@@ -77,6 +77,9 @@ test("app release manifest exposes app package files only", () => {
     "packages/butler-app/client/electron/package.json",
   );
   expect(appReleasePaths).toContain(
+    "packages/butler-app/client/electron/scripts",
+  );
+  expect(appReleasePaths).toContain(
     "packages/butler-app/client/electron/assets/icon.png",
   );
   expect(appReleasePaths).toContain(
@@ -316,6 +319,9 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(rootPackage.scripts).toHaveProperty("release:service:package");
   expect(electronPackage.scripts).toHaveProperty("package:mac");
   expect(electronPackage.scripts).toHaveProperty("package:linux");
+  expect(electronPackage.scripts["package:mac"]).toContain(
+    "adhoc-sign-mac.mjs",
+  );
   expect(electronPackage.version).toBe("0.0.1");
   expect(electronPackage.devDependencies).toHaveProperty("@electron/packager");
   expect(

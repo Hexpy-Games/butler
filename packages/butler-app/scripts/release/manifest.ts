@@ -73,6 +73,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
     "packages/butler-app/client/electron/package.json",
     "packages/butler-app/client/electron/main.mjs",
     "packages/butler-app/client/electron/preload.cjs",
+    "packages/butler-app/client/electron/scripts",
     "packages/butler-app/client/electron/assets/butler-icon.svg",
     "packages/butler-app/client/electron/assets/butler.icon",
     "packages/butler-app/client/electron/assets/butler.icns",
