@@ -2350,14 +2350,17 @@ health_check() {
 # ─── Completion Screen ───────────────────────────────────────────────────────
 
 print_completion() {
-  local runtime_mode
-  runtime_mode=$(CFG_PATH="$CONFIG_PATH" "$BUTLER_BUN" -e "
-    import { readFileSync } from 'fs';
-    try {
-      const cfg = JSON.parse(readFileSync(process.env.CFG_PATH, 'utf-8'));
-      console.log(cfg.system?.runtime || 'codex-api');
-    } catch { console.log('codex-api'); }
-  " 2>/dev/null || echo "codex-api")
+  local version
+  version="$(tr -d '[:space:]' < "$BUTLER_HOME/VERSION" 2>/dev/null || true)"
+  if [[ -z "$version" ]]; then
+    version=$(PKG_PATH="$BUTLER_HOME/package.json" "$BUTLER_BUN" -e "
+      import { readFileSync } from 'fs';
+      try {
+        const pkg = JSON.parse(readFileSync(process.env.PKG_PATH, 'utf-8'));
+        console.log(pkg.version || '0.0.0');
+      } catch { console.log('0.0.0'); }
+    " 2>/dev/null || echo "0.0.0")
+  fi
 
   local tagline
   tagline="$(random_tagline)"
@@ -2365,7 +2368,7 @@ print_completion() {
   echo ""
   echo -e "${SUCCESS}${BOLD}Butler is ready.${NC}"
   echo ""
-  echo -e "  ${MUTED}v1.0.0${NC}"
+  echo -e "  ${MUTED}v${version}${NC}"
   echo ""
   echo -e "  ${BOLD}Quick Start${NC}"
   echo ""

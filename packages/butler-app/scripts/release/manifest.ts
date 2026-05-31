@@ -2,7 +2,9 @@ import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 export const APP_RELEASE_COMPONENT_IDS = ["app"] as const;
+export const APP_RELEASE_PLATFORMS = ["darwin-arm64", "linux-x64"] as const;
 export type AppReleaseComponentId = (typeof APP_RELEASE_COMPONENT_IDS)[number];
+export type AppReleasePlatform = (typeof APP_RELEASE_PLATFORMS)[number];
 export type AppReleaseRestartPolicy = "restart-app";
 export type AppReleaseUpdatePolicy = "app-user-action";
 
@@ -22,7 +24,7 @@ export interface AppReleaseArtifact {
   component: AppReleaseComponentId;
   version: string;
   channel: "stable";
-  platform: "darwin-arm64";
+  platform: AppReleasePlatform;
   artifactName: string;
   downloadUrl: string | null;
   sha256: string | null;
@@ -102,20 +104,22 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
     protocol: "butler.app.v1",
     version: versions.app,
     components,
-    artifacts: components.map((component) => ({
-      component: component.id,
-      version: component.version,
-      channel: "stable",
-      platform: "darwin-arm64",
-      artifactName: artifactName(component.id, component.version),
-      downloadUrl: null,
-      sha256: null,
-      signature: null,
-      bundledComponents: component.bundledComponents,
-      compatibleProtocol: "butler.app.v1",
-      updatePolicy: component.updatePolicy,
-      restartPolicy: component.restartPolicy,
-    })),
+    artifacts: components.flatMap((component) =>
+      APP_RELEASE_PLATFORMS.map((platform) => ({
+        component: component.id,
+        version: component.version,
+        channel: "stable",
+        platform,
+        artifactName: artifactName(component.id, component.version, platform),
+        downloadUrl: null,
+        sha256: null,
+        signature: null,
+        bundledComponents: component.bundledComponents,
+        compatibleProtocol: "butler.app.v1",
+        updatePolicy: component.updatePolicy,
+        restartPolicy: component.restartPolicy,
+      })),
+    ),
   };
 }
 
@@ -140,8 +144,10 @@ export function validateAppReleaseManifest(
 function artifactName(
   _component: AppReleaseComponentId,
   version: string,
+  platform: AppReleasePlatform,
 ): string {
-  return `butler-app-${version}-darwin-arm64.zip`;
+  const extension = platform === "darwin-arm64" ? "zip" : "tar.gz";
+  return `butler-app-${version}-${platform}.${extension}`;
 }
 
 function validateRequiredFiles(
@@ -221,6 +227,7 @@ function validateArtifacts(
   issues: string[],
 ): void {
   const artifactComponents = new Set<AppReleaseComponentId>();
+  const artifactPlatforms = new Map<AppReleaseComponentId, Set<string>>();
   for (const artifact of manifest.artifacts) {
     if (!APP_RELEASE_COMPONENT_IDS.includes(artifact.component)) {
       issues.push(
@@ -229,6 +236,18 @@ function validateArtifacts(
       continue;
     }
     artifactComponents.add(artifact.component);
+    if (!APP_RELEASE_PLATFORMS.includes(artifact.platform)) {
+      issues.push(`unknown app release artifact platform: ${artifact.platform}`);
+      continue;
+    }
+    const platforms = artifactPlatforms.get(artifact.component) ?? new Set();
+    if (platforms.has(artifact.platform)) {
+      issues.push(
+        `duplicate app release artifact platform: ${artifact.component}/${artifact.platform}`,
+      );
+    }
+    platforms.add(artifact.platform);
+    artifactPlatforms.set(artifact.component, platforms);
     const component = manifest.components.find(
       (item) => item.id === artifact.component,
     );
@@ -251,6 +270,12 @@ function validateArtifacts(
   for (const id of APP_RELEASE_COMPONENT_IDS) {
     if (!artifactComponents.has(id)) {
       issues.push(`missing app release artifact: ${id}`);
+    }
+    const platforms = artifactPlatforms.get(id) ?? new Set();
+    for (const platform of APP_RELEASE_PLATFORMS) {
+      if (!platforms.has(platform)) {
+        issues.push(`missing app release artifact platform: ${id}/${platform}`);
+      }
     }
   }
 }
