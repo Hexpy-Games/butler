@@ -2,7 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const root = process.cwd();
 const electronBin = resolve(
@@ -87,8 +87,15 @@ assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; run npm --pr
 const serverPort = await freePort();
 const healthUrl = `http://127.0.0.1:${serverPort}/health`;
 const output: string[] = [];
+const nodePath = spawnSync("which", ["node"], { encoding: "utf8" }).stdout.trim();
+const smokePath = nodePath
+  ? `${dirname(nodePath)}:/usr/bin:/bin:/usr/sbin:/sbin`
+  : (process.env.PATH ?? "/usr/bin:/bin:/usr/sbin:/sbin");
 const electronEnv: NodeJS.ProcessEnv = {
   ...process.env,
+  PATH: smokePath,
+  BUTLER_BUN: process.execPath,
+  BUTLER_HOME: root,
   BUTLER_APP_SERVER_PORT: String(serverPort),
   BUTLER_APP_SERVER_BRIDGE: "off",
   BUTLER_DATA: tempDir,

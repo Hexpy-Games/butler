@@ -349,6 +349,11 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(
     readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
   ).toContain("packaged app executable");
+  expect(
+    readText(
+      join(root, "packages", "butler-app", "scripts", "app-client-managed-server-smoke.ts"),
+    ),
+  ).toContain("BUTLER_BUN: process.execPath");
   expect(readText(join(root, "install.sh"))).not.toContain("v1.0.0");
   expect(readText(join(root, "install.sh"))).toContain("$BUTLER_HOME/VERSION");
   expect(electronPackage).toMatchObject({

@@ -15,11 +15,13 @@ import { createHmac, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import { basename, dirname, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
+const userHome = homedir();
 const preloadPath = resolve(__dirname, "preload.cjs");
 const packagePath = resolve(__dirname, "package.json");
 const appDisplayName = "Butler";
@@ -75,12 +77,20 @@ app.setName(appDisplayName);
 syncPreloadServerEnvironment();
 
 function managedGatewayCommand() {
-  const localButlerCli = resolve(repoRoot, "bin", "butler.js");
-  if (existsSync(localButlerCli)) {
+  for (const home of candidateButlerHomes()) {
+    const localButlerCli = resolve(home, "bin", "butler.js");
+    if (!existsSync(localButlerCli)) continue;
+    const data = process.env.BUTLER_DATA || join(userHome, ".butler");
+    const runtime = resolveButlerRuntime(data);
     return {
-      command: "node",
+      command: runtime,
       args: [localButlerCli, "gateway", "app"],
-      cwd: repoRoot,
+      cwd: home,
+      env: {
+        BUTLER_HOME: home,
+        BUTLER_DATA: data,
+        BUTLER_BUN: runtime,
+      },
     };
   }
   return {
@@ -88,6 +98,35 @@ function managedGatewayCommand() {
     args: ["gateway", "app"],
     cwd: undefined,
   };
+}
+
+function candidateButlerHomes() {
+  const homes = [
+    repoRoot,
+    process.env.BUTLER_HOME,
+    join(userHome, "butler"),
+    process.platform === "linux" ? "/opt/butler" : null,
+  ];
+  const seen = new Set();
+  return homes
+    .filter((home) => typeof home === "string" && home.trim())
+    .map((home) => resolve(home))
+    .filter((home) => {
+      if (seen.has(home)) return false;
+      seen.add(home);
+      return true;
+    });
+}
+
+function resolveButlerRuntime(data) {
+  const candidates = [
+    process.env.BUTLER_BUN,
+    join(data, "runtime", "bun", "current", "bin", "bun"),
+  ];
+  for (const candidate of candidates) {
+    if (candidate && existsSync(candidate)) return candidate;
+  }
+  return "bun";
 }
 
 async function healthOk() {
@@ -136,6 +175,7 @@ async function startManagedServer() {
     ...(gateway.cwd ? { cwd: gateway.cwd } : {}),
     env: {
       ...process.env,
+      ...(gateway.env ?? {}),
       BUTLER_APP_SERVER_PORT: String(port),
       BUTLER_APP_SERVER_URL: serverUrl,
       ...(explicitUiUrl ? { BUTLER_APP_DEV_ORIGIN: rendererOrigin } : {}),
