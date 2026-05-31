@@ -14,6 +14,7 @@ const electronRoot = resolve(
   "electron",
 );
 const electronMain = resolve(electronRoot, "main.mjs");
+const macSignScript = resolve(electronRoot, "scripts", "adhoc-sign-mac.mjs");
 const packagerBin = resolve(
   electronRoot,
   "node_modules",
@@ -126,6 +127,7 @@ try {
     "MacOS",
     "Butler",
   );
+  const appBundle = join(packagedOut, packageDir, "Butler.app");
   assert(existsSync(executable), "packaged app executable was not created");
   assert(
     existsSync(
@@ -140,6 +142,17 @@ try {
     ),
     "packaged app mac icon resource was not created",
   );
+
+  if (process.platform === "darwin") {
+    const signResult = spawnSync("node", [macSignScript, appBundle], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    assert(
+      signResult.status === 0,
+      `mac ad-hoc signing failed: ${signResult.stderr || signResult.stdout}`,
+    );
+  }
 
   if (process.platform === "darwin") {
     const appProcess = spawn(executable, [], {
