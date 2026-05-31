@@ -470,21 +470,15 @@ test("non-interactive installer gateway defaults to Butler App without chooser",
   expect(result.stdout.trim()).toBe("ok");
 });
 
-test("interactive installer gateway can choose Butler App from list", () => {
+test("interactive installer gateway uses Butler App without chooser", () => {
   const result = runInstallerFunction(`
     set -euo pipefail
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
     source ./install.sh --home "$PWD" --data "$tmp" --language en
     is_non_interactive_shell() { return 1; }
-    tl_choose() {
-      touch "$tmp/gateway-chooser-called"
-      test "$1" = "Butler App"
-      test "$2" = "Telegram"
-      printf '%s\\n' "Butler App"
-    }
+    tl_choose() { echo should-not-prompt; exit 42; }
     configure_gateway >/dev/null
-    test -f "$tmp/gateway-chooser-called"
     test ! -f "$tmp/config/telegram-transport.json"
     [[ -z "\${BOT_TOKEN:-}" && -z "\${CHAT_ID:-}" ]]
     echo ok
@@ -494,32 +488,14 @@ test("interactive installer gateway can choose Butler App from list", () => {
   expect(result.stdout.trim()).toBe("ok");
 });
 
-test("interactive installer gateway can choose Telegram from list", () => {
-  const bun = process.execPath.replace(/'/g, "'\\''");
+test("installer rejects explicit Telegram gateway setup", () => {
   const result = runInstallerFunction(`
     set -euo pipefail
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
-    export BUTLER_BUN='${bun}'
-    export BUTLER_TELEGRAM_TOKEN=bot-token-preview
-    source ./install.sh --home "$PWD" --data "$tmp" --language en
-    is_non_interactive_shell() { return 1; }
-    tl_choose() {
-      touch "$tmp/gateway-chooser-called"
-      test "$1" = "Butler App"
-      test "$2" = "Telegram"
-      printf '%s\\n' "Telegram"
-    }
-    telegram_detect_chat_id() { printf '%s\\n' "12345"; }
-    configure_gateway >/dev/null
-    test -f "$tmp/gateway-chooser-called"
-    test -f "$tmp/config/telegram-transport.json"
-    grep -q '^TELEGRAM_BOT_TOKEN=bot-token-preview$' "$tmp/.env"
-    echo ok
+    source ./install.sh --gateway telegram
   `);
 
-  expect(result.status).toBe(0);
-  expect(result.stdout.trim()).toBe("ok");
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain("--gateway currently supports app");
 });
 
 test("explicit Codex subscription provider uses profile without chooser", () => {

@@ -60,11 +60,19 @@ while [[ $# -gt 0 ]]; do
       ;;
     --gateway)
       INSTALL_GATEWAY_ARG="${2:-}"
-      [[ -n "$INSTALL_GATEWAY_ARG" ]] || { echo "--gateway requires app or telegram" >&2; exit 2; }
+      [[ -n "$INSTALL_GATEWAY_ARG" ]] || { echo "--gateway requires app" >&2; exit 2; }
+      case "$(printf '%s' "$INSTALL_GATEWAY_ARG" | tr '[:upper:]' '[:lower:]')" in
+        app|butler-app|butler_app) ;;
+        *) echo "--gateway currently supports app" >&2; exit 2 ;;
+      esac
       shift 2
       ;;
     --gateway=*)
       INSTALL_GATEWAY_ARG="${1#--gateway=}"
+      case "$(printf '%s' "$INSTALL_GATEWAY_ARG" | tr '[:upper:]' '[:lower:]')" in
+        app|butler-app|butler_app) ;;
+        *) echo "--gateway currently supports app" >&2; exit 2 ;;
+      esac
       shift
       ;;
     --model)
@@ -1874,7 +1882,6 @@ configure_api_provider() {
 
 gateway_choice_from_env() {
   case "$(printf '%s' "${INSTALL_GATEWAY_ARG:-${BUTLER_GATEWAY:-${BUTLER_INSTALL_GATEWAY:-}}}" | tr '[:upper:]' '[:lower:]')" in
-    telegram|tg) echo "telegram" ;;
     app|butler-app|butler_app|"") echo "app" ;;
     *) echo "app" ;;
   esac
@@ -1910,102 +1917,9 @@ configure_gateway() {
   ui_section "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "Gateway Setup" || echo "Gateway Setup")"
   echo ""
 
-  local gateway_choice
-  gateway_choice="$(gateway_choice_from_env)"
-  if ! gateway_choice_is_explicit && ! is_non_interactive_shell; then
-    local selected_gateway
-    if [[ "${INSTALL_LANG:-en}" == "ko" ]]; then
-      tl_text "Butler와 처음 대화할 게이트웨이를 선택해 주세요."
-      tl_muted "Butler 앱은 추가 설정 없이 바로 사용할 수 있습니다. Telegram은 토큰과 DM 연결을 이어서 설정합니다."
-      selected_gateway="$(tl_choose "Butler 앱" "Telegram")"
-      case "$selected_gateway" in
-        "Telegram") gateway_choice="telegram" ;;
-        *) gateway_choice="app" ;;
-      esac
-    else
-      tl_text "Choose the gateway for your first conversation with Butler."
-      tl_muted "Butler App works without extra setup. Telegram will ask for a bot token and DM pairing."
-      selected_gateway="$(tl_choose "Butler App" "Telegram")"
-      case "$selected_gateway" in
-        "Telegram") gateway_choice="telegram" ;;
-        *) gateway_choice="app" ;;
-      esac
-    fi
-  fi
-
-  if [[ "$gateway_choice" != "telegram" ]]; then
-    BOT_TOKEN=""
-    CHAT_ID=""
-    ui_success "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "Butler 앱 게이트웨이 준비 완료" || echo "Butler App gateway ready")"
-    if [[ -z "${INSTALL_GATEWAY_ARG:-${BUTLER_GATEWAY:-${BUTLER_INSTALL_GATEWAY:-}}}" && -z "${BUTLER_TELEGRAM_TOKEN:-}" ]]; then
-      ui_info "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "Telegram은 나중에 --gateway telegram 또는 BUTLER_GATEWAY=telegram 으로 연결할 수 있습니다." || echo "Telegram can be connected later with --gateway telegram or BUTLER_GATEWAY=telegram.")"
-    fi
-    return 0
-  fi
-
-  ensure_telegram_transport_config
-
-  local bot_token="${BUTLER_TELEGRAM_TOKEN:-}"
-  local chat_id="${BUTLER_TELEGRAM_CHAT_ID:-}"
-  if [[ -z "$bot_token" ]]; then
-    if ! is_non_interactive_shell; then
-      if [[ "${INSTALL_LANG:-en}" == "ko" ]]; then
-        tl_text "@BotFather에서 만든 봇 토큰을 붙여넣어 주세요."
-        tl_muted "토큰은 $BUTLER_DATA/.env에 저장되며 화면에 다시 출력하지 않습니다."
-      else
-        tl_text "Paste the bot token created with @BotFather."
-        tl_muted "The token is stored in $BUTLER_DATA/.env and will not be printed back."
-      fi
-      bot_token=$(tl_secret_input "Telegram bot token" "")
-    fi
-  fi
-
-  if [[ -z "$bot_token" ]]; then
-    ui_warn "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "Telegram 토큰이 없어 앱 게이트웨이만 사용합니다" || echo "Telegram token missing; using Butler App only")"
-    BOT_TOKEN=""
-    CHAT_ID=""
-    return 0
-  fi
-
-  if [[ -z "$chat_id" ]]; then
-    if ! is_non_interactive_shell; then
-      if [[ "${INSTALL_LANG:-en}" == "ko" ]]; then
-        tl_text "Telegram에서 해당 봇에게 아무 DM이나 보내고 Enter를 누르세요."
-        tl_muted "설치기는 토큰 검증과 chat ID 감지만 수행합니다. 실제 온보딩은 첫 Butler 대화에서 시작됩니다."
-        read -rp "  │   DM을 보낸 뒤 Enter: " _ || true
-        tl_muted "Telegram 업데이트를 확인합니다..."
-      else
-        tl_text "Send any DM to the bot in Telegram, then press Enter."
-        tl_muted "The installer only validates the token and detects chat ID. Onboarding starts in the first Butler conversation."
-        read -rp "  │   Press Enter after sending the DM: " _ || true
-        tl_muted "Checking Telegram updates..."
-      fi
-      chat_id=$(telegram_detect_chat_id "$bot_token" 5 || true)
-      if [[ "$chat_id" == ERROR:* ]]; then
-        tl_warn "${chat_id#ERROR:}"
-        chat_id=""
-      fi
-    fi
-  fi
-
-  upsert_env_value "$BUTLER_DATA/.env" "TELEGRAM_BOT_TOKEN" "$bot_token"
-  if [[ -n "$chat_id" ]]; then
-    upsert_env_value "$BUTLER_DATA/.env" "TELEGRAM_CHAT_ID" "$chat_id"
-    CFG_PATH="$CONFIG_PATH" TG_CHAT="$chat_id" "$BUTLER_BUN" -e "
-      import { existsSync, readFileSync, writeFileSync } from 'fs';
-      const path = process.env.CFG_PATH;
-      const cfg = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {};
-      cfg.telegram = cfg.telegram && typeof cfg.telegram === 'object' ? cfg.telegram : {};
-      cfg.telegram.groupId = process.env.TG_CHAT;
-      writeFileSync(path, JSON.stringify(cfg, null, 2) + '\n');
-    "
-    ui_success "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "Telegram DM 연결 완료" || echo "Telegram DM paired")"
-  else
-    ui_warn "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "Telegram 토큰은 저장했지만 chat ID는 아직 없습니다" || echo "Telegram token saved, but chat ID is not paired yet")"
-  fi
-  chmod 600 "$BUTLER_DATA/.env"
-  BOT_TOKEN="$bot_token"
-  CHAT_ID="$chat_id"
+  BOT_TOKEN=""
+  CHAT_ID=""
+  ui_success "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "Butler 앱 게이트웨이 준비 완료" || echo "Butler App gateway ready")"
 }
 
 # ─── Steward / Transport Config ──────────────────────────────────────────────
@@ -2046,12 +1960,6 @@ install_workspace_deps() {
   if [[ -f "$BUTLER_HOME/package.json" ]]; then
     run_quiet_step "Root dependencies" \
       "cd '$BUTLER_HOME' && '$BUTLER_BUN' install --frozen-lockfile 2>/dev/null || '$BUTLER_BUN' install"
-  fi
-
-  # Integration workspaces
-  if [[ -f "$BUTLER_HOME/packages/butler-agent/src/integrations/telegram/package.json" ]]; then
-    run_quiet_step "Telegram integration deps" \
-      "cd '$BUTLER_HOME/packages/butler-agent/src/integrations/telegram' && '$BUTLER_BUN' install --frozen-lockfile 2>/dev/null || '$BUTLER_BUN' install"
   fi
 
   # MCP server
