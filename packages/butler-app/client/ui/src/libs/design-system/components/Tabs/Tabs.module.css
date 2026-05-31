@@ -1,0 +1,133 @@
+.root {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  gap: var(--space-3);
+}
+
+.orientation-horizontal {
+  flex-direction: column;
+}
+
+.orientation-vertical {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.list {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.list::-webkit-scrollbar {
+  display: none;
+}
+
+.variant-default {
+  min-height: 32px;
+  padding: var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.variant-line {
+  min-height: 30px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.trigger {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-body);
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.trigger:hover {
+  background: color-mix(in srgb, var(--selection) 72%, transparent);
+  color: var(--text-primary);
+}
+
+.trigger:focus-visible {
+  background: var(--selection);
+  color: var(--text-primary);
+}
+
+.trigger[data-state="active"] {
+  background: var(--selection);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.trigger[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.orientation-vertical .list {
+  flex-direction: column;
+  align-items: stretch;
+  overflow-x: visible;
+}
+
+.orientation-vertical .trigger {
+  justify-content: flex-start;
+}
+
+.content {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-3);
+  line-height: var(--line-height-body);
+  outline: none;
+}
+
+.content[data-state="active"] {
+  animation: tabs-content-enter 120ms ease-out;
+}
+
+@keyframes tabs-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trigger,
+  .content[data-state="active"] {
+    animation: none;
+    transition: none;
+  }
+}

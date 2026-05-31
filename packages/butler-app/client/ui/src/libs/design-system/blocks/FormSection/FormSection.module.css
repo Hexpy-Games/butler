@@ -1,0 +1,20 @@
+.section {
+  width: 100%;
+  padding: var(--space-lg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--settings-panel-bg);
+  color: var(--text-primary);
+}
+
+.title {
+  color: var(--text-primary);
+}
+
+.description {
+  color: var(--text-secondary);
+}
+
+.fields {
+  gap: var(--space-xl);
+}

@@ -1,0 +1,23 @@
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.card {
+  padding: var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+}
+
+.card:hover {
+  background: var(--selection);
+}
+
+.active {
+  background: var(--selection-strong);
+}

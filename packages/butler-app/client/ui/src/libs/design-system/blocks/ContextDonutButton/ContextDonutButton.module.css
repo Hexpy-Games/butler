@@ -1,0 +1,64 @@
+.button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    opacity 140ms ease;
+}
+
+.button:not(:disabled):hover,
+.button[data-state="open"],
+.button[aria-expanded="true"] {
+  background: var(--selection);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.donut {
+  width: 18px;
+  height: 18px;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.track,
+.progress {
+  fill: none;
+  stroke-width: 3.5;
+}
+
+.track {
+  stroke: var(--context-track-bg);
+}
+
+.progress {
+  stroke: var(--accent);
+  stroke-dasharray: var(--context-circumference);
+  stroke-dashoffset: var(--context-offset);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 120ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .progress {
+    transition: none;
+  }
+}

@@ -1,0 +1,89 @@
+.frame {
+  --scroll-area-scrollbar-offset: 10px;
+  --scroll-area-fade-size: 14px;
+  --scroll-area-edge-padding: var(--scroll-area-fade-size);
+  --scroll-area-frame-width: calc(100% + var(--scroll-area-scrollbar-offset));
+  --scroll-area-content-width: calc(100% - var(--scroll-area-scrollbar-offset));
+
+  position: relative;
+  width: var(--scroll-area-frame-width);
+  max-width: var(--scroll-area-frame-width);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.scroll {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden auto;
+  scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
+    transparent;
+  scrollbar-width: thin;
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      var(--text-primary) var(--scroll-area-fade-size),
+      var(--text-primary) calc(100% - var(--scroll-area-fade-size)),
+      transparent 100%
+    ),
+    linear-gradient(var(--text-primary), var(--text-primary));
+  -webkit-mask-position:
+    0 0,
+    right top;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size:
+    calc(100% - var(--scroll-area-scrollbar-offset)) 100%,
+    var(--scroll-area-scrollbar-offset) 100%;
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0,
+      var(--text-primary) var(--scroll-area-fade-size),
+      var(--text-primary) calc(100% - var(--scroll-area-fade-size)),
+      transparent 100%
+    ),
+    linear-gradient(var(--text-primary), var(--text-primary));
+  mask-position:
+    0 0,
+    right top;
+  mask-repeat: no-repeat;
+  mask-size:
+    calc(100% - var(--scroll-area-scrollbar-offset)) 100%,
+    var(--scroll-area-scrollbar-offset) 100%;
+}
+
+.content {
+  box-sizing: border-box;
+  display: flex;
+  width: var(--scroll-area-content-width);
+  max-width: var(--scroll-area-content-width);
+  min-width: 0;
+  min-height: min-content;
+  flex-direction: column;
+  padding-block: var(--scroll-area-edge-padding);
+}
+
+.scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--line-strong) 70%, transparent);
+  background-clip: content-box;
+}

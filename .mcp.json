@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "butler": {
+      "command": "sh",
+      "args": [
+        "-c",
+        "$HOME/.bun/bin/bun run $BUTLER_HOME/src/interfaces/mcp-server/server.ts"
+      ],
+      "cwd": "$BUTLER_HOME/src/interfaces/mcp-server"
+    }
+  }
+}

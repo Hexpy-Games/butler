@@ -1,0 +1,40 @@
+.wrapper {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 80;
+  width: max-content;
+  max-width: min(220px, calc(100vw - 24px));
+  padding: 6px 9px;
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-body);
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: tooltip-enter 0.12s ease-out;
+}
+
+@keyframes tooltip-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tooltip {
+    animation: none;
+  }
+}

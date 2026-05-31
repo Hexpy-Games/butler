@@ -1,0 +1,11 @@
+.success {
+  border-color: color-mix(in srgb, var(--color-success) 34%, var(--line));
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.success [data-icon],
+.success [data-title],
+.success [data-description] {
+  color: var(--color-success);
+}

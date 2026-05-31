@@ -1,0 +1,139 @@
+.markdown {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-3);
+  line-height: var(--line-height-document);
+  overflow: auto;
+}
+
+.markdown :where(p, ul, ol, pre, blockquote, h1, h2, h3, h4, h5, h6, table) {
+  margin-block: 0;
+}
+
+.markdown
+  > :where(p, ul, ol, pre, blockquote, table)
+  + :where(p, ul, ol, pre, blockquote, table) {
+  margin-top: var(--space-4);
+}
+
+.markdown
+  :where(h1, h2, h3, h4, h5, h6)
+  + :where(p, ul, ol, pre, blockquote, table) {
+  margin-top: var(--space-3);
+}
+
+.markdown h1 {
+  font-size: var(--font-size-6);
+}
+
+.markdown h2 {
+  margin-top: var(--space-6);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-2);
+  font-size: var(--font-size-5);
+}
+
+.markdown h3 {
+  margin-top: var(--space-5);
+  font-size: var(--font-size-4);
+}
+
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-3);
+}
+
+.markdown :where(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+
+.markdown :where(h1, h2, h3, h4, h5, h6) {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.markdown :where(ul, ol) {
+  padding-left: var(--space-6);
+}
+
+.markdown li + li {
+  margin-top: var(--space-2);
+}
+
+.markdown li > :where(ul, ol) {
+  margin-top: var(--space-2);
+}
+
+.markdown blockquote {
+  border-left: 2px solid var(--line-strong);
+  padding-left: var(--space-4);
+  color: var(--text-secondary);
+}
+
+.markdown hr {
+  height: 1px;
+  margin: var(--space-6) 0;
+  border: 0;
+  background: color-mix(in srgb, var(--line) 34%, transparent);
+}
+
+.markdown code {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  font: var(--font-code);
+}
+
+.markdown a {
+  color: var(--accent);
+}
+
+.markdown img {
+  display: block;
+  max-width: 30%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+}
+
+.markdown pre {
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-raised);
+  overflow: auto;
+}
+
+.markdown pre code {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+.markdown table {
+  display: block;
+  width: 100%;
+  overflow: auto;
+  border-collapse: collapse;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--line);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown th {
+  background: var(--selection);
+  font-weight: var(--font-weight-medium);
+}

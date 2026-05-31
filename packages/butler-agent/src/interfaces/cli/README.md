@@ -1,0 +1,36 @@
+# cli
+
+`packages/butler-agent/src/interfaces/cli/` owns the product command surface behind `bin/butler.js`. The CLI is
+the supported local operator interface for installation, health checks,
+configuration, auth/model control, gateway management, transport pairing, work
+recovery, memory, search, automation, and diagnostics.
+
+## Key Files
+
+- `commands.json`: canonical command inventory shared by the Node entrypoint
+  and TypeScript helpers.
+- `command-registry.ts`: typed command lookup and priority helpers.
+- `args.ts`: shared parsing for `--home`, `--data`, `--json`, `--yes`, and
+  other common options.
+- `output.ts`: privacy-safe JSON envelope helpers.
+- `runtime.ts`: Butler-managed runtime resolver.
+- `core-command.ts`: Core command handlers.
+- `operator-command.ts`: support and recovery handlers.
+- `advanced-command.ts`: stable advanced command handlers.
+- `telegram.ts` and `private-env.ts`: CLI-only Telegram and private env helpers.
+
+## Boundaries
+
+CLI output must be safe by default. Do not print secrets, raw transcripts, raw
+prompts, raw tool payloads, raw web queries, raw URLs, or private memory text.
+Developer and release checks stay as package scripts unless a future spec
+promotes them into product commands.
+
+## Related Specs
+
+- `SPEC-BUTLER-CLI` - Butler CLI
+- `SPEC-CLI-CORE-COMMANDS` - Butler CLI Core Command Specs
+- `SPEC-CLI-OPERATOR-COMMANDS` - Butler CLI Operator Command Specs
+- `SPEC-CLI-ADVANCED-DEFERRED-COMMANDS` - Butler CLI Advanced And Deferred Command Specs
+- `SPEC-MANAGED-BUN-RUNTIME` - Butler-Managed Bun Runtime
+- `SPEC-AGENT-OWNED-GATEWAY-HOST` - Agent-Owned Gateway Host

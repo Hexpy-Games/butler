@@ -1,0 +1,23 @@
+.header {
+  width: 100%;
+  padding: var(--space-md) 0;
+}
+
+.text {
+  min-width: 0;
+  flex: 1;
+}
+
+.title {
+  color: var(--text-primary);
+}
+
+.description {
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}

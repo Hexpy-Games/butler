@@ -1,0 +1,89 @@
+.stage {
+  position: relative;
+  display: grid;
+  min-height: 280px;
+  place-items: center;
+  overflow: hidden;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--conversation-bg);
+  isolation: isolate;
+}
+
+.backgroundText {
+  position: absolute;
+  inset: var(--space-3);
+  z-index: -2;
+  display: grid;
+  align-content: center;
+  gap: var(--space-2);
+  color: color-mix(in srgb, var(--text-primary) 55%, transparent);
+  font-size: var(--typo-dashboard-title-size);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-compact);
+  text-transform: uppercase;
+}
+
+.backgroundText span:nth-child(2) {
+  justify-self: end;
+}
+
+.backgroundText span:nth-child(3) {
+  justify-self: center;
+}
+
+.pictureMarks {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.mark {
+  position: absolute;
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+.markOne {
+  top: 28px;
+  left: 24px;
+  width: 120px;
+  height: 82px;
+  rotate: -9deg;
+}
+
+.markTwo {
+  right: 34px;
+  bottom: 34px;
+  width: 156px;
+  height: 96px;
+  background: color-mix(in srgb, var(--ok) 26%, transparent);
+  rotate: 8deg;
+}
+
+.markThree {
+  top: 42px;
+  right: 88px;
+  width: 64px;
+  height: 150px;
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  rotate: 18deg;
+}
+
+.stack {
+  display: grid;
+  width: min(100%, 360px);
+  gap: var(--space-2);
+}
+
+.demo {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.compact {
+  justify-self: start;
+  width: min(100%, 240px);
+}

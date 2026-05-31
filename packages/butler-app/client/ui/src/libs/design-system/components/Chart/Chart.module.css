@@ -1,0 +1,45 @@
+.fixture {
+  min-width: 0;
+}
+
+.chart {
+  justify-self: stretch;
+  width: auto;
+  height: 150px;
+  min-width: 220px;
+  max-width: 100%;
+}
+
+.chart[data-density="compact"] {
+  height: 36px;
+  min-width: 0;
+}
+
+.tooltip {
+  min-width: 140px;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: var(--shadow-card);
+}
+
+.tooltipList {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.tooltipRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tooltipSwatch {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}

@@ -1,0 +1,1417 @@
+[
+  {
+    "id": "help",
+    "path": [
+      "help"
+    ],
+    "usage": "butler help",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Show top-level command groups and common options.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "help.command",
+    "path": [
+      "help",
+      "<command>"
+    ],
+    "usage": "butler help <command>",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Show command usage, intent, and safety notes.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "commands",
+    "path": [
+      "commands"
+    ],
+    "usage": "butler commands [--json]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Expose the command tree for automation, docs, and app UI.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "version",
+    "path": [
+      "version"
+    ],
+    "usage": "butler version [--json]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Report Butler version, git revision, runtime, and data layout.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "install",
+    "path": [
+      "install"
+    ],
+    "usage": "butler install [--home PATH] [--data PATH] [--non-interactive] [--register-service|--no-register-service]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Run first-time setup and service bootstrap.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "upgrade-report",
+    "path": [
+      "upgrade-report"
+    ],
+    "usage": "butler upgrade-report [--home PATH] [--data PATH]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Preview upgrade impact before mutating private state.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "start",
+    "path": [
+      "start"
+    ],
+    "usage": "butler start",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Start native Butler services.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "stop",
+    "path": [
+      "stop"
+    ],
+    "usage": "butler stop",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Stop native Butler services without deleting private data.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "restart",
+    "path": [
+      "restart"
+    ],
+    "usage": "butler restart",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Restart services after config or code changes.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "service.run",
+    "path": [
+      "service",
+      "run"
+    ],
+    "usage": "butler service run",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Run the foreground Butler supervisor for launchd/systemd.",
+    "spec": "docs/specs/os-service-adapter.md"
+  },
+  {
+    "id": "service.launchd-plist",
+    "path": [
+      "service",
+      "launchd-plist"
+    ],
+    "usage": "butler service launchd-plist [--json]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Print a launchd user-agent plist for the single Butler service.",
+    "spec": "docs/specs/os-service-adapter.md"
+  },
+  {
+    "id": "service.systemd-unit",
+    "path": [
+      "service",
+      "systemd-unit"
+    ],
+    "usage": "butler service systemd-unit [--json]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Print a systemd user service unit for the single Butler service.",
+    "spec": "docs/specs/os-service-adapter.md"
+  },
+  {
+    "id": "service.install",
+    "path": [
+      "service",
+      "install"
+    ],
+    "usage": "butler service install [--platform auto|launchd|systemd] [--dry-run] [--yes] [--json]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Plan or install the single Butler user service.",
+    "spec": "docs/specs/os-service-adapter.md"
+  },
+  {
+    "id": "service.status",
+    "path": [
+      "service",
+      "status"
+    ],
+    "usage": "butler service status [--platform auto|launchd|systemd] [--json]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Check the single Butler user service without mutating state.",
+    "spec": "docs/specs/os-service-adapter.md"
+  },
+  {
+    "id": "service.uninstall",
+    "path": [
+      "service",
+      "uninstall"
+    ],
+    "usage": "butler service uninstall [--platform auto|launchd|systemd] [--dry-run] [--yes] [--json]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Plan or uninstall the single Butler user service.",
+    "spec": "docs/specs/os-service-adapter.md"
+  },
+  {
+    "id": "gateway.app",
+    "path": [
+      "gateway",
+      "app"
+    ],
+    "usage": "butler gateway app",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Run the Butler App gateway owned by Butler Agent.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.list",
+    "path": [
+      "gateway",
+      "list"
+    ],
+    "usage": "butler gateway list [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "List agent-owned gateways and readiness state.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.status",
+    "path": [
+      "gateway",
+      "status"
+    ],
+    "usage": "butler gateway status [<gateway>] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Show gateway health and lifecycle state.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.inspect",
+    "path": [
+      "gateway",
+      "inspect"
+    ],
+    "usage": "butler gateway inspect <gateway> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Inspect safe gateway configuration and next actions.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.enable",
+    "path": [
+      "gateway",
+      "enable"
+    ],
+    "usage": "butler gateway enable <gateway> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Enable an agent-owned gateway.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.disable",
+    "path": [
+      "gateway",
+      "disable"
+    ],
+    "usage": "butler gateway disable <gateway> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Disable an agent-owned gateway.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.configure.app",
+    "path": [
+      "gateway",
+      "configure",
+      "app"
+    ],
+    "usage": "butler gateway configure app --host HOST --port PORT [--db PATH] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Configure the local Butler App gateway.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.configure.telegram",
+    "path": [
+      "gateway",
+      "configure",
+      "telegram"
+    ],
+    "usage": "butler gateway configure telegram [--chat-id ID] [--format markdownv2|plain] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Configure Telegram gateway metadata.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.credential.set.telegram",
+    "path": [
+      "gateway",
+      "credential",
+      "set",
+      "telegram"
+    ],
+    "usage": "butler gateway credential set telegram --token-stdin [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Store a Telegram gateway token without echoing it.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.pair.telegram",
+    "path": [
+      "gateway",
+      "pair",
+      "telegram"
+    ],
+    "usage": "butler gateway pair telegram [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Pair Telegram through the agent-owned gateway surface.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.unpair.telegram",
+    "path": [
+      "gateway",
+      "unpair",
+      "telegram"
+    ],
+    "usage": "butler gateway unpair telegram [--yes] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Remove Telegram gateway pairing.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.test",
+    "path": [
+      "gateway",
+      "test"
+    ],
+    "usage": "butler gateway test <gateway> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Run a safe gateway readiness test.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.logs",
+    "path": [
+      "gateway",
+      "logs"
+    ],
+    "usage": "butler gateway logs <gateway> [--lines N] [--follow]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Read gateway logs or explain embedded gateway log ownership.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.run.app",
+    "path": [
+      "gateway",
+      "run",
+      "app"
+    ],
+    "usage": "butler gateway run app",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Run the Butler App gateway in the foreground.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.start",
+    "path": [
+      "gateway",
+      "start"
+    ],
+    "usage": "butler gateway start <gateway> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Start a process-owned gateway.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.stop",
+    "path": [
+      "gateway",
+      "stop"
+    ],
+    "usage": "butler gateway stop <gateway> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Stop a process-owned gateway.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "gateway.restart",
+    "path": [
+      "gateway",
+      "restart"
+    ],
+    "usage": "butler gateway restart <gateway> [--yes] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Restart a gateway or report embedded service restart needs.",
+    "spec": "SPEC-AGENT-OWNED-GATEWAY-HOST"
+  },
+  {
+    "id": "status",
+    "path": [
+      "status"
+    ],
+    "usage": "butler status [--json] [--verbose]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Summarize runtime, provider, context, delivery, task, and metrics health.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "doctor",
+    "path": [
+      "doctor"
+    ],
+    "usage": "butler doctor [--fix] [--json] [--check NAME]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Run health checks and optional repairs.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "metrics.status",
+    "path": [
+      "metrics",
+      "status"
+    ],
+    "usage": "butler metrics status [--json] [--since-hours N]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Summarize optional operational metrics.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "metrics.enable",
+    "path": [
+      "metrics",
+      "enable"
+    ],
+    "usage": "butler metrics enable",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Enable new operational metric writes.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "metrics.disable",
+    "path": [
+      "metrics",
+      "disable"
+    ],
+    "usage": "butler metrics disable",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Disable new operational metric writes without deleting history.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "auth.status",
+    "path": [
+      "auth",
+      "status"
+    ],
+    "usage": "butler auth status [--json]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Report configured auth mode without exposing secrets.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "auth.login",
+    "path": [
+      "auth",
+      "login"
+    ],
+    "usage": "butler auth login",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Run Butler-owned OAuth login flow.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "model.status",
+    "path": [
+      "model",
+      "status"
+    ],
+    "usage": "butler model status [--json]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Report active runtime, provider, model, and cache policy.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "runtime.repair",
+    "path": [
+      "runtime",
+      "repair"
+    ],
+    "usage": "butler runtime repair [--yes]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Repair Butler-managed runtime binaries and pointers.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "telegram.pair",
+    "path": [
+      "telegram",
+      "pair"
+    ],
+    "usage": "butler telegram pair",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Pair a Telegram chat with Butler.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "telegram.status",
+    "path": [
+      "telegram",
+      "status"
+    ],
+    "usage": "butler telegram status [--json]",
+    "priority": "core",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Report Telegram credential, pairing, and polling readiness.",
+    "spec": "docs/specs/cli/core-commands.md"
+  },
+  {
+    "id": "update",
+    "path": [
+      "update"
+    ],
+    "usage": "butler update [--component service|app] [--check|--apply] [--manifest PATH] [--dry-run] [--yes]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Check or stage a Butler service or app update.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "uninstall",
+    "path": [
+      "uninstall"
+    ],
+    "usage": "butler uninstall [--keep-data] [--yes]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Remove Butler services and optionally private data.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "logs",
+    "path": [
+      "logs"
+    ],
+    "usage": "butler logs [--service NAME] [--lines N] [--follow]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Read bounded service logs for support.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "ps",
+    "path": [
+      "ps"
+    ],
+    "usage": "butler ps [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Show Butler service process state.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "metrics.tail",
+    "path": [
+      "metrics",
+      "tail"
+    ],
+    "usage": "butler metrics tail [--lines N] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Tail recent safe operational metric summaries.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "config.get",
+    "path": [
+      "config",
+      "get"
+    ],
+    "usage": "butler config get <path> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Read a safe config value.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "config.set",
+    "path": [
+      "config",
+      "set"
+    ],
+    "usage": "butler config set <path> <value> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Set a safe config value.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "config.edit",
+    "path": [
+      "config",
+      "edit"
+    ],
+    "usage": "butler config edit",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Open the private config in an editor.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "config.validate",
+    "path": [
+      "config",
+      "validate"
+    ],
+    "usage": "butler config validate [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Validate config schema and redacted provider state.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "personalization.show",
+    "path": [
+      "personalization",
+      "show"
+    ],
+    "usage": "butler personalization show [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Show Butler naming personalization fields and profiling consent state.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "personalization.set",
+    "path": [
+      "personalization",
+      "set"
+    ],
+    "usage": "butler personalization set [--butler-nickname NAME] [--principal-name NAME] [--preferred-address NAME] [--profiling-mode off|basic|deep] [--clear-profile] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Update Butler nickname, principal naming preferences, and profiling controls.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "personalization.migration.prompt",
+    "path": [
+      "personalization",
+      "migration",
+      "prompt"
+    ],
+    "usage": "butler personalization migration prompt [--locale en|ko] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Generate a source-agnostic prompt to export important memories from an AI assistant.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "personalization.migration.import",
+    "path": [
+      "personalization",
+      "migration",
+      "import"
+    ],
+    "usage": "butler personalization migration import (--file PATH|--stdin) [--source NAME] [--model MODEL] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Import a user-provided AI memory export into Butler's black-box profile.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "auth.logout",
+    "path": [
+      "auth",
+      "logout"
+    ],
+    "usage": "butler auth logout [--yes]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Remove local auth profile after confirmation.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "model.list",
+    "path": [
+      "model",
+      "list"
+    ],
+    "usage": "butler model list [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "List known model refs and provider availability.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "model.set",
+    "path": [
+      "model",
+      "set"
+    ],
+    "usage": "butler model set <provider/model>",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Persist the active canonical model ref.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "transport.status",
+    "path": [
+      "transport",
+      "status"
+    ],
+    "usage": "butler transport status [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Summarize configured transport adapters.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "transport.test",
+    "path": [
+      "transport",
+      "test"
+    ],
+    "usage": "butler transport test [--transport NAME]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Run a transport-independent send/receive smoke.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "mcp.list",
+    "path": [
+      "mcp",
+      "list"
+    ],
+    "usage": "butler mcp list [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "List configured MCP servers from Butler data home.",
+    "spec": ".project-ledger/specs/butler-rc-hardening-foundations.md"
+  },
+  {
+    "id": "mcp.add",
+    "path": [
+      "mcp",
+      "add"
+    ],
+    "usage": "butler mcp add --id ID --transport stdio --command CMD [--arg ARG] [--env KEY=VALUE] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Add or update an MCP server in Butler data home with redacted secret output.",
+    "spec": ".project-ledger/specs/butler-rc-hardening-foundations.md"
+  },
+  {
+    "id": "mcp.enable",
+    "path": [
+      "mcp",
+      "enable"
+    ],
+    "usage": "butler mcp enable <id> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Enable a configured MCP server.",
+    "spec": ".project-ledger/specs/butler-rc-hardening-foundations.md"
+  },
+  {
+    "id": "mcp.disable",
+    "path": [
+      "mcp",
+      "disable"
+    ],
+    "usage": "butler mcp disable <id> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Disable a configured MCP server without deleting it.",
+    "spec": ".project-ledger/specs/butler-rc-hardening-foundations.md"
+  },
+  {
+    "id": "mcp.delete",
+    "path": [
+      "mcp",
+      "delete"
+    ],
+    "usage": "butler mcp delete <id> --yes [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Delete a configured MCP server from Butler data home.",
+    "spec": ".project-ledger/specs/butler-rc-hardening-foundations.md"
+  },
+  {
+    "id": "mcp.test",
+    "path": [
+      "mcp",
+      "test"
+    ],
+    "usage": "butler mcp test <id> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Connect to a configured MCP server and list its tools/resources.",
+    "spec": ".project-ledger/specs/butler-rc-hardening-foundations.md"
+  },
+  {
+    "id": "skills.list",
+    "path": [
+      "skills",
+      "list"
+    ],
+    "usage": "butler skills list [--project ID] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "List core, user, and project skills from Butler home and data home.",
+    "spec": ".project-ledger/specs/butler-rc-hardening-foundations.md"
+  },
+  {
+    "id": "skills.inspect",
+    "path": [
+      "skills",
+      "inspect"
+    ],
+    "usage": "butler skills inspect <name> [--project ID] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Inspect safe metadata for a core, user, or project skill.",
+    "spec": ".project-ledger/specs/butler-rc-hardening-foundations.md"
+  },
+  {
+    "id": "skills.import",
+    "path": [
+      "skills",
+      "import"
+    ],
+    "usage": "butler skills import <zip-path> [--project ID] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Import a validated skill zip into Butler data home.",
+    "spec": ".project-ledger/specs/butler-rc-hardening-foundations.md"
+  },
+  {
+    "id": "skills.validate",
+    "path": [
+      "skills",
+      "validate"
+    ],
+    "usage": "butler skills validate [--project ID] [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Validate core, user, and project skill definitions without exposing raw content.",
+    "spec": ".project-ledger/specs/butler-rc-hardening-foundations.md"
+  },
+  {
+    "id": "telegram.send-test",
+    "path": [
+      "telegram",
+      "send-test"
+    ],
+    "usage": "butler telegram send-test [--message TEXT]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Send a safe Telegram test message.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "telegram.unpair",
+    "path": [
+      "telegram",
+      "unpair"
+    ],
+    "usage": "butler telegram unpair [--yes]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Remove paired Telegram chat state.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "work.dashboard",
+    "path": [
+      "work",
+      "dashboard"
+    ],
+    "usage": "butler work dashboard [--json] [--debug]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Show support and recovery work overview.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "work.list",
+    "path": [
+      "work",
+      "list"
+    ],
+    "usage": "butler work list [--json] [--status STATUS]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "List durable work items for recovery.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "work.show",
+    "path": [
+      "work",
+      "show"
+    ],
+    "usage": "butler work show <id> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Show one work item summary without raw prompts.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "work.resume",
+    "path": [
+      "work",
+      "resume"
+    ],
+    "usage": "butler work resume <id|latest>",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Resume recoverable work from durable state.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "work.cancel",
+    "path": [
+      "work",
+      "cancel"
+    ],
+    "usage": "butler work cancel <id> [--yes]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Cancel an active or recoverable work item.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "work.retry",
+    "path": [
+      "work",
+      "retry"
+    ],
+    "usage": "butler work retry <id>",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Retry a failed work item.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "cognition.memory.status",
+    "path": [
+      "cognition",
+      "memory",
+      "status"
+    ],
+    "usage": "butler cognition memory status [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Report memory index and maintenance health.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "cognition.memory.recall",
+    "path": [
+      "cognition",
+      "memory",
+      "recall"
+    ],
+    "usage": "butler cognition memory recall <cue> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Run privacy-safe associative memory recall from a cue.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "cognition.memory.project.inspect",
+    "path": [
+      "cognition",
+      "memory",
+      "project",
+      "inspect"
+    ],
+    "usage": "butler cognition memory project inspect <project-id> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Inspect one project memory capsule safely.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "context.status",
+    "path": [
+      "context",
+      "status"
+    ],
+    "usage": "butler context status [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Show context pressure and compaction readiness.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "context.compact",
+    "path": [
+      "context",
+      "compact"
+    ],
+    "usage": "butler context compact [--session SESSION_ID] [--yes]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Run explicit context compaction for a session.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "context.prune",
+    "path": [
+      "context",
+      "prune"
+    ],
+    "usage": "butler context prune [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Run safe context-maintenance pruning.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "maintenance.context",
+    "path": [
+      "maintenance",
+      "context"
+    ],
+    "usage": "butler maintenance context [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Compatibility alias for context prune maintenance.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "search.status",
+    "path": [
+      "search",
+      "status"
+    ],
+    "usage": "butler search status [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Report configured search provider state.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "search.test",
+    "path": [
+      "search",
+      "test"
+    ],
+    "usage": "butler search test <query> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Run a search provider smoke query.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "web.read",
+    "path": [
+      "web",
+      "read"
+    ],
+    "usage": "butler web read <url> [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Read a URL through the web reader stack.",
+    "spec": "docs/specs/cli/operator-commands.md"
+  },
+  {
+    "id": "cognition.memory.ingest",
+    "path": [
+      "cognition",
+      "memory",
+      "ingest"
+    ],
+    "usage": "butler cognition memory ingest [--session SESSION_ID] [--dry-run]",
+    "priority": "advanced",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Ingest session memory when owning feature gates are stable.",
+    "spec": "docs/specs/cli/advanced-deferred-commands.md"
+  },
+  {
+    "id": "cognition.memory.maintain",
+    "path": [
+      "cognition",
+      "memory",
+      "maintain"
+    ],
+    "usage": "butler cognition memory maintain [--json]",
+    "priority": "advanced",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Run memory maintenance and emit safe summaries.",
+    "spec": "docs/specs/cli/advanced-deferred-commands.md"
+  },
+  {
+    "id": "cognition.migrate",
+    "path": [
+      "cognition",
+      "migrate"
+    ],
+    "usage": "butler cognition migrate --status|--dry-run|--apply [--json]",
+    "priority": "operator",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Inspect or apply the immediate cognition namespace migration.",
+    "spec": ".project-ledger/specs/cognition-namespace-migration.md"
+  },
+  {
+    "id": "automation.list",
+    "path": [
+      "automation",
+      "list"
+    ],
+    "usage": "butler automation list [--json]",
+    "priority": "advanced",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "List configured automations for support.",
+    "spec": "docs/specs/cli/advanced-deferred-commands.md"
+  },
+  {
+    "id": "automation.show",
+    "path": [
+      "automation",
+      "show"
+    ],
+    "usage": "butler automation show <id> [--json]",
+    "priority": "advanced",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": true,
+    "summary": "Show one automation summary.",
+    "spec": "docs/specs/cli/advanced-deferred-commands.md"
+  },
+  {
+    "id": "automation.run",
+    "path": [
+      "automation",
+      "run"
+    ],
+    "usage": "butler automation run <id>",
+    "priority": "advanced",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Manually run an automation after lifecycle stabilizes.",
+    "spec": "docs/specs/cli/advanced-deferred-commands.md"
+  },
+  {
+    "id": "automation.delete",
+    "path": [
+      "automation",
+      "delete"
+    ],
+    "usage": "butler automation delete <id> [--yes]",
+    "priority": "advanced",
+    "status": "implemented",
+    "implemented": true,
+    "supportsJson": false,
+    "summary": "Delete an automation after confirmation.",
+    "spec": "docs/specs/cli/advanced-deferred-commands.md"
+  },
+  {
+    "id": "todo.list",
+    "path": [
+      "todo",
+      "list"
+    ],
+    "usage": "butler todo list [--json]",
+    "priority": "deferred",
+    "status": "deferred",
+    "implemented": false,
+    "supportsJson": true,
+    "summary": "Deferred because todos are agent-internal planning state.",
+    "spec": "docs/specs/cli/advanced-deferred-commands.md"
+  },
+  {
+    "id": "todo.add",
+    "path": [
+      "todo",
+      "add"
+    ],
+    "usage": "butler todo add <text>",
+    "priority": "deferred",
+    "status": "deferred",
+    "implemented": false,
+    "supportsJson": false,
+    "summary": "Deferred until a direct user workflow exists.",
+    "spec": "docs/specs/cli/advanced-deferred-commands.md"
+  },
+  {
+    "id": "todo.update",
+    "path": [
+      "todo",
+      "update"
+    ],
+    "usage": "butler todo update <id> --status STATUS",
+    "priority": "deferred",
+    "status": "deferred",
+    "implemented": false,
+    "supportsJson": false,
+    "summary": "Deferred until direct todo mutation is product-justified.",
+    "spec": "docs/specs/cli/advanced-deferred-commands.md"
+  },
+  {
+    "id": "automation.pause",
+    "path": [
+      "automation",
+      "pause"
+    ],
+    "usage": "butler automation pause <id>",
+    "priority": "deferred",
+    "status": "deferred",
+    "implemented": false,
+    "supportsJson": false,
+    "summary": "Deferred until automation lifecycle controls are stable.",
+    "spec": "docs/specs/cli/advanced-deferred-commands.md"
+  },
+  {
+    "id": "automation.resume",
+    "path": [
+      "automation",
+      "resume"
+    ],
+    "usage": "butler automation resume <id>",
+    "priority": "deferred",
+    "status": "deferred",
+    "implemented": false,
+    "supportsJson": false,
+    "summary": "Deferred until automation lifecycle controls are stable.",
+    "spec": "docs/specs/cli/advanced-deferred-commands.md"
+  }
+]

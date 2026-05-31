@@ -1,0 +1,26 @@
+.tag {
+  width: fit-content;
+  min-height: 20px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+}
+
+.icon svg {
+  width: 11px;
+  height: 11px;
+}
+
+.label {
+  color: inherit;
+  font-size: var(--font-size-1);
+  line-height: 1;
+}

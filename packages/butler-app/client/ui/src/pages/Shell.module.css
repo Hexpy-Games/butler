@@ -1,0 +1,277 @@
+.moduleScope {
+  --module-scope: 1;
+}
+
+:global(.mac-window) {
+  --shell-left-column-width: min(var(--sidebar-width), 100vw);
+  --shell-right-column-width: min(var(--right-panel-width), 100vw);
+  --shell-left-column-target-width: var(--shell-left-column-width);
+  --shell-right-column-target-width: 0px;
+
+  grid-template-columns:
+    minmax(0, var(--shell-left-column-target-width)) minmax(0, 1fr)
+    minmax(0, var(--shell-right-column-target-width));
+  width: 100vw;
+  height: 100vh;
+  color: var(--text-primary);
+  background: var(--sidebar-bg);
+  transition: grid-template-columns 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+  display: grid;
+  position: relative;
+  overflow: hidden;
+}
+
+:global(.mac-window.browser-chrome) {
+  --traffic-controls-width: 0px;
+  --chrome-floating-toggle-left: 0px;
+}
+
+:global(.electron-chrome.platform-darwin) {
+  --window-controls-width: 0px;
+}
+
+:global(.electron-chrome.platform-win32),
+:global(.electron-chrome.platform-linux) {
+  --traffic-controls-width: 0px;
+  --window-controls-width: 138px;
+}
+
+:global(.mac-window.right-open) {
+  --shell-right-column-target-width: var(--shell-right-column-width);
+}
+
+:global(.mac-window.left-collapsed) {
+  --shell-left-column-target-width: 0px;
+}
+
+:global(.mac-window.panel-resizing) {
+  transition: none;
+}
+
+:global(.mac-window.settings-active) {
+  background: var(--settings-bg);
+  grid-template-columns: none;
+  display: block;
+}
+
+:global(.sidebar-slot) {
+  z-index: 3;
+  min-width: 0;
+  transition:
+    background 0.18s,
+    border-color 0.18s;
+  position: relative;
+  overflow: hidden;
+}
+
+:global(.left-collapsed .sidebar-slot) {
+  background: transparent;
+  border-right-color: transparent;
+}
+
+:global(.right-panel-slot) {
+  position: relative;
+  z-index: 6;
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden;
+  contain: layout paint style;
+}
+
+:global(.right-panel-slot [data-test-class~="right-inspector"]) {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--shell-right-column-width);
+  max-width: var(--shell-right-column-width);
+}
+
+:global(.panel-resize-handle) {
+  z-index: 8;
+  width: 9px;
+  cursor: col-resize;
+  outline: none;
+  position: absolute;
+  top: var(--titlebar-height);
+  bottom: 0;
+  -webkit-app-region: no-drag;
+  touch-action: none;
+}
+
+:global(.panel-resize-handle::after) {
+  content: "";
+  opacity: 0.34;
+  background: var(--line);
+  border-radius: var(--radius-control);
+  width: 1px;
+  position: absolute;
+  inset: 10px 4px;
+  transition: opacity 0.14s;
+}
+
+:global(.panel-resize-handle:hover::after),
+:global(.panel-resize-handle:active::after),
+:global(.panel-resize-handle:focus-visible::after),
+:global(.panel-resizing .panel-resize-handle::after) {
+  opacity: 1;
+  background: var(--line-strong);
+}
+
+:global(.panel-resize-handle:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+:global(.left-panel-resize-handle) {
+  left: calc(var(--shell-left-column-width) - 4px);
+}
+
+:global(.right-panel-resize-handle) {
+  right: calc(var(--shell-right-column-width) - 4px);
+}
+
+:global(.workspace) {
+  grid-template-rows: var(--titlebar-height) 1fr;
+  position: relative;
+  background: var(--workspace-bg);
+  min-width: 0;
+  height: 100vh;
+  transition: background 0.18s;
+  display: grid;
+  border-radius: 18px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+:global(.mac-window.new-chat-active.main-screen-theme-bloom .workspace),
+:global(.mac-window.new-chat-active.main-screen-theme-silk .workspace) {
+  background: transparent;
+}
+
+:global(
+  .mac-window.new-chat-active.main-screen-theme-bloom
+    [data-test-class~="custom-titlebar"]
+),
+:global(
+  .mac-window.new-chat-active.main-screen-theme-silk
+    [data-test-class~="custom-titlebar"]
+) {
+  background: transparent;
+}
+
+:global(.mac-window.right-open .workspace) {
+  border-right-width: 0;
+}
+
+:global(.workspace > :not([data-test-class~="custom-titlebar"])) {
+  grid-row: 2;
+  min-height: 0;
+}
+
+:global(.right-panel-overlay-titlebar) {
+  display: none;
+}
+
+@media (width<=1180px) {
+  :global(:root) {
+    --sidebar-width: 284px;
+    --right-panel-width: 320px;
+  }
+
+  :global(.segmented-button span) {
+    display: none;
+  }
+
+  :global(.segmented-button.wide) {
+    min-width: 34px;
+  }
+}
+
+@media (width<=640px) {
+  :global(.mac-window.right-open) {
+    --shell-left-column-width: 0px;
+    --shell-right-column-width: 100vw;
+    --shell-left-column-target-width: 0px;
+    --shell-right-column-target-width: 100vw;
+  }
+
+  :global(.mac-window.right-open .workspace) {
+    border-right-width: 0;
+    border-radius: 0;
+  }
+
+  :global(.mac-window.right-open [data-test-class~="right-inspector"]) {
+    padding-top: var(--titlebar-height);
+  }
+
+  :global(.mac-window.right-open .right-panel-overlay-titlebar) {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 44;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: min(100vw, var(--shell-right-column-width));
+    height: var(--titlebar-height);
+    padding: 0 18px;
+    pointer-events: auto;
+    app-region: drag;
+    -webkit-app-region: drag;
+  }
+
+  :global(
+    .mac-window.right-open [data-test-class~="chrome-floating-toggle-layer"]
+  ) {
+    display: none;
+  }
+
+  :global(.mac-window.right-open .left-panel-resize-handle),
+  :global(.mac-window.right-open .right-panel-resize-handle) {
+    display: none;
+  }
+}
+
+@media (width<=820px) {
+  :global(:root) {
+    --sidebar-width: 272px;
+    --traffic-controls-width: 78px;
+  }
+
+  :global(.project-controls) {
+    gap: 4px;
+  }
+
+  :global(.titlebar-divider),
+  :global(.project-controls .segmented-button:nth-of-type(2)),
+  :global(.project-controls .icon-button:nth-last-child(3)),
+  :global(.project-controls .icon-button:nth-last-child(2)) {
+    display: none;
+  }
+
+  :global(.empty-state) {
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+
+  :global(.prompt-card),
+  :global(.composer-card),
+  :global(.composer-wrap),
+  :global(.composer-wrap.large) {
+    width: min(760px, 94%);
+  }
+
+  :global(.prompt-actions),
+  :global(.composer-toolbar) {
+    gap: 6px;
+  }
+
+  :global(.access-button span),
+  :global(.model-button span:last-of-type),
+  :global(.context-bar span:nth-child(n + 3)) {
+    display: none;
+  }
+}

@@ -1,0 +1,21 @@
+.root {
+  min-width: 0;
+}
+
+.tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.token {
+  max-width: 100%;
+  padding: 2px var(--space-sm);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--selection);
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,30 @@
+.header {
+  display: flex;
+  gap: var(--space-lg);
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.copy {
+  min-width: 0;
+}
+
+.title {
+  color: var(--text-primary);
+}
+
+.description,
+.meta {
+  color: var(--text-secondary);
+}
+
+.action {
+  flex: 0 0 auto;
+}
+
+@media (width <= 640px) {
+  .header {
+    flex-direction: column;
+  }
+}

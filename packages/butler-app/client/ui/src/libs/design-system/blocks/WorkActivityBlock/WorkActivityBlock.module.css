@@ -1,0 +1,299 @@
+.block {
+  --work-activity-line-x: 15px;
+  --work-activity-content-x: 44px;
+  --work-activity-line-start: 8px;
+  --work-activity-line-bridge: calc(
+    var(--space-4) + var(--work-activity-line-start)
+  );
+  --work-activity-muted-text: color-mix(
+    in srgb,
+    var(--text-tertiary) 78%,
+    transparent
+  );
+
+  position: relative;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0 0 0 var(--work-activity-content-x);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.compact {
+  --work-activity-line-x: 9px;
+  --work-activity-content-x: 28px;
+  --work-activity-line-start: 6px;
+  --work-activity-line-bridge: calc(
+    var(--space-3) + var(--work-activity-line-start)
+  );
+}
+
+.block::before {
+  position: absolute;
+  top: var(--work-activity-line-start);
+  bottom: 2px;
+  left: var(--work-activity-line-x);
+  width: 1px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--line) 82%, transparent);
+  content: "";
+}
+
+.block:not(:last-child)::before {
+  bottom: calc(0px - var(--work-activity-line-bridge));
+}
+
+.running {
+  background: transparent;
+}
+
+.header {
+  display: block;
+  position: relative;
+  min-width: 0;
+  min-height: 1lh;
+}
+
+.marker,
+.icon,
+.toolIcon {
+  display: inline-grid;
+  width: 1lh;
+  height: 1lh;
+  place-items: center;
+  color: var(--text-tertiary);
+  font-size: var(--typo-body-size);
+  line-height: var(--line-height-body);
+}
+
+.marker {
+  position: absolute;
+  top: 0.4lh;
+  left: calc(
+    -1 * var(--work-activity-content-x) + var(--work-activity-line-x) - 3px
+  );
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+}
+
+.icon {
+  position: absolute;
+  top: 0;
+  left: calc(
+    -1 * var(--work-activity-content-x) + var(--work-activity-line-x) - 0.5lh
+  );
+  background: var(--surface);
+}
+
+.icon svg,
+.toolIcon svg {
+  display: block;
+}
+
+.title,
+.toolTitle,
+.description,
+.toolDetails {
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-regular);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.description {
+  color: var(--work-activity-muted-text);
+  font-weight: var(--font-weight-regular);
+  overflow-wrap: anywhere;
+}
+
+.tools {
+  display: grid;
+  max-width: 100%;
+  gap: var(--space-2);
+}
+
+.compact .tools {
+  gap: var(--space-1);
+}
+
+.compact .title,
+.compact .description,
+.compact .toolTitle,
+.compact .toolDetails {
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+}
+
+.compact .marker {
+  top: 0.36lh;
+}
+
+.compact .marker,
+.compact .icon,
+.compact .toolIcon {
+  font-size: var(--typo-caption-size);
+}
+
+.toolRow {
+  min-width: 0;
+}
+
+.tool {
+  display: grid;
+  width: fit-content;
+  max-width: min(100%, 760px);
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+  padding: 5px var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface) 74%, transparent);
+  color: var(--work-activity-muted-text);
+  font: inherit;
+  text-align: left;
+}
+
+.toolGroup {
+  display: grid;
+  width: fit-content;
+  max-width: min(100%, 760px);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 5px var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface) 74%, transparent);
+  color: var(--work-activity-muted-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+
+.compact .tool {
+  width: 100%;
+  max-width: 100%;
+  padding: 2px var(--space-2);
+}
+
+.compact .toolGroup {
+  width: 100%;
+  max-width: 100%;
+  padding: 2px var(--space-2);
+}
+
+button.tool {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+button.tool:hover,
+button.tool:focus-visible,
+button.tool[aria-expanded="true"],
+.toolGroup:hover,
+.toolGroup:focus-visible,
+.toolGroup[aria-expanded="true"] {
+  background: var(--selection);
+  border-color: var(--line-strong);
+  outline: none;
+}
+
+.toolGroupSummary {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolGroupChevron,
+.toolDetailChevron {
+  display: grid;
+  width: 1lh;
+  height: 1lh;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.toolCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.toolTitle {
+  overflow: hidden;
+  color: var(--work-activity-muted-text);
+  font-weight: var(--font-weight-regular);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolDetailList {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  color: var(--work-activity-muted-text);
+}
+
+.toolDetailRow {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.toolDetailButton {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--work-activity-muted-text);
+  font: inherit;
+  text-align: left;
+}
+
+button.toolDetailButton {
+  cursor: pointer;
+}
+
+button.toolDetailButton:hover,
+button.toolDetailButton:focus-visible {
+  color: var(--text-secondary);
+  outline: none;
+}
+
+.toolDetailText {
+  color: var(--work-activity-muted-text);
+}
+
+.toolDetails {
+  display: block;
+  width: 100%;
+  margin-top: 0;
+  border-left: 0;
+  color: var(--work-activity-muted-text);
+  padding: 0 0 0 calc(1lh + var(--space-2));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.tool,
+  .toolGroup {
+    transition: none;
+  }
+}

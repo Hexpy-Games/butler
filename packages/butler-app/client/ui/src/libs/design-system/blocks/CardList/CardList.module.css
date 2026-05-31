@@ -1,0 +1,107 @@
+.cardList {
+  --card-list-row-height: 72px;
+
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.heading {
+  color: var(--text-primary);
+}
+
+.scroller {
+  display: grid;
+  max-height: var(--card-list-max-height, none);
+  gap: var(--space-2);
+  overflow: hidden auto;
+  scrollbar-color: color-mix(in srgb, var(--line-strong) 70%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
+.scroller::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroller::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--line-strong) 70%, transparent);
+  background-clip: content-box;
+}
+
+.item {
+  display: grid;
+  min-height: var(--card-list-row-height);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: start;
+}
+
+.item[data-has-icon="true"] {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.icon {
+  display: inline-grid;
+  width: 1lh;
+  height: 1lh;
+  align-self: start;
+  font-size: var(--typo-body-size);
+  line-height: var(--typo-body-line-height);
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.icon > svg {
+  width: 1em;
+  height: 1em;
+}
+
+.content {
+  min-width: 0;
+}
+
+.titleRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.description {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.actions {
+  align-self: start;
+  min-width: max-content;
+}

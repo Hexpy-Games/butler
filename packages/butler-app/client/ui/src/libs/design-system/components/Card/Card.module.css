@@ -1,0 +1,39 @@
+.card {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.card[data-padding="none"] {
+  padding: 0;
+}
+
+.card[data-padding="sm"] {
+  padding: var(--space-2);
+}
+
+.card[data-padding="md"] {
+  padding: var(--space-3);
+}
+
+.card[data-selected="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-raised));
+}
+
+.card[data-interactive="true"] {
+  cursor: pointer;
+}
+
+.card[data-interactive="true"]:hover {
+  background: var(--selection);
+}
+
+.card[data-interactive="true"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}

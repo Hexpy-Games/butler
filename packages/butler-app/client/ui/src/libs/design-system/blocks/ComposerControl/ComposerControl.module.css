@@ -1,0 +1,57 @@
+.control {
+  align-self: center;
+  max-width: min(100%, 220px);
+}
+
+.control [data-slot="button-icon"] {
+  color: var(--composer-control-icon-color, currentColor);
+}
+
+.control [data-test-class~="composer-control-icon"] {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.control [data-slot="button-icon"] svg {
+  color: inherit;
+}
+
+.control [data-test-class~="composer-control-icon"] svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.control
+  [data-slot="button-icon"]
+  :where(path, circle, rect, line, polyline, polygon) {
+  stroke: currentColor;
+}
+
+.active {
+  background: var(--selection-strong);
+}
+
+.content {
+  min-width: 0;
+}
+
+.label,
+.detail {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.label {
+  color: var(--text-primary);
+}
+
+.detail {
+  color: var(--text-tertiary);
+}

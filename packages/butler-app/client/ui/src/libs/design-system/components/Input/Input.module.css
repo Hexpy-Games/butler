@@ -1,0 +1,29 @@
+.fixture {
+  min-width: 0;
+}
+
+.input {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--placeholder);
+  opacity: 1;
+}
+
+.input:not(:placeholder-shown) {
+  color: var(--text-primary);
+}
+
+.input:focus {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}

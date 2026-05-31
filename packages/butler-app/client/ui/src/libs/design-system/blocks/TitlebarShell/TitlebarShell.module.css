@@ -1,0 +1,113 @@
+.titlebar {
+  display: flex;
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  right: 0;
+  left: 0;
+  gap: var(--space-md);
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--titlebar-height, 48px);
+  padding: 0 18px;
+  padding-right: calc(18px + var(--window-controls-width, 0px));
+  color: var(--text-primary);
+  background: var(--titlebar-bg);
+  transition: left 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.collapsed {
+  left: 0;
+  padding-left: calc(var(--traffic-controls-width) + 54px);
+}
+
+.identity,
+.copy {
+  min-width: 0;
+}
+
+.identity {
+  flex: 1 1 auto;
+  align-items: center;
+}
+
+.copy {
+  display: inline-flex;
+  overflow: hidden;
+  align-items: baseline;
+  gap: var(--space-sm);
+  white-space: nowrap;
+}
+
+.title,
+.subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.title {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.leading {
+  display: inline-grid;
+  width: calc(var(--typo-app-title-size) * var(--typo-app-title-line-height));
+  height: calc(var(--typo-app-title-size) * var(--typo-app-title-line-height));
+  place-items: center;
+  color: var(--text-tertiary);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.leading[data-visibility="narrow"] {
+  display: none;
+  width: auto;
+  height: auto;
+}
+
+.leading svg {
+  display: block;
+}
+
+.subtitle {
+  flex: 0 999 auto;
+  color: var(--text-tertiary);
+}
+
+.trailing {
+  flex: 0 0 auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.fixture {
+  position: relative;
+  min-height: var(--titlebar-height);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--titlebar-bg);
+}
+
+.fixtureTitlebar {
+  position: relative;
+  right: auto;
+  left: auto;
+  padding-left: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .titlebar {
+    transition: none;
+  }
+}
+
+@media (width <=640px) {
+  .leading[data-visibility="narrow"] {
+    display: inline-grid;
+  }
+}

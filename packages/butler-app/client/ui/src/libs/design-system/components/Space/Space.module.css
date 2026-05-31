@@ -1,0 +1,67 @@
+.space {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Direction */
+.direction-horizontal {
+  width: auto;
+  height: 1px;
+}
+
+.direction-vertical {
+  width: 1px;
+  height: auto;
+}
+
+/* Sizes */
+.size-none {
+  --space-size: var(--space-none);
+}
+
+.size-xs {
+  --space-size: var(--space-xs);
+}
+
+.size-sm {
+  --space-size: var(--space-sm);
+}
+
+.size-md {
+  --space-size: var(--space-md);
+}
+
+.size-lg {
+  --space-size: var(--space-lg);
+}
+
+.size-xl {
+  --space-size: var(--space-xl);
+}
+
+.size-2xl {
+  --space-size: var(--space-2xl);
+}
+
+/* Apply sizing */
+.direction-horizontal.size-none,
+.direction-horizontal.size-xs,
+.direction-horizontal.size-sm,
+.direction-horizontal.size-md,
+.direction-horizontal.size-lg,
+.direction-horizontal.size-xl,
+.direction-horizontal.size-2xl {
+  width: var(--space-size);
+  min-width: var(--space-size);
+}
+
+.direction-vertical.size-none,
+.direction-vertical.size-xs,
+.direction-vertical.size-sm,
+.direction-vertical.size-md,
+.direction-vertical.size-lg,
+.direction-vertical.size-xl,
+.direction-vertical.size-2xl {
+  height: var(--space-size);
+  min-height: var(--space-size);
+}

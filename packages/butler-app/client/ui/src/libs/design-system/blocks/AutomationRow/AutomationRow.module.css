@@ -1,0 +1,13 @@
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-sm);
+  align-items: center;
+  width: 100%;
+}
+
+@media (width >= 720px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+}

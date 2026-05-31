@@ -1,0 +1,11 @@
+.row {
+  width: 100%;
+}
+
+.help {
+  color: var(--text-tertiary);
+}
+
+.error {
+  color: var(--error-text, var(--red-03));
+}

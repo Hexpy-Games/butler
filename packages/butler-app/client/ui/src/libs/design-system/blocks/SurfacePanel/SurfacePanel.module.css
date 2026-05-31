@@ -1,0 +1,27 @@
+.panel {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.elevation-none {
+  box-shadow: none;
+  background: transparent;
+}
+
+.elevation-low {
+  box-shadow: var(--shadow-control);
+}
+
+.elevation-medium {
+  box-shadow: var(--shadow-card);
+}
+
+.elevation-high {
+  box-shadow: var(--shadow-window);
+}

@@ -1,0 +1,19 @@
+.empty {
+  width: 100%;
+  padding: var(--space-2xl);
+  text-align: center;
+}
+
+.icon {
+  display: inline-flex;
+  color: var(--text-tertiary);
+  opacity: 0.6;
+}
+
+.message {
+  color: var(--text-secondary);
+}
+
+.action {
+  /* Action container */
+}

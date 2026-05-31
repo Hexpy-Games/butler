@@ -1,0 +1,221 @@
+.root {
+  display: grid;
+  width: max-content;
+  min-width: min(280px, calc(100vw - 32px));
+  max-width: min(520px, calc(100vw - 32px));
+  gap: var(--space-1);
+  padding: 0;
+  color: var(--text-primary);
+}
+
+.root[data-width="fixed"] {
+  width: min(320px, calc(100vw - 32px));
+  min-width: min(320px, calc(100vw - 32px));
+  max-width: min(320px, calc(100vw - 32px));
+}
+
+.title,
+.groupTitle,
+.footerTitle {
+  min-width: 0;
+  padding: 3px var(--space-2) 4px;
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-compact);
+}
+
+.searchLabel {
+  display: block;
+  min-width: 0;
+  padding: 0 var(--space-1);
+}
+
+.searchControl {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.searchInput {
+  padding-right: 32px;
+}
+
+.clearButton {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.clearButton:hover,
+.clearButton:focus-visible {
+  background: var(--selection);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.filters,
+.footerOptions {
+  display: flex;
+  min-width: 0;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+  overflow-x: auto;
+  padding: 0 var(--space-1) var(--space-1);
+  scrollbar-width: none;
+}
+
+.filters::-webkit-scrollbar,
+.footerOptions::-webkit-scrollbar {
+  display: none;
+}
+
+.filters [data-slot="button"],
+.footerOptions [data-slot="button"] {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.filters [data-slot="button"]:hover,
+.filters [data-slot="button"]:focus-visible,
+.footerOptions [data-slot="button"]:hover,
+.footerOptions [data-slot="button"]:focus-visible {
+  background: var(--selection);
+  color: var(--text-primary);
+}
+
+.filters [data-slot="button"][data-selected="true"],
+.footerOptions [data-slot="button"][data-selected="true"] {
+  background: var(--selection);
+  color: var(--text-primary);
+}
+
+.results {
+  height: min(calc(var(--filtered-select-results-max-rows, 6.65) * 30px), 42vh);
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.resultsContent {
+  display: grid;
+  gap: var(--space-2);
+  padding-inline: 0;
+}
+
+.group,
+.groupItems,
+.footer {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.item {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-1);
+  align-items: start;
+  padding: 3px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.item:not([data-has-icon="true"]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.item:hover,
+.item:focus-visible,
+.item[data-selected="true"] {
+  background: var(--selection);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.icon {
+  display: inline-grid;
+  width: 1lh;
+  height: 1lh;
+  place-items: center;
+  color: currentColor;
+}
+
+.icon svg {
+  display: block;
+}
+
+.itemCopy {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.itemLabel {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemDescription {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
+}
+
+.empty {
+  padding: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-3);
+  line-height: var(--line-height-body);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item,
+  .clearButton {
+    transition: none;
+  }
+}

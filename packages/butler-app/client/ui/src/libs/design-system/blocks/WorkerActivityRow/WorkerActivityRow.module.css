@@ -1,0 +1,226 @@
+.root {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-1) 0;
+  color: var(--text-primary);
+}
+
+.compact {
+  padding: 0;
+}
+
+.noIcon {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.root[data-depth="1"] {
+  padding-left: var(--space-3);
+}
+
+.root[data-depth="1"] .body {
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--line);
+}
+
+.icon {
+  display: inline-grid;
+  width: 1lh;
+  height: 1lh;
+  place-items: center;
+  color: var(--text-tertiary);
+  line-height: var(--line-height-body);
+}
+
+.body,
+.header,
+.primaryLine,
+.title,
+.meta,
+.description,
+.details {
+  min-width: 0;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.headerButton {
+  display: block;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.headerButton:focus-visible .primaryLine {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.primaryLine {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.title {
+  flex: 0 0 auto;
+  min-width: max-content;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-regular);
+  overflow: visible;
+  overflow-wrap: normal;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.meta {
+  flex: 0 0 auto;
+  min-width: max-content;
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-regular);
+  overflow: visible;
+  overflow-wrap: normal;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.actions {
+  min-width: max-content;
+}
+
+.description {
+  flex: 1 1 auto;
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-regular);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.details {
+  display: grid;
+  max-width: 100%;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  overflow: hidden;
+}
+
+.phaseRail {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-1);
+  padding: var(--space-1) 0 0;
+  margin: 0;
+  list-style: none;
+}
+
+.phaseStep {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  align-content: start;
+  color: var(--text-tertiary);
+}
+
+.phaseDot {
+  display: block;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+}
+
+.phaseLabel {
+  overflow: hidden;
+  font-size: var(--font-size-1);
+  line-height: var(--line-height-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phaseStep[data-state="done"] {
+  color: var(--text-tertiary);
+}
+
+.phaseStep[data-state="done"] .phaseDot {
+  background: color-mix(in srgb, var(--worker-active) 64%, var(--line));
+}
+
+.phaseStep[data-state="active"] {
+  color: var(--text-secondary);
+}
+
+.phaseStep[data-state="active"] .phaseDot {
+  background: var(--worker-active);
+  animation: worker-phase-pulse 1.25s ease-in-out infinite;
+}
+
+.phaseStep[data-state="failed"] {
+  color: var(--danger);
+}
+
+.phaseStep[data-state="failed"] .phaseDot {
+  background: var(--danger);
+}
+
+.phaseStep[data-state="cancelled"] {
+  color: var(--text-secondary);
+}
+
+.phaseStep[data-state="cancelled"] .phaseDot {
+  background: var(--text-tertiary);
+}
+
+.root[data-terminal="true"] .phaseStep[data-state="active"] .phaseDot,
+.root[data-terminal="true"] .phaseStep[data-state="done"] .phaseDot {
+  background: var(--text-tertiary);
+  animation: none;
+}
+
+@media (width <= 720px) {
+  .header {
+    gap: var(--space-1) var(--space-2);
+  }
+
+  .actions {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phaseStep[data-state="active"] .phaseDot {
+    animation: none;
+  }
+}
+
+@keyframes worker-phase-pulse {
+  0%,
+  100% {
+    opacity: 0.68;
+    transform: scaleY(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scaleY(1.35);
+  }
+}

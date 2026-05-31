@@ -1,0 +1,659 @@
+:root {
+  color-scheme: light;
+  --titlebar-height: 48px;
+  --titlebar-safe-area-top: calc(var(--titlebar-height) + var(--space-sm));
+  --chrome-floating-toggle-top: 10px;
+  --chrome-floating-toggle-left: calc(
+    var(--traffic-controls-width) + var(--space-2)
+  );
+  --sidebar-width: 304px;
+  --traffic-controls-width: 78px;
+  --right-panel-width: 376px;
+  --composer-reserve: 260px;
+  /* Semantic spacing tokens */
+  --space-none: 0;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+
+  /* Legacy numeric aliases for backwards compatibility */
+  --space-1: var(--space-xs);
+  --space-2: var(--space-sm);
+  --space-3: var(--space-md);
+  --space-4: var(--space-lg);
+  --space-5: var(--space-xl);
+  --space-6: var(--space-2xl);
+
+  /* Source color literals. Semantic tokens below must reference these. */
+  --neutral-white: #ffffff;
+  --neutral-light-text-primary: #222326;
+  --neutral-light-text-secondary: #696d73;
+  --neutral-light-text-disabled: #a7abb0;
+  --neutral-dark-text-secondary: #b5b8bd;
+  --neutral-dark-text-tertiary: #858991;
+  --neutral-dark-text-disabled: #5a5d64;
+  --neutral-dark-icon-muted: #c5c7cb;
+  --neutral-dark-placeholder: #74777d;
+  --neutral-dark-send-stop: #e8e9eb;
+
+  --orange-06: #c85f1b;
+
+  --green-worker-active: #20c052;
+  --amber-worker-warning: #d19a19;
+
+  /* Raw Palette Tokens */
+  --grayscale-01: #f8f9fa;
+  --grayscale-02: #f2f3f4;
+  --grayscale-03: #e9eaec;
+  --grayscale-04: #d5d7da;
+  --grayscale-05: #c2c4c7;
+  --grayscale-06: #9a9da2;
+  --grayscale-07: #71767d;
+  --grayscale-08: #54585e;
+  --grayscale-09: #3a3d42;
+  --grayscale-10: #26282c;
+  --grayscale-11: #1f2023;
+  --grayscale-12: #141516;
+
+  --blue-01: #e6f2ff;
+  --blue-02: #b3d9ff;
+  --blue-03: #80bfff;
+  --blue-04: #4da6ff;
+  --blue-05: #1a8cff;
+  --blue-06: #007aff;
+  --blue-07: #0066d9;
+  --blue-08: #0052b3;
+  --blue-09: #003d8c;
+  --blue-10: #002966;
+
+  --green-01: #e6f7e9;
+  --green-02: #b3e6bf;
+  --green-03: #80d494;
+  --green-04: #4dc26a;
+  --green-05: #2fb050;
+  --green-06: #2a9f48;
+  --green-07: #228b3e;
+  --green-08: #1b7733;
+  --green-09: #146328;
+  --green-10: #0d4f1e;
+
+  --red-01: #fff5f4;
+  --red-02: #ffe0de;
+  --red-03: #ffcac7;
+  --red-04: #ffb3af;
+  --red-05: #ff8a85;
+  --red-06: #e85552;
+  --red-07: #be3836;
+  --red-08: #a42e2c;
+  --red-09: #8a2523;
+  --red-10: #701c1a;
+
+  --amber-01: #fff9e6;
+  --amber-02: #ffedb3;
+  --amber-03: #ffe080;
+  --amber-04: #ffd44d;
+  --amber-05: #ffc71a;
+  --amber-06: #e6b000;
+  --amber-07: #cc9900;
+  --amber-08: #b38300;
+  --amber-09: #996c00;
+  --amber-10: #805600;
+
+  /* Semantic Color Tokens */
+  --color-text-primary: var(--grayscale-10);
+  --color-text-secondary: var(--grayscale-07);
+  --color-text-tertiary: var(--grayscale-06);
+  --color-text-disabled: var(--grayscale-05);
+  --color-text-inverse: var(--grayscale-01);
+
+  --color-action-primary: var(--blue-06);
+  --color-action-primary-hover: var(--blue-07);
+  --color-action-primary-active: var(--blue-08);
+
+  --color-success: var(--green-06);
+  --color-success-bg: var(--green-01);
+  --color-warning: var(--amber-06);
+  --color-warning-bg: var(--amber-01);
+  --color-danger: var(--red-07);
+  --color-danger-bg: var(--red-01);
+
+  --color-border-default: var(--grayscale-03);
+  --color-border-strong: var(--grayscale-04);
+  --color-border-interactive: var(--blue-06);
+
+  --color-surface-base: var(--grayscale-01);
+  --color-surface-raised: rgba(255, 255, 255, 0.96);
+  --color-surface-overlay: rgba(255, 255, 255, 0.98);
+  --color-surface-sunken: var(--grayscale-02);
+
+  --color-disabled-bg: var(--grayscale-02);
+  --color-disabled-fg: var(--grayscale-05);
+
+  --color-focus-ring: rgba(0, 122, 255, 0.34);
+
+  /* Typography Role Tokens */
+  --typo-h1-size: 32px;
+  --typo-h1-weight: 620;
+  --typo-h1-line-height: 1.25;
+  --typo-h1-letter-spacing: 0;
+
+  --typo-h2-size: 24px;
+  --typo-h2-weight: 620;
+  --typo-h2-line-height: 1.3;
+  --typo-h2-letter-spacing: 0;
+
+  --typo-h3-size: 20px;
+  --typo-h3-weight: 560;
+  --typo-h3-line-height: 1.35;
+  --typo-h3-letter-spacing: 0;
+
+  --typo-h4-size: 18px;
+  --typo-h4-weight: 560;
+  --typo-h4-line-height: 1.4;
+  --typo-h4-letter-spacing: 0;
+
+  --typo-h5-size: 16px;
+  --typo-h5-weight: 560;
+  --typo-h5-line-height: 1.45;
+  --typo-h5-letter-spacing: 0;
+
+  --typo-h6-size: 14px;
+  --typo-h6-weight: 560;
+  --typo-h6-line-height: 1.45;
+  --typo-h6-letter-spacing: 0;
+
+  --typo-body-size: 14px;
+  --typo-body-weight: 400;
+  --typo-body-line-height: 1.45;
+  --typo-body-letter-spacing: 0;
+
+  --typo-caption-size: 12px;
+  --typo-caption-weight: 400;
+  --typo-caption-line-height: 1.45;
+  --typo-caption-letter-spacing: 0;
+
+  --typo-label-size: 13px;
+  --typo-label-weight: 500;
+  --typo-label-line-height: 1.45;
+  --typo-label-letter-spacing: 0;
+
+  --typo-code-size: 13px;
+  --typo-code-weight: 400;
+  --typo-code-line-height: 1.45;
+  --typo-code-letter-spacing: 0;
+  --typo-code-font: var(--typo-code-weight) var(--typo-code-size) /
+    var(--typo-code-line-height) var(--font-family-code);
+
+  /* App UI Typography Tokens - Compact variants for app chrome */
+  --typo-app-title-size: 15px;
+  --typo-app-title-weight: 620;
+  --typo-app-title-line-height: 1.4;
+  --typo-app-title-letter-spacing: 0;
+
+  --typo-panel-title-size: 15px;
+  --typo-panel-title-weight: 620;
+  --typo-panel-title-line-height: 1.3;
+  --typo-panel-title-letter-spacing: 0;
+
+  --typo-dashboard-title-size: 24px;
+  --typo-dashboard-title-weight: 620;
+  --typo-dashboard-title-line-height: 1.3;
+  --typo-dashboard-title-letter-spacing: 0;
+
+  --typo-new-chat-title-size: 48px;
+  --typo-new-chat-title-size-md: 40px;
+  --typo-new-chat-title-size-sm: 34px;
+  --typo-new-chat-title-weight: 620;
+  --typo-new-chat-title-line-height: 1.06;
+  --typo-new-chat-title-letter-spacing: 0;
+
+  --typo-section-title-size: 13px;
+  --typo-section-title-weight: 500;
+  --typo-section-title-line-height: 1.45;
+  --typo-section-title-letter-spacing: 0;
+
+  --typo-panel-section-title-size: 15px;
+  --typo-panel-section-title-weight: 500;
+  --typo-panel-section-title-line-height: 1.45;
+  --typo-panel-section-title-letter-spacing: 0;
+
+  --typo-metric-value-size: 18px;
+  --typo-metric-value-weight: 560;
+  --typo-metric-value-line-height: 1.4;
+  --typo-metric-value-letter-spacing: 0;
+
+  --font-body:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", sans-serif;
+  --font-family-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-code: var(--font-size-2)/var(--line-height-body)
+    var(--font-family-code);
+  --font-size-1: 12px;
+  --font-size-2: 13px;
+  --font-size-3: 14px;
+  --font-size-4: 15px;
+  --font-size-5: 18px;
+  --font-size-6: 24px;
+  --font-size-display: clamp(28px, 3vw, 40px);
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 560;
+  --font-weight-strong: 620;
+  --line-height-body: 1.45;
+  --line-height-document: 1.58;
+  --sidebar-row-height: 30px;
+  --sidebar-action-size: 24px;
+  --sidebar-icon-column: 18px;
+  --sidebar-row-gap: 10px;
+  --radius-control: 8px;
+  --radius-panel: 10px;
+  --radius-popover: 12px;
+  --radius-composer: 22px;
+  --radius-pill: 999px;
+  --surface: rgba(255, 255, 255, 0.9);
+  --surface-raised: rgba(255, 255, 255, 0.96);
+  --workspace-bg: rgba(255, 255, 255, 0.94);
+  --titlebar-bg: rgba(255, 255, 255, 0.72);
+  --conversation-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.96),
+    rgba(250, 250, 248, 0.96)
+  );
+  --settings-bg: rgba(255, 255, 255, 0.96);
+  --settings-panel-bg: rgba(255, 255, 255, 0.78);
+  --control-bg: rgba(255, 255, 255, 0.82);
+  --control-hover-bg: rgba(255, 255, 255, 0.94);
+  --context-bar-bg: rgba(246, 246, 244, 0.82);
+  --composer-glass-bg: rgba(255, 255, 255, 0.52);
+  --composer-glass-control-bg: rgba(246, 247, 249, 0.3);
+  --composer-glass-border: rgba(255, 255, 255, 0.65);
+  --composer-glass-divider: rgba(0, 0, 0, 0.045);
+  --composer-glass-highlight: rgba(255, 255, 255, 0.42);
+  --composer-glass-lowlight: rgba(0, 0, 0, 0.035);
+  --composer-glass-glint: transparent;
+  --composer-glass-shadow: 0 12px 28px rgba(0, 0, 0, 0.06);
+  --composer-glass-blur: 36px;
+  --composer-glass-filter: saturate(1.35) blur(var(--composer-glass-blur));
+  --tinted-glass-bg: var(--composer-glass-bg);
+  --tinted-glass-tint: rgba(255, 255, 255, 1);
+  --tinted-glass-edge-size: 20px;
+  --tinted-glass-border: var(--composer-glass-border);
+  --tinted-glass-highlight: var(--composer-glass-highlight);
+  --tinted-glass-shadow: var(--composer-glass-shadow);
+  --tinted-glass-blur: 4px;
+  --tinted-glass-filter: saturate(1.35) blur(var(--tinted-glass-blur));
+  --user-message-bg: rgba(244, 245, 247, 0.92);
+  --danger-bg: rgba(255, 245, 244, 0.86);
+  --danger-banner-bg: rgba(255, 239, 238, 0.96);
+  --worker-panel-bg: rgba(241, 242, 244, 0.96);
+  --worker-title-bg: rgba(0, 0, 0, 0.14);
+  --automation-details-bg: rgba(248, 248, 247, 0.9);
+  /* Tuned for macOS light-mode translucency over Electron under-window material. */
+  --sidebar-bg: rgba(255, 255, 255, 0.52);
+  --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-tertiary: var(--color-text-tertiary);
+  --line: var(--color-border-default);
+  --line-strong: var(--color-border-strong);
+  --selection: rgba(32, 35, 39, 0.07);
+  --selection-strong: rgba(32, 35, 39, 0.1);
+  --accent: var(--color-action-primary);
+  --ok: var(--color-success);
+  --danger: var(--color-danger);
+  --icon-muted: var(--grayscale-08);
+  --placeholder: var(--grayscale-05);
+  --send-bg: var(--grayscale-10);
+  --send-stop-bg: var(--grayscale-11);
+  --send-fg: var(--neutral-white);
+  --send-disabled-bg: var(--grayscale-04);
+  --worker-active: var(--green-worker-active);
+  --worker-warning: var(--amber-worker-warning);
+  --access-full: var(--orange-06);
+  --access-ask: var(--accent);
+  --access-read: var(--text-primary);
+  --access-read-icon: var(--text-tertiary);
+  --switch-thumb: var(--neutral-white);
+  --switch-track-bg: rgba(0, 0, 0, 0.18);
+  --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
+  --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
+  --command-overlay-bg: rgba(0, 0, 0, 0.06);
+  --chrome-button-bg: rgba(0, 0, 0, 0.18);
+  --chrome-divider-bg: rgba(0, 0, 0, 0.12);
+  --danger-line: rgba(190, 56, 54, 0.24);
+  --danger-line-strong: rgba(210, 64, 58, 0.28);
+  --context-track-bg: rgba(0, 0, 0, 0.12);
+  --context-chart-1: var(--accent);
+  --context-chart-2: var(--ok);
+  --context-chart-3: var(--icon-muted);
+  --context-chart-4: var(--text-secondary);
+  --context-chart-5: var(--text-tertiary);
+  --context-chart-6: var(--line-strong);
+  --context-chart-free: var(--context-track-bg);
+  --color-mix-light: var(--neutral-white);
+  --shadow-card: 0 10px 28px rgba(0, 0, 0, 0.08);
+  --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.14);
+  --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.22);
+  --shadow-switch: 0 1px 3px rgba(0, 0, 0, 0.18);
+  --shadow-command: 0 18px 48px rgba(0, 0, 0, 0.16);
+  --background: var(--surface-raised);
+  --foreground: var(--text-primary);
+  --popover: rgba(255, 255, 255, 0.98);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--send-bg);
+  --primary-foreground: var(--color-text-inverse);
+  --secondary: rgba(32, 35, 39, 0.08);
+  --secondary-foreground: var(--text-primary);
+  --muted: rgba(32, 35, 39, 0.06);
+  --muted-foreground: var(--text-secondary);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: rgba(0, 122, 255, 0.34);
+  --radius: var(--radius-control);
+}
+
+.theme-dark {
+  color-scheme: dark;
+  /* Override semantic tokens for dark theme */
+  --color-text-primary: var(--grayscale-02);
+  --color-text-secondary: var(--neutral-dark-text-secondary);
+  --color-text-tertiary: var(--neutral-dark-text-tertiary);
+  --color-text-disabled: var(--neutral-dark-text-disabled);
+  --color-text-inverse: var(--grayscale-11);
+
+  --color-action-primary: var(--blue-06);
+  --color-action-primary-hover: var(--blue-05);
+  --color-action-primary-active: var(--blue-04);
+
+  --color-success: var(--green-05);
+  --color-success-bg: rgba(42, 159, 72, 0.12);
+  --color-warning: var(--amber-06);
+  --color-warning-bg: rgba(230, 176, 0, 0.12);
+  --color-danger: var(--red-06);
+  --color-danger-bg: rgba(190, 56, 54, 0.16);
+
+  --color-border-default: rgba(255, 255, 255, 0.1);
+  --color-border-strong: rgba(255, 255, 255, 0.16);
+  --color-border-interactive: var(--color-action-primary);
+
+  --color-surface-base: var(--grayscale-11);
+  --color-surface-raised: rgba(35, 36, 39, 0.96);
+  --color-surface-overlay: rgba(37, 38, 41, 0.98);
+  --color-surface-sunken: var(--grayscale-12);
+
+  --color-disabled-bg: rgba(255, 255, 255, 0.08);
+  --color-disabled-fg: var(--neutral-dark-text-disabled);
+
+  --color-focus-ring: rgba(0, 122, 255, 0.34);
+  --surface: rgba(30, 31, 34, 0.9);
+  --surface-raised: rgba(35, 36, 39, 0.96);
+  --workspace-bg: rgba(26, 27, 30, 0.94);
+  --titlebar-bg: rgba(26, 27, 30, 0.76);
+  --conversation-bg: linear-gradient(
+    180deg,
+    rgba(28, 29, 32, 0.96),
+    rgba(22, 23, 25, 0.96)
+  );
+  --settings-bg: rgba(28, 29, 31, 0.96);
+  --settings-panel-bg: rgba(37, 38, 41, 0.78);
+  --control-bg: rgba(255, 255, 255, 0.08);
+  --control-hover-bg: rgba(255, 255, 255, 0.13);
+  --context-bar-bg: rgba(255, 255, 255, 0.06);
+  --composer-glass-bg: rgba(30, 30, 32, 0.7);
+  --composer-glass-control-bg: rgba(255, 255, 255, 0.045);
+  --composer-glass-border: rgba(0, 0, 0, 0.08);
+  --composer-glass-divider: rgba(255, 255, 255, 0.055);
+  --composer-glass-highlight: rgba(255, 255, 255, 0.11);
+  --composer-glass-lowlight: rgba(0, 0, 0, 0.16);
+  --composer-glass-glint: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(23, 24, 26, 0.81) 13%,
+    rgba(23, 24, 26, 1) 20%,
+    rgba(23, 24, 26, 1) 81%,
+    rgba(23, 24, 26, 0.75) 90%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  --composer-glass-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+  --composer-glass-blur: 4px;
+  --composer-glass-filter: saturate(1.3) blur(var(--composer-glass-blur));
+  --tinted-glass-bg: var(--composer-glass-bg);
+  --tinted-glass-tint: rgba(23, 24, 26, 1);
+  --tinted-glass-edge-size: 20px;
+  --tinted-glass-border: var(--composer-glass-border);
+  --tinted-glass-highlight: var(--composer-glass-highlight);
+  --tinted-glass-shadow: var(--composer-glass-shadow);
+  --tinted-glass-blur: 4px;
+  --tinted-glass-filter: saturate(1.3) blur(var(--tinted-glass-blur));
+  --user-message-bg: rgba(255, 255, 255, 0.1);
+  --danger-bg: rgba(190, 56, 54, 0.16);
+  --danger-banner-bg: rgba(190, 56, 54, 0.18);
+  --worker-panel-bg: rgba(37, 38, 41, 0.96);
+  --worker-title-bg: rgba(255, 255, 255, 0.08);
+  --automation-details-bg: rgba(255, 255, 255, 0.05);
+  --sidebar-bg: rgba(36, 37, 40, 0.72);
+  --sidebar-collapsed-bg: rgba(20, 21, 23, 0.18);
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-tertiary: var(--color-text-tertiary);
+  --line: var(--color-border-default);
+  --line-strong: var(--color-border-strong);
+  --selection: rgba(255, 255, 255, 0.08);
+  --selection-strong: rgba(255, 255, 255, 0.13);
+  --icon-muted: var(--neutral-dark-icon-muted);
+  --placeholder: var(--neutral-dark-placeholder);
+  --send-bg: var(--color-text-primary);
+  --send-stop-bg: var(--neutral-dark-send-stop);
+  --send-fg: var(--color-text-inverse);
+  --send-disabled-bg: var(--neutral-dark-text-disabled);
+  --switch-track-bg: rgba(255, 255, 255, 0.16);
+  --switch-inline-track-bg: rgba(255, 255, 255, 0.14);
+  --dialog-overlay-bg: rgba(0, 0, 0, 0.34);
+  --command-overlay-bg: rgba(0, 0, 0, 0.26);
+  --chrome-button-bg: rgba(255, 255, 255, 0.11);
+  --chrome-divider-bg: rgba(255, 255, 255, 0.1);
+  --danger-line: rgba(190, 56, 54, 0.28);
+  --danger-line-strong: rgba(210, 64, 58, 0.34);
+  --context-track-bg: rgba(255, 255, 255, 0.14);
+  --shadow-card: 0 16px 34px rgba(0, 0, 0, 0.32);
+  --shadow-window: 0 18px 48px rgba(0, 0, 0, 0.38);
+  --shadow-control: 0 1px 3px rgba(0, 0, 0, 0.32);
+  --shadow-switch: 0 1px 3px rgba(0, 0, 0, 0.28);
+  --shadow-command: 0 18px 48px rgba(0, 0, 0, 0.42);
+  --background: var(--surface-raised);
+  --foreground: var(--text-primary);
+  --popover: rgba(37, 38, 41, 0.98);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--send-bg);
+  --primary-foreground: var(--color-text-inverse);
+}
+
+.theme-light {
+  color-scheme: light;
+  --color-text-primary: var(--neutral-light-text-primary);
+  --color-text-secondary: var(--neutral-light-text-secondary);
+  --color-text-tertiary: var(--grayscale-07);
+  --color-text-disabled: var(--neutral-light-text-disabled);
+  --color-text-inverse: var(--neutral-white);
+
+  --surface: rgba(255, 255, 255, 0.9);
+  --surface-raised: rgba(255, 255, 255, 0.96);
+  --workspace-bg: rgba(255, 255, 255, 0.94);
+  --titlebar-bg: rgba(255, 255, 255, 0.72);
+  --conversation-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.96),
+    rgba(250, 250, 248, 0.96)
+  );
+  --settings-bg: rgba(255, 255, 255, 0.96);
+  --settings-panel-bg: rgba(255, 255, 255, 0.78);
+  --control-bg: rgba(255, 255, 255, 0.82);
+  --control-hover-bg: rgba(255, 255, 255, 0.94);
+  --context-bar-bg: rgba(246, 246, 244, 0.82);
+  --composer-glass-bg: rgba(255, 255, 255, 0.52);
+  --composer-glass-control-bg: rgba(246, 247, 249, 0.3);
+  --composer-glass-border: rgba(255, 255, 255, 0.65);
+  --composer-glass-divider: rgba(0, 0, 0, 0.045);
+  --composer-glass-highlight: rgba(255, 255, 255, 0.42);
+  --composer-glass-lowlight: rgba(0, 0, 0, 0.035);
+  --composer-glass-glint: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 1) 20%,
+    rgba(255, 255, 255, 1) 80%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  --composer-glass-shadow: 0 12px 28px rgba(0, 0, 0, 0.06);
+  --composer-glass-blur: 4px;
+  --composer-glass-filter: saturate(1.35) blur(var(--composer-glass-blur));
+  --tinted-glass-bg: var(--composer-glass-bg);
+  --tinted-glass-tint: rgba(255, 255, 255, 1);
+  --tinted-glass-edge-size: 20px;
+  --tinted-glass-border: var(--composer-glass-border);
+  --tinted-glass-highlight: var(--composer-glass-highlight);
+  --tinted-glass-shadow: var(--composer-glass-shadow);
+  --tinted-glass-blur: 4px;
+  --tinted-glass-filter: saturate(1.35) blur(var(--tinted-glass-blur));
+  --user-message-bg: rgba(244, 245, 247, 0.92);
+  --danger-bg: rgba(255, 245, 244, 0.86);
+  --danger-banner-bg: rgba(255, 239, 238, 0.96);
+  --worker-panel-bg: rgba(241, 242, 244, 0.96);
+  --worker-title-bg: rgba(0, 0, 0, 0.14);
+  --automation-details-bg: rgba(248, 248, 247, 0.9);
+  --sidebar-bg: rgba(255, 255, 255, 0.52);
+  --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-tertiary: var(--color-text-tertiary);
+  --line: var(--color-border-default);
+  --line-strong: var(--color-border-strong);
+  --selection: rgba(32, 35, 39, 0.07);
+  --selection-strong: rgba(32, 35, 39, 0.1);
+  --icon-muted: var(--grayscale-08);
+  --placeholder: var(--grayscale-05);
+  --send-bg: var(--grayscale-10);
+  --send-stop-bg: var(--grayscale-11);
+  --send-fg: var(--color-text-inverse);
+  --send-disabled-bg: var(--grayscale-04);
+  --switch-track-bg: rgba(0, 0, 0, 0.18);
+  --switch-inline-track-bg: rgba(0, 0, 0, 0.14);
+  --dialog-overlay-bg: rgba(0, 0, 0, 0.12);
+  --command-overlay-bg: rgba(0, 0, 0, 0.06);
+  --chrome-button-bg: rgba(0, 0, 0, 0.18);
+  --chrome-divider-bg: rgba(0, 0, 0, 0.12);
+  --danger-line: rgba(190, 56, 54, 0.24);
+  --danger-line-strong: rgba(210, 64, 58, 0.28);
+  --context-track-bg: rgba(0, 0, 0, 0.12);
+  --color-mix-light: var(--neutral-white);
+  --background: var(--surface-raised);
+  --foreground: var(--text-primary);
+  --popover: rgba(255, 255, 255, 0.98);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--send-bg);
+  --primary-foreground: var(--color-text-inverse);
+}
+
+.sidebar-solid {
+  --sidebar-bg: rgba(246, 247, 249, 0.98);
+}
+
+.theme-light.sidebar-solid {
+  --sidebar-bg: rgba(246, 247, 249, 0.98);
+}
+
+.theme-dark.sidebar-solid {
+  --sidebar-bg: rgba(36, 37, 40, 0.98);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--text-primary);
+  font: var(--font-size-3)/var(--line-height-body) var(--font-body);
+  letter-spacing: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: 0;
+}
+
+button {
+  color: inherit;
+}
+
+input:not([type="range"]),
+select,
+textarea {
+  color: var(--text-primary);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--placeholder);
+  opacity: 1;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+button:not(:disabled),
+a[href],
+select:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+[role="button"]:not([aria-disabled="true"], [data-disabled="true"]),
+[role="menuitem"]:not([aria-disabled="true"], [data-disabled="true"]),
+[role="option"]:not([aria-disabled="true"], [data-disabled="true"]) {
+  cursor: pointer;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.drag-region button,
+.drag-region a,
+.drag-region input,
+.drag-region select,
+.drag-region textarea,
+.drag-region [role="button"],
+.drag-region [role="menuitem"],
+.drag-region [role="option"],
+.drag-region [tabindex] {
+  -webkit-app-region: no-drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}

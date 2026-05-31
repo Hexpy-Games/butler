@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Butler">
+  <rect width="256" height="256" rx="58" fill="#f7f7f4"/>
+  <path d="M65 152c0-45 27-78 63-78s63 33 63 78v31H65v-31Z" fill="#24262b"/>
+  <path d="M91 151c0-28 16-48 37-48s37 20 37 48v7H91v-7Z" fill="#f26b38"/>
+  <circle cx="104" cy="135" r="8" fill="#f7f7f4"/>
+  <circle cx="152" cy="135" r="8" fill="#f7f7f4"/>
+  <path d="M104 171h48" stroke="#f7f7f4" stroke-width="12" stroke-linecap="round"/>
+</svg>

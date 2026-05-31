@@ -1,0 +1,70 @@
+.feed {
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--text-primary);
+}
+
+.composer {
+  border: 1px solid var(--composer-glass-border);
+  border-radius: var(--radius-composer);
+  background: var(--composer-glass-bg);
+  backdrop-filter: var(--composer-glass-filter);
+  box-shadow:
+    var(--composer-glass-shadow),
+    inset 0 1px 0 var(--composer-glass-highlight);
+}
+
+.item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  padding: 3px var(--space-1);
+  border-radius: var(--radius-control);
+}
+
+.item:hover {
+  background: var(--selection);
+}
+
+.icon {
+  display: inline-grid;
+  width: 1lh;
+  height: 1lh;
+  place-items: center;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-body);
+}
+
+.icon svg {
+  display: block;
+}
+
+.header {
+  min-width: 0;
+}
+
+.body,
+.title {
+  min-width: 0;
+}
+
+.feedTitle {
+  color: var(--text-primary);
+}
+
+.description,
+.empty,
+.meta {
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-regular);
+}
+
+.title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-regular);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

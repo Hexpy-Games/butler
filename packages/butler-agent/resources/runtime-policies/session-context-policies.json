@@ -1,0 +1,26 @@
+{
+  "schema": "butler.runtime.session_context_policies.v1",
+  "updatedAt": "2026-05-24T13:41:00Z",
+  "policies": [
+    {
+      "id": "project-ledger-project-session-context",
+      "status": "active",
+      "description": "Attach Project Ledger as default starting context for project-origin Butler and Steward sessions.",
+      "match": {
+        "roles": ["butler", "steward"],
+        "metadataAny": [
+          { "key": "projectId", "type": "string" }
+        ]
+      },
+      "context": {
+        "title": "Project Ledger Runtime Context",
+        "lines": [
+          "Project-origin session detected from RuntimeSessionInit.metadata.projectId={{metadata.projectId}} and workspacePath={{workspacePath}}.",
+          "- Treat project-ledger as the default starting context for this project session, not merely as an optional skill.",
+          "- Before broad project/codebase investigation or project feature work, first consider project-ledger status/query tools: inspect_project_status for current ledger state and query_project_work for relevant tasks, artifacts, records, or prior work.",
+          "- Use project-ledger results to scope any subsequent file/code inspection; re-query the live tools when freshness matters and do not invent ledger records."
+        ]
+      }
+    }
+  ]
+}

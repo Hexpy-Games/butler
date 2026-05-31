@@ -1,0 +1,42 @@
+.clickable {
+  box-sizing: border-box;
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  min-height: 30px;
+  min-width: 0;
+  align-items: center;
+  padding-right: 10px;
+  padding-left: 10px;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  outline: none;
+}
+
+.clickable[data-disabled="true"] {
+  cursor: default;
+}
+
+.clickable[data-stretch="true"] {
+  width: 100%;
+}
+
+.clickable:hover:not([data-disabled="true"]) {
+  background: var(--selection);
+}
+
+.clickable:focus-visible {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.clickable [data-slot="button"][data-size^="icon"] {
+  width: 1lh;
+  height: 1lh;
+  min-height: 1lh;
+  border-radius: min(var(--radius-control), 1lh);
+}
+
+.clickable [data-slot="button"][data-size^="icon"] svg {
+  width: min(15px, 0.78lh);
+  height: min(15px, 0.78lh);
+}

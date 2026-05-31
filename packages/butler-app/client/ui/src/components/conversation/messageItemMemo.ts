@@ -1,0 +1,19 @@
+import type { MessageItemProps } from "./messageItemTypes";
+
+export function areMessageItemPropsEqual(
+  previous: MessageItemProps,
+  next: MessageItemProps,
+): boolean {
+  return previous.message === next.message &&
+    previous.topOffset === next.topOffset &&
+    previous.isLatestAssistant === next.isLatestAssistant &&
+    previous.markTheme === next.markTheme &&
+    previous.copied === next.copied &&
+    previous.footerMeta === next.footerMeta &&
+    previous.onCopyAssistantMessage === next.onCopyAssistantMessage &&
+    previous.onCopyContextMenuText === next.onCopyContextMenuText &&
+    previous.rowVirtualizer === next.rowVirtualizer &&
+    previous.virtualRow.index === next.virtualRow.index &&
+    previous.virtualRow.start === next.virtualRow.start &&
+    previous.virtualRow.size === next.virtualRow.size;
+}

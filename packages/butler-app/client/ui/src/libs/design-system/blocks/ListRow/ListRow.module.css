@@ -1,0 +1,36 @@
+.row {
+  width: 100%;
+  padding: var(--space-2);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.icon {
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-tertiary);
+}
+
+.content {
+  min-width: 0;
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--font-weight-regular);
+}
+
+.description {
+  color: var(--text-secondary);
+}
+
+.meta {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-1);
+  white-space: nowrap;
+}

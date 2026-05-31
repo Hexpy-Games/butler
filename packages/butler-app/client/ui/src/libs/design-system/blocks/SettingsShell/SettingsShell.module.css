@@ -1,0 +1,113 @@
+.shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, 236px) minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  background: var(--settings-bg);
+}
+
+.active {
+  grid-template-columns: minmax(236px, 274px) minmax(0, 1fr);
+  width: 100vw;
+  height: 100vh;
+}
+
+.sidebar {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: var(--space-5) var(--space-3);
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+}
+
+.sidebarActive {
+  padding-top: calc(var(--titlebar-height) + var(--space-2));
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.detail {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-lg);
+  min-height: 0;
+  padding: 28px 32px 0;
+  overflow: hidden;
+}
+
+.detailActive {
+  padding-top: calc(var(--titlebar-height) + 18px);
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.titlebarDragOverlay {
+  position: absolute;
+  z-index: 100;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--titlebar-height);
+  pointer-events: auto;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.detailContent {
+  display: grid;
+  max-width: 760px;
+  gap: var(--space-lg);
+  padding-bottom: 60px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.detailHeader {
+  position: relative;
+  z-index: 10;
+  max-width: 760px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.detailScroll {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  height: 100%;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.sidebarActive button,
+.sidebarActive [role="button"],
+.sidebarActive a,
+.sidebarActive input,
+.sidebarActive select,
+.sidebarActive textarea {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+@media (width <= 760px) {
+  .shell,
+  .active {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    height: 100%;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .detailContent {
+    max-width: none;
+  }
+}

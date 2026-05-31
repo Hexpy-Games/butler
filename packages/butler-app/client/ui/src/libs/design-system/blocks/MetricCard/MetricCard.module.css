@@ -1,0 +1,36 @@
+.card {
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+.value {
+  color: var(--text-primary);
+}
+
+.label {
+  color: var(--text-secondary);
+}
+
+.change {
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-medium);
+}
+
+.icon {
+  opacity: 0.7;
+}
+
+.trend-up {
+  color: var(--color-success);
+}
+
+.trend-down {
+  color: var(--color-danger);
+}
+
+.trend-neutral {
+  color: var(--text-tertiary);
+}

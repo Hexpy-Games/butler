@@ -1,0 +1,45 @@
+# ── Private user data accidentally created inside the checkout ───────────────
+data/
+.project-ledger/
+
+# ── Private top-level runtime paths must live under $BUTLER_DATA instead ─────
+.env
+/tasks/
+/logs/
+/config/
+memory/hot/cache.md
+memory/hot/*.md
+memory/core.md
+memory/user-profile.md
+memory/projects/*.md
+memory/conversations/
+memory/db/
+src/integrations/telegram/config.json
+
+# ── Topic session dirs — per-thread CWD for unattached topics ────────────────
+data/topics/
+
+# ── Test secrets ─────────────────────────────────────────────────────────────
+tests/.env.test
+
+# ── Build artifacts ───────────────────────────────────────────────────────────
+__pycache__/
+node_modules/
+app-client/ui/dist/
+packages/butler-app/client/ui/dist/
+app-client/ui/.*/skills/
+app-client/ui/.*/**/skills/
+app-client/ui/skills/
+.DS_Store
+*.lockb
+*.lance/
+
+# ── Test debug/capture artifacts ──────────────────────────────────────────────
+tests/recordings/
+tests/debug_*
+tests/capture_*
+.tmp/
+
+# ── Backup files ──────────────────────────────────────────────────────────────
+*.bak
+data/personas/active.md

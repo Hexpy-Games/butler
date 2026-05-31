@@ -1,0 +1,59 @@
+.fixture {
+  min-width: 0;
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-3);
+  list-style: none;
+}
+
+.item,
+.separator,
+.link,
+.page {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+  transition: color 120ms ease;
+  appearance: none;
+}
+
+.link:hover {
+  color: var(--text-primary);
+}
+
+.separator svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.page {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-strong);
+}
+
+.ellipsis {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+}

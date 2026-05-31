@@ -1,0 +1,9 @@
+.panel {
+  min-width: 0;
+}
+
+.list {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-sm);
+}

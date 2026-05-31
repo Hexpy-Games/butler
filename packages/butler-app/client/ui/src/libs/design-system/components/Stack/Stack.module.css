@@ -1,0 +1,124 @@
+.stack {
+  display: flex;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.fill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Direction */
+.align-row {
+  flex-direction: row;
+}
+
+.align-column {
+  flex-direction: column;
+}
+
+/* Gap - Semantic tokens */
+.gap-none {
+  gap: var(--space-none);
+}
+
+.gap-xs {
+  gap: var(--space-xs);
+}
+
+.gap-sm {
+  gap: var(--space-sm);
+}
+
+.gap-md {
+  gap: var(--space-md);
+}
+
+.gap-lg {
+  gap: var(--space-lg);
+}
+
+.gap-xl {
+  gap: var(--space-xl);
+}
+
+.gap-2xl {
+  gap: var(--space-2xl);
+}
+
+/* Gap - Legacy numeric aliases */
+.gap-1 {
+  gap: var(--space-1);
+}
+
+.gap-2 {
+  gap: var(--space-2);
+}
+
+.gap-3 {
+  gap: var(--space-3);
+}
+
+.gap-4 {
+  gap: var(--space-4);
+}
+
+.gap-5 {
+  gap: var(--space-5);
+}
+
+.gap-6 {
+  gap: var(--space-6);
+}
+
+/* Main axis alignment */
+.justify-start {
+  justify-content: flex-start;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.justify-end {
+  justify-content: flex-end;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.justify-around {
+  justify-content: space-around;
+}
+
+.justify-evenly {
+  justify-content: space-evenly;
+}
+
+/* Cross axis alignment */
+.cross-start {
+  align-items: flex-start;
+}
+
+.cross-center {
+  align-items: center;
+}
+
+.cross-end {
+  align-items: flex-end;
+}
+
+.cross-stretch {
+  align-items: stretch;
+}
+
+.cross-baseline {
+  align-items: baseline;
+}
+
+/* Wrapping */
+.wrap {
+  flex-wrap: wrap;
+}

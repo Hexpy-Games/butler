@@ -1,0 +1,142 @@
+.wrap {
+  position: relative;
+  width: min(100%, var(--conversation-content-width, 760px));
+  max-width: 920px;
+  margin: 0 auto;
+  transition:
+    bottom 180ms ease,
+    max-width 180ms ease;
+}
+
+.floating {
+  position: absolute;
+  z-index: 12;
+  right: 44px;
+  bottom: 22px;
+  left: 44px;
+  pointer-events: none;
+}
+
+.large {
+  max-width: 960px;
+}
+
+.floating.large {
+  bottom: 34px;
+}
+
+.card {
+  --composer-inner-padding-block: var(--space-3);
+  --composer-inner-padding-inline: var(--space-4);
+
+  display: grid;
+  width: 100%;
+  pointer-events: auto;
+}
+
+.adjunct {
+  min-width: 0;
+  border-bottom: 1px solid var(--composer-glass-divider);
+  padding: 0;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 72px;
+  max-height: calc(
+    8lh + var(--composer-inner-padding-block) +
+      var(--composer-inner-padding-block)
+  );
+  resize: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.5;
+  outline: none;
+  padding: var(--composer-inner-padding-block)
+    var(--composer-inner-padding-inline);
+}
+
+.textarea::placeholder {
+  color: var(--placeholder);
+}
+
+.toolbar {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: var(--space-1);
+  border-top: 1px solid var(--composer-glass-divider);
+  padding: var(--space-2);
+}
+
+.spacer {
+  flex: 1 1 auto;
+  min-width: var(--space-sm);
+}
+
+.planToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 30px;
+  padding: 0 var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: var(--font-size-2);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.planToggle:hover {
+  background: var(--composer-glass-control-bg);
+  color: var(--text-primary);
+}
+
+.sendButton {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--send-bg);
+  color: var(--send-fg);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.sendButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.sendButton:disabled {
+  background: var(--send-disabled-bg);
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.stop {
+  background: var(--send-stop-bg);
+}
+
+@media (width <=720px) {
+  .wrap {
+    right: var(--space-3);
+    left: var(--space-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wrap,
+  .sendButton {
+    transition: none;
+  }
+}

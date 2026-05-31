@@ -1,0 +1,8 @@
+{
+  "schema": "project-ledger.project.v1",
+  "id": "example",
+  "name": "Example Project",
+  "status": "active",
+  "createdAt": "1970-01-01T00:00:00.000Z",
+  "updatedAt": "1970-01-01T00:00:00.000Z"
+}

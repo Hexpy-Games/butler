@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Running pre-commit checks..."
+bun run lint
+bun run typecheck
+echo "Pre-commit checks passed."

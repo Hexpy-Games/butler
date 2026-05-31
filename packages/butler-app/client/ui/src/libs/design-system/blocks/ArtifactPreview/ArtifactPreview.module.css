@@ -1,0 +1,33 @@
+.viewer {
+  min-height: 280px;
+  min-width: 0;
+  max-height: calc(100vh - var(--titlebar-height) - 210px);
+  overflow: auto;
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+}
+
+.pre {
+  margin: 0;
+  color: var(--text-primary);
+  font: var(--font-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-control);
+}
+
+.frame {
+  width: 100%;
+  min-height: 520px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}

@@ -1,0 +1,34 @@
+.header {
+  display: flex;
+  gap: var(--space-md);
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.copy {
+  min-width: 0;
+}
+
+.title {
+  color: var(--color-text-primary);
+}
+
+.description {
+  max-width: 68ch;
+  color: var(--text-secondary);
+}
+
+.secondary {
+  min-height: 28px;
+}
+
+.action {
+  flex: 0 0 auto;
+}
+
+@media (width <= 560px) {
+  .header {
+    flex-direction: column;
+  }
+}

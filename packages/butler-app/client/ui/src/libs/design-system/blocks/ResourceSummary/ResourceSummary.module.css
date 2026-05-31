@@ -1,0 +1,30 @@
+.summary {
+  min-width: 0;
+}
+
+.icon {
+  display: inline-flex;
+  color: var(--text-tertiary);
+}
+
+.body {
+  min-width: 0;
+}
+
+.title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.description {
+  color: var(--text-secondary);
+}
+
+.meta {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-1);
+}

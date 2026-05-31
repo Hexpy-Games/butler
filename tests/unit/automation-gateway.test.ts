@@ -1,0 +1,581 @@
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import type {
+  AgentRuntimeAdapter,
+  ArtifactRef,
+  InboundEnvelope,
+  ModelProviderAdapter,
+  RuntimeSessionHandle,
+  RuntimeSessionInit,
+  RuntimeTurnInput,
+} from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
+import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
+import { GatewayRouter } from "../../packages/butler-agent/src/gateways/core/router.ts";
+import { createGatewayServer } from "../../packages/butler-agent/src/gateways/core/server.ts";
+import { createLifecycleGatewayHandlers, SessionLifecycleService } from "../../packages/butler-agent/src/interfaces/gateway/session-lifecycle.ts";
+import { AutomationStore } from "../../packages/butler-agent/src/operations/service/automation-store.ts";
+import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
+import { processQueuedInboundEvents } from "../../packages/butler-agent/src/interfaces/gateway/queued-inbound.ts";
+import { DeliveryGuard } from "../../packages/butler-agent/src/interfaces/transport/delivery-guard.ts";
+import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/mock/adapter.ts";
+import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+
+let tempDir = "";
+let originalButlerData: string | undefined;
+
+class ScriptedRuntime implements AgentRuntimeAdapter {
+  readonly id = "automation-runtime";
+  readonly turns: RuntimeTurnInput[] = [];
+  readonly capabilities = {
+    supportsSessionResume: false,
+    supportsCompaction: false,
+    supportsToolStreaming: false,
+    supportsParallelToolCalls: false,
+  } as const;
+
+  constructor(private readonly artifacts: ArtifactRef[] = []) {}
+
+  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
+    return {
+      sessionId: input.sessionId,
+      role: input.role,
+      runtimeAdapterId: this.id,
+      runtimeSessionRef: `automation:${input.sessionId}`,
+    };
+  }
+
+  async runTurn(input: RuntimeTurnInput) {
+    this.turns.push(input);
+    return {
+      text: "automation handled",
+      artifacts: this.artifacts,
+      runtimeSessionRef: input.handle.runtimeSessionRef,
+    };
+  }
+}
+
+const fakeProvider: ModelProviderAdapter = {
+  id: "fake-provider",
+  capabilities: {
+    supportsStreaming: false,
+    supportsToolCalls: true,
+    supportsImages: false,
+    supportsAudio: false,
+    supportsServerThreads: false,
+    supportsReasoningConfig: true,
+    supportsPromptCaching: true,
+  },
+  async invoke() {
+    return { text: "unused" };
+  },
+};
+
+beforeEach(() => {
+  tempDir = mkdtempSync(join(tmpdir(), "butler-automation-gateway-"));
+  originalButlerData = process.env.BUTLER_DATA;
+  process.env.BUTLER_DATA = tempDir;
+});
+
+afterEach(() => {
+  if (originalButlerData === undefined) delete process.env.BUTLER_DATA;
+  else process.env.BUTLER_DATA = originalButlerData;
+  rmSync(tempDir, { recursive: true, force: true });
+});
+
+test("due automation envelopes route through gateway and session actor", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new ScriptedRuntime();
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [],
+  });
+  const automations = new AutomationStore(tempDir);
+  automations.create({
+    id: "route-test",
+    prompt: "Run the scheduled project check.",
+    sessionId: "butler/main",
+    schedule: {
+      type: "once",
+      run_at: "2026-04-27T08:00:00.000Z",
+    },
+  });
+
+  const [run] = automations.claimDue(new Date("2026-04-27T08:00:00.000Z"));
+  expect(run).toBeDefined();
+
+  const router = new GatewayRouter({ store });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler in an automation test.",
+  });
+  const server = createGatewayServer({
+    router,
+    handlers: createLifecycleGatewayHandlers(lifecycle),
+  });
+
+  const result = await server.handleInbound(run!.envelope);
+
+  expect(result.status).toBe("handled");
+  if (result.status !== "handled") return;
+  expect(result.route.reason).toBe("session-hint");
+  expect(result.route.sessionId).toBe("butler/main");
+  expect(result.handlerResult.metadata?.text).toBe("automation handled");
+  expect(runtime.turns[0]?.input).toMatchObject({
+    transport: "automation",
+    message: {
+      text: "Run the scheduled project check.",
+    },
+  });
+});
+
+test("queued automation events are consumed by butler-main path and delivered to session transport binding", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new ScriptedRuntime();
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: "mock",
+      accountId: "default",
+      peerId: "operator",
+    }, {
+      transport: "mock",
+      accountId: "default",
+      peerId: "observer",
+    }],
+  });
+  const queue = new NativeInboundQueue(tempDir);
+  const automations = new AutomationStore(tempDir);
+  automations.create({
+    id: "queued-route-test",
+    prompt: "Run the queued scheduled project check.",
+    sessionId: "butler/main",
+    schedule: {
+      type: "once",
+      run_at: "2026-04-27T08:00:00.000Z",
+    },
+  });
+  const [run] = automations.claimDue(new Date("2026-04-27T08:00:00.000Z"));
+  queue.enqueue(run!.envelope, { source: "test" });
+
+  const router = new GatewayRouter({ store });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler in an automation queue test.",
+  });
+  const server = createGatewayServer({
+    router,
+    handlers: createLifecycleGatewayHandlers(lifecycle),
+  });
+  const mock = new MockTransportAdapter({ id: "mock" });
+  const guard = new DeliveryGuard({ adapters: [mock] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server,
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    delivered: 2,
+    failed: 0,
+  });
+  expect(runtime.turns[0]?.input).toMatchObject({
+    transport: "automation",
+    message: {
+      text: "Run the queued scheduled project check.",
+    },
+  });
+  expect(
+    mock.sentActions.map((action) => ({
+      transport: action.transport,
+      peer: action.peer,
+      text: action.message.text,
+    })),
+  ).toEqual(
+    expect.arrayContaining([
+      {
+        transport: "mock",
+        peer: { kind: "group", id: "operator", threadId: undefined },
+        text: "automation handled",
+      },
+      {
+        transport: "mock",
+        peer: { kind: "group", id: "observer", threadId: undefined },
+        text: "automation handled",
+      },
+    ]),
+  );
+});
+
+test("queued inbound delivery preserves safe artifact refs for app projection", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new ScriptedRuntime([{
+    id: "artifact-report",
+    kind: "document",
+    title: "report.md",
+    safePathLabel: "reports/report.md",
+    localPath: join(tempDir, "reports", "report.md"),
+    mimeType: "text/markdown",
+  }]);
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "general",
+    }],
+  });
+  const queue = new NativeInboundQueue(tempDir);
+  const automations = new AutomationStore(tempDir);
+  automations.create({
+    id: "queued-artifact-test",
+    prompt: "Run the queued artifact check.",
+    sessionId: "butler/main",
+    schedule: {
+      type: "once",
+      run_at: "2026-04-27T08:00:00.000Z",
+    },
+  });
+  const [run] = automations.claimDue(new Date("2026-04-27T08:00:00.000Z"));
+  queue.enqueue(run!.envelope, { source: "test" });
+
+  const router = new GatewayRouter({ store });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler in an automation queue test.",
+  });
+  const server = createGatewayServer({
+    router,
+    handlers: createLifecycleGatewayHandlers(lifecycle),
+  });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server,
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    delivered: 1,
+    failed: 0,
+  });
+  expect(app.sentActions[0]?.message.artifacts?.[0]).toMatchObject({
+    id: "artifact-report",
+    title: "report.md",
+    safePathLabel: "reports/report.md",
+    mimeType: "text/markdown",
+  });
+  expect(JSON.stringify(app.sentActions[0])).not.toContain(tempDir);
+});
+
+test("queued inbound runtime failure emits terminal app turn failure action", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  const envelope: InboundEnvelope = {
+    eventId: "app:message-failure",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-failure",
+      text: "trigger failure",
+      timestamp: "2026-05-18T12:03:00.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-failure",
+    },
+  };
+  queue.enqueue(envelope, { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        throw new Error("private provider socket details should not surface");
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 0,
+    delivered: 1,
+    failed: 1,
+  });
+  expect(app.sentActions).toHaveLength(1);
+  expect(app.sentActions[0]).toMatchObject({
+    transport: "app",
+    peer: { kind: "dm", id: "general" },
+    message: {
+      text: "Butler could not complete this turn.",
+      replyToMessageId: "message-failure",
+    },
+    metadata: {
+      kind: "turn_failed",
+      turnId: "turn-failure",
+      safeErrorCode: "gateway_failed",
+    },
+  });
+  expect(JSON.stringify(app.sentActions[0])).not.toContain("private provider");
+});
+
+test("queued inbound provider failure preserves safe API diagnostics for app projection", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue({
+    eventId: "app:message-provider-failure",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-provider-failure",
+      text: "trigger provider failure",
+      timestamp: "2026-05-18T12:04:00.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-provider-failure",
+    },
+  }, { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        throw new ModelProviderRequestError({
+          code: "provider_api_error",
+          message: "OpenAI API request failed with HTTP 500.",
+          provider: "openai",
+          api: "responses",
+          statusCode: 500,
+          endpoint: "https://api.openai.com/v1/responses",
+          model: "gpt-5.5",
+          retryable: true,
+          cause: "private provider token=secret",
+        });
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 0,
+    delivered: 1,
+    failed: 1,
+  });
+  expect(app.sentActions[0]).toMatchObject({
+    message: {
+      text: "OpenAI API request failed with HTTP 500.",
+    },
+    metadata: {
+      kind: "turn_failed",
+      turnId: "turn-provider-failure",
+      safeErrorCode: "provider_api_error",
+      provider: "openai",
+      api: "responses",
+      statusCode: 500,
+      endpoint: "https://api.openai.com/v1/responses",
+      model: "gpt-5.5",
+      retryable: true,
+    },
+  });
+  expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
+});
+
+test("queued inbound reactivates hinted crashed app sessions before routing", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  store.upsert({
+    sessionId: "butler/app-general",
+    role: "butler",
+    lifecycleState: "crashed",
+    workspacePath: tempDir,
+    runtimeAdapterId: "native-tool-loop",
+    modelProviderId: "openai",
+    modelRef: "openai/gpt-5.5",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "general",
+    }],
+  });
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue({
+    eventId: "app:message-after-crash",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-after-crash",
+      text: "recover the next app turn",
+      timestamp: "2026-05-19T02:07:07.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-after-crash",
+    },
+  }, { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        const binding = store.getBySessionId("butler/app-general");
+        if (binding?.lifecycleState !== "active") {
+          return {
+            status: "unroutable",
+            reason: "missing-session",
+            details: {
+              transport: "app",
+              accountId: "local",
+              peerId: "general",
+              sessionId: "butler/app-general",
+            },
+          };
+        }
+        return {
+          status: "handled",
+          route: {
+            sessionId: "butler/app-general",
+            role: "butler",
+            reason: "session-hint",
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            handledBy: "test",
+            metadata: { text: "recovered after crash" },
+          },
+        };
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    delivered: 1,
+    failed: 0,
+  });
+  expect(store.getBySessionId("butler/app-general")?.lifecycleState).toBe("active");
+  expect(app.sentActions[0]).toMatchObject({
+    message: {
+      text: "recovered after crash",
+    },
+    metadata: {
+      kind: "final_result",
+      turnId: "turn-after-crash",
+    },
+  });
+});
+
+test("queued inbound unroutable app turn emits terminal failure instead of completing pending", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue({
+    eventId: "app:message-unroutable",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-unroutable",
+      text: "this should not stay pending",
+      timestamp: "2026-05-19T02:08:00.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-unroutable",
+    },
+  }, { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        return {
+          status: "unroutable",
+          reason: "missing-session",
+          details: {
+            transport: "app",
+            accountId: "local",
+            peerId: "general",
+            sessionId: "butler/app-general",
+          },
+        };
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 0,
+    delivered: 1,
+    failed: 1,
+  });
+  expect(app.sentActions[0]).toMatchObject({
+    message: {
+      text: "Butler could not route this turn to an active session.",
+      replyToMessageId: "message-unroutable",
+    },
+    metadata: {
+      kind: "turn_failed",
+      turnId: "turn-unroutable",
+      safeErrorCode: "gateway_unroutable",
+      dispatchStatus: "unroutable",
+    },
+  });
+});

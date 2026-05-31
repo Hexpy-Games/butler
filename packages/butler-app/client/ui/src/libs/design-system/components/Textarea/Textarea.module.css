@@ -1,0 +1,30 @@
+.fixture {
+  min-width: 0;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 140px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+  resize: vertical;
+}
+
+.textarea::placeholder {
+  color: var(--placeholder);
+  opacity: 1;
+}
+
+.textarea:not(:placeholder-shown) {
+  color: var(--text-primary);
+}
+
+.textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}

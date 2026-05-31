@@ -1,0 +1,111 @@
+{
+  "user": {
+    "name": "YourName",
+    "bio": "",
+    "timezone": "Asia/Seoul",
+    "language": "ko",
+    "techLanguage": "en"
+  },
+  "butler": {
+    "name": "Butler"
+  },
+  "system": {
+    "butlerHome": "~/butler",
+    "butlerData": "~/.butler",
+    "devRoot": "~/dev",
+    "mcpServerName": "butler-main",
+    "runtime": "codex-api",
+    "defaultModel": "openai/gpt-5.5-codex",
+    "openaiModel": "gpt-5.5-codex",
+    "openaiReasoningEffort": "medium",
+    "openaiPromptCacheKeyPrefix": "",
+    "openaiPromptCacheRetention": "",
+    "activePersona": "butler",
+    "activePersonaLocale": "ko"
+  },
+  "projects": [],
+  "personalization": {
+    "profiling": {
+      "enabled": false,
+      "mode": "off",
+      "extractorModel": "default",
+      "consentVersion": "2026-05-16",
+      "consentedAt": null,
+      "storage": "cognition/profile/profile.sqlite",
+      "rawProfileBrowserVisible": false
+    }
+  },
+  "project": {
+    "discoveryRoots": ["~/dev"]
+  },
+  "webSearch": {
+    "provider": "duckduckgo-html",
+    "readerBackend": "lightweight",
+    "model": "gpt-5",
+    "apiBase": "",
+    "braveApiBase": "",
+    "tavilyApiBase": "",
+    "planning": {
+      "enabled": true,
+      "defaultDepth": "balanced"
+    }
+  },
+  "metrics": {
+    "enabled": true,
+    "retentionDays": 30
+  },
+  "memory": {
+    "hotCacheMaxBytes": 10240,
+    "taskTtlMs": 3600000,
+    "lancedbTable": "butler_memory",
+    "notifySocket": "/tmp/butler-notify.sock",
+    "sleepCycle": {
+      "enabled": true,
+      "scheduleCron": "0 4 * * *",
+      "totalBudgetMs": 600000,
+      "subPhaseBudgetsMs": {
+        "catchup": 120000,
+        "consolidate": 240000,
+        "optimize": 180000,
+        "health": 60000
+      },
+      "diskQuotaMb": 2048,
+      "activationDecayD": 0.5,
+      "activationPruneFloor": -3.0,
+      "hotCacheCompactThresholdBytes": 32768,
+      "logRetentionDays": 7,
+      "alerts": {
+        "telegram": true,
+        "notifyOnSubPhaseFailure": false
+      }
+    }
+  },
+  "telegram": {
+    "defaultFormat": "markdownv2",
+    "ackReaction": "⚡",
+    "permissionRelay": false,
+    "groupId": "",
+    "topic": {
+      "undoWindowSec": 30,
+      "sessionTtlSec": 300,
+      "awaitInputTtlSec": 60,
+      "pageSize": 10
+    },
+    "autoRegister": {
+      "rateLimitPerMinute": 5,
+      "burst": 10,
+      "windowSec": 60
+    },
+    "topics": {}
+  },
+  "timeouts": {
+    "workerDefaultSec": 600,
+    "debounceMs": 3000,
+    "smartTimeout": true,
+    "sampleIntervalSec": 60,
+    "noProgressSec": 180,
+    "extensionSec": 300,
+    "maxWorkerSec": 3600,
+    "warmupGraceSec": 10
+  }
+}

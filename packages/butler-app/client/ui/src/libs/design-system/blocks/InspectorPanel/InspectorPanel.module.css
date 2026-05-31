@@ -1,0 +1,8 @@
+.panel {
+  min-width: 0;
+  margin-inline: var(--inspector-inline-padding, 0);
+  padding: var(--space-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+}

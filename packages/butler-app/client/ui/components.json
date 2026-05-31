@@ -1,0 +1,23 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "radix-nova",
+  "rsc": false,
+  "tsx": false,
+  "tailwind": {
+    "config": "",
+    "css": "src/libs/design-system/tokens.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "rtl": false,
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/butler-ds/lib/utils",
+    "ui": "@/butler-ds/shadcn/ui",
+    "lib": "@/butler-ds/lib",
+    "hooks": "@/butler-ds/hooks"
+  },
+  "registries": {}
+}

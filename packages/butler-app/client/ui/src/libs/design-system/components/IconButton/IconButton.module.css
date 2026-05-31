@@ -1,0 +1,30 @@
+.moduleScope {
+  width: var(--icon-button-size, 30px);
+  height: var(--icon-button-size, 30px);
+  min-height: var(--icon-button-size, 30px);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  place-items: center;
+  display: inline-grid;
+}
+.moduleScope:hover {
+  background: var(--selection);
+  color: var(--text-primary);
+}
+
+.moduleScope.selected {
+  background: var(--selection);
+  color: var(--text-primary);
+}
+.moduleScope:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+.moduleScope:disabled:hover {
+  color: var(--text-secondary);
+  background: transparent;
+}

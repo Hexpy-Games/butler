@@ -1,0 +1,125 @@
+.moduleScope {
+  --module-scope: 1;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 48px;
+  background: var(--worker-panel-bg);
+  color: var(--text-primary);
+  display: grid;
+  place-items: center;
+}
+
+.stack {
+  width: min(860px, 100%);
+  display: grid;
+  gap: 24px;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 18px;
+}
+
+.control-group {
+  display: grid;
+  gap: 10px;
+}
+
+.control-label {
+  font: var(--font-size-2)/var(--line-height-body) var(--font-body);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+}
+
+.slider {
+  width: 100%;
+  accent-color: var(--send-bg);
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(2, 88px);
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--control-bg);
+}
+
+.segment,
+.segment-active {
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-primary);
+  font: var(--font-size-1)/var(--line-height-body) var(--font-body);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+  background: transparent;
+}
+
+.segment-active {
+  color: var(--send-fg);
+  background: var(--send-bg);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+}
+
+.sample {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.surface {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  padding: 44px;
+}
+
+.surface-dark {
+  background: var(--send-stop-bg);
+}
+
+.surface-light {
+  background: var(--surface-raised);
+}
+
+.mark {
+  width: min(var(--thinking-mark-size, 230px), 100%);
+}
+
+.label {
+  font: var(--font-size-2)/var(--line-height-body) var(--font-body);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0;
+}
+
+@media (width <= 720px) {
+  .page {
+    padding: 28px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .controls {
+    grid-template-columns: 1fr;
+  }
+
+  .segmented {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

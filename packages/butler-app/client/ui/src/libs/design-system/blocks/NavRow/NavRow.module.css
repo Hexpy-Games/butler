@@ -1,0 +1,148 @@
+.row {
+  width: 100%;
+  min-height: var(--sidebar-row-height, 32px);
+  padding: 0 var(--space-2, 8px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sidebar-row-gap, 8px);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.row[data-slot="clickable"] {
+  display: grid;
+  padding: 0 var(--space-2, 8px);
+}
+
+.interactive {
+  cursor: pointer;
+}
+
+.interactive:hover {
+  background: color-mix(in srgb, var(--selection) 84%, transparent);
+}
+
+.active {
+  background: var(--selection-strong);
+}
+
+.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.labelRegion {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--sidebar-row-gap, 8px);
+}
+
+.icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: currentColor;
+  opacity: 0.82;
+}
+
+.icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--font-weight-regular);
+  font-size: var(--font-size-2);
+}
+
+.controlRegion {
+  --nav-row-action-icon-size: 14px;
+  --nav-row-action-target-size: var(--sidebar-action-size);
+  --nav-row-action-visual-offset: calc(
+    (
+        (var(--nav-row-action-target-size) - var(--nav-row-action-icon-size)) /
+          -2
+      ) -
+      3px
+  );
+
+  display: inline-flex;
+  position: relative;
+  min-width: 0;
+  align-items: center;
+  justify-content: end;
+  justify-self: end;
+  gap: var(--space-1);
+}
+
+.controlRegion[data-has-hover-actions="true"] {
+  min-width: 4ch;
+}
+
+.badge {
+  flex: none;
+  overflow: hidden;
+  min-width: 4ch;
+  max-width: 7ch;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-1);
+  font-weight: var(--font-weight-regular);
+  opacity: 1;
+  text-align: right;
+  transition:
+    max-width 120ms ease,
+    opacity 120ms ease;
+}
+
+.actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: end;
+  gap: 1px;
+}
+
+.hoverActions {
+  position: absolute;
+  top: 50%;
+  right: var(--nav-row-action-visual-offset);
+  width: max-content;
+  min-width: var(--nav-row-action-target-size);
+  justify-content: center;
+  opacity: 0;
+  transform: translate(2px, -50%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.hoverActions:focus-within,
+.row:hover .hoverActions {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.row[data-has-hover-actions="true"]:hover .badge,
+.row[data-has-hover-actions="true"]:focus-within .badge {
+  max-width: 0;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .hoverActions,
+  .badge {
+    transition: none;
+  }
+}

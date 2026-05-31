@@ -1,0 +1,42 @@
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.assistant {
+  background: transparent;
+}
+
+.user {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.system {
+  background: transparent;
+  color: var(--color-warning);
+}
+
+.active {
+  color: var(--accent);
+}
+
+.avatar svg,
+.avatar canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.avatar > span {
+  width: 100%;
+  height: 100%;
+}

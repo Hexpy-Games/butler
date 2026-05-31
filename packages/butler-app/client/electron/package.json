@@ -1,0 +1,25 @@
+{
+  "name": "butler-electron-client",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "productName": "Butler",
+  "description": "Butler dedicated desktop client",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "package:mac": "electron-packager . Butler --platform=darwin --arch=arm64 --overwrite --out=dist --icon=assets/butler.icns",
+    "package:win": "electron-packager . Butler --platform=win32 --arch=x64 --overwrite --out=dist --icon=assets/icon.png",
+    "package:linux": "electron-packager . Butler --platform=linux --arch=x64 --overwrite --out=dist --icon=assets/icon.png"
+  },
+  "butler": {
+    "protocolVersion": "butler.app.v1",
+    "icon": "assets/butler.icns",
+    "serverMode": "agent-gateway"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.0.0",
+    "electron": "41.2.0",
+    "electron-devtools-installer": "^4.0.0"
+  }
+}

@@ -1,0 +1,28 @@
+.page {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: transparent;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.scrollArea {
+  height: 100%;
+}
+
+.content {
+  display: grid;
+  gap: var(--space-2xl);
+  min-width: 0;
+  width: 100%;
+  padding: var(--space-xl) clamp(var(--space-lg), 3vw, 40px) 56px;
+}
+
+@media (width <= 700px) {
+  .content {
+    padding: var(--space-lg) var(--space-lg) 48px;
+  }
+}

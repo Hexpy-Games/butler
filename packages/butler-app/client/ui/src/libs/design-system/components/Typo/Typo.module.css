@@ -1,0 +1,140 @@
+.h1 {
+  font-size: var(--typo-h1-size);
+  font-weight: var(--typo-h1-weight);
+  line-height: var(--typo-h1-line-height);
+  letter-spacing: var(--typo-h1-letter-spacing);
+  margin: 0;
+}
+
+.h2 {
+  font-size: var(--typo-h2-size);
+  font-weight: var(--typo-h2-weight);
+  line-height: var(--typo-h2-line-height);
+  letter-spacing: var(--typo-h2-letter-spacing);
+  margin: 0;
+}
+
+.h3 {
+  font-size: var(--typo-h3-size);
+  font-weight: var(--typo-h3-weight);
+  line-height: var(--typo-h3-line-height);
+  letter-spacing: var(--typo-h3-letter-spacing);
+  margin: 0;
+}
+
+.h4 {
+  font-size: var(--typo-h4-size);
+  font-weight: var(--typo-h4-weight);
+  line-height: var(--typo-h4-line-height);
+  letter-spacing: var(--typo-h4-letter-spacing);
+  margin: 0;
+}
+
+.h5 {
+  font-size: var(--typo-h5-size);
+  font-weight: var(--typo-h5-weight);
+  line-height: var(--typo-h5-line-height);
+  letter-spacing: var(--typo-h5-letter-spacing);
+  margin: 0;
+}
+
+.h6 {
+  font-size: var(--typo-h6-size);
+  font-weight: var(--typo-h6-weight);
+  line-height: var(--typo-h6-line-height);
+  letter-spacing: var(--typo-h6-letter-spacing);
+  margin: 0;
+}
+
+.body {
+  font-size: var(--typo-body-size);
+  font-weight: var(--typo-body-weight);
+  line-height: var(--typo-body-line-height);
+  letter-spacing: var(--typo-body-letter-spacing);
+  margin: 0;
+}
+
+.caption {
+  font-size: var(--typo-caption-size);
+  font-weight: var(--typo-caption-weight);
+  line-height: var(--typo-caption-line-height);
+  letter-spacing: var(--typo-caption-letter-spacing);
+  margin: 0;
+}
+
+.label {
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  line-height: var(--typo-label-line-height);
+  letter-spacing: var(--typo-label-letter-spacing);
+  margin: 0;
+}
+
+.code {
+  font: var(--typo-code-font);
+  letter-spacing: var(--typo-code-letter-spacing);
+  margin: 0;
+}
+
+.app-title {
+  font-size: var(--typo-app-title-size);
+  font-weight: var(--typo-app-title-weight);
+  line-height: var(--typo-app-title-line-height);
+  letter-spacing: var(--typo-app-title-letter-spacing);
+  margin: 0;
+}
+
+.panel-title {
+  font-size: var(--typo-panel-title-size);
+  font-weight: var(--typo-panel-title-weight);
+  line-height: var(--typo-panel-title-line-height);
+  letter-spacing: var(--typo-panel-title-letter-spacing);
+  margin: 0;
+}
+
+.dashboard-title {
+  font-size: var(--typo-dashboard-title-size);
+  font-weight: var(--typo-dashboard-title-weight);
+  line-height: var(--typo-dashboard-title-line-height);
+  letter-spacing: var(--typo-dashboard-title-letter-spacing);
+  margin: 0;
+}
+
+.section-title {
+  font-size: var(--typo-section-title-size);
+  font-weight: var(--typo-section-title-weight);
+  line-height: var(--typo-section-title-line-height);
+  letter-spacing: var(--typo-section-title-letter-spacing);
+  margin: 0;
+}
+
+.panel-section-title {
+  font-size: var(--typo-panel-section-title-size);
+  font-weight: var(--typo-panel-section-title-weight);
+  line-height: var(--typo-panel-section-title-line-height);
+  letter-spacing: var(--typo-panel-section-title-letter-spacing);
+  margin: 0;
+}
+
+.metric-value {
+  font-size: var(--typo-metric-value-size);
+  font-weight: var(--typo-metric-value-weight);
+  line-height: var(--typo-metric-value-line-height);
+  letter-spacing: var(--typo-metric-value-letter-spacing);
+  margin: 0;
+}
+
+.h1,
+.h2,
+.h3,
+.h4,
+.h5,
+.h6,
+.app-title,
+.panel-title,
+.dashboard-title,
+.section-title,
+.panel-section-title {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}

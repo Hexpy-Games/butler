@@ -1,0 +1,17 @@
+.heatmap {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8px, 1fr));
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.day {
+  min-width: 8px;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: color-mix(
+    in srgb,
+    var(--accent) var(--activity-strength),
+    var(--context-track-bg)
+  );
+}

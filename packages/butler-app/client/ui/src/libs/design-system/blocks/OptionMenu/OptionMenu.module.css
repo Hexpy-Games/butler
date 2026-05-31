@@ -1,0 +1,169 @@
+.menu {
+  min-width: min(320px, calc(100vw - 32px));
+  padding: 0;
+}
+
+.menu[data-size="fit"] {
+  width: max-content;
+  min-width: max-content;
+  max-width: calc(100vw - 32px);
+}
+
+.title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.items {
+  display: grid;
+  gap: 2px;
+  margin-top: 0;
+}
+
+.section {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.section + .section {
+  margin-top: var(--space-1);
+}
+
+.sectionTitle {
+  min-width: 0;
+  padding: 3px var(--space-2) 4px;
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-compact);
+}
+
+.sectionItems {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.item {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-1);
+  align-items: start;
+  padding: 3px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.item[data-description-placement="inline"] {
+  align-items: center;
+}
+
+.item:not([data-has-icon="true"]) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.item:hover,
+.item:focus-visible,
+.item[data-selected="true"] {
+  background: var(--selection);
+  outline: none;
+}
+
+.item[data-tone="accent"] {
+  color: var(--accent);
+}
+
+.item[data-tone="warning"] {
+  color: var(--access-full);
+}
+
+.item[data-tone="muted"] {
+  color: var(--text-secondary);
+}
+
+.icon {
+  display: inline-grid;
+  width: 1lh;
+  height: 1lh;
+  place-items: center;
+  color: var(--option-menu-icon-color, currentColor);
+}
+
+.icon svg {
+  display: block;
+  color: inherit;
+}
+
+.icon :where(path, circle, rect, line, polyline, polygon) {
+  stroke: currentColor;
+}
+
+.copy {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.item[data-description-placement="inline"] .copy {
+  align-items: center;
+}
+
+.item[data-description-placement="block"] .copy {
+  display: grid;
+  gap: 0;
+  align-items: start;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.description {
+  display: inline-grid;
+  min-height: 1lh;
+  align-items: center;
+  flex: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-2);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-body);
+}
+
+.item[data-description-placement="block"] .description {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item {
+    transition: none;
+  }
+}

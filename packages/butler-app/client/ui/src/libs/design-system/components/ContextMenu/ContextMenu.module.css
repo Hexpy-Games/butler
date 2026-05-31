@@ -1,0 +1,53 @@
+.fixture {
+  min-width: 0;
+}
+
+.content {
+  z-index: 90;
+  min-width: 8rem;
+  overflow: hidden;
+  padding: 6px;
+  color: var(--text-primary);
+}
+
+.content[data-state="open"] {
+  animation: context-menu-open 90ms ease-out;
+  transform-origin: var(
+    --radix-context-menu-content-transform-origin,
+    center top
+  );
+}
+
+.item {
+  position: relative;
+  display: flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+}
+
+.item:focus,
+.item:hover {
+  background: var(--selection);
+}
+
+.item[data-variant="destructive"] {
+  color: var(--danger);
+}
+
+@keyframes context-menu-open {
+  from {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

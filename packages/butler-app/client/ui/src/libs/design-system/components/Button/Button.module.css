@@ -1,0 +1,167 @@
+.fixture {
+  min-width: 0;
+}
+
+.button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
+  height: 30px;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: inherit;
+  font-size: var(--font-size-3);
+  font-weight: var(--font-weight-regular);
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    transform 120ms ease;
+}
+
+.button[data-stretch="true"] {
+  width: 100%;
+}
+
+.button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--selection);
+}
+
+.button:focus-visible {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.variantDefault:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 88%, var(--color-mix-light));
+}
+
+.variantOutline {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-raised) 86%, transparent);
+  color: var(--text-primary);
+}
+
+.variantBorderless {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.variantGhost {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.variantDestructive {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.variantSecondary {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.variantLink {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.sizeXs {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: var(--font-size-2);
+}
+
+.sizeSm {
+  height: 28px;
+  min-height: 28px;
+}
+
+.sizeLg {
+  height: 34px;
+  min-height: 34px;
+}
+
+.sizeIcon,
+.sizeIconXs,
+.sizeIconSm,
+.sizeIconLg {
+  padding: 0;
+}
+
+.sizeIcon {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+}
+
+.sizeIconXs {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
+.sizeIconSm {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+}
+
+.sizeIconLg {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+}
+
+.shapePill {
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background-clip: padding-box;
+}
+
+.button[data-has-icon-text="true"][data-icon-layout="start"] {
+  padding-right: 14px;
+}
+
+.button[data-has-icon-text="true"][data-icon-layout="end"] {
+  padding-left: 14px;
+}
+
+.icon,
+.text {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  line-height: 1;
+}
+
+.icon > svg {
+  display: block;
+}
+
+.text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -1,0 +1,7 @@
+.container {
+  min-width: 0;
+}
+
+.fixture {
+  max-width: 420px;
+}

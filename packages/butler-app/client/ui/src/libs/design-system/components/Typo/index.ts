@@ -1,0 +1,20 @@
+export {
+  AppTitle,
+  Body,
+  Caption,
+  Code,
+  DashboardTitle,
+  H1,
+  H2,
+  H3,
+  H4,
+  H5,
+  H6,
+  MetricValue,
+  PanelSectionTitle,
+  PanelTitle,
+  SectionTitle,
+  Typo,
+  default,
+} from "./Typo";
+export type { TypoProps } from "./Typo";
