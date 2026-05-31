@@ -93,7 +93,6 @@ if rg -n \
   -e "$legacy_product" \
   -e "\\.${legacy_word}" \
   --glob '!node_modules/**' --glob '!data/**' \
-  --glob '!HANDOFF.md' \
   --glob '!.project-ledger/plans/plan-autonomous-planned-dispatch.md' \
   --glob '!.project-ledger/specs/autonomous-planned-dispatch.md' \
   .; then
