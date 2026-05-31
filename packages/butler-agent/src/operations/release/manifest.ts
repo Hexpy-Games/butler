@@ -94,7 +94,6 @@ export function createReleaseManifest(root: string): ReleaseManifest {
     "packages/butler-agent/resources",
     "packages/project-ledger",
     "VERSION",
-    "CHANGELOG.md",
     "README.md",
   ];
   const privateDataPatterns = [
