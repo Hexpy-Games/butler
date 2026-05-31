@@ -11,6 +11,7 @@ import {
   createServiceReleasePackage,
 } from "../../packages/butler-agent/src/operations/release/package-service-release.ts";
 import {
+  APP_RELEASE_PLATFORMS,
   createAppReleaseManifest,
   validateAppReleaseManifest,
 } from "../../packages/butler-app/scripts/release/manifest.ts";
@@ -98,6 +99,13 @@ test("app release manifest exposes app package files only", () => {
   expect(
     appReleasePaths.some((file) => file.startsWith("packages/butler-agent/")),
   ).toBe(false);
+  expect(manifest.artifacts.map((artifact) => artifact.platform)).toEqual([
+    ...APP_RELEASE_PLATFORMS,
+  ]);
+  expect(manifest.artifacts.map((artifact) => artifact.artifactName)).toEqual([
+    "butler-app-0.0.1-darwin-arm64.zip",
+    "butler-app-0.0.1-linux-x64.tar.gz",
+  ]);
   expect(validateAppReleaseManifest(root, manifest)).toEqual([]);
 });
 
@@ -144,6 +152,13 @@ test("release manifest validation rejects cross-owned bundled artifacts", () => 
   );
   expect(validateAppReleaseManifest(root, brokenAppPaths)).toContain(
     "app release required file must not include service internals: packages/butler-agent/src/agent/turn/native-tool-loop.ts",
+  );
+  const brokenAppPlatforms = structuredClone(createAppReleaseManifest(root));
+  brokenAppPlatforms.artifacts = brokenAppPlatforms.artifacts.filter(
+    (artifact) => artifact.platform !== "linux-x64",
+  );
+  expect(validateAppReleaseManifest(root, brokenAppPlatforms)).toContain(
+    "missing app release artifact platform: app/linux-x64",
   );
 });
 
@@ -300,6 +315,7 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(rootPackage.scripts).toHaveProperty("app:layout:smoke");
   expect(rootPackage.scripts).toHaveProperty("release:service:package");
   expect(electronPackage.scripts).toHaveProperty("package:mac");
+  expect(electronPackage.scripts).toHaveProperty("package:linux");
   expect(electronPackage.version).toBe("0.0.1");
   expect(electronPackage.devDependencies).toHaveProperty("@electron/packager");
   expect(
@@ -327,6 +343,8 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(
     readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
   ).toContain("packaged app executable");
+  expect(readText(join(root, "install.sh"))).not.toContain("v1.0.0");
+  expect(readText(join(root, "install.sh"))).toContain("$BUTLER_HOME/VERSION");
   expect(electronPackage).toMatchObject({
     productName: "Butler",
     butler: {
