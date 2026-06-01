@@ -6,6 +6,7 @@ import {
   recallMemory,
   recallMemoryWithVector,
   type AssociativeRecallResult,
+  type RecallEvidencePolicy,
 } from "./recall/engine.ts";
 import { readProjectRefreshFailures, sanitizeProjectMemoryId } from "./project-memory.ts";
 import { cognitionConsolidationRoot, cognitionMemoryRoot } from "../paths.ts";
@@ -442,6 +443,7 @@ export function recallMemoryEvidence(input: {
   butlerData: string;
   cue: string;
   projectId?: string;
+  evidencePolicy?: RecallEvidencePolicy;
   limit?: number;
 }): MemoryRecallResult {
   const cue = input.cue.trim();
@@ -450,6 +452,7 @@ export function recallMemoryEvidence(input: {
     butlerData: input.butlerData,
     cue,
     projectId: input.projectId,
+    evidencePolicy: input.evidencePolicy,
     limit: input.limit,
   });
   return memoryRecallEvidenceFromRecall({
@@ -463,6 +466,7 @@ export async function recallMemoryEvidenceWithVector(input: {
   butlerData: string;
   cue: string;
   projectId?: string;
+  evidencePolicy?: RecallEvidencePolicy;
   limit?: number;
   vectorQueries?: string[];
 }): Promise<MemoryRecallResult> {
@@ -472,6 +476,7 @@ export async function recallMemoryEvidenceWithVector(input: {
     butlerData: input.butlerData,
     cue,
     projectId: input.projectId,
+    evidencePolicy: input.evidencePolicy,
     limit: input.limit,
     vectorQueries: input.vectorQueries,
   });

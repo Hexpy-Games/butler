@@ -2,7 +2,11 @@ import { existsSync, readFileSync, readdirSync } from "fs";
 import { basename, join } from "path";
 import { Database } from "bun:sqlite";
 import { sanitizeProjectMemoryId } from "../project-memory.ts";
-import type { RetrievalEvidenceRequirement } from "../retrieval-planning.ts";
+import type {
+  RetrievalEvidenceRequirement,
+  RetrievalPlan,
+  RetrievalStrategy,
+} from "../retrieval-planning.ts";
 import { cognitionMemoryRoot } from "../../paths.ts";
 import { recordOperationalMetric } from "../../../../operations/metrics/operational-metrics.ts";
 import {
@@ -96,10 +100,21 @@ export interface AssociativeRecallResult {
 
 export interface RecallEvidencePolicy {
   evidenceRequired?: RetrievalEvidenceRequirement[];
+  retrievalPlan?: Pick<RetrievalPlan, "strategies" | "evidence_required">;
+  strategies?: RetrievalStrategy[];
   minEvidenceConfidence?: number;
   requireSpecificMemory?: boolean;
   tieMargin?: number;
   excludeContradicted?: boolean;
+}
+
+export function recallRankingPolicyFromPlan(
+  plan: Pick<RetrievalPlan, "strategies" | "evidence_required">,
+): RecallEvidencePolicy {
+  return {
+    retrievalPlan: plan,
+    evidenceRequired: plan.evidence_required,
+  };
 }
 
 export interface RecallEvidenceVerification {
@@ -362,6 +377,226 @@ function candidateBoost(candidate: RecallCandidate): number {
   return 0;
 }
 
+interface RecallRankingSignals {
+  semantic: number;
+  lexical: number;
+  contextual: number;
+  graph: number;
+  recency: number;
+  frequency: number;
+  explicit: number;
+  boost: number;
+  hub: number;
+  conflict: number;
+  superseded: number;
+}
+
+interface ActiveRecallPolicy {
+  planned: boolean;
+  strategies: RetrievalStrategy[];
+  evidenceRequired: RetrievalEvidenceRequirement[];
+}
+
+function activeRecallPolicy(policy: RecallEvidencePolicy | undefined): ActiveRecallPolicy {
+  const strategies = uniqueStrings([
+    ...(policy?.retrievalPlan?.strategies ?? []),
+    ...(policy?.strategies ?? []),
+  ]) as RetrievalStrategy[];
+  const evidenceRequired = uniqueStrings([
+    ...(policy?.retrievalPlan?.evidence_required ?? []),
+    ...(policy?.evidenceRequired ?? []),
+  ]) as RetrievalEvidenceRequirement[];
+  return {
+    planned: strategies.length > 0,
+    strategies,
+    evidenceRequired,
+  };
+}
+
+function nonExactEvidenceRequirements(policy: ActiveRecallPolicy): RetrievalEvidenceRequirement[] {
+  return policy.evidenceRequired.filter((requirement) => requirement !== "exact_quote");
+}
+
+function uniqueStrings<T extends string>(values: T[]): T[] {
+  return values.filter((value, index) => values.indexOf(value) === index);
+}
+
+function hasVectorProvenance(candidate: RecallCandidate): boolean {
+  return candidate.source === "vector" && candidate.provenance.some((entry) => entry.startsWith("vector:"));
+}
+
+function hasProjectMemoryProvenance(candidate: RecallCandidate): boolean {
+  return candidate.source === "project-memory" || candidate.originalSource === "project-memory";
+}
+
+function hasTaskContinuityProvenance(candidate: RecallCandidate): boolean {
+  return candidate.provenance.some((entry) => entry.startsWith("task:") || entry.includes(":task:"));
+}
+
+function hasRecentTurnProvenance(candidate: RecallCandidate): boolean {
+  return candidate.source === "hot-cache" ||
+    candidate.provenance.some((entry) => entry.startsWith("session:") || entry.startsWith("turn:"));
+}
+
+function evidenceRequirementScore(
+  requirement: RetrievalEvidenceRequirement,
+  candidate: RecallCandidate,
+  signals: RecallRankingSignals,
+): number {
+  if (requirement === "exact_quote") return 0;
+  if (requirement === "vector_episode_hit") {
+    return hasVectorProvenance(candidate) ? signals.semantic : 0;
+  }
+  if (requirement === "project_memory_hit") {
+    return hasProjectMemoryProvenance(candidate)
+      ? Math.max(signals.lexical, signals.contextual, signals.graph, signals.explicit)
+      : 0;
+  }
+  if (requirement === "graph_relation_hit") {
+    return candidate.relatedNodes?.length ? signals.graph : 0;
+  }
+  if (requirement === "explicit_rule_hit") {
+    return candidate.source === "explicit" || candidate.originalSource === "rules" ? signals.explicit : 0;
+  }
+  if (requirement === "task_continuity") {
+    if (signals.contextual > 0) return signals.contextual;
+    return hasTaskContinuityProvenance(candidate)
+      ? Math.max(signals.lexical, signals.graph, signals.explicit)
+      : 0;
+  }
+  if (requirement === "recent_turn_hit") {
+    return hasRecentTurnProvenance(candidate) ? Math.max(signals.contextual, signals.lexical) : 0;
+  }
+  return 0;
+}
+
+function strategyEvidenceScore(
+  strategy: RetrievalStrategy,
+  candidate: RecallCandidate,
+  signals: RecallRankingSignals,
+): number {
+  if (strategy === "search_vector_episode") return evidenceRequirementScore("vector_episode_hit", candidate, signals);
+  if (strategy === "search_lexical_memory") return signals.lexical;
+  if (strategy === "read_graph_memory") return evidenceRequirementScore("graph_relation_hit", candidate, signals);
+  if (strategy === "read_explicit_memory") return evidenceRequirementScore("explicit_rule_hit", candidate, signals);
+  if (strategy === "read_task_state") return evidenceRequirementScore("task_continuity", candidate, signals);
+  if (strategy === "read_recent_context") return Math.max(signals.contextual, evidenceRequirementScore("recent_turn_hit", candidate, signals));
+  if (strategy === "query_exact_transcript") return 0;
+  return 0;
+}
+
+function requirementForStrategy(strategy: RetrievalStrategy): RetrievalEvidenceRequirement | null {
+  if (strategy === "search_vector_episode") return "vector_episode_hit";
+  if (strategy === "search_lexical_memory") return "project_memory_hit";
+  if (strategy === "read_graph_memory") return "graph_relation_hit";
+  if (strategy === "read_explicit_memory") return "explicit_rule_hit";
+  if (strategy === "read_task_state") return "task_continuity";
+  if (strategy === "read_recent_context") return "recent_turn_hit";
+  if (strategy === "query_exact_transcript") return "exact_quote";
+  return null;
+}
+
+function plannedStrategyEvidenceScore(
+  strategy: RetrievalStrategy,
+  candidate: RecallCandidate,
+  signals: RecallRankingSignals,
+  policy: ActiveRecallPolicy,
+): number {
+  const mappedRequirement = requirementForStrategy(strategy);
+  if (
+    mappedRequirement &&
+    policy.evidenceRequired.includes(mappedRequirement) &&
+    evidenceRequirementScore(mappedRequirement, candidate, signals) <= 0
+  ) {
+    return 0;
+  }
+  return strategyEvidenceScore(strategy, candidate, signals);
+}
+
+function evidenceConfidence(
+  candidate: RecallCandidate,
+  signals: RecallRankingSignals,
+  policy: ActiveRecallPolicy,
+): number {
+  if (!policy.planned) {
+    return Math.max(signals.semantic, signals.lexical, signals.contextual, signals.graph, signals.explicit);
+  }
+  const plannedScores = policy.strategies.map((strategy) =>
+    plannedStrategyEvidenceScore(strategy, candidate, signals, policy),
+  );
+  const requiredScores = policy.evidenceRequired
+    .filter((requirement) => requirement !== "exact_quote")
+    .map((requirement) => evidenceRequirementScore(requirement, candidate, signals));
+  return Math.max(...plannedScores, ...requiredScores, 0);
+}
+
+function recallPenalty(signals: RecallRankingSignals): number {
+  return Math.max(signals.hub, signals.conflict, signals.superseded);
+}
+
+function fallbackRecallScore(signals: RecallRankingSignals): number {
+  if (signals.superseded > 0) return 0;
+  const evidence = Math.max(signals.semantic, signals.lexical, signals.contextual, signals.graph, signals.explicit);
+  if (evidence <= 0) return 0;
+  return clamp01(evidence + signals.boost - recallPenalty(signals));
+}
+
+function plannedRecallScore(
+  candidate: RecallCandidate,
+  signals: RecallRankingSignals,
+  policy: ActiveRecallPolicy,
+): number {
+  if (!policy.planned) return fallbackRecallScore(signals);
+  const strategyScores = policy.strategies.map((strategy) =>
+    plannedStrategyEvidenceScore(strategy, candidate, signals, policy),
+  );
+  const requiredScores = policy.evidenceRequired.map((requirement) =>
+    evidenceRequirementScore(requirement, candidate, signals),
+  );
+  if (requiredScores.length > 0 && requiredScores.every((score) => score <= 0)) return 0;
+  const bestEvidence = Math.max(...strategyScores, ...requiredScores, 0);
+  if (bestEvidence <= 0) return 0;
+  return clamp01(bestEvidence + signals.boost - recallPenalty(signals));
+}
+
+function plannedStrategyIndex(
+  candidate: RecallCandidate,
+  breakdown: RecallScoreBreakdown,
+  policy: ActiveRecallPolicy,
+): number {
+  if (!policy.planned) return Number.MAX_SAFE_INTEGER;
+  const signals: RecallRankingSignals = {
+    semantic: breakdown.semantic_similarity,
+    lexical: breakdown.lexical_match,
+    contextual: breakdown.contextual_match,
+    graph: breakdown.graph_activation,
+    recency: breakdown.recency_score,
+    frequency: breakdown.frequency_score,
+    explicit: breakdown.explicit_salience,
+    boost: breakdown.decision_preference_boost,
+    hub: breakdown.hub_penalty,
+    conflict: breakdown.conflict_penalty,
+    superseded: breakdown.stale_superseded_penalty,
+  };
+  const index = policy.strategies.findIndex((strategy) =>
+    plannedStrategyEvidenceScore(strategy, candidate, signals, policy) > 0,
+  );
+  return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+}
+
+function compareScoredRecall(
+  left: { candidate: RecallCandidate; breakdown: RecallScoreBreakdown },
+  right: { candidate: RecallCandidate; breakdown: RecallScoreBreakdown },
+  policy: ActiveRecallPolicy,
+): number {
+  if (policy.planned) {
+    const leftIndex = plannedStrategyIndex(left.candidate, left.breakdown, policy);
+    const rightIndex = plannedStrategyIndex(right.candidate, right.breakdown, policy);
+    if (leftIndex !== rightIndex) return leftIndex - rightIndex;
+  }
+  return right.breakdown.total - left.breakdown.total;
+}
+
 function sourceForCandidate(candidate: RecallCandidate, semantic: number, graph: number): RecallSource {
   if (candidate.source === "explicit") return "explicit";
   if (graph > 0 && semantic > 0) return "hybrid";
@@ -369,11 +604,46 @@ function sourceForCandidate(candidate: RecallCandidate, semantic: number, graph:
   return candidate.source;
 }
 
+function itemSatisfiesEvidenceRequirement(
+  item: RecallItem,
+  requirement: RetrievalEvidenceRequirement,
+): boolean {
+  const breakdown = item.score_breakdown;
+  if (requirement === "exact_quote") return false;
+  if (requirement === "vector_episode_hit") {
+    return breakdown.semantic_similarity > 0 &&
+      item.provenance.some((entry) => entry.startsWith("vector:"));
+  }
+  if (requirement === "project_memory_hit") {
+    return (item.source === "project-memory" || item.originalSource === "project-memory") &&
+      Math.max(breakdown.lexical_match, breakdown.contextual_match, breakdown.graph_activation) > 0;
+  }
+  if (requirement === "graph_relation_hit") {
+    return breakdown.graph_activation > 0 && item.related_nodes.length > 0;
+  }
+  if (requirement === "explicit_rule_hit") {
+    return (item.source === "explicit" || item.originalSource === "rules") &&
+      breakdown.explicit_salience > 0;
+  }
+  if (requirement === "recent_turn_hit") {
+    return (item.source === "hot-cache" ||
+      item.provenance.some((entry) => entry.startsWith("session:") || entry.startsWith("turn:"))) &&
+      Math.max(breakdown.contextual_match, breakdown.lexical_match) > 0;
+  }
+  if (requirement === "task_continuity") {
+    if (breakdown.contextual_match > 0) return true;
+    return item.provenance.some((entry) => entry.startsWith("task:") || entry.includes(":task:")) &&
+      Math.max(breakdown.lexical_match, breakdown.graph_activation, breakdown.explicit_salience) > 0;
+  }
+  return false;
+}
+
 export function recallFromCorpus(input: {
   cue: string;
   corpus: RecallCorpus;
   context?: RecallContextInput;
   evidencePolicy?: RecallEvidencePolicy;
+  rankingPolicy?: RecallEvidencePolicy;
   limit?: number;
   now?: number;
   minScore?: number;
@@ -388,64 +658,60 @@ export function recallFromCorpus(input: {
   const contextualEvidence = buildContextualRecallEvidence(input.context, input.corpus);
   const degree = buildDegreeMap(input.corpus);
   const activeCandidateIds = new Set(input.corpus.candidates.map((candidate) => candidate.id));
+  const effectivePolicy = input.rankingPolicy ?? input.evidencePolicy;
+  const recallPolicy = activeRecallPolicy(effectivePolicy);
 
   const scored = input.corpus.candidates
     .map((candidate) => {
-      const semantic = semanticScore(candidate);
-      const lexical = lexicalScore(candidate, lexicalStats);
-      const contextual = contextualScore(candidate, contextualEvidence);
-      const graph = candidateGraphActivation(candidate, activation);
-      const recency = recencyScore(candidate.timestamp, now);
-      const frequency = frequencyScore(candidate.frequency);
-      const explicit = candidate.explicitSalience ?? (candidate.source === "explicit" ? 1 : 0);
-      const boost = candidateBoost(candidate);
-      const hub = candidateHubPenalty(candidate, degree);
-      const conflict = candidateConflictPenalty(candidate, activeCandidateIds);
-      const superseded = candidate.supersededBy && activeCandidateIds.has(candidate.supersededBy) ? 0.7 : 0;
-      const evidence = Math.max(semantic, lexical, contextual, graph, explicit);
-      const total =
-        semantic * 0.32 +
-        lexical * 0.32 +
-        contextual * 0.18 +
-        graph * 0.28 +
-        recency * 0.08 +
-        frequency * 0.06 +
-        explicit * 0.18 +
-        boost -
-        hub * 0.25 -
-        conflict -
-        superseded;
+      const signals: RecallRankingSignals = {
+        semantic: semanticScore(candidate),
+        lexical: lexicalScore(candidate, lexicalStats),
+        contextual: contextualScore(candidate, contextualEvidence),
+        graph: candidateGraphActivation(candidate, activation),
+        recency: recencyScore(candidate.timestamp, now),
+        frequency: frequencyScore(candidate.frequency),
+        explicit: candidate.explicitSalience ?? (candidate.source === "explicit" ? 1 : 0),
+        boost: candidateBoost(candidate),
+        hub: candidateHubPenalty(candidate, degree),
+        conflict: candidateConflictPenalty(candidate, activeCandidateIds),
+        superseded: candidate.supersededBy && activeCandidateIds.has(candidate.supersededBy) ? 0.7 : 0,
+      };
+      const evidence = evidenceConfidence(candidate, signals, recallPolicy);
+      const total = plannedRecallScore(candidate, signals, recallPolicy);
       const hasEvidence = evidence > 0;
       return {
         candidate,
         hasEvidence,
         breakdown: {
-          semantic_similarity: semantic,
-          lexical_match: lexical,
-          contextual_match: contextual,
-          graph_activation: graph,
-          recency_score: recency,
-          frequency_score: frequency,
-          explicit_salience: explicit,
+          semantic_similarity: signals.semantic,
+          lexical_match: signals.lexical,
+          contextual_match: signals.contextual,
+          graph_activation: signals.graph,
+          recency_score: signals.recency,
+          frequency_score: signals.frequency,
+          explicit_salience: signals.explicit,
           evidence_confidence: evidence,
-          decision_preference_boost: boost,
-          hub_penalty: hub,
-          conflict_penalty: conflict,
-          stale_superseded_penalty: superseded,
+          decision_preference_boost: signals.boost,
+          hub_penalty: signals.hub,
+          conflict_penalty: signals.conflict,
+          stale_superseded_penalty: signals.superseded,
           total,
         },
       };
     })
     .filter((item) => item.hasEvidence)
     .filter((item) => item.breakdown.total > 0)
-    .sort((left, right) => right.breakdown.total - left.breakdown.total);
+    .sort((left, right) => compareScoredRecall(left, right, recallPolicy));
 
   // Initial threshold: below this, tests showed recency/frequency can feel like
   // false memory even when no semantic, graph, or explicit evidence exists.
   const minScore = input.minScore ?? 0.22;
+  const plannedEvidenceLimit = recallPolicy.planned
+    ? Math.max(limit, nonExactEvidenceRequirements(recallPolicy).length)
+    : limit;
   const rawItems = scored
     .filter((item) => item.breakdown.total >= minScore)
-    .slice(0, limit)
+    .slice(0, plannedEvidenceLimit)
     .map(({ candidate, breakdown }) => ({
       summary: candidate.summary,
       confidence: Math.max(0, Math.min(1, breakdown.total)),
@@ -457,7 +723,7 @@ export function recallFromCorpus(input: {
     }));
   const verification = verifyRecallEvidence({
     items: rawItems,
-    policy: input.evidencePolicy,
+    policy: effectivePolicy,
   });
   const items = verification.items;
 
@@ -469,6 +735,8 @@ export function recallFromCorpus(input: {
     diagnostics: [
       `candidates=${input.corpus.candidates.length}`,
       `activated_nodes=${[...activation.values()].filter((value) => value > 0).length}`,
+      `ranking=${recallPolicy.planned ? "planned_policy" : "fallback_evidence"}`,
+      `ranking_policy=${recallPolicy.planned ? "planned" : "fallback"}`,
       `context_terms=${contextualEvidence?.terms.size ?? 0}`,
       `contextual_candidates=${rawItems.filter((item) => item.score_breakdown.contextual_match > 0).length}`,
       ...verification.diagnostics,
@@ -482,7 +750,16 @@ export function verifyRecallEvidence(input: {
   policy?: RecallEvidencePolicy;
 }): RecallEvidenceVerification {
   const policy = input.policy ?? {};
+  const evidenceRequired = activeRecallPolicy(policy).evidenceRequired;
   const diagnostics: string[] = [];
+  if (evidenceRequired.includes("exact_quote")) {
+    return {
+      verified: false,
+      items: [],
+      diagnostics: ["evidence=exact_quote_requires_query_memory"],
+      nextAction: "try_alternate_retrieval",
+    };
+  }
   if (input.items.length === 0) {
     return {
       verified: false,
@@ -491,15 +768,6 @@ export function verifyRecallEvidence(input: {
       nextAction: "try_alternate_retrieval",
     };
   }
-  if (policy.evidenceRequired?.includes("exact_quote")) {
-    return {
-      verified: false,
-      items: [],
-      diagnostics: ["evidence=exact_quote_requires_query_memory"],
-      nextAction: "try_alternate_retrieval",
-    };
-  }
-
   const minEvidence = policy.minEvidenceConfidence ?? 0;
   const usableItems = input.items.filter((item) => {
     const breakdown = item.score_breakdown;
@@ -518,8 +786,28 @@ export function verifyRecallEvidence(input: {
     };
   }
 
-  if (policy.requireSpecificMemory && usableItems.length > 1) {
-    const [first, second] = usableItems;
+  const missingRequiredEvidence = evidenceRequired
+    .filter((requirement) => requirement !== "exact_quote")
+    .filter((requirement) => !usableItems.some((item) => itemSatisfiesEvidenceRequirement(item, requirement)));
+  for (const requirement of missingRequiredEvidence) diagnostics.push(`evidence_missing=${requirement}`);
+  if (missingRequiredEvidence.length > 0) {
+    return {
+      verified: false,
+      items: [],
+      diagnostics,
+      nextAction: "try_alternate_retrieval",
+    };
+  }
+
+  const nonExactRequiredEvidence = evidenceRequired.filter((requirement) => requirement !== "exact_quote");
+  const evidenceScopedItems = nonExactRequiredEvidence.length === 0
+    ? usableItems
+    : usableItems.filter((item) =>
+      nonExactRequiredEvidence.some((requirement) => itemSatisfiesEvidenceRequirement(item, requirement)),
+    );
+
+  if (policy.requireSpecificMemory && evidenceScopedItems.length > 1) {
+    const [first, second] = evidenceScopedItems;
     const margin = Math.max(0, policy.tieMargin ?? 0);
     if (
       first &&
@@ -538,7 +826,7 @@ export function verifyRecallEvidence(input: {
   diagnostics.push("evidence=verified");
   return {
     verified: true,
-    items: usableItems,
+    items: evidenceScopedItems,
     diagnostics,
     nextAction: "answer",
   };
@@ -779,6 +1067,7 @@ export function recallMemory(input: {
   projectId?: string;
   context?: RecallContextInput;
   evidencePolicy?: RecallEvidencePolicy;
+  rankingPolicy?: RecallEvidencePolicy;
   limit?: number;
   now?: number;
   minScore?: number;
@@ -793,6 +1082,7 @@ export function recallMemory(input: {
       }),
       context: input.context,
       evidencePolicy: input.evidencePolicy,
+      rankingPolicy: input.rankingPolicy,
       limit: input.limit,
       now: input.now,
       minScore: input.minScore,
@@ -820,6 +1110,7 @@ export async function recallMemoryWithVector(input: {
   projectId?: string;
   context?: RecallContextInput;
   evidencePolicy?: RecallEvidencePolicy;
+  rankingPolicy?: RecallEvidencePolicy;
   vectorQueries?: string[];
   vectorBackend?: VectorEpisodeBackend;
   vectorTimeoutMs?: number;
@@ -839,15 +1130,19 @@ export async function recallMemoryWithVector(input: {
       ...(input.vectorQueries ?? []),
     ]).slice(0, 3);
     const vectorDiagnostics: string[] = [];
-    for (const query of vectorQueries) {
-      const vectorResult = await searchVectorEpisodes({
-        butlerData: input.butlerData,
-        query,
-        projectId: input.projectId,
-        limit: input.limit,
-        timeoutMs: input.vectorTimeoutMs,
-        backend: input.vectorBackend,
-      });
+    const vectorResults = await Promise.all(
+      vectorQueries.map((query) =>
+        searchVectorEpisodes({
+          butlerData: input.butlerData,
+          query,
+          projectId: input.projectId,
+          limit: input.limit,
+          timeoutMs: input.vectorTimeoutMs,
+          backend: input.vectorBackend,
+        }),
+      ),
+    );
+    for (const vectorResult of vectorResults) {
       corpus.candidates.push(...vectorResult.candidates);
       vectorDiagnostics.push(...vectorResult.diagnostics);
     }
@@ -856,6 +1151,7 @@ export async function recallMemoryWithVector(input: {
       corpus,
       context: input.context,
       evidencePolicy: input.evidencePolicy,
+      rankingPolicy: input.rankingPolicy,
       limit: input.limit,
       now: input.now,
       minScore: input.minScore,
@@ -922,6 +1218,7 @@ export function createCachedRecallMemoryRunner(input: {
         corpus: cachedCorpus,
         context: request.context,
         evidencePolicy: request.evidencePolicy,
+        rankingPolicy: request.rankingPolicy,
         limit: request.limit,
         now: request.now,
       });

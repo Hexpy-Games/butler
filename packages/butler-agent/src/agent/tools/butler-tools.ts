@@ -67,6 +67,10 @@ import {
   readMemoryHealth,
   updateExplicitMemory,
 } from "../cognition/memory/quality.ts";
+import type {
+  RetrievalEvidenceRequirement,
+  RetrievalStrategy,
+} from "../cognition/memory/retrieval-planning.ts";
 import { queryMemory } from "../cognition/memory/exact-query.ts";
 import { readReflectiveProfileSummary, type ProfilingMode } from "../../personalization/profiling.ts";
 import {
@@ -88,6 +92,36 @@ import {
   updateFirstChatOnboarding,
   type FirstChatOnboardingPersonaPreset,
 } from "../../personalization/onboarding.ts";
+
+const RECALL_RETRIEVAL_STRATEGIES = new Set<RetrievalStrategy>([
+  "read_recent_context",
+  "query_exact_transcript",
+  "search_lexical_memory",
+  "search_vector_episode",
+  "read_graph_memory",
+  "read_explicit_memory",
+  "read_task_state",
+]);
+
+const RECALL_EVIDENCE_REQUIREMENTS = new Set<RetrievalEvidenceRequirement>([
+  "exact_quote",
+  "recent_turn_hit",
+  "task_continuity",
+  "project_memory_hit",
+  "vector_episode_hit",
+  "explicit_rule_hit",
+  "graph_relation_hit",
+]);
+
+function normalizeRecallEnumArray<T extends string>(value: unknown, allowed: Set<T>): T[] {
+  if (!Array.isArray(value)) return [];
+  const output: T[] = [];
+  for (const item of value) {
+    if (typeof item !== "string" || !allowed.has(item as T) || output.includes(item as T)) continue;
+    output.push(item as T);
+  }
+  return output;
+}
 import {
   validateSkillCatalog,
 } from "../../integrations/skills/catalog.ts";
@@ -1323,6 +1357,40 @@ export const BUTLER_TOOLS: ButlerToolDefinition[] = [
           type: "array",
           description: "Optional planner-expanded semantic episode queries.",
           items: { type: "string" },
+        },
+        strategies: {
+          type: "array",
+          description:
+            "Optional model-selected retrieval strategies for this recall. Use this to make ranking follow the planned evidence path instead of the fallback scorer.",
+          items: {
+            type: "string",
+            enum: [
+              "read_recent_context",
+              "query_exact_transcript",
+              "search_lexical_memory",
+              "search_vector_episode",
+              "read_graph_memory",
+              "read_explicit_memory",
+              "read_task_state",
+            ],
+          },
+        },
+        evidence_required: {
+          type: "array",
+          description:
+            "Optional evidence types this recall must prove before Butler can use the result.",
+          items: {
+            type: "string",
+            enum: [
+              "exact_quote",
+              "recent_turn_hit",
+              "task_continuity",
+              "project_memory_hit",
+              "vector_episode_hit",
+              "explicit_rule_hit",
+              "graph_relation_hit",
+            ],
+          },
         },
       },
       required: ["cue"],
@@ -4032,12 +4100,27 @@ export function createButlerToolExecutor(input: {
           typeof query === "string" && query.trim().length > 0,
         )
         : undefined;
+      const strategies = normalizeRecallEnumArray(call.args.strategies, RECALL_RETRIEVAL_STRATEGIES);
+      const evidenceRequired = normalizeRecallEnumArray(call.args.evidence_required, RECALL_EVIDENCE_REQUIREMENTS);
+      const evidencePolicy = strategies.length > 0 || evidenceRequired.length > 0
+        ? {
+          strategies,
+          evidenceRequired,
+          retrievalPlan: strategies.length > 0 || evidenceRequired.length > 0
+            ? {
+              strategies,
+              evidence_required: evidenceRequired,
+            }
+            : undefined,
+        }
+        : undefined;
       const recall = call.args.include_vector === false
         ? recallMemoryEvidence({
           butlerData: input.butlerData,
           cue,
           projectId: input.projectId,
           limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
+          evidencePolicy,
         })
         : await recallMemoryEvidenceWithVector({
           butlerData: input.butlerData,
@@ -4045,6 +4128,7 @@ export function createButlerToolExecutor(input: {
           projectId: input.projectId,
           limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
           vectorQueries,
+          evidencePolicy,
         });
       return {
         ok: true,
