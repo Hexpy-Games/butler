@@ -1,22 +1,15 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
-
-const root = process.cwd();
-
-function readRepoFile(path: string): string {
-  return readFileSync(join(root, path), "utf8");
-}
+import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
 
 test("context management has a dedicated governing spec and phased plan", () => {
   const specPath = ".project-ledger/specs/context-management-optimization.md";
   const planPath = ".project-ledger/plans/plan-context-management-optimization.md";
 
-  expect(existsSync(join(root, specPath))).toBe(true);
-  expect(existsSync(join(root, planPath))).toBe(true);
+  expect(repoOrLedgerExists(specPath)).toBe(true);
+  expect(repoOrLedgerExists(planPath)).toBe(true);
 
-  const spec = readRepoFile(specPath);
-  const plan = readRepoFile(planPath);
+  const spec = readRepoOrLedgerFile(specPath);
+  const plan = readRepoOrLedgerFile(planPath);
 
   expect(spec).toContain("source of truth");
   expect(spec).toContain("Memory-Backed Context Contract");
@@ -35,9 +28,9 @@ test("context management has a dedicated governing spec and phased plan", () => 
 test("context management research records RTK decision and cache policy", () => {
   const reportPath = ".project-ledger/reports/context-management-research.md";
 
-  expect(existsSync(join(root, reportPath))).toBe(true);
+  expect(repoOrLedgerExists(reportPath)).toBe(true);
 
-  const report = readRepoFile(reportPath);
+  const report = readRepoOrLedgerFile(reportPath);
 
   expect(report).toContain("Do not make RTK default");
   expect(report).toContain("optional, config-gated, fail-open, shell-output-only adapter");
@@ -57,8 +50,8 @@ test("context management research records RTK decision and cache policy", () => 
 });
 
 test("context management research cites external memory and provider references", () => {
-  const spec = readRepoFile(".project-ledger/specs/context-management-optimization.md");
-  const report = readRepoFile(".project-ledger/reports/context-management-research.md");
+  const spec = readRepoOrLedgerFile(".project-ledger/specs/context-management-optimization.md");
+  const report = readRepoOrLedgerFile(".project-ledger/reports/context-management-research.md");
   const combined = `${spec}\n${report}`;
 
   for (const url of [
