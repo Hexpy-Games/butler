@@ -29,6 +29,10 @@ prompts, raw tool payloads, raw web queries, raw URLs, or private memory text.
 Developer and release checks stay as package scripts unless a future spec
 promotes them into product commands.
 
+Local product URLs are allowed in gateway status output. `butler gateway status
+app` and its JSON form must expose the app gateway server URL so operators can
+confirm the Butler App port without reading private config files.
+
 ## Related Specs
 
 - `SPEC-BUTLER-CLI` - Butler CLI

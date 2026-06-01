@@ -2442,6 +2442,60 @@ health_check() {
 
 # ─── Completion Screen ───────────────────────────────────────────────────────
 
+strip_trailing_slashes() {
+  local value="$1"
+  while [[ "$value" == */ && "$value" != "http://" && "$value" != "https://" ]]; do
+    value="${value%/}"
+  done
+  printf '%s' "$value"
+}
+
+resolve_app_gateway_url() {
+  if [[ -n "${BUTLER_INSTALL_APP_SERVER_URL:-}" ]]; then
+    strip_trailing_slashes "$BUTLER_INSTALL_APP_SERVER_URL"
+    return 0
+  fi
+
+  local url
+  url="$(BUTLER_DATA_PATH="$BUTLER_DATA" "$BUTLER_BUN" -e "
+    import { readFileSync } from 'fs';
+    import { join } from 'path';
+
+    const butlerData = process.env.BUTLER_DATA_PATH || '';
+    let host = (process.env.BUTLER_APP_SERVER_HOST || '').trim();
+    let port = (process.env.BUTLER_APP_SERVER_PORT || '').trim();
+    try {
+      const settings = JSON.parse(readFileSync(join(butlerData, 'gateways', 'app.json'), 'utf8'));
+      const config = settings && typeof settings === 'object' && settings.config && typeof settings.config === 'object'
+        ? settings.config
+        : {};
+      if (!host && typeof config.host === 'string') host = config.host.trim();
+      if (!port && config.port !== undefined && config.port !== null) port = String(config.port).trim();
+    } catch {}
+    if (!host) host = '127.0.0.1';
+    if (host === '0.0.0.0' || host === '::') host = '127.0.0.1';
+    const parsedPort = Number(port);
+    const normalizedPort = Number.isFinite(parsedPort) && parsedPort >= 1 && parsedPort <= 65535
+      ? Math.trunc(parsedPort)
+      : 18765;
+    console.log('http://' + host + ':' + normalizedPort);
+  " 2>/dev/null || true)"
+
+  if [[ -z "$url" ]]; then
+    url="http://127.0.0.1:18765"
+  fi
+  strip_trailing_slashes "$url"
+}
+
+resolve_install_app_url() {
+  local app_url="$1"
+  if [[ -n "${BUTLER_INSTALL_HOST_APP_URL:-}" ]]; then
+    strip_trailing_slashes "$BUTLER_INSTALL_HOST_APP_URL"
+    return 0
+  fi
+  strip_trailing_slashes "$app_url"
+}
+
 print_completion() {
   local version
   version="$(tr -d '[:space:]' < "$BUTLER_HOME/VERSION" 2>/dev/null || true)"
@@ -2457,6 +2511,9 @@ print_completion() {
 
   local tagline
   tagline="$(random_tagline)"
+  local app_url display_app_url
+  app_url="$(resolve_app_gateway_url)"
+  display_app_url="$(resolve_install_app_url "$app_url")"
 
   echo ""
   echo -e "${SUCCESS}${BOLD}Butler is ready.${NC}"
@@ -2467,6 +2524,9 @@ print_completion() {
   echo ""
   printf "  ${MUTED}%-18s${NC} %s\n" "Start" "butler start"
   printf "  ${MUTED}%-18s${NC} %s\n" "Status" "butler status"
+  printf "  ${MUTED}%-18s${NC} %s\n" "Butler App" "$display_app_url"
+  printf "  ${MUTED}%-18s${NC} %s\n" "App Health" "$display_app_url/health"
+  printf "  ${MUTED}%-18s${NC} %s\n" "App Status" "butler gateway status app --json"
   printf "  ${MUTED}%-18s${NC} %s\n" "Logs" "butler logs --service butler-main --lines 100"
   printf "  ${MUTED}%-18s${NC} %s\n" "Help" "butler --help"
   print_os_service_later_hint

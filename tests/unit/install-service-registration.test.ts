@@ -127,6 +127,7 @@ test("docker installer preinstalls container dependencies before running install
   expect(source).toContain("-v \"$ARTIFACT_DIR:/release:ro\"");
   expect(source).toContain("export BUTLER_HOME=/opt/butler");
   expect(source).toContain("export BUTLER_DATA=/tmp/butler-data");
+  expect(source).toContain('-e BUTLER_INSTALL_HOST_APP_URL="http://127.0.0.1:$HOST_APP_PORT"');
   expect(source).toContain('"host": "0.0.0.0"');
   expect(source).toContain('"port": $container_app_port');
   expect(source).toContain('app_web_client="$BUTLER_HOME/packages/butler-agent/resources/app-client/dist"');
@@ -171,6 +172,7 @@ test("README Docker sandbox uses a dependency-only image and leaves install manu
   expect(script).toContain("download_release_artifact()");
   expect(script).toContain("-v \"$artifact_dir:/home/butler/Downloads:ro\"");
   expect(script).toContain("-p \"127.0.0.1:$HOST_APP_PORT:$CONTAINER_APP_PORT\"");
+  expect(script).toContain('-e BUTLER_INSTALL_HOST_APP_URL="http://127.0.0.1:$HOST_APP_PORT"');
   expect(script).toContain('"host": "0.0.0.0"');
   expect(script).toContain('"port": $container_app_port');
   expect(script).toContain("tail -f /dev/null");
@@ -188,6 +190,32 @@ test("README Docker sandbox uses a dependency-only image and leaves install manu
   expect(readme).toContain("bun run install:docker:readme");
   expect(readme).toContain("dependency-only Docker");
   expect(readme).toContain("docker exec -it butler-readme-install bash -l");
+});
+
+test("installer completion prints Butler App URL and CLI status command", () => {
+  const bun = process.execPath.replace(/'/g, "'\\''");
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    export BUTLER_BUN='${bun}'
+    export BUTLER_DATA="$tmp"
+    export BUTLER_INSTALL_HOST_APP_URL="http://127.0.0.1:18766"
+    source ./install.sh --home "$PWD" --data "$tmp" --language en
+    mkdir -p "$tmp/gateways"
+    cat > "$tmp/gateways/app.json" <<'JSON'
+{"id":"app","enabled":true,"config":{"host":"0.0.0.0","port":18765}}
+JSON
+    print_os_service_later_hint() { :; }
+    show_footer_links() { :; }
+    print_completion
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("Butler App");
+  expect(result.stdout).toContain("http://127.0.0.1:18766");
+  expect(result.stdout).toContain("http://127.0.0.1:18766/health");
+  expect(result.stdout).toContain("butler gateway status app --json");
 });
 
 test("release docker verification installs from service artifact and checks health", () => {
