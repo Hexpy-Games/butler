@@ -597,6 +597,74 @@ test("file-backed recall memory returns explicit and graph-backed results", () =
   }
 });
 
+test("file-backed graph recall filters candidates by active project", () => {
+  const tempDir = join(tmpdir(), `butler-recall-graph-project-${Date.now()}-${Math.random()}`);
+  try {
+    mkdirSync(join(tempDir, "cognition", "memory", "db"), { recursive: true });
+    const db = new Database(join(tempDir, "cognition", "memory", "db", "graph.sqlite"));
+    db.exec(`
+      CREATE TABLE entities (id TEXT, type TEXT, name TEXT, project TEXT);
+      CREATE TABLE edges (id INTEGER, source_id TEXT, target_id TEXT, rel_type TEXT, weight REAL);
+      CREATE TABLE entity_mentions (
+        id INTEGER,
+        entity_id TEXT,
+        session_id TEXT,
+        timestamp INTEGER,
+        snippet TEXT,
+        project TEXT
+      );
+      INSERT INTO entities VALUES ('runtime-butler', 'decision', 'Runtime decision', 'butler');
+      INSERT INTO entities VALUES ('runtime-other', 'decision', 'Runtime decision', 'other');
+      INSERT INTO entity_mentions VALUES (1, 'runtime-butler', 'butler_session', 1777210000, 'Runtime decision belongs to Butler.', 'butler');
+      INSERT INTO entity_mentions VALUES (2, 'runtime-other', 'other_session', 1777210001, 'Runtime decision belongs to another project.', 'other');
+    `);
+    db.close();
+
+    const result = recallMemory({
+      butlerData: tempDir,
+      cue: "runtime decision",
+      projectId: "butler",
+      now,
+      minScore: 0.01,
+    });
+
+    expect(result.abstained).toBe(false);
+    expect(result.items.some((item) => item.provenance.includes("graph:butler_session"))).toBe(true);
+    expect(result.items.some((item) => item.provenance.includes("graph:other_session"))).toBe(false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("project-scoped legacy graph recall degrades without leaking unscoped graph rows", () => {
+  const tempDir = join(tmpdir(), `butler-recall-graph-legacy-${Date.now()}-${Math.random()}`);
+  try {
+    mkdirSync(join(tempDir, "cognition", "memory", "db"), { recursive: true });
+    const db = new Database(join(tempDir, "cognition", "memory", "db", "graph.sqlite"));
+    db.exec(`
+      CREATE TABLE entities (id TEXT, type TEXT, name TEXT);
+      CREATE TABLE edges (id INTEGER, source_id TEXT, target_id TEXT, rel_type TEXT, weight REAL);
+      CREATE TABLE entity_mentions (id INTEGER, entity_id TEXT, session_id TEXT, timestamp INTEGER, snippet TEXT);
+      INSERT INTO entities VALUES ('runtime', 'decision', 'Runtime decision');
+      INSERT INTO entity_mentions VALUES (1, 'runtime', 'legacy_session', 1777210000, 'Legacy graph row has no project scope.');
+    `);
+    db.close();
+
+    const result = recallMemory({
+      butlerData: tempDir,
+      cue: "runtime decision",
+      projectId: "butler",
+      now,
+      minScore: 0.01,
+    });
+
+    expect(result.abstained).toBe(true);
+    expect(result.items.some((item) => item.provenance.includes("graph:legacy_session"))).toBe(false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("cached recall runner avoids reloading the corpus on every turn", () => {
   const tempDir = join(tmpdir(), `butler-recall-cache-${Date.now()}-${Math.random()}`);
   try {
