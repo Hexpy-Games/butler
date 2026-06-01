@@ -15,9 +15,10 @@ project work.
 ## Core Ideas
 
 **Local memory.** Context and runtime state are stored under your Butler data
-directory by default. If you enable profiling or hosted model providers, the
-selected prompt/context can be sent to that provider according to your
-configuration.
+directory by default. Local-first does not mean every inference is local: if
+you enable profiling or hosted model providers, selected prompt, context, or
+profile-candidate text may be sent to the configured provider. Use a local
+provider when that processing must stay on your machine.
 
 **Reviewed outcomes.** Tool output and worker results are evidence, not final
 answers.
@@ -117,7 +118,7 @@ flowchart LR
 
   Gateway --> Runtime[Native Butler Runtime]
   Runtime --> Loop[Agent Loop]
-  Runtime --> Cognition[Private Cognition System]
+  Runtime --> Cognition[Local Cognition System]
   Runtime --> Work[WorkStreams and Workers]
   Runtime --> Delivery[Delivery State]
   Runtime --> Providers[Model Providers]

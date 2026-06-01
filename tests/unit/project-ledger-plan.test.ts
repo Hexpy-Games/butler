@@ -1,25 +1,18 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
-
-const root = process.cwd();
-
-function readRepoFile(path: string): string {
-  return readFileSync(join(root, path), "utf8");
-}
+import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
 
 test("Project Ledger PL-0 documents the governing plan spec and ADR", () => {
   const planPath = ".project-ledger/plans/plan-project-ledger.md";
   const specPath = ".project-ledger/specs/project-ledger.md";
   const adrPath = ".project-ledger/decisions/0001-project-ledger-repo-first-skill-packaged-cli.md";
 
-  expect(existsSync(join(root, planPath))).toBe(true);
-  expect(existsSync(join(root, specPath))).toBe(true);
-  expect(existsSync(join(root, adrPath))).toBe(true);
+  expect(repoOrLedgerExists(planPath)).toBe(true);
+  expect(repoOrLedgerExists(specPath)).toBe(true);
+  expect(repoOrLedgerExists(adrPath)).toBe(true);
 
-  const plan = readRepoFile(planPath);
-  const spec = readRepoFile(specPath);
-  const adr = readRepoFile(adrPath);
+  const plan = readRepoOrLedgerFile(planPath);
+  const spec = readRepoOrLedgerFile(specPath);
+  const adr = readRepoOrLedgerFile(adrPath);
 
   expect(plan).toContain("This plan implements `docs/specs/project-ledger.md`");
   expect(plan).toContain("| PL-1 | Skill-packaged CLI MVP | Complete |");
@@ -29,7 +22,7 @@ test("Project Ledger PL-0 documents the governing plan spec and ADR", () => {
 });
 
 test("Project Ledger plan includes all fixed phases and MVP commands", () => {
-  const plan = readRepoFile(".project-ledger/plans/plan-project-ledger.md");
+  const plan = readRepoOrLedgerFile(".project-ledger/plans/plan-project-ledger.md");
 
   for (const phase of ["PL-0", "PL-1", "PL-2", "PL-3", "PL-4", "PL-5", "PL-6", "PL-7"]) {
     expect(plan).toContain(phase);
@@ -52,7 +45,7 @@ test("Project Ledger plan includes all fixed phases and MVP commands", () => {
 });
 
 test("Project Ledger spec defines source of truth layout privacy and success criteria", () => {
-  const spec = readRepoFile(".project-ledger/specs/project-ledger.md");
+  const spec = readRepoOrLedgerFile(".project-ledger/specs/project-ledger.md");
 
   expect(spec).toContain("## Source Of Truth");
   expect(spec).toMatch(/Generated views are not source\s+of truth/);
@@ -68,7 +61,7 @@ test("Project Ledger spec defines source of truth layout privacy and success cri
 });
 
 test("Project Ledger ADR records rejected alternatives and Butler decoupling", () => {
-  const adr = readRepoFile(".project-ledger/decisions/0001-project-ledger-repo-first-skill-packaged-cli.md");
+  const adr = readRepoOrLedgerFile(".project-ledger/decisions/0001-project-ledger-repo-first-skill-packaged-cli.md");
 
   expect(adr).toContain("Accepted");
   expect(adr).toContain("Butler-only tool: rejected");

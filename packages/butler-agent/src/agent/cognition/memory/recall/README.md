@@ -44,6 +44,6 @@ and adds degraded-mode diagnostics such as `vector=unavailable:*`.
 ## Related Specs
 
 - `SPEC-ASSOCIATIVE-MEMORY-RUNTIME` - Associative Memory Runtime
-- `SPEC-BUTLER-RETRIEVAL-PLANNING` - Retrieval Planning And Evidence-Grounded Recall
+- `SPEC-BUTLER-RETRIEVAL-PLANNING` - Butler Retrieval Planning And Evidence-Grounded Recall
 - `SPEC-MEMORY-QUALITY-LOOP` - Memory Quality Loop
 - `SPEC-CONTEXT-MANAGEMENT-OPTIMIZATION` - Context Management Optimization

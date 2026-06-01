@@ -44,7 +44,7 @@ real vector backend hits as `semantic_similarity`.
 ## Related Specs
 
 - `SPEC-ASSOCIATIVE-MEMORY-RUNTIME` - Associative Memory Runtime
-- `SPEC-BUTLER-RETRIEVAL-PLANNING` - Retrieval Planning And Evidence-Grounded Recall
+- `SPEC-BUTLER-RETRIEVAL-PLANNING` - Butler Retrieval Planning And Evidence-Grounded Recall
 - `SPEC-MEMORY-QUALITY-LOOP` - Memory Quality Loop
 - `SPEC-CONTEXT-MANAGEMENT-OPTIMIZATION` - Context Management Optimization
 - `SPEC-PROJECT-MEMORY-RUNTIME` - Project Memory Runtime

@@ -1,8 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
-
-const root = process.cwd();
+import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
 
 const capabilitySpecs = [
   {
@@ -56,21 +53,17 @@ const capabilitySpecs = [
   },
 ];
 
-function readRepoFile(path: string): string {
-  return readFileSync(join(root, path), "utf8");
-}
-
 test("Agentic Core capabilities have dedicated governing specs", () => {
-  const index = readRepoFile(".project-ledger/specs/agentic-core-capabilities.md");
+  const index = readRepoOrLedgerFile(".project-ledger/specs/agentic-core-capabilities.md");
 
   expect(index).toContain("index and trace hub");
   expect(index).toContain("no longer the governing behavior spec");
 
   for (const capability of capabilitySpecs) {
-    expect(existsSync(join(root, capability.spec))).toBe(true);
+    expect(repoOrLedgerExists(capability.spec)).toBe(true);
     expect(index).toContain(capability.legacySpec);
 
-    const spec = readRepoFile(capability.spec);
+    const spec = readRepoOrLedgerFile(capability.spec);
     expect(spec).toContain(`${capability.id}`);
     expect(spec).toContain("source of truth");
     expect(spec).toContain("## Required Behavior");
@@ -87,7 +80,7 @@ test("Agentic Core capabilities have dedicated governing specs", () => {
 });
 
 test("Agentic Core plan references the dedicated governing specs", () => {
-  const plan = readRepoFile(".project-ledger/plans/plan-agentic-core-capabilities.md");
+  const plan = readRepoOrLedgerFile(".project-ledger/plans/plan-agentic-core-capabilities.md");
 
   for (const capability of capabilitySpecs) {
     expect(plan).toContain(capability.id);

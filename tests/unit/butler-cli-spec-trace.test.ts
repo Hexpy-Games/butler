@@ -1,8 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
-
-const root = process.cwd();
+import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
 
 const childSpecs = [
   ".project-ledger/specs/cli/core-commands.md",
@@ -59,7 +56,7 @@ const expectedCommands = [
   "butler runtime repair [--yes]",
   "butler telegram pair",
   "butler telegram status [--json]",
-  "butler update [--component service] [--check|--apply] [--manifest PATH] [--dry-run] [--yes]",
+  "butler update [--component service|app] [--check|--apply] [--manifest PATH] [--dry-run] [--yes]",
   "butler uninstall [--keep-data] [--yes]",
   "butler logs [--service NAME] [--lines N] [--follow]",
   "butler ps [--json]",
@@ -107,25 +104,21 @@ const expectedCommands = [
   "butler automation resume <id>",
 ];
 
-function readRepoFile(path: string): string {
-  return readFileSync(join(root, path), "utf8");
-}
-
 test("Butler CLI parent spec links command-level child specs", () => {
-  const parent = readRepoFile(".project-ledger/specs/butler-cli.md");
+  const parent = readRepoOrLedgerFile(".project-ledger/specs/butler-cli.md");
 
   expect(parent).toContain("No command may be implemented");
   expect(parent).toContain("Maintainer Boundary");
   expect(parent).toContain("Minimum Command Test Contract");
   expect(parent).toContain("JSON Examples");
   for (const [index, childSpec] of childSpecs.entries()) {
-    expect(existsSync(join(root, childSpec))).toBe(true);
+    expect(repoOrLedgerExists(childSpec)).toBe(true);
     expect(parent).toContain(legacyChildSpecs[index]);
   }
 });
 
 test("every Butler CLI command has a command-level sub-spec", () => {
-  const childSpecText = childSpecs.map(readRepoFile).join("\n");
+  const childSpecText = childSpecs.map(readRepoOrLedgerFile).join("\n");
 
   for (const command of expectedCommands) {
     expect(childSpecText).toContain(`### \`${command}\``);
@@ -134,7 +127,7 @@ test("every Butler CLI command has a command-level sub-spec", () => {
 
 test("command-level specs include necessity privacy and tests", () => {
   for (const childSpec of childSpecs) {
-    const text = readRepoFile(childSpec);
+    const text = readRepoOrLedgerFile(childSpec);
     expect(text).toContain("Parent spec: `docs/specs/butler-cli.md`");
     expect(text).toMatch(/Necessity|necessity|Reason deferred|Promotion condition/);
     expect(text).toMatch(/Privacy|privacy/);
@@ -143,12 +136,12 @@ test("command-level specs include necessity privacy and tests", () => {
 });
 
 test("completed CLI parent spec has consistent child spec statuses", () => {
-  const parent = readRepoFile(".project-ledger/specs/butler-cli.md");
+  const parent = readRepoOrLedgerFile(".project-ledger/specs/butler-cli.md");
   expect(parent).toContain("Status: Complete.");
 
-  expect(readRepoFile(".project-ledger/specs/cli/core-commands.md")).toContain("Status: Implemented.");
-  expect(readRepoFile(".project-ledger/specs/cli/operator-commands.md")).toContain("Status: Implemented.");
-  expect(readRepoFile(".project-ledger/specs/cli/advanced-deferred-commands.md")).toContain(
+  expect(readRepoOrLedgerFile(".project-ledger/specs/cli/core-commands.md")).toContain("Status: Implemented.");
+  expect(readRepoOrLedgerFile(".project-ledger/specs/cli/operator-commands.md")).toContain("Status: Implemented.");
+  expect(readRepoOrLedgerFile(".project-ledger/specs/cli/advanced-deferred-commands.md")).toContain(
     "Status: Advanced implemented; Deferred commands remain unimplemented.",
   );
 });

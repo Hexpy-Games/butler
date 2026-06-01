@@ -1,18 +1,11 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "fs";
-import { join } from "path";
-
-const root = process.cwd();
-
-function readRepoFile(path: string): string {
-  return readFileSync(join(root, path), "utf8");
-}
+import { readRepoOrLedgerFile } from "../support/project-ledger-root.ts";
 
 test("feature roadmap status matches completed implementation slices", () => {
-  const roadmap = readRepoFile(".project-ledger/roadmaps/roadmap-todo.md");
-  const featurePlan = readRepoFile(".project-ledger/plans/plan-feature-roadmap.md");
-  const projectMemoryPlan = readRepoFile(".project-ledger/plans/plan-project-memory-runtime.md");
-  const cliDeferredSpec = readRepoFile(".project-ledger/specs/cli/advanced-deferred-commands.md");
+  const roadmap = readRepoOrLedgerFile(".project-ledger/roadmaps/roadmap-todo.md");
+  const featurePlan = readRepoOrLedgerFile(".project-ledger/plans/plan-feature-roadmap.md");
+  const projectMemoryPlan = readRepoOrLedgerFile(".project-ledger/plans/plan-project-memory-runtime.md");
+  const cliDeferredSpec = readRepoOrLedgerFile(".project-ledger/specs/cli/advanced-deferred-commands.md");
 
   expect(roadmap).toContain("| 11 | Butler Product CLI | `docs/specs/butler-cli.md` | Completed |");
   expect(roadmap).toContain("| 12 | Project Memory Runtime | `docs/specs/project-memory-runtime.md` | Completed |");

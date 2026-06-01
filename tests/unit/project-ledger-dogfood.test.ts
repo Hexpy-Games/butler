@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { existsSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
+import { repoOrLedgerExists } from "../support/project-ledger-root.ts";
 
 const root = process.cwd();
 const cliPath = join(root, "packages", "project-ledger", "bin", "project-ledger");
@@ -16,10 +16,10 @@ function runLedgerJson(args: string[]): any {
 }
 
 test("Butler repo dogfoods Project Ledger with generated bounded views", () => {
-  expect(existsSync(join(root, ".project-ledger", "project.json"))).toBe(true);
-  expect(existsSync(join(root, ".project-ledger", "views", "dashboard.md"))).toBe(true);
-  expect(existsSync(join(root, ".project-ledger", "views", "handoff.md"))).toBe(true);
-  expect(existsSync(join(root, ".project-ledger", "views", "roadmap.md"))).toBe(true);
+  expect(repoOrLedgerExists(".project-ledger/project.json")).toBe(true);
+  expect(repoOrLedgerExists(".project-ledger/views/dashboard.md")).toBe(true);
+  expect(repoOrLedgerExists(".project-ledger/views/handoff.md")).toBe(true);
+  expect(repoOrLedgerExists(".project-ledger/views/roadmap.md")).toBe(true);
 
   const status = runLedgerJson(["status"]);
   expect(status.data.project.id).toBe("butler");
