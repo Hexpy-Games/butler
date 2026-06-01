@@ -163,6 +163,7 @@ start_container() {
     -p "127.0.0.1:$HOST_APP_PORT:$CONTAINER_APP_PORT" \
     -v "$artifact_dir:/home/butler/Downloads:ro" \
     -e BUTLER_INSTALL_IN_DOCKER=1 \
+    -e BUTLER_INSTALL_HOST_APP_URL="http://127.0.0.1:$HOST_APP_PORT" \
     -e FORCE_COLOR="${FORCE_COLOR:-1}" \
     -e BUTLER_HOME=/home/butler/butler \
     -e BUTLER_DATA=/home/butler/.butler \

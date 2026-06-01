@@ -616,6 +616,7 @@ function renderGatewayStatus(view: Awaited<ReturnType<typeof buildGatewayStatusV
     `${view.id}: ${view.status}`,
     `enabled: ${view.enabled}`,
     `configured: ${view.configured}`,
+    typeof view.config.serverUrl === "string" ? `url: ${view.config.serverUrl}` : "",
     `lifecycle: ${view.lifecycle}`,
     `running: ${view.running}`,
     `restart required: ${view.restartRequired}`,

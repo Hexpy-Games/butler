@@ -12,6 +12,7 @@ import { createMemoryChunk } from "../../packages/butler-agent/src/agent/cogniti
 
 const root = process.cwd();
 const cli = join(root, "bin", "butler.js");
+const packageVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version as string;
 
 function tempRoot(): string {
   const dir = join(tmpdir(), `butler-cli-operator-${Date.now()}-${Math.random()}`);
@@ -166,6 +167,10 @@ test("gateway CLI manages app gateway settings through safe output", () => {
       "app",
       "telegram",
     ]);
+
+    const status = runCli(["gateway", "status", "app"], butlerData);
+    expect(status.exitCode).toBe(0);
+    expect(stdoutText(status)).toContain("url: http://127.0.0.1:19001");
 
     const disabled = runCli(["gateway", "disable", "app", "--json"], butlerData);
     expect(disabled.exitCode).toBe(0);
@@ -856,28 +861,30 @@ test("operator cognition consolidation runs the generic cycle manually", () => {
 
 test("operator lifecycle commands require explicit confirmation for mutation", () => {
   const butlerData = tempRoot();
+  const updateVersion = "99.0.0";
   try {
     const check = runCli(["update", "--component", "service", "--check", "--json"], butlerData);
     expect(check.exitCode).toBe(0);
     let parsed = JSON.parse(stdoutText(check));
     expect(parsed.data).toMatchObject({
       component: "service",
-      current_version: "0.0.1",
-      available_version: "0.0.1",
+      current_version: packageVersion,
+      available_version: packageVersion,
       update_available: false,
       dryRun: false,
     });
 
-    const artifactPath = join(butlerData, "butler-service-0.0.2.tar.gz");
-    writeFileSync(artifactPath, "service artifact v0.0.2", "utf8");
+    const artifactPath = join(butlerData, `butler-service-${updateVersion}.tar.gz`);
+    const artifactContents = `service artifact v${updateVersion}`;
+    writeFileSync(artifactPath, artifactContents, "utf8");
     const manifestPath = join(butlerData, "update-manifest.json");
     writeFileSync(manifestPath, JSON.stringify({
       artifacts: [{
         component: "service",
-        version: "0.0.2",
+        version: updateVersion,
         channel: "stable",
         artifact_url: artifactPath,
-        sha256: createHash("sha256").update("service artifact v0.0.2").digest("hex"),
+        sha256: createHash("sha256").update(artifactContents).digest("hex"),
         bundled_components: ["service"],
         update_policy: "explicit",
         restart_policy: "restart-service",
@@ -895,8 +902,8 @@ test("operator lifecycle commands require explicit confirmation for mutation", (
     parsed = JSON.parse(stdoutText(apply));
     expect(parsed.data).toMatchObject({
       component: "service",
-      current_version: "0.0.1",
-      available_version: "0.0.2",
+      current_version: packageVersion,
+      available_version: updateVersion,
       update_available: true,
       dryRun: false,
       stage_status: "staged",

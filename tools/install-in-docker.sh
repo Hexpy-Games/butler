@@ -105,6 +105,7 @@ exec docker run --rm -it \
   -v "$ARTIFACT_DIR:/release:ro" \
   -e FORCE_COLOR="${FORCE_COLOR:-1}" \
   -e BUTLER_INSTALL_IN_DOCKER=1 \
+  -e BUTLER_INSTALL_HOST_APP_URL="http://127.0.0.1:$HOST_APP_PORT" \
   "$IMAGE" \
   bash -lc '
     set -euo pipefail

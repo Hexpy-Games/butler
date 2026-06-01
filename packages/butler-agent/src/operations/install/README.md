@@ -29,6 +29,10 @@ an existing working managed runtime when a new download fails.
   installs must write `user.language` for UI/default locale context and
   `user.responseLanguage` for model-facing assistant replies, both as `en` or
   `ko`, before first-chat onboarding starts.
+- A completed install must print the Butler App URL, health URL, and the
+  `butler gateway status app --json` verification command. Docker wrappers that
+  publish the app gateway to the host must pass the host-facing URL so the
+  completion screen does not show only the container-local bind address.
 - Local model setup must never dead-end on a single unreachable server URL.
   When discovery cannot return a model and no model id was provided, interactive
   installs must let the operator retry with another URL or enter a model id
