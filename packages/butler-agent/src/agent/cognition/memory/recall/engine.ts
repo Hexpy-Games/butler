@@ -125,6 +125,30 @@ export interface RecallEvidenceVerification {
 }
 
 const DEFAULT_LIMIT = 5;
+const RECALL_SEED_MIN_CHARS = 2;
+const RECALL_SEED_MAX_TERMS = 24;
+const BM25_IDF_SMOOTHING = 0.5;
+// BM25 defaults match Apache Lucene BM25Similarity, which cites Robertson et al.,
+// "Okapi at TREC-3"; k1 controls term-frequency saturation, b length normalization.
+const BM25_TERM_FREQUENCY_SATURATION_K1 = 1.2;
+const BM25_DOCUMENT_LENGTH_NORMALIZATION_B = 0.75;
+const UNKNOWN_TIMESTAMP_RECENCY_SCORE = 0.15;
+const RECENCY_DECAY_WINDOW_DAYS = 30;
+const FREQUENCY_NORMALIZATION_REFERENCE_COUNT = 8;
+const GRAPH_ACTIVATION_HOPS = 2;
+const GRAPH_EDGE_WEIGHT_CAP = 2;
+// Tuned policy constants, not learned weights: they only shape graph spreading
+// after lexical/vector/contextual evidence has selected a candidate path.
+const GRAPH_FORWARD_SPREAD_FACTOR = 0.58;
+const GRAPH_REVERSE_SPREAD_FACTOR = 0.45;
+const HUB_PENALTY_FREE_DEGREE = 8;
+const HUB_PENALTY_FULL_SCALE = 40;
+const CONFLICTING_MEMORY_PENALTY = 0.4;
+const SUPERSEDED_MEMORY_PENALTY = 0.7;
+// Protected by recall regression tests; candidates below this level tended to
+// be recency/frequency noise rather than usable evidence.
+const DEFAULT_MIN_RECALL_SCORE = 0.22;
+const DEFAULT_RECALL_CACHE_TTL_MS = 30_000;
 
 function readText(path: string): string {
   try {
@@ -151,9 +175,9 @@ export function extractRecallSeeds(cue: string): string[] {
     .toLowerCase()
     .split(/[^\p{L}\p{N}._-]+/u)
     .map((part) => part.trim())
-    .filter((part) => part.length >= 2)
+    .filter((part) => part.length >= RECALL_SEED_MIN_CHARS)
     .filter((part, index, values) => values.indexOf(part) === index)
-    .slice(0, 24);
+    .slice(0, RECALL_SEED_MAX_TERMS);
 }
 
 function lexicalTokens(text: string): string[] {
@@ -162,7 +186,7 @@ function lexicalTokens(text: string): string[] {
     .toLowerCase()
     .split(/[^\p{L}\p{N}._-]+/u)
     .map((part) => part.trim())
-    .filter((part) => part.length >= 2);
+    .filter((part) => part.length >= RECALL_SEED_MIN_CHARS);
 }
 
 function frequencyMap(tokens: string[]): Map<string, number> {
@@ -205,7 +229,9 @@ function buildLexicalStats(candidates: RecallCandidate[], seeds: string[]): Lexi
 function idf(term: string, stats: LexicalStats): number {
   const frequency = stats.documentFrequency.get(term) ?? 0;
   if (frequency === 0 || stats.documentCount === 0) return 0;
-  return Math.log(1 + (stats.documentCount - frequency + 0.5) / (frequency + 0.5));
+  return Math.log(
+    1 + (stats.documentCount - frequency + BM25_IDF_SMOOTHING) / (frequency + BM25_IDF_SMOOTHING),
+  );
 }
 
 function lexicalScore(candidate: RecallCandidate, stats: LexicalStats): number {
@@ -214,8 +240,6 @@ function lexicalScore(candidate: RecallCandidate, stats: LexicalStats): number {
   if (tokens.length === 0) return 0;
   const frequencies = frequencyMap(tokens);
   const averageLength = stats.averageDocumentLength > 0 ? stats.averageDocumentLength : tokens.length;
-  const k1 = 1.2;
-  const b = 0.75;
   let score = 0;
   let availableQueryWeight = 0;
   for (const term of stats.queryTerms) {
@@ -224,8 +248,11 @@ function lexicalScore(candidate: RecallCandidate, stats: LexicalStats): number {
     availableQueryWeight += termIdf;
     const termFrequency = frequencies.get(term) ?? 0;
     if (termFrequency === 0) continue;
-    const lengthNormalization = k1 * (1 - b + b * (tokens.length / averageLength));
-    score += termIdf * ((termFrequency * (k1 + 1)) / (termFrequency + lengthNormalization));
+    const lengthNormalization = BM25_TERM_FREQUENCY_SATURATION_K1 *
+      (1 - BM25_DOCUMENT_LENGTH_NORMALIZATION_B +
+        BM25_DOCUMENT_LENGTH_NORMALIZATION_B * (tokens.length / averageLength));
+    score += termIdf *
+      ((termFrequency * (BM25_TERM_FREQUENCY_SATURATION_K1 + 1)) / (termFrequency + lengthNormalization));
   }
   if (availableQueryWeight <= 0) return 0;
   return clamp01(score / availableQueryWeight);
@@ -304,14 +331,14 @@ function contextualScore(
 }
 
 function recencyScore(timestamp: number | undefined, now: number): number {
-  if (!timestamp) return 0.15;
+  if (!timestamp) return UNKNOWN_TIMESTAMP_RECENCY_SCORE;
   const ageMs = Math.max(0, now - timestamp * 1000);
-  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
-  return Math.max(0, 1 - ageMs / thirtyDaysMs);
+  const recencyWindowMs = RECENCY_DECAY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  return Math.max(0, 1 - ageMs / recencyWindowMs);
 }
 
 function frequencyScore(value: number | undefined): number {
-  return Math.min(1, Math.log1p(value ?? 0) / Math.log1p(8));
+  return Math.min(1, Math.log1p(value ?? 0) / Math.log1p(FREQUENCY_NORMALIZATION_REFERENCE_COUNT));
 }
 
 function buildDegreeMap(corpus: RecallCorpus): Map<string, number> {
@@ -335,12 +362,13 @@ function activateGraph(corpus: RecallCorpus, seeds: string[]): Map<string, numbe
     if (matched) activation.set(node.id, 1);
   }
 
-  for (let hop = 0; hop < 2; hop += 1) {
+  for (let hop = 0; hop < GRAPH_ACTIVATION_HOPS; hop += 1) {
     const next = new Map(activation);
     for (const edge of corpus.edges) {
       const weight = edge.weight ?? 1;
-      const spread = 0.58 * Math.min(2, weight) / (1 + (degree.get(edge.sourceId) ?? 0));
-      const reverseSpread = 0.45 * Math.min(2, weight) / (1 + (degree.get(edge.targetId) ?? 0));
+      const cappedWeight = Math.min(GRAPH_EDGE_WEIGHT_CAP, weight);
+      const spread = GRAPH_FORWARD_SPREAD_FACTOR * cappedWeight / (1 + (degree.get(edge.sourceId) ?? 0));
+      const reverseSpread = GRAPH_REVERSE_SPREAD_FACTOR * cappedWeight / (1 + (degree.get(edge.targetId) ?? 0));
       const sourceActivation = activation.get(edge.sourceId) ?? 0;
       const targetActivation = activation.get(edge.targetId) ?? 0;
       if (sourceActivation > 0) {
@@ -365,11 +393,22 @@ function candidateGraphActivation(candidate: RecallCandidate, activation: Map<st
 function candidateHubPenalty(candidate: RecallCandidate, degree: Map<string, number>): number {
   const nodes = candidate.relatedNodes ?? [];
   if (nodes.length === 0) return 0;
-  return Math.max(...nodes.map((node) => Math.min(1, Math.max(0, ((degree.get(node) ?? 0) - 8) / 40))), 0);
+  return Math.max(
+    ...nodes.map((node) =>
+      Math.min(
+        1,
+        Math.max(
+          0,
+          ((degree.get(node) ?? 0) - HUB_PENALTY_FREE_DEGREE) / HUB_PENALTY_FULL_SCALE,
+        ),
+      ),
+    ),
+    0,
+  );
 }
 
 function candidateConflictPenalty(candidate: RecallCandidate, activeCandidateIds: Set<string>): number {
-  return candidate.contradicts?.some((id) => activeCandidateIds.has(id)) ? 0.4 : 0;
+  return candidate.contradicts?.some((id) => activeCandidateIds.has(id)) ? CONFLICTING_MEMORY_PENALTY : 0;
 }
 
 function candidateBoost(candidate: RecallCandidate): number {
@@ -674,7 +713,9 @@ export function recallFromCorpus(input: {
         boost: candidateBoost(candidate),
         hub: candidateHubPenalty(candidate, degree),
         conflict: candidateConflictPenalty(candidate, activeCandidateIds),
-        superseded: candidate.supersededBy && activeCandidateIds.has(candidate.supersededBy) ? 0.7 : 0,
+        superseded: candidate.supersededBy && activeCandidateIds.has(candidate.supersededBy)
+          ? SUPERSEDED_MEMORY_PENALTY
+          : 0,
       };
       const evidence = evidenceConfidence(candidate, signals, recallPolicy);
       const total = plannedRecallScore(candidate, signals, recallPolicy);
@@ -703,9 +744,7 @@ export function recallFromCorpus(input: {
     .filter((item) => item.breakdown.total > 0)
     .sort((left, right) => compareScoredRecall(left, right, recallPolicy));
 
-  // Initial threshold: below this, tests showed recency/frequency can feel like
-  // false memory even when no semantic, graph, or explicit evidence exists.
-  const minScore = input.minScore ?? 0.22;
+  const minScore = input.minScore ?? DEFAULT_MIN_RECALL_SCORE;
   const plannedEvidenceLimit = recallPolicy.planned
     ? Math.max(limit, nonExactEvidenceRequirements(recallPolicy).length)
     : limit;
@@ -1197,7 +1236,7 @@ export function createCachedRecallMemoryRunner(input: {
   butlerData: string;
   ttlMs?: number;
 }): typeof recallMemory {
-  const ttlMs = Math.max(1000, input.ttlMs ?? 30_000);
+  const ttlMs = Math.max(1000, input.ttlMs ?? DEFAULT_RECALL_CACHE_TTL_MS);
   let cachedAt = 0;
   let cachedCorpus: RecallCorpus | null = null;
   let cachedProjectId: string | undefined;

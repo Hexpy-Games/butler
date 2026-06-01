@@ -45,6 +45,17 @@ export interface VectorEpisodeSearchResult {
   diagnostics: string[];
 }
 
+const VECTOR_SEARCH_MIN_LIMIT = 1;
+const VECTOR_SEARCH_DEFAULT_LIMIT = 5;
+const VECTOR_SEARCH_MAX_LIMIT = 10;
+const VECTOR_SEARCH_MIN_TIMEOUT_MS = 200;
+const VECTOR_SEARCH_DEFAULT_TIMEOUT_MS = 1_500;
+const VECTOR_SEARCH_MAX_TIMEOUT_MS = 10_000;
+const VECTOR_SEARCH_OVERFETCH_MULTIPLIER = 5;
+const VECTOR_SEARCH_OVERFETCH_MAX_LIMIT = 50;
+const VECTOR_CIRCUIT_FAILURE_THRESHOLD = 3;
+const VECTOR_CIRCUIT_COOLDOWN_MS = 30_000;
+
 export async function searchVectorEpisodes(input: {
   butlerData: string;
   query: string;
@@ -57,8 +68,14 @@ export async function searchVectorEpisodes(input: {
   if (!query) {
     return { candidates: [], diagnostics: ["vector=skipped:empty-query"] };
   }
-  const limit = Math.max(1, Math.min(10, Math.trunc(input.limit ?? 5)));
-  const timeoutMs = Math.max(200, Math.min(10_000, Math.trunc(input.timeoutMs ?? 1500)));
+  const limit = Math.max(
+    VECTOR_SEARCH_MIN_LIMIT,
+    Math.min(VECTOR_SEARCH_MAX_LIMIT, Math.trunc(input.limit ?? VECTOR_SEARCH_DEFAULT_LIMIT)),
+  );
+  const timeoutMs = Math.max(
+    VECTOR_SEARCH_MIN_TIMEOUT_MS,
+    Math.min(VECTOR_SEARCH_MAX_TIMEOUT_MS, Math.trunc(input.timeoutMs ?? VECTOR_SEARCH_DEFAULT_TIMEOUT_MS)),
+  );
   const startedAt = Date.now();
   const dbPath = join(cognitionMemoryRoot(input.butlerData), "db", "butler.lance");
   const tableName = "butler_memory";
@@ -248,15 +265,13 @@ type TimedResult<T> =
   | { status: "timeout" };
 
 const defaultVectorEpisodeBackend = createLanceDbMemoryVectorBackend();
-const VECTOR_CIRCUIT_FAILURE_THRESHOLD = 3;
-const VECTOR_CIRCUIT_COOLDOWN_MS = 30_000;
 const vectorCircuitStates = new WeakMap<VectorEpisodeBackend, {
   failureCount: number;
   openUntil: number;
 }>();
 
 function overfetchLimit(limit: number): number {
-  return Math.max(limit, Math.min(50, limit * 5));
+  return Math.max(limit, Math.min(VECTOR_SEARCH_OVERFETCH_MAX_LIMIT, limit * VECTOR_SEARCH_OVERFETCH_MULTIPLIER));
 }
 
 function normalizeVectorSearchRows(value: VectorEpisodeSearchRows): {
