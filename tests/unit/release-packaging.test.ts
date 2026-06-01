@@ -26,7 +26,7 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
 
   expect(manifest).toMatchObject({
     name: "butler",
-    version: "0.0.1",
+    version: "0.0.2",
     bin: {
       butler: "./bin/butler.js",
     },
@@ -35,7 +35,7 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
     "service",
   ]);
   expect(
-    manifest.components.every((component) => component.version === "0.0.1"),
+    manifest.components.every((component) => component.version === "0.0.2"),
   ).toBe(true);
   expect(
     manifest.components.find((component) => component.id === "service")
@@ -74,11 +74,11 @@ test("app release manifest exposes app package files only", () => {
   expect(manifest).toMatchObject({
     name: "butler-app",
     protocol: "butler.app.v1",
-    version: "0.0.1",
+    version: "0.0.2",
   });
   expect(manifest.components.map((component) => component.id)).toEqual(["app"]);
   expect(
-    manifest.components.every((component) => component.version === "0.0.1"),
+    manifest.components.every((component) => component.version === "0.0.2"),
   ).toBe(true);
   expect(
     manifest.components.find((component) => component.id === "app")
@@ -120,8 +120,8 @@ test("app release manifest exposes app package files only", () => {
     ...APP_RELEASE_PLATFORMS,
   ]);
   expect(manifest.artifacts.map((artifact) => artifact.artifactName)).toEqual([
-    "butler-app-0.0.1-darwin-arm64.zip",
-    "butler-app-0.0.1-linux-x64.tar.gz",
+    "butler-app-0.0.2-darwin-arm64.zip",
+    "butler-app-0.0.2-linux-x64.tar.gz",
   ]);
   expect(validateAppReleaseManifest(root, manifest)).toEqual([]);
 });
@@ -332,16 +332,16 @@ test("package-owned release gate scripts pass in the repo checkout", () => {
   expect(service.stdout).toBe("");
   expect(serviceVerbose.status).toBe(0);
   expect(serviceVerbose.stdout).toContain(
-    "Service release gate passed: butler@0.0.1",
+    "Service release gate passed: butler@0.0.2",
   );
-  expect(serviceVerbose.stdout).toContain("Components: service@0.0.1");
+  expect(serviceVerbose.stdout).toContain("Components: service@0.0.2");
   expect(app.status).toBe(0);
   expect(app.stdout).toBe("");
   expect(appVerbose.status).toBe(0);
   expect(appVerbose.stdout).toContain(
-    "App release gate passed: butler-app@0.0.1",
+    "App release gate passed: butler-app@0.0.2",
   );
-  expect(appVerbose.stdout).toContain("Components: app@0.0.1");
+  expect(appVerbose.stdout).toContain("Components: app@0.0.2");
   expect(rootGate.status).toBe(0);
   expect(rootGate.stdout).toBe("");
 });
@@ -370,7 +370,7 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(electronPackage.scripts["package:mac"]).toContain(
     "adhoc-sign-mac.mjs",
   );
-  expect(electronPackage.version).toBe("0.0.1");
+  expect(electronPackage.version).toBe("0.0.2");
   expect(electronPackage.devDependencies).toHaveProperty("@electron/packager");
   expect(
     readText(
@@ -384,7 +384,7 @@ test("dedicated client package smoke and metadata are available", () => {
         "VERSION",
       ),
     ).trim(),
-  ).toBe("0.0.1");
+  ).toBe("0.0.2");
   expect(existsSync(join(root, "tests", "smoke", "app-package-smoke.ts"))).toBe(
     true,
   );

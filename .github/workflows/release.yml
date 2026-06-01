@@ -55,6 +55,11 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
+          notes_file=".github/releases/${tag}.md"
+          notes_args=(--notes "Butler service release $tag")
+          if [ -f "$notes_file" ]; then
+            notes_args=(--notes-file "$notes_file")
+          fi
           shopt -s nullglob
           files=(
             dist/release/service/butler-service-*-all.tar.gz
@@ -68,7 +73,8 @@ jobs:
             exit 1
           fi
           if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "$tag" "${notes_args[@]}"
             gh release upload "$tag" "${files[@]}" --clobber
           else
-            gh release create "$tag" "${files[@]}" --title "$tag" --notes "Butler service release $tag"
+            gh release create "$tag" "${files[@]}" --title "$tag" "${notes_args[@]}"
           fi
