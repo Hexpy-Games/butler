@@ -46,6 +46,11 @@ an existing working managed runtime when a new download fails.
   defaults to the first free port starting at `127.0.0.1:18766`. The Docker
   harness must verify that the service artifact contains the built app web
   client and that `/` serves HTML, not an API `not_found` envelope.
+- The README Docker sandbox must use a dependency-only image. It may download or
+  mount the service release artifact into `~/Downloads`, but it must leave
+  `install.sh` execution to the operator so the README Quick Start can be
+  followed manually. It must still pre-wire the app gateway to
+  `0.0.0.0:18765` and publish it to a non-conflicting host port.
 
 ## Related Specs
 
