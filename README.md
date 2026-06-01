@@ -71,6 +71,20 @@ free port starting at `18766` so it does not collide with a host Butler already
 using `18765`. The script prints the host web and health URLs. Set
 `BUTLER_INSTALL_DOCKER_HOST_PORT=18770` to force a specific host port.
 
+To manually follow the README install commands inside a dependency-only Docker
+image:
+
+```bash
+bun run install:docker:readme
+docker exec -it butler-readme-install bash -l
+```
+
+The README sandbox downloads the release artifact into the container's
+`~/Downloads`, prepares only system dependencies in the Docker image, pre-wires
+the app gateway to bind `0.0.0.0:18765`, and publishes it to the first free host
+port starting at `18766`. Run the Quick Start commands inside the shell, then
+open the printed host URL from your browser.
+
 After install:
 
 ```bash
@@ -170,7 +184,7 @@ bun run app:client
 
 ## Status
 
-Butler is `v0.0.1` and pre-release. Expect breaking changes before `v1.0.0`.
+Butler is `v0.0.2` and pre-release. Expect breaking changes before `v1.0.0`.
 
 The intended deployment model is single-user and self-hosted on a machine you
 control. Butler can run tools, edit files, dispatch background workers, and

@@ -158,6 +158,38 @@ test("docker installer preinstalls container dependencies before running install
   }
 });
 
+test("README Docker sandbox uses a dependency-only image and leaves install manual", () => {
+  const script = readFileSync("tools/readme-install-docker.sh", "utf8");
+  const dockerfile = readFileSync("tools/docker/install-deps.Dockerfile", "utf8");
+  const packageJson = readFileSync("package.json", "utf8");
+  const readme = readFileSync("README.md", "utf8");
+
+  expect(packageJson).toContain('"install:docker:readme": "bash tools/readme-install-docker.sh"');
+  expect(script).toContain("tools/docker/install-deps.Dockerfile");
+  expect(script).toContain("butler-install-deps:ubuntu-24.04");
+  expect(script).toContain("docker build -t \"$IMAGE\"");
+  expect(script).toContain("download_release_artifact()");
+  expect(script).toContain("-v \"$artifact_dir:/home/butler/Downloads:ro\"");
+  expect(script).toContain("-p \"127.0.0.1:$HOST_APP_PORT:$CONTAINER_APP_PORT\"");
+  expect(script).toContain('"host": "0.0.0.0"');
+  expect(script).toContain('"port": $container_app_port');
+  expect(script).toContain("tail -f /dev/null");
+  expect(script).toContain("docker exec -it $CONTAINER_NAME bash -l");
+  expect(script).toContain("mkdir -p ~/butler");
+  expect(script).toContain("tar -xzf ~/Downloads/butler-service-*-all.tar.gz -C ~/butler");
+  expect(script).toContain("Host web URL after install: http://127.0.0.1:$HOST_APP_PORT");
+  expect(dockerfile).toContain("FROM ubuntu:24.04");
+  expect(dockerfile).toContain("apt-get install -y --no-install-recommends");
+  expect(dockerfile).toContain("build-essential");
+  expect(dockerfile).toContain("netcat-openbsd");
+  expect(dockerfile).toContain("USER butler");
+  expect(dockerfile).not.toContain("COPY");
+  expect(dockerfile).not.toContain("install.sh");
+  expect(readme).toContain("bun run install:docker:readme");
+  expect(readme).toContain("dependency-only Docker");
+  expect(readme).toContain("docker exec -it butler-readme-install bash -l");
+});
+
 test("release docker verification installs from service artifact and checks health", () => {
   const source = readFileSync("tools/verify-service-release-in-docker.sh", "utf8");
   const packageIndex = source.indexOf("release:service:package");
