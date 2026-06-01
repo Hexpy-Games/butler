@@ -22,6 +22,14 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
 
+function writeDeadLockOwner(lockDir: string): void {
+  writeFileSync(join(lockDir, "owner.json"), JSON.stringify({
+    pid: 999_999_999,
+    token: "dead-owner",
+    acquiredAt: "2026-04-24T00:00:00.000Z",
+  }), "utf8");
+}
+
 test("task store reads durable task records from the shared task layout", () => {
   const taskDir = join(tempDir, "tasks", "task-1");
   mkdirSync(taskDir, { recursive: true });
@@ -62,14 +70,56 @@ test("task store recovers stale notification locks and does not leave temp files
   mkdirSync(taskDir, { recursive: true });
   writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
   mkdirSync(join(taskDir, ".worker-result-notified.lock"));
+  writeDeadLockOwner(join(taskDir, ".worker-result-notified.lock"));
+  writeFileSync(join(taskDir, "..worker-result-notified.tmp-dead-writer"), "partial\n", "utf8");
+  writeFileSync(join(taskDir, "..worker-result-notified.lock.candidate-dead-writer"), "partial\n", "utf8");
   const stale = new Date(Date.now() - 60_000);
   utimesSync(join(taskDir, ".worker-result-notified.lock"), stale, stale);
+  utimesSync(join(taskDir, "..worker-result-notified.lock.candidate-dead-writer"), stale, stale);
 
   store.markResultNotified("task-stale-notify-lock", new Date("2026-04-24T00:00:00.000Z"));
 
   expect(store.read("task-stale-notify-lock")?.notifiedAt).toBe("2026-04-24T00:00:00.000Z");
   expect(existsSync(join(taskDir, ".worker-result-notified.lock"))).toBe(false);
   expect(readdirSync(taskDir).filter((entry) => entry.includes(".tmp-"))).toEqual([]);
+  expect(readdirSync(taskDir).filter((entry) => entry.includes(".candidate-"))).toEqual([]);
+});
+
+test("task store does not steal a stale-looking lock from a live owner", () => {
+  const store = new TaskStore(tempDir);
+  const taskDir = join(tempDir, "tasks", "task-live-notify-lock");
+  const lockDir = join(taskDir, ".worker-result-notified.lock");
+  mkdirSync(lockDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(lockDir, "owner.json"), JSON.stringify({
+    pid: process.pid,
+    token: "live-owner",
+    acquiredAt: "2026-04-24T00:00:00.000Z",
+  }), "utf8");
+  const stale = new Date(Date.now() - 60_000);
+  utimesSync(lockDir, stale, stale);
+
+  expect(() =>
+    store.markResultNotified("task-live-notify-lock", new Date("2026-04-24T00:00:00.000Z")),
+  ).toThrow("Timed out waiting for file lock");
+  expect(existsSync(lockDir)).toBe(true);
+  expect(existsSync(join(taskDir, ".worker-result-notified"))).toBe(false);
+});
+
+test("task store treats ownerless stale locks as unknown instead of stealing them", () => {
+  const store = new TaskStore(tempDir);
+  const taskDir = join(tempDir, "tasks", "task-ownerless-notify-lock");
+  const lockDir = join(taskDir, ".worker-result-notified.lock");
+  mkdirSync(lockDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  const stale = new Date(Date.now() - 60_000);
+  utimesSync(lockDir, stale, stale);
+
+  expect(() =>
+    store.markResultNotified("task-ownerless-notify-lock", new Date("2026-04-24T00:00:00.000Z")),
+  ).toThrow("Timed out waiting for file lock");
+  expect(existsSync(lockDir)).toBe(true);
+  expect(existsSync(join(taskDir, ".worker-result-notified"))).toBe(false);
 });
 
 test("task store summaries are sorted newest-first and limited", () => {
@@ -258,6 +308,7 @@ test("task store persists and reads task origin context", () => {
   mkdirSync(taskDir, { recursive: true });
   writeFileSync(join(taskDir, "status"), "RUNNING\n", "utf8");
   mkdirSync(join(taskDir, "origin.json.lock"));
+  writeDeadLockOwner(join(taskDir, "origin.json.lock"));
   const stale = new Date(Date.now() - 60_000);
   utimesSync(join(taskDir, "origin.json.lock"), stale, stale);
 
@@ -297,6 +348,8 @@ test("task store reconciles dead running workers into recoverable state when con
   writeFileSync(join(taskDir, "pid"), "424242\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "continue this interrupted investigation\n", "utf8");
   mkdirSync(join(taskDir, "status.lock"));
+  writeDeadLockOwner(join(taskDir, "status.lock"));
+  writeFileSync(join(taskDir, ".status.tmp-dead-writer"), "partial\n", "utf8");
   const stale = new Date(Date.now() - 60_000);
   utimesSync(join(taskDir, "status.lock"), stale, stale);
 
