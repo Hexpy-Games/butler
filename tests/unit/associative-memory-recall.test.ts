@@ -8,6 +8,7 @@ import {
   createCachedRecallMemoryRunner,
   recallFromCorpus,
   recallMemory,
+  recallRankingPolicyFromPlan,
   verifyRecallEvidence,
   type RecallCorpus,
 } from "../../packages/butler-agent/src/agent/cognition/memory/recall/engine.ts";
@@ -277,6 +278,170 @@ test("recall evidence verifier rejects exact-quote answers from summary recall",
 
   expect(result.abstained).toBe(true);
   expect(result.diagnostics).toContain("evidence=exact_quote_requires_query_memory");
+});
+
+test("planned recall ranks by requested evidence instead of fixed weighted sums", () => {
+  const result = recallFromCorpus({
+    cue: "composer approval form",
+    now,
+    minScore: 0.01,
+    rankingPolicy: recallRankingPolicyFromPlan({
+      strategies: ["search_vector_episode"],
+      evidence_required: ["vector_episode_hit"],
+    }),
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "lexical-project",
+        summary: "Composer approval form",
+        text: "Composer approval form uses lexical project memory anchors.",
+        source: "project-memory",
+        originalSource: "project-memory",
+        provenance: ["project:composer"],
+        timestamp: Math.floor(now / 1000),
+        frequency: 8,
+      }, {
+        id: "semantic-vector",
+        summary: "Semantic UI decision episode",
+        text: "The semantic episode says the ask-first UI replaced the input field.",
+        source: "vector",
+        originalSource: "task-memory",
+        provenance: ["vector:episode-approval"],
+        vectorSimilarity: 0.24,
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(false);
+  expect(result.diagnostics).toContain("ranking_policy=planned");
+  expect(result.items[0]?.provenance[0]).toBe("vector:episode-approval");
+  expect(result.items[0]?.score_breakdown.semantic_similarity).toBe(0.24);
+  expect(result.items[0]?.score_breakdown.lexical_match).toBe(0);
+});
+
+test("retrieval plans enforce non-exact evidence requirements", () => {
+  const result = recallFromCorpus({
+    cue: "runtime decision",
+    now,
+    minScore: 0.01,
+    limit: 2,
+    rankingPolicy: recallRankingPolicyFromPlan({
+      strategies: ["search_vector_episode", "search_lexical_memory", "read_graph_memory", "read_task_state"],
+      evidence_required: [
+        "vector_episode_hit",
+        "project_memory_hit",
+        "graph_relation_hit",
+        "task_continuity",
+      ],
+    }),
+    corpus: {
+      hotCacheHints: [],
+      nodes: [{ id: "runtime", type: "decision", name: "runtime decision", degree: 1 }],
+      edges: [],
+      candidates: [{
+        id: "vector-hit",
+        summary: "Semantic runtime episode",
+        text: "The semantic episode covers the runtime decision.",
+        source: "vector",
+        provenance: ["vector:runtime"],
+        vectorSimilarity: 0.64,
+      }, {
+        id: "project-hit",
+        summary: "Runtime decision project memory",
+        text: "Runtime decision is recorded in project memory.",
+        source: "project-memory",
+        originalSource: "project-memory",
+        provenance: ["project:runtime"],
+      }, {
+        id: "graph-hit",
+        summary: "Runtime decision graph relation",
+        text: "Runtime decision is connected to the managed runtime node.",
+        source: "graph",
+        originalSource: "graph",
+        provenance: ["graph:runtime"],
+        relatedNodes: ["runtime"],
+      }, {
+        id: "task-hit",
+        summary: "Runtime task continuity",
+        text: "Runtime decision remains the active task continuity record.",
+        source: "task-memory",
+        originalSource: "task-memory",
+        provenance: ["task:runtime"],
+      }, {
+        id: "plain-lexical",
+        summary: "Runtime decision lexical note",
+        text: "Runtime decision appears here, but this note is not one of the requested evidence channels.",
+        source: "hot-cache",
+        originalSource: "hot-cache",
+        provenance: ["hot:runtime"],
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(false);
+  expect(result.diagnostics).toContain("evidence=verified");
+  expect(result.diagnostics).not.toContain("evidence_missing=vector_episode_hit");
+  expect(result.items.map((item) => item.provenance[0])).toEqual([
+    "vector:runtime",
+    "project:runtime",
+    "graph:runtime",
+    "task:runtime",
+  ]);
+});
+
+test("recall evidence verifier rejects missing non-exact evidence channels", () => {
+  const result = recallFromCorpus({
+    cue: "runtime decision",
+    now,
+    minScore: 0.01,
+    evidencePolicy: {
+      evidenceRequired: ["vector_episode_hit"],
+    },
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "fake-vector",
+        summary: "Runtime decision",
+        text: "Runtime decision matches lexically but has no vector similarity.",
+        source: "vector",
+        provenance: ["memory:not-a-vector-hit"],
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(true);
+  expect(result.diagnostics).toContain("evidence_missing=vector_episode_hit");
+});
+
+test("task continuity evidence requires task provenance or contextual linkage", () => {
+  const result = recallFromCorpus({
+    cue: "runtime decision",
+    now,
+    minScore: 0.01,
+    evidencePolicy: {
+      evidenceRequired: ["task_continuity"],
+    },
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "static-task-note",
+        summary: "Runtime decision task note",
+        text: "Runtime decision appears in a static task-memory note.",
+        source: "task-memory",
+        originalSource: "task-memory",
+        provenance: ["memory:task-note"],
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(true);
+  expect(result.diagnostics).toContain("evidence_missing=task_continuity");
 });
 
 test("recall evidence verifier rejects weak or ambiguous specific-memory evidence", () => {
