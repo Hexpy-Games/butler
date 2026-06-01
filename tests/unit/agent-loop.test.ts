@@ -256,7 +256,6 @@ test("agent loop runs concurrency-safe tool calls in parallel and preserves resu
   let maxActive = 0;
   const finished: string[] = [];
   let toolMessageNames: string[] = [];
-
   const result = await runAgentLoop({
     messages: [{ role: "user", content: "run both" }],
     tools: safeTools,
@@ -370,6 +369,114 @@ test("agent loop stops repeated identical failed tool calls before loop limit", 
   expect(result.finalText).toBe("Stopped after 2 repeated failures: boom");
   expect(result.events.map((event) => event.type)).toContain("repeated_tool_failure");
   expect(result.events.map((event) => event.type)).not.toContain("loop_limit");
+});
+
+test("agent loop records every completed parallel result before terminal finalization", async () => {
+  const safeTools: AgentLoopToolDefinition[] = [
+    { name: "terminal", description: "Terminal safe tool.", concurrencySafe: true },
+    { name: "other", description: "Other safe tool.", concurrencySafe: true },
+  ];
+
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "run terminal and other" }],
+    tools: safeTools,
+    callModel: async () => ({
+      toolCalls: [
+        { id: "call-terminal", name: "terminal", arguments: {} },
+        { id: "call-other", name: "other", arguments: {} },
+      ],
+    }),
+    executeTool: async (call) => ({ tool: call.name }),
+    finalTextFromToolResult: ({ toolCall }) =>
+      toolCall.name === "terminal" ? "Terminal result is enough." : null,
+  });
+
+  const toolMessageNames = result.messages
+    .filter((message) => message.role === "tool")
+    .map((message) => message.name ?? "");
+  expect(result.finalText).toBe("Terminal result is enough.");
+  expect(toolMessageNames).toEqual(["terminal", "other"]);
+  expect(result.events.map((event) => event.type)).toEqual([
+    "model_call",
+    "model_response",
+    "tool_call",
+    "tool_call",
+    "tool_result",
+    "tool_result",
+  ]);
+});
+
+test("agent loop treats the same failed tool call as repeated even when error text changes", async () => {
+  let attempts = 0;
+
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "retry same missing file" }],
+    tools,
+    maxIterations: 8,
+    callModel: async (input) => ({
+      toolCalls: [{
+        id: `call-${input.iteration}`,
+        name: "echo",
+        arguments: { message: "same path" },
+      }],
+    }),
+    executeTool: async () => {
+      attempts += 1;
+      throw new Error(`ENOENT attempt ${attempts}`);
+    },
+  });
+
+  expect(attempts).toBe(2);
+  expect(result.stoppedByLimit).toBe(false);
+  expect(result.finalText).toContain("same tool call failed repeatedly");
+  expect(result.finalText).toContain("ENOENT attempt 2");
+  expect(result.events.map((event) => event.type)).toContain("repeated_tool_failure");
+  expect(result.events.map((event) => event.type)).not.toContain("loop_limit");
+});
+
+test("agent loop gives repeated-failure finalizer all completed parallel results", async () => {
+  const safeTools: AgentLoopToolDefinition[] = [
+    { name: "fail", description: "Failing safe tool.", concurrencySafe: true },
+    { name: "other", description: "Other safe tool.", concurrencySafe: true },
+  ];
+  let callbackToolResults: string[] = [];
+
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "retry then run another safe check" }],
+    tools: safeTools,
+    callModel: async (input) => ({
+      toolCalls: input.iteration === 0
+        ? [{ id: "call-fail-1", name: "fail", arguments: {} }]
+        : [
+            { id: "call-fail-2", name: "fail", arguments: {} },
+            { id: "call-other", name: "other", arguments: {} },
+          ],
+    }),
+    executeTool: async (call) => {
+      if (call.name === "fail") throw new Error("still failing");
+      return { tool: call.name };
+    },
+    onRepeatedToolFailure: ({ toolResults }) => {
+      callbackToolResults = toolResults.map((toolResult) => toolResult.name);
+      return "Repeated failure finalizer saw the completed batch.";
+    },
+  });
+
+  expect(result.finalText).toBe("Repeated failure finalizer saw the completed batch.");
+  expect(callbackToolResults).toEqual(["fail", "fail", "other"]);
+  expect(result.events.map((event) => event.type)).toEqual([
+    "model_call",
+    "model_response",
+    "tool_call",
+    "tool_result",
+    "model_call",
+    "model_response",
+    "tool_call",
+    "tool_call",
+    "tool_result",
+    "tool_result",
+    "repeated_tool_failure",
+  ]);
 });
 
 test("agent loop produces truthful partial response when loop limit is reached", async () => {

@@ -99,7 +99,8 @@ export interface AgentLoopOutput {
 }
 
 const DEFAULT_MAX_ITERATIONS = 8;
-const DEFAULT_MAX_REPEATED_TOOL_FAILURES = 2;
+const MIN_REPEATED_TOOL_FAILURES_BEFORE_STOP = 2;
+const DEFAULT_MAX_REPEATED_TOOL_FAILURES = MIN_REPEATED_TOOL_FAILURES_BEFORE_STOP;
 const CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS = 6_000;
 const CHECKPOINT_CUMULATIVE_TOOL_RESULT_TOKENS = 30_000;
 const GENERIC_TOOL_RESULT_PREVIEW_TOKENS = 1_200;
@@ -164,14 +165,10 @@ function stableJson(value: unknown): unknown {
   return output;
 }
 
-function failedToolSignature(input: {
-  toolCall: AgentLoopToolCall;
-  toolResult: AgentLoopToolResult;
-}): string {
+function failedToolSignature(input: { toolCall: AgentLoopToolCall }): string {
   return JSON.stringify({
     name: input.toolCall.name,
     arguments: stableJson(input.toolCall.arguments),
-    error: input.toolResult.error ?? "unknown tool error",
   });
 }
 
@@ -366,6 +363,15 @@ interface PreparedToolCall {
   validationError: string | null;
 }
 
+interface ToolStopCandidate {
+  type: "tool_final_text" | "repeated_tool_failure";
+  iteration: number;
+  toolCall: AgentLoopToolCall;
+  toolResult: AgentLoopToolResult;
+  finalText?: string;
+  failureCount?: number;
+}
+
 function prepareToolCall(input: AgentLoopInput, call: AgentLoopToolCall): PreparedToolCall {
   const tool = input.tools.find((candidate) => candidate.name === call.name);
   return {
@@ -409,7 +415,8 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
   const events: AgentLoopEvent[] = [];
   const maxIterations = Math.max(1, input.maxIterations ?? DEFAULT_MAX_ITERATIONS);
   const maxRepeatedToolFailures = Math.max(
-    DEFAULT_MAX_REPEATED_TOOL_FAILURES,
+    // The first failure must be visible to the model so it can try a different strategy.
+    MIN_REPEATED_TOOL_FAILURES_BEFORE_STOP,
     input.maxRepeatedToolFailures ?? DEFAULT_MAX_REPEATED_TOOL_FAILURES,
   );
   const toolResults: AgentLoopToolResult[] = [];
@@ -420,8 +427,9 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
     call: AgentLoopToolCall;
     result: AgentLoopToolResult;
     iteration: number;
-  }): Promise<AgentLoopOutput | null> => {
-    const { call, result, iteration } = inputRecord;
+    evaluateStop?: boolean;
+  }): Promise<ToolStopCandidate | null> => {
+    const { call, evaluateStop = true, result, iteration } = inputRecord;
     toolResults.push(result);
     const toolMessage = toolResultToMessage({
       result,
@@ -436,60 +444,74 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
     });
 
     if (!result.ok) {
-      const signature = failedToolSignature({ toolCall: call, toolResult: result });
+      const signature = failedToolSignature({ toolCall: call });
       const failureCount = (failedToolCounts.get(signature) ?? 0) + 1;
       failedToolCounts.set(signature, failureCount);
-      if (failureCount >= maxRepeatedToolFailures) {
-        emit(events, input.onEvent, {
+      if (evaluateStop && failureCount >= maxRepeatedToolFailures) {
+        return {
           type: "repeated_tool_failure",
           iteration,
           toolCall: call,
           toolResult: result,
-        });
-        const synthesizedText = (await input.onRepeatedToolFailure?.({
-          messages,
-          toolResults,
-          toolCall: call,
-          toolResult: result,
           failureCount,
-          maxRepeatedToolFailures,
-        }))?.trim();
-        const finalText = synthesizedText || renderRepeatedToolFailureResponse({
-          toolResult: result,
-          failureCount,
-        });
-        messages.push({
-          role: "assistant",
-          content: finalText,
-        });
-        return {
-          finalText,
-          messages,
-          events,
-          stoppedByLimit: false,
         };
       }
       return null;
     }
+
+    if (!evaluateStop) return null;
 
     const finalText = (await input.finalTextFromToolResult?.({
       toolCall: call,
       toolResult: result,
     }))?.trim();
     if (finalText) {
-      messages.push({
-        role: "assistant",
-        content: finalText,
-      });
       return {
+        type: "tool_final_text",
+        iteration,
+        toolCall: call,
+        toolResult: result,
         finalText,
-        messages,
-        events,
-        stoppedByLimit: false,
       };
     }
 
     return null;
+  };
+
+  const finishWithStopCandidate = async (candidate: ToolStopCandidate): Promise<AgentLoopOutput> => {
+    let finalText = candidate.finalText;
+    if (candidate.type === "repeated_tool_failure") {
+      emit(events, input.onEvent, {
+        type: "repeated_tool_failure",
+        iteration: candidate.iteration,
+        toolCall: candidate.toolCall,
+        toolResult: candidate.toolResult,
+      });
+      const failureCount = candidate.failureCount ?? maxRepeatedToolFailures;
+      const synthesizedText = (await input.onRepeatedToolFailure?.({
+        messages,
+        toolResults,
+        toolCall: candidate.toolCall,
+        toolResult: candidate.toolResult,
+        failureCount,
+        maxRepeatedToolFailures,
+      }))?.trim();
+      finalText = synthesizedText || renderRepeatedToolFailureResponse({
+        toolResult: candidate.toolResult,
+        failureCount,
+      });
+    }
+    if (!finalText) finalText = "";
+    messages.push({
+      role: "assistant",
+      content: finalText,
+    });
+    return {
+      finalText,
+      messages,
+      events,
+      stoppedByLimit: false,
+    };
   };
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -546,14 +568,17 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
       const results = await Promise.all(preparedCalls.map((prepared) =>
         executePreparedToolCall(input, prepared),
       ));
+      let stop: ToolStopCandidate | null = null;
       for (let index = 0; index < preparedCalls.length; index += 1) {
-        const stop = await recordToolResult({
+        const candidate = await recordToolResult({
           call: preparedCalls[index]!.call,
+          evaluateStop: stop === null,
           result: results[index]!,
           iteration,
         });
-        if (stop) return stop;
+        if (!stop && candidate) stop = candidate;
       }
+      if (stop) return finishWithStopCandidate(stop);
       continue;
     }
 
@@ -569,7 +594,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
         result,
         iteration,
       });
-      if (stop) return stop;
+      if (stop) return finishWithStopCandidate(stop);
     }
   }
 
