@@ -47,6 +47,7 @@ type E2eMode =
   | "live-llm-decision-context"
   | "live-llm-workstream"
   | "live-llm-workstream-natural"
+  | "live-llm-real-project-check"
   | "live-llm-workstream-natural-external"
   | "live-llm-artifact-report";
 const requestedMode = process.env.BUTLER_APP_CLIENT_E2E_MODE;
@@ -66,6 +67,8 @@ const e2eMode: E2eMode = requestedMode === "live-llm"
             ? "live-llm-workstream"
           : requestedMode === "live-llm-workstream-natural"
             ? "live-llm-workstream-natural"
+          : requestedMode === "live-llm-real-project-check"
+            ? "live-llm-real-project-check"
           : requestedMode === "live-llm-workstream-natural-external"
             ? "live-llm-workstream-natural-external"
           : requestedMode === "live-llm-artifact-report"
@@ -77,13 +80,17 @@ const usesLiveLlm = e2eMode === "live-llm" ||
   e2eMode === "live-llm-decision-context" ||
   e2eMode === "live-llm-workstream" ||
   e2eMode === "live-llm-workstream-natural" ||
+  e2eMode === "live-llm-real-project-check" ||
   e2eMode === "live-llm-workstream-natural-external" ||
   e2eMode === "live-llm-artifact-report";
 const usesDecisionContextScenario = e2eMode === "decision-context" || e2eMode === "live-llm-decision-context";
 const usesDynamicDecisionContextScenario = e2eMode === "live-llm-decision-context";
 const usesExternalButlerService = e2eMode === "live-llm-workstream-natural-external";
 const usesMemoryRecallScenario = e2eMode === "live-llm-memory-recall";
-const usesNaturalWorkStreamScenario = e2eMode === "live-llm-workstream-natural" || usesExternalButlerService;
+const usesRealProjectCheckScenario = e2eMode === "live-llm-real-project-check";
+const usesNaturalWorkStreamScenario = e2eMode === "live-llm-workstream-natural" ||
+  usesRealProjectCheckScenario ||
+  usesExternalButlerService;
 const usesWorkStreamScenario = e2eMode === "live-llm-workstream" || usesNaturalWorkStreamScenario;
 const usesArtifactReportScenario = e2eMode === "live-llm-artifact-report";
 const usesDynamicWorkLabels = e2eMode === "live-llm-toolchain" ||
@@ -186,7 +193,14 @@ const activeRequiredToolCalls = usesArtifactReportScenario
   : usesDecisionContextScenario
   ? requiredDecisionContextCalls
   : requiredToolchainCalls;
-const toolchainPrompt = usesNaturalWorkStreamScenario
+const toolchainPrompt = usesRealProjectCheckScenario
+  ? [
+    "지금 이 Butler 저장소를 머지하기 전에 한 번 봐줘.",
+    "현재 브랜치, 작업트리 상태, 최근 커밋 몇 개를 확인해서 내가 지금 조심해야 할 리스크가 있는지 알려줘.",
+    "필요하면 로컬 명령으로 확인해도 돼.",
+    "답변은 브랜치, 변경 요약, 리스크, 다음 행동 네 항목으로 짧게 정리해줘.",
+  ].join("\n")
+  : usesNaturalWorkStreamScenario
   ? [
     "지금 브랜치가 뭔지랑 package.json에 WorkStream 관련 E2E 실행 스크립트가 등록돼 있는지 확인해줄래?",
     "등록돼 있으면 스크립트 이름만 짧게 알려줘.",
@@ -503,6 +517,7 @@ try {
               usesExternalButlerService ? "external-butler-service-live-model-path" : "real-llm-provider-called",
               "butler-workstream-created",
               "workstream-fsm-progressed",
+              ...(usesRealProjectCheckScenario ? ["real-project-check-use-case"] : []),
               ...(usesNaturalWorkStreamScenario ? ["natural-workstream-use-case"] : []),
               ...(usesExternalButlerService
                 ? ["external-butler-service-processed-inbound", "app-transport-final-delivered"]
@@ -1026,6 +1041,8 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
   }
   if (usesDynamicDecisionContextScenario) {
     await waitForAssistantOutcomeReport(client);
+  } else if (usesRealProjectCheckScenario) {
+    await waitForRealProjectCheckOutcome(client);
   } else if (usesNaturalWorkStreamScenario) {
     await waitForNaturalWorkStreamOutcome(client);
   } else if (usesWorkStreamScenario) {
@@ -1583,6 +1600,15 @@ async function assertFinalAnswerIsOutcomeOnly(client: CdpClient): Promise<void> 
       /(?:서울|Seoul|부산|Busan|인구|population|CSV|PNG|그래프|chart)/iu.test(finalText),
       "live artifact final assistant answer did not mention the created data or chart outcome.",
     );
+  } else if (usesRealProjectCheckScenario) {
+    assert(finalText.length > 40, "real project check final assistant answer was too short to be an outcome report.");
+    assert(!/^INCOMPLETE\s*:/iu.test(finalText.trim()), "real project check final assistant answer reported an incomplete goal.");
+    assert(
+      /(?:브랜치|branch)/iu.test(finalText) &&
+        /(?:커밋|commit|작업트리|status|변경|change)/iu.test(finalText) &&
+        /(?:리스크|risk|주의|조심|없음|none)/iu.test(finalText),
+      "real project check final assistant answer did not summarize branch, changes, and risk.",
+    );
   } else if (usesNaturalWorkStreamScenario) {
     assert(finalText.length > 40, "natural WorkStream final assistant answer was too short to be an outcome report.");
     assert(!/^INCOMPLETE\s*:/iu.test(finalText.trim()), "natural WorkStream final assistant answer reported an incomplete goal.");
@@ -1819,6 +1845,23 @@ async function waitForNaturalWorkStreamOutcome(client: CdpClient): Promise<void>
         /(?:app:client:workstream:live-llm:e2e|live-llm-workstream|등록되어 있지|not registered|No WorkStream script)/i.test(text);
     })()`,
     "natural WorkStream outcome report",
+    waitForFinalTimeoutMs,
+  );
+}
+
+async function waitForRealProjectCheckOutcome(client: CdpClient): Promise<void> {
+  await waitForExpression(
+    client,
+    `(() => {
+      const documents = Array.from(document.querySelectorAll(${JSON.stringify(assistantFinalMarkdownSelector)}));
+      const text = (documents.at(-1)?.textContent ?? "").replace(/\\s+/g, " ").trim();
+      return text.length > 40 &&
+        !/^INCOMPLETE\\s*:/i.test(text) &&
+        /(?:브랜치|branch)/i.test(text) &&
+        /(?:커밋|commit|작업트리|status|변경|change)/i.test(text) &&
+        /(?:리스크|risk|주의|조심|없음|none)/i.test(text);
+    })()`,
+    "real project check outcome report",
     waitForFinalTimeoutMs,
   );
 }
