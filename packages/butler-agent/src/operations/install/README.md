@@ -29,6 +29,11 @@ an existing working managed runtime when a new download fails.
   installs must write `user.language` for UI/default locale context and
   `user.responseLanguage` for model-facing assistant replies, both as `en` or
   `ko`, before first-chat onboarding starts.
+- The model selected during install is the initial product model. If the
+  operator registers a local model, `system.defaultModel` and
+  `system.butlerModel` must point at `local/<id>`, and the app gateway settings
+  plus model catalog default must expose that local ref instead of falling back
+  to the hosted catalog default.
 - A completed install must print the Butler App URL, health URL, and the
   `butler gateway status app --json` verification command. Docker wrappers that
   publish the app gateway to the host must pass the host-facing URL so the

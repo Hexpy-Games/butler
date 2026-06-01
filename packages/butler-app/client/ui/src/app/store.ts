@@ -5,7 +5,7 @@ import {
   isProjectFolderPickerUnavailable,
   selectProjectFolder,
 } from "./api.ts";
-import { appCopy } from "./copy.ts";
+import { appCopy, setAppCopyLanguage } from "./copy.ts";
 import {
   ACTIVE_TURN_STATES,
   EMPTY_MODEL_CATALOG,
@@ -546,6 +546,9 @@ function applySessionView(
   };
 }
 
+const initialSettings = readCachedSettings();
+setAppCopyLanguage(initialSettings.language);
+
 export const useButlerStore = create<ButlerStore>((set, get) => ({
   leftOpen: false,
   rightOpen: true,
@@ -569,7 +572,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   summary: null,
   turnProgress: {},
   sessionQueue: [],
-  settings: readCachedSettings(),
+  settings: initialSettings,
   modelCatalog: EMPTY_MODEL_CATALOG,
   status: { label: "connecting", tone: "muted" },
   isSending: false,
@@ -727,6 +730,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setSettings: (settings) =>
     set((state) => {
       const nextSettings = settingsWithDefaults(settings);
+      setAppCopyLanguage(nextSettings.language);
       writeCachedSettings(nextSettings);
       return structurallyEqual(state.settings, nextSettings)
         ? state

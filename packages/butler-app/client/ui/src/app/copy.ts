@@ -1,5 +1,12 @@
 type CountFormatter = (count: number) => string;
-type AppLocale = "ko-KR";
+export type AppLocale = "en-US" | "ko-KR";
+type DeepCopyOverride<T> = {
+  [K in keyof T]?: T[K] extends (...args: infer Args) => infer Return
+    ? (...args: Args) => Return
+    : T[K] extends object
+      ? DeepCopyOverride<T[K]>
+      : T[K];
+};
 
 interface ConversationWorkCopy {
   historyRegionLabel: string;
@@ -1192,14 +1199,681 @@ const koKrCopy: AppCopy = {
   },
 };
 
+function mergeCopy<T extends object>(
+  base: T,
+  overrides: DeepCopyOverride<T>,
+): T {
+  const output = { ...base } as Record<string, unknown>;
+  for (const [key, value] of Object.entries(overrides)) {
+    const current = output[key];
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      typeof current === "object" &&
+      current !== null &&
+      !Array.isArray(current)
+    ) {
+      output[key] = mergeCopy(
+        current as Record<string, unknown>,
+        value as DeepCopyOverride<Record<string, unknown>>,
+      );
+    } else {
+      output[key] = value;
+    }
+  }
+  return output as T;
+}
+
+const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
+  conversation: {
+    work: {
+      historyRegionLabel: "Progress history",
+      pendingLabel: "Working on your request.",
+      pendingStateLabels: {
+        accepted: "Request accepted.",
+        queued: "Queued.",
+        thinking: "Thinking.",
+        streaming: "Writing the response.",
+        waiting_for_form: "Waiting for input.",
+        waiting_for_tool: "Waiting for tool response.",
+        retrying: "Retrying.",
+        cancelling: "Stopping.",
+      },
+      todoListRegionLabel: "Steps",
+      todoListTitle: "Steps",
+      todoItemPendingLabel: "Pending",
+      todoItemRunningLabel: "In progress",
+      todoItemCompletedLabel: "Done",
+      todoItemFailedLabel: "Failed",
+      todoItemCancelledLabel: "Cancelled",
+      collapsedSummary: (primaryLabel, count) =>
+        count <= 1
+          ? primaryLabel
+          : `${primaryLabel} and ${count - 1} more progress items`,
+      expandHistoryLabel: (primaryLabel, count) =>
+        count <= 1
+          ? `Open ${primaryLabel} details`
+          : `Open ${primaryLabel} and ${count - 1} more progress items`,
+      collapseHistoryLabel: (primaryLabel, count) =>
+        count <= 1
+          ? `Close ${primaryLabel} details`
+          : `Close ${primaryLabel} and ${count - 1} more progress items`,
+      toolchainRegionLabel: (label) => `${label} tool run history`,
+      detailsRegionLabel: (label) => `${label} details`,
+    },
+    result: {
+      regionLabel: "Answer",
+    },
+    failure: {
+      regionLabel: "Failed response",
+      title: "Butler could not complete the request.",
+      retry: "Retry",
+      retrying: "Retrying",
+      fallbackReason: "No safe error details are available.",
+    },
+  },
+  sessionActions: {
+    menuLabel: "Session menu",
+    rename: "Rename",
+    archive: "Archive",
+    renameTitle: "Rename session",
+    renameField: "Session name",
+    cancel: "Cancel",
+    save: "Save",
+  },
+  sidebar: {
+    regionLabel: "Sidebar",
+    newChat: "New chat",
+    search: "Search",
+    automations: "Automations",
+    projects: "Projects",
+    chats: "Chats",
+    settings: "Settings",
+    expandProjects: "Expand projects",
+    collapseProjects: "Collapse projects",
+    expandChats: "Expand chats",
+    collapseChats: "Collapse chats",
+    newProject: "New project",
+    startFromScratch: "Start from scratch",
+    useExistingFolder: "Use existing folder",
+    availableInDesktop: "Available in the desktop app",
+    projectDashboard: "Project dashboard",
+    newProjectChat: "New project chat",
+    projectMenu: "Project menu",
+    projectRenameTitle: "Rename project",
+    projectName: "Project name",
+    pin: "Pin",
+    unpin: "Unpin",
+    delete: "Delete",
+    projectDeleteConfirm: (projectName) =>
+      `Permanently remove "${projectName}" from Butler? This will not delete the local folder.`,
+  },
+  composer: {
+    messageComposer: "Message composer",
+    placeholder: "Ask Butler anything",
+    placeholderFollowUp: "Ask for follow-up changes",
+    attachedFiles: "Attached files",
+    removeFile: (fileName) => `Remove ${fileName}`,
+    attachFile: "Attach file",
+    permission: "Permission",
+    plan: "Plan",
+    model: "Model",
+    modelSearch: "Search models...",
+    modelSearchClear: "Clear search",
+    allProviders: "All",
+    noModels: "No models found",
+    reasoning: "Reasoning",
+    reasoningEffort: "Reasoning effort",
+    send: "Send",
+    stop: "Stop",
+    queuedMessages: "Queued messages",
+    queuedMessage: "Queued message",
+    queuedMessageStatus: "Queued",
+    queuedAttachmentCount: (count) => `${count} attachments`,
+    editQueuedMessage: "Edit queued message",
+    deleteQueuedMessage: "Delete queued message",
+    contextDetails: "Show context details",
+  },
+  permissions: {
+    fullAccess: "Full access",
+    fullAccessDesc: "Can read files, write files, and run commands",
+    askFirst: "Ask first",
+    askFirstDesc: "Requires approval before making changes",
+    readOnly: "Read only",
+    readOnlyDesc: "Can only read files",
+  },
+  automations: {
+    title: "Automations",
+    scheduledCount: (count) => `${count} scheduled prompts`,
+    empty: "No automations yet",
+    new: "New automation",
+    detailFallback: "Details",
+    backLabel: "Back to automations",
+    runNow: "Run now",
+    resume: "Resume",
+    pause: "Pause",
+    fields: {
+      title: "Title",
+      prompt: "Prompt",
+      details: "Details",
+      targetChat: "Target chat",
+      interval: "Interval",
+      customMinutes: "Custom minutes",
+      state: "State",
+      runs: "Runs",
+    },
+    placeholders: {
+      title: "Automation title",
+      prompt: "Prompt body",
+    },
+    runs: {
+      empty: "No runs yet",
+      queued: "Queued",
+      succeeded: "Succeeded",
+      failed: "Failed",
+      running: "Running",
+      skippedTargetUnavailable: "Target unavailable",
+      cancelled: "Cancelled",
+      notRun: "Not run yet",
+    },
+    inspector: {
+      empty: "No automations target this session",
+    },
+  },
+  artifacts: {
+    title: "Artifacts",
+    empty: "No artifacts yet",
+    backToList: "Artifact list",
+    open: "Open",
+    save: "Save",
+    saved: "Artifact saved",
+    saveFailed: "Could not save artifact",
+    loading: "Loading artifact",
+    unsupported: "This artifact cannot be previewed in the app",
+    loadFailed: "Could not load artifact",
+  },
+  inspector: {
+    tabs: {
+      summary: "Summary",
+      context: "Context",
+      artifacts: "Artifacts",
+      automations: "Automations",
+      workers: "Workers",
+    },
+    workers: {
+      showDetails: "Details",
+      hideDetails: "Close",
+    },
+  },
+  common: {
+    close: "Close",
+    more: "More",
+    refresh: "Refresh",
+    save: "Save",
+    cancel: "Cancel",
+    delete: "Delete",
+    copy: "Copy",
+  },
+  settings: {
+    title: "Settings",
+    back: "Back",
+    saving: "Saving",
+    saved: "Saved",
+    sectionsLabel: "Settings sections",
+    sections: {
+      general: "General",
+      notifications: "Notifications",
+      desktopShell: "Desktop",
+      models: "Models",
+      appearance: "Appearance",
+      server: "Server",
+      updates: "Updates",
+      mcp: "MCP",
+      skills: "Skills",
+      usage: "Usage",
+      personalization: "Personalization",
+      privacy: "Privacy",
+      system: "System events",
+      archives: "Archives",
+      about: "About",
+    },
+    panels: {
+      butlerModel: "Model settings",
+      workerModelRules: "Worker model rules",
+      serverBridge: "Server / Bridge",
+      updates: "Updates",
+      mcpServers: "MCP servers",
+      skills: "Skills",
+      usageMonitor: "Usage",
+      privacyDiagnostics: "Privacy / Diagnostics",
+      systemEvents: "System events",
+      archives: "Archives",
+      about: "About",
+    },
+    fields: {
+      language: "Language",
+      timezone: "Timezone",
+      followUpBehavior: "Follow-up handling",
+      multilineSend: "Message sending",
+      searchSettings: "Search",
+      searchProvider: "Search provider",
+      searchProviderApiKey: "API key",
+      searchReaderBackend: "Page reader",
+      searchPlanningEnabled: "Use smart search planning",
+      searchDefaultDepth: "Default search depth",
+      butlerModel: "Model",
+      butlerReasoning: "Reasoning",
+      consolidationModel: "Conversation memory model",
+      localReasoningBudget: "Local reasoning budget",
+      contextLimit: "Context limit",
+      access: "Access",
+      planModeDefault: "Use plan mode by default",
+      enabled: "Enabled",
+      condition: "Condition",
+      model: "Model",
+      reasoning: "Reasoning",
+      theme: "Theme",
+      mainScreenTheme: "Home screen theme",
+      mainScreenThemePreset: "Background colors",
+      mainScreenThemeColors: "Custom colors",
+      mainScreenThemeColor: (index) => `Color ${index}`,
+      themeSamples: "Theme samples",
+      translucentSidebar: "Translucent sidebar",
+      desktopNotifications: "Desktop notifications",
+      desktopNotificationAssistantMessages: "AI message notifications",
+      desktopNotificationTaskCompletions: "Task completion notifications",
+      desktopTray: "Tray / menu bar",
+      bridgeMode: "Bridge mode",
+      serverUrl: "Server URL",
+      defaultProjectFolder: "Default project folder",
+      diagnostics: "Diagnostics",
+      appName: "App name",
+      appVersion: "Version",
+      appRepository: "GitHub repository",
+      appProtocol: "Protocol",
+      developerMode: "Developer mode",
+      butlerNickname: "Butler nickname",
+      principalName: "My name",
+      preferredAddress: "Preferred address",
+      responseLanguage: "Response language",
+      profilingMode: "Personal information analysis",
+      profilingExtractorModel: "Personal information analysis model",
+      profileMigrationImport: "Import external AI memory",
+      profileMigrationPrompt: "Import prompt",
+      profileMigrationDump: "Imported profile content",
+      personaPreset: "Persona preset",
+      persona: "Persona",
+      eol: "EOL",
+      mcpServerId: "Server ID",
+      mcpServerName: "Display name",
+      mcpTransport: "Transport",
+      mcpCommand: "Command",
+      mcpArgs: "Arguments",
+      mcpUrl: "URL",
+      mcpCwd: "Working folder",
+      mcpEnv: "Environment variables",
+      mcpHeaders: "Headers",
+    },
+    options: {
+      english: "English",
+      korean: "Korean",
+      queueWhileBusy: "Queue while busy",
+      steerCurrentTurn: "Steer current turn",
+      modifierEnterSendEnterNewline: "Command/Ctrl Enter sends, Enter inserts newline",
+      enterSendShiftEnterNewline: "Enter sends, Shift Enter inserts newline",
+      system: "System",
+      light: "Light",
+      dark: "Dark",
+      paletteCustom: "Custom",
+      local: "Local",
+      external: "External",
+      customPersona: "Custom",
+      profilingOff: "Off",
+      profilingBasic: "Basic",
+      profilingDeep: "Deep",
+      profilingExtractorDefault: "Model default",
+      consolidationModelDefault: "Model default",
+      searchProviderAuto: "Auto",
+      searchProviderCodex: "Codex subscription search",
+      searchProviderDisabled: "Disabled",
+      searchReaderLightweight: "Lightweight reader",
+      searchReaderAuto: "Auto",
+      searchReaderDisabled: "Disabled",
+      searchDepthQuick: "Quick",
+      searchDepthBalanced: "Balanced",
+      searchDepthDeep: "Deep",
+      timezoneSearch: "Search timezones",
+      timezoneSearchClear: "Clear search",
+      timezoneAll: "All",
+      timezoneEmpty: "No matching timezones",
+    },
+    descriptions: {
+      runtimeSupportedModelsOnly:
+        "Only models from currently runnable providers are shown.",
+      language: "Sets the Butler App interface language.",
+      timezone:
+        "The timezone Butler uses to understand current time and schedule context.",
+      consolidationModel:
+        "The model used for conversation memory consolidation and personal information analysis.",
+      consolidationModelDefault:
+        "Use the current Butler default model setting.",
+      localReasoningBudget:
+        "The share of the selected local model output tokens reserved for reasoning.",
+      mainScreenTheme: "The background theme for the new chat screen.",
+      mainScreenThemePreset:
+        "Choose the color palette for the home screen background.",
+      mainScreenThemeColors:
+        "Custom colors are used in the home screen background flow.",
+      contextLimit: (maxLabel) =>
+        `The active Butler context budget. Model maximum: ${maxLabel}.`,
+      contextLimitClamped: (value) =>
+        `Context limit adjusted to ${value} tokens.`,
+      responseLanguage:
+        "The language Butler uses for final chat replies and progress updates.",
+      personaPreset:
+        "Choosing a preset only changes the persona draft below. Nothing is saved until you apply it.",
+      profilingMode:
+        "With consent, Butler stores and uses information from local conversations for personalized replies.",
+      profilingOff:
+        "Do not analyze personal information. Butler only uses the current settings needed for the feature.",
+      profilingBasic:
+        "Use tone, explanation style, and workflow preferences for personalized replies.",
+      profilingDeep:
+        "Use recent interests, meaningful context, and values for personalized replies.",
+      profilingExtractorModel:
+        "The model used to extract information needed for personalization.",
+      profilingExtractorDefault:
+        "Use the current Butler default model setting.",
+      profileMigration: "Import memories from another AI service.",
+      profileMigrationImmediate:
+        "Import runs on this screen immediately and shows the result when it finishes.",
+      profileMigrationImporting:
+        "Reading imported memories and applying them to the profile.",
+      profileMigrationApplied: (count) =>
+        `Import complete. ${count} items were applied to the profile and will be used in future replies.`,
+      profileMigrationStored:
+        "The import was stored. Butler will apply it once there is enough reliable information for future replies.",
+      profileMigrationNoNewInfo:
+        "Import finished, but no new profile information was found.",
+      systemEvents:
+        "Review regular consolidation, personal information analysis, and maintenance work.",
+      systemEventsEmpty: "No system events to show yet.",
+      updates: "Check and update the app, app server, and Butler service separately.",
+      eolLastLoaded: (value) => `Last loaded at ${value}`,
+      mcpServers:
+        "Settings are stored in Butler data home. Active server tools and resources can be called by Butler during chats.",
+      mcpSecrets:
+        "Enter source, key, and value by row. Stored values are hidden from the screen and API responses.",
+      skills:
+        "Manage built-in and project skills under Butler data home.",
+      usageMonitor:
+        "Review model tokens, prompt cache, web search, and tool calls. This is tracked separately from context window capacity.",
+      usageMonitorEmpty: "No usage records to show yet.",
+      searchSettings:
+        "Configure web search providers and pre-search planning. Providers that need keys can store secrets here.",
+      searchProvider:
+        "Choose the backend that fetches search results. Providers without required keys fall back safely.",
+      searchProviderApiKey: (envVar) =>
+        `Stores the value in ${envVar}. It is not shown again in the UI or API responses.`,
+      searchProviderApiKeyConfigured:
+        "A saved key exists. Enter a new value to replace it.",
+      searchReaderBackend: "The page reader used for search result pages.",
+      searchPlanning:
+        "When enabled, Butler calls the model once before search to plan intent, depth, verification needs, and query batches.",
+      desktopNotifications:
+        "Send OS notifications for new replies or task completion when the app is in the background.",
+      desktopNotificationAssistantMessages:
+        "Show only a safe preview when a new AI reply arrives.",
+      desktopNotificationTaskCompletions:
+        "Notify when an active task completes, fails, or is cancelled.",
+      desktopTray:
+        "Keep the app in the tray or menu bar when the window is closed, with quick access to new and recent chats.",
+      developerMode:
+        "Allows Chrome DevTools in this desktop window. When off, Electron menus and DevTools shortcuts are blocked.",
+    },
+    nativeNotifications: {
+      status: {
+        checking: "Checking the Electron notification bridge.",
+        unsupported: "Desktop notifications are not supported in this environment.",
+        macosPermission:
+          "If macOS notifications are disabled, allow Butler notifications in System Settings.",
+        windowsShortcut:
+          "If Windows notifications are disabled, allow Butler notifications in system notification settings.",
+        linuxLibnotify:
+          "Linux notifications depend on the desktop environment and libnotify support.",
+        platformDependent:
+          "Notification permission status can depend on OS settings.",
+        browserUnsupported:
+          "The desktop notification bridge is only available in the Electron app.",
+        unavailable: "Notification status is unavailable.",
+      },
+      settings: {
+        macos: "macOS notification settings",
+        windows: "Windows notification settings",
+        fallback: "System settings",
+      },
+    },
+    systemEventLabels: {
+      titles: {
+        consolidation: "Conversation memory consolidation",
+        profile: "Personal information analysis",
+        sessionSync: "Conversation history sync",
+        contextMaintenance: "Context maintenance",
+        consolidationCycle: "Regular memory consolidation",
+      },
+      statuses: {
+        ok: "OK",
+        completed: "Completed",
+        failed: "Failed",
+        running: "Running",
+        notRun: "Not run yet",
+        unknown: "Needs status check",
+      },
+      metrics: {
+        phase_count: "Phases",
+        failed_phase_count: "Failed phases",
+        profiling_enabled: "Personal information analysis",
+        mode: "Mode",
+        candidate_count: "Candidates",
+        promoted_count: "Applied",
+        skipped_count: "Skipped",
+        stable_entry_count: "Stored profile",
+        projection_written: "Projection updated",
+        transcript_scanned_file_count: "Conversation files read",
+        transcript_scanned_event_count: "Events read",
+        transcript_captured_candidate_count: "Candidates found",
+        transcript_extractor_model_called: "Model called",
+        transcript_extractor_fallback_used: "Fallback used",
+        last_run_date: "Run date",
+      },
+      values: {
+        yes: "Yes",
+        no: "No",
+        deep: "Deep",
+        basic: "Basic",
+        off: "Off",
+      },
+    },
+    actions: {
+      chooseFolder: "Choose folder",
+      applyPersonalization: "Apply",
+      savePersonalization: "Save personalization",
+      clearProfile: "Delete profile data",
+      clearProfileQueued: "Delete queued",
+      openProfileMigration: "Import",
+      closeProfileMigration: "Close",
+      copyMigrationPrompt: "Copy prompt",
+      importProfileMigration: "Import profile",
+      importProfileMigrationRunning: "Importing",
+      addMcpServer: "Add MCP server",
+      testMcpServer: "Test connection",
+      editMcpServer: "Edit",
+      deleteMcpServer: "Delete",
+      enableMcpServer: "Enable",
+      disableMcpServer: "Disable",
+      importSkill: "Import",
+      createSkillWithChat: "Create with chat",
+      checkUpdates: "Check",
+      updateComponent: "Update",
+      upToDate: "Up to date",
+      updateChecking: "Checking",
+      updateApplying: "Applying",
+    },
+    placeholders: {
+      butlerNickname: "Example: Butler, Alfred",
+      principalName: "Example: your preferred name",
+      preferredAddress: "Example: boss, captain",
+      profileMigrationDump:
+        "Paste JSON or a summary returned by another AI.",
+      persona: "How Butler expresses itself and collaborates with you",
+      eol: "Long-term preferences, boundaries, and durable operating notes",
+      mcpArgs: "One argument per line",
+      mcpEnv: "OPENAI_API_KEY=env:OPENAI_API_KEY or TOKEN=literal-value",
+      mcpHeaders:
+        "Authorization=env:MCP_AUTH_HEADER or Authorization=Bearer ...",
+    },
+    errors: {
+      loadPersonalization: "Failed to load personalization",
+      updateSettings: "Failed to update settings",
+      chooseFolder: "Failed to choose folder",
+      updatePersonalization: "Failed to update personalization",
+      profileMigration: "Failed to import profile",
+      profileMigrationProfilingOff:
+        "Personal information analysis is off, so the import was not applied.",
+      updateLocalReasoningBudget: "Failed to update local reasoning budget",
+      loadAppInfo: "Failed to load app info",
+      updateDeveloperMode: "Failed to change developer mode",
+    },
+    localModels: {
+      title: "Local models",
+      description:
+        "Register OpenAI-compatible local servers for Butler and worker model selectors.",
+      provider: "Provider",
+      apiInfoTitle: "Model API information",
+      modelInfoTitle: "Model information",
+      apiType: "API type",
+      apiDescription:
+        "Butler prefers API standards. Platform is used only as a compatibility hint.",
+      platformHint: "Platform hint",
+      serverUrl: "Server URL",
+      discoverModels: "Discover models",
+      discovering: "Discovering",
+      registerModel: "Register model",
+      registering: "Registering",
+      saveModel: "Save model",
+      saving: "Saving",
+      showAdvanced: "Show advanced settings",
+      hideAdvanced: "Hide advanced settings",
+      unsavedChanges:
+        "You have unsaved changes. Leaving this page will discard them.",
+      discoveredModel: "Discovered model",
+      discoveredModelDescription:
+        "When available, Butler uses the server runtime window as the default context.",
+      manualFallback: "Manual entry",
+      modelId: "Model ID",
+      displayName: "Display name",
+      maxContext: "Max context",
+      registeredLocalModels: "Registered local models",
+      customOpenAiCompatible: "Custom OpenAI-compatible",
+      discoveredStatus: (count) => `Found ${count} local models.`,
+      registeredStatus: (modelName) => `${modelName} was registered.`,
+      savedStatus: (modelName) => `${modelName} was saved.`,
+      editingStatus: (modelName) => `Editing ${modelName}.`,
+      deleteConfirm: (modelName) =>
+        `Delete ${modelName} from local models?`,
+      deletedStatus: (modelName) => `${modelName} was deleted.`,
+      editLabel: (modelName) => `Edit ${modelName}`,
+      deleteLabel: (modelName) => `Delete ${modelName}`,
+      reasoningBudgetLabel: (percent) => `${percent}% reasoning`,
+      errors: {
+        discover: "Failed to discover local models",
+        register: "Failed to register local model",
+        update: "Failed to update local model",
+        delete: "Failed to delete local model",
+      },
+    },
+    modelManagement: {
+      title: "Model management",
+      addTitle: "Add model",
+      editTitle: "Edit model",
+      manageButton: "Manage models",
+      addButton: "Add model",
+      registeredTitle: "Registered models",
+      emptyRegistered: "No registered models yet.",
+      provider: "Provider",
+      model: "Model",
+      authMethod: "Auth method",
+      apiKey: "API key",
+      credential: "Saved credential",
+      credentialLabel: "Credential name",
+      newCredential: "New credential",
+      codexOauth: "OAuth",
+      apiKeyAuth: "API key",
+      save: "Add",
+      saveAdd: "Add",
+      saveEdit: "Save",
+      saving: "Saving",
+      edit: "Edit",
+      delete: "Delete",
+      deleteConfirm: (modelName) =>
+        `Delete ${modelName} from selectable models?`,
+      registeredStatus: (modelName) => `${modelName} was registered.`,
+      deletedStatus: (modelName) => `${modelName} was deleted.`,
+      editLabel: (modelName) => `Edit ${modelName}`,
+      deleteLabel: (modelName) => `Delete ${modelName}`,
+      authTag: (authType, credential) => `${authType} · ${credential}`,
+      errors: {
+        save: "Failed to register model",
+        delete: "Failed to delete model",
+      },
+    },
+  },
+  titlebar: {
+    commandPalette: "Command palette",
+    hideRightPanel: "Hide right panel",
+    showRightPanel: "Show right panel",
+  },
+  commandPalette: {
+    label: "Command palette",
+    placeholder: "Search chats, projects, automations, and settings",
+    close: "Close command palette",
+  },
+};
+
+const enUsCopy: AppCopy = mergeCopy(koKrCopy, enUsCopyOverrides);
+
 const appCopyByLocale: Record<AppLocale, AppCopy> = {
+  "en-US": enUsCopy,
   "ko-KR": koKrCopy,
 };
 
-const defaultAppLocale: AppLocale = "ko-KR";
+const defaultAppLocale: AppLocale = "en-US";
+let activeAppLocale: AppLocale = defaultAppLocale;
+
+export function appLocaleFromLanguage(language?: string | null): AppLocale {
+  const normalized = language?.trim().toLocaleLowerCase("en-US") ?? "";
+  if (
+    normalized === "ko" ||
+    normalized === "ko-kr" ||
+    normalized.includes("korean") ||
+    normalized.includes("한국")
+  ) {
+    return "ko-KR";
+  }
+  return "en-US";
+}
+
+export function setAppCopyLanguage(language?: string | null): void {
+  activeAppLocale = appLocaleFromLanguage(language);
+}
 
 export function getAppCopy(locale: AppLocale = defaultAppLocale): AppCopy {
   return appCopyByLocale[locale];
 }
 
-export const appCopy = getAppCopy();
+export const appCopy = new Proxy({} as AppCopy, {
+  get(_target, property: keyof AppCopy) {
+    return appCopyByLocale[activeAppLocale][property];
+  },
+});
