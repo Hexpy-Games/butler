@@ -45,6 +45,26 @@ recall keeps lexical, contextual, graph, explicit, project, and task-memory
 fallback paths and adds degraded-mode diagnostics such as
 `vector=unavailable:*`.
 
+## Policy Constants
+
+Recall constants in `engine.ts` and `vector.ts` must be named. A number may
+stay inline only when it is an obvious arithmetic identity such as `0`, `1`, or
+`1000` in a milliseconds conversion.
+
+The lexical scorer uses BM25 constants matching Apache Lucene
+`BM25Similarity`: `k1 = 1.2`, `b = 0.75`, and the documented IDF smoothing
+formula `log(1 + (docCount - docFreq + 0.5)/(docFreq + 0.5))`. Lucene cites
+Robertson et al., "Okapi at TREC-3", for the BM25 similarity implementation.
+
+The remaining recall thresholds are not claimed to be research-derived. They
+are named tunable policy constants and are protected by regression tests:
+minimum recall score, graph spread factors, hub/conflict/superseded penalties,
+recency window, cache TTL, and vector timeout/circuit/overfetch limits.
+
+Reference:
+
+- https://lucene.apache.org/core/10_2_2/core/org/apache/lucene/search/similarities/BM25Similarity.html
+
 ## Related Specs
 
 - `SPEC-ASSOCIATIVE-MEMORY-RUNTIME` - Associative Memory Runtime
