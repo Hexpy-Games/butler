@@ -21,6 +21,10 @@ an existing working managed runtime when a new download fails.
   The installer initializes profiling as `off` and prepares first-chat
   onboarding; first-chat onboarding owns the consent question and the product
   profiling choices: `off`, `basic`, and `deep`.
+- Public user installs consume tag release artifacts, not source checkouts.
+  `install.sh` runs from the extracted service package and must not build
+  `packages/butler-app/client/ui`; CI/tag release packaging owns the app web
+  client build.
 - The installer language is also the initial agent response language. Fresh
   installs must write `user.language` for UI/default locale context and
   `user.responseLanguage` for model-facing assistant replies, both as `en` or

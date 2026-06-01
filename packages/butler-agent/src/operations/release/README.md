@@ -22,6 +22,19 @@ tree, app package metadata, or app release component ownership. Service release
 checks complement but do not replace full validation, managed runtime checks,
 app release gates, and native purge gates.
 
+## Tag Release Contract
+
+Version tags matching `v*` are the automated user-install release trigger. The
+tag workflow must run the service release gate, package the service release into
+`dist/release/service`, verify the tarball contains
+`packages/butler-agent/resources/app-client/dist/index.html` and bundled asset
+files, then publish the tarball, SHA256 file, service release manifest, and
+update manifest to the GitHub Release for the same tag.
+
+The tag workflow owns building the Butler App web client for user installs.
+`install.sh` consumes the extracted service artifact and must not build frontend
+assets during normal user installs.
+
 ## Related Specs
 
 - `SPEC-RELEASE-PACKAGING` - Release Packaging
