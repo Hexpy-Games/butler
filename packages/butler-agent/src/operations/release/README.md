@@ -31,6 +31,10 @@ tag workflow must run the service release gate, package the service release into
 files, then publish the tarball, SHA256 file, service release manifest, and
 update manifest to the GitHub Release for the same tag.
 
+When `.github/releases/<tag>.md` exists, the tag workflow must use that file as
+the GitHub Release body. Existing releases must be edited with the same notes
+before assets are uploaded so release pages and artifacts stay in sync.
+
 The tag workflow owns building the Butler App web client for user installs.
 `install.sh` consumes the extracted service artifact and must not build frontend
 assets during normal user installs.

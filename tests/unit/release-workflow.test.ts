@@ -50,6 +50,11 @@ test("version tag release workflow publishes service artifact with packaged app 
     "dist/release/service/service-release-manifest.json",
   );
   expect(workflow).toContain("dist/release/service/update-manifest.json");
+  expect(workflow).toContain('notes_file=".github/releases/${tag}.md"');
+  expect(workflow).toContain('notes_args=(--notes-file "$notes_file")');
+  expect(workflow).toContain(
+    'gh release edit "$tag" --title "$tag" "${notes_args[@]}"',
+  );
   expect(workflow).toContain(
     'gh release upload "$tag" "${files[@]}" --clobber',
   );
@@ -84,4 +89,15 @@ test("README directs user installs to tag artifacts instead of source checkout",
     "git clone https://github.com/Hexpy-Games/butler.git ~/butler",
   );
   expect(development).toContain("bun install");
+});
+
+test("v0.0.2 release notes describe the GitHub release changelog", () => {
+  const notes = readRepoFile(".github/releases/v0.0.2.md");
+
+  expect(notes).toContain("# Butler v0.0.2");
+  expect(notes).toContain("## Change Log");
+  expect(notes).toContain("Built Butler App web client");
+  expect(notes).toContain("prebuilt native `butler` CLI launchers");
+  expect(notes).toContain("interactive Docker installer");
+  expect(notes).toContain("first-chat onboarding");
 });
