@@ -92,7 +92,8 @@ test("pending first-chat onboarding is dynamic turn context and disappears after
     expect(pending).toContain("첫 대화 온보딩이 아직 완료되지 않았습니다.");
     expect(pending).toContain("update_onboarding_profile");
     expect(pending).toContain("설정의 페르소나 프리셋 선택지:");
-    expect(pending).toContain("- Butler - 설정 프리셋 프리뷰");
+    expect(pending).toContain("persona_preset id 값을 그대로");
+    expect(pending).toContain("- persona_preset: butler (Butler) - 설정 프리셋 프리뷰");
     expect(pending).toContain("- 직접 편집");
     expect(pending).toContain("장기 사용자 프로필 학습을 허용할지");
     expect(pending).toContain("`off`");
@@ -194,6 +195,62 @@ test("update_onboarding_profile persists profile persona and raw-text-free onboa
     expect(config.butler.name).toBe("Jeeves");
     expect(config.system.activePersona).toBe("operator");
     expect(readProfilingConsentSnapshot(butlerData).mode).toBe("basic");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("onboarding persona selection resolves displayed preset text to the real preset", async () => {
+  const root = join(tmpdir(), `butler-first-chat-persona-label-${Date.now()}`);
+  const butlerHome = join(root, "home");
+  const butlerData = join(root, "data");
+  mkdirSync(join(butlerHome, "resources", "personas", "templates", "en"), { recursive: true });
+  writeFileSync(
+    join(butlerHome, "resources", "personas", "templates", "en", "operator.md"),
+    [
+      "---",
+      "name: operator",
+      "description: Test operator persona.",
+      "preview: Command received. I will keep the board clean.",
+      "---",
+      "# {{butler_name}}",
+      "",
+      "Act with calm operational clarity from the real preset body.",
+    ].join("\n"),
+    "utf8",
+  );
+
+  try {
+    const execute = createButlerToolExecutor({
+      butlerHome,
+      butlerData,
+      sessionId: "butler/main",
+    });
+    const result = await execute({
+      name: "update_onboarding_profile",
+      args: {
+        butler_nickname: "Jeeves",
+        persona_preset: "Operator - Command received. I will keep the board clean.",
+        complete: true,
+        locale: "en",
+      },
+      rawArguments: "{}",
+    }) as {
+      ok: boolean;
+      persona: { preset: string | null; applied: boolean };
+    };
+
+    expect(result.ok).toBe(true);
+    expect(result.persona).toEqual({ preset: "operator", applied: true });
+    const onboarding = readFirstChatOnboardingState(butlerData);
+    expect(onboarding.fields.persona_preset).toBe("operator");
+    expect(onboarding.fields.persona_custom).toBeUndefined();
+    const activePersona = readFileSync(join(butlerData, "personas", "active.md"), "utf8");
+    expect(activePersona).toContain("base: operator");
+    expect(activePersona).toContain("Act with calm operational clarity from the real preset body.");
+    expect(activePersona).not.toContain("base: custom");
+    const config = JSON.parse(readFileSync(join(butlerData, "butler.config.json"), "utf8"));
+    expect(config.system.activePersona).toBe("operator");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

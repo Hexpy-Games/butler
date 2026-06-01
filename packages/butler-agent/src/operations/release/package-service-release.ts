@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -21,13 +22,19 @@ import {
 import { spawnSync } from "node:child_process";
 import {
   createReleaseManifest,
+  SERVICE_APP_WEB_CLIENT_DIST,
+  SERVICE_CLI_LAUNCHER_PLATFORMS,
+  serviceCliLauncherBuildTarget,
+  serviceCliLauncherRelativePath,
   validateReleaseManifest,
+  type ServiceCliLauncherPlatform,
   type ReleaseManifest,
 } from "./manifest.ts";
 
 export interface ServiceReleasePackageOptions {
   root: string;
   outDir: string;
+  cliLauncherPlatforms?: ServiceCliLauncherPlatform[];
 }
 
 export interface ServiceReleasePackageResult {
@@ -60,6 +67,16 @@ const IGNORED_PATH_SEGMENTS = new Set([
   "node_modules",
 ]);
 
+export function currentServiceCliLauncherPlatform(): ServiceCliLauncherPlatform {
+  const os = process.platform === "darwin" ? "darwin" : process.platform;
+  const arch = process.arch === "arm64" ? "arm64" : "x64";
+  const platform = `${os}-${arch}`;
+  if (SERVICE_CLI_LAUNCHER_PLATFORMS.includes(platform as ServiceCliLauncherPlatform)) {
+    return platform as ServiceCliLauncherPlatform;
+  }
+  throw new Error(`unsupported service CLI launcher platform: ${platform}`);
+}
+
 export function createServiceReleasePackage(
   options: ServiceReleasePackageOptions,
 ): ServiceReleasePackageResult {
@@ -74,11 +91,26 @@ export function createServiceReleasePackage(
   mkdirSync(outDir, { recursive: true });
   const stageRoot = mkdtempSync(join(tmpdir(), "butler-service-release-"));
   try {
+    const cliLauncherPlatforms = options.cliLauncherPlatforms ??
+      [...SERVICE_CLI_LAUNCHER_PLATFORMS];
+    const cliLauncherPlatformSet = new Set(cliLauncherPlatforms);
+    const packagedManifest: ReleaseManifest = {
+      ...manifest,
+      cliLaunchers: manifest.cliLaunchers.filter((launcher) =>
+        cliLauncherPlatformSet.has(launcher.platform),
+      ),
+    };
     copyManifestFiles(root, stageRoot, manifest);
     writeServicePackageJson(root, stageRoot);
+    buildAppWebClientDist(root, stageRoot);
+    buildPrebuiltCliLaunchers(
+      root,
+      stageRoot,
+      cliLauncherPlatforms,
+    );
     stripMacExtendedAttributes(stageRoot);
     const releaseManifestPath = join(outDir, "service-release-manifest.json");
-    writeJson(releaseManifestPath, manifest);
+    writeJson(releaseManifestPath, packagedManifest);
 
     const artifactName = manifest.artifacts.find((artifact) =>
       artifact.component === "service",
@@ -91,7 +123,12 @@ export function createServiceReleasePackage(
     writeFileSync(sha256Path, `${sha256}  ${basename(artifactPath)}\n`, "utf8");
 
     const updateManifestPath = join(outDir, "update-manifest.json");
-    writeJson(updateManifestPath, createUpdateManifest(manifest, artifactPath, sha256));
+    writeJson(updateManifestPath, createUpdateManifest(
+      packagedManifest,
+      artifactPath,
+      sha256,
+      cliLauncherPlatforms,
+    ));
 
     return {
       artifactPath,
@@ -158,6 +195,86 @@ function writeServicePackageJson(root: string, stageRoot: string): void {
   });
 }
 
+function buildAppWebClientDist(root: string, stageRoot: string): void {
+  const uiRoot = join(root, "packages", "butler-app", "client", "ui");
+  const sourceDist = join(uiRoot, "dist");
+  const result = spawnSync(process.env.BUTLER_NPM || "npm", [
+    "--prefix",
+    "packages/butler-app/client/ui",
+    "run",
+    "--silent",
+    "build",
+  ], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `app web client build failed: ${
+        summarizeCommandOutput(result.stderr || result.stdout) || "unknown error"
+      }`,
+    );
+  }
+  if (!existsSync(join(sourceDist, "index.html"))) {
+    throw new Error("app web client build did not produce dist/index.html");
+  }
+  const output = join(stageRoot, SERVICE_APP_WEB_CLIENT_DIST);
+  rmSync(output, { recursive: true, force: true });
+  mkdirSync(dirname(output), { recursive: true });
+  cpSync(sourceDist, output, {
+    dereference: false,
+    errorOnExist: false,
+    force: true,
+    recursive: true,
+  });
+}
+
+function summarizeCommandOutput(output: string): string {
+  const trimmed = output.trim();
+  if (trimmed.length <= 4000) return trimmed;
+  return `${trimmed.slice(0, 4000)}\n...<truncated>`;
+}
+
+function buildPrebuiltCliLaunchers(
+  root: string,
+  stageRoot: string,
+  platforms: ServiceCliLauncherPlatform[],
+): void {
+  const launcherSource = join(
+    root,
+    "packages",
+    "butler-agent",
+    "src",
+    "interfaces",
+    "cli",
+    "launcher.ts",
+  );
+  for (const platform of platforms) {
+    const output = join(stageRoot, serviceCliLauncherRelativePath(platform));
+    mkdirSync(dirname(output), { recursive: true });
+    const result = spawnSync(process.env.BUTLER_BUN || "bun", [
+      "build",
+      "--compile",
+      "--target",
+      serviceCliLauncherBuildTarget(platform),
+      "--outfile",
+      output,
+      launcherSource,
+    ], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    if (result.status !== 0) {
+      throw new Error(
+        `CLI launcher build failed for ${platform}: ${
+          result.stderr.trim() || result.stdout.trim() || "unknown error"
+        }`,
+      );
+    }
+    chmodSync(output, 0o755);
+  }
+}
+
 function createTarball(stageRoot: string, artifactPath: string): void {
   const result = spawnSync("tar", [
     "--format",
@@ -196,7 +313,9 @@ function createUpdateManifest(
   manifest: ReleaseManifest,
   artifactPath: string,
   sha256: string,
+  cliLauncherPlatforms: ServiceCliLauncherPlatform[],
 ): Record<string, unknown> {
+  const platformSet = new Set(cliLauncherPlatforms);
   return {
     schema: "butler.update-manifest.v1",
     generated_at: new Date().toISOString(),
@@ -211,6 +330,14 @@ function createUpdateManifest(
       update_policy: artifact.updatePolicy,
       restart_policy: artifact.restartPolicy,
     })),
+    cli_launchers: manifest.cliLaunchers
+      .filter((launcher) => platformSet.has(launcher.platform))
+      .map((launcher) => ({
+        platform: launcher.platform,
+        path: launcher.path,
+        build_target: launcher.buildTarget,
+      })),
+    app_web_client_dist: manifest.appWebClientDist,
   };
 }
 

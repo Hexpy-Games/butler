@@ -1447,7 +1447,7 @@ export const BUTLER_TOOLS: ButlerToolDefinition[] = [
         persona_preset: {
           type: "string",
           description:
-            "Selected persona preset name exactly as listed in the first-chat onboarding context, or custom when the user wrote their own.",
+            "Selected persona_preset id from the first-chat onboarding context, such as operator; use custom only when the user wrote their own persona.",
         },
         persona_custom: {
           type: "string",

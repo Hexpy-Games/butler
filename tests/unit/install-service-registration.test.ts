@@ -103,13 +103,47 @@ test("installer explicit language selection does not prompt", () => {
 
 test("docker installer preinstalls container dependencies before running install script", () => {
   const source = readFileSync("tools/install-in-docker.sh", "utf8");
+  const packageIndex = source.indexOf("release:service:package");
+  const dockerIndex = source.indexOf("exec docker run --rm -it");
   const dependencyBlockIndex = source.indexOf("install_container_dependencies");
-  const installIndex = source.indexOf("exec ./install.sh");
+  const extractIndex = source.indexOf("tar -xzf");
+  const installIndex = source.indexOf("./install.sh");
+  const keepaliveIndex = source.indexOf("exec bash -l");
 
+  expect(packageIndex).toBeGreaterThan(-1);
+  expect(dockerIndex).toBeGreaterThan(packageIndex);
   expect(dependencyBlockIndex).toBeGreaterThan(-1);
-  expect(installIndex).toBeGreaterThan(dependencyBlockIndex);
+  expect(extractIndex).toBeGreaterThan(dependencyBlockIndex);
+  expect(installIndex).toBeGreaterThan(extractIndex);
+  expect(keepaliveIndex).toBeGreaterThan(installIndex);
   expect(source).toContain("-e BUTLER_INSTALL_IN_DOCKER=1");
+  expect(source).toContain('HOST_APP_PORT="${BUTLER_INSTALL_DOCKER_HOST_PORT:-}"');
+  expect(source).toContain('CONTAINER_APP_PORT="${BUTLER_INSTALL_DOCKER_APP_PORT:-18765}"');
+  expect(source).toContain("host_port_in_use()");
+  expect(source).toContain("for candidate in $(seq 18766 18865)");
+  expect(source).toContain("BUTLER_INSTALL_DOCKER_HOST_PORT is already in use");
+  expect(source).toContain('-p "127.0.0.1:$HOST_APP_PORT:$CONTAINER_APP_PORT"');
+  expect(source).toContain("ARTIFACT_DIR=\"$(cd \"$(dirname \"$ARTIFACT_PATH\")\" && pwd)\"");
+  expect(source).toContain("-v \"$ARTIFACT_DIR:/release:ro\"");
+  expect(source).toContain("export BUTLER_HOME=/opt/butler");
+  expect(source).toContain("export BUTLER_DATA=/tmp/butler-data");
+  expect(source).toContain('"host": "0.0.0.0"');
+  expect(source).toContain('"port": $container_app_port');
+  expect(source).toContain('app_web_client="$BUTLER_HOME/packages/butler-agent/resources/app-client/dist"');
+  expect(source).toContain("Service release artifact is missing the built Butler app web client");
+  expect(source).toContain("Launching interactive install.sh");
+  expect(source).toContain("Host web URL: http://127.0.0.1:$host_app_port");
+  expect(source).toContain("Host health URL: http://127.0.0.1:$host_app_port/health");
+  expect(source).toContain("curl -fsS \"http://127.0.0.1:$container_app_port/health\"");
+  expect(source).toContain("curl -fsS -D /tmp/butler-app-root.headers -o /tmp/butler-app-root.html");
+  expect(source).toContain("Butler app web check passed: / served HTML.");
+  expect(source).toContain("Docker container is staying open for Butler app-server testing.");
   expect(source).toContain("apt-get install -y --no-install-recommends");
+  expect(source).not.toContain('HOST_APP_PORT="${BUTLER_INSTALL_DOCKER_HOST_PORT:-18765}"');
+  expect(source).not.toContain("BUTLER_INSTALL_DOCKER_APP_UI_DIST");
+  expect(source).not.toContain("-v \"$APP_UI_DIST");
+  expect(source).not.toContain("exec ./install.sh");
+  expect(source).not.toContain("-v \"$REPO_ROOT\":/src:ro");
   for (const packageName of [
     "ca-certificates",
     "curl",
@@ -135,9 +169,14 @@ test("release docker verification installs from service artifact and checks heal
   expect(extractIndex).toBeGreaterThan(packageIndex);
   expect(installIndex).toBeGreaterThan(extractIndex);
   expect(healthIndex).toBeGreaterThan(installIndex);
-  expect(source).toContain("-v \"$ARTIFACT_PATH:/release/$ARTIFACT_NAME:ro\"");
+  expect(source).toContain("-v \"$ARTIFACT_DIR:/release:ro\"");
   expect(source).toContain("-e BUTLER_ACCEPT_EXPERIMENTAL=1");
+  expect(source).toContain('app_web_client="$BUTLER_HOME/packages/butler-agent/resources/app-client/dist"');
+  expect(source).toContain("Service release artifact is missing the built Butler app web client");
   expect(source).toContain("service-release-docker-health-ok");
+  expect(source).toContain("service-release-docker-web-ok");
+  expect(source).toContain("http://127.0.0.1:18765/");
+  expect(source).toContain("<title>Butler</title>");
 });
 
 test("interactive installer language selection uses chooser", () => {
@@ -548,6 +587,36 @@ test("interactive installer provider chooser lists hosted providers and local la
   expect(result.stderr).not.toContain("default choice");
 });
 
+test("interactive installer model chooser does not expose internal codex runtime label", () => {
+  const bun = process.execPath.replace(/'/g, "'\\''");
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    export BUTLER_BUN='${bun}'
+    source ./install.sh --home "$PWD" --data "$tmp" --language ko
+    is_non_interactive_shell() { return 1; }
+    tl_choose() {
+      test "$1" = "Open AI (API 키)"
+      printf '%s\\n' "로컬 OpenAI 호환 모델"
+    }
+    configure_local_model() { touch "$tmp/local-model-called"; }
+    OS_TYPE="$(uname -s)"
+    select_install_language >/dev/null
+    setup_directories >/dev/null
+    configure_api_provider >"$tmp/stdout" 2>"$tmp/stderr"
+    test -f "$tmp/local-model-called"
+    cat "$tmp/stdout" "$tmp/stderr" > "$tmp/output"
+    ! grep -q '런타임: codex-api' "$tmp/output"
+    ! grep -q 'Runtime: codex-api' "$tmp/output"
+    grep -q 'Butler가 사용할 모델 프로바이더를 선택해 주세요.' "$tmp/output"
+    echo ok
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout.trim()).toBe("ok");
+});
+
 test("interactive installer provider chooser can choose OpenAI API key", () => {
   const bun = process.execPath.replace(/'/g, "'\\''");
   const result = runInstallerFunction(`
@@ -641,6 +710,49 @@ test("interactive installer provider chooser can register Anthropic API key", ()
   expect(result.stdout.trim()).toBe("ok");
 });
 
+test("installer leaves profile learning consent to first-chat onboarding", () => {
+  const bun = process.execPath.replace(/'/g, "'\\''");
+  const installer = readFileSync("install.sh", "utf8");
+  expect(installer).not.toContain("--profiling-mode");
+  expect(installer).not.toContain("configure_profile_learning");
+  expect(installer).not.toContain("Profile Learning");
+
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    export NON_INTERACTIVE=true
+    export BUTLER_BUN='${bun}'
+    export BUTLER_ACCEPT_EXPERIMENTAL=1
+    source ./install.sh --home "$PWD" --data "$tmp" --language en --non-interactive
+    tl_choose() { echo should-not-prompt; exit 42; }
+    if declare -F configure_profile_learning >/dev/null; then
+      echo "installer must not define configure_profile_learning" >&2
+      exit 1
+    fi
+    OS_TYPE="$(uname -s)"
+    setup_directories >/dev/null
+    write_minimal_runtime_config >/dev/null
+    initialize_first_chat_onboarding_state >/dev/null
+    CFG="$tmp/butler.config.json" ONBOARDING="$tmp/personalization/onboarding.json" PROFILE="$PWD/packages/butler-agent/src/personalization/profiling.ts" "$BUTLER_BUN" -e "
+      import { pathToFileURL } from 'url';
+      const { readProfilingConsentSnapshot } = await import(pathToFileURL(process.env.PROFILE).href);
+      const cfg = JSON.parse(await Bun.file(process.env.CFG).text());
+      const onboarding = JSON.parse(await Bun.file(process.env.ONBOARDING).text());
+      const consent = readProfilingConsentSnapshot(process.env.BUTLER_DATA);
+      if (consent.mode !== 'off') throw new Error('profiling should default off');
+      if (cfg.personalization.profiling.mode !== 'off') throw new Error('config profiling mode should default off');
+      if (cfg.personalization.profiling.enabled !== false) throw new Error('off profiling should be disabled');
+      if (onboarding.status !== 'pending') throw new Error('first-chat onboarding should own consent');
+      if ('profiling_mode' in onboarding.fields) throw new Error('installer should not pre-answer profiling consent');
+    "
+    echo ok
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout.trim()).toBe("ok");
+});
+
 test("installer can configure a local OpenAI-compatible model as the default", () => {
   const bun = process.execPath.replace(/'/g, "'\\''");
   const result = runInstallerFunction(`
@@ -690,7 +802,13 @@ test("interactive local model setup prompts for a model id when discovery is emp
     source ./install.sh --home "$PWD" --data "$tmp" --language en
     is_non_interactive_shell() { return 1; }
     discover_local_models_json() { return 0; }
-    tl_choose() { printf '%s\\n' "Custom"; }
+    tl_choose() {
+      case "$1" in
+        "Try another server URL") printf '%s\\n' "Enter model ID manually" ;;
+        "llama.cpp") printf '%s\\n' "Custom" ;;
+        *) echo "unexpected choose prompt: $*" >&2; exit 42 ;;
+      esac
+    }
     tl_input() {
       case "$1" in
         "Local model server URL") printf '%s\\n' "https://llmpen.com/api/vllm" ;;
@@ -712,6 +830,62 @@ test("interactive local model setup prompts for a model id when discovery is emp
       if (model.server_url !== 'https://llmpen.com/api/vllm') throw new Error('manual local URL mismatch');
       if (cfg.system.defaultModel !== 'local/gemma-4-31B-it') throw new Error('manual local model should be default');
     "
+    echo ok
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout.trim()).toBe("ok");
+});
+
+test("interactive local model setup retries another server URL after failed discovery", () => {
+  const bun = process.execPath.replace(/'/g, "'\\''");
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    export BUTLER_BUN='${bun}'
+    export BUTLER_MODEL_PROVIDER=local
+    source ./install.sh --home "$PWD" --data "$tmp" --language en
+    is_non_interactive_shell() { return 1; }
+    discover_local_models_json() {
+      printf '%s\\n' "$1" >> "$tmp/discovery.urls"
+      if [[ "$1" == "http://127.0.0.1:8080" ]]; then
+        return 0
+      fi
+      cat <<'JSON'
+{"models":[{"model_id":"gemma-retry","model_ref":"local/gemma-retry","context_window_tokens":65536}]}
+JSON
+    }
+    tl_choose() {
+      test "$1" = "Try another server URL"
+      printf '%s\\n' "Try another server URL"
+    }
+    tl_input() {
+      case "$1" in
+        "Local model server URL")
+          if [[ ! -s "$tmp/discovery.urls" ]]; then
+            printf '%s\\n' "http://127.0.0.1:8080"
+          else
+            printf '%s\\n' "http://127.0.0.1:11434"
+          fi
+          ;;
+        *) echo "unexpected input prompt: $1" >&2; exit 43 ;;
+      esac
+    }
+    INSTALL_LANG=en
+    OS_TYPE="$(uname -s)"
+    setup_directories >/dev/null
+    configure_api_provider >/dev/null
+    CFG="$tmp/butler.config.json" "$BUTLER_BUN" -e "
+      const cfg = JSON.parse(await Bun.file(process.env.CFG).text());
+      const model = cfg.models?.local?.find((item) => item.model_ref === 'local/gemma-retry');
+      if (!model) throw new Error('retry-discovered local model was not registered');
+      if (model.server_url !== 'http://127.0.0.1:11434') throw new Error('retry local URL mismatch');
+      if (model.context_window_tokens !== 65536) throw new Error('retry local context mismatch');
+      if (cfg.system.defaultModel !== 'local/gemma-retry') throw new Error('retry local model should be default');
+    "
+    grep -q '^http://127.0.0.1:8080$' "$tmp/discovery.urls"
+    grep -q '^http://127.0.0.1:11434$' "$tmp/discovery.urls"
     echo ok
   `);
 
@@ -812,6 +986,56 @@ test("installer skipped OS service path documents the later registration command
 
   expect(result.status).toBe(0);
   expect(result.stdout).toContain("butler service install --yes");
+});
+
+test("installer installs a prebuilt CLI binary and exports its bin directory", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    export HOME="$tmp/home"
+    export SHELL="/bin/zsh"
+    mkdir -p "$HOME"
+    source ./install.sh --home "$tmp/home/butler" --data "$tmp/data" --language en --auto-env
+    platform="$(cli_binary_platform)"
+    mkdir -p "$BUTLER_HOME/packages/butler-agent/resources/cli/$platform"
+    cat > "$BUTLER_HOME/packages/butler-agent/resources/cli/$platform/butler" <<'SH'
+#!/usr/bin/env bash
+printf '%s\\n' "prebuilt butler launcher"
+SH
+    chmod +x "$BUTLER_HOME/packages/butler-agent/resources/cli/$platform/butler"
+    run_quiet_step() { echo build-called; return 1; }
+    install_cli_binary >/dev/null
+    test -x "$tmp/data/bin/butler"
+    "$tmp/data/bin/butler" | grep -q 'prebuilt butler launcher'
+    setup_shell_env >/dev/null
+    grep -q 'export PATH="$BUTLER_DATA/bin:$PATH"' "$HOME/.zshrc"
+    ! grep -q 'packages/butler-agent/scripts:\\$PATH' "$HOME/.zshrc"
+    ! "$tmp/data/bin/butler" | grep -q build-called
+    echo ok
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout.trim()).toBe("ok");
+});
+
+test("source-checkout installer builds a fallback native CLI binary when prebuilt is absent", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    bun_bin="$(command -v bun)"
+    export BUTLER_BUN="$bun_bin"
+    source ./install.sh --home "$PWD" --data "$tmp/data" --language en
+    install_cli_binary >/dev/null
+    test -x "$tmp/data/bin/butler"
+    file "$tmp/data/bin/butler" | grep -Eq 'Mach-O|ELF|PE32'
+    PATH="$tmp/data/bin:$PATH" butler --help | grep -q 'Butler CLI'
+    echo ok
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout.trim()).toBe("ok");
 });
 
 test("installer does not start manual services after successful OS service registration", () => {
@@ -928,6 +1152,8 @@ test("minimal non-interactive installer prepares first-chat onboarding without u
       const cfg = JSON.parse(await Bun.file(process.env.CFG).text());
       const onboarding = JSON.parse(await Bun.file(process.env.ONBOARDING).text());
       if (cfg.user.name !== '') throw new Error('user.name should stay empty before first chat onboarding');
+      if (cfg.user.language !== 'en') throw new Error('install language should initialize user.language');
+      if (cfg.user.responseLanguage !== 'en') throw new Error('install language should initialize agent response language');
       if (cfg.system.runtime !== 'codex-api') throw new Error('runtime should be codex-api');
       if (cfg.webSearch.provider !== 'duckduckgo-html') throw new Error('web search should default to no-key provider');
       if (cfg.webSearch.readerBackend !== 'lightweight') throw new Error('reader backend should default to lightweight');

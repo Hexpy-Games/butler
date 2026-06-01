@@ -37,6 +37,42 @@ test("Butler CLI help documents product commands without maintainer commands", (
   expect(result.stdout).not.toContain("butler release gate");
 });
 
+test("installed native bin PATH exposes the butler CLI command", () => {
+  const butlerData = tempRoot();
+  const cliBinDir = join(butlerData, "bin");
+  mkdirSync(cliBinDir, { recursive: true });
+  const build = spawnSync("bun", [
+    "build",
+    "--compile",
+    "--outfile",
+    join(cliBinDir, "butler"),
+    join(root, "packages", "butler-agent", "src", "interfaces", "cli", "launcher.ts"),
+  ], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  expect(build.status).toBe(0);
+
+  const result = spawnSync("butler", ["--help"], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      BUTLER_HOME: root,
+      BUTLER_DATA: butlerData,
+      PATH: `${cliBinDir}:${process.env.PATH ?? ""}`,
+    },
+  });
+
+  try {
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Butler CLI");
+    expect(result.stdout).toContain("butler status [--json]");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("Butler CLI commands JSON uses the shared envelope and excludes dev commands", () => {
   const result = spawnSync("node", [cli, "commands", "--json"], {
     cwd: root,

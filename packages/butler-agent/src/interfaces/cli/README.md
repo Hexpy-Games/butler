@@ -1,7 +1,8 @@
 # cli
 
-`packages/butler-agent/src/interfaces/cli/` owns the product command surface behind `bin/butler.js`. The CLI is
-the supported local operator interface for installation, health checks,
+`packages/butler-agent/src/interfaces/cli/` owns the product command surface
+behind the installed `butler` binary and its source entrypoint `bin/butler.js`.
+The CLI is the supported local operator interface for installation, health checks,
 configuration, auth/model control, gateway management, transport pairing, work
 recovery, memory, search, automation, and diagnostics.
 
@@ -14,6 +15,8 @@ recovery, memory, search, automation, and diagnostics.
   other common options.
 - `output.ts`: privacy-safe JSON envelope helpers.
 - `runtime.ts`: Butler-managed runtime resolver.
+- `launcher.ts`: source for the native `butler` executable that release
+  packaging prebuilds and source-checkout installs may build as a fallback.
 - `core-command.ts`: Core command handlers.
 - `operator-command.ts`: support and recovery handlers.
 - `advanced-command.ts`: stable advanced command handlers.

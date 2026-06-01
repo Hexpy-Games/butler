@@ -5,10 +5,13 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   createReleaseManifest as createServiceReleaseManifest,
+  SERVICE_APP_WEB_CLIENT_DIST,
+  serviceCliLauncherRelativePath,
   validateReleaseManifest as validateServiceReleaseManifest,
 } from "../../packages/butler-agent/src/operations/release/manifest.ts";
 import {
   createServiceReleasePackage,
+  currentServiceCliLauncherPlatform,
 } from "../../packages/butler-agent/src/operations/release/package-service-release.ts";
 import {
   APP_RELEASE_PLATFORMS,
@@ -38,9 +41,20 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
     manifest.components.find((component) => component.id === "service")
       ?.bundledComponents,
   ).toEqual(["service"]);
+  expect(manifest.cliLaunchers.map((launcher) => launcher.platform)).toEqual([
+    "darwin-arm64",
+    "darwin-x64",
+    "linux-arm64",
+    "linux-x64",
+  ]);
+  expect(manifest.cliLaunchers.map((launcher) => launcher.path)).toContain(
+    "packages/butler-agent/resources/cli/darwin-arm64/butler",
+  );
+  expect(manifest.appWebClientDist).toBe(SERVICE_APP_WEB_CLIENT_DIST);
   expect(manifest.requiredFiles).toContain(
     "packages/butler-agent/src/gateways",
   );
+  expect(manifest.requiredFiles).toContain("bin/butler.js");
   expect(manifest.requiredFiles).toContain("package.json");
   expect(manifest.requiredFiles).toContain("packages/butler-agent/scripts");
   expect(manifest.requiredFiles).toContain("packages/butler-agent/resources");
@@ -165,10 +179,15 @@ test("release manifest validation rejects cross-owned bundled artifacts", () => 
   );
 });
 
-test("service release packager creates an app-free installable artifact", () => {
+test("service release packager creates an installable artifact with app web client", () => {
   const outDir = mkdtempSync(join(tmpdir(), "butler-service-release-test-"));
   try {
-    const result = createServiceReleasePackage({ root, outDir });
+    const currentCliPlatform = currentServiceCliLauncherPlatform();
+    const result = createServiceReleasePackage({
+      root,
+      outDir,
+      cliLauncherPlatforms: [currentCliPlatform],
+    });
     expect(existsSync(result.artifactPath)).toBe(true);
     expect(existsSync(result.sha256Path)).toBe(true);
     expect(existsSync(result.releaseManifestPath)).toBe(true);
@@ -179,10 +198,17 @@ test("service release packager creates an app-free installable artifact", () => 
     });
     expect(listing.status).toBe(0);
     const entries = listing.stdout.split(/\r?\n/).filter(Boolean);
+    const currentCliLauncher = serviceCliLauncherRelativePath(
+      currentCliPlatform,
+    );
     expect(entries).toContain("./install.sh");
     expect(entries).toContain("./package.json");
+    expect(entries).toContain("./bin/butler.js");
+    expect(entries).toContain(`./${currentCliLauncher}`);
     expect(entries).toContain("./packages/butler-agent/scripts/service-control.sh");
     expect(entries).toContain("./packages/project-ledger/bin/project-ledger");
+    expect(entries).toContain(`./${SERVICE_APP_WEB_CLIENT_DIST}/index.html`);
+    expect(entries.some((entry) => entry.startsWith(`./${SERVICE_APP_WEB_CLIENT_DIST}/assets/`))).toBe(true);
     expect(entries.some((entry) => entry.includes("packages/butler-app/"))).toBe(false);
     expect(entries.some((entry) => entry.includes("/node_modules/"))).toBe(false);
 
@@ -201,6 +227,21 @@ test("service release packager creates an app-free installable artifact", () => 
         "packages/butler-agent/src/integrations/telegram",
       ]);
       expect(JSON.stringify(packagedRootPackage)).not.toContain("packages/butler-app");
+      expect(
+        readText(join(extractDir, SERVICE_APP_WEB_CLIENT_DIST, "index.html")),
+      ).toContain("<title>Butler</title>");
+      const prebuiltHelp = spawnSync(join(extractDir, currentCliLauncher), ["--help"], {
+        cwd: extractDir,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          BUTLER_HOME: extractDir,
+          BUTLER_DATA: extractDir,
+          BUTLER_BUN: process.execPath,
+        },
+      });
+      expect(prebuiltHelp.status).toBe(0);
+      expect(prebuiltHelp.stdout).toContain("Butler CLI");
     } finally {
       rmSync(extractDir, { recursive: true, force: true });
     }
@@ -214,6 +255,12 @@ test("service release packager creates an app-free installable artifact", () => 
       update_policy: "explicit",
       restart_policy: "restart-service",
     });
+    expect(updateManifest.cli_launchers).toContainEqual({
+      platform: currentCliPlatform,
+      path: currentCliLauncher,
+      build_target: `bun-${currentCliPlatform}`,
+    });
+    expect(updateManifest.app_web_client_dist).toBe(SERVICE_APP_WEB_CLIENT_DIST);
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
@@ -317,6 +364,7 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(rootPackage.scripts).toHaveProperty("app:package:smoke");
   expect(rootPackage.scripts).toHaveProperty("app:layout:smoke");
   expect(rootPackage.scripts).toHaveProperty("release:service:package");
+  expect(rootPackage.scripts).toHaveProperty("install:docker");
   expect(electronPackage.scripts).toHaveProperty("package:mac");
   expect(electronPackage.scripts).toHaveProperty("package:linux");
   expect(electronPackage.scripts["package:mac"]).toContain(

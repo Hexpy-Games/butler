@@ -142,8 +142,9 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   expect(BUTLER_TOOLS.every((tool) => tool.transcriptVisibility === "visible")).toBe(true);
   const onboardingTool = BUTLER_TOOLS.find((tool) => tool.name === "update_onboarding_profile");
   const onboardingProperties = onboardingTool?.parameters.properties as Record<string, unknown> | undefined;
-  const personaPresetProperty = onboardingProperties?.persona_preset as { enum?: unknown } | undefined;
+  const personaPresetProperty = onboardingProperties?.persona_preset as { enum?: unknown; description?: unknown } | undefined;
   expect(personaPresetProperty?.enum).toBeUndefined();
+  expect(String(personaPresetProperty?.description)).toContain("persona_preset id");
 });
 
 test("web_search schema exposes query and domain filters", () => {

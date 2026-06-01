@@ -230,6 +230,7 @@ import { readUsageMonitor } from "../../operations/metrics/usage-monitor.ts";
 
 const DEFAULT_CHAT_ID = "general";
 const DEFAULT_PROJECT_ID = "butler";
+const DEFAULT_CHAT_TITLE = "Onboarding";
 const SCRATCH_PROJECT_BASE_NAME = "New project";
 const FOLDER_SELECTION_TOKEN_VERSION = "v1";
 const FOLDER_SELECTION_TOKEN_TTL_MS = 5 * 60 * 1000;
@@ -692,6 +693,7 @@ export class AppServerStore {
     options: { date?: string | null; projectId?: string | null } = {},
   ): NewChatBriefingView {
     const settings = this.getSettings();
+    const configUserSettings = readConfigUserSettings(this.butlerData);
     const projectId = options.projectId?.trim();
     const project = projectId ? this.getProjectRow(projectId) : null;
     if (projectId && !project) {
@@ -703,7 +705,8 @@ export class AppServerStore {
     }
     return buildNewChatBriefing({
       butlerData: this.butlerData,
-      preferredLocale: settings.language === "ko" ? "ko" : "en",
+      preferredLocale: configUserSettings.responseLanguage ??
+        (settings.language === "ko" ? "ko" : "en"),
       date: options.date,
       project: project
         ? {
@@ -1172,7 +1175,9 @@ export class AppServerStore {
       default_project_workspace_label: safeWorkspaceLabel(
         this.projectWorkspaceRoot,
       ),
-      language: stored.language === "ko" ? "ko" : "en",
+      language: stored.language === "ko" || stored.language === "en"
+        ? stored.language
+        : (configUserSettings.language ?? "en"),
       timezone: normalizeTimezone(
         stored.timezone ?? configUserSettings.timezone,
       ),
@@ -1842,8 +1847,18 @@ export class AppServerStore {
     if (sanitized.web_search) {
       writeConfigWebSearchSettings(this.butlerData, next.web_search);
     }
+    const configUserPatch: ConfigUserSettings = {};
     if (sanitized.timezone) {
-      writeConfigUserSettings(this.butlerData, { timezone: next.timezone });
+      configUserPatch.timezone = next.timezone;
+    }
+    if (sanitized.language) {
+      configUserPatch.language = next.language;
+      if (!readConfigUserSettings(this.butlerData).responseLanguage) {
+        configUserPatch.responseLanguage = next.language;
+      }
+    }
+    if (Object.keys(configUserPatch).length > 0) {
+      writeConfigUserSettings(this.butlerData, configUserPatch);
     }
     this.writeSetting("settings", next);
     this.appendEvent("settings.updated", {
@@ -1885,13 +1900,17 @@ export class AppServerStore {
     const profile = readPersonalizationProfile(this.butlerData);
     const profiling = readProfilingConsentSnapshot(this.butlerData);
     const extractorModel = readProfilingExtractorModelConfig(this.butlerData);
+    const settings = this.getSettings();
+    const configUserSettings = readConfigUserSettings(this.butlerData);
     return {
       persona: readPrivateText(join(this.butlerData, "personas", "active.md")),
       eol: readPrivateText(join(this.butlerData, "eol.md")),
       updated_at: new Date().toISOString(),
+      response_language: configUserSettings.responseLanguage ??
+        (settings.language === "ko" ? "ko" : "en"),
       persona_presets: readPersonaPresets(
         this.butlerHome,
-        this.getSettings().language,
+        settings.language,
       ),
       profile: {
         ...profile,
@@ -1959,6 +1978,11 @@ export class AppServerStore {
             input.profiling.extractor_reasoning_effort,
           )
         : null;
+    if (input.response_language === "en" || input.response_language === "ko") {
+      writeConfigUserSettings(this.butlerData, {
+        responseLanguage: input.response_language,
+      });
+    }
     const clearedProfile = input.profiling?.clear_profile
       ? clearProfilingData(this.butlerData)
       : null;
@@ -1979,6 +2003,7 @@ export class AppServerStore {
         updatedExtractorModel?.configured_model ?? undefined,
       profiling_extractor_reasoning_effort:
         updatedExtractorReasoning?.reasoning_effort,
+      response_language: input.response_language,
       profile_black_box_cleared: clearedProfile
         ? {
             removed_candidates: clearedProfile.removed_candidates,
@@ -5274,39 +5299,47 @@ export class AppServerStore {
 
   private seedDefaults(): void {
     const now = new Date().toISOString();
-    const workspacePath = process.cwd();
-    this.db
-      .query(
-        `
-      INSERT OR IGNORE INTO projects (
-        id, display_name, status, workspace_path, workspace_label, safe_path_label,
-        pinned, archived, error_summary, created_at, updated_at
-      )
-      VALUES (?, ?, 'active', ?, ?, ?, 1, 0, NULL, ?, ?)
-    `,
-      )
-      .run(
-        DEFAULT_PROJECT_ID,
-        "butler",
-        workspacePath,
-        basename(workspacePath) || "butler",
-        basename(workspacePath) || "butler",
-        now,
-        now,
-      );
     const insert = this.db.prepare(`
       INSERT OR IGNORE INTO chats (id, title, kind, project_id, pinned, archived, created_at, updated_at)
       VALUES (?, ?, ?, ?, 0, 0, ?, ?)
     `);
-    insert.run(DEFAULT_CHAT_ID, "New chat", "chat", null, now, now);
-    insert.run(
-      "project-butler",
-      "butler",
-      "project",
-      DEFAULT_PROJECT_ID,
-      now,
-      now,
-    );
+    insert.run(DEFAULT_CHAT_ID, DEFAULT_CHAT_TITLE, "chat", null, now, now);
+    this.db
+      .query(
+        `
+      UPDATE chats
+      SET title = ?, updated_at = ?
+      WHERE id = ?
+        AND title = 'New chat'
+        AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)
+    `,
+      )
+      .run(DEFAULT_CHAT_TITLE, now, DEFAULT_CHAT_ID);
+    this.removeUnusedSeededButlerProject();
+  }
+
+  private removeUnusedSeededButlerProject(): void {
+    this.db
+      .query(
+        `
+      DELETE FROM chats
+      WHERE id = 'project-butler'
+        AND kind = 'project'
+        AND project_id = ?
+        AND NOT EXISTS (SELECT 1 FROM messages WHERE messages.chat_id = chats.id)
+    `,
+      )
+      .run(DEFAULT_PROJECT_ID);
+    this.db
+      .query(
+        `
+      DELETE FROM projects
+      WHERE id = ?
+        AND display_name = 'butler'
+        AND NOT EXISTS (SELECT 1 FROM chats WHERE chats.project_id = projects.id)
+    `,
+      )
+      .run(DEFAULT_PROJECT_ID);
   }
 
   private ensureChat(chatId: string): void {
@@ -6010,7 +6043,9 @@ export class AppServerStore {
     );
     const defaultTitle =
       chat.kind === "project" ? "New project chat" : "New chat";
-    return currentTitle === defaultTitle || currentTitle === provisionalTitle;
+    return currentTitle === defaultTitle ||
+      (chat.kind === "chat" && currentTitle === DEFAULT_CHAT_TITLE) ||
+      currentTitle === provisionalTitle;
   }
 
   private getTurnRow(turnId: string): TurnRow | null {
@@ -7166,13 +7201,40 @@ function readConfigWebSearchSettings(
   }
 }
 
-function readConfigUserSettings(butlerData: string): { timezone?: string } {
+type AppLanguage = "en" | "ko";
+
+interface ConfigUserSettings {
+  timezone?: string;
+  language?: AppLanguage;
+  responseLanguage?: AppLanguage;
+}
+
+function normalizeAppLanguage(value: unknown): AppLanguage | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "ko" ||
+    normalized === "kr" ||
+    normalized.includes("korean") ||
+    normalized.includes("한국")
+  ) {
+    return "ko";
+  }
+  if (normalized === "en" || normalized.includes("english") || normalized.includes("영어")) {
+    return "en";
+  }
+  return undefined;
+}
+
+function readConfigUserSettings(butlerData: string): ConfigUserSettings {
   try {
     const config = JSON.parse(
       readFileSync(join(butlerData, "butler.config.json"), "utf8"),
     ) as Record<string, any>;
     return {
       timezone: normalizeTimezone(config.user?.timezone) ?? undefined,
+      language: normalizeAppLanguage(config.user?.language),
+      responseLanguage: normalizeAppLanguage(config.user?.responseLanguage),
     };
   } catch {
     return {};
@@ -7193,7 +7255,7 @@ function readConfigDefaultModel(butlerData: string): string | undefined {
 
 function writeConfigUserSettings(
   butlerData: string,
-  settings: { timezone?: string },
+  settings: ConfigUserSettings,
 ): void {
   const path = join(butlerData, "butler.config.json");
   let config: Record<string, any>;
@@ -7205,6 +7267,10 @@ function writeConfigUserSettings(
   config.user = {
     ...(config.user && typeof config.user === "object" ? config.user : {}),
     ...(settings.timezone ? { timezone: settings.timezone } : {}),
+    ...(settings.language ? { language: settings.language } : {}),
+    ...(settings.responseLanguage
+      ? { responseLanguage: settings.responseLanguage }
+      : {}),
   };
   mkdirSync(butlerData, { recursive: true, mode: 0o700 });
   writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });

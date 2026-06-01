@@ -63,10 +63,12 @@ export function resolveRuntimeMessageLanguage(options: {
   explicit?: string;
 } = {}): RuntimeMessageLanguage {
   const butlerData = getButlerData(options.butlerData);
+  const config = readJson(join(butlerData, "butler.config.json"));
   return normalizeLanguage(options.explicit) ??
     normalizeLanguage(process.env.BUTLER_RESPONSE_LANGUAGE) ??
     normalizeLanguage(process.env.BUTLER_LANG) ??
-    normalizeLanguage(readJson(join(butlerData, "butler.config.json"))?.user?.language) ??
+    normalizeLanguage(config?.user?.responseLanguage) ??
+    normalizeLanguage(config?.user?.language) ??
     languageFromPersona(butlerData) ??
     "en";
 }

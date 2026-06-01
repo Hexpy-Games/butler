@@ -88,6 +88,7 @@ export const useSettingsUIStore = create<SettingsUIStore>((set, get) => ({
   personalizationDraft: {
     persona: "",
     eol: "",
+    responseLanguage: "en",
     personaPreset: "custom",
     profile: emptyProfileDraft(),
     profiling: emptyProfilingDraft(),
@@ -336,6 +337,7 @@ function draftFromPersonalization(
   return {
     persona: editablePersonaText(persona),
     eol: personalization.eol ?? "",
+    responseLanguage: personalization.response_language === "ko" ? "ko" : "en",
     personaPreset: resolvePersonaPreset(persona, personalization),
     profile: profileDraftFromPersonalization(personalization),
     profiling: profilingDraftFromPersonalization(personalization),
@@ -351,6 +353,8 @@ export function personalizationDraftHasChanges(
   return (
     personaDraftChanged(personalization, draft) ||
     draft.eol !== (personalization.eol ?? "") ||
+    draft.responseLanguage !==
+      (personalization.response_language === "ko" ? "ko" : "en") ||
     !profileDraftsEqual(
       draft.profile,
       profileDraftFromPersonalization(personalization),
@@ -377,6 +381,13 @@ function personalizationUpdatePayload(
   }
   if (!personalization || draft.eol !== (personalization.eol ?? "")) {
     payload.eol = draft.eol;
+  }
+  if (
+    !personalization ||
+    draft.responseLanguage !==
+      (personalization.response_language === "ko" ? "ko" : "en")
+  ) {
+    payload.response_language = draft.responseLanguage;
   }
   if (
     !personalization ||

@@ -6,6 +6,22 @@ export const RELEASE_COMPONENT_IDS = ["service"] as const;
 export type ReleaseComponentId = (typeof RELEASE_COMPONENT_IDS)[number];
 export type ReleaseRestartPolicy = "restart-service";
 export type ReleaseUpdatePolicy = "explicit";
+export const SERVICE_CLI_LAUNCHER_PLATFORMS = [
+  "darwin-arm64",
+  "darwin-x64",
+  "linux-arm64",
+  "linux-x64",
+] as const;
+export const SERVICE_APP_WEB_CLIENT_DIST =
+  "packages/butler-agent/resources/app-client/dist";
+export type ServiceCliLauncherPlatform =
+  (typeof SERVICE_CLI_LAUNCHER_PLATFORMS)[number];
+
+export interface ServiceCliLauncher {
+  platform: ServiceCliLauncherPlatform;
+  path: string;
+  buildTarget: string;
+}
 
 export interface ReleaseComponent {
   id: ReleaseComponentId;
@@ -39,6 +55,8 @@ export interface ReleaseManifest {
   version: string;
   bin: Record<string, string>;
   managedRuntimeVersion: string;
+  appWebClientDist: string;
+  cliLaunchers: ServiceCliLauncher[];
   requiredFiles: string[];
   privateDataPatterns: string[];
   components: ReleaseComponent[];
@@ -121,6 +139,12 @@ export function createReleaseManifest(root: string): ReleaseManifest {
     managedRuntimeVersion: existsSync(runtimeVersionPath)
       ? readText(runtimeVersionPath)
       : "unknown",
+    appWebClientDist: SERVICE_APP_WEB_CLIENT_DIST,
+    cliLaunchers: SERVICE_CLI_LAUNCHER_PLATFORMS.map((platform) => ({
+      platform,
+      path: serviceCliLauncherRelativePath(platform),
+      buildTarget: serviceCliLauncherBuildTarget(platform),
+    })),
     requiredFiles: serviceFiles,
     privateDataPatterns,
     components,
@@ -159,12 +183,28 @@ export function validateReleaseManifest(
   if (manifest.bin.butler !== "./bin/butler.js") {
     issues.push("package bin.butler must point to ./bin/butler.js");
   }
+  if (manifest.appWebClientDist !== SERVICE_APP_WEB_CLIENT_DIST) {
+    issues.push("service app web client dist path mismatch");
+  }
   validateRequiredFiles(root, manifest.requiredFiles, issues);
   validateNoAppInternals(manifest.requiredFiles, issues);
   validatePrivatePatterns(root, manifest.privateDataPatterns, issues);
+  validateCliLaunchers(manifest.cliLaunchers, issues);
   validateComponents(root, manifest, versions, issues);
   validateArtifacts(manifest, issues);
   return issues;
+}
+
+export function serviceCliLauncherRelativePath(
+  platform: ServiceCliLauncherPlatform,
+): string {
+  return `packages/butler-agent/resources/cli/${platform}/butler`;
+}
+
+export function serviceCliLauncherBuildTarget(
+  platform: ServiceCliLauncherPlatform,
+): string {
+  return `bun-${platform}`;
 }
 
 function artifactName(component: ReleaseComponentId, version: string): string {
@@ -236,6 +276,36 @@ function validateNoAppInternals(
       )
     ) {
       issues.push(`service release required file must not include app internals: ${file}`);
+    }
+  }
+}
+
+function validateCliLaunchers(
+  launchers: ServiceCliLauncher[],
+  issues: string[],
+): void {
+  const seen = new Set<ServiceCliLauncherPlatform>();
+  for (const launcher of launchers) {
+    if (!SERVICE_CLI_LAUNCHER_PLATFORMS.includes(launcher.platform)) {
+      issues.push(`unknown service CLI launcher platform: ${launcher.platform}`);
+      continue;
+    }
+    if (seen.has(launcher.platform)) {
+      issues.push(`duplicate service CLI launcher platform: ${launcher.platform}`);
+    }
+    seen.add(launcher.platform);
+    const expectedPath = serviceCliLauncherRelativePath(launcher.platform);
+    if (launcher.path !== expectedPath) {
+      issues.push(`service CLI launcher path mismatch for ${launcher.platform}`);
+    }
+    const expectedTarget = serviceCliLauncherBuildTarget(launcher.platform);
+    if (launcher.buildTarget !== expectedTarget) {
+      issues.push(`service CLI launcher build target mismatch for ${launcher.platform}`);
+    }
+  }
+  for (const platform of SERVICE_CLI_LAUNCHER_PLATFORMS) {
+    if (!seen.has(platform)) {
+      issues.push(`missing service CLI launcher platform: ${platform}`);
     }
   }
 }

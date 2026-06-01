@@ -2546,7 +2546,7 @@ function writeLocalModelConfig(
   }), "utf8");
 }
 
-test("runtime messages resolve from config language", () => {
+test("runtime messages resolve from response language before interface language", () => {
   expect(resolveRuntimeMessageLanguage({ butlerData: tempDir })).toBe("en");
 
   writeFileSync(join(tempDir, "butler.config.json"), JSON.stringify({
@@ -2554,6 +2554,11 @@ test("runtime messages resolve from config language", () => {
   }), "utf8");
 
   expect(resolveRuntimeMessageLanguage({ butlerData: tempDir })).toBe("ko");
+  writeFileSync(join(tempDir, "butler.config.json"), JSON.stringify({
+    user: { language: "ko", responseLanguage: "en" },
+  }), "utf8");
+
+  expect(resolveRuntimeMessageLanguage({ butlerData: tempDir })).toBe("en");
   expect(runtimeMessages("ko").ungroundedWorkerDispatch()).toContain("확인하지 못했습니다");
   expect(runtimeMessages("en").ungroundedWorkerDispatch()).toContain("could not verify");
 });

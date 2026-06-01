@@ -159,6 +159,7 @@ export function renderFirstChatOnboardingPrompt(input: {
       "- 사용자가 불편해하거나 건너뛰겠다고 하면 존중하고 다음 항목으로 넘어갑니다.",
       "- 사용자의 실제 요청이 함께 있으면 요청을 무시하지 말고 짧게 응답한 뒤 자연스럽게 온보딩을 이어갑니다.",
       "- 사용자가 답한 필드는 `update_onboarding_profile` 도구로 저장합니다.",
+      "- 페르소나 프리셋을 저장할 때는 목록의 persona_preset id 값을 그대로 도구의 `persona_preset`에 넣습니다. 프리뷰 문장을 `persona_custom`으로 흉내 내지 않습니다.",
       "- 마지막에는 선택된 페르소나를 적용하고 완료 상태를 저장합니다.",
       "",
       "권장 순서:",
@@ -189,6 +190,7 @@ export function renderFirstChatOnboardingPrompt(input: {
     "- Respect skip answers and move on.",
     "- If the principal also asks for a real task, answer briefly and then continue onboarding naturally.",
     "- Persist confirmed answers with the `update_onboarding_profile` tool.",
+    "- When saving a persona preset, pass the listed persona_preset id to `persona_preset`. Do not imitate the preview text as `persona_custom`.",
     "- At the end, apply the selected persona and mark onboarding complete.",
     "",
     "Recommended order:",
@@ -237,19 +239,15 @@ export function updateFirstChatOnboarding(
   const interests = boundedNoteText(input.interests);
   const work = boundedNoteText(input.work);
   const servicePreference = boundedNoteText(input.service_preference);
-  let personaPreset = normalizePersonaPreset(input.persona_preset);
+  const locale = onboardingLocale(input.locale);
+  let personaPreset = resolvePersonaPresetSelection({
+    value: input.persona_preset,
+    butlerHome: input.butlerHome,
+    locale,
+  });
   const personaCustom = boundedNoteText(input.persona_custom);
   if (!personaPreset && personaCustom) {
     personaPreset = "custom";
-  }
-  const locale = onboardingLocale(input.locale);
-  if (
-    personaPreset &&
-    personaPreset !== "custom" &&
-    input.butlerHome &&
-    !readPersonaPreset(input.butlerHome, locale, personaPreset)
-  ) {
-    personaPreset = null;
   }
 
   if (interests !== undefined) {
@@ -484,9 +482,82 @@ function uniqueStrings(values: string[]): string[] {
 }
 
 function normalizePersonaPreset(value: unknown): FirstChatOnboardingPersonaPreset | "custom" | null {
-  if (value === "custom") return "custom";
   if (typeof value !== "string") return null;
-  return safePersonaPresetName(value);
+  const trimmed = value.trim();
+  if (isCustomPersonaSelection(trimmed)) return "custom";
+  return safePersonaPresetName(trimmed);
+}
+
+function resolvePersonaPresetSelection(input: {
+  value: unknown;
+  butlerHome?: string;
+  locale: PersonaPresetLocale;
+}): FirstChatOnboardingPersonaPreset | "custom" | null {
+  if (typeof input.value !== "string") return null;
+  const text = input.value.trim();
+  if (!text) return null;
+  if (isCustomPersonaSelection(text)) return "custom";
+
+  const explicitId = personaPresetIdFromSelectionText(text);
+  const explicitPreset = knownPersonaPresetName(input.butlerHome, input.locale, explicitId);
+  if (explicitPreset) return explicitPreset;
+
+  const directPreset = knownPersonaPresetName(input.butlerHome, input.locale, text);
+  if (directPreset) return directPreset;
+  if (!input.butlerHome) return safePersonaPresetName(text);
+
+  const normalized = normalizePersonaSelectionText(text);
+  for (const preset of readPersonaPresets(input.butlerHome, input.locale)) {
+    const aliases = personaPresetSelectionAliases(preset);
+    if (aliases.some((alias) => normalizePersonaSelectionText(alias) === normalized)) {
+      return preset.name;
+    }
+  }
+
+  return null;
+}
+
+function knownPersonaPresetName(
+  butlerHome: string | undefined,
+  locale: PersonaPresetLocale,
+  value: string | null,
+): FirstChatOnboardingPersonaPreset | null {
+  if (!value) return null;
+  const safe = safePersonaPresetName(value);
+  if (!safe) return null;
+  if (!butlerHome) return safe;
+  return readPersonaPreset(butlerHome, locale, safe)?.name ?? null;
+}
+
+function isCustomPersonaSelection(value: string): boolean {
+  const normalized = normalizePersonaSelectionText(value);
+  return normalized === "custom" || normalized === "direct editing" || normalized === "직접 편집";
+}
+
+function personaPresetIdFromSelectionText(value: string): string | null {
+  const match = value.match(/persona_preset\s*:\s*`?([A-Za-z0-9][A-Za-z0-9._-]{0,95})`?/iu);
+  return match?.[1] ?? null;
+}
+
+function normalizePersonaSelectionText(value: string): string {
+  return value
+    .replace(/^\s*[-*]\s*/u, "")
+    .replace(/[`"“”]/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function personaPresetSelectionAliases(preset: ReturnType<typeof readPersonaPresets>[number]): string[] {
+  return [
+    preset.name,
+    preset.label,
+    `persona_preset: ${preset.name}`,
+    `${preset.name} (${preset.label})`,
+    `${preset.label} (${preset.name})`,
+    personaPresetDisplayText(preset),
+    preset.preview ? `${preset.label} - ${preset.preview}` : "",
+  ].filter(Boolean);
 }
 
 function onboardingObservationText(input: {
@@ -583,8 +654,13 @@ function personaPresetPromptLines(input: {
 }): string[] {
   if (!input.butlerHome) return [];
   return readPersonaPresets(input.butlerHome, input.locale).map((preset) => {
-    return preset.preview
-      ? `- ${preset.label} - ${preset.preview}`
-      : `- ${preset.label}`;
+    return `- ${personaPresetDisplayText(preset)}`;
   });
+}
+
+function personaPresetDisplayText(preset: ReturnType<typeof readPersonaPresets>[number]): string {
+  const label = preset.label === preset.name ? preset.name : `${preset.name} (${preset.label})`;
+  return preset.preview
+    ? `persona_preset: ${label} - ${preset.preview}`
+    : `persona_preset: ${label}`;
 }

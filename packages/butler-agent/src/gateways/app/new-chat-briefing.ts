@@ -6,6 +6,7 @@ import {
   type NewChatBriefingLocale,
   type NewChatBriefingTitleBucket,
 } from "../../agent/cognition/consolidation/new-chat-briefing.ts";
+import { readFirstChatOnboardingState } from "../../personalization/onboarding.ts";
 import type { NewChatBriefingSuggestion, NewChatBriefingView } from "./protocol.ts";
 
 type AppLocale = "ko" | "en";
@@ -98,11 +99,48 @@ const GENERAL_FALLBACK: Record<AppLocale, {
   },
 };
 
+const ONBOARDING_FALLBACK: Record<AppLocale, {
+  title: string;
+  description: string;
+  suggestions: NewChatBriefingSuggestion[];
+}> = {
+  ko: {
+    title: "반갑습니다. 당신을 모시게 되어 기쁩니다.",
+    description:
+      "AI 에이전트 집사 버틀러를 선택해주셔서 감사합니다. 시작하기에 앞서 간단하게 당신에 대해 알려주세요.",
+    suggestions: [
+      {
+        id: "butler-onboarding",
+        title: "버틀러와 알아가기",
+        description:
+          "버틀러를 사용하기에 앞서 기본적인 설정을 진행합니다.",
+        text: "버틀러를 사용하기에 앞서 기본적인 설정을 진행하자.",
+      },
+    ],
+  },
+  en: {
+    title: "Pleased to meet you. It will be my honor to serve.",
+    description:
+      "Thank you for choosing Butler, your AI agent butler. Before we begin, please tell me a little about yourself.",
+    suggestions: [
+      {
+        id: "butler-onboarding",
+        title: "Get acquainted with Butler",
+        description: "Set up the basics before using Butler.",
+        text: "Let's set up the basics before I start using Butler.",
+      },
+    ],
+  },
+};
+
 export function buildNewChatBriefing(
   input: BuildNewChatBriefingInput,
 ): NewChatBriefingView {
   const now = input.now ?? new Date();
   const locale = input.preferredLocale;
+  if (!input.project && firstChatOnboardingPending(input.butlerData)) {
+    return onboardingFallbackView({ locale, now });
+  }
   const artifact = readNewChatBriefingArtifact({
     butlerData: input.butlerData,
     date: input.date,
@@ -166,6 +204,30 @@ function titleFromArtifact(
     return artifact.title;
   }
   return artifact.title_variants[timeOfDay(now)] || artifact.title;
+}
+
+function firstChatOnboardingPending(butlerData: string): boolean {
+  return readFirstChatOnboardingState(butlerData).status !== "complete";
+}
+
+function onboardingFallbackView(input: {
+  locale: AppLocale;
+  now: Date;
+}): NewChatBriefingView {
+  const fallback = ONBOARDING_FALLBACK[input.locale];
+  return {
+    moment: input.locale === "ko" ? "온보딩" : "Onboarding",
+    title: fallback.title,
+    description: fallback.description,
+    suggestions: fallback.suggestions,
+    source: fallbackSource({
+      scope: "onboarding",
+      locale: input.locale,
+      now: input.now,
+      consolidationRunId: null,
+    }),
+    raw_text_included: false,
+  };
 }
 
 function generalFallbackView(input: {
@@ -278,7 +340,7 @@ function projectFallbackSuggestions(
 }
 
 function fallbackSource(input: {
-  scope: "general" | "project";
+  scope: "general" | "project" | "onboarding";
   locale: AppLocale;
   now: Date;
   consolidationRunId: string | null;
