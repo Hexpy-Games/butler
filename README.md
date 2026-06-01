@@ -4,17 +4,20 @@
 
 # Butler
 
-Butler is your private AI butler.
+Butler is a local-first AI agent runtime for personal and project work.
 
-It remembers your context, plans the work, coordinates tools and workers, and
-reports only after reviewing the outcome.
+It can remember local context, plan work, coordinate tools and workers, and
+report after reviewing the outcome.
 
 Not a chatbot. Not a hosted profile. A local operating layer for personal and
 project work.
 
 ## Core Ideas
 
-**Private memory.** Context and runtime state stay on your machine.
+**Local memory.** Context and runtime state are stored under your Butler data
+directory by default. If you enable profiling or hosted model providers, the
+selected prompt/context can be sent to that provider according to your
+configuration.
 
 **Reviewed outcomes.** Tool output and worker results are evidence, not final
 answers.
@@ -38,6 +41,7 @@ mkdir -p ~/butler
 tar -xzf ~/butler-service-*-all.tar.gz -C ~/butler
 cd ~/butler
 ./install.sh
+butler install --home ~/butler --data ~/.butler
 ```
 
 Default paths:
@@ -191,7 +195,7 @@ Butler is `v0.0.2` and pre-release. Expect breaking changes before `v1.0.0`.
 The intended deployment model is single-user and self-hosted on a machine you
 control. Butler can run tools, edit files, dispatch background workers, and
 operate unattended services, so install it only in environments where that level
-of local automation is acceptable.
+of local agent automation is acceptable.
 
 ## License
 
