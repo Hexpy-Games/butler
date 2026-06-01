@@ -8,6 +8,7 @@ import {
   type AssociativeRecallResult,
   type RecallEvidencePolicy,
 } from "./recall/engine.ts";
+import type { VectorEpisodeBackend } from "./recall/vector.ts";
 import { readProjectRefreshFailures, sanitizeProjectMemoryId } from "./project-memory.ts";
 import { cognitionConsolidationRoot, cognitionMemoryRoot } from "../paths.ts";
 import { recordOperationalMetric } from "../../../operations/metrics/operational-metrics.ts";
@@ -469,6 +470,8 @@ export async function recallMemoryEvidenceWithVector(input: {
   evidencePolicy?: RecallEvidencePolicy;
   limit?: number;
   vectorQueries?: string[];
+  vectorBackend?: VectorEpisodeBackend;
+  vectorTimeoutMs?: number;
 }): Promise<MemoryRecallResult> {
   const cue = input.cue.trim();
   if (!cue) throw new Error("memory recall requires cue");
@@ -479,6 +482,8 @@ export async function recallMemoryEvidenceWithVector(input: {
     evidencePolicy: input.evidencePolicy,
     limit: input.limit,
     vectorQueries: input.vectorQueries,
+    vectorBackend: input.vectorBackend,
+    vectorTimeoutMs: input.vectorTimeoutMs,
   });
   return memoryRecallEvidenceFromRecall({
     butlerData: input.butlerData,

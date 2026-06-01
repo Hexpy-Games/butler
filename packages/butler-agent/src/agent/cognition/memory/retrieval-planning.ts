@@ -254,18 +254,20 @@ export function normalizeRetrievalPlan(
   if (!raw || typeof raw !== "object") throw new Error("plan is not an object");
   const value = raw as Record<string, any>;
   const strategies = normalizeEnumArray(value.strategies, STRATEGIES, 12);
-  if (strategies.length === 0) throw new Error("plan has no strategies");
-  const selfSufficient = value.self_sufficient === true;
-  const missingReferents = selfSufficient
-    ? normalizeEnumArray(value.missing_referents, MISSING_REFERENTS, 6)
-    : normalizeEnumArray(value.missing_referents, MISSING_REFERENTS, 6, ["target"]);
-  const generatedQueries = normalizeGeneratedQueries(value.generated_queries, strategies);
   const evidenceRequired = normalizeEnumArray(
     value.evidence_required,
     EVIDENCE_REQUIREMENTS,
     10,
     inferEvidenceRequirements(strategies),
   );
+  if (strategies.length === 0 && evidenceRequired.length === 0) {
+    throw new Error("plan has no strategies or evidence requirements");
+  }
+  const selfSufficient = value.self_sufficient === true;
+  const missingReferents = selfSufficient
+    ? normalizeEnumArray(value.missing_referents, MISSING_REFERENTS, 6)
+    : normalizeEnumArray(value.missing_referents, MISSING_REFERENTS, 6, ["target"]);
+  const generatedQueries = normalizeGeneratedQueries(value.generated_queries, strategies);
   return {
     self_sufficient: selfSufficient,
     missing_referents: missingReferents,

@@ -3,7 +3,10 @@ import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { cognitionMemoryRoot } from "../../packages/butler-agent/src/agent/cognition/paths.ts";
-import { recallMemoryWithVector } from "../../packages/butler-agent/src/agent/cognition/memory/recall/engine.ts";
+import {
+  recallMemoryWithVector,
+  recallRankingPolicyFromPlan,
+} from "../../packages/butler-agent/src/agent/cognition/memory/recall/engine.ts";
 import {
   createLanceDbMemoryVectorBackend,
   searchVectorEpisodes,
@@ -153,6 +156,38 @@ test("vector connector times out the full query operation", async () => {
   }
 });
 
+test("vector connector times out embedding before search", async () => {
+  let searchCalls = 0;
+  const backend: VectorEpisodeBackend = {
+    async embed() {
+      return await new Promise(() => {});
+    },
+    async search() {
+      searchCalls += 1;
+      return [];
+    },
+  };
+
+  const butlerData = tempButlerData();
+  const startedAt = performance.now();
+  try {
+    const result = await searchVectorEpisodes({
+      butlerData,
+      query: "slow embed query",
+      backend,
+      timeoutMs: 250,
+    });
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(elapsedMs).toBeLessThan(1000);
+    expect(searchCalls).toBe(0);
+    expect(result.candidates).toHaveLength(0);
+    expect(result.diagnostics).toContain("vector=unavailable:embed-timeout");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("runtime vector recall bounds expanded queries without serial timeout stacking", async () => {
   const backend: VectorEpisodeBackend = {
     async embed() {
@@ -217,6 +252,50 @@ test("vector connector opens a circuit after repeated backend failures", async (
     expect(searchCalls).toBe(3);
     expect(blocked.candidates).toHaveLength(0);
     expect(blocked.diagnostics).toContain("vector=unavailable:circuit-open");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("vector connector post-filters rows even when a prefilter-capable backend leaks other projects", async () => {
+  let observedProjectId: string | undefined;
+  const backend: VectorEpisodeBackend = {
+    supportsProjectFilter: true,
+    async embed() {
+      return [0.1, 0.2, 0.3];
+    },
+    async search(input) {
+      observedProjectId = input.projectId;
+      return [{
+        id: "other-row",
+        text: "Other project memory episode.",
+        project: "other",
+        session_id: "s-other",
+        _distance: 0.01,
+      }, {
+        id: "butler-row",
+        text: "Butler project memory episode.",
+        project: "butler",
+        session_id: "s-butler",
+        _distance: 0.2,
+      }];
+    },
+  };
+
+  const butlerData = tempButlerData();
+  try {
+    const result = await searchVectorEpisodes({
+      butlerData,
+      query: "project memory",
+      projectId: "butler",
+      backend,
+      limit: 2,
+    });
+
+    expect(observedProjectId).toBe("butler");
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]?.provenance[0]).toBe("vector:s-butler:butler-row");
+    expect(result.diagnostics).toContain("vector_project_filter=prefilter");
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
@@ -306,6 +385,52 @@ test("vector connector passes project filter to backends that support prefilteri
   }
 });
 
+test("vector connector reports postfilter when backend cannot actually prefilter", async () => {
+  const backend: VectorEpisodeBackend = {
+    supportsProjectFilter: true,
+    async embed() {
+      return [0.1, 0.2, 0.3];
+    },
+    async search(input) {
+      return {
+        projectFilterMode: "postfilter",
+        limit: input.fallbackLimit ?? input.limit,
+        rows: [{
+          id: "other-row",
+          text: "Other project memory episode.",
+          project: "other",
+          session_id: "s-other",
+          _distance: 0.01,
+        }, {
+          id: "butler-row",
+          text: "Butler project memory episode.",
+          project: "butler",
+          session_id: "s-butler",
+          _distance: 0.2,
+        }],
+      };
+    },
+  };
+
+  const butlerData = tempButlerData();
+  try {
+    const result = await searchVectorEpisodes({
+      butlerData,
+      query: "project memory",
+      projectId: "butler",
+      backend,
+      limit: 1,
+    });
+
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]?.provenance[0]).toBe("vector:s-butler:butler-row");
+    expect(result.diagnostics).toContain("vector_project_filter=postfilter");
+    expect(result.diagnostics).toContain("vector_search_limit=5");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("vector rows without score metadata do not receive perfect semantic similarity", () => {
   const candidates = vectorRowsToRecallCandidates([{
     id: "no-score",
@@ -316,6 +441,44 @@ test("vector rows without score metadata do not receive perfect semantic similar
 
   expect(candidates).toHaveLength(1);
   expect(candidates[0]?.vectorSimilarity).toBeUndefined();
+});
+
+test("scoreless vector rows do not satisfy planned vector evidence", async () => {
+  const backend: VectorEpisodeBackend = {
+    async embed() {
+      return [0.1, 0.2, 0.3];
+    },
+    async search() {
+      return [{
+        id: "no-score",
+        text: "Runtime decision appears in a vector row without score metadata.",
+        project: "butler",
+        session_id: "s1",
+      }];
+    },
+  };
+
+  const butlerData = tempButlerData();
+  try {
+    const result = await recallMemoryWithVector({
+      butlerData,
+      cue: "runtime decision",
+      projectId: "butler",
+      vectorBackend: backend,
+      minScore: 0.01,
+      rankingPolicy: recallRankingPolicyFromPlan({
+        strategies: ["search_vector_episode"],
+        evidence_required: ["vector_episode_hit"],
+      }),
+    });
+
+    expect(result.abstained).toBe(true);
+    expect(result.items).toHaveLength(0);
+    expect(result.diagnostics).toContain("ranking_policy=planned");
+    expect(result.diagnostics).toContain("vector_rows_without_score=1");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
 });
 
 test("real LanceDB vector backend applies project filter before vector limit", async () => {

@@ -880,6 +880,15 @@ test("memory quality tool schemas expose health ingestion recall and explicit up
   expect(BUTLER_TOOLS.find((item) => item.name === "recall_memory")?.description).toContain(
     "associative context",
   );
+  expect(Object.keys(BUTLER_TOOLS.find((item) => item.name === "recall_memory")?.parameters.properties ?? {})).toEqual([
+    "cue",
+    "limit",
+    "include_vector",
+    "vector_queries",
+    "generated_queries",
+    "strategies",
+    "evidence_required",
+  ]);
   expect(BUTLER_TOOLS.find((item) => item.name === "query_memory")?.description).toContain(
     "exact memory/history evidence",
   );
@@ -2384,6 +2393,21 @@ test("memory quality tools ingest task outcomes and recall local memory", async 
     results: [expect.objectContaining({ source: "task-memory" })],
   });
   expect(await execute({
+    name: "recall_memory",
+    args: {
+      cue: "source-backed reports",
+      include_vector: false,
+      strategies: ["query_exact_transcript"],
+      evidence_required: ["exact_quote"],
+    },
+    rawArguments: "{}",
+  })).toMatchObject({
+    ok: true,
+    abstained: true,
+    results: [],
+    diagnostics: expect.arrayContaining(["evidence=exact_quote_requires_query_memory"]),
+  });
+  expect(await execute({
     name: "query_memory",
     args: { speaker: "user", order: "earliest", limit: 1 },
     rawArguments: "{}",
@@ -2407,6 +2431,116 @@ test("memory quality tools ingest task outcomes and recall local memory", async 
   })).toMatchObject({
     ok: true,
   });
+});
+
+test("recall_memory tool applies model-provided retrieval strategy evidence", async () => {
+  mkdirSync(join(tempDir, "cognition", "memory", "hot"), { recursive: true });
+  mkdirSync(join(tempDir, "cognition", "memory", "projects"), { recursive: true });
+  writeFileSync(
+    join(tempDir, "cognition", "memory", "hot", "runtime.md"),
+    "Runtime decision appears in hot cache but is not project memory.\n",
+    "utf8",
+  );
+  writeFileSync(
+    join(tempDir, "cognition", "memory", "projects", "butler.md"),
+    "Runtime decision is recorded in Butler project memory.\n",
+    "utf8",
+  );
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    projectId: "butler",
+  });
+
+  const recall = await execute({
+    name: "recall_memory",
+    args: {
+      cue: "runtime decision",
+      include_vector: false,
+      strategies: ["search_lexical_memory"],
+      evidence_required: ["project_memory_hit"],
+    },
+    rawArguments: JSON.stringify({
+      cue: "runtime decision",
+      include_vector: false,
+      strategies: ["search_lexical_memory"],
+      evidence_required: ["project_memory_hit"],
+    }),
+  }) as {
+    ok: boolean;
+    results: Array<{ source: string; text: string }>;
+    diagnostics: string[];
+  };
+
+  expect(recall.ok).toBe(true);
+  expect(recall.diagnostics).toContain("ranking_policy=planned");
+  expect(recall.diagnostics).toContain("evidence=verified");
+  expect(recall.results.map((result) => result.source)).toEqual(["project-memory"]);
+  expect(recall.results[0]?.text).toContain("Butler project memory");
+});
+
+test("recall_memory tool runs retrieval planner when model omits recall policy", async () => {
+  const plannerCalls: string[] = [];
+  const embedQueries: string[] = [];
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    projectId: "butler",
+    sessionId: "butler/main",
+    workerModel: "openai/test-memory-planner",
+    memoryRetrievalPlanner: async (input) => {
+      plannerCalls.push(input.request);
+      return {
+        usedPlanner: true,
+        attempts: 1,
+        diagnostics: ["planner_succeeded_attempt_1"],
+        plan: {
+          self_sufficient: false,
+          missing_referents: ["target"],
+          strategies: ["search_vector_episode"],
+          generated_queries: [{
+            strategy: "search_vector_episode",
+            query: "semantic composer approval episode",
+          }],
+          evidence_required: ["vector_episode_hit"],
+          max_latency_ms: 500,
+        },
+      };
+    },
+    memoryVectorBackend: {
+      async embed(query: string) {
+        embedQueries.push(query);
+        return [0.1, 0.2, 0.3];
+      },
+      async search() {
+        return [{
+          id: "composer-vector",
+          text: "Semantic composer approval episode says the approval form replaces the input.",
+          project: "butler",
+          session_id: "s-composer",
+          _distance: 0.1,
+        }];
+      },
+    },
+  });
+
+  const recall = await execute({
+    name: "recall_memory",
+    args: { cue: "그거 뭐였지?", limit: 1 },
+    rawArguments: JSON.stringify({ cue: "그거 뭐였지?", limit: 1 }),
+  }) as {
+    ok: boolean;
+    results: Array<{ source: string; text: string }>;
+    diagnostics: string[];
+  };
+
+  expect(plannerCalls).toEqual(["그거 뭐였지?"]);
+  expect(embedQueries).toContain("semantic composer approval episode");
+  expect(recall.ok).toBe(true);
+  expect(recall.results).toEqual([expect.objectContaining({ source: "vector" })]);
+  expect(recall.diagnostics).toContain("ranking_policy=planned");
+  expect(recall.diagnostics).toContain("retrieval_planner=used");
+  expect(recall.diagnostics).toContain("retrieval_planner_planner_succeeded_attempt_1");
 });
 
 test("skill catalog tool lists strategy skills for model inspection", async () => {
