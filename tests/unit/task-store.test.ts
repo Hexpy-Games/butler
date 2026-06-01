@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -54,6 +54,22 @@ test("task store marks result notification durably and keeps legacy marker reada
   store.markResultNotified("task-2", at);
 
   expect(store.read("task-2")?.notifiedAt).toBe("2026-04-24T00:00:00.000Z");
+});
+
+test("task store recovers stale notification locks and does not leave temp files", () => {
+  const store = new TaskStore(tempDir);
+  const taskDir = join(tempDir, "tasks", "task-stale-notify-lock");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  mkdirSync(join(taskDir, ".worker-result-notified.lock"));
+  const stale = new Date(Date.now() - 60_000);
+  utimesSync(join(taskDir, ".worker-result-notified.lock"), stale, stale);
+
+  store.markResultNotified("task-stale-notify-lock", new Date("2026-04-24T00:00:00.000Z"));
+
+  expect(store.read("task-stale-notify-lock")?.notifiedAt).toBe("2026-04-24T00:00:00.000Z");
+  expect(existsSync(join(taskDir, ".worker-result-notified.lock"))).toBe(false);
+  expect(readdirSync(taskDir).filter((entry) => entry.includes(".tmp-"))).toEqual([]);
 });
 
 test("task store summaries are sorted newest-first and limited", () => {
@@ -241,6 +257,9 @@ test("task store persists and reads task origin context", () => {
   const taskDir = join(tempDir, "tasks", "task-origin");
   mkdirSync(taskDir, { recursive: true });
   writeFileSync(join(taskDir, "status"), "RUNNING\n", "utf8");
+  mkdirSync(join(taskDir, "origin.json.lock"));
+  const stale = new Date(Date.now() - 60_000);
+  utimesSync(join(taskDir, "origin.json.lock"), stale, stale);
 
   store.writeOrigin("task-origin", {
     version: 1,
@@ -266,6 +285,8 @@ test("task store persists and reads task origin context", () => {
   expect(task?.origin?.task_summary).toBe("make the chart for topic A");
   expect(task?.origin?.transcript_ref.recent_event_ids).toEqual(["event-before", "mock:42"]);
   expect(store.summaries(1)[0]?.origin_summary).toBe("make the chart for topic A");
+  expect(existsSync(join(taskDir, "origin.json.lock"))).toBe(false);
+  expect(readdirSync(taskDir).filter((entry) => entry.includes(".tmp-"))).toEqual([]);
 });
 
 test("task store reconciles dead running workers into recoverable state when context exists", () => {
@@ -275,6 +296,9 @@ test("task store reconciles dead running workers into recoverable state when con
   writeFileSync(join(taskDir, "status"), "RUNNING\n", "utf8");
   writeFileSync(join(taskDir, "pid"), "424242\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "continue this interrupted investigation\n", "utf8");
+  mkdirSync(join(taskDir, "status.lock"));
+  const stale = new Date(Date.now() - 60_000);
+  utimesSync(join(taskDir, "status.lock"), stale, stale);
 
   const reconciled = store.reconcileRecoverableTasks({
     isPidAlive: () => false,
@@ -287,6 +311,8 @@ test("task store reconciles dead running workers into recoverable state when con
     reason: "running worker process is missing; durable context is available",
   }]);
   expect(store.read("task-dead-running")?.status).toBe("RECOVERABLE");
+  expect(existsSync(join(taskDir, "status.lock"))).toBe(false);
+  expect(readdirSync(taskDir).filter((entry) => entry.includes(".tmp-"))).toEqual([]);
   expect(store.summaries(1)[0]).toMatchObject({
     task_id: "task-dead-running",
     can_resume: true,

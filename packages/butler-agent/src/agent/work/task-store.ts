@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
+import { writeLockedTextFile } from "./file-state.ts";
 import {
   readTaskOrigin,
   resolveTaskOriginContext,
@@ -149,7 +150,7 @@ function readText(path: string): string {
 }
 
 function writeText(path: string, value: string): void {
-  writeFileSync(path, value, "utf8");
+  writeLockedTextFile(path, value);
 }
 
 function normalizeStatus(value: string): TaskStatus {
@@ -738,7 +739,7 @@ export class TaskStore {
   markResultNotified(taskId: string, at = new Date()): void {
     const taskDir = this.taskDir(taskId);
     mkdirSync(taskDir, { recursive: true });
-    writeFileSync(join(taskDir, NOTIFIED_MARKER), `${at.toISOString()}\n`, "utf8");
+    writeText(join(taskDir, NOTIFIED_MARKER), `${at.toISOString()}\n`);
   }
 
   writeOrigin(taskId: string, origin: TaskOriginContext): void {

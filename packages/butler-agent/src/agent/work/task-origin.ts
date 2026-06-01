@@ -1,8 +1,9 @@
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { cognitionMemoryRoot } from "../cognition/paths.ts";
 import type { InboundEnvelope } from "../../test-support/harness/contracts.ts";
 import { readTranscript, transcriptPath, type TranscriptEvent } from "../../test-support/harness/transcripts.ts";
+import { writeLockedTextFile } from "./file-state.ts";
 
 export interface TaskOriginTranscriptRef {
   session_id: string;
@@ -131,7 +132,7 @@ export function readTaskOrigin(taskDir: string): TaskOriginContext | null {
 }
 
 export function writeTaskOrigin(taskDir: string, origin: TaskOriginContext): void {
-  writeFileSync(taskOriginPath(taskDir), `${JSON.stringify(origin, null, 2)}\n`, "utf8");
+  writeLockedTextFile(taskOriginPath(taskDir), `${JSON.stringify(origin, null, 2)}\n`);
 }
 
 function readTranscriptFromOrigin(origin: TaskOriginContext): TranscriptEvent[] {
