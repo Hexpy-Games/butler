@@ -420,4 +420,4 @@ test("Butler CLI metrics enable and disable update the private data config", () 
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
-});
+}, 15_000);

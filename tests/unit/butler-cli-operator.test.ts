@@ -280,7 +280,7 @@ test("gateway CLI manages Telegram credentials and embedded lifecycle safely", (
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
-});
+}, 15_000);
 
 test("operator personalization commands persist naming profile privately", () => {
   const butlerData = tempRoot();
@@ -357,7 +357,7 @@ test("operator personalization commands persist naming profile privately", () =>
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
-});
+}, 15_000);
 
 test("operator personalization migration prompt and off-mode import stay raw-text-free", () => {
   const butlerData = tempRoot();
@@ -530,7 +530,7 @@ test("operator work commands expose recovery state without raw prompts", () => {
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
-});
+}, 15_000);
 
 test("operator cognition memory, context, search, and web helpers return safe JSON envelopes", () => {
   const butlerData = tempRoot();

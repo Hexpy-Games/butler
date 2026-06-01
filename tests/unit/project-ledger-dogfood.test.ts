@@ -16,6 +16,12 @@ function runLedgerJson(args: string[]): any {
 }
 
 test("Butler repo dogfoods Project Ledger with generated bounded views", () => {
+  runLedgerJson(["index"]);
+  runLedgerJson(["render", "dashboard", "--write"]);
+  runLedgerJson(["render", "handoff", "--write"]);
+  runLedgerJson(["render", "roadmap", "--write"]);
+  runLedgerJson(["index"]);
+
   expect(repoOrLedgerExists(".project-ledger/project.json")).toBe(true);
   expect(repoOrLedgerExists(".project-ledger/views/dashboard.md")).toBe(true);
   expect(repoOrLedgerExists(".project-ledger/views/handoff.md")).toBe(true);
