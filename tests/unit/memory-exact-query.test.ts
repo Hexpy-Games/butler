@@ -377,11 +377,14 @@ test("message date queries use indexes instead of scanning message rows", () => 
     INSERT INTO messages (id, chat_id, role, text, status, created_at, updated_at)
     VALUES (?, 'general', ?, ?, 'sent', ?, ?)
   `);
-  for (let index = 0; index < 5000; index += 1) {
-    const role = index % 2 === 0 ? "user" : "assistant";
-    const createdAt = `2026-05-25T${String(Math.floor(index / 3600)).padStart(2, "0")}:${String(Math.floor(index / 60) % 60).padStart(2, "0")}:${String(index % 60).padStart(2, "0")}.000Z`;
-    insert.run(`m${index}`, role, `synthetic ${index}`, createdAt, createdAt);
-  }
+  const insertMany = db.transaction(() => {
+    for (let index = 0; index < 5000; index += 1) {
+      const role = index % 2 === 0 ? "user" : "assistant";
+      const createdAt = `2026-05-25T${String(Math.floor(index / 3600)).padStart(2, "0")}:${String(Math.floor(index / 60) % 60).padStart(2, "0")}:${String(index % 60).padStart(2, "0")}.000Z`;
+      insert.run(`m${index}`, role, `synthetic ${index}`, createdAt, createdAt);
+    }
+  });
+  insertMany();
   const plan = db.query<{ detail: string }, []>(`
     EXPLAIN QUERY PLAN
     SELECT id
