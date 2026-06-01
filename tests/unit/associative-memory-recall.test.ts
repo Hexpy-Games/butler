@@ -391,6 +391,44 @@ test("retrieval plans enforce non-exact evidence requirements", () => {
   ]);
 });
 
+test("evidence-only retrieval plans rank required evidence before slicing", () => {
+  const result = recallFromCorpus({
+    cue: "runtime decision",
+    now,
+    minScore: 0.01,
+    limit: 1,
+    rankingPolicy: recallRankingPolicyFromPlan({
+      strategies: [],
+      evidence_required: ["project_memory_hit"],
+    }),
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "semantic-distractor",
+        summary: "Runtime decision semantic distractor",
+        text: "This vector episode is semantically strong but is not project memory.",
+        source: "vector",
+        provenance: ["vector:runtime-distractor"],
+        vectorSimilarity: 0.95,
+      }, {
+        id: "project-hit",
+        summary: "Runtime decision project memory",
+        text: "Runtime decision is recorded in project memory.",
+        source: "project-memory",
+        originalSource: "project-memory",
+        provenance: ["project:runtime"],
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(false);
+  expect(result.diagnostics).toContain("ranking_policy=planned");
+  expect(result.items).toHaveLength(1);
+  expect(result.items[0]?.provenance[0]).toBe("project:runtime");
+});
+
 test("recall evidence verifier rejects missing non-exact evidence channels", () => {
   const result = recallFromCorpus({
     cue: "runtime decision",

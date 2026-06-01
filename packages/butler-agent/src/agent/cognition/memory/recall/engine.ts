@@ -407,7 +407,7 @@ function activeRecallPolicy(policy: RecallEvidencePolicy | undefined): ActiveRec
     ...(policy?.evidenceRequired ?? []),
   ]) as RetrievalEvidenceRequirement[];
   return {
-    planned: strategies.length > 0,
+    planned: strategies.length > 0 || evidenceRequired.length > 0,
     strategies,
     evidenceRequired,
   };
@@ -761,10 +761,12 @@ export function verifyRecallEvidence(input: {
     };
   }
   if (input.items.length === 0) {
+    const missingRequiredEvidence = evidenceRequired.filter((requirement) => requirement !== "exact_quote");
+    for (const requirement of missingRequiredEvidence) diagnostics.push(`evidence_missing=${requirement}`);
     return {
       verified: false,
       items: [],
-      diagnostics: ["evidence=none"],
+      diagnostics: diagnostics.length > 0 ? diagnostics : ["evidence=none"],
       nextAction: "try_alternate_retrieval",
     };
   }
