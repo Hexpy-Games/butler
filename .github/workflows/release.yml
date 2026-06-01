@@ -1,0 +1,74 @@
+name: Butler Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  service-artifact:
+    name: Build and publish service artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/butler-app/client/ui/package-lock.json
+
+      - name: Install service dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install app web client dependencies
+        run: npm --prefix packages/butler-app/client/ui ci
+
+      - name: Run service release gate
+        run: bun run release:service:gate
+
+      - name: Package service release
+        run: bun run release:service:package --out dist/release/service
+
+      - name: Verify packaged Butler App web client
+        run: |
+          set -euo pipefail
+          artifact="$(find dist/release/service -maxdepth 1 -name 'butler-service-*-all.tar.gz' -print -quit)"
+          test -n "$artifact"
+          listing="$(tar -tzf "$artifact")"
+          grep -F "./packages/butler-agent/resources/app-client/dist/index.html" <<<"$listing"
+          grep -F "./packages/butler-agent/resources/app-client/dist/assets/" <<<"$listing"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          shopt -s nullglob
+          files=(
+            dist/release/service/butler-service-*-all.tar.gz
+            dist/release/service/butler-service-*-all.tar.gz.sha256
+            dist/release/service/service-release-manifest.json
+            dist/release/service/update-manifest.json
+          )
+          if [ "${#files[@]}" -ne 4 ]; then
+            printf 'Expected 4 service release files, got %s\n' "${#files[@]}" >&2
+            printf '%s\n' "${files[@]}" >&2
+            exit 1
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --clobber
+          else
+            gh release create "$tag" "${files[@]}" --title "$tag" --notes "Butler service release $tag"
+          fi

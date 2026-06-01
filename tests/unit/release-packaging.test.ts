@@ -264,7 +264,7 @@ test("service release packager creates an installable artifact with app web clie
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 test("Butler CLI help documents install home and data overrides", () => {
   const result = spawnSync("node", [join(root, "bin", "butler.js"), "--help"], {

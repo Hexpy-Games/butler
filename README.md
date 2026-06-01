@@ -26,8 +26,14 @@ workstreams.
 
 ## Quick Start
 
+Download `butler-service-<version>-all.tar.gz` from the
+[GitHub Releases](https://github.com/Hexpy-Games/butler/releases) page for the
+tag you want to install. Release artifacts already include the built Butler App
+web client that the local app gateway serves.
+
 ```bash
-git clone https://github.com/Hexpy-Games/butler.git ~/butler
+mkdir -p ~/butler
+tar -xzf ~/Downloads/butler-service-*-all.tar.gz -C ~/butler
 cd ~/butler
 ./install.sh
 ```
@@ -41,6 +47,7 @@ Override them when needed:
 
 ```bash
 ./install.sh --home ~/Apps/butler --data ~/.butler
+butler install --home ~/butler --data ~/.butler
 ```
 
 For scripted installs:
@@ -67,11 +74,19 @@ using `18765`. The script prints the host web and health URLs. Set
 After install:
 
 ```bash
+butler commands
 butler status
 butler ps
 butler logs --service butler-main --lines 100
 butler doctor --check delivery --verbose
+butler context prune --json
+butler start
+butler stop
+butler restart
 ```
+
+For the complete user-facing command list, see
+`REF-CLI-REFERENCE - Butler CLI Reference`.
 
 ## How Butler Works
 
@@ -127,6 +142,16 @@ Butler has two release shapes:
 - **Butler Service:** the local agent runtime that powers clients and workers.
 
 ## Development
+
+Source checkouts are for development, not the normal user install path. User
+installs consume service release artifacts so the Butler App web client is
+already built before `install.sh` runs.
+
+```bash
+git clone https://github.com/Hexpy-Games/butler.git ~/butler
+cd ~/butler
+bun install
+```
 
 ```bash
 bun run lint
