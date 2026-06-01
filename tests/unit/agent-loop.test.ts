@@ -17,6 +17,10 @@ const tools: AgentLoopToolDefinition[] = [{
   },
 }];
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 test("agent loop returns text-only model response", async () => {
   const result = await runAgentLoop({
     messages: [{ role: "user", content: "hello" }],
@@ -241,6 +245,131 @@ test("agent loop converts thrown tool errors into model-visible tool results", a
   expect(toolEvent?.toolResult?.ok).toBe(false);
   expect(toolEvent?.toolResult?.error).toBe("boom");
   expect(result.finalText).toBe("The tool failed truthfully.");
+});
+
+test("agent loop runs concurrency-safe tool calls in parallel and preserves result order", async () => {
+  const safeTools: AgentLoopToolDefinition[] = [
+    { name: "slow", description: "Slow safe tool.", concurrencySafe: true },
+    { name: "fast", description: "Fast safe tool.", concurrencySafe: true },
+  ];
+  let active = 0;
+  let maxActive = 0;
+  const finished: string[] = [];
+  let toolMessageNames: string[] = [];
+
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "run both" }],
+    tools: safeTools,
+    callModel: async (input) => {
+      if (input.iteration === 0) {
+        return {
+          toolCalls: [
+            { id: "call-slow", name: "slow", arguments: {} },
+            { id: "call-fast", name: "fast", arguments: {} },
+          ],
+        };
+      }
+      toolMessageNames = input.messages
+        .filter((message) => message.role === "tool")
+        .map((message) => message.name ?? "");
+      return { text: "parallel results received" };
+    },
+    executeTool: async (call) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await delay(call.name === "slow" ? 30 : 5);
+      finished.push(call.name);
+      active -= 1;
+      return { tool: call.name };
+    },
+  });
+
+  expect(result.finalText).toBe("parallel results received");
+  expect(maxActive).toBe(2);
+  expect(finished).toEqual(["fast", "slow"]);
+  expect(toolMessageNames).toEqual(["slow", "fast"]);
+  expect(result.events.map((event) => event.type)).toEqual([
+    "model_call",
+    "model_response",
+    "tool_call",
+    "tool_call",
+    "tool_result",
+    "tool_result",
+    "model_call",
+    "model_response",
+  ]);
+});
+
+test("agent loop keeps mixed concurrency-safe and unsafe tool batches serial", async () => {
+  const mixedTools: AgentLoopToolDefinition[] = [
+    { name: "safe", description: "Safe tool.", concurrencySafe: true },
+    { name: "unsafe", description: "Unsafe tool." },
+  ];
+  let active = 0;
+  let maxActive = 0;
+  const order: string[] = [];
+
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "run mixed tools" }],
+    tools: mixedTools,
+    callModel: async (input) => input.iteration === 0
+      ? {
+          toolCalls: [
+            { id: "call-safe", name: "safe", arguments: {} },
+            { id: "call-unsafe", name: "unsafe", arguments: {} },
+          ],
+        }
+      : { text: "serial results received" },
+    executeTool: async (call) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      order.push(`start:${call.name}`);
+      await delay(5);
+      order.push(`finish:${call.name}`);
+      active -= 1;
+      return { tool: call.name };
+    },
+  });
+
+  expect(result.finalText).toBe("serial results received");
+  expect(maxActive).toBe(1);
+  expect(order).toEqual([
+    "start:safe",
+    "finish:safe",
+    "start:unsafe",
+    "finish:unsafe",
+  ]);
+});
+
+test("agent loop stops repeated identical failed tool calls before loop limit", async () => {
+  let modelCalls = 0;
+
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "try a failing local action" }],
+    tools,
+    maxIterations: 8,
+    callModel: async (input) => {
+      modelCalls += 1;
+      return {
+        toolCalls: [{
+          id: `call-${input.iteration}`,
+          name: "echo",
+          arguments: { message: "same" },
+        }],
+      };
+    },
+    executeTool: async () => {
+      throw new Error("boom");
+    },
+    onRepeatedToolFailure: ({ failureCount, toolResult }) =>
+      `Stopped after ${failureCount} repeated failures: ${toolResult.error}`,
+  });
+
+  expect(modelCalls).toBe(2);
+  expect(result.stoppedByLimit).toBe(false);
+  expect(result.finalText).toBe("Stopped after 2 repeated failures: boom");
+  expect(result.events.map((event) => event.type)).toContain("repeated_tool_failure");
+  expect(result.events.map((event) => event.type)).not.toContain("loop_limit");
 });
 
 test("agent loop produces truthful partial response when loop limit is reached", async () => {
