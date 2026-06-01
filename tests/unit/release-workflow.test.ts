@@ -18,9 +18,7 @@ test("version tag release workflow publishes service artifact with packaged app 
   const workflow = readFileSync(workflowPath, "utf8");
 
   const gateIndex = workflow.indexOf("bun run release:service:gate");
-  const packageIndex = workflow.indexOf(
-    "bun run release:service:package --out dist/release/service",
-  );
+  const packageIndex = workflow.indexOf("bun run release:service:package");
   const verifyIndex = workflow.indexOf(
     "Verify packaged Butler App web client",
   );
@@ -42,6 +40,10 @@ test("version tag release workflow publishes service artifact with packaged app 
   );
   expect(workflow).toContain(
     "dist/release/service/butler-service-*-all.tar.gz",
+  );
+  expect(workflow).toContain("--artifact-base-url");
+  expect(workflow).toContain(
+    "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}",
   );
   expect(workflow).toContain(
     "dist/release/service/butler-service-*-all.tar.gz.sha256",

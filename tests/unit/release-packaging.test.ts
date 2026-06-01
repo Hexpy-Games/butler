@@ -247,9 +247,16 @@ test("service release packager creates an installable artifact with app web clie
     }
 
     const updateManifest = JSON.parse(readText(result.updateManifestPath));
+    const releaseManifest = JSON.parse(readText(result.releaseManifestPath));
+    expect(releaseManifest.artifacts[0]).toMatchObject({
+      artifactName: result.artifactName,
+      downloadUrl: `file://${result.artifactPath}`,
+      sha256: result.sha256,
+    });
     expect(updateManifest.artifacts[0]).toMatchObject({
       component: "service",
       version: result.version,
+      artifact_url: `file://${result.artifactPath}`,
       sha256: result.sha256,
       bundled_components: ["service"],
       update_policy: "explicit",
@@ -261,6 +268,34 @@ test("service release packager creates an installable artifact with app web clie
       build_target: `bun-${currentCliPlatform}`,
     });
     expect(updateManifest.app_web_client_dist).toBe(SERVICE_APP_WEB_CLIENT_DIST);
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("service release packager can write public GitHub artifact URLs", () => {
+  const outDir = mkdtempSync(join(tmpdir(), "butler-service-release-url-test-"));
+  try {
+    const result = createServiceReleasePackage({
+      root,
+      outDir,
+      artifactBaseUrl: "https://github.com/Hexpy-Games/butler/releases/download/v0.0.2/",
+      cliLauncherPlatforms: [currentServiceCliLauncherPlatform()],
+    });
+    const expectedUrl =
+      `https://github.com/Hexpy-Games/butler/releases/download/v0.0.2/${result.artifactName}`;
+
+    const releaseManifest = JSON.parse(readText(result.releaseManifestPath));
+    const updateManifest = JSON.parse(readText(result.updateManifestPath));
+
+    expect(releaseManifest.artifacts[0]).toMatchObject({
+      downloadUrl: expectedUrl,
+      sha256: result.sha256,
+    });
+    expect(updateManifest.artifacts[0]).toMatchObject({
+      artifact_url: expectedUrl,
+      sha256: result.sha256,
+    });
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }

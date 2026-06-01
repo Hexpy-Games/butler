@@ -38,7 +38,10 @@ jobs:
         run: bun run release:service:gate
 
       - name: Package service release
-        run: bun run release:service:package --out dist/release/service
+        run: |
+          bun run release:service:package \
+            --out dist/release/service \
+            --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
 
       - name: Verify packaged Butler App web client
         run: |

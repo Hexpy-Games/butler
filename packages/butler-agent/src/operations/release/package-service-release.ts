@@ -34,6 +34,7 @@ import {
 export interface ServiceReleasePackageOptions {
   root: string;
   outDir: string;
+  artifactBaseUrl?: string | null;
   cliLauncherPlatforms?: ServiceCliLauncherPlatform[];
 }
 
@@ -109,9 +110,6 @@ export function createServiceReleasePackage(
       cliLauncherPlatforms,
     );
     stripMacExtendedAttributes(stageRoot);
-    const releaseManifestPath = join(outDir, "service-release-manifest.json");
-    writeJson(releaseManifestPath, packagedManifest);
-
     const artifactName = manifest.artifacts.find((artifact) =>
       artifact.component === "service",
     )?.artifactName ?? `butler-service-${manifest.version}-all.tar.gz`;
@@ -122,10 +120,24 @@ export function createServiceReleasePackage(
     const sha256Path = `${artifactPath}.sha256`;
     writeFileSync(sha256Path, `${sha256}  ${basename(artifactPath)}\n`, "utf8");
 
+    const artifactUrl = artifactDownloadUrl(
+      options.artifactBaseUrl,
+      artifactPath,
+      artifactName,
+    );
+    const releaseManifestPath = join(outDir, "service-release-manifest.json");
+    const releaseManifest = withArtifactMetadata(
+      packagedManifest,
+      artifactName,
+      artifactUrl,
+      sha256,
+    );
+    writeJson(releaseManifestPath, releaseManifest);
+
     const updateManifestPath = join(outDir, "update-manifest.json");
     writeJson(updateManifestPath, createUpdateManifest(
-      packagedManifest,
-      artifactPath,
+      releaseManifest,
+      artifactUrl,
       sha256,
       cliLauncherPlatforms,
     ));
@@ -309,9 +321,35 @@ function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
+function artifactDownloadUrl(
+  artifactBaseUrl: string | null | undefined,
+  artifactPath: string,
+  artifactName: string,
+): string {
+  const trimmedBaseUrl = artifactBaseUrl?.trim();
+  if (!trimmedBaseUrl) return `file://${artifactPath}`;
+  return `${trimmedBaseUrl.replace(/\/+$/, "")}/${artifactName}`;
+}
+
+function withArtifactMetadata(
+  manifest: ReleaseManifest,
+  artifactName: string,
+  downloadUrl: string,
+  sha256: string,
+): ReleaseManifest {
+  return {
+    ...manifest,
+    artifacts: manifest.artifacts.map((artifact) =>
+      artifact.artifactName === artifactName
+        ? { ...artifact, downloadUrl, sha256 }
+        : artifact,
+    ),
+  };
+}
+
 function createUpdateManifest(
   manifest: ReleaseManifest,
-  artifactPath: string,
+  artifactUrl: string,
   sha256: string,
   cliLauncherPlatforms: ServiceCliLauncherPlatform[],
 ): Record<string, unknown> {
@@ -323,8 +361,8 @@ function createUpdateManifest(
       component: artifact.component,
       version: artifact.version,
       channel: artifact.channel,
-      artifact_url: `file://${artifactPath}`,
-      sha256,
+      artifact_url: artifact.downloadUrl ?? artifactUrl,
+      sha256: artifact.sha256 ?? sha256,
       signature: artifact.signature,
       bundled_components: artifact.bundledComponents,
       update_policy: artifact.updatePolicy,
@@ -350,8 +388,13 @@ function toPosix(path: string): string {
   return path.split(sep).join("/");
 }
 
-function parseCliArgs(args: string[]): { outDir: string; json: boolean } {
+function parseCliArgs(args: string[]): {
+  outDir: string;
+  artifactBaseUrl?: string | null;
+  json: boolean;
+} {
   let outDir = join(process.cwd(), "dist", "release", "service");
+  let artifactBaseUrl: string | null | undefined;
   let json = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -368,10 +411,19 @@ function parseCliArgs(args: string[]): { outDir: string; json: boolean } {
       outDir = arg.slice("--out=".length);
       continue;
     }
+    if (arg === "--artifact-base-url") {
+      artifactBaseUrl = args[index + 1] ?? "";
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--artifact-base-url=")) {
+      artifactBaseUrl = arg.slice("--artifact-base-url=".length);
+      continue;
+    }
     throw new Error(`unknown option: ${arg}`);
   }
   if (!outDir.trim()) throw new Error("--out requires a path");
-  return { outDir, json };
+  return { outDir, artifactBaseUrl, json };
 }
 
 if (import.meta.main) {
@@ -380,6 +432,7 @@ if (import.meta.main) {
     const result = createServiceReleasePackage({
       root: process.cwd(),
       outDir: args.outDir,
+      artifactBaseUrl: args.artifactBaseUrl,
     });
     if (args.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
