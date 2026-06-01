@@ -368,10 +368,13 @@ test("mock transport can drive recall context into native runtime without Telegr
         related_nodes: ["tteokbokki", "low-carb-goal"],
         score_breakdown: {
           semantic_similarity: 0.8,
+          lexical_match: 0,
+          contextual_match: 0,
           graph_activation: 0.8,
           recency_score: 0.4,
           frequency_score: 0.2,
           explicit_salience: 0,
+          evidence_confidence: 0.8,
           decision_preference_boost: 0.18,
           hub_penalty: 0,
           conflict_penalty: 0,

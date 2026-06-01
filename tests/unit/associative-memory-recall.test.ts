@@ -152,6 +152,61 @@ test("associative recall does not surface recency-only candidates", () => {
   expect(result.abstained).toBe(true);
 });
 
+test("associative recall reports lexical evidence separately from semantic similarity", () => {
+  const result = recallFromCorpus({
+    cue: "composer approval form",
+    now,
+    minScore: 0.01,
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "composer-form",
+        summary: "Composer approval form",
+        text: "The ask-first approval form replaces the composer input.",
+        source: "task-memory",
+        originalSource: "task-memory",
+        provenance: ["memory:composer-form"],
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(false);
+  expect(result.items[0]?.source).toBe("task-memory");
+  expect(result.items[0]?.score_breakdown.semantic_similarity).toBe(0);
+  expect(result.items[0]?.score_breakdown.lexical_match).toBeGreaterThan(0);
+  expect(result.items[0]?.score_breakdown.contextual_match).toBe(0);
+  expect(result.items[0]?.score_breakdown.evidence_confidence).toBe(
+    result.items[0]?.score_breakdown.lexical_match,
+  );
+});
+
+test("associative recall uses semantic similarity only for real vector candidates", () => {
+  const result = recallFromCorpus({
+    cue: "semantic episode",
+    now,
+    minScore: 0.01,
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "vector-episode",
+        summary: "A vector-backed semantic episode",
+        text: "This candidate came from a vector backend.",
+        source: "vector",
+        provenance: ["vector:episode-1"],
+        vectorSimilarity: 0.82,
+      }],
+    },
+  });
+
+  expect(result.items[0]?.source).toBe("vector");
+  expect(result.items[0]?.score_breakdown.semantic_similarity).toBe(0.82);
+  expect(result.items[0]?.score_breakdown.lexical_match).toBeGreaterThan(0);
+});
+
 test("associative recall applies contradiction penalties", () => {
   const result = recallFromCorpus({
     cue: "보고는 자세하게 하면 되나요?",

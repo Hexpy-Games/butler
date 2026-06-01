@@ -119,7 +119,8 @@ test("shadow baseline protects current recall behavior across key retrieval case
     },
   ]);
 
-  expect(results["strong lexical and graph anchor"]?.items[0]?.score_breakdown.semantic_similarity).toBeGreaterThan(0);
+  expect(results["strong lexical and graph anchor"]?.items[0]?.score_breakdown.semantic_similarity).toBe(0);
+  expect(results["strong lexical and graph anchor"]?.items[0]?.score_breakdown.lexical_match).toBeGreaterThan(0);
   expect(results["vague prior-reference recall still finds the prior discussion"]?.items[0]?.score_breakdown.recency_score).toBeGreaterThan(0);
 });
 
