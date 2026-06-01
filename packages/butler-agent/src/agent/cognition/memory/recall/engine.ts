@@ -5,6 +5,10 @@ import { sanitizeProjectMemoryId } from "../project-memory.ts";
 import type { RetrievalEvidenceRequirement } from "../retrieval-planning.ts";
 import { cognitionMemoryRoot } from "../../paths.ts";
 import { recordOperationalMetric } from "../../../../operations/metrics/operational-metrics.ts";
+import {
+  searchVectorEpisodes,
+  type VectorEpisodeBackend,
+} from "./vector.ts";
 
 export type RecallSource = "hot-cache" | "vector" | "graph" | "explicit" | "hybrid" | "project-memory" | "task-memory";
 
@@ -808,6 +812,87 @@ export function recallMemory(input: {
     });
     throw error;
   }
+}
+
+export async function recallMemoryWithVector(input: {
+  butlerData: string;
+  cue: string;
+  projectId?: string;
+  context?: RecallContextInput;
+  evidencePolicy?: RecallEvidencePolicy;
+  vectorQueries?: string[];
+  vectorBackend?: VectorEpisodeBackend;
+  vectorTimeoutMs?: number;
+  limit?: number;
+  now?: number;
+  minScore?: number;
+}): Promise<AssociativeRecallResult> {
+  const startedAt = Date.now();
+  const projectScoped = Boolean(input.projectId?.trim());
+  try {
+    const corpus = loadRecallCorpus({
+      butlerData: input.butlerData,
+      projectId: input.projectId,
+    });
+    const vectorQueries = uniqueQueries([
+      input.cue,
+      ...(input.vectorQueries ?? []),
+    ]).slice(0, 3);
+    const vectorDiagnostics: string[] = [];
+    for (const query of vectorQueries) {
+      const vectorResult = await searchVectorEpisodes({
+        butlerData: input.butlerData,
+        query,
+        projectId: input.projectId,
+        limit: input.limit,
+        timeoutMs: input.vectorTimeoutMs,
+        backend: input.vectorBackend,
+      });
+      corpus.candidates.push(...vectorResult.candidates);
+      vectorDiagnostics.push(...vectorResult.diagnostics);
+    }
+    const result = recallFromCorpus({
+      cue: input.cue,
+      corpus,
+      context: input.context,
+      evidencePolicy: input.evidencePolicy,
+      limit: input.limit,
+      now: input.now,
+      minScore: input.minScore,
+    });
+    const resultWithDiagnostics = {
+      ...result,
+      diagnostics: [...result.diagnostics, ...vectorDiagnostics],
+    };
+    recordRecallMetric({
+      butlerData: input.butlerData,
+      startedAt,
+      result: resultWithDiagnostics,
+      projectScoped,
+    });
+    return resultWithDiagnostics;
+  } catch (error) {
+    recordRecallError({
+      butlerData: input.butlerData,
+      startedAt,
+      projectScoped,
+    });
+    throw error;
+  }
+}
+
+function uniqueQueries(values: string[]): string[] {
+  const output: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const query = value.trim();
+    if (query.length < 2) continue;
+    const key = query.toLocaleLowerCase("en-US");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(query);
+  }
+  return output;
 }
 
 export function createCachedRecallMemoryRunner(input: {

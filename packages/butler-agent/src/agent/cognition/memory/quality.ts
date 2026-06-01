@@ -4,6 +4,7 @@ import { Database } from "bun:sqlite";
 import { TaskStore } from "../../work/task-store.ts";
 import {
   recallMemory,
+  recallMemoryWithVector,
   type AssociativeRecallResult,
 } from "./recall/engine.ts";
 import { readProjectRefreshFailures, sanitizeProjectMemoryId } from "./project-memory.ts";
@@ -62,7 +63,7 @@ export interface MemoryRecallResult {
   results: Array<{
     text: string;
     score: number;
-    source: "hot-cache" | "project-memory" | "task-memory" | "rules" | "graph";
+    source: "hot-cache" | "project-memory" | "task-memory" | "rules" | "graph" | "vector";
     path: string;
   }>;
   items: AssociativeRecallResult["items"];
@@ -451,23 +452,60 @@ export function recallMemoryEvidence(input: {
     projectId: input.projectId,
     limit: input.limit,
   });
+  return memoryRecallEvidenceFromRecall({
+    butlerData: input.butlerData,
+    cue,
+    recall,
+  });
+}
+
+export async function recallMemoryEvidenceWithVector(input: {
+  butlerData: string;
+  cue: string;
+  projectId?: string;
+  limit?: number;
+  vectorQueries?: string[];
+}): Promise<MemoryRecallResult> {
+  const cue = input.cue.trim();
+  if (!cue) throw new Error("memory recall requires cue");
+  const recall = await recallMemoryWithVector({
+    butlerData: input.butlerData,
+    cue,
+    projectId: input.projectId,
+    limit: input.limit,
+    vectorQueries: input.vectorQueries,
+  });
+  return memoryRecallEvidenceFromRecall({
+    butlerData: input.butlerData,
+    cue,
+    recall,
+  });
+}
+
+function memoryRecallEvidenceFromRecall(input: {
+  butlerData: string;
+  cue: string;
+  recall: AssociativeRecallResult;
+}): MemoryRecallResult {
+  const { butlerData, cue, recall } = input;
   return {
     cue,
     seeds: recall.seeds,
     results: recall.items.flatMap((item) => {
-      const source = item.originalSource;
+      const source = item.originalSource ?? (item.source === "vector" ? "vector" : undefined);
       const path = item.provenance[0] ?? "";
       if (
         source !== "hot-cache" &&
         source !== "project-memory" &&
         source !== "task-memory" &&
         source !== "rules" &&
-        source !== "graph"
+        source !== "graph" &&
+        source !== "vector"
       ) {
         return [];
       }
       return [{
-        text: path.startsWith(input.butlerData) ? compactEvidenceText(readText(path), 700) : item.summary,
+        text: path.startsWith(butlerData) ? compactEvidenceText(readText(path), 700) : item.summary,
         score: item.confidence,
         source,
         path,

@@ -63,6 +63,7 @@ import { readUsageMonitor } from "../../operations/metrics/usage-monitor.ts";
 import {
   ingestTaskOutcomeMemory,
   recallMemoryEvidence,
+  recallMemoryEvidenceWithVector,
   readMemoryHealth,
   updateExplicitMemory,
 } from "../cognition/memory/quality.ts";
@@ -1314,6 +1315,15 @@ export const BUTLER_TOOLS: ButlerToolDefinition[] = [
       properties: {
         cue: { type: "string", description: "Memory recall cue text." },
         limit: { type: "integer", description: "Maximum number of memory recall results." },
+        include_vector: {
+          type: "boolean",
+          description: "Whether to try vector episode search in addition to lexical, graph, project/task, and explicit memory. Defaults to true for tool calls.",
+        },
+        vector_queries: {
+          type: "array",
+          description: "Optional planner-expanded semantic episode queries.",
+          items: { type: "string" },
+        },
       },
       required: ["cue"],
     },
@@ -4017,13 +4027,28 @@ export function createButlerToolExecutor(input: {
     if (call.name === "recall_memory") {
       const cue = typeof call.args.cue === "string" ? call.args.cue.trim() : "";
       if (!cue) throw new Error("recall_memory requires cue");
-      return {
-        ok: true,
-        ...recallMemoryEvidence({
+      const vectorQueries = Array.isArray(call.args.vector_queries)
+        ? call.args.vector_queries.filter((query): query is string =>
+          typeof query === "string" && query.trim().length > 0,
+        )
+        : undefined;
+      const recall = call.args.include_vector === false
+        ? recallMemoryEvidence({
           butlerData: input.butlerData,
           cue,
+          projectId: input.projectId,
           limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
-        }),
+        })
+        : await recallMemoryEvidenceWithVector({
+          butlerData: input.butlerData,
+          cue,
+          projectId: input.projectId,
+          limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
+          vectorQueries,
+        });
+      return {
+        ok: true,
+        ...recall,
       };
     }
 
