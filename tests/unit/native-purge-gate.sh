@@ -13,6 +13,17 @@ done
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+LEDGER_ROOT="${PROJECT_LEDGER_ROOT:-}"
+if [[ -z "$LEDGER_ROOT" && -n "${BUTLER_DATA:-}" && -s "$BUTLER_DATA/project-ledger/projects/butler/project.json" ]]; then
+  LEDGER_ROOT="$BUTLER_DATA/project-ledger/projects/butler"
+fi
+if [[ -z "$LEDGER_ROOT" && -s "$HOME/.butler/project-ledger/projects/butler/project.json" ]]; then
+  LEDGER_ROOT="$HOME/.butler/project-ledger/projects/butler"
+fi
+if [[ -z "$LEDGER_ROOT" ]]; then
+  LEDGER_ROOT=".project-ledger"
+fi
+
 fail() {
   echo "FAIL: $*" >&2
   exit 1
@@ -30,21 +41,22 @@ done
 [[ ! -e .env ]] || fail ".env must not exist in the checkout; private credentials belong under \$BUTLER_DATA/.env"
 
 for required_doc in \
-  .project-ledger/references/architecture.md \
-  .project-ledger/references/roles.md \
-  .project-ledger/references/memory-architecture.md \
-  .project-ledger/references/project-structure.md \
-  .project-ledger/specs/managed-bun-runtime.md \
-  .project-ledger/specs/openai-auth-and-models.md \
-  .project-ledger/specs/native-product.md; do
-  [[ -s "$required_doc" ]] || fail "required native product doc is missing or empty: $required_doc"
+  references/architecture.md \
+  references/roles.md \
+  references/memory-architecture.md \
+  references/project-structure.md \
+  specs/managed-bun-runtime.md \
+  specs/openai-auth-and-models.md \
+  specs/native-product.md; do
+  required_path="$LEDGER_ROOT/$required_doc"
+  [[ -s "$required_path" ]] || fail "required native product doc is missing or empty: .project-ledger/$required_doc"
 done
 
-rg -q "Butler.*Steward.*Worker|Steward.*Worker|Worker" .project-ledger/references/roles.md \
+rg -q "Butler.*Steward.*Worker|Steward.*Worker|Worker" "$LEDGER_ROOT/references/roles.md" \
   || fail "role documentation must describe the Butler/Steward/Worker model"
-rg -q "hot cache|vector|graph|Transcript Ingestion|Maintenance Cycle" .project-ledger/references/memory-architecture.md \
+rg -q "hot cache|vector|graph|Transcript Ingestion|Maintenance Cycle" "$LEDGER_ROOT/references/memory-architecture.md" \
   || fail "memory documentation must describe hot cache, indexes, ingestion, and maintenance"
-rg -q "Source Code|Product Resources|Operations|Private Data" .project-ledger/references/project-structure.md \
+rg -q "Source Code|Product Resources|Operations|Private Data" "$LEDGER_ROOT/references/project-structure.md" \
   || fail "project structure documentation must describe active source areas and private data"
 
 for required_root_dir in packages tools tests; do
@@ -108,11 +120,11 @@ rg -q 'gpt-5\.5-codex' README.md install.sh butler.config.template.json packages
 if rg -n 'auto:codex-latest' install.sh butler.config.template.json; then
   fail "legacy auto Codex alias must not be used as an install or template default"
 fi
-rg -q 'Codex subscription login|Codex 구독 로그인' README.md .env.example install.sh .project-ledger/specs/openai-auth-and-models.md \
+rg -q 'Codex subscription login|Codex 구독 로그인' README.md .env.example install.sh "$LEDGER_ROOT/specs/openai-auth-and-models.md" \
   || fail "Codex subscription login must be documented and installer-facing"
-rg -q 'originator=butler|BUTLER_CODEX_OAUTH_ORIGINATOR|Butler-owned transport' README.md .env.example install.sh .project-ledger/specs/openai-auth-and-models.md \
+rg -q 'originator=butler|BUTLER_CODEX_OAUTH_ORIGINATOR|Butler-owned transport' README.md .env.example install.sh "$LEDGER_ROOT/specs/openai-auth-and-models.md" \
   || fail "Codex subscription login must use Butler-owned identity rather than a third-party originator"
-rg -q 'Butler runtime|managed runtime|BUTLER_BUN' README.md install.sh .env.example .project-ledger/specs/managed-bun-runtime.md packages/butler-agent/scripts/lib/butler-runtime.sh \
+rg -q 'Butler runtime|managed runtime|BUTLER_BUN' README.md install.sh .env.example "$LEDGER_ROOT/specs/managed-bun-runtime.md" packages/butler-agent/scripts/lib/butler-runtime.sh \
   || fail "managed Butler runtime must be documented and installer-facing"
 
 if rg -n '\$BUTLER_HOME/\.env|\$\{BUTLER_HOME\}/\.env|join\([^)]*BUTLER_HOME[^)]*"\.env"|join\([^)]*butlerHome[^)]*"\.env"' \

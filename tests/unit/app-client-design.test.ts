@@ -2,11 +2,12 @@ import { expect, test, describe } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { resolveRepoOrLedgerPath } from "../support/project-ledger-root.ts";
 
 const root = process.cwd();
 
 function read(path: string): string {
-  return readFileSync(join(root, path), "utf8");
+  return readFileSync(resolveRepoOrLedgerPath(path), "utf8");
 }
 
 function collapseWhitespace(value: string): string {
@@ -1252,9 +1253,10 @@ test("conversation UI renders user bubbles and assistant documents with retryabl
   expect(emptyState).toContain(
     'titleIcon={<img alt="" draggable={false} src={titleIconSrc} />}',
   );
-  expect(emptyState).toContain("const momentLabel = newChatMomentLabel()");
+  expect(emptyState).toContain(
+    "const momentLabel = briefing?.moment ?? newChatMomentLabel();",
+  );
   expect(emptyState).toContain("moment={momentLabel}");
-  expect(emptyState).not.toContain("briefing?.moment");
   expect(emptyState).not.toContain("<ButlerMarkIcon");
   expect(renderer).toContain("<ButlerMarkIcon");
   expect(promptSuggestionList).toContain("titleIcon");
