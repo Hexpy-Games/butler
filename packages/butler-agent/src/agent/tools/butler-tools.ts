@@ -67,10 +67,15 @@ import {
   readMemoryHealth,
   updateExplicitMemory,
 } from "../cognition/memory/quality.ts";
-import type {
-  RetrievalEvidenceRequirement,
-  RetrievalStrategy,
+import {
+  createRetrievalPlan,
+  type RetrievalEvidenceRequirement,
+  type RetrievalGeneratedQuery,
+  type RetrievalPlanningInput,
+  type RetrievalPlanningResult,
+  type RetrievalStrategy,
 } from "../cognition/memory/retrieval-planning.ts";
+import type { VectorEpisodeBackend } from "../cognition/memory/recall/vector.ts";
 import { queryMemory } from "../cognition/memory/exact-query.ts";
 import { readReflectiveProfileSummary, type ProfilingMode } from "../../personalization/profiling.ts";
 import {
@@ -121,6 +126,59 @@ function normalizeRecallEnumArray<T extends string>(value: unknown, allowed: Set
     output.push(item as T);
   }
   return output;
+}
+
+function normalizeRecallGeneratedQueries(value: unknown): RetrievalGeneratedQuery[] {
+  if (!Array.isArray(value)) return [];
+  const output: RetrievalGeneratedQuery[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item as Record<string, unknown>;
+    const strategy = typeof raw.strategy === "string" &&
+      RECALL_RETRIEVAL_STRATEGIES.has(raw.strategy as RetrievalStrategy)
+      ? raw.strategy as RetrievalStrategy
+      : null;
+    const query = typeof raw.query === "string" ? raw.query.trim() : "";
+    if (!strategy || query.length < 2) continue;
+    const key = `${strategy}:${query.toLocaleLowerCase("en-US")}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push({ strategy, query });
+  }
+  return output;
+}
+
+function mergeRecallQueries(...groups: Array<string[] | undefined>): string[] | undefined {
+  const output: string[] = [];
+  const seen = new Set<string>();
+  for (const group of groups) {
+    for (const value of group ?? []) {
+      const query = value.trim();
+      if (query.length < 2) continue;
+      const key = query.toLocaleLowerCase("en-US");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      output.push(query);
+    }
+  }
+  return output.length > 0 ? output : undefined;
+}
+
+function vectorQueriesFromGeneratedQueries(queries: RetrievalGeneratedQuery[]): string[] {
+  return queries
+    .filter((query) => query.strategy === "search_vector_episode")
+    .map((query) => query.query);
+}
+
+function retrievalPlannerDiagnostics(result: RetrievalPlanningResult | null): string[] {
+  if (!result) return [];
+  return [
+    "retrieval_planner=used",
+    `retrieval_planner_attempts=${result.attempts}`,
+    ...result.diagnostics.map((entry) => `retrieval_planner_${entry}`),
+    ...(result.fallbackReason ? [`retrieval_planner_fallback=${result.fallbackReason}`] : []),
+  ];
 }
 import {
   validateSkillCatalog,
@@ -1357,6 +1415,31 @@ export const BUTLER_TOOLS: ButlerToolDefinition[] = [
           type: "array",
           description: "Optional planner-expanded semantic episode queries.",
           items: { type: "string" },
+        },
+        generated_queries: {
+          type: "array",
+          description:
+            "Optional structured retrieval-plan queries. `search_vector_episode` queries are used as vector episode queries.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              strategy: {
+                type: "string",
+                enum: [
+                  "read_recent_context",
+                  "query_exact_transcript",
+                  "search_lexical_memory",
+                  "search_vector_episode",
+                  "read_graph_memory",
+                  "read_explicit_memory",
+                  "read_task_state",
+                ],
+              },
+              query: { type: "string" },
+            },
+            required: ["strategy", "query"],
+          },
         },
         strategies: {
           type: "array",
@@ -3738,6 +3821,9 @@ export function createButlerToolExecutor(input: {
   workerModel?: string;
   workerModelRules?: WorkerModelSelectionRule[];
   searchPlannerModel?: string;
+  memoryRetrievalPlanner?: (input: RetrievalPlanningInput) => Promise<RetrievalPlanningResult>;
+  memoryVectorBackend?: VectorEpisodeBackend;
+  memoryVectorTimeoutMs?: number;
   dispatchTask?: typeof dispatchBackgroundTask;
   webSearchProvider?: WebSearchProvider;
   searchPlanner?: (input: SmartSearchPlanningInput) => Promise<SmartSearchPlanningResult>;
@@ -4095,13 +4181,34 @@ export function createButlerToolExecutor(input: {
     if (call.name === "recall_memory") {
       const cue = typeof call.args.cue === "string" ? call.args.cue.trim() : "";
       if (!cue) throw new Error("recall_memory requires cue");
-      const vectorQueries = Array.isArray(call.args.vector_queries)
-        ? call.args.vector_queries.filter((query): query is string =>
-          typeof query === "string" && query.trim().length > 0,
-        )
-        : undefined;
-      const strategies = normalizeRecallEnumArray(call.args.strategies, RECALL_RETRIEVAL_STRATEGIES);
-      const evidenceRequired = normalizeRecallEnumArray(call.args.evidence_required, RECALL_EVIDENCE_REQUIREMENTS);
+      const explicitVectorQueries = stringArray(call.args.vector_queries);
+      const explicitGeneratedQueries = normalizeRecallGeneratedQueries(call.args.generated_queries);
+      let strategies = normalizeRecallEnumArray(call.args.strategies, RECALL_RETRIEVAL_STRATEGIES);
+      let evidenceRequired = normalizeRecallEnumArray(call.args.evidence_required, RECALL_EVIDENCE_REQUIREMENTS);
+      let plannedGeneratedQueries = explicitGeneratedQueries;
+      let plannerResult: RetrievalPlanningResult | null = null;
+      const shouldPlanRecall = strategies.length === 0 &&
+        evidenceRequired.length === 0 &&
+        explicitGeneratedQueries.length === 0 &&
+        (input.memoryRetrievalPlanner || input.searchPlannerModel || input.workerModel);
+      if (shouldPlanRecall) {
+        const planner = input.memoryRetrievalPlanner ?? createRetrievalPlan;
+        plannerResult = await planner({
+          request: input.searchPlannerOriginalRequest ?? cue,
+          recentContext: input.turnContext,
+          projectId: input.projectId,
+          sessionId: input.sessionId,
+          model: input.searchPlannerModel ?? input.workerModel,
+        });
+        strategies = plannerResult.plan.strategies;
+        evidenceRequired = plannerResult.plan.evidence_required;
+        plannedGeneratedQueries = plannerResult.plan.generated_queries;
+      }
+      const vectorQueries = mergeRecallQueries(
+        explicitVectorQueries,
+        vectorQueriesFromGeneratedQueries(explicitGeneratedQueries),
+        vectorQueriesFromGeneratedQueries(plannedGeneratedQueries),
+      );
       const evidencePolicy = strategies.length > 0 || evidenceRequired.length > 0
         ? {
           strategies,
@@ -4129,10 +4236,16 @@ export function createButlerToolExecutor(input: {
           limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
           vectorQueries,
           evidencePolicy,
+          vectorBackend: input.memoryVectorBackend,
+          vectorTimeoutMs: input.memoryVectorTimeoutMs,
         });
       return {
         ok: true,
         ...recall,
+        diagnostics: [
+          ...recall.diagnostics,
+          ...retrievalPlannerDiagnostics(plannerResult),
+        ],
       };
     }
 

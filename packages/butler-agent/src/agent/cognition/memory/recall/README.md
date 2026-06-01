@@ -37,9 +37,13 @@ Exact quote/date/count/first/last requests should use `query_memory` or recent
 conversation context instead of summary recall alone.
 
 Vector episode search is attempted by the `recall_memory` tool unless the tool
-call disables it. If LanceDB or the embed server is unavailable, recall keeps
-lexical, contextual, graph, explicit, project, and task-memory fallback paths
-and adds degraded-mode diagnostics such as `vector=unavailable:*`.
+call disables it. Tool calls can provide a structured retrieval policy directly;
+when they do not and the runtime has a model available, Butler runs the bounded
+retrieval planner before recall and forwards generated `search_vector_episode`
+queries into vector search. If LanceDB or the embed server is unavailable,
+recall keeps lexical, contextual, graph, explicit, project, and task-memory
+fallback paths and adds degraded-mode diagnostics such as
+`vector=unavailable:*`.
 
 ## Related Specs
 

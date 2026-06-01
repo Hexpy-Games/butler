@@ -103,6 +103,26 @@ test("retrieval planner normalizes enum fields and drops unselected query strate
   expect(plan.max_latency_ms).toBe(10_000);
 });
 
+test("retrieval planner accepts evidence-required-only plans", async () => {
+  const result = await createRetrievalPlan({
+    request: "runtime decision evidence",
+    runPrompt: async () => JSON.stringify({
+      self_sufficient: true,
+      missing_referents: [],
+      strategies: [],
+      generated_queries: [],
+      evidence_required: ["project_memory_hit"],
+      max_latency_ms: 600,
+    }),
+  });
+
+  expect(result.usedPlanner).toBe(true);
+  expect(result.fallbackReason).toBeUndefined();
+  expect(result.plan.strategies).toEqual([]);
+  expect(result.plan.generated_queries).toEqual([]);
+  expect(result.plan.evidence_required).toEqual(["project_memory_hit"]);
+});
+
 test("invalid planner output falls back to conservative local retrieval without blocking", async () => {
   let calls = 0;
   const result = await createRetrievalPlan({

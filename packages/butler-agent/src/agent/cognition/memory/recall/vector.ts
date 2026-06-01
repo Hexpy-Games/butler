@@ -27,8 +27,18 @@ export interface VectorEpisodeBackend {
     limit: number;
     fallbackLimit?: number;
     projectId?: string;
-  }): Promise<VectorEpisodeRow[]>;
+  }): Promise<VectorEpisodeSearchRows>;
 }
+
+export type VectorProjectFilterMode = "none" | "prefilter" | "postfilter";
+
+export type VectorEpisodeSearchRows =
+  | VectorEpisodeRow[]
+  | {
+    rows: VectorEpisodeRow[];
+    projectFilterMode?: VectorProjectFilterMode;
+    limit?: number;
+  };
 
 export interface VectorEpisodeSearchResult {
   candidates: RecallCandidate[];
@@ -97,6 +107,10 @@ export async function searchVectorEpisodes(input: {
   const fallbackLimit = projectId ? overfetchLimit(limit) : limit;
   const searchLimit = canPrefilterProject ? limit : fallbackLimit;
   let rows: VectorEpisodeRow[];
+  let actualProjectFilterMode: VectorProjectFilterMode = projectId
+    ? (canPrefilterProject ? "prefilter" : "postfilter")
+    : "none";
+  let actualSearchLimit = searchLimit;
   try {
     const searchResult = await withTimeout(
       () => backend.search({
@@ -113,7 +127,10 @@ export async function searchVectorEpisodes(input: {
       recordVectorCircuitFailure(backend);
       return { candidates: [], diagnostics: ["vector=unavailable:query-timeout"] };
     }
-    rows = searchResult.value;
+    const normalizedSearch = normalizeVectorSearchRows(searchResult.value);
+    rows = normalizedSearch.rows;
+    actualProjectFilterMode = normalizedSearch.projectFilterMode ?? actualProjectFilterMode;
+    actualSearchLimit = normalizedSearch.limit ?? actualSearchLimit;
   } catch {
     recordVectorCircuitFailure(backend);
     return { candidates: [], diagnostics: ["vector=unavailable:query-failed"] };
@@ -130,8 +147,8 @@ export async function searchVectorEpisodes(input: {
     diagnostics: [
       "vector=ok",
       `vector_rows=${rows.length}`,
-      `vector_project_filter=${projectId ? (canPrefilterProject ? "prefilter" : "postfilter") : "none"}`,
-      `vector_search_limit=${searchLimit}`,
+      `vector_project_filter=${actualProjectFilterMode}`,
+      `vector_search_limit=${actualSearchLimit}`,
       `vector_rows_without_score=${rowsWithoutScore}`,
       `vector_candidates=${candidates.length}`,
     ],
@@ -198,14 +215,25 @@ export function createLanceDbMemoryVectorBackend(input?: {
       const table = await db.openTable(input.tableName);
       const search = table.search(input.vector) as LanceDbSearchBuilder;
       if (input.projectId && typeof search.where === "function") {
-        return await search
+        const rows = await search
           .where(`project = ${lanceStringLiteral(input.projectId)}`)
           .limit(input.limit)
           .toArray() as VectorEpisodeRow[];
+        return {
+          rows,
+          projectFilterMode: "prefilter",
+          limit: input.limit,
+        };
       }
-      return await search
+      const fallbackLimit = input.fallbackLimit ?? input.limit;
+      const rows = await search
         .limit(input.fallbackLimit ?? input.limit)
         .toArray() as VectorEpisodeRow[];
+      return {
+        rows,
+        projectFilterMode: input.projectId ? "postfilter" : "none",
+        limit: fallbackLimit,
+      };
     },
   };
 }
@@ -229,6 +257,21 @@ const vectorCircuitStates = new WeakMap<VectorEpisodeBackend, {
 
 function overfetchLimit(limit: number): number {
   return Math.max(limit, Math.min(50, limit * 5));
+}
+
+function normalizeVectorSearchRows(value: VectorEpisodeSearchRows): {
+  rows: VectorEpisodeRow[];
+  projectFilterMode?: VectorProjectFilterMode;
+  limit?: number;
+} {
+  if (Array.isArray(value)) return { rows: value };
+  return {
+    rows: Array.isArray(value.rows) ? value.rows : [],
+    projectFilterMode: value.projectFilterMode,
+    limit: typeof value.limit === "number" && Number.isFinite(value.limit)
+      ? value.limit
+      : undefined,
+  };
 }
 
 function remainingBudgetMs(startedAt: number, timeoutMs: number): number {
