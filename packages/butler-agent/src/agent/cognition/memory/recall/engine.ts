@@ -5,7 +5,7 @@ import { sanitizeProjectMemoryId } from "../project-memory.ts";
 import { cognitionMemoryRoot } from "../../paths.ts";
 import { recordOperationalMetric } from "../../../../operations/metrics/operational-metrics.ts";
 
-export type RecallSource = "hot-cache" | "vector" | "graph" | "explicit" | "hybrid";
+export type RecallSource = "hot-cache" | "vector" | "graph" | "explicit" | "hybrid" | "project-memory" | "task-memory";
 
 export interface RecallNode {
   id: string;
@@ -32,6 +32,8 @@ export interface RecallCandidate {
   timestamp?: number;
   frequency?: number;
   explicitSalience?: number;
+  vectorSimilarity?: number;
+  contextualScore?: number;
   supersededBy?: string;
   contradicts?: string[];
 }
@@ -45,10 +47,13 @@ export interface RecallCorpus {
 
 export interface RecallScoreBreakdown {
   semantic_similarity: number;
+  lexical_match: number;
+  contextual_match: number;
   graph_activation: number;
   recency_score: number;
   frequency_score: number;
   explicit_salience: number;
+  evidence_confidence: number;
   decision_preference_boost: number;
   hub_penalty: number;
   conflict_penalty: number;
@@ -106,11 +111,88 @@ export function extractRecallSeeds(cue: string): string[] {
     .slice(0, 24);
 }
 
-function keywordScore(text: string, seeds: string[]): number {
-  if (seeds.length === 0) return 0;
-  const lower = text.toLowerCase();
-  const hits = seeds.filter((seed) => lower.includes(seed)).length;
-  return hits / seeds.length;
+function lexicalTokens(text: string): string[] {
+  return text
+    .normalize("NFC")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}._-]+/u)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 2);
+}
+
+function frequencyMap(tokens: string[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const token of tokens) map.set(token, (map.get(token) ?? 0) + 1);
+  return map;
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+interface LexicalStats {
+  queryTerms: string[];
+  documentFrequency: Map<string, number>;
+  averageDocumentLength: number;
+  documentCount: number;
+}
+
+function buildLexicalStats(candidates: RecallCandidate[], seeds: string[]): LexicalStats {
+  const queryTerms = [...new Set(seeds.flatMap((seed) => lexicalTokens(seed)))];
+  const documentFrequency = new Map<string, number>();
+  let totalDocumentLength = 0;
+  for (const candidate of candidates) {
+    const documentTokens = lexicalTokens(`${candidate.summary}\n${candidate.text}`);
+    const uniqueDocumentTokens = new Set(documentTokens);
+    totalDocumentLength += documentTokens.length;
+    for (const term of queryTerms) {
+      if (uniqueDocumentTokens.has(term)) documentFrequency.set(term, (documentFrequency.get(term) ?? 0) + 1);
+    }
+  }
+  return {
+    queryTerms,
+    documentFrequency,
+    averageDocumentLength: candidates.length > 0 ? totalDocumentLength / candidates.length : 0,
+    documentCount: candidates.length,
+  };
+}
+
+function idf(term: string, stats: LexicalStats): number {
+  const frequency = stats.documentFrequency.get(term) ?? 0;
+  if (frequency === 0 || stats.documentCount === 0) return 0;
+  return Math.log(1 + (stats.documentCount - frequency + 0.5) / (frequency + 0.5));
+}
+
+function lexicalScore(candidate: RecallCandidate, stats: LexicalStats): number {
+  if (stats.queryTerms.length === 0 || stats.documentCount === 0) return 0;
+  const tokens = lexicalTokens(`${candidate.summary}\n${candidate.text}`);
+  if (tokens.length === 0) return 0;
+  const frequencies = frequencyMap(tokens);
+  const averageLength = stats.averageDocumentLength > 0 ? stats.averageDocumentLength : tokens.length;
+  const k1 = 1.2;
+  const b = 0.75;
+  let score = 0;
+  let availableQueryWeight = 0;
+  for (const term of stats.queryTerms) {
+    const termIdf = idf(term, stats);
+    if (termIdf <= 0) continue;
+    availableQueryWeight += termIdf;
+    const termFrequency = frequencies.get(term) ?? 0;
+    if (termFrequency === 0) continue;
+    const lengthNormalization = k1 * (1 - b + b * (tokens.length / averageLength));
+    score += termIdf * ((termFrequency * (k1 + 1)) / (termFrequency + lengthNormalization));
+  }
+  if (availableQueryWeight <= 0) return 0;
+  return clamp01(score / availableQueryWeight);
+}
+
+function semanticScore(candidate: RecallCandidate): number {
+  if (candidate.source !== "vector" || typeof candidate.vectorSimilarity !== "number") return 0;
+  return clamp01(candidate.vectorSimilarity);
+}
+
+function contextualScore(candidate: RecallCandidate): number {
+  return clamp01(candidate.contextualScore ?? 0);
 }
 
 function recencyScore(timestamp: number | undefined, now: number): number {
@@ -207,12 +289,15 @@ export function recallFromCorpus(input: {
   const limit = Math.max(1, Math.min(10, Math.trunc(input.limit ?? DEFAULT_LIMIT)));
   const now = input.now ?? Date.now();
   const activation = activateGraph(input.corpus, seeds);
+  const lexicalStats = buildLexicalStats(input.corpus.candidates, seeds);
   const degree = buildDegreeMap(input.corpus);
   const activeCandidateIds = new Set(input.corpus.candidates.map((candidate) => candidate.id));
 
   const scored = input.corpus.candidates
     .map((candidate) => {
-      const semantic = keywordScore(`${candidate.summary}\n${candidate.text}`, seeds);
+      const semantic = semanticScore(candidate);
+      const lexical = lexicalScore(candidate, lexicalStats);
+      const contextual = contextualScore(candidate);
       const graph = candidateGraphActivation(candidate, activation);
       const recency = recencyScore(candidate.timestamp, now);
       const frequency = frequencyScore(candidate.frequency);
@@ -221,26 +306,32 @@ export function recallFromCorpus(input: {
       const hub = candidateHubPenalty(candidate, degree);
       const conflict = candidateConflictPenalty(candidate, activeCandidateIds);
       const superseded = candidate.supersededBy && activeCandidateIds.has(candidate.supersededBy) ? 0.7 : 0;
+      const evidence = Math.max(semantic, lexical, contextual, graph, explicit);
       const total =
-        semantic * 0.38 +
-        graph * 0.32 +
+        semantic * 0.32 +
+        lexical * 0.32 +
+        contextual * 0.18 +
+        graph * 0.28 +
         recency * 0.08 +
-        frequency * 0.07 +
+        frequency * 0.06 +
         explicit * 0.18 +
         boost -
         hub * 0.25 -
         conflict -
         superseded;
-      const hasEvidence = semantic > 0 || graph > 0 || explicit > 0;
+      const hasEvidence = evidence > 0;
       return {
         candidate,
         hasEvidence,
         breakdown: {
           semantic_similarity: semantic,
+          lexical_match: lexical,
+          contextual_match: contextual,
           graph_activation: graph,
           recency_score: recency,
           frequency_score: frequency,
           explicit_salience: explicit,
+          evidence_confidence: evidence,
           decision_preference_boost: boost,
           hub_penalty: hub,
           conflict_penalty: conflict,
@@ -465,7 +556,7 @@ export function loadRecallCorpus(input: { butlerData: string; projectId?: string
       id: `task:${path}`,
       path,
       text,
-      source: "vector",
+      source: "task-memory",
       originalSource: "task-memory",
     }));
   }
@@ -480,7 +571,7 @@ export function loadRecallCorpus(input: { butlerData: string; projectId?: string
       id: `project:${path}`,
       path,
       text,
-      source: "vector",
+      source: "project-memory",
       originalSource: "project-memory",
     }));
   }
