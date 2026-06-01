@@ -32,8 +32,10 @@ tag you want to install. Release artifacts already include the built Butler App
 web client that the local app gateway serves.
 
 ```bash
+cd ~
+wget https://github.com/Hexpy-Games/butler/releases/download/v0.0.2/butler-service-0.0.2-all.tar.gz
 mkdir -p ~/butler
-tar -xzf ~/Downloads/butler-service-*-all.tar.gz -C ~/butler
+tar -xzf ~/butler-service-*-all.tar.gz -C ~/butler
 cd ~/butler
 ./install.sh
 ```
