@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "fs";
 import { basename, join } from "path";
 import { Database } from "bun:sqlite";
 import { sanitizeProjectMemoryId } from "../project-memory.ts";
+import type { RetrievalEvidenceRequirement } from "../retrieval-planning.ts";
 import { cognitionMemoryRoot } from "../../paths.ts";
 import { recordOperationalMetric } from "../../../../operations/metrics/operational-metrics.ts";
 
@@ -36,6 +37,16 @@ export interface RecallCandidate {
   contextualScore?: number;
   supersededBy?: string;
   contradicts?: string[];
+}
+
+export interface RecallContextInput {
+  recentContext?: string;
+  activeTaskSummary?: string;
+  projectState?: string;
+  recentArtifacts?: string[];
+  recentActions?: string[];
+  projectId?: string;
+  sessionId?: string;
 }
 
 export interface RecallCorpus {
@@ -77,6 +88,21 @@ export interface AssociativeRecallResult {
   items: RecallItem[];
   abstained: boolean;
   diagnostics: string[];
+}
+
+export interface RecallEvidencePolicy {
+  evidenceRequired?: RetrievalEvidenceRequirement[];
+  minEvidenceConfidence?: number;
+  requireSpecificMemory?: boolean;
+  tieMargin?: number;
+  excludeContradicted?: boolean;
+}
+
+export interface RecallEvidenceVerification {
+  verified: boolean;
+  items: RecallItem[];
+  diagnostics: string[];
+  nextAction: "answer" | "try_alternate_retrieval" | "ask_user";
 }
 
 const DEFAULT_LIMIT = 5;
@@ -191,8 +217,71 @@ function semanticScore(candidate: RecallCandidate): number {
   return clamp01(candidate.vectorSimilarity);
 }
 
-function contextualScore(candidate: RecallCandidate): number {
-  return clamp01(candidate.contextualScore ?? 0);
+interface ContextualRecallEvidence {
+  terms: Set<string>;
+  relatedNodeIds: Set<string>;
+  provenanceNeedles: string[];
+}
+
+function buildContextualRecallEvidence(
+  context: RecallContextInput | undefined,
+  corpus: RecallCorpus,
+): ContextualRecallEvidence | null {
+  if (!context) return null;
+  const contextText = [
+    context.recentContext,
+    context.activeTaskSummary,
+    context.projectState,
+    ...(context.recentArtifacts ?? []),
+    ...(context.recentActions ?? []),
+  ].filter((item): item is string => Boolean(item?.trim())).join("\n");
+  const terms = new Set(lexicalTokens(contextText));
+  const relatedNodeIds = new Set<string>();
+  for (const node of corpus.nodes) {
+    const nodeTerms = lexicalTokens(node.name);
+    if (nodeTerms.length > 0 && nodeTerms.some((term) => terms.has(term))) {
+      relatedNodeIds.add(node.id);
+    }
+  }
+  const provenanceNeedles = [
+    context.sessionId,
+    ...(context.recentArtifacts ?? []),
+  ].flatMap((value) => lexicalTokens(value ?? "")).filter((value, index, values) => values.indexOf(value) === index);
+  if (terms.size === 0 && relatedNodeIds.size === 0 && provenanceNeedles.length === 0) return null;
+  return {
+    terms,
+    relatedNodeIds,
+    provenanceNeedles,
+  };
+}
+
+function binaryCosine(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 || right.size === 0) return 0;
+  let overlap = 0;
+  for (const token of left) {
+    if (right.has(token)) overlap += 1;
+  }
+  return clamp01(overlap / Math.sqrt(left.size * right.size));
+}
+
+function contextualScore(
+  candidate: RecallCandidate,
+  evidence: ContextualRecallEvidence | null,
+): number {
+  const explicit = clamp01(candidate.contextualScore ?? 0);
+  if (!evidence) return explicit;
+  const candidateTerms = new Set(lexicalTokens(`${candidate.summary}\n${candidate.text}`));
+  const lexicalContinuity = binaryCosine(evidence.terms, candidateTerms);
+  const relatedNodes = candidate.relatedNodes ?? [];
+  const graphContinuity = relatedNodes.length === 0
+    ? 0
+    : relatedNodes.filter((node) => evidence.relatedNodeIds.has(node)).length / relatedNodes.length;
+  const provenanceContinuity = evidence.provenanceNeedles.some((needle) =>
+    candidate.provenance.some((provenance) => lexicalTokens(provenance).includes(needle)),
+  )
+    ? 1
+    : 0;
+  return Math.max(explicit, lexicalContinuity, graphContinuity, provenanceContinuity);
 }
 
 function recencyScore(timestamp: number | undefined, now: number): number {
@@ -279,6 +368,8 @@ function sourceForCandidate(candidate: RecallCandidate, semantic: number, graph:
 export function recallFromCorpus(input: {
   cue: string;
   corpus: RecallCorpus;
+  context?: RecallContextInput;
+  evidencePolicy?: RecallEvidencePolicy;
   limit?: number;
   now?: number;
   minScore?: number;
@@ -290,6 +381,7 @@ export function recallFromCorpus(input: {
   const now = input.now ?? Date.now();
   const activation = activateGraph(input.corpus, seeds);
   const lexicalStats = buildLexicalStats(input.corpus.candidates, seeds);
+  const contextualEvidence = buildContextualRecallEvidence(input.context, input.corpus);
   const degree = buildDegreeMap(input.corpus);
   const activeCandidateIds = new Set(input.corpus.candidates.map((candidate) => candidate.id));
 
@@ -297,7 +389,7 @@ export function recallFromCorpus(input: {
     .map((candidate) => {
       const semantic = semanticScore(candidate);
       const lexical = lexicalScore(candidate, lexicalStats);
-      const contextual = contextualScore(candidate);
+      const contextual = contextualScore(candidate, contextualEvidence);
       const graph = candidateGraphActivation(candidate, activation);
       const recency = recencyScore(candidate.timestamp, now);
       const frequency = frequencyScore(candidate.frequency);
@@ -347,7 +439,7 @@ export function recallFromCorpus(input: {
   // Initial threshold: below this, tests showed recency/frequency can feel like
   // false memory even when no semantic, graph, or explicit evidence exists.
   const minScore = input.minScore ?? 0.22;
-  const items = scored
+  const rawItems = scored
     .filter((item) => item.breakdown.total >= minScore)
     .slice(0, limit)
     .map(({ candidate, breakdown }) => ({
@@ -359,6 +451,11 @@ export function recallFromCorpus(input: {
       related_nodes: candidate.relatedNodes ?? [],
       score_breakdown: breakdown,
     }));
+  const verification = verifyRecallEvidence({
+    items: rawItems,
+    policy: input.evidencePolicy,
+  });
+  const items = verification.items;
 
   return {
     cue,
@@ -368,8 +465,78 @@ export function recallFromCorpus(input: {
     diagnostics: [
       `candidates=${input.corpus.candidates.length}`,
       `activated_nodes=${[...activation.values()].filter((value) => value > 0).length}`,
+      `context_terms=${contextualEvidence?.terms.size ?? 0}`,
+      `contextual_candidates=${rawItems.filter((item) => item.score_breakdown.contextual_match > 0).length}`,
+      ...verification.diagnostics,
       items.length === 0 ? "abstained=low-confidence" : "abstained=false",
     ],
+  };
+}
+
+export function verifyRecallEvidence(input: {
+  items: RecallItem[];
+  policy?: RecallEvidencePolicy;
+}): RecallEvidenceVerification {
+  const policy = input.policy ?? {};
+  const diagnostics: string[] = [];
+  if (input.items.length === 0) {
+    return {
+      verified: false,
+      items: [],
+      diagnostics: ["evidence=none"],
+      nextAction: "try_alternate_retrieval",
+    };
+  }
+  if (policy.evidenceRequired?.includes("exact_quote")) {
+    return {
+      verified: false,
+      items: [],
+      diagnostics: ["evidence=exact_quote_requires_query_memory"],
+      nextAction: "try_alternate_retrieval",
+    };
+  }
+
+  const minEvidence = policy.minEvidenceConfidence ?? 0;
+  const usableItems = input.items.filter((item) => {
+    const breakdown = item.score_breakdown;
+    const hasEnoughEvidence = breakdown.evidence_confidence >= minEvidence;
+    const contradicted = policy.excludeContradicted === true &&
+      (breakdown.conflict_penalty > 0 || breakdown.stale_superseded_penalty > 0);
+    return hasEnoughEvidence && !contradicted;
+  });
+
+  if (usableItems.length === 0) {
+    return {
+      verified: false,
+      items: [],
+      diagnostics: ["evidence=weak_or_contradicted"],
+      nextAction: "try_alternate_retrieval",
+    };
+  }
+
+  if (policy.requireSpecificMemory && usableItems.length > 1) {
+    const [first, second] = usableItems;
+    const margin = Math.max(0, policy.tieMargin ?? 0);
+    if (
+      first &&
+      second &&
+      first.confidence - second.confidence <= margin
+    ) {
+      return {
+        verified: false,
+        items: [],
+        diagnostics: ["evidence=ambiguous_tie"],
+        nextAction: "try_alternate_retrieval",
+      };
+    }
+  }
+
+  diagnostics.push("evidence=verified");
+  return {
+    verified: true,
+    items: usableItems,
+    diagnostics,
+    nextAction: "answer",
   };
 }
 
@@ -606,6 +773,8 @@ export function recallMemory(input: {
   butlerData: string;
   cue: string;
   projectId?: string;
+  context?: RecallContextInput;
+  evidencePolicy?: RecallEvidencePolicy;
   limit?: number;
   now?: number;
   minScore?: number;
@@ -618,6 +787,8 @@ export function recallMemory(input: {
         butlerData: input.butlerData,
         projectId: input.projectId,
       }),
+      context: input.context,
+      evidencePolicy: input.evidencePolicy,
       limit: input.limit,
       now: input.now,
       minScore: input.minScore,
@@ -664,6 +835,8 @@ export function createCachedRecallMemoryRunner(input: {
       const result = recallFromCorpus({
         cue: request.cue,
         corpus: cachedCorpus,
+        context: request.context,
+        evidencePolicy: request.evidencePolicy,
         limit: request.limit,
         now: request.now,
       });
