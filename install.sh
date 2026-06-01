@@ -1448,47 +1448,107 @@ local_model_context_from_discovery() {
   " 2>/dev/null || true
 }
 
+local_model_discovery_action_from_label() {
+  case "$1" in
+    "Try another server URL"|"다른 서버 URL로 다시 시도") echo "retry" ;;
+    "Enter model ID manually"|"모델 ID 직접 입력") echo "manual" ;;
+    *) echo "cancel" ;;
+  esac
+}
+
+select_local_model_discovery_action() {
+  if [[ "${INSTALL_LANG:-en}" == "ko" ]]; then
+    {
+      tl_text "로컬 모델 서버에서 모델 목록을 가져오지 못했습니다."
+      tl_muted "서버가 꺼져 있거나 주소가 다를 수 있습니다."
+    } >&2
+    local_model_discovery_action_from_label "$(
+      tl_choose \
+        "다른 서버 URL로 다시 시도" \
+        "모델 ID 직접 입력" \
+        "로컬 모델 설정 취소"
+    )"
+  else
+    {
+      tl_text "Could not discover models from the local model server."
+      tl_muted "The server may be off, or the address may be different."
+    } >&2
+    local_model_discovery_action_from_label "$(
+      tl_choose \
+        "Try another server URL" \
+        "Enter model ID manually" \
+        "Cancel local setup"
+    )"
+  fi
+}
+
 configure_local_model() {
   local server_url="${INSTALL_LOCAL_MODEL_URL_ARG:-${BUTLER_LOCAL_MODEL_SERVER_URL:-}}"
   local platform="${BUTLER_LOCAL_MODEL_PLATFORM:-}"
   local model_id
   model_id="$(local_model_id_from_env)"
 
-  if [[ -z "$server_url" ]]; then
-    if is_non_interactive_shell; then
-      ui_error "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "로컬 모델 서버 URL이 필요합니다. BUTLER_LOCAL_MODEL_SERVER_URL 또는 --local-model-url 을 설정하세요." || echo "Local model server URL is required. Set BUTLER_LOCAL_MODEL_SERVER_URL or --local-model-url.")"
-      return 1
-    fi
-    if [[ "${INSTALL_LANG:-en}" == "ko" ]]; then
-      tl_text "OpenAI 호환 로컬 모델 서버 URL을 입력해 주세요."
-      tl_muted "예: llama.cpp server는 http://127.0.0.1:8080, Ollama는 http://127.0.0.1:11434"
-    else
-      tl_text "Enter the local OpenAI-compatible model server URL."
-      tl_muted "Examples: llama.cpp server http://127.0.0.1:8080, Ollama http://127.0.0.1:11434"
-    fi
-    server_url="$(tl_input "Local model server URL" "http://127.0.0.1:8080")"
-  fi
-
   local discovery_json discovery_path discovery_platform auto_discovered_model
   discovery_path="$(mktempfile)"
-  discovery_platform="$(normalize_local_model_platform "${platform:-custom}")"
   auto_discovered_model=false
-  discovery_json="$(discover_local_models_json "$server_url" "$discovery_platform")"
-  if [[ -n "$discovery_json" ]]; then
-    printf '%s\n' "$discovery_json" > "$discovery_path"
-  fi
 
   local discovered_ids=()
-  while IFS= read -r discovered_id; do
-    [[ -n "$discovered_id" ]] && discovered_ids+=("$discovered_id")
-  done < <(local_model_ids_from_discovery "$discovery_path")
+  while true; do
+    if [[ -z "$server_url" ]]; then
+      if is_non_interactive_shell; then
+        ui_error "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "로컬 모델 서버 URL이 필요합니다. BUTLER_LOCAL_MODEL_SERVER_URL 또는 --local-model-url 을 설정하세요." || echo "Local model server URL is required. Set BUTLER_LOCAL_MODEL_SERVER_URL or --local-model-url.")"
+        return 1
+      fi
+      if [[ "${INSTALL_LANG:-en}" == "ko" ]]; then
+        tl_text "OpenAI 호환 로컬 모델 서버 URL을 입력해 주세요."
+        tl_muted "예: llama.cpp server는 http://127.0.0.1:8080, Ollama는 http://127.0.0.1:11434"
+      else
+        tl_text "Enter the local OpenAI-compatible model server URL."
+        tl_muted "Examples: llama.cpp server http://127.0.0.1:8080, Ollama http://127.0.0.1:11434"
+      fi
+      server_url="$(tl_input "Local model server URL" "http://127.0.0.1:8080")"
+    fi
 
-  if [[ -z "$model_id" && "${#discovered_ids[@]}" -gt 0 ]]; then
-    model_id="${discovered_ids[0]}"
-    platform="$discovery_platform"
-    auto_discovered_model=true
-    tl_success "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "로컬 모델 자동 감지: $model_id" || echo "Local model auto-detected: $model_id")"
-  fi
+    discovery_platform="$(normalize_local_model_platform "${platform:-custom}")"
+    : > "$discovery_path"
+    discovery_json="$(discover_local_models_json "$server_url" "$discovery_platform")"
+    if [[ -n "$discovery_json" ]]; then
+      printf '%s\n' "$discovery_json" > "$discovery_path"
+    fi
+
+    discovered_ids=()
+    while IFS= read -r discovered_id; do
+      [[ -n "$discovered_id" ]] && discovered_ids+=("$discovered_id")
+    done < <(local_model_ids_from_discovery "$discovery_path")
+
+    if [[ -z "$model_id" && "${#discovered_ids[@]}" -gt 0 ]]; then
+      model_id="${discovered_ids[0]}"
+      platform="$discovery_platform"
+      auto_discovered_model=true
+      tl_success "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "로컬 모델 자동 감지: $model_id" || echo "Local model auto-detected: $model_id")"
+    fi
+
+    if [[ -n "$model_id" || "${#discovered_ids[@]}" -gt 0 ]]; then
+      break
+    fi
+
+    if is_non_interactive_shell; then
+      break
+    fi
+
+    case "$(select_local_model_discovery_action)" in
+      retry)
+        server_url="$(tl_input "Local model server URL" "$server_url")"
+        ;;
+      manual)
+        break
+        ;;
+      *)
+        ui_error "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "로컬 모델 설정을 취소했습니다." || echo "Local model setup cancelled.")"
+        return 1
+        ;;
+    esac
+  done
 
   if [[ -z "$platform" && -z "$model_id" ]] && ! is_non_interactive_shell; then
     local selected_platform
@@ -1591,29 +1651,6 @@ codex_subscription_login() {
 
 codex_subscription_profile_exists() {
   [[ -s "${BUTLER_CODEX_AUTH_PROFILE:-${BUTLER_OPENAI_AUTH_PROFILE:-$BUTLER_DATA/auth/openai-codex.json}}" ]]
-}
-
-normalize_profiling_mode() {
-  case "$(printf '%s' "${1:-off}" | tr '[:upper:]' '[:lower:]')" in
-    basic) echo "basic" ;;
-    deep) echo "deep" ;;
-    *) echo "off" ;;
-  esac
-}
-
-initialize_profile_black_box() {
-  local profiling_mode="${1:-off}"
-  PROFILE_MODULE="$BUTLER_HOME/packages/butler-agent/src/personalization/profiling.ts" \
-  PROFILE_MODE="$profiling_mode" \
-  BUTLER_DATA="$BUTLER_DATA" \
-  "$BUTLER_BUN" -e "
-    import { pathToFileURL } from 'url';
-    const modulePath = process.env.PROFILE_MODULE;
-    const butlerData = process.env.BUTLER_DATA;
-    const mode = process.env.PROFILE_MODE || 'off';
-    const profiling = await import(pathToFileURL(modulePath).href);
-    profiling.writeProfilingConsentSnapshot(butlerData, { mode });
-  "
 }
 
 require_source_file() {
@@ -1729,8 +1766,10 @@ write_minimal_runtime_config() {
     cfg.user = cfg.user && typeof cfg.user === 'object' ? cfg.user : {};
     if (!cfg.user.name || cfg.user.name === 'YourName') cfg.user.name = '';
     if (typeof cfg.user.bio !== 'string') cfg.user.bio = '';
+    const installLanguage = process.env.U_LANG || 'en';
     cfg.user.timezone = cfg.user.timezone || process.env.U_TZ || 'UTC';
-    cfg.user.language = cfg.user.language || process.env.U_LANG || 'en';
+    cfg.user.language = installLanguage;
+    cfg.user.responseLanguage = installLanguage;
     cfg.butler = cfg.butler && typeof cfg.butler === 'object' ? cfg.butler : {};
     cfg.butler.name = cfg.butler.name || process.env.B_NAME || 'Butler';
     cfg.system = cfg.system && typeof cfg.system === 'object' ? cfg.system : {};
@@ -1740,17 +1779,24 @@ write_minimal_runtime_config() {
     cfg.system.openaiModel = process.env.OPENAI_MODEL;
     cfg.system.defaultModel = 'openai/' + process.env.OPENAI_MODEL;
     cfg.system.activePersona = cfg.system.activePersona || 'butler';
-    cfg.system.activePersonaLocale = cfg.system.activePersonaLocale || (process.env.U_LANG || 'en');
+    cfg.system.activePersonaLocale = installLanguage;
     cfg.system.installedAt = cfg.system.installedAt || new Date().toISOString();
     cfg.personalization = cfg.personalization && typeof cfg.personalization === 'object' ? cfg.personalization : {};
     cfg.personalization.profiling = cfg.personalization.profiling && typeof cfg.personalization.profiling === 'object'
       ? cfg.personalization.profiling
       : {};
-    cfg.personalization.profiling.enabled = false;
-    cfg.personalization.profiling.mode = 'off';
+    const profilingMode = cfg.personalization.profiling.mode === 'basic' || cfg.personalization.profiling.mode === 'deep'
+      ? cfg.personalization.profiling.mode
+      : 'off';
+    cfg.personalization.profiling.enabled = profilingMode !== 'off';
+    cfg.personalization.profiling.mode = profilingMode;
     cfg.personalization.profiling.extractorModel = cfg.personalization.profiling.extractorModel || 'default';
     cfg.personalization.profiling.consentVersion = cfg.personalization.profiling.consentVersion || '2026-05-16';
-    cfg.personalization.profiling.consentedAt = null;
+    cfg.personalization.profiling.consentedAt = profilingMode === 'off'
+      ? null
+      : typeof cfg.personalization.profiling.consentedAt === 'string'
+        ? cfg.personalization.profiling.consentedAt
+        : null;
     cfg.personalization.profiling.storage = 'cognition/profile/profile.sqlite';
     cfg.personalization.profiling.rawProfileBrowserVisible = false;
     cfg.webSearch = cfg.webSearch && typeof cfg.webSearch === 'object' ? cfg.webSearch : {};
@@ -1805,7 +1851,6 @@ configure_api_provider() {
   echo ""
 
   write_minimal_runtime_config
-  ui_success "$([[ "${INSTALL_LANG:-en}" == "ko" ]] && echo "런타임: codex-api" || echo "Runtime: codex-api")"
 
   local provider_choice
   provider_choice="$(install_provider_choice_from_env)"
@@ -1971,6 +2016,54 @@ install_workspace_deps() {
   # Memory domain code is part of the root workspace.
 }
 
+cli_binary_platform() {
+  local os arch
+  case "$(uname -s)" in
+    Darwin) os="darwin" ;;
+    Linux) os="linux" ;;
+    *) return 1 ;;
+  esac
+  case "$(uname -m)" in
+    arm64|aarch64) arch="arm64" ;;
+    x86_64|amd64) arch="x64" ;;
+    *) return 1 ;;
+  esac
+  printf '%s-%s\n' "$os" "$arch"
+}
+
+install_cli_binary() {
+  ui_section "CLI Binary"
+  echo ""
+
+  local launcher_path="$BUTLER_HOME/packages/butler-agent/src/interfaces/cli/launcher.ts"
+  local output_path="$BUTLER_DATA/bin/butler"
+  local prebuilt_path platform
+  platform="$(cli_binary_platform || true)"
+  local bun_q launcher_q output_q
+  mkdir -p "$BUTLER_DATA/bin"
+  if [[ -n "$platform" ]]; then
+    prebuilt_path="$BUTLER_HOME/packages/butler-agent/resources/cli/$platform/butler"
+    if [[ -f "$prebuilt_path" ]]; then
+      cp "$prebuilt_path" "$output_path"
+      chmod 755 "$output_path" 2>/dev/null || true
+      ui_success "Butler CLI binary: $output_path"
+      return 0
+    fi
+  fi
+
+  require_source_file "$launcher_path" "packages/butler-agent/src/interfaces/cli/launcher.ts" || return 1
+  bun_q="$(shell_quote "$BUTLER_BUN")"
+  launcher_q="$(shell_quote "$launcher_path")"
+  output_q="$(shell_quote "$output_path")"
+  if run_quiet_step "Building Butler CLI binary fallback" "$bun_q build --compile --outfile $output_q $launcher_q"; then
+    chmod 755 "$output_path" 2>/dev/null || true
+    ui_success "Butler CLI binary: $output_path"
+    return 0
+  fi
+  ui_error "Could not build Butler CLI binary"
+  return 1
+}
+
 # ─── Shell Environment ───────────────────────────────────────────────────────
 
 setup_shell_env() {
@@ -1986,7 +2079,7 @@ setup_shell_env() {
 # butler environment
 export BUTLER_HOME="BUTLER_HOME_PLACEHOLDER"
 export BUTLER_DATA="BUTLER_DATA_PLACEHOLDER"
-export PATH="$BUTLER_HOME/packages/butler-agent/scripts:$PATH"
+export PATH="$BUTLER_DATA/bin:$PATH"
 ENVBLOCKEOF
 )
   env_block="${env_block//BUTLER_HOME_PLACEHOLDER/$BUTLER_HOME}"
@@ -2008,7 +2101,7 @@ ENVBLOCKEOF
         const path = process.env.SHELL_RC;
         const block = process.env.ENV_BLOCK;
         const text = readFileSync(path, 'utf8');
-        const re = /# butler environment\nexport BUTLER_HOME=\"[^\"]*\"\nexport BUTLER_DATA=\"[^\"]*\"\nexport PATH=\"\\\$BUTLER_HOME\/(?:ops\/scripts|packages\/butler-agent\/scripts):\\\$PATH\"/;
+        const re = /# butler environment\nexport BUTLER_HOME=\"[^\"]*\"\nexport BUTLER_DATA=\"[^\"]*\"\nexport PATH=\"\\\$(?:BUTLER_HOME\/(?:bin|ops\/scripts|packages\/butler-agent\/scripts)|BUTLER_DATA\/bin):\\\$PATH\"/;
         const next = re.test(text)
           ? text.replace(re, block)
           : text.replace('# butler environment', block);
@@ -2030,7 +2123,7 @@ ENVBLOCKEOF
       "" \
       "  export BUTLER_HOME=\"$BUTLER_HOME\"" \
       "  export BUTLER_DATA=\"$BUTLER_DATA\"" \
-      "  export PATH=\"\$BUTLER_HOME/packages/butler-agent/scripts:\$PATH\"" \
+      "  export PATH=\"\$BUTLER_DATA/bin:\$PATH\"" \
       "" \
       "(or re-run with --auto-env)"
   fi
@@ -2648,6 +2741,7 @@ main() {
     ui_section "Installing Dependencies"
     ui_success "Skipped (BUTLER_SKIP_DEPS=1)"
   fi
+  install_cli_binary
   setup_shell_env
 
   # ── Phase 3: Finalizing ──

@@ -52,6 +52,10 @@ export function PersonalizationSettings() {
     personalization?.persona_presets ?? [],
     settingsCopy.options.customPersona,
   );
+  const responseLanguageOptions = [
+    { value: "en", label: settingsCopy.options.english },
+    { value: "ko", label: settingsCopy.options.korean },
+  ];
   const butlerModel = models.find((item) => item.model_ref === settings.model) ??
     models[0];
 
@@ -63,6 +67,19 @@ export function PersonalizationSettings() {
         saving={saving}
         personalizationLoaded={Boolean(personalization)}
         setPersonalizationDraft={setPersonalizationDraft}
+      />
+      <SettingsSelect
+        label={settingsFields.responseLanguage}
+        description={settingsDescriptions.responseLanguage}
+        controlWidth="full"
+        value={personalizationDraft.responseLanguage}
+        onChange={(value) =>
+          setPersonalizationDraft((current) => ({
+            ...current,
+            responseLanguage: value === "ko" ? "ko" : "en",
+          }))}
+        options={responseLanguageOptions}
+        disabled={saving || !personalization}
       />
       <PersonalizationProfilingSettings
         models={models}

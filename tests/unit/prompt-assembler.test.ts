@@ -501,7 +501,8 @@ test("turn context carries the latest active persona reminder for existing sessi
 
     expect(turnContext).toContain("## Active Persona Reminder");
     expect(turnContext).toContain("NEW_NEKO_PERSONA_SENTINEL");
-    expect(turnContext).toContain("including formal, sensitive, urgent, or high-stakes situations");
+    expect(turnContext).toContain("Use the configured Assistant Response Language from the Turn Environment");
+    expect(turnContext).toContain("translate or adapt that voice into the configured response language");
     expect(turnContext).toContain("Do not let tool, review, or report formatting instructions erase the persona.");
     expect(turnContext).not.toContain("safety/accuracy requires a calmer voice");
     expect(turnContext).not.toContain("OLD_PERSONA_STABLE");
@@ -563,6 +564,7 @@ test("turn context includes current time, timezone, language, and geo hint", () 
     user: {
       timezone: "Asia/Seoul",
       language: "ko",
+      responseLanguage: "en",
       techLanguage: "en",
       geo: {
         city: "Chungju",
@@ -597,6 +599,7 @@ test("turn context includes current time, timezone, language, and geo hint", () 
     expect(turnContext).toContain("Current Time UTC: 2026-05-07T01:21:14.000Z");
     expect(turnContext).toContain("User Timezone: Asia/Seoul");
     expect(turnContext).toContain("User Language: ko");
+    expect(turnContext).toContain("Assistant Response Language: en");
     expect(turnContext).toContain("User Technical Language: en");
     expect(turnContext).toContain("User Geo Hint: Chungju, Chungcheongbuk-do, South Korea");
   } finally {

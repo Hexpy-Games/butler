@@ -261,6 +261,7 @@ export interface AppCopy {
       butlerNickname: string;
       principalName: string;
       preferredAddress: string;
+      responseLanguage: string;
       profilingMode: string;
       profilingExtractorModel: string;
       profileMigrationImport: string;
@@ -341,6 +342,7 @@ export interface AppCopy {
       mainScreenThemeColors: string;
       contextLimit: (maxLabel: string) => string;
       contextLimitClamped: (value: string) => string;
+      responseLanguage: string;
       personaPreset: string;
       profilingMode: string;
       profilingOff: string;
@@ -829,6 +831,7 @@ const koKrCopy: AppCopy = {
       butlerNickname: "버틀러 닉네임",
       principalName: "내 이름",
       preferredAddress: "나를 부를 호칭",
+      responseLanguage: "답변 언어",
       profilingMode: "사용자 정보 분석",
       profilingExtractorModel: "사용자 정보 분석 모델",
       profileMigrationImport: "외부 AI 기억 가져오기",
@@ -917,6 +920,8 @@ const koKrCopy: AppCopy = {
         `실제 버틀러 컨텍스트 예산입니다. 모델 최대값: ${maxLabel}.`,
       contextLimitClamped: (value) =>
         `컨텍스트 한도를 ${value} 토큰으로 조정했습니다.`,
+      responseLanguage:
+        "버틀러가 채팅에서 최종 답변과 진행 상태를 말할 때 사용할 언어입니다.",
       personaPreset:
         "프리셋을 고르면 아래 페르소나 초안만 바뀌고, 적용 전에는 저장되지 않습니다.",
       profilingMode:

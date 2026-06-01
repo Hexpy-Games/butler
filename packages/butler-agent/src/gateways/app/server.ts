@@ -185,12 +185,16 @@ export function createAppServer(
     MAX_BUN_IDLE_TIMEOUT_SECONDS,
     Math.max(30, Math.ceil(responderTimeoutMs / 1000)),
   );
-  const builtUiRoot = resolve(process.cwd(), "packages", "butler-app", "client", "ui", "dist");
+  const uiBaseRoot = options.butlerHome ?? process.cwd();
+  const packagedUiRoot = resolve(uiBaseRoot, "packages", "butler-agent", "resources", "app-client", "dist");
+  const builtUiRoot = resolve(uiBaseRoot, "packages", "butler-app", "client", "ui", "dist");
   const uiRoot =
     options.uiRoot ??
-    (existsSync(builtUiRoot)
+    (existsSync(packagedUiRoot)
+      ? packagedUiRoot
+      : existsSync(builtUiRoot)
       ? builtUiRoot
-      : resolve(process.cwd(), "packages", "butler-app", "client", "ui"));
+      : resolve(uiBaseRoot, "packages", "butler-app", "client", "ui"));
   const devCorsOrigin = normalizeLocalHttpOrigin(
     options.devCorsOrigin ?? DEFAULT_DEV_CORS_ORIGIN,
   );

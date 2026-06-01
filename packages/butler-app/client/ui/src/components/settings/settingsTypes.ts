@@ -17,6 +17,7 @@ export type SettingsLocalMessage = { tone: StatusTone; label: string };
 export type PersonalizationDraft = {
   persona: string;
   eol: string;
+  responseLanguage: "en" | "ko";
   personaPreset: string;
   profile: {
     butler_nickname: string;

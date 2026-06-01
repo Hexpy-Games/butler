@@ -50,6 +50,20 @@ For scripted installs:
 ./install.sh --non-interactive --register-service
 ```
 
+To test the interactive installer in a disposable Docker container:
+
+```bash
+bun run install:docker
+```
+
+The Docker installer builds or consumes a service release artifact, runs the
+interactive `install.sh`, then keeps the container shell open. Service artifacts
+include the built app web client served by the app gateway. The container app
+gateway stays on `18765`, but the host publish port is selected from the first
+free port starting at `18766` so it does not collide with a host Butler already
+using `18765`. The script prints the host web and health URLs. Set
+`BUTLER_INSTALL_DOCKER_HOST_PORT=18770` to force a specific host port.
+
 After install:
 
 ```bash

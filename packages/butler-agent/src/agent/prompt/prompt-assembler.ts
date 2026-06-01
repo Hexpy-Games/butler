@@ -90,6 +90,7 @@ export type ProjectCapsuleStatus = "skipped" | "present" | "missing";
 interface PromptUserConfig {
   timezone?: string;
   language?: string;
+  responseLanguage?: string;
   techLanguage?: string;
   location?: unknown;
   geo?: unknown;
@@ -314,7 +315,8 @@ function hashSections(sections: PromptSection[]): string {
 }
 
 function promptLocale(config: PromptButlerConfig): "en" | "ko" {
-  const language = safeConfigText(config.user?.language).toLocaleLowerCase("en-US");
+  const language = (safeConfigText(config.user?.responseLanguage) ||
+    safeConfigText(config.user?.language)).toLocaleLowerCase("en-US");
   if (/\bko\b|\bkor\b|korean|한국|한국어/u.test(language)) return "ko";
   return "en";
 }
@@ -331,7 +333,8 @@ function buildActivePersonaReminderSection(butlerData: string): PromptSection | 
     region: "live_configuration",
     content: [
       "Use this current persona for every user-facing answer in this turn.",
-      "Preserve its language, tone, and signature speech patterns in every final answer and visible status text, including formal, sensitive, urgent, or high-stakes situations.",
+      "Use the configured Assistant Response Language from the Turn Environment for every final answer and visible status text.",
+      "Preserve the persona's tone and signature speech patterns; if the persona text is written in another language, translate or adapt that voice into the configured response language.",
       "For long answers, carry the persona through section bodies and the closing, not only the opening sentence.",
       "Do not let tool, review, or report formatting instructions erase the persona.",
       "",
@@ -507,6 +510,7 @@ function buildTurnEnvironmentContext(input: {
   const timestamp = parseTurnTimestamp(input.envelope.message.timestamp);
   const timezone = safeConfigText(user.timezone) || "UTC";
   const language = safeConfigText(user.language) || "unknown";
+  const responseLanguage = safeConfigText(user.responseLanguage) || language;
   const techLanguage = safeConfigText(user.techLanguage);
   const geoHint = bestGeoHint(user, timezone);
   const localTime = formatLocalTime(timestamp, timezone);
@@ -516,6 +520,7 @@ function buildTurnEnvironmentContext(input: {
     `Current Local Time: ${localTime}`,
     `User Timezone: ${timezone}`,
     `User Language: ${language}`,
+    `Assistant Response Language: ${responseLanguage}`,
   ];
   if (techLanguage) lines.push(`User Technical Language: ${techLanguage}`);
   lines.push(`User Geo Hint: ${geoHint}`);

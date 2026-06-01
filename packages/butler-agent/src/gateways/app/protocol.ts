@@ -235,7 +235,7 @@ export interface NewChatBriefingView {
   description?: string;
   suggestions: NewChatBriefingSuggestion[];
   source: {
-    scope: "general" | "project";
+    scope: "general" | "project" | "onboarding";
     content_origin: "generated" | "heuristic_fallback";
     consolidation_run_id: string | null;
     generated_at: string;
@@ -749,6 +749,7 @@ export interface PersonalizationView {
   persona: string;
   eol: string;
   updated_at: string;
+  response_language: "en" | "ko";
   persona_presets: PersonaPresetView[];
   profile: PersonalizationProfileView;
   profiling: PersonalizationProfilingView;
@@ -828,6 +829,7 @@ export interface PersonalizationProfileMigrationResultView {
 export interface UpdatePersonalizationRequest {
   persona?: string;
   eol?: string;
+  response_language?: PersonalizationView["response_language"];
   profile?: PersonalizationProfileUpdateRequest;
   profiling?: PersonalizationProfilingUpdateRequest;
 }
@@ -1804,6 +1806,7 @@ export function isUpdatePersonalizationRequest(
       (key) =>
         key === "persona" ||
         key === "eol" ||
+        key === "response_language" ||
         key === "profile" ||
         key === "profiling",
     )
@@ -1811,6 +1814,13 @@ export function isUpdatePersonalizationRequest(
     return false;
   if ("persona" in input && typeof input.persona !== "string") return false;
   if ("eol" in input && typeof input.eol !== "string") return false;
+  if (
+    "response_language" in input &&
+    input.response_language !== "en" &&
+    input.response_language !== "ko"
+  ) {
+    return false;
+  }
   if ("profile" in input && !isPersonalizationProfileUpdate(input.profile)) {
     return false;
   }

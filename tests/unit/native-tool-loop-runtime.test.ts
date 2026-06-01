@@ -2044,7 +2044,8 @@ test("native tool loop prompt requires semantic progress first and output path a
   expect(instructions).toContain("Project sessions and future super sessions are both user-facing Butler sessions");
   expect(instructions).toContain("Use `list_work_streams` when context switching across concurrent issues");
   expect(instructions).toContain("## Persona Continuity");
-  expect(instructions).toContain("Preserve the persona's language, tone, and signature speech patterns in every situation");
+  expect(instructions).toContain("Use the configured Assistant Response Language from the Turn Environment");
+  expect(instructions).toContain("Preserve the persona's tone and signature speech patterns in every situation");
   expect(instructions).not.toContain("safety/accuracy requires a calmer voice");
   expect(instructions).toContain("Do not let native tool, review, or report formatting instructions erase the persona.");
   expect(instructions).toContain("include `output_paths`");

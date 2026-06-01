@@ -63,6 +63,7 @@ afterEach(() => {
     personalizationDraft: {
       persona: "",
       eol: "",
+      responseLanguage: "en",
       personaPreset: "custom",
       profile: {
         butler_nickname: "",
@@ -100,6 +101,7 @@ test("persona preset selection updates only the personalization draft until appl
     persona: "current persona",
     eol: "current eol",
     updated_at: "2026-05-16T00:00:00.000Z",
+    response_language: "en",
     profile: {
       butler_nickname: "Butler",
       principal_name: "Principal",
@@ -148,6 +150,7 @@ test("persona preset selection updates only the personalization draft until appl
     personalizationDraft: {
       persona: personalization.persona,
       eol: personalization.eol,
+      responseLanguage: "en",
       personaPreset: "custom",
       profile: {
         butler_nickname: "Butler",
@@ -193,6 +196,7 @@ test("custom persona edits do not require visible frontmatter metadata", async (
       "---\nname: active\nbase: neko-servant\nbase_locale: ko\n---\n\n# Neko\n",
     eol: "current eol",
     updated_at: "2026-05-16T00:00:00.000Z",
+    response_language: "ko",
     profile: {
       butler_nickname: "Butler",
       principal_name: "Principal",
@@ -266,6 +270,7 @@ test("profiling controls are saved only through the personalization apply path",
     persona: "current persona",
     eol: "current eol",
     updated_at: "2026-05-16T00:00:00.000Z",
+    response_language: "en",
     profile: {
       butler_nickname: "",
       principal_name: "",
@@ -310,6 +315,7 @@ test("profiling controls are saved only through the personalization apply path",
     personalizationDraft: {
       persona: personalization.persona,
       eol: personalization.eol,
+      responseLanguage: "en",
       personaPreset: "custom",
       profile: {
         butler_nickname: "",
@@ -348,11 +354,81 @@ test("profiling controls are saved only through the personalization apply path",
   });
 });
 
+test("response language is saved through the personalization apply path", async () => {
+  const personalization: PersonalizationView = {
+    persona: "current persona",
+    eol: "current eol",
+    updated_at: "2026-05-16T00:00:00.000Z",
+    response_language: "ko",
+    profile: {
+      butler_nickname: "",
+      principal_name: "",
+      preferred_address: "",
+      updated_at: null,
+      storage_label: "personalization/profile.json",
+    },
+    profiling: {
+      mode: "off",
+      enabled: false,
+      consent_version: "2026-05-16",
+      consented_at: null,
+      storage_label: "cognition/profile/profile.sqlite",
+      raw_profile_browser_visible: false,
+      extractor_model: "default",
+      effective_extractor_model: "openai/gpt-5.5",
+      extractor_uses_butler_model: true,
+    },
+    persona_presets: [],
+  };
+  const fetchCalls: Array<{ path: string; init?: RequestInit }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    fetchCalls.push({ path: String(input), init });
+    const body = JSON.parse(
+      String(init?.body ?? "{}"),
+    ) as Partial<PersonalizationView>;
+    return jsonResponse<PersonalizationView>({
+      ...personalization,
+      response_language: body.response_language ?? personalization.response_language,
+    });
+  }) as unknown as typeof fetch;
+  useSettingsUIStore.setState({
+    personalization,
+    personalizationDraft: {
+      persona: personalization.persona,
+      eol: personalization.eol,
+      responseLanguage: "en",
+      personaPreset: "custom",
+      profile: {
+        butler_nickname: "",
+        principal_name: "",
+        preferred_address: "",
+      },
+      profiling: {
+        mode: "off",
+        extractorModel: "default",
+        extractorReasoningEffort: "medium",
+        clearProfile: false,
+      },
+    },
+  });
+
+  await useSettingsUIStore.getState().savePersonalization();
+
+  expect(fetchCalls).toHaveLength(1);
+  expect(JSON.parse(String(fetchCalls[0].init?.body))).toEqual({
+    response_language: "en",
+  });
+  expect(useSettingsUIStore.getState().personalizationDraft.responseLanguage).toBe(
+    "en",
+  );
+});
+
 test("profile migration import reports immediate profile application result", async () => {
   const personalization: PersonalizationView = {
     persona: "current persona",
     eol: "current eol",
     updated_at: "2026-05-16T00:00:00.000Z",
+    response_language: "en",
     profile: {
       butler_nickname: "",
       principal_name: "",
@@ -397,6 +473,7 @@ test("profile migration import reports immediate profile application result", as
     personalizationDraft: {
       persona: personalization.persona,
       eol: personalization.eol,
+      responseLanguage: "en",
       personaPreset: "custom",
       profile: {
         butler_nickname: "",
@@ -450,6 +527,7 @@ test("legacy personalization responses without presets keep settings usable", as
   expect(useSettingsUIStore.getState().personalizationDraft).toMatchObject({
     persona: "legacy persona",
     eol: "legacy eol",
+    responseLanguage: "en",
     personaPreset: "custom",
     profile: {
       butler_nickname: "",
@@ -470,6 +548,7 @@ test("settings drafts fill default web search settings for legacy responses", as
       persona: "",
       eol: "",
       updated_at: "2026-05-22T00:00:00.000Z",
+      response_language: "en",
       persona_presets: [],
       profile: {
         butler_nickname: "",

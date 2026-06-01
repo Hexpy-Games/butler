@@ -397,6 +397,7 @@ export interface PersonalizationView {
   persona: string;
   eol: string;
   updated_at: string;
+  response_language?: "en" | "ko";
   persona_presets: PersonaPresetView[];
   profile: PersonalizationProfileView;
   profiling: PersonalizationProfilingView;
@@ -478,6 +479,7 @@ export interface PersonalizationProfileMigrationResultView {
 export interface UpdatePersonalizationRequest {
   persona?: string;
   eol?: string;
+  response_language?: "en" | "ko";
   profile?: PersonalizationProfileUpdateRequest;
   profiling?: PersonalizationProfilingUpdateRequest;
 }
@@ -892,7 +894,7 @@ export interface NewChatBriefingView {
   description?: string;
   suggestions: NewChatBriefingSuggestion[];
   source: {
-    scope: "general" | "project";
+    scope: "general" | "project" | "onboarding";
     content_origin: "generated" | "heuristic_fallback";
     consolidation_run_id: string | null;
     generated_at: string;

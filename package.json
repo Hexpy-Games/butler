@@ -53,6 +53,7 @@
     "render": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/ds-viewer-render.ts",
     "app:ui:hmr:smoke": "${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-ui-hmr-smoke.ts",
     "maintenance:context": "${BUTLER_BUN:-bun} run packages/butler-agent/scripts/prune-context-maintenance.ts",
+    "install:docker": "bash tools/install-in-docker.sh",
     "release:service:gate": "${BUTLER_BUN:-bun} run --silent packages/butler-agent/src/operations/release/release-gate.ts",
     "release:service:package": "${BUTLER_BUN:-bun} run --silent packages/butler-agent/src/operations/release/package-service-release.ts",
     "release:app:gate": "${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/release/release-gate.ts",

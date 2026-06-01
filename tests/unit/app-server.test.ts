@@ -71,7 +71,7 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
 
-test("app server exposes health and seeded chats", async () => {
+test("app server exposes health and onboarding chat seed", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -82,14 +82,49 @@ test("app server exposes health and seeded chats", async () => {
     expect(health.data.ok).toBe(true);
 
     const chats = await getJson(`${server.url}chats`);
-    expect(chats.data.map((chat: { id: string }) => chat.id)).toContain(
-      "general",
+    expect(chats.data).toContainEqual(
+      expect.objectContaining({ id: "general", title: "Onboarding" }),
     );
-    expect(chats.data.map((chat: { id: string }) => chat.id)).toContain(
+    expect(chats.data.map((chat: { id: string }) => chat.id)).not.toContain(
       "project-butler",
     );
   } finally {
     server.stop();
+  }
+});
+
+test("app server serves packaged web client dist from Butler home", async () => {
+  const butlerHome = mkdtempSync(join(tmpdir(), "butler-packaged-ui-"));
+  const packagedDist = join(
+    butlerHome,
+    "packages",
+    "butler-agent",
+    "resources",
+    "app-client",
+    "dist",
+  );
+  mkdirSync(packagedDist, { recursive: true });
+  writeFileSync(
+    join(packagedDist, "index.html"),
+    "<!doctype html><html><head><title>Butler</title></head><body>packaged</body></html>",
+  );
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    butlerHome,
+    port: 0,
+    automationSchedulerIntervalMs: false,
+  });
+  try {
+    const response = await fetch(server.url);
+    const html = await response.text();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(html).toContain("<title>Butler</title>");
+    expect(html).toContain("packaged");
+  } finally {
+    server.stop();
+    rmSync(butlerHome, { recursive: true, force: true });
   }
 });
 
@@ -418,7 +453,7 @@ test("terminal app turns clean up live turn event sequences without resetting re
   }
 });
 
-test("navigation separates general chats from project sessions without workspace paths", async () => {
+test("navigation starts with no default projects and no workspace paths", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -428,15 +463,7 @@ test("navigation separates general chats from project sessions without workspace
     expect(
       navigation.data.chats.map((session: { id: string }) => session.id),
     ).toContain("general");
-    expect(
-      navigation.data.projects.map((project: { id: string }) => project.id),
-    ).toContain("butler");
-    const butlerProject = navigation.data.projects.find(
-      (project: { id: string }) => project.id === "butler",
-    );
-    expect(
-      butlerProject.sessions.map((session: { id: string }) => session.id),
-    ).toContain("project-butler");
+    expect(navigation.data.projects).toEqual([]);
     expect(JSON.stringify(navigation)).not.toContain(process.cwd());
     expect(JSON.stringify(navigation)).not.toContain(tempDir);
     expect(JSON.stringify(navigation)).not.toContain("workspace_path");
@@ -451,60 +478,70 @@ test("navigation separates general chats from project sessions without workspace
 
 test("project dashboard reads Project Ledger documents from Butler data home", async () => {
   const butlerData = join(tempDir, ".butler");
-  const specDir = join(
-    butlerData,
-    "project-ledger",
-    "projects",
-    "butler",
-    "specs",
-  );
-  const planDir = join(
-    butlerData,
-    "project-ledger",
-    "projects",
-    "butler",
-    "plans",
-  );
-  const workDir = join(
-    butlerData,
-    "project-ledger",
-    "projects",
-    "butler",
-    "work",
-    "dashboard-work",
-  );
-  const taskDir = join(workDir, "tasks");
-  mkdirSync(specDir, { recursive: true });
-  mkdirSync(planDir, { recursive: true });
-  mkdirSync(taskDir, { recursive: true });
-  writeFileSync(
-    join(specDir, "local-spec.md"),
-    "# Data home spec\n\nSpec body with [external](https://example.com).",
-    "utf8",
-  );
-  writeFileSync(
-    join(planDir, "local-plan.md"),
-    "# Data home plan\n\nPlan body.",
-    "utf8",
-  );
-  writeFileSync(
-    join(workDir, "work.md"),
-    '---\nstatus: "done"\n---\n\n# Data home work\n\nWork body.',
-    "utf8",
-  );
-  writeFileSync(
-    join(taskDir, "task.md"),
-    '---\nstatus: "done"\n---\n\n# Data home task\n\nTask body.',
-    "utf8",
-  );
+  const workspaceRoot = join(tempDir, "project-workspace");
 
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     butlerData,
+    projectWorkspaceRoot: workspaceRoot,
     port: 0,
   });
   try {
-    const dashboard = await getJson(`${server.url}projects/butler/dashboard`);
+    const created = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "Data home project",
+    });
+    const projectId = created.data.project.id as string;
+    const specDir = join(
+      butlerData,
+      "project-ledger",
+      "projects",
+      projectId,
+      "specs",
+    );
+    const planDir = join(
+      butlerData,
+      "project-ledger",
+      "projects",
+      projectId,
+      "plans",
+    );
+    const workDir = join(
+      butlerData,
+      "project-ledger",
+      "projects",
+      projectId,
+      "work",
+      "dashboard-work",
+    );
+    const taskDir = join(workDir, "tasks");
+    mkdirSync(specDir, { recursive: true });
+    mkdirSync(planDir, { recursive: true });
+    mkdirSync(taskDir, { recursive: true });
+    writeFileSync(
+      join(specDir, "local-spec.md"),
+      "# Data home spec\n\nSpec body with [external](https://example.com).",
+      "utf8",
+    );
+    writeFileSync(
+      join(planDir, "local-plan.md"),
+      "# Data home plan\n\nPlan body.",
+      "utf8",
+    );
+    writeFileSync(
+      join(workDir, "work.md"),
+      '---\nstatus: "done"\n---\n\n# Data home work\n\nWork body.',
+      "utf8",
+    );
+    writeFileSync(
+      join(taskDir, "task.md"),
+      '---\nstatus: "done"\n---\n\n# Data home task\n\nTask body.',
+      "utf8",
+    );
+
+    const dashboard = await getJson(
+      `${server.url}projects/${encodeURIComponent(projectId)}/dashboard`,
+    );
     expect(dashboard.data.stats.specs).toBe(1);
     expect(dashboard.data.stats.plans).toBe(1);
     expect(
@@ -516,7 +553,7 @@ test("project dashboard reads Project Ledger documents from Butler data home", a
       dashboard.data.documents.map(
         (document: { safe_path_label: string }) => document.safe_path_label,
       ),
-    ).toContain("project-ledger/projects/butler/specs/local-spec.md");
+    ).toContain(`project-ledger/projects/${projectId}/specs/local-spec.md`);
     expect(JSON.stringify(dashboard)).not.toContain(
       `${process.cwd()}/.project-ledger`,
     );
@@ -527,13 +564,30 @@ test("project dashboard reads Project Ledger documents from Butler data home", a
 });
 
 test("project dashboard falls back to folder Project Ledger documents without leaking paths", async () => {
+  const folderSelectionSecret = "dashboard-folder-secret";
+  const selectedFolder = join(tempDir, "selected-ledger-project");
+  const specDir = join(selectedFolder, ".project-ledger", "specs");
+  const planDir = join(selectedFolder, ".project-ledger", "plans");
+  mkdirSync(specDir, { recursive: true });
+  mkdirSync(planDir, { recursive: true });
+  writeFileSync(join(specDir, "folder-spec.md"), "# Folder spec\n\nSpec body.", "utf8");
+  writeFileSync(join(planDir, "folder-plan.md"), "# Folder plan\n\nPlan body.", "utf8");
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     butlerData: tempDir,
+    folderSelectionSecret,
     port: 0,
   });
   try {
-    const dashboard = await getJson(`${server.url}projects/butler/dashboard`);
+    const project = await createExistingFolderProjectForTest(
+      server.url,
+      selectedFolder,
+      folderSelectionSecret,
+      "Butler source",
+    );
+    const dashboard = await getJson(
+      `${server.url}projects/${encodeURIComponent(project.id)}/dashboard`,
+    );
     expect(dashboard.data.stats.specs).toBeGreaterThan(0);
     expect(dashboard.data.stats.plans).toBeGreaterThan(0);
     expect(
@@ -553,39 +607,51 @@ test("project dashboard falls back to folder Project Ledger documents without le
   }
 });
 
-test("one folder backed project can contain multiple project sessions", async () => {
+test("folder backed projects can contain multiple project sessions", async () => {
+  const workspaceRoot = join(tempDir, "project-workspace");
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
+    projectWorkspaceRoot: workspaceRoot,
     port: 0,
   });
   try {
+    const project = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "Session project",
+    });
+    const projectId = project.data.project.id as string;
+    await postJson(`${server.url}sessions`, {
+      kind: "project",
+      project_id: projectId,
+      title: "First project topic",
+    });
     const created = await postJson(`${server.url}sessions`, {
       kind: "project",
-      project_id: "butler",
+      project_id: projectId,
       title: "Second project topic",
     });
     expect(created.data.session).toMatchObject({
       kind: "project",
-      project_id: "butler",
+      project_id: projectId,
       title: "Second project topic",
     });
 
     const sessions = await getJson(
-      `${server.url}project-sessions?project_id=butler`,
+      `${server.url}project-sessions?project_id=${encodeURIComponent(projectId)}`,
     );
     expect(
       sessions.data.sessions.filter(
-        (session: { project_id?: string }) => session.project_id === "butler",
+        (session: { project_id?: string }) => session.project_id === projectId,
       ),
     ).toHaveLength(2);
 
     const navigation = await getJson(`${server.url}navigation`);
-    const butlerProject = navigation.data.projects.find(
-      (project: { id: string }) => project.id === "butler",
+    const sessionProject = navigation.data.projects.find(
+      (project: { id: string }) => project.id === projectId,
     );
-    expect(butlerProject.active_session_count).toBe(2);
+    expect(sessionProject.active_session_count).toBe(2);
     expect(
-      butlerProject.sessions.map((session: { title: string }) => session.title),
+      sessionProject.sessions.map((session: { title: string }) => session.title),
     ).toContain("Second project topic");
   } finally {
     server.stop();
@@ -837,7 +903,7 @@ test("existing folder project creation rejects unsigned selections without parti
       projects.data.projects.map(
         (project: { display_name: string }) => project.display_name,
       ),
-    ).toEqual(["butler"]);
+    ).toEqual([]);
   } finally {
     server.stop();
   }
@@ -874,6 +940,7 @@ test("existing folder project creation rejects sensitive root folders", async ()
 
 test("project session gateway routing uses the app session hint and project id", async () => {
   const runtime = new ScriptedRuntime("project bridge reply");
+  const workspaceRoot = join(tempDir, "routing-workspace");
   const bridge = new AppGatewayBridge({
     butlerHome: tempDir,
     butlerData: tempDir,
@@ -882,13 +949,19 @@ test("project session gateway routing uses the app session hint and project id",
   });
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
+    projectWorkspaceRoot: workspaceRoot,
     port: 0,
     responder: bridge.responder,
   });
   try {
+    const project = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "Routing project",
+    });
+    const projectId = project.data.project.id as string;
     const session = await postJson(`${server.url}sessions`, {
       kind: "project",
-      project_id: "butler",
+      project_id: projectId,
       title: "Project topic routing",
       session_hint: "project-topic-routing",
     });
@@ -899,7 +972,7 @@ test("project session gateway routing uses the app session hint and project id",
     expect(runtime.turns[0]?.input).toMatchObject({
       routingHints: {
         sessionId: "butler/app-project-topic-routing",
-        projectId: "butler",
+        projectId,
       },
       peer: {
         id: "project-topic-routing",
@@ -912,14 +985,21 @@ test("project session gateway routing uses the app session hint and project id",
 });
 
 test("project session hints are normalized before becoming local ids", async () => {
+  const workspaceRoot = join(tempDir, "hint-workspace");
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
+    projectWorkspaceRoot: workspaceRoot,
     port: 0,
   });
   try {
+    const project = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "Hint project",
+    });
+    const projectId = project.data.project.id as string;
     const created = await postJson(`${server.url}sessions`, {
       kind: "project",
-      project_id: "butler",
+      project_id: projectId,
       title: "Unsafe hint shape",
       session_hint: "Project Topic With Spaces",
     });
@@ -1303,6 +1383,7 @@ test("app server exposes safe usage monitor summary", async () => {
 });
 
 test("new chat briefing reads generated artifacts before neutral fallback copy", async () => {
+  writeOnboardingStateForTest(tempDir, "complete");
   const runsDir = join(tempDir, "cognition", "consolidation", "runs");
   const briefingsDir = join(tempDir, "cognition", "consolidation", "briefings", "2026-05-28");
   mkdirSync(runsDir, { recursive: true });
@@ -1447,6 +1528,7 @@ test("new chat briefing reads generated artifacts before neutral fallback copy",
 });
 
 test("new chat briefing fallback stays neutral and placeholder-sized", () => {
+  writeOnboardingStateForTest(tempDir, "complete");
   const personasDir = join(tempDir, "personas");
   mkdirSync(personasDir, { recursive: true });
   writeFileSync(
@@ -1474,7 +1556,66 @@ test("new chat briefing fallback stays neutral and placeholder-sized", () => {
   expect(JSON.stringify(view)).not.toContain("냥");
 });
 
+test("new chat briefing returns localized onboarding fallback until onboarding completes", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const initialPersonalization = await getJson(`${server.url}personalization`);
+    expect(initialPersonalization.data.response_language).toBe("en");
+
+    const englishBriefing = await getJson(`${server.url}new-chat-briefing`);
+    expect(englishBriefing.data).toMatchObject({
+      moment: "Onboarding",
+      title: "Pleased to meet you. It will be my honor to serve.",
+      source: {
+        scope: "onboarding",
+        content_origin: "heuristic_fallback",
+        locale: "en",
+      },
+    });
+    expect(englishBriefing.data.suggestions).toHaveLength(1);
+    expect(englishBriefing.data.suggestions[0]).toMatchObject({
+      title: "Get acquainted with Butler",
+    });
+
+    const localized = await patchJson(`${server.url}personalization`, {
+      response_language: "ko",
+    });
+    expect(localized.data.response_language).toBe("ko");
+    const koreanBriefing = await getJson(`${server.url}new-chat-briefing`);
+    expect(koreanBriefing.data).toMatchObject({
+      moment: "온보딩",
+      title: "반갑습니다. 당신을 모시게 되어 기쁩니다.",
+      description:
+        "AI 에이전트 집사 버틀러를 선택해주셔서 감사합니다. 시작하기에 앞서 간단하게 당신에 대해 알려주세요.",
+      source: {
+        scope: "onboarding",
+        locale: "ko",
+      },
+    });
+    expect(koreanBriefing.data.suggestions).toEqual([
+      expect.objectContaining({
+        title: "버틀러와 알아가기",
+        description: "버틀러를 사용하기에 앞서 기본적인 설정을 진행합니다.",
+      }),
+    ]);
+
+    writeOnboardingStateForTest(tempDir, "complete");
+    const completedBriefing = await getJson(`${server.url}new-chat-briefing`);
+    expect(completedBriefing.data.source.scope).toBe("general");
+    expect(completedBriefing.data.title).not.toBe(
+      "반갑습니다. 당신을 모시게 되어 기쁩니다.",
+    );
+  } finally {
+    server.stop();
+  }
+});
+
 test("new chat briefing returns project scoped opening cards", async () => {
+  writeOnboardingStateForTest(tempDir, "complete");
   const personasDir = join(tempDir, "personas");
   const projectPlansDir = join(
     tempDir,
@@ -1509,22 +1650,29 @@ test("new chat briefing returns project scoped opening cards", async () => {
     "utf8",
   );
 
+  const workspaceRoot = join(tempDir, "project-briefing-workspace");
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     butlerData: tempDir,
+    projectWorkspaceRoot: workspaceRoot,
     port: 0,
   });
   try {
     await patchJson(`${server.url}settings`, { language: "ko" });
+    const project = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "butler",
+    });
+    const projectId = project.data.project.id as string;
     const result = await getJson(
-      `${server.url}new-chat-briefing?project_id=butler`,
+      `${server.url}new-chat-briefing?project_id=${encodeURIComponent(projectId)}`,
     );
     expect(result.data.raw_text_included).toBe(false);
     expect(result.data.moment).toBe("프로젝트");
     expect(result.data.source).toMatchObject({
       scope: "project",
       content_origin: "heuristic_fallback",
-      project_id: "butler",
+      project_id: projectId,
       project_name: "Butler",
       persona_applied: false,
     });
@@ -1551,8 +1699,10 @@ test("new chat briefing returns project scoped opening cards", async () => {
 });
 
 test("settings, command palette, and project actions are route-backed and privacy safe", async () => {
+  const workspaceRoot = join(tempDir, "settings-project-workspace");
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
+    projectWorkspaceRoot: workspaceRoot,
     port: 0,
   });
   try {
@@ -1941,7 +2091,12 @@ test("settings, command palette, and project actions are route-backed and privac
       }),
     );
 
-    const renamed = await patchJson(`${server.url}projects/butler`, {
+    const createdProject = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "Butler",
+    });
+    const projectId = createdProject.data.project.id as string;
+    const renamed = await patchJson(`${server.url}projects/${projectId}`, {
       display_name: "Renamed Butler",
       pinned: false,
     });
@@ -1949,7 +2104,10 @@ test("settings, command palette, and project actions are route-backed and privac
       display_name: "Renamed Butler",
       pinned: false,
     });
-    const archived = await postJson(`${server.url}projects/butler/archive`, {});
+    const archived = await postJson(
+      `${server.url}projects/${projectId}/archive`,
+      {},
+    );
     expect(archived.data.project.archived).toBe(true);
   } finally {
     server.stop();
@@ -3605,17 +3763,31 @@ test("session summaries show only workers that belong to the active session", as
   }
 
   writeTask("20260501010103", "RUNNING", "general", null);
-  writeTask("20260501010102", "RUNNING", "project-butler", "butler");
-  writeTask("20260501010101", "RUNNING");
-  writeTask("20260501010100", "FAILED", undefined, "butler");
-  writeTask("20260501010099", "RUNNING", undefined, "butler");
-
+  const workspaceRoot = join(tempDir, "worker-project-workspace");
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     butlerData: tempDir,
+    projectWorkspaceRoot: workspaceRoot,
     port: 0,
   });
   try {
+    const createdProject = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "Worker project",
+    });
+    const projectId = createdProject.data.project.id as string;
+    const projectSession = await postJson(`${server.url}sessions`, {
+      kind: "project",
+      project_id: projectId,
+      title: "Worker project session",
+      session_hint: "project-butler",
+    });
+    const projectSessionId = projectSession.data.session.id as string;
+    writeTask("20260501010102", "RUNNING", projectSessionId, projectId);
+    writeTask("20260501010101", "RUNNING");
+    writeTask("20260501010100", "FAILED", undefined, projectId);
+    writeTask("20260501010099", "RUNNING", undefined, projectId);
+
     const general = await getJson(
       `${server.url}session-summary?session_id=general`,
     );
@@ -3630,23 +3802,23 @@ test("session summaries show only workers that belong to the active session", as
     });
     expect(general.data.worker_activity[0].project_id).toBeUndefined();
 
-    const project = await getJson(
-      `${server.url}session-summary?session_id=project-butler`,
+    const projectSummary = await getJson(
+      `${server.url}session-summary?session_id=${projectSessionId}`,
     );
     expect(
-      project.data.worker_activity.map(
+      projectSummary.data.worker_activity.map(
         (worker: { task_id: string }) => worker.task_id,
       ),
     ).toEqual(["20260501010102", "20260501010099"]);
-    expect(project.data.worker_activity[0]).toMatchObject({
-      session_id: "project-butler",
-      project_id: "butler",
+    expect(projectSummary.data.worker_activity[0]).toMatchObject({
+      session_id: projectSessionId,
+      project_id: projectId,
       objective: "Safe worker summary 20260501010102",
     });
-    expect(project.data.worker_activity[1]).toMatchObject({
+    expect(projectSummary.data.worker_activity[1]).toMatchObject({
       task_id: "20260501010099",
       phase: "executing",
-      project_id: "butler",
+      project_id: projectId,
       objective: "Background worker task",
     });
 
@@ -3663,7 +3835,7 @@ test("session summaries show only workers that belong to the active session", as
       "20260501010099",
     ]);
     expect(JSON.stringify(general)).not.toContain("private request");
-    expect(JSON.stringify(project)).not.toContain("private request");
+    expect(JSON.stringify(projectSummary)).not.toContain("private request");
   } finally {
     server.stop();
   }
@@ -4694,12 +4866,16 @@ test("message file refs reject unknown, cross-session, and reused file ids", asy
     });
     const uploaded = await uploadResponse.json();
     expect(uploadResponse.ok).toBe(true);
+    const otherChat = await postJson(`${server.url}sessions`, {
+      kind: "chat",
+      title: "Other upload session",
+    });
 
     const wrongSession = await fetch(`${server.url}messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        chat_id: "project-butler",
+        chat_id: otherChat.data.session.id,
         text: "wrong session",
         attachments: [{ file_id: uploaded.data.file.file_id }],
       }),
@@ -6433,8 +6609,12 @@ test("message endpoint rate limits bursts with safe protocol errors", async () =
       chat_id: "general",
       text: "first message",
     });
+    const otherChat = await postJson(`${server.url}sessions`, {
+      kind: "chat",
+      title: "Rate limit bypass session",
+    });
     await postJson(`${server.url}messages`, {
-      chat_id: "project-butler",
+      chat_id: otherChat.data.session.id,
       text: "different chat can still send",
     });
     const response = await fetch(`${server.url}messages`, {
@@ -6596,6 +6776,46 @@ test("static UI serving blocks path traversal", async () => {
     server.stop();
   }
 });
+
+function writeOnboardingStateForTest(
+  butlerData: string,
+  status: "pending" | "complete",
+): void {
+  const onboardingDir = join(butlerData, "personalization");
+  mkdirSync(onboardingDir, { recursive: true });
+  writeFileSync(
+    join(onboardingDir, "onboarding.json"),
+    `${JSON.stringify({
+      schema: "butler.first_chat_onboarding.v1",
+      status,
+      gateway: "any",
+      fields: {},
+      skipped_fields: [],
+      created_at: "2026-05-28T00:00:00.000Z",
+      updated_at: "2026-05-28T00:00:00.000Z",
+      completed_at: status === "complete" ? "2026-05-28T00:00:00.000Z" : null,
+    }, null, 2)}\n`,
+    "utf8",
+  );
+}
+
+async function createExistingFolderProjectForTest(
+  serverUrl: string,
+  folderPath: string,
+  folderSelectionSecret: string,
+  displayName: string,
+): Promise<{ id: string; display_name: string }> {
+  const token = createProjectFolderSelectionToken(
+    folderPath,
+    folderSelectionSecret,
+  );
+  const created = await postJson(`${serverUrl}projects`, {
+    source: "existing_folder",
+    display_name: displayName,
+    folder_selection_token: token,
+  });
+  return created.data.project;
+}
 
 async function getJson(url: string) {
   const response = await fetch(url);

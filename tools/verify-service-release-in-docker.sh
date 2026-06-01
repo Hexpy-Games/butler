@@ -31,11 +31,12 @@ if [[ -z "$ARTIFACT_PATH" || ! -f "$ARTIFACT_PATH" ]]; then
   exit 1
 fi
 
-ARTIFACT_PATH="$(cd "$(dirname "$ARTIFACT_PATH")" && pwd)/$(basename "$ARTIFACT_PATH")"
+ARTIFACT_DIR="$(cd "$(dirname "$ARTIFACT_PATH")" && pwd)"
 ARTIFACT_NAME="$(basename "$ARTIFACT_PATH")"
+ARTIFACT_PATH="$ARTIFACT_DIR/$ARTIFACT_NAME"
 
 docker run --rm \
-  -v "$ARTIFACT_PATH:/release/$ARTIFACT_NAME:ro" \
+  -v "$ARTIFACT_DIR:/release:ro" \
   -e BUTLER_INSTALL_IN_DOCKER=1 \
   -e BUTLER_ACCEPT_EXPERIMENTAL=1 \
   -e NO_COLOR=1 \
@@ -103,6 +104,11 @@ docker run --rm \
     export BUTLER_DATA=/tmp/butler-data
     mkdir -p "$BUTLER_HOME" "$BUTLER_DATA"
     tar -xzf "/release/'"$ARTIFACT_NAME"'" -C "$BUTLER_HOME"
+    app_web_client="$BUTLER_HOME/packages/butler-agent/resources/app-client/dist"
+    if [[ ! -f "$app_web_client/index.html" ]]; then
+      echo "Service release artifact is missing the built Butler app web client: $app_web_client" >&2
+      exit 1
+    fi
     cd "$BUTLER_HOME"
 
     ./install.sh \
@@ -117,6 +123,10 @@ docker run --rm \
         grep -q "\"ok\":true" /tmp/butler-health.json
         echo "service-release-docker-health-ok"
         cat /tmp/butler-health.json
+        curl -fsS -D /tmp/butler-root.headers -o /tmp/butler-root.html http://127.0.0.1:18765/
+        grep -qi "content-type: text/html" /tmp/butler-root.headers
+        grep -qi "<title>Butler</title>" /tmp/butler-root.html
+        echo "service-release-docker-web-ok"
         BUTLER_HOME="$BUTLER_HOME" BUTLER_DATA="$BUTLER_DATA" \
           "$BUTLER_HOME/packages/butler-agent/scripts/service-control.sh" stop >/dev/null 2>&1 || true
         exit 0

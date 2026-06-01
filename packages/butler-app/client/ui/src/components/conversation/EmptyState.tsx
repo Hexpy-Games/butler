@@ -79,7 +79,7 @@ export function EmptyState({
   const description = briefing?.description;
   const titleIconSrc =
     markTheme === "dark" ? butlerMarkDarkSrc : butlerMarkLightSrc;
-  const momentLabel = newChatMomentLabel();
+  const momentLabel = briefing?.moment ?? newChatMomentLabel();
 
   return (
     <PromptSuggestionList
