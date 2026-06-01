@@ -8,6 +8,7 @@ import {
   createCachedRecallMemoryRunner,
   recallFromCorpus,
   recallMemory,
+  verifyRecallEvidence,
   type RecallCorpus,
 } from "../../packages/butler-agent/src/agent/cognition/memory/recall/engine.ts";
 
@@ -152,6 +153,50 @@ test("associative recall does not surface recency-only candidates", () => {
   expect(result.abstained).toBe(true);
 });
 
+test("associative recall reports contextual evidence only when bounded context connects to a candidate", () => {
+  const result = recallFromCorpus({
+    cue: "계속해줘",
+    now,
+    minScore: 0.01,
+    context: {
+      recentContext: "We decided that the composer ask-first approval form uses vertical card items.",
+      activeTaskSummary: "Implement composer approval form continuity.",
+      projectId: "butler",
+    },
+    corpus: {
+      hotCacheHints: [],
+      nodes: [
+        { id: "composer", type: "surface", name: "composer approval form", degree: 1 },
+      ],
+      edges: [],
+      candidates: [
+        {
+          id: "composer-form",
+          summary: "Composer ask-first approval form renders vertical card items.",
+          text: "The approval form replaces the composer input and lays options out as a card item list.",
+          source: "task-memory",
+          originalSource: "task-memory",
+          provenance: ["task:butler:composer-form"],
+          relatedNodes: ["composer"],
+        },
+        {
+          id: "unrelated",
+          summary: "Search planning has web source buckets.",
+          text: "Web search planning decomposes external source queries.",
+          source: "task-memory",
+          originalSource: "task-memory",
+          provenance: ["task:butler:search"],
+        },
+      ],
+    },
+  });
+
+  expect(result.abstained).toBe(false);
+  expect(result.items[0]?.provenance[0]).toBe("task:butler:composer-form");
+  expect(result.items[0]?.score_breakdown.contextual_match).toBeGreaterThan(0);
+  expect(result.diagnostics).toContain("contextual_candidates=1");
+});
+
 test("associative recall reports lexical evidence separately from semantic similarity", () => {
   const result = recallFromCorpus({
     cue: "composer approval form",
@@ -205,6 +250,74 @@ test("associative recall uses semantic similarity only for real vector candidate
   expect(result.items[0]?.source).toBe("vector");
   expect(result.items[0]?.score_breakdown.semantic_similarity).toBe(0.82);
   expect(result.items[0]?.score_breakdown.lexical_match).toBeGreaterThan(0);
+});
+
+test("recall evidence verifier rejects exact-quote answers from summary recall", () => {
+  const result = recallFromCorpus({
+    cue: "정확한 문장",
+    now,
+    minScore: 0.01,
+    evidencePolicy: {
+      evidenceRequired: ["exact_quote"],
+    },
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "summary-only",
+        summary: "사용자는 정확한 문장을 물어본 적이 있다.",
+        text: "This is only a memory summary, not an exact transcript projection hit.",
+        source: "task-memory",
+        originalSource: "task-memory",
+        provenance: ["memory:summary"],
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(true);
+  expect(result.diagnostics).toContain("evidence=exact_quote_requires_query_memory");
+});
+
+test("recall evidence verifier rejects weak or ambiguous specific-memory evidence", () => {
+  const baseItem = {
+    summary: "후보",
+    source: "task-memory" as const,
+    originalSource: "task-memory" as const,
+    provenance: ["memory:one"],
+    related_nodes: [],
+    score_breakdown: {
+      semantic_similarity: 0,
+      lexical_match: 0.1,
+      contextual_match: 0,
+      graph_activation: 0,
+      recency_score: 0,
+      frequency_score: 0,
+      explicit_salience: 0,
+      evidence_confidence: 0.1,
+      decision_preference_boost: 0,
+      hub_penalty: 0,
+      conflict_penalty: 0,
+      stale_superseded_penalty: 0,
+      total: 0.4,
+    },
+  };
+  const weak = verifyRecallEvidence({
+    items: [{ ...baseItem, confidence: 0.4 }],
+    policy: { minEvidenceConfidence: 0.2 },
+  });
+  const ambiguous = verifyRecallEvidence({
+    items: [
+      { ...baseItem, confidence: 0.7 },
+      { ...baseItem, confidence: 0.69, provenance: ["memory:two"] },
+    ],
+    policy: { requireSpecificMemory: true, tieMargin: 0.02 },
+  });
+
+  expect(weak.verified).toBe(false);
+  expect(weak.nextAction).toBe("try_alternate_retrieval");
+  expect(ambiguous.verified).toBe(false);
+  expect(ambiguous.diagnostics).toContain("evidence=ambiguous_tie");
 });
 
 test("associative recall applies contradiction penalties", () => {
