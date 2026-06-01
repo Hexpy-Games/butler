@@ -49,6 +49,9 @@ let originalFetch: typeof fetch;
 let originalButlerData: string | undefined;
 let originalButlerHome: string | undefined;
 let originalOpenAiApiKey: string | undefined;
+const packageVersion = JSON.parse(
+  readFileSync(join(process.cwd(), "package.json"), "utf8"),
+).version as string;
 
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "butler-app-server-"));
@@ -139,7 +142,7 @@ test("app server exposes app info metadata", async () => {
     const info = await getJson(`${server.url}app-info`);
     expect(info.data).toMatchObject({
       name: "Butler",
-      version: "0.0.1",
+      version: packageVersion,
       repository_url: "https://github.com/Hexpy-Games/butler",
       protocol_version: "butler.app.v1",
       developer_mode_available: false,
@@ -190,6 +193,9 @@ test("fresh app settings honor an install-selected local model default", async (
     const settings = await getJson(`${server.url}settings`);
     expect(settings.data.model).toBe("local/gemma-install");
     expect(settings.data.context_window_tokens).toBe(32768);
+    const catalog = await getJson(`${server.url}model-catalog`);
+    expect(catalog.data.default_model_ref).toBe("local/gemma-install");
+    expect(catalog.data.default_reasoning_effort).toBe("none");
   } finally {
     server.stop();
   }
@@ -211,7 +217,8 @@ test("app server exposes separate update status check and apply endpoints", asyn
     ).toEqual(["service", "app"]);
     expect(
       status.data.components.every(
-        (item: { current_version: string }) => item.current_version === "0.0.1",
+        (item: { current_version: string }) =>
+          item.current_version === packageVersion,
       ),
     ).toBe(true);
 
@@ -221,8 +228,8 @@ test("app server exposes separate update status check and apply endpoints", asyn
     expect(check.data.components).toHaveLength(1);
     expect(check.data.components[0]).toMatchObject({
       component: "app",
-      current_version: "0.0.1",
-      available_version: "0.0.1",
+      current_version: packageVersion,
+      available_version: packageVersion,
       update_available: false,
     });
 
@@ -4939,14 +4946,18 @@ test("app slash update command uses the service updater without routing to the m
       chat_id: "general",
       text: "/update",
     });
-    expect(check.data.reply.text).toBe("Butler service is up to date (0.0.1).");
+    expect(check.data.reply.text).toBe(
+      `Butler service is up to date (${packageVersion}).`,
+    );
     expect(runtime.turns).toHaveLength(0);
 
     const apply = await postJson(`${server.url}messages`, {
       chat_id: "general",
       text: "/update apply",
     });
-    expect(apply.data.reply.text).toBe("Butler service is up to date (0.0.1).");
+    expect(apply.data.reply.text).toBe(
+      `Butler service is up to date (${packageVersion}).`,
+    );
     expect(existsSync(join(tempDir, "updates", "staged", "service.json"))).toBe(
       true,
     );

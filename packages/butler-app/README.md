@@ -20,6 +20,13 @@ The app may call a configured local app gateway URL. It must not own or import
 agent turn execution, cognition, scheduler, worker runtime, gateway session
 actors, or agent policy.
 
+The renderer copy follows the app settings language returned by the gateway.
+Installer language initializes both the app interface language and the agent
+response language, so a fresh English install must render English UI copy after
+settings load. The model catalog default returned by the gateway must also
+reflect the installed Butler model, including `local/<id>` models registered
+during install.
+
 ## Related Specs
 
 - `SPEC-BUTLER-DEDICATED-CLIENT` - Butler Dedicated Client

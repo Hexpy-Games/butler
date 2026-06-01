@@ -1234,6 +1234,7 @@ export class AppServerStore {
       localModels,
       [...registeredHostedModelMetadata(this.butlerData), ...localModels],
       listProviderCredentialViews(this.butlerData),
+      { defaultModelRef: readConfigDefaultModel(this.butlerData) },
     );
   }
 

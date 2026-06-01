@@ -72,6 +72,10 @@ export interface ModelCatalogView {
   worker_model_presets: WorkerModelPreset[];
 }
 
+interface ModelCatalogOptions {
+  defaultModelRef?: string | null;
+}
+
 export interface WorkerModelRule {
   id: string;
   label: string;
@@ -554,8 +558,13 @@ export function modelCatalogView(
   extraModels: ProviderModelMetadata[] = [],
   registeredModels: ProviderModelMetadata[] = extraModels,
   providerCredentials: ModelCatalogView["provider_credentials"] = [],
+  options: ModelCatalogOptions = {},
 ): ModelCatalogView {
   const models = listModelMetadata(extraModels);
+  const defaultModel = resolveModelMetadata(
+    options.defaultModelRef ?? DEFAULT_MODEL_REF,
+    extraModels,
+  );
   const providers = Array.from(new Set(models.map((model) => model.provider_id))).map((providerId) => {
     const providerModels = models.filter((model) => model.provider_id === providerId);
     const latest = providerModels.find((model) => model.status === "latest") ?? providerModels[0]!;
@@ -569,8 +578,8 @@ export function modelCatalogView(
   });
   return {
     generated_at: new Date().toISOString(),
-    default_model_ref: DEFAULT_MODEL_REF,
-    default_reasoning_effort: DEFAULT_REASONING_EFFORT,
+    default_model_ref: defaultModel.model_ref,
+    default_reasoning_effort: defaultModel.default_reasoning_effort,
     providers,
     models,
     registered_models: registeredModels.map((model) => ({
