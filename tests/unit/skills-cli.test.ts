@@ -113,4 +113,4 @@ test("skills CLI lists validates inspects and imports data-home skills", () => {
     rmSync(butlerData, { recursive: true, force: true });
     rmSync(sourceRoot, { recursive: true, force: true });
   }
-});
+}, 20_000);

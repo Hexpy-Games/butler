@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/butler_banner.png" alt="Butler" width="100%" />
+  <img src="assets/butler_banner.png" alt="Butler" width="100%" />
 </p>
 
 # Butler

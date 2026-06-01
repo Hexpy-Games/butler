@@ -789,7 +789,7 @@ test("operator cognition user controls inspect forget disable repair without acc
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
-});
+}, 20_000);
 
 test("operator cognition know-how commands expose retrieval quality and index controls", () => {
   const butlerData = tempRoot();

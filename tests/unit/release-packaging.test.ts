@@ -272,7 +272,6 @@ test("service release packager creates an installable artifact with app web clie
     rmSync(outDir, { recursive: true, force: true });
   }
 }, 30_000);
-
 test("service release packager can write public GitHub artifact URLs", () => {
   const outDir = mkdtempSync(join(tmpdir(), "butler-service-release-url-test-"));
   try {

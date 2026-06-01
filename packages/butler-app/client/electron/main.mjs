@@ -120,7 +120,6 @@ function candidateButlerHomes() {
 
 function resolveButlerRuntime(data) {
   const candidates = [
-    process.env.BUTLER_BUN,
     join(data, "runtime", "bun", "current", "bin", "bun"),
   ];
   for (const candidate of candidates) {
