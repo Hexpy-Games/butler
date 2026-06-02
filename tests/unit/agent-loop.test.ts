@@ -479,6 +479,44 @@ test("agent loop gives repeated-failure finalizer all completed parallel results
   ]);
 });
 
+test("agent loop lets model use successful alternate result before default repeated-failure stop", async () => {
+  const safeTools: AgentLoopToolDefinition[] = [
+    { name: "fail", description: "Failing safe tool.", concurrencySafe: true },
+    { name: "alternate", description: "Alternate safe tool.", concurrencySafe: true },
+  ];
+  let modelCalls = 0;
+
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "try failing primary then alternate" }],
+    tools: safeTools,
+    callModel: async (input) => {
+      modelCalls += 1;
+      if (input.iteration === 0) {
+        return {
+          toolCalls: [{ id: "call-fail-1", name: "fail", arguments: { target: "same" } }],
+        };
+      }
+      if (input.iteration === 1) {
+        return {
+          toolCalls: [
+            { id: "call-fail-2", name: "fail", arguments: { target: "same" } },
+            { id: "call-alternate", name: "alternate", arguments: { target: "other" } },
+          ],
+        };
+      }
+      return { text: "Used the successful alternate result." };
+    },
+    executeTool: async (call) => {
+      if (call.name === "fail") throw new Error("still failing");
+      return { tool: call.name, ok: true };
+    },
+  });
+
+  expect(modelCalls).toBe(3);
+  expect(result.finalText).toBe("Used the successful alternate result.");
+  expect(result.events.map((event) => event.type)).not.toContain("repeated_tool_failure");
+});
+
 test("agent loop produces truthful partial response when loop limit is reached", async () => {
   const result = await runAgentLoop({
     messages: [{ role: "user", content: "never finishes" }],

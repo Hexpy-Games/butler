@@ -578,6 +578,14 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
         });
         if (!stop && candidate) stop = candidate;
       }
+      const hasSuccessfulAlternateInBatch = stop?.type === "repeated_tool_failure" &&
+        input.onRepeatedToolFailure === undefined &&
+        results.some((result, index) =>
+          result.ok &&
+          failedToolSignature({ toolCall: preparedCalls[index]!.call }) !==
+            failedToolSignature({ toolCall: stop!.toolCall }),
+        );
+      if (hasSuccessfulAlternateInBatch) continue;
       if (stop) return finishWithStopCandidate(stop);
       continue;
     }
