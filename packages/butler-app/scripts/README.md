@@ -14,8 +14,9 @@ dev renderer can attach without starting a second app-server.
   `app-ui-hmr-smoke.ts` stay here when they are client-owned. Package, layout,
   design-system, render, model-management, and multi-turn checks live under
   `tests/` because they start or inspect the agent-owned app gateway.
-- App release: `release/manifest.ts` and `release/release-gate.ts` validate app
-  package metadata without depending on service release internals.
+- App release: `release/manifest.ts`, `release/release-gate.ts`, and
+  `release/package-app-release.ts` validate and package app artifacts without
+  depending on service release internals.
 - UI quality: `lint/`.
 
 ## Boundaries

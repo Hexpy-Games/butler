@@ -61,6 +61,7 @@
     "release:service:gate": "${BUTLER_BUN:-bun} run --silent packages/butler-agent/src/operations/release/release-gate.ts",
     "release:service:package": "${BUTLER_BUN:-bun} run --silent packages/butler-agent/src/operations/release/package-service-release.ts",
     "release:app:gate": "${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/release/release-gate.ts",
+    "release:app:package": "${BUTLER_BUN:-bun} run --silent packages/butler-app/scripts/release/package-app-release.ts",
     "release:gate": "${BUTLER_BUN:-bun} run --silent release:service:gate && ${BUTLER_BUN:-bun} run --silent release:app:gate",
     "check": "${BUTLER_BUN:-bun} run --silent tools/validation/validate.ts check:run",
     "check:verbose": "${BUTLER_BUN:-bun} run --silent tools/validation/validate.ts check:run --verbose",

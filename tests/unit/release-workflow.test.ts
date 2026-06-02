@@ -65,6 +65,37 @@ test("version tag release workflow publishes service artifact with packaged app 
   expect(workflow).not.toContain("packages/butler-app/client/ui/dist");
 });
 
+test("version tag release workflow publishes signed app artifacts", () => {
+  const workflowPath = join(root, ".github", "workflows", "release.yml");
+  expect(existsSync(workflowPath)).toBe(true);
+  const workflow = readFileSync(workflowPath, "utf8");
+
+  const serviceJobIndex = workflow.indexOf("service-artifact:");
+  const appJobIndex = workflow.indexOf("app-artifact:");
+  const packageIndex = workflow.indexOf("bun run release:app:package");
+  const verifyIndex = workflow.indexOf("Verify packaged app artifacts");
+  const publishIndex = workflow.indexOf("Publish app GitHub Release files");
+
+  expect(appJobIndex).toBeGreaterThan(serviceJobIndex);
+  expect(workflow).toContain("runs-on: macos-latest");
+  expect(workflow).toContain("needs: service-artifact");
+  expect(workflow).toContain("npm --prefix packages/butler-app/client/electron ci");
+  expect(workflow).toContain("bun run release:app:gate");
+  expect(packageIndex).toBeGreaterThan(appJobIndex);
+  expect(workflow).toContain("--artifact-base-url");
+  expect(verifyIndex).toBeGreaterThan(packageIndex);
+  expect(workflow).toContain("codesign --verify --deep --strict --verbose=4");
+  expect(workflow).toContain('grep -F "Butler-linux-x64/Butler"');
+  expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.zip");
+  expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.zip.sha256");
+  expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.tar.gz");
+  expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.tar.gz.sha256");
+  expect(workflow).toContain("dist/release/app/app-release-manifest.json");
+  expect(workflow).toContain("dist/release/app/app-update-manifest.json");
+  expect(publishIndex).toBeGreaterThan(verifyIndex);
+  expect(workflow).toContain('gh release upload "$tag" "${files[@]}" --clobber');
+});
+
 test("README directs user installs to tag artifacts instead of source checkout", () => {
   const readme = readRepoFile("README.md");
   const quickStartStart = readme.indexOf("## Quick Start");
