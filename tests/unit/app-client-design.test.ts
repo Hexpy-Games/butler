@@ -1515,7 +1515,7 @@ test("electron shell owns only the app gateway process and shuts it down cleanly
   expect(electronMain).toContain("serverShutdownKillTimer");
   expect(electronMain).toContain("function managedGatewayCommand");
   expect(electronMain).toContain('"gateway", "app"');
-  expect(electronMain).not.toContain("process.env.BUTLER_BUN");
+  expect(electronMain).toContain("process.env.BUTLER_BUN");
   expect(electronMain).not.toContain(
     "packages/butler-agent/src/gateways/app/cli.ts",
   );
@@ -1523,6 +1523,8 @@ test("electron shell owns only the app gateway process and shuts it down cleanly
   expect(electronMain).toContain("already starting but is not healthy");
   expect(electronMain).toContain("Failed to start Butler app server");
   expect(electronMain).toContain("exited before becoming healthy");
+  expect(electronMain).toContain("if (await healthOk()) return;");
+  expect(electronMain).toContain("BUTLER_APP_GATEWAY_PID_FILE");
   expect(electronMain).toContain('serverProcess.once("exit"');
   expect(electronMain).toContain('serverProcess.once("error"');
   expect(electronMain).not.toContain("serverProcess.unref()");

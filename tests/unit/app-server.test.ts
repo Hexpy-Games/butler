@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/server.ts";
@@ -93,6 +94,45 @@ test("app server exposes health and onboarding chat seed", async () => {
     );
   } finally {
     server.stop();
+  }
+});
+
+test("app gateway CLI keeps serving after startup health", async () => {
+  const port = await findAvailablePort();
+  const dbPath = join(tempDir, "cli-app.sqlite");
+  const proc = spawn(process.execPath, [
+    join(process.cwd(), "bin", "butler.js"),
+    "gateway",
+    "app",
+  ], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      BUTLER_DATA: tempDir,
+      BUTLER_HOME: process.cwd(),
+      BUTLER_BUN: process.execPath,
+      BUTLER_APP_SERVER_PORT: String(port),
+      BUTLER_APP_SERVER_URL: `http://127.0.0.1:${port}`,
+      BUTLER_APP_SERVER_DB: dbPath,
+      BUTLER_APP_SERVER_BRIDGE: "off",
+      BUTLER_APP_GATEWAY_PID_FILE: "off",
+    },
+    stdio: "ignore",
+  });
+
+  try {
+    await waitForHttpOk(`http://127.0.0.1:${port}/health`);
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    if (proc.exitCode !== null) {
+      throw new Error("Gateway CLI exited after startup.");
+    }
+    const health = await getJson(`http://127.0.0.1:${port}/health`);
+    expect(health.data.ok).toBe(true);
+    expect(existsSync(join(tempDir, "state", "gateways", "app.pid"))).toBe(
+      false,
+    );
+  } finally {
+    await terminateChild(proc);
   }
 });
 
@@ -6840,6 +6880,47 @@ async function waitForCondition(predicate: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error("Condition did not become true.");
+}
+
+async function waitForHttpOk(url: string): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return;
+      lastError = `HTTP ${response.status}`;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`Timed out waiting for ${url}: ${String(lastError)}`);
+}
+
+async function findAvailablePort(): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address();
+      const port = typeof address === "object" && address ? address.port : null;
+      probe.close(() => {
+        if (port === null) reject(new Error("Could not allocate test port."));
+        else resolve(port);
+      });
+    });
+  });
+}
+
+async function terminateChild(proc: ReturnType<typeof spawn>): Promise<void> {
+  if (proc.exitCode !== null) return;
+  const exited = new Promise((resolve) => proc.once("exit", resolve));
+  proc.kill("SIGTERM");
+  await Promise.race([
+    exited,
+    new Promise((resolve) => setTimeout(resolve, 500)),
+  ]);
+  if (proc.exitCode === null) proc.kill("SIGKILL");
 }
 
 async function readSseEvent(
