@@ -5,6 +5,7 @@ import { join } from "path";
 import {
   defaultNativeServiceSpecs,
   listServices,
+  projectFolderTokenSecretPath,
   serviceStatePath,
   startService,
   startServices,
@@ -46,6 +47,12 @@ test("native service manifest defines Butler-owned default services", () => {
       BUTLER_APP_SERVER_HOST: "127.0.0.1",
       BUTLER_APP_SERVER_PORT: "18765",
     });
+    const appGatewaySecret = appGateway?.env?.BUTLER_PROJECT_FOLDER_TOKEN_SECRET;
+    expect(appGatewaySecret).toBeTruthy();
+    if (!appGatewaySecret) throw new Error("missing app gateway folder token secret");
+    expect(readFileSync(projectFolderTokenSecretPath(butlerData), "utf8").trim()).toBe(
+      appGatewaySecret,
+    );
     expect(specs.every((spec) => spec.stdoutFile.startsWith(`${butlerData}/logs/`))).toBe(true);
     expect(specs.every((spec) => spec.env?.BUTLER_DATA === butlerData)).toBe(true);
   } finally {

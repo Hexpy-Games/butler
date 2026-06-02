@@ -33,8 +33,8 @@ bun run app:server
   are queued through the app transport instead of being answered by the gateway
   store directly.
 - `BUTLER_PROJECT_FOLDER_TOKEN_SECRET`: optional override for desktop folder
-  selection token signing. When omitted, Electron uses an in-process local
-  secret for the current desktop run.
+  selection token signing. When omitted, Electron and the native app gateway
+  share a data-home secret under `state/app-gateway/`.
 
 ## Static Client
 

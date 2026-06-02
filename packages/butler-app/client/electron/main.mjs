@@ -12,7 +12,7 @@ import {
 } from "electron";
 import { spawn } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
 const userHome = homedir();
+const butlerDataRoot = process.env.BUTLER_DATA || join(userHome, ".butler");
 const preloadPath = resolve(__dirname, "preload.cjs");
 const packagePath = resolve(__dirname, "package.json");
 const appDisplayName = "Butler";
@@ -54,8 +55,7 @@ const macTrafficLightPosition = { x: 20, y: 18 };
 const macTransparentBackground = "#00000000";
 const macVibrancy = "sidebar";
 const appearanceThemeSources = new Set(["system", "light", "dark"]);
-const projectFolderTokenSecret =
-  process.env.BUTLER_PROJECT_FOLDER_TOKEN_SECRET ?? randomUUID();
+const projectFolderTokenSecret = resolveProjectFolderTokenSecret();
 const projectFolderTokenTtlMs = 5 * 60 * 1000;
 const messageFileIdPattern = /^file-[0-9a-f-]{36}$/iu;
 let serverProcess = null;
@@ -76,11 +76,36 @@ const nativeNotificationState = {
 app.setName(appDisplayName);
 syncPreloadServerEnvironment();
 
+function projectFolderTokenSecretPath(dataRoot = butlerDataRoot) {
+  return join(
+    dataRoot,
+    "state",
+    "app-gateway",
+    "project-folder-token-secret",
+  );
+}
+
+function resolveProjectFolderTokenSecret() {
+  const envSecret = process.env.BUTLER_PROJECT_FOLDER_TOKEN_SECRET?.trim();
+  if (envSecret) return envSecret;
+  const secretPath = projectFolderTokenSecretPath();
+  try {
+    const existing = readFileSync(secretPath, "utf8").trim();
+    if (existing) return existing;
+  } catch {
+    // Missing or unreadable secrets are recreated below for local desktop use.
+  }
+  const secret = randomUUID();
+  mkdirSync(dirname(secretPath), { recursive: true, mode: 0o700 });
+  writeFileSync(secretPath, `${secret}\n`, { mode: 0o600 });
+  return secret;
+}
+
 function managedGatewayCommand() {
   for (const home of candidateButlerHomes()) {
     const localButlerCli = resolve(home, "bin", "butler.js");
     if (!existsSync(localButlerCli)) continue;
-    const data = process.env.BUTLER_DATA || join(userHome, ".butler");
+    const data = butlerDataRoot;
     const runtime = resolveButlerRuntime(data);
     return {
       command: runtime,

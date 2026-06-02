@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { spawn } from "child_process";
 import {
   closeSync,
@@ -151,6 +152,31 @@ function logPath(butlerData: string, name: string): string {
   return join(butlerData, "logs", name);
 }
 
+export function projectFolderTokenSecretPath(butlerData: string): string {
+  return join(
+    butlerData,
+    "state",
+    "app-gateway",
+    "project-folder-token-secret",
+  );
+}
+
+export function readOrCreateProjectFolderTokenSecret(butlerData: string): string {
+  const envSecret = process.env.BUTLER_PROJECT_FOLDER_TOKEN_SECRET?.trim();
+  if (envSecret) return envSecret;
+  const secretPath = projectFolderTokenSecretPath(butlerData);
+  try {
+    const existing = readFileSync(secretPath, "utf8").trim();
+    if (existing) return existing;
+  } catch {
+    // Missing or unreadable secrets are recreated below for local app gateway use.
+  }
+  const secret = randomUUID();
+  mkdirSync(dirname(secretPath), { recursive: true, mode: 0o700 });
+  writeFileSync(secretPath, `${secret}\n`, { mode: 0o600 });
+  return secret;
+}
+
 export function defaultNativeServiceSpecs(input: Partial<NativeSupervisorPaths> = {}): NativeServiceSpec[] {
   const paths = resolveNativeSupervisorPaths(input);
   const bun = resolveBunPath({ butlerData: paths.butlerData });
@@ -238,6 +264,8 @@ export function defaultNativeServiceSpecs(input: Partial<NativeSupervisorPaths> 
         ...commonEnv,
         BUTLER_APP_SERVER_HOST: app.host,
         BUTLER_APP_SERVER_PORT: String(app.port),
+        BUTLER_PROJECT_FOLDER_TOKEN_SECRET:
+          readOrCreateProjectFolderTokenSecret(paths.butlerData),
         ...(app.dbPath ? { BUTLER_APP_SERVER_DB: app.dbPath } : {}),
       },
       stdoutFile: appLogs.stdout,
