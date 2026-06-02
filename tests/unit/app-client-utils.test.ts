@@ -25,6 +25,10 @@ import {
   workerActivityStatusLine,
   workBlocksFromProgressRows,
 } from "../../packages/butler-app/client/ui/src/app/utils.ts";
+import {
+  browserRandomId,
+  browserRandomUUID,
+} from "../../packages/butler-app/client/ui/src/app/id.ts";
 import { resolveMarkdownImageSource } from "../../packages/butler-app/client/ui/src/components/conversation/messageMedia.ts";
 import type {
   MessageFileRef,
@@ -34,6 +38,48 @@ import type {
   TurnProgressSnapshot,
   WorkerActivitySummary,
 } from "../../packages/butler-app/client/ui/src/app/types.ts";
+
+const originalCrypto = globalThis.crypto;
+
+function withCrypto<T>(crypto: Partial<Crypto> | undefined, run: () => T): T {
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    value: crypto,
+    writable: true,
+  });
+  try {
+    return run();
+  } finally {
+    Object.defineProperty(globalThis, "crypto", {
+      configurable: true,
+      value: originalCrypto,
+      writable: true,
+    });
+  }
+}
+
+test("browser random ids fall back when randomUUID is unavailable", () => {
+  const id = withCrypto(
+    {
+      getRandomValues(bytes: Uint8Array) {
+        bytes.fill(0);
+        bytes[15] = 1;
+        return bytes;
+      },
+    },
+    () => browserRandomUUID(),
+  );
+
+  expect(id).toBe("00000000-0000-4000-8000-000000000001");
+});
+
+test("browser random ids still exist when Web Crypto is unavailable", () => {
+  const id = withCrypto(undefined, () => browserRandomId("client"));
+
+  expect(id).toMatch(
+    /^client-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+  );
+});
 
 test("message merging preserves unchanged row references", () => {
   const cachedMessage = message("assistant-a", "assistant", 2, "turn-a");

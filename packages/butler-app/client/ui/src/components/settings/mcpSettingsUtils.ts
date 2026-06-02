@@ -1,3 +1,4 @@
+import { browserRandomUUID } from "@/app/id.ts";
 import type {
   McpSecretInput,
   McpServerUpsertRequest,
@@ -110,7 +111,7 @@ export function secretList(rows: McpSecretRowState[]): McpSecretInput[] {
 
 export function emptySecretRow(source: McpSecretInput["source"] = "literal"): McpSecretRowState {
   return {
-    id: crypto.randomUUID(),
+    id: browserRandomUUID(),
     key: "",
     source,
     value: "",
@@ -119,7 +120,7 @@ export function emptySecretRow(source: McpSecretInput["source"] = "literal"): Mc
 
 function secretRowFromView(secret: McpServerView["env"][number]): McpSecretRowState {
   return {
-    id: crypto.randomUUID(),
+    id: browserRandomUUID(),
     key: secret.key,
     source: secret.source,
     value: secret.value ?? "",

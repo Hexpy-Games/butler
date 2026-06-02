@@ -29,9 +29,15 @@ import type {
 
 const originalFetch = globalThis.fetch;
 const originalWindow = globalThis.window;
+const originalCrypto = globalThis.crypto;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    value: originalCrypto,
+    writable: true,
+  });
   useButlerStore.setState({
     activeChatId: "draft:chat",
     navigation: EMPTY_NAVIGATION,
@@ -90,6 +96,75 @@ afterEach(() => {
       writable: true,
     });
   }
+});
+
+test("sendMessage works when browser randomUUID is unavailable", async () => {
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    value: {
+      getRandomValues(bytes: Uint8Array) {
+        bytes.fill(0);
+        bytes[15] = 2;
+        return bytes;
+      },
+    },
+    writable: true,
+  });
+  let sendMessageBody: Record<string, unknown> | null = null;
+  globalThis.fetch = (async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    const path = String(input);
+    if (path === "/messages" && init?.method === "POST") {
+      sendMessageBody = JSON.parse(String(init.body ?? "{}")) as Record<
+        string,
+        unknown
+      >;
+      const messageId = String(sendMessageBody.client_message_id);
+      return jsonResponse({
+        accepted: messageRecord(
+          messageId,
+          "session-browser",
+          "user",
+          "hello",
+          1,
+          "turn-browser",
+        ),
+        replies: [],
+      });
+    }
+    if (path === "/navigation") return jsonResponse(EMPTY_NAVIGATION);
+    if (path.startsWith("/session-view")) {
+      return jsonResponse(
+        sessionView("session-browser", {
+          messages: [],
+          turnState: "thinking",
+          latestProgress: {
+            turn_id: "turn-browser",
+            state: "thinking",
+            safe_progress_rows: [],
+          },
+        }),
+      );
+    }
+    return jsonResponse({});
+  }) as unknown as typeof fetch;
+
+  useButlerStore.setState({
+    activeChatId: "session-browser",
+    view: { kind: "session" },
+    messages: [],
+    summary: null,
+  });
+
+  await useButlerStore.getState().sendMessage("hello");
+
+  expect(sendMessageBody).toMatchObject({
+    chat_id: "session-browser",
+    client_message_id: "client-00000000-0000-4000-8000-000000000002",
+    text: "hello",
+  });
 });
 
 test("fresh app state starts with the left sidebar collapsed", () => {

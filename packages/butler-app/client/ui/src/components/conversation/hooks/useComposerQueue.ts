@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { RefObject } from "react";
+import { browserRandomUUID } from "@/app/id.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type {
   QueuedMessageRecord,
@@ -44,7 +45,7 @@ export function useComposerQueue({
     setText(message.text);
     files.setAttachments(
       (message.attachments ?? []).map((file) => ({
-        id: `queued-${file.file_id}-${crypto.randomUUID()}`,
+        id: `queued-${file.file_id}-${browserRandomUUID()}`,
         file,
         kind: file.kind,
       })),

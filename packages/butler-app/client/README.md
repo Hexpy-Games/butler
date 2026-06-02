@@ -14,6 +14,12 @@
 Client code talks to the agent-owned app gateway through HTTP. It should not
 import Butler Agent internals directly.
 
+The UI must remain browser-compatible when served over local or LAN HTTP. Do
+not call optional Web Crypto helpers such as `crypto.randomUUID()` directly from
+renderer code; use the app ID helpers so message sending, attachment queues, and
+settings rows keep working when a browser exposes only `getRandomValues` or no
+Web Crypto object.
+
 ## Related Specs
 
 - `SPEC-BUTLER-DEDICATED-CLIENT` - Butler Dedicated Client
