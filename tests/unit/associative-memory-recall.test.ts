@@ -561,6 +561,57 @@ test("associative recall applies contradiction penalties", () => {
   expect(old?.score_breakdown.conflict_penalty ?? 0).toBeGreaterThan(0);
 });
 
+test("explicit recall requires a cue anchor before rules become evidence", () => {
+  const result = recallFromCorpus({
+    cue: "이미지 OCR 노이즈 제거 결론",
+    now,
+    minScore: 0.01,
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "reporting-rule",
+        summary: "보고는 핵심만 간결하게 한다.",
+        text: "사용자는 최종적으로 핵심만 간결하게 보고하기를 선호한다.",
+        source: "explicit",
+        originalSource: "rules",
+        provenance: ["rules:reporting"],
+        explicitSalience: 1,
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(true);
+  expect(result.items).toHaveLength(0);
+});
+
+test("explicit recall still returns rules when the cue anchors the rule", () => {
+  const result = recallFromCorpus({
+    cue: "간결하게 보고하기",
+    now,
+    minScore: 0.01,
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "reporting-rule",
+        summary: "보고는 핵심만 간결하게 한다.",
+        text: "사용자는 최종적으로 핵심만 간결하게 보고하기를 선호한다.",
+        source: "explicit",
+        originalSource: "rules",
+        provenance: ["rules:reporting"],
+        explicitSalience: 1,
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(false);
+  expect(result.items[0]?.provenance[0]).toBe("rules:reporting");
+  expect(result.items[0]?.score_breakdown.explicit_salience).toBeGreaterThan(0);
+});
+
 test("file-backed recall memory returns explicit and graph-backed results", () => {
   const tempDir = join(tmpdir(), `butler-recall-${Date.now()}-${Math.random()}`);
   try {
