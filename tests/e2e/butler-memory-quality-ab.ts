@@ -56,6 +56,12 @@ interface ModeResult {
   sources: string[];
   top_source: string | null;
   top_score_breakdown: Record<string, number> | null;
+  legacy_keyword_weighted_target_rank: number | null;
+  legacy_keyword_weighted_decoy_rank: number | null;
+  legacy_keyword_weighted_target_score: number | null;
+  legacy_keyword_weighted_top_score: number | null;
+  legacy_keyword_weighted_top_target_hit: boolean;
+  legacy_keyword_weighted_top_decoy_hit: boolean;
   raw_memory_text_in_report: false;
 }
 
@@ -70,6 +76,8 @@ interface CaseComparison {
   negative_false_positive: boolean;
   vector_lift: boolean;
   vector_regression: boolean;
+  vector_lift_over_legacy_keyword_weighted: boolean;
+  vector_regression_against_legacy_keyword_weighted: boolean;
   notes: string[];
 }
 
@@ -317,6 +325,54 @@ function roundedBreakdown(value: RecallScoreBreakdown | undefined): Record<strin
   };
 }
 
+function legacyKeywordWeightedScore(value: RecallScoreBreakdown): number {
+  // Initial recall used keyword overlap as the "semantic" channel. Current
+  // breakdown separates that evidence as lexical_match, so this baseline maps
+  // lexical_match into the old semantic slot instead of using vector similarity.
+  return value.lexical_match * 0.38 +
+    value.graph_activation * 0.32 +
+    value.recency_score * 0.08 +
+    value.frequency_score * 0.07 +
+    value.explicit_salience * 0.18 +
+    value.decision_preference_boost -
+    value.hub_penalty * 0.25 -
+    value.conflict_penalty -
+    value.stale_superseded_penalty;
+}
+
+function legacyKeywordWeightedRanks(
+  items: RecallItem[],
+  targetGroups: string[][],
+  decoyGroups?: string[][],
+): {
+  targetRank: number | null;
+  decoyRank: number | null;
+  targetScore: number | null;
+  topScore: number | null;
+  topTargetHit: boolean;
+  topDecoyHit: boolean;
+} {
+  const ranked = items
+    .map((item, index) => ({
+      item,
+      index,
+      score: legacyKeywordWeightedScore(item.score_breakdown),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index);
+  const rankedItems = ranked.map((entry) => entry.item);
+  const targetIndex = firstMatchingIndex(rankedItems, targetGroups);
+  const decoyIndex = decoyGroups ? firstMatchingIndex(rankedItems, decoyGroups) : -1;
+  return {
+    targetRank: targetIndex < 0 ? null : targetIndex + 1,
+    decoyRank: decoyIndex < 0 ? null : decoyIndex + 1,
+    targetScore: targetIndex < 0 ? null : round(ranked[targetIndex]?.score ?? 0),
+    topScore: ranked[0] ? round(ranked[0].score) : null,
+    topTargetHit: targetIndex === 0,
+    topDecoyHit: decoyIndex === 0,
+  };
+}
+
 function round(value: number): number {
   return Math.round(value * 1_000) / 1_000;
 }
@@ -330,6 +386,11 @@ async function runMode(qualityCase: QualityCase, mode: RecallMode): Promise<Mode
   const targetItem = targetIndex < 0 ? undefined : result.items[targetIndex];
   const decoyRank = qualityCase.decoyGroups ? firstMatchingRank(result.items, qualityCase.decoyGroups) : null;
   const sources = result.items.map((item) => item.source);
+  const legacyRanks = legacyKeywordWeightedRanks(
+    result.items,
+    qualityCase.targetGroups,
+    qualityCase.decoyGroups,
+  );
   return {
     mode,
     duration_ms: durationMs,
@@ -354,6 +415,12 @@ async function runMode(qualityCase: QualityCase, mode: RecallMode): Promise<Mode
     sources,
     top_source: sources[0] ?? null,
     top_score_breakdown: roundedBreakdown(result.items[0]?.score_breakdown),
+    legacy_keyword_weighted_target_rank: legacyRanks.targetRank,
+    legacy_keyword_weighted_decoy_rank: legacyRanks.decoyRank,
+    legacy_keyword_weighted_target_score: legacyRanks.targetScore,
+    legacy_keyword_weighted_top_score: legacyRanks.topScore,
+    legacy_keyword_weighted_top_target_hit: legacyRanks.topTargetHit,
+    legacy_keyword_weighted_top_decoy_hit: legacyRanks.topDecoyHit,
     raw_memory_text_in_report: false,
   };
 }
@@ -406,6 +473,18 @@ async function runCase(qualityCase: QualityCase): Promise<CaseComparison> {
     lexical.target_hit &&
       (!vector.target_hit || vector.top_decoy_hit || rankWorse(lexical.target_rank, vector.target_rank)),
   );
+  const vectorLiftOverLegacy = qualityCase.category !== "negative" &&
+    (
+      rankImproved(lexical.legacy_keyword_weighted_target_rank, vector.target_rank) ||
+        (!lexical.legacy_keyword_weighted_top_target_hit && vector.top_target_hit)
+    );
+  const vectorRegressionAgainstLegacy = Boolean(
+    qualityCase.category !== "negative" &&
+      lexical.legacy_keyword_weighted_target_rank !== null &&
+      (!vector.target_hit ||
+        vector.top_decoy_hit ||
+        rankWorse(lexical.legacy_keyword_weighted_target_rank, vector.target_rank)),
+  );
   return {
     case_id: qualityCase.id,
     category: qualityCase.category,
@@ -417,6 +496,8 @@ async function runCase(qualityCase: QualityCase): Promise<CaseComparison> {
     negative_false_positive: negativeFalsePositive,
     vector_lift: vectorLift,
     vector_regression: vectorRegression,
+    vector_lift_over_legacy_keyword_weighted: vectorLiftOverLegacy,
+    vector_regression_against_legacy_keyword_weighted: vectorRegressionAgainstLegacy,
     notes: comparisonNotes(qualityCase, lexical, vector, planned),
   };
 }
@@ -456,8 +537,17 @@ function comparisonNotes(
   if (!vector.vector_ok && !planned.vector_ok) notes.push("vector_backend_not_observed");
   if (vector.top_target_hit && !lexical.top_target_hit) notes.push("vector_enabled_promoted_target_to_top");
   if (planned.top_target_hit && !lexical.top_target_hit) notes.push("planned_vector_promoted_target_to_top");
+  if (vector.target_hit && rankImproved(lexical.legacy_keyword_weighted_target_rank, vector.target_rank)) {
+    notes.push("vector_enabled_improved_over_legacy_keyword_weighted");
+  }
   if (lexical.target_hit && !vector.target_hit) notes.push("vector_enabled_lost_lexical_target");
+  if (lexical.legacy_keyword_weighted_target_rank !== null && rankWorse(lexical.legacy_keyword_weighted_target_rank, vector.target_rank)) {
+    notes.push("vector_enabled_worse_than_legacy_keyword_weighted");
+  }
   if (vector.top_decoy_hit) notes.push("vector_enabled_top_decoy");
+  if (lexical.legacy_keyword_weighted_top_decoy_hit && !vector.top_decoy_hit) {
+    notes.push("vector_enabled_demoted_legacy_top_decoy");
+  }
   if (planned.target_vector_backed && !vector.target_vector_backed) notes.push("planned_vector_evidence_observed");
   if (planned.abstained && vector.target_hit) notes.push("planned_vector_first_abstained");
   if (!lexical.target_hit && !vector.target_hit && !planned.target_hit) notes.push("no_mode_found_target");
@@ -471,6 +561,8 @@ function writeReport(comparisons: CaseComparison[]): void {
   ).length;
   const vectorLiftCases = comparisons.filter((comparison) => comparison.vector_lift).length;
   const regressionCases = comparisons.filter((comparison) => comparison.vector_regression);
+  const legacyLiftCases = comparisons.filter((comparison) => comparison.vector_lift_over_legacy_keyword_weighted);
+  const legacyRegressionCases = comparisons.filter((comparison) => comparison.vector_regression_against_legacy_keyword_weighted);
   const decoyTopCases = comparisons.filter((comparison) =>
     comparison.modes.some((mode) => mode.mode === "vector_enabled" && mode.top_decoy_hit),
   );
@@ -506,11 +598,14 @@ function writeReport(comparisons: CaseComparison[]): void {
       vector_ok_cases: vectorOkCases,
       vector_lift_cases: vectorLiftCases,
       vector_regression_cases: regressionCases.length,
+      legacy_keyword_weighted_lift_cases: legacyLiftCases.length,
+      legacy_keyword_weighted_regression_cases: legacyRegressionCases.length,
       vector_top_decoy_cases: decoyTopCases.length,
       positive_target_miss_cases: positiveTargetMissCases.length,
       negative_false_positive_cases: negativeFalsePositiveCases.length,
       vector_backed_target_cases: vectorBackedTargetCases.length,
       positive_vector_backed_miss_cases: positiveVectorBackedMissCases.length,
+      duration_ms: durationAggregate(comparisons),
     },
     comparisons,
   };
@@ -520,17 +615,54 @@ function writeReport(comparisons: CaseComparison[]): void {
   assertReportDoesNotContainRawMemoryText(summaryPath);
 }
 
+function average(values: number[]): number {
+  if (values.length === 0) return 0;
+  return round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function averageDuration(comparisons: CaseComparison[], mode: RecallMode): number {
+  return average(comparisons.map((comparison) => requiredMode(comparison.modes, mode).duration_ms));
+}
+
+function durationAggregate(comparisons: CaseComparison[]): {
+  lexical_only_avg: number;
+  vector_enabled_avg: number;
+  planned_vector_first_avg: number;
+  vector_enabled_over_lexical_avg_delta: number;
+  planned_vector_first_over_vector_avg_delta: number;
+} {
+  const lexical = averageDuration(comparisons, "lexical_only");
+  const vector = averageDuration(comparisons, "vector_enabled");
+  const planned = averageDuration(comparisons, "planned_vector_first");
+  return {
+    lexical_only_avg: lexical,
+    vector_enabled_avg: vector,
+    planned_vector_first_avg: planned,
+    vector_enabled_over_lexical_avg_delta: round(vector - lexical),
+    planned_vector_first_over_vector_avg_delta: round(planned - vector),
+  };
+}
+
 function renderSummary(
   aggregate: {
     case_count: number;
     vector_ok_cases: number;
     vector_lift_cases: number;
     vector_regression_cases: number;
+    legacy_keyword_weighted_lift_cases: number;
+    legacy_keyword_weighted_regression_cases: number;
     vector_top_decoy_cases: number;
     positive_target_miss_cases: number;
     negative_false_positive_cases: number;
     vector_backed_target_cases: number;
     positive_vector_backed_miss_cases: number;
+    duration_ms: {
+      lexical_only_avg: number;
+      vector_enabled_avg: number;
+      planned_vector_first_avg: number;
+      vector_enabled_over_lexical_avg_delta: number;
+      planned_vector_first_over_vector_avg_delta: number;
+    };
   },
   comparisons: CaseComparison[],
 ): string {
@@ -540,20 +672,28 @@ function renderSummary(
     `- run_id: ${runId}`,
     `- source_data_label: ${sourceButlerData.replace(homedir(), "~")}`,
     `- project_id: ${projectId}`,
+    "- legacy_keyword_weighted_baseline: lexical_only candidates reranked with initial keyword-weighted formula",
     `- cases: ${aggregate.case_count}`,
     `- vector_ok_cases: ${aggregate.vector_ok_cases}`,
     `- vector_lift_cases: ${aggregate.vector_lift_cases}`,
     `- vector_regression_cases: ${aggregate.vector_regression_cases}`,
+    `- legacy_keyword_weighted_lift_cases: ${aggregate.legacy_keyword_weighted_lift_cases}`,
+    `- legacy_keyword_weighted_regression_cases: ${aggregate.legacy_keyword_weighted_regression_cases}`,
     `- vector_top_decoy_cases: ${aggregate.vector_top_decoy_cases}`,
     `- positive_target_miss_cases: ${aggregate.positive_target_miss_cases}`,
     `- negative_false_positive_cases: ${aggregate.negative_false_positive_cases}`,
     `- vector_backed_target_cases: ${aggregate.vector_backed_target_cases}`,
     `- positive_vector_backed_miss_cases: ${aggregate.positive_vector_backed_miss_cases}`,
+    `- duration_lexical_only_avg_ms: ${aggregate.duration_ms.lexical_only_avg}`,
+    `- duration_vector_enabled_avg_ms: ${aggregate.duration_ms.vector_enabled_avg}`,
+    `- duration_planned_vector_first_avg_ms: ${aggregate.duration_ms.planned_vector_first_avg}`,
+    `- duration_vector_over_lexical_avg_delta_ms: ${aggregate.duration_ms.vector_enabled_over_lexical_avg_delta}`,
+    `- duration_planned_over_vector_avg_delta_ms: ${aggregate.duration_ms.planned_vector_first_over_vector_avg_delta}`,
     `- hot_cache_vector_backfill_blocks: ${hotCacheVectorBackfillBlocks}`,
     "- raw_memory_text_in_report: false",
     "",
-    "| case | category | lexical target | vector target | planned target | vector-backed target | vector ok | lift | regression | notes |",
-    "| --- | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- |",
+    "| case | category | lexical target | legacy target | vector target | planned target | vector-backed target | vector ok | vector lift | legacy lift | regression | notes |",
+    "| --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |",
   ];
   for (const comparison of comparisons) {
     const lexical = requiredMode(comparison.modes, "lexical_only");
@@ -563,11 +703,13 @@ function renderSummary(
       comparison.case_id,
       comparison.category,
       rankLabel(lexical.target_rank),
+      rankLabel(lexical.legacy_keyword_weighted_target_rank),
       rankLabel(vector.target_rank),
       rankLabel(planned.target_rank),
       vector.target_vector_backed || planned.target_vector_backed ? "yes" : "no",
       vector.vector_ok || planned.vector_ok ? "yes" : "no",
       comparison.vector_lift ? "yes" : "no",
+      comparison.vector_lift_over_legacy_keyword_weighted ? "yes" : "no",
       comparison.vector_regression ? "yes" : "no",
       comparison.notes.join(", ") || "-",
     ].join(" | ").replace(/^/, "| ").replace(/$/, " |"));
@@ -629,6 +771,8 @@ async function main(): Promise<void> {
     comparison.modes.some((mode) => mode.mode !== "lexical_only" && mode.vector_ok),
   );
   const vectorRegressions = comparisons.filter((comparison) => comparison.vector_regression);
+  const legacyLiftCases = comparisons.filter((comparison) => comparison.vector_lift_over_legacy_keyword_weighted);
+  const legacyRegressionCases = comparisons.filter((comparison) => comparison.vector_regression_against_legacy_keyword_weighted);
   const vectorTopDecoys = comparisons.filter((comparison) =>
     comparison.modes.some((mode) => mode.mode === "vector_enabled" && mode.top_decoy_hit),
   );
@@ -650,7 +794,8 @@ async function main(): Promise<void> {
       `lifts=${comparisons.filter((comparison) => comparison.vector_lift).length}, ` +
       `regressions=${vectorRegressions.length}, topDecoys=${vectorTopDecoys.length}, ` +
       `positiveMisses=${positiveTargetMisses.length}, negativeFalsePositives=${negativeFalsePositives.length}, ` +
-      `vectorBackedTargets=${vectorBackedTargetCases.length}`,
+      `vectorBackedTargets=${vectorBackedTargetCases.length}, ` +
+      `legacyLifts=${legacyLiftCases.length}, legacyRegressions=${legacyRegressionCases.length}`,
   );
 
   assert(vectorObserved, "vector-enabled recall did not produce vector=ok in any quality case");
@@ -664,6 +809,14 @@ async function main(): Promise<void> {
     `memory quality negative cases returned confident evidence: ${negativeFalsePositives.map((item) => item.case_id).join(", ")}`,
   );
   assert(vectorRegressions.length === 0, `vector-enabled recall regressed target ranking: ${vectorRegressions.map((item) => item.case_id).join(", ")}`);
+  assert(
+    legacyLiftCases.length > 0,
+    "memory quality did not prove any rank lift over the legacy keyword-weighted scorer",
+  );
+  assert(
+    legacyRegressionCases.length === 0,
+    `vector-enabled recall regressed against legacy keyword-weighted ranking: ${legacyRegressionCases.map((item) => item.case_id).join(", ")}`,
+  );
   assert(
     positiveVectorBackedMisses.length === 0,
     `memory quality positive cases lacked vector-backed target evidence: ${positiveVectorBackedMisses.map((item) => item.case_id).join(", ")}`,
