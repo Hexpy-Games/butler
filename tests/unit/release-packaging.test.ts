@@ -398,11 +398,21 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(rootPackage.scripts).toHaveProperty("app:package:smoke");
   expect(rootPackage.scripts).toHaveProperty("app:layout:smoke");
   expect(rootPackage.scripts).toHaveProperty("release:service:package");
+  expect(rootPackage.scripts).toHaveProperty("release:app:package");
+  expect(rootPackage.scripts["release:app:package"]).toContain(
+    "packages/butler-app/scripts/release/package-app-release.ts",
+  );
   expect(rootPackage.scripts).toHaveProperty("install:docker");
   expect(electronPackage.scripts).toHaveProperty("package:mac");
   expect(electronPackage.scripts).toHaveProperty("package:linux");
   expect(electronPackage.scripts["package:mac"]).toContain(
     "adhoc-sign-mac.mjs",
+  );
+  expect(electronPackage.scripts["package:mac"]).toContain(
+    "--ignore=\"^/dist($|/)\"",
+  );
+  expect(electronPackage.scripts["package:linux"]).toContain(
+    "--ignore=\"^/dist($|/)\"",
   );
   expect(electronPackage.version).toBe("0.0.3");
   expect(electronPackage.devDependencies).toHaveProperty("@electron/packager");
@@ -431,6 +441,15 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(
     readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
   ).toContain("packaged app executable");
+  const appReleasePackager = readText(
+    join(root, "packages", "butler-app", "scripts", "release", "package-app-release.ts"),
+  );
+  expect(appReleasePackager).toContain("butler.update-manifest.v1");
+  expect(appReleasePackager).toContain("app-release-manifest.json");
+  expect(appReleasePackager).toContain("app-update-manifest.json");
+  expect(appReleasePackager).toContain("adhoc-sign-mac.mjs");
+  expect(appReleasePackager).toContain("BUTLER_APP_PACKAGER");
+  expect(appReleasePackager).toContain("--ignore=^/dist($|/)");
   expect(
     readText(
       join(root, "packages", "butler-app", "scripts", "app-client-managed-server-smoke.ts"),

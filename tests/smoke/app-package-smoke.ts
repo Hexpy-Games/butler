@@ -103,6 +103,7 @@ try {
       "--overwrite",
       `--out=${packagedOut}`,
       "--icon=assets/butler.icns",
+      "--ignore=^/dist($|/)",
       "--quiet",
     ],
     {

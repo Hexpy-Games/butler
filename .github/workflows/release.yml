@@ -81,3 +81,73 @@ jobs:
           else
             gh release create "$tag" "${files[@]}" --title "$tag" "${notes_args[@]}"
           fi
+
+  app-artifact:
+    name: Build and publish app artifacts
+    runs-on: macos-latest
+    needs: service-artifact
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/butler-app/client/electron/package-lock.json
+
+      - name: Install app client dependencies
+        run: |
+          bun install --frozen-lockfile
+          npm --prefix packages/butler-app/client/electron ci
+
+      - name: Run app release gate
+        run: bun run release:app:gate
+
+      - name: Package app release
+        run: |
+          bun run release:app:package \
+            --out dist/release/app \
+            --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+
+      - name: Verify packaged app artifacts
+        run: |
+          set -euo pipefail
+          mac_zip="$(find dist/release/app -maxdepth 1 -name 'butler-app-*-darwin-arm64.zip' -print -quit)"
+          linux_tar="$(find dist/release/app -maxdepth 1 -name 'butler-app-*-linux-x64.tar.gz' -print -quit)"
+          test -n "$mac_zip"
+          test -n "$linux_tar"
+          test -f "$mac_zip"
+          test -f "$linux_tar"
+          extract_dir="$(mktemp -d)"
+          ditto -x -k "$mac_zip" "$extract_dir"
+          codesign --verify --deep --strict --verbose=4 "$extract_dir/Butler.app"
+          tar -tzf "$linux_tar" | grep -F "Butler-linux-x64/Butler"
+
+      - name: Publish app GitHub Release files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          shopt -s nullglob
+          files=(
+            dist/release/app/butler-app-*-darwin-arm64.zip
+            dist/release/app/butler-app-*-darwin-arm64.zip.sha256
+            dist/release/app/butler-app-*-linux-x64.tar.gz
+            dist/release/app/butler-app-*-linux-x64.tar.gz.sha256
+            dist/release/app/app-release-manifest.json
+            dist/release/app/app-update-manifest.json
+          )
+          if [ "${#files[@]}" -ne 6 ]; then
+            printf 'Expected 6 app release files, got %s\n' "${#files[@]}" >&2
+            printf '%s\n' "${files[@]}" >&2
+            exit 1
+          fi
+          gh release upload "$tag" "${files[@]}" --clobber
