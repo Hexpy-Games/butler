@@ -263,6 +263,12 @@ function semanticScore(candidate: RecallCandidate): number {
   return clamp01(candidate.vectorSimilarity);
 }
 
+function explicitEvidenceScore(candidate: RecallCandidate, anchorScore: number): number {
+  const salience = candidate.explicitSalience ?? (candidate.source === "explicit" ? 1 : 0);
+  if (salience <= 0 || anchorScore <= 0) return 0;
+  return clamp01(salience * anchorScore);
+}
+
 interface ContextualRecallEvidence {
   terms: Set<string>;
   relatedNodeIds: Set<string>;
@@ -702,14 +708,19 @@ export function recallFromCorpus(input: {
 
   const scored = input.corpus.candidates
     .map((candidate) => {
+      const semantic = semanticScore(candidate);
+      const lexical = lexicalScore(candidate, lexicalStats);
+      const contextual = contextualScore(candidate, contextualEvidence);
+      const graph = candidateGraphActivation(candidate, activation);
+      const explicit = explicitEvidenceScore(candidate, Math.max(semantic, lexical, contextual, graph));
       const signals: RecallRankingSignals = {
-        semantic: semanticScore(candidate),
-        lexical: lexicalScore(candidate, lexicalStats),
-        contextual: contextualScore(candidate, contextualEvidence),
-        graph: candidateGraphActivation(candidate, activation),
+        semantic,
+        lexical,
+        contextual,
+        graph,
         recency: recencyScore(candidate.timestamp, now),
         frequency: frequencyScore(candidate.frequency),
-        explicit: candidate.explicitSalience ?? (candidate.source === "explicit" ? 1 : 0),
+        explicit,
         boost: candidateBoost(candidate),
         hub: candidateHubPenalty(candidate, degree),
         conflict: candidateConflictPenalty(candidate, activeCandidateIds),
