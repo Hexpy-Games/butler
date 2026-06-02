@@ -2947,6 +2947,72 @@ test("native runtime records safe context monitor telemetry for each turn", asyn
     .not.toContain("오늘 결정 기억해?");
 });
 
+test("native runtime default automatic recall uses vector-capable recall", async () => {
+  const vectorRequests: Array<Record<string, unknown>> = [];
+  let capturedPrompt = "";
+  const runtime = new NativeToolLoopRuntime({
+    recallMemoryWithVector: async (input) => {
+      vectorRequests.push(input);
+      return {
+        cue: input.cue,
+        seeds: ["웹", "리더"],
+        abstained: false,
+        diagnostics: ["vector=ok"],
+        items: [{
+          summary: "웹 리더 본문 노이즈는 하이브리드 추출, confidence, raw fallback으로 줄인다.",
+          confidence: 0.91,
+          source: "vector",
+          provenance: ["vector:s-reader:reader-vector"],
+          related_nodes: [],
+          score_breakdown: {
+            semantic_similarity: 0.91,
+            lexical_match: 0,
+            contextual_match: 0,
+            graph_activation: 0,
+            recency_score: 0.5,
+            frequency_score: 0,
+            explicit_salience: 0,
+            evidence_confidence: 0.91,
+            decision_preference_boost: 0,
+            hub_penalty: 0,
+            conflict_penalty: 0,
+            stale_superseded_penalty: 0,
+            total: 0.91,
+          },
+        }],
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      capturedPrompt = input.prompt;
+      return "확인했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+    metadata: { projectId: "butler" },
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "웹 리더 본문 노이즈 줄이는 접근 기억해?" },
+  });
+
+  expect(vectorRequests).toEqual([expect.objectContaining({
+    butlerData: tempDir,
+    cue: "웹 리더 본문 노이즈 줄이는 접근 기억해?",
+    projectId: "butler",
+    limit: 4,
+    vectorTimeoutMs: 1500,
+  })]);
+  expect(capturedPrompt).toContain("## Associative Recall Context");
+  expect(capturedPrompt).toContain("source=vector");
+});
+
 test("native runtime injects compact associative recall context when useful", async () => {
   let capturedPrompt = "";
   const runtime = new NativeToolLoopRuntime({

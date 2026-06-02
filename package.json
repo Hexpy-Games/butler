@@ -44,6 +44,7 @@
     "app:client:decision-context:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=decision-context ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:decision-context:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-decision-context ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:memory-recall:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-memory-recall ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
+    "app:client:beeg-autonomous:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-beeg-autonomous ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:workstream:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-workstream ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:workstream:natural-live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-workstream-natural ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "e2e:evidence-gate": "${BUTLER_BUN:-bun} run tests/e2e/butler-e2e-evidence-gate.ts",

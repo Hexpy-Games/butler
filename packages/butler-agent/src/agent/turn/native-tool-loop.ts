@@ -44,8 +44,8 @@ import {
   type RuntimeMessageLanguage,
 } from "../output/messages.ts";
 import {
-  createCachedRecallMemoryRunner,
   recallMemory,
+  recallMemoryWithVector,
   type AssociativeRecallResult,
 } from "../cognition/memory/recall/engine.ts";
 import { renderFeedbackBufferContext } from "../cognition/feedback/buffer.ts";
@@ -126,11 +126,14 @@ export interface NativeToolLoopRuntimeOptions {
   appMessageDbPath?: string;
   messageLanguage?: RuntimeMessageLanguage;
   recallMemory?: typeof recallMemory;
+  recallMemoryWithVector?: typeof recallMemoryWithVector;
   disableAutomaticRecall?: boolean;
   contextBudgetOverrides?: ContextBudgetOverrides;
   recentConversationTokenBudget?: number;
 }
 
+// Keep automatic recall within the same latency envelope as vector.ts' default search budget.
+const AUTOMATIC_RECALL_VECTOR_TIMEOUT_MS = 1_500;
 const DIRECT_TOOL_CHAIN_MAX_ROUNDS = 60;
 const GOAL_COMPLETION_REVIEW_SKIP_TOOLS = new Set([
   "dispatch_worker",
@@ -1400,7 +1403,8 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
   private readonly butlerData: string;
   private readonly appMessageDbPath?: string;
   private readonly messageLanguage: RuntimeMessageLanguage;
-  private readonly recallRunner: typeof recallMemory;
+  private readonly recallRunner?: typeof recallMemory;
+  private readonly vectorRecallRunner: typeof recallMemoryWithVector;
   private readonly automaticRecallEnabled: boolean;
   private readonly contextBudgetOverrides?: ContextBudgetOverrides;
   private readonly recentConversationTokenBudget?: number;
@@ -1415,9 +1419,8 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
     this.messageLanguage = options.messageLanguage ?? resolveRuntimeMessageLanguage({
       butlerData: this.butlerData,
     });
-    this.recallRunner = options.recallMemory ?? createCachedRecallMemoryRunner({
-      butlerData: this.butlerData,
-    });
+    this.recallRunner = options.recallMemory;
+    this.vectorRecallRunner = options.recallMemoryWithVector ?? recallMemoryWithVector;
     this.automaticRecallEnabled = options.disableAutomaticRecall !== true;
     this.contextBudgetOverrides = options.contextBudgetOverrides;
     this.recentConversationTokenBudget = options.recentConversationTokenBudget;
@@ -1434,6 +1437,19 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       runtimeAdapterId: this.id,
       runtimeSessionRef: `native:${input.sessionId}:${randomUUID()}`,
     };
+  }
+
+  private async runAutomaticRecall(input: {
+    butlerData: string;
+    cue: string;
+    projectId?: string;
+    limit?: number;
+  }): Promise<AssociativeRecallResult> {
+    if (this.recallRunner) return this.recallRunner(input);
+    return await this.vectorRecallRunner({
+      ...input,
+      vectorTimeoutMs: AUTOMATIC_RECALL_VECTOR_TIMEOUT_MS,
+    });
   }
 
   async runTurn(input: RuntimeTurnInput): Promise<RuntimeTurnResult> {
@@ -1486,9 +1502,10 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
 
       if (this.automaticRecallEnabled && shouldAttemptAutomaticRecall(input, userText)) {
         try {
-          recallContext = renderRecallContext(this.recallRunner({
+          recallContext = renderRecallContext(await this.runAutomaticRecall({
             butlerData: this.butlerData,
             cue: userText,
+            projectId: typeof session.init.metadata?.projectId === "string" ? session.init.metadata.projectId : undefined,
             limit: 4,
           }));
         } catch {

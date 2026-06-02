@@ -2543,6 +2543,58 @@ test("recall_memory tool runs retrieval planner when model omits recall policy",
   expect(recall.diagnostics).toContain("retrieval_planner_planner_succeeded_attempt_1");
 });
 
+test("recall_memory tool ignores model vector opt-out for associative recall", async () => {
+  const embedQueries: string[] = [];
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    projectId: "butler",
+    memoryVectorBackend: {
+      async embed(query: string) {
+        embedQueries.push(query);
+        return [0.1, 0.2, 0.3];
+      },
+      async search() {
+        return [{
+          id: "reader-vector",
+          text: "Web reader noise reduction used hybrid extraction, confidence scoring, and raw fallback.",
+          project: "butler",
+          session_id: "s-reader",
+          _score: 0.91,
+        }];
+      },
+    },
+  });
+
+  const recall = await execute({
+    name: "recall_memory",
+    args: {
+      cue: "웹 리더 본문 노이즈를 줄이는 안전한 접근",
+      include_vector: false,
+      strategies: ["search_vector_episode"],
+      evidence_required: ["vector_episode_hit"],
+      limit: 1,
+    },
+    rawArguments: JSON.stringify({
+      cue: "웹 리더 본문 노이즈를 줄이는 안전한 접근",
+      include_vector: false,
+      strategies: ["search_vector_episode"],
+      evidence_required: ["vector_episode_hit"],
+      limit: 1,
+    }),
+  }) as {
+    ok: boolean;
+    results: Array<{ source: string; text: string }>;
+    diagnostics: string[];
+  };
+
+  expect(embedQueries).toEqual(["웹 리더 본문 노이즈를 줄이는 안전한 접근"]);
+  expect(recall.ok).toBe(true);
+  expect(recall.results).toEqual([expect.objectContaining({ source: "vector" })]);
+  expect(recall.diagnostics).toContain("vector=ok");
+  expect(recall.diagnostics).toContain("vector=forced:model-opt-out-ignored");
+});
+
 test("skill catalog tool lists strategy skills for model inspection", async () => {
   const execute = createButlerToolExecutor({
     butlerHome: root,

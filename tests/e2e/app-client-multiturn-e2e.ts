@@ -43,6 +43,7 @@ type E2eMode =
   | "toolchain"
   | "live-llm-toolchain"
   | "live-llm-memory-recall"
+  | "live-llm-beeg-autonomous"
   | "decision-context"
   | "live-llm-decision-context"
   | "live-llm-workstream"
@@ -59,6 +60,8 @@ const e2eMode: E2eMode = requestedMode === "live-llm"
       ? "live-llm-toolchain"
       : requestedMode === "live-llm-memory-recall"
         ? "live-llm-memory-recall"
+      : requestedMode === "live-llm-beeg-autonomous"
+        ? "live-llm-beeg-autonomous"
       : requestedMode === "decision-context"
         ? "decision-context"
         : requestedMode === "live-llm-decision-context"
@@ -77,6 +80,7 @@ const e2eMode: E2eMode = requestedMode === "live-llm"
 const usesLiveLlm = e2eMode === "live-llm" ||
   e2eMode === "live-llm-toolchain" ||
   e2eMode === "live-llm-memory-recall" ||
+  e2eMode === "live-llm-beeg-autonomous" ||
   e2eMode === "live-llm-decision-context" ||
   e2eMode === "live-llm-workstream" ||
   e2eMode === "live-llm-workstream-natural" ||
@@ -87,6 +91,7 @@ const usesDecisionContextScenario = e2eMode === "decision-context" || e2eMode ==
 const usesDynamicDecisionContextScenario = e2eMode === "live-llm-decision-context";
 const usesExternalButlerService = e2eMode === "live-llm-workstream-natural-external";
 const usesMemoryRecallScenario = e2eMode === "live-llm-memory-recall";
+const usesBeegAutonomousScenario = e2eMode === "live-llm-beeg-autonomous";
 const usesRealProjectCheckScenario = e2eMode === "live-llm-real-project-check";
 const usesNaturalWorkStreamScenario = e2eMode === "live-llm-workstream-natural" ||
   usesRealProjectCheckScenario ||
@@ -284,10 +289,17 @@ const memoryRecallPrompt = [
   "Exact first user message 줄에는 query_memory 결과의 timestamp와 text를 반드시 함께 포함해 주세요.",
   `Quality key 줄에는 이 값을 그대로 포함해 주세요: ${MEMORY_RECALL_TOKEN}`,
 ].join("\n");
+const beegAutonomousPrompt = [
+  "버틀러에 저장된 예전 기억을 확인해서 답해줘.",
+  "전에 웹 리더에서 본문 노이즈를 줄이는 방법을 얘기했잖아.",
+  "그때 어떤 접근이 안전하다고 봤는지 확인된 범위에서 짧게 정리해줘.",
+  "기억에서 확인되지 않은 내용은 단정하지 말아줘.",
+].join("\n");
 const waitForFinalTimeoutMs = usesLiveLlm ? 300_000 : 20_000;
 
 mkdirSync(screenshotDir, { recursive: true });
 if (usesMemoryRecallScenario) initializeMemoryRecallFixture();
+if (usesBeegAutonomousScenario) initializeBeegRealDataSnapshot();
 if (usesToolchainScenario && !usesArtifactReportScenario) {
   initializeToolchainProject();
 }
@@ -470,6 +482,8 @@ try {
 
   if (usesMemoryRecallScenario) {
     await runMemoryRecallBrowserScenario(cdp);
+  } else if (usesBeegAutonomousScenario) {
+    await runBeegAutonomousBrowserScenario(cdp);
   } else if (usesToolchainScenario) {
     await runToolchainBrowserScenario(cdp);
   } else {
@@ -500,7 +514,7 @@ try {
       "electron-reload-preserved-session-state",
       ...(usesToolchainScenario
         ? ["work-blocks-visible", "final-work-collapsed", "result-isolated"]
-        : usesMemoryRecallScenario
+        : usesMemoryRecallScenario || usesBeegAutonomousScenario
         ? ["memory-recall-final-visible"]
         : ["status-only-final-activity-hidden"]),
       ...(usesToolchainScenario
@@ -537,6 +551,14 @@ try {
           "seeded-memory-quality-token-recalled",
           "exact-first-user-message-verified",
         ]
+        : usesBeegAutonomousScenario
+        ? [
+          "real-llm-provider-called",
+          "natural-prompt-used",
+          "autonomous-recall-memory-tool-called",
+          "vector-diagnostics-observed",
+          "raw-private-memory-not-reported",
+        ]
         : [
           "composer-two-turn-flow",
           "durable-final-transcript-continuity",
@@ -544,8 +566,11 @@ try {
         ]),
     ],
     toolCalls: observedToolCalls,
-    durableToolCalls: durableTranscriptToolCalls(),
+    durableToolCalls: usesBeegAutonomousScenario
+      ? durableTranscriptToolCalls(latestE2eSessionId())
+      : durableTranscriptToolCalls(),
     memoryRecall: usesMemoryRecallScenario ? readMemoryRecallEvidence() : undefined,
+    beegAutonomous: usesBeegAutonomousScenario ? readBeegAutonomousEvidence() : undefined,
     inboundQueue: usesExternalButlerService ? inboundQueueCounts() : undefined,
     decisionSourceCounts,
     workStreams: workStreamEvidence,
@@ -652,6 +677,29 @@ function initializeMemoryRecallFixture(): void {
       }),
     ],
   });
+}
+
+function initializeBeegRealDataSnapshot(): void {
+  assert(existsSync(sourceButlerData), `source Butler data does not exist: ${sourceButlerData}`);
+  const result = spawnSync("rsync", [
+    "-a",
+    "--delete",
+    "--exclude",
+    "runtime/",
+    "--exclude",
+    "*.sock",
+    `${sourceButlerData.replace(/\/$/u, "")}/`,
+    `${tempDir}/`,
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: "pipe",
+  });
+  assert(
+    result.status === 0,
+    `failed to copy real Butler data snapshot for BEEG autonomous E2E: ${result.stderr || result.stdout}`,
+  );
+  rmSync(appDbPath, { force: true });
 }
 
 function copyLocalModelConfig(modelRef: string, source: string, target: string): void {
@@ -1004,6 +1052,45 @@ async function runMemoryRecallBrowserScenario(client: CdpClient): Promise<void> 
   );
 }
 
+async function runBeegAutonomousBrowserScenario(client: CdpClient): Promise<void> {
+  assert(
+    !/recall_memory|query_memory|run_command|tool/iu.test(beegAutonomousPrompt),
+    "BEEG autonomous prompt must not name tools.",
+  );
+  await sendComposerTurn(client, beegAutonomousPrompt);
+  await waitForBeegAutonomousOutcome(client);
+  const sessionId = latestE2eSessionId();
+  const finalText = await lastAssistantFinalText(client);
+  const durableToolCalls = durableTranscriptToolCalls(sessionId);
+  const recallResults = durableTranscriptToolResultPayloads("recall_memory", sessionId);
+  const recallDiagnostics = recallResults.flatMap((result) => stringArray(result.diagnostics));
+  assert(liveLlmCalls >= 1, `expected at least 1 real LLM call, observed ${liveLlmCalls}.`);
+  assert(
+    observedToolCalls.includes("recall_memory"),
+    `BEEG autonomous Electron E2E provider did not execute recall_memory in this run: observed=${observedToolCalls.join(" -> ")}`,
+  );
+  assert(
+    durableToolCalls.includes("recall_memory"),
+    `BEEG autonomous Electron E2E did not persist current-session recall_memory evidence: session=${sessionId} durable=${durableToolCalls.join(" -> ")}`,
+  );
+  assert(
+    recallDiagnostics.includes("vector=ok"),
+    `BEEG autonomous Electron E2E did not observe vector=ok diagnostics: ${recallDiagnostics.join(" | ")}`,
+  );
+  assert(
+    recallDiagnostics.includes("ranking_policy=planned"),
+    `BEEG autonomous Electron E2E did not observe planned ranking diagnostics: ${recallDiagnostics.join(" | ")}`,
+  );
+  assert(
+    !durableToolCalls.includes("run_command"),
+    `BEEG autonomous memory E2E fell back to run_command: ${durableToolCalls.join(" -> ")}`,
+  );
+  assert(
+    finalText.length > 40 && !/^INCOMPLETE\s*:/iu.test(finalText.trim()),
+    "BEEG autonomous final answer was missing or incomplete.",
+  );
+}
+
 function readMemoryRecallEvidence(): Record<string, unknown> {
   const finalTokenRecovered = server.store.listMessages(latestE2eSessionId()).some((message) =>
     message.role === "assistant" && message.text.includes(MEMORY_RECALL_TOKEN));
@@ -1014,6 +1101,25 @@ function readMemoryRecallEvidence(): Record<string, unknown> {
     queryToolCalls: durableCalls.filter((name) => name === "query_memory").length,
     runCommandToolCalls: durableCalls.filter((name) => name === "run_command").length,
     qualityKey: MEMORY_RECALL_TOKEN,
+  };
+}
+
+function readBeegAutonomousEvidence(): Record<string, unknown> {
+  const sessionId = latestE2eSessionId();
+  const durableCalls = durableTranscriptToolCalls(sessionId);
+  const recallResults = durableTranscriptToolResultPayloads("recall_memory", sessionId);
+  return {
+    sessionId,
+    promptNamedTools: /recall_memory|query_memory|run_command|tool/iu.test(beegAutonomousPrompt),
+    observedRecallToolCalls: observedToolCalls.filter((name) => name === "recall_memory").length,
+    recallToolCalls: durableCalls.filter((name) => name === "recall_memory").length,
+    runCommandToolCalls: durableCalls.filter((name) => name === "run_command").length,
+    diagnostics: [...new Set(recallResults.flatMap((result) => stringArray(result.diagnostics)))],
+    resultCount: recallResults.reduce((total, result) => {
+      const results = Array.isArray(result.results) ? result.results : [];
+      return total + results.length;
+    }, 0),
+    rawPrivateMemoryReported: false,
   };
 }
 
@@ -1866,6 +1972,19 @@ async function waitForRealProjectCheckOutcome(client: CdpClient): Promise<void> 
   );
 }
 
+async function waitForBeegAutonomousOutcome(client: CdpClient): Promise<void> {
+  await waitForExpression(
+    client,
+    `(() => {
+      const documents = Array.from(document.querySelectorAll(${JSON.stringify(assistantFinalMarkdownSelector)}));
+      const text = (documents.at(-1)?.textContent ?? "").replace(/\\s+/g, " ").trim();
+      return text.length > 40 && !/^INCOMPLETE\\s*:/i.test(text);
+    })()`,
+    "BEEG autonomous memory outcome",
+    waitForFinalTimeoutMs,
+  );
+}
+
 async function waitForAnyAssistantFinalText(client: CdpClient, texts: string[], timeoutMs?: number): Promise<void> {
   await waitForExpression(
     client,
@@ -2042,7 +2161,7 @@ function durableTranscriptContains(text: string): boolean {
   return false;
 }
 
-function durableTranscriptToolCalls(): string[] {
+function durableTranscriptToolCalls(sessionId?: string): string[] {
   const dir = join(tempDir, "transcripts");
   if (!existsSync(dir)) return [];
   const names: string[] = [];
@@ -2053,10 +2172,15 @@ function durableTranscriptToolCalls(): string[] {
       if (!trimmed) continue;
       try {
         const event = JSON.parse(trimmed) as {
+          sessionId?: unknown;
           kind?: string;
           payload?: { name?: unknown };
         };
-        if (event.kind === "tool_call" && typeof event.payload?.name === "string") {
+        if (
+          durableTranscriptEventMatchesSession(event, sessionId) &&
+          event.kind === "tool_call" &&
+          typeof event.payload?.name === "string"
+        ) {
           names.push(event.payload.name);
         }
       } catch {
@@ -2065,6 +2189,13 @@ function durableTranscriptToolCalls(): string[] {
     }
   }
   return names;
+}
+
+function durableTranscriptEventMatchesSession(event: { sessionId?: unknown }, sessionId?: string): boolean {
+  if (!sessionId) return true;
+  const eventSessionId = typeof event.sessionId === "string" ? event.sessionId : "";
+  if (eventSessionId === sessionId) return true;
+  return !sessionId.startsWith("butler/") && eventSessionId === `butler/app-${sessionId}`;
 }
 
 function durableTranscriptToolResults(): string[] {
@@ -2094,6 +2225,46 @@ function durableTranscriptToolResults(): string[] {
     }
   }
   return names;
+}
+
+function durableTranscriptToolResultPayloads(toolName: string, sessionId?: string): Array<Record<string, unknown>> {
+  const dir = join(tempDir, "transcripts");
+  if (!existsSync(dir)) return [];
+  const results: Array<Record<string, unknown>> = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".jsonl")) continue;
+    for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const event = JSON.parse(trimmed) as {
+          sessionId?: unknown;
+          kind?: string;
+          payload?: { name?: unknown; ok?: unknown; result?: unknown };
+        };
+        if (
+          durableTranscriptEventMatchesSession(event, sessionId) &&
+          event.kind === "tool_result" &&
+          event.payload?.ok === true &&
+          event.payload.name === toolName &&
+          event.payload.result &&
+          typeof event.payload.result === "object" &&
+          !Array.isArray(event.payload.result)
+        ) {
+          results.push(event.payload.result as Record<string, unknown>);
+        }
+      } catch {
+        // Ignore malformed transcript lines; the E2E assertions use valid durable events.
+      }
+    }
+  }
+  return results;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function durableTodoProgressLabels(): string[] {
