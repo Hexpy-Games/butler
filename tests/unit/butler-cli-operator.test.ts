@@ -191,6 +191,17 @@ test("gateway CLI manages app gateway settings through safe output", () => {
 test("gateway CLI manages Telegram credentials and embedded lifecycle safely", () => {
   const butlerData = tempRoot();
   try {
+    const freshStatus = runCli(["gateway", "status", "telegram", "--json"], butlerData);
+    expect(freshStatus.exitCode).toBe(0);
+    let parsed = JSON.parse(stdoutText(freshStatus));
+    expect(parsed.data).toMatchObject({
+      enabled: false,
+      configured: false,
+      running: false,
+      status: "disabled",
+    });
+    expect(parsed.data.nextActions).toEqual(["butler gateway enable telegram"]);
+
     const token = "123456:test-secret-token";
     const credential = runCliWithStdin([
       "gateway",
@@ -202,7 +213,7 @@ test("gateway CLI manages Telegram credentials and embedded lifecycle safely", (
     ], butlerData, `${token}\n`);
     expect(credential.exitCode).toBe(0);
     expect(stdoutText(credential)).not.toContain(token);
-    let parsed = JSON.parse(stdoutText(credential));
+    parsed = JSON.parse(stdoutText(credential));
     expect(parsed.data).toMatchObject({
       gateway: "telegram",
       tokenStored: true,
@@ -243,6 +254,9 @@ test("gateway CLI manages Telegram credentials and embedded lifecycle safely", (
     expect(status.exitCode).toBe(0);
     parsed = JSON.parse(stdoutText(status));
     expect(parsed.data).toMatchObject({
+      enabled: true,
+      running: true,
+      status: "embedded",
       lifecycle: "embedded",
       configured: true,
       credentials: {
@@ -276,6 +290,15 @@ test("gateway CLI manages Telegram credentials and embedded lifecycle safely", (
       gateway: "telegram",
       chatPaired: false,
       tokenConfigured: true,
+    });
+
+    const disabled = runCli(["gateway", "disable", "telegram", "--json"], butlerData);
+    expect(disabled.exitCode).toBe(0);
+    parsed = JSON.parse(stdoutText(disabled));
+    expect(parsed.data).toMatchObject({
+      enabled: false,
+      status: "disabled",
+      restartRecommended: false,
     });
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
@@ -923,6 +946,73 @@ test("operator lifecycle commands require explicit confirmation for mutation", (
     expect(ps.exitCode).toBe(0);
     expect(JSON.parse(stdoutText(ps)).data.source).toBeTruthy();
     expect(stderrText(ps)).not.toContain("secret");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("operator logs --follow streams appended safe lines", async () => {
+  const butlerData = tempRoot();
+  try {
+    const logDir = join(butlerData, "logs");
+    mkdirSync(logDir, { recursive: true });
+    const logPath = join(logDir, "butler-out.log");
+    writeFileSync(logPath, "initial line\n", "utf8");
+
+    const proc = Bun.spawn([
+      "node",
+      cli,
+      "logs",
+      "--service",
+      "butler-main",
+      "--lines",
+      "1",
+      "--follow",
+      "--data",
+      butlerData,
+    ], {
+      cwd: root,
+      env: {
+        ...process.env,
+        BUTLER_DATA: butlerData,
+        BUTLER_HOME: root,
+        BUTLER_LOG_FOLLOW_POLL_MS: "25",
+        BUTLER_LOG_FOLLOW_TEST_MS: "1000",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const decoder = new TextDecoder();
+    const reader = proc.stdout.getReader();
+    let stdout = "";
+    while (!stdout.includes("[butler-out.log] initial line")) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      stdout += decoder.decode(chunk.value, { stream: true });
+    }
+    expect(stdout).toContain("[butler-out.log] initial line");
+
+    writeFileSync(logPath, "next TELEGRAM_BOT_TOKEN=super-secret\n", {
+      encoding: "utf8",
+      flag: "a",
+    });
+
+    const [stderr, exitCode] = await Promise.all([
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      stdout += decoder.decode(chunk.value, { stream: true });
+    }
+    stdout += decoder.decode();
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("[butler-out.log] next TELEGRAM_BOT_TOKEN=[redacted]");
+    expect(stdout).not.toContain("super-secret");
+    expect(stderr).toBe("");
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

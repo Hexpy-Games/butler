@@ -139,7 +139,20 @@ clear_native_main_state() {
   rm -f "$NATIVE_MAIN_STATE_FILE" 2>/dev/null || true
 }
 
+telegram_gateway_enabled() {
+  local settings="$BUTLER_DATA/gateways/telegram.json"
+  [ -f "$settings" ] || return 1
+  if command -v jq >/dev/null 2>&1; then
+    local enabled
+    enabled="$(jq -r 'if has("enabled") then .enabled else false end' "$settings" 2>/dev/null || echo false)"
+    [ "$enabled" = "true" ]
+    return
+  fi
+  grep -Eq '"enabled"[[:space:]]*:[[:space:]]*true' "$settings" 2>/dev/null
+}
+
 _check_telegram_health() {
+  telegram_gateway_enabled || return 0
   if [ -f "$BUTLER_DATA/.env" ]; then
     set +u; source "$BUTLER_DATA/.env"; set -u
   fi

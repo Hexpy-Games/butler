@@ -137,6 +137,11 @@ export async function runTelegramPolling(options: TelegramPollingOptions): Promi
   const shouldStop = options.shouldStop ?? (() => false);
   const timeoutSec = options.timeoutSec ?? 10;
 
+  if (shouldStop()) {
+    log("Telegram polling skipped: gateway disabled");
+    return;
+  }
+
   if (!botToken) {
     log("Telegram polling disabled: TELEGRAM_BOT_TOKEN not set");
     return;
@@ -165,7 +170,10 @@ export async function runTelegramPolling(options: TelegramPollingOptions): Promi
       continue;
     }
 
+    if (shouldStop()) break;
+
     for (const update of updates) {
+      if (shouldStop()) break;
       offset = update.update_id + 1;
       writeOffset(butlerData, offset);
       const input = toInboundInput(update);

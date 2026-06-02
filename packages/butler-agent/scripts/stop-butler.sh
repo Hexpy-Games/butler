@@ -16,10 +16,23 @@ NATIVE_MAIN_STATE_FILE="$BUTLER_DATA/state/butler-main-native.json"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [stop-butler] $*"; }
 
+telegram_gateway_enabled() {
+  local settings="$BUTLER_DATA/gateways/telegram.json"
+  [ -f "$settings" ] || return 1
+  if command -v jq >/dev/null 2>&1; then
+    local enabled
+    enabled="$(jq -r 'if has("enabled") then .enabled else false end' "$settings" 2>/dev/null || echo false)"
+    [ "$enabled" = "true" ]
+    return
+  fi
+  grep -Eq '"enabled"[[:space:]]*:[[:space:]]*true' "$settings" 2>/dev/null
+}
+
 log "Stopping all butler services..."
 
 # Send shutdown notification via Telegram (before killing anything)
 _notify_shutdown() {
+  telegram_gateway_enabled || return 0
   if [ -f "$BUTLER_DATA/.env" ]; then
     set +u; source "$BUTLER_DATA/.env"; set -u
   fi

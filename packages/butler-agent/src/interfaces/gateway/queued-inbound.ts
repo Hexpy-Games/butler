@@ -1,6 +1,6 @@
 import type { GatewayDispatchResult } from "../../gateways/core/contracts.ts";
 import type { ClaimedInboundEvent, NativeInboundQueue } from "../../gateways/core/inbound-queue.ts";
-import type { ArtifactRef, InboundEnvelope, OutboundAction, SessionTransportBinding } from "../../test-support/harness/contracts.ts";
+import type { ArtifactRef, DeliveryResult, InboundEnvelope, OutboundAction, SessionTransportBinding } from "../../test-support/harness/contracts.ts";
 import type { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import { safeRuntimeFailure, type RuntimeFailureDiagnostic } from "../../integrations/providers/provider-errors.ts";
 import type { DeliveryGuard } from "../transport/delivery-guard.ts";
@@ -14,6 +14,11 @@ export interface ProcessQueuedInboundOptions {
   server: QueuedInboundServer;
   store: SessionBindingStore;
   deliveryGuard: DeliveryGuard;
+  deliverAction?: (
+    sessionId: string,
+    action: OutboundAction,
+    metadata: Record<string, unknown>,
+  ) => Promise<DeliveryResult>;
   telegramGroupId?: string;
   limit?: number;
   now?: () => Date;
@@ -137,7 +142,11 @@ function failureForDispatchResult(result: Exclude<GatewayDispatchResult, { statu
 
 async function deliverFailureForOriginalInbound(input: {
   item: ClaimedInboundEvent;
-  deliveryGuard: DeliveryGuard;
+  deliverAction: (
+    sessionId: string,
+    action: OutboundAction,
+    metadata: Record<string, unknown>,
+  ) => Promise<DeliveryResult>;
   error?: unknown;
   failure?: RuntimeFailureDiagnostic;
   queueSource: string;
@@ -149,7 +158,7 @@ async function deliverFailureForOriginalInbound(input: {
   });
   const sessionId = input.item.envelope.routingHints?.sessionId?.trim();
   if (!failureAction || !sessionId) return false;
-  const delivery = await input.deliveryGuard.deliver(sessionId, failureAction, {
+  const delivery = await input.deliverAction(sessionId, failureAction, {
     source: input.queueSource,
     queueId: input.item.queueId,
   });
@@ -278,6 +287,9 @@ export async function processQueuedInboundEvents(
     delivered: 0,
     failed: 0,
   };
+  const deliverAction = options.deliverAction ??
+    ((sessionId: string, action: OutboundAction, metadata: Record<string, unknown>) =>
+      options.deliveryGuard.deliver(sessionId, action, metadata));
 
   for (const item of items) {
     try {
@@ -292,7 +304,7 @@ export async function processQueuedInboundEvents(
         const failure = failureForDispatchResult(result);
         const delivered = await deliverFailureForOriginalInbound({
           item,
-          deliveryGuard: options.deliveryGuard,
+          deliverAction,
           failure,
           queueSource: "gateway/queued-inbound.ts#dispatch-failure",
         });
@@ -322,7 +334,7 @@ export async function processQueuedInboundEvents(
           telegramGroupId: options.telegramGroupId,
         });
         for (const action of actions) {
-          const delivery = await options.deliveryGuard.deliver(result.route.sessionId, action, {
+          const delivery = await deliverAction(result.route.sessionId, action, {
             source: "gateway/queued-inbound.ts",
             queueId: item.queueId,
           });
@@ -338,7 +350,7 @@ export async function processQueuedInboundEvents(
       const safeFailure = safeRuntimeFailure(error);
       const delivered = await deliverFailureForOriginalInbound({
         item,
-        deliveryGuard: options.deliveryGuard,
+        deliverAction,
         error,
         queueSource: "gateway/queued-inbound.ts#failure",
       });

@@ -5,9 +5,11 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readSync,
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "fs";
 import { basename, dirname, join } from "path";
@@ -454,6 +456,108 @@ function safeLogLine(line: string): string {
     .replace(/bot\d+:[A-Za-z0-9_-]+/g, "bot[redacted]");
 }
 
+interface LogLineView {
+  file: string;
+  text: string;
+}
+
+interface FollowLogState {
+  file: string;
+  offset: number;
+  pending: string;
+}
+
+function tailLogEntries(entries: string[], lines: number): LogLineView[] {
+  return entries.flatMap((file) => tailFile(file, lines).map((line) => ({
+    file: basename(file),
+    text: safeLogLine(line),
+  }))).slice(-lines);
+}
+
+function logFollowPollMs(): number {
+  const parsed = Number(process.env.BUTLER_LOG_FOLLOW_POLL_MS ?? "");
+  return Number.isFinite(parsed) && parsed >= 10 ? Math.trunc(parsed) : 500;
+}
+
+function logFollowStopAfterMs(): number | null {
+  const parsed = Number(process.env.BUTLER_LOG_FOLLOW_TEST_MS ?? "");
+  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : null;
+}
+
+function emitFollowText(state: FollowLogState, text: string): void {
+  const combined = `${state.pending}${text}`;
+  const parts = combined.split(/\r?\n/);
+  state.pending = combined.endsWith("\n") || combined.endsWith("\r") ? "" : parts.pop() ?? "";
+  for (const line of parts) {
+    if (!line) continue;
+    process.stdout.write(`[${basename(state.file)}] ${safeLogLine(line)}\n`);
+  }
+}
+
+function readFollowChunk(state: FollowLogState): void {
+  const stat = statSync(state.file, { throwIfNoEntry: false });
+  if (!stat?.isFile()) return;
+  if (stat.size < state.offset) {
+    state.offset = 0;
+    state.pending = "";
+  }
+  if (stat.size === state.offset) return;
+
+  const fd = openSync(state.file, "r");
+  try {
+    while (state.offset < stat.size) {
+      const length = Math.min(64 * 1024, stat.size - state.offset);
+      const buffer = Buffer.allocUnsafe(length);
+      const bytesRead = readSync(fd, buffer, 0, length, state.offset);
+      if (bytesRead <= 0) break;
+      state.offset += bytesRead;
+      emitFollowText(state, buffer.toString("utf8", 0, bytesRead));
+    }
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function followLogFiles(entries: string[]): void {
+  const states: FollowLogState[] = entries.map((file) => ({
+    file,
+    offset: statSync(file, { throwIfNoEntry: false })?.size ?? 0,
+    pending: "",
+  }));
+  const pollMs = logFollowPollMs();
+  const stopAfterMs = logFollowStopAfterMs();
+  let stopped = false;
+  let stopTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const timer = setInterval(() => {
+    for (const state of states) readFollowChunk(state);
+  }, pollMs);
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    clearInterval(timer);
+    if (stopTimer) clearTimeout(stopTimer);
+    for (const state of states) {
+      if (state.pending) {
+        process.stdout.write(`[${basename(state.file)}] ${safeLogLine(state.pending)}\n`);
+        state.pending = "";
+      }
+    }
+    process.exit(0);
+  };
+
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  if (stopAfterMs) stopTimer = setTimeout(stop, stopAfterMs);
+}
+
+function maybeFollowLogs(parsed: ParsedCommonOptions, args: string[], entries: string[]): void {
+  if (!hasFlag(args, "--follow")) return;
+  if (parsed.options.json || parsed.options.quiet) return;
+  followLogFiles(entries);
+}
+
 function logs(parsed: ParsedCommonOptions, args: string[]): void {
   const service = optionValue(args, "--service") || "butler-main";
   const lines = numericOption(args, "--lines", 80, 1_000);
@@ -466,13 +570,11 @@ function logs(parsed: ParsedCommonOptions, args: string[]): void {
   const data = {
     service,
     files: entries,
-    lines: entries.flatMap((file) => tailFile(file, lines).map((line) => ({
-      file: basename(file),
-      text: safeLogLine(line),
-    }))).slice(-lines),
+    lines: tailLogEntries(entries, lines),
     follow: hasFlag(args, "--follow"),
   };
   print(parsed, "butler logs", data, data.lines.map((line) => `[${line.file}] ${line.text}`).join("\n") || "No log lines found.");
+  maybeFollowLogs(parsed, args, entries);
 }
 
 function ps(parsed: ParsedCommonOptions): void {
@@ -674,11 +776,12 @@ async function gatewaySetEnabled(
   const view = await buildGatewayStatusView(parsed.options.data, gatewayId);
   const data = {
     ...view,
-    restartRecommended: gatewayId === "telegram",
+    restartRecommended: gatewayId === "telegram" && enabled,
   };
   print(parsed, `butler gateway ${enabled ? "enable" : "disable"} ${gatewayId}`, data, [
     `${gatewayId} gateway ${enabled ? "enabled" : "disabled"}.`,
-    gatewayId === "telegram" ? "Restart Butler service to apply embedded gateway changes." : "",
+    gatewayId === "telegram" && enabled ? "Restart Butler service to start embedded Telegram polling." : "",
+    gatewayId === "telegram" && !enabled ? "Embedded Telegram polling will stop shortly if Butler is running." : "",
   ].filter(Boolean).join("\n"));
 }
 
@@ -985,13 +1088,11 @@ function gatewayLogs(parsed: ParsedCommonOptions, args: string[]): void {
   const data = {
     gateway: gatewayId,
     files: entries.map((file) => basename(file)),
-    lines: entries.flatMap((file) => tailFile(file, lines).map((line) => ({
-      file: basename(file),
-      text: safeLogLine(line),
-    }))).slice(-lines),
+    lines: tailLogEntries(entries, lines),
     follow: hasFlag(args, "--follow"),
   };
   print(parsed, "butler gateway logs app", data, data.lines.map((line) => `[${line.file}] ${line.text}`).join("\n") || "No app gateway log lines found.");
+  maybeFollowLogs(parsed, args, entries);
 }
 
 function mcpTransportOption(parsed: ParsedCommonOptions, args: string[]): McpTransportKind {
