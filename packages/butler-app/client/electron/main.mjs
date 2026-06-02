@@ -259,7 +259,8 @@ function configureAppIdentity() {
 
 function configureAppIcon() {
   if (!isMac) return;
-  for (const iconPath of [macAppDockIconPath, macAppIconPath, appIconPath]) {
+  if (app.isPackaged) return;
+  for (const iconPath of [macAppIconPath, appIconPath]) {
     if (!existsSync(iconPath)) continue;
     try {
       app.dock.setIcon(iconPath);
