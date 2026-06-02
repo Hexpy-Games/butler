@@ -118,6 +118,10 @@ const RECALL_EVIDENCE_REQUIREMENTS = new Set<RetrievalEvidenceRequirement>([
   "graph_relation_hit",
 ]);
 
+// Explicit recall_memory calls are evidence-gathering steps; allow cold embed startup
+// the same upper budget enforced by vector.ts instead of the automatic recall budget.
+const RECALL_MEMORY_TOOL_VECTOR_TIMEOUT_MS = 10_000;
+
 function normalizeRecallEnumArray<T extends string>(value: unknown, allowed: Set<T>): T[] {
   if (!Array.isArray(value)) return [];
   const output: T[] = [];
@@ -147,6 +151,16 @@ function normalizeRecallGeneratedQueries(value: unknown): RetrievalGeneratedQuer
     output.push({ strategy, query });
   }
   return output;
+}
+
+function shouldHonorRecallVectorOptOut(input: {
+  includeVector: unknown;
+  strategies: RetrievalStrategy[];
+  evidenceRequired: RetrievalEvidenceRequirement[];
+}): boolean {
+  if (input.includeVector !== false) return false;
+  return input.strategies.includes("query_exact_transcript") ||
+    input.evidenceRequired.includes("exact_quote");
 }
 
 function mergeRecallQueries(...groups: Array<string[] | undefined>): string[] | undefined {
@@ -4221,7 +4235,12 @@ export function createButlerToolExecutor(input: {
             : undefined,
         }
         : undefined;
-      const recall = call.args.include_vector === false
+      const honorVectorOptOut = shouldHonorRecallVectorOptOut({
+        includeVector: call.args.include_vector,
+        strategies,
+        evidenceRequired,
+      });
+      const recall = honorVectorOptOut
         ? recallMemoryEvidence({
           butlerData: input.butlerData,
           cue,
@@ -4237,13 +4256,16 @@ export function createButlerToolExecutor(input: {
           vectorQueries,
           evidencePolicy,
           vectorBackend: input.memoryVectorBackend,
-          vectorTimeoutMs: input.memoryVectorTimeoutMs,
+          vectorTimeoutMs: input.memoryVectorTimeoutMs ?? RECALL_MEMORY_TOOL_VECTOR_TIMEOUT_MS,
         });
       return {
         ok: true,
         ...recall,
         diagnostics: [
           ...recall.diagnostics,
+          ...(call.args.include_vector === false && !honorVectorOptOut
+            ? ["vector=forced:model-opt-out-ignored"]
+            : []),
           ...retrievalPlannerDiagnostics(plannerResult),
         ],
       };
