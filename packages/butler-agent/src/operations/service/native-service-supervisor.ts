@@ -81,6 +81,10 @@ export interface NativeSupervisorPaths {
   butlerData: string;
 }
 
+interface NativeServiceSpecOptions {
+  createProjectFolderTokenSecret?: boolean;
+}
+
 interface StartServiceOptions {
   now?: () => Date;
   isPidRunning?: (pid: number) => boolean;
@@ -177,8 +181,12 @@ export function readOrCreateProjectFolderTokenSecret(butlerData: string): string
   return secret;
 }
 
-export function defaultNativeServiceSpecs(input: Partial<NativeSupervisorPaths> = {}): NativeServiceSpec[] {
+export function defaultNativeServiceSpecs(
+  input: Partial<NativeSupervisorPaths> = {},
+  options: NativeServiceSpecOptions = {},
+): NativeServiceSpec[] {
   const paths = resolveNativeSupervisorPaths(input);
+  const createProjectFolderTokenSecret = options.createProjectFolderTokenSecret ?? true;
   const bun = resolveBunPath({ butlerData: paths.butlerData });
   const commonEnv = {
     NODE_ENV: "production",
@@ -264,9 +272,10 @@ export function defaultNativeServiceSpecs(input: Partial<NativeSupervisorPaths> 
         ...commonEnv,
         BUTLER_APP_SERVER_HOST: app.host,
         BUTLER_APP_SERVER_PORT: String(app.port),
-        BUTLER_PROJECT_FOLDER_TOKEN_SECRET:
-          readOrCreateProjectFolderTokenSecret(paths.butlerData),
         ...(app.dbPath ? { BUTLER_APP_SERVER_DB: app.dbPath } : {}),
+        ...(createProjectFolderTokenSecret
+          ? { BUTLER_PROJECT_FOLDER_TOKEN_SECRET: readOrCreateProjectFolderTokenSecret(paths.butlerData) }
+          : {}),
       },
       stdoutFile: appLogs.stdout,
       stderrFile: appLogs.stderr,
@@ -407,7 +416,7 @@ export function listServices(
 ): NativeServiceProjection[] {
   const resolved = resolveNativeSupervisorPaths(paths);
   const alive = options.isPidRunning ?? isPidRunning;
-  return defaultNativeServiceSpecs(resolved).map((spec) => {
+  return defaultNativeServiceSpecs(resolved, { createProjectFolderTokenSecret: false }).map((spec) => {
     const state = readServiceState(resolved.butlerData, spec.id);
     if (!state && spec.id === "app-gateway") {
       const gatewayPid = readAppGatewayPid(resolved.butlerData);

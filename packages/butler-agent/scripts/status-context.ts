@@ -7,6 +7,7 @@ import { readTranscript } from "../src/test-support/harness/transcripts.ts";
 import { getRuntimeControlPlaneSummary } from "../src/integrations/providers/provider.ts";
 import { readPromptCacheMetrics, summarizePromptCacheMetrics } from "../src/integrations/providers/prompt-cache-metrics.ts";
 import { readOperationalHealth, renderOperationalHealth } from "../src/operations/health/operational-health.ts";
+import { listServices, type NativeServiceId } from "../src/operations/service/native-service-supervisor.ts";
 import { evaluateContextBudget } from "../src/agent/context/budget.ts";
 import { cognitionMemoryRoot } from "../src/agent/cognition/paths.ts";
 import { butlerAgentResourcesPath } from "../src/runtime/paths.ts";
@@ -48,6 +49,36 @@ export interface ContextStats {
   reservedOutput: number;
   reservedTool: number;
 }
+
+export interface ServiceHealthItem {
+  serviceId: NativeServiceId;
+  name: string;
+  status: "online" | "offline" | "stale";
+  pid: number | null;
+  startedAt: string | null;
+  restartPolicy: "manual" | "watchdog";
+}
+
+export interface ServiceHealthSummary {
+  total: number;
+  online: number;
+  offline: number;
+  stale: number;
+}
+
+export interface ServiceHealth {
+  summary: ServiceHealthSummary;
+  items: ServiceHealthItem[];
+}
+
+const SERVICE_DISPLAY_NAMES: Record<NativeServiceId, string> = {
+  "butler-main": "butler-agent",
+  "app-gateway": "gateway-app",
+  "butler-scheduler": "scheduler",
+  "butler-watchdog": "watchdog",
+  "butler-sync-consumer": "sync-consumer",
+  "embed-server": "embed-server",
+};
 
 function readConfiguredButlerModel(butlerData: string): string {
   const configPath = join(butlerData, "butler.config.json");
@@ -136,13 +167,47 @@ export function buildContextStats(
   };
 }
 
+export function buildServiceHealth(
+  butlerHome: string = process.env.BUTLER_HOME ?? BUTLER_HOME_DEFAULT,
+  butlerData: string = process.env.BUTLER_DATA || join(HOME, ".butler"),
+): ServiceHealth {
+  const items = listServices({ butlerHome, butlerData }).map((service) => ({
+    serviceId: service.serviceId,
+    name: SERVICE_DISPLAY_NAMES[service.serviceId],
+    status: service.status,
+    pid: service.pid,
+    startedAt: service.startedAt,
+    restartPolicy: service.restartPolicy,
+  }));
+  const summary = items.reduce<ServiceHealthSummary>(
+    (acc, item) => {
+      acc.total += 1;
+      acc[item.status] += 1;
+      return acc;
+    },
+    { total: 0, online: 0, offline: 0, stale: 0 },
+  );
+  return { summary, items };
+}
+
 function fmt(n: number): string {
   return n.toLocaleString("en-US");
+}
+
+export function renderServiceHealth(health: ServiceHealth): string {
+  return [
+    "## Services",
+    ...health.items.map((service) =>
+      `${service.name}: ${service.status}${service.pid ? ` pid=${service.pid}` : ""}`,
+    ),
+    `summary: online=${health.summary.online}, offline=${health.summary.offline}, stale=${health.summary.stale}`,
+  ].join("\n");
 }
 
 export function renderStatusContext(): string {
   const butlerData = process.env.BUTLER_DATA || join(HOME, ".butler");
   const stats = buildContextStats();
+  const services = buildServiceHealth(process.env.BUTLER_HOME ?? BUTLER_HOME_DEFAULT, butlerData);
   const control = getRuntimeControlPlaneSummary({ cacheScope: "status-context" });
   const cacheMetrics = summarizePromptCacheMetrics(readPromptCacheMetrics());
   const operationalHealth = renderOperationalHealth(readOperationalHealth(butlerData));
@@ -172,6 +237,8 @@ export function renderStatusContext(): string {
     `reserved output: ${fmt(stats.reservedOutput)}`,
     `reserved tool: ${fmt(stats.reservedTool)}`,
     `free before autocompact: ${fmt(stats.freeSpace)}`,
+    "",
+    renderServiceHealth(services),
     "",
     operationalHealth,
   ].join("\n");

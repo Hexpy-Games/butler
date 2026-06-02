@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import {
+  projectFolderTokenSecretPath,
+} from "../../packages/butler-agent/src/operations/service/native-service-supervisor.ts";
 
 const root = process.cwd();
 const cli = join(root, "bin", "butler.js");
@@ -11,6 +14,26 @@ function tempRoot(): string {
   const dir = join(tmpdir(), `butler-cli-${Date.now()}-${Math.random()}`);
   mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+function writeNativeServiceState(butlerData: string, serviceId: string, pid: number): void {
+  const stateDir = join(butlerData, "state", "services");
+  mkdirSync(stateDir, { recursive: true });
+  writeFileSync(join(stateDir, `${serviceId}.json`), JSON.stringify({
+    version: 1,
+    supervisor: "native-supervisor",
+    serviceId,
+    pid,
+    processGroupId: pid,
+    mode: "detached",
+    startedAt: "2026-06-02T00:00:00.000Z",
+    command: "test-command",
+    args: [],
+    cwd: root,
+    stdoutFile: join(butlerData, "logs", `${serviceId}-out.log`),
+    stderrFile: join(butlerData, "logs", `${serviceId}-err.log`),
+    restartPolicy: "watchdog",
+  }), "utf8");
 }
 
 test("Butler CLI help documents product commands without maintainer commands", () => {
@@ -269,6 +292,7 @@ test("Butler CLI status JSON combines health with the shared envelope", () => {
   const butlerData = tempRoot();
 
   try {
+    writeNativeServiceState(butlerData, "butler-main", process.pid);
     const result = spawnSync("node", [cli, "status", "--json", "--data", butlerData], {
       cwd: root,
       encoding: "utf8",
@@ -280,6 +304,46 @@ test("Butler CLI status JSON combines health with the shared envelope", () => {
     expect(parsed.command).toBe("butler status");
     expect(parsed.data.status.operational.privacy.rawTextStored).toBe(false);
     expect(parsed.data.model.runtime).toBe("codex-api");
+    expect(parsed.data.services.summary).toMatchObject({
+      total: 6,
+      online: 1,
+      stale: 0,
+    });
+    expect(parsed.data.services.items.find((service: { serviceId: string }) => service.serviceId === "butler-main")).toMatchObject({
+      serviceId: "butler-main",
+      name: "butler-agent",
+      status: "online",
+      pid: process.pid,
+    });
+    expect(parsed.data.services.items.find((service: { serviceId: string }) => service.serviceId === "app-gateway")).toMatchObject({
+      serviceId: "app-gateway",
+      name: "gateway-app",
+      status: "offline",
+      pid: null,
+    });
+    expect(JSON.stringify(parsed.data.services)).not.toContain(butlerData);
+    expect(existsSync(projectFolderTokenSecretPath(butlerData))).toBe(false);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("Butler CLI status human output includes service health", () => {
+  const butlerData = tempRoot();
+
+  try {
+    writeNativeServiceState(butlerData, "butler-main", process.pid);
+    const result = spawnSync("node", [cli, "status", "--data", butlerData], {
+      cwd: root,
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("## Services");
+    expect(result.stdout).toContain("butler-agent: online");
+    expect(result.stdout).toContain("gateway-app: offline");
+    expect(result.stdout).not.toContain(butlerData);
+    expect(existsSync(projectFolderTokenSecretPath(butlerData))).toBe(false);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

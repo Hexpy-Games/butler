@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -155,6 +155,24 @@ test("listServices marks stale state without shelling out to an external process
       status: "offline",
       pid: null,
     });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("listServices is read-only for app gateway token secrets", () => {
+  const butlerHome = "/opt/butler";
+  const butlerData = tempRoot();
+  try {
+    const services = listServices({ butlerHome, butlerData }, {
+      isPidRunning: () => false,
+    });
+
+    expect(services.find((service) => service.serviceId === "app-gateway")).toMatchObject({
+      status: "offline",
+      pid: null,
+    });
+    expect(existsSync(projectFolderTokenSecretPath(butlerData))).toBe(false);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

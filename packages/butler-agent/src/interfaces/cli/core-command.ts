@@ -4,7 +4,7 @@ import { createInterface } from "readline/promises";
 import { stdin as input, stdout as output } from "process";
 
 import { buildMetricsStatus, renderMetricsStatus } from "../../../scripts/metrics-status.ts";
-import { renderStatusContext } from "../../../scripts/status-context.ts";
+import { buildServiceHealth, renderStatusContext } from "../../../scripts/status-context.ts";
 import { getModelProviderControlStatus, renderModelProviderControlStatus } from "../../integrations/providers/control-plane.ts";
 import { parseCommonOptions, type ParsedCommonOptions } from "./args.ts";
 import { renderJsonEnvelope } from "./output.ts";
@@ -134,6 +134,7 @@ function status(parsed: ParsedCommonOptions, args: string[]): void {
       butlerData: parsed.options.data,
       sinceHours,
     }),
+    services: buildServiceHealth(parsed.options.home, parsed.options.data),
     model: getModelProviderControlStatus({
       sinceTs: sinceHours === null ? undefined : Date.now() - sinceHours * 60 * 60 * 1000,
     }),
