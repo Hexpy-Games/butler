@@ -91,7 +91,7 @@ const expectedCommands = [
   "butler search test <query> [--json]",
   "butler web read <url> [--json]",
   "butler cognition memory ingest [--session SESSION_ID] [--dry-run]",
-  "butler cognition memory maintain [--json]",
+  "butler cognition memory maintain [--hot-cache-backfill-only] [--json]",
   "butler cognition migrate --status|--dry-run|--apply [--json]",
   "butler automation list [--json]",
   "butler automation show <id> [--json]",

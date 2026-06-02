@@ -3,6 +3,7 @@ import { basename, join } from "path";
 import { Database } from "bun:sqlite";
 import { TaskStore } from "../../work/task-store.ts";
 import {
+  markdownMemoryBlocks,
   recallMemory,
   recallMemoryWithVector,
   type AssociativeRecallResult,
@@ -263,6 +264,15 @@ function compactEvidenceText(value: string, limit: number): string {
   return normalized.length > limit ? `${normalized.slice(0, limit)}...` : normalized;
 }
 
+function readRecallEvidenceText(path: string): string {
+  const blockMatch = /#block-(\d+)$/u.exec(path);
+  if (!blockMatch) return readText(path);
+  const filePath = path.slice(0, blockMatch.index);
+  const blockIndex = Number.parseInt(blockMatch[1] ?? "", 10) - 1;
+  const blocks = markdownMemoryBlocks(readText(filePath));
+  return blocks[blockIndex] ?? readText(filePath);
+}
+
 export function readMemoryHealth(input: {
   butlerData: string;
   staleAfterMs?: number;
@@ -515,7 +525,7 @@ function memoryRecallEvidenceFromRecall(input: {
         return [];
       }
       return [{
-        text: path.startsWith(butlerData) ? compactEvidenceText(readText(path), 700) : item.summary,
+        text: path.startsWith(butlerData) ? compactEvidenceText(readRecallEvidenceText(path), 700) : item.summary,
         score: item.confidence,
         source,
         path,

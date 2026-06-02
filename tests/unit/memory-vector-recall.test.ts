@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { cognitionMemoryRoot } from "../../packages/butler-agent/src/agent/cognition/paths.ts";
@@ -215,6 +215,122 @@ test("runtime vector recall bounds expanded queries without serial timeout stack
     expect(result.items).toHaveLength(0);
     expect(result.diagnostics.filter((item) => item === "vector=unavailable:query-timeout"))
       .toHaveLength(3);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("runtime vector recall does not use expanded vector queries as lexical fallback evidence", async () => {
+  const backend: VectorEpisodeBackend = {
+    async embed() {
+      return [0.1, 0.2, 0.3];
+    },
+    async search() {
+      return [];
+    },
+  };
+
+  const butlerData = tempButlerData();
+  try {
+    mkdirSync(join(cognitionMemoryRoot(butlerData), "hot"), { recursive: true });
+    writeFileSync(
+      join(cognitionMemoryRoot(butlerData), "hot", "cache.md"),
+      "## web reader\nReadability fallback raw extraction mode keeps article product list pages visible.",
+      "utf8",
+    );
+
+    const result = await recallMemoryWithVector({
+      butlerData,
+      cue: "웹페이지 내용이 잘리지 않게 하자는 얘기",
+      vectorQueries: ["Readability fallback raw article product list"],
+      vectorBackend: backend,
+      minScore: 0.01,
+    });
+
+    expect(result.abstained).toBe(true);
+    expect(result.items).toHaveLength(0);
+    expect(result.diagnostics).toContain("vector_candidates=0");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("runtime vector recall uses expanded queries only to rerank vector-backed candidates", async () => {
+  const backend: VectorEpisodeBackend = {
+    async embed() {
+      return [0.1, 0.2, 0.3];
+    },
+    async search() {
+      return [{
+        id: "distractor",
+        text: "A generic project note without the web reader decision.",
+        project: "butler",
+        session_id: "distractor",
+        _score: 0.72,
+      }, {
+        id: "web-reader",
+        text: "Butler web reader uses Readability with fallback raw mode for article product list pages.",
+        project: "butler",
+        session_id: "web-reader",
+        _score: 0.70,
+      }];
+    },
+  };
+
+  const butlerData = tempButlerData();
+  try {
+    const result = await recallMemoryWithVector({
+      butlerData,
+      cue: "웹페이지 내용이 잘리지 않게 하자는 얘기",
+      projectId: "butler",
+      vectorQueries: ["Readability fallback raw article product list"],
+      vectorBackend: backend,
+      minScore: 0.01,
+    });
+
+    expect(result.abstained).toBe(false);
+    expect(result.items[0]?.source).toBe("vector");
+    expect(result.items[0]?.summary).toContain("Readability");
+    expect(result.items[0]?.score_breakdown.contextual_match).toBeGreaterThan(0);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("runtime vector recall dedupes vector rows returned by cue and expanded queries", async () => {
+  let searchCalls = 0;
+  const backend: VectorEpisodeBackend = {
+    async embed() {
+      return [0.1, 0.2, 0.3];
+    },
+    async search() {
+      searchCalls += 1;
+      return [{
+        id: "shared-row",
+        text: "Butler README public launch memory should explain the first visitor path.",
+        project: "butler",
+        session_id: "shared-session",
+        _score: searchCalls === 1 ? 0.62 : 0.69,
+      }];
+    },
+  };
+
+  const butlerData = tempButlerData();
+  try {
+    const result = await recallMemoryWithVector({
+      butlerData,
+      cue: "공개 문서 얘기 다시 찾아줘",
+      projectId: "butler",
+      vectorQueries: ["Butler README public launch first visitor path"],
+      vectorBackend: backend,
+      minScore: 0.01,
+    });
+
+    expect(searchCalls).toBe(2);
+    expect(result.abstained).toBe(false);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.provenance[0]).toBe("vector:shared-session:shared-row");
+    expect(result.items[0]?.score_breakdown.semantic_similarity).toBe(0.69);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

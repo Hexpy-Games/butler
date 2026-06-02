@@ -564,7 +564,7 @@ test("operator cognition memory, context, search, and web helpers return safe JS
     expect(memoryRecall.exitCode).toBe(0);
     parsed = JSON.parse(stdoutText(memoryRecall));
     expect(parsed.data.results[0]?.summary).toContain("떡볶이");
-    expect(parsed.data.results[0]?.provenance[0]).toBe("cache.md");
+    expect(parsed.data.results[0]?.provenance[0]).toBe("cache.md#block-1");
 
     mkdirSync(join(butlerData, "cognition", "memory", "projects"), { recursive: true });
     writeFileSync(join(butlerData, "cognition", "memory", "projects", "butler.md"), [

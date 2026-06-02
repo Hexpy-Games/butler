@@ -1266,7 +1266,7 @@
       "memory",
       "maintain"
     ],
-    "usage": "butler cognition memory maintain [--json]",
+    "usage": "butler cognition memory maintain [--hot-cache-backfill-only] [--json]",
     "priority": "advanced",
     "status": "implemented",
     "implemented": true,

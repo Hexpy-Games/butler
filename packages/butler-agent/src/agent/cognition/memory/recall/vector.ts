@@ -55,6 +55,7 @@ const VECTOR_SEARCH_OVERFETCH_MULTIPLIER = 5;
 const VECTOR_SEARCH_OVERFETCH_MAX_LIMIT = 50;
 const VECTOR_CIRCUIT_FAILURE_THRESHOLD = 3;
 const VECTOR_CIRCUIT_COOLDOWN_MS = 30_000;
+const VECTOR_CANDIDATE_SUMMARY_CHARS = 420;
 
 export async function searchVectorEpisodes(input: {
   butlerData: string;
@@ -187,7 +188,7 @@ export function vectorRowsToRecallCandidates(
     const similarity = vectorSimilarity(row);
     return [{
       id: `vector:${rowId}`,
-      summary: compact(text, 180),
+      summary: compact(text, VECTOR_CANDIDATE_SUMMARY_CHARS),
       text,
       source: "vector",
       provenance: [`vector:${sessionId}:${rowId}`],

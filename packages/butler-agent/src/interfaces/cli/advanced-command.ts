@@ -1,6 +1,9 @@
 #!/usr/bin/env bun
 import { spawnSync } from "child_process";
-import { existsSync } from "fs";
+import { createHash } from "crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
+import { cognitionMemoryRoot } from "../../agent/cognition/paths.ts";
 import { buildImportPlan } from "../../agent/cognition/memory/scripts/import-session.ts";
 import { readMemoryHealth } from "../../agent/cognition/memory/quality.ts";
 import { AutomationStore, type AutomationPreview } from "../../operations/service/automation-store.ts";
@@ -139,20 +142,124 @@ function memoryIngest(parsed: ParsedCommonOptions, args: string[], commandBase: 
   }, `Memory ingest applied: session=${plan.sessionId} chunks=${plan.chunks.length}`);
 }
 
-function memoryMaintain(parsed: ParsedCommonOptions, commandBase: string): void {
+function hashText(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+
+function markdownMemoryBlocks(text: string): string[] {
+  const normalized = text.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const blocks: string[] = [];
+  let current: string[] = [];
+  for (const line of lines) {
+    if (/^#{1,6}\s+\S/u.test(line) && current.some((entry) => entry.trim())) {
+      blocks.push(current.join("\n").trim());
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.some((entry) => entry.trim())) blocks.push(current.join("\n").trim());
+  return blocks.filter((block) => block.trim());
+}
+
+function listMarkdownFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const output: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry);
+    const stat = statSync(path);
+    if (stat.isDirectory()) {
+      output.push(...listMarkdownFiles(path));
+      continue;
+    }
+    if (entry.endsWith(".md")) output.push(path);
+  }
+  return output;
+}
+
+function backfillHotCacheVectorIndex(parsed: ParsedCommonOptions): {
+  attempted: number;
+  indexed: number;
+  failed: number;
+  rawTextIncluded: false;
+} {
+  const memoryRoot = cognitionMemoryRoot(parsed.options.data);
+  const hotDir = join(memoryRoot, "hot");
+  const indexScript = butlerAgentSourcePath(parsed.options.home, "agent", "cognition", "memory", "scripts", "index.ts");
+  const tmpDir = join(memoryRoot, "queue", "hot-maintain-index");
+  let attempted = 0;
+  let indexed = 0;
+  let failed = 0;
+
+  for (const path of listMarkdownFiles(hotDir)) {
+    const blocks = markdownMemoryBlocks(readFileSync(path, "utf8"));
+    for (const [blockIndex, block] of blocks.entries()) {
+      attempted += 1;
+      const sessionId = `hot_maintain_${hashText(`${path}:${blockIndex}:${block}`)}`;
+      const tmp = join(tmpDir, `${sessionId}.md`);
+      mkdirSync(dirname(tmp), { recursive: true });
+      writeFileSync(tmp, block, "utf8");
+      try {
+        const result = spawnSync(process.execPath, [
+          "run",
+          indexScript,
+          "--file",
+          tmp,
+          "--project",
+          "butler",
+          "--session-id",
+          sessionId,
+          "--source-session-id",
+          sessionId,
+          "--type",
+          "hot-cache",
+          "--source",
+          "hot-cache",
+          "--plain-text",
+        ], {
+          cwd: parsed.options.home,
+          encoding: "utf8",
+          env: process.env,
+        });
+        if ((result.status ?? 1) === 0 && /Indexed \d+ chunks into LanceDB/.test(result.stdout)) {
+          indexed += 1;
+        } else {
+          failed += 1;
+        }
+      } finally {
+        try {
+          unlinkSync(tmp);
+        } catch {}
+      }
+    }
+  }
+
+  return {
+    attempted,
+    indexed,
+    failed,
+    rawTextIncluded: false,
+  };
+}
+
+function memoryMaintain(parsed: ParsedCommonOptions, args: string[], commandBase: string): void {
   const before = readMemoryHealth({ butlerData: parsed.options.data });
-  const result = spawnSync(process.execPath, [
-    "run",
-    butlerAgentSourcePath(parsed.options.home, "agent", "cognition", "memory", "scripts", "consolidation-cycle.ts"),
-  ], {
-    cwd: parsed.options.home,
-    encoding: "utf8",
-    env: process.env,
-  });
+  const hotCacheVectorBackfill = backfillHotCacheVectorIndex(parsed);
+  const backfillOnly = hasFlag(args, "--hot-cache-backfill-only");
+  const result = backfillOnly
+    ? { status: 0, stdout: "hot-cache backfill only" }
+    : spawnSync(process.execPath, [
+      "run",
+      butlerAgentSourcePath(parsed.options.home, "agent", "cognition", "memory", "scripts", "consolidation-cycle.ts"),
+    ], {
+      cwd: parsed.options.home,
+      encoding: "utf8",
+      env: process.env,
+    });
   const after = readMemoryHealth({ butlerData: parsed.options.data });
   const data = {
     exitCode: result.status ?? 1,
-    skipped: result.stdout.includes("consolidation-cycle disabled"),
+    skipped: backfillOnly || result.stdout.includes("consolidation-cycle disabled"),
     before: {
       maintenanceStatus: before.maintenanceStatus,
       queueBacklog: before.queueBacklog,
@@ -165,6 +272,7 @@ function memoryMaintain(parsed: ParsedCommonOptions, commandBase: string): void 
       graphEntityCount: after.graphEntityCount,
       graphEdgeCount: after.graphEdgeCount,
     },
+    hotCacheVectorBackfill,
     rawTextIncluded: false,
   };
   if ((result.status ?? 1) !== 0) {
@@ -175,7 +283,7 @@ function memoryMaintain(parsed: ParsedCommonOptions, commandBase: string): void 
 
 function memory(parsed: ParsedCommonOptions, args: string[], commandBase: string): void {
   if (args[0] === "ingest") return memoryIngest(parsed, args, commandBase);
-  if (args[0] === "maintain") return memoryMaintain(parsed, commandBase);
+  if (args[0] === "maintain") return memoryMaintain(parsed, args, commandBase);
   fail(parsed, "unknown_command", `unknown memory command: ${args[0] ?? ""}`);
 }
 

@@ -129,3 +129,54 @@ test("strict index writes LanceDB rows and graph counts for normalized transcrip
     graph.close();
   }
 }, 70000);
+
+test("plain-text index writes hot-cache summary rows into LanceDB", async () => {
+  const inputPath = join(tempDir, "hot-summary.md");
+  writeFileSync(
+    inputPath,
+    [
+      "## [12:00] butler | hot-session",
+      "**Task**: Butler web reader uses Readability with fallback raw mode.",
+      "**Learning**: Article, product, and list pages need separate extraction modes.",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const result = await runIndexCli([
+    "run",
+    "packages/butler-agent/src/agent/cognition/memory/scripts/index.ts",
+    "--file",
+    inputPath,
+    "--project",
+    "butler",
+    "--session-id",
+    "hot_butler_main_c0",
+    "--source-session-id",
+    "butler/main",
+    "--type",
+    "hot-cache",
+    "--source",
+    "hot-cache",
+    "--plain-text",
+    "--strict",
+  ]);
+
+  if (result.exitCode !== 0) {
+    throw new Error([
+      `index.ts exited with status=${result.exitCode}`,
+      result.stdout ? `stdout=${result.stdout}` : "",
+      result.stderr ? `stderr=${result.stderr}` : "",
+    ].filter(Boolean).join("\n"));
+  }
+  const db = await lancedb.connect(join(tempDir, "cognition", "memory", "db", "butler.lance"));
+  const table = await db.openTable("butler_memory");
+  const rows = await table.query().where("source = 'hot-cache'").limit(10).toArray() as Array<{
+    text?: string;
+    type?: string;
+    source?: string;
+  }>;
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.type).toBe("hot-cache");
+  expect(rows[0]?.source).toBe("hot-cache");
+  expect(rows[0]?.text).toContain("Readability");
+}, 70000);

@@ -1,10 +1,11 @@
 // CLI: echo "content" | bun run save_hot.ts --project name --session-id id [--type task|conversation|learning|play] [--project-path /abs/path] [--topic slug]
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { spawnSync } from "child_process";
 import { BUTLER_DIR, TWENTY_KB } from "./constants.ts";
 import { runPromptText } from "../../../../integrations/providers/provider.ts";
 import { butlerAgentSourcePath } from "../../../../runtime/paths.ts";
+import { normalizeSessionIdForStorage } from "./lib/session-id.ts";
 
 function getArg(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);
@@ -46,6 +47,50 @@ export function resolveHotCachePath(opts: {
     file: join(opts.memoryDir, "hot", "cache.md"),
     mode: "global",
   };
+}
+
+function indexHotCacheEntry(input: {
+  project: string;
+  sessionId: string;
+  entry: string;
+  topic?: string;
+  logFile: string;
+}): void {
+  const indexScript = butlerAgentSourcePath(BUTLER_DIR.HOME, "agent", "cognition", "memory", "scripts", "index.ts");
+  if (!existsSync(indexScript)) return;
+  const vectorSessionId = normalizeSessionIdForStorage(`hot_${input.sessionId}`);
+  const tmp = join(BUTLER_DIR.MEMORY, "queue", "hot-index", `${vectorSessionId}.${process.pid}.md`);
+  mkdirSync(dirname(tmp), { recursive: true });
+  writeFileSync(tmp, input.entry, "utf8");
+  try {
+    const args = [
+      "run",
+      indexScript,
+      "--file",
+      tmp,
+      "--project",
+      input.project,
+      "--session-id",
+      vectorSessionId,
+      "--source-session-id",
+      input.sessionId,
+      "--type",
+      "hot-cache",
+      "--source",
+      "hot-cache",
+      "--plain-text",
+    ];
+    if (input.topic) args.push("--topic", input.topic);
+    const result = spawnSync(process.execPath, args, { encoding: "utf8", timeout: 120000 });
+    if (result.status !== 0 || /WARNING:/.test(`${result.stdout}\n${result.stderr}`)) {
+      const detail = (result.stderr || result.stdout || "unknown").trim().slice(0, 200);
+      appendFileSync(input.logFile, `[${new Date().toISOString()}] save_hot.ts: hot-cache vector index skipped — ${detail}\n`);
+    }
+  } finally {
+    try {
+      unlinkSync(tmp);
+    } catch {}
+  }
 }
 
 if (import.meta.main) {
@@ -117,6 +162,13 @@ ${text.trim()}`;
     : `\n## [${timeStr}] ${project} | ${sessionId}\n`;
   const entry = `${header}${entryBody}\n`;
   appendFileSync(CACHE_FILE, entry);
+  indexHotCacheEntry({
+    project,
+    sessionId,
+    entry,
+    topic,
+    logFile: LOG_FILE,
+  });
 
   const topicLog = topic ? ` topic=${topic}` : "";
   const logEntry = `[${now.toISOString().slice(0, 19).replace("T", " ")}] save_hot.ts | project=${project} session=${sessionId}${topicLog} mode=${resolved.mode} | saved: ${entryBody.slice(0, 80)}\n`;

@@ -3,7 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
+  readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -42,6 +45,9 @@ interface ModeResult {
   decoy_rank: number | null;
   target_hit: boolean;
   top_target_hit: boolean;
+  target_source: string | null;
+  target_score_breakdown: Record<string, number> | null;
+  target_vector_backed: boolean;
   decoy_hit: boolean;
   top_decoy_hit: boolean;
   vector_ok: boolean;
@@ -79,7 +85,7 @@ const summaryPath = join(evidenceDir, "summary.md");
 const projectId = process.env.BUTLER_E2E_PROJECT_ID?.trim() || "butler";
 const recallLimit = positiveInt(process.env.BUTLER_MEMORY_QUALITY_LIMIT, 5);
 const vectorTimeoutMs = positiveInt(process.env.BUTLER_MEMORY_QUALITY_VECTOR_TIMEOUT_MS, 10_000);
-const minScore = finiteNumber(process.env.BUTLER_MEMORY_QUALITY_MIN_SCORE, 0.01);
+const minScore = optionalFiniteNumber(process.env.BUTLER_MEMORY_QUALITY_MIN_SCORE);
 
 const plannedStrategies: RetrievalStrategy[] = [
   "search_vector_episode",
@@ -90,6 +96,8 @@ const plannedStrategies: RetrievalStrategy[] = [
 ];
 
 const plannedVectorEvidence: RetrievalEvidenceRequirement[] = ["vector_episode_hit"];
+const rawMemoryLeakScanMinChars = 120;
+let hotCacheVectorBackfillBlocks = 0;
 
 const cases: QualityCase[] = [
   {
@@ -117,7 +125,7 @@ const cases: QualityCase[] = [
       ["하이브리드", "추출"],
     ],
     decoyGroups: [["README"], ["게임", "대회"], ["Project", "Ledger"]],
-    vectorQueries: ["web reader token efficient content extraction without losing important page content"],
+    vectorQueries: ["Safari Reader Readability fallback raw article product list body loss hybrid extraction"],
   },
   {
     id: "MQ-DECOY-1",
@@ -157,7 +165,7 @@ const cases: QualityCase[] = [
       ["소프트웨어", "렌더러"],
     ],
     decoyGroups: [["README"], ["Project", "Ledger"], ["웹", "리더"]],
-    vectorQueries: ["small size game contest realistic stack multiplatform C Win32 Linux X11"],
+    vectorQueries: ["1.44MB game contest Win32 C Linux X11 software renderer multiplatform"],
   },
   {
     id: "MQ-NEG-1",
@@ -166,7 +174,7 @@ const cases: QualityCase[] = [
     expected: "If the snapshot has no matching evidence, vector-enabled recall should not confidently surface a decoy.",
     targetGroups: [["이미지", "OCR", "노이즈"]],
     decoyGroups: [["readability"], ["README"], ["게임", "대회"], ["Project", "Ledger"]],
-    vectorQueries: ["image OCR noise cleanup Butler memory decision"],
+    vectorQueries: ["OCR text recognition noise cleanup scanned image preprocessing"],
   },
 ];
 
@@ -180,10 +188,10 @@ function positiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : fallback;
 }
 
-function finiteNumber(value: string | undefined, fallback: number): number {
-  if (!value) return fallback;
+function optionalFiniteNumber(value: string | undefined): number | undefined {
+  if (!value) return undefined;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function hashText(value: string): string {
@@ -213,6 +221,45 @@ function copyButlerDataSnapshot(): void {
   }
 }
 
+function indexHotCacheSnapshot(): number {
+  const result = spawnSync("node", [
+    "bin/butler.js",
+    "cognition",
+    "memory",
+    "maintain",
+    "--hot-cache-backfill-only",
+    "--json",
+    "--data",
+    snapshotButlerData,
+  ], {
+    cwd: root,
+    env: {
+      ...process.env,
+      BUTLER_HOME: root,
+      BUTLER_DATA: snapshotButlerData,
+    },
+    stdio: "pipe",
+    encoding: "utf8",
+    timeout: 120000,
+  });
+  if (result.status !== 0) {
+    throw new Error(`hot-cache vector backfill failed: ${result.stderr || result.stdout}`);
+  }
+  const parsed = JSON.parse(result.stdout) as {
+    data?: {
+      hotCacheVectorBackfill?: {
+        indexed?: number;
+        failed?: number;
+      };
+    };
+  };
+  const backfill = parsed.data?.hotCacheVectorBackfill;
+  if (!backfill || (backfill.failed ?? 0) > 0) {
+    throw new Error(`hot-cache vector backfill incomplete: ${result.stdout}`);
+  }
+  return backfill.indexed ?? 0;
+}
+
 function normalizedText(value: string): string {
   return value.normalize("NFC").toLowerCase();
 }
@@ -232,10 +279,14 @@ function itemInspectableText(item: RecallItem): string {
   ].join("\n");
 }
 
-function firstMatchingRank(items: RecallItem[], groups: string[][]): number | null {
-  const index = items.findIndex((item) =>
+function firstMatchingIndex(items: RecallItem[], groups: string[][]): number {
+  return items.findIndex((item) =>
     groups.some((group) => textMatchesGroup(itemInspectableText(item), group)),
   );
+}
+
+function firstMatchingRank(items: RecallItem[], groups: string[][]): number | null {
+  const index = firstMatchingIndex(items, groups);
   return index < 0 ? null : index + 1;
 }
 
@@ -274,7 +325,9 @@ async function runMode(qualityCase: QualityCase, mode: RecallMode): Promise<Mode
   const startedAt = Date.now();
   const result = await runRecall(qualityCase, mode);
   const durationMs = Date.now() - startedAt;
-  const targetRank = firstMatchingRank(result.items, qualityCase.targetGroups);
+  const targetIndex = firstMatchingIndex(result.items, qualityCase.targetGroups);
+  const targetRank = targetIndex < 0 ? null : targetIndex + 1;
+  const targetItem = targetIndex < 0 ? undefined : result.items[targetIndex];
   const decoyRank = qualityCase.decoyGroups ? firstMatchingRank(result.items, qualityCase.decoyGroups) : null;
   const sources = result.items.map((item) => item.source);
   return {
@@ -286,6 +339,13 @@ async function runMode(qualityCase: QualityCase, mode: RecallMode): Promise<Mode
     decoy_rank: decoyRank,
     target_hit: targetRank !== null,
     top_target_hit: targetRank === 1,
+    target_source: targetItem?.source ?? null,
+    target_score_breakdown: roundedBreakdown(targetItem?.score_breakdown),
+    target_vector_backed: Boolean(
+      targetItem &&
+        targetItem.score_breakdown.semantic_similarity > 0 &&
+        (targetItem.source === "vector" || targetItem.source === "hybrid"),
+    ),
     decoy_hit: decoyRank !== null,
     top_decoy_hit: decoyRank === 1,
     vector_ok: result.diagnostics.includes("vector=ok"),
@@ -305,21 +365,23 @@ async function runRecall(qualityCase: QualityCase, mode: RecallMode): Promise<As
       cue: qualityCase.prompt,
       projectId,
       limit: recallLimit,
-      minScore,
+      ...(minScore === undefined ? {} : { minScore }),
     });
   }
   const rankingPolicy = mode === "planned_vector_first"
-    ? recallRankingPolicyFromPlan({
-      strategies: plannedStrategies,
-      evidence_required: plannedVectorEvidence,
-    })
+    ? {
+      ...recallRankingPolicyFromPlan({
+        strategies: plannedStrategies,
+        evidence_required: plannedVectorEvidence,
+      }),
+    }
     : undefined;
   return await recallMemoryWithVector({
     butlerData: snapshotButlerData,
     cue: qualityCase.prompt,
     projectId,
     limit: recallLimit,
-    minScore,
+    ...(minScore === undefined ? {} : { minScore }),
     vectorQueries: qualityCase.vectorQueries,
     vectorTimeoutMs,
     rankingPolicy,
@@ -335,12 +397,11 @@ async function runCase(qualityCase: QualityCase): Promise<CaseComparison> {
   const vector = requiredMode(modes, "vector_enabled");
   const planned = requiredMode(modes, "planned_vector_first");
   const positiveTargetMissing = qualityCase.category !== "negative" &&
-    !modes.some((mode) => mode.target_hit);
+    !vector.target_hit;
   const negativeFalsePositive = qualityCase.category === "negative" &&
     modes.some((mode) => !mode.abstained || mode.target_hit || mode.top_decoy_hit);
   const vectorLift = rankImproved(lexical.target_rank, vector.target_rank) ||
-    rankImproved(lexical.target_rank, planned.target_rank) ||
-    (!lexical.top_target_hit && (vector.top_target_hit || planned.top_target_hit));
+    (!lexical.top_target_hit && vector.top_target_hit);
   const vectorRegression = Boolean(
     lexical.target_hit &&
       (!vector.target_hit || vector.top_decoy_hit || rankWorse(lexical.target_rank, vector.target_rank)),
@@ -397,7 +458,8 @@ function comparisonNotes(
   if (planned.top_target_hit && !lexical.top_target_hit) notes.push("planned_vector_promoted_target_to_top");
   if (lexical.target_hit && !vector.target_hit) notes.push("vector_enabled_lost_lexical_target");
   if (vector.top_decoy_hit) notes.push("vector_enabled_top_decoy");
-  if (planned.abstained && vector.target_hit) notes.push("planned_vector_first_too_strict");
+  if (planned.target_vector_backed && !vector.target_vector_backed) notes.push("planned_vector_evidence_observed");
+  if (planned.abstained && vector.target_hit) notes.push("planned_vector_first_abstained");
   if (!lexical.target_hit && !vector.target_hit && !planned.target_hit) notes.push("no_mode_found_target");
   return notes;
 }
@@ -414,19 +476,30 @@ function writeReport(comparisons: CaseComparison[]): void {
   );
   const positiveTargetMissCases = comparisons.filter((comparison) => comparison.positive_target_missing);
   const negativeFalsePositiveCases = comparisons.filter((comparison) => comparison.negative_false_positive);
+  const vectorBackedTargetCases = comparisons.filter((comparison) =>
+    comparison.category !== "negative" &&
+    requiredMode(comparison.modes, "vector_enabled").target_vector_backed,
+  );
+  const positiveVectorBackedMissCases = comparisons.filter((comparison) =>
+    comparison.category !== "negative" &&
+    !requiredMode(comparison.modes, "vector_enabled").target_vector_backed,
+  );
   const report = {
     run_id: runId,
     source_data_label: sourceButlerData.replace(homedir(), "~"),
     snapshot_data_label: snapshotButlerData.replace(root, "."),
     project_id: projectId,
     recall_limit: recallLimit,
-    min_score: minScore,
+    min_score: minScore ?? "engine-default",
     vector_timeout_ms: vectorTimeoutMs,
+    raw_memory_leak_scan_min_chars: rawMemoryLeakScanMinChars,
+    hot_cache_vector_backfill_blocks: hotCacheVectorBackfillBlocks,
     generated_at: new Date().toISOString(),
     privacy: {
       raw_memory_text_in_report: false,
       prompt_text_is_synthetic_and_non_private: true,
       scoring_used_memory_text_in_process_only: true,
+      raw_memory_text_scan_min_chars: rawMemoryLeakScanMinChars,
     },
     aggregate: {
       case_count: comparisons.length,
@@ -436,11 +509,15 @@ function writeReport(comparisons: CaseComparison[]): void {
       vector_top_decoy_cases: decoyTopCases.length,
       positive_target_miss_cases: positiveTargetMissCases.length,
       negative_false_positive_cases: negativeFalsePositiveCases.length,
+      vector_backed_target_cases: vectorBackedTargetCases.length,
+      positive_vector_backed_miss_cases: positiveVectorBackedMissCases.length,
     },
     comparisons,
   };
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   writeFileSync(summaryPath, renderSummary(report.aggregate, comparisons), "utf8");
+  assertReportDoesNotContainRawMemoryText(reportPath);
+  assertReportDoesNotContainRawMemoryText(summaryPath);
 }
 
 function renderSummary(
@@ -452,6 +529,8 @@ function renderSummary(
     vector_top_decoy_cases: number;
     positive_target_miss_cases: number;
     negative_false_positive_cases: number;
+    vector_backed_target_cases: number;
+    positive_vector_backed_miss_cases: number;
   },
   comparisons: CaseComparison[],
 ): string {
@@ -468,10 +547,13 @@ function renderSummary(
     `- vector_top_decoy_cases: ${aggregate.vector_top_decoy_cases}`,
     `- positive_target_miss_cases: ${aggregate.positive_target_miss_cases}`,
     `- negative_false_positive_cases: ${aggregate.negative_false_positive_cases}`,
+    `- vector_backed_target_cases: ${aggregate.vector_backed_target_cases}`,
+    `- positive_vector_backed_miss_cases: ${aggregate.positive_vector_backed_miss_cases}`,
+    `- hot_cache_vector_backfill_blocks: ${hotCacheVectorBackfillBlocks}`,
     "- raw_memory_text_in_report: false",
     "",
-    "| case | category | lexical target | vector target | planned target | vector ok | lift | regression | notes |",
-    "| --- | --- | ---: | ---: | ---: | --- | --- | --- | --- |",
+    "| case | category | lexical target | vector target | planned target | vector-backed target | vector ok | lift | regression | notes |",
+    "| --- | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- |",
   ];
   for (const comparison of comparisons) {
     const lexical = requiredMode(comparison.modes, "lexical_only");
@@ -483,6 +565,7 @@ function renderSummary(
       rankLabel(lexical.target_rank),
       rankLabel(vector.target_rank),
       rankLabel(planned.target_rank),
+      vector.target_vector_backed || planned.target_vector_backed ? "yes" : "no",
       vector.vector_ok || planned.vector_ok ? "yes" : "no",
       comparison.vector_lift ? "yes" : "no",
       comparison.vector_regression ? "yes" : "no",
@@ -499,8 +582,43 @@ function rankLabel(value: number | null): string {
   return value === null ? "-" : String(value);
 }
 
+function listTextFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const output: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry);
+    const stat = statSync(path);
+    if (stat.isDirectory()) {
+      output.push(...listTextFiles(path));
+      continue;
+    }
+    if (entry.endsWith(".md") || entry.endsWith(".txt")) output.push(path);
+  }
+  return output;
+}
+
+function rawMemoryLeakNeedles(): string[] {
+  const memoryDir = join(snapshotButlerData, "cognition", "memory");
+  const needles: string[] = [];
+  for (const path of listTextFiles(memoryDir)) {
+    const text = readFileSync(path, "utf8");
+    for (const line of text.split(/\r?\n/u)) {
+      const normalized = line.replace(/\s+/g, " ").trim();
+      if (normalized.length >= rawMemoryLeakScanMinChars) needles.push(normalized);
+    }
+  }
+  return [...new Set(needles)].slice(0, 1_000);
+}
+
+function assertReportDoesNotContainRawMemoryText(path: string): void {
+  const reportText = readFileSync(path, "utf8");
+  const leaked = rawMemoryLeakNeedles().find((needle) => reportText.includes(needle));
+  assert(!leaked, `memory quality report leaked raw memory text into ${path}`);
+}
+
 async function main(): Promise<void> {
   copyButlerDataSnapshot();
+  hotCacheVectorBackfillBlocks = indexHotCacheSnapshot();
   const comparisons: CaseComparison[] = [];
   for (const qualityCase of cases) {
     comparisons.push(await runCase(qualityCase));
@@ -516,6 +634,14 @@ async function main(): Promise<void> {
   );
   const positiveTargetMisses = comparisons.filter((comparison) => comparison.positive_target_missing);
   const negativeFalsePositives = comparisons.filter((comparison) => comparison.negative_false_positive);
+  const vectorBackedTargetCases = comparisons.filter((comparison) =>
+    comparison.category !== "negative" &&
+    requiredMode(comparison.modes, "vector_enabled").target_vector_backed,
+  );
+  const positiveVectorBackedMisses = comparisons.filter((comparison) =>
+    comparison.category !== "negative" &&
+    !requiredMode(comparison.modes, "vector_enabled").target_vector_backed,
+  );
 
   console.log(`memory quality report: ${summaryPath}`);
   console.log(`memory quality json: ${reportPath}`);
@@ -523,10 +649,12 @@ async function main(): Promise<void> {
     `aggregate: cases=${comparisons.length}, vectorObserved=${vectorObserved}, ` +
       `lifts=${comparisons.filter((comparison) => comparison.vector_lift).length}, ` +
       `regressions=${vectorRegressions.length}, topDecoys=${vectorTopDecoys.length}, ` +
-      `positiveMisses=${positiveTargetMisses.length}, negativeFalsePositives=${negativeFalsePositives.length}`,
+      `positiveMisses=${positiveTargetMisses.length}, negativeFalsePositives=${negativeFalsePositives.length}, ` +
+      `vectorBackedTargets=${vectorBackedTargetCases.length}`,
   );
 
   assert(vectorObserved, "vector-enabled recall did not produce vector=ok in any quality case");
+  assert(hotCacheVectorBackfillBlocks > 0, "memory quality did not backfill any hot-cache blocks into vector index");
   assert(
     positiveTargetMisses.length === 0,
     `memory quality positive cases missed target evidence: ${positiveTargetMisses.map((item) => item.case_id).join(", ")}`,
@@ -534,6 +662,11 @@ async function main(): Promise<void> {
   assert(
     negativeFalsePositives.length === 0,
     `memory quality negative cases returned confident evidence: ${negativeFalsePositives.map((item) => item.case_id).join(", ")}`,
+  );
+  assert(vectorRegressions.length === 0, `vector-enabled recall regressed target ranking: ${vectorRegressions.map((item) => item.case_id).join(", ")}`);
+  assert(
+    positiveVectorBackedMisses.length === 0,
+    `memory quality positive cases lacked vector-backed target evidence: ${positiveVectorBackedMisses.map((item) => item.case_id).join(", ")}`,
   );
   assert(vectorTopDecoys.length === 0, `vector-enabled recall promoted decoy evidence: ${vectorTopDecoys.map((item) => item.case_id).join(", ")}`);
 }
