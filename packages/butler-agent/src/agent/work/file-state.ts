@@ -1,4 +1,5 @@
 import {
+  appendFileSync,
   closeSync,
   fsyncSync,
   linkSync,
@@ -28,6 +29,23 @@ function errnoCode(error: unknown): string {
   return error && typeof error === "object" && "code" in error
     ? String((error as { code?: unknown }).code)
     : "";
+}
+
+function recordFileStateEvidence(event: string, payload: Record<string, unknown>): void {
+  const evidencePath = process.env.BUTLER_FILE_STATE_EVIDENCE_PATH?.trim();
+  if (!evidencePath) return;
+  try {
+    mkdirSync(dirname(evidencePath), { recursive: true });
+    appendFileSync(evidencePath, `${JSON.stringify({
+      schema: "butler.file-state-evidence.v1",
+      event,
+      at: new Date().toISOString(),
+      pid: process.pid,
+      ...payload,
+    })}\n`, "utf8");
+  } catch {
+    // Evidence logging is test-only and must never change state-write behavior.
+  }
 }
 
 function isLockExistsError(error: unknown): boolean {
@@ -144,6 +162,10 @@ function cleanupStaleLockCandidates(lockPath: string, now: number): void {
 export function atomicWriteTextFile(path: string, value: string): void {
   mkdirSync(dirname(path), { recursive: true });
   const tempPath = uniqueTempPath(path);
+  recordFileStateEvidence("atomic_write.started", {
+    target: basename(path),
+    bytes: Buffer.byteLength(value, "utf8"),
+  });
   const fd = openSync(tempPath, "wx");
   let closed = false;
   const closeFile = (): void => {
@@ -157,9 +179,17 @@ export function atomicWriteTextFile(path: string, value: string): void {
     fsyncSync(fd);
     closeFile();
     renameSync(tempPath, path);
+    recordFileStateEvidence("atomic_write.committed", {
+      target: basename(path),
+      bytes: Buffer.byteLength(value, "utf8"),
+    });
   } catch (error) {
     closeFile();
     rmSync(tempPath, { force: true });
+    recordFileStateEvidence("atomic_write.failed", {
+      target: basename(path),
+      error: error instanceof Error ? error.message : String(error),
+    });
     throw error;
   }
 }
@@ -179,12 +209,20 @@ function acquireFileLock(lockPath: string): string {
     throw error;
   }
   rmSync(candidatePath, { force: true });
+  recordFileStateEvidence("lock.acquired", {
+    lock: basename(lockPath),
+    token,
+  });
   return token;
 }
 
 function releaseFileLock(lockPath: string, token: string): void {
   if (readLockOwner(lockPath)?.token !== token) return;
   rmSync(lockPath, { recursive: true, force: true });
+  recordFileStateEvidence("lock.released", {
+    lock: basename(lockPath),
+    token,
+  });
 }
 
 export function withFileLock<T>(targetPath: string, write: () => T): T {
@@ -211,9 +249,17 @@ function waitForFileLock(targetPath: string, lockPath: string): string {
       const now = Date.now();
       if (canRecoverLock(lockPath, now)) {
         rmSync(lockPath, { recursive: true, force: true });
+        recordFileStateEvidence("lock.recovered", {
+          target: basename(targetPath),
+          lock: basename(lockPath),
+        });
         continue;
       }
       if (now - startedAt >= FILE_LOCK_WAIT_TIMEOUT_MS) {
+        recordFileStateEvidence("lock.timeout", {
+          target: basename(targetPath),
+          lock: basename(lockPath),
+        });
         throw new Error(`Timed out waiting for file lock: ${targetPath}`, { cause: error });
       }
       sleepSync(FILE_LOCK_RETRY_DELAY_MS);
