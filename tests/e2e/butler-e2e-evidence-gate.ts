@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   runAgentLoop,
   type AgentLoopToolDefinition,
@@ -21,6 +21,7 @@ import {
   createButlerToolExecutor,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { TaskStore } from "../../packages/butler-agent/src/agent/work/task-store.ts";
+import { PlannedTaskStore } from "../../packages/butler-agent/src/agent/work/planned-task.ts";
 import {
   recallMemoryWithVector,
   recallRankingPolicyFromPlan,
@@ -56,6 +57,7 @@ interface ToolTiming {
 
 const root = process.cwd();
 const sourceButlerData = resolve(process.env.BUTLER_E2E_SOURCE_DATA || join(homedir(), ".butler"));
+const projectId = "butler";
 const runId = process.env.BUTLER_E2E_RUN_ID?.trim() ||
   `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
 const runRoot = resolve(root, ".tmp", "real-data-e2e", runId);
@@ -67,6 +69,11 @@ const fileStateEvidencePath = join(evidenceDir, "file-state.jsonl");
 
 if (process.argv[2] === "--task-store-writer") {
   runTaskStoreWriter();
+  process.exit(0);
+}
+
+if (process.argv[2] === "--planned-task-writer") {
+  runPlannedTaskWriter();
   process.exit(0);
 }
 
@@ -113,6 +120,60 @@ function copyButlerDataSnapshot(): void {
   if (result.status !== 0) {
     throw new Error(`rsync snapshot failed: ${result.stderr || result.stdout}`);
   }
+}
+
+function listFilesRecursive(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const output: string[] = [];
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    const stat = statSync(path);
+    if (stat.isDirectory()) {
+      output.push(...listFilesRecursive(path));
+    } else if (stat.isFile()) {
+      output.push(path);
+    }
+  }
+  return output;
+}
+
+function indexHotCacheSnapshot(): number {
+  const result = spawnSync("node", [
+    "bin/butler.js",
+    "cognition",
+    "memory",
+    "maintain",
+    "--hot-cache-backfill-only",
+    "--json",
+    "--data",
+    snapshotButlerData,
+  ], {
+    cwd: root,
+    env: {
+      ...process.env,
+      BUTLER_HOME: root,
+      BUTLER_DATA: snapshotButlerData,
+    },
+    stdio: "pipe",
+    encoding: "utf8",
+    timeout: 120000,
+  });
+  if (result.status !== 0) {
+    throw new Error(`hot-cache vector backfill failed: ${result.stderr || result.stdout}`);
+  }
+  const parsed = JSON.parse(result.stdout) as {
+    data?: {
+      hotCacheVectorBackfill?: {
+        indexed?: number;
+        failed?: number;
+      };
+    };
+  };
+  const backfill = parsed.data?.hotCacheVectorBackfill;
+  if (!backfill || (backfill.failed ?? 0) > 0) {
+    throw new Error(`hot-cache vector backfill incomplete: ${result.stdout}`);
+  }
+  return backfill.indexed ?? 0;
 }
 
 function writeJson(path: string, value: unknown): void {
@@ -174,13 +235,14 @@ async function runRecallCase(input: {
   strategies: RetrievalStrategy[];
   evidenceRequired: RetrievalEvidenceRequirement[];
   vectorQueries?: string[];
+  targetGroups?: string[][];
   expected: string;
 }): Promise<CaseResult> {
   const promptId = hashText(input.prompt);
   const executor = createButlerToolExecutor({
     butlerHome: root,
     butlerData: snapshotButlerData,
-    projectId: "butler",
+    projectId,
     sessionId: "beeg/real-data",
     memoryVectorTimeoutMs: 10_000,
   });
@@ -205,7 +267,7 @@ async function runRecallCase(input: {
     const engineResult = await recallMemoryWithVector({
       butlerData: snapshotButlerData,
       cue: input.prompt,
-      projectId: "butler",
+      projectId,
       limit: 3,
       minScore: 0.01,
       vectorQueries: input.vectorQueries,
@@ -225,8 +287,19 @@ async function runRecallCase(input: {
     const hasSemanticVector = engineResult.items.some((item) =>
       item.source === "vector" && item.score_breakdown.semantic_similarity > 0,
     );
+    const targetRank = input.targetGroups ? firstMatchingRank(engineResult.items, input.targetGroups) : null;
+    const targetItem = targetRank === null ? undefined : engineResult.items[targetRank - 1];
+    const targetVectorBacked = Boolean(
+      targetItem &&
+        targetItem.source === "vector" &&
+        targetItem.score_breakdown.semantic_similarity > 0,
+    );
     const passed = input.evidenceRequired.includes("vector_episode_hit")
-      ? vectorSourcesAreHonest && vectorOk && sources.includes("vector") && hasSemanticVector
+      ? vectorSourcesAreHonest &&
+        vectorOk &&
+        sources.includes("vector") &&
+        hasSemanticVector &&
+        (!input.targetGroups || targetVectorBacked)
       : vectorSourcesAreHonest && engineResult.diagnostics.includes("ranking_policy=planned");
     const observed = {
       result_count: toolResults.length,
@@ -235,6 +308,8 @@ async function runRecallCase(input: {
       engine_diagnostics: engineResult.diagnostics,
       top_score_breakdown: summarizedBreakdown(engineResult.items[0]?.score_breakdown),
       semantic_values: semanticValues,
+      target_rank: targetRank,
+      target_vector_backed: targetVectorBacked,
       raw_text_included: false,
     };
     if (!passed) {
@@ -266,6 +341,95 @@ async function runRecallCase(input: {
   }
 }
 
+function normalizedText(value: string): string {
+  return value.normalize("NFC").toLowerCase();
+}
+
+function itemInspectableText(item: { summary?: string; provenance?: string[]; related_nodes?: string[] }): string {
+  return [
+    item.summary ?? "",
+    ...(item.provenance ?? []),
+    ...(item.related_nodes ?? []),
+  ].join("\n");
+}
+
+function firstMatchingRank(items: Array<{ summary?: string; provenance?: string[]; related_nodes?: string[] }>, groups: string[][]): number | null {
+  const index = items.findIndex((item) => {
+    const haystack = normalizedText(itemInspectableText(item));
+    return groups.some((group) => group.every((term) => haystack.includes(normalizedText(term))));
+  });
+  return index < 0 ? null : index + 1;
+}
+
+interface WriterProcessResult {
+  index: number;
+  status: number | null;
+  stderr: string;
+  stdout: string;
+  startedAtMs: number;
+  endedAtMs: number;
+}
+
+function runWriterProcess(input: {
+  kind: "task-store" | "planned-task";
+  taskId: string;
+  index: number;
+}): Promise<WriterProcessResult> {
+  const startedAtMs = Date.now();
+  const child = spawn(process.execPath, [
+    "run",
+    import.meta.path,
+    input.kind === "task-store" ? "--task-store-writer" : "--planned-task-writer",
+    snapshotButlerData,
+    input.taskId,
+    String(input.index),
+  ], {
+    cwd: root,
+    env: {
+      ...process.env,
+      BUTLER_DATA: snapshotButlerData,
+      BUTLER_FILE_STATE_EVIDENCE_PATH: fileStateEvidencePath,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  return new Promise((resolve) => {
+    child.on("close", (status) => {
+      resolve({
+        index: input.index,
+        status,
+        stderr: stderr.trim(),
+        stdout: stdout.trim(),
+        startedAtMs,
+        endedAtMs: Date.now(),
+      });
+    });
+  });
+}
+
+function maxActiveProcesses(processes: WriterProcessResult[]): number {
+  const events = processes.flatMap((process) => [
+    { at: process.startedAtMs, delta: 1 },
+    { at: process.endedAtMs, delta: -1 },
+  ]).sort((left, right) => left.at - right.at || right.delta - left.delta);
+  let active = 0;
+  let maxActive = 0;
+  for (const event of events) {
+    active += event.delta;
+    maxActive = Math.max(maxActive, active);
+  }
+  return maxActive;
+}
+
 async function runTaskStoreContentionCase(input: {
   caseId: string;
   prompt: string;
@@ -276,34 +440,46 @@ async function runTaskStoreContentionCase(input: {
   const taskDir = join(snapshotButlerData, "tasks", taskId);
   mkdirSync(taskDir, { recursive: true });
   writeFileSync(join(taskDir, "status"), "RUNNING\n", "utf8");
+  const plannedTaskId = `beeg-planned-${runId}`;
+  const plannedStore = new PlannedTaskStore(snapshotButlerData);
+  plannedStore.create({
+    task_id: plannedTaskId,
+    type: "planned",
+    goal: "BEEG planned-task state contention",
+    project: "butler",
+    created_at: new Date().toISOString(),
+    decision_policy: "test",
+    acceptance_criteria: ["planned-task state remains parseable under concurrent writes"],
+    verification_commands: ["bun run e2e:evidence-gate"],
+    review_policy: "test",
+    repair_policy: {
+      max_attempts: 0,
+      allow_autonomous_repair: false,
+    },
+    public_report_policy: "test",
+  });
+  const plannedTaskDir = plannedStore.taskDir(plannedTaskId);
 
-  const writers = Array.from({ length: 6 }, (_, index) =>
-    spawnSync(process.execPath, [
-      "run",
-      import.meta.path,
-      "--task-store-writer",
-      snapshotButlerData,
-      taskId,
-      String(index + 1),
-    ], {
-      cwd: root,
-      env: {
-        ...process.env,
-        BUTLER_DATA: snapshotButlerData,
-        BUTLER_FILE_STATE_EVIDENCE_PATH: fileStateEvidencePath,
-      },
-      encoding: "utf8",
-      stdio: "pipe",
-    }),
-  );
+  const writers = await Promise.all([
+    ...Array.from({ length: 6 }, (_, index) =>
+      runWriterProcess({ kind: "task-store", taskId, index: index + 1 }),
+    ),
+    ...Array.from({ length: 6 }, (_, index) =>
+      runWriterProcess({ kind: "planned-task", taskId: plannedTaskId, index: index + 1 }),
+    ),
+  ]);
   const failures = writers
-    .map((result, index) => ({ index: index + 1, status: result.status, stderr: result.stderr.trim() }))
+    .map((result) => ({ index: result.index, status: result.status, stderr: result.stderr }))
     .filter((result) => result.status !== 0);
-  const entries = existsSync(taskDir) ? readdirSync(taskDir) : [];
-  const tempFiles = entries.filter((entry) => entry.includes(".tmp-") || entry.includes(".candidate-"));
-  const lockFiles = entries.filter((entry) => entry.endsWith(".lock"));
-  const files = entries.map((entry) => join(taskDir, entry)).filter((path) => statSync(path).isFile());
-  const zeroByteFiles = files.filter((path) => statSync(path).size === 0).map((path) => basename(path));
+  const maxActiveWriters = maxActiveProcesses(writers);
+  const files = [
+    ...listFilesRecursive(taskDir),
+    ...listFilesRecursive(plannedTaskDir),
+  ];
+  const relativeFiles = files.map((path) => path.replace(`${snapshotButlerData}/`, ""));
+  const tempFiles = relativeFiles.filter((entry) => entry.includes(".tmp-") || entry.includes(".candidate-"));
+  const lockFiles = relativeFiles.filter((entry) => entry.endsWith(".lock"));
+  const zeroByteFiles = files.filter((path) => statSync(path).size === 0).map((path) => path.replace(`${snapshotButlerData}/`, ""));
   const originParseOk = (() => {
     try {
       const origin = JSON.parse(readFileSync(join(taskDir, "origin.json"), "utf8")) as Record<string, unknown>;
@@ -311,6 +487,14 @@ async function runTaskStoreContentionCase(input: {
     } catch {
       return false;
     }
+  })();
+  const plannedParseOk = (() => {
+    const record = plannedStore.read(plannedTaskId);
+    return Boolean(
+      record?.review?.task_id === plannedTaskId &&
+        record.publicReport &&
+        record.decision?.task_id === plannedTaskId,
+    );
   })();
   const eventLines = existsSync(fileStateEvidencePath)
     ? readFileSync(fileStateEvidencePath, "utf8").split("\n").filter(Boolean)
@@ -325,16 +509,20 @@ async function runTaskStoreContentionCase(input: {
   });
   const passed = failures.length === 0 &&
     originParseOk &&
+    plannedParseOk &&
     tempFiles.length === 0 &&
     lockFiles.length === 0 &&
     zeroByteFiles.length === 0 &&
     eventKinds.includes("lock.acquired") &&
     eventKinds.includes("lock.released") &&
-    eventKinds.includes("atomic_write.committed");
+    eventKinds.includes("atomic_write.committed") &&
+    maxActiveWriters > 1;
   const observed = {
     writer_count: writers.length,
+    max_active_writers: maxActiveWriters,
     writer_failures: failures,
     origin_parse_ok: originParseOk,
+    planned_parse_ok: plannedParseOk,
     temp_files: tempFiles,
     lock_files: lockFiles,
     zero_byte_files: zeroByteFiles,
@@ -348,7 +536,7 @@ async function runTaskStoreContentionCase(input: {
       case_id: caseId,
       prompt_id: hashText(prompt),
       prompt,
-      expected: "Concurrent TaskStore writers leave valid JSON, no zero-byte files, no stale temp/lock files, and lock evidence.",
+      expected: "Concurrent TaskStore and PlannedTaskStore writers leave valid JSON, no zero-byte files, no stale temp/lock files, and lock evidence.",
       observed,
       failure: "TaskStore contention evidence did not meet integrity requirements.",
     });
@@ -357,7 +545,7 @@ async function runTaskStoreContentionCase(input: {
     case_id: caseId,
     prompt_id: hashText(prompt),
     prompt,
-    expected: "Concurrent TaskStore writers leave valid JSON, no zero-byte files, no stale temp/lock files, and lock evidence.",
+    expected: "Concurrent TaskStore and PlannedTaskStore writers leave valid JSON, no zero-byte files, no stale temp/lock files, and lock evidence.",
     observed,
   });
 }
@@ -479,6 +667,7 @@ function hasOverlap(timings: ToolTiming[]): boolean {
 async function main(): Promise<void> {
   mkdirSync(evidenceDir, { recursive: true });
   copyButlerDataSnapshot();
+  const hotCacheVectorBackfillBlocks = indexHotCacheSnapshot();
   process.env.BUTLER_DATA = snapshotButlerData;
   process.env.BUTLER_FILE_STATE_EVIDENCE_PATH = fileStateEvidencePath;
 
@@ -495,21 +684,27 @@ async function main(): Promise<void> {
     {
       caseId: "BEEG-MEM-1",
       prompt: "전에 웹 리더에서 본문 노이즈를 줄이는 방법 얘기했잖아. 그때 어떤 접근이 안전하다고 봤는지 기억해?",
+      vectorQueries: ["웹사이트 노이즈 토큰 절감 Reader 알고리즘 하이브리드 본문 유실"],
+      targetGroups: [["Readability", "본문"], ["Reader", "하이브리드"]],
       expected: "recall_memory returns honest vector-backed evidence with semantic similarity.",
     },
     {
       caseId: "BEEG-MEM-2",
       prompt: "Butler 공개용 README를 어떻게 구성하자고 했었는지 다시 요약해줘.",
+      targetGroups: [["README", "공개"], ["첫 공개", "README"]],
       expected: "README/public-doc planning memory is retrieved without lexical fallback being labeled semantic.",
     },
     {
       caseId: "BEEG-MEM-3",
       prompt: "그 작은 용량 게임 대회 얘기에서 어떤 기술 스택이 현실적이라고 봤었지?",
+      targetGroups: [["게임", "대회"], ["1.44MB"]],
       expected: "Prior game-stack decision is retrieved from durable memory.",
     },
     {
       caseId: "BEEG-MEM-4",
       prompt: "프로젝트 원장 먼저 봐야 한다고 했던 워크플로우 문제의 핵심이 뭐였지?",
+      vectorQueries: ["project-ledger 스킬 워크플로우 관련 문제 먼저 읽기"],
+      targetGroups: [["project-ledger", "워크플로우"], ["Project Ledger", "ledger"]],
       expected: "Project Ledger workflow issue is retrieved without raw transcript search.",
     },
   ]) {
@@ -525,24 +720,28 @@ async function main(): Promise<void> {
       caseId: "BEEG-RANK-1",
       prompt: "그거 있잖아, 웹페이지 내용 줄이려던 방법. 단순 마크다운 파일 얘기 말고 본문 추출 쪽 결론 뭐였지?",
       vectorQueries: ["웹 리더 Readability 본문 추출 노이즈 제거"],
+      targetGroups: [["Readability", "본문"], ["웹", "노이즈"]],
       expected: "Planned ranking uses vector/lexical/graph evidence channels instead of fixed anonymous weights.",
     },
     {
       caseId: "BEEG-RANK-2",
       prompt: "지난번 공개 문서 얘기에서 첫 방문자에게 뭘 먼저 보여줘야 한다고 했더라?",
       vectorQueries: ["Butler README 공개 문서 첫 방문자 구성"],
+      targetGroups: [["README", "공개"], ["첫 공개", "README"]],
       expected: "Retrieval strategy and score breakdown support the public-doc answer.",
     },
     {
       caseId: "BEEG-RANK-3",
       prompt: "그때 작은 게임 대회에서 멀티플랫폼을 계속 밀어도 된다고 했었나, 아니면 다른 결론이었나?",
       vectorQueries: ["작은 용량 게임 대회 기술 스택 멀티플랫폼"],
+      targetGroups: [["게임", "대회"], ["멀티플랫폼"]],
       expected: "The intended decision outranks merely lexical candidates.",
     },
     {
       caseId: "BEEG-RANK-4",
       prompt: "프로젝트 대시보드가 오래된 상태로 보이던 문제, 원인이 어디였지?",
       vectorQueries: ["Project Ledger dashboard stale view canonical ledger root"],
+      targetGroups: [["대시보드", "stale"], ["Project Ledger", "dashboard"]],
       expected: "Ranking exposes separate semantic, lexical, graph, contextual, and task evidence.",
     },
   ]) {
@@ -577,7 +776,7 @@ async function main(): Promise<void> {
   const projectExecutor = createButlerToolExecutor({
     butlerHome: root,
     butlerData: snapshotButlerData,
-    projectId: "butler",
+    projectId,
     workspacePath: root,
     sessionId: "beeg/agent-loop",
   });
@@ -723,6 +922,7 @@ async function main(): Promise<void> {
       raw_private_memory_in_report: false,
       source_butler_data_path_committed: false,
     },
+    hot_cache_vector_backfill_blocks: hotCacheVectorBackfillBlocks,
     summary: {
       total: cases.length,
       passed: cases.filter((item) => item.status === "pass").length,
@@ -738,6 +938,7 @@ async function main(): Promise<void> {
     `- total: ${report.summary.total}`,
     `- passed: ${report.summary.passed}`,
     `- failed: ${report.summary.failed}`,
+    `- hot_cache_vector_backfill_blocks: ${hotCacheVectorBackfillBlocks}`,
     "",
     "| Case | Status | Failure |",
     "| --- | --- | --- |",
@@ -749,6 +950,7 @@ async function main(): Promise<void> {
     run_id: runId,
     report: reportPath.replace(`${root}/`, ""),
     summary: report.summary,
+    hot_cache_vector_backfill_blocks: hotCacheVectorBackfillBlocks,
     failed_cases: cases.filter((item) => item.status === "fail").map((item) => ({
       case_id: item.case_id,
       failure: item.failure,
@@ -786,6 +988,50 @@ function runTaskStoreWriter(): void {
     memory_refs: [],
   });
   store.markResultNotified(taskId, new Date());
+}
+
+function runPlannedTaskWriter(): void {
+  const [, , , butlerData, taskId, writerId] = process.argv;
+  assert(butlerData, "planned writer requires butlerData");
+  assert(taskId, "planned writer requires taskId");
+  assert(writerId, "planned writer requires writerId");
+  const writerNumber = Number.parseInt(writerId, 10);
+  const store = new PlannedTaskStore(butlerData);
+  store.writeAttemptDispatch(taskId, writerNumber, {
+    worker_task_id: `worker-${writerId}`,
+    prompt: `BEEG planned writer ${writerId} prompt`,
+  });
+  store.writeAttemptResult(taskId, writerNumber, `BEEG planned writer ${writerId} result`);
+  store.writeReview({
+    task_id: taskId,
+    attempt: writerNumber,
+    verdict: "PASS",
+    reviewed_at: new Date().toISOString(),
+    criteria: [{
+      criterion_index: 1,
+      criterion: "planned-task state remains parseable under concurrent writes",
+      verdict: "PASS",
+      evidence: `writer ${writerId} review evidence`,
+    }],
+    missing_evidence: [],
+    repair_recommendation: null,
+  });
+  store.writeDecision(taskId, {
+    decision_id: `decision-${taskId}`,
+    task_id: taskId,
+    situation: "BEEG planned contention decision",
+    recommended_option_id: "continue",
+    options: [{
+      id: "continue",
+      label: "Continue",
+      description: "Keep the contention test running.",
+    }],
+    tradeoffs: ["test-only contention evidence"],
+    expires_at: null,
+    created_at: new Date().toISOString(),
+    response: null,
+  });
+  store.writePublicReport(taskId, `BEEG planned writer ${writerId} public report`);
 }
 
 await main();

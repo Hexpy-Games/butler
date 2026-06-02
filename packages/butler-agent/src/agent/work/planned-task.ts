@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
+import { writeLockedTextFile } from "./file-state.ts";
 
 export type PlannedTaskStatus =
   | "PLANNED"
@@ -160,7 +161,11 @@ function readJson<T>(path: string): T | null {
 }
 
 function writeJson(path: string, value: unknown): void {
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  writeLockedTextFile(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function writeText(path: string, value: string): void {
+  writeLockedTextFile(path, value);
 }
 
 function attemptNumberFromDir(entry: string): number {
@@ -348,8 +353,8 @@ export class PlannedTaskStore {
     const taskDir = this.taskDir(plan.task_id);
     mkdirSync(join(taskDir, "attempts"), { recursive: true });
     writeJson(join(taskDir, "plan.json"), plan);
-    writeFileSync(join(taskDir, "plan.md"), renderPlanMarkdown(plan), "utf8");
-    writeFileSync(join(taskDir, "status"), "PLANNED\n", "utf8");
+    writeText(join(taskDir, "plan.md"), renderPlanMarkdown(plan));
+    writeText(join(taskDir, "status"), "PLANNED\n");
     return this.read(plan.task_id)!;
   }
 
@@ -410,7 +415,7 @@ export class PlannedTaskStore {
     if (!allowed.includes(next)) {
       throw new Error(`invalid planned task transition ${record.status} -> ${next}`);
     }
-    writeFileSync(join(record.taskDir, "status"), `${next}\n`, "utf8");
+    writeText(join(record.taskDir, "status"), `${next}\n`);
     return this.read(taskId)!;
   }
 
@@ -419,7 +424,7 @@ export class PlannedTaskStore {
     if (!record) throw new Error(`planned task ${taskId} not found`);
     const attemptDir = join(record.taskDir, "attempts", String(attempt).padStart(3, "0"));
     mkdirSync(attemptDir, { recursive: true });
-    writeFileSync(join(attemptDir, "result.md"), result.trim() ? `${result.trim()}\n` : "", "utf8");
+    writeText(join(attemptDir, "result.md"), result.trim() ? `${result.trim()}\n` : "");
     return this.read(taskId)!;
   }
 
@@ -435,8 +440,8 @@ export class PlannedTaskStore {
     if (!record) throw new Error(`planned task ${taskId} not found`);
     const attemptDir = join(record.taskDir, "attempts", String(attempt).padStart(3, "0"));
     mkdirSync(attemptDir, { recursive: true });
-    writeFileSync(join(attemptDir, "worker-task-id"), `${input.worker_task_id.trim()}\n`, "utf8");
-    writeFileSync(join(attemptDir, "prompt.md"), `${input.prompt.trim()}\n`, "utf8");
+    writeText(join(attemptDir, "worker-task-id"), `${input.worker_task_id.trim()}\n`);
+    writeText(join(attemptDir, "prompt.md"), `${input.prompt.trim()}\n`);
     return this.read(taskId)!;
   }
 
@@ -454,14 +459,14 @@ export class PlannedTaskStore {
       },
     };
     writeJson(join(record.taskDir, "review.json"), normalized);
-    writeFileSync(join(record.taskDir, "review.md"), renderReviewMarkdown(normalized), "utf8");
+    writeText(join(record.taskDir, "review.md"), renderReviewMarkdown(normalized));
     return this.read(review.task_id)!;
   }
 
   writePublicReport(taskId: string, report: string): PlannedTaskRecord {
     const record = this.read(taskId);
     if (!record) throw new Error(`planned task ${taskId} not found`);
-    writeFileSync(join(record.taskDir, "public-report.md"), `${report.trim()}\n`, "utf8");
+    writeText(join(record.taskDir, "public-report.md"), `${report.trim()}\n`);
     return this.read(taskId)!;
   }
 
