@@ -42,6 +42,7 @@ const folderSelectionSecret = process.env.BUTLER_PROJECT_FOLDER_TOKEN_SECRET;
 const devCorsOrigin = process.env.BUTLER_APP_DEV_ORIGIN;
 const bridgeMode =
   process.env.BUTLER_APP_SERVER_BRIDGE === "off" ? "external" : "local";
+const shouldWritePidFile = process.env.BUTLER_APP_GATEWAY_PID_FILE !== "off";
 mkdirSync(dirname(dbPath), { recursive: true });
 
 const app = createAppServer({
@@ -74,18 +75,23 @@ console.log(
     dbConfigured: appGatewayConfig.dbConfigured,
   }),
 );
-writeAppGatewayPid(dataRoot, process.pid);
+if (shouldWritePidFile) writeAppGatewayPid(dataRoot, process.pid);
+const keepAliveInterval = setInterval(() => {
+  void app.url;
+}, 60 * 60 * 1000);
 
 process.on("SIGINT", () => {
-  clearAppGatewayPid(dataRoot);
+  clearInterval(keepAliveInterval);
+  if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
   app.stop();
   process.exit(0);
 });
 process.on("SIGTERM", () => {
-  clearAppGatewayPid(dataRoot);
+  clearInterval(keepAliveInterval);
+  if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
   app.stop();
   process.exit(0);
 });
 process.on("exit", () => {
-  clearAppGatewayPid(dataRoot);
+  if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
 });

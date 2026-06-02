@@ -120,7 +120,10 @@ function candidateButlerHomes() {
 
 function resolveButlerRuntime(data) {
   const candidates = [
+    process.env.BUTLER_BUN,
     join(data, "runtime", "bun", "current", "bin", "bun"),
+    "/opt/homebrew/bin/bun",
+    "/usr/local/bin/bun",
   ];
   for (const candidate of candidates) {
     if (candidate && existsSync(candidate)) return candidate;
@@ -149,9 +152,8 @@ async function ensureServer() {
   }
   if (serverProcess && (await healthOk())) return;
   if (serverStartupPromise) return serverStartupPromise;
-  const preferredPortAlreadyUsed =
-    (await healthOk()) || !(await isPortAvailable(port));
-  if (preferredPortAlreadyUsed) {
+  if (await healthOk()) return;
+  if (!(await isPortAvailable(port))) {
     updateManagedServerPort(await findAvailablePort(port + 1));
   }
   serverStartupPromise = startManagedServer();
@@ -177,6 +179,7 @@ async function startManagedServer() {
       ...(gateway.env ?? {}),
       BUTLER_APP_SERVER_PORT: String(port),
       BUTLER_APP_SERVER_URL: serverUrl,
+      BUTLER_APP_GATEWAY_PID_FILE: "off",
       ...(explicitUiUrl ? { BUTLER_APP_DEV_ORIGIN: rendererOrigin } : {}),
       BUTLER_PROJECT_FOLDER_TOKEN_SECRET: projectFolderTokenSecret,
     },
