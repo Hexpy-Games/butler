@@ -552,6 +552,13 @@ test("electron shell uses native macOS corners and sidebar vibrancy", () => {
   expect(electronMain).toContain("app.setAboutPanelOptions");
   expect(electronMain).toContain("applicationName: appDisplayName");
   expect(electronMain).toContain("configureAppIcon()");
+  expect(electronMain).toContain("if (app.isPackaged) return;");
+  expect(electronMain).toContain(
+    "for (const iconPath of [macAppIconPath, appIconPath])",
+  );
+  expect(electronMain).not.toContain(
+    "for (const iconPath of [macAppDockIconPath, macAppIconPath, appIconPath])",
+  );
   expect(electronMain).toContain("app.dock.setIcon(iconPath)");
   expect(electronMain).toContain('titleBarStyle: "hidden"');
   expect(electronMain).toContain("icon: appIconForWindow()");
