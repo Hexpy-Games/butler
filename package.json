@@ -46,6 +46,7 @@
     "app:client:memory-recall:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-memory-recall ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:workstream:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-workstream ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:workstream:natural-live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-workstream-natural ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
+    "e2e:evidence-gate": "${BUTLER_BUN:-bun} run tests/e2e/butler-e2e-evidence-gate.ts",
     "live:decision-context:medium": "${BUTLER_BUN:-bun} run tests/live/decision-context-medium-task.ts",
     "app:package:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-package-smoke.ts",
     "app:layout:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-layout-smoke.ts",
