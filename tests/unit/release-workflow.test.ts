@@ -124,13 +124,13 @@ test("README directs user installs to tag artifacts instead of source checkout",
   expect(development).toContain("bun install");
 });
 
-test("v0.0.3 release notes describe the GitHub release changelog", () => {
-  const notes = readRepoFile(".github/releases/v0.0.3.md");
+test("v0.0.4 release notes describe the GitHub release changelog", () => {
+  const notes = readRepoFile(".github/releases/v0.0.4.md");
 
-  expect(notes).toContain("# Butler v0.0.3");
+  expect(notes).toContain("# Butler v0.0.4");
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("LanceDB-backed vector recall");
-  expect(notes).toContain("legacy keyword-weighted baseline");
-  expect(notes).toContain("locked atomic file-state writes");
-  expect(notes).toContain("successful alternate tool result");
+  expect(notes).toContain("crypto.randomUUID");
+  expect(notes).toContain("Telegram gateway opt-in");
+  expect(notes).toContain("log following support");
+  expect(notes).toContain("service health visibility");
 });
