@@ -1051,6 +1051,8 @@ test("electron shell mediates existing-folder project selection without exposing
     'properties: ["openDirectory", "createDirectory"]',
   );
   expect(electronMain).toContain("BUTLER_PROJECT_FOLDER_TOKEN_SECRET");
+  expect(electronMain).toContain("project-folder-token-secret");
+  expect(electronMain).toContain("resolveProjectFolderTokenSecret");
   expect(electronMain).toContain("createProjectFolderSelectionToken");
   expect(preload).toContain("folder_selection_token");
   expect(preload).not.toContain("showOpenDialog");
