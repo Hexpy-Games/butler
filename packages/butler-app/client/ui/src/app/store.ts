@@ -24,6 +24,7 @@ import {
   settingsWithDefaults,
   writeCachedSettings,
 } from "./settingsCache.ts";
+import { browserRandomId } from "./id.ts";
 import type { AppUiStateSnapshot } from "./appUiStateCache.ts";
 import {
   DEFAULT_LEFT_PANEL_WIDTH,
@@ -981,7 +982,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   sendMessage: async (text, controls = {}) => {
-    const clientMessageId = `client-${crypto.randomUUID()}`;
+    const clientMessageId = browserRandomId("client");
     const clientTurnId = clientTurnIdFromMessageId(clientMessageId);
     const attachments = controls.attachments ?? [];
     const messageTitle = text.trim() || attachments[0]?.safe_name || "New chat";

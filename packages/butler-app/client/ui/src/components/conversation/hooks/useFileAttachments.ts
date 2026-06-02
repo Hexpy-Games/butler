@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { uploadMessageFile } from "@/app/api.ts";
+import { browserRandomUUID } from "@/app/id.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { projectDocumentFileName } from "@/app/projectDocuments.ts";
 import { isDraftChatId } from "@/app/utils.ts";
@@ -56,7 +57,7 @@ export function useFileAttachments(activeChatId: string) {
           isDraftChatId(activeChatId) ? undefined : activeChatId,
         );
         accepted.push({
-          id: `${file.name}-${file.size}-${crypto.randomUUID()}`,
+          id: `${file.name}-${file.size}-${browserRandomUUID()}`,
           file: uploaded,
           kind: uploaded.kind ?? "generic",
         });
@@ -101,7 +102,7 @@ export function useFileAttachments(activeChatId: string) {
       setAttachments((current) => [
         ...current,
         {
-          id: `project-document-${document.id}-${crypto.randomUUID()}`,
+          id: `project-document-${document.id}-${browserRandomUUID()}`,
           file: uploaded,
           kind: "project-document",
         },
