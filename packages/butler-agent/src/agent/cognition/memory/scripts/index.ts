@@ -1,4 +1,4 @@
-// CLI: bun run index.ts --file <path> --project <name> --session-id <id> --type summary
+// CLI: bun run index.ts --file <path> --project <name> --session-id <id> --type summary [--plain-text]
 import * as lancedb from "@lancedb/lancedb";
 import { readFileSync, appendFileSync, mkdirSync, writeFileSync, renameSync } from "fs";
 import { dirname, join } from "path";
@@ -71,13 +71,14 @@ if (import.meta.main) {
   const source = getArg(args, "--source") ?? "butler";
   const topic = getArg(args, "--topic");
   const strict = args.includes("--strict");
+  const plainText = args.includes("--plain-text");
 
   if (!file) { console.error("--file required"); process.exit(1); }
 
   const raw = readFileSync(file, "utf8");
   const now = Math.floor(Date.now() / 1000);
 
-  const text = extractTextFromJsonl(raw);
+  const text = plainText ? raw.trim() : extractTextFromJsonl(raw);
   const chunks = chunkText(text);
 
   if (chunks.length === 0) {
@@ -86,6 +87,10 @@ if (import.meta.main) {
     // exit non-zero). The April 2025 incident was a silent exit 0 here.
     if (raw.trim().length === 0) {
       console.log("Empty input (skipping)");
+      process.exit(0);
+    }
+    if (plainText) {
+      console.log("Empty plain-text input (skipping)");
       process.exit(0);
     }
     // Is any line valid JSONL at all? If zero lines parse, reject loudly.

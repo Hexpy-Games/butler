@@ -5,6 +5,7 @@ import { join } from "path";
 import {
   recallFromCorpus,
   type AssociativeRecallResult,
+  type RecallContextInput,
   type RecallCorpus,
 } from "../../packages/butler-agent/src/agent/cognition/memory/recall/engine.ts";
 import {
@@ -18,6 +19,7 @@ interface ShadowRecallCase {
   name: string;
   cue: string;
   corpus: RecallCorpus;
+  context?: RecallContextInput;
   expectedTopProvenance?: string;
   expectAbstain?: boolean;
 }
@@ -27,6 +29,7 @@ function runShadowRecallCases(
   runner: (input: {
     cue: string;
     corpus: RecallCorpus;
+    context?: RecallContextInput;
     now: number;
     minScore?: number;
   }) => AssociativeRecallResult = recallFromCorpus,
@@ -36,6 +39,7 @@ function runShadowRecallCases(
     const result = runner({
       cue: item.cue,
       corpus: item.corpus,
+      context: item.context,
       now,
       minScore: 0.05,
     });
@@ -106,9 +110,18 @@ test("shadow baseline protects current recall behavior across key retrieval case
       expectedTopProvenance: "memory:composer-form",
     },
     {
-      name: "vague prior-reference recall still finds the prior discussion",
+      name: "vague prior-reference fallback abstains without corroborating context",
       cue: "지난번 그거 말이야",
       corpus: retrievalCorpus(),
+      expectAbstain: true,
+    },
+    {
+      name: "vague prior-reference recall resolves through active context",
+      cue: "지난번 그거 말이야",
+      corpus: retrievalCorpus(),
+      context: {
+        recentContext: "retrieval planner target 해소 최근 대화 작업 상태",
+      },
       expectedTopProvenance: "memory:prior-reference",
     },
     {
@@ -121,7 +134,8 @@ test("shadow baseline protects current recall behavior across key retrieval case
 
   expect(results["strong lexical and graph anchor"]?.items[0]?.score_breakdown.semantic_similarity).toBe(0);
   expect(results["strong lexical and graph anchor"]?.items[0]?.score_breakdown.lexical_match).toBeGreaterThan(0);
-  expect(results["vague prior-reference recall still finds the prior discussion"]?.items[0]?.score_breakdown.recency_score).toBeGreaterThan(0);
+  expect(results["vague prior-reference fallback abstains without corroborating context"]?.abstained).toBe(true);
+  expect(results["vague prior-reference recall resolves through active context"]?.items[0]?.score_breakdown.contextual_match).toBeGreaterThan(0);
 });
 
 test("shadow baseline keeps exact transcript lookup on queryMemory", () => {

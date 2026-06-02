@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
+import * as lancedb from "@lancedb/lancedb";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
+import { createServer, type Server } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
 import { AutomationStore } from "../../packages/butler-agent/src/operations/service/automation-store.ts";
@@ -13,11 +15,12 @@ function tempRoot(): string {
   return dir;
 }
 
-function runCli(args: string[], butlerData: string) {
+function runCli(args: string[], butlerData: string, extraEnv: Record<string, string> = {}) {
   return Bun.spawnSync(["node", cli, ...args, "--data", butlerData], {
     cwd: root,
     env: {
       ...process.env,
+      ...extraEnv,
       BUTLER_DATA: butlerData,
       BUTLER_HOME: root,
     },
@@ -28,6 +31,35 @@ function runCli(args: string[], butlerData: string) {
 
 function stdoutText(result: ReturnType<typeof runCli>): string {
   return new TextDecoder().decode(result.stdout);
+}
+
+async function runCliAsync(
+  args: string[],
+  butlerData: string,
+  extraEnv: Record<string, string> = {},
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const proc = Bun.spawn(["node", cli, ...args, "--data", butlerData], {
+    cwd: root,
+    env: {
+      ...process.env,
+      ...extraEnv,
+      BUTLER_DATA: butlerData,
+      BUTLER_HOME: root,
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const timeout = setTimeout(() => proc.kill(), 70000);
+  try {
+    const [exitCode, stdout, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    return { exitCode, stdout, stderr };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function writeTranscript(butlerData: string, sessionId: string): void {
@@ -59,6 +91,44 @@ function writeTranscript(butlerData: string, sessionId: string): void {
     },
   ];
   writeFileSync(path, `${events.map((event) => JSON.stringify(event)).join("\n")}\n`, "utf8");
+}
+
+function vectorForText(text: string): number[] {
+  const seed = [...text].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return Array.from({ length: 8 }, (_, index) => ((seed + index * 17) % 101) / 100);
+}
+
+async function withEmbedServer(socketPath: string, fn: () => Promise<void>): Promise<void> {
+  let server: Server | null = createServer((socket) => {
+    let data = "";
+    socket.on("data", (chunk) => {
+      data += chunk.toString();
+      let request: { text?: string; texts?: string[] };
+      try {
+        request = JSON.parse(data.trim());
+      } catch {
+        return;
+      }
+      if (Array.isArray(request.texts)) {
+        socket.end(`${JSON.stringify({ embeddings: request.texts.map(vectorForText) })}\n`);
+        return;
+      }
+      socket.end(`${JSON.stringify({ embedding: vectorForText(request.text ?? "") })}\n`);
+    });
+  });
+  await new Promise<void>((resolve) => server?.listen(socketPath, resolve));
+  try {
+    await fn();
+  } finally {
+    await new Promise<void>((resolve) => {
+      if (!server) {
+        resolve();
+        return;
+      }
+      server.close(() => resolve());
+    });
+    server = null;
+  }
 }
 
 test("advanced cognition memory ingest dry-run reports counts without raw transcript text", () => {
@@ -108,6 +178,53 @@ test("advanced cognition memory maintain emits safe maintenance summary", () => 
     rmSync(butlerData, { recursive: true, force: true });
   }
 });
+
+test("advanced cognition memory maintain backfills hot-cache vectors without raw output", async () => {
+  const butlerData = tempRoot();
+  const socketPath = join(tmpdir(), `bca-${Date.now()}-${Math.floor(Math.random() * 100000)}.sock`);
+  try {
+    writeFileSync(join(butlerData, "butler.config.json"), JSON.stringify({
+      cognition: {
+        consolidationCycle: {
+          enabled: false,
+        },
+      },
+    }));
+    const hotDir = join(butlerData, "cognition", "memory", "hot");
+    mkdirSync(hotDir, { recursive: true });
+    writeFileSync(join(hotDir, "cache.md"), [
+      "## [12:00] butler | hot-session",
+      "**Task**: Butler web reader uses Readability with fallback raw mode.",
+      "**Learning**: Product and list pages need separate extraction modes.",
+    ].join("\n"), "utf8");
+
+    await withEmbedServer(socketPath, async () => {
+      const result = await runCliAsync(["cognition", "memory", "maintain", "--hot-cache-backfill-only", "--json"], butlerData, {
+        EMBED_SOCKET: socketPath,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const stdout = result.stdout;
+      expect(stdout).not.toContain("Readability with fallback raw mode");
+      const parsed = JSON.parse(stdout);
+      expect(parsed.command).toBe("butler cognition memory maintain");
+      expect(parsed.data.hotCacheVectorBackfill).toMatchObject({
+        attempted: 1,
+        indexed: 1,
+        failed: 0,
+        rawTextIncluded: false,
+      });
+      const db = await lancedb.connect(join(butlerData, "cognition", "memory", "db", "butler.lance"));
+      const table = await db.openTable("butler_memory");
+      const rows = await table.query().where("source = 'hot-cache'").limit(10).toArray() as Array<{ text?: string }>;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.text).toContain("Readability");
+    });
+  } finally {
+    rmSync(socketPath, { force: true });
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+}, 70000);
 
 test("advanced automation commands list show run and tombstone safely", () => {
   const butlerData = tempRoot();

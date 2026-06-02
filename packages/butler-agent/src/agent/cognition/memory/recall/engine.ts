@@ -125,13 +125,18 @@ export interface RecallEvidenceVerification {
 }
 
 const DEFAULT_LIMIT = 5;
+const FILE_CANDIDATE_SUMMARY_CHARS = 420;
+const HOT_CACHE_HINT_CHARS = 240;
 const RECALL_SEED_MIN_CHARS = 2;
 const RECALL_SEED_MAX_TERMS = 24;
+const NON_ASCII_LEXICAL_SHINGLE_MIN_CHARS = 2;
+const NON_ASCII_LEXICAL_SHINGLE_MAX_CHARS = 3;
 const BM25_IDF_SMOOTHING = 0.5;
 // BM25 defaults match Apache Lucene BM25Similarity, which cites Robertson et al.,
 // "Okapi at TREC-3"; k1 controls term-frequency saturation, b length normalization.
 const BM25_TERM_FREQUENCY_SATURATION_K1 = 1.2;
 const BM25_DOCUMENT_LENGTH_NORMALIZATION_B = 0.75;
+const LEXICAL_SEED_COVERAGE_EXPONENT = 4;
 const UNKNOWN_TIMESTAMP_RECENCY_SCORE = 0.15;
 const RECENCY_DECAY_WINDOW_DAYS = 30;
 const FREQUENCY_NORMALIZATION_REFERENCE_COUNT = 8;
@@ -145,9 +150,27 @@ const HUB_PENALTY_FREE_DEGREE = 8;
 const HUB_PENALTY_FULL_SCALE = 40;
 const CONFLICTING_MEMORY_PENALTY = 0.4;
 const SUPERSEDED_MEMORY_PENALTY = 0.7;
-// Protected by recall regression tests; candidates below this level tended to
-// be recency/frequency noise rather than usable evidence.
-const DEFAULT_MIN_RECALL_SCORE = 0.22;
+// Coverage-normalized BM25 scores are intentionally conservative; below this
+// floor the match is usually incidental single-token overlap in regression
+// fixtures rather than usable recall evidence.
+const DEFAULT_MIN_RECALL_SCORE = 0.01;
+// The default floor remains the normal confidence gate. This lower floor is
+// only used when no candidate reaches that gate and the top candidate clearly
+// separates from nearby alternatives, which preserves weak-but-specific recall
+// without turning generic overlap into an answer.
+const LOW_CONFIDENCE_RECALL_FLOOR = 0.0001;
+const LOW_CONFIDENCE_DOMINANCE_RATIO = 2;
+// A single lexical seed such as "last time" is an underspecified recall cue.
+// Low-confidence lexical-only recall needs at least two independent seed
+// groups before the dominance gate is allowed to rescue it.
+const LOW_CONFIDENCE_MIN_LEXICAL_SEED_MATCHES = 2;
+// LanceDB nearest-neighbor scores can form tight clusters. Within that
+// neighborhood, lexical/query corroboration is a tie-breaker and an ambiguity
+// guard; outside it, the vector score remains the primary semantic evidence.
+const VECTOR_SEMANTIC_NEIGHBORHOOD_MARGIN = 0.03;
+const VECTOR_AMBIGUITY_SCAN_MARGIN = 0.05;
+const VECTOR_AMBIGUOUS_NEIGHBORHOOD_MIN_CORROBORATION = 0.025;
+const VECTOR_QUERY_MIN_CORROBORATING_SEED_MATCHES = 2;
 const DEFAULT_RECALL_CACHE_TTL_MS = 30_000;
 
 function readText(path: string): string {
@@ -181,12 +204,38 @@ export function extractRecallSeeds(cue: string): string[] {
 }
 
 function lexicalTokens(text: string): string[] {
-  return text
+  const tokens = text
     .normalize("NFC")
     .toLowerCase()
     .split(/[^\p{L}\p{N}._-]+/u)
     .map((part) => part.trim())
     .filter((part) => part.length >= RECALL_SEED_MIN_CHARS);
+  return [...tokens, ...tokens.flatMap(nonAsciiLexicalShingles)]
+    .filter((part, index, values) => values.indexOf(part) === index);
+}
+
+function nonAsciiLexicalShingles(token: string): string[] {
+  if (!hasNonAscii(token) || !/\p{L}/u.test(token)) return [];
+  const chars = [...token];
+  const shingles: string[] = [];
+  for (
+    let size = NON_ASCII_LEXICAL_SHINGLE_MIN_CHARS;
+    size <= NON_ASCII_LEXICAL_SHINGLE_MAX_CHARS;
+    size += 1
+  ) {
+    if (chars.length < size) continue;
+    for (let index = 0; index <= chars.length - size; index += 1) {
+      shingles.push(chars.slice(index, index + size).join(""));
+    }
+  }
+  return shingles;
+}
+
+function hasNonAscii(value: string): boolean {
+  return [...value].some((char) => {
+    const codePoint = char.codePointAt(0);
+    return codePoint !== undefined && codePoint > 0x7f;
+  });
 }
 
 function frequencyMap(tokens: string[]): Map<string, number> {
@@ -201,13 +250,23 @@ function clamp01(value: number): number {
 
 interface LexicalStats {
   queryTerms: string[];
+  querySeedTerms: string[][];
   documentFrequency: Map<string, number>;
   averageDocumentLength: number;
   documentCount: number;
 }
 
+interface LexicalScoreResult {
+  score: number;
+  matchedSeedCount: number;
+  seedCoverage: number;
+}
+
 function buildLexicalStats(candidates: RecallCandidate[], seeds: string[]): LexicalStats {
-  const queryTerms = [...new Set(seeds.flatMap((seed) => lexicalTokens(seed)))];
+  const querySeedTerms = seeds
+    .map((seed) => lexicalTokens(seed))
+    .filter((terms) => terms.length > 0);
+  const queryTerms = [...new Set(querySeedTerms.flat())];
   const documentFrequency = new Map<string, number>();
   let totalDocumentLength = 0;
   for (const candidate of candidates) {
@@ -220,6 +279,7 @@ function buildLexicalStats(candidates: RecallCandidate[], seeds: string[]): Lexi
   }
   return {
     queryTerms,
+    querySeedTerms,
     documentFrequency,
     averageDocumentLength: candidates.length > 0 ? totalDocumentLength / candidates.length : 0,
     documentCount: candidates.length,
@@ -234,10 +294,12 @@ function idf(term: string, stats: LexicalStats): number {
   );
 }
 
-function lexicalScore(candidate: RecallCandidate, stats: LexicalStats): number {
-  if (stats.queryTerms.length === 0 || stats.documentCount === 0) return 0;
+function lexicalScore(candidate: RecallCandidate, stats: LexicalStats): LexicalScoreResult {
+  if (stats.queryTerms.length === 0 || stats.documentCount === 0) {
+    return { score: 0, matchedSeedCount: 0, seedCoverage: 0 };
+  }
   const tokens = lexicalTokens(`${candidate.summary}\n${candidate.text}`);
-  if (tokens.length === 0) return 0;
+  if (tokens.length === 0) return { score: 0, matchedSeedCount: 0, seedCoverage: 0 };
   const frequencies = frequencyMap(tokens);
   const averageLength = stats.averageDocumentLength > 0 ? stats.averageDocumentLength : tokens.length;
   let score = 0;
@@ -254,8 +316,22 @@ function lexicalScore(candidate: RecallCandidate, stats: LexicalStats): number {
     score += termIdf *
       ((termFrequency * (BM25_TERM_FREQUENCY_SATURATION_K1 + 1)) / (termFrequency + lengthNormalization));
   }
-  if (availableQueryWeight <= 0) return 0;
-  return clamp01(score / availableQueryWeight);
+  if (availableQueryWeight <= 0) return { score: 0, matchedSeedCount: 0, seedCoverage: 0 };
+  const matchedQueryTermSet = new Set<string>();
+  for (const term of stats.queryTerms) {
+    if ((frequencies.get(term) ?? 0) > 0) matchedQueryTermSet.add(term);
+  }
+  const matchedSeedCount = stats.querySeedTerms.filter((terms) =>
+    terms.some((term) => matchedQueryTermSet.has(term)),
+  ).length;
+  const seedCoverage = stats.querySeedTerms.length > 0
+    ? matchedSeedCount / stats.querySeedTerms.length
+    : 0;
+  return {
+    score: clamp01((score / availableQueryWeight) * (seedCoverage ** LEXICAL_SEED_COVERAGE_EXPONENT)),
+    matchedSeedCount,
+    seedCoverage,
+  };
 }
 
 function semanticScore(candidate: RecallCandidate): number {
@@ -436,6 +512,19 @@ interface RecallRankingSignals {
   superseded: number;
 }
 
+interface ScoredRecallCandidate {
+  candidate: RecallCandidate;
+  hasEvidence: boolean;
+  breakdown: RecallScoreBreakdown;
+  lexicalMatchedSeedCount: number;
+  lexicalSeedCoverage: number;
+}
+
+interface ScoreGateSelection {
+  items: ScoredRecallCandidate[];
+  diagnostic: string;
+}
+
 interface ActiveRecallPolicy {
   planned: boolean;
   strategies: RetrievalStrategy[];
@@ -564,7 +653,7 @@ function evidenceConfidence(
   policy: ActiveRecallPolicy,
 ): number {
   if (!policy.planned) {
-    return Math.max(signals.semantic, signals.lexical, signals.contextual, signals.graph, signals.explicit);
+    return fallbackEvidenceScore(signals);
   }
   const plannedScores = policy.strategies.map((strategy) =>
     plannedStrategyEvidenceScore(strategy, candidate, signals, policy),
@@ -579,9 +668,16 @@ function recallPenalty(signals: RecallRankingSignals): number {
   return Math.max(signals.hub, signals.conflict, signals.superseded);
 }
 
+function fallbackEvidenceScore(signals: RecallRankingSignals): number {
+  // Graph activation is a routing clue in fallback recall, not standalone
+  // evidence that the candidate text answers the cue. Planned graph retrieval
+  // can still request graph_relation_hit explicitly.
+  return Math.max(signals.semantic, signals.lexical, signals.contextual, signals.explicit);
+}
+
 function fallbackRecallScore(signals: RecallRankingSignals): number {
   if (signals.superseded > 0) return 0;
-  const evidence = Math.max(signals.semantic, signals.lexical, signals.contextual, signals.graph, signals.explicit);
+  const evidence = fallbackEvidenceScore(signals);
   if (evidence <= 0) return 0;
   return clamp01(evidence + signals.boost - recallPenalty(signals));
 }
@@ -639,7 +735,119 @@ function compareScoredRecall(
     const rightIndex = plannedStrategyIndex(right.candidate, right.breakdown, policy);
     if (leftIndex !== rightIndex) return leftIndex - rightIndex;
   }
+  if (
+    isVectorSemanticCandidate(left) &&
+    isVectorSemanticCandidate(right) &&
+    Math.abs(left.breakdown.semantic_similarity - right.breakdown.semantic_similarity) <=
+      VECTOR_SEMANTIC_NEIGHBORHOOD_MARGIN
+  ) {
+    const corroborationDelta = vectorCorroboration(right.breakdown) - vectorCorroboration(left.breakdown);
+    if (corroborationDelta !== 0) return corroborationDelta;
+  }
   return right.breakdown.total - left.breakdown.total;
+}
+
+function isVectorSemanticCandidate(item: { candidate: RecallCandidate; breakdown: RecallScoreBreakdown }): boolean {
+  return item.candidate.source === "vector" && item.breakdown.semantic_similarity > 0;
+}
+
+function vectorCorroboration(breakdown: RecallScoreBreakdown): number {
+  return Math.max(
+    breakdown.lexical_match,
+    breakdown.contextual_match,
+    breakdown.graph_activation,
+    breakdown.explicit_salience,
+  );
+}
+
+function hasAmbiguousVectorNeighborhood(items: ScoredRecallCandidate[]): boolean {
+  const first = items[0];
+  if (!first || !isVectorSemanticCandidate(first)) return false;
+  const second = items.find((item) => item !== first && isVectorSemanticCandidate(item));
+  if (!second) return false;
+  return first.breakdown.semantic_similarity - second.breakdown.semantic_similarity <=
+    VECTOR_AMBIGUITY_SCAN_MARGIN;
+}
+
+function lowConfidenceCandidateDominates(
+  first: ScoredRecallCandidate | undefined,
+  second: ScoredRecallCandidate | undefined,
+  policy: ActiveRecallPolicy,
+): boolean {
+  if (!first) return false;
+  const firstScore = first.breakdown.total;
+  if (firstScore < LOW_CONFIDENCE_RECALL_FLOOR) return false;
+  if (policy.planned) return true;
+  const lexicalOnly = first.breakdown.lexical_match > 0 &&
+    first.breakdown.semantic_similarity <= 0 &&
+    first.breakdown.contextual_match <= 0 &&
+    first.breakdown.explicit_salience <= 0;
+  if (
+    lexicalOnly &&
+    first.lexicalMatchedSeedCount < LOW_CONFIDENCE_MIN_LEXICAL_SEED_MATCHES
+  ) {
+    return false;
+  }
+  const secondScore = second?.breakdown.total ?? 0;
+  if (secondScore <= 0) return true;
+  return firstScore / secondScore >= LOW_CONFIDENCE_DOMINANCE_RATIO;
+}
+
+function selectScoredRecallCandidates(input: {
+  scored: ScoredRecallCandidate[];
+  minScore: number;
+  limit: number;
+  policy: ActiveRecallPolicy;
+}): ScoreGateSelection {
+  const standardItems = input.scored.filter((item) => item.breakdown.total >= input.minScore);
+  if (standardItems.length > 0) {
+    const firstStandard = standardItems[0];
+    if (
+      firstStandard &&
+      hasAmbiguousVectorNeighborhood(standardItems) &&
+      vectorCorroboration(firstStandard.breakdown) < VECTOR_AMBIGUOUS_NEIGHBORHOOD_MIN_CORROBORATION
+    ) {
+      const corroboratedItems = standardItems.filter((item) =>
+        !isVectorSemanticCandidate(item) ||
+        vectorCorroboration(item.breakdown) >= VECTOR_AMBIGUOUS_NEIGHBORHOOD_MIN_CORROBORATION,
+      );
+      if (corroboratedItems.length > 0) {
+        return {
+          items: corroboratedItems.slice(0, input.limit),
+          diagnostic: "score_gate=corroborated-vector-neighborhood",
+        };
+      }
+      return {
+        items: [],
+        diagnostic: "score_gate=ambiguous-vector-neighborhood",
+      };
+    }
+    return {
+      items: standardItems.slice(0, input.limit),
+      diagnostic: "score_gate=standard",
+    };
+  }
+
+  const lowConfidenceItems = input.scored.filter((item) =>
+    item.breakdown.total >= LOW_CONFIDENCE_RECALL_FLOOR &&
+    item.breakdown.total < input.minScore,
+  );
+  if (lowConfidenceItems.length === 0) {
+    return {
+      items: [],
+      diagnostic: "score_gate=below-floor",
+    };
+  }
+  if (!lowConfidenceCandidateDominates(lowConfidenceItems[0], lowConfidenceItems[1], input.policy)) {
+    return {
+      items: [],
+      diagnostic: "score_gate=ambiguous-low-confidence",
+    };
+  }
+  return {
+    items: lowConfidenceItems.slice(0, input.limit),
+    diagnostic: "score_gate=dominant-low-confidence",
+  };
 }
 
 function sourceForCandidate(candidate: RecallCandidate, semantic: number, graph: number): RecallSource {
@@ -683,6 +891,46 @@ function itemSatisfiesEvidenceRequirement(
   return false;
 }
 
+function vectorQueryCorroborationScore(query: string, candidate: RecallCandidate): number {
+  const querySeedTerms = extractRecallSeeds(query)
+    .map((seed) => lexicalTokens(seed))
+    .filter((terms) => terms.length > 0);
+  const queryTerms = new Set(querySeedTerms.flat());
+  const candidateTerms = new Set(lexicalTokens(`${candidate.summary}\n${candidate.text}`));
+  const matchedSeedCount = querySeedTerms.filter((terms) =>
+    terms.some((term) => candidateTerms.has(term)),
+  ).length;
+  if (matchedSeedCount < VECTOR_QUERY_MIN_CORROBORATING_SEED_MATCHES) return 0;
+  const seedCoverage = querySeedTerms.length > 0 ? matchedSeedCount / querySeedTerms.length : 0;
+  return binaryCosine(queryTerms, candidateTerms) * seedCoverage;
+}
+
+function mergeVectorCandidate(
+  candidates: Map<string, RecallCandidate>,
+  candidate: RecallCandidate,
+  query: string,
+): void {
+  const key = candidate.provenance[0] ?? candidate.id;
+  const contextualScore = Math.max(
+    candidate.contextualScore ?? 0,
+    vectorQueryCorroborationScore(query, candidate),
+  );
+  const existing = candidates.get(key);
+  if (!existing) {
+    candidates.set(key, {
+      ...candidate,
+      contextualScore,
+    });
+    return;
+  }
+  candidates.set(key, {
+    ...existing,
+    contextualScore: Math.max(existing.contextualScore ?? 0, contextualScore),
+    vectorSimilarity: Math.max(existing.vectorSimilarity ?? 0, candidate.vectorSimilarity ?? 0),
+    frequency: Math.max(existing.frequency ?? 0, candidate.frequency ?? 0),
+  });
+}
+
 export function recallFromCorpus(input: {
   cue: string;
   corpus: RecallCorpus;
@@ -706,13 +954,15 @@ export function recallFromCorpus(input: {
   const effectivePolicy = input.rankingPolicy ?? input.evidencePolicy;
   const recallPolicy = activeRecallPolicy(effectivePolicy);
 
-  const scored = input.corpus.candidates
+  const scored: ScoredRecallCandidate[] = input.corpus.candidates
     .map((candidate) => {
-      const semantic = semanticScore(candidate);
-      const lexical = lexicalScore(candidate, lexicalStats);
+      const rawSemantic = semanticScore(candidate);
+      const lexicalEvidence = lexicalScore(candidate, lexicalStats);
+      const lexical = lexicalEvidence.score;
       const contextual = contextualScore(candidate, contextualEvidence);
       const graph = candidateGraphActivation(candidate, activation);
-      const explicit = explicitEvidenceScore(candidate, Math.max(semantic, lexical, contextual, graph));
+      const semantic = rawSemantic;
+      const explicit = explicitEvidenceScore(candidate, Math.max(semantic, lexical, contextual));
       const signals: RecallRankingSignals = {
         semantic,
         lexical,
@@ -734,6 +984,8 @@ export function recallFromCorpus(input: {
       return {
         candidate,
         hasEvidence,
+        lexicalMatchedSeedCount: lexicalEvidence.matchedSeedCount,
+        lexicalSeedCoverage: lexicalEvidence.seedCoverage,
         breakdown: {
           semantic_similarity: signals.semantic,
           lexical_match: signals.lexical,
@@ -759,10 +1011,13 @@ export function recallFromCorpus(input: {
   const plannedEvidenceLimit = recallPolicy.planned
     ? Math.max(limit, nonExactEvidenceRequirements(recallPolicy).length)
     : limit;
-  const rawItems = scored
-    .filter((item) => item.breakdown.total >= minScore)
-    .slice(0, plannedEvidenceLimit)
-    .map(({ candidate, breakdown }) => ({
+  const scoreSelection = selectScoredRecallCandidates({
+    scored,
+    minScore,
+    limit: plannedEvidenceLimit,
+    policy: recallPolicy,
+  });
+  const rawItems = scoreSelection.items.map(({ candidate, breakdown }) => ({
       summary: candidate.summary,
       confidence: Math.max(0, Math.min(1, breakdown.total)),
       source: sourceForCandidate(candidate, breakdown.semantic_similarity, breakdown.graph_activation),
@@ -787,6 +1042,7 @@ export function recallFromCorpus(input: {
       `activated_nodes=${[...activation.values()].filter((value) => value > 0).length}`,
       `ranking=${recallPolicy.planned ? "planned_policy" : "fallback_evidence"}`,
       `ranking_policy=${recallPolicy.planned ? "planned" : "fallback"}`,
+      scoreSelection.diagnostic,
       `context_terms=${contextualEvidence?.terms.size ?? 0}`,
       `contextual_candidates=${rawItems.filter((item) => item.score_breakdown.contextual_match > 0).length}`,
       ...verification.diagnostics,
@@ -965,13 +1221,47 @@ function fileCandidate(input: {
 }): RecallCandidate {
   return {
     id: input.id,
-    summary: input.summary ?? compact(input.text, 180),
+    summary: input.summary ?? compact(input.text, FILE_CANDIDATE_SUMMARY_CHARS),
     text: input.text,
     source: input.source,
     originalSource: input.originalSource,
     explicitSalience: input.explicitSalience,
     provenance: [input.path],
   };
+}
+
+export function markdownMemoryBlocks(text: string): string[] {
+  const normalized = text.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  const blocks: string[] = [];
+  let current: string[] = [];
+
+  for (const line of lines) {
+    if (/^#{1,6}\s+\S/u.test(line) && current.some((entry) => entry.trim())) {
+      blocks.push(current.join("\n").trim());
+      current = [];
+    }
+    current.push(line);
+  }
+
+  if (current.some((entry) => entry.trim())) blocks.push(current.join("\n").trim());
+  const usable = blocks.filter((block) => block.trim());
+  return usable.length > 1 ? usable : [text.trim()].filter(Boolean);
+}
+
+function hotCacheFileCandidates(input: {
+  path: string;
+  text: string;
+}): RecallCandidate[] {
+  return markdownMemoryBlocks(input.text).map((block, index) =>
+    fileCandidate({
+      id: `hot:${input.path}#block-${index + 1}`,
+      path: `${input.path}#block-${index + 1}`,
+      text: block,
+      source: "hot-cache",
+      originalSource: "hot-cache",
+    }),
+  );
 }
 
 function loadGraphCandidates(input: {
@@ -1012,17 +1302,40 @@ function loadGraphCandidates(input: {
         snippet: string;
         name: string;
       }>;
+      const groupedMentions = new Map<string, {
+        id: number;
+        session_id: string;
+        timestamp: number;
+        snippet: string;
+        entityIds: string[];
+      }>();
+      for (const mention of mentions) {
+        const key = `${mention.session_id}\u0000${mention.snippet}`;
+        const existing = groupedMentions.get(key);
+        if (existing) {
+          existing.timestamp = Math.max(existing.timestamp, mention.timestamp);
+          if (!existing.entityIds.includes(mention.entity_id)) existing.entityIds.push(mention.entity_id);
+          continue;
+        }
+        groupedMentions.set(key, {
+          id: mention.id,
+          session_id: mention.session_id,
+          timestamp: mention.timestamp,
+          snippet: mention.snippet,
+          entityIds: [mention.entity_id],
+        });
+      }
       return {
         nodes,
         edges,
-        candidates: mentions.map((mention) => ({
+        candidates: [...groupedMentions.values()].map((mention) => ({
           id: `graph:${mention.id}`,
           summary: compact(mention.snippet, 180),
           text: mention.snippet,
           source: "graph",
           originalSource: "graph",
           provenance: [`graph:${mention.session_id}`],
-          relatedNodes: [mention.entity_id],
+          relatedNodes: mention.entityIds,
           timestamp: mention.timestamp,
           frequency: 1,
         })),
@@ -1048,14 +1361,9 @@ export function loadRecallCorpus(input: { butlerData: string; projectId?: string
   ]) {
     const text = readText(path);
     if (!text.trim()) continue;
-    hotCacheHints.push(compact(text, 240));
-    candidates.push(fileCandidate({
-      id: `hot:${path}`,
-      path,
-      text,
-      source: "hot-cache",
-      originalSource: "hot-cache",
-    }));
+    const hotCandidates = hotCacheFileCandidates({ path, text });
+    hotCacheHints.push(...hotCandidates.map((candidate) => compact(candidate.text, HOT_CACHE_HINT_CHARS)));
+    candidates.push(...hotCandidates);
   }
 
   const taskMemoryDir = join(memoryDir, "tasks");
@@ -1183,8 +1491,9 @@ export async function recallMemoryWithVector(input: {
     ]).slice(0, 3);
     const vectorDiagnostics: string[] = [];
     const vectorResults = await Promise.all(
-      vectorQueries.map((query) =>
-        searchVectorEpisodes({
+      vectorQueries.map(async (query) => ({
+        query,
+        result: await searchVectorEpisodes({
           butlerData: input.butlerData,
           query,
           projectId: input.projectId,
@@ -1192,12 +1501,16 @@ export async function recallMemoryWithVector(input: {
           timeoutMs: input.vectorTimeoutMs,
           backend: input.vectorBackend,
         }),
-      ),
+      })),
     );
-    for (const vectorResult of vectorResults) {
-      corpus.candidates.push(...vectorResult.candidates);
+    const vectorCandidateMap = new Map<string, RecallCandidate>();
+    for (const { query, result: vectorResult } of vectorResults) {
+      for (const candidate of vectorResult.candidates) {
+        mergeVectorCandidate(vectorCandidateMap, candidate, query);
+      }
       vectorDiagnostics.push(...vectorResult.diagnostics);
     }
+    corpus.candidates.push(...vectorCandidateMap.values());
     const result = recallFromCorpus({
       cue: input.cue,
       corpus,

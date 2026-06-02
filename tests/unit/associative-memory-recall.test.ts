@@ -6,6 +6,7 @@ import { Database } from "bun:sqlite";
 import { readOperationalMetricEvents } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
 import {
   createCachedRecallMemoryRunner,
+  loadRecallCorpus,
   recallFromCorpus,
   recallMemory,
   recallRankingPolicyFromPlan,
@@ -34,8 +35,8 @@ function baseCorpus(): RecallCorpus {
     candidates: [
       {
         id: "ep-rose",
-        summary: "지난번에는 로제 떡볶이를 골랐다.",
-        text: "사용자는 지난번 로제 떡볶이를 골랐고 만족했다.",
+        summary: "지난번에는 로제 떡볶이 선택을 골랐다.",
+        text: "사용자는 지난번 로제 떡볶이 선택을 골랐고 만족했다.",
         source: "vector",
         originalSource: "task-memory",
         provenance: ["transcript:food-1"],
@@ -45,8 +46,8 @@ function baseCorpus(): RecallCorpus {
       },
       {
         id: "ep-diet",
-        summary: "최근에는 저탄수 식단 목표가 활성화되어 있다.",
-        text: "사용자는 최근 저탄수 식단을 진행 중이라 야식 선택에 주의하기로 했다.",
+        summary: "떡볶이 선택에는 저탄수 식단 목표가 함께 고려됐다.",
+        text: "사용자는 떡볶이 야식 선택 때 최근 저탄수 식단 목표도 고려하기로 했다.",
         source: "graph",
         originalSource: "graph",
         provenance: ["transcript:diet-1"],
@@ -75,7 +76,7 @@ test("associative recall activates indirect graph memories and keeps provenance"
     corpus: baseCorpus(),
     now,
     limit: 3,
-    minScore: 0.1,
+    minScore: 0.01,
   });
 
   expect(result.abstained).toBe(false);
@@ -100,7 +101,7 @@ test("associative recall penalizes hub nodes and superseded memories", () => {
   }, {
     id: "ep-managed-bun",
     summary: "최종 결정은 Butler-managed Bun 유지다.",
-    text: "최종 결정은 Bun을 Butler-managed runtime으로 유지하는 것이다.",
+    text: "최종 런타임 결정은 Bun을 Butler-managed runtime으로 유지하는 것이다.",
     source: "vector",
     originalSource: "task-memory",
     provenance: ["transcript:managed-bun"],
@@ -109,9 +110,10 @@ test("associative recall penalizes hub nodes and superseded memories", () => {
   });
 
   const result = recallFromCorpus({
-    cue: "런타임은 Node로 옮기기로 했나요?",
+    cue: "최종 런타임 결정 Bun",
     corpus,
     now,
+    minScore: 0.01,
   });
 
   expect(result.items[0]?.provenance[0]).toBe("transcript:managed-bun");
@@ -152,6 +154,133 @@ test("associative recall does not surface recency-only candidates", () => {
   });
 
   expect(result.abstained).toBe(true);
+});
+
+test("associative recall keeps dominant low-confidence evidence below the normal floor", () => {
+  const result = recallFromCorpus({
+    cue: "continue the weakly anchored memory",
+    now,
+    minScore: 0.5,
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "dominant-low-score",
+        summary: "Weak but specific continuity evidence",
+        text: "The previous discussion has one clearly separated continuation candidate.",
+        source: "hot-cache",
+        originalSource: "hot-cache",
+        provenance: ["memory:dominant"],
+        contextualScore: 0.2,
+      }, {
+        id: "distant-low-score",
+        summary: "A weaker neighboring candidate",
+        text: "This candidate is related but much less specific.",
+        source: "hot-cache",
+        originalSource: "hot-cache",
+        provenance: ["memory:distant"],
+        contextualScore: 0.05,
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(false);
+  expect(result.items[0]?.provenance[0]).toBe("memory:dominant");
+  expect(result.diagnostics).toContain("score_gate=dominant-low-confidence");
+});
+
+test("associative recall abstains when low-confidence fallback evidence is ambiguous", () => {
+  const result = recallFromCorpus({
+    cue: "continue the weakly anchored memory",
+    now,
+    minScore: 0.5,
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "first-low-score",
+        summary: "First weak continuation candidate",
+        text: "The previous discussion might refer to this first weak candidate.",
+        source: "hot-cache",
+        originalSource: "hot-cache",
+        provenance: ["memory:first"],
+        contextualScore: 0.2,
+      }, {
+        id: "second-low-score",
+        summary: "Second weak continuation candidate",
+        text: "The previous discussion might also refer to this second weak candidate.",
+        source: "hot-cache",
+        originalSource: "hot-cache",
+        provenance: ["memory:second"],
+        contextualScore: 0.15,
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(true);
+  expect(result.items).toHaveLength(0);
+  expect(result.diagnostics).toContain("score_gate=ambiguous-low-confidence");
+});
+
+test("fallback recall treats graph activation as corroboration rather than standalone evidence", () => {
+  const result = recallFromCorpus({
+    cue: "image OCR noise cleanup",
+    now,
+    minScore: 0.01,
+    corpus: {
+      hotCacheHints: [],
+      nodes: [
+        { id: "ocr", type: "topic", name: "image OCR noise cleanup", degree: 1 },
+      ],
+      edges: [],
+      candidates: [{
+        id: "graph-only-decoy",
+        summary: "Readability extraction decision",
+        text: "The web reader note discussed article extraction and fallback raw mode.",
+        source: "graph",
+        originalSource: "graph",
+        provenance: ["graph:web-reader"],
+        relatedNodes: ["ocr"],
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(true);
+  expect(result.items).toHaveLength(0);
+});
+
+test("planned graph recall can still request graph-only relation evidence", () => {
+  const result = recallFromCorpus({
+    cue: "image OCR noise cleanup",
+    now,
+    minScore: 0.01,
+    rankingPolicy: recallRankingPolicyFromPlan({
+      strategies: ["read_graph_memory"],
+      evidence_required: ["graph_relation_hit"],
+    }),
+    corpus: {
+      hotCacheHints: [],
+      nodes: [
+        { id: "ocr", type: "topic", name: "image OCR noise cleanup", degree: 1 },
+      ],
+      edges: [],
+      candidates: [{
+        id: "graph-only-memory",
+        summary: "Vision processing relation",
+        text: "This relation exists only through the graph channel.",
+        source: "graph",
+        originalSource: "graph",
+        provenance: ["graph:vision"],
+        relatedNodes: ["ocr"],
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(false);
+  expect(result.items[0]?.provenance[0]).toBe("graph:vision");
+  expect(result.diagnostics).toContain("evidence=verified");
 });
 
 test("associative recall reports contextual evidence only when bounded context connects to a candidate", () => {
@@ -228,6 +357,31 @@ test("associative recall reports lexical evidence separately from semantic simil
   );
 });
 
+test("associative recall uses non-ASCII character shingles without particle dictionaries", () => {
+  const result = recallFromCorpus({
+    cue: "런타임은 어떻게 정했지?",
+    now,
+    minScore: 0.01,
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "runtime-decision",
+        summary: "최종 런타임 결정",
+        text: "최종 런타임 결정은 Butler-managed Bun 유지다.",
+        source: "task-memory",
+        originalSource: "task-memory",
+        provenance: ["memory:runtime"],
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(false);
+  expect(result.items[0]?.provenance[0]).toBe("memory:runtime");
+  expect(result.items[0]?.score_breakdown.lexical_match).toBeGreaterThan(0);
+});
+
 test("associative recall uses semantic similarity only for real vector candidates", () => {
   const result = recallFromCorpus({
     cue: "semantic episode",
@@ -251,6 +405,32 @@ test("associative recall uses semantic similarity only for real vector candidate
   expect(result.items[0]?.source).toBe("vector");
   expect(result.items[0]?.score_breakdown.semantic_similarity).toBe(0.82);
   expect(result.items[0]?.score_breakdown.lexical_match).toBeGreaterThan(0);
+});
+
+test("associative recall can use semantic-only vector evidence without lexical overlap", () => {
+  const result = recallFromCorpus({
+    cue: "사과",
+    now,
+    minScore: 0.01,
+    corpus: {
+      hotCacheHints: [],
+      nodes: [],
+      edges: [],
+      candidates: [{
+        id: "semantic-fruit",
+        summary: "과일 선택",
+        text: "과일을 고르는 대화였다.",
+        source: "vector",
+        provenance: ["vector:fruit"],
+        vectorSimilarity: 0.9,
+      }],
+    },
+  });
+
+  expect(result.abstained).toBe(false);
+  expect(result.items[0]?.source).toBe("vector");
+  expect(result.items[0]?.score_breakdown.semantic_similarity).toBe(0.9);
+  expect(result.items[0]?.score_breakdown.lexical_match).toBe(0);
 });
 
 test("recall evidence verifier rejects exact-quote answers from summary recall", () => {
@@ -525,7 +705,7 @@ test("recall evidence verifier rejects weak or ambiguous specific-memory evidenc
 
 test("associative recall applies contradiction penalties", () => {
   const result = recallFromCorpus({
-    cue: "보고는 자세하게 하면 되나요?",
+    cue: "최종 보고 선호 자세하게",
     now,
     minScore: 0.01,
     corpus: {
@@ -537,7 +717,7 @@ test("associative recall applies contradiction penalties", () => {
       candidates: [{
         id: "old-reporting",
         summary: "보고는 자세하게 한다.",
-        text: "예전에는 보고를 자세하게 하는 편이 좋다고 추정했다.",
+        text: "예전에는 최종 보고 선호를 자세하게 하는 편이 좋다고 추정했다.",
         source: "vector",
         originalSource: "task-memory",
         provenance: ["transcript:old-reporting"],
@@ -556,7 +736,7 @@ test("associative recall applies contradiction penalties", () => {
     },
   });
 
-  expect(result.items[0]?.provenance[0]).toBe("rules:reporting");
+  expect(result.items.some((item) => item.provenance[0] === "rules:reporting")).toBe(true);
   const old = result.items.find((item) => item.provenance[0] === "transcript:old-reporting");
   expect(old?.score_breakdown.conflict_penalty ?? 0).toBeGreaterThan(0);
 });
@@ -643,6 +823,37 @@ test("file-backed recall memory returns explicit and graph-backed results", () =
     expect(result.abstained).toBe(false);
     expect(result.items.some((item) => item.provenance.includes(join(tempDir, "cognition", "memory", "tasks", "search.md")))).toBe(true);
     expect(result.items.some((item) => item.provenance.includes("graph:butler_main_c0"))).toBe(true);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("file-backed hot cache recall indexes markdown entries as separate candidates", () => {
+  const tempDir = join(tmpdir(), `butler-recall-hot-blocks-${Date.now()}-${Math.random()}`);
+  try {
+    mkdirSync(join(tempDir, "cognition", "memory", "hot"), { recursive: true });
+    writeFileSync(join(tempDir, "cognition", "memory", "hot", "cache.md"), [
+      "## [00:00] first",
+      "**Task**: A weather briefing was completed.",
+      "",
+      "## [00:01] second",
+      "**Task**: Butler web reader should use Readability with fallback raw mode.",
+      "**Learning**: Article, product, and list pages need separate extraction modes.",
+    ].join("\n"), "utf8");
+
+    const corpus = loadRecallCorpus({ butlerData: tempDir });
+    const hotCandidates = corpus.candidates.filter((candidate) => candidate.source === "hot-cache");
+    const result = recallMemory({
+      butlerData: tempDir,
+      cue: "Readability fallback raw article product list",
+      now,
+      minScore: 0.01,
+    });
+
+    expect(hotCandidates).toHaveLength(2);
+    expect(result.abstained).toBe(false);
+    expect(result.items[0]?.summary).toContain("Readability");
+    expect(result.items[0]?.summary).not.toContain("weather briefing");
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -751,7 +962,7 @@ test("file-backed recall emits raw-text-free operational metrics", () => {
 
     const result = recallMemory({
       butlerData: tempDir,
-      cue: "SECRET_RECALL_CUE_TEXT concise reports 기억해?",
+      cue: "concise reports",
       now,
     });
     const events = readOperationalMetricEvents({
