@@ -2067,7 +2067,9 @@ test("settings, command palette, automations, right panel, and worker UI are app
     "aria-label={appCopy.conversation.result.regionLabel}",
   );
   expect(renderer).toContain("appCopy.conversation.work.historyRegionLabel");
-  expect(renderer).toContain('type AppLocale = "ko-KR"');
+  expect(renderer).toContain('export type AppLocale = "en-US" | "ko-KR"');
+  expect(renderer).toContain('const defaultAppLocale: AppLocale = "en-US"');
+  expect(renderer).toContain('return "ko-KR"');
   expect(renderer).toContain("export function getAppCopy");
   expect(renderer).toContain('historyRegionLabel: "진행 내역"');
   expect(renderer).toContain('regionLabel: "답변"');
