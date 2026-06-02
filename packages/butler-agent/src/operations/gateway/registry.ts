@@ -75,6 +75,10 @@ export const GATEWAY_DEFINITIONS: GatewayDefinition[] = [
 ];
 
 const gatewayIds = new Set<GatewayId>(GATEWAY_DEFINITIONS.map((gateway) => gateway.id));
+const DEFAULT_GATEWAY_ENABLED: Record<GatewayId, boolean> = {
+  app: true,
+  telegram: false,
+};
 
 function readJson(path: string): Record<string, any> {
   if (!existsSync(path)) return {};
@@ -201,9 +205,17 @@ export function removeGatewayConfigKeys(
   });
 }
 
+export function defaultGatewayEnabled(id: GatewayId): boolean {
+  return DEFAULT_GATEWAY_ENABLED[id];
+}
+
+function gatewayEnabledFromSettings(id: GatewayId, settings: GatewaySettings): boolean {
+  return settings.enabled ?? defaultGatewayEnabled(id);
+}
+
 export function isGatewayEnabled(butlerData: string, id: GatewayId): boolean {
   const settings = readGatewaySettings(butlerData, id);
-  return settings.enabled !== false;
+  return gatewayEnabledFromSettings(id, settings);
 }
 
 export function gatewayCompatibilityConfigPath(butlerData: string): string {
@@ -279,7 +291,7 @@ export function resolveTelegramGatewayRuntimeConfig(input: {
     "markdownv2";
   const defaultFormat = configuredFormat === "plain" ? "plain" : "markdownv2";
   return {
-    enabled: settings.enabled !== false,
+    enabled: gatewayEnabledFromSettings("telegram", settings),
     chatId: chatId || null,
     defaultFormat,
     tokenConfigured: Boolean(token),
@@ -376,17 +388,18 @@ export async function buildGatewayStatusView(
   }
 
   const telegram = resolveTelegramGatewayRuntimeConfig({ butlerData });
+  const telegramConfigured = telegram.tokenConfigured && telegram.chatPaired;
   return {
     id,
     title: definition.title,
     lifecycle: definition.lifecycle,
     transport: definition.transport,
-    enabled,
-    configured: telegram.tokenConfigured && telegram.chatPaired,
-    running: enabled,
-    status: !enabled
+    enabled: telegram.enabled,
+    configured: telegramConfigured,
+    running: telegram.enabled && telegramConfigured,
+    status: !telegram.enabled
       ? "disabled"
-      : telegram.tokenConfigured && telegram.chatPaired
+      : telegramConfigured
         ? "embedded"
         : "unconfigured",
     restartRequired: false,
@@ -408,4 +421,3 @@ export async function buildGatewayStatusView(
 export function supportedGatewayIds(): GatewayId[] {
   return [...gatewayIds];
 }
-

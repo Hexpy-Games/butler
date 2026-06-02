@@ -13,7 +13,12 @@ import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/
 import { GatewayRouter } from "../../packages/butler-agent/src/gateways/core/router.ts";
 import { createTelegramLiveGateway } from "../../packages/butler-agent/src/interfaces/transport/telegram/live-gateway.ts";
 import { createTelegramTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/telegram/adapter.ts";
+import { runTelegramPolling } from "../../packages/butler-agent/src/interfaces/transport/telegram/polling-runner.ts";
 import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
+import {
+  resolveTelegramGatewayRuntimeConfig,
+  writeGatewaySettings,
+} from "../../packages/butler-agent/src/operations/gateway/registry.ts";
 
 let tempDir = "";
 let originalFetch: typeof fetch;
@@ -91,6 +96,10 @@ afterEach(() => {
 test("native butler-main polls Telegram from $BUTLER_DATA/.env and delivers runtime replies", async () => {
   const butlerData = tempDir;
   writeFileSync(join(butlerData, ".env"), "TELEGRAM_BOT_TOKEN=test-token\n", "utf8");
+  writeGatewaySettings(butlerData, "telegram", {
+    enabled: true,
+    config: { chatId: "123" },
+  });
   writeFileSync(join(butlerData, "butler.config.json"), JSON.stringify({
     system: {
       runtime: "codex-api",
@@ -167,6 +176,43 @@ test("native butler-main polls Telegram from $BUTLER_DATA/.env and delivers runt
   expect(deliveries.map((delivery) => delivery.text)).toContain("runtime reply");
 });
 
+test("native butler-main leaves Telegram idle when gateway is not enabled", async () => {
+  const butlerData = tempDir;
+  writeFileSync(join(butlerData, ".env"), "TELEGRAM_BOT_TOKEN=test-token\n", "utf8");
+  writeFileSync(join(butlerData, "butler.config.json"), JSON.stringify({
+    system: {
+      runtime: "codex-api",
+      defaultModel: "openai/auto:codex-latest",
+    },
+    telegram: {
+      groupId: "123",
+    },
+  }), "utf8");
+
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    throw new Error(`unexpected Telegram fetch while disabled: ${String(input)}`);
+  }) as unknown as typeof fetch;
+
+  const deliveries: Array<{ chatId: string; text: string; threadId?: string }> = [];
+  const result = await runNativeButlerMain({
+    butlerHome: "fixtures/butler-project",
+    butlerData,
+    runtime: new FakeRuntime(),
+    provider: fakeProvider,
+    waitForShutdown: false,
+    sendTelegram: async (input) => {
+      deliveries.push(input);
+      return {
+        ok: true,
+        transportMessageId: String(deliveries.length),
+      };
+    },
+  });
+
+  expect(result.shutdownReason).toBe("bootstrap-only");
+  expect(deliveries).toEqual([]);
+});
+
 test("native Telegram /update command checks service updates without model routing", async () => {
   const deliveries: Array<{ chatId: string; text: string; threadId?: string }> = [];
   const adapter = createTelegramTransportAdapter({
@@ -217,6 +263,10 @@ test("native Telegram /update command checks service updates without model routi
 test("native butler-main proactively delivers worker completion through delivery layer", async () => {
   const butlerData = tempDir;
   writeFileSync(join(butlerData, ".env"), "TELEGRAM_BOT_TOKEN=test-token\n", "utf8");
+  writeGatewaySettings(butlerData, "telegram", {
+    enabled: true,
+    config: { chatId: "123" },
+  });
   writeFileSync(join(butlerData, "butler.config.json"), JSON.stringify({
     system: {
       runtime: "codex-api",
@@ -269,4 +319,61 @@ test("native butler-main proactively delivers worker completion through delivery
   expect(result.shutdownReason).toBe("signal");
   expect(deliveries.some((delivery) => delivery.text.includes("Task ID:"))).toBe(false);
   expect(deliveries.some((delivery) => delivery.text.includes("chart is ready"))).toBe(true);
+});
+
+test("Telegram polling exits before handling updates after gateway disable", async () => {
+  const butlerData = tempDir;
+  writeFileSync(join(butlerData, ".env"), "TELEGRAM_BOT_TOKEN=test-token\n", "utf8");
+  writeGatewaySettings(butlerData, "telegram", {
+    enabled: true,
+    config: { chatId: "123" },
+  });
+  const logs: string[] = [];
+  let getUpdatesCalls = 0;
+  let handled = 0;
+
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    const url = String(input);
+    if (url.endsWith("/deleteWebhook")) {
+      return Response.json({ ok: true, result: true });
+    }
+    if (url.endsWith("/getUpdates")) {
+      getUpdatesCalls += 1;
+      writeGatewaySettings(butlerData, "telegram", {
+        enabled: false,
+        config: { chatId: "123" },
+      });
+      return Response.json({
+        ok: true,
+        result: [{
+          update_id: 42,
+          message: {
+            message_id: 24,
+            date: 1_700_000_000,
+            text: "stop before handling",
+            chat: { id: 123, type: "private" },
+            from: { id: 456, username: "tester" },
+          },
+        }],
+      });
+    }
+    throw new Error(`unexpected fetch URL: ${url}`);
+  }) as unknown as typeof fetch;
+
+  await runTelegramPolling({
+    butlerData,
+    timeoutSec: 0,
+    gateway: {
+      async handleMessage() {
+        handled += 1;
+        return { kind: "routed", dispatchStatus: "handled" };
+      },
+    },
+    shouldStop: () => !resolveTelegramGatewayRuntimeConfig({ butlerData }).enabled,
+    log: (line) => logs.push(line),
+  });
+
+  expect(getUpdatesCalls).toBe(1);
+  expect(handled).toBe(0);
+  expect(logs).toContain("Telegram polling stopped");
 });

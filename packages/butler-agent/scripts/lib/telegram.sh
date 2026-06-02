@@ -22,10 +22,24 @@ _telegram_log_silence() {
   printf '%s chat=%s reason=%s\n' "$(date -u +%FT%TZ)" "$CHAT" "$REASON" >> "$LOG_FILE" 2>/dev/null || true
 }
 
+_telegram_gateway_enabled() {
+  local settings="$BUTLER_DATA/gateways/telegram.json"
+  [ -f "$settings" ] || return 1
+  if command -v jq >/dev/null 2>&1; then
+    local enabled
+    enabled="$(jq -r 'if has("enabled") then .enabled else false end' "$settings" 2>/dev/null || echo false)"
+    [ "$enabled" = "true" ]
+    return
+  fi
+  grep -Eq '"enabled"[[:space:]]*:[[:space:]]*true' "$settings" 2>/dev/null
+}
+
 notify_telegram() {
   local TEXT="$1"
   local SEND_SCRIPT="${BUTLER_HOME}/packages/butler-agent/scripts/send-telegram.sh"
   local RESOLVE_SCRIPT="${BUTLER_HOME}/packages/butler-agent/scripts/resolve-chat-ids.sh"
+
+  _telegram_gateway_enabled || return 0
 
   # Load private runtime .env for bot token.
   if [ -f "$BUTLER_DATA/.env" ]; then

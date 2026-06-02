@@ -445,6 +445,18 @@ export async function runNativeButlerMain(
   let telegramPolling: Promise<void> | undefined;
   let workerResultMonitor: Promise<void> | undefined;
   let appWorkerResultMonitor: Promise<void> | undefined;
+  const serviceShouldStop = () =>
+    stopTelegramPolling || input.shutdownSignal?.aborted || existsSync(shutdownFlagPath);
+  const currentTelegramGateway = () =>
+    resolveTelegramGatewayRuntimeConfig({
+      butlerData,
+      compatibilityConfig: readButlerConfig(butlerData) as Record<string, any>,
+    });
+  const telegramShouldStop = () => serviceShouldStop() || !currentTelegramGateway().enabled;
+  const currentTelegramChatId = () => {
+    const current = currentTelegramGateway();
+    return current.enabled ? current.chatId ?? undefined : undefined;
+  };
 
   try {
     sessionId = resolveSessionId(store, butlerData);
@@ -467,6 +479,19 @@ export async function runNativeButlerMain(
     const deliveryGuard = new DeliveryGuard({
       adapters: [telegramAdapter, appAdapter],
     });
+    const deliverThroughEnabledGate = async (
+      activeSessionId: string,
+      action: OutboundAction,
+      metadata: Record<string, unknown>,
+    ): Promise<DeliveryResult> => {
+      if (action.transport === "telegram" && !currentTelegramGateway().enabled) {
+        return {
+          ok: false,
+          error: "Telegram gateway disabled",
+        };
+      }
+      return await deliveryGuard.deliver(activeSessionId, action, metadata);
+    };
     const lifecycle = new SessionLifecycleService({
       store,
       runtime,
@@ -480,7 +505,7 @@ export async function runNativeButlerMain(
         generateSessionTitleWithProvider(provider, titleInput),
       approvalMode: input.approvalMode ?? "default",
       deliverIntermediate: async ({ binding: activeBinding, action, metadata }) => {
-        await deliveryGuard.deliver(activeBinding.sessionId, action, {
+        await deliverThroughEnabledGate(activeBinding.sessionId, action, {
           source: "gateway/native-butler-bootstrap.ts#intermediate",
           ...(metadata ?? {}),
         });
@@ -508,16 +533,16 @@ export async function runNativeButlerMain(
       : runTelegramPolling({
           butlerData,
           gateway,
-          shouldStop: () => stopTelegramPolling || input.shutdownSignal?.aborted || existsSync(shutdownFlagPath),
+          shouldStop: telegramShouldStop,
           log: (line) => {
             process.stdout.write(`[telegram] ${line}\n`);
           },
         });
-    workerResultMonitor = runWorkerResultMonitor({
+    workerResultMonitor = telegramGateway.enabled ? runWorkerResultMonitor({
       butlerHome,
       butlerData,
       sessionId: binding.sessionId,
-      chatId: telegramGateway.chatId ?? config.telegram?.groupId,
+      chatId: telegramGateway.chatId ?? undefined,
       pollMs: input.workerResultPollMs,
       renderNotificationText: async ({ task }) => {
         const targetSessionId = task.origin?.origin_session_id?.trim() || binding.sessionId;
@@ -531,7 +556,7 @@ export async function runNativeButlerMain(
         });
         const result = await actor.handleInbound(buildWorkerCompletionEnvelope({
           accountId: "default",
-          peerId: telegramGateway.chatId?.trim() || config.telegram?.groupId?.trim() || targetBinding.sessionId,
+          peerId: currentTelegramChatId()?.trim() || targetBinding.sessionId,
           task,
         }), {
           sessionId: targetBinding.sessionId,
@@ -555,7 +580,7 @@ export async function runNativeButlerMain(
         });
         await actor.handleInbound(buildPlannedReviewEnvelope({
           accountId: "default",
-          peerId: telegramGateway.chatId?.trim() || config.telegram?.groupId?.trim() || targetBinding.sessionId,
+          peerId: currentTelegramChatId()?.trim() || targetBinding.sessionId,
           butlerData,
           plannedTaskId: promotion.plannedTaskId,
           workerTaskId: promotion.workerTaskId,
@@ -571,12 +596,12 @@ export async function runNativeButlerMain(
         });
       },
       deliverAction: async (activeSessionId, action, metadata) =>
-        await deliveryGuard.deliver(activeSessionId, action, metadata),
-      shouldStop: () => stopTelegramPolling || input.shutdownSignal?.aborted || existsSync(shutdownFlagPath),
+        await deliverThroughEnabledGate(activeSessionId, action, metadata),
+      shouldStop: telegramShouldStop,
       log: (line) => {
         process.stdout.write(`[worker-monitor] ${line}\n`);
       },
-    });
+    }) : undefined;
     appWorkerResultMonitor = runWorkerResultMonitor({
       butlerHome,
       butlerData,
@@ -641,8 +666,8 @@ export async function runNativeButlerMain(
         });
       },
       deliverAction: async (activeSessionId, action, metadata) =>
-        await deliveryGuard.deliver(activeSessionId, action, metadata),
-      shouldStop: () => stopTelegramPolling || input.shutdownSignal?.aborted || existsSync(shutdownFlagPath),
+        await deliverThroughEnabledGate(activeSessionId, action, metadata),
+      shouldStop: serviceShouldStop,
       log: (line) => {
         process.stdout.write(`[app-worker-monitor] ${line}\n`);
       },
@@ -650,13 +675,13 @@ export async function runNativeButlerMain(
 
     writeStartupGraceMarker(butlerData);
     const startupMessage = buildStartupMessage(binding.modelRef, countRunningTasks(butlerData));
-    const startupDelivery = await sendStartupNotification({
+    const startupDelivery = telegramGateway.enabled ? await sendStartupNotification({
       butlerHome,
-      chatId: telegramGateway.chatId ?? config.telegram?.groupId,
+      chatId: telegramGateway.chatId ?? undefined,
       sessionId: binding.sessionId,
       startupMessage,
       sendTelegram: input.sendTelegram,
-    });
+    }) : undefined;
 
     let shutdownReason: NativeButlerMainResult["shutdownReason"] = "bootstrap-only";
     if (input.waitForShutdown !== false) {
@@ -670,7 +695,8 @@ export async function runNativeButlerMain(
             server,
             store,
             deliveryGuard,
-            telegramGroupId: telegramGateway.chatId ?? config.telegram?.groupId,
+            deliverAction: deliverThroughEnabledGate,
+            telegramGroupId: currentTelegramChatId(),
             limit: 5,
           });
           if (summary.claimed > 0) {
