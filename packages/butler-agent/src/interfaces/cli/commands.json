@@ -456,7 +456,7 @@
     "status": "implemented",
     "implemented": true,
     "supportsJson": true,
-    "summary": "Summarize runtime, provider, context, delivery, task, and metrics health.",
+    "summary": "Summarize runtime, provider, context, service, delivery, task, and metrics health.",
     "spec": "docs/specs/cli/core-commands.md"
   },
   {
