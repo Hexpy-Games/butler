@@ -319,6 +319,40 @@ test("app server migrates message indexes for exact memory queries", () => {
   }
 });
 
+test("app server migrates event indexes for bounded app event scans", () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+  });
+  try {
+    const indexes = server.store.db
+      .query<{ name: string }, []>("PRAGMA index_list(events)")
+      .all()
+      .map((row) => row.name);
+    expect(indexes).toContain("events_type_id_idx");
+
+    const plan = server.store.db
+      .query<{ detail: string }, []>(
+        `
+      EXPLAIN QUERY PLAN
+      SELECT id, type, payload_json, created_at
+      FROM events
+      WHERE type = 'agent.turn_event'
+        AND payload_json LIKE '%"turn_id":"turn-plan"%' ESCAPE '\\'
+      ORDER BY id DESC
+      LIMIT 500
+    `,
+      )
+      .all()
+      .map((row) => row.detail)
+      .join("\n");
+    expect(plan).toContain("USING INDEX events_type_id_idx");
+    expect(plan).not.toContain("SCAN events");
+  } finally {
+    server.stop();
+  }
+});
+
 test("app server defaults app responder turns to ten minutes", () => {
   const serverSource = readFileSync(
     join(process.cwd(), "packages/butler-agent/src/gateways/app/server.ts"),
@@ -4435,6 +4469,63 @@ test("app transport progress projection stays idempotent after a large event bac
           `runtime-intermediate:app:${userMessageId}:single-progress`,
     );
     expect(progressEvents).toHaveLength(1);
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport sync skips unchanged transcript snapshots", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "project one progress row once",
+  });
+  const turnId = result.data.turn.id;
+  const userMessageId = result.data.accepted.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:05:00.000Z",
+      payload: {
+        actionId: `runtime-intermediate:app:${userMessageId}:snapshot-progress`,
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+          replyToMessageId: userMessageId,
+        },
+        metadata: {
+          kind: "tool_progress",
+          activityKind: "searched",
+          toolName: "Web search",
+          safeLabel: "Web search: snapshot row",
+          inputLabel: "snapshot row",
+          toolCallId: "tool-snapshot-progress",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    expect(server.store.syncAllAppTransportEvents()).toBe(1);
+    expect(server.store.syncAllAppTransportEvents()).toBe(0);
+    const row = server.store.db
+      .query<{ count: number }, [string]>(
+        `
+      SELECT COUNT(*) AS count
+      FROM events
+      WHERE type = 'progress.summary'
+        AND payload_json LIKE ? ESCAPE '\\'
+    `,
+      )
+      .get(`%"turn_id":"${turnId}"%`);
+    expect(row?.count).toBe(1);
   } finally {
     server.stop();
   }
