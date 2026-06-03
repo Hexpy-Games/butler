@@ -6,6 +6,7 @@ import {
   resolveAppGatewayRuntimeConfig,
   writeAppGatewayPid,
 } from "../../operations/gateway/registry.ts";
+import { reclaimStaleAppGatewayPort } from "./port-claim.ts";
 import { createAppServer } from "./server.ts";
 
 const dataRoot =
@@ -44,6 +45,18 @@ const bridgeMode =
   process.env.BUTLER_APP_SERVER_BRIDGE === "off" ? "external" : "local";
 const shouldWritePidFile = process.env.BUTLER_APP_GATEWAY_PID_FILE !== "off";
 mkdirSync(dirname(dbPath), { recursive: true });
+
+const portClaim = reclaimStaleAppGatewayPort({
+  port: Number.isFinite(port) ? port : 18765,
+  hostname,
+  butlerData: dataRoot,
+  butlerHome,
+});
+if (portClaim.reclaimedPids.length > 0) {
+  console.error(
+    `Reclaimed stale Butler app gateway listener(s): ${portClaim.reclaimedPids.join(", ")}`,
+  );
+}
 
 const app = createAppServer({
   dbPath,
