@@ -525,6 +525,12 @@ export class AppStoreOperationError extends Error {
   }
 }
 
+interface TranscriptSyncSnapshot {
+  path: string;
+  size: number;
+  mtimeMs: number;
+}
+
 export class AppServerStore {
   readonly db: Database;
   private closed = false;
@@ -541,6 +547,10 @@ export class AppServerStore {
   >();
   private readonly sessionTurnEventSequences = new Map<string, number>();
   private readonly turnEventSequences = new Map<string, number>();
+  private readonly transcriptSyncSnapshots = new Map<
+    string,
+    TranscriptSyncSnapshot
+  >();
   private readonly pendingSystemResponderTurns = new Set<string>();
   private readonly activeTurnControllers = new Map<string, AbortController>();
 
@@ -3309,13 +3319,41 @@ export class AppServerStore {
 
   private syncAppTransportEventsForChat(chatId: string): number {
     const sessionId = sessionHintForRow(chatId);
-    const events = readTranscriptFromDataHome(this.butlerData, sessionId);
+    const transcriptPath = transcriptPathFromDataHome(
+      this.butlerData,
+      sessionId,
+    );
+    let stats: ReturnType<typeof statSync>;
+    try {
+      stats = statSync(transcriptPath);
+    } catch {
+      this.transcriptSyncSnapshots.delete(sessionId);
+      return 0;
+    }
+    if (!stats.isFile()) {
+      this.transcriptSyncSnapshots.delete(sessionId);
+      return 0;
+    }
+    const previous = this.transcriptSyncSnapshots.get(sessionId);
+    if (
+      previous?.path === transcriptPath &&
+      previous.size === stats.size &&
+      previous.mtimeMs === stats.mtimeMs
+    ) {
+      return 0;
+    }
+    const events = readTranscriptFromPath(transcriptPath);
     let applied = 0;
     for (const event of events) {
       if (event.kind !== "outbound" || event.transport !== APP_TRANSPORT)
         continue;
       if (this.projectAppOutboundEvent(chatId, event)) applied += 1;
     }
+    this.transcriptSyncSnapshots.set(sessionId, {
+      path: transcriptPath,
+      size: stats.size,
+      mtimeMs: stats.mtimeMs,
+    });
     return applied;
   }
 
@@ -3644,10 +3682,8 @@ export class AppServerStore {
     const row = this.db
       .query<{ id: number }, []>(
         `
-      SELECT id
+      SELECT COALESCE(MAX(id), 0) AS id
       FROM events
-      ORDER BY id DESC
-      LIMIT 1
     `,
       )
       .get();
@@ -3728,17 +3764,19 @@ export class AppServerStore {
   }
 
   private listProgressRowsForTurn(turnId: string): ProgressSummaryRow[] {
+    const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
     const rows = this.db
-      .query<EventRow, []>(
+      .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type IN ('progress.summary', 'agent.turn_event.progress')
+        AND payload_json LIKE ? ESCAPE '\\'
       ORDER BY id DESC
       LIMIT 1000
     `,
       )
-      .all();
+      .all(turnPayloadPattern);
     const progressRows: ProgressSummaryRow[] = [];
     for (const event of rows.reverse()) {
       const payload = safeParseRecord(event.payload_json);
@@ -5280,6 +5318,9 @@ export class AppServerStore {
 
       CREATE INDEX IF NOT EXISTS session_queued_messages_session_idx
       ON session_queued_messages(chat_id, state);
+
+      CREATE INDEX IF NOT EXISTS events_type_id_idx
+      ON events(type, id DESC);
     `);
     ensureAppMessageQuerySchema(this.db);
     this.ensureColumn("chats", "pinned", "INTEGER NOT NULL DEFAULT 0");
@@ -6441,16 +6482,22 @@ export class AppServerStore {
     scope: "session" | "turn",
     id: string,
   ): number {
+    const payloadPattern =
+      scope === "session"
+        ? `%${escapeSqlLike(`"session_id":"${id}"`)}%`
+        : `%${escapeSqlLike(`"turn_id":"${id}"`)}%`;
     const rows = this.db
-      .query<EventRow, []>(
+      .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type = 'agent.turn_event'
+        AND payload_json LIKE ? ESCAPE '\\'
       ORDER BY id DESC
+      LIMIT 20
     `,
       )
-      .all();
+      .all(payloadPattern);
     for (const row of rows) {
       const payload = safeParseRecord(row.payload_json);
       if (scope === "session" && payload.session_id !== id) continue;
@@ -6469,17 +6516,19 @@ export class AppServerStore {
   }
 
   private hasTurnEventKind(turnId: string, kind: string): boolean {
+    const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
     const rows = this.db
-      .query<EventRow, []>(
+      .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type = 'agent.turn_event'
+        AND payload_json LIKE ? ESCAPE '\\'
       ORDER BY id DESC
-      LIMIT 120
+      LIMIT 500
     `,
       )
-      .all();
+      .all(turnPayloadPattern);
     return rows.some((row) => {
       const payload = safeParseRecord(row.payload_json);
       if (payload.turn_id !== turnId) return false;
@@ -6501,16 +6550,18 @@ export class AppServerStore {
     `,
       )
       .run(type, JSON.stringify(payload), createdAt);
+    const inserted = this.db
+      .query<{ id: number }, []>("SELECT last_insert_rowid() AS id")
+      .get();
     const row = this.db
-      .query<EventRow, []>(
+      .query<EventRow, [number]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
-      ORDER BY id DESC
-      LIMIT 1
+      WHERE id = ?
     `,
       )
-      .get();
+      .get(inserted?.id ?? 0);
     if (!row) throw new Error("Failed to append event.");
     const event: AppEventEnvelope = {
       protocol_version: APP_PROTOCOL_VERSION,
@@ -9240,11 +9291,23 @@ function readTranscriptFromDataHome(
   butlerData: string,
   sessionId: string,
 ): TranscriptEvent[] {
-  const path = join(
+  return readTranscriptFromPath(
+    transcriptPathFromDataHome(butlerData, sessionId),
+  );
+}
+
+function transcriptPathFromDataHome(
+  butlerData: string,
+  sessionId: string,
+): string {
+  return join(
     butlerData,
     "transcripts",
     `${sessionId.replace(/[^A-Za-z0-9._-]/g, "_")}.jsonl`,
   );
+}
+
+function readTranscriptFromPath(path: string): TranscriptEvent[] {
   if (!existsSync(path)) return [];
   const text = readFileSync(path, "utf8");
   if (!text.trim()) return [];
