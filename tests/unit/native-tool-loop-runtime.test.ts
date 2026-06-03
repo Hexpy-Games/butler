@@ -4557,6 +4557,64 @@ test("native runtime returns recoverable tool errors to the model instead of abo
     event.payload.ok === false)).toBe(true);
 });
 
+test("native runtime marks interrupted direct WorkStreams recoverable", async () => {
+  const sessionId = "butler/main/interrupted-direct-work";
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          title: "긴 작업 내구성 확인",
+          todos: [{
+            id: "inspect",
+            content: "긴 작업 상태 확인",
+            active_form: "긴 작업 상태 확인 중",
+            status: "in_progress",
+            phase: "execution",
+          }, {
+            id: "report",
+            content: "복구 가능한 상태 보고",
+            active_form: "복구 가능한 상태 보고 중",
+            status: "pending",
+            phase: "reporting",
+          }],
+        },
+        rawArguments: JSON.stringify({ title: "긴 작업 내구성 확인" }),
+      });
+      throw new Error("The socket connection was closed unexpectedly.");
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "이 작업은 오래 걸려도 계속되어야 해." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  })).rejects.toThrow("socket connection");
+
+  const streams = new WorkStreamStore(tempDir).list({ sessionId, includeTerminal: true });
+  expect(streams).toHaveLength(1);
+  expect(streams[0]).toMatchObject({
+    state: "recoverable",
+    current_phase: "execution",
+    active_step_id: "inspect",
+    terminal: false,
+  });
+  const record = new WorkStreamStore(tempDir).read(streams[0].id);
+  expect(record?.status_note).toContain("interrupted before final delivery");
+});
+
 test("native runtime synthesizes durable WorkStream progress when a compound tool turn skips todo setup", async () => {
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,

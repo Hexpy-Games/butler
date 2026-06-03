@@ -37,6 +37,7 @@ import {
   completeReportingWorkStreamForSession,
   completeTurnLocalWorkStreamForSession,
   WorkStreamStore,
+  workStreamTerminal,
 } from "../work/work-stream.ts";
 import { appendRuntimeTurnContextMetric } from "../../operations/metrics/context-monitor.ts";
 import {
@@ -542,6 +543,34 @@ function completeRuntimeSemanticWorkStreamBestEffort(input: {
   } catch {
     // Synthetic progress bookkeeping must never block final delivery.
   }
+}
+
+function markActiveWorkStreamRecoverableBestEffort(input: {
+  butlerData: string;
+  sessionId: string;
+  reason?: string;
+}): void {
+  try {
+    const store = new WorkStreamStore(input.butlerData);
+    const record = store.activeForSession(input.sessionId);
+    if (!record || workStreamTerminal(record.state) || record.state === "recoverable") return;
+    const reason = safeTextForStatusNote(input.reason);
+    store.transition({
+      id: record.id,
+      state: "recoverable",
+      statusNote: reason
+        ? `Turn interrupted before final delivery; durable work can be resumed. Cause: ${reason}`
+        : "Turn interrupted before final delivery; durable work can be resumed.",
+    });
+  } catch {
+    // Recovery bookkeeping must not hide the original runtime failure.
+  }
+}
+
+function safeTextForStatusNote(value: string | undefined): string | null {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  return normalized.length > 240 ? `${normalized.slice(0, 237)}...` : normalized;
 }
 
 function buildRecentConversation(input: RuntimeTurnInput, maxTokens: number, butlerData: string): string {
@@ -1472,9 +1501,10 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       throw new Error(`NativeToolLoopRuntime has no stored session for ${input.handle.sessionId}`);
     }
 
+    const useTools = session.init.role === "butler" || session.init.role === "steward";
+
     try {
       throwIfRuntimeTurnAborted(input.signal);
-      const useTools = session.init.role === "butler" || session.init.role === "steward";
       const audit: ToolAuditEntry[] = [];
       const publicDecisionContext: PublicWorkDecision[] = [];
       const pendingPublicDecisions: PublicWorkDecision[] = [];
@@ -1919,6 +1949,13 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         }),
       };
     } catch (error) {
+      if (useTools && !input.signal?.aborted) {
+        markActiveWorkStreamRecoverableBestEffort({
+          butlerData: this.butlerData,
+          sessionId: input.handle.sessionId,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
       await emitTurnEventBestEffort(input, {
         kind: input.signal?.aborted ? "turn.cancelled" : "turn.failed",
         payload: {
