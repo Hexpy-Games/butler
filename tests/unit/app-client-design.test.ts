@@ -4582,6 +4582,12 @@ test("message virtualization isolates virtual row updates from message content",
   expect(workBlocks).not.toContain("useButlerStore");
   expect(workBlocks).not.toContain("turnProgress");
   expect(messageContent).toContain("message.work_blocks");
+  expect(messageContent.indexOf("<MessageMarkdown")).toBeLessThan(
+    messageContent.indexOf("<CompletedWorkBlocks"),
+  );
+  expect(messageContent.indexOf("<AssistantFailureNotice")).toBeLessThan(
+    messageContent.indexOf("<CompletedWorkBlocks"),
+  );
   expect(footer).not.toContain("messages:");
   expect(footer).not.toContain("messageIndex");
   expect(shellCss).toContain("overflow-anchor: none");
