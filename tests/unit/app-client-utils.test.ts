@@ -602,6 +602,102 @@ test("delivered assistant message terminalizes active turn progress immediately"
   expect(activeTurnProgressSnapshot(state.summary, state.turnProgress)).toBeNull();
 });
 
+test("retrying assistant message revives failed turn progress for the same turn", () => {
+  const failedRow = {
+    id: "row-retry",
+    kind: "ran_command",
+    state: "failed",
+    safe_label: "Bash: previous attempt",
+    safe_tool_name: "Bash",
+  } as const;
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "turn.state_changed",
+        payload: {
+          turn: {
+            id: "turn-retry",
+            chat_id: "general",
+            state: "retrying",
+            safe_status_label: "Retrying",
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "message.updated",
+        payload: {
+          message: {
+            id: "assistant-failed",
+            chat_id: "general",
+            turn_id: "turn-retry",
+            role: "assistant",
+            text: "Retrying this turn.",
+            status: "retrying",
+          },
+        },
+      },
+      {
+        id: 3,
+        type: "agent.turn_event.progress",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-retry",
+          row: {
+            ...failedRow,
+            state: "thinking",
+            safe_label: "Bash: retry attempt",
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [
+        {
+          id: "assistant-failed",
+          chat_id: "general",
+          turn_id: "turn-retry",
+          role: "assistant",
+          text: "Butler could not complete this turn.",
+          status: "failed",
+        },
+      ],
+      summary: {
+        session_id: "general",
+        turn_state: "failed",
+        latest_progress: {
+          turn_id: "turn-retry",
+          state: "failed",
+          safe_progress_rows: [failedRow],
+        },
+      },
+      turnProgress: {
+        "turn-retry": {
+          turn_id: "turn-retry",
+          state: "failed",
+          safe_progress_rows: [failedRow],
+        },
+      },
+    },
+  );
+
+  expect(state.messages[0]?.status).toBe("retrying");
+  expect(state.turnProgress["turn-retry"]?.state).toBe("thinking");
+  expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toEqual([
+    expect.objectContaining({
+      id: "row-retry",
+      state: "thinking",
+      safe_label: "Bash: retry attempt",
+    }),
+  ]);
+  expect(activeTurnProgressSnapshot(state.summary, state.turnProgress)).toMatchObject({
+    turn_id: "turn-retry",
+    state: "thinking",
+  });
+});
+
 test("timeline applies public turn events as progress rows", () => {
   let messages: MessageRecord[] = [];
   let currentSummary: SessionSummaryView | null = {

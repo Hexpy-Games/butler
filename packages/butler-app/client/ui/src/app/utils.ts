@@ -131,6 +131,9 @@ function mergeTerminalSameTurnSummary(
 
   const currentState = currentLatest.state ?? current?.turn_state ?? "";
   const incomingState = incomingLatest.state ?? incoming.turn_state ?? "";
+  if (shouldResetProgressForRetry(currentState, incomingState)) {
+    return null;
+  }
   if (
     !isTerminalProgressState(currentState) ||
     isTerminalProgressState(incomingState)
@@ -249,12 +252,16 @@ export function pruneReplacedClientTurnProgress(
   return next ?? turnProgress;
 }
 
+interface TimelineProgressBucket {
+  rows: ProgressRow[];
+  state?: string;
+  label?: string;
+  resetForRetry?: boolean;
+}
+
 interface TimelineEventPatch {
   incoming: MessageRecord[];
-  progressByTurn: Map<
-    string,
-    { rows: ProgressRow[]; state?: string; label?: string }
-  >;
+  progressByTurn: Map<string, TimelineProgressBucket>;
   latestProgressTurnId?: string;
   unknownProgressTurn: string;
 }
@@ -265,10 +272,7 @@ function collectTimelineEventPatch(
 ): TimelineEventPatch {
   const incoming: MessageRecord[] = [];
   const unknownProgressTurn = "__unknown__";
-  const progressByTurn = new Map<
-    string,
-    { rows: ProgressRow[]; state?: string; label?: string }
-  >();
+  const progressByTurn = new Map<string, TimelineProgressBucket>();
   let latestProgressTurnId: string | undefined;
   const progressBucket = (turnId?: string) => {
     const key = turnId ?? latestProgressTurnId ?? unknownProgressTurn;
@@ -286,6 +290,7 @@ function collectTimelineEventPatch(
     label?: string,
   ) => {
     const bucket = progressBucket(turnId);
+    if (isRetryProgressState(state)) bucket.resetForRetry = true;
     bucket.state = state ?? bucket.state;
     bucket.label = label ?? bucket.label;
   };
@@ -303,30 +308,32 @@ function collectTimelineEventPatch(
       rowState && !isTerminalProgressState(rowState) ? rowState : bucket.state;
     bucket.label = label ?? bucket.label;
   };
-  const noteDeliveredAssistantMessage = (message: MessageRecord): void => {
+  const noteAssistantMessageTerminalState = (message: MessageRecord): void => {
     if (
       message.role !== "assistant" ||
-      !message.turn_id ||
-      message.status === "pending" ||
-      message.status === "streaming"
+      !message.turn_id
     ) {
       return;
     }
-    noteProgressState(message.turn_id, "delivered");
+    if (message.status === "delivered") {
+      noteProgressState(message.turn_id, "delivered");
+    } else if (message.status === "failed" || message.status === "cancelled") {
+      noteProgressState(message.turn_id, message.status);
+    }
   };
   for (const event of events ?? []) {
     if (event.type === "message.created") {
       const message = event.payload?.message;
       if (!message || message.chat_id !== activeChatId) continue;
       incoming.push(message);
-      noteDeliveredAssistantMessage(message);
+      noteAssistantMessageTerminalState(message);
       continue;
     }
     if (event.type === "message.updated") {
       const message = event.payload?.message;
       if (!message || message.chat_id !== activeChatId) continue;
       incoming.push(message);
-      noteDeliveredAssistantMessage(message);
+      noteAssistantMessageTerminalState(message);
       continue;
     }
     if (event.type === "turn.state_changed") {
@@ -409,25 +416,29 @@ function mergeTimelineProgressIntoSummary(
   if (!selected) return current;
   const nextTurnId =
     selectedKey === patch.unknownProgressTurn ? latest.turn_id : selectedKey;
+  const resetForRetry =
+    selected.resetForRetry ||
+    shouldResetProgressForRetry(currentState ?? "", selected.state ?? "");
   const previousRows =
-    nextTurnId && latest.turn_id && nextTurnId !== latest.turn_id
+    resetForRetry || (nextTurnId && latest.turn_id && nextTurnId !== latest.turn_id)
       ? []
       : (latest.safe_progress_rows ?? []);
   const nextRows =
     selected.rows.length > 0
       ? mergeProgressRows(previousRows, selected.rows)
       : previousRows;
+  const currentStateForMerge = resetForRetry ? "" : (currentState ?? "");
   const nextState = selected.state
-    ? progressMergeState(currentState ?? "", selected.state)
+    ? progressMergeState(currentStateForMerge, selected.state)
     : currentState;
   const selectedStateWins = selected.state
-    ? progressMergeState(currentState ?? "", selected.state) === selected.state
+    ? progressMergeState(currentStateForMerge, selected.state) === selected.state
     : false;
   return {
     ...current,
     turn_state: nextState ?? current.turn_state,
     latest_progress: {
-      ...latest,
+      ...(resetForRetry ? {} : latest),
       turn_id: nextTurnId ?? latest.turn_id,
       safe_progress_rows: nextRows,
       ...(nextState ? { state: nextState } : {}),
@@ -440,10 +451,7 @@ function mergeTimelineProgressIntoSummary(
 
 function mergeTurnProgressBuckets(
   current: Record<string, TurnProgressSnapshot>,
-  progressByTurn: Map<
-    string,
-    { rows: ProgressRow[]; state?: string; label?: string }
-  >,
+  progressByTurn: Map<string, TimelineProgressBucket>,
 ): Record<string, TurnProgressSnapshot> {
   let changed = false;
   const next = { ...current };
@@ -451,18 +459,25 @@ function mergeTurnProgressBuckets(
     if (!turnId || turnId === "__unknown__") continue;
     const previous = next[turnId];
     const safeRows = bucket.rows.filter((row) => !isInternalProgressRow(row));
+    const resetForRetry =
+      bucket.resetForRetry ||
+      shouldResetProgressForRetry(previous?.state ?? "", bucket.state ?? "");
+    const previousStateForMerge = resetForRetry ? "" : (previous?.state ?? "");
+    const previousRows = resetForRetry
+      ? []
+      : (previous?.safe_progress_rows ?? []);
     const rows =
       safeRows.length > 0
-        ? mergeProgressRows(previous?.safe_progress_rows ?? [], safeRows)
-        : (previous?.safe_progress_rows ?? []);
+        ? mergeProgressRows(previousRows, safeRows)
+        : previousRows;
     const nextState = bucket.state
-      ? progressMergeState(previous?.state ?? "", bucket.state)
+      ? progressMergeState(previousStateForMerge, bucket.state)
       : previous?.state;
     const bucketStateWins = bucket.state
-      ? progressMergeState(previous?.state ?? "", bucket.state) === bucket.state
+      ? progressMergeState(previousStateForMerge, bucket.state) === bucket.state
       : false;
     const snapshot = {
-      ...previous,
+      ...(resetForRetry ? {} : previous),
       turn_id: turnId,
       safe_progress_rows: rows,
       ...(nextState ? { state: nextState } : {}),
@@ -488,21 +503,26 @@ export function mergeTurnProgressFromSummary(
   );
   const previous = current[latest.turn_id];
   const incomingState = latest.state ?? summary?.turn_state ?? "";
+  const resetForRetry = shouldResetProgressForRetry(
+    previous?.state ?? "",
+    incomingState,
+  );
+  const previousStateForMerge = resetForRetry ? "" : (previous?.state ?? "");
   const nextState = incomingState
-    ? progressMergeState(previous?.state ?? "", incomingState)
+    ? progressMergeState(previousStateForMerge, incomingState)
     : previous?.state;
   const incomingStateWins = incomingState
-    ? progressMergeState(previous?.state ?? "", incomingState) === incomingState
+    ? progressMergeState(previousStateForMerge, incomingState) === incomingState
     : true;
   const base = incomingStateWins
-    ? { ...previous, ...latest }
-    : { ...latest, ...previous };
+    ? { ...(resetForRetry ? {} : previous), ...latest }
+    : { ...latest, ...(resetForRetry ? {} : previous) };
   const nextSnapshot = {
     ...base,
     turn_id: latest.turn_id,
     ...(nextState ? { state: nextState } : {}),
     safe_progress_rows: mergeProgressRows(
-      previous?.safe_progress_rows ?? [],
+      resetForRetry ? [] : (previous?.safe_progress_rows ?? []),
       rows,
     ),
   };
@@ -595,16 +615,21 @@ export function mergeTurnProgressSnapshotMap(
       continue;
     }
     const incomingState = snapshot.state ?? "";
+    const resetForRetry = shouldResetProgressForRetry(
+      previous.state ?? "",
+      incomingState,
+    );
+    const previousStateForMerge = resetForRetry ? "" : (previous.state ?? "");
     const nextState = incomingState
-      ? progressMergeState(previous.state ?? "", incomingState)
+      ? progressMergeState(previousStateForMerge, incomingState)
       : previous.state;
     const incomingStateWins = incomingState
-      ? progressMergeState(previous.state ?? "", incomingState) ===
+      ? progressMergeState(previousStateForMerge, incomingState) ===
         incomingState
       : false;
     const base = incomingStateWins
-      ? { ...previous, ...snapshot }
-      : { ...snapshot, ...previous };
+      ? { ...(resetForRetry ? {} : previous), ...snapshot }
+      : { ...snapshot, ...(resetForRetry ? {} : previous) };
     const nextUpdatedAt =
       newestTimestamp(previous.updated_at, snapshot.updated_at) ??
       base.updated_at;
@@ -614,7 +639,7 @@ export function mergeTurnProgressSnapshotMap(
       ...(nextState ? { state: nextState } : {}),
       ...(nextUpdatedAt ? { updated_at: nextUpdatedAt } : {}),
       safe_progress_rows: mergeProgressRows(
-        previous.safe_progress_rows ?? [],
+        resetForRetry ? [] : (previous.safe_progress_rows ?? []),
         safeIncomingRows,
       ),
     };
@@ -1773,10 +1798,19 @@ function progressRowEqual(left: ProgressRow, right: ProgressRow): boolean {
 
 function progressMergeState(current: string, incoming: string): string {
   if (isTerminalProgressState(incoming)) return incoming;
+  if (shouldResetProgressForRetry(current, incoming)) return incoming;
   if (isTerminalProgressState(current)) return current;
   return progressStateRank(incoming) >= progressStateRank(current)
     ? incoming
     : current;
+}
+
+function shouldResetProgressForRetry(current: string, incoming: string): boolean {
+  return current === "failed" && isRetryProgressState(incoming);
+}
+
+function isRetryProgressState(state?: string): boolean {
+  return state === "retrying";
 }
 
 function isTerminalProgressState(state: string): boolean {
