@@ -68,6 +68,8 @@ export function mergeSessionSummaryForPendingTurn(
 ): SessionSummaryView {
   const terminalMerged = mergeTerminalSameTurnSummary(current, incoming);
   if (terminalMerged) return terminalMerged;
+  const activeMerged = mergeActiveSameTurnSummary(current, incoming);
+  if (activeMerged) return activeMerged;
 
   const currentTurnId = current?.latest_progress?.turn_id;
   if (!isClientTurnId(currentTurnId)) return incoming;
@@ -115,6 +117,37 @@ export function mergeSessionSummaryForPendingTurn(
     ...incoming,
     latest_progress: current?.latest_progress,
     turn_state: current?.turn_state ?? incoming.turn_state,
+  };
+}
+
+function mergeActiveSameTurnSummary(
+  current: SessionSummaryView | null,
+  incoming: SessionSummaryView,
+): SessionSummaryView | null {
+  const currentLatest = current?.latest_progress;
+  const incomingLatest = incoming.latest_progress;
+  const turnId = incomingLatest?.turn_id;
+  if (!currentLatest?.turn_id || !turnId || currentLatest.turn_id !== turnId) {
+    return null;
+  }
+
+  const currentState = currentLatest.state ?? current?.turn_state ?? "";
+  const incomingState = incomingLatest.state ?? incoming.turn_state ?? "";
+  if (
+    !shouldPreserveActiveSnapshotOverStaleTerminal(
+      currentLatest,
+      incomingLatest,
+      currentState,
+      incomingState,
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    ...incoming,
+    turn_state: currentState || current?.turn_state || incoming.turn_state,
+    latest_progress: currentLatest,
   };
 }
 
@@ -503,6 +536,17 @@ export function mergeTurnProgressFromSummary(
   );
   const previous = current[latest.turn_id];
   const incomingState = latest.state ?? summary?.turn_state ?? "";
+  if (
+    previous &&
+    shouldPreserveActiveSnapshotOverStaleTerminal(
+      previous,
+      { ...latest, turn_id: latest.turn_id, safe_progress_rows: rows },
+      previous.state ?? "",
+      incomingState,
+    )
+  ) {
+    return current;
+  }
   const resetForRetry = shouldResetProgressForRetry(
     previous?.state ?? "",
     incomingState,
@@ -604,17 +648,27 @@ export function mergeTurnProgressSnapshotMap(
     const safeIncomingRows = (snapshot.safe_progress_rows ?? []).filter(
       (row) => !isInternalProgressRow(row),
     );
+    const incomingSnapshot = {
+      ...snapshot,
+      turn_id: snapshot.turn_id ?? turnId,
+      safe_progress_rows: safeIncomingRows,
+    };
     if (!previous) {
-      const nextSnapshot = {
-        ...snapshot,
-        turn_id: snapshot.turn_id ?? turnId,
-        safe_progress_rows: safeIncomingRows,
-      };
-      next[turnId] = nextSnapshot;
+      next[turnId] = incomingSnapshot;
       changed = true;
       continue;
     }
     const incomingState = snapshot.state ?? "";
+    if (
+      shouldPreserveActiveSnapshotOverStaleTerminal(
+        previous,
+        incomingSnapshot,
+        previous.state ?? "",
+        incomingState,
+      )
+    ) {
+      continue;
+    }
     const resetForRetry = shouldResetProgressForRetry(
       previous.state ?? "",
       incomingState,
@@ -1807,6 +1861,30 @@ function progressMergeState(current: string, incoming: string): string {
 
 function shouldResetProgressForRetry(current: string, incoming: string): boolean {
   return current === "failed" && isRetryProgressState(incoming);
+}
+
+function shouldPreserveActiveSnapshotOverStaleTerminal(
+  current: TurnProgressSnapshot,
+  incoming: TurnProgressSnapshot,
+  currentState: string,
+  incomingState: string,
+): boolean {
+  if (
+    !current.turn_id ||
+    !incoming.turn_id ||
+    current.turn_id !== incoming.turn_id
+  ) {
+    return false;
+  }
+  if (!currentState || isTerminalProgressState(currentState)) return false;
+  if (incomingState !== "failed" && incomingState !== "cancelled") return false;
+  const currentActivityMs = turnProgressSnapshotActivityMs(current);
+  const incomingActivityMs = turnProgressSnapshotActivityMs(incoming);
+  return (
+    currentActivityMs > 0 &&
+    incomingActivityMs > 0 &&
+    incomingActivityMs < currentActivityMs
+  );
 }
 
 function isRetryProgressState(state?: string): boolean {

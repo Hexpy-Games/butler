@@ -15,6 +15,7 @@ import {
   isInternalProgressRow,
   mergeMessages,
   mergeTurnProgressFromSummary,
+  mergeTurnProgressSnapshotMap,
   mergeSessionSummaryForPendingTurn,
   isWorkerVisibleInComposer,
   phaseLabel,
@@ -496,6 +497,83 @@ test("stale session snapshots cannot revive a terminal turn", () => {
   expect(merged.latest_progress?.safe_progress_rows).toContainEqual(
     expect.objectContaining({ id: "row-turn-current", state: "delivered" }),
   );
+});
+
+test("stale failed polling does not hide active retry progress", () => {
+  const retrying = summary(
+    "turn-retry",
+    "retrying",
+    "Bash: retry attempt",
+    "2026-06-03T03:00:11.000Z",
+  );
+  retrying.latest_progress!.safe_progress_rows = [
+    {
+      id: "retry-row",
+      kind: "ran_command",
+      state: "thinking",
+      safe_label: "Bash: retry attempt",
+      safe_tool_name: "Bash",
+      created_at: "2026-06-03T03:00:11.000Z",
+    },
+  ];
+  const staleFailed = summary(
+    "turn-retry",
+    "failed",
+    "Butler could not complete this turn.",
+    "2026-06-03T02:55:53.000Z",
+  );
+
+  const merged = mergeSessionSummaryForPendingTurn(retrying, staleFailed);
+
+  expect(merged.turn_state).toBe("retrying");
+  expect(merged.latest_progress?.state).toBe("retrying");
+  expect(merged.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({ id: "retry-row", state: "thinking" }),
+  );
+});
+
+test("stale failed progress snapshots do not replace active retry snapshots", () => {
+  const retrySnapshot: TurnProgressSnapshot = {
+    turn_id: "turn-retry",
+    state: "thinking",
+    safe_progress_rows: [
+      {
+        id: "retry-row",
+        kind: "ran_command",
+        state: "thinking",
+        safe_label: "Bash: retry attempt",
+        safe_tool_name: "Bash",
+        created_at: "2026-06-03T03:00:11.000Z",
+      },
+    ],
+  };
+  const staleFailedSnapshot: TurnProgressSnapshot = {
+    turn_id: "turn-retry",
+    state: "failed",
+    updated_at: "2026-06-03T02:55:53.000Z",
+    safe_progress_rows: [
+      {
+        id: "failed-row",
+        kind: "error",
+        state: "failed",
+        safe_label: "Butler could not complete this turn.",
+      },
+    ],
+  };
+  const current = { "turn-retry": retrySnapshot };
+
+  expect(
+    mergeTurnProgressFromSummary(current, {
+      session_id: "general",
+      turn_state: "failed",
+      latest_progress: staleFailedSnapshot,
+    }),
+  ).toBe(current);
+  expect(
+    mergeTurnProgressSnapshotMap(current, {
+      "turn-retry": staleFailedSnapshot,
+    }),
+  ).toBe(current);
 });
 
 test("accepted real turn removes optimistic client turn progress", () => {
