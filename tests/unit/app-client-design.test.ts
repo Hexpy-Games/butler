@@ -1141,17 +1141,17 @@ test("conversation UI renders user bubbles and assistant documents with retryabl
   expect(autoScroll).toContain("useLayoutEffect");
   expect(autoScroll).toContain("latestMessageVersion");
   expect(autoScroll).toContain("virtualListHeight");
-  expect(autoScroll).toContain("lastContentVersionRef");
-  expect(autoScroll).toContain("contentChanged");
-  expect(autoScroll).toContain("lastKnownUnpinnedScrollTopRef");
-  expect(autoScroll).toContain("SCROLL_DRIFT_RESTORE_TOLERANCE");
+  expect(autoScroll).not.toContain("lastContentVersionRef");
+  expect(autoScroll).not.toContain("contentChanged");
+  expect(autoScroll).not.toContain("lastKnownUnpinnedScrollTopRef");
+  expect(autoScroll).not.toContain("SCROLL_DRIFT_RESTORE_TOLERANCE");
+  expect(autoScroll).not.toContain("element.scrollTop = expectedScrollTop");
   expect(autoScroll).toContain("cancelScheduledScroll()");
   expect(autoScroll).toContain("distanceFromBottom < BOTTOM_LOCK_THRESHOLD");
-  expect(autoScroll).toContain("const currentlyPinned = isPinnedToBottom();");
-  expect(autoScroll).toContain("canFollowActiveContent");
   expect(autoScroll).toContain(
-    "(pinnedToBottomRef.current && contentChanged && canFollowActiveContent)",
+    "const shouldPin = enteringChat || pinnedToBottomRef.current;",
   );
+  expect(autoScroll).not.toContain("canFollowActiveContent");
   expect(autoScroll).not.toContain(
     "pinnedToBottomRef.current ||\n    isSending",
   );
@@ -4577,14 +4577,16 @@ test("message virtualization isolates virtual row updates from message content",
   expect(messageList).not.toContain("contentVersion");
   expect(messageList).toContain("useMessageVirtualizer");
   expect(virtualizer).toContain("rowVirtualizer.scrollRect?.height");
-  expect(virtualizer).not.toContain(
+  expect(virtualizer).toContain(
     "shouldAdjustScrollPositionOnItemSizeChange",
   );
+  expect(virtualizer).toContain("keepScrollOffsetOnSizeChange");
   expect(virtualizer).not.toContain("scrollToFn:");
   expect(autoScroll).toContain("latestMessageVersion");
   expect(autoScroll).toContain("virtualListHeight");
-  expect(autoScroll).toContain("lastKnownUnpinnedScrollTopRef");
-  expect(autoScroll).toContain("USER_SCROLL_INPUT_WINDOW_MS");
+  expect(autoScroll).not.toContain("lastKnownUnpinnedScrollTopRef");
+  expect(autoScroll).not.toContain("USER_SCROLL_INPUT_WINDOW_MS");
+  expect(autoScroll).not.toContain("element.scrollTop = expectedScrollTop");
   expect(messageItem).toContain("<VirtualMessageRow");
   expect(messageItem).toContain("<MessageContent");
   expect(messageContent).not.toContain("virtualRow");
@@ -4594,10 +4596,10 @@ test("message virtualization isolates virtual row updates from message content",
   expect(workBlocks).not.toContain("useButlerStore");
   expect(workBlocks).not.toContain("turnProgress");
   expect(messageContent).toContain("message.work_blocks");
-  expect(messageContent.indexOf("<CompletedWorkBlocks")).toBeLessThan(
+  expect(messageContent.indexOf("<CompletedWorkBlocks")).toBeGreaterThan(
     messageContent.indexOf("<MessageMarkdown"),
   );
-  expect(messageContent.indexOf("<CompletedWorkBlocks")).toBeLessThan(
+  expect(messageContent.indexOf("<CompletedWorkBlocks")).toBeGreaterThan(
     messageContent.indexOf("<AssistantFailureNotice"),
   );
   expect(footer).not.toContain("messages:");
