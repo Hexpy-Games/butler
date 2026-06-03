@@ -143,6 +143,57 @@ test("work streams can re-enter execution from review without blocking unrelated
   expect(resumed.current_phase).toBe("execution");
 });
 
+test("resumed todo progress preserves terminal streams and opens an active revision", () => {
+  const store = new WorkStreamStore(tempDir);
+  const completed = store.updateFromTodoList({
+    ownerSessionId: "butler/app-project-butler",
+    projectId: "butler",
+    listId: "durable-turn",
+    title: "Durable turn",
+    items: [
+      todo({ id: "inspect", phase: "execution", status: "completed" }),
+      todo({ id: "report", phase: "reporting", status: "completed" }),
+    ],
+    now: new Date("2026-05-15T01:00:00.000Z"),
+  });
+
+  expect(completed.state).toBe("complete");
+  store.link({
+    id: completed.id,
+    plannedTaskIds: ["planned-durable"],
+    orchestrationIds: ["orch-durable"],
+    workerTaskIds: ["worker-durable"],
+  });
+
+  const resumed = store.updateFromTodoList({
+    ownerSessionId: "butler/app-project-butler",
+    projectId: "butler",
+    listId: "durable-turn",
+    title: "Durable turn retry",
+    items: [
+      todo({ id: "inspect", phase: "execution", status: "in_progress" }),
+      todo({ id: "report", phase: "reporting", status: "pending" }),
+    ],
+    now: new Date("2026-05-15T01:05:00.000Z"),
+  });
+
+  expect(resumed.id).not.toBe(completed.id);
+  expect(resumed).toMatchObject({
+    state: "executing",
+    current_phase: "execution",
+    active_step_id: "inspect",
+    todo_list_id: "durable-turn",
+    linked_planned_task_ids: ["planned-durable"],
+    linked_orchestration_ids: ["orch-durable"],
+    linked_worker_task_ids: ["worker-durable"],
+  });
+  expect(store.read(completed.id)?.state).toBe("complete");
+  expect(store.list({ sessionId: "butler/app-project-butler" }).map((item) => item.id)).toEqual([resumed.id]);
+  expect(store.list({ sessionId: "butler/app-project-butler", includeTerminal: true })
+    .map((item) => item.state)
+    .sort()).toEqual(["complete", "executing"]);
+});
+
 test("work streams link planned tasks orchestrations and worker tasks to the active stream", () => {
   const store = new WorkStreamStore(tempDir);
   const stream = store.updateFromTodoList({

@@ -78,13 +78,13 @@ const STATE_VALUES: WorkStreamState[] = [
 const TERMINAL_STATES = new Set<WorkStreamState>(["complete", "failed"]);
 
 const TRANSITIONS: Record<WorkStreamState, WorkStreamState[]> = {
-  routing: ["conception", "planning", "waiting_user", "failed"],
-  conception: ["planning", "waiting_user", "paused", "failed"],
-  planning: ["executing", "waiting_user", "paused", "failed"],
+  routing: ["conception", "planning", "waiting_user", "recoverable", "failed"],
+  conception: ["planning", "waiting_user", "paused", "recoverable", "failed"],
+  planning: ["executing", "waiting_user", "paused", "recoverable", "failed"],
   executing: ["reviewing", "waiting_user", "paused", "recoverable", "failed"],
   reviewing: ["executing", "consolidating", "waiting_user", "paused", "recoverable", "failed"],
-  consolidating: ["reporting", "reviewing", "failed"],
-  reporting: ["complete", "reviewing", "failed"],
+  consolidating: ["reporting", "reviewing", "recoverable", "failed"],
+  reporting: ["complete", "reviewing", "recoverable", "failed"],
   waiting_user: ["planning", "executing", "reviewing", "paused", "failed"],
   paused: ["planning", "executing", "reviewing", "failed"],
   complete: [],
@@ -154,6 +154,14 @@ function stableStreamId(input: {
     .digest("hex")
     .slice(0, 16);
   return `ws-${digest}`;
+}
+
+function revisionStreamId(baseId: string, now: string): string {
+  const suffix = createHash("sha1")
+    .update(`${baseId}\n${now}`)
+    .digest("hex")
+    .slice(0, 8);
+  return `${baseId.slice(0, 111)}-${suffix}`;
 }
 
 function normalizeState(value: unknown): WorkStreamState {
@@ -369,16 +377,39 @@ export class WorkStreamStore {
     return readJson<WorkStreamRecord>(this.pathFor(id));
   }
 
+  private records(): WorkStreamRecord[] {
+    if (!existsSync(this.dir)) return [];
+    return readdirSync(this.dir)
+      .filter((entry) => entry.endsWith(".json"))
+      .map((entry) => readJson<WorkStreamRecord>(join(this.dir, entry)))
+      .filter((record): record is WorkStreamRecord => Boolean(record));
+  }
+
+  private activeForScope(input: {
+    ownerSessionId?: string | null;
+    projectId?: string | null;
+    listId?: string | null;
+    excludeId?: string | null;
+  }): WorkStreamRecord | null {
+    const ownerSessionId = input.ownerSessionId?.trim() || null;
+    const projectId = input.projectId?.trim() || null;
+    const listId = input.listId?.trim() || null;
+    return this.records()
+      .filter((record) => record.id !== input.excludeId)
+      .filter((record) => !workStreamTerminal(record.state))
+      .filter((record) => !ownerSessionId || record.owner_session_id === ownerSessionId)
+      .filter((record) => !projectId || record.project_id === projectId)
+      .filter((record) => !listId || record.todo_list_id === listId)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .at(0) ?? null;
+  }
+
   list(options: {
     sessionId?: string | null;
     projectId?: string | null;
     includeTerminal?: boolean;
   } = {}): WorkStreamSummary[] {
-    if (!existsSync(this.dir)) return [];
-    return readdirSync(this.dir)
-      .filter((entry) => entry.endsWith(".json"))
-      .map((entry) => readJson<WorkStreamRecord>(join(this.dir, entry)))
-      .filter((record): record is WorkStreamRecord => Boolean(record))
+    return this.records()
       .filter((record) => !options.sessionId || record.owner_session_id === options.sessionId)
       .filter((record) => !options.projectId || record.project_id === options.projectId)
       .filter((record) => options.includeTerminal === true || !workStreamTerminal(record.state))
@@ -440,38 +471,50 @@ export class WorkStreamStore {
     now?: Date;
   }): WorkStreamRecord {
     const now = (input.now ?? new Date()).toISOString();
-    const id = safeId(input.id?.trim() || stableStreamId({
+    const baseId = safeId(input.id?.trim() || stableStreamId({
       ownerSessionId: input.ownerSessionId,
       projectId: input.projectId,
       listId: input.listId,
     }));
+    let id = baseId;
     const prior = this.read(id);
-    const target = targetFromTodos(input.items, prior);
+    let activePrior = prior;
+    let target = targetFromTodos(input.items, activePrior);
+    if (prior && workStreamTerminal(prior.state) && !workStreamTerminal(target.state) && !input.id?.trim()) {
+      activePrior = this.activeForScope({
+        ownerSessionId: input.ownerSessionId ?? prior.owner_session_id,
+        projectId: input.projectId ?? prior.project_id,
+        listId: input.listId ?? prior.todo_list_id,
+        excludeId: baseId,
+      });
+      id = activePrior?.id ?? revisionStreamId(baseId, now);
+      target = targetFromTodos(input.items, activePrior);
+    }
     validateTodoEvidenceForTarget(input.items, target.state);
-    if (prior) {
-      const path = transitionPath(prior.state, target.state);
-      if (!path) assertWorkStreamTransition(prior.state, target.state);
+    if (activePrior) {
+      const path = transitionPath(activePrior.state, target.state);
+      if (!path) assertWorkStreamTransition(activePrior.state, target.state);
     }
     const record: WorkStreamRecord = {
       version: 1,
       id,
-      title: safeText(input.title, 120) ?? prior?.title ?? "Butler work stream",
-      owner_session_id: input.ownerSessionId?.trim() || prior?.owner_session_id || null,
-      project_id: input.projectId?.trim() || prior?.project_id || null,
-      intent_summary: safeText(input.intentSummary, 600) ?? prior?.intent_summary ?? null,
-      role_hint: safeText(input.roleHint, 240) ?? prior?.role_hint ?? null,
-      expected_deliverable: safeText(input.expectedDeliverable, 600) ?? prior?.expected_deliverable ?? null,
+      title: safeText(input.title, 120) ?? activePrior?.title ?? prior?.title ?? "Butler work stream",
+      owner_session_id: input.ownerSessionId?.trim() || activePrior?.owner_session_id || prior?.owner_session_id || null,
+      project_id: input.projectId?.trim() || activePrior?.project_id || prior?.project_id || null,
+      intent_summary: safeText(input.intentSummary, 600) ?? activePrior?.intent_summary ?? prior?.intent_summary ?? null,
+      role_hint: safeText(input.roleHint, 240) ?? activePrior?.role_hint ?? prior?.role_hint ?? null,
+      expected_deliverable: safeText(input.expectedDeliverable, 600) ?? activePrior?.expected_deliverable ?? prior?.expected_deliverable ?? null,
       state: target.state,
-      current_phase: target.phase ?? phaseForState(target.state, prior?.current_phase ?? null),
+      current_phase: target.phase ?? phaseForState(target.state, activePrior?.current_phase ?? null),
       active_step_id: target.activeStepId,
-      todo_list_id: input.listId?.trim() || prior?.todo_list_id || null,
-      linked_planned_task_ids: prior?.linked_planned_task_ids ?? [],
-      linked_orchestration_ids: prior?.linked_orchestration_ids ?? [],
-      linked_worker_task_ids: prior?.linked_worker_task_ids ?? [],
-      created_at: prior?.created_at ?? now,
+      todo_list_id: input.listId?.trim() || activePrior?.todo_list_id || prior?.todo_list_id || null,
+      linked_planned_task_ids: activePrior?.linked_planned_task_ids ?? prior?.linked_planned_task_ids ?? [],
+      linked_orchestration_ids: activePrior?.linked_orchestration_ids ?? prior?.linked_orchestration_ids ?? [],
+      linked_worker_task_ids: activePrior?.linked_worker_task_ids ?? prior?.linked_worker_task_ids ?? [],
+      created_at: activePrior?.created_at ?? now,
       updated_at: now,
-      last_user_turn_id: input.lastUserTurnId?.trim() || prior?.last_user_turn_id || null,
-      status_note: prior?.status_note ?? null,
+      last_user_turn_id: input.lastUserTurnId?.trim() || activePrior?.last_user_turn_id || prior?.last_user_turn_id || null,
+      status_note: activePrior?.status_note ?? null,
     };
     writeJsonAtomic(this.pathFor(id), record);
     return record;
