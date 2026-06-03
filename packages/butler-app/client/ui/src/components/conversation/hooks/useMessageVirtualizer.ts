@@ -41,6 +41,8 @@ export function useMessageVirtualizer({
     estimateSize,
     overscan: 8,
   });
+  rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
+    keepScrollOffsetOnSizeChange;
 
   const virtualContentHeight = rowVirtualizer.getTotalSize();
   const viewportHeight =
@@ -69,6 +71,10 @@ export function useMessageVirtualizer({
     virtualListHeight,
     latestMessageVersion,
   };
+}
+
+function keepScrollOffsetOnSizeChange() {
+  return false;
 }
 
 function estimateMessageRowSize(
