@@ -30,6 +30,10 @@ function MessageContentComponent({
     <>
       {message.role === "assistant" ? (
         <>
+          <CompletedWorkBlocks
+            blocks={message.work_blocks}
+            defaultExpanded={expandWorkBlocks}
+          />
           {message.status === "failed" ? (
             <AssistantFailureNotice message={message} />
           ) : (
@@ -38,10 +42,6 @@ function MessageContentComponent({
               text={message.text}
             />
           )}
-          <CompletedWorkBlocks
-            blocks={message.work_blocks}
-            defaultExpanded={expandWorkBlocks}
-          />
         </>
       ) : (
         message.text
