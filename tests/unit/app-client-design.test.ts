@@ -1141,14 +1141,21 @@ test("conversation UI renders user bubbles and assistant documents with retryabl
   expect(autoScroll).toContain("useLayoutEffect");
   expect(autoScroll).toContain("latestMessageVersion");
   expect(autoScroll).toContain("virtualListHeight");
+  expect(autoScroll).toContain("lastContentVersionRef");
+  expect(autoScroll).toContain("contentChanged");
+  expect(autoScroll).toContain("lastKnownUnpinnedScrollTopRef");
+  expect(autoScroll).toContain("SCROLL_DRIFT_RESTORE_TOLERANCE");
   expect(autoScroll).toContain("cancelScheduledScroll()");
   expect(autoScroll).toContain("distanceFromBottom < BOTTOM_LOCK_THRESHOLD");
+  expect(autoScroll).toContain("const currentlyPinned = isPinnedToBottom();");
+  expect(autoScroll).toContain("canFollowActiveContent");
   expect(autoScroll).toContain(
-    "const shouldPin = enteringChat || pinnedToBottomRef.current;",
+    "(pinnedToBottomRef.current && contentChanged && canFollowActiveContent)",
   );
   expect(autoScroll).not.toContain(
     "pinnedToBottomRef.current ||\n    isSending",
   );
+  expect(autoScroll).not.toContain("pinnedToBottomRef.current || enteringChat");
   expect(
     read("packages/butler-app/client/ui/src/hooks/useAppBootstrap.ts"),
   ).toContain("if (cursor > 0)");
@@ -4570,9 +4577,14 @@ test("message virtualization isolates virtual row updates from message content",
   expect(messageList).not.toContain("contentVersion");
   expect(messageList).toContain("useMessageVirtualizer");
   expect(virtualizer).toContain("rowVirtualizer.scrollRect?.height");
-  expect(virtualizer).toContain("keepScrollOffsetOnSizeChange");
+  expect(virtualizer).not.toContain(
+    "shouldAdjustScrollPositionOnItemSizeChange",
+  );
+  expect(virtualizer).not.toContain("scrollToFn:");
   expect(autoScroll).toContain("latestMessageVersion");
   expect(autoScroll).toContain("virtualListHeight");
+  expect(autoScroll).toContain("lastKnownUnpinnedScrollTopRef");
+  expect(autoScroll).toContain("USER_SCROLL_INPUT_WINDOW_MS");
   expect(messageItem).toContain("<VirtualMessageRow");
   expect(messageItem).toContain("<MessageContent");
   expect(messageContent).not.toContain("virtualRow");
@@ -4582,15 +4594,21 @@ test("message virtualization isolates virtual row updates from message content",
   expect(workBlocks).not.toContain("useButlerStore");
   expect(workBlocks).not.toContain("turnProgress");
   expect(messageContent).toContain("message.work_blocks");
-  expect(messageContent.indexOf("<MessageMarkdown")).toBeLessThan(
-    messageContent.indexOf("<CompletedWorkBlocks"),
+  expect(messageContent.indexOf("<CompletedWorkBlocks")).toBeLessThan(
+    messageContent.indexOf("<MessageMarkdown"),
   );
-  expect(messageContent.indexOf("<AssistantFailureNotice")).toBeLessThan(
-    messageContent.indexOf("<CompletedWorkBlocks"),
+  expect(messageContent.indexOf("<CompletedWorkBlocks")).toBeLessThan(
+    messageContent.indexOf("<AssistantFailureNotice"),
   );
   expect(footer).not.toContain("messages:");
   expect(footer).not.toContain("messageIndex");
   expect(shellCss).toContain("overflow-anchor: none");
+  expect(shellCss).not.toContain(".virtualScroll *");
+  expect(shellCss).toContain(".virtualizedMessageList {\n  position: relative;");
+  expect(shellCss).not.toContain(
+    "align-content: stretch;\n  overflow-anchor: none;",
+  );
+  expect(shellCss).not.toContain("width: 100%;\n  overflow-anchor: none;");
 });
 
 test("component line count lint script is wired into lint:design", () => {

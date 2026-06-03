@@ -226,6 +226,16 @@ function messageRecordsEqual(
   });
 }
 
+function reusePreviousMessageRecord(
+  previousById: Map<string, MessageRecord>,
+  message: MessageRecord,
+): MessageRecord {
+  const previous = previousById.get(message.id);
+  return previous && messageRecordsEqual([previous], [message])
+    ? previous
+    : message;
+}
+
 function completedSendingOperationState(
   state: ButlerStore,
   sendOperationId: string,
@@ -370,7 +380,7 @@ function applyMessageListView(
         : message;
     }),
     prunedTurnProgress,
-  );
+  ).map((message) => reusePreviousMessageRecord(previousById, message));
   const sessionMessageViews = upsertCompleteSessionView(
     state.sessionMessageViews,
     completeSessionView(chatId, messages, prunedTurnProgress, view.next_cursor),
@@ -513,12 +523,13 @@ function applySessionView(
       previous?.work_blocks?.length && !message.work_blocks
         ? { ...message, work_blocks: previous.work_blocks }
         : message;
-    return freezeMessageWorkBlocksForRecord(
+    const frozen = freezeMessageWorkBlocksForRecord(
       retainedMessage,
       retainedMessage.turn_id
         ? turnProgress[retainedMessage.turn_id]
         : undefined,
     );
+    return reusePreviousMessageRecord(previousById, frozen);
   });
   const sessionMessageViews = upsertCompleteSessionView(
     state.sessionMessageViews,

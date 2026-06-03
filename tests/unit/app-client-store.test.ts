@@ -1070,6 +1070,68 @@ test("session view hydration preserves live turn progress rows", () => {
   ).toContainEqual(expect.objectContaining({ id: "row-live" }));
 });
 
+test("session view hydration reuses frozen assistant message references", () => {
+  const progress: TurnProgressSnapshot = {
+    turn_id: "turn-a",
+    state: "delivered",
+    safe_progress_rows: [
+      {
+        id: "row-command",
+        kind: "ran_command",
+        state: "delivered",
+        safe_label: "Bash: inspect",
+        safe_tool_name: "Bash",
+        safe_input_label: "inspect",
+        work_block_id: "work-a",
+        work_block_label: "상태를 확인하는 중",
+      },
+    ],
+  };
+  const assistant = messageRecord(
+    "assistant-a",
+    "session-a",
+    "assistant",
+    "done",
+    2,
+    "turn-a",
+  );
+  const [frozenAssistant] = freezeMessageWorkBlocks([assistant], {
+    "turn-a": progress,
+  });
+  const incomingAssistant: MessageRecord = {
+    ...assistant,
+    work_blocks: [
+      {
+        id: "work-a",
+        label: "상태를 확인하는 중",
+        state: "running",
+        rows: [
+          {
+            ...progress.safe_progress_rows[0]!,
+            state: "running",
+          },
+        ],
+      },
+    ],
+  };
+
+  useButlerStore.setState({
+    activeChatId: "session-a",
+    messages: [frozenAssistant!],
+    turnProgress: { "turn-a": progress },
+  });
+
+  useButlerStore.getState().setSessionView(
+    sessionView("session-a", {
+      messages: [incomingAssistant],
+      latestProgress: progress,
+      turnState: "delivered",
+    }),
+  );
+
+  expect(useButlerStore.getState().messages[0]).toBe(frozenAssistant);
+});
+
 test("session view hydration preserves active worker activity from stale snapshots", () => {
   useButlerStore.setState({
     activeChatId: "session-a",
