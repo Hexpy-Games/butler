@@ -20,28 +20,6 @@ Task state may reference private origins and transcripts, but user-facing
 outputs must use safe summaries. Planned work should not be reportable until
 review gates prove the result is ready.
 
-## Durable Long-Running Work
-
-Butler work must be durable across long-running sessions and worker lifetimes.
-Interactive turns and background workers are expected to survive process
-restarts, provider disconnects, app gateway retries, and work that spans 24
-hours or more.
-
-Success criteria:
-
-- A provider disconnect, gateway retry, or runtime exception must not erase the
-  active work state for a non-trivial Butler task.
-- Interrupted direct work must leave a recoverable WorkStream with the latest
-  public-safe phase, active step, todo list, and status note.
-- Retrying or continuing a turn must never reopen a terminal WorkStream by
-  mutating `complete` back to `executing`; terminal records are preserved and a
-  new active stream revision is created when work resumes.
-- Final delivery guards may block premature completion, but they must expose a
-  resumable state instead of converting durable progress into an opaque
-  `gateway_failed` outcome.
-- Hard time and round budgets are safety boundaries only; hitting a boundary
-  must checkpoint or recover work rather than silently losing progress.
-
 ## Related Specs
 
 - `SPEC-AUTONOMOUS-PLANNED-DISPATCH` - Autonomous Planned Dispatch
