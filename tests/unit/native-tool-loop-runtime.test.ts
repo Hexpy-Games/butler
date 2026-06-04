@@ -2433,6 +2433,117 @@ test("completion obligation guard accepts command-created CSV and chart artifact
   })).toBeNull();
 });
 
+test("completion obligation guard ignores inspection-only durable artifact obligations", () => {
+  expect(completionObligationIncompleteReason({
+    audit: [{
+      name: "run_command",
+      args: {
+        command: "node -e \"verify ledger files\"",
+      },
+      ok: true,
+      result: {
+        ok: true,
+        exit_code: 0,
+        evidence_receipts: [{
+          schema: "butler.evidence-receipt.v1",
+          id: "receipt-ledger-check",
+          producer: { kind: "tool", name: "run_command" },
+          receiptType: "command_execution",
+          verified: true,
+          covers: ["command_execution"],
+          summary: "Canonical Project Ledger files exist and repo-local ledger absence was verified.",
+          references: [],
+          satisfies: ["command_executed"],
+        }],
+      },
+    }],
+    decisions: [{
+      decisionId: "decision-ledger-inspection",
+      summary: "canonical Project Ledger 파일 존재와 repo-local .project-ledger 부재를 직접 검증합니다.",
+      rationale: "기존 상태 확인 명령이며 새 산출물을 생성하지 않습니다.",
+      nextStep: "검증된 경로와 상태를 최종 보고에 반영합니다.",
+      completionObligations: ["command_executed", "durable_artifact"],
+      evidenceRefs: [],
+      source: "assistant-authored",
+    }],
+  })).toBeNull();
+});
+
+test("completion obligation guard treats passive written-document checks as inspections", () => {
+  expect(completionObligationIncompleteReason({
+    audit: [{
+      name: "run_command",
+      args: {
+        command: "node -e \"inspect written specs\"",
+      },
+      ok: true,
+      result: {
+        ok: true,
+        exit_code: 0,
+      },
+    }],
+    decisions: [{
+      decisionId: "decision-written-doc-check",
+      summary: "작성된 로드맵·계획·스펙 문서 파일과 핵심 문구를 확인합니다.",
+      rationale: "이미 만들어진 문서가 요청 범위를 담고 있는지 검증하는 단계입니다.",
+      nextStep: "확인된 범위와 누락 여부를 최종 보고합니다.",
+      completionObligations: ["command_executed", "durable_artifact"],
+      evidenceRefs: [],
+      source: "assistant-authored",
+    }],
+  })).toBeNull();
+});
+
+test("completion obligation guard does not treat writing-scope review as artifact creation", () => {
+  expect(completionObligationIncompleteReason({
+    audit: [{
+      name: "run_command",
+      args: {
+        command: "node -e \"check ledger scope\"",
+      },
+      ok: true,
+      result: {
+        ok: true,
+        exit_code: 0,
+      },
+    }],
+    decisions: [{
+      decisionId: "decision-writing-scope-check",
+      summary: "Butler Home의 Project Ledger 상태와 기존 관련 작업을 먼저 확인합니다.",
+      rationale: "이미 존재하는 ledger 상태 확인입니다.",
+      nextStep: "확인된 ledger 상태를 기준으로 문서 위치와 작성 범위를 좁힙니다.",
+      completionObligations: ["command_executed", "durable_artifact"],
+      evidenceRefs: [],
+      source: "assistant-authored",
+    }],
+  })).toBeNull();
+});
+
+test("completion obligation guard still requires durable evidence for creation decisions", () => {
+  expect(completionObligationIncompleteReason({
+    audit: [{
+      name: "run_command",
+      args: {
+        command: "node -e \"write report\"",
+      },
+      ok: true,
+      result: {
+        ok: true,
+        exit_code: 0,
+      },
+    }],
+    decisions: [{
+      decisionId: "decision-report-create",
+      summary: "검증 결과를 새 보고서 파일로 작성합니다.",
+      rationale: "사용자가 저장된 산출물을 요청했습니다.",
+      nextStep: "보고서 파일을 저장한 뒤 최종 보고합니다.",
+      completionObligations: ["command_executed", "durable_artifact"],
+      evidenceRefs: [],
+      source: "assistant-authored",
+    }],
+  })).toBe("The turn still has unsatisfied public completion obligation(s): durable_artifact.");
+});
+
 test("completion obligation guard accepts generic evidence receipts for non-CSV deliverables", () => {
   expect(completionObligationIncompleteReason({
     audit: [{

@@ -239,11 +239,42 @@ export function unsatisfiedCompletionObligations(
 ): PublicWorkObligationKind[] {
   const required = new Set<PublicWorkObligationKind>();
   for (const decision of decisions) {
-    for (const obligation of decision.completionObligations ?? []) required.add(obligation);
+    for (const obligation of effectiveCompletionObligations(decision)) required.add(obligation);
   }
   if (required.size === 0) return [];
   const satisfied = satisfiedCompletionObligations(audit);
   return Array.from(required).filter((obligation) => !satisfied.has(obligation));
+}
+
+function effectiveCompletionObligations(decision: PublicWorkDecision): PublicWorkObligationKind[] {
+  const obligations = decision.completionObligations ?? [];
+  if (!obligations.includes("durable_artifact")) return obligations;
+  if (!isInspectionOnlyDurableArtifactDecision(decision)) return obligations;
+  return obligations.filter((obligation) => obligation !== "durable_artifact");
+}
+
+function isInspectionOnlyDurableArtifactDecision(decision: PublicWorkDecision): boolean {
+  const actionText = [
+    decision.summary ?? "",
+    decision.nextStep ?? "",
+  ].join("\n");
+  const fullText = [
+    actionText,
+    decision.rationale ?? "",
+  ].join("\n");
+  if (
+    !/(?:verify|verification|check|checking|confirm|read|review|inspect|list|find|grep|exists|existence|presence|absence|query|status|확인|검증|조회|읽|목록|찾|존재|부재|상태|본문|경로)/iu.test(fullText)
+  ) {
+    return false;
+  }
+  return !hasActiveDurableArtifactCreation(actionText);
+}
+
+function hasActiveDurableArtifactCreation(text: string): boolean {
+  if (/\b(?:create|write|generate|render|attach|save|patch|update|edit|produce)\b/iu.test(text)) {
+    return true;
+  }
+  return /(?:작성|생성|렌더|저장|첨부|수정|갱신|패치|만들).{0,16}(?:합니다|하겠다|해야|한 뒤|하고|해서|한다|할 것|할게)/iu.test(text);
 }
 
 function satisfiedCompletionObligations(audit: ToolAuditEntry[]): Set<PublicWorkObligationKind> {
