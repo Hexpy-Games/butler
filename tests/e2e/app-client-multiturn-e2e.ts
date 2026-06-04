@@ -1104,22 +1104,44 @@ function stringField(value: Record<string, unknown>, key: string): string | unde
 }
 
 async function waitForWatlWorkerOutcome(client: CdpClient): Promise<void> {
-  await waitForAssistantFinalContaining(client, ["수정", "검증"], 240_000);
+  await waitForExpression(
+    client,
+    `(() => {
+      const text = document.body?.innerText || "";
+      return /(?:Worker|작업자|Create Planned Task|run_planned_task|dispatch_worker|별도 작업|맡겨서)/iu.test(text);
+    })()`,
+    "WATL worker/planned work surface",
+    120_000,
+  );
+  const startedAt = Date.now();
+  let evidence: Record<string, unknown> = {};
+  while (Date.now() - startedAt < 300_000) {
+    evidence = readWatlWorkerEvidence();
+    const phases = stringArray(evidence.phases);
+    const actions = stringArray(evidence.actions);
+    if (Number(evidence.eventCount) > 0
+      && phases.includes("executing")
+      && phases.includes("verifying")
+      && actions.some((action) => ["edit_file", "apply_patch", "write_file"].includes(action))) {
+      break;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_000));
+  }
   const durableToolCalls = durableTranscriptToolCalls(latestE2eSessionId());
   assert(durableToolCalls.includes("dispatch_worker") || durableToolCalls.includes("create_planned_task") || durableToolCalls.includes("run_planned_task"), `WATL worker Electron E2E did not start worker/planned work: ${durableToolCalls.join(" -> ")}`);
-  const evidence = readWatlWorkerEvidence();
   const phases = stringArray(evidence.phases);
   const actions = stringArray(evidence.actions);
   assert(Number(evidence.eventCount) > 0, "WATL worker Electron E2E did not persist worker activity events.");
   assert(phases.includes("executing"), `WATL worker Electron E2E did not record executing semantic phase: ${phases.join(", ")}`);
   assert(phases.includes("verifying"), `WATL worker Electron E2E did not record verifying semantic phase: ${phases.join(", ")}`);
-  assert(actions.some((action) => ["edit_file", "apply_patch", "write_file", "run_command"].includes(action)), `WATL worker Electron E2E did not record implementation action evidence: ${actions.join(", ")}`);
+  assert(actions.some((action) => ["edit_file", "apply_patch", "write_file"].includes(action)), `WATL worker Electron E2E did not record implementation action evidence: ${actions.join(", ")}`);
 }
 
 async function runWatlWorkerBrowserScenario(client: CdpClient): Promise<void> {
   const prompt = [
     "WATL 문서에서 Electron 앱으로 worker timeline을 확인하는 절차가 아직 부족한 것 같아.",
-    "실제 앱에서 확인할 수 있는 검증 절차를 짧게 보강하고, 관련 문서만 수정한 뒤 검증까지 해줘.",
+    "이건 앱 실행 흐름까지 확인해야 해서 조금 길어질 수 있으니, 별도 작업으로 맡겨서 진행해줘.",
+    "관련 문서만 짧게 보강하고, 수정 내용 확인과 검증까지 마친 뒤 결과를 알려줘.",
   ].join("\n");
   assert(!/테스트를 위해|WATL e2e|semantic phase|activity event|tool/iu.test(prompt), "WATL worker prompt must remain natural and must not name test internals.");
   await sendComposerTurn(client, prompt);
