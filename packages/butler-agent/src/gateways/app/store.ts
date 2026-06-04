@@ -3390,7 +3390,16 @@ export class AppServerStore {
     }
 
     if (metadata.kind === "turn_failed") {
-      return this.projectAppTurnFailure(chatId, turnId, message, metadata);
+      if (this.hasProjectedTransportEvent(actionId)) return false;
+      const projected = this.projectAppTurnFailure(
+        chatId,
+        turnId,
+        message,
+        metadata,
+        event.timestamp,
+      );
+      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      return projected;
     }
 
     if (metadata.kind !== "final_result") return false;
@@ -3531,10 +3540,14 @@ export class AppServerStore {
     turnId: string,
     message: Record<string, unknown>,
     metadata: Record<string, unknown>,
+    eventTimestamp: string,
   ): boolean {
     const turn = this.getTurnRow(turnId);
     if (!turn) return false;
     if (turn.state === "delivered" || turn.state === "cancelled") return false;
+    if (turn.state === "retrying" && timestampBefore(eventTimestamp, turn.updated_at)) {
+      return false;
+    }
     const safeError = {
       code: safeOptionalShortToken(metadata.safeErrorCode) ?? "gateway_failed",
       message:
@@ -9517,6 +9530,13 @@ function mimeTypeForArtifactPath(path: string): string {
 
 function escapeSqlLike(value: string): string {
   return value.replace(/[\\%_]/gu, (char) => `\\${char}`);
+}
+
+function timestampBefore(candidate: string, reference: string): boolean {
+  const candidateMs = Date.parse(candidate);
+  const referenceMs = Date.parse(reference);
+  return Number.isFinite(candidateMs) && Number.isFinite(referenceMs) &&
+    candidateMs < referenceMs;
 }
 
 function safeResponderError(error: unknown): { code: string; message: string } {

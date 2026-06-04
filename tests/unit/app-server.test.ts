@@ -4843,6 +4843,79 @@ test("retry without injected responder requeues the app turn instead of answerin
   }
 });
 
+test("retry ignores stale app transport failure projection from earlier attempts", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    port: 0,
+    responder() {
+      throw new Error("provider failed");
+    },
+  });
+  const first = await fetch(`${server.url}messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      chat_id: "general",
+      text: "retry with stale failure transcript",
+    }),
+  });
+  expect(first.status).toBe(500);
+  const failedTurns = await getJson(`${server.url}turns?chat_id=general`);
+  const turnId = failedTurns.data.turns[0].id;
+  expect(failedTurns.data.turns[0].state).toBe("failed");
+  server.stop();
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const retry = await postJson(
+      `${server.url}turns/${encodeURIComponent(turnId)}/retry`,
+      {},
+    );
+    expect(retry.data.turn).toMatchObject({
+      id: turnId,
+      state: "retrying",
+      attempt: 2,
+    });
+
+    appendTranscriptEvent(
+      createTranscriptEvent({
+        sessionId: "butler/app-general",
+        kind: "outbound",
+        transport: "app",
+        timestamp: "2026-05-18T12:00:00.000Z",
+        payload: {
+          actionId: "queued-inbound-failure:test:app:general:stale-retry",
+          accountId: "local",
+          peer: { kind: "dm", id: "general" },
+          message: {
+            text: "Butler could not complete this turn.",
+          },
+          metadata: {
+            kind: "turn_failed",
+            turnId,
+            safeErrorCode: "gateway_failed",
+            source: "test",
+          },
+        },
+      }),
+    );
+
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "retrying",
+      cancellable: true,
+      retryable: false,
+      attempt: 2,
+    });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+  } finally {
+    server.stop();
+  }
+});
+
 test("message replay includes automatic compaction markers at the snapshot point", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
