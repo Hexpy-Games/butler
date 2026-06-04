@@ -89,6 +89,7 @@ import {
   completionObligationIncompleteReason,
   containsFinalPublicWorkDecisionLeak,
   containsFinalToolImplementationLeak,
+  goalCompletionIncompleteContinuationPrompt,
   completionReviewIncompleteReason,
   finalResultContractRepairPrompt,
   goalCompletionReviewPrompt,
@@ -172,6 +173,7 @@ const PLANNED_REVIEW_SCOPED_TOOLS = new Set<string>([
   "write_planned_public_report",
 ]);
 const RUNTIME_SEMANTIC_TODO_LIST_ID = "runtime-semantic";
+const DEFAULT_GOAL_COMPLETION_CONTINUATION_ATTEMPTS = 8;
 
 interface StoredSessionConfig {
   init: RuntimeSessionInit;
@@ -212,6 +214,13 @@ function goalCompletionIncompleteError(reason: string): Error {
   const error = new Error(reason || "Butler could not complete this turn.");
   error.name = "GoalCompletionIncompleteError";
   return error;
+}
+
+function goalCompletionContinuationAttempts(): number {
+  const raw = process.env.BUTLER_GOAL_COMPLETION_CONTINUATION_ATTEMPTS;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  if (!Number.isFinite(parsed)) return DEFAULT_GOAL_COMPLETION_CONTINUATION_ATTEMPTS;
+  return Math.max(0, Math.min(parsed, 100));
 }
 
 function throwIfRuntimeTurnAborted(signal?: AbortSignal): void {
@@ -1679,12 +1688,42 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         reviewPromptText: string,
         maxToolRounds: number,
       ): Promise<string> => {
-        const successfulToolsBeforeReview = successfulToolAuditCount();
-        const reviewText = await runToolPrompt(reviewPromptText, maxToolRounds);
-        const incompleteReason = completionReviewIncompleteReason(reviewText);
-        if (incompleteReason) throw goalCompletionIncompleteError(incompleteReason);
-        const reviewAdvancedTheTurn = successfulToolAuditCount() > successfulToolsBeforeReview;
-        return reviewAdvancedTheTurn ? reviewText : currentFinalText;
+        let candidateFinalText = currentFinalText;
+        let nextReviewPromptText = reviewPromptText;
+        const maxContinuationAttempts = goalCompletionContinuationAttempts();
+        for (let continuationAttempt = 0;; continuationAttempt += 1) {
+          const successfulToolsBeforeReview = successfulToolAuditCount();
+          const reviewText = await runToolPrompt(nextReviewPromptText, maxToolRounds);
+          const incompleteReason = completionReviewIncompleteReason(reviewText);
+          const reviewAdvancedTheTurn = successfulToolAuditCount() > successfulToolsBeforeReview;
+          if (!incompleteReason) return reviewAdvancedTheTurn ? reviewText : candidateFinalText;
+          if (continuationAttempt >= maxContinuationAttempts) {
+            throw goalCompletionIncompleteError(incompleteReason);
+          }
+
+          const successfulToolsBeforeContinuation = successfulToolAuditCount();
+          const continuationText = await runToolPrompt(goalCompletionIncompleteContinuationPrompt({
+            prompt,
+            previousAnswer: reviewText,
+            incompleteReason,
+            audit,
+            decisions: publicDecisionContext,
+          }));
+          const continuationAdvancedTheTurn =
+            successfulToolAuditCount() > successfulToolsBeforeContinuation;
+          const continuationIncompleteReason =
+            completionReviewIncompleteReason(continuationText);
+          if (continuationIncompleteReason && !continuationAdvancedTheTurn) {
+            throw goalCompletionIncompleteError(continuationIncompleteReason);
+          }
+          candidateFinalText = continuationText;
+          nextReviewPromptText = goalCompletionReviewPrompt({
+            prompt,
+            previousAnswer: candidateFinalText,
+            audit,
+            decisions: publicDecisionContext,
+          });
+        }
       };
       let text = useTools
         ? await runToolPrompt(prompt)

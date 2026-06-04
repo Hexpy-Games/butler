@@ -78,6 +78,35 @@ export function goalCompletionReviewPrompt(input: {
   ].join("\n");
 }
 
+export function goalCompletionIncompleteContinuationPrompt(input: {
+  prompt: string;
+  previousAnswer: string;
+  incompleteReason: string;
+  audit: ToolAuditEntry[];
+  decisions: PublicWorkDecision[];
+}): string {
+  return [
+    "## Goal Completion Incomplete Continuation",
+    "The previous completion review returned `INCOMPLETE`, so the turn is not deliverable yet.",
+    "Do not treat that as a final answer. Continue the original user request now.",
+    "If an available native tool can advance the missing requested outcome, call that tool.",
+    "If the missing outcome can be completed by inspecting local files, running checks, editing files, committing, or reading durable state, use the relevant native tool instead of stopping.",
+    "Return `INCOMPLETE: <safe user-facing reason>` only when no available tool can advance the missing outcome or a principal decision is required.",
+    "Preserve the active persona, user language, and any current-turn Active Persona Reminder.",
+    "",
+    "Incomplete reason:",
+    input.incompleteReason,
+    "",
+    "Original request:",
+    input.prompt,
+    "",
+    renderFinalEvidenceForRepair(input.audit, input.decisions),
+    "",
+    "Previous incomplete answer:",
+    input.previousAnswer.trim(),
+  ].join("\n");
+}
+
 function renderFinalEvidenceForRepair(audit: ToolAuditEntry[], decisions: PublicWorkDecision[]): string {
   const lines = [
     "Completed public evidence summary:",

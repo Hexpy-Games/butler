@@ -131,6 +131,14 @@ export function providerEmptyResponseError(input: {
 export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
   if (error instanceof ModelProviderRequestError) return error.diagnostic();
   const message = errorMessage(error);
+  if (isGoalCompletionIncompleteError(error)) {
+    return {
+      code: "goal_completion_incomplete",
+      message: safeGoalCompletionIncompleteMessage(message),
+      retryable: true,
+      cause: safeErrorText(message),
+    };
+  }
   const status = statusCodeFromMessage(message);
   if (/Local model API returned no (?:visible )?(?:final )?(?:text output|answer envelope)/iu.test(message)) {
     return providerEmptyResponseError({
@@ -234,6 +242,17 @@ function isContextLimitDetail(detail: string | undefined): boolean {
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return typeof error === "string" ? error : "Unknown runtime error";
+}
+
+function isGoalCompletionIncompleteError(error: unknown): error is Error {
+  return error instanceof Error && error.name === "GoalCompletionIncompleteError";
+}
+
+function safeGoalCompletionIncompleteMessage(message: string): string {
+  if (/unsatisfied public completion obligation/iu.test(message)) {
+    return "Butler could not verify that the requested goal was completed.";
+  }
+  return safeErrorText(message) ?? "Butler could not verify that the requested goal was completed.";
 }
 
 function safeErrorText(value: unknown): string | undefined {
