@@ -2809,7 +2809,7 @@ test("composer adjunct panels use design-system blocks inside the composer card"
   );
   expect(workerPanel).toContain("WorkerActivityPanel");
   expect(workerPanel).not.toContain("ActivityFeed");
-  expect(workerPanel).toContain("phase: worker.phase");
+  expect(workerPanel).toContain("phase: worker.semantic_phase ?? worker.phase");
   expect(workerPanel).toContain("workerCollapsedSummary(");
   expect(workerPanel).toContain("collapsedSummary={collapsedSummary}");
   expect(todoPanel).toContain("TodoProgressPanel");
@@ -3606,7 +3606,16 @@ describe("app-client design system foundation", () => {
     expect(workerActivityRow).toContain("phaseRail");
     expect(workerActivityRow).toContain("RowActionCluster");
     expect(workerActivityRow).toContain(
-      'phase === "consolidating") return PHASES.indexOf("verifying")',
+      'if (phase === "committing" || phase === "consolidating") return "verifying"',
+    );
+    expect(workerActivityRow).toContain(
+      'const PUBLIC_PHASES = ["orienting", "planning", "executing", "verifying", "reporting"] as const',
+    );
+    expect(workerActivityRow).toContain(
+      '{PUBLIC_PHASES.map((item, index) => (',
+    );
+    expect(workerActivityRow).toContain(
+      'reporting: "Report"',
     );
     expect(workerActivityRow).toContain(
       "data-depth={depth > 0 ? String(depth) : undefined}",

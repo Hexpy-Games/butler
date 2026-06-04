@@ -4,25 +4,10 @@ import { cn } from "../../lib/utils";
 import { RowActionCluster } from "../RowActionCluster";
 import styles from "./WorkerActivityRow.module.css";
 
-const PHASES = [
-  "orienting",
-  "planning",
-  "inspecting",
-  "executing",
-  "verifying",
-  "committing",
-  "reporting",
-] as const;
+const PUBLIC_PHASES = ["orienting", "planning", "executing", "verifying", "reporting"] as const;
 
-type WorkerPhase =
-  | (typeof PHASES)[number]
-  | "consolidating"
-  | "complete"
-  | "blocked"
-  | "failed"
-  | "cancelled"
-  | "recoverable"
-  | string;
+type PublicPhase = (typeof PUBLIC_PHASES)[number];
+type WorkerPhase = PublicPhase | string;
 
 export interface WorkerActivityRowProps {
   id: string;
@@ -68,14 +53,7 @@ export function WorkerActivityRow({
           {meta}{description ? ":" : null}
         </Typo.Caption>
       ) : null}
-      {description ? (
-        <Typo.Caption
-          className={styles.description}
-          data-slot="activity-feed-description"
-        >
-          {description}
-        </Typo.Caption>
-      ) : null}
+      {description ? <Typo.Caption className={styles.description} data-slot="activity-feed-description">{description}</Typo.Caption> : null}
     </span>
   );
   return (
@@ -108,7 +86,7 @@ export function WorkerActivityRow({
         </div>
         {showPhaseRail && phase ? (
           <ol className={styles.phaseRail} aria-label="Worker phase">
-            {PHASES.map((item, index) => (
+            {PUBLIC_PHASES.map((item, index) => (
               <li
                 className={styles.phaseStep}
                 data-state={phaseState(index, currentPhase, terminal, phase)}
@@ -127,9 +105,8 @@ export function WorkerActivityRow({
 }
 
 function phaseIndex(phase?: WorkerPhase): number {
-  if (phase === "consolidating") return PHASES.indexOf("verifying");
-  if (phase === "complete") return PHASES.length;
-  return PHASES.findIndex((item) => item === phase);
+  if (phase === "complete") return PUBLIC_PHASES.length;
+  return PUBLIC_PHASES.findIndex((item) => item === publicPhaseFor(phase));
 }
 
 function isTerminalPhase(phase?: WorkerPhase): boolean {
@@ -145,16 +122,20 @@ function phaseState(
   if ((phase === "failed" || phase === "cancelled") && index === Math.max(0, current)) {
     return phase;
   }
-  if (terminal && current >= PHASES.length) return "done";
+  if (terminal && current >= PUBLIC_PHASES.length) return "done";
   if (current < 0) return "pending";
   if (index < current) return "done";
   if (index === current) return "active";
   return "pending";
 }
 
-function phaseTitle(phase: (typeof PHASES)[number]): string {
-  if (phase === "orienting") return "Orient";
-  if (phase === "planning") return "Plan";
-  const titles: Record<string, string> = { orienting: "Orient", planning: "Plan", executing: "Execute", verifying: "Verify" };
-  return titles[phase] ?? "Report";
+function publicPhaseFor(phase?: WorkerPhase): PublicPhase | undefined {
+  if (phase === "inspecting") return "planning";
+  if (phase === "committing" || phase === "consolidating") return "verifying";
+  if (phase === "orienting" || phase === "planning" || phase === "executing" || phase === "verifying" || phase === "reporting") return phase;
+  return undefined;
+}
+
+function phaseTitle(phase: PublicPhase): string {
+  return { orienting: "Orient", planning: "Plan", executing: "Execute", verifying: "Verify", reporting: "Report" }[phase];
 }
