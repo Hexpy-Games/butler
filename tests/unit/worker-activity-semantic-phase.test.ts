@@ -18,31 +18,31 @@ function assertEqual(actual: unknown, expected: unknown, label: string): void {
 }
 
 function run(): void {
-    assertMatch(summarizeWorkerShellActivity("rg -n worker_activity packages"), {
+    assertMatch(summarizeWorkerShellActivity("rg -n worker_activity packages") as unknown as Record<string, unknown>, {
       phase: "executing",
       semanticPhase: "inspecting",
       actionKind: "search",
     });
 
-    assertMatch(summarizeWorkerShellActivity("sed -n '1,80p' packages/butler-agent/scripts/run-worker.ts"), {
+    assertMatch(summarizeWorkerShellActivity("sed -n '1,80p' packages/butler-agent/scripts/run-worker.ts") as unknown as Record<string, unknown>, {
       phase: "executing",
       semanticPhase: "inspecting",
       actionKind: "read_file",
     });
 
-    assertMatch(summarizeWorkerShellActivity("python3 - <<'PY'\nfrom pathlib import Path\nPath('x').write_text('ok')\nPY"), {
+    assertMatch(summarizeWorkerShellActivity("python3 - <<'PY'\nfrom pathlib import Path\nPath('x').write_text('ok')\nPY") as unknown as Record<string, unknown>, {
       phase: "executing",
       semanticPhase: "executing",
       actionKind: "edit_file",
     });
 
-    assertMatch(summarizeWorkerShellActivity("bun test tests/unit/worker-activity-semantic-phase.test.ts"), {
+    assertMatch(summarizeWorkerShellActivity("bun test tests/unit/worker-activity-semantic-phase.test.ts") as unknown as Record<string, unknown>, {
       phase: "verifying",
       semanticPhase: "verifying",
       actionKind: "test",
     });
 
-    assertMatch(summarizeWorkerShellActivity("git add a && git commit -m test"), {
+    assertMatch(summarizeWorkerShellActivity("git add a && git commit -m test") as unknown as Record<string, unknown>, {
       phase: "executing",
       semanticPhase: "committing",
       actionKind: "commit",
@@ -50,7 +50,7 @@ function run(): void {
 
     const update = workerActivityUpdateForShellCommand("rg --files packages/butler-agent", "call_123", "ko");
 
-    assertMatch(update, {
+    assertMatch(update as unknown as Record<string, unknown>, {
       phase: "executing",
       semanticPhase: "inspecting",
       actionKind: "list_files",
