@@ -32,6 +32,7 @@ afterEach(() => {
 function runProjectLedger(args: string[], projectPath: string): void {
   const result = spawnSync(process.execPath, [projectLedgerCli, ...args, "--project", projectPath, "--json"], {
     encoding: "utf8",
+    env: { ...process.env },
   });
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
@@ -1900,6 +1901,65 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
     path: ".project-ledger/views/dashboard.md",
     artifact_kind: "markdown_file",
   });
+});
+
+test("Project Ledger tools prefer Butler data project roots over repo-local ledgers", async () => {
+  const previousButlerData = process.env.BUTLER_DATA;
+  try {
+    process.env.BUTLER_DATA = tempDir;
+    const workspace = join(tempDir, "workspace");
+    const canonicalRoot = join(
+      tempDir,
+      "project-ledger",
+      "projects",
+      "ledger-demo",
+    );
+    mkdirSync(workspace, { recursive: true });
+    writeFileSync(
+      join(workspace, "package.json"),
+      JSON.stringify({ name: "ledger-demo" }),
+      "utf8",
+    );
+
+    runProjectLedger(["init", "--id", "ledger-demo", "--name", "Ledger Demo"], canonicalRoot);
+    runProjectLedger([
+      "work",
+      "create",
+      "--id",
+      "W-CANONICAL",
+      "--title",
+      "Canonical Project Ledger work",
+      "--spec",
+      "project-ledger/projects/ledger-demo/specs/project-ledger.md",
+      "--acceptance",
+      "Butler tools read the data-home Project Ledger",
+      "--status",
+      "specified",
+    ], workspace);
+    runProjectLedger(["index"], workspace);
+
+    const execute = createButlerToolExecutor({
+      butlerHome: root,
+      butlerData: tempDir,
+    });
+
+    const status = await execute({
+      name: "inspect_project_status",
+      args: { project_path: workspace },
+      rawArguments: "{}",
+    }) as Record<string, any>;
+    expect(status.ok).toBe(true);
+    expect(status.data.project.path).toBe(
+      "project-ledger/projects/ledger-demo/project.json",
+    );
+    expect(status.data.nextActions[0].path).toBe(
+      "project-ledger/projects/ledger-demo/work/W-CANONICAL/work.md",
+    );
+    expect(JSON.stringify(status)).not.toContain(".project-ledger");
+  } finally {
+    if (previousButlerData === undefined) delete process.env.BUTLER_DATA;
+    else process.env.BUTLER_DATA = previousButlerData;
+  }
 });
 
 test("context monitor tool returns safe active-session pressure summary", async () => {

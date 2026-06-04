@@ -62,6 +62,11 @@ function isLedgerRoot(path) {
   return existsSync(join(path, "project.json")) && existsSync(join(path, "ledger.jsonl"));
 }
 
+function isPathInside(root, path) {
+  const rel = relative(root, path).split("\\").join("/");
+  return rel === "" || (rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel));
+}
+
 function projectIdCandidates(project) {
   return [
     readProjectId(join(project, LEDGER_DIR)),
@@ -80,31 +85,71 @@ function externalLedgerRoot(project) {
   return null;
 }
 
+function externalLedgerRootFromProjectPath(project) {
+  for (const butlerData of butlerDataCandidates().map((candidate) => resolve(String(candidate)))) {
+    const projectsRoot = join(butlerData, "project-ledger", "projects");
+    if (!isPathInside(projectsRoot, project)) continue;
+    const [id] = relative(projectsRoot, project).split("\\").join("/").split("/");
+    if (id) return join(projectsRoot, id);
+  }
+  return null;
+}
+
 export function ledgerRoot(project) {
   const resolvedProject = resolve(project);
   if (isLedgerRoot(resolvedProject)) return resolvedProject;
+  const externalFromPath = externalLedgerRootFromProjectPath(resolvedProject);
+  if (externalFromPath) return externalFromPath;
   return externalLedgerRoot(resolvedProject) ?? join(resolvedProject, LEDGER_DIR);
+}
+
+export function ledgerDisplayPrefix(project) {
+  const resolvedProject = resolve(project);
+  const root = ledgerRoot(resolvedProject);
+  const localRoot = join(resolvedProject, LEDGER_DIR);
+  if (root === localRoot) return LEDGER_DIR;
+
+  for (const butlerData of butlerDataCandidates().map((candidate) => resolve(String(candidate)))) {
+    if (isPathInside(butlerData, root)) {
+      return relative(butlerData, root).split("\\").join("/");
+    }
+  }
+
+  for (const ledgerRepo of externalLedgerRepoCandidates()) {
+    if (isPathInside(ledgerRepo, root)) {
+      const rel = relative(ledgerRepo, root).split("\\").join("/");
+      return rel.startsWith("projects/") ? `project-ledger/${rel}` : rel;
+    }
+  }
+
+  return `project-ledger/projects/${safeProjectSegment(basename(root))}`;
 }
 
 export function projectRelative(project, path) {
   const root = ledgerRoot(project);
   const fromLedgerRoot = relative(root, path).split("\\").join("/");
-  if (
-    fromLedgerRoot &&
-    fromLedgerRoot !== ".." &&
-    !fromLedgerRoot.startsWith("../") &&
-    !isAbsolute(fromLedgerRoot)
-  ) {
-    return `${LEDGER_DIR}/${fromLedgerRoot}`;
+  if (isPathInside(root, path)) {
+    const prefix = ledgerDisplayPrefix(project);
+    return fromLedgerRoot ? `${prefix}/${fromLedgerRoot}` : prefix;
   }
   return relative(project, path).split("\\").join("/");
 }
 
 export function projectPath(project, path) {
   const normalized = path.split("\\").join("/");
-  if (normalized === LEDGER_DIR) return ledgerRoot(project);
-  const prefix = `${LEDGER_DIR}/`;
-  if (normalized.startsWith(prefix)) return join(ledgerRoot(project), normalized.slice(prefix.length));
+  const root = ledgerRoot(project);
+  const displayPrefix = ledgerDisplayPrefix(project);
+  if (normalized === displayPrefix) return root;
+  if (normalized.startsWith(`${displayPrefix}/`)) {
+    return join(root, normalized.slice(displayPrefix.length + 1));
+  }
+  if (normalized === LEDGER_DIR) return root;
+  const legacyPrefix = `${LEDGER_DIR}/`;
+  if (normalized.startsWith(legacyPrefix)) return join(root, normalized.slice(legacyPrefix.length));
+  const canonicalMatch = normalized.match(/^project-ledger\/projects\/([^/]+)(?:\/(.*))?$/u);
+  if (canonicalMatch && canonicalMatch[1] === safeProjectSegment(basename(root))) {
+    return canonicalMatch[2] ? join(root, canonicalMatch[2]) : root;
+  }
   return join(project, path);
 }
 

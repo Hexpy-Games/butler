@@ -7,6 +7,7 @@ import {
   ensureDir,
   ledgerRoot,
   projectPath,
+  projectRelative,
   requireLedger,
   safeReadJson,
   safeWriteJson,
@@ -34,11 +35,12 @@ export function viewStatuses(project, maxSourceMtimeMs) {
   return VIEW_NAMES.map((view) => {
     const relPath = `${LEDGER_DIR}/views/${view}.md`;
     const path = projectPath(project, relPath);
-    if (!existsSync(path)) return { name: view, path: relPath, exists: false, stale: true };
+    const displayPath = projectRelative(project, path);
+    if (!existsSync(path)) return { name: view, path: displayPath, exists: false, stale: true };
     const mtimeMs = statSync(path).mtimeMs;
     return {
       name: view,
-      path: relPath,
+      path: displayPath,
       exists: true,
       stale: mtimeMs < maxSourceMtimeMs,
       updatedAt: new Date(mtimeMs).toISOString(),
@@ -48,15 +50,16 @@ export function viewStatuses(project, maxSourceMtimeMs) {
 
 export function indexFreshness(project) {
   const path = projectPath(project, INDEX_PATH);
+  const displayPath = projectRelative(project, path);
   if (!existsSync(path)) {
-    return { available: false, stale: true, generatedAt: null, path: INDEX_PATH };
+    return { available: false, stale: true, generatedAt: null, path: displayPath };
   }
   const indexMtimeMs = statSync(path).mtimeMs;
   return {
     available: true,
     stale: indexMtimeMs < sourceMaxMtimeMs(project),
     generatedAt: new Date(indexMtimeMs).toISOString(),
-    path: INDEX_PATH,
+    path: displayPath,
   };
 }
 
@@ -113,9 +116,10 @@ export function writeIndex(project) {
   const index = buildIndex(project);
   const path = projectPath(project, INDEX_PATH);
   ensureDir(dirname(path));
+  const displayPath = projectRelative(project, path);
   safeWriteJson(path, {
     ...index,
-    index: { available: true, stale: false, generatedAt: nowIso(), path: INDEX_PATH },
+    index: { available: true, stale: false, generatedAt: nowIso(), path: displayPath },
   });
   appendLedgerEvent(project, {
     type: "index_written",
@@ -130,7 +134,7 @@ export function readIndex(project) {
   const path = projectPath(project, INDEX_PATH);
   if (!existsSync(path)) return null;
   const index = safeReadJson(path);
-  return { ...index, index: indexFreshness(project) };
+  return { ...normalizeIndexPaths(project, index), index: indexFreshness(project) };
 }
 
 export function loadIndex(project) {
@@ -189,7 +193,7 @@ export function queryIndex(index, kind) {
       kind: "index",
       title: "Project Ledger compact index",
       status: index.index.available ? "stale" : "missing",
-      path: INDEX_PATH,
+      path: index.index?.path ?? INDEX_PATH,
       reason: index.index.available ? "compact_index_stale" : "compact_index_missing",
     }] : [];
   }
@@ -254,4 +258,47 @@ export function check(project) {
     ...result,
     ok: result.issues.length === 0,
   };
+}
+
+function normalizeIndexPaths(project, index) {
+  return {
+    ...index,
+    project: index.project ? normalizeRecordPath(project, index.project) : index.project,
+    records: Array.isArray(index.records)
+      ? index.records.map((record) => normalizeRecordPath(project, record))
+      : index.records,
+    issues: Array.isArray(index.issues)
+      ? index.issues.map((item) => ({
+        ...item,
+        path: normalizeLedgerDisplayPath(project, item.path),
+        record: item.record ? normalizeRecordPath(project, item.record) : item.record,
+      }))
+      : index.issues,
+    views: Array.isArray(index.views)
+      ? index.views.map((view) => ({
+        ...view,
+        path: normalizeLedgerDisplayPath(project, view.path),
+      }))
+      : index.views,
+  };
+}
+
+function normalizeRecordPath(project, record) {
+  return {
+    ...record,
+    path: normalizeLedgerDisplayPath(project, record.path),
+  };
+}
+
+function normalizeLedgerDisplayPath(project, path) {
+  if (typeof path !== "string" || !path.trim()) return path;
+  const normalized = path.split("\\").join("/");
+  if (
+    normalized === LEDGER_DIR ||
+    normalized.startsWith(`${LEDGER_DIR}/`) ||
+    normalized.startsWith("project-ledger/projects/")
+  ) {
+    return projectRelative(project, projectPath(project, normalized));
+  }
+  return normalized;
 }

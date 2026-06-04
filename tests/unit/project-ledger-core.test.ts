@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { pathToFileURL } from "url";
@@ -49,6 +49,59 @@ test("Project Ledger core modules can be imported and used without spawning the 
     expect(existsSync(join(project, ".project-ledger", "work", "W-CORE", "work.md"))).toBe(true);
   } finally {
     rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("Project Ledger uses Butler data project roots without .project-ledger labels", async () => {
+  const rootDir = tempProject();
+  const previousButlerData = process.env.BUTLER_DATA;
+  try {
+    const butlerData = join(rootDir, "data");
+    const workspace = join(rootDir, "workspace");
+    const canonicalProject = join(butlerData, "project-ledger", "projects", "demo");
+    mkdirSync(workspace, { recursive: true });
+    writeFileSync(join(workspace, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    process.env.BUTLER_DATA = butlerData;
+
+    const { handle } = await importModule("commands.js");
+    const { projectStatus, queryIndex, loadIndex } = await importModule("indexer.js");
+    const { projectPath } = await importModule("fs.js");
+
+    const initialized = handle("init", [], {
+      project: canonicalProject,
+      id: "demo",
+      name: "Demo Project",
+    });
+    expect(initialized.root).toBe("project-ledger/projects/demo");
+    expect(existsSync(join(canonicalProject, ".project-ledger"))).toBe(false);
+
+    handle("work", ["create"], {
+      project: workspace,
+      id: "W-CANONICAL",
+      title: "Canonical root test",
+      spec: "project-ledger/projects/demo/specs/project-ledger.md",
+      acceptance: "Canonical Project Ledger paths are returned",
+      status: "specified",
+    });
+    handle("index", [], { project: workspace });
+
+    const status = projectStatus(workspace);
+    expect(status.project.path).toBe("project-ledger/projects/demo/project.json");
+    expect(status.index.path).toBe("project-ledger/projects/demo/index/project.json");
+    expect(status.nextActions[0].path).toBe(
+      "project-ledger/projects/demo/work/W-CANONICAL/work.md",
+    );
+    expect(JSON.stringify(status)).not.toContain(".project-ledger");
+    expect(queryIndex(loadIndex(workspace), "next-actions")[0].path).toBe(
+      "project-ledger/projects/demo/work/W-CANONICAL/work.md",
+    );
+    expect(projectPath(workspace, status.nextActions[0].path)).toBe(
+      join(canonicalProject, "work", "W-CANONICAL", "work.md"),
+    );
+  } finally {
+    if (previousButlerData === undefined) delete process.env.BUTLER_DATA;
+    else process.env.BUTLER_DATA = previousButlerData;
+    rmSync(rootDir, { recursive: true, force: true });
   }
 });
 

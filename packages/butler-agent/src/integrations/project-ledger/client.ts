@@ -1,6 +1,6 @@
 import { spawnSync } from "child_process";
-import { existsSync } from "fs";
-import { join, resolve } from "path";
+import { existsSync, readFileSync } from "fs";
+import { basename, join, resolve } from "path";
 import { butlerAgentResourcesPath } from "../../runtime/paths.ts";
 
 export function projectLedgerPath(input: { butlerHome: string }): string {
@@ -9,16 +9,26 @@ export function projectLedgerPath(input: { butlerHome: string }): string {
   return butlerAgentResourcesPath(input.butlerHome, "skills", "project-ledger", "bin", "project-ledger");
 }
 
-export function projectLedgerProjectPath(input: { butlerHome: string }, args: Record<string, unknown>): string {
-  return typeof args.project_path === "string" && args.project_path.trim()
+export function projectLedgerProjectPath(
+  input: { butlerHome: string; butlerData?: string },
+  args: Record<string, unknown>,
+): string {
+  const projectPath = typeof args.project_path === "string" && args.project_path.trim()
     ? args.project_path.trim()
     : input.butlerHome;
+  return canonicalProjectLedgerRoot(input.butlerData, projectPath) ?? projectPath;
 }
 
-export function runProjectLedgerTool(input: { butlerHome: string }, args: string[]): Record<string, unknown> {
+export function runProjectLedgerTool(
+  input: { butlerHome: string; butlerData?: string },
+  args: string[],
+): Record<string, unknown> {
   const result = spawnSync(process.execPath, [projectLedgerPath(input), ...args, "--json"], {
     cwd: input.butlerHome,
     encoding: "utf8",
+    env: input.butlerData
+      ? { ...process.env, BUTLER_DATA: input.butlerData }
+      : process.env,
     timeout: 10_000,
   });
   if (result.stdout.trim()) {
@@ -53,7 +63,7 @@ export function projectLedgerRenderedViewEvidence(input: {
   const data = input.result.data && typeof input.result.data === "object" && !Array.isArray(input.result.data)
     ? input.result.data as Record<string, unknown>
     : {};
-  const fallbackPath = `.project-ledger/views/${safeViewName(input.view)}.md`;
+  const fallbackPath = `project-ledger/views/${safeViewName(input.view)}.md`;
   const relativePath = typeof data.path === "string" && data.path.trim()
     ? data.path.trim()
     : fallbackPath;
@@ -74,4 +84,58 @@ export function projectLedgerRenderedViewEvidence(input: {
 
 function safeViewName(view: string): string {
   return view.replace(/[^a-zA-Z0-9_-]/gu, "-").replace(/-+/gu, "-") || "view";
+}
+
+function canonicalProjectLedgerRoot(butlerData: string | undefined, projectPath: string): string | null {
+  if (!butlerData) return null;
+  const direct = resolve(projectPath);
+  if (isProjectLedgerRoot(direct)) return direct;
+  for (const id of projectIdCandidates(projectPath)) {
+    const candidate = join(butlerData, "project-ledger", "projects", safeProjectSegment(id));
+    if (isProjectLedgerRoot(candidate)) return candidate;
+  }
+  return null;
+}
+
+function projectIdCandidates(projectPath: string): string[] {
+  const resolved = resolve(projectPath);
+  const ids = [
+    readJsonProjectId(join(resolved, "project.json")),
+    readPackageName(join(resolved, "package.json")),
+    basename(resolved),
+  ].filter((value): value is string => Boolean(value));
+  return [...new Set(ids)];
+}
+
+function isProjectLedgerRoot(path: string): boolean {
+  return existsSync(join(path, "project.json")) && existsSync(join(path, "ledger.jsonl"));
+}
+
+function readJsonProjectId(path: string): string | null {
+  if (!existsSync(path)) return null;
+  try {
+    const data = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    return typeof data.id === "string" && data.id.trim() ? data.id.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function readPackageName(path: string): string | null {
+  if (!existsSync(path)) return null;
+  try {
+    const data = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    return typeof data.name === "string" && data.name.trim() ? data.name.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeProjectSegment(value: string): string {
+  const safe = value
+    .trim()
+    .toLocaleLowerCase("en-US")
+    .replace(/[^a-z0-9._-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
+  return safe ? safe.slice(0, 96) : "project";
 }

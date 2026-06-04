@@ -1,7 +1,7 @@
 import { dirname } from "node:path";
 import { LEDGER_DIR, VIEW_NAMES } from "./constants.js";
 import { CliError } from "./errors.js";
-import { appendLedgerEvent, ensureDir, projectPath } from "./fs.js";
+import { appendLedgerEvent, ensureDir, projectPath, projectRelative } from "./fs.js";
 import { loadIndex, queryIndex, sortRecords } from "./indexer.js";
 import { recordReference } from "./records.js";
 import { writeFileSync } from "node:fs";
@@ -104,20 +104,21 @@ export function render(project, viewName, options) {
   }
   const markdown = renderMarkdown(project, viewName);
   const relPath = `${LEDGER_DIR}/views/${viewName}.md`;
+  const path = projectPath(project, relPath);
+  const displayPath = projectRelative(project, path);
   if (options.write) {
-    const path = projectPath(project, relPath);
     ensureDir(dirname(path));
     writeFileSync(path, markdown, "utf8");
     appendLedgerEvent(project, {
       type: "view_rendered",
       view: viewName,
-      path: relPath,
+      path: displayPath,
       source: "project-ledger",
     });
   }
   return {
     view: viewName,
-    path: relPath,
+    path: displayPath,
     markdown,
     written: Boolean(options.write),
   };

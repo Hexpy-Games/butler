@@ -3534,6 +3534,7 @@ export class AppServerStore {
   ): boolean {
     const turn = this.getTurnRow(turnId);
     if (!turn) return false;
+    if (turn.state === "delivered" || turn.state === "cancelled") return false;
     const safeError = {
       code: safeOptionalShortToken(metadata.safeErrorCode) ?? "gateway_failed",
       message:

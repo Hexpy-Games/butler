@@ -4220,6 +4220,92 @@ test("app transport final result projection strips Butler final-answer envelope"
   }
 });
 
+test("app transport failure projection does not downgrade delivered turns", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const url = server.url;
+  const result = await postJson(`${url}messages`, {
+    chat_id: "general",
+    text: "keep the completed turn stable",
+  });
+  const turnId = result.data.turn.id;
+  expect(result.data.turn.state).toBe("thinking");
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-reply:test:app:general:stable-final",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "The durable app result completed successfully.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:01.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:stale-after-final",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not complete this turn.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          safeErrorCode: "gateway_failed",
+          source: "test",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "keep the completed turn stable",
+      "The durable app result completed successfully.",
+    ]);
+    const assistant = messages.data.messages.find(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistant.status).toBe("delivered");
+    expect(assistant.safe_error_code ?? null).toBeNull();
+    expect(assistant.retryable).toBe(false);
+
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns).toHaveLength(1);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "delivered",
+      cancellable: false,
+      retryable: false,
+    });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport worker result projection is durable and idempotent", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   appendTranscriptEvent(

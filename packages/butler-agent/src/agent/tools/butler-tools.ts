@@ -902,7 +902,7 @@ export const BUTLER_TOOLS: ButlerToolDefinition[] = [
         },
         write: {
           type: "boolean",
-          description: "When true, write the generated view under .project-ledger/views.",
+          description: "When true, write the generated view under the active Project Ledger views directory.",
         },
       },
       required: ["view"],
