@@ -1,4 +1,5 @@
-import { basename, isAbsolute } from "node:path";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { basename, isAbsolute, join } from "node:path";
 import type {
   AgentRuntimeAdapter,
   InboundEnvelope,
@@ -17,8 +18,16 @@ import {
   recordSystemEvent,
 } from "../../test-support/harness/durable-session-transcript.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
-import { diagnosticDetails, safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
-import type { GatewayActorTurnResult, GatewayDurableRole, GatewayRoute, GatewaySessionActor } from "../../gateways/core/contracts.ts";
+import {
+  diagnosticDetails,
+  safeRuntimeFailure,
+} from "../../integrations/providers/provider-errors.ts";
+import type {
+  GatewayActorTurnResult,
+  GatewayDurableRole,
+  GatewayRoute,
+  GatewaySessionActor,
+} from "../../gateways/core/contracts.ts";
 
 interface SessionActorOptions {
   sessionId: string;
@@ -66,17 +75,129 @@ function defaultNow(): string {
 const DEFAULT_TYPING_INTERVAL_MS = 4_000;
 const EMPTY_FINAL_DURABLE_TEXT = "[turn completed without public final text]";
 
-function peerKindFromEnvelope(peer: InboundEnvelope["peer"]): OutboundAction["peer"]["kind"] {
+type StewardActivityTimelineEvent = {
+  schema: "butler.steward-activity-event.v1";
+  event_id: string;
+  created_at: string;
+  actor: "steward";
+  session_id: string;
+  turn_id: string;
+  event: "turn_received" | "activity_updated" | "turn_finished" | "turn_failed";
+  semantic_phase:
+    | "orienting"
+    | "planning"
+    | "inspecting"
+    | "executing"
+    | "verifying"
+    | "consolidating"
+    | "reporting"
+    | "blocked";
+  action_kind:
+    | "receive_message"
+    | "run_agent"
+    | "write_transcript"
+    | "report"
+    | "error";
+  status: "started" | "completed" | "failed";
+  decision_summary: string;
+  decision_rationale: string;
+  decision_next_step: string;
+  evidence_refs?: string[];
+};
+
+type StewardActivityProjection = {
+  schema: "butler.steward-activity.v1";
+  session_id: string;
+  turn_id: string;
+  updated_at: string;
+  current_event: StewardActivityTimelineEvent["event"];
+  semantic_phase: StewardActivityTimelineEvent["semantic_phase"];
+  action_kind: StewardActivityTimelineEvent["action_kind"];
+  status: StewardActivityTimelineEvent["status"];
+  decision_summary: string;
+  decision_next_step: string;
+};
+
+function safeSessionPathSegment(value: string): string {
+  return value.replace(/[^A-Za-z0-9_.=-]+/g, "_").slice(0, 180) || "session";
+}
+
+function stewardTimelineRoot(sessionId: string): string {
+  const dataRoot =
+    process.env.BUTLER_DATA ||
+    join(process.env.HOME || process.cwd(), ".butler");
+  return join(dataRoot, "steward-activity", safeSessionPathSegment(sessionId));
+}
+
+function stewardEventId(
+  event: StewardActivityTimelineEvent["event"],
+  turnId: string,
+): string {
+  return `${Date.now().toString(36)}-${event}-${safeSessionPathSegment(turnId).slice(0, 40)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function appendStewardActivityTimelineEvent(
+  input: Omit<
+    StewardActivityTimelineEvent,
+    "schema" | "event_id" | "created_at" | "actor"
+  >,
+): void {
+  try {
+    const root = stewardTimelineRoot(input.session_id);
+    mkdirSync(root, { recursive: true });
+    const event: StewardActivityTimelineEvent = {
+      schema: "butler.steward-activity-event.v1",
+      event_id: stewardEventId(input.event, input.turn_id),
+      created_at: defaultNow(),
+      actor: "steward",
+      ...input,
+    };
+    appendFileSync(
+      join(root, "steward_activity_events.jsonl"),
+      `${JSON.stringify(event)}\n`,
+      "utf8",
+    );
+    const projection: StewardActivityProjection = {
+      schema: "butler.steward-activity.v1",
+      session_id: event.session_id,
+      turn_id: event.turn_id,
+      updated_at: event.created_at,
+      current_event: event.event,
+      semantic_phase: event.semantic_phase,
+      action_kind: event.action_kind,
+      status: event.status,
+      decision_summary: event.decision_summary,
+      decision_next_step: event.decision_next_step,
+    };
+    writeFileSync(
+      join(root, "steward_activity.json"),
+      `${JSON.stringify(projection, null, 2)}\n`,
+      "utf8",
+    );
+  } catch {
+    // Timeline observability must never break the principal-facing turn path.
+  }
+}
+
+function peerKindFromEnvelope(
+  peer: InboundEnvelope["peer"],
+): OutboundAction["peer"]["kind"] {
   return peer.kind;
 }
 
 function turnIdFromEnvelope(envelope: InboundEnvelope): string {
-  return envelope.routingHints?.turnId?.trim() ||
-    envelope.eventId.replace(/[^A-Za-z0-9._:-]/g, "_");
+  return (
+    envelope.routingHints?.turnId?.trim() ||
+    envelope.eventId.replace(/[^A-Za-z0-9._:-]/g, "_")
+  );
 }
 
-function liveConfigHashFromPromptContext(promptContext?: string): string | null {
-  const match = promptContext?.match(/^Live Configuration Hash:\s*([A-Za-z0-9_-]+)/mu);
+function liveConfigHashFromPromptContext(
+  promptContext?: string,
+): string | null {
+  const match = promptContext?.match(
+    /^Live Configuration Hash:\s*([A-Za-z0-9_-]+)/mu,
+  );
   return match?.[1] ?? null;
 }
 
@@ -97,7 +218,9 @@ function loadedSkillNamesFromPromptContext(promptContext?: string): string[] {
   return names.slice(0, 48);
 }
 
-function outboundArtifacts(artifacts?: ArtifactRef[]): ArtifactRef[] | undefined {
+function outboundArtifacts(
+  artifacts?: ArtifactRef[],
+): ArtifactRef[] | undefined {
   const safeArtifacts = artifacts?.map((artifact) => ({
     id: safeArtifactText(artifact.id, "artifact"),
     kind: artifact.kind,
@@ -128,16 +251,21 @@ function actionWithTurnIdentity(
 }
 
 function safeArtifactText(value: string | undefined, fallback: string): string {
-  const text = stripControlCharacters(value ?? "").replace(/\s+/gu, " ").trim();
+  const text = stripControlCharacters(value ?? "")
+    .replace(/\s+/gu, " ")
+    .trim();
   return (text || fallback).slice(0, 180);
 }
 
 function safeArtifactLabel(value: string | undefined): string | undefined {
-  const label = stripControlCharacters(value ?? "").replace(/\s+/gu, " ").trim();
+  const label = stripControlCharacters(value ?? "")
+    .replace(/\s+/gu, " ")
+    .trim();
   if (!label) return undefined;
   const normalized = label.replace(/\\/gu, "/");
   const hasParentSegment = normalized.split("/").includes("..");
-  const pathLike = isAbsolute(label) || /^[A-Za-z]:\//u.test(normalized) || hasParentSegment;
+  const pathLike =
+    isAbsolute(label) || /^[A-Za-z]:\//u.test(normalized) || hasParentSegment;
   return (pathLike ? basename(normalized) : label).slice(0, 180);
 }
 
@@ -156,12 +284,14 @@ function finalResultAction(input: {
   generatedSessionTitle?: string | null;
   loadedSkillNames?: string[];
 }): OutboundAction {
-  const threadId = input.envelope.peer.kind === "thread"
-    ? input.envelope.peer.id
-    : input.envelope.peer.parentId;
-  const peerId = input.envelope.peer.kind === "thread" && input.envelope.peer.parentId
-    ? input.envelope.peer.parentId
-    : input.envelope.peer.id;
+  const threadId =
+    input.envelope.peer.kind === "thread"
+      ? input.envelope.peer.id
+      : input.envelope.peer.parentId;
+  const peerId =
+    input.envelope.peer.kind === "thread" && input.envelope.peer.parentId
+      ? input.envelope.peer.parentId
+      : input.envelope.peer.id;
   return {
     actionId: `runtime-final:${turnIdFromEnvelope(input.envelope)}`,
     transport: input.envelope.transport,
@@ -201,7 +331,10 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     this.role = options.role;
   }
 
-  async handleInbound(envelope: InboundEnvelope, route?: GatewayRoute): Promise<GatewayActorTurnResult> {
+  async handleInbound(
+    envelope: InboundEnvelope,
+    route?: GatewayRoute,
+  ): Promise<GatewayActorTurnResult> {
     return await this.enqueueTurn(() => this.handleInboundNow(envelope, route));
   }
 
@@ -218,9 +351,29 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     return await run;
   }
 
-  private async handleInboundNow(envelope: InboundEnvelope, route?: GatewayRoute): Promise<GatewayActorTurnResult> {
+  private async handleInboundNow(
+    envelope: InboundEnvelope,
+    route?: GatewayRoute,
+  ): Promise<GatewayActorTurnResult> {
+    const turnId = turnIdFromEnvelope(envelope);
+    if (this.role === "steward") {
+      appendStewardActivityTimelineEvent({
+        session_id: this.options.sessionId,
+        turn_id: turnId,
+        event: "turn_received",
+        semantic_phase: "orienting",
+        action_kind: "receive_message",
+        status: "started",
+        decision_summary: "Steward received a project/workstream turn.",
+        decision_rationale:
+          "Steward turns need the same durable work-intent history as Butler-facing work blocks.",
+        decision_next_step:
+          "Persist the inbound transcript event, then run the steward session agent.",
+      });
+    }
     const binding = this.requireBinding();
-    const timestamp = envelope.message.timestamp || this.options.now?.() || defaultNow();
+    const timestamp =
+      envelope.message.timestamp || this.options.now?.() || defaultNow();
 
     recordDurableInbound({
       sessionId: binding.sessionId,
@@ -259,11 +412,18 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         },
         timestamp,
       });
-      await this.invalidateRuntimeHandleIfLiveConfigChanged(binding, timestamp, promptContext);
+      await this.invalidateRuntimeHandleIfLiveConfigChanged(
+        binding,
+        timestamp,
+        promptContext,
+      );
       const activeBinding = this.requireBinding();
       const handle = await this.ensureRuntimeHandle(activeBinding, timestamp);
       const emitIntermediate = this.options.deliverIntermediate
-        ? async (action: OutboundAction, metadata?: Record<string, unknown>) => {
+        ? async (
+            action: OutboundAction,
+            metadata?: Record<string, unknown>,
+          ) => {
             await this.options.deliverIntermediate?.({
               binding: activeBinding,
               envelope,
@@ -321,7 +481,8 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       this.handle = nextHandle;
       this.persistBinding(activeBinding, {
         runtimeSessionRef: nextHandle.runtimeSessionRef,
-        providerThreadRef: result.providerThreadRef ?? activeBinding.providerThreadRef,
+        providerThreadRef:
+          result.providerThreadRef ?? activeBinding.providerThreadRef,
         lifecycleState: "active",
         updatedAt: timestamp,
         lastActiveAt: timestamp,
@@ -412,11 +573,13 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     route?: GatewayRoute,
   ): Promise<string | null> {
     try {
-      return await this.options.generateSessionTitle?.({
-        binding,
-        envelope,
-        route,
-      }) ?? null;
+      return (
+        (await this.options.generateSessionTitle?.({
+          binding,
+          envelope,
+          route,
+        })) ?? null
+      );
     } catch {
       return null;
     }
@@ -432,7 +595,11 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     }
 
     this.handle = null;
-    this.options.store.updateLifecycleState(binding.sessionId, "closed", timestamp);
+    this.options.store.updateLifecycleState(
+      binding.sessionId,
+      "closed",
+      timestamp,
+    );
     recordSessionLifecycle({
       sessionId: binding.sessionId,
       role: binding.role,
@@ -486,7 +653,9 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
   private requireBinding(): StoredSessionBinding {
     const binding = this.options.store.getBySessionId(this.options.sessionId);
     if (!binding) {
-      throw new Error(`Missing stored session binding for ${this.options.sessionId}`);
+      throw new Error(
+        `Missing stored session binding for ${this.options.sessionId}`,
+      );
     }
     if (binding.role !== this.options.role) {
       throw new Error(
@@ -496,7 +665,10 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     return binding;
   }
 
-  private async ensureRuntimeHandle(binding: StoredSessionBinding, timestamp: string): Promise<RuntimeSessionHandle> {
+  private async ensureRuntimeHandle(
+    binding: StoredSessionBinding,
+    timestamp: string,
+  ): Promise<RuntimeSessionHandle> {
     if (this.handle) return this.handle;
 
     const resumed = this.resumeHandleFromBinding(binding);
@@ -546,7 +718,9 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     return created;
   }
 
-  private resumeHandleFromBinding(binding: StoredSessionBinding): RuntimeSessionHandle | null {
+  private resumeHandleFromBinding(
+    binding: StoredSessionBinding,
+  ): RuntimeSessionHandle | null {
     if (!this.options.runtime.capabilities.supportsSessionResume) return null;
     if (!binding.runtimeSessionRef) return null;
     return {
@@ -560,7 +734,10 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
   private startTypingPresence(input: {
     binding: StoredSessionBinding;
     envelope: InboundEnvelope;
-    emitIntermediate?: (action: OutboundAction, metadata?: Record<string, unknown>) => Promise<void>;
+    emitIntermediate?: (
+      action: OutboundAction,
+      metadata?: Record<string, unknown>,
+    ) => Promise<void>;
   }): () => void {
     if (!input.emitIntermediate) return () => {};
     if (input.envelope.transport === "system") return () => {};
@@ -568,21 +745,23 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const emit = () => {
       if (stopped) return;
-      void input.emitIntermediate?.(this.typingAction(input.binding, input.envelope), {
-        source: "gateway-actor",
-        type: "presence",
-        presence: "typing",
-      }).catch((error) => {
-        recordSystemEvent({
-          sessionId: input.binding.sessionId,
-          category: "delivery_error",
-          message: error instanceof Error ? error.message : String(error),
-          metadata: {
-            source: "gateway-actor#typing-presence",
-          },
-          timestamp: this.options.now?.() || defaultNow(),
+      void input
+        .emitIntermediate?.(this.typingAction(input.binding, input.envelope), {
+          source: "gateway-actor",
+          type: "presence",
+          presence: "typing",
+        })
+        .catch((error) => {
+          recordSystemEvent({
+            sessionId: input.binding.sessionId,
+            category: "delivery_error",
+            message: error instanceof Error ? error.message : String(error),
+            metadata: {
+              source: "gateway-actor#typing-presence",
+            },
+            timestamp: this.options.now?.() || defaultNow(),
+          });
         });
-      });
       timer = setTimeout(emit, DEFAULT_TYPING_INTERVAL_MS);
     };
     emit();
@@ -592,11 +771,18 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     };
   }
 
-  private typingAction(binding: StoredSessionBinding, envelope: InboundEnvelope): OutboundAction {
-    const threadId = envelope.peer.kind === "thread" ? envelope.peer.id : envelope.peer.parentId;
-    const peerId = envelope.peer.kind === "thread" && envelope.peer.parentId
-      ? envelope.peer.parentId
-      : envelope.peer.id;
+  private typingAction(
+    binding: StoredSessionBinding,
+    envelope: InboundEnvelope,
+  ): OutboundAction {
+    const threadId =
+      envelope.peer.kind === "thread"
+        ? envelope.peer.id
+        : envelope.peer.parentId;
+    const peerId =
+      envelope.peer.kind === "thread" && envelope.peer.parentId
+        ? envelope.peer.parentId
+        : envelope.peer.id;
     return {
       actionId: `presence:${binding.sessionId}:${envelope.eventId}:typing:${Date.now()}`,
       transport: envelope.transport,
@@ -635,12 +821,14 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       runtimeAdapterId: binding.runtimeAdapterId,
       modelProviderId: binding.modelProviderId,
       modelRef: binding.modelRef,
-      runtimeSessionRef: overrides.runtimeSessionRef === undefined
-        ? binding.runtimeSessionRef
-        : overrides.runtimeSessionRef ?? undefined,
-      providerThreadRef: overrides.providerThreadRef === undefined
-        ? binding.providerThreadRef
-        : overrides.providerThreadRef ?? undefined,
+      runtimeSessionRef:
+        overrides.runtimeSessionRef === undefined
+          ? binding.runtimeSessionRef
+          : (overrides.runtimeSessionRef ?? undefined),
+      providerThreadRef:
+        overrides.providerThreadRef === undefined
+          ? binding.providerThreadRef
+          : (overrides.providerThreadRef ?? undefined),
       transportBindings: binding.transportBindings,
       metadata: binding.metadata,
       lifecycleState: overrides.lifecycleState ?? binding.lifecycleState,
