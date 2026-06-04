@@ -2050,6 +2050,12 @@ test("native tool loop prompt requires semantic progress first and output path a
   expect(instructions).toContain("Do not let native tool, review, or report formatting instructions erase the persona.");
   expect(instructions).toContain("include `output_paths`");
   expect(instructions).toContain("structured artifact evidence");
+  expect(instructions).toContain(
+    "Use `durable_artifact` only when the immediate tool path will create, update, write, render, or attach a durable deliverable",
+  );
+  expect(instructions).toContain(
+    "Do not use `durable_artifact` for merely reading, listing, checking, or confirming existing Project Ledger/workspace documents",
+  );
   expect(instructions).toContain("Do not add `completion_obligations` for preference, style, feedback");
 });
 
