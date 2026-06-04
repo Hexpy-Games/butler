@@ -48,11 +48,24 @@ function run(): void {
       actionKind: "commit",
     });
 
-    const update = workerActivityUpdateForShellCommand("rg --files packages/butler-agent", "call_123", "ko");
+
+    assertMatch(summarizeWorkerShellActivity("rg -n worker packages", { semanticPhase: "planning" }) as unknown as Record<string, unknown>, {
+      phase: "planning",
+      semanticPhase: "planning",
+      actionKind: "search",
+    });
+
+    assertMatch(summarizeWorkerShellActivity("rg -n worker packages", { semanticPhase: "verifying" }) as unknown as Record<string, unknown>, {
+      phase: "verifying",
+      semanticPhase: "verifying",
+      actionKind: "search",
+    });
+
+    const update = workerActivityUpdateForShellCommand("rg --files packages/butler-agent", "call_123", "ko", { semanticPhase: "planning" });
 
     assertMatch(update as unknown as Record<string, unknown>, {
-      phase: "executing",
-      semanticPhase: "inspecting",
+      phase: "planning",
+      semanticPhase: "planning",
       actionKind: "list_files",
     });
     assertEqual(update.workBlock?.rows[0]?.tool_call_id, "call_123", "tool_call_id");

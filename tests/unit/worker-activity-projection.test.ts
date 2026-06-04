@@ -174,3 +174,22 @@ test("planned public report completion terminates the review turn instead of spa
   expect(nativeLoop).not.toContain("workerStartHeartbeat()");
   expect(nativeLoop).toContain("After `write_planned_public_report` succeeds");
 });
+
+
+test("worker shell semantic phase follows state-machine context, not command kind", () => {
+  expect(summarizeWorkerShellActivity("rg -n \"worker\" src", { semanticPhase: "planning" })).toMatchObject({
+    phase: "planning",
+    semanticPhase: "planning",
+    actionKind: "search",
+  });
+  expect(summarizeWorkerShellActivity("rg -n \"worker\" src", { semanticPhase: "verifying" })).toMatchObject({
+    phase: "verifying",
+    semanticPhase: "verifying",
+    actionKind: "search",
+  });
+  expect(workerActivityUpdateForShellCommand("sed -n '1,80p' README.md", "call-readme-context", "ko", { semanticPhase: "planning" })).toMatchObject({
+    phase: "planning",
+    semanticPhase: "planning",
+    actionKind: "read_file",
+  });
+});

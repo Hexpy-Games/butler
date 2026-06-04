@@ -1314,104 +1314,143 @@ function truncateForLog(text: string, limit = 1_200): string {
   return `${text.slice(0, limit)}\n...[truncated ${text.length - limit} chars]`;
 }
 
-export function summarizeWorkerShellActivity(command: string): WorkerActivityUpdate {
+function legacyWorkerActivityPhaseForSemanticPhase(
+  semanticPhase: WorkerActivitySemanticPhase,
+  fallback: WorkerActivityPhase,
+): WorkerActivityPhase {
+  switch (semanticPhase) {
+    case "verifying":
+      return "verifying";
+    case "consolidating":
+      return "consolidating";
+    case "reporting":
+      return "reporting";
+    case "planning":
+    case "orienting":
+      return "planning";
+    case "executing":
+    case "committing":
+    case "inspecting":
+    case "blocked":
+      return fallback;
+  }
+}
+
+function applyWorkerActivitySemanticContext(
+  update: WorkerActivityUpdate,
+  semanticPhase?: WorkerActivitySemanticPhase,
+): WorkerActivityUpdate {
+  if (!semanticPhase) return update;
+  return {
+    ...update,
+    phase: legacyWorkerActivityPhaseForSemanticPhase(semanticPhase, update.phase),
+    semanticPhase,
+  };
+}
+
+export function summarizeWorkerShellActivity(
+  command: string,
+  semanticContext: { semanticPhase?: WorkerActivitySemanticPhase } = {},
+): WorkerActivityUpdate {
   const normalized = command.toLocaleLowerCase("en-US");
+  const withSemanticContext = (update: WorkerActivityUpdate): WorkerActivityUpdate =>
+    applyWorkerActivitySemanticContext(update, semanticContext.semanticPhase);
   if (/\bgit\s+(add|commit)\b/u.test(normalized)) {
-    return {
+    return withSemanticContext({
       phase: "executing",
       semanticPhase: "committing",
       actionKind: "commit",
       statusLine: "Committing: recording selected work changes.",
-    };
+    });
   }
   if (/\bgit\s+(status)\b/u.test(normalized)) {
-    return {
+    return withSemanticContext({
       phase: "verifying",
       semanticPhase: "verifying",
       actionKind: "git_status",
       statusLine: "Verifying: checking workspace state.",
-    };
+    });
   }
   if (/\bgit\s+(diff|show|log)\b/u.test(normalized)) {
-    return {
+    return withSemanticContext({
       phase: "verifying",
       semanticPhase: "verifying",
       actionKind: "git_diff",
       statusLine: "Verifying: checking workspace evidence.",
-    };
+    });
   }
   if (/(^|&&|;|\|\||\s)(bun|npm|pnpm|yarn)\s+(run\s+)?(test|check|lint|typecheck)(\s|$)/u.test(normalized) || /(^|&&|;|\|\||\s)(vitest|jest|playwright|tsc)(\s|$)/u.test(normalized)) {
     const isTypecheck = /(^|&&|;|\|\||\s)(bun|npm|pnpm|yarn)\s+(run\s+)?typecheck(\s|$)/u.test(normalized) || /(^|&&|;|\|\||\s)tsc(\s|$)/u.test(normalized);
-    return {
+    return withSemanticContext({
       phase: "verifying",
       semanticPhase: "verifying",
       actionKind: isTypecheck ? "typecheck" : "test",
       statusLine: isTypecheck ? "Verifying: running type checks." : "Verifying: running validation checks.",
-    };
+    });
   }
   if (/\b(apply_patch)\b/u.test(normalized)) {
-    return {
+    return withSemanticContext({
       phase: "executing",
       semanticPhase: "executing",
       actionKind: "apply_patch",
       statusLine: "Executing: applying a project patch.",
-    };
+    });
   }
   if (/\b(cat|python3?|node|bun|perl|ruby|tee)\b/u.test(normalized) && /(>\s*[^&]|write_text|writefilesync|appendfilesync|sed\s+-i)/u.test(command)) {
-    return {
+    return withSemanticContext({
       phase: "executing",
       semanticPhase: "executing",
       actionKind: "edit_file",
       statusLine: "Executing: writing project files.",
-    };
+    });
   }
   if (/\b(rg|grep)\b/u.test(normalized) && !/\brg\s+--files\b/u.test(normalized)) {
-    return {
+    return withSemanticContext({
       phase: "executing",
       semanticPhase: "inspecting",
       actionKind: "search",
       statusLine: "Inspecting: searching project files.",
-    };
+    });
   }
   if (/\b(find|ls|tree)\b/u.test(normalized) || /\brg\s+--files\b/u.test(normalized)) {
-    return {
+    return withSemanticContext({
       phase: "executing",
       semanticPhase: "inspecting",
       actionKind: "list_files",
       statusLine: "Inspecting: listing project files.",
-    };
+    });
   }
   if (/\bpwd\b/u.test(normalized)) {
-    return {
+    return withSemanticContext({
       phase: "executing",
       semanticPhase: "orienting",
       actionKind: "run_command",
       statusLine: "Orienting: checking the working directory.",
-    };
+    });
   }
   if (/\bwc\b/u.test(normalized)) {
-    return {
+    return withSemanticContext({
       phase: "executing",
       semanticPhase: "inspecting",
       actionKind: "run_command",
       statusLine: "Inspecting: measuring project files.",
-    };
+    });
   }
   const readableFiles = readableCommandFiles(command);
   if (readableFiles.length > 0) {
-    return {
+    return withSemanticContext({
       phase: "executing",
       semanticPhase: "inspecting",
       actionKind: "read_file",
       statusLine: `Inspecting: reading ${formatWorkerEvidenceSubject(readableFiles)}.`,
-    };
+    });
   }
-  return {
+  return withSemanticContext({
     phase: "executing",
     semanticPhase: "executing",
     actionKind: "run_command",
     statusLine: "Executing: running the worker step.",
-  };
+  });
 }
 
 export function summarizeWorkerShellWorkBlock(
@@ -1457,8 +1496,9 @@ export function workerActivityUpdateForShellCommand(
   command: string,
   callId: string,
   language: RuntimeMessageLanguage,
+  semanticContext: { semanticPhase?: WorkerActivitySemanticPhase } = {},
 ): WorkerActivityUpdate {
-  const activity = summarizeWorkerShellActivity(command);
+  const activity = summarizeWorkerShellActivity(command, semanticContext);
   const workBlock = summarizeWorkerShellWorkBlock(command, callId, language, "running");
   return {
     ...activity,
