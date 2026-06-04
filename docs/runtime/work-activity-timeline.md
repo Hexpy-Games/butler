@@ -83,6 +83,15 @@ npm --prefix packages/butler-app/client/ui run build
 
 When e2e validation is required, run it against a cloned Butler home/data pair so live Butler state is not modified.
 
+For an Electron app smoke check, follow the app execution flow instead of only inspecting task files:
+
+1. Use an isolated Butler state clone. Install client dependencies once with `npm run app:client:install`, then launch the built Electron client from the repo root with `BUTLER_HOME=/path/to/cloned-home BUTLER_DATA=/path/to/cloned-data npm run app:client`. The Electron main process starts or connects to the local app gateway.
+2. If you need the Vite dev renderer, start the gateway first in one terminal with the same `BUTLER_HOME`/`BUTLER_DATA` via `npm run app:server`, then launch `BUTLER_APP_SERVER_URL=http://127.0.0.1:18765 npm run app:client:dev` in another terminal. Treat `Butler app server is not healthy` or early gateway exits in the terminal logs as launch blockers.
+3. In the Electron app, open the target chat/project, submit a small request that dispatches a Worker or Steward task, and keep the new turn selected while it runs so progress updates stream into the disclosure.
+4. While the task is active, inspect the latest turn's `Progress history` / work activity disclosure (`Open ... details` or `Open ... progress items`). Confirm the worker timeline shows an active phase/status, a safe current activity label, and ordered detail/tool-run rows without hidden reasoning or raw prompts.
+5. Let the task finish, then reopen the same chat/project and confirm the status is complete and the timeline remains visible from the task protocol projection.
+6. Treat a missing work activity disclosure, empty timeline detail rows, or no phase/activity updates during an active task as an absence signal to investigate.
+
 ## Closeout notes
 
 - Do not create repo-local `.project-ledger`; Project Ledger state belongs under Butler Home data.
