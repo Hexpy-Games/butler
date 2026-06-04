@@ -102,7 +102,7 @@ export function planLane(
   const status = plan.status?.toLocaleLowerCase("en-US") ?? "";
   if (/done|complete|shipped|closed|reported/u.test(status)) return "done";
   if (/active|progress|running|review|current/u.test(status)) return "active";
-  if (/draft|planned|todo|ready|open/u.test(status)) return "planned";
+  if (/draft|planned|specified|todo|ready|open/u.test(status)) return "planned";
   return "other";
 }
 

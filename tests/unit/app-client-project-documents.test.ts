@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   PLAN_BOARD_TABS,
   planBoardType,
+  planLane,
   projectDocumentBadgeLabel,
   projectDocumentMarkdownView,
 } from "../../packages/butler-app/client/ui/src/app/projectDocuments.ts";
@@ -53,6 +54,16 @@ function projectDocument(
     updated_at: "2026-05-23T00:00:00.000Z",
   };
 }
+
+
+test("project dashboard maps specified work to the planned lane", () => {
+  expect(
+    planLane({
+      ...projectDocument("work"),
+      status: "specified",
+    }),
+  ).toBe("planned");
+});
 
 test("project dashboard keeps top-level plans separate from work records", () => {
   expect(PLAN_BOARD_TABS.map((tab) => tab.id)).toEqual([
