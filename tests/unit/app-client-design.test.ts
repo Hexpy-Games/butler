@@ -3034,16 +3034,16 @@ describe("app-client design system foundation", () => {
       "utf8",
     );
     const spec = read(
-      ".project-ledger/specs/butler-dedicated-client-design-system.md",
+      "project-ledger/projects/butler/specs/butler-dedicated-client-design-system.md",
     );
     const recoveryPlan = read(
-      ".project-ledger/plans/plan-butler-dedicated-client-design-system-recovery.md",
+      "project-ledger/projects/butler/plans/plan-butler-dedicated-client-design-system-recovery.md",
     );
     const subrepoPlan = read(
-      ".project-ledger/plans/plan-butler-dedicated-client-design-system-subrepo.md",
+      "project-ledger/projects/butler/plans/plan-butler-dedicated-client-design-system-subrepo.md",
     );
     const report = read(
-      ".project-ledger/reports/butler-dedicated-client-design-system-skill-map.md",
+      "project-ledger/projects/butler/reports/butler-dedicated-client-design-system-skill-map.md",
     );
 
     expect(existsSync(join(skillRoot, "SKILL.md"))).toBe(true);
@@ -3765,7 +3765,7 @@ describe("app-client design system foundation", () => {
   test("design-system primitive styles are no longer owned by tokens.css", () => {
     const tokens = readFileSync(join(designSystemRoot, "tokens.css"), "utf8");
     const report = read(
-      ".project-ledger/reports/butler-dedicated-client-design-system-primitive-stabilization.md",
+      "project-ledger/projects/butler/reports/butler-dedicated-client-design-system-primitive-stabilization.md",
     );
     const componentSelectors = tokens
       .split("\n")

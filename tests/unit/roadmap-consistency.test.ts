@@ -2,10 +2,14 @@ import { expect, test } from "bun:test";
 import { readRepoOrLedgerFile } from "../support/project-ledger-root.ts";
 
 test("feature roadmap status matches completed implementation slices", () => {
-  const roadmap = readRepoOrLedgerFile(".project-ledger/roadmaps/roadmap-todo.md");
-  const featurePlan = readRepoOrLedgerFile(".project-ledger/plans/plan-feature-roadmap.md");
-  const projectMemoryPlan = readRepoOrLedgerFile(".project-ledger/plans/plan-project-memory-runtime.md");
-  const cliDeferredSpec = readRepoOrLedgerFile(".project-ledger/specs/cli/advanced-deferred-commands.md");
+  const roadmap = readRepoOrLedgerFile("project-ledger/projects/butler/roadmaps/roadmap-todo.md");
+  const featurePlan = readRepoOrLedgerFile("project-ledger/projects/butler/plans/plan-feature-roadmap.md");
+  const projectMemoryPlan = readRepoOrLedgerFile(
+    "project-ledger/projects/butler/plans/plan-project-memory-runtime.md",
+  );
+  const cliDeferredSpec = readRepoOrLedgerFile(
+    "project-ledger/projects/butler/specs/cli/advanced-deferred-commands.md",
+  );
 
   expect(roadmap).toContain("| 11 | Butler Product CLI | `docs/specs/butler-cli.md` | Completed |");
   expect(roadmap).toContain("| 12 | Project Memory Runtime | `docs/specs/project-memory-runtime.md` | Completed |");

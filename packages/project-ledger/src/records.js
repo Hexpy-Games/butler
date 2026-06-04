@@ -1,7 +1,6 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import {
-  LEDGER_DIR,
   PRIVATE_CONTENT_PATTERNS,
   VALID_ATTEMPT_STATES,
   VALID_TASK_STATES,
@@ -211,8 +210,6 @@ export function taskIdFromAttemptPath(path) {
 
 function ledgerContentPath(path) {
   const normalized = path.split("\\").join("/");
-  if (normalized === LEDGER_DIR) return "";
-  if (normalized.startsWith(`${LEDGER_DIR}/`)) return normalized.slice(LEDGER_DIR.length + 1);
   const canonicalMatch = normalized.match(/^project-ledger\/projects\/[^/]+(?:\/(.*))?$/u);
   if (canonicalMatch) return canonicalMatch[1] ?? "";
   return normalized;

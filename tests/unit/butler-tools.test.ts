@@ -32,7 +32,7 @@ afterEach(() => {
 function runProjectLedger(args: string[], projectPath: string): void {
   const result = spawnSync(process.execPath, [projectLedgerCli, ...args, "--project", projectPath, "--json"], {
     encoding: "utf8",
-    env: { ...process.env },
+    env: { ...process.env, BUTLER_DATA: tempDir },
   });
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
@@ -1844,6 +1844,11 @@ test("work dashboard and control tools expose canonical task state", async () =>
 test("Project Ledger tools wrap the portable CLI without Butler runtime coupling", async () => {
   const projectPath = join(tempDir, "ledger-project");
   mkdirSync(projectPath, { recursive: true });
+  writeFileSync(
+    join(projectPath, "package.json"),
+    JSON.stringify({ name: "ledger-demo", private: true }),
+    "utf8",
+  );
   runProjectLedger(["init", "--id", "ledger-demo", "--name", "Ledger Demo"], projectPath);
   runProjectLedger([
     "work",
@@ -1896,9 +1901,9 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
   expect(written.ok).toBe(true);
   expect(written.durable_artifact_created).toBe(true);
   expect(written.artifact_kind).toBe("markdown_file");
-  expect(written.artifact_label).toBe(".project-ledger/views/dashboard.md");
+  expect(written.artifact_label).toBe("project-ledger/projects/ledger-demo/views/dashboard.md");
   expect(written.verified_output_files).toContainEqual({
-    path: ".project-ledger/views/dashboard.md",
+    path: "project-ledger/projects/ledger-demo/views/dashboard.md",
     artifact_kind: "markdown_file",
   });
 });
@@ -1955,7 +1960,6 @@ test("Project Ledger tools prefer Butler data project roots over repo-local ledg
     expect(status.data.nextActions[0].path).toBe(
       "project-ledger/projects/ledger-demo/work/W-CANONICAL/work.md",
     );
-    expect(JSON.stringify(status)).not.toContain(".project-ledger");
   } finally {
     if (previousButlerData === undefined) delete process.env.BUTLER_DATA;
     else process.env.BUTLER_DATA = previousButlerData;

@@ -1,7 +1,6 @@
 import { join } from "node:path";
 
-export const LEDGER_DIR = ".project-ledger";
-export const INDEX_PATH = join(LEDGER_DIR, "index", "project.json");
+export const INDEX_PATH = join("index", "project.json");
 export const VIEW_NAMES = ["dashboard", "handoff", "roadmap"];
 export const LAYOUT_DIRS = [
   "initiatives",
