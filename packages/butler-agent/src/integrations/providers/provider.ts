@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "fs";
+import { appendFileSync, existsSync, readFileSync } from "fs";
 import { spawn } from "child_process";
 import { basename, join } from "path";
 import { arch, homedir, platform, release } from "os";
@@ -69,6 +69,7 @@ interface WorkerOptions {
 interface ShellTaskOptions {
   prompt: string;
   projectPath: string;
+  taskDir?: string;
   model?: string;
   instructions?: string;
   cacheScope?: string;
@@ -85,8 +86,43 @@ export type WorkerActivityPhase =
   | "consolidating"
   | "reporting";
 
+export type WorkerActivitySemanticPhase =
+  | "orienting"
+  | "planning"
+  | "inspecting"
+  | "executing"
+  | "verifying"
+  | "committing"
+  | "consolidating"
+  | "reporting"
+  | "blocked";
+
+export type WorkerActivityActionKind =
+  | "read_file"
+  | "search"
+  | "list_files"
+  | "run_command"
+  | "write_file"
+  | "edit_file"
+  | "apply_patch"
+  | "git_status"
+  | "git_diff"
+  | "test"
+  | "typecheck"
+  | "commit"
+  | "report"
+  | "unknown";
+
 export interface WorkerActivityUpdate {
+  /**
+   * Legacy compact projection phase. Keep for existing UI consumers; do not
+   * treat this as the semantic source of truth for Worker/Steward timelines.
+   */
   phase: WorkerActivityPhase;
+  /** Semantic state-machine phase. This is intentionally separate from tool or command kind. */
+  semanticPhase?: WorkerActivitySemanticPhase;
+  /** Safe action/tool classification used inside the semantic phase. */
+  actionKind?: WorkerActivityActionKind;
   statusLine: string;
   currentTitle?: string;
   workBlock?: WorkerActivityWorkBlockUpdate;
@@ -667,6 +703,32 @@ function modelApiRetryAttempts(): number {
   const raw = Number(process.env.BUTLER_MODEL_API_RETRY_ATTEMPTS);
   if (!Number.isFinite(raw)) return DEFAULT_MODEL_API_RETRY_ATTEMPTS;
   return Math.max(1, Math.min(5, Math.trunc(raw)));
+}
+
+
+function workerTracePath(taskDir: string | undefined): string | null {
+  return taskDir ? join(taskDir, "worker_observability.jsonl") : null;
+}
+
+function compactTraceValue(input: unknown, max = 800): unknown {
+  if (typeof input === "string") return input.replace(/\s+/g, " ").trim().slice(0, max);
+  if (input === null || input === undefined) return input;
+  try {
+    const text = JSON.stringify(input);
+    return text.length > max ? `${text.slice(0, max)}…` : input;
+  } catch {
+    return String(input).slice(0, max);
+  }
+}
+
+function writeWorkerTrace(taskDir: string | undefined, event: string, data: Record<string, unknown> = {}): void {
+  const path = workerTracePath(taskDir);
+  if (!path) return;
+  try {
+    appendFileSync(path, `${JSON.stringify({ ts: new Date().toISOString(), event, ...data })}\n`, "utf8");
+  } catch {
+    // Observability is best-effort; provider execution remains primary.
+  }
 }
 
 function modelApiRetryDelayMs(attemptIndex: number): number {
@@ -1254,51 +1316,100 @@ function truncateForLog(text: string, limit = 1_200): string {
 
 export function summarizeWorkerShellActivity(command: string): WorkerActivityUpdate {
   const normalized = command.toLocaleLowerCase("en-US");
-  if (/\b(test|check|lint|typecheck|vitest|jest|playwright|tsc)\b/u.test(normalized)) {
+  if (/\bgit\s+(add|commit)\b/u.test(normalized)) {
     return {
-      phase: "verifying",
-      statusLine: "Verifying: running validation checks.",
+      phase: "executing",
+      semanticPhase: "committing",
+      actionKind: "commit",
+      statusLine: "Committing: recording selected work changes.",
     };
   }
-  if (/\bgit\s+(status|diff|show|log)\b/u.test(normalized)) {
+  if (/\bgit\s+(status)\b/u.test(normalized)) {
     return {
       phase: "verifying",
+      semanticPhase: "verifying",
+      actionKind: "git_status",
       statusLine: "Verifying: checking workspace state.",
+    };
+  }
+  if (/\bgit\s+(diff|show|log)\b/u.test(normalized)) {
+    return {
+      phase: "verifying",
+      semanticPhase: "verifying",
+      actionKind: "git_diff",
+      statusLine: "Verifying: checking workspace evidence.",
+    };
+  }
+  if (/(^|&&|;|\|\||\s)(bun|npm|pnpm|yarn)\s+(run\s+)?(test|check|lint|typecheck)(\s|$)/u.test(normalized) || /(^|&&|;|\|\||\s)(vitest|jest|playwright|tsc)(\s|$)/u.test(normalized)) {
+    const isTypecheck = /(^|&&|;|\|\||\s)(bun|npm|pnpm|yarn)\s+(run\s+)?typecheck(\s|$)/u.test(normalized) || /(^|&&|;|\|\||\s)tsc(\s|$)/u.test(normalized);
+    return {
+      phase: "verifying",
+      semanticPhase: "verifying",
+      actionKind: isTypecheck ? "typecheck" : "test",
+      statusLine: isTypecheck ? "Verifying: running type checks." : "Verifying: running validation checks.",
+    };
+  }
+  if (/\b(apply_patch)\b/u.test(normalized)) {
+    return {
+      phase: "executing",
+      semanticPhase: "executing",
+      actionKind: "apply_patch",
+      statusLine: "Executing: applying a project patch.",
+    };
+  }
+  if (/\b(cat|python3?|node|bun|perl|ruby|tee)\b/u.test(normalized) && /(>\s*[^&]|write_text|writefilesync|appendfilesync|sed\s+-i)/u.test(command)) {
+    return {
+      phase: "executing",
+      semanticPhase: "executing",
+      actionKind: "edit_file",
+      statusLine: "Executing: writing project files.",
     };
   }
   if (/\b(rg|grep)\b/u.test(normalized) && !/\brg\s+--files\b/u.test(normalized)) {
     return {
       phase: "executing",
-      statusLine: "Executing: searching project files.",
+      semanticPhase: "inspecting",
+      actionKind: "search",
+      statusLine: "Inspecting: searching project files.",
     };
   }
   if (/\b(find|ls|tree)\b/u.test(normalized) || /\brg\s+--files\b/u.test(normalized)) {
     return {
       phase: "executing",
-      statusLine: "Executing: listing project files.",
+      semanticPhase: "inspecting",
+      actionKind: "list_files",
+      statusLine: "Inspecting: listing project files.",
     };
   }
   if (/\bpwd\b/u.test(normalized)) {
     return {
       phase: "executing",
-      statusLine: "Executing: checking the working directory.",
+      semanticPhase: "orienting",
+      actionKind: "run_command",
+      statusLine: "Orienting: checking the working directory.",
     };
   }
   if (/\bwc\b/u.test(normalized)) {
     return {
       phase: "executing",
-      statusLine: "Executing: measuring project files.",
+      semanticPhase: "inspecting",
+      actionKind: "run_command",
+      statusLine: "Inspecting: measuring project files.",
     };
   }
   const readableFiles = readableCommandFiles(command);
   if (readableFiles.length > 0) {
     return {
       phase: "executing",
-      statusLine: `Executing: reading ${formatWorkerEvidenceSubject(readableFiles)}.`,
+      semanticPhase: "inspecting",
+      actionKind: "read_file",
+      statusLine: `Inspecting: reading ${formatWorkerEvidenceSubject(readableFiles)}.`,
     };
   }
   return {
     phase: "executing",
+    semanticPhase: "executing",
+    actionKind: "run_command",
     statusLine: "Executing: running the worker step.",
   };
 }
@@ -2497,6 +2608,13 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
     }
 
     requiredToolRepairNames = null;
+    writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.assistant.tool_calls", {
+      provider: "local",
+      text_chars: text.length,
+      tool_count: toolCalls.length,
+      tool_names: toolCalls.map((call) => call.function.name),
+      executed_tool_calls: executedToolCalls,
+    });
     await options.onAssistantTextBeforeTools?.({
       text,
       toolCalls: toolCalls.map((call) => {
@@ -2517,6 +2635,12 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
     for (const call of toolCalls) {
       const args = localToolArguments(call.function.arguments);
       log(`tool ${call.function.name}: ${args.raw}`);
+      writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.start", {
+        provider: "local",
+        name: call.function.name,
+        args_preview: compactTraceValue(args.parsed),
+        raw_args_chars: args.raw.length,
+      });
       let payload: Record<string, unknown>;
       try {
         const result = await options.executeTool({
@@ -2525,12 +2649,24 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
           rawArguments: args.raw,
         });
         payload = { ok: true, output: result };
+        writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.finish", {
+          provider: "local",
+          name: call.function.name,
+          ok: true,
+          output_preview: compactTraceValue(result),
+        });
         executedToolCalls += 1;
       } catch (error) {
         payload = {
           ok: false,
           error: error instanceof Error ? error.message : String(error),
         };
+        writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.finish", {
+          provider: "local",
+          name: call.function.name,
+          ok: false,
+          error: compactTraceValue(payload.error),
+        });
         executedToolCalls += 1;
       }
       const finalText = payload.ok
@@ -3811,9 +3947,16 @@ ${buildWorkerMemoryContextInstruction()}
 Task:
 ${taskDesc}`;
 
+  writeWorkerTrace(options.taskDir, "worker.prompt.built", {
+    prompt_chars: prompt.length,
+    task_chars: taskDesc.length,
+    has_memory_instruction: prompt.includes("memory"),
+  });
+
   return await runShellTask({
     prompt,
     projectPath: options.projectPath,
+    taskDir: options.taskDir,
     model: options.model,
     instructions: buildWorkerInstructions(),
     cacheScope: "worker",
