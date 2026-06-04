@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { LEDGER_DIR, LAYOUT_DIRS } from "./constants.js";
+import { LAYOUT_DIRS } from "./constants.js";
 import { CliError, nowIso } from "./errors.js";
 import { optionalNumber, optionalString, projectRoot, requiredOption } from "./args.js";
 import {
@@ -115,10 +115,11 @@ export function initProject(options) {
     source: "project-ledger",
   });
 
+  const rootLabel = projectRelative(project, ledgerRoot(project));
   return {
     project: safeReadJson(projectFile),
-    root: LEDGER_DIR,
-    directories: LAYOUT_DIRS.map((dir) => `${LEDGER_DIR}/${dir}`),
+    root: rootLabel,
+    directories: LAYOUT_DIRS.map((dir) => `${rootLabel}/${dir}`),
   };
 }
 

@@ -35,20 +35,21 @@ export function recordReference(record, reason = null) {
 }
 
 export function inferKind(relPath, data) {
+  const ledgerPath = ledgerContentPath(relPath);
   if (typeof data.kind === "string" && data.kind) return data.kind;
-  if (relPath === `${LEDGER_DIR}/project.json`) return "project";
-  if (relPath.includes("/attempts/")) return "attempt";
-  if (relPath.includes("/tasks/")) return "task";
-  if (relPath.startsWith(`${LEDGER_DIR}/work/`)) return "work";
-  if (relPath.startsWith(`${LEDGER_DIR}/initiatives/`)) return "initiative";
-  if (relPath.startsWith(`${LEDGER_DIR}/decisions/`)) return "decision";
-  if (relPath.startsWith(`${LEDGER_DIR}/risks/`)) return "risk";
-  if (relPath.startsWith(`${LEDGER_DIR}/specs/`)) return "spec";
-  if (relPath.startsWith(`${LEDGER_DIR}/reports/`)) return "report";
-  if (relPath.startsWith(`${LEDGER_DIR}/plans/`)) return "plan";
-  if (relPath.startsWith(`${LEDGER_DIR}/handoffs/`)) return "handoff";
-  if (relPath.startsWith(`${LEDGER_DIR}/references/`)) return "reference";
-  if (relPath.startsWith(`${LEDGER_DIR}/roadmaps/`)) return "roadmap";
+  if (ledgerPath === "project.json") return "project";
+  if (ledgerPath.includes("/attempts/")) return "attempt";
+  if (ledgerPath.includes("/tasks/")) return "task";
+  if (ledgerPath.startsWith("work/")) return "work";
+  if (ledgerPath.startsWith("initiatives/")) return "initiative";
+  if (ledgerPath.startsWith("decisions/")) return "decision";
+  if (ledgerPath.startsWith("risks/")) return "risk";
+  if (ledgerPath.startsWith("specs/")) return "spec";
+  if (ledgerPath.startsWith("reports/")) return "report";
+  if (ledgerPath.startsWith("plans/")) return "plan";
+  if (ledgerPath.startsWith("handoffs/")) return "handoff";
+  if (ledgerPath.startsWith("references/")) return "reference";
+  if (ledgerPath.startsWith("roadmaps/")) return "roadmap";
   return "record";
 }
 
@@ -199,11 +200,20 @@ export function findRecord(index, kind, id) {
 }
 
 export function workIdFromTaskPath(path) {
-  const match = path.match(/^\.project-ledger\/work\/([^/]+)\/tasks\//u);
+  const match = ledgerContentPath(path).match(/^work\/([^/]+)\/tasks\//u);
   return match?.[1] ?? null;
 }
 
 export function taskIdFromAttemptPath(path) {
-  const match = path.match(/^\.project-ledger\/work\/([^/]+)\/tasks\/([^/]+)\/attempts\//u);
+  const match = ledgerContentPath(path).match(/^work\/([^/]+)\/tasks\/([^/]+)\/attempts\//u);
   return match ? { workId: match[1], taskId: match[2] } : null;
+}
+
+function ledgerContentPath(path) {
+  const normalized = path.split("\\").join("/");
+  if (normalized === LEDGER_DIR) return "";
+  if (normalized.startsWith(`${LEDGER_DIR}/`)) return normalized.slice(LEDGER_DIR.length + 1);
+  const canonicalMatch = normalized.match(/^project-ledger\/projects\/[^/]+(?:\/(.*))?$/u);
+  if (canonicalMatch) return canonicalMatch[1] ?? "";
+  return normalized;
 }
