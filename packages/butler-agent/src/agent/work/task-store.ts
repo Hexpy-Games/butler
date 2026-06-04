@@ -28,6 +28,7 @@ export type TaskStatus =
 
 export type WorkMode =
   | "planning"
+  | "inspecting"
   | "executing"
   | "reviewing"
   | "repairing"
@@ -40,8 +41,10 @@ export type WorkMode =
 export type WorkerActivityPhaseName =
   | "orienting"
   | "planning"
+  | "inspecting"
   | "executing"
   | "verifying"
+  | "committing"
   | "consolidating"
   | "reporting"
   | "complete"
@@ -89,6 +92,8 @@ export interface TaskSummary {
   user_summary: string;
   next_step: string;
   activity_phase: WorkerActivityPhaseName | null;
+  activity_semantic_phase: WorkerActivityPhaseName | null;
+  activity_action_kind: string | null;
   activity_status_line: string | null;
   activity_current_title: string | null;
   activity_work_blocks: WorkerActivityWorkBlock[];
@@ -439,8 +444,10 @@ function normalizeWorkerActivityPhase(value: unknown): WorkerActivityPhaseName |
   if (
     value === "orienting" ||
     value === "planning" ||
+    value === "inspecting" ||
     value === "executing" ||
     value === "verifying" ||
+    value === "committing" ||
     value === "consolidating" ||
     value === "reporting" ||
     value === "complete" ||
@@ -458,16 +465,20 @@ function readWorkerActivityProjection(taskDir: string): {
   phase: WorkerActivityPhaseName | null;
   status_line: string | null;
   current_title: string | null;
+  semantic_phase: WorkerActivityPhaseName | null;
+  action_kind: string | null;
   work_blocks: WorkerActivityWorkBlock[];
   updated_at: string | null;
 } {
   const raw = readText(join(taskDir, "worker_activity.json"));
-  if (!raw) return { phase: null, status_line: null, current_title: null, work_blocks: [], updated_at: null };
+  if (!raw) return { phase: null, status_line: null, current_title: null, semantic_phase: null, action_kind: null, work_blocks: [], updated_at: null };
   try {
     const parsed = JSON.parse(raw) as {
       phase?: unknown;
       status_line?: unknown;
       current_title?: unknown;
+      semantic_phase?: unknown;
+      action_kind?: unknown;
       work_blocks?: unknown;
       updated_at?: unknown;
     };
@@ -475,11 +486,13 @@ function readWorkerActivityProjection(taskDir: string): {
       phase: normalizeWorkerActivityPhase(parsed.phase),
       status_line: typeof parsed.status_line === "string" ? compactOneLine(parsed.status_line, 180) : null,
       current_title: typeof parsed.current_title === "string" ? compactOneLine(parsed.current_title, 180) : null,
+      semantic_phase: normalizeWorkerActivityPhase(parsed.semantic_phase),
+      action_kind: typeof parsed.action_kind === "string" ? compactOneLine(parsed.action_kind, 80) : null,
       work_blocks: safeWorkerActivityWorkBlocks(parsed.work_blocks),
       updated_at: typeof parsed.updated_at === "string" ? parsed.updated_at : null,
     };
   } catch {
-    return { phase: null, status_line: null, current_title: null, work_blocks: [], updated_at: null };
+    return { phase: null, status_line: null, current_title: null, semantic_phase: null, action_kind: null, work_blocks: [], updated_at: null };
   }
 }
 
@@ -497,6 +510,11 @@ function safeWorkerActivityWorkBlocks(value: unknown): WorkerActivityWorkBlock[]
         label,
         state: safeActivityText(record.state, 40) || "running",
         rows: safeWorkerActivityRows(record.rows),
+        ...(safeActivityText(record.decision_summary, 220) ? { decision_summary: safeActivityText(record.decision_summary, 220)! } : {}),
+        ...(safeActivityText(record.decision_rationale, 300) ? { decision_rationale: safeActivityText(record.decision_rationale, 300)! } : {}),
+        ...(safeActivityText(record.decision_next_step, 300) ? { decision_next_step: safeActivityText(record.decision_next_step, 300)! } : {}),
+        ...(safeActivityText(record.decision_source, 80) ? { decision_source: safeActivityText(record.decision_source, 80)! } : {}),
+        ...(Array.isArray(record.decision_evidence_refs) ? { decision_evidence_refs: record.decision_evidence_refs.map((ref) => safeActivityText(ref, 220)).filter((ref): ref is string => Boolean(ref)).slice(0, 8) } : {}),
         ...(typeof record.created_at === "string" ? { created_at: record.created_at } : {}),
       } satisfies WorkerActivityWorkBlock;
     })
@@ -668,7 +686,9 @@ export class TaskStore {
         can_resume: task.status === "RECOVERABLE",
         user_summary: taskUserSummary(task),
         next_step: taskNextStep(task),
-        activity_phase: activity.phase,
+        activity_phase: activity.semantic_phase ?? activity.phase,
+        activity_semantic_phase: activity.semantic_phase,
+        activity_action_kind: activity.action_kind,
         activity_status_line: activity.status_line,
         activity_current_title: activity.current_title,
         activity_work_blocks: activity.work_blocks,
