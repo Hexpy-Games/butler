@@ -121,7 +121,7 @@ function writeActivityEvent(event: Omit<WorkerActivityTimelineEvent, "schema" | 
 }
 
 
-function readActivityEvents(): WorkerActivityTimelineEvent[] {
+function _readActivityEvents(): WorkerActivityTimelineEvent[] {
   const path = join(taskDir, "worker_activity_events.jsonl");
   if (!existsSync(path)) return [];
   try {
@@ -134,7 +134,7 @@ function readActivityEvents(): WorkerActivityTimelineEvent[] {
   }
 }
 
-function summarizeCompletionEvidence(events: WorkerActivityTimelineEvent[]): NonNullable<WorkerActivityTimelineEvent["evidence_summary"]> {
+function _summarizeCompletionEvidence(events: WorkerActivityTimelineEvent[]): NonNullable<WorkerActivityTimelineEvent["evidence_summary"]> {
   const summary = { inspecting: 0, executing: 0, verifying: 0, committing: 0, blocked: 0 };
   for (const event of events) {
     switch (event.semantic_phase) {
@@ -148,7 +148,7 @@ function summarizeCompletionEvidence(events: WorkerActivityTimelineEvent[]): Non
   return summary;
 }
 
-function completionContractForEvidence(summary: NonNullable<WorkerActivityTimelineEvent["evidence_summary"]>): NonNullable<WorkerActivityTimelineEvent["completion_contract"]> {
+function _completionContractForEvidence(summary: NonNullable<WorkerActivityTimelineEvent["evidence_summary"]>): NonNullable<WorkerActivityTimelineEvent["completion_contract"]> {
   return {
     has_execution_evidence: summary.executing > 0,
     has_verification_evidence: summary.verifying > 0,
@@ -157,14 +157,14 @@ function completionContractForEvidence(summary: NonNullable<WorkerActivityTimeli
   };
 }
 
-function completionReviewForEvidence(contract: NonNullable<WorkerActivityTimelineEvent["completion_contract"]>): NonNullable<WorkerActivityTimelineEvent["completion_review"]> {
+function _completionReviewForEvidence(contract: NonNullable<WorkerActivityTimelineEvent["completion_contract"]>): NonNullable<WorkerActivityTimelineEvent["completion_review"]> {
   if (contract.has_blocker_evidence) return "blocked";
   return contract.has_execution_evidence || contract.has_verification_evidence || contract.has_commit_evidence
     ? "satisfied"
     : "unsatisfied";
 }
 
-function completionObligationsForActivity(semanticPhase: string | undefined, actionKind: string | undefined): string[] {
+function _completionObligationsForActivity(semanticPhase: string | undefined, actionKind: string | undefined): string[] {
   const obligations = new Set<string>();
   if (semanticPhase === "executing") obligations.add("implementation_evidence");
   if (semanticPhase === "verifying") obligations.add("validation_evidence");
