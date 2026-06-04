@@ -31,6 +31,33 @@ type StoredWorkerActivity = {
   }>;
 };
 
+type WorkerActivityTimelineEvent = {
+  schema: "butler.worker-activity-event.v1";
+  event_id: string;
+  created_at: string;
+  actor: "worker";
+  task_id?: string;
+  event: "worker_started" | "activity_updated" | "worker_finished" | "worker_failed";
+  phase?: string;
+  semantic_phase?: string;
+  action_kind?: string;
+  status_line?: string;
+  current_title?: string;
+  decision_summary?: string;
+  decision_rationale?: string;
+  decision_next_step?: string;
+  evidence_refs?: string[];
+  completion_obligations?: string[];
+  work_block_id?: string;
+};
+
+function taskIdFromDir(): string | undefined {
+  return taskDir.split("/").filter(Boolean).at(-1);
+}
+
+function makeEventId(event: string): string {
+  return `${Date.now().toString(36)}-${event}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 function stableHash(input: string): string {
   let hash = 0x811c9dc5;
@@ -58,6 +85,60 @@ function writeTrace(event: string, data: Record<string, unknown> = {}): void {
     );
   } catch {
     // Observability is best-effort; worker execution remains primary.
+  }
+}
+
+function writeActivityEvent(event: Omit<WorkerActivityTimelineEvent, "schema" | "event_id" | "created_at" | "actor" | "task_id">): void {
+  try {
+    const payload: WorkerActivityTimelineEvent = {
+      schema: "butler.worker-activity-event.v1",
+      event_id: makeEventId(event.event),
+      created_at: new Date().toISOString(),
+      actor: "worker",
+      task_id: taskIdFromDir(),
+      evidence_refs: [],
+      completion_obligations: [],
+      ...event,
+    };
+    appendFileSync(join(taskDir, "worker_activity_events.jsonl"), `${JSON.stringify(payload)}\n`, "utf8");
+  } catch {
+    // Timeline history is best-effort for this compatibility step; worker execution remains primary.
+  }
+}
+
+function decisionSummaryForActivity(phase: string, semanticPhase: string | undefined, actionKind: string | undefined, statusLine: string): string {
+  const semantic = semanticPhase ? `${semanticPhase}` : phase;
+  const action = actionKind ? ` via ${actionKind}` : "";
+  return `${semantic}${action}: ${statusLine}`;
+}
+
+function decisionRationaleForActivity(semanticPhase: string | undefined): string {
+  switch (semanticPhase) {
+    case "orienting": return "The worker is establishing task and repository context before choosing concrete actions.";
+    case "planning": return "The worker is selecting the next work path before using execution tools.";
+    case "inspecting": return "The worker is gathering bounded evidence needed for the current task step.";
+    case "executing": return "The worker is producing or modifying task deliverables.";
+    case "verifying": return "The worker is checking whether observed evidence satisfies the task.";
+    case "committing": return "The worker is preserving completed changes as a source-control checkpoint.";
+    case "consolidating": return "The worker is combining observed evidence into a reviewed outcome.";
+    case "reporting": return "The worker is preparing the final task report.";
+    case "blocked": return "The worker has encountered a blocker that prevents safe continuation.";
+    default: return "The worker activity was recorded for timeline continuity.";
+  }
+}
+
+function decisionNextStepForActivity(semanticPhase: string | undefined): string {
+  switch (semanticPhase) {
+    case "orienting":
+    case "planning": return "Use the selected path to inspect, execute, or verify the next concrete step.";
+    case "inspecting": return "Use the gathered evidence to decide whether to execute, verify, or report a blocker.";
+    case "executing": return "Verify the produced or modified deliverable before claiming completion.";
+    case "verifying": return "Use the validation result to consolidate, repair, or continue execution.";
+    case "committing": return "Confirm the commit and proceed to the next task or final report.";
+    case "consolidating": return "Prepare a concise report backed by the observed evidence.";
+    case "reporting": return "Finish the task attempt with the reviewed public result.";
+    case "blocked": return "Surface the blocker with the evidence needed for a safe decision.";
+    default: return "Continue from the recorded worker activity.";
   }
 }
 
@@ -145,12 +226,23 @@ try {
   const requestPath = join(taskDir, "request.md");
   const requestText = existsSync(requestPath) ? readFileSync(requestPath, "utf8") : "";
   writeTrace("worker.start", {
-    task_id: taskDir.split("/").at(-1),
+    task_id: taskIdFromDir(),
     project_path: projectPath,
     model: model || null,
     request_chars: requestText.length,
     request_hash: stableHash(requestText),
     request_preview: compactPreview(requestText),
+  });
+  writeActivityEvent({
+    event: "worker_started",
+    semantic_phase: "orienting",
+    action_kind: "run_command",
+    status_line: "Worker task started.",
+    current_title: "워커 작업을 시작합니다.",
+    decision_summary: "Start worker task and build an activity timeline.",
+    decision_rationale: "A durable append-only timeline is needed before projection updates can be trusted as current-state views.",
+    decision_next_step: "Build the worker prompt and record each activity update as timeline history.",
+    evidence_refs: [`request:${stableHash(requestText)}`],
   });
   const startedAt = Date.now();
   const result = await runWorkerTask({
@@ -159,13 +251,26 @@ try {
     model: model || undefined,
     log,
     onActivity: ({ phase, semanticPhase, actionKind, statusLine, currentTitle, workBlock }) => {
+      const workBlockId = workBlock && typeof workBlock === "object" ? (workBlock as { id?: unknown }).id : undefined;
       writeTrace("worker.activity", {
         phase,
         semantic_phase: semanticPhase,
         action_kind: actionKind,
         status_line: statusLine,
         current_title: currentTitle,
-        work_block_id: workBlock && typeof workBlock === "object" ? (workBlock as { id?: unknown }).id : undefined,
+        work_block_id: workBlockId,
+      });
+      writeActivityEvent({
+        event: "activity_updated",
+        phase,
+        semantic_phase: semanticPhase,
+        action_kind: actionKind,
+        status_line: statusLine,
+        current_title: currentTitle,
+        work_block_id: typeof workBlockId === "string" ? workBlockId : undefined,
+        decision_summary: decisionSummaryForActivity(phase, semanticPhase, actionKind, statusLine),
+        decision_rationale: decisionRationaleForActivity(semanticPhase),
+        decision_next_step: decisionNextStepForActivity(semanticPhase),
       });
       writeActivity(
         phase,
@@ -183,11 +288,33 @@ try {
     result_hash: stableHash(result),
     result_preview: compactPreview(result),
   });
+  writeActivityEvent({
+    event: "worker_finished",
+    semantic_phase: "reporting",
+    action_kind: "report",
+    status_line: "Worker task finished.",
+    current_title: "워커 작업을 마쳤습니다.",
+    decision_summary: "Finish worker task and preserve the result reference.",
+    decision_rationale: "The final report should be tied back to the append-only activity timeline.",
+    decision_next_step: "Use result evidence and timeline events for review or public reporting.",
+    evidence_refs: [`result:${stableHash(result)}`],
+  });
   process.stdout.write(result);
   if (!result.endsWith("\n")) process.stdout.write("\n");
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
   writeTrace("worker.error", { message: compactPreview(message, 500) });
+  writeActivityEvent({
+    event: "worker_failed",
+    semantic_phase: "blocked",
+    action_kind: "unknown",
+    status_line: workerFailureStatusLine(message),
+    current_title: "워커 작업이 중단되었습니다.",
+    decision_summary: "Record worker failure as a timeline event.",
+    decision_rationale: "Failures must remain visible in history instead of only overwriting the projection.",
+    decision_next_step: "Review the error evidence and decide whether retry, repair, or user decision is appropriate.",
+    evidence_refs: [`error:${stableHash(message)}`],
+  });
   writeActivity("failed", workerFailureStatusLine(message));
   log(`ERROR: ${message}`);
   process.exit(1);
