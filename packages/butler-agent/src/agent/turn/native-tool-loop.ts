@@ -174,6 +174,7 @@ const PLANNED_REVIEW_SCOPED_TOOLS = new Set<string>([
 ]);
 const RUNTIME_SEMANTIC_TODO_LIST_ID = "runtime-semantic";
 const DEFAULT_GOAL_COMPLETION_CONTINUATION_ATTEMPTS = 8;
+const DEFAULT_DIRECT_WORK_CONTINUATION_ATTEMPTS = 100;
 
 interface StoredSessionConfig {
   init: RuntimeSessionInit;
@@ -221,6 +222,13 @@ function goalCompletionContinuationAttempts(): number {
   const parsed = raw ? Number.parseInt(raw, 10) : NaN;
   if (!Number.isFinite(parsed)) return DEFAULT_GOAL_COMPLETION_CONTINUATION_ATTEMPTS;
   return Math.max(0, Math.min(parsed, 100));
+}
+
+function directWorkContinuationAttempts(): number {
+  const raw = process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  if (!Number.isFinite(parsed)) return DEFAULT_DIRECT_WORK_CONTINUATION_ATTEMPTS;
+  return Math.max(0, Math.min(parsed, 1_000));
 }
 
 function throwIfRuntimeTurnAborted(signal?: AbortSignal): void {
@@ -1829,17 +1837,20 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         }
       }
       if (useTools) {
-        for (let repairAttempt = 0; repairAttempt < 2; repairAttempt += 1) {
+        const maxDirectWorkContinuations = directWorkContinuationAttempts();
+        for (let repairAttempt = 0; repairAttempt < maxDirectWorkContinuations; repairAttempt += 1) {
           const blocker = finalDeliveryBlockerForOpenDirectWork({
             butlerData: this.butlerData,
             sessionId: input.handle.sessionId,
           });
           if (!blocker) break;
+          const successfulToolsBeforeContinuation = successfulToolAuditCount();
           finalText = await runToolPrompt(openDirectWorkContinuationPrompt({
             prompt,
             previousAnswer: finalText,
             blocker,
           }), 8);
+          if (successfulToolAuditCount() <= successfulToolsBeforeContinuation) break;
         }
         const remainingBlocker = finalDeliveryBlockerForOpenDirectWork({
           butlerData: this.butlerData,
