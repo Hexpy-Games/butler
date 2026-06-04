@@ -19,22 +19,32 @@ const root = process.cwd();
 test("worker shell activity maps commands to safe FSM phases", () => {
   expect(summarizeWorkerShellActivity("rg -n \"worker\" src")).toEqual({
     phase: "executing",
-    statusLine: "Executing: searching project files.",
+    semanticPhase: "inspecting",
+    actionKind: "search",
+    statusLine: "Inspecting: searching project files.",
   });
   expect(summarizeWorkerShellActivity("sed -n '1,80p' README.md")).toEqual({
     phase: "executing",
-    statusLine: "Executing: reading README.md.",
+    semanticPhase: "inspecting",
+    actionKind: "read_file",
+    statusLine: "Inspecting: reading README.md.",
   });
   expect(summarizeWorkerShellActivity("printf 'a\\nb' | sed 's/a/b/'")).toEqual({
     phase: "executing",
+    semanticPhase: "executing",
+    actionKind: "run_command",
     statusLine: "Executing: running the worker step.",
   });
   expect(summarizeWorkerShellActivity("bun run typecheck")).toEqual({
     phase: "verifying",
-    statusLine: "Verifying: running validation checks.",
+    semanticPhase: "verifying",
+    actionKind: "typecheck",
+    statusLine: "Verifying: running type checks.",
   });
   expect(summarizeWorkerShellActivity("git status --short")).toEqual({
     phase: "verifying",
+    semanticPhase: "verifying",
+    actionKind: "git_status",
     statusLine: "Verifying: checking workspace state.",
   });
 });
