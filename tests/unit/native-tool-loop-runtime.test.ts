@@ -2331,6 +2331,87 @@ test("completion obligation guard accepts structured source evidence contracts",
   expect(unsupportedActionReason).toContain("source_verified");
 });
 
+test("completion obligation guard accepts Project Ledger state inspection as source evidence", () => {
+  expect(completionObligationIncompleteReason({
+    audit: [{
+      name: "inspect_project_status",
+      args: { project_path: "/tmp/sandy-bot" },
+      ok: true,
+      result: {
+        ok: false,
+        error: {
+          code: "not_initialized",
+          message: "Project Ledger not initialized at /tmp/sandy-bot",
+        },
+      },
+    }],
+    decisions: [{
+      decisionId: "decision-project-ledger-status",
+      summary: "Project Ledger 상태를 확인합니다.",
+      completionObligations: ["source_verified"],
+      evidenceRefs: [],
+      source: "assistant-authored",
+    }],
+  })).toBeNull();
+});
+
+test("native runtime skips completion review when capability evidence satisfies the outcome contract", async () => {
+  const attempts: string[] = [];
+  const executedTools: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    executeButlerTool: async (call) => {
+      executedTools.push(call.name);
+      return {
+        ok: true,
+        project: { id: "butler" },
+        counts: { work: 0 },
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      attempts.push(input.prompt);
+      if (attempts.length > 1) {
+        throw new Error("completion review should be skipped when capability evidence satisfies obligations");
+      }
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "작업: Project Ledger 상태를 확인합니다.",
+          "이유: 최종 보고가 추측이 아니라 durable 프로젝트 상태에 근거해야 합니다.",
+          "다음: 확인한 상태를 기준으로 요약합니다.",
+          "completion_obligations: source_verified",
+        ].join("\n"),
+        toolCalls: [{ name: "inspect_project_status", args: {} }],
+      });
+      await input.executeTool({
+        name: "inspect_project_status",
+        args: {},
+        rawArguments: "{}",
+      });
+      return "Project Ledger 상태를 확인했고, 해당 상태 기준으로 요약할 수 있습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/capability-evidence-skip",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: {
+      text: "Project Ledger 상태를 확인하고 요약해줘.",
+    },
+  });
+
+  expect(executedTools).toEqual(["inspect_project_status"]);
+  expect(attempts).toHaveLength(1);
+  expect(result.text).toContain("Project Ledger 상태를 확인");
+});
+
 test("native runtime skips completion review when evidence receipts satisfy the outcome contract", async () => {
   const attempts: string[] = [];
   const executedTools: string[] = [];

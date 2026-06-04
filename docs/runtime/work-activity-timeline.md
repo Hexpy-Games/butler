@@ -61,6 +61,8 @@ For implementation tasks, completion requires implementation evidence such as on
 
 A task that only inspects and reports may be complete if the task is a discovery/audit task. The same inspection-only result must not satisfy an implementation task unless the task contract explicitly says no code change is required and records why.
 
+Completion obligations are satisfied by structured tool-audit evidence, not only by final-answer prose. If a state-inspection tool is the requested source of truth, its successful audit contract can satisfy `source_verified`; Project Ledger status/query inspection also counts as verified state evidence when it returns a bounded state result such as `not_initialized`. The final review loop must not keep retrying solely because the evidence came from a capability contract rather than a separate evidence receipt.
+
 ## Storage and projection
 
 Timeline events should be durable and append-only. UI projections may compact these events into the latest activity row, current phase, status line, and evidence counters. Projection is a derived view, not the audit source.
