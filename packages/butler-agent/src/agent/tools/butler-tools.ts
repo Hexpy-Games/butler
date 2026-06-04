@@ -2537,7 +2537,6 @@ interface CommandArtifactEvidence {
 
 const COMMAND_ARTIFACT_SCAN_IGNORES = new Set([
   ".git",
-  ".project-ledger",
   ".turbo",
   ".vite",
   "coverage",

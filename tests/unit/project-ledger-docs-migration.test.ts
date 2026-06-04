@@ -12,7 +12,21 @@ const migrationModuleUrl = pathToFileURL(
 ).href;
 
 function tempProject(): string {
-  return mkdtempSync(join(tmpdir(), "project-ledger-docs-"));
+  const project = mkdtempSync(join(tmpdir(), "project-ledger-docs-"));
+  writeProjectFile(
+    project,
+    "package.json",
+    `${JSON.stringify({ name: "demo", private: true }, null, 2)}\n`,
+  );
+  return project;
+}
+
+function testButlerData(project: string): string {
+  return join(project, ".butler-data");
+}
+
+function ledgerProjectRoot(project: string): string {
+  return join(testButlerData(project), "project-ledger", "projects", "demo");
 }
 
 function writeProjectFile(project: string, relPath: string, text: string): void {
@@ -21,8 +35,16 @@ function writeProjectFile(project: string, relPath: string, text: string): void 
   writeFileSync(path, text, "utf8");
 }
 
+function projectArg(args: string[]): string | null {
+  const index = args.indexOf("--project");
+  return index >= 0 ? args[index + 1] ?? null : null;
+}
+
 function runLedgerJson(args: string[]): any {
+  const project = projectArg(args);
+  const env = project ? { BUTLER_DATA: testButlerData(project) } : {};
   const result = spawnSync(process.execPath, [cliPath, ...args, "--json"], {
+    env: { ...process.env, ...env },
     encoding: "utf8",
   });
   expect(result.stderr).toBe("");
@@ -43,19 +65,19 @@ test("migrate-docs moves supported docs into Project Ledger and leaves compatibi
 
     const { planDocsMigration } = await import(migrationModuleUrl) as any;
     const plan = planDocsMigration(project);
-    expect(plan.moves.map((item: any) => item.target)).toContain(".project-ledger/specs/example.md");
+    expect(plan.moves.map((item: any) => item.target)).toContain("specs/example.md");
     expect(plan.unsupported.map((item: any) => item.path)).toEqual(["docs/notes.md"]);
 
     const dryRun = runLedgerJson(["migrate-docs", "--project", project]);
     expect(dryRun.data.written).toBe(false);
-    expect(existsSync(join(project, ".project-ledger", "specs", "example.md"))).toBe(false);
+    expect(existsSync(join(ledgerProjectRoot(project), "specs", "example.md"))).toBe(false);
 
     const written = runLedgerJson(["migrate-docs", "--project", project, "--write"]);
     expect(written.data.written).toBe(true);
     expect(written.data.moves).toHaveLength(5);
 
     const source = join(project, "docs", "specs", "example.md");
-    const target = join(project, ".project-ledger", "specs", "example.md");
+    const target = join(ledgerProjectRoot(project), "specs", "example.md");
     expect(lstatSync(source).isSymbolicLink()).toBe(true);
     expect(join(dirname(source), readlinkSync(source))).toBe(target);
 

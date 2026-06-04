@@ -12,11 +12,35 @@ async function importModule(name: string): Promise<any> {
 }
 
 function tempProject(): string {
-  return mkdtempSync(join(tmpdir(), "project-ledger-core-"));
+  const project = mkdtempSync(join(tmpdir(), "project-ledger-core-"));
+  writeFileSync(
+    join(project, "package.json"),
+    `${JSON.stringify({ name: "demo", private: true }, null, 2)}\n`,
+    "utf8",
+  );
+  return project;
+}
+
+function testButlerData(project: string): string {
+  return join(project, ".butler-data");
+}
+
+function ledgerProjectRoot(project: string, id = "demo"): string {
+  return join(testButlerData(project), "project-ledger", "projects", id);
+}
+
+function useTestButlerData(project: string): () => void {
+  const previousButlerData = process.env.BUTLER_DATA;
+  process.env.BUTLER_DATA = testButlerData(project);
+  return () => {
+    if (previousButlerData === undefined) delete process.env.BUTLER_DATA;
+    else process.env.BUTLER_DATA = previousButlerData;
+  };
 }
 
 test("Project Ledger core modules can be imported and used without spawning the CLI", async () => {
   const project = tempProject();
+  const restoreButlerData = useTestButlerData(project);
   try {
     const { handle } = await importModule("commands.js");
     const { projectStatus, queryIndex, loadIndex } = await importModule("indexer.js");
@@ -46,13 +70,14 @@ test("Project Ledger core modules can be imported and used without spawning the 
     const status = projectStatus(project);
     expect(status.counts.work).toBe(1);
     expect(queryIndex(loadIndex(project), "recent-completed").map((item: any) => item.id)).toContain("W-CORE");
-    expect(existsSync(join(project, ".project-ledger", "work", "W-CORE", "work.md"))).toBe(true);
+    expect(existsSync(join(ledgerProjectRoot(project), "work", "W-CORE", "work.md"))).toBe(true);
   } finally {
+    restoreButlerData();
     rmSync(project, { recursive: true, force: true });
   }
 });
 
-test("Project Ledger uses Butler data project roots without .project-ledger labels", async () => {
+test("Project Ledger uses Butler data project roots with canonical labels", async () => {
   const rootDir = tempProject();
   const previousButlerData = process.env.BUTLER_DATA;
   try {
@@ -73,7 +98,6 @@ test("Project Ledger uses Butler data project roots without .project-ledger labe
       name: "Demo Project",
     });
     expect(initialized.root).toBe("project-ledger/projects/demo");
-    expect(existsSync(join(canonicalProject, ".project-ledger"))).toBe(false);
 
     handle("work", ["create"], {
       project: workspace,
@@ -91,7 +115,6 @@ test("Project Ledger uses Butler data project roots without .project-ledger labe
     expect(status.nextActions[0].path).toBe(
       "project-ledger/projects/demo/work/W-CANONICAL/work.md",
     );
-    expect(JSON.stringify(status)).not.toContain(".project-ledger");
     expect(queryIndex(loadIndex(workspace), "next-actions")[0].path).toBe(
       "project-ledger/projects/demo/work/W-CANONICAL/work.md",
     );
@@ -107,6 +130,7 @@ test("Project Ledger uses Butler data project roots without .project-ledger labe
 
 test("Project Ledger check fails on stale generated views and passes after render plus index", async () => {
   const project = tempProject();
+  const restoreButlerData = useTestButlerData(project);
   try {
     const { handle } = await importModule("commands.js");
 
@@ -129,12 +153,14 @@ test("Project Ledger check fails on stale generated views and passes after rende
 
     expect(handle("check", [], { project }).ok).toBe(true);
   } finally {
+    restoreButlerData();
     rmSync(project, { recursive: true, force: true });
   }
 });
 
 test("Project Ledger ignores platform metadata files when checking freshness", async () => {
   const project = tempProject();
+  const restoreButlerData = useTestButlerData(project);
   try {
     const { handle } = await importModule("commands.js");
 
@@ -152,10 +178,11 @@ test("Project Ledger ignores platform metadata files when checking freshness", a
     handle("render", ["roadmap"], { project, write: true });
     handle("index", [], { project });
 
-    writeFileSync(join(project, ".project-ledger", ".DS_Store"), "ignored metadata", "utf8");
+    writeFileSync(join(ledgerProjectRoot(project), ".DS_Store"), "ignored metadata", "utf8");
 
     expect(handle("check", [], { project }).ok).toBe(true);
   } finally {
+    restoreButlerData();
     rmSync(project, { recursive: true, force: true });
   }
 });

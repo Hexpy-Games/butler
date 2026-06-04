@@ -1,5 +1,5 @@
 import { dirname } from "node:path";
-import { LEDGER_DIR, VIEW_NAMES } from "./constants.js";
+import { VIEW_NAMES } from "./constants.js";
 import { CliError } from "./errors.js";
 import { appendLedgerEvent, ensureDir, projectPath, projectRelative } from "./fs.js";
 import { loadIndex, queryIndex, sortRecords } from "./indexer.js";
@@ -103,7 +103,7 @@ export function render(project, viewName, options) {
     throw new CliError(`Unsupported render view: ${viewName}`, "invalid_render_view");
   }
   const markdown = renderMarkdown(project, viewName);
-  const relPath = `${LEDGER_DIR}/views/${viewName}.md`;
+  const relPath = `views/${viewName}.md`;
   const path = projectPath(project, relPath);
   const displayPath = projectRelative(project, path);
   if (options.write) {

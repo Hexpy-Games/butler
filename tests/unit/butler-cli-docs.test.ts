@@ -42,7 +42,7 @@ test("README normal workflows use the product CLI instead of internal scripts", 
 });
 
 test("CLI reference lists every registry command with availability state", () => {
-  const reference = readRepoOrLedgerFile(".project-ledger/references/cli-reference.md");
+  const reference = readRepoOrLedgerFile("project-ledger/projects/butler/references/cli-reference.md");
   const documentedCommands = [...reference.matchAll(/^- `([^`]+)`\s+-\s+(available|planned|deferred)\./gm)]
     .map((match) => ({
       usage: match[1],
@@ -58,7 +58,7 @@ test("CLI reference lists every registry command with availability state", () =>
 });
 
 test("CLI spec defines the user documentation gate", () => {
-  const spec = readRepoOrLedgerFile(".project-ledger/specs/butler-cli.md");
+  const spec = readRepoOrLedgerFile("project-ledger/projects/butler/specs/butler-cli.md");
 
   expect(spec).toContain("Product Documentation Contract");
   expect(spec).toContain("must link to a command reference");

@@ -13,6 +13,7 @@ function runLedgerJson(args: string[]): any {
   const result = spawnSync(process.execPath, [cliPath, ...args, "--project", root, "--json"], {
     encoding: "utf8",
     env: { ...process.env, BUTLER_DATA: butlerData },
+    maxBuffer: 20 * 1024 * 1024,
   });
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);

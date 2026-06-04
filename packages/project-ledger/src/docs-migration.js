@@ -8,7 +8,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
-import { LEDGER_DIR } from "./constants.js";
 import {
   appendLedgerEvent,
   ensureDir,
@@ -74,35 +73,35 @@ function idFor(kind, targetRel) {
     reference: "REF",
     roadmap: "ROADMAP",
   }[kind] ?? "DOC";
-  return `${prefix}-${slug(targetRel.replace(new RegExp(`^${LEDGER_DIR}/[^/]+/`, "u"), ""))}`;
+  return `${prefix}-${slug(targetRel.replace(/^[^/]+\//u, ""))}`;
 }
 
 function classify(relPath) {
   if (!relPath.startsWith("docs/") || !relPath.endsWith(".md")) return null;
   const underDocs = relPath.slice("docs/".length);
   if (underDocs.startsWith("specs/")) {
-    return { kind: "spec", targetRel: `${LEDGER_DIR}/specs/${underDocs.slice("specs/".length)}` };
+    return { kind: "spec", targetRel: `specs/${underDocs.slice("specs/".length)}` };
   }
   if (underDocs.startsWith("reports/")) {
-    return { kind: "report", targetRel: `${LEDGER_DIR}/reports/${underDocs.slice("reports/".length)}` };
+    return { kind: "report", targetRel: `reports/${underDocs.slice("reports/".length)}` };
   }
   if (underDocs.startsWith("decisions/")) {
-    return { kind: "decision", targetRel: `${LEDGER_DIR}/decisions/${underDocs.slice("decisions/".length)}` };
+    return { kind: "decision", targetRel: `decisions/${underDocs.slice("decisions/".length)}` };
   }
   if (underDocs.startsWith("handoffs/")) {
-    return { kind: "handoff", targetRel: `${LEDGER_DIR}/handoffs/${underDocs.slice("handoffs/".length)}` };
+    return { kind: "handoff", targetRel: `handoffs/${underDocs.slice("handoffs/".length)}` };
   }
   if (basename(underDocs).startsWith("plan-")) {
-    return { kind: "plan", targetRel: `${LEDGER_DIR}/plans/${underDocs}` };
+    return { kind: "plan", targetRel: `plans/${underDocs}` };
   }
   if (basename(underDocs).startsWith("roadmap")) {
-    return { kind: "roadmap", targetRel: `${LEDGER_DIR}/roadmaps/${underDocs}` };
+    return { kind: "roadmap", targetRel: `roadmaps/${underDocs}` };
   }
   if (underDocs === "agent-loop-completion-report.md") {
-    return { kind: "report", targetRel: `${LEDGER_DIR}/reports/${underDocs}` };
+    return { kind: "report", targetRel: `reports/${underDocs}` };
   }
   if (TOP_LEVEL_REFERENCES.has(underDocs)) {
-    return { kind: "reference", targetRel: `${LEDGER_DIR}/references/${underDocs}` };
+    return { kind: "reference", targetRel: `references/${underDocs}` };
   }
   return null;
 }

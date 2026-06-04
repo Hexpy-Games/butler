@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { COUNTED_KINDS, INDEX_PATH, LEDGER_DIR, VIEW_NAMES } from "./constants.js";
+import { COUNTED_KINDS, INDEX_PATH, LAYOUT_DIRS, VIEW_NAMES } from "./constants.js";
 import { CliError, nowIso } from "./errors.js";
 import {
   appendLedgerEvent,
@@ -33,7 +33,7 @@ export function countRecords(records) {
 
 export function viewStatuses(project, maxSourceMtimeMs) {
   return VIEW_NAMES.map((view) => {
-    const relPath = `${LEDGER_DIR}/views/${view}.md`;
+    const relPath = `views/${view}.md`;
     const path = projectPath(project, relPath);
     const displayPath = projectRelative(project, path);
     if (!existsSync(path)) return { name: view, path: displayPath, exists: false, stale: true };
@@ -294,11 +294,16 @@ function normalizeLedgerDisplayPath(project, path) {
   if (typeof path !== "string" || !path.trim()) return path;
   const normalized = path.split("\\").join("/");
   if (
-    normalized === LEDGER_DIR ||
-    normalized.startsWith(`${LEDGER_DIR}/`) ||
-    normalized.startsWith("project-ledger/projects/")
+    normalized.startsWith("project-ledger/projects/") ||
+    isLedgerRootRelativePath(normalized)
   ) {
     return projectRelative(project, projectPath(project, normalized));
   }
   return normalized;
+}
+
+function isLedgerRootRelativePath(path) {
+  if (path === "project.json" || path === "ledger.jsonl") return true;
+  const [head] = path.split("/");
+  return LAYOUT_DIRS.includes(head);
 }

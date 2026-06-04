@@ -8,7 +8,26 @@ const root = process.cwd();
 const cliPath = join(root, "packages", "project-ledger", "bin", "project-ledger");
 
 function tempProject(): string {
-  return mkdtempSync(join(tmpdir(), "project-ledger-fixture-"));
+  const project = mkdtempSync(join(tmpdir(), "project-ledger-fixture-"));
+  writeFileSync(
+    join(project, "package.json"),
+    `${JSON.stringify({ name: "demo", private: true }, null, 2)}\n`,
+    "utf8",
+  );
+  return project;
+}
+
+function testButlerData(project: string): string {
+  return join(project, ".butler-data");
+}
+
+function ledgerProjectRoot(project: string, butlerData = testButlerData(project), id = "demo"): string {
+  return join(butlerData, "project-ledger", "projects", id);
+}
+
+function projectArg(args: string[]): string | null {
+  const index = args.indexOf("--project");
+  return index >= 0 ? args[index + 1] ?? null : null;
 }
 
 function runLedger(args: string[], options: { cwd?: string; env?: Record<string, string> } = {}): {
@@ -16,9 +35,11 @@ function runLedger(args: string[], options: { cwd?: string; env?: Record<string,
   stdout: string;
   stderr: string;
 } {
+  const project = projectArg(args);
+  const defaultEnv = project ? { BUTLER_DATA: testButlerData(project) } : {};
   const result = spawnSync(process.execPath, [cliPath, ...args], {
     cwd: options.cwd ?? root,
-    env: { ...process.env, ...options.env },
+    env: { ...process.env, ...defaultEnv, ...options.env },
     encoding: "utf8",
   });
   return {
@@ -36,7 +57,7 @@ function runLedgerJson(args: string[], options: { cwd?: string; env?: Record<str
 }
 
 function writeWork(project: string, id: string, frontmatter: Record<string, string>): string {
-  const dir = join(project, ".project-ledger", "work", id);
+  const dir = join(ledgerProjectRoot(project), "work", id);
   mkdirSync(dir, { recursive: true });
   const body = [
     "---",
@@ -52,7 +73,7 @@ function writeWork(project: string, id: string, frontmatter: Record<string, stri
 }
 
 function writeTask(project: string, workId: string, id: string, frontmatter: Record<string, string>): string {
-  const dir = join(project, ".project-ledger", "work", workId, "tasks");
+  const dir = join(ledgerProjectRoot(project), "work", workId, "tasks");
   mkdirSync(dir, { recursive: true });
   const body = [
     "---",
@@ -100,7 +121,7 @@ test("project-ledger root help aliases print the command reference", () => {
   }
 });
 
-test("project-ledger init creates portable repo-local ledger layout", () => {
+test("project-ledger init creates Butler data-home ledger layout", () => {
   const project = tempProject();
   try {
     const result = runLedgerJson([
@@ -115,42 +136,27 @@ test("project-ledger init creates portable repo-local ledger layout", () => {
 
     expect(result.ok).toBe(true);
     expect(result.data.project.id).toBe("demo");
-    expect(existsSync(join(project, ".project-ledger", "project.json"))).toBe(true);
-    expect(existsSync(join(project, ".project-ledger", "ledger.jsonl"))).toBe(true);
+    const dataProject = ledgerProjectRoot(project);
+    expect(result.data.root).toBe("project-ledger/projects/demo");
+    expect(existsSync(join(dataProject, "project.json"))).toBe(true);
+    expect(existsSync(join(dataProject, "ledger.jsonl"))).toBe(true);
     for (const dir of ["initiatives", "work", "decisions", "risks", "specs", "reports", "index", "views"]) {
-      expect(existsSync(join(project, ".project-ledger", dir))).toBe(true);
+      expect(existsSync(join(dataProject, dir))).toBe(true);
     }
 
-    const projectJson = JSON.parse(readFileSync(join(project, ".project-ledger", "project.json"), "utf8"));
+    const projectJson = JSON.parse(readFileSync(join(dataProject, "project.json"), "utf8"));
     expect(projectJson.schema).toBe("project-ledger.project.v1");
-    expect(readFileSync(join(project, ".project-ledger", "ledger.jsonl"), "utf8")).toContain("project_initialized");
+    expect(readFileSync(join(dataProject, "ledger.jsonl"), "utf8")).toContain("project_initialized");
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
 });
 
-test("project-ledger resolves an existing Butler data-home project before the repo-local ledger", () => {
+test("project-ledger resolves an existing Butler data-home project", () => {
   const project = tempProject();
   const butlerData = mkdtempSync(join(tmpdir(), "project-ledger-data-home-"));
   const dataProject = join(butlerData, "project-ledger", "projects", "demo");
   try {
-    runLedgerJson([
-      "init",
-      "--project",
-      project,
-      "--id",
-      "demo",
-      "--name",
-      "Demo Project",
-    ]);
-    writeWork(project, "LOCAL-WORK", {
-      id: "LOCAL-WORK",
-      kind: "work",
-      title: "Repo local work",
-      status: "in_progress",
-      spec: "docs/specs/project-ledger.md",
-    });
-
     mkdirSync(dataProject, { recursive: true });
     writeFileSync(
       join(dataProject, "project.json"),
@@ -182,7 +188,6 @@ test("project-ledger resolves an existing Butler data-home project before the re
       { env: { BUTLER_DATA: butlerData } },
     );
     expect(existsSync(join(dataProject, "views", "dashboard.md"))).toBe(true);
-    expect(existsSync(join(project, ".project-ledger", "views", "dashboard.md"))).toBe(false);
   } finally {
     rmSync(project, { recursive: true, force: true });
     rmSync(butlerData, { recursive: true, force: true });
@@ -232,7 +237,6 @@ test("project-ledger resolves Butler data-home by package name without a repo-lo
       { env: { BUTLER_DATA: butlerData } },
     );
     expect(query.data.results.map((item: any) => item.id)).toEqual(["DATA-HOME-PACKAGE-WORK"]);
-    expect(existsSync(join(project, ".project-ledger"))).toBe(false);
   } finally {
     rmSync(project, { recursive: true, force: true });
     rmSync(butlerData, { recursive: true, force: true });
@@ -451,11 +455,11 @@ test("project-ledger render writes generated views only with --write", () => {
     const preview = runLedger(["render", "--project", project, "dashboard"]);
     expect(preview.status).toBe(0);
     expect(preview.stdout).toContain("# Project Ledger Dashboard");
-    expect(existsSync(join(project, ".project-ledger", "views", "dashboard.md"))).toBe(false);
+    expect(existsSync(join(ledgerProjectRoot(project), "views", "dashboard.md"))).toBe(false);
 
     const written = runLedgerJson(["render", "--project", project, "dashboard", "--write"]);
-    expect(written.data.path).toBe(".project-ledger/views/dashboard.md");
-    expect(readFileSync(join(project, ".project-ledger", "views", "dashboard.md"), "utf8")).toContain(
+    expect(written.data.path).toBe("project-ledger/projects/demo/views/dashboard.md");
+    expect(readFileSync(join(ledgerProjectRoot(project), "views", "dashboard.md"), "utf8")).toContain(
       "generated by project-ledger",
     );
   } finally {
@@ -481,7 +485,7 @@ test("project-ledger doctor detects missing spec orphan task stale view and priv
       status: "todo",
     });
     writeFileSync(
-      join(project, ".project-ledger", "risks", "R-0001.md"),
+      join(ledgerProjectRoot(project), "risks", "R-0001.md"),
       "---\nid: R-0001\nkind: risk\ntitle: Privacy leak\nstatus: open\n---\nTELEGRAM_BOT_TOKEN=secret\n",
       "utf8",
     );

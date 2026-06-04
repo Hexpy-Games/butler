@@ -15,7 +15,6 @@ export function butlerProjectLedgerRoot(): string {
       ? join(process.env.BUTLER_DATA, "project-ledger", "projects", "butler")
       : "",
     join(homedir(), ".butler", "project-ledger", "projects", "butler"),
-    join(repoRoot, ".project-ledger"),
   ]);
 
   const root = candidates.find((candidate) => existsSync(join(candidate, "project.json")));
@@ -26,8 +25,9 @@ export function butlerProjectLedgerRoot(): string {
 }
 
 export function resolveRepoOrLedgerPath(path: string): string {
-  if (path.startsWith(".project-ledger/")) {
-    return join(butlerProjectLedgerRoot(), path.slice(".project-ledger/".length));
+  const canonicalPrefix = "project-ledger/projects/butler/";
+  if (path.startsWith(canonicalPrefix)) {
+    return join(butlerProjectLedgerRoot(), path.slice(canonicalPrefix.length));
   }
   return join(repoRoot, path);
 }

@@ -11,14 +11,11 @@ reporting: Reply with bounded status, next actions, blockers, stale views, or do
 
 # Project Ledger
 
-Use this skill when a project contains `.project-ledger/`, has a matching
-external Project Ledger repository under `$PROJECT_LEDGER_REPO/projects/`,
-`$BUTLER_PROJECT_LEDGER_REPO/projects/`, `$BUTLER_DATA/project-ledger/projects/`,
-or `~/.butler/project-ledger/projects/`, or when the user asks to manage project
-state, progress, roadmap, handoff, decisions, risks, work, or tasks through
-Project Ledger. Butler project worktrees may omit a repo-local `.project-ledger/`
-directory when their package name or folder name resolves to a live external
-ledger record.
+Use this skill when a project has a matching Project Ledger repository under
+`$BUTLER_DATA/project-ledger/projects/`, `~/.butler/project-ledger/projects/`,
+`$PROJECT_LEDGER_REPO/projects/`, or `$BUTLER_PROJECT_LEDGER_REPO/projects/`,
+or when the user asks to manage project state, progress, roadmap, handoff,
+decisions, risks, work, or tasks through Project Ledger.
 
 ## Start Session Routine
 
@@ -64,16 +61,15 @@ review prompts.
 
 ## Source Of Truth
 
-Project Ledger records under `.project-ledger/` are the default source of truth
-for standalone repos. For Butler-managed projects, the CLI resolves
-`--project "$PWD"` to a matching external ledger repository first, such as
-`$PROJECT_LEDGER_REPO/projects/butler` or
-`~/.butler/project-ledger/projects/butler`, using repo-local project metadata,
-package name, or folder name as routing hints. Generated view files are derived
+Project Ledger records under `$BUTLER_DATA/project-ledger/projects/<id>/` are
+the default source of truth. The CLI resolves `--project "$PWD"` to a matching
+data-home ledger, such as `~/.butler/project-ledger/projects/butler`, using
+package name or folder name as routing hints. Generated view files are derived
 views stored under the resolved ledger root.
 
-The governing spec is `.project-ledger/specs/project-ledger.md`. The legacy
-`docs/specs/project-ledger.md` path may exist as a compatibility symlink only.
+The governing spec lives under the resolved ledger root, for example
+`project-ledger/projects/butler/specs/project-ledger.md`. Legacy `docs/...`
+paths may exist as compatibility symlinks only.
 
 ## Work Recording
 
@@ -99,6 +95,7 @@ When migrating an existing repo, use dry-run first:
 packages/project-ledger/bin/project-ledger migrate-docs --project "$PWD" --json
 ```
 
-Only use `--write` when the repo should make Project Ledger the source of truth
-for supported project-management documents. Write mode moves supported `docs/`
-files into `.project-ledger/` and leaves `docs/...` compatibility symlinks.
+Only use `--write` when Project Ledger should become the source of truth for
+supported project-management documents. Write mode moves supported `docs/` files
+into the resolved data-home ledger root and leaves `docs/...` compatibility
+symlinks.

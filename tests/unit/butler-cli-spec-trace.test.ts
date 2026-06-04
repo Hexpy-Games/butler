@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
 
 const childSpecs = [
-  ".project-ledger/specs/cli/core-commands.md",
-  ".project-ledger/specs/cli/operator-commands.md",
-  ".project-ledger/specs/cli/advanced-deferred-commands.md",
+  "project-ledger/projects/butler/specs/cli/core-commands.md",
+  "project-ledger/projects/butler/specs/cli/operator-commands.md",
+  "project-ledger/projects/butler/specs/cli/advanced-deferred-commands.md",
 ];
 const legacyChildSpecs = [
   "docs/specs/cli/core-commands.md",
@@ -105,7 +105,7 @@ const expectedCommands = [
 ];
 
 test("Butler CLI parent spec links command-level child specs", () => {
-  const parent = readRepoOrLedgerFile(".project-ledger/specs/butler-cli.md");
+  const parent = readRepoOrLedgerFile("project-ledger/projects/butler/specs/butler-cli.md");
 
   expect(parent).toContain("No command may be implemented");
   expect(parent).toContain("Maintainer Boundary");
@@ -136,12 +136,16 @@ test("command-level specs include necessity privacy and tests", () => {
 });
 
 test("completed CLI parent spec has consistent child spec statuses", () => {
-  const parent = readRepoOrLedgerFile(".project-ledger/specs/butler-cli.md");
+  const parent = readRepoOrLedgerFile("project-ledger/projects/butler/specs/butler-cli.md");
   expect(parent).toContain("Status: Complete.");
 
-  expect(readRepoOrLedgerFile(".project-ledger/specs/cli/core-commands.md")).toContain("Status: Implemented.");
-  expect(readRepoOrLedgerFile(".project-ledger/specs/cli/operator-commands.md")).toContain("Status: Implemented.");
-  expect(readRepoOrLedgerFile(".project-ledger/specs/cli/advanced-deferred-commands.md")).toContain(
+  expect(readRepoOrLedgerFile("project-ledger/projects/butler/specs/cli/core-commands.md")).toContain(
+    "Status: Implemented.",
+  );
+  expect(readRepoOrLedgerFile("project-ledger/projects/butler/specs/cli/operator-commands.md")).toContain(
+    "Status: Implemented.",
+  );
+  expect(readRepoOrLedgerFile("project-ledger/projects/butler/specs/cli/advanced-deferred-commands.md")).toContain(
     "Status: Advanced implemented; Deferred commands remain unimplemented.",
   );
 });
