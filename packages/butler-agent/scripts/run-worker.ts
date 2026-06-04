@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { runWorkerTask } from "../src/integrations/providers/provider.ts";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 const [, , taskDir, projectPath, model = ""] = process.argv;
@@ -18,6 +18,8 @@ function log(line: string): void {
 
 type StoredWorkerActivity = {
   phase?: string;
+  semantic_phase?: string;
+  action_kind?: string;
   status_line?: string;
   current_title?: string;
   updated_at?: string;
@@ -28,6 +30,36 @@ type StoredWorkerActivity = {
     rows?: Array<{ id?: string; state?: string } & Record<string, unknown>>;
   }>;
 };
+
+
+function stableHash(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+function compactPreview(input: string, max = 240): string {
+  return input.replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+function writeTrace(event: string, data: Record<string, unknown> = {}): void {
+  try {
+    appendFileSync(
+      join(taskDir, "worker_observability.jsonl"),
+      `${JSON.stringify({
+        ts: new Date().toISOString(),
+        event,
+        ...data,
+      })}\n`,
+      "utf8",
+    );
+  } catch {
+    // Observability is best-effort; worker execution remains primary.
+  }
+}
 
 function readActivity(): StoredWorkerActivity {
   const path = join(taskDir, "worker_activity.json");
@@ -69,6 +101,8 @@ function writeActivity(
   statusLine: string,
   currentTitle?: string,
   workBlock?: NonNullable<StoredWorkerActivity["work_blocks"]>[number],
+  semanticPhase?: string,
+  actionKind?: string,
 ): void {
   try {
     const previous = readActivity();
@@ -80,6 +114,8 @@ function writeActivity(
       `${JSON.stringify({
         ...previous,
         phase,
+        semantic_phase: semanticPhase ?? previous.semantic_phase,
+        action_kind: actionKind ?? previous.action_kind,
         status_line: statusLine,
         current_title: currentTitle ?? previous.current_title,
         updated_at: new Date().toISOString(),
@@ -106,23 +142,52 @@ function workerFailureStatusLine(message: string): string {
 }
 
 try {
+  const requestPath = join(taskDir, "request.md");
+  const requestText = existsSync(requestPath) ? readFileSync(requestPath, "utf8") : "";
+  writeTrace("worker.start", {
+    task_id: taskDir.split("/").at(-1),
+    project_path: projectPath,
+    model: model || null,
+    request_chars: requestText.length,
+    request_hash: stableHash(requestText),
+    request_preview: compactPreview(requestText),
+  });
+  const startedAt = Date.now();
   const result = await runWorkerTask({
     taskDir,
     projectPath,
     model: model || undefined,
     log,
-    onActivity: ({ phase, statusLine, currentTitle, workBlock }) =>
+    onActivity: ({ phase, semanticPhase, actionKind, statusLine, currentTitle, workBlock }) => {
+      writeTrace("worker.activity", {
+        phase,
+        semantic_phase: semanticPhase,
+        action_kind: actionKind,
+        status_line: statusLine,
+        current_title: currentTitle,
+        work_block_id: workBlock && typeof workBlock === "object" ? (workBlock as { id?: unknown }).id : undefined,
+      });
       writeActivity(
         phase,
         statusLine,
         currentTitle,
         workBlock as NonNullable<StoredWorkerActivity["work_blocks"]>[number] | undefined,
-      ),
+        semanticPhase,
+        actionKind,
+      );
+    },
+  });
+  writeTrace("worker.finish", {
+    duration_ms: Date.now() - startedAt,
+    result_chars: result.length,
+    result_hash: stableHash(result),
+    result_preview: compactPreview(result),
   });
   process.stdout.write(result);
   if (!result.endsWith("\n")) process.stdout.write("\n");
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
+  writeTrace("worker.error", { message: compactPreview(message, 500) });
   writeActivity("failed", workerFailureStatusLine(message));
   log(`ERROR: ${message}`);
   process.exit(1);
