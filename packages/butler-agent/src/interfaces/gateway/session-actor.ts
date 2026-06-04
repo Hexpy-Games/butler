@@ -372,12 +372,17 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     } catch (error) {
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
-      this.options.store.updateLifecycleState(binding.sessionId, "crashed", timestamp);
+      const failureState = safeFailure.code === "goal_completion_incomplete"
+        ? "active"
+        : "crashed";
+      this.options.store.updateLifecycleState(binding.sessionId, failureState, timestamp);
       recordSessionLifecycle({
         sessionId: binding.sessionId,
         role: binding.role,
-        state: "crashed",
-        reason: "gateway-runtime-error",
+        state: failureState,
+        reason: failureState === "active"
+          ? "gateway-turn-incomplete"
+          : "gateway-runtime-error",
         metadata: {
           message: safeFailure.message,
           code: safeFailure.code,

@@ -1534,6 +1534,87 @@ test("goal completion review verdict without new tool evidence is not delivered 
   expect(result.text).not.toContain("추가 도구 호출 없이");
 });
 
+test("native runtime continues direct work when completion review returns incomplete", async () => {
+  const attempts: string[] = [];
+  const executedCommands: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    executeButlerTool: async (call) => {
+      if (call.name === "run_command") {
+        executedCommands.push(String(call.args.command));
+        return {
+          ok: true,
+          command: call.args.command,
+          cwd: tempDir,
+          exit_code: 0,
+          timed_out: false,
+          stdout_preview: `ok: ${call.args.command}`,
+        };
+      }
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      attempts.push(input.prompt);
+      if (attempts.length === 1) {
+        await input.onAssistantTextBeforeTools?.({
+          text: "작업: 현재 커밋 상태를 확인합니다.\n이유: 사용자 요청은 작업 단위 커밋을 요구했습니다.\n다음: 검증을 실행한 뒤 결과를 커밋합니다.",
+          toolCalls: [{ name: "run_command", args: { command: "git status --short" } }],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "git status --short" },
+          rawArguments: JSON.stringify({ command: "git status --short" }),
+        });
+        return "첫 커밋 상태는 확인했지만 검증과 다음 커밋은 아직 끝나지 않았습니다.";
+      }
+      if (input.prompt.includes("Goal Completion Incomplete Continuation")) {
+        expect(input.prompt).toContain("검증과 다음 커밋은 아직 완료되지 않았습니다");
+        await input.onAssistantTextBeforeTools?.({
+          text: "작업: 요청된 검증과 커밋을 완료합니다.\n이유: 리뷰 게이트가 아직 미완료라고 판단했습니다.\n다음: 검증 결과와 커밋 해시를 보고합니다.",
+          toolCalls: [{ name: "run_command", args: { command: "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation" } }],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation" },
+          rawArguments: JSON.stringify({
+            command: "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation",
+          }),
+        });
+        return "검증과 다음 커밋을 완료했습니다.";
+      }
+      expect(input.prompt).toContain("Goal Completion Review");
+      if (!attempts.some((prompt) => prompt.includes("Goal Completion Incomplete Continuation"))) {
+        return "INCOMPLETE: 검증과 다음 커밋은 아직 완료되지 않았습니다.";
+      }
+      return "검증과 다음 커밋을 완료했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/incomplete-continuation",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: {
+      text: "작업목록을 순서대로 직접 처리하고, 각 작업이 끝날 때마다 검증 후 커밋해줘.",
+    },
+  });
+
+  expect(attempts.some((prompt) => prompt.includes("Goal Completion Incomplete Continuation")))
+    .toBe(true);
+  expect(executedCommands).toEqual([
+    "git status --short",
+    "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation",
+  ]);
+  expect(result.text).toContain("검증과 다음 커밋을 완료");
+});
+
 test("native runtime does not rerun completion review after planned public report is written", async () => {
   const attempts: string[] = [];
   const executedTools: string[] = [];

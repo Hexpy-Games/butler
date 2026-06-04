@@ -138,6 +138,63 @@ test("due automation envelopes route through gateway and session actor", async (
   });
 });
 
+test("goal completion incomplete runtime errors keep session bindings active", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new class extends ScriptedRuntime {
+    override async runTurn(input: RuntimeTurnInput): Promise<never> {
+      this.turns.push(input);
+      const error = new Error("아직 완료 증거가 부족합니다.");
+      error.name = "GoalCompletionIncompleteError";
+      throw error;
+    }
+  }();
+  store.upsert({
+    sessionId: "butler/app-general",
+    role: "butler",
+    workspacePath: tempDir,
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "general",
+    }],
+  });
+
+  const router = new GatewayRouter({ store });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler in an automation test.",
+  });
+  const server = createGatewayServer({
+    router,
+    handlers: createLifecycleGatewayHandlers(lifecycle),
+  });
+
+  await expect(server.handleInbound({
+    eventId: "app:goal-incomplete",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-goal-incomplete",
+      text: "finish the direct work",
+      timestamp: "2026-05-18T12:06:00.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-goal-incomplete",
+    },
+  })).rejects.toThrow("아직 완료 증거가 부족합니다");
+
+  expect(store.getBySessionId("butler/app-general")?.lifecycleState)
+    .toBe("active");
+});
+
 test("queued automation events are consumed by butler-main path and delivered to session transport binding", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const runtime = new ScriptedRuntime();
@@ -421,6 +478,64 @@ test("queued inbound provider failure preserves safe API diagnostics for app pro
       statusCode: 500,
       endpoint: "https://api.openai.com/v1/responses",
       model: "gpt-5.5",
+      retryable: true,
+    },
+  });
+  expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
+});
+
+test("queued inbound goal completion incomplete preserves safe retryable reason", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue({
+    eventId: "app:message-goal-incomplete",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-goal-incomplete",
+      text: "continue the long direct task",
+      timestamp: "2026-05-18T12:05:00.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-goal-incomplete",
+    },
+  }, { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        const error = new Error(
+          "확인된 완료 증거가 아직 부족합니다. token=secret",
+        );
+        error.name = "GoalCompletionIncompleteError";
+        throw error;
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 0,
+    delivered: 1,
+    failed: 1,
+  });
+  expect(app.sentActions[0]).toMatchObject({
+    message: {
+      text: "확인된 완료 증거가 아직 부족합니다. [redacted]",
+      replyToMessageId: "message-goal-incomplete",
+    },
+    metadata: {
+      kind: "turn_failed",
+      turnId: "turn-goal-incomplete",
+      safeErrorCode: "goal_completion_incomplete",
       retryable: true,
     },
   });
