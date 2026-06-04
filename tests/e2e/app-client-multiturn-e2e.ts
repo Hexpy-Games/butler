@@ -50,7 +50,8 @@ type E2eMode =
   | "live-llm-workstream-natural"
   | "live-llm-real-project-check"
   | "live-llm-workstream-natural-external"
-  | "live-llm-artifact-report";
+  | "live-llm-artifact-report"
+  | "live-llm-watl-worker";
 const requestedMode = process.env.BUTLER_APP_CLIENT_E2E_MODE;
 const e2eMode: E2eMode = requestedMode === "live-llm"
   ? "live-llm"
@@ -76,6 +77,8 @@ const e2eMode: E2eMode = requestedMode === "live-llm"
             ? "live-llm-workstream-natural-external"
           : requestedMode === "live-llm-artifact-report"
             ? "live-llm-artifact-report"
+          : requestedMode === "live-llm-watl-worker"
+            ? "live-llm-watl-worker"
           : "deterministic";
 const usesLiveLlm = e2eMode === "live-llm" ||
   e2eMode === "live-llm-toolchain" ||
@@ -86,7 +89,8 @@ const usesLiveLlm = e2eMode === "live-llm" ||
   e2eMode === "live-llm-workstream-natural" ||
   e2eMode === "live-llm-real-project-check" ||
   e2eMode === "live-llm-workstream-natural-external" ||
-  e2eMode === "live-llm-artifact-report";
+  e2eMode === "live-llm-artifact-report" ||
+  e2eMode === "live-llm-watl-worker";
 const usesDecisionContextScenario = e2eMode === "decision-context" || e2eMode === "live-llm-decision-context";
 const usesDynamicDecisionContextScenario = e2eMode === "live-llm-decision-context";
 const usesExternalButlerService = e2eMode === "live-llm-workstream-natural-external";
@@ -98,15 +102,18 @@ const usesNaturalWorkStreamScenario = e2eMode === "live-llm-workstream-natural" 
   usesExternalButlerService;
 const usesWorkStreamScenario = e2eMode === "live-llm-workstream" || usesNaturalWorkStreamScenario;
 const usesArtifactReportScenario = e2eMode === "live-llm-artifact-report";
+const usesWatlWorkerScenario = e2eMode === "live-llm-watl-worker";
 const usesDynamicWorkLabels = e2eMode === "live-llm-toolchain" ||
   usesDynamicDecisionContextScenario ||
   usesWorkStreamScenario ||
-  usesArtifactReportScenario;
+  usesArtifactReportScenario ||
+  usesWatlWorkerScenario;
 const usesToolchainScenario = e2eMode === "toolchain" ||
   e2eMode === "live-llm-toolchain" ||
   usesDecisionContextScenario ||
   usesWorkStreamScenario ||
-  usesArtifactReportScenario;
+  usesArtifactReportScenario ||
+  usesWatlWorkerScenario;
 const composerSelector = "[data-test-class~=\"composer-card\"]";
 const composerTextareaSelector = `${composerSelector} textarea`;
 const composerSendButtonSelector = `${composerSelector} button[type="submit"]`;
@@ -299,7 +306,7 @@ const waitForFinalTimeoutMs = usesLiveLlm ? 300_000 : 20_000;
 
 mkdirSync(screenshotDir, { recursive: true });
 if (usesMemoryRecallScenario) initializeMemoryRecallFixture();
-if (usesBeegAutonomousScenario) initializeBeegRealDataSnapshot();
+if (usesBeegAutonomousScenario || usesWatlWorkerScenario) initializeBeegRealDataSnapshot();
 if (usesToolchainScenario && !usesArtifactReportScenario) {
   initializeToolchainProject();
 }
@@ -482,6 +489,8 @@ try {
 
   if (usesMemoryRecallScenario) {
     await runMemoryRecallBrowserScenario(cdp);
+  } else if (usesWatlWorkerScenario) {
+    await runWatlWorkerBrowserScenario(cdp);
   } else if (usesBeegAutonomousScenario) {
     await runBeegAutonomousBrowserScenario(cdp);
   } else if (usesToolchainScenario) {
@@ -541,6 +550,9 @@ try {
           ...(usesArtifactReportScenario
             ? ["real-llm-provider-called", "command-generated-artifacts", "default-goal-completion-gate"]
             : []),
+          ...(usesWatlWorkerScenario
+            ? ["real-llm-provider-called", "electron-natural-worker-prompt", "worker-activity-timeline-evidence", "worker-implementation-evidence"]
+            : []),
         ]
         : usesMemoryRecallScenario
         ? [
@@ -571,6 +583,7 @@ try {
       : durableTranscriptToolCalls(),
     memoryRecall: usesMemoryRecallScenario ? readMemoryRecallEvidence() : undefined,
     beegAutonomous: usesBeegAutonomousScenario ? readBeegAutonomousEvidence() : undefined,
+    watlWorker: usesWatlWorkerScenario ? readWatlWorkerEvidence() : undefined,
     inboundQueue: usesExternalButlerService ? inboundQueueCounts() : undefined,
     decisionSourceCounts,
     workStreams: workStreamEvidence,
@@ -697,7 +710,7 @@ function initializeBeegRealDataSnapshot(): void {
   });
   assert(
     result.status === 0,
-    `failed to copy real Butler data snapshot for BEEG autonomous E2E: ${result.stderr || result.stdout}`,
+    `failed to copy real Butler data snapshot for live worker Electron E2E: ${result.stderr || result.stdout}`,
   );
   rmSync(appDbPath, { force: true });
 }
@@ -1050,6 +1063,67 @@ async function runMemoryRecallBrowserScenario(client: CdpClient): Promise<void> 
     finalText.includes("2026-04-24") && finalText.includes(MEMORY_QUERY_FIRST_TEXT),
     "live memory recall final answer did not include the exact query_memory first-message evidence.",
   );
+}
+
+function readWatlWorkerEvidence(): Record<string, unknown> {
+  const taskDirs = listTaskDirs(tempDir);
+  const eventFiles = taskDirs.map((dir) => join(dir, "worker_activity_events.jsonl")).filter(existsSync);
+  const projectionFiles = taskDirs.map((dir) => join(dir, "worker_activity.json")).filter(existsSync);
+  const events = eventFiles.flatMap((file) => readJsonlObjects(file));
+  const projections = projectionFiles.map((file) => JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>);
+  const phases = uniqueStrings(events.map((event) => stringField(event, "semantic_phase") || stringField(event, "semanticPhase")));
+  const actions = uniqueStrings(events.map((event) => stringField(event, "action_kind") || stringField(event, "actionKind")));
+  const completionObligations = uniqueStrings(events.flatMap((event) => stringArray(event.completion_obligations ?? event.completionObligations)));
+  const evidenceRefs = uniqueStrings(events.flatMap((event) => stringArray(event.evidence_refs ?? event.evidenceRefs)));
+  return { taskDirs, eventFiles, projectionFiles, eventCount: events.length, projectionCount: projections.length, phases, actions, completionObligations, evidenceRefs };
+}
+
+function listTaskDirs(butlerData: string): string[] {
+  const tasksRoot = join(butlerData, "tasks");
+  if (!existsSync(tasksRoot)) return [];
+  return readdirSync(tasksRoot)
+    .map((entry) => join(tasksRoot, entry))
+    .filter((candidate) => statSync(candidate).isDirectory());
+}
+
+function readJsonlObjects(file: string): Array<Record<string, unknown>> {
+  return readFileSync(file, "utf8")
+    .split(/\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+function stringField(value: Record<string, unknown>, key: string): string | undefined {
+  const candidate = value[key];
+  return typeof candidate === "string" ? candidate : undefined;
+}
+
+async function waitForWatlWorkerOutcome(client: CdpClient): Promise<void> {
+  await waitForAssistantFinalContaining(client, ["수정", "검증"], 240_000);
+  const durableToolCalls = durableTranscriptToolCalls(latestE2eSessionId());
+  assert(durableToolCalls.includes("dispatch_worker") || durableToolCalls.includes("create_planned_task") || durableToolCalls.includes("run_planned_task"), `WATL worker Electron E2E did not start worker/planned work: ${durableToolCalls.join(" -> ")}`);
+  const evidence = readWatlWorkerEvidence();
+  const phases = stringArray(evidence.phases);
+  const actions = stringArray(evidence.actions);
+  assert(Number(evidence.eventCount) > 0, "WATL worker Electron E2E did not persist worker activity events.");
+  assert(phases.includes("executing"), `WATL worker Electron E2E did not record executing semantic phase: ${phases.join(", ")}`);
+  assert(phases.includes("verifying"), `WATL worker Electron E2E did not record verifying semantic phase: ${phases.join(", ")}`);
+  assert(actions.some((action) => ["edit_file", "apply_patch", "write_file", "run_command"].includes(action)), `WATL worker Electron E2E did not record implementation action evidence: ${actions.join(", ")}`);
+}
+
+async function runWatlWorkerBrowserScenario(client: CdpClient): Promise<void> {
+  const prompt = [
+    "WATL 문서에서 Electron 앱으로 worker timeline을 확인하는 절차가 아직 부족한 것 같아.",
+    "실제 앱에서 확인할 수 있는 검증 절차를 짧게 보강하고, 관련 문서만 수정한 뒤 검증까지 해줘.",
+  ].join("\n");
+  assert(!/테스트를 위해|WATL e2e|semantic phase|activity event|tool/iu.test(prompt), "WATL worker prompt must remain natural and must not name test internals.");
+  await sendComposerTurn(client, prompt);
+  await waitForWatlWorkerOutcome(client);
 }
 
 async function runBeegAutonomousBrowserScenario(client: CdpClient): Promise<void> {
@@ -1904,6 +1978,20 @@ async function waitForAssistantFinalText(client: CdpClient, text: string, timeou
     client,
     assistantFinalTextIncludesExpression(text),
     `assistant final text ${text}`,
+    timeoutMs,
+  );
+}
+
+async function waitForAssistantFinalContaining(client: CdpClient, texts: string[], timeoutMs?: number): Promise<void> {
+  const escapedTexts = JSON.stringify(texts);
+  await waitForExpression(
+    client,
+    `(() => {
+      const documents = Array.from(document.querySelectorAll(${JSON.stringify(assistantFinalMarkdownSelector)}));
+      const text = (documents.at(-1)?.textContent ?? "").replace(/\\s+/g, " " ).trim();
+      return ${escapedTexts}.every((part) => text.includes(part));
+    })()`,
+    `assistant final text containing ${texts.join(", ")}`,
     timeoutMs,
   );
 }
