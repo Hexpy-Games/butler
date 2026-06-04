@@ -1241,8 +1241,10 @@ export interface AutomationRunResult {
 export type WorkerActivityPhase =
   | "orienting"
   | "planning"
+  | "inspecting"
   | "executing"
   | "verifying"
+  | "committing"
   | "consolidating"
   | "reporting"
   | "complete"

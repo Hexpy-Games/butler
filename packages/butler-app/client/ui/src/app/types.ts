@@ -956,8 +956,10 @@ export interface AutomationTargetSummary {
 export type WorkerActivityPhase =
   | "orienting"
   | "planning"
+  | "inspecting"
   | "executing"
   | "verifying"
+  | "committing"
   | "consolidating"
   | "reporting"
   | "complete"
@@ -973,6 +975,8 @@ export interface WorkerActivitySummary {
   worker_label: string;
   objective: string;
   phase: WorkerActivityPhase;
+  semantic_phase?: WorkerActivityPhase;
+  action_kind?: string;
   status_line: string;
   current_activity_title?: string;
   work_blocks?: WorkBlockView[];

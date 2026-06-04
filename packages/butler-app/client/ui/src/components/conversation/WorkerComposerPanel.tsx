@@ -15,7 +15,7 @@ function activityRow(worker: WorkerActivitySummary, depth = 0) {
     title: worker.worker_label,
     description: workerActivityDescription(worker),
     meta: workerActivityMeta(worker),
-    phase: worker.phase,
+    phase: worker.semantic_phase ?? worker.phase,
     depth,
   };
 }

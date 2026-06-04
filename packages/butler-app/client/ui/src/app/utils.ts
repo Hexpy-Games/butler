@@ -2204,8 +2204,10 @@ function formatReasoningTokens(tokens: number): string {
 export function phaseLabel(value: string): string {
   if (value === "orienting") return "Thinking";
   if (value === "planning") return "Planning";
+  if (value === "inspecting") return "Inspecting";
   if (value === "executing") return "Executing";
   if (value === "verifying") return "Verifying";
+  if (value === "committing") return "Committing";
   if (value === "consolidating") return "Consolidating";
   if (value === "reporting") return "Reporting";
   if (value === "complete") return "Complete";
@@ -2292,14 +2294,19 @@ export function workerActivityDescription(
 export function workerActivityMeta(
   worker: WorkerActivitySummary,
 ): string | null {
-  return phaseLabel(worker.phase);
+  const phase = phaseLabel(worker.semantic_phase ?? worker.phase);
+  const action = worker.action_kind?.trim();
+  return action ? `${phase} · ${action}` : phase;
 }
 
 export function workerActivityCollapsedSummaryLine(
   worker: WorkerActivitySummary,
 ): string {
   const label = worker.worker_label.trim() || "Worker";
-  return `${label} ${phaseLabel(worker.phase)}: ${workerActivityCollapsedAction(worker)}`;
+  const phase = phaseLabel(worker.semantic_phase ?? worker.phase);
+  const action = worker.action_kind?.trim();
+  const meta = action ? `${phase}/${action}` : phase;
+  return `${label} ${meta}: ${workerActivityCollapsedAction(worker)}`;
 }
 
 function workerActivityCollapsedAction(worker: WorkerActivitySummary): string {

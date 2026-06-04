@@ -7,8 +7,10 @@ import styles from "./WorkerActivityRow.module.css";
 const PHASES = [
   "orienting",
   "planning",
+  "inspecting",
   "executing",
   "verifying",
+  "committing",
   "reporting",
 ] as const;
 
@@ -153,7 +155,6 @@ function phaseState(
 function phaseTitle(phase: (typeof PHASES)[number]): string {
   if (phase === "orienting") return "Orient";
   if (phase === "planning") return "Plan";
-  if (phase === "executing") return "Execute";
-  if (phase === "verifying") return "Verify";
-  return "Report";
+  const titles: Record<string, string> = { orienting: "Orient", planning: "Plan", executing: "Execute", verifying: "Verify" };
+  return titles[phase] ?? "Report";
 }
