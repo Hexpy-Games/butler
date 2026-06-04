@@ -386,6 +386,7 @@ function shouldRunGoalCompletionReview(metadata: unknown, role: SessionRole): bo
 function hasVerifiedEvidenceReceipt(audit: ToolAuditEntry[]): boolean {
   return audit.some((entry) => {
     if (!entry.ok) return false;
+    if ((entry.satisfiedCompletionObligations ?? []).includes("source_verified")) return true;
     const receipts = [
       ...(entry.evidenceReceipts ?? []),
       ...evidenceReceiptsFromResult(entry.result),

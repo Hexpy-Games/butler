@@ -356,6 +356,8 @@ function weatherActionSucceeded(toolName: string, result: Record<string, unknown
 function durableStateInspectionCompleted(toolName: string): boolean {
   if (
     toolName !== "get_work_dashboard" &&
+    toolName !== "inspect_project_status" &&
+    toolName !== "query_project_work" &&
     toolName !== "list_tasks" &&
     toolName !== "get_task_result" &&
     toolName !== "list_work_streams"

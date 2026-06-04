@@ -3374,6 +3374,10 @@ export function satisfiedCompletionObligationsForToolResult(
 function toolResultSucceeded(result: unknown): boolean {
   if (!result || typeof result !== "object" || Array.isArray(result)) return true;
   const record = result as Record<string, unknown>;
+  const receiptSatisfied = satisfiedCompletionObligationsFromEvidenceReceipts(
+    evidenceReceiptsFromResult(result),
+  );
+  if (receiptSatisfied.length > 0) return true;
   if (record.ok === false) return false;
   if (record.timed_out === true) return false;
   if (typeof record.exit_code === "number" && record.exit_code !== 0) return false;
