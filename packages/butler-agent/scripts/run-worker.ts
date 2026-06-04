@@ -48,6 +48,20 @@ type WorkerActivityTimelineEvent = {
   decision_next_step?: string;
   evidence_refs?: string[];
   completion_obligations?: string[];
+  evidence_summary?: {
+    inspecting: number;
+    executing: number;
+    verifying: number;
+    committing: number;
+    blocked: number;
+  };
+  completion_contract?: {
+    has_execution_evidence: boolean;
+    has_verification_evidence: boolean;
+    has_commit_evidence: boolean;
+    has_blocker_evidence: boolean;
+  };
+  completion_review?: "satisfied" | "unsatisfied" | "blocked";
   work_block_id?: string;
 };
 
@@ -104,6 +118,62 @@ function writeActivityEvent(event: Omit<WorkerActivityTimelineEvent, "schema" | 
   } catch {
     // Timeline history is best-effort for this compatibility step; worker execution remains primary.
   }
+}
+
+
+function readActivityEvents(): WorkerActivityTimelineEvent[] {
+  const path = join(taskDir, "worker_activity_events.jsonl");
+  if (!existsSync(path)) return [];
+  try {
+    return readFileSync(path, "utf8")
+      .split(/\r?\n/u)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as WorkerActivityTimelineEvent);
+  } catch {
+    return [];
+  }
+}
+
+function summarizeCompletionEvidence(events: WorkerActivityTimelineEvent[]): NonNullable<WorkerActivityTimelineEvent["evidence_summary"]> {
+  const summary = { inspecting: 0, executing: 0, verifying: 0, committing: 0, blocked: 0 };
+  for (const event of events) {
+    switch (event.semantic_phase) {
+      case "inspecting": summary.inspecting += 1; break;
+      case "executing": summary.executing += 1; break;
+      case "verifying": summary.verifying += 1; break;
+      case "committing": summary.committing += 1; break;
+      case "blocked": summary.blocked += 1; break;
+    }
+  }
+  return summary;
+}
+
+function completionContractForEvidence(summary: NonNullable<WorkerActivityTimelineEvent["evidence_summary"]>): NonNullable<WorkerActivityTimelineEvent["completion_contract"]> {
+  return {
+    has_execution_evidence: summary.executing > 0,
+    has_verification_evidence: summary.verifying > 0,
+    has_commit_evidence: summary.committing > 0,
+    has_blocker_evidence: summary.blocked > 0,
+  };
+}
+
+function completionReviewForEvidence(contract: NonNullable<WorkerActivityTimelineEvent["completion_contract"]>): NonNullable<WorkerActivityTimelineEvent["completion_review"]> {
+  if (contract.has_blocker_evidence) return "blocked";
+  return contract.has_execution_evidence || contract.has_verification_evidence || contract.has_commit_evidence
+    ? "satisfied"
+    : "unsatisfied";
+}
+
+function completionObligationsForActivity(semanticPhase: string | undefined, actionKind: string | undefined): string[] {
+  const obligations = new Set<string>();
+  if (semanticPhase === "executing") obligations.add("implementation_evidence");
+  if (semanticPhase === "verifying") obligations.add("validation_evidence");
+  if (semanticPhase === "committing") obligations.add("commit_evidence");
+  if (semanticPhase === "blocked") obligations.add("blocker_evidence");
+  if (actionKind === "edit_file" || actionKind === "write_file" || actionKind === "apply_patch") obligations.add("implementation_evidence");
+  if (actionKind === "test" || actionKind === "typecheck" || actionKind === "git_status" || actionKind === "git_diff") obligations.add("validation_evidence");
+  if (actionKind === "commit") obligations.add("commit_evidence");
+  return [...obligations];
 }
 
 function decisionSummaryForActivity(phase: string, semanticPhase: string | undefined, actionKind: string | undefined, statusLine: string): string {
