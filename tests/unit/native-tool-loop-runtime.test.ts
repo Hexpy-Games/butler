@@ -4690,6 +4690,110 @@ test("native runtime continues instead of delivering while direct todo work is u
   expect(streams[0].state).toBe("complete");
 });
 
+test("native runtime keeps extending direct work while continuations make tool progress", async () => {
+  let promptCalls = 0;
+  const continuationPrompts: string[] = [];
+  const todoForStage = (stage: number) => [
+    {
+      id: "commit",
+      content: "첫 변경분 검증 후 커밋",
+      active_form: "첫 변경분 검증 후 커밋하는 중",
+      status: stage >= 1 ? "completed" as const : "in_progress" as const,
+      phase: "execution",
+    },
+    {
+      id: "e2e",
+      content: "클론된 Butler home/data e2e 검증",
+      active_form: "클론된 Butler home/data e2e 검증 중",
+      status: stage >= 2 ? "completed" as const : stage === 1 ? "in_progress" as const : "pending" as const,
+      phase: "execution",
+    },
+    {
+      id: "next-task",
+      content: "다음 WATL 작업 구현 후 커밋",
+      active_form: "다음 WATL 작업 구현 후 커밋하는 중",
+      status: stage >= 3 ? "completed" as const : stage === 2 ? "in_progress" as const : "pending" as const,
+      phase: "execution",
+    },
+  ];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      promptCalls += 1;
+      if (promptCalls === 1) {
+        await input.executeTool({
+          name: "update_todo_list",
+          args: {
+            title: "WATL 직접 구현",
+            todos: todoForStage(0),
+          },
+          rawArguments: JSON.stringify({ title: "WATL 직접 구현", todos: todoForStage(0) }),
+        });
+        return "첫 변경분부터 진행하겠습니다.";
+      }
+      continuationPrompts.push(input.prompt);
+      const stage = promptCalls - 1;
+      await input.executeTool({
+        name: "run_command",
+        args: { command: `printf 'stage ${stage}\\n'` },
+        rawArguments: JSON.stringify({ command: `printf 'stage ${stage}\\n'` }),
+      });
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          title: "WATL 직접 구현",
+          todos: todoForStage(stage),
+        },
+        rawArguments: JSON.stringify({ title: "WATL 직접 구현", todos: todoForStage(stage) }),
+      });
+      return stage >= 3
+        ? "세 번째 continuation에서 남은 WATL 직접 작업까지 완료했습니다."
+        : `stage ${stage} 작업만 완료했습니다.`;
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/open-direct-work-multi-continuation",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "WATL 작업을 순서대로 직접 처리하고 각 단계마다 커밋해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(promptCalls).toBe(4);
+  expect(continuationPrompts).toHaveLength(3);
+  expect(continuationPrompts.every((prompt) => prompt.includes("Final Delivery Blocked")))
+    .toBe(true);
+  expect(result.text).toContain("세 번째 continuation");
+  const toolCalls = readTranscript("butler/main/open-direct-work-multi-continuation")
+    .filter((event) => event.kind === "tool_call")
+    .map((event) => event.payload.name);
+  expect(toolCalls).toEqual([
+    "update_todo_list",
+    "run_command",
+    "update_todo_list",
+    "run_command",
+    "update_todo_list",
+    "run_command",
+    "update_todo_list",
+  ]);
+  const streams = new WorkStreamStore(tempDir).list({
+    sessionId: "butler/main/open-direct-work-multi-continuation",
+    includeTerminal: true,
+  });
+  expect(streams).toHaveLength(1);
+  expect(streams[0].state).toBe("complete");
+});
+
 test("native runtime returns recoverable tool errors to the model instead of aborting the turn", async () => {
   let observedToolError: unknown;
   const runtime = new NativeToolLoopRuntime({
