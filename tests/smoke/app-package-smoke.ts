@@ -24,6 +24,7 @@ const electronRoot = resolve(
 );
 const electronMain = resolve(electronRoot, "main.mjs");
 const macSignScript = resolve(electronRoot, "scripts", "adhoc-sign-mac.mjs");
+const macNormalizeScript = resolve(electronRoot, "scripts", "normalize-mac-bundle.mjs");
 const butlerIcon = resolve(electronRoot, "assets", "butler.icns");
 const packagerBin = resolve(
   electronRoot,
@@ -41,6 +42,19 @@ function assert(condition: unknown, message: string): asserts condition {
 
 function sha256(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function plistValue(appBundle: string, key: string): string {
+  const result = spawnSync("/usr/libexec/PlistBuddy", [
+    "-c",
+    `Print :${key}`,
+    join(appBundle, "Contents", "Info.plist"),
+  ], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  assert(result.status === 0, `failed to read ${key}: ${result.stderr}`);
+  return result.stdout.trim();
 }
 
 async function readJson(url: string, init?: RequestInit) {
@@ -146,7 +160,7 @@ try {
     "Butler",
   );
   const appBundle = join(packagedOut, packageDir, "Butler.app");
-  const packagedIcon = join(
+  const rawPackagedIcon = join(
     packagedOut,
     packageDir,
     "Butler.app",
@@ -154,17 +168,53 @@ try {
     "Resources",
     "electron.icns",
   );
+  const normalizedPackagedIcon = join(
+    packagedOut,
+    packageDir,
+    "Butler.app",
+    "Contents",
+    "Resources",
+    "butler.icns",
+  );
   assert(existsSync(executable), "packaged app executable was not created");
   assert(
-    existsSync(packagedIcon),
+    existsSync(rawPackagedIcon),
     "packaged app mac icon resource was not created",
   );
   assert(
-    sha256(packagedIcon) === sha256(butlerIcon),
+    sha256(rawPackagedIcon) === sha256(butlerIcon),
     "packaged app mac icon resource does not match Butler icon",
   );
 
   if (process.platform === "darwin") {
+    const normalizeResult = spawnSync("node", [macNormalizeScript, appBundle], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    assert(
+      normalizeResult.status === 0,
+      `mac bundle normalization failed: ${normalizeResult.stderr || normalizeResult.stdout}`,
+    );
+    assert(
+      existsSync(normalizedPackagedIcon),
+      "normalized packaged app mac icon resource was not created",
+    );
+    assert(
+      sha256(normalizedPackagedIcon) === sha256(butlerIcon),
+      "normalized packaged app mac icon resource does not match Butler icon",
+    );
+    assert(
+      plistValue(appBundle, "CFBundleIconFile") === "butler.icns",
+      "packaged app icon plist does not point at butler.icns",
+    );
+    assert(
+      plistValue(appBundle, "CFBundleIconName") === "butler",
+      "packaged app icon name is not Butler",
+    );
+    assert(
+      plistValue(appBundle, "CFBundleIdentifier") === "com.hexpy.butler",
+      "packaged app bundle id is not Butler",
+    );
     const signResult = spawnSync("node", [macSignScript, appBundle], {
       cwd: root,
       encoding: "utf8",

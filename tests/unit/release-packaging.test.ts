@@ -417,6 +417,12 @@ test("dedicated client package smoke and metadata are available", () => {
     "adhoc-sign-mac.mjs",
   );
   expect(electronPackage.scripts["package:mac"]).toContain(
+    "normalize-mac-bundle.mjs",
+  );
+  expect(electronPackage.scripts["package:mac"]).toContain(
+    "--app-bundle-id=com.hexpy.butler",
+  );
+  expect(electronPackage.scripts["package:mac"]).toContain(
     "--ignore=\"^/dist($|/)\"",
   );
   expect(electronPackage.scripts["package:linux"]).toContain(
@@ -456,10 +462,13 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(appReleasePackager).toContain("app-release-manifest.json");
   expect(appReleasePackager).toContain("app-update-manifest.json");
   expect(appReleasePackager).toContain("adhoc-sign-mac.mjs");
+  expect(appReleasePackager).toContain("normalize-mac-bundle.mjs");
   expect(appReleasePackager).toContain("BUTLER_APP_PACKAGER");
   expect(appReleasePackager).toContain("appReleaseIconPath(root)");
   expect(appReleasePackager).toContain("appReleasePackagerIconPath(outDir)");
   expect(appReleasePackager).toContain("copyFileSync(iconPath, packagerIconPath)");
+  expect(appReleasePackager).toContain("CFBundleIconName");
+  expect(appReleasePackager).toContain("--app-bundle-id=");
   expect(appReleasePackager).toContain("packaged mac app icon does not match Butler icon");
   expect(appReleasePackager).toContain("--ignore=^/dist($|/)");
   expect(appReleaseIconPath(root)).toBe(
