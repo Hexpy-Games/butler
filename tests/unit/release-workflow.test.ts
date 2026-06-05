@@ -136,5 +136,5 @@ test("current release notes describe the GitHub release changelog", () => {
   expect(notes).toContain("Butler App macOS release packaging");
   expect(notes).toContain("absolute");
   expect(notes).toContain("icon hash");
-  expect(notes).toContain("electron.icns");
+  expect(notes).toContain("butler.icns");
 });
