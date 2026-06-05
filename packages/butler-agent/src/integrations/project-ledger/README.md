@@ -7,8 +7,9 @@ instead of embedding CLI pathing directly in agent core.
 
 ## Key Files
 
-- `client.ts`: resolves the repo-tracked Project Ledger CLI, selects the active
-  project path, executes commands with JSON output, and returns safe envelopes
+- `client.ts`: resolves the packaged Project Ledger CLI, maps workspace paths to the active
+  Butler data-home ledger under `$BUTLER_DATA/project-ledger/projects/`, executes
+  commands with JSON output, and returns safe envelopes
   to agent tools.
 
 ## Boundaries

@@ -20,7 +20,7 @@ function runLedgerJson(args: string[]): any {
   return JSON.parse(result.stdout);
 }
 
-test("install-skill can symlink the repo-tracked Project Ledger skill into an external skill dir", () => {
+test("install-skill can symlink the packaged Project Ledger skill into an external skill dir", () => {
   const target = tempDir("project-ledger-skill-");
   try {
     const result = runLedgerJson(["install-skill", "--target", target]);

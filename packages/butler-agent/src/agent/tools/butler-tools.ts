@@ -830,14 +830,14 @@ export const BUTLER_TOOLS: ButlerToolDefinition[] = [
     type: "function",
     name: "inspect_project_status",
     description:
-      "Inspect a repo-local Project Ledger status summary without reading broad project files.",
+      "Inspect the canonical Butler data-home Project Ledger status summary without reading broad project files.",
     parameters: {
       type: "object",
       additionalProperties: false,
       properties: {
         project_path: {
           type: "string",
-          description: "Absolute project path. Defaults to the Butler repository.",
+          description: "Absolute workspace/project path used to resolve the canonical Project Ledger under BUTLER_DATA/project-ledger/projects. Defaults to the Butler repository.",
         },
       },
       required: [],
@@ -850,14 +850,14 @@ export const BUTLER_TOOLS: ButlerToolDefinition[] = [
     type: "function",
     name: "query_project_work",
     description:
-      "Query a repo-local Project Ledger for bounded project-management references such as next actions, blockers, missing specs, risks, and stale views.",
+      "Query the canonical Butler data-home Project Ledger for bounded project-management references such as next actions, blockers, missing specs, risks, and stale views.",
     parameters: {
       type: "object",
       additionalProperties: false,
       properties: {
         project_path: {
           type: "string",
-          description: "Absolute project path. Defaults to the Butler repository.",
+          description: "Absolute workspace/project path used to resolve the canonical Project Ledger under BUTLER_DATA/project-ledger/projects. Defaults to the Butler repository.",
         },
         kind: {
           type: "string",
@@ -886,14 +886,14 @@ export const BUTLER_TOOLS: ButlerToolDefinition[] = [
     type: "function",
     name: "render_project_dashboard",
     description:
-      "Render Project Ledger dashboard, handoff, or roadmap views for a repo-local project.",
+      "Render Project Ledger dashboard, handoff, or roadmap views from canonical Butler data-home Project Ledger state.",
     parameters: {
       type: "object",
       additionalProperties: false,
       properties: {
         project_path: {
           type: "string",
-          description: "Absolute project path. Defaults to the Butler repository.",
+          description: "Absolute workspace/project path used to resolve the canonical Project Ledger under BUTLER_DATA/project-ledger/projects. Defaults to the Butler repository.",
         },
         view: {
           type: "string",
@@ -922,7 +922,7 @@ export const BUTLER_TOOLS: ButlerToolDefinition[] = [
       properties: {
         project_path: {
           type: "string",
-          description: "Absolute project path. Defaults to the Butler repository.",
+          description: "Absolute workspace/project path used to resolve the canonical Project Ledger under BUTLER_DATA/project-ledger/projects. Defaults to the Butler repository.",
         },
         id: { type: "string", description: "Work id to complete." },
         validation: { type: "string", description: "Validation evidence summary or path." },
@@ -5180,6 +5180,8 @@ export function createButlerToolExecutor(input: {
       const tasks = taskStore.summaries(limit).map((task) => {
         const summary = { ...task };
         delete (summary as Partial<typeof task>).activity_phase;
+        delete (summary as Partial<typeof task>).activity_semantic_phase;
+        delete (summary as Partial<typeof task>).activity_action_kind;
         delete (summary as Partial<typeof task>).activity_status_line;
         delete (summary as Partial<typeof task>).activity_current_title;
         delete (summary as Partial<typeof task>).activity_work_blocks;

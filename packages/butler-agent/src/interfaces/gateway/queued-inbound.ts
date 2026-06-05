@@ -19,6 +19,7 @@ export interface ProcessQueuedInboundOptions {
     action: OutboundAction,
     metadata: Record<string, unknown>,
   ) => Promise<DeliveryResult>;
+  shouldHandleItem?: (item: ClaimedInboundEvent) => boolean;
   telegramGroupId?: string;
   limit?: number;
   now?: () => Date;
@@ -293,6 +294,13 @@ export async function processQueuedInboundEvents(
 
   for (const item of items) {
     try {
+      if (options.shouldHandleItem && !options.shouldHandleItem(item)) {
+        options.queue.complete(item, {
+          dispatchStatus: "skipped-terminal-turn",
+          handled: false,
+        }, options.now?.());
+        continue;
+      }
       reactivateHintedSessionForInbound({
         item,
         store: options.store,
