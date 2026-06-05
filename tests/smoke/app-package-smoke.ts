@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -15,6 +16,7 @@ const electronRoot = resolve(
 );
 const electronMain = resolve(electronRoot, "main.mjs");
 const macSignScript = resolve(electronRoot, "scripts", "adhoc-sign-mac.mjs");
+const butlerIcon = resolve(electronRoot, "assets", "butler.icns");
 const packagerBin = resolve(
   electronRoot,
   "node_modules",
@@ -27,6 +29,10 @@ const packagedArch = process.arch === "arm64" ? "arm64" : "x64";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+function sha256(path: string): string {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 async function readJson(url: string, init?: RequestInit) {
@@ -102,7 +108,7 @@ try {
       `--arch=${packagedArch}`,
       "--overwrite",
       `--out=${packagedOut}`,
-      "--icon=assets/butler.icns",
+      `--icon=${butlerIcon}`,
       "--ignore=^/dist($|/)",
       "--quiet",
     ],
@@ -129,19 +135,22 @@ try {
     "Butler",
   );
   const appBundle = join(packagedOut, packageDir, "Butler.app");
+  const packagedIcon = join(
+    packagedOut,
+    packageDir,
+    "Butler.app",
+    "Contents",
+    "Resources",
+    "electron.icns",
+  );
   assert(existsSync(executable), "packaged app executable was not created");
   assert(
-    existsSync(
-      join(
-        packagedOut,
-        packageDir,
-        "Butler.app",
-        "Contents",
-        "Resources",
-        "electron.icns",
-      ),
-    ),
+    existsSync(packagedIcon),
     "packaged app mac icon resource was not created",
+  );
+  assert(
+    sha256(packagedIcon) === sha256(butlerIcon),
+    "packaged app mac icon resource does not match Butler icon",
   );
 
   if (process.platform === "darwin") {

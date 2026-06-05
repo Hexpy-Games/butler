@@ -43,6 +43,11 @@ export interface AppReleasePackageResult {
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
 const MAC_SIGN_SCRIPT = join(ELECTRON_ROOT, "scripts", "adhoc-sign-mac.mjs");
+const MAC_APP_ICON_RESOURCE = join("Contents", "Resources", "electron.icns");
+
+export function appReleaseIconPath(root: string): string {
+  return join(resolve(root), ELECTRON_ROOT, "assets", "butler.icns");
+}
 
 export function createAppReleasePackage(
   options: AppReleasePackageOptions,
@@ -118,6 +123,7 @@ function packagePlatform(input: {
   if (input.platform === "darwin-arm64") {
     const appBundle = join(packagedDir, "Butler.app");
     if (!existsSync(appBundle)) throw new Error(`mac app bundle not found: ${appBundle}`);
+    verifyMacBundleIcon(input.root, appBundle);
     signMacBundle(input.root, appBundle);
     createMacZip(appBundle, artifactPath);
   } else {
@@ -148,6 +154,10 @@ function runElectronPackager(
       "Electron packager is missing; run npm --prefix packages/butler-app/client/electron ci",
     );
   }
+  const iconPath = appReleaseIconPath(root);
+  if (!existsSync(iconPath)) {
+    throw new Error(`Butler app icon is missing: ${iconPath}`);
+  }
   const [electronPlatform, electronArch] = platform.split("-");
   const result = spawnSync(packager, [
     join(root, ELECTRON_ROOT),
@@ -156,7 +166,7 @@ function runElectronPackager(
     `--arch=${electronArch}`,
     "--overwrite",
     `--out=${outDir}`,
-    "--icon=assets/butler.icns",
+    `--icon=${iconPath}`,
     "--ignore=^/dist($|/)",
     "--quiet",
   ], {
@@ -168,6 +178,21 @@ function runElectronPackager(
       `electron package failed for ${platform}: ${
         result.stderr.trim() || result.stdout.trim() || "unknown error"
       }`,
+    );
+  }
+}
+
+function verifyMacBundleIcon(root: string, appBundle: string): void {
+  const sourceIcon = appReleaseIconPath(root);
+  const packagedIcon = join(appBundle, MAC_APP_ICON_RESOURCE);
+  if (!existsSync(packagedIcon)) {
+    throw new Error(`packaged mac app icon resource is missing: ${packagedIcon}`);
+  }
+  const sourceHash = sha256File(sourceIcon);
+  const packagedHash = sha256File(packagedIcon);
+  if (sourceHash !== packagedHash) {
+    throw new Error(
+      `packaged mac app icon does not match Butler icon: expected ${sourceHash}, got ${packagedHash}`,
     );
   }
 }
