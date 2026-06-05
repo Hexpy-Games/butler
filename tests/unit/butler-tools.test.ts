@@ -448,6 +448,55 @@ test("run_command stores generated artifacts under Butler data", async () => {
   expect(existsSync(join(workspace, "artifacts"))).toBe(false);
 });
 
+test("run_command verifies structured stdout artifact paths under Butler data", async () => {
+  const workspace = join(tempDir, "workspace");
+  mkdirSync(workspace, { recursive: true });
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: [
+        "out=\"$BUTLER_ARTIFACTS_DIR/issue-english-rewrite-verification.json\"",
+        "printf '{\"ok\":true}\\n' > \"$out\"",
+        "touch -t 202001010000 \"$out\"",
+        "python3 -c 'import json, os; print(json.dumps({\"ok\": True, \"report_path\": os.environ[\"BUTLER_ARTIFACTS_DIR\"] + \"/issue-english-rewrite-verification.json\"}))'",
+      ].join("; "),
+      output_mode: "full",
+    },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    durable_artifact_created?: boolean;
+    artifact_label?: string;
+    verified_output_files?: Array<{ path: string; artifact_kind: string }>;
+    evidence_receipts: Array<Record<string, any>>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.durable_artifact_created).toBe(true);
+  expect(result.artifact_label).toBe("artifacts/generated/issue-english-rewrite-verification.json");
+  expect(result.verified_output_files).toContainEqual(expect.objectContaining({
+    path: "artifacts/generated/issue-english-rewrite-verification.json",
+    artifact_kind: "file",
+  }));
+  expect(result.evidence_receipts).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      receiptType: "deliverable",
+      verified: true,
+      satisfies: ["durable_artifact"],
+      artifacts: [expect.objectContaining({
+        label: "artifacts/generated/issue-english-rewrite-verification.json",
+        role: "file",
+      })],
+    }),
+  ]));
+});
+
 test("run_command rejects cwd outside the active workspace", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });
