@@ -133,8 +133,8 @@ test("current release notes describe the GitHub release changelog", () => {
 
   expect(notes).toContain(`# Butler ${currentReleaseTag}`);
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("cancelled app turns");
-  expect(notes).toContain("queued app inbound work");
-  expect(notes).toContain("native runtime abort guards");
-  expect(notes).toContain("Project Ledger integration boundaries");
+  expect(notes).toContain("Butler App macOS release packaging");
+  expect(notes).toContain("absolute");
+  expect(notes).toContain("icon hash");
+  expect(notes).toContain("electron.icns");
 });
