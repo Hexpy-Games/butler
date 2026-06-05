@@ -15,7 +15,8 @@ export type WorkStreamState =
   | "paused"
   | "complete"
   | "failed"
-  | "recoverable";
+  | "recoverable"
+  | "cancelled";
 
 export type WorkStreamPhase =
   | "conception"
@@ -73,23 +74,25 @@ const STATE_VALUES: WorkStreamState[] = [
   "complete",
   "failed",
   "recoverable",
+  "cancelled",
 ];
 
-const TERMINAL_STATES = new Set<WorkStreamState>(["complete", "failed"]);
+const TERMINAL_STATES = new Set<WorkStreamState>(["complete", "failed", "cancelled"]);
 
 const TRANSITIONS: Record<WorkStreamState, WorkStreamState[]> = {
-  routing: ["conception", "planning", "waiting_user", "recoverable", "failed"],
-  conception: ["planning", "waiting_user", "paused", "recoverable", "failed"],
-  planning: ["executing", "waiting_user", "paused", "recoverable", "failed"],
-  executing: ["reviewing", "waiting_user", "paused", "recoverable", "failed"],
-  reviewing: ["executing", "consolidating", "waiting_user", "paused", "recoverable", "failed"],
-  consolidating: ["reporting", "reviewing", "recoverable", "failed"],
-  reporting: ["complete", "reviewing", "recoverable", "failed"],
-  waiting_user: ["planning", "executing", "reviewing", "paused", "failed"],
-  paused: ["planning", "executing", "reviewing", "failed"],
+  routing: ["conception", "planning", "waiting_user", "recoverable", "failed", "cancelled"],
+  conception: ["planning", "waiting_user", "paused", "recoverable", "failed", "cancelled"],
+  planning: ["executing", "waiting_user", "paused", "recoverable", "failed", "cancelled"],
+  executing: ["reviewing", "waiting_user", "paused", "recoverable", "failed", "cancelled"],
+  reviewing: ["executing", "consolidating", "waiting_user", "paused", "recoverable", "failed", "cancelled"],
+  consolidating: ["reporting", "reviewing", "recoverable", "failed", "cancelled"],
+  reporting: ["complete", "reviewing", "recoverable", "failed", "cancelled"],
+  waiting_user: ["planning", "executing", "reviewing", "paused", "failed", "cancelled"],
+  paused: ["planning", "executing", "reviewing", "failed", "cancelled"],
   complete: [],
   failed: ["recoverable"],
-  recoverable: ["executing", "reviewing", "failed"],
+  recoverable: ["executing", "reviewing", "failed", "cancelled"],
+  cancelled: [],
 };
 
 const PHASE_TO_STATE: Record<WorkStreamPhase, WorkStreamState> = {
@@ -176,7 +179,7 @@ function phaseForState(state: WorkStreamState, prior: WorkStreamPhase | null): W
   if (state === "reviewing") return "review";
   if (state === "consolidating") return "consolidation";
   if (state === "reporting") return "reporting";
-  if (state === "routing" || state === "complete" || state === "failed") return null;
+  if (state === "routing" || state === "complete" || state === "failed" || state === "cancelled") return null;
   return prior;
 }
 
@@ -415,6 +418,62 @@ export class WorkStreamStore {
       .filter((record) => options.includeTerminal === true || !workStreamTerminal(record.state))
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .map(summary);
+  }
+
+  linkedTo(input: {
+    plannedTaskIds?: string[];
+    orchestrationIds?: string[];
+    workerTaskIds?: string[];
+    includeTerminal?: boolean;
+  }): WorkStreamRecord[] {
+    const plannedTaskIds = new Set((input.plannedTaskIds ?? []).map(safeOptionalId).filter((id): id is string => Boolean(id)));
+    const orchestrationIds = new Set((input.orchestrationIds ?? []).map(safeOptionalId).filter((id): id is string => Boolean(id)));
+    const workerTaskIds = new Set((input.workerTaskIds ?? []).map(safeOptionalId).filter((id): id is string => Boolean(id)));
+    if (plannedTaskIds.size === 0 && orchestrationIds.size === 0 && workerTaskIds.size === 0) return [];
+    return this.records()
+      .filter((record) => input.includeTerminal === true || !workStreamTerminal(record.state))
+      .filter((record) =>
+        record.linked_planned_task_ids.some((id) => plannedTaskIds.has(id)) ||
+        record.linked_orchestration_ids.some((id) => orchestrationIds.has(id)) ||
+        record.linked_worker_task_ids.some((id) => workerTaskIds.has(id)),
+      )
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  }
+
+  cancelLinked(input: {
+    workStreamIds?: string[];
+    plannedTaskIds?: string[];
+    orchestrationIds?: string[];
+    workerTaskIds?: string[];
+    statusNote?: string | null;
+    now?: Date;
+  }): WorkStreamRecord[] {
+    const workStreamIds = new Set((input.workStreamIds ?? []).map(safeOptionalId).filter((id): id is string => Boolean(id)));
+    const linked = this.linkedTo({
+      plannedTaskIds: input.plannedTaskIds,
+      orchestrationIds: input.orchestrationIds,
+      workerTaskIds: input.workerTaskIds,
+    });
+    const records = new Map<string, WorkStreamRecord>();
+    for (const id of workStreamIds) {
+      const record = this.read(id);
+      if (record && !workStreamTerminal(record.state)) records.set(record.id, record);
+    }
+    for (const record of linked) records.set(record.id, record);
+    const now = (input.now ?? new Date()).toISOString();
+    const statusNote = safeText(input.statusNote, 600) ?? "Cancelled by user request.";
+    return Array.from(records.values()).map((record) => {
+      const updated: WorkStreamRecord = {
+        ...record,
+        state: "cancelled",
+        current_phase: null,
+        active_step_id: null,
+        status_note: statusNote,
+        updated_at: now,
+      };
+      writeJsonAtomic(this.pathFor(record.id), updated);
+      return updated;
+    });
   }
 
   activeForSession(sessionId?: string | null): WorkStreamRecord | null {

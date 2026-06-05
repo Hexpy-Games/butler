@@ -41,6 +41,10 @@ import {
   type PlannedTaskRecord,
 } from "../../agent/work/planned-task.ts";
 import {
+  WorkOrchestrationStore,
+  type WorkOrchestrationRecord,
+} from "../../agent/work/work-orchestration.ts";
+import {
   DEFAULT_MODEL_REF,
   DEFAULT_REASONING_EFFORT,
   defaultWorkerModelRules,
@@ -2959,22 +2963,82 @@ export class AppServerStore {
     }
     const taskStore = new TaskStore(this.butlerData);
     const plannedStore = new PlannedTaskStore(this.butlerData);
+    const workStreamStore = new WorkStreamStore(this.butlerData);
+    const orchestrationStore = new WorkOrchestrationStore(this.butlerData);
     const cancelledTaskIds = new Set<string>();
+    const workerTaskIds = new Set<string>();
+    const plannedTaskIds = new Set<string>();
+    const orchestrationIds = new Set<string>();
+
+    const cancelWorkerTaskId = (workerTaskId: string) => {
+      workerTaskIds.add(workerTaskId);
+      this.cancelDurableWorkerTask(taskStore, workerTaskId, cancelledTaskIds);
+    };
+    const collectPlannedWorkers = (planned: PlannedTaskRecord | null) => {
+      if (!planned) return;
+      plannedTaskIds.add(planned.taskId);
+      for (const workerTaskId of workerTaskIdsForPlannedTask(planned)) {
+        workerTaskIds.add(workerTaskId);
+      }
+    };
+    const collectOrchestrationWorkers = (
+      orchestration: WorkOrchestrationRecord | null,
+    ) => {
+      if (!orchestration) return;
+      orchestrationIds.add(orchestration.id);
+      for (const stream of orchestration.streams) {
+        if (stream.worker_task_id) workerTaskIds.add(stream.worker_task_id);
+      }
+    };
 
     if (worker.activity_kind === "planned") {
       const planned = plannedStore.read(taskId);
-      for (const workerTaskId of planned
-        ? workerTaskIdsForPlannedTask(planned)
-        : []) {
-        this.cancelDurableWorkerTask(taskStore, workerTaskId, cancelledTaskIds);
-      }
+      collectPlannedWorkers(planned);
       this.cancelPlannedTask(plannedStore, taskId);
+      plannedTaskIds.add(taskId);
     } else {
-      this.cancelDurableWorkerTask(taskStore, taskId, cancelledTaskIds);
+      cancelWorkerTaskId(taskId);
       const linkedPlan = plannedStore.findByWorkerTaskId(taskId);
-      if (linkedPlan)
+      if (linkedPlan) {
+        collectPlannedWorkers(linkedPlan.record);
         this.cancelPlannedTask(plannedStore, linkedPlan.record.taskId);
+      }
     }
+
+    const linkedStreams = workStreamStore.linkedTo({
+      plannedTaskIds: [...plannedTaskIds],
+      workerTaskIds: [...workerTaskIds],
+    });
+    for (const stream of linkedStreams) {
+      for (const linkedWorkerTaskId of stream.linked_worker_task_ids) {
+        workerTaskIds.add(linkedWorkerTaskId);
+      }
+      for (const linkedPlannedTaskId of stream.linked_planned_task_ids) {
+        plannedTaskIds.add(linkedPlannedTaskId);
+        collectPlannedWorkers(plannedStore.read(linkedPlannedTaskId));
+      }
+      for (const linkedOrchestrationId of stream.linked_orchestration_ids) {
+        collectOrchestrationWorkers(orchestrationStore.read(linkedOrchestrationId));
+      }
+    }
+    for (const linkedOrchestrationId of [...orchestrationIds]) {
+      const orchestration = orchestrationStore.read(linkedOrchestrationId);
+      collectOrchestrationWorkers(orchestration);
+      if (orchestration) orchestrationStore.cancel(linkedOrchestrationId);
+    }
+    for (const linkedPlannedTaskId of [...plannedTaskIds]) {
+      this.cancelPlannedTask(plannedStore, linkedPlannedTaskId);
+    }
+    for (const linkedWorkerTaskId of [...workerTaskIds]) {
+      cancelWorkerTaskId(linkedWorkerTaskId);
+    }
+    workStreamStore.cancelLinked({
+      workStreamIds: linkedStreams.map((stream) => stream.id),
+      plannedTaskIds: [...plannedTaskIds],
+      orchestrationIds: [...orchestrationIds],
+      workerTaskIds: [...workerTaskIds],
+      statusNote: "Cancelled by user request.",
+    });
 
     const refreshed = this.getWorkerActivity(worker.worker_id);
     this.appendEvent("worker_activity_controlled", {

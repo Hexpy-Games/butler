@@ -1332,6 +1332,7 @@ export const BUTLER_TOOLS: ButlerToolDefinition[] = [
             "complete",
             "failed",
             "recoverable",
+            "cancelled",
           ],
         },
         active_step_id: {
@@ -3360,7 +3361,8 @@ function workStreamState(value: unknown): WorkStreamState {
     value === "paused" ||
     value === "complete" ||
     value === "failed" ||
-    value === "recoverable"
+    value === "recoverable" ||
+    value === "cancelled"
   ) {
     return value;
   }
