@@ -37,7 +37,7 @@ web client that the local app gateway serves.
 
 ```bash
 cd ~
-wget https://github.com/Hexpy-Games/butler/releases/download/v0.0.4/butler-service-0.0.4-all.tar.gz
+wget https://github.com/Hexpy-Games/butler/releases/download/v0.0.6/butler-service-0.0.6-all.tar.gz
 mkdir -p ~/butler
 tar -xzf ~/butler-service-*-all.tar.gz -C ~/butler
 cd ~/butler
@@ -191,7 +191,7 @@ bun run app:client
 
 ## Status
 
-Butler is `v0.0.4` and pre-release. Expect breaking changes before `v1.0.0`.
+Butler is `v0.0.6` and pre-release. Expect breaking changes before `v1.0.0`.
 
 The intended deployment model is single-user and self-hosted on a machine you
 control. Butler can run tools, edit files, dispatch background workers, and
