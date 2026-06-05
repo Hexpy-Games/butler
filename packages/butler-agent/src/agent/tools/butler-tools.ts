@@ -2629,27 +2629,142 @@ function commandArtifactPathCandidates(path: string, cwd: string, butlerData: st
   ]));
 }
 
+function uniqueCommandArtifacts(artifacts: CommandArtifactEvidence[]): CommandArtifactEvidence[] {
+  const seen = new Set<string>();
+  const unique: CommandArtifactEvidence[] = [];
+  for (const artifact of artifacts) {
+    if (seen.has(artifact.path)) continue;
+    seen.add(artifact.path);
+    unique.push(artifact);
+  }
+  return unique;
+}
+
+function commandArtifactsFromPaths(input: {
+  paths: string[];
+  cwd: string;
+  workspace: string;
+  butlerData: string;
+}): CommandArtifactEvidence[] {
+  return uniqueCommandArtifacts(input.paths
+    .slice(0, MAX_COMMAND_ARTIFACT_EVIDENCE)
+    .map((path) => {
+      for (const candidate of commandArtifactPathCandidates(path, input.cwd, input.butlerData)) {
+        const artifact = verifiedCommandArtifact({
+          path: candidate,
+          cwd: input.cwd,
+          workspace: input.workspace,
+          butlerData: input.butlerData,
+        });
+        if (artifact) return artifact;
+      }
+      return null;
+    })
+    .filter((artifact): artifact is CommandArtifactEvidence => Boolean(artifact)));
+}
+
 function declaredCommandArtifacts(
   args: Record<string, unknown>,
   cwd: string,
   workspace: string,
   butlerData: string,
 ): CommandArtifactEvidence[] {
-  return stringArray(args.output_paths)
-    .slice(0, MAX_COMMAND_ARTIFACT_EVIDENCE)
-    .map((path) => {
-      for (const candidate of commandArtifactPathCandidates(path, cwd, butlerData)) {
-        const artifact = verifiedCommandArtifact({
-          path: candidate,
-          cwd,
-          workspace,
-          butlerData,
-        });
-        if (artifact) return artifact;
+  return commandArtifactsFromPaths({
+    paths: stringArray(args.output_paths),
+    cwd,
+    workspace,
+    butlerData,
+  });
+}
+
+const STDOUT_ARTIFACT_PATH_KEYS = new Set([
+  "artifact_file",
+  "artifact_path",
+  "file_path",
+  "output_path",
+  "report_path",
+  "written_file",
+]);
+
+const STDOUT_ARTIFACT_PATH_ARRAY_KEYS = new Set([
+  "artifact_files",
+  "artifact_paths",
+  "file_paths",
+  "output_paths",
+  "report_paths",
+  "verified_output_files",
+  "written_files",
+]);
+
+function jsonValuesFromCommandStdout(stdout: string): unknown[] {
+  const trimmed = stdout.trim();
+  if (!trimmed) return [];
+  const values: unknown[] = [];
+  const parse = (text: string) => {
+    try {
+      values.push(JSON.parse(text));
+    } catch {
+      // Ignore non-JSON command output; artifact paths must be structured.
+    }
+  };
+  parse(trimmed);
+  for (const line of trimmed.split(/\r?\n/u)) {
+    const candidate = line.trim();
+    if (!candidate || candidate === trimmed) continue;
+    if (!candidate.startsWith("{") && !candidate.startsWith("[")) continue;
+    parse(candidate);
+  }
+  return values;
+}
+
+function collectStructuredArtifactPaths(value: unknown, output: Set<string>): void {
+  if (output.size >= MAX_COMMAND_ARTIFACT_EVIDENCE) return;
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectStructuredArtifactPaths(item, output);
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  for (const [key, item] of Object.entries(record)) {
+    if (output.size >= MAX_COMMAND_ARTIFACT_EVIDENCE) return;
+    if (STDOUT_ARTIFACT_PATH_KEYS.has(key) && typeof item === "string" && item.trim()) {
+      output.add(item.trim());
+      continue;
+    }
+    if (STDOUT_ARTIFACT_PATH_ARRAY_KEYS.has(key)) {
+      for (const path of stringArray(item)) {
+        output.add(path);
+        if (output.size >= MAX_COMMAND_ARTIFACT_EVIDENCE) return;
       }
-      return null;
-    })
-    .filter((artifact): artifact is CommandArtifactEvidence => Boolean(artifact));
+      if (Array.isArray(item)) {
+        for (const child of item) {
+          if (child && typeof child === "object" && !Array.isArray(child)) {
+            const childPath = (child as Record<string, unknown>).path;
+            if (typeof childPath === "string" && childPath.trim()) output.add(childPath.trim());
+          }
+          if (output.size >= MAX_COMMAND_ARTIFACT_EVIDENCE) return;
+        }
+      }
+    }
+  }
+}
+
+function structuredStdoutCommandArtifacts(input: {
+  stdout: string;
+  cwd: string;
+  workspace: string;
+  butlerData: string;
+}): CommandArtifactEvidence[] {
+  const paths = new Set<string>();
+  for (const value of jsonValuesFromCommandStdout(input.stdout)) {
+    collectStructuredArtifactPaths(value, paths);
+  }
+  return commandArtifactsFromPaths({
+    paths: [...paths],
+    cwd: input.cwd,
+    workspace: input.workspace,
+    butlerData: input.butlerData,
+  });
 }
 
 function recentCommandArtifacts(input: {
@@ -2984,7 +3099,15 @@ async function runCommandTool(input: {
   });
   const workspace = resolve(input.workspacePath);
   const declaredArtifacts = declaredCommandArtifacts(input.args, cwd, workspace, input.butlerData);
-  const discoveredArtifacts = declaredArtifacts.length > 0
+  const stdoutArtifacts = declaredArtifacts.length > 0
+    ? []
+    : structuredStdoutCommandArtifacts({
+      stdout: raw.stdout,
+      cwd,
+      workspace,
+      butlerData: input.butlerData,
+    });
+  const discoveredArtifacts = declaredArtifacts.length > 0 || stdoutArtifacts.length > 0
     ? []
     : recentCommandArtifacts({
       cwd,
@@ -2992,14 +3115,12 @@ async function runCommandTool(input: {
       butlerData: input.butlerData,
       startedAtMs: commandStartedAtMs,
     });
-  const artifactEvidence = commandArtifactEvidenceFields([
+  const artifacts = uniqueCommandArtifacts([
     ...declaredArtifacts,
+    ...stdoutArtifacts,
     ...discoveredArtifacts,
   ]);
-  const artifacts = [
-    ...declaredArtifacts,
-    ...discoveredArtifacts,
-  ];
+  const artifactEvidence = commandArtifactEvidenceFields(artifacts);
   return {
     ok: budgeted.exit_code === 0 && budgeted.timed_out === false,
     command,
