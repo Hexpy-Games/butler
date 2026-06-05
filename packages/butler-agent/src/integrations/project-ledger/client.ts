@@ -1,6 +1,6 @@
 import { spawnSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
-import { basename, join, resolve } from "path";
+import { basename, isAbsolute, join, relative, resolve } from "path";
 import { butlerAgentResourcesPath } from "../../runtime/paths.ts";
 
 export function projectLedgerPath(input: { butlerHome: string }): string {
@@ -16,7 +16,7 @@ export function projectLedgerProjectPath(
   const projectPath = typeof args.project_path === "string" && args.project_path.trim()
     ? args.project_path.trim()
     : input.butlerHome;
-  return canonicalProjectLedgerRoot(input.butlerData, projectPath) ?? projectPath;
+  return canonicalProjectLedgerProjectPath(input.butlerData, projectPath) ?? projectPath;
 }
 
 export function runProjectLedgerTool(
@@ -26,9 +26,11 @@ export function runProjectLedgerTool(
   const result = spawnSync(process.execPath, [projectLedgerPath(input), ...args, "--json"], {
     cwd: input.butlerHome,
     encoding: "utf8",
-    env: input.butlerData
-      ? { ...process.env, BUTLER_DATA: input.butlerData }
-      : process.env,
+    env: {
+      ...process.env,
+      BUTLER_HOME: input.butlerHome,
+      ...(input.butlerData ? { BUTLER_DATA: input.butlerData } : {}),
+    },
     timeout: 10_000,
   });
   if (result.stdout.trim()) {
@@ -86,15 +88,23 @@ function safeViewName(view: string): string {
   return view.replace(/[^a-zA-Z0-9_-]/gu, "-").replace(/-+/gu, "-") || "view";
 }
 
-function canonicalProjectLedgerRoot(butlerData: string | undefined, projectPath: string): string | null {
+function canonicalProjectLedgerProjectPath(butlerData: string | undefined, projectPath: string): string | null {
   if (!butlerData) return null;
   const direct = resolve(projectPath);
-  if (isProjectLedgerRoot(direct)) return direct;
-  for (const id of projectIdCandidates(projectPath)) {
-    const candidate = join(butlerData, "project-ledger", "projects", safeProjectSegment(id));
-    if (isProjectLedgerRoot(candidate)) return candidate;
+  const projectsRoot = join(resolve(butlerData), "project-ledger", "projects");
+
+  if (isPathInside(projectsRoot, direct)) {
+    const [id] = relative(projectsRoot, direct).split("\\").join("/").split("/");
+    return id ? join(projectsRoot, id) : projectsRoot;
   }
-  return null;
+
+  const [id] = projectIdCandidates(projectPath);
+  return id ? join(projectsRoot, safeProjectSegment(id)) : null;
+}
+
+function isPathInside(root: string, path: string): boolean {
+  const rel = relative(root, path).split("\\").join("/");
+  return rel === "" || (rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel));
 }
 
 function projectIdCandidates(projectPath: string): string[] {
@@ -107,9 +117,6 @@ function projectIdCandidates(projectPath: string): string[] {
   return [...new Set(ids)];
 }
 
-function isProjectLedgerRoot(path: string): boolean {
-  return existsSync(join(path, "project.json")) && existsSync(join(path, "ledger.jsonl"));
-}
 
 function readJsonProjectId(path: string): string | null {
   if (!existsSync(path)) return null;

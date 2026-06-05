@@ -1676,6 +1676,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             return null;
           },
           onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
+            throwIfRuntimeTurnAborted(input.signal);
             pendingPublicDecisions.push(...publicWorkDecisionsFromAssistantText({
               text,
               toolCalls,
@@ -2052,6 +2053,7 @@ function createAuditedButlerToolExecutor(input: {
     call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
     source: "model" | "runtime",
   ) => {
+    throwIfRuntimeTurnAborted(input.turnInput.signal);
     const startedAt = Date.now();
     const cleanArgs = { ...call.args };
     discardPendingPublicDecisionForTool(input.pendingPublicDecisions, call.name);
@@ -2070,6 +2072,7 @@ function createAuditedButlerToolExecutor(input: {
     }));
     try {
       const result = await input.executor(call);
+      throwIfRuntimeTurnAborted(input.turnInput.signal);
       recordOperationalMetric({
         category: "tool",
         name: call.name,
@@ -2198,6 +2201,7 @@ function createAuditedButlerToolExecutor(input: {
     }, "runtime");
   };
   return async (call) => {
+    throwIfRuntimeTurnAborted(input.turnInput.signal);
     const startedAt = Date.now();
     const cleanArgs = { ...call.args };
     const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
@@ -2394,7 +2398,9 @@ function createAuditedButlerToolExecutor(input: {
       },
     }));
     try {
+      throwIfRuntimeTurnAborted(input.turnInput.signal);
       const result = await input.executor(effectiveCall);
+      throwIfRuntimeTurnAborted(input.turnInput.signal);
       recordOperationalMetric({
         category: "tool",
         name: call.name,

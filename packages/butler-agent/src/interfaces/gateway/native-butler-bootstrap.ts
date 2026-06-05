@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { Database } from "bun:sqlite";
 import type {
   AgentRuntimeAdapter,
   DeliveryResult,
@@ -30,8 +31,9 @@ import { runWorkerResultMonitor } from "./worker-result-monitor.ts";
 import { runPromptText } from "../../integrations/providers/provider.ts";
 import { plannedInternalGoal, PlannedTaskStore } from "../../agent/work/planned-task.ts";
 import type { TaskRecord } from "../../agent/work/task-store.ts";
-import { NativeInboundQueue } from "../../gateways/core/inbound-queue.ts";
+import { NativeInboundQueue, type ClaimedInboundEvent } from "../../gateways/core/inbound-queue.ts";
 import {
+  resolveAppGatewayRuntimeConfig,
   resolveTelegramGatewayRuntimeConfig,
 } from "../../operations/gateway/registry.ts";
 import { processQueuedInboundEvents } from "./queued-inbound.ts";
@@ -357,6 +359,31 @@ function buildStatusText(input: {
     `model: ${input.modelRef}`,
     `data: ${input.butlerData}`,
   ].join("\n");
+}
+
+function appTurnStateDbPath(butlerData: string): string {
+  const config = resolveAppGatewayRuntimeConfig({ butlerData });
+  return config.dbPath ?? join(butlerData, "app-server", "butler-client.sqlite");
+}
+
+function shouldHandleAppInboundTurn(butlerData: string): (item: ClaimedInboundEvent) => boolean {
+  const dbPath = appTurnStateDbPath(butlerData);
+  return (item) => {
+    const turnId = item.envelope.routingHints?.turnId?.trim();
+    if (!turnId || !existsSync(dbPath)) return true;
+    let db: Database | null = null;
+    try {
+      db = new Database(dbPath, { readonly: true });
+      const row = db
+        .query<{ state: string }, [string]>("SELECT state FROM turns WHERE id = ?")
+        .get(turnId);
+      return !row || !["cancelled", "delivered", "failed"].includes(row.state);
+    } catch {
+      return true;
+    } finally {
+      db?.close();
+    }
+  };
 }
 
 function writeStartupGraceMarker(butlerData: string): void {
@@ -696,6 +723,7 @@ export async function runNativeButlerMain(
             store,
             deliveryGuard,
             deliverAction: deliverThroughEnabledGate,
+            shouldHandleItem: shouldHandleAppInboundTurn(butlerData),
             telegramGroupId: currentTelegramChatId(),
             limit: 5,
           });

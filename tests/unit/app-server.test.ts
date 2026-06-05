@@ -4220,6 +4220,70 @@ test("app transport final result projection strips Butler final-answer envelope"
   }
 });
 
+test("app transport final result projection does not resurrect cancelled turns", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const url = server.url;
+  const result = await postJson(`${url}messages`, {
+    chat_id: "general",
+    text: "cancel stale app result",
+  });
+  const turnId = result.data.turn.id;
+  expect(result.data.turn.state).toBe("thinking");
+
+  const cancel = await postJson(
+    `${url}turns/${encodeURIComponent(turnId)}/cancel`,
+    {},
+  );
+  expect(cancel.data.turn).toMatchObject({
+    state: "cancelled",
+    cancellable: false,
+    retryable: false,
+  });
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-reply:test:app:general:stale-after-cancel",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "This late result must not be delivered.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["cancel stale app result"]);
+
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns).toHaveLength(1);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "cancelled",
+      cancellable: false,
+      retryable: false,
+    });
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport failure projection does not downgrade delivered turns", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });

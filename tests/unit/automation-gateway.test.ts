@@ -285,6 +285,51 @@ test("queued automation events are consumed by butler-main path and delivered to
   );
 });
 
+test("queued inbound skips terminal app turns before dispatch", async () => {
+  const queue = new NativeInboundQueue(tempDir);
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  queue.enqueue({
+    eventId: "app-terminal-turn",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "project-chat" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "client-terminal-turn",
+      text: "do not run cancelled work",
+      timestamp: "2026-06-05T00:00:00.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-project-chat",
+      turnId: "turn-cancelled",
+    },
+  }, { source: "test" });
+
+  let handled = false;
+  const summary = await processQueuedInboundEvents({
+    queue,
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [] }),
+    server: {
+      async handleInbound() {
+        handled = true;
+        throw new Error("cancelled app turn should not dispatch");
+      },
+    },
+    shouldHandleItem: () => false,
+  });
+
+  expect(summary).toEqual({
+    claimed: 1,
+    handled: 0,
+    delivered: 0,
+    failed: 0,
+  });
+  expect(handled).toBe(false);
+  expect(queue.claim(1)).toEqual([]);
+  store.close();
+});
+
 test("queued inbound delivery preserves safe artifact refs for app projection", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const runtime = new ScriptedRuntime([{

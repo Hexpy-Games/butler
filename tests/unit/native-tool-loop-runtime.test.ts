@@ -3845,6 +3845,52 @@ test("native runtime does not force broad project investigations into planned di
   expect(result.text).toBe("프로젝트 조사를 완료했습니다.");
 });
 
+test("native runtime stops executing tools after turn cancellation", async () => {
+  const controller = new AbortController();
+  const executed: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    executeButlerTool: async (call) => {
+      executed.push(call.name);
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "pwd" },
+        rawArguments: "{\"command\":\"pwd\"}",
+      });
+      controller.abort();
+      await input.executeTool({
+        name: "create_planned_task",
+        args: {
+          goal: "This planned task must not be created after cancellation.",
+          acceptance_criteria: ["No planned work after cancel."],
+        },
+        rawArguments: "{}",
+      });
+      return "should not deliver";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/cancel-stops-tools",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "start then cancel" },
+    signal: controller.signal,
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  })).rejects.toThrow("Runtime turn was cancelled.");
+
+  expect(executed).toEqual(["run_command"]);
+});
+
 test("runtime does not rewrite worker or task claims through language dictionaries", () => {
   expect(enforceGroundedActionClaims({
     userText: "워커로 확인해줘",

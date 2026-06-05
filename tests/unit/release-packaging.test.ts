@@ -20,13 +20,17 @@ import {
 } from "../../packages/butler-app/scripts/release/manifest.ts";
 
 const root = process.cwd();
+const currentVersion = String(
+  JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version ?? "",
+);
+const currentReleaseTag = `v${currentVersion}`;
 
 test("service release manifest exposes Butler CLI entrypoint and service files only", () => {
   const manifest = createServiceReleaseManifest(root);
 
   expect(manifest).toMatchObject({
     name: "butler",
-    version: "0.0.4",
+    version: currentVersion,
     bin: {
       butler: "./bin/butler.js",
     },
@@ -35,7 +39,7 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
     "service",
   ]);
   expect(
-    manifest.components.every((component) => component.version === "0.0.4"),
+    manifest.components.every((component) => component.version === currentVersion),
   ).toBe(true);
   expect(
     manifest.components.find((component) => component.id === "service")
@@ -74,11 +78,11 @@ test("app release manifest exposes app package files only", () => {
   expect(manifest).toMatchObject({
     name: "butler-app",
     protocol: "butler.app.v1",
-    version: "0.0.4",
+    version: currentVersion,
   });
   expect(manifest.components.map((component) => component.id)).toEqual(["app"]);
   expect(
-    manifest.components.every((component) => component.version === "0.0.4"),
+    manifest.components.every((component) => component.version === currentVersion),
   ).toBe(true);
   expect(
     manifest.components.find((component) => component.id === "app")
@@ -120,8 +124,8 @@ test("app release manifest exposes app package files only", () => {
     ...APP_RELEASE_PLATFORMS,
   ]);
   expect(manifest.artifacts.map((artifact) => artifact.artifactName)).toEqual([
-    "butler-app-0.0.4-darwin-arm64.zip",
-    "butler-app-0.0.4-linux-x64.tar.gz",
+    `butler-app-${currentVersion}-darwin-arm64.zip`,
+    `butler-app-${currentVersion}-linux-x64.tar.gz`,
   ]);
   expect(validateAppReleaseManifest(root, manifest)).toEqual([]);
 });
@@ -278,11 +282,11 @@ test("service release packager can write public GitHub artifact URLs", () => {
     const result = createServiceReleasePackage({
       root,
       outDir,
-      artifactBaseUrl: "https://github.com/Hexpy-Games/butler/releases/download/v0.0.4/",
+      artifactBaseUrl: `https://github.com/Hexpy-Games/butler/releases/download/${currentReleaseTag}/`,
       cliLauncherPlatforms: [currentServiceCliLauncherPlatform()],
     });
     const expectedUrl =
-      `https://github.com/Hexpy-Games/butler/releases/download/v0.0.4/${result.artifactName}`;
+      `https://github.com/Hexpy-Games/butler/releases/download/${currentReleaseTag}/${result.artifactName}`;
 
     const releaseManifest = JSON.parse(readText(result.releaseManifestPath));
     const updateManifest = JSON.parse(readText(result.updateManifestPath));
@@ -366,16 +370,16 @@ test("package-owned release gate scripts pass in the repo checkout", () => {
   expect(service.stdout).toBe("");
   expect(serviceVerbose.status).toBe(0);
   expect(serviceVerbose.stdout).toContain(
-    "Service release gate passed: butler@0.0.4",
+    `Service release gate passed: butler@${currentVersion}`,
   );
-  expect(serviceVerbose.stdout).toContain("Components: service@0.0.4");
+  expect(serviceVerbose.stdout).toContain(`Components: service@${currentVersion}`);
   expect(app.status).toBe(0);
   expect(app.stdout).toBe("");
   expect(appVerbose.status).toBe(0);
   expect(appVerbose.stdout).toContain(
-    "App release gate passed: butler-app@0.0.4",
+    `App release gate passed: butler-app@${currentVersion}`,
   );
-  expect(appVerbose.stdout).toContain("Components: app@0.0.4");
+  expect(appVerbose.stdout).toContain(`Components: app@${currentVersion}`);
   expect(rootGate.status).toBe(0);
   expect(rootGate.stdout).toBe("");
 });
@@ -414,7 +418,7 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(electronPackage.scripts["package:linux"]).toContain(
     "--ignore=\"^/dist($|/)\"",
   );
-  expect(electronPackage.version).toBe("0.0.4");
+  expect(electronPackage.version).toBe(currentVersion);
   expect(electronPackage.devDependencies).toHaveProperty("@electron/packager");
   expect(
     readText(
@@ -428,7 +432,7 @@ test("dedicated client package smoke and metadata are available", () => {
         "VERSION",
       ),
     ).trim(),
-  ).toBe("0.0.4");
+  ).toBe(currentVersion);
   expect(existsSync(join(root, "tests", "smoke", "app-package-smoke.ts"))).toBe(
     true,
   );

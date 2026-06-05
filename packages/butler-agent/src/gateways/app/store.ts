@@ -3369,7 +3369,13 @@ export class AppServerStore {
       return this.projectAppWorkerResult(chatId, event, actionId, message);
     }
     const turnId = this.turnIdForAppOutbound(chatId, metadata, message);
-    if (!actionId || !turnId || !this.turnExists(turnId)) return false;
+    if (!actionId || !turnId) return false;
+    const turn = this.getTurnRow(turnId);
+    if (!turn) return false;
+    if (isTerminalTurnState(turn.state)) {
+      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      return false;
+    }
 
     const progressRow = progressRowFromAppOutbound(
       actionId,
@@ -3723,6 +3729,7 @@ export class AppServerStore {
     turnId: string,
     input: RuntimeTurnEventInput,
   ): AgentTurnEvent {
+    const shouldPersist = this.shouldPersistRuntimeTurnEvent(turnId, input.kind);
     const event = createAgentTurnEvent({
       sessionId,
       turnId,
@@ -3733,7 +3740,7 @@ export class AppServerStore {
       payload: input.payload,
       createdAt: input.createdAt,
     });
-    if (event.visibility !== "public") return event;
+    if (!shouldPersist || event.visibility !== "public") return event;
     this.appendEvent("agent.turn_event", {
       session_id: sessionId,
       turn_id: turnId,
@@ -3757,6 +3764,7 @@ export class AppServerStore {
     input: ProgressSummaryInput,
   ): ProgressSummaryRow {
     const row = normalizeProgressSummaryRow(input);
+    if (this.isTerminalTurn(turnId)) return row;
     const event = turnEventFromProgressRow({
       sessionId,
       turnId,
@@ -5453,6 +5461,9 @@ export class AppServerStore {
         "turn_not_found",
         "Turn not found.",
       );
+    if (current.state === "cancelled" && state !== "cancelled") {
+      return this.getTurn(turnId);
+    }
     const now = new Date().toISOString();
     this.db
       .query(
@@ -6121,6 +6132,20 @@ export class AppServerStore {
 
   private turnExists(turnId: string): boolean {
     return Boolean(this.getTurnRow(turnId));
+  }
+
+  private isTerminalTurn(turnId: string): boolean {
+    const turn = this.getTurnRow(turnId);
+    return Boolean(turn && isTerminalTurnState(turn.state));
+  }
+
+  private shouldPersistRuntimeTurnEvent(turnId: string, kind: string): boolean {
+    const turn = this.getTurnRow(turnId);
+    if (!turn || !isTerminalTurnState(turn.state)) return true;
+    if (turn.state === "cancelled") return kind === "turn.cancelled";
+    if (turn.state === "failed") return kind === "turn.failed";
+    if (turn.state === "delivered") return kind === "turn.completed";
+    return false;
   }
 
   private turnIdForAppOutbound(
@@ -9134,6 +9159,10 @@ function isTerminalProgressState(state: string): boolean {
     state === "complete" ||
     state === "completed"
   );
+}
+
+function isTerminalTurnState(state: TurnState): boolean {
+  return state === "delivered" || state === "failed" || state === "cancelled";
 }
 
 function progressStateRank(state: string): number {
