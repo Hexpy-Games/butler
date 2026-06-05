@@ -219,6 +219,45 @@ test("work streams link planned tasks orchestrations and worker tasks to the act
   expect(linked?.linked_worker_task_ids).toEqual(["worker-1"]);
 });
 
+test("linked work stream cancellation is terminal and preserves linked ids", () => {
+  const store = new WorkStreamStore(tempDir);
+  const stream = store.updateFromTodoList({
+    ownerSessionId: "butler/app-project-butler",
+    listId: "main",
+    items: [
+      todo({ id: "intent", phase: "conception", status: "completed" }),
+      todo({ id: "code", phase: "execution", status: "in_progress" }),
+    ],
+  });
+  store.link({
+    id: stream.id,
+    plannedTaskIds: ["planned-1"],
+    orchestrationIds: ["orchestration-1"],
+    workerTaskIds: ["worker-1", "worker-2"],
+  });
+
+  const cancelled = store.cancelLinked({
+    workerTaskIds: ["worker-1"],
+    statusNote: "Cancelled from worker control.",
+    now: new Date("2026-05-15T03:00:00.000Z"),
+  });
+
+  expect(cancelled).toHaveLength(1);
+  expect(cancelled[0]).toMatchObject({
+    id: stream.id,
+    state: "cancelled",
+    current_phase: null,
+    active_step_id: null,
+    status_note: "Cancelled from worker control.",
+    linked_planned_task_ids: ["planned-1"],
+    linked_orchestration_ids: ["orchestration-1"],
+    linked_worker_task_ids: ["worker-1", "worker-2"],
+  });
+  expect(store.list({ sessionId: "butler/app-project-butler" })).toEqual([]);
+  expect(store.list({ sessionId: "butler/app-project-butler", includeTerminal: true })[0])
+    .toMatchObject({ state: "cancelled", terminal: true });
+});
+
 test("final delivery completes only unlinked turn-local work streams", () => {
   const store = new WorkStreamStore(tempDir);
   const turnLocal = store.updateFromTodoList({

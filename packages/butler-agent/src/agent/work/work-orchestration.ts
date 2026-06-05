@@ -11,7 +11,7 @@ export type WorkOrchestrationStatus =
   | "failed"
   | "cancelled";
 
-export type WorkStreamStatus = "pending" | "running" | "done" | "failed" | "skipped";
+export type WorkStreamStatus = "pending" | "running" | "done" | "failed" | "skipped" | "cancelled";
 
 export interface WorkStreamInput {
   id?: string;
@@ -132,7 +132,7 @@ function validateStreams(streams: WorkStreamRecord[]): void {
 }
 
 function terminal(stream: WorkStreamRecord): boolean {
-  return stream.status === "done" || stream.status === "failed" || stream.status === "skipped";
+  return stream.status === "done" || stream.status === "failed" || stream.status === "skipped" || stream.status === "cancelled";
 }
 
 function summarize(record: WorkOrchestrationRecord): WorkOrchestrationSummary {
@@ -142,8 +142,22 @@ function summarize(record: WorkOrchestrationRecord): WorkOrchestrationSummary {
     done: 0,
     failed: 0,
     skipped: 0,
+    cancelled: 0,
   };
   for (const stream of record.streams) counts[stream.status] += 1;
+  if (record.status === "cancelled") {
+    return {
+      id: record.id,
+      title: record.title,
+      goal: record.goal,
+      status: record.status,
+      stream_count: record.streams.length,
+      counts,
+      safe_to_report: false,
+      completion_claim_allowed: false,
+      guard_reason: "Work orchestration was cancelled.",
+    };
+  }
   const allTerminal = record.streams.every(terminal);
   const completionClaimAllowed = allTerminal && record.streams.every((stream) => stream.status === "done" || stream.status === "skipped");
   return {
@@ -230,6 +244,7 @@ export class WorkOrchestrationStore {
   readyStreams(id: string): WorkStreamRecord[] {
     const record = this.read(id);
     if (!record) throw new Error(`work orchestration ${id} not found`);
+    if (record.status === "cancelled" || record.status === "reported") return [];
     const byId = new Map(record.streams.map((stream) => [stream.id, stream]));
     return record.streams.filter((stream) =>
       stream.status === "pending" &&
@@ -240,6 +255,9 @@ export class WorkOrchestrationStore {
   markDispatched(id: string, dispatches: Array<{ stream_id: string; worker_task_id: string }>, now = new Date()): WorkOrchestrationSummary {
     const record = this.read(id);
     if (!record) throw new Error(`work orchestration ${id} not found`);
+    if (record.status === "cancelled" || record.status === "reported") {
+      throw new Error(`work orchestration ${id} is ${record.status}`);
+    }
     const nowIso = now.toISOString();
     const workerByStream = new Map(dispatches.map((item) => [item.stream_id, item.worker_task_id]));
     const updated: WorkOrchestrationRecord = {
@@ -265,6 +283,7 @@ export class WorkOrchestrationStore {
   syncFromTasks(id: string, taskStore = new TaskStore(this.butlerData), now = new Date()): WorkOrchestrationSummary {
     const record = this.read(id);
     if (!record) throw new Error(`work orchestration ${id} not found`);
+    if (record.status === "cancelled" || record.status === "reported") return summarize(record);
     const nowIso = now.toISOString();
     const updated: WorkOrchestrationRecord = {
       ...record,
@@ -300,6 +319,7 @@ export class WorkOrchestrationStore {
   writeReport(id: string, report: string, now = new Date()): WorkOrchestrationSummary {
     const record = this.read(id);
     if (!record) throw new Error(`work orchestration ${id} not found`);
+    if (record.status === "cancelled") throw new Error("cancelled work orchestration cannot be reported");
     const trimmedReport = report.trim();
     if (!trimmedReport) throw new Error("work orchestration report must be non-empty");
     if (!record.streams.every(terminal)) {
@@ -311,6 +331,28 @@ export class WorkOrchestrationStore {
       ...record,
       status: complete ? "reported" : "failed",
       public_report: trimmedReport,
+      updated_at: nowIso,
+    };
+    atomicWriteJson(this.pathFor(id), updated);
+    return summarize(updated);
+  }
+
+  cancel(id: string, now = new Date()): WorkOrchestrationSummary {
+    const record = this.read(id);
+    if (!record) throw new Error(`work orchestration ${id} not found`);
+    if (record.status === "cancelled") return summarize(record);
+    const nowIso = now.toISOString();
+    const updated: WorkOrchestrationRecord = {
+      ...record,
+      status: "cancelled",
+      streams: record.streams.map((stream) =>
+        terminal(stream)
+          ? stream
+          : {
+            ...stream,
+            status: "cancelled",
+            updated_at: nowIso,
+          }),
       updated_at: nowIso,
     };
     atomicWriteJson(this.pathFor(id), updated);

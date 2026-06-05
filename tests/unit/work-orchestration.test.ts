@@ -124,6 +124,48 @@ test("ready-stream dispatch and sync follow durable worker task state", () => {
   }
 });
 
+test("cancelled work orchestrations cannot dispatch, sync, or report later", () => {
+  const butlerData = tempRoot();
+  const store = new WorkOrchestrationStore(butlerData);
+
+  try {
+    store.create({
+      id: "orch-cancel",
+      goal: "Coordinate work that may be stopped",
+      streams: [
+        { id: "a", role: "researcher", objective: "Do A", acceptance_criteria: ["A done"] },
+        { id: "b", role: "builder", objective: "Do B", acceptance_criteria: ["B done"], depends_on: ["a"] },
+      ],
+    });
+    store.markDispatched("orch-cancel", [{ stream_id: "a", worker_task_id: "worker-a" }]);
+
+    const cancelled = store.cancel("orch-cancel", new Date("2026-04-27T01:00:00.000Z"));
+    expect(cancelled).toMatchObject({
+      status: "cancelled",
+      safe_to_report: false,
+      completion_claim_allowed: false,
+      counts: { cancelled: 2, pending: 0 },
+    });
+    expect(store.readyStreams("orch-cancel")).toEqual([]);
+
+    const workerDir = join(butlerData, "tasks", "worker-a");
+    mkdirSync(workerDir, { recursive: true });
+    writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
+    writeFileSync(join(workerDir, "result.md"), "A completed after cancel.\n", "utf8");
+
+    expect(store.syncFromTasks("orch-cancel")).toMatchObject({
+      status: "cancelled",
+      counts: { cancelled: 2, pending: 0 },
+    });
+    expect(() => store.markDispatched("orch-cancel", [{ stream_id: "b", worker_task_id: "worker-b" }]))
+      .toThrow("work orchestration orch-cancel is cancelled");
+    expect(() => store.writeReport("orch-cancel", "All done."))
+      .toThrow("cancelled work orchestration cannot be reported");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("work orchestration reports are blocked until streams are terminal", () => {
   const butlerData = tempRoot();
   const store = new WorkOrchestrationStore(butlerData);
