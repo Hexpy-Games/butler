@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -99,6 +107,9 @@ try {
     "package smoke message did not round-trip",
   );
 
+  mkdirSync(packagedOut, { recursive: true });
+  const packagerIcon = join(packagedOut, "butler-smoke-icon.icns");
+  copyFileSync(butlerIcon, packagerIcon);
   const packageResult = spawnSync(
     packagerBin,
     [
@@ -108,7 +119,7 @@ try {
       `--arch=${packagedArch}`,
       "--overwrite",
       `--out=${packagedOut}`,
-      `--icon=${butlerIcon}`,
+      `--icon=${packagerIcon}`,
       "--ignore=^/dist($|/)",
       "--quiet",
     ],

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { createHash } from "node:crypto";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -47,6 +48,10 @@ const MAC_APP_ICON_RESOURCE = join("Contents", "Resources", "electron.icns");
 
 export function appReleaseIconPath(root: string): string {
   return join(resolve(root), ELECTRON_ROOT, "assets", "butler.icns");
+}
+
+export function appReleasePackagerIconPath(outDir: string): string {
+  return join(resolve(outDir), "butler-release-icon.icns");
 }
 
 export function createAppReleasePackage(
@@ -158,6 +163,8 @@ function runElectronPackager(
   if (!existsSync(iconPath)) {
     throw new Error(`Butler app icon is missing: ${iconPath}`);
   }
+  const packagerIconPath = appReleasePackagerIconPath(outDir);
+  copyFileSync(iconPath, packagerIconPath);
   const [electronPlatform, electronArch] = platform.split("-");
   const result = spawnSync(packager, [
     join(root, ELECTRON_ROOT),
@@ -166,7 +173,7 @@ function runElectronPackager(
     `--arch=${electronArch}`,
     "--overwrite",
     `--out=${outDir}`,
-    `--icon=${iconPath}`,
+    `--icon=${packagerIconPath}`,
     "--ignore=^/dist($|/)",
     "--quiet",
   ], {
