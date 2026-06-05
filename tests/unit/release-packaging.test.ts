@@ -20,6 +20,7 @@ import {
 } from "../../packages/butler-app/scripts/release/manifest.ts";
 import {
   appReleaseIconPath,
+  appReleasePackagerIconPath,
 } from "../../packages/butler-app/scripts/release/package-app-release.ts";
 
 const root = process.cwd();
@@ -457,10 +458,15 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(appReleasePackager).toContain("adhoc-sign-mac.mjs");
   expect(appReleasePackager).toContain("BUTLER_APP_PACKAGER");
   expect(appReleasePackager).toContain("appReleaseIconPath(root)");
+  expect(appReleasePackager).toContain("appReleasePackagerIconPath(outDir)");
+  expect(appReleasePackager).toContain("copyFileSync(iconPath, packagerIconPath)");
   expect(appReleasePackager).toContain("packaged mac app icon does not match Butler icon");
   expect(appReleasePackager).toContain("--ignore=^/dist($|/)");
   expect(appReleaseIconPath(root)).toBe(
     join(root, "packages", "butler-app", "client", "electron", "assets", "butler.icns"),
+  );
+  expect(appReleasePackagerIconPath(join(root, "dist", "release"))).toBe(
+    join(root, "dist", "release", "butler-release-icon.icns"),
   );
   expect(
     readText(
