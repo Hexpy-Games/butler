@@ -19,6 +19,7 @@ import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/a
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
 import { createProjectFolderSelectionToken } from "../../packages/butler-agent/src/gateways/app/store.ts";
 import { compactionPath } from "../../packages/butler-agent/src/agent/context/compaction.ts";
+import { appendRuntimeTurnContextMetric } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
 import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
 import {
   appendTranscriptEvent,
@@ -3125,6 +3126,98 @@ test("session summary and context details expose aggregate app data without raw 
       message_count: 2,
     });
     expect(exported.data.content).toContain("private summary sentinel");
+  } finally {
+    server.stop();
+  }
+});
+
+test("context details reflect latest provider prompt usage telemetry", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder(input) {
+      return { texts: [`reply: ${input.text}`] };
+    },
+  });
+  try {
+    const sent = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "small visible request",
+    });
+    const turnId = sent.data.accepted.turn_id as string;
+    const before = await getJson(
+      `${server.url}context-details?session_id=general`,
+    );
+
+    appendPromptCacheMetric(
+      {
+        ts: Date.now(),
+        model: "openai/gpt-5.4",
+        scope: "session-turn",
+        turnId,
+        phase: "tool_loop",
+        promptTokens: 64_000,
+        cachedTokens: 8_000,
+        totalTokens: 65_500,
+      },
+      { butlerData: tempDir },
+    );
+
+    const after = await getJson(
+      `${server.url}context-details?session_id=general`,
+    );
+    const working = after.data.categories.find(
+      (category: { id: string }) => category.id === "working",
+    );
+
+    expect(before.data.used_tokens).toBeLessThan(64_000);
+    expect(after.data.used_tokens).toBeGreaterThanOrEqual(64_000);
+    expect(after.data.token_count_source).toBe("provider_prompt_usage");
+    expect(working.used_tokens).toBeGreaterThan(before.data.used_tokens);
+    expect(JSON.stringify(after)).not.toContain("small visible request");
+  } finally {
+    server.stop();
+  }
+});
+
+test("context details fall back to latest context monitor runtime telemetry", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder(input) {
+      return { texts: [`reply: ${input.text}`] };
+    },
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "small visible request",
+    });
+    const before = await getJson(
+      `${server.url}context-details?session_id=general`,
+    );
+
+    appendRuntimeTurnContextMetric({
+      butlerData: tempDir,
+      sessionId: "butler/app-general",
+      model: "openai/gpt-5.4",
+      totalPromptChars: 300_000,
+      promptContextChars: 280_000,
+      recentConversationChars: 20_000,
+      recallContextChars: 40_000,
+      inboundMessageChars: 120,
+    });
+
+    const after = await getJson(
+      `${server.url}context-details?session_id=general`,
+    );
+
+    expect(before.data.used_tokens).toBeLessThan(60_000);
+    expect(after.data.used_tokens).toBeGreaterThanOrEqual(60_000);
+    expect(after.data.token_count_source).toBe("context_monitor");
+    expect(JSON.stringify(after)).not.toContain("small visible request");
   } finally {
     server.stop();
   }
