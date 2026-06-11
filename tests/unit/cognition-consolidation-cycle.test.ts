@@ -363,6 +363,7 @@ test("consolidation cycle writes generated new chat briefing artifacts and usage
             promptTokens: project ? 200 : 100,
             cachedTokens: project ? 50 : 25,
             totalTokens: project ? 260 : 140,
+            outputTokens: project ? 60 : 40,
           },
           text: JSON.stringify({
             moment: project ? "Project" : "7:06 PM",

@@ -57,9 +57,14 @@ export interface PromptUsageBudgetState {
   status: "ok" | "warning" | "exhausted";
   requestCount: number;
   maxRequests: number;
+  promptTokens?: number;
+  cachedTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
   maxPromptTokens?: number;
   maxOutputTokens?: number;
   maxTotalTokens?: number;
+  stopReason?: string;
 }
 
 export interface PromptUsageAttribution {
@@ -68,6 +73,15 @@ export interface PromptUsageAttribution {
   roundIndex?: number;
   reasoningEffort?: ReasoningEffort;
   budgetState?: PromptUsageBudgetState;
+  getBudgetState?: () => PromptUsageBudgetState;
+  beforeModelRequest?: (input: {
+    roundIndex: number;
+    phase?: string;
+  }) => void;
+  afterModelResponseUsage?: (usage: PromptUsageReport & {
+    outputTokens: number;
+    roundIndex: number;
+  }) => void;
   promptSections?: PromptUsageSectionAttribution[];
 }
 
@@ -301,6 +315,7 @@ export interface PromptUsageReport {
   promptTokens: number | null;
   cachedTokens: number;
   totalTokens: number | null;
+  outputTokens: number;
 }
 
 export interface PromptTextResult {
@@ -1183,9 +1198,52 @@ function recordPromptCacheMetric(
     totalTokens: stats.totalTokens,
     promptCacheKey: input.promptCache.prompt_cache_key,
     promptCacheRetention: input.promptCache.prompt_cache_retention,
-    budgetState: input.usageAttribution?.budgetState,
+    budgetState: input.usageAttribution?.getBudgetState?.() ?? input.usageAttribution?.budgetState,
     promptSections: input.usageAttribution?.promptSections,
   }, { butlerData: input.butlerData });
+}
+
+function usageReportFromStats(input: {
+  model: string;
+  stats: PromptCacheStats;
+  roundIndex: number;
+}): PromptUsageReport & { outputTokens: number; roundIndex: number } {
+  const outputTokens = input.stats.totalTokens === null || input.stats.promptTokens === null
+    ? 0
+    : Math.max(0, input.stats.totalTokens - input.stats.promptTokens);
+  return {
+    model: input.model,
+    promptTokens: input.stats.promptTokens,
+    cachedTokens: input.stats.cachedTokens,
+    totalTokens: input.stats.totalTokens,
+    outputTokens,
+    roundIndex: input.roundIndex,
+  };
+}
+
+function beforeAttributedModelRequest(input: {
+  attribution?: PromptUsageAttribution;
+  roundIndex: number;
+}): void {
+  input.attribution?.beforeModelRequest?.({
+    roundIndex: input.roundIndex,
+    phase: input.attribution.phase,
+  });
+}
+
+function afterAttributedModelResponse(input: {
+  attribution?: PromptUsageAttribution;
+  model: string;
+  response: OpenAIResponse;
+  roundIndex: number;
+}): void {
+  const stats = extractPromptCacheStats(input.response);
+  if (!stats || stats.promptTokens === null) return;
+  input.attribution?.afterModelResponseUsage?.(usageReportFromStats({
+    model: input.model,
+    stats,
+    roundIndex: input.roundIndex,
+  }));
 }
 
 function loadFileIfExists(path: string): string {
@@ -3498,6 +3556,10 @@ async function runHostedPromptText(
     const resolution = resolveOpenAIModel(config.modelId, options.reasoningEffort);
     const model = await resolveDynamicOpenAIModel(resolution.model);
     const promptCache = resolveOpenAIPromptCacheConfig(options.cacheScope ?? "text-prompt");
+    beforeAttributedModelRequest({
+      attribution: options.usageAttribution,
+      roundIndex: options.usageAttribution?.roundIndex ?? 0,
+    });
     const response = await createOpenAIResponse({
       model,
       store: true,
@@ -3506,6 +3568,12 @@ async function runHostedPromptText(
       reasoning: buildReasoningConfig(resolution),
       input: openAIInputWithAttachments(options.prompt, options.attachments),
     }, options.signal, await openAIAuthOverrideForHosted(config));
+    afterAttributedModelResponse({
+      attribution: options.usageAttribution,
+      model,
+      response,
+      roundIndex: options.usageAttribution?.roundIndex ?? 0,
+    });
     recordPromptCacheMetric(response, {
       model,
       scope: options.cacheScope ?? "text-prompt",
@@ -3640,6 +3708,10 @@ export async function runPromptTextWithUsage(options: PromptOptions): Promise<Pr
   const resolution = resolveOpenAIModel(options.model, options.reasoningEffort);
   const model = await resolveDynamicOpenAIModel(resolution.model);
   const promptCache = resolveOpenAIPromptCacheConfig(options.cacheScope ?? "text-prompt");
+  beforeAttributedModelRequest({
+    attribution: options.usageAttribution,
+    roundIndex: options.usageAttribution?.roundIndex ?? 0,
+  });
   const response = await createOpenAIResponse({
     model,
     store: true,
@@ -3648,6 +3720,12 @@ export async function runPromptTextWithUsage(options: PromptOptions): Promise<Pr
     reasoning: buildReasoningConfig(resolution),
     input: openAIInputWithAttachments(options.prompt, options.attachments),
   }, options.signal);
+  afterAttributedModelResponse({
+    attribution: options.usageAttribution,
+    model,
+    response,
+    roundIndex: options.usageAttribution?.roundIndex ?? 0,
+  });
   recordPromptCacheMetric(response, {
     model,
     scope: options.cacheScope ?? "text-prompt",
@@ -3679,6 +3757,9 @@ export async function runPromptTextWithUsage(options: PromptOptions): Promise<Pr
           promptTokens: stats.promptTokens,
           cachedTokens: stats.cachedTokens,
           totalTokens: stats.totalTokens,
+          outputTokens: stats.totalTokens === null || stats.promptTokens === null
+            ? 0
+            : Math.max(0, stats.totalTokens - stats.promptTokens),
         }
       : null,
   };
@@ -3736,6 +3817,10 @@ async function runOpenAIFunctionToolPromptText(
         codexStatelessInput.push(...input.items);
       }
 
+      beforeAttributedModelRequest({
+        attribution: options.usageAttribution,
+        roundIndex: modelCallRound,
+      });
       const response = await createOpenAIResponse({
         model,
         store: true,
@@ -3754,6 +3839,12 @@ async function runOpenAIFunctionToolPromptText(
               __butler_codex_stateless_input: codexStatelessInput,
             }),
       }, options.signal, authOverride);
+      afterAttributedModelResponse({
+        attribution: options.usageAttribution,
+        model,
+        response,
+        roundIndex: modelCallRound,
+      });
       previousResponseId = response.id;
       const functionCallItems = functionCallContinuationItems(response, allowedNames);
       if (functionCallItems.length > 0) {
@@ -3804,6 +3895,10 @@ async function runOpenAIFunctionToolPromptText(
       sentToolMessages = pending.sentCount;
       codexStatelessInput.push(...pending.items);
       try {
+        beforeAttributedModelRequest({
+          attribution: options.usageAttribution,
+          roundIndex: modelCallRound,
+        });
         const response = await createOpenAIResponse({
           model,
           store: true,
@@ -3814,6 +3909,12 @@ async function runOpenAIFunctionToolPromptText(
           input: pending.items,
           __butler_codex_stateless_input: codexStatelessInput,
         }, options.signal, authOverride);
+        afterAttributedModelResponse({
+          attribution: options.usageAttribution,
+          model,
+          response,
+          roundIndex: modelCallRound,
+        });
         previousResponseId = response.id;
         recordPromptCacheMetric(response, {
           model,

@@ -496,6 +496,8 @@ test("native runtime attaches turn budget attribution to direct tool prompts", a
       turnId?: string;
       phase?: string;
       budgetState?: { status: string; requestCount: number; maxRequests: number };
+      getBudgetState?: () => { status: string; requestCount: number; maxRequests: number };
+      beforeModelRequest?: (input: { roundIndex: number }) => void;
       promptSections?: Array<{ id: string; chars: number; estimatedTokens: number }>;
     };
   }> = [];
@@ -503,6 +505,7 @@ test("native runtime attaches turn budget attribution to direct tool prompts", a
     disableAutomaticRecall: true,
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
       captured.push({
         maxToolRounds: input.maxToolRounds,
         butlerData: input.butlerData,
@@ -539,9 +542,14 @@ test("native runtime attaches turn budget attribution to direct tool prompts", a
     phase: "initial_tool_loop",
     budgetState: {
       status: "ok",
-      requestCount: 1,
+      requestCount: 0,
       maxRequests: 32,
     },
+  });
+  expect(captured[0].usageAttribution?.getBudgetState?.()).toMatchObject({
+    status: "ok",
+    requestCount: 1,
+    maxRequests: 32,
   });
   expect(captured[0].usageAttribution?.promptSections?.some((section) =>
     section.id === "prompt_context" &&
@@ -605,6 +613,97 @@ test("native runtime blocks repeated Project Ledger status command families in o
     repeat_count: 4,
     repeat_limit: 3,
   });
+});
+
+test("native runtime stops the next model call after provider usage exceeds token budget", async () => {
+  let beforeModelRequests = 0;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      beforeModelRequests += 1;
+      input.usageAttribution?.afterModelResponseUsage?.({
+        model: "openai/auto:codex-latest",
+        promptTokens: 221_000,
+        cachedTokens: 0,
+        outputTokens: 1_000,
+        totalTokens: 222_000,
+        roundIndex: 0,
+      });
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 1 });
+      beforeModelRequests += 1;
+      return "should not reach a second model request";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/token-cap",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "토큰 상한을 초과하면 다음 모델 호출을 막아줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  })).rejects.toThrow("turn token budget exhausted");
+  expect(beforeModelRequests).toBe(1);
+});
+
+test("native runtime allows repeated tests after a state-mutating command resets repeat guards", async () => {
+  const executed: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerData: tempDir,
+    executeButlerTool: async (call) => {
+      if (call.name === "run_command" && typeof call.args.command === "string") {
+        executed.push(call.args.command);
+      }
+      return {
+        ok: true,
+        stdout: "ok",
+        stderr: "",
+        exit_code: 0,
+        timed_out: false,
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      for (const command of [
+        "bun test tests/unit/native-tool-loop-runtime.test.ts",
+        "bun test tests/unit/native-tool-loop-runtime.test.ts",
+        "bun test tests/unit/native-tool-loop-runtime.test.ts",
+        "printf 'changed' > packages/butler-agent/src/__budget-reset-test.txt",
+        "bun test tests/unit/native-tool-loop-runtime.test.ts",
+      ]) {
+        await input.executeTool({
+          name: "run_command",
+          args: { command },
+          rawArguments: JSON.stringify({ command }),
+        });
+      }
+      return "변경 후 테스트 재실행을 허용했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/repeat-reset",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "테스트를 반복하고 수정 후 다시 실행해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toContain("허용했습니다");
+  expect(executed).toHaveLength(5);
 });
 
 test("native runtime can drive the real run_command tool through the default executor", async () => {

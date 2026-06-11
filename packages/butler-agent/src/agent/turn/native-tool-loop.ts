@@ -244,58 +244,118 @@ function directWorkContinuationAttempts(): number {
 
 interface DirectTurnBudget {
   turnId: string;
-  modelCallsReserved: number;
+  modelRequestsUsed: number;
+  promptTokens: number;
+  cachedTokens: number;
+  outputTokens: number;
+  totalTokens: number;
   maxModelCalls: number;
   maxPromptTokens: number;
   maxOutputTokens: number;
   maxTotalTokens: number;
+  stopReason: string | null;
 }
 
 function createDirectTurnBudget(turnId: string): DirectTurnBudget {
   return {
     turnId,
-    modelCallsReserved: 0,
+    modelRequestsUsed: 0,
+    promptTokens: 0,
+    cachedTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
     maxModelCalls: DIRECT_TURN_MODEL_CALL_BUDGET,
     maxPromptTokens: DIRECT_TURN_PROMPT_TOKEN_BUDGET,
     maxOutputTokens: DIRECT_TURN_OUTPUT_TOKEN_BUDGET,
     maxTotalTokens: DIRECT_TURN_TOTAL_TOKEN_BUDGET,
+    stopReason: null,
   };
 }
 
-function budgetStatus(input: {
-  requestCount: number;
-  maxRequests: number;
-}): PromptUsageBudgetState["status"] {
-  if (input.requestCount >= input.maxRequests) return "exhausted";
-  if (input.requestCount >= Math.floor(input.maxRequests * DIRECT_TURN_BUDGET_WARNING_RATIO)) return "warning";
+function budgetStatus(budget: DirectTurnBudget): PromptUsageBudgetState["status"] {
+  if (budget.stopReason) return "exhausted";
+  if (budget.modelRequestsUsed >= budget.maxModelCalls) return "exhausted";
+  if (
+    budget.modelRequestsUsed >= Math.floor(budget.maxModelCalls * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
+    budget.promptTokens >= Math.floor(budget.maxPromptTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
+    budget.outputTokens >= Math.floor(budget.maxOutputTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
+    budget.totalTokens >= Math.floor(budget.maxTotalTokens * DIRECT_TURN_BUDGET_WARNING_RATIO)
+  ) {
+    return "warning";
+  }
   return "ok";
 }
 
 function directTurnBudgetState(budget: DirectTurnBudget): PromptUsageBudgetState {
   return {
-    status: budgetStatus({
-      requestCount: budget.modelCallsReserved,
-      maxRequests: budget.maxModelCalls,
-    }),
-    requestCount: budget.modelCallsReserved,
+    status: budgetStatus(budget),
+    requestCount: budget.modelRequestsUsed,
     maxRequests: budget.maxModelCalls,
+    promptTokens: budget.promptTokens,
+    cachedTokens: budget.cachedTokens,
+    outputTokens: budget.outputTokens,
+    totalTokens: budget.totalTokens,
     maxPromptTokens: budget.maxPromptTokens,
     maxOutputTokens: budget.maxOutputTokens,
     maxTotalTokens: budget.maxTotalTokens,
+    stopReason: budget.stopReason ?? undefined,
   };
 }
 
-function reserveModelCallBudget(budget: DirectTurnBudget, requestedRounds: number): number {
-  const requested = Math.max(1, Math.min(requestedRounds, DIRECT_TOOL_CHAIN_MAX_ROUNDS));
-  const remaining = Math.max(0, budget.maxModelCalls - budget.modelCallsReserved);
-  if (remaining <= 0) {
-    throw goalCompletionIncompleteError(
-      `turn model-call budget exhausted: ${budget.modelCallsReserved}/${budget.maxModelCalls}`,
-    );
+function turnBudgetExceededMessage(budget: DirectTurnBudget): string {
+  if (budget.stopReason) {
+    return `turn token budget exhausted: ${budget.stopReason}`;
   }
-  const granted = Math.max(1, Math.min(requested, remaining));
-  budget.modelCallsReserved += 1;
-  return granted;
+  return `turn model-call budget exhausted: ${budget.modelRequestsUsed}/${budget.maxModelCalls}`;
+}
+
+function remainingModelRequestBudget(budget: DirectTurnBudget, requestedRounds: number): number {
+  if (budget.stopReason || budget.modelRequestsUsed >= budget.maxModelCalls) {
+    throw goalCompletionIncompleteError(turnBudgetExceededMessage(budget));
+  }
+  const requested = Math.max(1, Math.min(requestedRounds, DIRECT_TOOL_CHAIN_MAX_ROUNDS));
+  const remaining = Math.max(0, budget.maxModelCalls - budget.modelRequestsUsed);
+  return Math.max(1, Math.min(requested, remaining));
+}
+
+function beforeDirectTurnModelRequest(budget: DirectTurnBudget): void {
+  if (budget.stopReason || budget.modelRequestsUsed >= budget.maxModelCalls) {
+    throw goalCompletionIncompleteError(turnBudgetExceededMessage(budget));
+  }
+  budget.modelRequestsUsed += 1;
+}
+
+function addDirectTurnUsage(input: {
+  budget: DirectTurnBudget;
+  promptTokens: number | null;
+  cachedTokens: number;
+  outputTokens: number;
+  totalTokens: number | null;
+}): void {
+  const promptTokens = typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)
+    ? Math.max(0, input.promptTokens)
+    : 0;
+  const cachedTokens = Number.isFinite(input.cachedTokens)
+    ? Math.max(0, Math.min(input.cachedTokens, promptTokens))
+    : 0;
+  const outputTokens = Number.isFinite(input.outputTokens) ? Math.max(0, input.outputTokens) : 0;
+  const totalTokens = typeof input.totalTokens === "number" && Number.isFinite(input.totalTokens)
+    ? Math.max(0, input.totalTokens)
+    : promptTokens + outputTokens;
+  input.budget.promptTokens += promptTokens;
+  input.budget.cachedTokens += cachedTokens;
+  input.budget.outputTokens += outputTokens;
+  input.budget.totalTokens += totalTokens;
+  if (input.budget.promptTokens > input.budget.maxPromptTokens) {
+    input.budget.stopReason =
+      `prompt_tokens ${input.budget.promptTokens}/${input.budget.maxPromptTokens}`;
+  } else if (input.budget.outputTokens > input.budget.maxOutputTokens) {
+    input.budget.stopReason =
+      `output_tokens ${input.budget.outputTokens}/${input.budget.maxOutputTokens}`;
+  } else if (input.budget.totalTokens > input.budget.maxTotalTokens) {
+    input.budget.stopReason =
+      `total_tokens ${input.budget.totalTokens}/${input.budget.maxTotalTokens}`;
+  }
 }
 
 function promptUsageSectionsFromPrompt(input: NormalizedTurnPrompt): PromptUsageSectionAttribution[] {
@@ -350,6 +410,31 @@ function repeatedToolFamilyKey(name: string, args: Record<string, unknown>): str
   if (/^git\s+status\b/u.test(command)) return "command:git-status";
   if (/^git\s+diff\b/u.test(command)) return "command:git-diff";
   return null;
+}
+
+function isStateMutatingToolCall(name: string, args: Record<string, unknown>): boolean {
+  if (name !== "run_command") {
+    return ![
+      "inspect_project_status",
+      "query_project_work",
+      "render_project_dashboard",
+      "web_search",
+      "web_read",
+      "read_tool_output_artifact",
+      "list_todo_list",
+    ].includes(name);
+  }
+  const command = typeof args.command === "string" ? args.command.trim() : "";
+  if (!command) return false;
+  if (/\b(?:apply_patch|git\s+(?:add|commit|merge|rebase|cherry-pick|rm|mv|tag)|npm\s+(?:install|update)|bun\s+(?:install|add|remove))\b/u.test(command)) {
+    return true;
+  }
+  if (/\b(?:touch|mkdir|rm|mv|cp)\b/u.test(command)) return true;
+  if (/\b(?:sed|perl)\s+-i\b/u.test(command)) return true;
+  if (/(?:^|[\s;&|])(?:cat|printf|echo)\b[\s\S]*(?:>|>>|\|\s*tee\b)/u.test(command)) return true;
+  if (/(?:^|[\s;&|])project-ledger\s+(?:work|task|attempt)\s+(?:create|update|complete|start|succeed|fail)\b/u.test(command)) return true;
+  if (/(?:^|[\s;&|])project-ledger\s+render\b[\s\S]*\s--write\b/u.test(command)) return true;
+  return false;
 }
 
 function repeatedToolFamilyPolicyResult(input: {
@@ -1831,11 +1916,20 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         phase = "tool_loop",
       ): Promise<string> => {
         throwIfRuntimeTurnAborted(input.signal);
-        const grantedToolRounds = reserveModelCallBudget(turnBudget, maxToolRounds);
+        const grantedToolRounds = remainingModelRequestBudget(turnBudget, maxToolRounds);
         const usageAttribution: PromptUsageAttribution = {
           turnId,
           phase,
           budgetState: directTurnBudgetState(turnBudget),
+          getBudgetState: () => directTurnBudgetState(turnBudget),
+          beforeModelRequest: () => beforeDirectTurnModelRequest(turnBudget),
+          afterModelResponseUsage: (usage) => addDirectTurnUsage({
+            budget: turnBudget,
+            promptTokens: usage.promptTokens,
+            cachedTokens: usage.cachedTokens,
+            outputTokens: usage.outputTokens,
+            totalTokens: usage.totalTokens,
+          }),
           promptSections,
         };
         return await this.toolPromptRunner({
@@ -1927,7 +2021,6 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       if (useTools) {
         text = await runToolPrompt(prompt, DIRECT_TOOL_CHAIN_MAX_ROUNDS, "initial_tool_loop");
       } else {
-        reserveModelCallBudget(turnBudget, 1);
         text = await this.promptRunner({
           prompt,
           model: input.model,
@@ -1941,6 +2034,15 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             phase: "text_prompt",
             roundIndex: 0,
             budgetState: directTurnBudgetState(turnBudget),
+            getBudgetState: () => directTurnBudgetState(turnBudget),
+            beforeModelRequest: () => beforeDirectTurnModelRequest(turnBudget),
+            afterModelResponseUsage: (usage) => addDirectTurnUsage({
+              budget: turnBudget,
+              promptTokens: usage.promptTokens,
+              cachedTokens: usage.cachedTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.totalTokens,
+            }),
             promptSections,
           },
         });
@@ -2707,6 +2809,9 @@ function createAuditedButlerToolExecutor(input: {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       const result = await executeWithTurnFreshnessCache(effectiveCall);
       throwIfRuntimeTurnAborted(input.turnInput.signal);
+      if (isStateMutatingToolCall(call.name, cleanArgs)) {
+        repeatedToolFamilyCounts.clear();
+      }
       recordOperationalMetric({
         category: "tool",
         name: call.name,
