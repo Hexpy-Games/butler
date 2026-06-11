@@ -945,6 +945,8 @@ export interface ProgressSummaryRow {
     | "edited"
     | "dispatch"
     | "used_tool"
+    | "context"
+    | "model"
     | "thinking"
     | "worked_duration"
     | "message"
