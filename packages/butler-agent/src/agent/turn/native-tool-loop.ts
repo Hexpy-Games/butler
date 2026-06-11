@@ -24,6 +24,9 @@ import {
   runFunctionToolPromptText,
   runPromptText,
   type FunctionToolPromptOptions,
+  type PromptUsageAttribution,
+  type PromptUsageBudgetState,
+  type PromptUsageSectionAttribution,
 } from "../../integrations/providers/provider.ts";
 import {
   BUTLER_TOOLS,
@@ -52,6 +55,7 @@ import {
 import { renderFeedbackBufferContext } from "../cognition/feedback/buffer.ts";
 import {
   defaultRecentConversationTokenBudget,
+  estimateContextTokens,
   takeLinesFromEndWithinBudget,
   type ContextBudgetOverrides,
 } from "../context/budget.ts";
@@ -175,6 +179,13 @@ const PLANNED_REVIEW_SCOPED_TOOLS = new Set<string>([
 const RUNTIME_SEMANTIC_TODO_LIST_ID = "runtime-semantic";
 const DEFAULT_GOAL_COMPLETION_CONTINUATION_ATTEMPTS = 8;
 const DEFAULT_DIRECT_WORK_CONTINUATION_ATTEMPTS = 100;
+const DIRECT_TURN_MODEL_CALL_BUDGET = 32;
+const DIRECT_TURN_PROMPT_TOKEN_BUDGET = 220_000;
+const DIRECT_TURN_OUTPUT_TOKEN_BUDGET = 80_000;
+const DIRECT_TURN_TOTAL_TOKEN_BUDGET = 300_000;
+const DIRECT_TURN_BUDGET_WARNING_RATIO = 0.8;
+const COMPACT_RECENT_CONVERSATION_TOKEN_BUDGET = 2_000;
+const REPEATED_TOOL_FAMILY_LIMIT = 3;
 
 interface StoredSessionConfig {
   init: RuntimeSessionInit;
@@ -229,6 +240,132 @@ function directWorkContinuationAttempts(): number {
   const parsed = raw ? Number.parseInt(raw, 10) : NaN;
   if (!Number.isFinite(parsed)) return DEFAULT_DIRECT_WORK_CONTINUATION_ATTEMPTS;
   return Math.max(0, Math.min(parsed, 1_000));
+}
+
+interface DirectTurnBudget {
+  turnId: string;
+  modelCallsReserved: number;
+  maxModelCalls: number;
+  maxPromptTokens: number;
+  maxOutputTokens: number;
+  maxTotalTokens: number;
+}
+
+function createDirectTurnBudget(turnId: string): DirectTurnBudget {
+  return {
+    turnId,
+    modelCallsReserved: 0,
+    maxModelCalls: DIRECT_TURN_MODEL_CALL_BUDGET,
+    maxPromptTokens: DIRECT_TURN_PROMPT_TOKEN_BUDGET,
+    maxOutputTokens: DIRECT_TURN_OUTPUT_TOKEN_BUDGET,
+    maxTotalTokens: DIRECT_TURN_TOTAL_TOKEN_BUDGET,
+  };
+}
+
+function budgetStatus(input: {
+  requestCount: number;
+  maxRequests: number;
+}): PromptUsageBudgetState["status"] {
+  if (input.requestCount >= input.maxRequests) return "exhausted";
+  if (input.requestCount >= Math.floor(input.maxRequests * DIRECT_TURN_BUDGET_WARNING_RATIO)) return "warning";
+  return "ok";
+}
+
+function directTurnBudgetState(budget: DirectTurnBudget): PromptUsageBudgetState {
+  return {
+    status: budgetStatus({
+      requestCount: budget.modelCallsReserved,
+      maxRequests: budget.maxModelCalls,
+    }),
+    requestCount: budget.modelCallsReserved,
+    maxRequests: budget.maxModelCalls,
+    maxPromptTokens: budget.maxPromptTokens,
+    maxOutputTokens: budget.maxOutputTokens,
+    maxTotalTokens: budget.maxTotalTokens,
+  };
+}
+
+function reserveModelCallBudget(budget: DirectTurnBudget, requestedRounds: number): number {
+  const requested = Math.max(1, Math.min(requestedRounds, DIRECT_TOOL_CHAIN_MAX_ROUNDS));
+  const remaining = Math.max(0, budget.maxModelCalls - budget.modelCallsReserved);
+  if (remaining <= 0) {
+    throw goalCompletionIncompleteError(
+      `turn model-call budget exhausted: ${budget.modelCallsReserved}/${budget.maxModelCalls}`,
+    );
+  }
+  const granted = Math.max(1, Math.min(requested, remaining));
+  budget.modelCallsReserved += 1;
+  return granted;
+}
+
+function promptUsageSectionsFromPrompt(input: NormalizedTurnPrompt): PromptUsageSectionAttribution[] {
+  const sections = [
+    ["prompt_context", input.promptContextChars],
+    ["compaction_context", input.compactionContextChars],
+    ["feedback_buffer", input.feedbackBufferContextChars],
+    ["working_memory", input.workingMemoryContextChars],
+    ["recent_conversation", input.recentConversationChars],
+    ["recall_context", input.recallContextChars],
+    ["inbound_message", input.inboundMessageChars],
+  ] as const;
+  return sections
+    .filter(([, chars]) => chars > 0)
+    .map(([id, chars]) => ({
+      id,
+      chars,
+      estimatedTokens: estimateContextTokens("x".repeat(Math.min(chars, 200_000))),
+    }));
+}
+
+export function recentConversationBudgetForTurn(input: {
+  configuredBudget: number;
+  compactionContext: string;
+}): number {
+  if (input.compactionContext.trim()) {
+    return Math.min(input.configuredBudget, COMPACT_RECENT_CONVERSATION_TOKEN_BUDGET);
+  }
+  return input.configuredBudget;
+}
+
+function repeatedToolFamilyKey(name: string, args: Record<string, unknown>): string | null {
+  if (name === "inspect_project_status") return "project-ledger:status";
+  if (name === "query_project_work") {
+    const kind = typeof args.kind === "string" && args.kind.trim() ? args.kind.trim() : "query";
+    return `project-ledger:query:${kind}`;
+  }
+  if (name === "render_project_dashboard") {
+    const view = typeof args.view === "string" && args.view.trim() ? args.view.trim() : "dashboard";
+    return `project-ledger:render:${view}`;
+  }
+  if (name !== "run_command") return null;
+  const command = typeof args.command === "string" ? args.command.trim() : "";
+  if (!command) return null;
+  if (/\bproject-ledger\s+status\b/u.test(command)) return "project-ledger:status";
+  if (/\bproject-ledger\s+check\b/u.test(command)) return "project-ledger:check";
+  const ledgerQuery = command.match(/\bproject-ledger\s+query\b[\s\S]*?\s--kind\s+([A-Za-z0-9._-]+)/u)?.[1];
+  if (ledgerQuery) return `project-ledger:query:${ledgerQuery}`;
+  if (/^bun\s+test\b/u.test(command)) return "command:test";
+  if (/^bun\s+run\s+typecheck\b/u.test(command)) return "command:typecheck";
+  if (/^bun\s+run\s+check\b/u.test(command)) return "command:check";
+  if (/^git\s+status\b/u.test(command)) return "command:git-status";
+  if (/^git\s+diff\b/u.test(command)) return "command:git-diff";
+  return null;
+}
+
+function repeatedToolFamilyPolicyResult(input: {
+  family: string;
+  count: number;
+  limit: number;
+}): Record<string, unknown> {
+  return {
+    ok: false,
+    budget_policy: "repeated_tool_family_blocked",
+    repeat_family: input.family,
+    repeat_count: input.count,
+    repeat_limit: input.limit,
+    message:
+      "This turn has already repeated this tool family enough times. Reuse the latest evidence, summarize it, or ask for an explicit continuation instead of re-running the same status/test/git command loop.",
+  };
 }
 
 function throwIfRuntimeTurnAborted(signal?: AbortSignal): void {
@@ -1598,6 +1735,8 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         butlerData: this.butlerData,
         sessionId: input.handle.sessionId,
       }));
+      const turnId = currentRuntimeTurnId(input) ?? `turn-${randomUUID().slice(0, 12)}`;
+      const turnBudget = createDirectTurnBudget(turnId);
       const feedbackBufferContext = promptContextIncludesSection(input, "Active Feedback Buffer")
         ? ""
         : renderFeedbackBufferContext({
@@ -1619,16 +1758,21 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         feedbackBufferContext,
         workingMemoryContext,
         runtimePolicyContext,
-        recentConversationTokenBudget:
-          this.recentConversationTokenBudget ?? defaultRecentConversationTokenBudget(input.model),
+        recentConversationTokenBudget: recentConversationBudgetForTurn({
+          configuredBudget: this.recentConversationTokenBudget ?? defaultRecentConversationTokenBudget(input.model),
+          compactionContext,
+        }),
         butlerData: this.butlerData,
       });
+      const promptSections = promptUsageSectionsFromPrompt(normalizedPrompt);
       await emitTurnEventBestEffort(input, {
         kind: "turn.iteration.started",
         payload: {
           iteration: 1,
           model: input.model,
           useTools,
+          turnId,
+          budget: directTurnBudgetState(turnBudget),
         },
       });
       const prompt = normalizedPrompt.prompt;
@@ -1684,8 +1828,16 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       const runToolPrompt = async (
         promptText: string,
         maxToolRounds = DIRECT_TOOL_CHAIN_MAX_ROUNDS,
+        phase = "tool_loop",
       ): Promise<string> => {
         throwIfRuntimeTurnAborted(input.signal);
+        const grantedToolRounds = reserveModelCallBudget(turnBudget, maxToolRounds);
+        const usageAttribution: PromptUsageAttribution = {
+          turnId,
+          phase,
+          budgetState: directTurnBudgetState(turnBudget),
+          promptSections,
+        };
         return await this.toolPromptRunner({
           prompt: promptText,
           model: input.model,
@@ -1694,7 +1846,9 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           signal: input.signal,
           attachments,
           tools: BUTLER_TOOLS,
-          maxToolRounds,
+          maxToolRounds: grantedToolRounds,
+          butlerData: this.butlerData,
+          usageAttribution,
           executeTool: executor,
           finalTextFromToolResult: ({ name, output }) => {
             if (name === "write_planned_public_report") {
@@ -1737,7 +1891,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         const maxContinuationAttempts = goalCompletionContinuationAttempts();
         for (let continuationAttempt = 0;; continuationAttempt += 1) {
           const successfulToolsBeforeReview = successfulToolAuditCount();
-          const reviewText = await runToolPrompt(nextReviewPromptText, maxToolRounds);
+          const reviewText = await runToolPrompt(nextReviewPromptText, maxToolRounds, "goal_completion_review");
           const incompleteReason = completionReviewIncompleteReason(reviewText);
           const reviewAdvancedTheTurn = successfulToolAuditCount() > successfulToolsBeforeReview;
           if (!incompleteReason) return reviewAdvancedTheTurn ? reviewText : candidateFinalText;
@@ -1752,7 +1906,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             incompleteReason,
             audit,
             decisions: publicDecisionContext,
-          }));
+          }), 8, "goal_completion_continuation");
           const continuationAdvancedTheTurn =
             successfulToolAuditCount() > successfulToolsBeforeContinuation;
           const continuationIncompleteReason =
@@ -1769,16 +1923,28 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           });
         }
       };
-      let text = useTools
-        ? await runToolPrompt(prompt)
-        : await this.promptRunner({
+      let text = "";
+      if (useTools) {
+        text = await runToolPrompt(prompt, DIRECT_TOOL_CHAIN_MAX_ROUNDS, "initial_tool_loop");
+      } else {
+        reserveModelCallBudget(turnBudget, 1);
+        text = await this.promptRunner({
           prompt,
           model: input.model,
           instructions: session.init.systemPrompt,
           cacheScope: "session-turn",
           signal: input.signal,
           attachments,
+          butlerData: this.butlerData,
+          usageAttribution: {
+            turnId,
+            phase: "text_prompt",
+            roundIndex: 0,
+            budgetState: directTurnBudgetState(turnBudget),
+            promptSections,
+          },
         });
+      }
       throwIfRuntimeTurnAborted(input.signal);
       if (useTools) {
         const explicitTools = requiredExplicitToolNames(input.metadata, BUTLER_TOOLS.map((tool) => tool.name));
@@ -1790,7 +1956,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             prompt,
             previousAnswer: text,
             missingTools: missingExplicitTools,
-          }), Math.min(4, missingExplicitTools.length + 2));
+          }), Math.min(4, missingExplicitTools.length + 2), "explicit_tool_repair");
         }
       }
       const groundedText = useTools && shouldEnforceGrounding(input)
@@ -1885,7 +2051,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             objective: userText,
             audit,
             blocker,
-          }), 8);
+          }), 8, "direct_work_continuation");
           if (successfulToolAuditCount() <= successfulToolsBeforeContinuation) break;
         }
         const remainingBlocker = finalDeliveryBlockerForOpenDirectWork({
@@ -1909,7 +2075,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           previousAnswer: finalText,
           audit,
           decisions: publicDecisionContext,
-        }), 1);
+        }), 1, "final_contract_repair");
         const repairedStillLeaks = containsFinalPublicWorkDecisionLeak(repairedFinalText) ||
           containsFinalToolImplementationLeak(repairedFinalText, successfulToolNames);
         const strippedFinalText = repairedStillLeaks
@@ -2132,6 +2298,7 @@ function createAuditedButlerToolExecutor(input: {
     }
     return result;
   };
+  const repeatedToolFamilyCounts = new Map<string, number>();
   const runInternalProgressTool = async (
     call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
     source: "model" | "runtime",
@@ -2354,6 +2521,62 @@ function createAuditedButlerToolExecutor(input: {
             "write_planned_public_report",
           ],
         };
+      }
+    }
+    const repeatFamily = repeatedToolFamilyKey(call.name, cleanArgs);
+    if (repeatFamily) {
+      const count = (repeatedToolFamilyCounts.get(repeatFamily) ?? 0) + 1;
+      repeatedToolFamilyCounts.set(repeatFamily, count);
+      if (count > REPEATED_TOOL_FAMILY_LIMIT) {
+        const result = repeatedToolFamilyPolicyResult({
+          family: repeatFamily,
+          count,
+          limit: REPEATED_TOOL_FAMILY_LIMIT,
+        });
+        appendTranscriptEvent(createTranscriptEvent({
+          sessionId: input.sessionId,
+          kind: "tool_call",
+          payload: {
+            name: call.name,
+            arguments: cleanArgs,
+          },
+          metadata: {
+            source: "runtime/native-tool-loop.ts#repeated-tool-family-guard",
+            repeat_family: repeatFamily,
+          },
+        }));
+        appendTranscriptEvent(createTranscriptEvent({
+          sessionId: input.sessionId,
+          kind: "tool_result",
+          payload: {
+            name: call.name,
+            ok: false,
+            result,
+          },
+          metadata: {
+            source: "runtime/native-tool-loop.ts#repeated-tool-family-guard",
+            repeat_family: repeatFamily,
+          },
+        }));
+        recordOperationalMetric({
+          category: "runtime",
+          name: "repeated_tool_family_guard",
+          status: "ok",
+          durationMs: Date.now() - startedAt,
+          dimensions: {
+            sessionRole: input.turnInput.handle.role,
+            toolName: call.name,
+            repeatFamily,
+            repeatCount: String(count),
+          },
+        }, { butlerData: input.butlerData });
+        input.audit.push({
+          name: call.name,
+          args: cleanArgs,
+          ok: false,
+          error: String(result.message),
+        });
+        return result;
       }
     }
     const isWorkerStartTool = WORKER_ORCHESTRATION_START_TOOL_SET.has(call.name);

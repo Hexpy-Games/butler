@@ -8,11 +8,28 @@ export interface PromptCacheMetricEvent {
   ts: number;
   model: string;
   scope: string;
+  turnId?: string;
+  phase?: string;
+  roundIndex?: number;
+  reasoningEffort?: string;
   promptTokens: number;
   cachedTokens: number;
   totalTokens?: number | null;
   promptCacheKey?: string;
   promptCacheRetention?: PromptCacheRetention;
+  budgetState?: {
+    status: "ok" | "warning" | "exhausted";
+    requestCount: number;
+    maxRequests: number;
+    maxPromptTokens?: number;
+    maxOutputTokens?: number;
+    maxTotalTokens?: number;
+  };
+  promptSections?: Array<{
+    id: string;
+    chars: number;
+    estimatedTokens: number;
+  }>;
 }
 
 export interface PromptCacheMetricSummary {
