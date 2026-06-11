@@ -5,7 +5,7 @@ import { join } from "path";
 import { FileQueueButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
 import type { InboundEnvelope } from "../../packages/butler-agent/src/gateways/core/contracts.ts";
 import { createAppInboundEnvelope } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
-import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
+import { NativeInboundQueue, type QueuedInboundEvent } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 
 function tempRoot(): string {
   const dir = join(tmpdir(), `butler-inbound-queue-${Date.now()}-${Math.random()}`);
@@ -32,6 +32,15 @@ function envelope(id: string): InboundEnvelope {
   };
 }
 
+class CountingInboundQueue extends NativeInboundQueue {
+  readCount = 0;
+
+  protected override readQueuedRecord(path: string): QueuedInboundEvent | null {
+    this.readCount += 1;
+    return super.readQueuedRecord(path);
+  }
+}
+
 test("native inbound queue atomically enqueues, claims, completes, and fails events", () => {
   const butlerData = tempRoot();
   try {
@@ -54,6 +63,25 @@ test("native inbound queue atomically enqueues, claims, completes, and fails eve
     queue.fail(failed!, "provider unavailable");
     const failedPath = join(butlerData, "runtime", "inbound-events", "failed", `${failedRecord.queueId}.json`);
     expect(readFileSync(failedPath, "utf8")).toContain("provider unavailable");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("native inbound queue claims early without parsing the whole pending directory", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new CountingInboundQueue(butlerData);
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    const first = queue.enqueue(envelope("automation:first"), { source: "test" }, now);
+    for (let index = 0; index < 25; index += 1) {
+      queue.enqueue(envelope(`automation:later-${index}`), { source: "test" }, now);
+    }
+
+    const claimed = queue.claimEligible(1, () => true);
+
+    expect(claimed.map((item) => item.queueId)).toEqual([first.queueId]);
+    expect(queue.readCount).toBe(1);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
