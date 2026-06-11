@@ -94,6 +94,9 @@ export function usageFromPromptCacheMetricEvents(
       promptTokens: event.promptTokens,
       cachedTokens: event.cachedTokens,
       totalTokens: typeof event.totalTokens === "number" ? event.totalTokens : null,
+      outputTokens: typeof event.totalTokens === "number"
+        ? Math.max(0, event.totalTokens - event.promptTokens)
+        : 0,
     },
   })));
 }
