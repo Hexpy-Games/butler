@@ -47,6 +47,30 @@ export type ButlerRuntime = "codex-api" | "local";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 export type PromptCacheRetention = "in_memory" | "24h";
 
+export interface PromptUsageSectionAttribution {
+  id: string;
+  chars: number;
+  estimatedTokens: number;
+}
+
+export interface PromptUsageBudgetState {
+  status: "ok" | "warning" | "exhausted";
+  requestCount: number;
+  maxRequests: number;
+  maxPromptTokens?: number;
+  maxOutputTokens?: number;
+  maxTotalTokens?: number;
+}
+
+export interface PromptUsageAttribution {
+  turnId?: string;
+  phase?: string;
+  roundIndex?: number;
+  reasoningEffort?: ReasoningEffort;
+  budgetState?: PromptUsageBudgetState;
+  promptSections?: PromptUsageSectionAttribution[];
+}
+
 interface PromptOptions {
   prompt: string;
   model?: string;
@@ -56,6 +80,7 @@ interface PromptOptions {
   signal?: AbortSignal;
   attachments?: AttachmentRef[];
   butlerData?: string;
+  usageAttribution?: PromptUsageAttribution;
 }
 
 interface WorkerOptions {
@@ -204,6 +229,8 @@ export interface FunctionToolPromptOptions {
   cacheScope?: string;
   signal?: AbortSignal;
   attachments?: AttachmentRef[];
+  butlerData?: string;
+  usageAttribution?: PromptUsageAttribution;
   tools: FunctionToolDefinition[];
   maxToolRounds?: number;
   log?: (line: string) => void;
@@ -1137,6 +1164,7 @@ function recordPromptCacheMetric(
     scope: string;
     promptCache: OpenAIPromptCacheConfig;
     butlerData?: string;
+    usageAttribution?: PromptUsageAttribution;
   },
 ): void {
   const stats = extractPromptCacheStats(response);
@@ -1146,11 +1174,17 @@ function recordPromptCacheMetric(
     ts: Date.now(),
     model: input.model,
     scope: input.scope,
+    turnId: input.usageAttribution?.turnId,
+    phase: input.usageAttribution?.phase,
+    roundIndex: input.usageAttribution?.roundIndex,
+    reasoningEffort: input.usageAttribution?.reasoningEffort,
     promptTokens: stats.promptTokens,
     cachedTokens: stats.cachedTokens,
     totalTokens: stats.totalTokens,
     promptCacheKey: input.promptCache.prompt_cache_key,
     promptCacheRetention: input.promptCache.prompt_cache_retention,
+    budgetState: input.usageAttribution?.budgetState,
+    promptSections: input.usageAttribution?.promptSections,
   }, { butlerData: input.butlerData });
 }
 
@@ -3477,6 +3511,11 @@ async function runHostedPromptText(
       scope: options.cacheScope ?? "text-prompt",
       promptCache,
       butlerData: options.butlerData,
+      usageAttribution: {
+        ...options.usageAttribution,
+        reasoningEffort: resolution.reasoningEffort,
+        roundIndex: options.usageAttribution?.roundIndex ?? 0,
+      },
     });
     const text = extractResponseText(response);
     if (!text) {
@@ -3614,6 +3653,11 @@ export async function runPromptTextWithUsage(options: PromptOptions): Promise<Pr
     scope: options.cacheScope ?? "text-prompt",
     promptCache,
     butlerData: options.butlerData,
+    usageAttribution: {
+      ...options.usageAttribution,
+      reasoningEffort: resolution.reasoningEffort,
+      roundIndex: options.usageAttribution?.roundIndex ?? 0,
+    },
   });
 
   const text = extractResponseText(response);
@@ -3677,6 +3721,7 @@ async function runOpenAIFunctionToolPromptText(
   const initialPromptInput = openAIInputWithAttachments(options.prompt, options.attachments);
   const promptForAgentLoop = promptWithAttachmentContext(options.prompt, options.attachments);
   const codexStatelessInput = toCodexStatelessInput(initialPromptInput);
+  let modelCallRound = 0;
 
   const result = await runAgentLoop({
     messages: [{ role: "user", content: promptForAgentLoop }],
@@ -3718,7 +3763,14 @@ async function runOpenAIFunctionToolPromptText(
         model,
         scope: options.cacheScope ?? "function-tool-prompt",
         promptCache,
+        butlerData: options.butlerData,
+        usageAttribution: {
+          ...options.usageAttribution,
+          reasoningEffort: resolution.reasoningEffort,
+          roundIndex: modelCallRound,
+        },
       });
+      modelCallRound += 1;
       logPromptCacheStats(response, log, promptCache);
       return responseToAgentModelResponse(response, allowedNames);
     },
@@ -3767,7 +3819,14 @@ async function runOpenAIFunctionToolPromptText(
           model,
           scope: options.cacheScope ?? "function-tool-prompt",
           promptCache,
+          butlerData: options.butlerData,
+          usageAttribution: {
+            ...options.usageAttribution,
+            reasoningEffort: resolution.reasoningEffort,
+            roundIndex: modelCallRound,
+          },
         });
+        modelCallRound += 1;
         logPromptCacheStats(response, log, promptCache);
         return extractResponseText(response);
       } catch (error) {

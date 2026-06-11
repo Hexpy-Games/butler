@@ -31,6 +31,26 @@ export interface UsageModelSummary extends UsageTokenBucket {
   byScope: Record<string, number>;
   byScopeUsage: Record<string, UsageTokenBucket>;
   byModel: Record<string, UsageTokenBucket>;
+  byTurn: Record<string, UsageTokenBucket>;
+  byPhase: Record<string, UsageTokenBucket>;
+  byTurnPhase: Record<string, UsageTokenBucket>;
+  bySection: Record<string, {
+    requestCount: number;
+    chars: number;
+    estimatedTokens: number;
+  }>;
+  budgetStates: Record<string, {
+    status: "ok" | "warning" | "exhausted";
+    requestCount: number;
+    maxRequests: number;
+    maxPromptTokens?: number;
+    maxOutputTokens?: number;
+    maxTotalTokens?: number;
+  }>;
+  promptCache: {
+    missingKeyCount: number;
+    missingRetentionCount: number;
+  };
 }
 
 export interface UsageMonitorSummary {
@@ -237,6 +257,10 @@ function addPromptMetric(
   if (totalTokens === null) bucket.missingTotalTokenCount += 1;
 }
 
+function safeAttributionKey(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
 function summarizeModelUsage(events: PromptCacheMetricEvent[]): UsageModelSummary {
   const summary: UsageModelSummary = {
     ...emptyTokenBucket(),
@@ -244,6 +268,15 @@ function summarizeModelUsage(events: PromptCacheMetricEvent[]): UsageModelSummar
     byScope: {},
     byScopeUsage: {},
     byModel: {},
+    byTurn: {},
+    byPhase: {},
+    byTurnPhase: {},
+    bySection: {},
+    budgetStates: {},
+    promptCache: {
+      missingKeyCount: 0,
+      missingRetentionCount: 0,
+    },
   };
 
   for (const event of events) {
@@ -251,6 +284,30 @@ function summarizeModelUsage(events: PromptCacheMetricEvent[]): UsageModelSummar
     summary.byScope[event.scope] = (summary.byScope[event.scope] || 0) + 1;
     addPromptMetric(tokenBucketFor(summary.byScopeUsage, event.scope), event);
     addPromptMetric(tokenBucketFor(summary.byModel, event.model), event);
+    const turnId = safeAttributionKey(event.turnId, "unknown-turn");
+    const phase = safeAttributionKey(event.phase, event.scope);
+    addPromptMetric(tokenBucketFor(summary.byTurn, turnId), event);
+    addPromptMetric(tokenBucketFor(summary.byPhase, phase), event);
+    addPromptMetric(tokenBucketFor(summary.byTurnPhase, `${turnId}:${phase}`), event);
+    if (!event.promptCacheKey) summary.promptCache.missingKeyCount += 1;
+    if (!event.promptCacheRetention) summary.promptCache.missingRetentionCount += 1;
+    if (event.budgetState) {
+      summary.budgetStates[turnId] = event.budgetState;
+    }
+    for (const section of event.promptSections ?? []) {
+      if (!section.id.trim()) continue;
+      const bucket = summary.bySection[section.id] ?? {
+        requestCount: 0,
+        chars: 0,
+        estimatedTokens: 0,
+      };
+      bucket.requestCount += 1;
+      bucket.chars += Number.isFinite(section.chars) ? Math.max(0, section.chars) : 0;
+      bucket.estimatedTokens += Number.isFinite(section.estimatedTokens)
+        ? Math.max(0, section.estimatedTokens)
+        : 0;
+      summary.bySection[section.id] = bucket;
+    }
   }
 
   if (summary.promptTokens > 0) {
