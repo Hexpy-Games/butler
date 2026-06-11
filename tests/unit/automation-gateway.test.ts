@@ -17,7 +17,10 @@ import { createGatewayServer } from "../../packages/butler-agent/src/gateways/co
 import { createLifecycleGatewayHandlers, SessionLifecycleService } from "../../packages/butler-agent/src/interfaces/gateway/session-lifecycle.ts";
 import { AutomationStore } from "../../packages/butler-agent/src/operations/service/automation-store.ts";
 import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
-import { processQueuedInboundEvents } from "../../packages/butler-agent/src/interfaces/gateway/queued-inbound.ts";
+import {
+  processQueuedInboundEvents,
+  QueuedInboundDispatcher,
+} from "../../packages/butler-agent/src/interfaces/gateway/queued-inbound.ts";
 import { DeliveryGuard } from "../../packages/butler-agent/src/interfaces/transport/delivery-guard.ts";
 import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/mock/adapter.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
@@ -71,6 +74,40 @@ const fakeProvider: ModelProviderAdapter = {
     return { text: "unused" };
   },
 };
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
+function appEnvelope(input: {
+  eventId: string;
+  messageId: string;
+  sessionId: string;
+  text?: string;
+}): InboundEnvelope {
+  return {
+    eventId: input.eventId,
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: input.sessionId.replace(/^butler\/app-/, "") },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: input.messageId,
+      text: input.text ?? input.messageId,
+      timestamp: "2026-06-11T00:00:00.000Z",
+    },
+    routingHints: {
+      sessionId: input.sessionId,
+      turnId: `turn-${input.messageId}`,
+    },
+  };
+}
 
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "butler-automation-gateway-"));
@@ -327,6 +364,136 @@ test("queued inbound skips terminal app turns before dispatch", async () => {
   });
   expect(handled).toBe(false);
   expect(queue.claim(1)).toEqual([]);
+  store.close();
+});
+
+test("queued inbound dispatcher runs different sessions concurrently", async () => {
+  const queue = new NativeInboundQueue(tempDir);
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  queue.enqueue(appEnvelope({
+    eventId: "app:session-a",
+    messageId: "message-a",
+    sessionId: "butler/app-session-a",
+  }), { source: "test" });
+  queue.enqueue(appEnvelope({
+    eventId: "app:session-b",
+    messageId: "message-b",
+    sessionId: "butler/app-session-b",
+  }), { source: "test" });
+
+  const releaseLongTurn = deferred();
+  const starts: string[] = [];
+  let shortTurnCompleted = false;
+  const dispatcher = new QueuedInboundDispatcher();
+  const summary = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [] }),
+    maxConcurrentSessions: 2,
+    limit: 2,
+    server: {
+      async handleInbound(envelope) {
+        const sessionId = envelope.routingHints?.sessionId ?? "";
+        starts.push(sessionId);
+        if (sessionId === "butler/app-session-a") {
+          await releaseLongTurn.promise;
+        } else {
+          shortTurnCompleted = true;
+        }
+        return {
+          status: "handled",
+          route: {
+            sessionId,
+            role: "butler",
+            reason: "session-hint",
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            handledBy: "test",
+            metadata: { text: `handled ${sessionId}` },
+          },
+        };
+      },
+    },
+  });
+
+  await Promise.resolve();
+  expect(summary.claimed).toBe(2);
+  expect(starts).toEqual(["butler/app-session-a", "butler/app-session-b"]);
+  expect(shortTurnCompleted).toBe(true);
+
+  releaseLongTurn.resolve();
+  await dispatcher.waitForIdle();
+  expect(summary).toMatchObject({
+    claimed: 2,
+    handled: 2,
+    delivered: 0,
+    failed: 0,
+  });
+  store.close();
+});
+
+test("queued inbound dispatcher preserves same-session FIFO eligibility", async () => {
+  const queue = new NativeInboundQueue(tempDir);
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  queue.enqueue(appEnvelope({
+    eventId: "app:same-session-1",
+    messageId: "message-1",
+    sessionId: "butler/app-same-session",
+  }), { source: "test" });
+  queue.enqueue(appEnvelope({
+    eventId: "app:same-session-2",
+    messageId: "message-2",
+    sessionId: "butler/app-same-session",
+  }), { source: "test" });
+
+  const releaseFirstTurn = deferred();
+  const starts: string[] = [];
+  const dispatcher = new QueuedInboundDispatcher();
+  const baseOptions = {
+    queue,
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [] }),
+    maxConcurrentSessions: 2,
+    limit: 2,
+    server: {
+      async handleInbound(envelope: InboundEnvelope) {
+        starts.push(envelope.message.id);
+        if (envelope.message.id === "message-1") {
+          await releaseFirstTurn.promise;
+        }
+        return {
+          status: "handled" as const,
+          route: {
+            sessionId: envelope.routingHints?.sessionId ?? "",
+            role: "butler" as const,
+            reason: "session-hint" as const,
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            handledBy: "test",
+            metadata: { text: `handled ${envelope.message.id}` },
+          },
+        };
+      },
+    },
+  };
+
+  const firstPoll = dispatcher.poll(baseOptions);
+  await Promise.resolve();
+  expect(firstPoll.claimed).toBe(1);
+  expect(starts).toEqual(["message-1"]);
+  expect(dispatcher.poll(baseOptions).claimed).toBe(0);
+
+  releaseFirstTurn.resolve();
+  await dispatcher.waitForIdle();
+  const secondPoll = dispatcher.poll(baseOptions);
+  await dispatcher.waitForIdle();
+
+  expect(secondPoll.claimed).toBe(1);
+  expect(starts).toEqual(["message-1", "message-2"]);
   store.close();
 });
 

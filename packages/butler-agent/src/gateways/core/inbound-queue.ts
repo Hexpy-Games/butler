@@ -64,7 +64,10 @@ export class NativeInboundQueue {
     return record;
   }
 
-  claim(limit = 10): ClaimedInboundEvent[] {
+  claimEligible(
+    limit = 10,
+    isEligible: (event: QueuedInboundEvent) => boolean,
+  ): ClaimedInboundEvent[] {
     const pending = this.dir("pending");
     if (!existsSync(pending)) return [];
     mkdirSync(this.dir("processing"), { recursive: true, mode: 0o700 });
@@ -73,13 +76,13 @@ export class NativeInboundQueue {
       if (claimed.length >= limit) break;
       const from = join(pending, entry);
       const to = join(this.dir("processing"), entry);
+      const record = readJson<QueuedInboundEvent>(from);
+      if (!record || !isEligible(record)) continue;
       try {
         renameSync(from, to);
       } catch {
         continue;
       }
-      const record = readJson<QueuedInboundEvent>(to);
-      if (!record) continue;
       const updated: QueuedInboundEvent = {
         ...record,
         attempts: record.attempts + 1,
@@ -91,6 +94,10 @@ export class NativeInboundQueue {
       });
     }
     return claimed;
+  }
+
+  claim(limit = 10): ClaimedInboundEvent[] {
+    return this.claimEligible(limit, () => true);
   }
 
   complete(item: ClaimedInboundEvent, metadata: Record<string, unknown> = {}, now = new Date()): void {
