@@ -36,7 +36,7 @@ import {
   resolveAppGatewayRuntimeConfig,
   resolveTelegramGatewayRuntimeConfig,
 } from "../../operations/gateway/registry.ts";
-import { processQueuedInboundEvents } from "./queued-inbound.ts";
+import { QueuedInboundDispatcher } from "./queued-inbound.ts";
 
 interface ButlerConfig {
   system?: {
@@ -472,6 +472,7 @@ export async function runNativeButlerMain(
   let telegramPolling: Promise<void> | undefined;
   let workerResultMonitor: Promise<void> | undefined;
   let appWorkerResultMonitor: Promise<void> | undefined;
+  const inboundDispatcher = new QueuedInboundDispatcher();
   const serviceShouldStop = () =>
     stopTelegramPolling || input.shutdownSignal?.aborted || existsSync(shutdownFlagPath);
   const currentTelegramGateway = () =>
@@ -717,7 +718,7 @@ export async function runNativeButlerMain(
         signal: input.shutdownSignal,
         pollMs,
         onPoll: async () => {
-          const summary = await processQueuedInboundEvents({
+          const summary = inboundDispatcher.poll({
             queue: new NativeInboundQueue(butlerData),
             server,
             store,
@@ -726,12 +727,17 @@ export async function runNativeButlerMain(
             shouldHandleItem: shouldHandleAppInboundTurn(butlerData),
             telegramGroupId: currentTelegramChatId(),
             limit: 5,
+            maxConcurrentSessions: 5,
           });
           if (summary.claimed > 0) {
             process.stdout.write(`[inbound-queue] claimed=${summary.claimed} handled=${summary.handled} delivered=${summary.delivered} failed=${summary.failed}\n`);
           }
         },
       });
+      await Promise.race([
+        inboundDispatcher.waitForIdle(),
+        new Promise((resolve) => setTimeout(resolve, 12_000)),
+      ]);
       stopTelegramPolling = true;
       await Promise.race([
         telegramPolling,

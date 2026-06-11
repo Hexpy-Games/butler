@@ -1,5 +1,5 @@
 import type { GatewayDispatchResult } from "../../gateways/core/contracts.ts";
-import type { ClaimedInboundEvent, NativeInboundQueue } from "../../gateways/core/inbound-queue.ts";
+import type { ClaimedInboundEvent, NativeInboundQueue, QueuedInboundEvent } from "../../gateways/core/inbound-queue.ts";
 import type { ArtifactRef, DeliveryResult, InboundEnvelope, OutboundAction, SessionTransportBinding } from "../../test-support/harness/contracts.ts";
 import type { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import { safeRuntimeFailure, type RuntimeFailureDiagnostic } from "../../integrations/providers/provider-errors.ts";
@@ -22,6 +22,7 @@ export interface ProcessQueuedInboundOptions {
   shouldHandleItem?: (item: ClaimedInboundEvent) => boolean;
   telegramGroupId?: string;
   limit?: number;
+  maxConcurrentSessions?: number;
   now?: () => Date;
 }
 
@@ -31,6 +32,8 @@ export interface ProcessQueuedInboundSummary {
   delivered: number;
   failed: number;
 }
+
+const DEFAULT_MAX_CONCURRENT_SESSIONS = 5;
 
 function peerKindForTarget(target: SessionTransportBinding): OutboundAction["peer"]["kind"] {
   if (target.threadId) return "thread";
@@ -385,4 +388,95 @@ export async function processQueuedInboundEvents(
   }
 
   return summary;
+}
+
+function sessionKeyForQueuedInbound(item: QueuedInboundEvent): string {
+  const hintedSessionId = item.envelope.routingHints?.sessionId?.trim();
+  if (hintedSessionId) return hintedSessionId;
+  return [
+    item.envelope.transport,
+    item.envelope.accountId,
+    item.envelope.peer.kind,
+    item.envelope.peer.id,
+    item.envelope.peer.parentId ?? "root",
+  ].join(":");
+}
+
+function maxConcurrentSessionsFor(options: ProcessQueuedInboundOptions): number {
+  const configured = options.maxConcurrentSessions;
+  if (typeof configured !== "number" || !Number.isFinite(configured)) {
+    return DEFAULT_MAX_CONCURRENT_SESSIONS;
+  }
+  return Math.max(1, Math.floor(configured));
+}
+
+export class QueuedInboundDispatcher {
+  private readonly activeSessionKeys = new Set<string>();
+  private readonly activeTasks = new Set<Promise<void>>();
+
+  poll(options: ProcessQueuedInboundOptions): ProcessQueuedInboundSummary {
+    const maxConcurrentSessions = maxConcurrentSessionsFor(options);
+    const availableSlots = Math.max(0, maxConcurrentSessions - this.activeTasks.size);
+    const claimLimit = Math.min(options.limit ?? DEFAULT_MAX_CONCURRENT_SESSIONS, availableSlots);
+    const summary: ProcessQueuedInboundSummary = {
+      claimed: 0,
+      handled: 0,
+      delivered: 0,
+      failed: 0,
+    };
+    if (claimLimit <= 0) return summary;
+
+    const batchSessionKeys = new Set<string>();
+    const items = options.queue.claimEligible(claimLimit, (event) => {
+      const sessionKey = sessionKeyForQueuedInbound(event);
+      if (this.activeSessionKeys.has(sessionKey) || batchSessionKeys.has(sessionKey)) {
+        return false;
+      }
+      batchSessionKeys.add(sessionKey);
+      return true;
+    });
+    summary.claimed = items.length;
+
+    for (const item of items) {
+      const sessionKey = sessionKeyForQueuedInbound(item);
+      this.activeSessionKeys.add(sessionKey);
+      const task = this.handleItem(item, options, summary)
+        .catch(() => {
+          summary.failed += 1;
+        })
+        .finally(() => {
+          this.activeSessionKeys.delete(sessionKey);
+          this.activeTasks.delete(task);
+        });
+      this.activeTasks.add(task);
+    }
+
+    return summary;
+  }
+
+  async waitForIdle(): Promise<void> {
+    while (this.activeTasks.size > 0) {
+      await Promise.allSettled([...this.activeTasks]);
+    }
+  }
+
+  private async handleItem(
+    item: ClaimedInboundEvent,
+    options: ProcessQueuedInboundOptions,
+    summary: ProcessQueuedInboundSummary,
+  ): Promise<void> {
+    const singleItemQueue = {
+      claim: () => [item],
+      complete: options.queue.complete.bind(options.queue),
+      fail: options.queue.fail.bind(options.queue),
+    } as NativeInboundQueue;
+    const result = await processQueuedInboundEvents({
+      ...options,
+      queue: singleItemQueue,
+      limit: 1,
+    });
+    summary.handled += result.handled;
+    summary.delivered += result.delivered;
+    summary.failed += result.failed;
+  }
 }
