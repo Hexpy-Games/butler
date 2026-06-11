@@ -49,6 +49,10 @@ export class NativeInboundQueue {
     this.rootDir = join(butlerData, "runtime", "inbound-events");
   }
 
+  protected readQueuedRecord(path: string): QueuedInboundEvent | null {
+    return readJson<QueuedInboundEvent>(path);
+  }
+
   private dir(name: "pending" | "processing" | "processed" | "failed"): string {
     return join(this.rootDir, name);
   }
@@ -81,30 +85,14 @@ export class NativeInboundQueue {
     const claimed: ClaimedInboundEvent[] = [];
     const pendingEntries = readdirSync(pending)
       .filter((name) => name.endsWith(".json"))
-      .map((name) => {
-        const path = join(pending, name);
-        return {
-          name,
-          path,
-          record: readJson<QueuedInboundEvent>(path),
-        };
-      })
-      .filter((entry): entry is {
-        name: string;
-        path: string;
-        record: QueuedInboundEvent;
-      } => entry.record !== null)
-      .sort((a, b) =>
-        a.record.enqueuedAt.localeCompare(b.record.enqueuedAt) ||
-        a.record.queueId.localeCompare(b.record.queueId) ||
-        a.name.localeCompare(b.name),
-      );
+      .sort((a, b) => a.localeCompare(b));
 
-    for (const entry of pendingEntries) {
+    for (const name of pendingEntries) {
       if (claimed.length >= limit) break;
-      const from = entry.path;
-      const to = join(this.dir("processing"), entry.name);
-      const record = entry.record;
+      const from = join(pending, name);
+      const to = join(this.dir("processing"), name);
+      const record = this.readQueuedRecord(from);
+      if (!record) continue;
       if (!isEligible(record)) continue;
       try {
         renameSync(from, to);

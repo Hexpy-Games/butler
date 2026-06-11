@@ -19,6 +19,13 @@ importing Butler App client code.
 This module may depend on agent runtime and harness contracts where needed. It
 must not depend on Butler App UI, Electron, or app scripts.
 
+## Queue Reliability
+
+`NativeInboundQueue` pending files are ordered by their sortable queue-id
+filename prefix. Claiming must sort filenames before reading records and lazily
+parse only until the caller's eligible claim limit is satisfied, so dispatcher
+polls stay bounded by active capacity instead of pending queue depth.
+
 ## Related Specs
 
 - `SPEC-NATIVE-PRODUCT` - Native Butler Product

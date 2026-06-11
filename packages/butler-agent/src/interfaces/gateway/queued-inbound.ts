@@ -481,6 +481,9 @@ export class QueuedInboundDispatcher {
       const sessionKey = sessionKeyForQueuedInbound(item);
       this.activeSessionKeys.add(sessionKey);
       const task = this.handleItem(item, options, summary)
+        .catch(() => {
+          summary.failed += 1;
+        })
         .finally(() => {
           this.activeSessionKeys.delete(sessionKey);
           this.activeTasks.delete(task);

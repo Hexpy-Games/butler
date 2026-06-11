@@ -59,6 +59,12 @@ class ScriptedRuntime implements AgentRuntimeAdapter {
   }
 }
 
+class PersistenceFailingInboundQueue extends NativeInboundQueue {
+  override fail(): void {
+    throw new Error("failed queue persistence unavailable");
+  }
+}
+
 const fakeProvider: ModelProviderAdapter = {
   id: "fake-provider",
   capabilities: {
@@ -533,6 +539,40 @@ test("queued inbound dispatcher preserves same-session FIFO eligibility", async 
     "msg-z0000000-0000-4000-8000-000000000000",
     "msg-a0000000-0000-4000-8000-000000000000",
   ]);
+  store.close();
+});
+
+test("queued inbound dispatcher contains failure persistence rejections", async () => {
+  const queue = new PersistenceFailingInboundQueue(tempDir);
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  queue.enqueue(appEnvelope({
+    eventId: "app:persistence-failure",
+    messageId: "message-persistence-failure",
+    sessionId: "butler/app-persistence-failure",
+  }), { source: "test" });
+
+  const dispatcher = new QueuedInboundDispatcher();
+  const summary = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [] }),
+    maxConcurrentSessions: 1,
+    limit: 1,
+    server: {
+      async handleInbound() {
+        throw new Error("runtime failed");
+      },
+    },
+  });
+
+  await dispatcher.waitForIdle();
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 0,
+    delivered: 0,
+    failed: 1,
+  });
   store.close();
 });
 
