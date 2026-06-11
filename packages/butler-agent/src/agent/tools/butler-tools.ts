@@ -3978,31 +3978,6 @@ export function createButlerToolExecutor(input: {
   const dispatchTask = input.dispatchTask ?? dispatchBackgroundTask;
   let smartSearchPlanningConsumed = false;
   const pageReadCache = new Map<string, PageReadResult>();
-  const projectLedgerFreshnessCache = new Map<string, Record<string, unknown>>();
-  const cachedProjectLedgerResult = (
-    key: string,
-    run: () => Record<string, unknown>,
-  ): Record<string, unknown> => {
-    const cached = projectLedgerFreshnessCache.get(key);
-    if (cached) {
-      return {
-        ...cached,
-        _butler_turn_cache: {
-          scope: "turn",
-          hit: true,
-        },
-      };
-    }
-    const result = run();
-    projectLedgerFreshnessCache.set(key, result);
-    return {
-      ...result,
-      _butler_turn_cache: {
-        scope: "turn",
-        hit: false,
-      },
-    };
-  };
   return async (call) => {
     if (call.name === "get_work_dashboard") {
       return {
@@ -4017,30 +3992,24 @@ export function createButlerToolExecutor(input: {
 
     if (call.name === "inspect_project_status") {
       const projectPath = projectLedgerProjectPath(input, call.args);
-      return cachedProjectLedgerResult(
-        `inspect_project_status:${projectPath}`,
-        () => runProjectLedgerTool(input, [
-          "status",
-          "--project",
-          projectPath,
-        ]),
-      );
+      return runProjectLedgerTool(input, [
+        "status",
+        "--project",
+        projectPath,
+      ]);
     }
 
     if (call.name === "query_project_work") {
       const kind = typeof call.args.kind === "string" ? call.args.kind.trim() : "";
       if (!kind) throw new Error("query_project_work requires kind");
       const projectPath = projectLedgerProjectPath(input, call.args);
-      return cachedProjectLedgerResult(
-        `query_project_work:${projectPath}:${kind}`,
-        () => runProjectLedgerTool(input, [
-          "query",
-          "--project",
-          projectPath,
-          "--kind",
-          kind,
-        ]),
-      );
+      return runProjectLedgerTool(input, [
+        "query",
+        "--project",
+        projectPath,
+        "--kind",
+        kind,
+      ]);
     }
 
     if (call.name === "render_project_dashboard") {
@@ -4055,7 +4024,6 @@ export function createButlerToolExecutor(input: {
       ];
       if (call.args.write === true) args.push("--write");
       const result = runProjectLedgerTool(input, args);
-      if (call.args.write === true) projectLedgerFreshnessCache.clear();
       return {
         ...result,
         ...projectLedgerRenderedViewEvidence({
@@ -4076,7 +4044,6 @@ export function createButlerToolExecutor(input: {
       if (!validation || !review || !report) {
         throw new Error("complete_project_work requires validation review and report");
       }
-      projectLedgerFreshnessCache.clear();
       return runProjectLedgerTool(input, [
         "work",
         "complete",

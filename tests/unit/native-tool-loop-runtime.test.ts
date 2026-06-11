@@ -738,82 +738,96 @@ test("native runtime describes Project Ledger tool progress by work context", as
   expect(publicToolEvents).not.toContain("render_project_dashboard");
 });
 
-test("Project Ledger status and query tools reuse turn-local freshness cache", async () => {
-  const butlerHome = join(tempDir, "butler-home");
-  const ledgerBin = join(butlerHome, "packages", "project-ledger", "bin");
-  const counterPath = join(tempDir, "project-ledger-counter.txt");
-  mkdirSync(ledgerBin, { recursive: true });
-  writeFileSync(counterPath, "0", "utf8");
-  writeFileSync(join(ledgerBin, "project-ledger"), [
-    "const { readFileSync, writeFileSync } = require('fs');",
-    `const counterPath = ${JSON.stringify(counterPath)};`,
-    "const count = Number(readFileSync(counterPath, 'utf8')) + 1;",
-    "writeFileSync(counterPath, String(count), 'utf8');",
-    "process.stdout.write(JSON.stringify({ ok: true, count, argv: process.argv.slice(2) }));",
-  ].join("\n"), "utf8");
-  const executor = createButlerToolExecutor({
-    butlerHome,
+test("native runtime caches Project Ledger reads only until a same-turn mutation", async () => {
+  let ledgerVersion = 1;
+  let statusExecutions = 0;
+  let queryExecutions = 0;
+  const observedVersions: number[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "en",
     butlerData: tempDir,
+    butlerHome: tempDir,
+    executeButlerTool: async (call) => {
+      if (call.name === "update_todo_list") return { ok: true };
+      if (call.name === "inspect_project_status") {
+        statusExecutions += 1;
+        return { ok: true, ledgerVersion, tool: call.name };
+      }
+      if (call.name === "query_project_work") {
+        queryExecutions += 1;
+        return { ok: true, ledgerVersion, tool: call.name };
+      }
+      if (call.name === "run_command") {
+        const command = typeof call.args.command === "string" ? call.args.command : "";
+        if (command.includes("project-ledger task update")) ledgerVersion += 1;
+        return { ok: true, exit_code: 0, stdout: "updated", stderr: "", timed_out: false };
+      }
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      const firstStatus = await input.executeTool({
+        name: "inspect_project_status",
+        args: { project_path: tempDir },
+        rawArguments: JSON.stringify({ project_path: tempDir }),
+      }) as Record<string, unknown>;
+      const cachedStatus = await input.executeTool({
+        name: "inspect_project_status",
+        args: { project_path: tempDir },
+        rawArguments: JSON.stringify({ project_path: tempDir }),
+      }) as Record<string, unknown>;
+      const firstQuery = await input.executeTool({
+        name: "query_project_work",
+        args: { project_path: tempDir, kind: "next-actions" },
+        rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
+      }) as Record<string, unknown>;
+      const cachedQuery = await input.executeTool({
+        name: "query_project_work",
+        args: { project_path: tempDir, kind: "next-actions" },
+        rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
+      }) as Record<string, unknown>;
+      await input.executeTool({
+        name: "run_command",
+        args: {
+          command: "node packages/project-ledger/bin/project-ledger task update --project \"$PWD\" --id T-1 --status in_progress",
+        },
+        rawArguments: JSON.stringify({
+          command: "node packages/project-ledger/bin/project-ledger task update --project \"$PWD\" --id T-1 --status in_progress",
+        }),
+      });
+      const statusAfterMutation = await input.executeTool({
+        name: "inspect_project_status",
+        args: { project_path: tempDir },
+        rawArguments: JSON.stringify({ project_path: tempDir }),
+      }) as Record<string, unknown>;
+      observedVersions.push(
+        Number(firstStatus.ledgerVersion),
+        Number(cachedStatus.ledgerVersion),
+        Number(firstQuery.ledgerVersion),
+        Number(cachedQuery.ledgerVersion),
+        Number(statusAfterMutation.ledgerVersion),
+      );
+      return "Project Ledger freshness checked.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/project-ledger-turn-cache",
+    role: "butler",
     workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
   });
 
-  const firstStatus = await executor({
-    name: "inspect_project_status",
-    args: { project_path: tempDir },
-    rawArguments: JSON.stringify({ project_path: tempDir }),
-  });
-  const secondStatus = await executor({
-    name: "inspect_project_status",
-    args: { project_path: tempDir },
-    rawArguments: JSON.stringify({ project_path: tempDir }),
-  });
-  const firstQuery = await executor({
-    name: "query_project_work",
-    args: { project_path: tempDir, kind: "next-actions" },
-    rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
-  });
-  const secondQuery = await executor({
-    name: "query_project_work",
-    args: { project_path: tempDir, kind: "next-actions" },
-    rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
-  });
-  await executor({
-    name: "render_project_dashboard",
-    args: { project_path: tempDir, view: "dashboard", write: true },
-    rawArguments: JSON.stringify({ project_path: tempDir, view: "dashboard", write: true }),
-  });
-  const queryAfterWrite = await executor({
-    name: "query_project_work",
-    args: { project_path: tempDir, kind: "next-actions" },
-    rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "Project Ledger 상태를 확인하고 변경 후 다시 확인해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(firstStatus).toMatchObject({
-    ok: true,
-    count: 1,
-    _butler_turn_cache: { scope: "turn", hit: false },
-  });
-  expect(secondStatus).toMatchObject({
-    ok: true,
-    count: 1,
-    _butler_turn_cache: { scope: "turn", hit: true },
-  });
-  expect(firstQuery).toMatchObject({
-    ok: true,
-    count: 2,
-    _butler_turn_cache: { scope: "turn", hit: false },
-  });
-  expect(secondQuery).toMatchObject({
-    ok: true,
-    count: 2,
-    _butler_turn_cache: { scope: "turn", hit: true },
-  });
-  expect(queryAfterWrite).toMatchObject({
-    ok: true,
-    count: 4,
-    _butler_turn_cache: { scope: "turn", hit: false },
-  });
-  expect(readFileSync(counterPath, "utf8")).toBe("4");
+  expect(observedVersions).toEqual([1, 1, 1, 1, 2]);
+  expect(statusExecutions).toBe(2);
+  expect(queryExecutions).toBe(1);
 });
 
 test("native runtime uses assistant-authored public decisions as work block context", async () => {
@@ -4827,11 +4841,34 @@ test("native runtime continues instead of delivering while direct todo work is u
     { ...firstTodos[1], status: "completed" as const },
     { ...firstTodos[2], status: "in_progress" as const },
   ];
+  const defaultExecutor = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+    sessionId: "butler/main/open-direct-work-final-guard",
+  });
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
     butlerData: tempDir,
     butlerHome: tempDir,
+    executeButlerTool: async (call) => {
+      if (call.name === "run_command") {
+        return {
+          ok: true,
+          evidence_receipts: [{
+            schema: "butler.evidence-receipt.v1",
+            id: "blank-receipt",
+            producer: { kind: "tool", name: "run_command" },
+            receiptType: "",
+            verified: true,
+            covers: [],
+            summary: "",
+          }],
+        };
+      }
+      return await defaultExecutor(call);
+    },
     runFunctionToolPromptText: async (input) => {
       promptCalls += 1;
       if (promptCalls === 1) {
@@ -4842,6 +4879,11 @@ test("native runtime continues instead of delivering while direct todo work is u
             todos: firstTodos,
           },
           rawArguments: JSON.stringify({ title: "컨텍스트 컴팩션 설계 리뷰", todos: firstTodos }),
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "printf 'blank receipt fixture\\n'" },
+          rawArguments: JSON.stringify({ command: "printf 'blank receipt fixture\\n'" }),
         });
         return "파일 탐색부터 시작하겠다냐.";
       }
@@ -4886,6 +4928,8 @@ test("native runtime continues instead of delivering while direct todo work is u
   expect(continuationPrompt).toContain("Remaining direct steps");
   expect(continuationPrompt).toContain("Continuity note");
   expect(continuationPrompt).toContain("evidence 1: update_todo_list");
+  expect(continuationPrompt).toContain("evidence 2: run_command");
+  expect(continuationPrompt).not.toContain("receipts: same user request");
   expect(continuationPrompt).not.toContain("Final Delivery Blocked");
   expect(continuationPrompt).not.toContain("previous answer is not deliverable");
   expect(continuationPrompt).not.toContain("Continue the original user request now");
@@ -4898,7 +4942,7 @@ test("native runtime continues instead of delivering while direct todo work is u
   const toolCalls = readTranscript("butler/main/open-direct-work-final-guard")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
-  expect(toolCalls).toEqual(["update_todo_list", "run_command", "update_todo_list"]);
+  expect(toolCalls).toEqual(["update_todo_list", "run_command", "run_command", "update_todo_list"]);
   const streams = new WorkStreamStore(tempDir).list({
     sessionId: "butler/main/open-direct-work-final-guard",
     includeTerminal: true,

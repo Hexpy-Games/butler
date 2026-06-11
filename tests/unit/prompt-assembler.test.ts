@@ -330,7 +330,7 @@ test("context assembly separates static live runtime retrieved and current input
   }
 });
 
-test("active work state hides ordinary machine status notes but keeps recoverable notes", () => {
+test("active work state hides noisy executing status notes but keeps blocker notes", () => {
   const root = join(tmpdir(), `butler-prompt-status-note-${Date.now()}`);
   const butlerHome = join(root, "home");
   const butlerData = join(root, "data");
@@ -343,48 +343,66 @@ test("active work state hides ordinary machine status notes but keeps recoverabl
 
   try {
     const assembler = new PromptAssembler({ butlerHome, butlerData });
-    const session = binding(workspacePath, {
-      role: "butler",
-      sessionId: "butler/status-note",
-      projectId: "butler",
-    });
-    const todo = new TodoListStore(butlerData).update({
-      listId: "status-note",
-      title: "Status note continuity",
-      items: [{
-        id: "execute",
-        content: "Continue direct work",
-        active_form: "Continuing direct work.",
-        status: "in_progress",
-        phase: "execution",
-      }],
-    });
     const workStreamStore = new WorkStreamStore(butlerData);
-    const stream = workStreamStore.updateFromTodoList({
-      ownerSessionId: session.sessionId,
-      projectId: "butler",
-      listId: todo.list.list_id,
-      title: "Status note continuity",
-      items: todo.items,
-    });
+    const createStream = (sessionId: string, listId: string) => {
+      const session = binding(workspacePath, {
+        role: "butler",
+        sessionId,
+        projectId: "butler",
+      });
+      const todo = new TodoListStore(butlerData).update({
+        listId,
+        title: "Status note continuity",
+        items: [{
+          id: "execute",
+          content: "Continue direct work",
+          active_form: "Continuing direct work.",
+          status: "in_progress",
+          phase: "execution",
+        }],
+      });
+      const stream = workStreamStore.updateFromTodoList({
+        ownerSessionId: session.sessionId,
+        projectId: "butler",
+        listId: todo.list.list_id,
+        title: "Status note continuity",
+        items: todo.items,
+      });
+      return { session, stream };
+    };
+
+    const noisy = createStream("butler/status-note-executing", "status-note-executing");
     workStreamStore.transition({
-      id: stream.id,
+      id: noisy.stream.id,
       state: "executing",
       statusNote: "Final Delivery Blocked by machine state.",
     });
 
-    const ordinary = assembledTurnContext(assembler, session, "계속 진행해줘");
+    const ordinary = assembledTurnContext(assembler, noisy.session, "계속 진행해줘");
     expect(ordinary).toContain("## Active Work State");
     expect(ordinary).not.toContain("Status Note:");
     expect(ordinary).not.toContain("Final Delivery Blocked");
 
+    for (const state of ["paused", "waiting_user", "failed", "recoverable"] as const) {
+      const current = createStream(`butler/status-note-${state}`, `status-note-${state}`);
+      workStreamStore.transition({
+        id: current.stream.id,
+        state,
+        statusNote: `Blocked until ${state} evidence is handled.`,
+      });
+      const prompt = assembledTurnContext(assembler, current.session, "상태를 이어서 확인해줘");
+      expect(prompt).toContain(`WorkStream State: ${state}`);
+      expect(prompt).toContain(`Status Note: Blocked until ${state} evidence is handled.`);
+    }
+
+    const usefulExecuting = createStream("butler/status-note-useful-executing", "status-note-useful-executing");
     workStreamStore.transition({
-      id: stream.id,
-      state: "recoverable",
-      statusNote: "Tool process exited while saving evidence.",
+      id: usefulExecuting.stream.id,
+      state: "executing",
+      statusNote: "Waiting for file watcher confirmation.",
     });
-    const recoverable = assembledTurnContext(assembler, session, "복구해서 이어가줘");
-    expect(recoverable).toContain("Recoverable Status Note: Tool process exited while saving evidence.");
+    const usefulPrompt = assembledTurnContext(assembler, usefulExecuting.session, "계속 진행해줘");
+    expect(usefulPrompt).toContain("Status Note: Waiting for file watcher confirmation.");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
