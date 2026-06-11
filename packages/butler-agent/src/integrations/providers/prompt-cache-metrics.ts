@@ -21,9 +21,14 @@ export interface PromptCacheMetricEvent {
     status: "ok" | "warning" | "exhausted";
     requestCount: number;
     maxRequests: number;
+    promptTokens?: number;
+    cachedTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
     maxPromptTokens?: number;
     maxOutputTokens?: number;
     maxTotalTokens?: number;
+    stopReason?: string;
   };
   promptSections?: Array<{
     id: string;

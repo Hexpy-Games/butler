@@ -43,9 +43,14 @@ export interface UsageModelSummary extends UsageTokenBucket {
     status: "ok" | "warning" | "exhausted";
     requestCount: number;
     maxRequests: number;
+    promptTokens?: number;
+    cachedTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
     maxPromptTokens?: number;
     maxOutputTokens?: number;
     maxTotalTokens?: number;
+    stopReason?: string;
   }>;
   promptCache: {
     missingKeyCount: number;
