@@ -3,6 +3,7 @@ import type { MessageRecord, TurnProgressSnapshot } from "@/app/types.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { MessageItem } from "./MessageItem";
 import { TurnActivityMessage } from "./TurnActivityMessage";
+import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { useMessageList } from "./hooks/useMessageList";
 import { useMessageVirtualizer } from "./hooks/useMessageVirtualizer";
 import { useConversationAutoScroll } from "./hooks/useConversationAutoScroll";
@@ -40,20 +41,16 @@ function MessageListComponent({
     assistantFooterMetaById,
   } = useMessageList(messages, summary, turnProgress, isSending);
 
-  const {
-    rowVirtualizer,
-    topOffset,
-    virtualListHeight,
-    latestMessageVersion,
-  } = useMessageVirtualizer({
-    visibleMessages,
-    showTurnActivity,
-    itemCount,
-    bottomReserve,
-    scrollRef: parentRef,
-  });
+  const { rowVirtualizer, topOffset, virtualListHeight, latestMessageVersion } =
+    useMessageVirtualizer({
+      visibleMessages,
+      showTurnActivity,
+      itemCount,
+      bottomReserve,
+      scrollRef: parentRef,
+    });
 
-  useConversationAutoScroll({
+  const scrollState = useConversationAutoScroll({
     activeChatId,
     latestMessageVersion,
     itemCount,
@@ -64,48 +61,61 @@ function MessageListComponent({
   });
 
   return (
-    <ConversationScroll virtualized scrollRef={parentRef}>
-      <MessageListSurface height={virtualListHeight}>
-        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-          if (showTurnActivity && virtualRow.index === visibleMessages.length) {
+    <>
+      <ConversationScroll virtualized scrollRef={parentRef}>
+        <MessageListSurface height={virtualListHeight}>
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            if (
+              showTurnActivity &&
+              virtualRow.index === visibleMessages.length
+            ) {
+              return (
+                <TurnActivityMessage
+                  key="active-turn-activity"
+                  virtualRow={virtualRow}
+                  topOffset={topOffset}
+                  progressRows={progressRows}
+                  turnState={turnState}
+                  markTheme={markTheme}
+                  rowVirtualizer={rowVirtualizer}
+                />
+              );
+            }
+
+            const message = visibleMessages[virtualRow.index];
+            if (!message) return null;
+
+            const isLatestAssistant =
+              message.role === "assistant" &&
+              message.id === latestAssistantMessageId;
+
             return (
-              <TurnActivityMessage
-                key="active-turn-activity"
+              <MessageItem
+                key={message.id ?? `${message.role}-${message.text}`}
+                message={message}
                 virtualRow={virtualRow}
                 topOffset={topOffset}
-                progressRows={progressRows}
-                turnState={turnState}
+                isLatestAssistant={isLatestAssistant}
                 markTheme={markTheme}
+                copied={copiedMessageId === message.id}
+                footerMeta={assistantFooterMetaById.get(message.id) ?? null}
+                onCopyAssistantMessage={copyAssistantMessage}
+                onCopyContextMenuText={copyContextMenuText}
                 rowVirtualizer={rowVirtualizer}
               />
             );
+          })}
+        </MessageListSurface>
+      </ConversationScroll>
+      {scrollState.isAwayFromBottom ? (
+        <ScrollToBottomButton
+          hasUnreadMessages={scrollState.hasUnreadMessages}
+          onScrollToBottom={() =>
+            scrollState.scrollToBottom({ behavior: "smooth" })
           }
-
-          const message = visibleMessages[virtualRow.index];
-          if (!message) return null;
-
-          const isLatestAssistant =
-            message.role === "assistant" &&
-            message.id === latestAssistantMessageId;
-
-          return (
-            <MessageItem
-              key={message.id ?? `${message.role}-${message.text}`}
-              message={message}
-              virtualRow={virtualRow}
-              topOffset={topOffset}
-              isLatestAssistant={isLatestAssistant}
-              markTheme={markTheme}
-              copied={copiedMessageId === message.id}
-              footerMeta={assistantFooterMetaById.get(message.id) ?? null}
-              onCopyAssistantMessage={copyAssistantMessage}
-              onCopyContextMenuText={copyContextMenuText}
-              rowVirtualizer={rowVirtualizer}
-            />
-          );
-        })}
-      </MessageListSurface>
-    </ConversationScroll>
+        />
+      ) : null}
+    </>
   );
 }
 

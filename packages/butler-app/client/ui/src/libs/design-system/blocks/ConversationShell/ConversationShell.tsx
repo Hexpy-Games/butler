@@ -1,5 +1,7 @@
 import type { CSSProperties, ReactNode, Ref } from "react";
 import { cn } from "../../lib/utils";
+import { ChevronDownIcon } from "../../components/Icons";
+import { PillButton } from "../../components/PillButton";
 import styles from "./ConversationShell.module.css";
 
 export interface ConversationShellProps {
@@ -87,5 +89,30 @@ export function MessageListSurface({
     >
       {children}
     </div>
+  );
+}
+
+export function ConversationScrollToBottomButton({
+  ariaLabel,
+  children,
+  hasUnreadMessages,
+  onScrollToBottom,
+}: {
+  ariaLabel: string;
+  children?: ReactNode;
+  hasUnreadMessages: boolean;
+  onScrollToBottom: () => void;
+}) {
+  return (
+    <PillButton
+      aria-label={ariaLabel}
+      className={styles.scrollToBottomButton}
+      data-test-class="scroll-to-bottom-button"
+      data-unread-messages={hasUnreadMessages ? "true" : "false"}
+      icon={<ChevronDownIcon size={16} />}
+      onClick={onScrollToBottom}
+    >
+      {children}
+    </PillButton>
   );
 }
