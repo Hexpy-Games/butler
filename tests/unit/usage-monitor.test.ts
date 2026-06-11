@@ -173,7 +173,7 @@ test("usage monitor excludes unexpected raw fields from token telemetry summarie
   }
 });
 
-test("usage monitor groups provider usage by turn, phase, budget state, and prompt section", () => {
+test("usage monitor groups provider usage by turn, phase, warning state, and prompt section", () => {
   const butlerData = tempRoot();
 
   try {
@@ -194,6 +194,10 @@ test("usage monitor groups provider usage by turn, phase, budget state, and prom
         status: "warning",
         requestCount: 26,
         maxRequests: 32,
+        promptTokens: 80_000,
+        cachedTokens: 20_000,
+        outputTokens: 10_000,
+        totalTokens: 90_000,
         maxPromptTokens: 220_000,
         maxOutputTokens: 80_000,
         maxTotalTokens: 300_000,
@@ -217,9 +221,16 @@ test("usage monitor groups provider usage by turn, phase, budget state, and prom
       promptCacheKey: "butler-session-turn",
       promptCacheRetention: "24h",
       budgetState: {
-        status: "exhausted",
-        requestCount: 32,
+        status: "warning",
+        requestCount: 33,
         maxRequests: 32,
+        promptTokens: 120_000,
+        cachedTokens: 30_000,
+        outputTokens: 25_000,
+        totalTokens: 145_000,
+        maxPromptTokens: 220_000,
+        maxOutputTokens: 80_000,
+        maxTotalTokens: 300_000,
       },
       promptSections: [
         { id: "recent_conversation", chars: 20_000, estimatedTokens: 5_000 },
@@ -246,9 +257,13 @@ test("usage monitor groups provider usage by turn, phase, budget state, and prom
       estimatedTokens: 35_000,
     });
     expect(summary.model.budgetStates["turn-token-budget"]).toMatchObject({
-      status: "exhausted",
-      requestCount: 32,
+      status: "warning",
+      requestCount: 33,
       maxRequests: 32,
+      promptTokens: 120_000,
+      cachedTokens: 30_000,
+      outputTokens: 25_000,
+      totalTokens: 145_000,
     });
     expect(summary.model.promptCache).toEqual({
       missingKeyCount: 0,

@@ -253,7 +253,6 @@ interface DirectTurnBudget {
   maxPromptTokens: number;
   maxOutputTokens: number;
   maxTotalTokens: number;
-  stopReason: string | null;
 }
 
 function createDirectTurnBudget(turnId: string): DirectTurnBudget {
@@ -268,13 +267,10 @@ function createDirectTurnBudget(turnId: string): DirectTurnBudget {
     maxPromptTokens: DIRECT_TURN_PROMPT_TOKEN_BUDGET,
     maxOutputTokens: DIRECT_TURN_OUTPUT_TOKEN_BUDGET,
     maxTotalTokens: DIRECT_TURN_TOTAL_TOKEN_BUDGET,
-    stopReason: null,
   };
 }
 
 function budgetStatus(budget: DirectTurnBudget): PromptUsageBudgetState["status"] {
-  if (budget.stopReason) return "exhausted";
-  if (budget.modelRequestsUsed >= budget.maxModelCalls) return "exhausted";
   if (
     budget.modelRequestsUsed >= Math.floor(budget.maxModelCalls * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
     budget.promptTokens >= Math.floor(budget.maxPromptTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
@@ -298,30 +294,14 @@ function directTurnBudgetState(budget: DirectTurnBudget): PromptUsageBudgetState
     maxPromptTokens: budget.maxPromptTokens,
     maxOutputTokens: budget.maxOutputTokens,
     maxTotalTokens: budget.maxTotalTokens,
-    stopReason: budget.stopReason ?? undefined,
   };
 }
 
-function turnBudgetExceededMessage(budget: DirectTurnBudget): string {
-  if (budget.stopReason) {
-    return `turn token budget exhausted: ${budget.stopReason}`;
-  }
-  return `turn model-call budget exhausted: ${budget.modelRequestsUsed}/${budget.maxModelCalls}`;
-}
-
-function remainingModelRequestBudget(budget: DirectTurnBudget, requestedRounds: number): number {
-  if (budget.stopReason || budget.modelRequestsUsed >= budget.maxModelCalls) {
-    throw goalCompletionIncompleteError(turnBudgetExceededMessage(budget));
-  }
-  const requested = Math.max(1, Math.min(requestedRounds, DIRECT_TOOL_CHAIN_MAX_ROUNDS));
-  const remaining = Math.max(0, budget.maxModelCalls - budget.modelRequestsUsed);
-  return Math.max(1, Math.min(requested, remaining));
+function directToolRoundLimit(requestedRounds: number): number {
+  return Math.max(1, Math.min(requestedRounds, DIRECT_TOOL_CHAIN_MAX_ROUNDS));
 }
 
 function beforeDirectTurnModelRequest(budget: DirectTurnBudget): void {
-  if (budget.stopReason || budget.modelRequestsUsed >= budget.maxModelCalls) {
-    throw goalCompletionIncompleteError(turnBudgetExceededMessage(budget));
-  }
   budget.modelRequestsUsed += 1;
 }
 
@@ -346,16 +326,6 @@ function addDirectTurnUsage(input: {
   input.budget.cachedTokens += cachedTokens;
   input.budget.outputTokens += outputTokens;
   input.budget.totalTokens += totalTokens;
-  if (input.budget.promptTokens > input.budget.maxPromptTokens) {
-    input.budget.stopReason =
-      `prompt_tokens ${input.budget.promptTokens}/${input.budget.maxPromptTokens}`;
-  } else if (input.budget.outputTokens > input.budget.maxOutputTokens) {
-    input.budget.stopReason =
-      `output_tokens ${input.budget.outputTokens}/${input.budget.maxOutputTokens}`;
-  } else if (input.budget.totalTokens > input.budget.maxTotalTokens) {
-    input.budget.stopReason =
-      `total_tokens ${input.budget.totalTokens}/${input.budget.maxTotalTokens}`;
-  }
 }
 
 function promptUsageSectionsFromPrompt(input: NormalizedTurnPrompt): PromptUsageSectionAttribution[] {
@@ -1916,7 +1886,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         phase = "tool_loop",
       ): Promise<string> => {
         throwIfRuntimeTurnAborted(input.signal);
-        const grantedToolRounds = remainingModelRequestBudget(turnBudget, maxToolRounds);
+        const grantedToolRounds = directToolRoundLimit(maxToolRounds);
         const usageAttribution: PromptUsageAttribution = {
           turnId,
           phase,
