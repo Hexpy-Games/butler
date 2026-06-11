@@ -36,6 +36,9 @@ import {
   registerHostedModelConfig,
 } from "../../packages/butler-agent/src/integrations/providers/registered-models.ts";
 import {
+  readPromptCacheMetrics,
+} from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
+import {
   resolveRuntimeMessageLanguage,
   runtimeMessages,
 } from "../../packages/butler-agent/src/agent/output/messages.ts";
@@ -97,6 +100,34 @@ function fakeJwt(payload: Record<string, unknown>): string {
 
 function finalEnvelope(text: string): string {
   return `<butler_final_answer>\n${text}\n</butler_final_answer>`;
+}
+
+function codexSseResponse(input: {
+  id: string;
+  item: Record<string, unknown>;
+  inputTokens: number;
+  totalTokens: number;
+  cachedTokens?: number;
+}): Response {
+  return new Response([
+    `data: ${JSON.stringify({ type: "response.output_item.done", item: input.item })}`,
+    "",
+    `data: ${JSON.stringify({
+      type: "response.completed",
+      response: {
+        id: input.id,
+        status: "completed",
+        usage: {
+          input_tokens: input.inputTokens,
+          total_tokens: input.totalTokens,
+          input_tokens_details: { cached_tokens: input.cachedTokens ?? 0 },
+        },
+      },
+    })}`,
+    "",
+    "data: [DONE]",
+    "",
+  ].join("\n"), { status: 200 });
 }
 
 test("OpenAI response text extraction strips Butler final-answer envelope", () => {
@@ -2708,6 +2739,182 @@ test("Codex subscription tool continuation is sent as stateless input without pr
   ]);
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("large-hidden-reasoning-state");
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("encrypted_content");
+});
+
+test("OpenAI function tool prompt records provider requests beyond warning threshold without aborting", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    accountId: "chatgpt-account",
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+
+  let fetchCalls = 0;
+  let requestCount = 0;
+  globalThis.fetch = (async () => {
+    fetchCalls += 1;
+    if (fetchCalls === 34) {
+      return codexSseResponse({
+        id: "resp_34",
+        item: {
+          type: "message",
+          content: [{ type: "output_text", text: "done after high usage" }],
+        },
+        inputTokens: 34,
+        totalTokens: 55,
+      });
+    }
+    return codexSseResponse({
+      id: `resp_${fetchCalls}`,
+      item: {
+        type: "function_call",
+        call_id: `call_${fetchCalls}`,
+        name: "lookup",
+        arguments: "{\"query\":\"again\"}",
+      },
+      inputTokens: 1,
+      totalTokens: 2,
+    });
+  }) as unknown as typeof fetch;
+
+  const result = await runFunctionToolPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "loop",
+    maxToolRounds: 40,
+    cacheScope: "session-turn",
+    butlerData: tempDir,
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "lookup status",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    usageAttribution: {
+      turnId: "turn-high-model-calls",
+      phase: "initial_tool_loop",
+      beforeModelRequest: () => {
+        requestCount += 1;
+      },
+      getBudgetState: () => ({
+        status: requestCount >= 32 ? "warning" : "ok",
+        requestCount,
+        maxRequests: 32,
+      }),
+    },
+    executeTool: async () => ({ ok: true }),
+  });
+
+  expect(result).toBe("done after high usage");
+  expect(fetchCalls).toBe(34);
+  expect(requestCount).toBe(34);
+  const events = readPromptCacheMetrics({ butlerData: tempDir })
+    .filter((event) => event.turnId === "turn-high-model-calls");
+  expect(events).toHaveLength(34);
+  expect(events.at(31)?.budgetState).toMatchObject({
+    status: "warning",
+    requestCount: 32,
+    maxRequests: 32,
+  });
+  expect(events.at(-1)?.budgetState).toMatchObject({
+    status: "warning",
+    requestCount: 34,
+    maxRequests: 32,
+  });
+});
+
+test("OpenAI function tool prompt records live budgetState for each provider usage event", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    accountId: "chatgpt-account",
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+
+  let fetchCalls = 0;
+  let requestCount = 0;
+  globalThis.fetch = (async () => {
+    fetchCalls += 1;
+    if (fetchCalls === 1) {
+      return codexSseResponse({
+        id: "resp_1",
+        item: {
+          type: "function_call",
+          call_id: "call_1",
+          name: "lookup",
+          arguments: "{\"query\":\"status\"}",
+        },
+        inputTokens: 10,
+        totalTokens: 15,
+      });
+    }
+    return codexSseResponse({
+      id: "resp_2",
+      item: {
+        type: "message",
+        content: [{ type: "output_text", text: "done" }],
+      },
+      inputTokens: 20,
+      totalTokens: 30,
+    });
+  }) as unknown as typeof fetch;
+
+  const result = await runFunctionToolPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "check",
+    cacheScope: "session-turn",
+    butlerData: tempDir,
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "lookup status",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    usageAttribution: {
+      turnId: "turn-live-budget",
+      phase: "initial_tool_loop",
+      beforeModelRequest: () => {
+        requestCount += 1;
+      },
+      getBudgetState: () => ({
+        status: requestCount >= 2 ? "warning" : "ok",
+        requestCount,
+        maxRequests: 3,
+      }),
+    },
+    executeTool: async () => ({ ok: true }),
+  });
+
+  expect(result).toBe("done");
+  const events = readPromptCacheMetrics({ butlerData: tempDir })
+    .filter((event) => event.turnId === "turn-live-budget");
+  expect(events.map((event) => event.budgetState?.requestCount)).toEqual([1, 2]);
+  expect(events.map((event) => event.budgetState?.status)).toEqual(["ok", "warning"]);
 });
 
 test("OpenAI function tool prompts send compact tool schemas to the model", async () => {

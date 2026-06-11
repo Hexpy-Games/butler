@@ -173,6 +173,107 @@ test("usage monitor excludes unexpected raw fields from token telemetry summarie
   }
 });
 
+test("usage monitor groups provider usage by turn, phase, warning state, and prompt section", () => {
+  const butlerData = tempRoot();
+
+  try {
+    appendPromptCacheMetric({
+      ts: 1000,
+      model: "openai/auto:codex-latest",
+      scope: "session-turn",
+      turnId: "turn-token-budget",
+      phase: "initial_tool_loop",
+      roundIndex: 0,
+      reasoningEffort: "high",
+      promptTokens: 80_000,
+      cachedTokens: 20_000,
+      totalTokens: 90_000,
+      promptCacheKey: "butler-session-turn",
+      promptCacheRetention: "24h",
+      budgetState: {
+        status: "warning",
+        requestCount: 26,
+        maxRequests: 32,
+        promptTokens: 80_000,
+        cachedTokens: 20_000,
+        outputTokens: 10_000,
+        totalTokens: 90_000,
+        maxPromptTokens: 220_000,
+        maxOutputTokens: 80_000,
+        maxTotalTokens: 300_000,
+      },
+      promptSections: [
+        { id: "recent_conversation", chars: 120_000, estimatedTokens: 30_000 },
+        { id: "project_ledger", chars: 20_000, estimatedTokens: 5_000 },
+      ],
+    }, { butlerData });
+    appendPromptCacheMetric({
+      ts: 2000,
+      model: "openai/auto:codex-latest",
+      scope: "session-turn",
+      turnId: "turn-token-budget",
+      phase: "direct_work_continuation",
+      roundIndex: 1,
+      reasoningEffort: "high",
+      promptTokens: 40_000,
+      cachedTokens: 10_000,
+      totalTokens: 55_000,
+      promptCacheKey: "butler-session-turn",
+      promptCacheRetention: "24h",
+      budgetState: {
+        status: "warning",
+        requestCount: 33,
+        maxRequests: 32,
+        promptTokens: 120_000,
+        cachedTokens: 30_000,
+        outputTokens: 25_000,
+        totalTokens: 145_000,
+        maxPromptTokens: 220_000,
+        maxOutputTokens: 80_000,
+        maxTotalTokens: 300_000,
+      },
+      promptSections: [
+        { id: "recent_conversation", chars: 20_000, estimatedTokens: 5_000 },
+        { id: "tool_loop", chars: 40_000, estimatedTokens: 10_000 },
+      ],
+    }, { butlerData });
+
+    const summary = readUsageMonitor({ butlerData });
+
+    expect(summary.model.byTurn["turn-token-budget"]).toMatchObject({
+      requestCount: 2,
+      promptTokens: 120_000,
+      cachedTokens: 30_000,
+      uncachedTokens: 90_000,
+      outputTokens: 25_000,
+      totalTokens: 145_000,
+    });
+    expect(summary.model.byPhase.initial_tool_loop.requestCount).toBe(1);
+    expect(summary.model.byPhase.direct_work_continuation.totalTokens).toBe(55_000);
+    expect(summary.model.byTurnPhase["turn-token-budget:direct_work_continuation"].promptTokens).toBe(40_000);
+    expect(summary.model.bySection.recent_conversation).toEqual({
+      requestCount: 2,
+      chars: 140_000,
+      estimatedTokens: 35_000,
+    });
+    expect(summary.model.budgetStates["turn-token-budget"]).toMatchObject({
+      status: "warning",
+      requestCount: 33,
+      maxRequests: 32,
+      promptTokens: 120_000,
+      cachedTokens: 30_000,
+      outputTokens: 25_000,
+      totalTokens: 145_000,
+    });
+    expect(summary.model.promptCache).toEqual({
+      missingKeyCount: 0,
+      missingRetentionCount: 0,
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("usage monitor derives tool counts from transcripts without raw arguments or results", () => {
   const butlerData = tempRoot();
   mkdirSync(join(butlerData, "transcripts"), { recursive: true });

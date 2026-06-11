@@ -14,6 +14,7 @@ import {
   applyWebSearchCitationGuard,
   enforceGroundedActionClaims,
   NativeToolLoopRuntime,
+  recentConversationBudgetForTurn,
 } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { readContextMonitor } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
@@ -189,6 +190,21 @@ test("native runtime injects recent transcript context and excludes current inbo
   expect(capturedPrompt).toContain("user: 내 이름은 테스트 사용자입니다");
   expect(capturedPrompt).toContain("butler: 네, 테스트 사용자님으로 기억하겠습니다.");
   expect(capturedPrompt.match(/방금 말한 내 이름이 뭐야/g)?.length).toBe(1);
+});
+
+test("native runtime recent conversation budget shrinks when compact summary exists", () => {
+  expect(recentConversationBudgetForTurn({
+    configuredBudget: 16_000,
+    compactionContext: "## Compaction Summary\nHistoric context was compacted.",
+  })).toBe(2_000);
+  expect(recentConversationBudgetForTurn({
+    configuredBudget: 1_200,
+    compactionContext: "## Compaction Summary\nHistoric context was compacted.",
+  })).toBe(1_200);
+  expect(recentConversationBudgetForTurn({
+    configuredBudget: 16_000,
+    compactionContext: "",
+  })).toBe(16_000);
 });
 
 test("native runtime keeps prior attachment content out of recent conversation while preserving attachment references", async () => {
@@ -470,6 +486,256 @@ test("native runtime exposes direct command toolchains to Butler and Steward ses
     expect(events.find((event) => event.kind === "tool.started")?.payload?.safeLabel)
       .toBe("Bash: pwd");
   }
+});
+
+test("native runtime attaches turn budget attribution to direct tool prompts", async () => {
+  const captured: Array<{
+    maxToolRounds?: number;
+    butlerData?: string;
+    usageAttribution?: {
+      turnId?: string;
+      phase?: string;
+      budgetState?: { status: string; requestCount: number; maxRequests: number };
+      getBudgetState?: () => { status: string; requestCount: number; maxRequests: number };
+      beforeModelRequest?: (input: { roundIndex: number }) => void;
+      promptSections?: Array<{ id: string; chars: number; estimatedTokens: number }>;
+    };
+  }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      captured.push({
+        maxToolRounds: input.maxToolRounds,
+        butlerData: input.butlerData,
+        usageAttribution: input.usageAttribution,
+      });
+      return "예산 attribution을 확인했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/token-budget",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "토큰 예산 attribution을 확인해줘." },
+    metadata: {
+      turnId: "turn-budget-1",
+      promptContext: "## Project Ledger Runtime Context\nstatus summary",
+      runtimePolicy: { completionReview: "disabled" },
+    },
+  });
+
+  expect(result.text).toContain("확인했습니다");
+  expect(captured).toHaveLength(1);
+  expect(captured[0].maxToolRounds).toBe(60);
+  expect(captured[0].butlerData).toBe(tempDir);
+  expect(captured[0].usageAttribution).toMatchObject({
+    turnId: "turn-budget-1",
+    phase: "initial_tool_loop",
+    budgetState: {
+      status: "ok",
+      requestCount: 0,
+      maxRequests: 32,
+    },
+  });
+  expect(captured[0].usageAttribution?.getBudgetState?.()).toMatchObject({
+    status: "ok",
+    requestCount: 1,
+    maxRequests: 32,
+  });
+  expect(captured[0].usageAttribution?.promptSections?.some((section) =>
+    section.id === "prompt_context" &&
+    section.chars > 0 &&
+    section.estimatedTokens > 0,
+  )).toBe(true);
+});
+
+test("native runtime blocks repeated Project Ledger status command families in one turn", async () => {
+  const executed: string[] = [];
+  const guardedResults: unknown[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerData: tempDir,
+    executeButlerTool: async (call) => {
+      if (call.name === "run_command" && typeof call.args.command === "string") {
+        executed.push(call.args.command);
+      }
+      return {
+        ok: true,
+        stdout: "fresh evidence",
+        stderr: "",
+        exit_code: 0,
+        timed_out: false,
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      for (let index = 0; index < 4; index += 1) {
+        guardedResults.push(await input.executeTool({
+          name: "run_command",
+          args: { command: "packages/project-ledger/bin/project-ledger status --project . --json" },
+          rawArguments: JSON.stringify({
+            command: "packages/project-ledger/bin/project-ledger status --project . --json",
+          }),
+        }));
+      }
+      return "반복 상태 확인을 중단했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/repeat-budget",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "원장 상태를 반복 확인해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toContain("중단했습니다");
+  expect(executed).toHaveLength(3);
+  expect(guardedResults[3]).toMatchObject({
+    ok: false,
+    budget_policy: "repeated_tool_family_blocked",
+    repeat_family: "project-ledger:status",
+    repeat_count: 4,
+    repeat_limit: 3,
+  });
+});
+
+test("native runtime reports high provider usage without stopping the next model call", async () => {
+  let beforeModelRequests = 0;
+  let stateAfterHighUsage: {
+    status: string;
+    requestCount: number;
+    promptTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  } | undefined;
+  let stateAfterSecondRequest: {
+    status: string;
+    requestCount: number;
+    promptTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  } | undefined;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      beforeModelRequests += 1;
+      input.usageAttribution?.afterModelResponseUsage?.({
+        model: "openai/auto:codex-latest",
+        promptTokens: 221_000,
+        cachedTokens: 0,
+        outputTokens: 1_000,
+        totalTokens: 222_000,
+        roundIndex: 0,
+      });
+      stateAfterHighUsage = input.usageAttribution?.getBudgetState?.();
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 1 });
+      beforeModelRequests += 1;
+      stateAfterSecondRequest = input.usageAttribution?.getBudgetState?.();
+      return "높은 토큰 사용량을 기록하고 계속 진행했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/token-cap",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "토큰 사용량이 높아도 진단만 기록하고 계속 진행해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toContain("계속 진행했습니다");
+  expect(beforeModelRequests).toBe(2);
+  expect(stateAfterHighUsage).toMatchObject({
+    status: "warning",
+    requestCount: 1,
+    promptTokens: 221_000,
+    outputTokens: 1_000,
+    totalTokens: 222_000,
+  });
+  expect(stateAfterSecondRequest).toMatchObject({
+    status: "warning",
+    requestCount: 2,
+    promptTokens: 221_000,
+    outputTokens: 1_000,
+    totalTokens: 222_000,
+  });
+});
+
+test("native runtime allows repeated tests after a state-mutating command resets repeat guards", async () => {
+  const executed: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerData: tempDir,
+    executeButlerTool: async (call) => {
+      if (call.name === "run_command" && typeof call.args.command === "string") {
+        executed.push(call.args.command);
+      }
+      return {
+        ok: true,
+        stdout: "ok",
+        stderr: "",
+        exit_code: 0,
+        timed_out: false,
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      for (const command of [
+        "bun test tests/unit/native-tool-loop-runtime.test.ts",
+        "bun test tests/unit/native-tool-loop-runtime.test.ts",
+        "bun test tests/unit/native-tool-loop-runtime.test.ts",
+        "printf 'changed' > packages/butler-agent/src/__budget-reset-test.txt",
+        "bun test tests/unit/native-tool-loop-runtime.test.ts",
+      ]) {
+        await input.executeTool({
+          name: "run_command",
+          args: { command },
+          rawArguments: JSON.stringify({ command }),
+        });
+      }
+      return "변경 후 테스트 재실행을 허용했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/repeat-reset",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "테스트를 반복하고 수정 후 다시 실행해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toContain("허용했습니다");
+  expect(executed).toHaveLength(5);
 });
 
 test("native runtime can drive the real run_command tool through the default executor", async () => {
