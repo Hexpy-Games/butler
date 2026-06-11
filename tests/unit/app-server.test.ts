@@ -644,6 +644,96 @@ test("project dashboard reads Project Ledger documents from Butler data home", a
   }
 });
 
+test("project dashboard resolves Butler data Project Ledger by workspace slug", async () => {
+  const butlerData = join(tempDir, ".butler");
+  const folderSelectionSecret = "dashboard-data-home-folder-secret";
+  const selectedFolder = join(tempDir, "sandy-bot");
+  mkdirSync(selectedFolder, { recursive: true });
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData,
+    folderSelectionSecret,
+    port: 0,
+  });
+  try {
+    const project = await createExistingFolderProjectForTest(
+      server.url,
+      selectedFolder,
+      folderSelectionSecret,
+      "Sandy Bot",
+    );
+    expect(project.id).not.toBe("sandy-bot");
+
+    const specDir = join(
+      butlerData,
+      "project-ledger",
+      "projects",
+      "sandy-bot",
+      "specs",
+    );
+    const planDir = join(
+      butlerData,
+      "project-ledger",
+      "projects",
+      "sandy-bot",
+      "plans",
+    );
+    const taskDir = join(
+      butlerData,
+      "project-ledger",
+      "projects",
+      "sandy-bot",
+      "work",
+      "W-SANDY",
+      "tasks",
+      "T-SANDY-001",
+    );
+    mkdirSync(specDir, { recursive: true });
+    mkdirSync(planDir, { recursive: true });
+    mkdirSync(taskDir, { recursive: true });
+    writeFileSync(
+      join(specDir, "sandy-spec.md"),
+      "# Sandy spec\n\nCanonical data-home spec.",
+      "utf8",
+    );
+    writeFileSync(
+      join(planDir, "sandy-plan.md"),
+      "# Sandy plan\n\nCanonical data-home plan.",
+      "utf8",
+    );
+    writeFileSync(
+      join(taskDir, "task.md"),
+      '---\nstatus: "todo"\n---\n\n# Sandy task\n\nNested task body.',
+      "utf8",
+    );
+
+    const dashboard = await getJson(
+      `${server.url}projects/${encodeURIComponent(project.id)}/dashboard`,
+    );
+    expect(dashboard.data.stats.specs).toBe(1);
+    expect(dashboard.data.stats.plans).toBe(1);
+    expect(
+      dashboard.data.documents.map(
+        (document: { safe_path_label: string }) => document.safe_path_label,
+      ),
+    ).toContain("project-ledger/projects/sandy-bot/specs/sandy-spec.md");
+    expect(
+      dashboard.data.documents.map(
+        (document: { safe_path_label: string }) => document.safe_path_label,
+      ),
+    ).toContain(
+      "project-ledger/projects/sandy-bot/work/W-SANDY/tasks/T-SANDY-001/task.md",
+    );
+    expect(JSON.stringify(dashboard)).not.toContain(
+      `project-ledger/projects/${project.id}/`,
+    );
+    expect(JSON.stringify(dashboard)).not.toContain("workspace_path");
+  } finally {
+    server.stop();
+  }
+});
+
 test("project dashboard falls back to folder Project Ledger documents without leaking paths", async () => {
   const folderSelectionSecret = "dashboard-folder-secret";
   const selectedFolder = join(tempDir, "selected-ledger-project");
@@ -4160,6 +4250,85 @@ test("app transport final result projection delivers queued turns after app-serv
     expect(sessionView.data.artifacts).toContainEqual(
       expect.objectContaining({ title: "queued-result.md" }),
     );
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport navigation sync skips zero-byte final artifacts", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const url = server.url;
+  const result = await postJson(`${url}messages`, {
+    chat_id: "general",
+    text: "project final answer with empty artifact",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  writeFileSync(join(tempDir, "result.md"), "# Projected result\n", "utf8");
+  writeFileSync(join(tempDir, "empty.err"), "", "utf8");
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-reply:test:app:general:empty-artifact",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Final answer with one empty artifact.",
+          artifacts: [
+            {
+              id: "artifact-result",
+              kind: "document",
+              title: "result.md",
+              safePathLabel: "result.md",
+              mimeType: "text/markdown",
+            },
+            {
+              id: "artifact-empty",
+              kind: "file",
+              title: "empty.err",
+              safePathLabel: "empty.err",
+              mimeType: "application/octet-stream",
+              sizeBytes: 0,
+            },
+          ],
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const navigation = await getJson(`${server.url}navigation`);
+    expect(navigation.data.chats.length).toBeGreaterThan(0);
+
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    const assistant = messages.data.messages.find(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistant.text).toBe("Final answer with one empty artifact.");
+    expect(assistant.attachments).toHaveLength(1);
+    expect(assistant.attachments[0]).toMatchObject({
+      safe_name: "result.md",
+      size_bytes: 19,
+    });
+    expect(assistant.artifacts).toHaveLength(1);
+
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "delivered",
+    });
   } finally {
     server.stop();
   }
