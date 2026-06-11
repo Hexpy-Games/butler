@@ -330,6 +330,66 @@ test("context assembly separates static live runtime retrieved and current input
   }
 });
 
+test("active work state hides ordinary machine status notes but keeps recoverable notes", () => {
+  const root = join(tmpdir(), `butler-prompt-status-note-${Date.now()}`);
+  const butlerHome = join(root, "home");
+  const butlerData = join(root, "data");
+  const workspacePath = join(root, "workspace");
+  mkdirSync(join(butlerHome, "resources", "prompts"), { recursive: true });
+  mkdirSync(join(butlerData, "personas"), { recursive: true });
+  writeFileSync(join(butlerHome, "resources", "prompts", "runtime-system-contract.md"), "RUNTIME_CONTRACT", "utf8");
+  writeFileSync(join(butlerHome, "resources", "prompts", "butler.md"), "BUTLER_ROLE", "utf8");
+  writeFileSync(join(butlerData, "personas", "active.md"), "PERSONA_BODY", "utf8");
+
+  try {
+    const assembler = new PromptAssembler({ butlerHome, butlerData });
+    const session = binding(workspacePath, {
+      role: "butler",
+      sessionId: "butler/status-note",
+      projectId: "butler",
+    });
+    const todo = new TodoListStore(butlerData).update({
+      listId: "status-note",
+      title: "Status note continuity",
+      items: [{
+        id: "execute",
+        content: "Continue direct work",
+        active_form: "Continuing direct work.",
+        status: "in_progress",
+        phase: "execution",
+      }],
+    });
+    const workStreamStore = new WorkStreamStore(butlerData);
+    const stream = workStreamStore.updateFromTodoList({
+      ownerSessionId: session.sessionId,
+      projectId: "butler",
+      listId: todo.list.list_id,
+      title: "Status note continuity",
+      items: todo.items,
+    });
+    workStreamStore.transition({
+      id: stream.id,
+      state: "executing",
+      statusNote: "Final Delivery Blocked by machine state.",
+    });
+
+    const ordinary = assembledTurnContext(assembler, session, "계속 진행해줘");
+    expect(ordinary).toContain("## Active Work State");
+    expect(ordinary).not.toContain("Status Note:");
+    expect(ordinary).not.toContain("Final Delivery Blocked");
+
+    workStreamStore.transition({
+      id: stream.id,
+      state: "recoverable",
+      statusNote: "Tool process exited while saving evidence.",
+    });
+    const recoverable = assembledTurnContext(assembler, session, "복구해서 이어가줘");
+    expect(recoverable).toContain("Recoverable Status Note: Tool process exited while saving evidence.");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("project memory and project hot cache are dynamic turn context", () => {
   const root = join(tmpdir(), `butler-project-memory-${Date.now()}`);
   const butlerHome = join(root, "home");
