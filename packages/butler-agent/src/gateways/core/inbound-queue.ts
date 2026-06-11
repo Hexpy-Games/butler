@@ -16,8 +16,15 @@ export interface ClaimedInboundEvent extends QueuedInboundEvent {
   path: string;
 }
 
+let enqueueSequence = 0;
+
 function safeQueueId(eventId: string): string {
   return eventId.replace(/[^A-Za-z0-9._:-]+/g, "_").slice(0, 120) || randomUUID();
+}
+
+function sortableQueueIdPrefix(now: Date): string {
+  enqueueSequence = (enqueueSequence + 1) % Number.MAX_SAFE_INTEGER;
+  return `${now.toISOString().replace(/[-:.]/g, "")}-${String(enqueueSequence).padStart(12, "0")}`;
 }
 
 function atomicWriteJson(path: string, value: unknown): void {
@@ -51,7 +58,7 @@ export class NativeInboundQueue {
     metadata: Record<string, unknown> = {},
     now = new Date(),
   ): QueuedInboundEvent {
-    const queueId = `${safeQueueId(envelope.eventId)}-${randomUUID().slice(0, 8)}`;
+    const queueId = `${sortableQueueIdPrefix(now)}-${safeQueueId(envelope.eventId)}-${randomUUID().slice(0, 8)}`;
     const record: QueuedInboundEvent = {
       version: 1,
       queueId,
@@ -72,12 +79,33 @@ export class NativeInboundQueue {
     if (!existsSync(pending)) return [];
     mkdirSync(this.dir("processing"), { recursive: true, mode: 0o700 });
     const claimed: ClaimedInboundEvent[] = [];
-    for (const entry of readdirSync(pending).filter((name) => name.endsWith(".json")).sort()) {
+    const pendingEntries = readdirSync(pending)
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => {
+        const path = join(pending, name);
+        return {
+          name,
+          path,
+          record: readJson<QueuedInboundEvent>(path),
+        };
+      })
+      .filter((entry): entry is {
+        name: string;
+        path: string;
+        record: QueuedInboundEvent;
+      } => entry.record !== null)
+      .sort((a, b) =>
+        a.record.enqueuedAt.localeCompare(b.record.enqueuedAt) ||
+        a.record.queueId.localeCompare(b.record.queueId) ||
+        a.name.localeCompare(b.name),
+      );
+
+    for (const entry of pendingEntries) {
       if (claimed.length >= limit) break;
-      const from = join(pending, entry);
-      const to = join(this.dir("processing"), entry);
-      const record = readJson<QueuedInboundEvent>(from);
-      if (!record || !isEligible(record)) continue;
+      const from = entry.path;
+      const to = join(this.dir("processing"), entry.name);
+      const record = entry.record;
+      if (!isEligible(record)) continue;
       try {
         renameSync(from, to);
       } catch {

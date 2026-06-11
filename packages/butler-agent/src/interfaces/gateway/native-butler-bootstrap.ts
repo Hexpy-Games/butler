@@ -728,9 +728,14 @@ export async function runNativeButlerMain(
             telegramGroupId: currentTelegramChatId(),
             limit: 5,
             maxConcurrentSessions: 5,
+            onOutcome: (outcome) => {
+              process.stdout.write(
+                `[inbound-queue] completed queueId=${outcome.queueId} handled=${outcome.handled} delivered=${outcome.delivered} failed=${outcome.failed}\n`,
+              );
+            },
           });
           if (summary.claimed > 0) {
-            process.stdout.write(`[inbound-queue] claimed=${summary.claimed} handled=${summary.handled} delivered=${summary.delivered} failed=${summary.failed}\n`);
+            process.stdout.write(`[inbound-queue] claimed=${summary.claimed} started=${summary.claimed}\n`);
           }
         },
       });

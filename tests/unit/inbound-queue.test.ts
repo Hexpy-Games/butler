@@ -88,6 +88,38 @@ test("file queue service client enqueues app turns through public gateway protoc
   }
 });
 
+test("native inbound queue claims app turns by enqueue order instead of event id order", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    queue.enqueue(createAppInboundEnvelope({
+      chatId: "general",
+      messageId: "msg-z0000000-0000-4000-8000-000000000000",
+      turnId: "turn-first",
+      text: "first",
+      timestamp: now.toISOString(),
+      sessionId: "butler/app-general",
+    }), { source: "app-server" }, now);
+    queue.enqueue(createAppInboundEnvelope({
+      chatId: "general",
+      messageId: "msg-a0000000-0000-4000-8000-000000000000",
+      turnId: "turn-second",
+      text: "second",
+      timestamp: now.toISOString(),
+      sessionId: "butler/app-general",
+    }), { source: "app-server" }, now);
+
+    const claimed = queue.claim(2);
+    expect(claimed.map((item) => item.envelope.message.id)).toEqual([
+      "msg-z0000000-0000-4000-8000-000000000000",
+      "msg-a0000000-0000-4000-8000-000000000000",
+    ]);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("app inbound envelope preserves explicit gateway peer metadata", () => {
   const envelope = createAppInboundEnvelope({
     chatId: "thread-42",
