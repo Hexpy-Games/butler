@@ -421,6 +421,91 @@ test("native runtime emits safe public turn events for tool, guard, and final ph
     .toBe("Web search: safe docs");
 });
 
+test("native runtime emits dynamic preparation progress before the first model response", async () => {
+  const progressActions: Array<Record<string, any>> = [];
+  const turnEvents: Array<Record<string, any>> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    runFunctionToolPromptText: async () => {
+      const preparationProgress = progressActions.find((action) =>
+        action.kind === "tool_progress" && action.activityKind === "model",
+      );
+      expect(preparationProgress).toBeTruthy();
+      return "확인했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/dynamic-preparation-progress",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: {
+      eventId: "app:dynamic-preparation-progress",
+      accountId: "local",
+      transport: "app",
+      peer: { kind: "dm", id: "general" },
+      sender: { id: "app-user" },
+      message: {
+        id: "dynamic-preparation-progress",
+        text: "내 비밀 경로 /Users/example/private 를 그대로 노출하지 말고 상태를 보여줘",
+        timestamp: new Date().toISOString(),
+      },
+    },
+    metadata: {
+      promptContext: "## Project Context\n\n- Runtime visibility spec fixture.",
+      runtimePolicy: { completionReview: "disabled" },
+    },
+    emitTurnEvent: (event) => {
+      turnEvents.push(event as Record<string, any>);
+    },
+    emitIntermediateDelivery: async (action) => {
+      if (action.metadata?.kind === "tool_progress") {
+        progressActions.push(action.metadata as Record<string, any>);
+      }
+    },
+  });
+
+  expect(result.text).toBe("확인했습니다.");
+  const preparationProgress = progressActions.find((action) =>
+    action.kind === "tool_progress" && action.activityKind === "model",
+  );
+  expect(preparationProgress?.safeLabel).toContain("gpt-5.5");
+  expect(preparationProgress?.safeLabel).toMatch(/\d+(?:,\d+)*자/u);
+  expect(preparationProgress?.safeLabel).not.toBe("Working");
+  expect(preparationProgress?.safeLabel).not.toBe("Thinking");
+  expect(preparationProgress?.detailRows).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      id: "prompt-context",
+      kind: "context",
+      safe_value: expect.stringMatching(/\d+(?:,\d+)*자/u),
+    }),
+    expect.objectContaining({
+      id: "inbound-message",
+      kind: "context",
+      safe_value: expect.stringMatching(/\d+(?:,\d+)*자/u),
+    }),
+    expect.objectContaining({
+      id: "total-model-input",
+      kind: "model",
+      safe_value: expect.stringMatching(/\d+(?:,\d+)*자/u),
+    }),
+  ]));
+  const serialized = JSON.stringify(progressActions);
+  expect(serialized).not.toContain("/Users/example/private");
+  expect(serialized).not.toContain("Runtime visibility spec fixture");
+  expect(serialized).not.toContain("그대로 노출");
+  expect(turnEvents.find((event) =>
+    event.kind === "tool.progress" && event.payload?.activityKind === "model",
+  )?.payload?.safeLabel).toBe(preparationProgress?.safeLabel);
+});
+
 test("native runtime exposes direct command toolchains to Butler and Steward sessions", async () => {
   for (const role of ["butler", "steward"] as const) {
     const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
@@ -992,12 +1077,15 @@ test("native runtime describes Project Ledger tool progress by work context", as
     "Updating the Project Ledger dashboard.",
     "Updating the Project Ledger dashboard.",
   ]);
-  for (const event of events.filter((item) => item.kind.startsWith("tool."))) {
+  const projectLedgerToolEvents = events.filter((item) =>
+    item.kind.startsWith("tool.") && item.payload?.activityKind !== "model",
+  );
+  for (const event of projectLedgerToolEvents) {
     expect(event.payload?.workBlockId).toBeTruthy();
     expect(event.payload?.workBlockLabel).not.toBe(event.payload?.safeLabel);
     expect(String(event.payload?.workBlockLabel)).not.toContain("inspect_project_status");
   }
-  const publicToolEvents = JSON.stringify(events.filter((event) => event.kind.startsWith("tool.")));
+  const publicToolEvents = JSON.stringify(projectLedgerToolEvents);
   expect(publicToolEvents).toContain("Project Ledger");
   expect(publicToolEvents).not.toContain("inspect_project_status");
   expect(publicToolEvents).not.toContain("query_project_work");
@@ -4709,12 +4797,13 @@ test("native runtime redacts complex tool progress command metadata", async () =
     },
   });
 
-  expect(progressActions).toHaveLength(1);
-  expect(progressActions[0]).toMatchObject({
+  const commandProgressActions = progressActions.filter((action) => action.activityKind === "ran_command");
+  expect(commandProgressActions).toHaveLength(1);
+  expect(commandProgressActions[0]).toMatchObject({
     activityKind: "ran_command",
     toolName: "Bash",
   });
-  const serialized = JSON.stringify(progressActions);
+  const serialized = JSON.stringify(commandProgressActions);
   expect(serialized).toContain("[redacted]");
   expect(serialized).not.toContain(homedir());
   expect(serialized).not.toContain("sk-test");
@@ -4900,10 +4989,12 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
   });
 
   expect(turnEvents.some((event) =>
-    String(event.kind).startsWith("tool.") ||
+    (String(event.kind).startsWith("tool.") && event.payload?.activityKind !== "model") ||
     String(event.kind).startsWith("work.block"),
   )).toBe(false);
-  expect(progressActions.some((action) => action.kind === "tool_progress")).toBe(false);
+  expect(progressActions.some((action) =>
+    action.kind === "tool_progress" && action.activityKind !== "model",
+  )).toBe(false);
   expect(progressActions.filter((action) => action.kind === "todo_progress")).toEqual([
     expect.objectContaining({
       safeLabel: "자료 수집하기",

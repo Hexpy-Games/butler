@@ -147,10 +147,11 @@ test("mock transport drives NativeToolLoopRuntime through dispatch_worker and ex
 
   const visibleActions = mock.sentActions.filter((action) => action.message.text?.trim());
   const progressActions = mock.sentActions.filter((action) => action.metadata?.kind === "tool_progress");
-  expect(mock.sentActions).toHaveLength(4);
+  const dispatchProgressActions = progressActions.filter((action) => action.metadata?.activityKind !== "model");
+  expect(mock.sentActions).toHaveLength(5);
   expect(visibleActions).toHaveLength(2);
-  expect(progressActions).toHaveLength(1);
-  expect(progressActions[0]!.message.text).toBe("");
+  expect(dispatchProgressActions).toHaveLength(1);
+  expect(dispatchProgressActions[0]!.message.text).toBe("");
   expect(mock.sentActions[0]!.presence).toMatchObject({ kind: "typing" });
   expect(visibleActions[0]!.message.text).toContain("A 주제 차트 작업은 백그라운드에서 진행하겠습니다");
   expect(visibleActions[0]!.message.text).not.toContain("워커");

@@ -389,7 +389,9 @@ function safeProgressKind(value: unknown): string {
     text === "ran_command" ||
     text === "edited" ||
     text === "dispatch" ||
-    text === "used_tool"
+    text === "used_tool" ||
+    text === "context" ||
+    text === "model"
   ) return text;
   return "used_tool";
 }

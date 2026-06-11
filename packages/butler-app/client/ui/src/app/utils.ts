@@ -1265,6 +1265,8 @@ function safeProgressKind(value: unknown): string {
     "edited",
     "dispatch",
     "used_tool",
+    "context",
+    "model",
     "message",
     "turn",
     "system",

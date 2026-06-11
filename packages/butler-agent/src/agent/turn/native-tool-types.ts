@@ -120,7 +120,7 @@ export interface ToolAuditEntry {
 }
 
 export interface ToolProgressSummary {
-  kind: "searched" | "read" | "ran_command" | "edited" | "dispatch" | "used_tool";
+  kind: "searched" | "read" | "ran_command" | "edited" | "dispatch" | "used_tool" | "context" | "model";
   toolName: string;
   safeLabel: string;
   workBlockLabel: string;

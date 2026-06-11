@@ -26,6 +26,12 @@ Context telemetry must be raw-text-free. Full transcripts and artifacts belong
 under Butler data; summaries and counters can be used for runtime decisions and
 operator status.
 
+Before the first model/tool response, runtime preparation progress may expose
+raw-text-free context and model-input counters so the user can see that Butler is
+working. These labels and detail rows must be derived from live structural
+metrics such as bucket character counts, attachment counts, and the selected
+model; they must not be fixed fallback copy or raw prompt/transcript text.
+
 ## Related Specs
 
 - `SPEC-CONTEXT-MANAGEMENT-OPTIMIZATION` - Context Management Optimization

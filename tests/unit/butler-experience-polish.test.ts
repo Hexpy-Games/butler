@@ -106,7 +106,7 @@ test("search citation guard keeps sources compact", () => {
 
 test("runtime omits leaked pre-dispatch internals and keeps model heartbeat", async () => {
   const deliveries: string[] = [];
-  const progressActions: unknown[] = [];
+  const progressActions: Array<Record<string, unknown>> = [];
   const runtime = new NativeToolLoopRuntime({
     messageLanguage: "ko",
     executeButlerTool: async () => ({
@@ -169,7 +169,7 @@ test("runtime omits leaked pre-dispatch internals and keeps model heartbeat", as
   });
 
   expect(deliveries).toHaveLength(0);
-  expect(progressActions).toHaveLength(1);
+  expect(progressActions.filter((action) => action.activityKind !== "model")).toHaveLength(1);
   expect(result.text).toBe("시작했습니다. 완료되면 결과만 정리하겠습니다.");
   expectNoInternalLeak(result.text);
 });
