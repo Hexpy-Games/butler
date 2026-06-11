@@ -383,6 +383,12 @@ test("queued inbound dispatcher runs different sessions concurrently", async () 
 
   const releaseLongTurn = deferred();
   const starts: string[] = [];
+  const outcomes: Array<{
+    handled: number;
+    delivered: number;
+    failed: number;
+    sessionKey: string;
+  }> = [];
   let shortTurnCompleted = false;
   const dispatcher = new QueuedInboundDispatcher();
   const summary = dispatcher.poll({
@@ -391,6 +397,14 @@ test("queued inbound dispatcher runs different sessions concurrently", async () 
     deliveryGuard: new DeliveryGuard({ adapters: [] }),
     maxConcurrentSessions: 2,
     limit: 2,
+    onOutcome: (outcome) => {
+      outcomes.push({
+        handled: outcome.handled,
+        delivered: outcome.delivered,
+        failed: outcome.failed,
+        sessionKey: outcome.sessionKey,
+      });
+    },
     server: {
       async handleInbound(envelope) {
         const sessionId = envelope.routingHints?.sessionId ?? "";
@@ -418,6 +432,12 @@ test("queued inbound dispatcher runs different sessions concurrently", async () 
     },
   });
 
+  expect(summary).toMatchObject({
+    claimed: 2,
+    handled: 0,
+    delivered: 0,
+    failed: 0,
+  });
   await Promise.resolve();
   expect(summary.claimed).toBe(2);
   expect(starts).toEqual(["butler/app-session-a", "butler/app-session-b"]);
@@ -431,6 +451,22 @@ test("queued inbound dispatcher runs different sessions concurrently", async () 
     delivered: 0,
     failed: 0,
   });
+  expect(outcomes).toEqual(
+    expect.arrayContaining([
+      {
+        handled: 1,
+        delivered: 0,
+        failed: 0,
+        sessionKey: "butler/app-session-a",
+      },
+      {
+        handled: 1,
+        delivered: 0,
+        failed: 0,
+        sessionKey: "butler/app-session-b",
+      },
+    ]),
+  );
   store.close();
 });
 
@@ -438,13 +474,13 @@ test("queued inbound dispatcher preserves same-session FIFO eligibility", async 
   const queue = new NativeInboundQueue(tempDir);
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   queue.enqueue(appEnvelope({
-    eventId: "app:same-session-1",
-    messageId: "message-1",
+    eventId: "app:msg-z0000000-0000-4000-8000-000000000000",
+    messageId: "msg-z0000000-0000-4000-8000-000000000000",
     sessionId: "butler/app-same-session",
   }), { source: "test" });
   queue.enqueue(appEnvelope({
-    eventId: "app:same-session-2",
-    messageId: "message-2",
+    eventId: "app:msg-a0000000-0000-4000-8000-000000000000",
+    messageId: "msg-a0000000-0000-4000-8000-000000000000",
     sessionId: "butler/app-same-session",
   }), { source: "test" });
 
@@ -460,7 +496,7 @@ test("queued inbound dispatcher preserves same-session FIFO eligibility", async 
     server: {
       async handleInbound(envelope: InboundEnvelope) {
         starts.push(envelope.message.id);
-        if (envelope.message.id === "message-1") {
+        if (envelope.message.id === "msg-z0000000-0000-4000-8000-000000000000") {
           await releaseFirstTurn.promise;
         }
         return {
@@ -484,7 +520,7 @@ test("queued inbound dispatcher preserves same-session FIFO eligibility", async 
   const firstPoll = dispatcher.poll(baseOptions);
   await Promise.resolve();
   expect(firstPoll.claimed).toBe(1);
-  expect(starts).toEqual(["message-1"]);
+  expect(starts).toEqual(["msg-z0000000-0000-4000-8000-000000000000"]);
   expect(dispatcher.poll(baseOptions).claimed).toBe(0);
 
   releaseFirstTurn.resolve();
@@ -493,7 +529,10 @@ test("queued inbound dispatcher preserves same-session FIFO eligibility", async 
   await dispatcher.waitForIdle();
 
   expect(secondPoll.claimed).toBe(1);
-  expect(starts).toEqual(["message-1", "message-2"]);
+  expect(starts).toEqual([
+    "msg-z0000000-0000-4000-8000-000000000000",
+    "msg-a0000000-0000-4000-8000-000000000000",
+  ]);
   store.close();
 });
 
