@@ -3991,20 +3991,22 @@ export function createButlerToolExecutor(input: {
     }
 
     if (call.name === "inspect_project_status") {
+      const projectPath = projectLedgerProjectPath(input, call.args);
       return runProjectLedgerTool(input, [
         "status",
         "--project",
-        projectLedgerProjectPath(input, call.args),
+        projectPath,
       ]);
     }
 
     if (call.name === "query_project_work") {
       const kind = typeof call.args.kind === "string" ? call.args.kind.trim() : "";
       if (!kind) throw new Error("query_project_work requires kind");
+      const projectPath = projectLedgerProjectPath(input, call.args);
       return runProjectLedgerTool(input, [
         "query",
         "--project",
-        projectLedgerProjectPath(input, call.args),
+        projectPath,
         "--kind",
         kind,
       ]);
