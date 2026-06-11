@@ -5,7 +5,7 @@ import { join } from "path";
 import { FileQueueButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
 import type { InboundEnvelope } from "../../packages/butler-agent/src/gateways/core/contracts.ts";
 import { createAppInboundEnvelope } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
-import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
+import { NativeInboundQueue, type QueuedInboundEvent } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 
 function tempRoot(): string {
   const dir = join(tmpdir(), `butler-inbound-queue-${Date.now()}-${Math.random()}`);
@@ -30,6 +30,15 @@ function envelope(id: string): InboundEnvelope {
     },
     raw: {},
   };
+}
+
+class CountingInboundQueue extends NativeInboundQueue {
+  readCount = 0;
+
+  protected override readQueuedRecord(path: string): QueuedInboundEvent | null {
+    this.readCount += 1;
+    return super.readQueuedRecord(path);
+  }
 }
 
 test("native inbound queue atomically enqueues, claims, completes, and fails events", () => {
@@ -59,6 +68,25 @@ test("native inbound queue atomically enqueues, claims, completes, and fails eve
   }
 });
 
+test("native inbound queue claims early without parsing the whole pending directory", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new CountingInboundQueue(butlerData);
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    const first = queue.enqueue(envelope("automation:first"), { source: "test" }, now);
+    for (let index = 0; index < 25; index += 1) {
+      queue.enqueue(envelope(`automation:later-${index}`), { source: "test" }, now);
+    }
+
+    const claimed = queue.claimEligible(1, () => true);
+
+    expect(claimed.map((item) => item.queueId)).toEqual([first.queueId]);
+    expect(queue.readCount).toBe(1);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("file queue service client enqueues app turns through public gateway protocol", () => {
   const butlerData = tempRoot();
   try {
@@ -83,6 +111,38 @@ test("file queue service client enqueues app turns through public gateway protoc
       "pending",
       `${queued.queueId}.json`,
     ), "utf8")).toContain("\"source\": \"app-server\"");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("native inbound queue claims app turns by enqueue order instead of event id order", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    const now = new Date("2026-06-11T00:00:00.000Z");
+    queue.enqueue(createAppInboundEnvelope({
+      chatId: "general",
+      messageId: "msg-z0000000-0000-4000-8000-000000000000",
+      turnId: "turn-first",
+      text: "first",
+      timestamp: now.toISOString(),
+      sessionId: "butler/app-general",
+    }), { source: "app-server" }, now);
+    queue.enqueue(createAppInboundEnvelope({
+      chatId: "general",
+      messageId: "msg-a0000000-0000-4000-8000-000000000000",
+      turnId: "turn-second",
+      text: "second",
+      timestamp: now.toISOString(),
+      sessionId: "butler/app-general",
+    }), { source: "app-server" }, now);
+
+    const claimed = queue.claim(2);
+    expect(claimed.map((item) => item.envelope.message.id)).toEqual([
+      "msg-z0000000-0000-4000-8000-000000000000",
+      "msg-a0000000-0000-4000-8000-000000000000",
+    ]);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
