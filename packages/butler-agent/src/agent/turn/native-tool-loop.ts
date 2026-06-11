@@ -663,6 +663,7 @@ function finalDeliveryBlockerForOpenDirectWork(input: {
 
 function openDirectWorkContinuationPrompt(input: {
   objective: string;
+  personaContext?: string;
   audit: ToolAuditEntry[];
   blocker: OpenDirectWorkBlocker;
 }): string {
@@ -673,10 +674,18 @@ function openDirectWorkContinuationPrompt(input: {
       .join("\n")
     : "- Active direct work stream has not reached a deliverable state.";
   const evidence = compactContinuationEvidence(input.audit);
+  const personaContext = compactContinuationPersonaContext(input.personaContext);
   return [
     "## Direct Work Continuation",
     "Continue the same logical Butler WorkStream as ordinary same-turn progress.",
     "",
+    ...(personaContext
+      ? [
+        "Persona continuation:",
+        personaContext,
+        "",
+      ]
+      : []),
     "Current WorkStream:",
     `- title: ${input.blocker.title}`,
     `- state: ${input.blocker.state}`,
@@ -697,6 +706,20 @@ function openDirectWorkContinuationPrompt(input: {
     "- Do not answer with a promise, plan, or 'I will start now' message.",
     "- Final delivery is allowed only after the direct WorkStream has no unfinished active items, reaches reporting/waiting_user/paused/recoverable with evidence, or is linked to an async worker/planned/orchestration stream.",
   ].join("\n");
+}
+
+function promptContextSection(prompt: string, title: string): string {
+  const trimmed = prompt.trim();
+  if (!trimmed) return "";
+  const section = new RegExp(`(?:^|\\n)(## ${escapeRegExp(title)}\\n[\\s\\S]*?)(?=\\n## |\\n---\\n|$)`, "u")
+    .exec(trimmed)?.[1];
+  return section?.trim() ?? "";
+}
+
+function compactContinuationPersonaContext(value?: string): string {
+  const section = value?.trim() ?? "";
+  if (!section) return "";
+  return compactContinuationText(section, 1_500);
 }
 
 function compactContinuationText(value: string, maxChars: number, fallback = ""): string {
@@ -2280,6 +2303,10 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           const successfulToolsBeforeContinuation = successfulToolAuditCount();
           finalText = await runToolPrompt(openDirectWorkContinuationPrompt({
             objective: userText,
+            personaContext: promptContextSection(
+              typeof input.metadata?.promptContext === "string" ? input.metadata.promptContext : "",
+              "Active Persona Reminder",
+            ),
             audit,
             blocker,
           }), 8, "direct_work_continuation");
