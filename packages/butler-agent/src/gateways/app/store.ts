@@ -72,6 +72,8 @@ import {
   upsertProviderApiKeyCredential,
   type HostedModelProviderId,
 } from "../../integrations/providers/registered-models.ts";
+import { readPromptCacheMetrics } from "../../integrations/providers/prompt-cache-metrics.ts";
+import { readContextMonitor } from "../../operations/metrics/context-monitor.ts";
 import {
   estimateContextTokensForModel,
   evaluateWorkingContextBudget,
@@ -2215,10 +2217,17 @@ export class AppServerStore {
     const personalization = this.getPersonalization();
     const runtimeSessionId = sessionHintForRow(sessionId);
     const messages = this.sessionViewMessages(sessionId);
+    const turns = this.listTurns(sessionId);
+    const latestTurn = turns.at(-1);
     const project = this.getProjectForSession(sessionId);
     const latestUserMessage = [...messages]
       .reverse()
       .find((message) => message.role === "user");
+    const livePromptUsage = latestLivePromptUsage({
+      butlerData: this.butlerData,
+      runtimeSessionId,
+      turnId: latestTurn?.id,
+    });
     const staticContextTokens = estimateContextTokensForModel(
       "Butler runtime contract, role policy, transport contract, and safety rules.",
       metadata.model_ref,
@@ -2239,7 +2248,7 @@ export class AppServerStore {
         runtimeSessionId,
         projectId: project?.id ?? null,
         sessionKind: this.getChatRow(sessionId)?.kind ?? "chat",
-        turnCount: this.listTurns(sessionId).length,
+        turnCount: turns.length,
       }),
       metadata.model_ref,
     ).tokens;
@@ -2272,8 +2281,21 @@ export class AppServerStore {
       0,
       artifacts.length * 48 + messageFiles.length * 24,
     );
-    const workingContextTokens = recentConversationTokens;
     const retrievedContextTokens = compactionTokens;
+    const knownPromptTokens =
+      staticContextTokens +
+      liveConfigurationTokens +
+      runtimeStateTokens +
+      retrievedContextTokens +
+      currentInputTokens +
+      referenceTokens;
+    const measuredWorkingContextTokens = livePromptUsage
+      ? Math.max(0, livePromptUsage.promptTokens - knownPromptTokens)
+      : 0;
+    const workingContextTokens = Math.max(
+      recentConversationTokens,
+      measuredWorkingContextTokens,
+    );
     const workingBudget = evaluateWorkingContextBudget({
       modelRef: metadata.model_ref,
       staticContextTokens,
@@ -2378,7 +2400,9 @@ export class AppServerStore {
       model_ref: metadata.model_ref,
       provider_id: metadata.provider_id,
       model_id: metadata.model_id,
-      token_count_source: workingBudget.tokenEstimator,
+      token_count_source: livePromptUsage
+        ? livePromptUsage.source
+        : workingBudget.tokenEstimator,
       used_tokens: used,
       budget_tokens: budget,
       max_output_tokens: metadata.max_output_tokens,
@@ -7888,6 +7912,58 @@ function contextCategory(
     safe_description:
       safeDescription ?? `${usedTokens.toLocaleString("en-US")} tokens`,
     source_kind: sourceKind,
+  };
+}
+
+function latestLivePromptUsage(input: {
+  butlerData: string;
+  runtimeSessionId: string;
+  turnId?: string;
+}): { promptTokens: number; source: string; ts: number } | null {
+  const provider = latestProviderPromptUsage(input);
+  const contextMonitor = latestContextMonitorPromptUsage(input);
+  if (!provider) return contextMonitor;
+  if (!contextMonitor) return provider;
+  return contextMonitor.ts > provider.ts ? contextMonitor : provider;
+}
+
+function latestProviderPromptUsage(input: {
+  butlerData: string;
+  turnId?: string;
+}): { promptTokens: number; source: string; ts: number } | null {
+  const turnId = input.turnId?.trim();
+  if (!turnId) return null;
+  let latest: { promptTokens: number; source: string; ts: number } | null = null;
+  for (const event of readPromptCacheMetrics({ butlerData: input.butlerData })) {
+    if (event.turnId !== turnId) continue;
+    if (!Number.isFinite(event.promptTokens) || event.promptTokens <= 0) {
+      continue;
+    }
+    if (!latest || event.ts >= latest.ts) {
+      latest = {
+        promptTokens: Math.max(0, Math.round(event.promptTokens)),
+        source: "provider_prompt_usage",
+        ts: event.ts,
+      };
+    }
+  }
+  return latest;
+}
+
+function latestContextMonitorPromptUsage(input: {
+  butlerData: string;
+  runtimeSessionId: string;
+}): { promptTokens: number; source: string; ts: number } | null {
+  const summary = readContextMonitor({
+    butlerData: input.butlerData,
+    sessionId: input.runtimeSessionId,
+  });
+  const latestTurn = summary.latestTurn;
+  if (!latestTurn || latestTurn.estimatedTokens <= 0) return null;
+  return {
+    promptTokens: Math.max(0, Math.round(latestTurn.estimatedTokens)),
+    source: "context_monitor",
+    ts: latestTurn.ts,
   };
 }
 
