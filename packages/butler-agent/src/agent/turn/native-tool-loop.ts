@@ -495,7 +495,7 @@ function openDirectWorkContinuationPrompt(input: {
     activeItems,
     "",
     "Continuity note:",
-    `- objective: ${compactContinuationText(input.objective, 500)}`,
+    `- objective: ${compactObjectiveText(input.objective, 500)}`,
     ...evidence.map((line) => `- ${line}`),
     "",
     "Next action:",
@@ -507,11 +507,15 @@ function openDirectWorkContinuationPrompt(input: {
   ].join("\n");
 }
 
-function compactContinuationText(value: string, maxChars: number): string {
+function compactContinuationText(value: string, maxChars: number, fallback = ""): string {
   const normalized = sanitizePublicText(value, "").replace(/\s+/g, " ").trim();
-  if (!normalized) return "same user request";
+  if (!normalized) return fallback;
   if (normalized.length <= maxChars) return normalized;
   return `${normalized.slice(0, maxChars - 1).trimEnd()}...`;
+}
+
+function compactObjectiveText(value: string, maxChars: number): string {
+  return compactContinuationText(value, maxChars, "same user request");
 }
 
 function compactContinuationEvidence(audit: ToolAuditEntry[]): string[] {
@@ -521,12 +525,20 @@ function compactContinuationEvidence(audit: ToolAuditEntry[]): string[] {
   if (recent.length === 0) return ["recent evidence: none yet"];
   return recent.map((entry, index) => {
     const receipts = (entry.evidenceReceipts ?? [])
-      .map((receipt) => compactContinuationText(receipt.summary ?? receipt.receiptType ?? "", 120))
+      .map((receipt) =>
+        compactContinuationText(receipt.summary, 120) ||
+        compactContinuationText(receipt.receiptType, 120))
       .filter(Boolean)
       .slice(0, 2);
     const receiptText = receipts.length > 0 ? `; receipts: ${receipts.join(" | ")}` : "";
     return `evidence ${index + 1}: ${entry.name}${receiptText}`;
   });
+}
+
+function stableJsonForCache(value: Record<string, unknown>): string {
+  return JSON.stringify(Object.fromEntries(
+    Object.entries(value).sort(([a], [b]) => a.localeCompare(b)),
+  ));
 }
 
 function hasGoalCompletionReviewSkipTool(audit: ToolAuditEntry[]): boolean {
@@ -2071,6 +2083,55 @@ function createAuditedButlerToolExecutor(input: {
 }): FunctionToolPromptOptions["executeTool"] {
   let semanticProgressEstablished = false;
   let currentSemanticWorkBlock: { id: string; label: string } | null = null;
+  const projectLedgerFreshnessCache = new Map<string, unknown>();
+  const projectLedgerFreshnessCacheKey = (call: {
+    name: string;
+    args: Record<string, unknown>;
+  }): string | null => {
+    if (call.name === "inspect_project_status") {
+      return `inspect_project_status:${stableJsonForCache({
+        project_path: typeof call.args.project_path === "string" ? call.args.project_path.trim() : "",
+      })}`;
+    }
+    if (call.name === "query_project_work") {
+      return `query_project_work:${stableJsonForCache({
+        project_path: typeof call.args.project_path === "string" ? call.args.project_path.trim() : "",
+        kind: typeof call.args.kind === "string" ? call.args.kind.trim() : "",
+      })}`;
+    }
+    return null;
+  };
+  const invalidateProjectLedgerFreshnessAfterTool = (call: {
+    name: string;
+    args: Record<string, unknown>;
+  }): void => {
+    if (call.name === "run_command") {
+      projectLedgerFreshnessCache.clear();
+      return;
+    }
+    if (call.name === "complete_project_work") {
+      projectLedgerFreshnessCache.clear();
+      return;
+    }
+    if (call.name === "render_project_dashboard" && call.args.write === true) {
+      projectLedgerFreshnessCache.clear();
+    }
+  };
+  const executeWithTurnFreshnessCache = async (
+    call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
+  ): Promise<unknown> => {
+    const cacheKey = projectLedgerFreshnessCacheKey(call);
+    if (cacheKey && projectLedgerFreshnessCache.has(cacheKey)) {
+      return projectLedgerFreshnessCache.get(cacheKey);
+    }
+    const result = await input.executor(call);
+    if (cacheKey) {
+      projectLedgerFreshnessCache.set(cacheKey, result);
+    } else {
+      invalidateProjectLedgerFreshnessAfterTool(call);
+    }
+    return result;
+  };
   const runInternalProgressTool = async (
     call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
     source: "model" | "runtime",
@@ -2421,7 +2482,7 @@ function createAuditedButlerToolExecutor(input: {
     }));
     try {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
-      const result = await input.executor(effectiveCall);
+      const result = await executeWithTurnFreshnessCache(effectiveCall);
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       recordOperationalMetric({
         category: "tool",
@@ -2549,6 +2610,7 @@ function createAuditedButlerToolExecutor(input: {
       return modelVisibleResult;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      invalidateProjectLedgerFreshnessAfterTool(effectiveCall);
       recordOperationalMetric({
         category: "tool",
         name: call.name,
