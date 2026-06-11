@@ -26,6 +26,12 @@ product interface implementations or external service pathing. Project-session
 behavior belongs in policy plus tools; Project Ledger pathing belongs in
 `packages/butler-agent/src/integrations/project-ledger/`.
 
+Native turn continuations are still part of the same user-facing turn. When a
+direct WorkStream is extended across multiple tool-loop prompts, the
+continuation prompt must preserve the current-turn persona reminder along with
+the compact WorkStream state so long-running work does not drift into a neutral
+reporting voice.
+
 ## Related Specs
 
 - `SPEC-BUTLER-AGENT-LOOP` - Butler Agent Loop

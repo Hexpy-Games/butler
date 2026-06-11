@@ -5277,11 +5277,21 @@ test("native runtime continues instead of delivering while direct todo work is u
     provider: fakeProvider,
     model: "local/gemma-test",
     input: { text: "컨텍스트 컴팩션 설계에서 빠진 위험을 짧게 리뷰해줘." },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    metadata: {
+      promptContext: [
+        "## Active Persona Reminder",
+        "",
+        "Use this current persona for every user-facing answer in this turn.",
+        "PERSONA_CONTINUATION_SENTINEL",
+      ].join("\n"),
+      runtimePolicy: { completionReview: "disabled" },
+    },
   });
 
   expect(promptCalls).toBe(2);
   expect(continuationPrompt).toContain("Direct Work Continuation");
+  expect(continuationPrompt).toContain("Persona continuation");
+  expect(continuationPrompt).toContain("PERSONA_CONTINUATION_SENTINEL");
   expect(continuationPrompt).toContain("Remaining direct steps");
   expect(continuationPrompt).toContain("Continuity note");
   expect(continuationPrompt).toContain("evidence 1: update_todo_list");
