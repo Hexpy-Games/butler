@@ -158,6 +158,36 @@ test("Project Ledger check fails on stale generated views and passes after rende
   }
 });
 
+test("Project Ledger status refreshes stored view freshness after render", async () => {
+  const project = tempProject();
+  const restoreButlerData = useTestButlerData(project);
+  try {
+    const { handle } = await importModule("commands.js");
+
+    handle("init", [], { project, id: "demo", name: "Demo Project" });
+    handle("work", ["create"], {
+      project,
+      id: "W-STATUS",
+      title: "Status freshness test",
+      spec: "docs/specs/project-ledger.md",
+      acceptance: "Status does not report stale views after render",
+      status: "proposed",
+    });
+    handle("index", [], { project });
+    expect(handle("status", [], { project }).staleViews).toHaveLength(3);
+
+    handle("render", ["dashboard"], { project, write: true });
+    handle("render", ["handoff"], { project, write: true });
+    handle("render", ["roadmap"], { project, write: true });
+
+    expect(handle("check", [], { project }).ok).toBe(true);
+    expect(handle("status", [], { project }).staleViews).toEqual([]);
+  } finally {
+    restoreButlerData();
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test("Project Ledger ignores platform metadata files when checking freshness", async () => {
   const project = tempProject();
   const restoreButlerData = useTestButlerData(project);

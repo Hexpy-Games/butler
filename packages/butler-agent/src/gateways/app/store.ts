@@ -726,17 +726,15 @@ export class AppServerStore {
         ? {
             id: project.id,
             displayName: project.display_name,
-            documents: readProjectLedgerDocuments(
-              this.butlerData,
-              project.id,
-              project.workspace_path,
-            ).map((document) => ({
-              title: document.title,
-              category: document.category,
-              status: document.status,
-              safePathLabel: document.safe_path_label,
-              markdown: document.markdown,
-            })),
+            documents: readProjectLedgerDocuments(this.butlerData, project).map(
+              (document) => ({
+                title: document.title,
+                category: document.category,
+                status: document.status,
+                safePathLabel: document.safe_path_label,
+                markdown: document.markdown,
+              }),
+            ),
           }
         : undefined,
     });
@@ -2177,11 +2175,7 @@ export class AppServerStore {
       projectId,
       recent30Start,
     );
-    const documents = readProjectLedgerDocuments(
-      this.butlerData,
-      projectId,
-      row.workspace_path,
-    );
+    const documents = readProjectLedgerDocuments(this.butlerData, row);
     return {
       project,
       stats: {
@@ -3693,6 +3687,7 @@ export class AppServerStore {
         artifact.safePathLabel?.trim() || artifact.title || path,
       );
       const bytes = readFileSync(path);
+      if (bytes.byteLength === 0) continue;
       const safeName = safeAttachmentName(name);
       const mimeType = normalizeAttachmentMimeType(
         artifact.mimeType ?? mimeTypeForArtifactPath(path),
@@ -8388,73 +8383,26 @@ function startOfUtcDay(value: Date): Date {
   );
 }
 
+type ProjectLedgerDocumentProject = Pick<
+  ProjectRow,
+  "id" | "display_name" | "workspace_path" | "workspace_label" | "safe_path_label"
+>;
+
 function readProjectLedgerDocuments(
   butlerData: string,
-  projectId: string,
-  workspacePath?: string,
+  project: ProjectLedgerDocumentProject,
 ): ProjectDashboardView["documents"] {
-  const root = projectLedgerDataRoot(butlerData, projectId);
-  if (!isPathInside(root, resolve(root))) return [];
-  const safeRootLabel = `project-ledger/projects/${safeProjectLedgerSegment(projectId)}`;
-  const dataSpecs = readProjectLedgerDocumentsFrom(
-    resolve(root, "specs"),
-    "spec",
-    `${safeRootLabel}/specs`,
-    { redactRoots: [{ root: butlerData, label: "butler-data" }] },
-  );
-  const dataPlans = readProjectLedgerDocumentsFrom(
-    resolve(root, "plans"),
-    "plan",
-    `${safeRootLabel}/plans`,
-    {
-      documentType: "plan",
-      redactRoots: [{ root: butlerData, label: "butler-data" }],
-    },
-  );
-  const dataRoadmaps = readProjectLedgerDocumentsFrom(
-    resolve(root, "roadmaps"),
-    "plan",
-    `${safeRootLabel}/roadmaps`,
-    {
-      category: () => "Roadmap",
-      documentType: "roadmap",
-      redactRoots: [{ root: butlerData, label: "butler-data" }],
-    },
-  );
-  const dataWork = readProjectLedgerDocumentsFrom(
-    resolve(root, "work"),
-    "plan",
-    `${safeRootLabel}/work`,
-    {
-      category: (_kind, relativeLabel) =>
-        projectLedgerWorkCategory(relativeLabel),
-      documentType: "work",
-      include: (relativeLabel) => relativeLabel.endsWith("/work.md"),
-      redactRoots: [{ root: butlerData, label: "butler-data" }],
-    },
-  );
-  const dataTasks = readProjectLedgerDocumentsFrom(
-    resolve(root, "work"),
-    "plan",
-    `${safeRootLabel}/work`,
-    {
-      category: (_kind, relativeLabel) =>
-        projectLedgerWorkCategory(relativeLabel),
-      documentType: "task",
-      include: (relativeLabel) => /\/tasks\/[^/]+\.md$/iu.test(relativeLabel),
-      redactRoots: [{ root: butlerData, label: "butler-data" }],
-    },
-  );
-  const dataHomeDocuments = [
-    ...dataSpecs,
-    ...dataPlans,
-    ...dataRoadmaps,
-    ...dataWork,
-    ...dataTasks,
-  ];
-  if (dataHomeDocuments.length > 0) {
-    return sortProjectLedgerDocuments(dataHomeDocuments);
+  for (const candidate of projectLedgerDataRootCandidates(butlerData, project)) {
+    const dataHomeDocuments = readProjectLedgerDocumentsFromRoot(
+      candidate.root,
+      candidate.safeRootLabel,
+      [{ root: butlerData, label: "butler-data" }],
+    );
+    if (dataHomeDocuments.length > 0) {
+      return sortProjectLedgerDocuments(dataHomeDocuments);
+    }
   }
+  const workspacePath = project.workspace_path;
   if (!workspacePath) return [];
   const workspaceRoot = resolve(workspacePath, ".project-ledger");
   if (!isPathInside(workspacePath, workspaceRoot)) return [];
@@ -8503,7 +8451,7 @@ function readProjectLedgerDocuments(
       category: (_kind, relativeLabel) =>
         projectLedgerWorkCategory(relativeLabel),
       documentType: "task",
-      include: (relativeLabel) => /\/tasks\/[^/]+\.md$/iu.test(relativeLabel),
+      include: isProjectLedgerTaskDocument,
       redactRoots: [{ root: workspacePath, label: "workspace" }],
     },
   );
@@ -8514,6 +8462,68 @@ function readProjectLedgerDocuments(
     ...workspaceWork,
     ...workspaceTasks,
   ]);
+}
+
+function readProjectLedgerDocumentsFromRoot(
+  root: string,
+  safeRootLabel: string,
+  redactRoots: Array<{ root: string; label: string }>,
+): ProjectDashboardView["documents"] {
+  if (!isPathInside(root, resolve(root))) return [];
+  const specs = readProjectLedgerDocumentsFrom(
+    resolve(root, "specs"),
+    "spec",
+    `${safeRootLabel}/specs`,
+    { redactRoots },
+  );
+  const plans = readProjectLedgerDocumentsFrom(
+    resolve(root, "plans"),
+    "plan",
+    `${safeRootLabel}/plans`,
+    {
+      documentType: "plan",
+      redactRoots,
+    },
+  );
+  const roadmaps = readProjectLedgerDocumentsFrom(
+    resolve(root, "roadmaps"),
+    "plan",
+    `${safeRootLabel}/roadmaps`,
+    {
+      category: () => "Roadmap",
+      documentType: "roadmap",
+      redactRoots,
+    },
+  );
+  const work = readProjectLedgerDocumentsFrom(
+    resolve(root, "work"),
+    "plan",
+    `${safeRootLabel}/work`,
+    {
+      category: (_kind, relativeLabel) =>
+        projectLedgerWorkCategory(relativeLabel),
+      documentType: "work",
+      include: (relativeLabel) => relativeLabel.endsWith("/work.md"),
+      redactRoots,
+    },
+  );
+  const tasks = readProjectLedgerDocumentsFrom(
+    resolve(root, "work"),
+    "plan",
+    `${safeRootLabel}/work`,
+    {
+      category: (_kind, relativeLabel) =>
+        projectLedgerWorkCategory(relativeLabel),
+      documentType: "task",
+      include: isProjectLedgerTaskDocument,
+      redactRoots,
+    },
+  );
+  return [...specs, ...plans, ...roadmaps, ...work, ...tasks];
+}
+
+function isProjectLedgerTaskDocument(relativeLabel: string): boolean {
+  return /\/tasks\/(?:[^/]+\.md|[^/]+\/task\.md)$/iu.test(relativeLabel);
 }
 
 function sortProjectLedgerDocuments(
@@ -8638,13 +8648,69 @@ function frontmatterValue(markdown: string, key: string): string | undefined {
   return frontmatter.match(pattern)?.[1]?.trim();
 }
 
-function projectLedgerDataRoot(butlerData: string, projectId: string): string {
-  return resolve(
-    butlerData,
-    "project-ledger",
-    "projects",
-    safeProjectLedgerSegment(projectId),
-  );
+function projectLedgerDataRootCandidates(
+  butlerData: string,
+  project: ProjectLedgerDocumentProject,
+): Array<{ root: string; safeRootLabel: string }> {
+  const seen = new Set<string>();
+  return projectLedgerProjectIdCandidates(project).flatMap((candidate) => {
+    const segment = safeProjectLedgerSegment(candidate);
+    if (seen.has(segment)) return [];
+    seen.add(segment);
+    return [
+      {
+        root: resolve(butlerData, "project-ledger", "projects", segment),
+        safeRootLabel: `project-ledger/projects/${segment}`,
+      },
+    ];
+  });
+}
+
+function projectLedgerProjectIdCandidates(
+  project: ProjectLedgerDocumentProject,
+): string[] {
+  const workspacePath = project.workspace_path;
+  return uniqueNonEmptyText([
+    workspacePath
+      ? readProjectJsonString(resolve(workspacePath, "project.json"), "id")
+      : null,
+    workspacePath
+      ? readProjectJsonString(resolve(workspacePath, "package.json"), "name")
+      : null,
+    workspacePath ? basename(workspacePath) : null,
+    project.safe_path_label,
+    project.workspace_label,
+    project.display_name,
+    project.id,
+  ]);
+}
+
+function uniqueNonEmptyText(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function readProjectJsonString(path: string, key: string): string | null {
+  if (!existsSync(path)) return null;
+  try {
+    const value = JSON.parse(readFileSync(path, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    const candidate = value[key];
+    return typeof candidate === "string" && candidate.trim()
+      ? candidate.trim()
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function safeProjectLedgerSegment(value: string): string {
