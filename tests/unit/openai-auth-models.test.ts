@@ -2741,7 +2741,7 @@ test("Codex subscription tool continuation is sent as stateless input without pr
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("encrypted_content");
 });
 
-test("OpenAI function tool prompt charges the budget per provider request before a 33rd call", async () => {
+test("OpenAI function tool prompt records provider requests beyond warning threshold without aborting", async () => {
   const token = fakeJwt({
     "https://api.openai.com/auth": {
       chatgpt_account_id: "chatgpt-account",
@@ -2761,8 +2761,16 @@ test("OpenAI function tool prompt charges the budget per provider request before
   let requestCount = 0;
   globalThis.fetch = (async () => {
     fetchCalls += 1;
-    if (fetchCalls > 32) {
-      throw new Error("unexpected 33rd provider request");
+    if (fetchCalls === 34) {
+      return codexSseResponse({
+        id: "resp_34",
+        item: {
+          type: "message",
+          content: [{ type: "output_text", text: "done after high usage" }],
+        },
+        inputTokens: 34,
+        totalTokens: 55,
+      });
     }
     return codexSseResponse({
       id: `resp_${fetchCalls}`,
@@ -2777,10 +2785,12 @@ test("OpenAI function tool prompt charges the budget per provider request before
     });
   }) as unknown as typeof fetch;
 
-  await expect(runFunctionToolPromptText({
+  const result = await runFunctionToolPromptText({
     model: "gpt-5.5-codex",
     prompt: "loop",
     maxToolRounds: 40,
+    cacheScope: "session-turn",
+    butlerData: tempDir,
     tools: [{
       type: "function",
       name: "lookup",
@@ -2793,22 +2803,36 @@ test("OpenAI function tool prompt charges the budget per provider request before
       },
     }],
     usageAttribution: {
+      turnId: "turn-high-model-calls",
+      phase: "initial_tool_loop",
       beforeModelRequest: () => {
-        if (requestCount >= 32) {
-          throw new Error("turn model-call budget exhausted: 32/32");
-        }
         requestCount += 1;
       },
       getBudgetState: () => ({
-        status: requestCount >= 32 ? "exhausted" : "ok",
+        status: requestCount >= 32 ? "warning" : "ok",
         requestCount,
         maxRequests: 32,
       }),
     },
     executeTool: async () => ({ ok: true }),
-  })).rejects.toThrow("turn model-call budget exhausted: 32/32");
-  expect(fetchCalls).toBe(32);
-  expect(requestCount).toBe(32);
+  });
+
+  expect(result).toBe("done after high usage");
+  expect(fetchCalls).toBe(34);
+  expect(requestCount).toBe(34);
+  const events = readPromptCacheMetrics({ butlerData: tempDir })
+    .filter((event) => event.turnId === "turn-high-model-calls");
+  expect(events).toHaveLength(34);
+  expect(events.at(31)?.budgetState).toMatchObject({
+    status: "warning",
+    requestCount: 32,
+    maxRequests: 32,
+  });
+  expect(events.at(-1)?.budgetState).toMatchObject({
+    status: "warning",
+    requestCount: 34,
+    maxRequests: 32,
+  });
 });
 
 test("OpenAI function tool prompt records live budgetState for each provider usage event", async () => {

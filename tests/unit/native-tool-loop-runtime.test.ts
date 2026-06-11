@@ -477,7 +477,7 @@ test("native runtime exposes direct command toolchains to Butler and Steward ses
 
     expect(result.text).toBe("명령 실행 결과를 확인했습니다.");
     expect(sawCommandTool).toBe(true);
-    expect(maxToolRounds).toBe(32);
+    expect(maxToolRounds).toBe(60);
     expect(executedTools).toEqual(["run_command"]);
     expect(events.find((event) => event.kind === "work.block.started")?.payload?.activityKind)
       .toBe("ran_command");
@@ -535,7 +535,7 @@ test("native runtime attaches turn budget attribution to direct tool prompts", a
 
   expect(result.text).toContain("확인했습니다");
   expect(captured).toHaveLength(1);
-  expect(captured[0].maxToolRounds).toBe(32);
+  expect(captured[0].maxToolRounds).toBe(60);
   expect(captured[0].butlerData).toBe(tempDir);
   expect(captured[0].usageAttribution).toMatchObject({
     turnId: "turn-budget-1",
@@ -615,8 +615,22 @@ test("native runtime blocks repeated Project Ledger status command families in o
   });
 });
 
-test("native runtime stops the next model call after provider usage exceeds token budget", async () => {
+test("native runtime reports high provider usage without stopping the next model call", async () => {
   let beforeModelRequests = 0;
+  let stateAfterHighUsage: {
+    status: string;
+    requestCount: number;
+    promptTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  } | undefined;
+  let stateAfterSecondRequest: {
+    status: string;
+    requestCount: number;
+    promptTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  } | undefined;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     butlerData: tempDir,
@@ -631,9 +645,11 @@ test("native runtime stops the next model call after provider usage exceeds toke
         totalTokens: 222_000,
         roundIndex: 0,
       });
+      stateAfterHighUsage = input.usageAttribution?.getBudgetState?.();
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 1 });
       beforeModelRequests += 1;
-      return "should not reach a second model request";
+      stateAfterSecondRequest = input.usageAttribution?.getBudgetState?.();
+      return "높은 토큰 사용량을 기록하고 계속 진행했습니다.";
     },
   });
   const handle = await runtime.createSession({
@@ -643,14 +659,30 @@ test("native runtime stops the next model call after provider usage exceeds toke
     systemPrompt: "You are Butler.",
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "openai/auto:codex-latest",
-    input: { text: "토큰 상한을 초과하면 다음 모델 호출을 막아줘." },
+    input: { text: "토큰 사용량이 높아도 진단만 기록하고 계속 진행해줘." },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
-  })).rejects.toThrow("turn token budget exhausted");
-  expect(beforeModelRequests).toBe(1);
+  });
+
+  expect(result.text).toContain("계속 진행했습니다");
+  expect(beforeModelRequests).toBe(2);
+  expect(stateAfterHighUsage).toMatchObject({
+    status: "warning",
+    requestCount: 1,
+    promptTokens: 221_000,
+    outputTokens: 1_000,
+    totalTokens: 222_000,
+  });
+  expect(stateAfterSecondRequest).toMatchObject({
+    status: "warning",
+    requestCount: 2,
+    promptTokens: 221_000,
+    outputTokens: 1_000,
+    totalTokens: 222_000,
+  });
 });
 
 test("native runtime allows repeated tests after a state-mutating command resets repeat guards", async () => {
