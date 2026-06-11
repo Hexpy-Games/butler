@@ -470,8 +470,8 @@ function finalDeliveryBlockerForOpenDirectWork(input: {
 }
 
 function openDirectWorkContinuationPrompt(input: {
-  prompt: string;
-  previousAnswer: string;
+  objective: string;
+  audit: ToolAuditEntry[];
   blocker: OpenDirectWorkBlocker;
 }): string {
   const activeItems = input.blocker.activeItems.length > 0
@@ -480,31 +480,53 @@ function openDirectWorkContinuationPrompt(input: {
         `${index + 1}. [${item.status}${item.phase ? `/${item.phase}` : ""}] ${item.label}`)
       .join("\n")
     : "- Active direct work stream has not reached a deliverable state.";
+  const evidence = compactContinuationEvidence(input.audit);
   return [
-    "## Final Delivery Blocked",
-    "The previous answer is not deliverable because the active direct Butler WorkStream still has unfinished work. This is a state-machine condition, not a style preference.",
+    "## Direct Work Continuation",
+    "Continue the same logical Butler WorkStream as ordinary same-turn progress.",
     "",
-    "Open WorkStream:",
+    "Current WorkStream:",
     `- title: ${input.blocker.title}`,
     `- state: ${input.blocker.state}`,
     `- phase: ${input.blocker.phase ?? "unknown"}`,
     `- todo_list_id: ${input.blocker.listId ?? "none"}`,
     "",
-    "Unfinished direct steps:",
+    "Remaining direct steps:",
     activeItems,
     "",
-    "Continue the original user request now.",
-    "- Use the structured tool-call channel to execute the unfinished direct work or to move the WorkStream to a legitimate deliverable state.",
+    "Continuity note:",
+    `- objective: ${compactContinuationText(input.objective, 500)}`,
+    ...evidence.map((line) => `- ${line}`),
+    "",
+    "Next action:",
+    "- Use the structured tool-call channel to execute the remaining direct work or to move the WorkStream to a legitimate deliverable state.",
     "- Update `update_todo_list` as evidence is gathered and steps complete.",
+    "- Keep the response focused on the remaining work and evidence, without meta-narrating runtime control flow.",
     "- Do not answer with a promise, plan, or 'I will start now' message.",
     "- Final delivery is allowed only after the direct WorkStream has no unfinished active items, reaches reporting/waiting_user/paused/recoverable with evidence, or is linked to an async worker/planned/orchestration stream.",
-    "",
-    "Previous non-deliverable answer:",
-    input.previousAnswer,
-    "",
-    "Original turn prompt:",
-    input.prompt,
   ].join("\n");
+}
+
+function compactContinuationText(value: string, maxChars: number): string {
+  const normalized = sanitizePublicText(value, "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "same user request";
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars - 1).trimEnd()}...`;
+}
+
+function compactContinuationEvidence(audit: ToolAuditEntry[]): string[] {
+  const recent = audit
+    .filter((entry) => entry.ok)
+    .slice(-6);
+  if (recent.length === 0) return ["recent evidence: none yet"];
+  return recent.map((entry, index) => {
+    const receipts = (entry.evidenceReceipts ?? [])
+      .map((receipt) => compactContinuationText(receipt.summary ?? receipt.receiptType ?? "", 120))
+      .filter(Boolean)
+      .slice(0, 2);
+    const receiptText = receipts.length > 0 ? `; receipts: ${receipts.join(" | ")}` : "";
+    return `evidence ${index + 1}: ${entry.name}${receiptText}`;
+  });
 }
 
 function hasGoalCompletionReviewSkipTool(audit: ToolAuditEntry[]): boolean {
@@ -1848,8 +1870,8 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           if (!blocker) break;
           const successfulToolsBeforeContinuation = successfulToolAuditCount();
           finalText = await runToolPrompt(openDirectWorkContinuationPrompt({
-            prompt,
-            previousAnswer: finalText,
+            objective: userText,
+            audit,
             blocker,
           }), 8);
           if (successfulToolAuditCount() <= successfulToolsBeforeContinuation) break;

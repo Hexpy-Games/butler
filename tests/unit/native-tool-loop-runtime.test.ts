@@ -31,7 +31,10 @@ import {
   stripLeadingPublicWorkDecisionBlock,
   stripToolImplementationLeakLines,
 } from "../../packages/butler-agent/src/agent/output/final-output-contract.ts";
-import { satisfiedCompletionObligationsForToolResult } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
+import {
+  createButlerToolExecutor,
+  satisfiedCompletionObligationsForToolResult,
+} from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { publicWorkDecisionsFromAssistantText } from "../../packages/butler-agent/src/agent/output/public-work-decisions.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
@@ -733,6 +736,84 @@ test("native runtime describes Project Ledger tool progress by work context", as
   expect(publicToolEvents).not.toContain("inspect_project_status");
   expect(publicToolEvents).not.toContain("query_project_work");
   expect(publicToolEvents).not.toContain("render_project_dashboard");
+});
+
+test("Project Ledger status and query tools reuse turn-local freshness cache", async () => {
+  const butlerHome = join(tempDir, "butler-home");
+  const ledgerBin = join(butlerHome, "packages", "project-ledger", "bin");
+  const counterPath = join(tempDir, "project-ledger-counter.txt");
+  mkdirSync(ledgerBin, { recursive: true });
+  writeFileSync(counterPath, "0", "utf8");
+  writeFileSync(join(ledgerBin, "project-ledger"), [
+    "const { readFileSync, writeFileSync } = require('fs');",
+    `const counterPath = ${JSON.stringify(counterPath)};`,
+    "const count = Number(readFileSync(counterPath, 'utf8')) + 1;",
+    "writeFileSync(counterPath, String(count), 'utf8');",
+    "process.stdout.write(JSON.stringify({ ok: true, count, argv: process.argv.slice(2) }));",
+  ].join("\n"), "utf8");
+  const executor = createButlerToolExecutor({
+    butlerHome,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+  });
+
+  const firstStatus = await executor({
+    name: "inspect_project_status",
+    args: { project_path: tempDir },
+    rawArguments: JSON.stringify({ project_path: tempDir }),
+  });
+  const secondStatus = await executor({
+    name: "inspect_project_status",
+    args: { project_path: tempDir },
+    rawArguments: JSON.stringify({ project_path: tempDir }),
+  });
+  const firstQuery = await executor({
+    name: "query_project_work",
+    args: { project_path: tempDir, kind: "next-actions" },
+    rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
+  });
+  const secondQuery = await executor({
+    name: "query_project_work",
+    args: { project_path: tempDir, kind: "next-actions" },
+    rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
+  });
+  await executor({
+    name: "render_project_dashboard",
+    args: { project_path: tempDir, view: "dashboard", write: true },
+    rawArguments: JSON.stringify({ project_path: tempDir, view: "dashboard", write: true }),
+  });
+  const queryAfterWrite = await executor({
+    name: "query_project_work",
+    args: { project_path: tempDir, kind: "next-actions" },
+    rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
+  });
+
+  expect(firstStatus).toMatchObject({
+    ok: true,
+    count: 1,
+    _butler_turn_cache: { scope: "turn", hit: false },
+  });
+  expect(secondStatus).toMatchObject({
+    ok: true,
+    count: 1,
+    _butler_turn_cache: { scope: "turn", hit: true },
+  });
+  expect(firstQuery).toMatchObject({
+    ok: true,
+    count: 2,
+    _butler_turn_cache: { scope: "turn", hit: false },
+  });
+  expect(secondQuery).toMatchObject({
+    ok: true,
+    count: 2,
+    _butler_turn_cache: { scope: "turn", hit: true },
+  });
+  expect(queryAfterWrite).toMatchObject({
+    ok: true,
+    count: 4,
+    _butler_turn_cache: { scope: "turn", hit: false },
+  });
+  expect(readFileSync(counterPath, "utf8")).toBe("4");
 });
 
 test("native runtime uses assistant-authored public decisions as work block context", async () => {
@@ -4801,8 +4882,17 @@ test("native runtime continues instead of delivering while direct todo work is u
   });
 
   expect(promptCalls).toBe(2);
-  expect(continuationPrompt).toContain("Final Delivery Blocked");
-  expect(continuationPrompt).toContain("Unfinished direct steps");
+  expect(continuationPrompt).toContain("Direct Work Continuation");
+  expect(continuationPrompt).toContain("Remaining direct steps");
+  expect(continuationPrompt).toContain("Continuity note");
+  expect(continuationPrompt).toContain("evidence 1: update_todo_list");
+  expect(continuationPrompt).not.toContain("Final Delivery Blocked");
+  expect(continuationPrompt).not.toContain("previous answer is not deliverable");
+  expect(continuationPrompt).not.toContain("Continue the original user request now");
+  expect(continuationPrompt).not.toContain("Previous non-deliverable answer");
+  expect(continuationPrompt).not.toContain("Original turn prompt");
+  expect(continuationPrompt.toLowerCase()).not.toContain("restart");
+  expect(continuationPrompt.toLowerCase()).not.toContain("interruption");
   expect(result.text).toContain("검토 완료");
   expect(result.text).not.toContain("시작하겠다");
   const toolCalls = readTranscript("butler/main/open-direct-work-final-guard")
@@ -4898,7 +4988,11 @@ test("native runtime keeps extending direct work while continuations make tool p
 
   expect(promptCalls).toBe(4);
   expect(continuationPrompts).toHaveLength(3);
-  expect(continuationPrompts.every((prompt) => prompt.includes("Final Delivery Blocked")))
+  expect(continuationPrompts.every((prompt) => prompt.includes("Direct Work Continuation")))
+    .toBe(true);
+  expect(continuationPrompts.every((prompt) => !prompt.includes("Final Delivery Blocked")))
+    .toBe(true);
+  expect(continuationPrompts.every((prompt) => prompt.includes("todo_list_id: main")))
     .toBe(true);
   expect(result.text).toContain("세 번째 continuation");
   const toolCalls = readTranscript("butler/main/open-direct-work-multi-continuation")

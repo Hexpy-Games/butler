@@ -396,7 +396,9 @@ function activeWorkStateLines(input: {
     `WorkStream Phase: ${stream.current_phase ?? "none"}`,
   ];
   if (stream.active_step_id) lines.push(`Active Step ID: ${stream.active_step_id}`);
-  if (stream.status_note) lines.push(`Status Note: ${stream.status_note}`);
+  if (stream.status_note && stream.state === "recoverable") {
+    lines.push(`Recoverable Status Note: ${stream.status_note}`);
+  }
   if (stream.todo_list_id) {
     const todo = new TodoListStore(input.butlerData).view(stream.todo_list_id, { includeCompleted: true });
     lines.push(`Todo List ID: ${todo.list.list_id}`);
