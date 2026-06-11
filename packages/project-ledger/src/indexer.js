@@ -48,7 +48,7 @@ export function viewStatuses(project, maxSourceMtimeMs) {
   });
 }
 
-export function indexFreshness(project) {
+export function indexFreshness(project, maxSourceMtimeMs = sourceMaxMtimeMs(project)) {
   const path = projectPath(project, INDEX_PATH);
   const displayPath = projectRelative(project, path);
   if (!existsSync(path)) {
@@ -57,7 +57,7 @@ export function indexFreshness(project) {
   const indexMtimeMs = statSync(path).mtimeMs;
   return {
     available: true,
-    stale: indexMtimeMs < sourceMaxMtimeMs(project),
+    stale: indexMtimeMs < maxSourceMtimeMs,
     generatedAt: new Date(indexMtimeMs).toISOString(),
     path: displayPath,
   };
@@ -104,7 +104,7 @@ export function buildIndex(project) {
     records: records.map(({ sourceMtimeMs: _sourceMtimeMs, ...record }) => record),
     issues: [...parseIssues, ...validationIssues],
     views: viewStatuses(project, maxSourceMtimeMs),
-    index: indexFreshness(project),
+    index: indexFreshness(project, maxSourceMtimeMs),
     privacy: {
       rawTextIncluded: false,
       secretsIncluded: false,
@@ -134,7 +134,12 @@ export function readIndex(project) {
   const path = projectPath(project, INDEX_PATH);
   if (!existsSync(path)) return null;
   const index = safeReadJson(path);
-  return { ...normalizeIndexPaths(project, index), index: indexFreshness(project) };
+  const maxSourceMtimeMs = sourceMaxMtimeMs(project);
+  return {
+    ...normalizeIndexPaths(project, index),
+    views: viewStatuses(project, maxSourceMtimeMs),
+    index: indexFreshness(project, maxSourceMtimeMs),
+  };
 }
 
 export function loadIndex(project) {
