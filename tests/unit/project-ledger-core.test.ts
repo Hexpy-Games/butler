@@ -209,6 +209,11 @@ test("Project Ledger ignores platform metadata files when checking freshness", a
     handle("index", [], { project });
 
     writeFileSync(join(ledgerProjectRoot(project), ".DS_Store"), "ignored metadata", "utf8");
+    writeFileSync(
+      join(ledgerProjectRoot(project), "work", "W-METADATA", "github-issues.json"),
+      `${JSON.stringify({ issues: [] }, null, 2)}\n`,
+      "utf8",
+    );
 
     expect(handle("check", [], { project }).ok).toBe(true);
   } finally {

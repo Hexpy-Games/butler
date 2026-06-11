@@ -2004,20 +2004,6 @@ async function waitForAssistantFinalText(client: CdpClient, text: string, timeou
   );
 }
 
-async function waitForAssistantFinalContaining(client: CdpClient, texts: string[], timeoutMs?: number): Promise<void> {
-  const escapedTexts = JSON.stringify(texts);
-  await waitForExpression(
-    client,
-    `(() => {
-      const documents = Array.from(document.querySelectorAll(${JSON.stringify(assistantFinalMarkdownSelector)}));
-      const text = (documents.at(-1)?.textContent ?? "").replace(/\\s+/g, " " ).trim();
-      return ${escapedTexts}.every((part) => text.includes(part));
-    })()`,
-    `assistant final text containing ${texts.join(", ")}`,
-    timeoutMs,
-  );
-}
-
 async function waitForAssistantOutcomeReport(client: CdpClient): Promise<void> {
   await waitForExpression(
     client,

@@ -160,7 +160,7 @@ export function scanPrivacy(project) {
 }
 
 function isIgnoredMetadataFile(filePath) {
-  return basename(filePath) === ".DS_Store";
+  return [".DS_Store", "github-issues.json"].includes(basename(filePath));
 }
 
 export function workRecordPath(project, id) {

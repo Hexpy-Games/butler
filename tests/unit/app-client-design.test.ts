@@ -3612,7 +3612,7 @@ describe("app-client design system foundation", () => {
       'const PUBLIC_PHASES = ["orienting", "planning", "executing", "verifying", "reporting"] as const',
     );
     expect(workerActivityRow).toContain(
-      '{PUBLIC_PHASES.map((item, index) => (',
+      "{PUBLIC_PHASES.map((item, index) => (",
     );
     expect(workerActivityRow).toContain(
       'reporting: "Report"',
