@@ -16,8 +16,15 @@ export interface ClaimedInboundEvent extends QueuedInboundEvent {
   path: string;
 }
 
+let enqueueSequence = 0;
+
 function safeQueueId(eventId: string): string {
   return eventId.replace(/[^A-Za-z0-9._:-]+/g, "_").slice(0, 120) || randomUUID();
+}
+
+function sortableQueueIdPrefix(now: Date): string {
+  enqueueSequence = (enqueueSequence + 1) % Number.MAX_SAFE_INTEGER;
+  return `${now.toISOString().replace(/[-:.]/g, "")}-${String(enqueueSequence).padStart(12, "0")}`;
 }
 
 function atomicWriteJson(path: string, value: unknown): void {
@@ -42,6 +49,10 @@ export class NativeInboundQueue {
     this.rootDir = join(butlerData, "runtime", "inbound-events");
   }
 
+  protected readQueuedRecord(path: string): QueuedInboundEvent | null {
+    return readJson<QueuedInboundEvent>(path);
+  }
+
   private dir(name: "pending" | "processing" | "processed" | "failed"): string {
     return join(this.rootDir, name);
   }
@@ -51,7 +62,7 @@ export class NativeInboundQueue {
     metadata: Record<string, unknown> = {},
     now = new Date(),
   ): QueuedInboundEvent {
-    const queueId = `${safeQueueId(envelope.eventId)}-${randomUUID().slice(0, 8)}`;
+    const queueId = `${sortableQueueIdPrefix(now)}-${safeQueueId(envelope.eventId)}-${randomUUID().slice(0, 8)}`;
     const record: QueuedInboundEvent = {
       version: 1,
       queueId,
@@ -64,22 +75,30 @@ export class NativeInboundQueue {
     return record;
   }
 
-  claim(limit = 10): ClaimedInboundEvent[] {
+  claimEligible(
+    limit = 10,
+    isEligible: (event: QueuedInboundEvent) => boolean,
+  ): ClaimedInboundEvent[] {
     const pending = this.dir("pending");
     if (!existsSync(pending)) return [];
     mkdirSync(this.dir("processing"), { recursive: true, mode: 0o700 });
     const claimed: ClaimedInboundEvent[] = [];
-    for (const entry of readdirSync(pending).filter((name) => name.endsWith(".json")).sort()) {
+    const pendingEntries = readdirSync(pending)
+      .filter((name) => name.endsWith(".json"))
+      .sort((a, b) => a.localeCompare(b));
+
+    for (const name of pendingEntries) {
       if (claimed.length >= limit) break;
-      const from = join(pending, entry);
-      const to = join(this.dir("processing"), entry);
+      const from = join(pending, name);
+      const to = join(this.dir("processing"), name);
+      const record = this.readQueuedRecord(from);
+      if (!record) continue;
+      if (!isEligible(record)) continue;
       try {
         renameSync(from, to);
       } catch {
         continue;
       }
-      const record = readJson<QueuedInboundEvent>(to);
-      if (!record) continue;
       const updated: QueuedInboundEvent = {
         ...record,
         attempts: record.attempts + 1,
@@ -91,6 +110,10 @@ export class NativeInboundQueue {
       });
     }
     return claimed;
+  }
+
+  claim(limit = 10): ClaimedInboundEvent[] {
+    return this.claimEligible(limit, () => true);
   }
 
   complete(item: ClaimedInboundEvent, metadata: Record<string, unknown> = {}, now = new Date()): void {
