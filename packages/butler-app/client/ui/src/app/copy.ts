@@ -32,6 +32,11 @@ interface ConversationWorkCopy {
 
 interface ConversationCopy {
   work: ConversationWorkCopy;
+  scrollToBottom: {
+    ariaLabel: string;
+    label: string;
+    newMessagesLabel: string;
+  };
   result: {
     regionLabel: string;
   };
@@ -603,6 +608,11 @@ const koKrCopy: AppCopy = {
       toolStepsSummary: (toolName, count) => `${toolName} ${count} steps`,
       webSearchDetail: (value) => `Web search: ${value}`,
       detailRow: (label, value) => `${label}: ${value}`,
+    },
+    scrollToBottom: {
+      ariaLabel: "최신 메시지와 입력창으로 이동",
+      label: "최신으로 이동",
+      newMessagesLabel: "새 메시지",
     },
     result: {
       regionLabel: "답변",
@@ -1261,6 +1271,11 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
           : `Close ${primaryLabel} and ${count - 1} more progress items`,
       toolchainRegionLabel: (label) => `${label} tool run history`,
       detailsRegionLabel: (label) => `${label} details`,
+    },
+    scrollToBottom: {
+      ariaLabel: "Scroll to the latest message and composer",
+      label: "Latest",
+      newMessagesLabel: "New messages",
     },
     result: {
       regionLabel: "Answer",

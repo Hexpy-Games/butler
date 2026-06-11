@@ -1,7 +1,17 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { RefObject } from "react";
-
-const BOTTOM_LOCK_THRESHOLD = 120;
+import {
+  BOTTOM_LOCK_THRESHOLD,
+  conversationDistanceFromBottom,
+  scrollConversationToBottom,
+  type ScrollToBottomOptions,
+} from "../conversationScrollUtils";
 
 interface UseConversationAutoScrollOptions {
   activeChatId: string;
@@ -13,6 +23,12 @@ interface UseConversationAutoScrollOptions {
   scrollRef: RefObject<HTMLDivElement | null>;
 }
 
+export interface ConversationScrollState {
+  isAwayFromBottom: boolean;
+  hasUnreadMessages: boolean;
+  scrollToBottom: (options?: ScrollToBottomOptions) => void;
+}
+
 export function useConversationAutoScroll({
   activeChatId,
   latestMessageVersion,
@@ -21,45 +37,66 @@ export function useConversationAutoScroll({
   isSending,
   showTurnActivity,
   scrollRef,
-}: UseConversationAutoScrollOptions) {
+}: UseConversationAutoScrollOptions): ConversationScrollState {
   const pinnedToBottomRef = useRef(true);
   const lastAutoScrolledChatRef = useRef<string | null>(null);
+  const latestSeenMessageVersionRef = useRef(latestMessageVersion);
   const frameRef = useRef<number | null>(null);
   const settleTimerRef = useRef<number | null>(null);
+  const [isAwayFromBottom, setIsAwayFromBottom] = useState(false);
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
 
-  const cancelScheduledScroll = () => {
+  const cancelScheduledScroll = useCallback(() => {
     if (frameRef.current === null) return;
     window.cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
-  };
+  }, []);
 
-  const cancelSettledScroll = () => {
+  const cancelSettledScroll = useCallback(() => {
     if (settleTimerRef.current === null) return;
     window.clearTimeout(settleTimerRef.current);
     settleTimerRef.current = null;
-  };
+  }, []);
 
-  const cancelScheduledScrolls = () => {
+  const cancelScheduledScrolls = useCallback(() => {
     cancelScheduledScroll();
     cancelSettledScroll();
-  };
+  }, [cancelScheduledScroll, cancelSettledScroll]);
 
-  const scrollToBottom = () => {
-    const element = scrollRef.current;
-    if (!element) return;
-    const contentHeight = Math.max(element.scrollHeight, virtualListHeight);
-    element.scrollTop = Math.max(0, contentHeight - element.clientHeight);
+  const scrollToBottom = useCallback(
+    (options?: ScrollToBottomOptions) => {
+      const element = scrollRef.current;
+      if (!element) return;
+      scrollConversationToBottom(element, virtualListHeight, options);
+      pinnedToBottomRef.current = true;
+      latestSeenMessageVersionRef.current = latestMessageVersion;
+      setIsAwayFromBottom(false);
+      setHasUnreadMessages(false);
+    },
+    [latestMessageVersion, scrollRef, virtualListHeight],
+  );
+
+  useEffect(() => {
+    latestSeenMessageVersionRef.current = latestMessageVersion;
     pinnedToBottomRef.current = true;
-  };
+    setIsAwayFromBottom(false);
+    setHasUnreadMessages(false);
+  }, [activeChatId]);
 
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
     const updatePinnedState = () => {
-      const distanceFromBottom =
-        element.scrollHeight - element.scrollTop - element.clientHeight;
-      pinnedToBottomRef.current = distanceFromBottom < BOTTOM_LOCK_THRESHOLD;
-      if (!pinnedToBottomRef.current) cancelScheduledScrolls();
+      const distanceFromBottom = conversationDistanceFromBottom(element);
+      const pinned = distanceFromBottom < BOTTOM_LOCK_THRESHOLD;
+      pinnedToBottomRef.current = pinned;
+      setIsAwayFromBottom(!pinned);
+      if (pinned) {
+        latestSeenMessageVersionRef.current = latestMessageVersion;
+        setHasUnreadMessages(false);
+      } else {
+        cancelScheduledScrolls();
+      }
     };
     updatePinnedState();
     element.addEventListener("scroll", updatePinnedState, { passive: true });
@@ -67,7 +104,20 @@ export function useConversationAutoScroll({
       element.removeEventListener("scroll", updatePinnedState);
       cancelScheduledScrolls();
     };
-  }, [scrollRef]);
+  }, [cancelScheduledScrolls, latestMessageVersion, scrollRef]);
+
+  useEffect(() => {
+    if (itemCount <= 0) return;
+    if (pinnedToBottomRef.current) {
+      latestSeenMessageVersionRef.current = latestMessageVersion;
+      setHasUnreadMessages(false);
+      return;
+    }
+    if (latestSeenMessageVersionRef.current !== latestMessageVersion) {
+      setIsAwayFromBottom(true);
+      setHasUnreadMessages(true);
+    }
+  }, [itemCount, latestMessageVersion]);
 
   useLayoutEffect(() => {
     if (itemCount <= 0) return;
@@ -93,17 +143,28 @@ export function useConversationAutoScroll({
         });
       }
     });
-    settleTimerRef.current = window.setTimeout(() => {
-      settleTimerRef.current = null;
-      if (pinnedToBottomRef.current) scrollToBottom();
-    }, enteringChat ? 120 : 48);
+    settleTimerRef.current = window.setTimeout(
+      () => {
+        settleTimerRef.current = null;
+        if (pinnedToBottomRef.current) scrollToBottom();
+      },
+      enteringChat ? 120 : 48,
+    );
   }, [
     activeChatId,
     isSending,
     itemCount,
     latestMessageVersion,
+    scrollToBottom,
     scrollRef,
     showTurnActivity,
     virtualListHeight,
+    cancelScheduledScrolls,
   ]);
+
+  return {
+    isAwayFromBottom,
+    hasUnreadMessages,
+    scrollToBottom,
+  };
 }

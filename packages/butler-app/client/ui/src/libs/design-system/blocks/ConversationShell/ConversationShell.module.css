@@ -111,3 +111,65 @@
   left: 0;
   width: 100%;
 }
+
+.scrollToBottomButton {
+  position: absolute;
+  z-index: 11;
+  right: 50%;
+  bottom: max(96px, calc(var(--composer-reserve) - 12px));
+  min-height: 32px;
+  max-width: calc(100% - 32px);
+  border: 1px solid var(--composer-glass-border);
+  background: var(--composer-glass-bg);
+  box-shadow: var(--shadow-card);
+  color: var(--text-primary);
+  font-size: var(--font-size-2);
+  transform: translateX(50%);
+  backdrop-filter: var(--composer-glass-filter);
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    transform 120ms ease;
+}
+
+.scrollToBottomButton:hover {
+  border-color: var(--line-strong);
+  background: var(--composer-glass-control-bg);
+  transform: translateX(50%) translateY(-1px);
+}
+
+.scrollToBottomButton:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px var(--ring),
+    var(--shadow-card);
+}
+
+.scrollToBottomButton[data-unread-messages="true"] {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  color: var(--accent);
+}
+
+.scrollToBottomButton [data-slot="button-icon"] {
+  flex: 0 0 auto;
+}
+
+.scrollToBottomButton [data-slot="button-text"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (width <=720px) {
+  .scrollToBottomButton {
+    bottom: max(88px, calc(var(--composer-reserve) - 10px));
+    max-width: calc(100% - var(--space-6));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrollToBottomButton {
+    transition: none;
+  }
+}
