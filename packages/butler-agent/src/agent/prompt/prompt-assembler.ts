@@ -25,7 +25,7 @@ import { butlerAgentResourcesPath } from "../../runtime/paths.ts";
 import { renderFirstChatOnboardingPrompt } from "../../personalization/onboarding.ts";
 import { TaskStore, type TaskSummary } from "../work/task-store.ts";
 import { TodoListStore } from "../work/todo-list.ts";
-import { WorkStreamStore } from "../work/work-stream.ts";
+import { WorkStreamStore, type WorkStreamRecord } from "../work/work-stream.ts";
 
 export interface PromptAssemblerOptions {
   butlerHome?: string;
@@ -386,7 +386,8 @@ function activeWorkStateLines(input: {
   butlerData: string;
   sessionId: string;
 }): string[] {
-  const stream = new WorkStreamStore(input.butlerData).activeForSession(input.sessionId);
+  const store = new WorkStreamStore(input.butlerData);
+  const stream = promptWorkStreamForSession(store, input.sessionId);
   if (!stream) return [];
   const lines = [
     "## Active Work State",
@@ -396,7 +397,9 @@ function activeWorkStateLines(input: {
     `WorkStream Phase: ${stream.current_phase ?? "none"}`,
   ];
   if (stream.active_step_id) lines.push(`Active Step ID: ${stream.active_step_id}`);
-  if (stream.status_note) lines.push(`Status Note: ${stream.status_note}`);
+  if (shouldShowActiveWorkStatusNote(stream)) {
+    lines.push(`Status Note: ${stream.status_note}`);
+  }
   if (stream.todo_list_id) {
     const todo = new TodoListStore(input.butlerData).view(stream.todo_list_id, { includeCompleted: true });
     lines.push(`Todo List ID: ${todo.list.list_id}`);
@@ -432,6 +435,35 @@ function activeWorkStateLines(input: {
     lines.push(`Linked Orchestrations: ${stream.linked_orchestration_ids.slice(0, 12).join(", ")}`);
   }
   return lines;
+}
+
+function promptWorkStreamForSession(
+  store: WorkStreamStore,
+  sessionId: string,
+): WorkStreamRecord | null {
+  const active = store.activeForSession(sessionId);
+  if (active) return active;
+  const latest = store.list({ sessionId, includeTerminal: true }).at(0);
+  return latest?.state === "failed" ? store.read(latest.id) : null;
+}
+
+function shouldShowActiveWorkStatusNote(stream: WorkStreamRecord): boolean {
+  const note = stream.status_note?.trim();
+  if (!note) return false;
+  if (
+    stream.state === "paused" ||
+    stream.state === "waiting_user" ||
+    stream.state === "failed" ||
+    stream.state === "recoverable"
+  ) {
+    return true;
+  }
+  return !isRuntimeControlStatusNote(note);
+}
+
+function isRuntimeControlStatusNote(note: string): boolean {
+  return /\b(?:final delivery blocked|previous answer|non-deliverable|interrupted before final delivery|active direct work stream is not deliverable)\b/iu
+    .test(note);
 }
 
 function buildCurrentInputSection(input: {
