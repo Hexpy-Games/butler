@@ -263,6 +263,18 @@ test("app server exposes separate update status check and apply endpoints", asyn
       ),
     ).toBe(true);
 
+    const agentPointerPath = join(tempDir, "runtime", "agent", "current.json");
+    mkdirSync(join(tempDir, "runtime", "agent"), { recursive: true });
+    writeFileSync(agentPointerPath, `${JSON.stringify({
+      schema: "butler.agent-standalone-runtime-pointer.v1",
+      product: "butler-agent",
+      profile: "agent-standalone",
+      version: "88.0.0",
+      runtime_home: join("runtime", "agent", "versions", "88.0.0"),
+      raw_text_included: false,
+    }, null, 2)}\n`, "utf8");
+    const agentPointerBefore = readFileSync(agentPointerPath, "utf8");
+
     const check = await postJson(`${server.url}updates/check`, {
       component: "app",
     });
@@ -286,6 +298,10 @@ test("app server exposes separate update status check and apply endpoints", asyn
       true,
     );
     expect(existsSync(join(tempDir, "updates", "staged", "service.json"))).toBe(
+      false,
+    );
+    expect(readFileSync(agentPointerPath, "utf8")).toBe(agentPointerBefore);
+    expect(existsSync(join(tempDir, "runtime", "agent", "versions", packageVersion))).toBe(
       false,
     );
   } finally {

@@ -42,6 +42,9 @@ export function UpdateComponentRow({
         <Stack gap="xs">
           <FieldLabel>{COMPONENT_LABELS[status.component]}</FieldLabel>
           <Typo.Caption>{versionLabel(status)}</Typo.Caption>
+          {status.stage_status === "rolled_back" && status.rollback_reason ? (
+            <Typo.Caption>{status.rollback_reason}</Typo.Caption>
+          ) : null}
         </Stack>
         <Button
           type="button"
@@ -104,6 +107,12 @@ export function emptyComponentStatus(
     checked_at: "",
     staged: false,
     stage_path: "",
+    stage_status: "up_to_date",
+    activation_status: "not_required",
+    active_runtime_path: null,
+    attempted_runtime_path: null,
+    previous_runtime_path: null,
+    rollback_reason: null,
     manifest_source: "",
   };
 }

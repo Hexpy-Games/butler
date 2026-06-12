@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
+import { spawnSync } from "child_process";
 import { createHash } from "crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { recordOperationalMetric } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
@@ -19,6 +20,39 @@ function tempRoot(): string {
   const dir = join(tmpdir(), `butler-cli-operator-${Date.now()}-${Math.random()}`);
   mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+function writeAgentArchive(
+  artifactPath: string,
+  version: string,
+  options: { doctorFailure?: string; unsafeSymlink?: boolean } = {},
+): Buffer {
+  const stage = tempRoot();
+  try {
+    mkdirSync(join(stage, "bin"), { recursive: true });
+    writeFileSync(join(stage, "bin", "butler.js"), `#!/usr/bin/env bun
+if (process.argv.includes("--help")) {
+  console.log("Butler Agent ${version}");
+  process.exit(0);
+}
+if (process.argv.includes("doctor")) {
+  ${options.doctorFailure ? `console.error(${JSON.stringify(options.doctorFailure)}); process.exit(42);` : "console.log(JSON.stringify({ ok: true })); process.exit(0);"}
+}
+process.exit(0);
+`, "utf8");
+    if (options.unsafeSymlink) {
+      symlinkSync("/tmp", join(stage, "unsafe-link"));
+    }
+    const pack = spawnSync("tar", ["-czf", artifactPath, "-C", stage, "."], {
+      encoding: "utf8",
+    });
+    if (pack.status !== 0) {
+      throw new Error(pack.stderr.trim() || pack.stdout.trim() || "failed to create test Agent archive");
+    }
+    return readFileSync(artifactPath);
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
 }
 
 function runCli(args: string[], butlerData: string, extraEnv: Record<string, string> = {}) {
@@ -902,8 +936,7 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
     expect(JSON.parse(stdoutText(legacyCheck)).data.component).toBe("service");
 
     const artifactPath = join(butlerData, `butler-service-${updateVersion}.tar.gz`);
-    const artifactContents = `service artifact v${updateVersion}`;
-    writeFileSync(artifactPath, artifactContents, "utf8");
+    const artifactContents = writeAgentArchive(artifactPath, updateVersion);
     const manifestPath = join(butlerData, "update-manifest.json");
     writeFileSync(manifestPath, JSON.stringify({
       artifacts: [{
@@ -948,14 +981,19 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
     const apply = runCli(["update", "--apply", "--yes", "--manifest", manifestPath, "--json"], butlerData);
     expect(apply.exitCode).toBe(0);
     parsed = JSON.parse(stdoutText(apply));
+    const activatedRuntimePath = join("runtime", "agent", "versions", updateVersion);
     expect(parsed.data).toMatchObject({
       component: "service",
       current_version: packageVersion,
       available_version: updateVersion,
       update_available: true,
       dryRun: false,
-      stage_status: "staged",
+      stage_status: "activated",
+      activation_status: "activated",
       stage_path: join("updates", "staged", "service.json"),
+      active_runtime_path: activatedRuntimePath,
+      attempted_runtime_path: activatedRuntimePath,
+      rollback_reason: null,
       product: "butler-agent",
       canonical_component: "agent",
       profile: "agent-standalone",
@@ -976,6 +1014,9 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
       signature: null,
     });
     expect(existsSync(join(butlerData, "updates", "staged", "service.json"))).toBe(true);
+    expect(existsSync(join(butlerData, "updates", "activation", "service.json"))).toBe(true);
+    expect(existsSync(join(butlerData, activatedRuntimePath, "runtime.json"))).toBe(true);
+    expect(existsSync(join(butlerData, activatedRuntimePath, "payloads", `butler-service-${updateVersion}.tar.gz`))).toBe(true);
     const staged = JSON.parse(readFileSync(
       join(butlerData, "updates", "staged", "service.json"),
       "utf8",
@@ -989,6 +1030,176 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
       staging_policy: "butler-data-updates",
       activation_policy: "versioned-standalone-runtime",
       rollback_policy: "preserve-previous-standalone-runtime",
+      activation_status: "activated",
+      active_runtime_path: activatedRuntimePath,
+      attempted_runtime_path: activatedRuntimePath,
+      rollback_reason: null,
+    });
+    const currentRuntime = JSON.parse(readFileSync(
+      join(butlerData, "runtime", "agent", "current.json"),
+      "utf8",
+    ));
+    expect(currentRuntime).toMatchObject({
+      schema: "butler.agent-standalone-runtime-pointer.v1",
+      product: "butler-agent",
+      profile: "agent-standalone",
+      version: updateVersion,
+      runtime_home: activatedRuntimePath,
+    });
+    const activationRecord = JSON.parse(readFileSync(
+      join(butlerData, "updates", "activation", "service.json"),
+      "utf8",
+    ));
+    expect(activationRecord).toMatchObject({
+      schema: "butler.update-activation.v1",
+      product: "butler-agent",
+      profile: "agent-standalone",
+      version: updateVersion,
+      activation_status: "activated",
+      active_runtime_path: activatedRuntimePath,
+      attempted_runtime_path: activatedRuntimePath,
+      rollback_reason: null,
+    });
+
+    const currentCheck = runCli(["update", "--check", "--manifest", manifestPath, "--json"], butlerData);
+    expect(currentCheck.exitCode).toBe(0);
+    expect(JSON.parse(stdoutText(currentCheck)).data).toMatchObject({
+      current_version: updateVersion,
+      available_version: updateVersion,
+      update_available: false,
+      stage_status: "activated",
+      activation_status: "activated",
+      active_runtime_path: activatedRuntimePath,
+    });
+
+    const failedUpdateVersion = "99.0.1";
+    const failedArtifactPath = join(butlerData, `butler-service-${failedUpdateVersion}.tar.gz`);
+    const failedArtifactContents = writeAgentArchive(
+      failedArtifactPath,
+      failedUpdateVersion,
+      { doctorFailure: "doctor check failed" },
+    );
+    writeFileSync(manifestPath, JSON.stringify({
+      artifacts: [{
+        component: "service",
+        version: failedUpdateVersion,
+        channel: "stable",
+        artifact_url: failedArtifactPath,
+        sha256: createHash("sha256").update(failedArtifactContents).digest("hex"),
+        bundled_components: ["service"],
+        product: "butler-agent",
+        canonical_component: "agent",
+        profile: "agent-standalone",
+        protocol_compatibility: {
+          protocol: "butler.agent.v1",
+          minimumAgentProtocol: "butler.agent.v1",
+          maximumAgentProtocol: "butler.agent.v1",
+        },
+        integrity: {
+          digestAlgorithm: "sha256",
+          digest: createHash("sha256").update(failedArtifactContents).digest("hex"),
+          signature: null,
+        },
+        update_policy: "explicit",
+        restart_policy: "restart-service",
+        updater_owner: "butler-agent",
+        payload_format: "agent-archive",
+        staging_policy: "butler-data-updates",
+        activation_policy: "versioned-standalone-runtime",
+        rollback_policy: "preserve-previous-standalone-runtime",
+      }],
+    }), "utf8");
+    const rollbackApply = runCli(["update", "--apply", "--yes", "--manifest", manifestPath, "--json"], butlerData);
+    expect(rollbackApply.exitCode).toBe(1);
+    parsed = JSON.parse(stdoutText(rollbackApply));
+    expect(parsed.data).toMatchObject({
+      component: "service",
+      available_version: failedUpdateVersion,
+      stage_status: "rolled_back",
+      activation_status: "rolled_back",
+      active_runtime_path: activatedRuntimePath,
+      attempted_runtime_path: join("runtime", "agent", "versions", failedUpdateVersion),
+      previous_runtime_path: activatedRuntimePath,
+      rollback_reason: "doctor check failed: doctor check failed",
+    });
+    expect(JSON.parse(readFileSync(
+      join(butlerData, "runtime", "agent", "current.json"),
+      "utf8",
+    ))).toMatchObject({
+      version: updateVersion,
+      runtime_home: activatedRuntimePath,
+    });
+    expect(JSON.parse(readFileSync(
+      join(butlerData, "updates", "activation", "service.json"),
+      "utf8",
+    ))).toMatchObject({
+      version: failedUpdateVersion,
+      activation_status: "rolled_back",
+      active_runtime_path: activatedRuntimePath,
+      attempted_runtime_path: join("runtime", "agent", "versions", failedUpdateVersion),
+      previous_runtime_path: activatedRuntimePath,
+      rollback_reason: "doctor check failed: doctor check failed",
+    });
+    const rollbackCheck = runCli(["update", "--check", "--manifest", manifestPath, "--json"], butlerData);
+    expect(rollbackCheck.exitCode).toBe(0);
+    expect(JSON.parse(stdoutText(rollbackCheck)).data).toMatchObject({
+      current_version: updateVersion,
+      available_version: failedUpdateVersion,
+      update_available: true,
+      stage_status: "rolled_back",
+      activation_status: "rolled_back",
+      active_runtime_path: activatedRuntimePath,
+      attempted_runtime_path: join("runtime", "agent", "versions", failedUpdateVersion),
+      previous_runtime_path: activatedRuntimePath,
+      rollback_reason: "doctor check failed: doctor check failed",
+    });
+
+    const unsafeUpdateVersion = "99.0.2";
+    const unsafeArtifactPath = join(butlerData, `butler-service-${unsafeUpdateVersion}.tar.gz`);
+    const unsafeArtifactContents = writeAgentArchive(
+      unsafeArtifactPath,
+      unsafeUpdateVersion,
+      { unsafeSymlink: true },
+    );
+    writeFileSync(manifestPath, JSON.stringify({
+      artifacts: [{
+        component: "service",
+        version: unsafeUpdateVersion,
+        channel: "stable",
+        artifact_url: unsafeArtifactPath,
+        sha256: createHash("sha256").update(unsafeArtifactContents).digest("hex"),
+        bundled_components: ["service"],
+        product: "butler-agent",
+        canonical_component: "agent",
+        profile: "agent-standalone",
+        protocol_compatibility: {
+          protocol: "butler.agent.v1",
+          minimumAgentProtocol: "butler.agent.v1",
+          maximumAgentProtocol: "butler.agent.v1",
+        },
+        integrity: {
+          digestAlgorithm: "sha256",
+          digest: createHash("sha256").update(unsafeArtifactContents).digest("hex"),
+          signature: null,
+        },
+        update_policy: "explicit",
+        restart_policy: "restart-service",
+        updater_owner: "butler-agent",
+        payload_format: "agent-archive",
+        staging_policy: "butler-data-updates",
+        activation_policy: "versioned-standalone-runtime",
+        rollback_policy: "preserve-previous-standalone-runtime",
+      }],
+    }), "utf8");
+    const unsafeApply = runCli(["update", "--apply", "--yes", "--manifest", manifestPath, "--json"], butlerData);
+    expect(unsafeApply.exitCode).toBe(1);
+    expect(JSON.parse(stdoutText(unsafeApply)).data).toMatchObject({
+      available_version: unsafeUpdateVersion,
+      stage_status: "rolled_back",
+      activation_status: "rolled_back",
+      active_runtime_path: activatedRuntimePath,
+      previous_runtime_path: activatedRuntimePath,
+      rollback_reason: "startup check failed: Agent artifact contains an unsafe entry type",
     });
 
     writeFileSync(manifestPath, JSON.stringify({
