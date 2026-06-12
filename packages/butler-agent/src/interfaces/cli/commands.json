@@ -83,7 +83,7 @@
     "path": [
       "start"
     ],
-    "usage": "butler start",
+    "usage": "butler start [--dry-run] [--json]",
     "priority": "core",
     "status": "implemented",
     "implemented": true,

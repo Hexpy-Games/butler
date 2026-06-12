@@ -19,7 +19,7 @@ const expectedCommands = [
   "butler version [--json]",
   "butler install [--profile agent-standalone] [--home PATH] [--data PATH] [--non-interactive] [--register-service|--no-register-service]",
   "butler upgrade-report [--home PATH] [--data PATH]",
-  "butler start",
+  "butler start [--dry-run] [--json]",
   "butler stop",
   "butler restart",
   "butler service run",
