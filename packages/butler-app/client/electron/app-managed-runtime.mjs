@@ -61,17 +61,60 @@ export function prepareAppManagedAgentRuntime({
   now = () => new Date(),
 }) {
   const root = resolve(resourceRoot);
-  const manifest = readJson(join(root, "agent-release-manifest.json"));
-  const artifact = resolveBundledAgentArtifact(manifest);
-  const artifactPath = join(root, artifact.artifactName);
-  if (!existsSync(artifactPath)) {
-    throw new Error("bundled Agent artifact is missing");
+  const preparedAt = now().toISOString();
+  let artifact = null;
+  let artifactPath;
+  let digest = null;
+  let version = "unknown";
+  let runtimeHomeLabel = join("app", "runtime", "agent", "versions", version);
+  let payloadLabel = join(runtimeHomeLabel, "payloads", "unknown");
+  try {
+    const manifest = readJson(join(root, "agent-release-manifest.json"));
+    artifact = resolveBundledAgentArtifact(manifest);
+    version = safeRuntimeVersionSegment(artifact.version);
+    runtimeHomeLabel = join("app", "runtime", "agent", "versions", version);
+    payloadLabel = join(runtimeHomeLabel, "payloads", artifact.artifactName);
+    artifactPath = join(root, artifact.artifactName);
+    if (!existsSync(artifactPath)) {
+      throw new Error("bundled Agent artifact is missing");
+    }
+    digest = sha256File(artifactPath);
+    if (artifact.sha256 && artifact.sha256 !== digest) {
+      throw new Error("bundled Agent artifact digest mismatch");
+    }
+  } catch (error) {
+    writeAppManagedRuntimeFailure({
+      butlerData,
+      version,
+      artifactVersion: artifact?.version ?? "unknown",
+      runtimeHomeLabel,
+      payloadLabel,
+      sourceRoot: root,
+      payloadDigest: digest,
+      managedRuntimeDigest: null,
+      preparedAt,
+      error,
+    });
+    throw error;
   }
-  const digest = sha256File(artifactPath);
-  if (artifact.sha256 && artifact.sha256 !== digest) {
-    throw new Error("bundled Agent artifact digest mismatch");
+  let verifiedClosure;
+  try {
+    verifiedClosure = verifyDependencyClosure(root, artifact, digest);
+  } catch (error) {
+    writeAppManagedRuntimeFailure({
+      butlerData,
+      version,
+      artifactVersion: artifact.version,
+      runtimeHomeLabel,
+      payloadLabel,
+      sourceRoot: root,
+      payloadDigest: digest,
+      managedRuntimeDigest: null,
+      preparedAt,
+      error,
+    });
+    throw error;
   }
-  const verifiedClosure = verifyDependencyClosure(root, artifact, digest);
   const readiness = {
     artifactName: artifact.artifactName,
     artifactPath,
@@ -79,8 +122,6 @@ export function prepareAppManagedAgentRuntime({
     managedRuntimeDigest: verifiedClosure.managedRuntimeDigest,
   };
 
-  const version = safeRuntimeVersionSegment(artifact.version);
-  const runtimeHomeLabel = join("app", "runtime", "agent", "versions", version);
   const runtimeHome = join(butlerData, runtimeHomeLabel);
   const currentPointerPath = appManagedAgentPointerPath(butlerData);
   const previousPointer = readJsonIfPresent(currentPointerPath);
@@ -104,11 +145,9 @@ export function prepareAppManagedAgentRuntime({
     };
   }
 
-  const payloadLabel = join(runtimeHomeLabel, "payloads", artifact.artifactName);
   const stagingHome = `${runtimeHome}.staging-${process.pid}-${Date.now()}`;
   const backupHome = `${runtimeHome}.previous-${process.pid}-${Date.now()}`;
   const stagingPayloadPath = join(stagingHome, "payloads", artifact.artifactName);
-  const preparedAt = now().toISOString();
   let backupCreated = false;
   rmSync(stagingHome, { recursive: true, force: true });
   rmSync(backupHome, { recursive: true, force: true });
@@ -212,25 +251,17 @@ export function prepareAppManagedAgentRuntime({
     if (fallbackPointer) {
       atomicWriteJson(currentPointerPath, fallbackPointer);
     }
-    atomicWriteJson(join(butlerData, "app", "runtime", "agent", "failures", `${version}.json`), {
-      schema: APP_MANAGED_RUNTIME_SCHEMA,
-      product: "butler-app",
-      bundled_agent_product: "butler-agent",
-      bundled_agent_version: artifact.version,
-      gateway_profile: "electron",
-      runtime_home: runtimeHomeLabel,
-      payload_path: payloadLabel,
-      source_resource_path: root,
-      payload_format: "agent-archive",
-      payload_sha256: digest,
-      managed_runtime_sha256: verifiedClosure.managedRuntimeDigest,
-      activation_policy: "versioned-app-managed-runtime",
-      rollback_policy: "preserve-previous-app-managed-runtime",
-      prepared_at: preparedAt,
-      selected_at: null,
-      activation_status: "rolled_back",
-      rollback_reason: error instanceof Error ? error.message : String(error),
-      raw_text_included: false,
+    writeAppManagedRuntimeFailure({
+      butlerData,
+      version,
+      artifactVersion: artifact.version,
+      runtimeHomeLabel,
+      payloadLabel,
+      sourceRoot: root,
+      payloadDigest: digest,
+      managedRuntimeDigest: verifiedClosure.managedRuntimeDigest,
+      preparedAt,
+      error,
     });
     throw error;
   }
@@ -704,4 +735,71 @@ function safeRuntimeVersionSegment(version) {
 
 function safeString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function writeAppManagedRuntimeFailure({
+  butlerData,
+  version,
+  artifactVersion,
+  runtimeHomeLabel,
+  payloadLabel,
+  sourceRoot,
+  payloadDigest,
+  managedRuntimeDigest,
+  preparedAt,
+  error,
+}) {
+  atomicWriteJson(join(butlerData, "app", "runtime", "agent", "failures", `${version}.json`), {
+    schema: APP_MANAGED_RUNTIME_SCHEMA,
+    product: "butler-app",
+    bundled_agent_product: "butler-agent",
+    bundled_agent_version: artifactVersion,
+    gateway_profile: "electron",
+    runtime_home: runtimeHomeLabel,
+    payload_path: payloadLabel,
+    source_resource_path: redactDiagnosticsPath(sourceRoot),
+    payload_format: "agent-archive",
+    payload_sha256: payloadDigest,
+    managed_runtime_sha256: managedRuntimeDigest,
+    activation_policy: "versioned-app-managed-runtime",
+    rollback_policy: "preserve-previous-app-managed-runtime",
+    prepared_at: preparedAt,
+    selected_at: null,
+    activation_status: "rolled_back",
+    rollback_reason: redactDiagnosticsText(
+      error instanceof Error ? error.message : String(error),
+    ),
+    raw_text_included: false,
+  });
+}
+
+function redactDiagnosticsText(value) {
+  return String(value)
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/giu, "Bearer [redacted-token]")
+    .replace(/\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]{8,})?\b/gu, "[redacted-token]")
+    .replace(/~[\\/][^"'\n\r\t,)]+/gu, "[redacted-path]")
+    .replace(/[A-Za-z]:\\Users\\[^"'\n\r\t,)]+/gu, "[redacted-path]")
+    .replace(/\\Users\\[^"'\n\r\t,)]+/gu, "[redacted-path]")
+    .replace(/\/Users\/[^"'\n\r\t,)]+/gu, "[redacted-path]")
+    .replace(/\/private\/[^"'\n\r\t,)]+/gu, "[redacted-path]")
+    .replace(/(^|[=:\s'"(])\/(?!\/)[^ "'\n\r\t,)]+/gu, "$1[redacted-path]")
+    .replace(/[A-Za-z0-9_-]{32,}/gu, "[redacted-token]");
+}
+
+function redactDiagnosticsPath(value) {
+  const text = String(value);
+  const normalized = text.replaceAll("\\", "/");
+  if (text.includes(".app/Contents/Resources")) return "[app-resource]";
+  if (text.startsWith("app/")) return text;
+  if (text.startsWith("runtime/")) return text;
+  if (
+    normalized.startsWith("~/") ||
+    normalized.startsWith("/Users/") ||
+    normalized.startsWith("/private/") ||
+    /^[A-Za-z]:\/Users\//u.test(normalized)
+  ) {
+    return "[redacted-path]";
+  }
+  if (text.startsWith("/")) return "[redacted-path]";
+  return redactDiagnosticsText(text);
 }

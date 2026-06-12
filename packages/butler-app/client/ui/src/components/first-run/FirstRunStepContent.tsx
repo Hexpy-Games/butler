@@ -9,6 +9,7 @@ type FirstRunCopy = (typeof firstRunCopy)[FirstRunLanguage];
 
 interface FirstRunStepContentProps {
   copy: FirstRunCopy;
+  diagnosticsStatus: string;
   error: string;
   language: FirstRunLanguage;
   status: string;
@@ -16,13 +17,16 @@ interface FirstRunStepContentProps {
   onAcceptSafety: () => void;
   onBackToLanguage: () => void;
   onComplete: (mode: "workspace" | "model-settings") => void;
+  onCopyDiagnostics: () => void;
   onLanguageChange: (language: FirstRunLanguage) => void;
   onLanguageContinue: () => void;
+  onQuit: () => void;
   onRetryInstall: () => void;
 }
 
 export function FirstRunStepContent({
   copy,
+  diagnosticsStatus,
   error,
   language,
   status,
@@ -30,8 +34,10 @@ export function FirstRunStepContent({
   onAcceptSafety,
   onBackToLanguage,
   onComplete,
+  onCopyDiagnostics,
   onLanguageChange,
   onLanguageContinue,
+  onQuit,
   onRetryInstall,
 }: FirstRunStepContentProps) {
   if (step === "language") {
@@ -77,11 +83,22 @@ export function FirstRunStepContent({
       <div className="first-run-setup-content">
         <h1>{copy.installTitle}</h1>
         <p>{error || status}</p>
+        {diagnosticsStatus && (
+          <p className="first-run-setup-secondary-status">{diagnosticsStatus}</p>
+        )}
         <div className="first-run-setup-actions">
           {error && (
-            <Button type="button" onClick={onRetryInstall}>
-              {copy.retry}
-            </Button>
+            <>
+              <Button type="button" onClick={onRetryInstall}>
+                {copy.retry}
+              </Button>
+              <Button type="button" variant="outline" onClick={onCopyDiagnostics}>
+                {copy.diagnostics}
+              </Button>
+              <Button type="button" variant="ghost" onClick={onQuit}>
+                {copy.quit}
+              </Button>
+            </>
           )}
         </div>
       </div>

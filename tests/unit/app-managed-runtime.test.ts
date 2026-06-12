@@ -109,7 +109,7 @@ test("App-managed runtime activation preserves previous pointer on failed activa
         runtime_home: previousRuntime,
       }, null, 2)}\n`,
     );
-    const resourceRoot = createBundledAgentResource(tempDir, {
+    const resourceRoot = createBundledAgentResource(join(tempDir, "Alice Smith"), {
       version: "2.0.0",
       sha256: "bad-digest",
     });
@@ -127,6 +127,19 @@ test("App-managed runtime activation preserves previous pointer on failed activa
       version: "1.0.0",
       runtime_home: previousRuntime,
     });
+    const failure = readJson(
+      join(butlerData, "app", "runtime", "agent", "failures", "2.0.0.json"),
+    );
+    expect(failure).toMatchObject({
+      activation_status: "rolled_back",
+      bundled_agent_version: "2.0.0",
+      managed_runtime_sha256: null,
+      raw_text_included: false,
+      rollback_reason: "bundled Agent artifact digest mismatch",
+      source_resource_path: "[redacted-path]",
+    });
+    expect(JSON.stringify(failure)).not.toContain(tempDir);
+    expect(JSON.stringify(failure)).not.toContain("Alice Smith");
     expect(existsSync(join(butlerData, "runtime", "agent", "current.json"))).toBe(false);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -228,6 +241,7 @@ test("App-managed runtime rejects directory launcher archive entries", () => {
 test("App-managed runtime verifies dependency closure checksums before activation", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-closure-"));
   try {
+    const butlerData = join(tempDir, "data");
     const resourceRoot = createBundledAgentResource(tempDir, {
       version: "5.0.0",
     });
@@ -240,11 +254,23 @@ test("App-managed runtime verifies dependency closure checksums before activatio
 
     expect(() =>
       activateAppManagedAgentRuntime({
-        butlerData: join(tempDir, "data"),
+        butlerData,
         resourceRoot,
         now: fixedNow,
       }),
     ).toThrow("managed-runtime-payload digest mismatch");
+
+    const failure = readJson(
+      join(butlerData, "app", "runtime", "agent", "failures", "5.0.0.json"),
+    );
+    expect(failure).toMatchObject({
+      activation_status: "rolled_back",
+      raw_text_included: false,
+      rollback_reason: "dependency closure managed-runtime-payload digest mismatch",
+      source_resource_path: "[redacted-path]",
+    });
+    expect(JSON.stringify(failure)).not.toContain(tempDir);
+    expect(JSON.stringify(failure)).not.toContain(resourceRoot);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }

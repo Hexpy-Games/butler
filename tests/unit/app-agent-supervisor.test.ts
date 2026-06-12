@@ -277,6 +277,52 @@ test("supervisor diagnostics redact startup error text and local auth token", as
   }
 });
 
+test("supervisor records gateway resolution failures for setup diagnostics", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-gateway-"));
+  try {
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: join(tempDir, "data"),
+      resolveGateway: () => {
+        const error = new Error("missing resource at /Users/example/.butler/private.env");
+        (error as Error & { code?: string }).code = "resource_missing";
+        throw error;
+      },
+      spawnProcess: () => {
+        throw new Error("spawn should not run after gateway resolution failure");
+      },
+      healthCheck: () => false,
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => undefined,
+      startupAttempts: 1,
+      baseEnv: {},
+    });
+
+    await expect(supervisor.ensureReady()).rejects.toThrow("missing resource");
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "failed",
+      last_error_code: "gateway_unavailable",
+      last_error: {
+        code: "gateway_unavailable",
+        details: {
+          reason: "resolve_gateway_failed",
+          error_code: "resource_missing",
+        },
+        raw_text_included: false,
+      },
+    });
+    const serialized = JSON.stringify(supervisor.diagnostics());
+    expect(serialized).not.toContain("/Users/example");
+    expect(serialized).not.toContain("private.env");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 class FakeChildProcess extends EventEmitter {
   spawn?: {
     command: string;

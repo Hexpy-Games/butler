@@ -14,6 +14,7 @@ interface RenderedFirstRun {
   calls: string[];
   container: HTMLElement;
   completedStates: FirstRunState[];
+  copiedDiagnostics: string[];
   root: Root;
   setupModes: string[];
 }
@@ -116,8 +117,20 @@ test("first-run setup shows concise retry after install readiness failure", asyn
 
   await waitForText(rendered.container, "Butler Agent is not ready.");
   expect(rendered.container.textContent).toContain("Retry");
+  expect(rendered.container.textContent).toContain("Copy diagnostics");
+  expect(rendered.container.textContent).toContain("Quit");
   expect(rendered.container.textContent).not.toContain("stack");
   expect(rendered.container.textContent).not.toContain("runtime path");
+
+  await clickButton(rendered.container, "Copy diagnostics");
+  expect(rendered.calls).toContain("exportSetupDiagnostics");
+  expect(rendered.copiedDiagnostics).toHaveLength(1);
+  expect(rendered.copiedDiagnostics[0]).toContain("[redacted-path]");
+  expect(rendered.copiedDiagnostics[0]).not.toContain("/Users/example/.butler");
+  expect(rendered.container.textContent).toContain("Diagnostics copied.");
+
+  await clickButton(rendered.container, "Quit");
+  expect(rendered.calls).toContain("quitApp");
 
   await clickButton(rendered.container, "Retry");
   await waitForText(rendered.container, "Model setup");
@@ -170,8 +183,17 @@ async function renderFirstRun(
   (globalThis as ReactActGlobal).IS_REACT_ACT_ENVIRONMENT = true;
 
   const calls: string[] = [];
+  const copiedDiagnostics: string[] = [];
   const completedStates: FirstRunState[] = [];
   const setupModes: string[] = [];
+  Object.defineProperty(dom.window.navigator, "clipboard", {
+    configurable: true,
+    value: {
+      writeText: async (value: string) => {
+        copiedDiagnostics.push(value);
+      },
+    },
+  });
   let setupFailures = options.failHealthOnce ? 1 : 0;
   let setupRejections = options.rejectSetupOnce ? 1 : 0;
   Object.assign(dom.window, {
@@ -201,6 +223,27 @@ async function renderFirstRun(
           status_label: "준비 완료",
         };
       },
+      exportSetupDiagnostics: async () => {
+        calls.push("exportSetupDiagnostics");
+        return {
+          generated_at: "2026-06-12T00:00:00.000Z",
+          phase: "failed",
+          checks: [],
+          errors: [
+            {
+              code: "setup_failed",
+              message: "Butler Agent is not ready.",
+              details: {
+                runtime_home: "[redacted-path]",
+              },
+            },
+          ],
+        };
+      },
+      quitApp: async () => {
+        calls.push("quitApp");
+        return { quitting: true };
+      },
       updateSettings: async () => {
         calls.push("updateSettings");
         return {};
@@ -219,7 +262,7 @@ async function renderFirstRun(
       />,
     );
   });
-  return { calls, completedStates, container, root, setupModes };
+  return { calls, completedStates, copiedDiagnostics, container, root, setupModes };
 }
 
 function deferred<T = void>() {

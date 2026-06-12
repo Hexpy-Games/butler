@@ -367,6 +367,12 @@
   letter-spacing: var(--typo-body-letter-spacing);
 }
 
+:global(.first-run-setup-secondary-status) {
+  color: var(--text-tertiary);
+  font-size: var(--typo-caption-size);
+  line-height: var(--typo-caption-line-height);
+}
+
 :global(.first-run-setup-actions) {
   display: flex;
   flex-wrap: wrap;

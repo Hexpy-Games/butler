@@ -158,7 +158,11 @@ async function connectToElectronPage(
         .then((response) => response.json())) as CdpTarget[];
       const target = targets.find((item) =>
         item.type === "page" &&
-        item.url?.startsWith(origin) &&
+        (
+          item.url?.startsWith(origin) ||
+          item.url?.endsWith("/app-client/index.html") ||
+          item.url?.endsWith("/dist/index.html")
+        ) &&
         item.webSocketDebuggerUrl,
       );
       if (target?.webSocketDebuggerUrl) {

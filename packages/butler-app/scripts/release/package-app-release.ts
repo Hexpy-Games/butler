@@ -66,6 +66,7 @@ interface BundledAgentPackage {
 }
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
+const APP_RENDERER_DIST = join("packages", "butler-app", "client", "ui", "dist");
 const MAC_SIGN_SCRIPT = join(ELECTRON_ROOT, "scripts", "adhoc-sign-mac.mjs");
 const MAC_NORMALIZE_SCRIPT = join(ELECTRON_ROOT, "scripts", "normalize-mac-bundle.mjs");
 const MAC_APP_BUNDLE_IDENTIFIER = "com.hexpy.butler";
@@ -211,6 +212,18 @@ function runElectronPackager(
   if (!existsSync(iconPath)) {
     throw new Error(`Butler app icon is missing: ${iconPath}`);
   }
+  const rendererDist = join(root, APP_RENDERER_DIST);
+  if (!existsSync(join(rendererDist, "index.html"))) {
+    throw new Error(`Butler app renderer dist is missing: ${rendererDist}`);
+  }
+  const rendererResourceDir = join(outDir, "app-client");
+  rmSync(rendererResourceDir, { recursive: true, force: true });
+  cpSync(rendererDist, rendererResourceDir, {
+    dereference: false,
+    errorOnExist: false,
+    force: true,
+    recursive: true,
+  });
   const packagerIconPath = appReleasePackagerIconPath(outDir);
   copyFileSync(iconPath, packagerIconPath);
   const [electronPlatform, electronArch] = platform.split("-");
@@ -225,6 +238,7 @@ function runElectronPackager(
     `--app-bundle-id=${MAC_APP_BUNDLE_IDENTIFIER}`,
     `--helper-bundle-id=${MAC_HELPER_BUNDLE_IDENTIFIER}`,
     `--extra-resource=${bundledAgentResourceDir}`,
+    `--extra-resource=${rendererResourceDir}`,
     "--ignore=^/dist($|/)",
     "--quiet",
   ], {

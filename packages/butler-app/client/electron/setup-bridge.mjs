@@ -50,6 +50,7 @@ export function createFirstRunSetupBridge({
       });
       session = currentSession;
       try {
+        let runtimeDiagnostics = null;
         await ensureReady();
         if (!isActiveRun(currentRunId, runId, session)) return statusView(session);
         if (currentSession.cancelled) return statusView(currentSession);
@@ -58,17 +59,17 @@ export function createFirstRunSetupBridge({
           "managed_gateway",
           "passed",
         );
-        const diagnostics = readRuntimeDiagnostics();
-        if (!bundledAgentVersionReady(diagnostics)) {
+        runtimeDiagnostics = safeReadRuntimeDiagnostics(readRuntimeDiagnostics);
+        if (!bundledAgentVersionReady(runtimeDiagnostics)) {
           throw setupError("bundled_agent_version_missing");
         }
         markCheck(currentSession, "bundled_agent_version", "passed");
-        if (diagnostics?.local_auth?.required !== true ||
-          diagnostics?.local_auth?.token_configured !== true) {
+        if (runtimeDiagnostics?.local_auth?.required !== true ||
+          runtimeDiagnostics?.local_auth?.token_configured !== true) {
           throw setupError("local_auth_unavailable");
         }
         markCheck(currentSession, "local_auth", "passed");
-        if (diagnostics?.phase !== "running") {
+        if (runtimeDiagnostics?.phase !== "running") {
           throw setupError("health_unavailable");
         }
         markCheck(currentSession, "health", "passed");
@@ -92,9 +93,15 @@ export function createFirstRunSetupBridge({
         }
       } catch (error) {
         if (!isActiveRun(currentRunId, runId, session)) return statusView(session);
+        const errorCode = setupErrorCode(error);
         session = createSession("failed", {
           checks: failPendingChecks(currentSession.checks),
-          errorCode: setupErrorCode(error),
+          errorCode,
+          supportDetails: setupSupportDetails({
+            errorCode,
+            error,
+            runtimeDiagnostics: safeReadRuntimeDiagnostics(readRuntimeDiagnostics),
+          }),
           startedAt,
         });
       }
@@ -108,6 +115,7 @@ function createSession(phase, patch = {}) {
     phase,
     checks: patch.checks ?? [],
     errorCode: patch.errorCode ?? null,
+    supportDetails: patch.supportDetails ?? null,
     startedAt: patch.startedAt ?? null,
     updatedAt: new Date().toISOString(),
     cancelled: patch.cancelled === true,
@@ -141,7 +149,11 @@ function diagnosticsView(session) {
       status: check.status,
     })),
     errors: session.errorCode
-      ? [{ code: session.errorCode, message: statusLabel(session) }]
+      ? [{
+        code: session.errorCode,
+        message: statusLabel(session),
+        details: session.supportDetails ?? undefined,
+      }]
       : [],
   };
 }
@@ -187,4 +199,89 @@ function setupError(code) {
 
 function isActiveRun(currentRunId, runId, session) {
   return runId === currentRunId && session.phase === "checking";
+}
+
+function safeReadRuntimeDiagnostics(readRuntimeDiagnostics) {
+  try {
+    return sanitizeDiagnosticsValue(readRuntimeDiagnostics());
+  } catch {
+    return {
+      phase: "unavailable",
+      raw_text_included: false,
+    };
+  }
+}
+
+function setupSupportDetails({ errorCode, error, runtimeDiagnostics }) {
+  return sanitizeDiagnosticsValue({
+    setup_error_code: errorCode,
+    exception_code:
+      error && typeof error === "object" && typeof error.code === "string"
+        ? error.code
+        : undefined,
+    exception_message:
+      error instanceof Error ? redactDiagnosticsText(error.message) : undefined,
+    runtime: runtimeDiagnostics,
+    raw_text_included: false,
+  });
+}
+
+function sanitizeDiagnosticsValue(value) {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") return redactDiagnosticsText(value);
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.map((item) => sanitizeDiagnosticsValue(item));
+  if (typeof value !== "object") return undefined;
+  const output = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (key === "raw_text_included") {
+      output.raw_text_included = false;
+      continue;
+    }
+    if (/stack|trace|stdout|stderr|raw_output|raw_error/iu.test(key)) {
+      continue;
+    }
+    if (/token|secret|authorization|password|credential/iu.test(key)) {
+      output[key] = typeof raw === "boolean" ? raw : "[redacted]";
+      continue;
+    }
+    if (/path|file|dir|home|root|cwd/iu.test(key) && typeof raw === "string") {
+      output[key] = redactDiagnosticsPath(raw);
+      continue;
+    }
+    output[key] = sanitizeDiagnosticsValue(raw);
+  }
+  output.raw_text_included = false;
+  return output;
+}
+
+function redactDiagnosticsText(value) {
+  return String(value)
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/giu, "Bearer [redacted-token]")
+    .replace(/\b[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]{8,})?\b/gu, "[redacted-token]")
+    .replace(/~[\\/][^"'\n\r\t,)]+/gu, "[redacted-path]")
+    .replace(/[A-Za-z]:\\Users\\[^"'\n\r\t,)]+/gu, "[redacted-path]")
+    .replace(/\\Users\\[^"'\n\r\t,)]+/gu, "[redacted-path]")
+    .replace(/\/Users\/[^"'\n\r\t,)]+/gu, "[redacted-path]")
+    .replace(/\/private\/[^"'\n\r\t,)]+/gu, "[redacted-path]")
+    .replace(/(^|[=:\s'"(])\/(?!\/)[^ "'\n\r\t,)]+/gu, "$1[redacted-path]")
+    .replace(/[A-Za-z0-9_-]{32,}/gu, "[redacted-token]");
+}
+
+function redactDiagnosticsPath(value) {
+  const text = String(value);
+  const normalized = text.replaceAll("\\", "/");
+  if (text.includes(".app/Contents/Resources")) return "[app-resource]";
+  if (text.startsWith("app/")) return text;
+  if (text.startsWith("runtime/")) return text;
+  if (
+    normalized.startsWith("~/") ||
+    normalized.startsWith("/Users/") ||
+    normalized.startsWith("/private/") ||
+    /^[A-Za-z]:\/Users\//u.test(normalized)
+  ) {
+    return "[redacted-path]";
+  }
+  if (text.startsWith("/")) return "[redacted-path]";
+  return redactDiagnosticsText(text);
 }

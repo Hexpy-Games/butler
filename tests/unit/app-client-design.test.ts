@@ -615,11 +615,15 @@ test("electron shell injects a minimal preload-only app API contract", () => {
     "packages/butler-app/client/electron/app-agent-supervisor.mjs",
   );
   const preload = read("packages/butler-app/client/electron/preload.cjs");
+  const viteConfig = read("packages/butler-app/client/ui/vite.config.ts");
   const renderer = readUiSources();
 
   expect(electronMain).toContain("const preloadPath");
   expect(electronMain).toContain("BUTLER_APP_UI_URL");
   expect(electronMain).toContain("rendererUrl");
+  expect(electronMain).toContain("defaultRendererUrl");
+  expect(electronMain).toContain("resolveStaticRendererUrl");
+  expect(electronMain).toContain('join(process.resourcesPath, "app-client")');
   expect(electronMain).toContain("serverHealthUrl");
   expect(electronMain).toContain('new URL("/health", serverUrl).toString()');
   expect(electronMain).toContain('body?.protocol_version === "butler.app.v1"');
@@ -627,6 +631,8 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(electronMain).toContain("createBundledAgentSupervisor");
   expect(electronMain).toContain("bundledAgentSupervisor.ensureReady()");
   expect(electronMain).toContain("butler:get-local-auth-headers");
+  expect(electronMain).toContain("butler:ensure-server");
+  expect(electronMain).toContain("butler:get-server-url");
   expect(electronMain).toContain("function appServerFetch");
   expect(electronMain).toContain("function appLocalAuthHeaders");
   expect(electronMain).toContain("normalizeLocalHttpUrl");
@@ -654,7 +660,10 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(preload).toContain("getAppInfo:");
   expect(preload).toContain("setDeveloperMode:");
   expect(preload).toContain("butler:get-local-auth-headers");
+  expect(preload).toContain("function ensureLocalServer");
+  expect(preload).toContain("function currentServerUrl");
   expect(preload).not.toContain("getLocalAuthHeaders");
+  expect(viteConfig).toContain('base: "./"');
   expect(preload).toContain("health:");
   expect(preload).toContain("listChats:");
   expect(preload).toContain("listNavigation:");

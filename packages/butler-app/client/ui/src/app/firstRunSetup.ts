@@ -55,6 +55,7 @@ export interface FirstRunSetupDiagnosticsView {
   errors: Array<{
     code: string;
     message: string;
+    details?: unknown;
   }>;
 }
 
@@ -82,6 +83,10 @@ export const firstRunCopy = {
     installChecking: "상태 확인 중",
     installFailed: "Butler Agent를 준비하지 못했습니다.",
     retry: "다시 시도",
+    diagnostics: "진단 복사",
+    diagnosticsCopied: "진단을 복사했습니다.",
+    diagnosticsUnavailable: "진단을 복사하지 못했습니다.",
+    quit: "종료",
     modelTitle: "모델 설정",
     modelBody: "모델은 지금 설정하거나 나중에 설정할 수 있습니다.",
     openModelSettings: "모델 설정 열기",
@@ -102,6 +107,10 @@ export const firstRunCopy = {
     installChecking: "Checking status",
     installFailed: "Butler Agent is not ready.",
     retry: "Retry",
+    diagnostics: "Copy diagnostics",
+    diagnosticsCopied: "Diagnostics copied.",
+    diagnosticsUnavailable: "Diagnostics unavailable.",
+    quit: "Quit",
     modelTitle: "Model setup",
     modelBody: "Set up a model now or continue and configure it later.",
     openModelSettings: "Open model settings",
