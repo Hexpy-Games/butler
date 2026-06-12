@@ -1,0 +1,110 @@
+.screen {
+  width: 100vw;
+  height: 100vh;
+  color: var(--text-primary);
+  background: var(--workspace-bg);
+  display: grid;
+  place-items: center;
+  padding: var(--space-2xl);
+}
+
+.panel {
+  width: min(520px, 100%);
+  min-height: 360px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.header {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-xl) var(--space-xl) var(--space-lg);
+  border-bottom: 1px solid var(--line);
+}
+
+.product {
+  font-size: var(--typo-h5-size);
+  font-weight: var(--typo-h5-weight);
+  line-height: var(--typo-h5-line-height);
+  letter-spacing: var(--typo-h5-letter-spacing);
+}
+
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.step,
+.stepActive {
+  min-height: 28px;
+  padding: 5px var(--space-md);
+  border-radius: var(--radius-control);
+  font-size: var(--typo-caption-size);
+  font-weight: var(--typo-caption-weight);
+  line-height: var(--typo-caption-line-height);
+  letter-spacing: var(--typo-caption-letter-spacing);
+  display: inline-flex;
+  align-items: center;
+}
+
+.step {
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+}
+
+.stepActive {
+  color: var(--text-primary);
+  background: var(--accent);
+}
+
+.content {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: var(--space-lg);
+  padding: var(--space-2xl);
+}
+
+.content h1 {
+  margin: 0;
+  font-size: var(--typo-h2-size);
+  font-weight: var(--typo-h2-weight);
+  line-height: var(--typo-h2-line-height);
+  letter-spacing: var(--typo-h2-letter-spacing);
+}
+
+.content p {
+  max-width: 42ch;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--typo-body-size);
+  font-weight: var(--typo-body-weight);
+  line-height: var(--typo-body-line-height);
+  letter-spacing: var(--typo-body-letter-spacing);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+@media (width<=560px) {
+  .screen {
+    padding: var(--space-md);
+  }
+
+  .panel {
+    min-height: 100%;
+  }
+
+  .content {
+    padding: var(--space-xl);
+  }
+}
