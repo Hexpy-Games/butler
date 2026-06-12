@@ -127,7 +127,6 @@ function managedGatewayCommand() {
     butlerData: butlerDataRoot,
     env: process.env,
     resourcesPath: process.resourcesPath,
-    resolveRuntime: resolveButlerRuntime,
   });
   if (appManagedGateway) return appManagedGateway;
   if (app.isPackaged) {

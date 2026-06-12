@@ -40,7 +40,6 @@ export function resolveAppManagedGatewayCommand(input?: {
   butlerData: string;
   env?: Record<string, string | undefined>;
   resourcesPath?: string;
-  resolveRuntime: (butlerData: string) => string;
 }): {
   command: string;
   args: string[];

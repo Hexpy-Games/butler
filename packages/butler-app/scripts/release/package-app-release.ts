@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   copyFileSync,
   cpSync,
   existsSync,
@@ -52,6 +53,16 @@ export interface BundledAgentResource {
   artifactName: string;
   sha256: string;
   version: string;
+  platform: AppReleasePlatform;
+}
+
+interface BundledAgentPackage {
+  artifactPath: string;
+  releaseManifestPath: string;
+  updateManifestPath: string;
+  artifactName: string;
+  sha256: string;
+  version: string;
 }
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
@@ -81,11 +92,22 @@ export function createAppReleasePackage(
   }
   const platforms = options.platforms ?? [...APP_RELEASE_PLATFORMS];
   assertSupportedPlatforms(platforms);
+  if (platforms.length === 0) {
+    throw new Error("at least one app release platform is required");
+  }
   mkdirSync(outDir, { recursive: true });
 
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-release-"));
   try {
-    const bundledAgent = prepareBundledAgentResource(root, workDir);
+    const bundledAgentPackage = createAgentReleasePackage({
+      root,
+      outDir: join(workDir, "agent-release"),
+      artifactBaseUrl: "bundled-agent",
+    });
+    const bundledAgents = new Map(platforms.map((platform) => [
+      platform,
+      prepareBundledAgentResourceFromPackage(root, workDir, platform, bundledAgentPackage),
+    ]));
     const artifacts = platforms.map((platform) =>
       packagePlatform({
         root,
@@ -93,9 +115,10 @@ export function createAppReleasePackage(
         workDir,
         platform,
         manifest,
-        bundledAgentResourceDir: bundledAgent.resourceDir,
+        bundledAgentResourceDir: mustGetBundledAgentResource(bundledAgents, platform).resourceDir,
       }),
     );
+    const bundledAgent = mustGetBundledAgentResource(bundledAgents, platforms[0]);
     const releaseManifest = withArtifactMetadata(
       withBundledAgentMetadata(manifest, bundledAgent),
       artifacts,
@@ -217,14 +240,27 @@ function runElectronPackager(
   }
 }
 
-export function prepareBundledAgentResource(root: string, workDir: string): BundledAgentResource {
+export function prepareBundledAgentResource(
+  root: string,
+  workDir: string,
+  platform: AppReleasePlatform = currentHostAppReleasePlatform(),
+): BundledAgentResource {
   const agentOutDir = join(workDir, "agent-release");
-  const resourceDir = join(workDir, "bundled-agent");
   const agent = createAgentReleasePackage({
     root,
     outDir: agentOutDir,
     artifactBaseUrl: "bundled-agent",
   });
+  return prepareBundledAgentResourceFromPackage(root, workDir, platform, agent);
+}
+
+function prepareBundledAgentResourceFromPackage(
+  root: string,
+  workDir: string,
+  platform: AppReleasePlatform,
+  agent: BundledAgentPackage,
+): BundledAgentResource {
+  const resourceDir = join(workDir, platform, "bundled-agent");
   mkdirSync(resourceDir, { recursive: true });
   copyFileSync(agent.artifactPath, join(resourceDir, agent.artifactName));
   copyFileSync(agent.releaseManifestPath, join(resourceDir, "agent-release-manifest.json"));
@@ -234,6 +270,7 @@ export function prepareBundledAgentResource(root: string, workDir: string): Bund
     join(resourceDir, "runtime"),
     { recursive: true },
   );
+  copyManagedRuntimeExecutable(join(resourceDir, "runtime"), platform);
   const releaseManifestSha256 = sha256File(join(resourceDir, "agent-release-manifest.json"));
   const updateManifestSha256 = sha256File(join(resourceDir, "agent-update-manifest.json"));
   const managedRuntimeSha256 = sha256Directory(join(resourceDir, "runtime"));
@@ -265,21 +302,104 @@ export function prepareBundledAgentResource(root: string, workDir: string): Bund
     artifactName: agent.artifactName,
     sha256: agent.sha256,
     version: agent.version,
+    platform,
   };
+}
+
+function copyManagedRuntimeExecutable(runtimeDir: string, platform: AppReleasePlatform): void {
+  const source = managedRuntimeExecutableForPlatform(platform);
+  if (!existsSync(source)) {
+    throw new Error(`managed App runtime executable is missing: ${source}`);
+  }
+  assertManagedRuntimeExecutablePlatform(source, platform);
+  const target = join(runtimeDir, "bin", "bun");
+  mkdirSync(dirname(target), { recursive: true });
+  copyFileSync(source, target);
+  try {
+    chmodSync(target, 0o755);
+  } catch {
+    // Preserve copy success on filesystems where chmod is not supported.
+  }
+}
+
+function managedRuntimeExecutableForPlatform(platform: AppReleasePlatform): string {
+  const platformEnv = `BUTLER_APP_MANAGED_BUN_${platformEnvSuffix(platform)}`;
+  const explicit = process.env[platformEnv];
+  if (explicit?.trim()) return explicit;
+  if (platform === currentHostAppReleasePlatform()) {
+    return process.env.BUTLER_APP_MANAGED_BUN || process.env.BUTLER_BUN || process.execPath;
+  }
+  throw new Error(`managed App runtime executable for ${platform} is missing; set ${platformEnv}`);
+}
+
+function assertManagedRuntimeExecutablePlatform(
+  path: string,
+  platform: AppReleasePlatform,
+): void {
+  const bytes = readFileSync(path);
+  if (platform === "linux-x64" && isElfX64(bytes)) return;
+  if (platform === "darwin-arm64" && isMachOArm64(bytes)) return;
+  throw new Error(`managed App runtime executable does not match ${platform}: ${path}`);
+}
+
+function isElfX64(bytes: Buffer): boolean {
+  if (
+    bytes.length < 20 ||
+    bytes[0] !== 0x7f ||
+    bytes[1] !== 0x45 ||
+    bytes[2] !== 0x4c ||
+    bytes[3] !== 0x46 ||
+    bytes[4] !== 2
+  ) {
+    return false;
+  }
+  const machine = bytes[5] === 2
+    ? bytes.readUInt16BE(18)
+    : bytes.readUInt16LE(18);
+  return machine === 0x3e;
+}
+
+function isMachOArm64(bytes: Buffer): boolean {
+  if (bytes.length < 8) return false;
+  const arm64 = 0x0100000c;
+  const magicLe = bytes.readUInt32LE(0);
+  const magicBe = bytes.readUInt32BE(0);
+  if (magicLe === 0xfeedfacf || magicLe === 0xfeedface) {
+    return bytes.readInt32LE(4) === arm64;
+  }
+  if (magicBe === 0xfeedfacf || magicBe === 0xfeedface) {
+    return bytes.readInt32BE(4) === arm64;
+  }
+  if (magicBe === 0xcafebabe || magicBe === 0xcafebabf) {
+    const entrySize = magicBe === 0xcafebabf ? 32 : 20;
+    const count = bytes.readUInt32BE(4);
+    for (let index = 0; index < count; index += 1) {
+      const offset = 8 + index * entrySize;
+      if (offset + 4 <= bytes.length && bytes.readInt32BE(offset) === arm64) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function platformEnvSuffix(platform: AppReleasePlatform): string {
+  return platform.toUpperCase().replace(/[^A-Z0-9]+/gu, "_");
+}
+
+function currentHostAppReleasePlatform(): AppReleasePlatform {
+  if (process.platform === "darwin" && process.arch === "arm64") return "darwin-arm64";
+  if (process.platform === "linux" && process.arch === "x64") return "linux-x64";
+  throw new Error(
+    "current host platform is not a supported App release runtime; set BUTLER_APP_MANAGED_BUN_<PLATFORM>",
+  );
 }
 
 function createAgentReleasePackage(input: {
   root: string;
   outDir: string;
   artifactBaseUrl: string;
-}): {
-  artifactPath: string;
-  releaseManifestPath: string;
-  updateManifestPath: string;
-  artifactName: string;
-  sha256: string;
-  version: string;
-} {
+}): BundledAgentPackage {
   const bun = process.env.BUTLER_BUN || "bun";
   const result = spawnSync(bun, [
     "run",
@@ -317,6 +437,17 @@ function createAgentReleasePackage(input: {
     // Report a stable packaging error below without leaking full command output.
   }
   throw new Error("bundled Agent package did not return a valid JSON manifest");
+}
+
+function mustGetBundledAgentResource(
+  resources: Map<AppReleasePlatform, BundledAgentResource>,
+  platform: AppReleasePlatform,
+): BundledAgentResource {
+  const resource = resources.get(platform);
+  if (!resource) {
+    throw new Error(`missing bundled Agent resource for ${platform}`);
+  }
+  return resource;
 }
 
 function withBundledAgentMetadata(

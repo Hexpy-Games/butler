@@ -424,6 +424,7 @@ export function createAppDependencyClosureManifest(input: {
       ownedDependency("managed-runtime-payload", "Managed runtime payload", [
         "bundled-agent/runtime",
         "bundled-agent/runtime/bun-version",
+        "bundled-agent/runtime/bin/bun",
       ], "bundled-payload-repair-source", managedRuntimeIntegrity),
       ownedDependency("runtime-package-dependencies", "Resolved runtime package dependencies", [
         `bundled-agent/${input.bundledAgentArtifactName}`,
@@ -570,6 +571,12 @@ export function validateAppDependencyClosureManifest(
     item.requiredForFirstLaunch === true,
   )) {
     issues.push("dependency closure managed runtime dependency is required");
+  }
+  const managedRuntime = manifest.appOwnedDependencies.find((item) =>
+    item.id === "managed-runtime-payload",
+  );
+  if (!managedRuntime?.paths.includes("bundled-agent/runtime/bin/bun")) {
+    issues.push("dependency closure managed runtime must include bundled Bun executable");
   }
   if (!manifest.repairSources.some((item) =>
     item.id === "bundled-payload-repair-source" &&

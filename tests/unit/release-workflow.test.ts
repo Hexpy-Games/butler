@@ -84,6 +84,7 @@ test("version tag release workflow publishes signed app artifacts", () => {
   const serviceJobIndex = workflow.indexOf("agent-artifact:");
   const appJobIndex = workflow.indexOf("app-artifact:");
   const packageIndex = workflow.indexOf("bun run release:app:package");
+  const linuxPrepIndex = workflow.indexOf("Prepare Linux app-managed Bun payload");
   const verifyIndex = workflow.indexOf("Verify packaged app artifacts");
   const publishIndex = workflow.indexOf("Publish app GitHub Release files");
 
@@ -92,6 +93,12 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).toContain("needs: agent-artifact");
   expect(workflow).toContain("npm --prefix packages/butler-app/client/electron ci");
   expect(workflow).toContain("bun run release:app:gate");
+  expect(workflow).toContain("Prepare Linux app-managed Bun payload");
+  expect(workflow).toContain("bun-linux-x64.zip");
+  expect(workflow).toContain("BUTLER_APP_MANAGED_BUN_LINUX_X64=$linux_bun");
+  expect(workflow).toContain("ELF 64-bit.*x86-64");
+  expect(linuxPrepIndex).toBeGreaterThan(appJobIndex);
+  expect(packageIndex).toBeGreaterThan(linuxPrepIndex);
   expect(packageIndex).toBeGreaterThan(appJobIndex);
   expect(workflow).toContain("--artifact-base-url");
   expect(verifyIndex).toBeGreaterThan(packageIndex);
