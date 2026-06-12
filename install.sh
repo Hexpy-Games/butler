@@ -14,6 +14,7 @@ INSTALL_LANG_ARG=""
 INSTALL_GATEWAY_ARG=""
 INSTALL_MODEL_ARG=""
 INSTALL_LOCAL_MODEL_URL_ARG=""
+INSTALL_SOURCE_ARG="${BUTLER_INSTALL_SOURCE:-}"
 PRINT_UPGRADE_REPORT=false
 RUNTIME_REPAIR_ONLY=false
 REGISTER_SERVICE_ARG=""
@@ -93,6 +94,15 @@ while [[ $# -gt 0 ]]; do
       INSTALL_LOCAL_MODEL_URL_ARG="${1#--local-model-url=}"
       shift
       ;;
+    --install-source)
+      INSTALL_SOURCE_ARG="${2:-}"
+      [[ -n "$INSTALL_SOURCE_ARG" ]] || { echo "--install-source requires local-artifact, remote-bootstrap, or source-checkout" >&2; exit 2; }
+      shift 2
+      ;;
+    --install-source=*)
+      INSTALL_SOURCE_ARG="${1#--install-source=}"
+      shift
+      ;;
     --upgrade-report)
       PRINT_UPGRADE_REPORT=true
       shift
@@ -167,6 +177,34 @@ BUTLER_HOME="$(resolve_install_home)"
 BUTLER_DATA="$(resolve_install_data)"
 BUTLER_HOME="$(expand_install_path "$BUTLER_HOME")"
 BUTLER_DATA="$(expand_install_path "$BUTLER_DATA")"
+normalize_install_source() {
+  local value
+  value="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    ""|auto)
+      if [[ -d "$BUTLER_HOME/.git" ]]; then
+        printf 'source-checkout\n'
+      else
+        printf 'local-artifact\n'
+      fi
+      ;;
+    local|artifact|local-artifact|agent-artifact)
+      printf 'local-artifact\n'
+      ;;
+    remote|bootstrap|remote-bootstrap)
+      printf 'remote-bootstrap\n'
+      ;;
+    source|checkout|source-checkout)
+      printf 'source-checkout\n'
+      ;;
+    *)
+      echo "Unsupported install source: $value" >&2
+      exit 2
+      ;;
+  esac
+}
+
+BUTLER_INSTALL_SOURCE="$(normalize_install_source "$INSTALL_SOURCE_ARG")"
 CONFIG_TEMPLATE="$BUTLER_HOME/butler.config.template.json"
 CONFIG_PATH="$BUTLER_DATA/butler.config.json"
 BUTLER_INSTALLER_VERSION="${BUTLER_INSTALLER_VERSION:-0.1.0}"
@@ -185,11 +223,45 @@ BUTLER_RUNTIME_HELPER="$BUTLER_HOME/packages/butler-agent/scripts/lib/butler-run
 
 OS_SERVICE_REGISTRATION_RESULT="not-evaluated"
 
-export BUTLER_HOME BUTLER_DATA BUTLER_INSTALLER_VERSION DEFAULT_NATIVE_RUNTIME DEFAULT_OPENAI_MODEL
+export BUTLER_HOME BUTLER_DATA BUTLER_INSTALL_SOURCE BUTLER_INSTALLER_VERSION DEFAULT_NATIVE_RUNTIME DEFAULT_OPENAI_MODEL
 
 if [[ -f "$BUTLER_RUNTIME_HELPER" ]]; then
   # shellcheck source=/dev/null
   source "$BUTLER_RUNTIME_HELPER"
+fi
+
+if ! declare -F butler_bun_pinned_version >/dev/null 2>&1; then
+  butler_bun_pinned_version() {
+    local version_file
+    version_file="$BUTLER_HOME/packages/butler-agent/resources/runtime/bun-version"
+    if [[ ! -f "$version_file" ]]; then
+      version_file="$BUTLER_HOME/resources/runtime/bun-version"
+    fi
+    if [[ -f "$version_file" ]]; then
+      tr -d '[:space:]' < "$version_file"
+    else
+      printf '%s\n' "1.3.11"
+    fi
+  }
+fi
+
+if ! declare -F butler_bun_root >/dev/null 2>&1; then
+  butler_bun_root() {
+    printf '%s\n' "$BUTLER_DATA/runtime/bun"
+  }
+fi
+
+if ! declare -F butler_bun_current_bin >/dev/null 2>&1; then
+  butler_bun_current_bin() {
+    printf '%s\n' "$(butler_bun_root)/current/bin/bun"
+  }
+fi
+
+if ! declare -F butler_bun_versioned_bin >/dev/null 2>&1; then
+  butler_bun_versioned_bin() {
+    local version="${1:-$(butler_bun_pinned_version)}"
+    printf '%s\n' "$(butler_bun_root)/$version/bin/bun"
+  }
 fi
 
 if [[ "$PRINT_UPGRADE_REPORT" == true ]]; then
@@ -503,6 +575,10 @@ run_quiet_step() {
 
 # ─── gum Bootstrap ────────────────────────────────────────────────────────────
 
+install_source_allows_gum_bootstrap() {
+  [[ "$BUTLER_INSTALL_SOURCE" != "local-artifact" ]]
+}
+
 bootstrap_gum() {
   # Skip if no TTY, non-interactive, or explicitly suppressed
   if [[ "${BUTLER_NO_GUM:-}" == "1" ]] || [[ ! -t 0 ]] || [[ "${NO_PROMPT:-}" == "1" ]] || [[ "$NON_INTERACTIVE" == true ]]; then
@@ -514,6 +590,9 @@ bootstrap_gum() {
     GUM="gum"
     return 0
   fi
+
+  install_source_allows_gum_bootstrap || return 1
+  command -v curl >/dev/null 2>&1 || return 1
 
   # Auto-download to temp dir
   local gum_version="0.17.0"
@@ -595,18 +674,29 @@ print_installer_banner() {
 
 show_install_plan() {
   local dep_status=""
-  [[ -n "${BUTLER_BUN:-}" && -x "$BUTLER_BUN" ]] && dep_status+="runtime ✓  " || dep_status+="runtime ✗  "
-  command -v git &>/dev/null   && dep_status+="git ✓" || dep_status+="git ✗"
+  managed_runtime_available && dep_status+="runtime ✓  " || dep_status+="runtime ✗  "
+  if install_source_requires_git; then
+    command -v git &>/dev/null && dep_status+="git ✓" || dep_status+="git ✗"
+  else
+    dep_status+="git n/a"
+  fi
+  if install_source_needs_runtime_download_tools; then
+    installer_downloader_command >/dev/null && dep_status+="  downloader ✓" || dep_status+="  downloader ✗"
+  fi
+  if install_source_needs_runtime_download_tools; then
+    runtime_extract_command "/tmp/butler-runtime.zip" "/tmp/butler-runtime" >/dev/null && dep_status+="  extractor ✓" || dep_status+="  extractor ✗"
+  fi
 
   local os_label="${OS_TYPE} ${ARCH_TYPE}"
 
   if [[ -n "$GUM" ]]; then
-    local line1 line2 line3 line4 line5
+    local line1 line2 line3 line4 line5 line6
     line1=$(ui_kv "OS" "$os_label")
     line2=$(ui_kv "Butler Home" "$BUTLER_HOME")
     line3=$(ui_kv "Data Dir" "$BUTLER_DATA")
-    line4=$(ui_kv "Dependencies" "$dep_status")
-    line5=$(ui_kv "Services" "native supervisor")
+    line4=$(ui_kv "Install Source" "$BUTLER_INSTALL_SOURCE")
+    line5=$(ui_kv "Dependencies" "$dep_status")
+    line6=$(ui_kv "Services" "native supervisor")
 
     "$GUM" style \
       --border rounded \
@@ -619,7 +709,8 @@ show_install_plan() {
       "$line2" \
       "$line3" \
       "$line4" \
-      "$line5"
+      "$line5" \
+      "$line6"
   else
     echo ""
     echo -e "  ${BOLD}Install Plan${NC}"
@@ -627,6 +718,7 @@ show_install_plan() {
     ui_kv "OS" "$os_label"
     ui_kv "Butler Home" "$BUTLER_HOME"
     ui_kv "Data Dir" "$BUTLER_DATA"
+    ui_kv "Install Source" "$BUTLER_INSTALL_SOURCE"
     ui_kv "Dependencies" "$dep_status"
     ui_kv "Services" "native supervisor"
     echo ""
@@ -1012,6 +1104,97 @@ ensure_core_tool() {
   ensure_dependency "$cmd" "$install_cmd" "$label"
 }
 
+install_source_requires_git() {
+  [[ "$BUTLER_INSTALL_SOURCE" == "source-checkout" ]]
+}
+
+install_source_requires_downloader() {
+  [[ "$BUTLER_INSTALL_SOURCE" == "remote-bootstrap" ]]
+}
+
+install_source_allows_runtime_download() {
+  [[ "$BUTLER_INSTALL_SOURCE" != "local-artifact" ]]
+}
+
+managed_runtime_available() {
+  [[ -n "${BUTLER_BUN:-}" && -x "$BUTLER_BUN" ]] && return 0
+  [[ -x "$(butler_bun_versioned_bin)" ]] && return 0
+  return 1
+}
+
+install_source_needs_runtime_download_tools() {
+  install_source_allows_runtime_download || return 1
+  managed_runtime_available && return 1
+  return 0
+}
+
+installer_downloader_command() {
+  if command -v curl >/dev/null 2>&1; then
+    printf 'curl\n'
+    return 0
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    printf 'wget\n'
+    return 0
+  fi
+  return 1
+}
+
+ensure_downloader() {
+  local downloader
+  downloader="$(installer_downloader_command || true)"
+  if [[ -n "$downloader" ]]; then
+    ui_success "downloader: $downloader"
+    return 0
+  fi
+
+  ui_error "runtime download requires curl or wget"
+  return 1
+}
+
+runtime_download_command() {
+  local url="$1" output="$2" downloader
+  downloader="$(installer_downloader_command || true)"
+  case "$downloader" in
+    curl)
+      printf 'curl -fsSL %s -o %s\n' "$(shell_quote "$url")" "$(shell_quote "$output")"
+      ;;
+    wget)
+      printf 'wget -qO %s %s\n' "$(shell_quote "$output")" "$(shell_quote "$url")"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+runtime_extract_command() {
+  local archive="$1" target_dir="$2"
+  if command -v unzip >/dev/null 2>&1; then
+    printf 'unzip -q %s -d %s\n' "$(shell_quote "$archive")" "$(shell_quote "$target_dir")"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    printf 'python3 -m zipfile -e %s %s\n' "$(shell_quote "$archive")" "$(shell_quote "$target_dir")"
+    return 0
+  fi
+  return 1
+}
+
+ensure_zip_extractor() {
+  if command -v unzip >/dev/null 2>&1; then
+    ui_success "zip extractor: unzip"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    ui_success "zip extractor: python3"
+    return 0
+  fi
+
+  ui_error "zip extractor not found (unzip or python3)"
+  return 1
+}
+
 bun_archive_slug() {
   local platform arch
   case "$OS_TYPE" in
@@ -1034,7 +1217,7 @@ bun_archive_slug() {
 }
 
 install_managed_bun() {
-  local version root version_dir target_bin current_link slug archive_url tmp_dir archive_path
+  local version root version_dir target_bin current_link slug archive_url tmp_dir archive_path download_cmd extract_cmd
   version="$(butler_bun_pinned_version)"
   root="$(butler_bun_root)"
   version_dir="$root/$version"
@@ -1055,15 +1238,31 @@ install_managed_bun() {
     return 1
   }
 
-  ensure_core_tool curl "curl" || return 1
-  ensure_core_tool unzip "unzip" || return 1
+  if ! install_source_allows_runtime_download; then
+    local existing
+    existing="$(butler_bun_current_bin)"
+    if [[ -x "$existing" ]]; then
+      export BUTLER_BUN="$existing"
+      export PATH="$(dirname "$BUTLER_BUN"):$PATH"
+      ui_success "Butler runtime: $("$BUTLER_BUN" --version 2>/dev/null | head -1) (managed)"
+      return 0
+    fi
+    ui_error "Local Butler Agent artifact is missing its managed runtime payload."
+    echo -e "  ${MUTED}Reinstall the Butler Agent artifact or run the remote bootstrap installer.${NC}"
+    return 1
+  fi
+
+  ensure_downloader || return 1
+  ensure_zip_extractor || return 1
 
   archive_url="https://github.com/oven-sh/bun/releases/download/bun-v${version}/${slug}.zip"
   tmp_dir="$(mktemp -d)"
   TMPFILES+=("$tmp_dir")
   archive_path="$tmp_dir/${slug}.zip"
+  download_cmd="$(runtime_download_command "$archive_url" "$archive_path")" || return 1
+  extract_cmd="$(runtime_extract_command "$archive_path" "$tmp_dir")" || return 1
 
-  if ! run_quiet_step "Preparing Butler runtime" "curl -fsSL '$archive_url' -o '$archive_path' && unzip -q '$archive_path' -d '$tmp_dir'"; then
+  if ! run_quiet_step "Preparing Butler runtime" "$download_cmd && $extract_cmd"; then
     local existing
     existing="$(butler_bun_current_bin)"
     if [[ -x "$existing" ]]; then
@@ -1110,15 +1309,18 @@ check_dependencies() {
   ui_section "Dependency Check"
   echo ""
 
-  # git
-  if command -v git &>/dev/null; then
-    ui_success "git: $(git --version | head -1)"
-  else
-    local git_install_cmd=""
-    if [[ -n "$PKG_INSTALL" ]]; then
-      git_install_cmd="$PKG_INSTALL git"
+  if install_source_requires_git; then
+    if command -v git &>/dev/null; then
+      ui_success "git: $(git --version | head -1)"
+    else
+      local git_install_cmd=""
+      if [[ -n "$PKG_INSTALL" ]]; then
+        git_install_cmd="$PKG_INSTALL git"
+      fi
+      ensure_dependency git "$git_install_cmd" "git" || exit 1
     fi
-    ensure_dependency git "$git_install_cmd" "git" || exit 1
+  else
+    ui_success "git: not required for $BUTLER_INSTALL_SOURCE"
   fi
 
   ensure_butler_runtime || exit 1
@@ -2785,8 +2987,8 @@ main() {
   # ── Phase 1: Preparing ──
 
   ui_stage "Preparing"
-  check_dependencies
   show_install_plan
+  check_dependencies
   setup_directories
   configure_api_provider
   initialize_first_chat_onboarding_state
