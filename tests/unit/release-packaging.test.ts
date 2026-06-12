@@ -1076,6 +1076,30 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(
     readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
   ).toContain("packaged app executable");
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).toContain("minimal-path-first-launch");
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).toContain("host-tool-blockers-unused");
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).toContain("BUTLER_HOST_TOOL_BLOCK_LOG");
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).toContain("delete env.BUTLER_BUN");
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).toContain("delete env.BUTLER_APP_BUNDLED_AGENT_DIR");
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).toContain('join("Contents", "Resources", "bundled-agent")');
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).toContain("packaged-resource-source");
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).toContain("PATH: hostToolBlockBin");
   const appReleasePackager = readText(
     join(root, "packages", "butler-app", "scripts", "release", "package-app-release.ts"),
   );
