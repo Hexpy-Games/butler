@@ -26,6 +26,7 @@ export function FirstRunSetup({
         </div>
         <FirstRunStepContent
           copy={setup.copy}
+          diagnosticsStatus={setup.diagnosticsStatus}
           error={setup.error}
           language={setup.language}
           status={setup.status}
@@ -33,8 +34,10 @@ export function FirstRunSetup({
           onAcceptSafety={setup.onAcceptSafety}
           onBackToLanguage={setup.onBackToLanguage}
           onComplete={setup.onComplete}
+          onCopyDiagnostics={setup.onCopyDiagnostics}
           onLanguageChange={setup.onLanguageChange}
           onLanguageContinue={setup.onLanguageContinue}
+          onQuit={setup.onQuit}
           onRetryInstall={setup.onRetryInstall}
         />
       </section>

@@ -257,7 +257,11 @@ async function connectToElectronPage(port: number, appUrl: string, appProcess: R
         .then((response) => response.json()) as CdpTarget[];
       const target = targets.find((item) =>
         item.type === "page" &&
-        item.url?.startsWith(origin) &&
+        (
+          item.url?.startsWith(origin) ||
+          item.url?.endsWith("/app-client/index.html") ||
+          item.url?.endsWith("/dist/index.html")
+        ) &&
         item.webSocketDebuggerUrl,
       );
       if (target?.webSocketDebuggerUrl) {
@@ -422,6 +426,7 @@ try {
       `--out=${packagedOut}`,
       `--icon=${packagerIcon}`,
       `--extra-resource=${bundledAgent.resourceDir}`,
+      `--extra-resource=${uiRoot}`,
       "--ignore=^/dist($|/)",
       "--quiet",
     ],
@@ -548,7 +553,6 @@ try {
     let cdp: CdpClient | null = null;
     try {
       await waitForStandaloneHealth(`http://127.0.0.1:${standalonePort}/health`, standalone);
-      const token = await waitForBundledHealth(`${serverUrl}health`, authPath);
       cdp = await connectToElectronPage(debugPort, serverUrl, appProcess);
       assert(
         appProcess.exitCode === null,
@@ -558,6 +562,8 @@ try {
         standalone.exitCode === null,
         "standalone Agent exited during packaged App smoke",
       );
+      await packagedRendererCompletesFirstRun(cdp);
+      const token = await waitForBundledHealth(`${serverUrl}health`, authPath);
       const unauthorized = await fetch(`${serverUrl}health`);
       assert(
         unauthorized.status === 401,
@@ -593,7 +599,6 @@ try {
         !existsSync(join(cleanDataRoot, "state", "gateways", "app.pid")),
         "packaged bundled Agent wrote a standalone gateway pid file",
       );
-      await packagedRendererCompletesFirstRun(cdp);
       assertNoHostToolCalls();
     } finally {
       cdp?.close();

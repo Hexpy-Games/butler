@@ -7,6 +7,7 @@ import {
   nextFirstRunState,
   settingsLanguagePatch,
   startFirstRunSetup,
+  exportFirstRunSetupDiagnostics,
   writeFirstRunState,
   type FirstRunLanguage,
   type FirstRunState,
@@ -21,6 +22,7 @@ export function useFirstRunSetupController(
   const [state, setState] = useState<FirstRunState>(initialState);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [diagnosticsStatus, setDiagnosticsStatus] = useState("");
   const language = state.language;
   const step = state.step;
   const copy = firstRunCopy[language];
@@ -96,6 +98,7 @@ export function useFirstRunSetupController(
 
   function markInstallFailed(message: string) {
     setStatus("");
+    setDiagnosticsStatus("");
     setError(message);
     setState((current) =>
       nextFirstRunState(current, {
@@ -105,8 +108,28 @@ export function useFirstRunSetupController(
     );
   }
 
+  async function copyDiagnostics() {
+    try {
+      const diagnostics = await exportFirstRunSetupDiagnostics();
+      await navigator.clipboard.writeText(JSON.stringify(diagnostics, null, 2));
+      setDiagnosticsStatus(copy.diagnosticsCopied);
+    } catch {
+      setDiagnosticsStatus(copy.diagnosticsUnavailable);
+    }
+  }
+
+  function quitApp() {
+    const bridge = window.butlerApp;
+    if (typeof bridge?.quitApp === "function") {
+      void bridge.quitApp();
+      return;
+    }
+    window.close();
+  }
+
   return {
     copy,
+    diagnosticsStatus,
     error:
       error ||
       (step === "install" && state.install_status === "failed"
@@ -130,6 +153,7 @@ export function useFirstRunSetupController(
         nextFirstRunState(current, { type: "back_to_language" }),
       ),
     onComplete: complete,
+    onCopyDiagnostics: () => void copyDiagnostics(),
     onLanguageChange: (nextLanguage: FirstRunLanguage) =>
       setState((current) =>
         nextFirstRunState(current, {
@@ -140,10 +164,12 @@ export function useFirstRunSetupController(
     onLanguageContinue: () => void selectLanguage(),
     onRetryInstall: () => {
       setError("");
+      setDiagnosticsStatus("");
       setStatus(copy.installChecking);
       setState((current) =>
         nextFirstRunState(current, { type: "retry_install" }),
       );
     },
+    onQuit: quitApp,
   };
 }

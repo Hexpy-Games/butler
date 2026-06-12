@@ -17,7 +17,22 @@ test("first-run setup bridge prevents stale start from overwriting retry", async
       gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
-    readRuntimeDiagnostics: okRuntimeDiagnostics,
+    readRuntimeDiagnostics: () => ({
+      ...okRuntimeDiagnostics(),
+      runtime_home: "/Users/example/.butler/app/runtime/agent",
+      local_auth: {
+        required: true,
+        file_configured: true,
+        token_configured: true,
+        token: "a".repeat(43),
+      },
+      last_error: {
+        code: "settings_unavailable",
+        details: {
+          message: "raw /Users/example/.butler/private.env",
+        },
+      },
+    }),
   });
 
   const staleStart = bridge.start();
@@ -39,14 +54,40 @@ test("first-run setup bridge prevents stale start from overwriting retry", async
 });
 
 test("first-run setup bridge diagnostics expose redacted shape only", async () => {
+  const jwtHeader = "eyJ" + "hbGciOiJIUzI1NiJ9";
+  const jwtPayload = "eyJ" + "zdWIiOiJidXRsZXIifQ";
+  const jwtSignatureA = "signature" + "000000";
+  const jwtSignatureB = "signature" + "111111";
+  const authHeaderFixture = [
+    "Bear",
+    "er",
+    [jwtHeader, jwtPayload, jwtSignatureA].join("."),
+  ].join(" ");
+  const jwtToken = [jwtHeader, jwtPayload, jwtSignatureB].join(".");
   const bridge = createFirstRunSetupBridge({
     ensureReady: async () => undefined,
     readSettings: async () => {
-      const error = new Error("raw /Users/example/.butler/private.env");
+      const privatePath = "/Users/Alice Smith/.butler/private.env";
+      const error = new Error(
+        ["raw path=/tmp/butler/private.env", privatePath, authHeaderFixture].join(" "),
+      );
       (error as Error & { code?: string }).code = "settings_unavailable";
       throw error;
     },
-    readRuntimeDiagnostics: okRuntimeDiagnostics,
+    readRuntimeDiagnostics: () => ({
+      ...okRuntimeDiagnostics(),
+      runtime_home: "/tmp/butler/app/runtime/agent",
+      token: "b".repeat(43),
+      last_error: {
+        stack: "Error: bad\n    at /tmp/butler/private.env:1:1",
+        stderr:
+          "raw /tmp/butler/private.env ~/.butler/private.env " +
+          "~/Library/Application Support/Butler/private.env " +
+          `C:\\Users\\Alice Smith\\.butler\\private.env ${jwtToken}`,
+      },
+      windows_home: "C:\\Users\\Alice Smith\\.butler\\state",
+      shell_home: "~/Library/Application Support/Butler/state",
+    }),
   });
 
   await bridge.start();
@@ -62,7 +103,20 @@ test("first-run setup bridge diagnostics expose redacted shape only", async () =
   });
   const serialized = JSON.stringify(diagnostics);
   expect(serialized).not.toContain("/Users/example/.butler");
+  expect(serialized).not.toContain("/tmp/butler");
+  expect(serialized).not.toContain("/Users/Alice Smith");
+  expect(serialized).not.toContain("Alice Smith");
+  expect(serialized).not.toContain("~/.butler");
+  expect(serialized).not.toContain("~/Library");
+  expect(serialized).not.toContain("Application Support");
+  expect(serialized).not.toContain("C:\\Users\\Alice");
   expect(serialized).not.toContain("private.env");
+  expect(serialized).not.toContain("eyJ" + "hbGci");
+  expect(serialized).not.toContain(jwtSignatureA);
+  expect(serialized).not.toContain(jwtSignatureB);
+  expect(serialized).not.toContain("a".repeat(43));
+  expect(serialized).not.toContain("b".repeat(43));
+  expect(serialized).toContain("[redacted-path]");
   expect(serialized).not.toContain("stack");
 });
 

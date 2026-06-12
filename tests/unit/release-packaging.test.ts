@@ -1114,6 +1114,9 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(appReleasePackager).not.toContain("currentServiceCliLauncherPlatform");
   expect(appReleasePackager).toContain("--extra-resource=");
   expect(appReleasePackager).toContain("bundled-agent");
+  expect(appReleasePackager).toContain("APP_RENDERER_DIST");
+  expect(appReleasePackager).toContain('join(outDir, "app-client")');
+  expect(appReleasePackager).toContain("Butler app renderer dist is missing");
   expect(appReleasePackager).toContain("adhoc-sign-mac.mjs");
   expect(appReleasePackager).toContain("normalize-mac-bundle.mjs");
   expect(appReleasePackager).toContain("BUTLER_APP_PACKAGER");

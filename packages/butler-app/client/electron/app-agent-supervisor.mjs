@@ -106,6 +106,7 @@ export function createBundledAgentSupervisor({
   let shutdownKillTimer = null;
   let phase = "idle";
   let lastErrorCode = null;
+  let lastErrorDetails = null;
   let lastExit = null;
   let localAuth = null;
   let activeGateway = null;
@@ -125,7 +126,19 @@ export function createBundledAgentSupervisor({
       return;
     }
     if (startupPromise) return startupPromise;
-    const gateway = resolveGateway();
+    let gateway;
+    try {
+      gateway = resolveGateway();
+    } catch (error) {
+      recordError("gateway_unavailable", {
+        reason: "resolve_gateway_failed",
+        error_code:
+          error && typeof error === "object" && typeof error.code === "string"
+            ? error.code
+            : null,
+      });
+      throw error;
+    }
     activeGateway = gateway;
     if (await healthCheck(localAuth)) {
       if (!gateway.commitActivation) {
@@ -190,18 +203,28 @@ export function createBundledAgentSupervisor({
         return;
       }
       if (spawnError) {
-        recordError("spawn_failed");
+        recordError("spawn_failed", {
+          reason: "process_start_failed",
+          error_code: typeof spawnError.code === "string" ? spawnError.code : null,
+        });
         throw new Error(`Failed to start Butler app server: ${spawnError.message}`);
       }
       if (earlyExit) {
-        recordError("early_exit");
+        recordError("early_exit", {
+          exit_code: earlyExit.code,
+          signal: earlyExit.signal,
+        });
         throw new Error(
           `Butler app server exited before becoming healthy: code=${earlyExit.code ?? "null"} signal=${earlyExit.signal ?? "null"}.`,
         );
       }
       await sleepMs(startupDelayMs);
     }
-    recordError("health_timeout");
+    recordError("health_timeout", {
+      attempts: startupAttempts,
+      host: "127.0.0.1",
+      port: getPort(),
+    });
     throw new Error(`Timed out waiting for Butler app server at ${getServerUrl()}.`);
   }
 
@@ -247,6 +270,13 @@ export function createBundledAgentSupervisor({
         raw_text_included: false,
       },
       last_error_code: lastErrorCode,
+      last_error: lastErrorCode
+        ? {
+          code: lastErrorCode,
+          details: lastErrorDetails ?? {},
+          raw_text_included: false,
+        }
+        : null,
       last_exit: lastExit,
       raw_text_included: false,
     };
@@ -265,8 +295,9 @@ export function createBundledAgentSupervisor({
     shutdownKillTimer = null;
   }
 
-  function recordError(code) {
+  function recordError(code, details = null) {
     lastErrorCode = code;
+    lastErrorDetails = details;
     phase = "failed";
   }
 

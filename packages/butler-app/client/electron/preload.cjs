@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 const port = Number(process.env.BUTLER_APP_SERVER_PORT ?? "18765");
-const serverUrl = normalizeLocalServerUrl(
+let cachedServerUrl = normalizeLocalServerUrl(
   process.env.BUTLER_APP_SERVER_URL ??
     `http://127.0.0.1:${Number.isFinite(port) ? port : 18765}`,
 );
@@ -26,6 +26,8 @@ function normalizeLocalServerUrl(value) {
 
 async function requestJson(path, options = {}) {
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  await ensureLocalServer();
+  const serverUrl = await currentServerUrl();
   const authHeaders = await localAuthHeaders();
   const response = await fetch(new URL(path, serverUrl), {
     ...options,
@@ -49,6 +51,22 @@ async function requestJson(path, options = {}) {
     throw error;
   }
   return body.data;
+}
+
+async function ensureLocalServer() {
+  await ipcRenderer.invoke("butler:ensure-server");
+}
+
+async function currentServerUrl() {
+  try {
+    const value = await ipcRenderer.invoke("butler:get-server-url");
+    if (typeof value === "string") {
+      cachedServerUrl = normalizeLocalServerUrl(value);
+    }
+  } catch {
+    // Keep the initial server URL when the dynamic bridge is unavailable.
+  }
+  return cachedServerUrl;
 }
 
 async function localAuthHeaders() {
@@ -128,7 +146,9 @@ function writeAppUiStateCache(snapshot) {
 
 const butlerApp = Object.freeze({
   protocolVersion: "butler.app.v1",
-  serverUrl,
+  get serverUrl() {
+    return cachedServerUrl;
+  },
   platform: process.platform,
   getAppInfo: () => ipcRenderer.invoke("butler:get-app-info"),
   setDeveloperMode: ({ enabled } = {}) =>
@@ -141,6 +161,7 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:first-run-setup-cancel", request ?? {}),
   exportSetupDiagnostics: () =>
     ipcRenderer.invoke("butler:first-run-setup-diagnostics"),
+  quitApp: () => ipcRenderer.invoke("butler:quit-app"),
   listChats: () => requestJson("/chats"),
   listNavigation: () => requestJson("/navigation"),
   getNewChatBriefing: ({ date, projectId } = {}) => {

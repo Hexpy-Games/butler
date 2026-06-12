@@ -22,18 +22,29 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(preload).toContain("startSetup");
   expect(preload).toContain("cancelSetup");
   expect(preload).toContain("exportSetupDiagnostics");
+  expect(preload).toContain("quitApp");
   expect(preload).toContain("butler:first-run-setup-start");
   expect(preload).toContain("butler:first-run-setup-diagnostics");
+  expect(preload).toContain("butler:ensure-server");
+  expect(preload).toContain("butler:get-server-url");
   expect(preload).toContain("butler:get-local-auth-headers");
   expect(preload).not.toContain("getLocalAuthHeaders");
 
+  expect(main).not.toContain("async function createWindow() {\n  await ensureServer();");
+  expect(main).toContain("function defaultRendererUrl()");
+  expect(main).toContain('join(process.resourcesPath, "app-client")');
+  expect(main).toContain('ipcMain.handle("butler:ensure-server"');
+  expect(main).toContain('ipcMain.handle("butler:get-server-url"');
   expect(main).toContain('ipcMain.handle("butler:first-run-setup-status"');
   expect(main).toContain('ipcMain.handle("butler:first-run-setup-start"');
   expect(main).toContain('ipcMain.handle("butler:first-run-setup-cancel"');
   expect(main).toContain('ipcMain.handle("butler:first-run-setup-diagnostics"');
+  expect(main).toContain('ipcMain.handle("butler:quit-app"');
+  expect(main).toContain("isQuitting = true");
   expect(main).toContain('ipcMain.handle("butler:get-local-auth-headers"');
   expect(main).toContain("createFirstRunSetupBridge");
   expect(main).toContain("readRuntimeDiagnostics");
+  expect(main).toContain("readLatestAppManagedRuntimeFailure");
   expect(setupBridge).toContain("createFirstRunSetupBridge");
   expect(setupBridge).toContain("bundled_agent_version");
   expect(setupBridge).toContain("local_auth");
@@ -380,13 +391,14 @@ test("Electron bundled-Agent setup does not attach to a pre-existing gateway", (
   expect(main).toContain("createBundledAgentSupervisor");
   expect(main).toContain("resolveGateway: managedGatewayCommand");
   expect(main).toContain("healthCheck: healthOk");
-  const gatewayResolveIndex = ensureReady.indexOf("const gateway = resolveGateway();");
+  const gatewayResolveIndex = ensureReady.indexOf("gateway = resolveGateway();");
   const managedHealthIndex = ensureReady.indexOf(
     "if (await healthCheck(localAuth))",
     gatewayResolveIndex,
   );
   expect(gatewayResolveIndex).toBeGreaterThanOrEqual(0);
   expect(managedHealthIndex).toBeGreaterThan(gatewayResolveIndex);
+  expect(ensureReady).toContain('recordError("gateway_unavailable"');
   expect(ensureReady).toContain("if (!gateway.commitActivation)");
   expect(ensureReady).toContain("updatePort(await findAvailablePort(getPort() + 1))");
   expect(ensureReady).toContain("startupPromise = start(gateway);");

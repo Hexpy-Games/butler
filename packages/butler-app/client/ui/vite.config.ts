@@ -21,6 +21,7 @@ function hugeiconsPureAnnotationPatch(): Plugin {
 }
 
 export default defineConfig({
+  base: "./",
   plugins: [hugeiconsPureAnnotationPatch(), react()],
   resolve: {
     alias: [

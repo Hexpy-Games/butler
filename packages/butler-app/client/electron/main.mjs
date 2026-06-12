@@ -12,12 +12,18 @@ import {
 } from "electron";
 import { spawn } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createBundledAgentSupervisor } from "./app-agent-supervisor.mjs";
 import { resolveAppManagedGatewayCommand } from "./app-managed-runtime.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
@@ -50,7 +56,7 @@ let serverUrl = normalizeLocalHttpUrl(
 const explicitUiUrl = process.env.BUTLER_APP_UI_URL;
 let rendererUrl = explicitUiUrl
   ? normalizeLocalHttpUrl(explicitUiUrl, "Butler app UI URL")
-  : serverUrl;
+  : defaultRendererUrl();
 let rendererOrigin = new URL(rendererUrl).origin;
 let serverHealthUrl = new URL("/health", serverUrl).toString();
 const isMac = process.platform === "darwin";
@@ -92,7 +98,7 @@ const firstRunSetupBridge = createFirstRunSetupBridge({
   ensureReady: ensureServer,
   gatewayProfile: "electron",
   readSettings: readSetupSettings,
-  readRuntimeDiagnostics: () => bundledAgentSupervisor.diagnostics(),
+  readRuntimeDiagnostics: readFirstRunRuntimeDiagnostics,
 });
 app.setName(appDisplayName);
 syncPreloadServerEnvironment();
@@ -208,6 +214,61 @@ async function healthOk(localAuth = null) {
 
 async function ensureServer() {
   await bundledAgentSupervisor.ensureReady();
+}
+
+function readFirstRunRuntimeDiagnostics() {
+  const diagnostics = bundledAgentSupervisor.diagnostics();
+  return {
+    ...diagnostics,
+    app_managed_runtime_failure:
+      diagnostics.phase === "failed" ? readLatestAppManagedRuntimeFailure() : null,
+  };
+}
+
+function readLatestAppManagedRuntimeFailure() {
+  const failuresDir = join(butlerDataRoot, "app", "runtime", "agent", "failures");
+  try {
+    const files = readdirSync(failuresDir)
+      .filter((name) => name.endsWith(".json"))
+      .sort();
+    const latest = files.at(-1);
+    if (!latest) return null;
+    return JSON.parse(readFileSync(join(failuresDir, latest), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function defaultRendererUrl() {
+  return resolveStaticRendererUrl() ?? serverUrl;
+}
+
+function resolveStaticRendererUrl() {
+  const explicitRendererDist = process.env.BUTLER_APP_RENDERER_DIST;
+  const candidates = [
+    explicitRendererDist,
+    process.resourcesPath ? join(process.resourcesPath, "app-client") : null,
+    process.resourcesPath ? join(process.resourcesPath, "dist") : null,
+    process.resourcesPath
+      ? join(
+          process.resourcesPath,
+          "bundled-agent",
+          "packages",
+          "butler-agent",
+          "resources",
+          "app-client",
+          "dist",
+        )
+      : null,
+    resolve(__dirname, "..", "ui", "dist"),
+    resolve(repoRoot, "packages", "butler-app", "client", "ui", "dist"),
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const indexPath = resolve(candidate, "index.html");
+    if (existsSync(indexPath)) return pathToFileURL(indexPath).toString();
+  }
+  return null;
 }
 
 async function installDevtools() {
@@ -659,7 +720,9 @@ function safeString(value) {
 }
 
 async function createWindow() {
-  await ensureServer();
+  if (rendererUrl === serverUrl) {
+    await ensureServer();
+  }
   await loadInitialNativeShellPreferences();
   scheduleTrayMenuRefresh();
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
@@ -740,6 +803,13 @@ ipcMain.handle("butler:first-run-setup-start", async () =>
   await firstRunSetupBridge.start(),
 );
 
+ipcMain.handle("butler:ensure-server", async () => {
+  await ensureServer();
+  return { ready: true };
+});
+
+ipcMain.handle("butler:get-server-url", () => serverUrl);
+
 ipcMain.handle("butler:first-run-setup-cancel", () =>
   firstRunSetupBridge.cancel(),
 );
@@ -747,6 +817,12 @@ ipcMain.handle("butler:first-run-setup-cancel", () =>
 ipcMain.handle("butler:first-run-setup-diagnostics", () =>
   firstRunSetupBridge.diagnostics(),
 );
+
+ipcMain.handle("butler:quit-app", () => {
+  isQuitting = true;
+  app.quit();
+  return { quitting: true };
+});
 
 ipcMain.handle("butler:get-local-auth-headers", async () =>
   await appLocalAuthHeaders(),
@@ -976,7 +1052,7 @@ function updateManagedServerPort(nextPort) {
     "Butler app server URL",
   );
   if (!explicitUiUrl) {
-    rendererUrl = serverUrl;
+    rendererUrl = defaultRendererUrl();
   }
   rendererOrigin = new URL(rendererUrl).origin;
   serverHealthUrl = new URL("/health", serverUrl).toString();
@@ -1015,6 +1091,10 @@ async function findAvailablePort(startPort) {
 function isAppNavigationUrl(value) {
   try {
     const url = new URL(value);
+    const renderer = new URL(rendererUrl);
+    if (renderer.protocol === "file:") {
+      return url.protocol === "file:" && url.pathname === renderer.pathname;
+    }
     return (
       url.origin === rendererOrigin || url.origin === new URL(serverUrl).origin
     );
