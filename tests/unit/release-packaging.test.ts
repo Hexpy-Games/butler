@@ -17,6 +17,7 @@ import {
 import {
   APP_RELEASE_PLATFORMS,
   createAppReleaseManifest,
+  validateAppDependencyClosureManifest,
   validateAppReleaseManifest,
 } from "../../packages/butler-app/scripts/release/manifest.ts";
 import {
@@ -695,6 +696,8 @@ test("app package smoke uses real bundled Agent release resources", () => {
     ], { encoding: "utf8" });
     expect(listing.status).toBe(0);
     expect(listing.stdout).toContain("bin/butler.js");
+    expect(listing.stdout).toContain(`./${SERVICE_APP_WEB_CLIENT_DIST}/index.html`);
+    expect(listing.stdout).toContain(`./${SERVICE_APP_WEB_CLIENT_DIST}/assets/`);
     expect(listing.stdout).toContain(
       "packages/butler-agent/resources/runtime/bun-version",
     );
@@ -713,13 +716,145 @@ test("app package smoke uses real bundled Agent release resources", () => {
     expect(dependencyClosure).toMatchObject({
       product: "butler-app",
       bundledAgentVersion: currentVersion,
+      gatewayProfile: "electron",
       payload: {
         product: "butler-agent",
         artifactName: bundledAgent.artifactName,
         sha256: bundledAgent.sha256,
+        integrity: {
+          digestAlgorithm: "sha256",
+          digest: bundledAgent.sha256,
+          signature: null,
+        },
       },
       hostToolsRequiredForFirstLaunch: [],
     });
+    expect(dependencyClosure.appOwnedDependencies.map((item: any) => item.id)).toEqual([
+      "electron-shell",
+      "renderer-assets",
+      "bootstrap-setup-ui",
+      "bundled-agent-payload",
+      "managed-runtime-payload",
+      "runtime-package-dependencies",
+      "local-setup-bridge",
+      "release-manifests",
+      "app-managed-runtime-home",
+      "bundled-payload-repair-source",
+    ]);
+    expect(
+      dependencyClosure.appOwnedDependencies.find(
+        (item: any) => item.id === "renderer-assets",
+      ),
+    ).toMatchObject({
+      source: "signed-butler-payload",
+      paths: [
+        `bundled-agent/${bundledAgent.artifactName}!${SERVICE_APP_WEB_CLIENT_DIST}`,
+        `bundled-agent/${bundledAgent.artifactName}!${SERVICE_APP_WEB_CLIENT_DIST}/index.html`,
+      ],
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: bundledAgent.sha256,
+      },
+      repairSource: "bundled-payload-repair-source",
+    });
+    expect(
+      dependencyClosure.appOwnedDependencies.find(
+        (item: any) => item.id === "bootstrap-setup-ui",
+      ),
+    ).toMatchObject({
+      source: "signed-butler-payload",
+      paths: [
+        `bundled-agent/${bundledAgent.artifactName}!${SERVICE_APP_WEB_CLIENT_DIST}`,
+      ],
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: bundledAgent.sha256,
+      },
+      repairSource: "bundled-payload-repair-source",
+    });
+    for (const dependency of dependencyClosure.appOwnedDependencies.filter(
+      (item: any) => item.source === "signed-butler-payload",
+    )) {
+      expect(dependency.integrity?.digestAlgorithm).toBe("sha256");
+      expect(typeof dependency.integrity?.digest).toBe("string");
+      expect(dependency.integrity.digest).toHaveLength(64);
+    }
+    expect(
+      dependencyClosure.appOwnedDependencies.find(
+        (item: any) => item.id === "bundled-agent-payload",
+      ).integrity.digest,
+    ).toBe(bundledAgent.sha256);
+    expect(
+      dependencyClosure.appOwnedDependencies.find(
+        (item: any) => item.id === "managed-runtime-payload",
+      ).integrity.digest,
+    ).not.toBe(bundledAgent.sha256);
+    expect(
+      dependencyClosure.appOwnedDependencies.find(
+        (item: any) => item.id === "release-manifests",
+      ).paths,
+    ).toEqual([
+      "bundled-agent/agent-release-manifest.json",
+      "bundled-agent/agent-update-manifest.json",
+    ]);
+    expect(dependencyClosure.repairSources).toEqual([
+      {
+        id: "bundled-payload-repair-source",
+        source: "app-bundle",
+        paths: [
+          `bundled-agent/${bundledAgent.artifactName}`,
+          "bundled-agent/agent-release-manifest.json",
+          "bundled-agent/agent-update-manifest.json",
+          "bundled-agent/runtime",
+        ],
+        verification: "sha256",
+        integrity: {
+          digestAlgorithm: "sha256",
+          digest: expect.stringMatching(/^[a-f0-9]{64}$/),
+          signature: null,
+        },
+      },
+    ]);
+    expect(dependencyClosure.runtimePackageDependencies).toEqual([
+      {
+        id: "managed-bun-runtime",
+        path: "bundled-agent/runtime",
+        requiredForFirstLaunch: true,
+        repairSource: "bundled-payload-repair-source",
+      },
+    ]);
+    expect(validateAppDependencyClosureManifest(dependencyClosure)).toEqual([]);
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test("app dependency closure manifest validation rejects missing owned dependencies", () => {
+  const workDir = mkdtempSync(join(tmpdir(), "butler-app-dependency-closure-validation-"));
+  try {
+    const bundledAgent = prepareBundledAgentResource(root, workDir);
+    const dependencyClosure = JSON.parse(
+      readText(join(bundledAgent.resourceDir, "dependency-closure.json")),
+    );
+    dependencyClosure.hostToolsRequiredForFirstLaunch = ["curl"];
+    dependencyClosure.appOwnedDependencies = dependencyClosure.appOwnedDependencies.filter(
+      (item: any) => item.id !== "bootstrap-setup-ui",
+    );
+    dependencyClosure.payload.integrity.digest = null;
+    dependencyClosure.appOwnedDependencies.find(
+      (item: any) => item.id === "managed-runtime-payload",
+    ).integrity.digest = null;
+    dependencyClosure.repairSources = [];
+
+    expect(validateAppDependencyClosureManifest(dependencyClosure)).toEqual(
+      expect.arrayContaining([
+        "dependency closure must not require host first-launch tools",
+        "dependency closure missing app-owned dependency: bootstrap-setup-ui",
+        "dependency closure bundled Agent payload digest is required",
+        "dependency closure managed-runtime-payload digest is required",
+        "dependency closure repair source is required",
+      ]),
+    );
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
