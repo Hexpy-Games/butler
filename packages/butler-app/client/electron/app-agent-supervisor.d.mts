@@ -33,6 +33,7 @@ export function createBundledAgentSupervisor(input: {
     appManaged?: boolean;
     bundledAgentVersion?: string;
     commitActivation?: () => void;
+    rollbackActivation?: (error: Error) => void;
   };
   spawnProcess: (
     command: string,
@@ -51,6 +52,9 @@ export function createBundledAgentSupervisor(input: {
   healthCheck: (
     localAuth?: { filePath: string; created: boolean; token: string } | null,
   ) => boolean | Promise<boolean>;
+  readinessCheck?: (
+    localAuth?: { filePath: string; created: boolean; token: string } | null,
+  ) => boolean | Promise<boolean>;
   isPortAvailable: (port: number) => boolean | Promise<boolean>;
   findAvailablePort: (startPort: number) => number | Promise<number>;
   updatePort: (port: number) => void;
@@ -67,6 +71,7 @@ export function createBundledAgentSupervisor(input: {
   startupAttempts?: number;
   startupDelayMs?: number;
   killTimeoutMs?: number;
+  probeTimeoutMs?: number;
   stdio?: string;
 }): {
   diagnostics(): {

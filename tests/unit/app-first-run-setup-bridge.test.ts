@@ -391,9 +391,10 @@ test("Electron bundled-Agent setup does not attach to a pre-existing gateway", (
   expect(main).toContain("createBundledAgentSupervisor");
   expect(main).toContain("resolveGateway: managedGatewayCommand");
   expect(main).toContain("healthCheck: healthOk");
+  expect(main).toContain("readinessCheck: gatewayReady");
   const gatewayResolveIndex = ensureReady.indexOf("gateway = resolveGateway();");
   const managedHealthIndex = ensureReady.indexOf(
-    "if (await healthCheck(localAuth))",
+    "if ((await checkGatewayReadiness()).ready)",
     gatewayResolveIndex,
   );
   expect(gatewayResolveIndex).toBeGreaterThanOrEqual(0);
