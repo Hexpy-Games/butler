@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install.sh — Butler interactive installer
-# Usage: ./install.sh [--non-interactive] [--auto-env] [--home PATH] [--data PATH] [--model openai|local|local/<id>] [--local-model-url URL] [--register-service|--no-register-service]
+# Usage: ./install.sh [--profile agent-standalone] [--install-source local-artifact|remote-bootstrap|source-checkout] [--non-interactive] [--auto-env] [--home PATH] [--data PATH] [--model openai|local|local/<id>] [--local-model-url URL] [--register-service|--no-register-service]
 # Safe to run multiple times (idempotent)
 set -euo pipefail
 
@@ -15,6 +15,7 @@ INSTALL_GATEWAY_ARG=""
 INSTALL_MODEL_ARG=""
 INSTALL_LOCAL_MODEL_URL_ARG=""
 INSTALL_SOURCE_ARG="${BUTLER_INSTALL_SOURCE:-}"
+INSTALL_PROFILE_ARG="${BUTLER_INSTALL_PROFILE:-}"
 PRINT_UPGRADE_REPORT=false
 RUNTIME_REPAIR_ONLY=false
 REGISTER_SERVICE_ARG=""
@@ -101,6 +102,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --install-source=*)
       INSTALL_SOURCE_ARG="${1#--install-source=}"
+      shift
+      ;;
+    --profile)
+      INSTALL_PROFILE_ARG="${2:-}"
+      [[ -n "$INSTALL_PROFILE_ARG" ]] || { echo "--profile requires agent-standalone" >&2; exit 2; }
+      shift 2
+      ;;
+    --profile=*)
+      INSTALL_PROFILE_ARG="${1#--profile=}"
       shift
       ;;
     --upgrade-report)
@@ -205,6 +215,25 @@ normalize_install_source() {
 }
 
 BUTLER_INSTALL_SOURCE="$(normalize_install_source "$INSTALL_SOURCE_ARG")"
+normalize_install_profile() {
+  local value
+  value="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    ""|agent|standalone|agent-standalone)
+      printf 'agent-standalone\n'
+      ;;
+    app|electron|bundled-agent|app-bundled)
+      echo "Butler App setup uses the Electron first-run UI; terminal install supports agent-standalone only." >&2
+      exit 2
+      ;;
+    *)
+      echo "Unsupported install profile: $value" >&2
+      exit 2
+      ;;
+  esac
+}
+
+BUTLER_INSTALL_PROFILE="$(normalize_install_profile "$INSTALL_PROFILE_ARG")"
 CONFIG_TEMPLATE="$BUTLER_HOME/butler.config.template.json"
 CONFIG_PATH="$BUTLER_DATA/butler.config.json"
 BUTLER_INSTALLER_VERSION="${BUTLER_INSTALLER_VERSION:-0.1.0}"
@@ -223,7 +252,7 @@ BUTLER_RUNTIME_HELPER="$BUTLER_HOME/packages/butler-agent/scripts/lib/butler-run
 
 OS_SERVICE_REGISTRATION_RESULT="not-evaluated"
 
-export BUTLER_HOME BUTLER_DATA BUTLER_INSTALL_SOURCE BUTLER_INSTALLER_VERSION DEFAULT_NATIVE_RUNTIME DEFAULT_OPENAI_MODEL
+export BUTLER_HOME BUTLER_DATA BUTLER_INSTALL_SOURCE BUTLER_INSTALL_PROFILE BUTLER_INSTALLER_VERSION DEFAULT_NATIVE_RUNTIME DEFAULT_OPENAI_MODEL
 
 if [[ -f "$BUTLER_RUNTIME_HELPER" ]]; then
   # shellcheck source=/dev/null
@@ -690,13 +719,14 @@ show_install_plan() {
   local os_label="${OS_TYPE} ${ARCH_TYPE}"
 
   if [[ -n "$GUM" ]]; then
-    local line1 line2 line3 line4 line5 line6
+    local line1 line2 line3 line4 line5 line6 line7
     line1=$(ui_kv "OS" "$os_label")
     line2=$(ui_kv "Butler Home" "$BUTLER_HOME")
     line3=$(ui_kv "Data Dir" "$BUTLER_DATA")
-    line4=$(ui_kv "Install Source" "$BUTLER_INSTALL_SOURCE")
-    line5=$(ui_kv "Dependencies" "$dep_status")
-    line6=$(ui_kv "Services" "native supervisor")
+    line4=$(ui_kv "Profile" "$BUTLER_INSTALL_PROFILE")
+    line5=$(ui_kv "Install Source" "$BUTLER_INSTALL_SOURCE")
+    line6=$(ui_kv "Dependencies" "$dep_status")
+    line7=$(ui_kv "Services" "native supervisor")
 
     "$GUM" style \
       --border rounded \
@@ -710,7 +740,8 @@ show_install_plan() {
       "$line3" \
       "$line4" \
       "$line5" \
-      "$line6"
+      "$line6" \
+      "$line7"
   else
     echo ""
     echo -e "  ${BOLD}Install Plan${NC}"
@@ -718,6 +749,7 @@ show_install_plan() {
     ui_kv "OS" "$os_label"
     ui_kv "Butler Home" "$BUTLER_HOME"
     ui_kv "Data Dir" "$BUTLER_DATA"
+    ui_kv "Profile" "$BUTLER_INSTALL_PROFILE"
     ui_kv "Install Source" "$BUTLER_INSTALL_SOURCE"
     ui_kv "Dependencies" "$dep_status"
     ui_kv "Services" "native supervisor"
@@ -1956,6 +1988,7 @@ write_minimal_runtime_config() {
   language_locale="$(install_language_locale)"
 
   CFG_PATH="$CONFIG_PATH" U_TZ="$user_tz" U_LANG="$language_locale" \
+  INSTALL_PROFILE="$BUTLER_INSTALL_PROFILE" \
   B_NAME="Butler" OPENAI_MODEL="$DEFAULT_OPENAI_MODEL" \
   "$BUTLER_BUN" -e "
     import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
@@ -1977,6 +2010,8 @@ write_minimal_runtime_config() {
     cfg.system = cfg.system && typeof cfg.system === 'object' ? cfg.system : {};
     cfg.system.butlerHome = process.env.BUTLER_HOME;
     cfg.system.butlerData = process.env.BUTLER_DATA;
+    cfg.system.profile = process.env.INSTALL_PROFILE || 'agent-standalone';
+    cfg.system.installProfile = process.env.INSTALL_PROFILE || 'agent-standalone';
     cfg.system.runtime = 'codex-api';
     cfg.system.openaiModel = process.env.OPENAI_MODEL;
     cfg.system.defaultModel = 'openai/' + process.env.OPENAI_MODEL;

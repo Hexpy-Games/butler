@@ -97,6 +97,33 @@ test("first-run setup bridge defaults to bundled-Agent mode", async () => {
   );
 });
 
+test("first-run setup bridge ignores standalone installer service fields", async () => {
+  let managedReadyCalls = 0;
+  const bridge = createFirstRunSetupBridge({
+    ensureReady: async () => {
+      managedReadyCalls += 1;
+    },
+    readSettings: async () => ({
+      bridge_mode: "local",
+      server_url: "http://127.0.0.1:18765",
+    }),
+  });
+
+  await bridge.start({
+    mode: "bundled-agent",
+    profile: "agent-standalone",
+    registerService: true,
+    installSource: "source-checkout",
+  } as never);
+  expect(bridge.status().phase).toBe("ready");
+  expect(managedReadyCalls).toBe(1);
+  expect(bridge.diagnostics().checks.map((check) => check.id)).toEqual([
+    "managed_gateway",
+    "settings",
+    "gateway_profile",
+  ]);
+});
+
 test("first-run setup bridge rejects incompatible existing-Agent settings", async () => {
   const bridge = createFirstRunSetupBridge({
     ensureReady: async () => undefined,

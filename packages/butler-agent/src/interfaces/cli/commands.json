@@ -57,7 +57,7 @@
     "path": [
       "install"
     ],
-    "usage": "butler install [--home PATH] [--data PATH] [--non-interactive] [--register-service|--no-register-service]",
+    "usage": "butler install [--profile agent-standalone] [--home PATH] [--data PATH] [--non-interactive] [--register-service|--no-register-service]",
     "priority": "core",
     "status": "implemented",
     "implemented": true,
