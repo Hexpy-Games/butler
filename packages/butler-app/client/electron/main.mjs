@@ -18,6 +18,7 @@ import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveAppManagedGatewayCommand } from "./app-managed-runtime.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -110,6 +111,16 @@ function resolveProjectFolderTokenSecret() {
 }
 
 function managedGatewayCommand() {
+  const appManagedGateway = resolveAppManagedGatewayCommand({
+    butlerData: butlerDataRoot,
+    env: process.env,
+    resourcesPath: process.resourcesPath,
+    resolveRuntime: resolveButlerRuntime,
+  });
+  if (appManagedGateway) return appManagedGateway;
+  if (app.isPackaged) {
+    throw new Error("Packaged Butler App is missing bundled Agent resources.");
+  }
   for (const home of candidateButlerHomes()) {
     const localButlerCli = resolve(home, "bin", "butler.js");
     if (!existsSync(localButlerCli)) continue;
@@ -185,11 +196,15 @@ async function ensureServer() {
   }
   if (serverProcess && (await healthOk())) return;
   if (serverStartupPromise) return serverStartupPromise;
-  if (await healthOk()) return;
+  const gateway = managedGatewayCommand();
+  if (await healthOk()) {
+    if (!gateway.commitActivation) return;
+    updateManagedServerPort(await findAvailablePort(port + 1));
+  }
   if (!(await isPortAvailable(port))) {
     updateManagedServerPort(await findAvailablePort(port + 1));
   }
-  serverStartupPromise = startManagedServer();
+  serverStartupPromise = startManagedServer(gateway);
   try {
     await serverStartupPromise;
   } finally {
@@ -197,14 +212,13 @@ async function ensureServer() {
   }
 }
 
-async function startManagedServer() {
+async function startManagedServer(gateway = managedGatewayCommand()) {
   if (serverProcess) {
     throw new Error(
       "Butler app server is already starting but is not healthy yet.",
     );
   }
 
-  const gateway = managedGatewayCommand();
   serverProcess = spawn(gateway.command, gateway.args, {
     ...(gateway.cwd ? { cwd: gateway.cwd } : {}),
     env: {
@@ -231,7 +245,10 @@ async function startManagedServer() {
   });
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (await healthOk()) return;
+    if (await healthOk()) {
+      gateway.commitActivation?.();
+      return;
+    }
     if (spawnError) {
       throw new Error(
         `Failed to start Butler app server: ${spawnError.message}`,
