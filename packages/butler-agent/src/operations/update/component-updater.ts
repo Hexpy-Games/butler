@@ -273,6 +273,7 @@ export async function applyComponentUpdate(
     sha256: status.sha256,
     signature: status.signature,
     bundled_components: status.bundled_components,
+    bundled_agent_version: status.bundled_agent_version,
     product: status.product,
     canonical_component: status.canonical_component,
     profile: status.profile,

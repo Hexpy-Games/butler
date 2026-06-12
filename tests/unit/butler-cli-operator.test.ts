@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "child_process";
 import { createHash } from "crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { recordOperationalMetric } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
@@ -26,6 +26,19 @@ function tempRoot(): string {
   const dir = join(tmpdir(), `butler-cli-operator-${Date.now()}-${Math.random()}`);
   mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+function writeHostToolBlockers(dir: string, _logPath: string): void {
+  mkdirSync(dir, { recursive: true });
+  for (const tool of ["curl", "wget", "unzip", "tar"]) {
+    const path = join(dir, tool);
+    writeFileSync(
+      path,
+      `#!/bin/sh\nprintf '%s\\n' '${tool}' >> "$BUTLER_HOST_TOOL_BLOCK_LOG"\nexit 127\n`,
+      "utf8",
+    );
+    chmodSync(path, 0o755);
+  }
 }
 
 function writeAgentArchive(
@@ -1458,6 +1471,144 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
     expect(ps.exitCode).toBe(0);
     expect(JSON.parse(stdoutText(ps)).data.source).toBeTruthy();
     expect(stderrText(ps)).not.toContain("secret");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("bundled-Agent-only App update stages as one App artifact without host tools", async () => {
+  const butlerData = tempRoot();
+  try {
+    const appPlatform = currentAppUpdatePlatformForTest();
+    const updateVersion = "99.7.1";
+    const bundledAgentVersion = "42.0.1";
+    const previousBundledAgentVersion = "42.0.0";
+    const unchangedShellContents = "electron shell unchanged; bundled Agent payload changed\n";
+    const artifactPath = join(butlerData, `butler-app-${updateVersion}-${appPlatform}.artifact`);
+    mkdirSync(butlerData, { recursive: true });
+    writeFileSync(artifactPath, unchangedShellContents, "utf8");
+    const sha256 = createHash("sha256").update(unchangedShellContents).digest("hex");
+
+    const pointerDir = join(butlerData, "app", "runtime", "agent");
+    const pointerPath = join(pointerDir, "current.json");
+    mkdirSync(pointerDir, { recursive: true });
+    writeFileSync(pointerPath, JSON.stringify({
+      schema: "butler.app-managed-agent-runtime-pointer.v1",
+      product: "butler-app",
+      bundled_agent_product: "butler-agent",
+      bundled_agent_version: previousBundledAgentVersion,
+      gateway_profile: "electron",
+      version: previousBundledAgentVersion,
+      runtime_home: join("app", "runtime", "agent", "versions", previousBundledAgentVersion),
+      raw_text_included: false,
+    }, null, 2), "utf8");
+    const pointerBefore = readFileSync(pointerPath, "utf8");
+
+    const manifestPath = join(butlerData, "app-update-manifest.json");
+    writeFileSync(manifestPath, JSON.stringify({
+      artifacts: [{
+        component: "app",
+        version: updateVersion,
+        channel: "stable",
+        platform: appPlatform,
+        artifact_url: artifactPath,
+        sha256,
+        signature: null,
+        bundled_components: ["app"],
+        bundled_agent_version: bundledAgentVersion,
+        product: "butler-app",
+        canonical_component: "app",
+        profile: "electron",
+        protocol_compatibility: {
+          protocol: "butler.app.v1",
+          minimumAppProtocol: "butler.app.v1",
+          maximumAppProtocol: "butler.app.v1",
+        },
+        integrity: {
+          digestAlgorithm: "sha256",
+          digest: sha256,
+          signature: null,
+        },
+        update_policy: "app-user-action",
+        restart_policy: "restart-app",
+        updater_owner: "butler-app",
+        payload_format: "platform-app-package",
+        staging_policy: "platform-updater-cache",
+        activation_policy: "platform-app-update-then-versioned-app-runtime",
+        rollback_policy: "preserve-previous-app-managed-runtime",
+      }],
+    }), "utf8");
+
+    const blockedHostTools = join(butlerData, "blocked-host-tools");
+    const hostToolLog = join(butlerData, "host-tool-calls.log");
+    writeHostToolBlockers(blockedHostTools, hostToolLog);
+    const previousPath = process.env.PATH;
+    const previousHostToolLog = process.env.BUTLER_HOST_TOOL_BLOCK_LOG;
+    try {
+      process.env.PATH = blockedHostTools;
+      process.env.BUTLER_HOST_TOOL_BLOCK_LOG = hostToolLog;
+      const result = await applyComponentUpdate({
+        root,
+        butlerData,
+        component: "app",
+        manifestPath,
+      });
+      expect(result).toMatchObject({
+        component: "app",
+        current_version: packageVersion,
+        available_version: updateVersion,
+        bundled_agent_version: bundledAgentVersion,
+        update_available: true,
+        platform: appPlatform,
+        stage_status: "staged",
+        activation_status: "not_required",
+        product: "butler-app",
+        canonical_component: "app",
+        profile: "electron",
+        updater_owner: "butler-app",
+        payload_format: "platform-app-package",
+        staging_policy: "platform-updater-cache",
+        activation_policy: "platform-app-update-then-versioned-app-runtime",
+        rollback_policy: "preserve-previous-app-managed-runtime",
+      });
+      expect(result.artifact_path).toBe(
+        join("updates", "artifacts", `butler-app-${updateVersion}-${appPlatform}.artifact`),
+      );
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      if (previousHostToolLog === undefined) delete process.env.BUTLER_HOST_TOOL_BLOCK_LOG;
+      else process.env.BUTLER_HOST_TOOL_BLOCK_LOG = previousHostToolLog;
+    }
+
+    const stagedArtifactPath = join(
+      butlerData,
+      "updates",
+      "artifacts",
+      `butler-app-${updateVersion}-${appPlatform}.artifact`,
+    );
+    expect(readFileSync(stagedArtifactPath, "utf8")).toBe(unchangedShellContents);
+    const stage = JSON.parse(readFileSync(
+      join(butlerData, "updates", "staged", "app.json"),
+      "utf8",
+    ));
+    expect(stage).toMatchObject({
+      schema: "butler.update-stage.v1",
+      component: "app",
+      available_version: updateVersion,
+      bundled_agent_version: bundledAgentVersion,
+      platform: appPlatform,
+      artifact_path: join(
+        "updates",
+        "artifacts",
+        `butler-app-${updateVersion}-${appPlatform}.artifact`,
+      ),
+      sha256,
+      stage_status: "staged",
+      activation_status: "not_required",
+    });
+    expect(readFileSync(pointerPath, "utf8")).toBe(pointerBefore);
+    expect(existsSync(hostToolLog) ? readFileSync(hostToolLog, "utf8").trim() : "").toBe("");
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

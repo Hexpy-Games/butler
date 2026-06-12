@@ -34,6 +34,7 @@ export function prepareAppManagedAgentRuntime(input: {
   activated: boolean;
   previousRuntimePath: string | null;
   commitActivation: () => void;
+  rollbackActivation: (error?: Error) => void;
 };
 
 export function resolveAppManagedGatewayCommand(input?: {
@@ -48,4 +49,5 @@ export function resolveAppManagedGatewayCommand(input?: {
   bundledAgentVersion: string;
   env: Record<string, string>;
   commitActivation: () => void;
+  rollbackActivation: (error?: Error) => void;
 } | null;
