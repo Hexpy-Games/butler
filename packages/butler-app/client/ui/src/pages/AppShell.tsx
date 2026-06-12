@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
 import { Sidebar } from "@/components/layout/Sidebar.tsx";
@@ -33,11 +34,35 @@ import {
   usePanelResize,
 } from "@/hooks/usePanelResize.ts";
 import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
+import { FirstRunSetup } from "@/components/first-run/FirstRunSetup.tsx";
+import { readFirstRunState } from "@/app/firstRunSetup.ts";
 import shellStyles from "./Shell.module.css";
 
 void shellStyles;
 
 export function AppShell() {
+  const [firstRunState, setFirstRunState] = useState(() =>
+    readFirstRunState(
+      window.localStorage,
+      typeof navigator !== "undefined" ? navigator.languages : [],
+    ),
+  );
+  const openSettings = useButlerStore((state) => state.openSettings);
+  if (firstRunState.status !== "complete") {
+    return (
+      <FirstRunSetup
+        initialState={firstRunState}
+        onComplete={(mode, completedState) => {
+          setFirstRunState(completedState);
+          if (mode === "model-settings") openSettings("models");
+        }}
+      />
+    );
+  }
+  return <AppWorkspaceShell />;
+}
+
+function AppWorkspaceShell() {
   useAppBootstrap();
   const leftOpen = useButlerStore((state) => state.leftOpen);
   const setLeftOpen = useButlerStore((state) => state.setLeftOpen);
