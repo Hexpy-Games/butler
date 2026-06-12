@@ -53,6 +53,25 @@ test("first-run setup diagnostics are redacted coarse status only", () => {
   expect(diagnostics).not.toContain("String(error)");
 });
 
+test("Electron bundled-Agent setup does not attach to a pre-existing gateway", () => {
+  const main = readRepoFile("packages/butler-app/client/electron/main.mjs");
+  const ensureStart = main.indexOf("async function ensureServer()");
+  const startStart = main.indexOf("async function startManagedServer", ensureStart);
+  const ensureServer = main.slice(ensureStart, startStart);
+  const externalProbeStart = ensureServer.indexOf("if (serverStartupPromise)");
+  const externalProbe = ensureServer.slice(externalProbeStart);
+
+  expect(externalProbe).toContain("const gateway = managedGatewayCommand();");
+  expect(externalProbe).toContain("if (await healthOk())");
+  expect(externalProbe.indexOf("const gateway = managedGatewayCommand();")).toBeLessThan(
+    externalProbe.indexOf("if (await healthOk())"),
+  );
+  expect(externalProbe).toContain("if (!gateway.commitActivation) return;");
+  expect(externalProbe).toContain("updateManagedServerPort(await findAvailablePort(port + 1))");
+  expect(externalProbe).toContain("serverStartupPromise = startManagedServer(gateway);");
+  expect(main).toContain("async function startManagedServer(gateway = managedGatewayCommand())");
+});
+
 function readRepoFile(path: string): string {
   return readFileSync(path, "utf8");
 }
