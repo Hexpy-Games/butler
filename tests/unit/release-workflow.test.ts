@@ -142,6 +142,35 @@ test("README directs default installs to Butler App and advanced installs to Age
   expect(development).toContain("bun install");
 });
 
+test("manual first-run test environment launches isolated Electron state", () => {
+  const packageJson = JSON.parse(readRepoFile("package.json")) as {
+    scripts?: Record<string, string>;
+  };
+  const script = readRepoFile("packages/butler-app/scripts/app-first-run-test-env.ts");
+
+  expect(packageJson.scripts?.["app:first-run:test-env"]).toContain(
+    "packages/butler-app/scripts/app-first-run-test-env.ts",
+  );
+  expect(packageJson.scripts?.["app:first-run:test-env"]).toContain("exec ");
+  expect(packageJson.scripts?.["app:first-run:test-env"]).toContain(
+    "packages/butler-app/client/ui run build",
+  );
+  expect(script).toContain("BUTLER_DATA: dataDir");
+  expect(script).toContain("BUTLER_HOME: root");
+  expect(script).toContain("BUTLER_APP_SERVER_PORT: String(serverPort)");
+  expect(script).toContain("--user-data-dir=${electronProfileDir}");
+  expect(script).toContain("baseEnvAllowlist");
+  expect(script).toContain("delete env.BUTLER_APP_SERVER_URL");
+  expect(script).toContain("delete env.BUTLER_APP_SERVER_BRIDGE");
+  expect(script).toContain("Refusing to use the real ~/.butler directory");
+  expect(script).toContain("Refusing to use the normal Butler Electron profile");
+  expect(script).toContain("assertPortAvailable(serverPort)");
+  expect(script).toContain("cleanupOwnedPort(serverPort, ownedListenerPids ?? new Set<number>())");
+  expect(script).toContain("not proof that the first-run wizard is implemented");
+  expect(script).toContain("Electron profile:");
+  expect(script).toContain("Quit Butler from the app/tray, or press Ctrl-C here to stop.");
+});
+
 test("current release notes describe the GitHub release changelog", () => {
   const notes = readRepoFile(`.github/releases/${currentReleaseTag}.md`);
 
