@@ -99,6 +99,54 @@ test("app server exposes health and onboarding chat seed", async () => {
   }
 });
 
+test("app server enforces App local auth for API routes without blocking static UI", async () => {
+  const uiRoot = join(tempDir, "ui");
+  mkdirSync(uiRoot, { recursive: true });
+  writeFileSync(join(uiRoot, "index.html"), "<!doctype html><div>Butler</div>");
+  const server = createAppServer({
+    dbPath: join(tempDir, "auth-app.sqlite"),
+    port: 0,
+    uiRoot,
+    localAuth: {
+      required: true,
+      token: "local-auth-token",
+    },
+  });
+  try {
+    const unauthenticatedHealth = await fetch(`${server.url}health`);
+    expect(unauthenticatedHealth.status).toBe(401);
+    const unauthenticatedBody = await unauthenticatedHealth.json();
+    expect(unauthenticatedBody.error).toMatchObject({
+      code: "local_auth_required",
+      message: "Butler App local auth is required.",
+    });
+    expect(JSON.stringify(unauthenticatedBody)).not.toContain("local-auth-token");
+
+    const wrongToken = await fetch(`${server.url}settings`, {
+      headers: { authorization: "Bearer wrong-token" },
+    });
+    expect(wrongToken.status).toBe(401);
+
+    const health = await fetch(`${server.url}health`, {
+      headers: { authorization: "Bearer local-auth-token" },
+    });
+    expect(health.status).toBe(200);
+    expect((await health.json()).data.ok).toBe(true);
+
+    const settings = await fetch(`${server.url}settings`, {
+      headers: { authorization: "Bearer local-auth-token" },
+    });
+    expect(settings.status).toBe(200);
+    expect((await settings.json()).data.gateway_profile).toBe("electron");
+
+    const staticUi = await fetch(server.url);
+    expect(staticUi.status).toBe(200);
+    expect(await staticUi.text()).toContain("Butler");
+  } finally {
+    server.stop();
+  }
+});
+
 test("app gateway CLI keeps serving after startup health", async () => {
   const port = await findAvailablePort();
   const dbPath = join(tempDir, "cli-app.sqlite");
@@ -118,6 +166,7 @@ test("app gateway CLI keeps serving after startup health", async () => {
       BUTLER_APP_SERVER_DB: dbPath,
       BUTLER_APP_SERVER_BRIDGE: "off",
       BUTLER_APP_GATEWAY_PID_FILE: "off",
+      BUTLER_APP_BUNDLED_SUPERVISOR: "1",
     },
     stdio: "ignore",
   });
@@ -133,6 +182,61 @@ test("app gateway CLI keeps serving after startup health", async () => {
     expect(existsSync(join(tempDir, "state", "gateways", "app.pid"))).toBe(
       false,
     );
+  } finally {
+    await terminateChild(proc);
+  }
+});
+
+test("app gateway CLI enforces App local auth from supervisor auth file", async () => {
+  const port = await findAvailablePort();
+  const dbPath = join(tempDir, "cli-auth-app.sqlite");
+  const authPath = join(tempDir, "app", "runtime", "auth", "local-agent-auth.json");
+  mkdirSync(join(tempDir, "app", "runtime", "auth"), { recursive: true });
+  writeFileSync(
+    authPath,
+    `${JSON.stringify({
+      schema: "butler.app-local-agent-auth.v1",
+      token: "cli-local-auth-token",
+      raw_text_included: false,
+    }, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+  const proc = spawn(process.execPath, [
+    join(process.cwd(), "bin", "butler.js"),
+    "gateway",
+    "app",
+  ], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      BUTLER_DATA: tempDir,
+      BUTLER_HOME: process.cwd(),
+      BUTLER_BUN: process.execPath,
+      BUTLER_APP_SERVER_PORT: String(port),
+      BUTLER_APP_SERVER_URL: `http://127.0.0.1:${port}`,
+      BUTLER_APP_SERVER_DB: dbPath,
+      BUTLER_APP_SERVER_BRIDGE: "off",
+      BUTLER_APP_GATEWAY_PID_FILE: "off",
+      BUTLER_APP_BUNDLED_SUPERVISOR: "1",
+      BUTLER_APP_LOCAL_AUTH_REQUIRED: "1",
+      BUTLER_APP_LOCAL_AUTH_FILE: authPath,
+    },
+    stdio: "ignore",
+  });
+
+  try {
+    await waitForHttpStatus(`http://127.0.0.1:${port}/health`, 401);
+    const unauthenticated = await fetch(`http://127.0.0.1:${port}/health`);
+    expect(unauthenticated.status).toBe(401);
+    expect(JSON.stringify(await unauthenticated.json())).not.toContain(
+      "cli-local-auth-token",
+    );
+
+    const authenticated = await fetch(`http://127.0.0.1:${port}/health`, {
+      headers: { authorization: "Bearer cli-local-auth-token" },
+    });
+    expect(authenticated.status).toBe(200);
+    expect((await authenticated.json()).data.ok).toBe(true);
   } finally {
     await terminateChild(proc);
   }
@@ -7556,6 +7660,21 @@ async function waitForHttpOk(url: string): Promise<void> {
     try {
       const response = await fetch(url);
       if (response.ok) return;
+      lastError = `HTTP ${response.status}`;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`Timed out waiting for ${url}: ${String(lastError)}`);
+}
+
+async function waitForHttpStatus(url: string, status: number): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    try {
+      const response = await fetch(url);
+      if (response.status === status) return;
       lastError = `HTTP ${response.status}`;
     } catch (error) {
       lastError = error;

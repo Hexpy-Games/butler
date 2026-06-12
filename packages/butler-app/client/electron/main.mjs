@@ -18,6 +18,7 @@ import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createBundledAgentSupervisor } from "./app-agent-supervisor.mjs";
 import { resolveAppManagedGatewayCommand } from "./app-managed-runtime.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
 
@@ -60,9 +61,6 @@ const appearanceThemeSources = new Set(["system", "light", "dark"]);
 const projectFolderTokenSecret = resolveProjectFolderTokenSecret();
 const projectFolderTokenTtlMs = 5 * 60 * 1000;
 const messageFileIdPattern = /^file-[0-9a-f-]{36}$/iu;
-let serverProcess = null;
-let serverStartupPromise = null;
-let serverShutdownKillTimer = null;
 let nativeSettingsCache = null;
 let mainWindow = null;
 let tray = null;
@@ -75,10 +73,26 @@ const nativeNotificationState = {
   lastAttemptedAt: null,
   lastShownAt: null,
 };
+const bundledAgentSupervisor = createBundledAgentSupervisor({
+  butlerData: butlerDataRoot,
+  resolveGateway: managedGatewayCommand,
+  spawnProcess: spawn,
+  healthCheck: healthOk,
+  isPortAvailable,
+  findAvailablePort,
+  updatePort: updateManagedServerPort,
+  getPort: () => port,
+  getServerUrl: () => serverUrl,
+  getRendererOrigin: () => rendererOrigin,
+  explicitServerUrl,
+  explicitUiUrl,
+  projectFolderTokenSecret,
+});
 const firstRunSetupBridge = createFirstRunSetupBridge({
   ensureReady: ensureServer,
   gatewayProfile: "electron",
   readSettings: readSetupSettings,
+  readRuntimeDiagnostics: () => bundledAgentSupervisor.diagnostics(),
 });
 app.setName(appDisplayName);
 syncPreloadServerEnvironment();
@@ -128,6 +142,7 @@ function managedGatewayCommand() {
       command: runtime,
       args: [localButlerCli, "gateway", "app"],
       cwd: home,
+      appManaged: false,
       env: {
         BUTLER_HOME: home,
         BUTLER_DATA: data,
@@ -139,6 +154,7 @@ function managedGatewayCommand() {
     command: process.env.BUTLER_CLI || "butler",
     args: ["gateway", "app"],
     cwd: undefined,
+    appManaged: false,
   };
 }
 
@@ -173,9 +189,13 @@ function resolveButlerRuntime(data) {
   return "bun";
 }
 
-async function healthOk() {
+async function healthOk(localAuth = null) {
   try {
-    const response = await fetch(serverHealthUrl);
+    const response = await fetch(serverHealthUrl, {
+      headers: localAuth?.token
+        ? { authorization: `Bearer ${localAuth.token}` }
+        : {},
+    });
     const body = await response.json().catch(() => null);
     return (
       response.ok &&
@@ -188,80 +208,7 @@ async function healthOk() {
 }
 
 async function ensureServer() {
-  if (explicitServerUrl) {
-    if (await healthOk()) return;
-    throw new Error(`Butler app server is not healthy: ${explicitServerUrl}`);
-  }
-  if (serverProcess && (await healthOk())) return;
-  if (serverStartupPromise) return serverStartupPromise;
-  const gateway = managedGatewayCommand();
-  if (await healthOk()) {
-    if (!gateway.commitActivation) return;
-    updateManagedServerPort(await findAvailablePort(port + 1));
-  }
-  if (!(await isPortAvailable(port))) {
-    updateManagedServerPort(await findAvailablePort(port + 1));
-  }
-  serverStartupPromise = startManagedServer(gateway);
-  try {
-    await serverStartupPromise;
-  } finally {
-    serverStartupPromise = null;
-  }
-}
-
-async function startManagedServer(gateway = managedGatewayCommand()) {
-  if (serverProcess) {
-    throw new Error(
-      "Butler app server is already starting but is not healthy yet.",
-    );
-  }
-
-  serverProcess = spawn(gateway.command, gateway.args, {
-    ...(gateway.cwd ? { cwd: gateway.cwd } : {}),
-    env: {
-      ...process.env,
-      ...(gateway.env ?? {}),
-      BUTLER_APP_SERVER_PORT: String(port),
-      BUTLER_APP_SERVER_URL: serverUrl,
-      BUTLER_APP_GATEWAY_PID_FILE: "off",
-      ...(explicitUiUrl ? { BUTLER_APP_DEV_ORIGIN: rendererOrigin } : {}),
-      BUTLER_PROJECT_FOLDER_TOKEN_SECRET: projectFolderTokenSecret,
-    },
-    stdio: "inherit",
-  });
-  let spawnError = null;
-  let earlyExit = null;
-  serverProcess.once("error", (error) => {
-    spawnError = error;
-  });
-  serverProcess.once("exit", (code, signal) => {
-    earlyExit = { code, signal };
-    if (serverShutdownKillTimer) clearTimeout(serverShutdownKillTimer);
-    serverShutdownKillTimer = null;
-    serverProcess = null;
-  });
-
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (await healthOk()) {
-      gateway.commitActivation?.();
-      return;
-    }
-    if (spawnError) {
-      throw new Error(
-        `Failed to start Butler app server: ${spawnError.message}`,
-      );
-    }
-    if (earlyExit) {
-      throw new Error(
-        `Butler app server exited before becoming healthy: code=${earlyExit.code ?? "null"} signal=${earlyExit.signal ?? "null"}.`,
-      );
-    }
-    await new Promise((resolveSleep) => setTimeout(resolveSleep, 150));
-  }
-  throw new Error(
-    `Timed out waiting for Butler app server at ${serverHealthUrl}.`,
-  );
+  await bundledAgentSupervisor.ensureReady();
 }
 
 async function installDevtools() {
@@ -294,7 +241,7 @@ function appInfoView() {
 }
 
 async function readSetupSettings() {
-  const response = await fetch(new URL("/settings", serverUrl));
+  const response = await appServerFetch("/settings");
   const body = await response.json().catch(() => null);
   if (!response.ok || body?.protocol_version !== appProtocolVersion) {
     const error = new Error("settings_unavailable");
@@ -365,7 +312,7 @@ function updateTrayIcon() {
 
 async function readAppData(path) {
   try {
-    const response = await fetch(new URL(path, serverUrl));
+    const response = await appServerFetch(path);
     const body = await response.json().catch(() => null);
     if (!response.ok || body?.protocol_version !== appProtocolVersion) {
       return null;
@@ -790,8 +737,8 @@ ipcMain.handle("butler:first-run-setup-status", () =>
   firstRunSetupBridge.status(),
 );
 
-ipcMain.handle("butler:first-run-setup-start", async (_event, input) =>
-  await firstRunSetupBridge.start(input ?? {}),
+ipcMain.handle("butler:first-run-setup-start", async () =>
+  await firstRunSetupBridge.start(),
 );
 
 ipcMain.handle("butler:first-run-setup-cancel", () =>
@@ -800,6 +747,10 @@ ipcMain.handle("butler:first-run-setup-cancel", () =>
 
 ipcMain.handle("butler:first-run-setup-diagnostics", () =>
   firstRunSetupBridge.diagnostics(),
+);
+
+ipcMain.handle("butler:get-local-auth-headers", async () =>
+  await appLocalAuthHeaders(),
 );
 
 ipcMain.handle("butler:set-native-appearance-theme", (_event, input) => {
@@ -878,6 +829,7 @@ ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {
   if (result.canceled || !result.filePath) return { saved: false };
   const artifactResponse = await fetch(
     new URL(`/message-files/${encodeURIComponent(fileId)}`, serverUrl),
+    { headers: await appLocalAuthHeaders() },
   );
   if (!artifactResponse.ok) {
     throw new Error("Unable to load Butler artifact.");
@@ -947,11 +899,24 @@ process.once("SIGTERM", () => {
 });
 
 function stopServerProcess() {
-  if (!serverProcess) return;
-  serverProcess.kill("SIGTERM");
-  serverShutdownKillTimer = setTimeout(() => {
-    if (serverProcess) serverProcess.kill("SIGKILL");
-  }, 2000);
+  void bundledAgentSupervisor.stop();
+}
+
+async function appServerFetch(path, init = {}) {
+  return await fetch(new URL(path, serverUrl), {
+    ...init,
+    headers: {
+      ...(await appLocalAuthHeaders()),
+      ...(init.headers ?? {}),
+    },
+  });
+}
+
+async function appLocalAuthHeaders() {
+  const headers = await bundledAgentSupervisor.authHeaders();
+  const authorization =
+    typeof headers?.authorization === "string" ? headers.authorization : "";
+  return authorization ? { authorization } : {};
 }
 
 function createProjectFolderSelectionToken(folderPath, secret) {

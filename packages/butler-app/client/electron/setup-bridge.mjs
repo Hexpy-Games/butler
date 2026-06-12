@@ -1,6 +1,7 @@
 export function createFirstRunSetupBridge({
   ensureReady,
   readSettings,
+  readRuntimeDiagnostics = () => ({}),
   gatewayProfile = "electron",
 }) {
   let runId = 0;
@@ -36,7 +37,10 @@ export function createFirstRunSetupBridge({
             "managed_gateway",
             "Butler Agent 연결",
           ),
-          setupCheck("settings", "앱 설정 확인"),
+          setupCheck("bundled_agent_version", "Agent 버전 확인"),
+          setupCheck("local_auth", "로컬 인증 확인"),
+          setupCheck("health", "상태 확인"),
+          setupCheck("protocol", "프로토콜 확인"),
           setupCheck(
             "gateway_profile",
             "Electron 연결 확인",
@@ -54,10 +58,24 @@ export function createFirstRunSetupBridge({
           "managed_gateway",
           "passed",
         );
+        const diagnostics = readRuntimeDiagnostics();
+        if (!bundledAgentVersionReady(diagnostics)) {
+          throw setupError("bundled_agent_version_missing");
+        }
+        markCheck(currentSession, "bundled_agent_version", "passed");
+        if (diagnostics?.local_auth?.required !== true ||
+          diagnostics?.local_auth?.token_configured !== true) {
+          throw setupError("local_auth_unavailable");
+        }
+        markCheck(currentSession, "local_auth", "passed");
+        if (diagnostics?.phase !== "running") {
+          throw setupError("health_unavailable");
+        }
+        markCheck(currentSession, "health", "passed");
         const settings = await readSettings();
         if (!isActiveRun(currentRunId, runId, session)) return statusView(session);
         if (currentSession.cancelled) return statusView(currentSession);
-        markCheck(currentSession, "settings", "passed");
+        markCheck(currentSession, "protocol", "passed");
         if (gatewayProfile !== "electron" || settings?.gateway_profile !== "electron") {
           throw setupError("gateway_profile_mismatch");
         }
@@ -145,10 +163,20 @@ function failPendingChecks(checks) {
 }
 
 function setupErrorCode(error) {
-  if (error?.code === "gateway_profile_mismatch") {
+  if (
+    error?.code === "gateway_profile_mismatch" ||
+    error?.code === "bundled_agent_version_missing" ||
+    error?.code === "local_auth_unavailable" ||
+    error?.code === "health_unavailable"
+  ) {
     return error.code;
   }
   return "setup_failed";
+}
+
+function bundledAgentVersionReady(diagnostics) {
+  if (diagnostics?.bundled_agent?.version_configured === true) return true;
+  return diagnostics?.bundled_agent?.source === "development";
 }
 
 function setupError(code) {

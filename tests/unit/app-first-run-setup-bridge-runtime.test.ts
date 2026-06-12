@@ -17,6 +17,7 @@ test("first-run setup bridge prevents stale start from overwriting retry", async
       gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
+    readRuntimeDiagnostics: okRuntimeDiagnostics,
   });
 
   const staleStart = bridge.start();
@@ -45,6 +46,7 @@ test("first-run setup bridge diagnostics expose redacted shape only", async () =
       (error as Error & { code?: string }).code = "settings_unavailable";
       throw error;
     },
+    readRuntimeDiagnostics: okRuntimeDiagnostics,
   });
 
   await bridge.start();
@@ -75,6 +77,7 @@ test("first-run setup bridge ignores existing-Agent mode requests", async () => 
       gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
+    readRuntimeDiagnostics: okRuntimeDiagnostics,
   });
 
   await startWithRawRequest(bridge, { mode: "existing-agent" });
@@ -82,7 +85,10 @@ test("first-run setup bridge ignores existing-Agent mode requests", async () => 
   expect(managedReadyCalls).toBe(1);
   expect(bridge.diagnostics().checks.map((check) => check.id)).toEqual([
     "managed_gateway",
-    "settings",
+    "bundled_agent_version",
+    "local_auth",
+    "health",
+    "protocol",
     "gateway_profile",
   ]);
 });
@@ -95,6 +101,7 @@ test("first-run setup bridge defaults to bundled-Agent mode", async () => {
       gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
+    readRuntimeDiagnostics: okRuntimeDiagnostics,
   });
 
   await bridge.start();
@@ -114,6 +121,7 @@ test("first-run setup bridge ignores standalone installer service fields", async
       gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
+    readRuntimeDiagnostics: okRuntimeDiagnostics,
   });
 
   await startWithRawRequest(bridge, {
@@ -126,7 +134,10 @@ test("first-run setup bridge ignores standalone installer service fields", async
   expect(managedReadyCalls).toBe(1);
   expect(bridge.diagnostics().checks.map((check) => check.id)).toEqual([
     "managed_gateway",
-    "settings",
+    "bundled_agent_version",
+    "local_auth",
+    "health",
+    "protocol",
     "gateway_profile",
   ]);
 });
@@ -139,6 +150,7 @@ test("first-run setup bridge rejects damaged bundled gateway profile settings", 
       gateway_profile: "terminal",
       server_url: "http://127.0.0.1:18765",
     }),
+    readRuntimeDiagnostics: okRuntimeDiagnostics,
   });
 
   await startWithRawRequest(bridge, { mode: "bundled-agent" });
@@ -156,6 +168,7 @@ test("first-run setup bridge still verifies electron profile for existing-Agent 
       gateway_profile: "terminal",
       server_url: "http://127.0.0.1:18765",
     }),
+    readRuntimeDiagnostics: okRuntimeDiagnostics,
   });
 
   await startWithRawRequest(bridge, { mode: "existing-agent" });
@@ -176,6 +189,7 @@ test("first-run setup bridge uses managed server for existing-Agent mode request
       gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
+    readRuntimeDiagnostics: okRuntimeDiagnostics,
   });
 
   await startWithRawRequest(bridge, { mode: "existing-agent" });
@@ -194,6 +208,7 @@ test("first-run setup bridge does not require existing-Agent endpoint for mode r
       gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
+    readRuntimeDiagnostics: okRuntimeDiagnostics,
   });
 
   await startWithRawRequest(bridge, { mode: "existing-agent" });
@@ -217,4 +232,18 @@ async function startWithRawRequest(
 ) {
   const start = bridge.start as (request?: unknown) => Promise<unknown>;
   await start(request);
+}
+
+function okRuntimeDiagnostics() {
+  return {
+    phase: "running",
+    bundled_agent: {
+      source: "app-managed",
+      version_configured: true,
+    },
+    local_auth: {
+      required: true,
+      token_configured: true,
+    },
+  };
 }

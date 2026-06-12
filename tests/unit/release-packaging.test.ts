@@ -858,7 +858,10 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(appReleasePackager).toContain("app-release-manifest.json");
   expect(appReleasePackager).toContain("app-update-manifest.json");
   expect(appReleasePackager).toContain("prepareBundledAgentResource");
-  expect(appReleasePackager).toContain("createServiceReleasePackage");
+  expect(appReleasePackager).toContain("createAgentReleasePackage");
+  expect(appReleasePackager).toContain('join("deploy", "agent", "package-agent.ts")');
+  expect(appReleasePackager).toContain('"--json"');
+  expect(appReleasePackager).not.toContain("createServiceReleasePackage");
   expect(appReleasePackager).not.toContain("currentServiceCliLauncherPlatform");
   expect(appReleasePackager).toContain("--extra-resource=");
   expect(appReleasePackager).toContain("bundled-agent");

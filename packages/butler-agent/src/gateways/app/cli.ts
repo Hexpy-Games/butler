@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   clearAppGatewayPid,
@@ -11,7 +11,8 @@ import { createAppServer } from "./server.ts";
 
 const dataRoot =
   process.env.BUTLER_DATA ?? join(process.env.HOME ?? process.cwd(), ".butler");
-if (!isGatewayEnabled(dataRoot, "app")) {
+const isBundledSupervisor = process.env.BUTLER_APP_BUNDLED_SUPERVISOR === "1";
+if (!isBundledSupervisor && !isGatewayEnabled(dataRoot, "app")) {
   console.error("Butler App gateway is disabled. Run `butler gateway enable app` to enable it.");
   process.exit(2);
 }
@@ -40,6 +41,7 @@ const dbPath =
   join(dataRoot, "app-server", "butler-client.sqlite");
 const projectWorkspaceRoot = process.env.BUTLER_PROJECT_WORKSPACE;
 const folderSelectionSecret = process.env.BUTLER_PROJECT_FOLDER_TOKEN_SECRET;
+const localAuth = readLocalAuthConfig(process.env);
 const devCorsOrigin = process.env.BUTLER_APP_DEV_ORIGIN;
 const bridgeMode =
   process.env.BUTLER_APP_SERVER_BRIDGE === "off" ? "external" : "local";
@@ -78,6 +80,7 @@ const app = createAppServer({
       ? messageRateLimitWindowMs
       : 60000,
   },
+  localAuth,
 });
 
 console.log(
@@ -108,3 +111,24 @@ process.on("SIGTERM", () => {
 process.on("exit", () => {
   if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
 });
+
+function readLocalAuthConfig(env: NodeJS.ProcessEnv): {
+  required: boolean;
+  token: string | null;
+} {
+  const required = env.BUTLER_APP_LOCAL_AUTH_REQUIRED === "1";
+  if (!required) return { required: false, token: null };
+  const path = env.BUTLER_APP_LOCAL_AUTH_FILE?.trim();
+  if (!path) return { required: true, token: null };
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    return {
+      required: true,
+      token: typeof parsed?.token === "string" && parsed.token.trim()
+        ? parsed.token.trim()
+        : null,
+    };
+  } catch {
+    return { required: true, token: null };
+  }
+}

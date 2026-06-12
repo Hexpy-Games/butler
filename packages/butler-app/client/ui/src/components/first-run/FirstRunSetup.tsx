@@ -2,7 +2,6 @@ import type { FirstRunState } from "@/app/firstRunSetup.ts";
 import { FirstRunProgress } from "./FirstRunProgress";
 import { FirstRunStepContent } from "./FirstRunStepContent";
 import { useFirstRunSetupController } from "./useFirstRunSetupController";
-import styles from "./FirstRunSetup.module.css";
 
 interface FirstRunSetupProps {
   initialState: FirstRunState;
@@ -16,10 +15,10 @@ export function FirstRunSetup({
   const setup = useFirstRunSetupController(initialState, onComplete);
 
   return (
-    <main className={styles.screen} data-test-class="first-run-setup">
-      <section className={styles.panel}>
-        <div className={styles.header}>
-          <div className={styles.product}>{setup.copy.product}</div>
+    <main className="first-run-setup-screen" data-test-class="first-run-setup">
+      <section className="first-run-setup-panel">
+        <div className="first-run-setup-header">
+          <div className="first-run-setup-product">{setup.copy.product}</div>
           <FirstRunProgress
             activeIndex={setup.stepIndex}
             labels={setup.copy.steps}

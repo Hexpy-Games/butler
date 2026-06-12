@@ -4,7 +4,6 @@ import {
   type FirstRunStep,
 } from "@/app/firstRunSetup.ts";
 import { Button, NativeSelect, NativeSelectOption } from "@/butler-ds";
-import styles from "./FirstRunSetup.module.css";
 
 type FirstRunCopy = (typeof firstRunCopy)[FirstRunLanguage];
 
@@ -37,7 +36,7 @@ export function FirstRunStepContent({
 }: FirstRunStepContentProps) {
   if (step === "language") {
     return (
-      <div className={styles.content}>
+      <div className="first-run-setup-content">
         <h1>{copy.languageTitle}</h1>
         <NativeSelect
           value={language}
@@ -58,10 +57,10 @@ export function FirstRunStepContent({
 
   if (step === "safety") {
     return (
-      <div className={styles.content}>
+      <div className="first-run-setup-content">
         <h1>{copy.safetyTitle}</h1>
         <p>{copy.safetyBody}</p>
-        <div className={styles.actions}>
+        <div className="first-run-setup-actions">
           <Button type="button" variant="outline" onClick={onBackToLanguage}>
             {copy.back}
           </Button>
@@ -75,10 +74,10 @@ export function FirstRunStepContent({
 
   if (step === "install") {
     return (
-      <div className={styles.content}>
+      <div className="first-run-setup-content">
         <h1>{copy.installTitle}</h1>
         <p>{error || status}</p>
-        <div className={styles.actions}>
+        <div className="first-run-setup-actions">
           {error && (
             <Button type="button" onClick={onRetryInstall}>
               {copy.retry}
@@ -90,10 +89,10 @@ export function FirstRunStepContent({
   }
 
   return (
-    <div className={styles.content}>
+    <div className="first-run-setup-content">
       <h1>{copy.modelTitle}</h1>
       <p>{copy.modelBody}</p>
-      <div className={styles.actions}>
+      <div className="first-run-setup-actions">
         <Button
           type="button"
           variant="outline"

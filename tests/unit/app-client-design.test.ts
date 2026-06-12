@@ -611,6 +611,9 @@ test("fresh app chrome defaults to a collapsed left sidebar", () => {
 
 test("electron shell injects a minimal preload-only app API contract", () => {
   const electronMain = read("packages/butler-app/client/electron/main.mjs");
+  const supervisor = read(
+    "packages/butler-app/client/electron/app-agent-supervisor.mjs",
+  );
   const preload = read("packages/butler-app/client/electron/preload.cjs");
   const renderer = readUiSources();
 
@@ -621,10 +624,13 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(electronMain).toContain('new URL("/health", serverUrl).toString()');
   expect(electronMain).toContain('body?.protocol_version === "butler.app.v1"');
   expect(electronMain).toContain("body?.data?.ok === true");
-  expect(electronMain).toContain("serverStartupPromise");
-  expect(electronMain).toContain("startManagedServer");
+  expect(electronMain).toContain("createBundledAgentSupervisor");
+  expect(electronMain).toContain("bundledAgentSupervisor.ensureReady()");
+  expect(electronMain).toContain("butler:get-local-auth-headers");
+  expect(electronMain).toContain("function appServerFetch");
+  expect(electronMain).toContain("function appLocalAuthHeaders");
   expect(electronMain).toContain("normalizeLocalHttpUrl");
-  expect(electronMain).toContain("BUTLER_APP_DEV_ORIGIN");
+  expect(supervisor).toContain("BUTLER_APP_DEV_ORIGIN");
   expect(electronMain).toContain("await win.loadURL(rendererUrl)");
   expect(electronMain).toContain("handleFatalStartupError");
   expect(electronMain).toContain(".catch(handleFatalStartupError)");
@@ -647,6 +653,8 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(preload).toContain('protocolVersion: "butler.app.v1"');
   expect(preload).toContain("getAppInfo:");
   expect(preload).toContain("setDeveloperMode:");
+  expect(preload).toContain("butler:get-local-auth-headers");
+  expect(preload).not.toContain("getLocalAuthHeaders");
   expect(preload).toContain("health:");
   expect(preload).toContain("listChats:");
   expect(preload).toContain("listNavigation:");
@@ -1524,11 +1532,15 @@ test("conversation UI renders user bubbles and assistant documents with retryabl
 
 test("electron shell owns only the app gateway process and shuts it down cleanly", () => {
   const electronMain = read("packages/butler-app/client/electron/main.mjs");
+  const supervisor = read(
+    "packages/butler-app/client/electron/app-agent-supervisor.mjs",
+  );
 
   expect(electronMain).toContain("function stopServerProcess");
-  expect(electronMain).toContain('serverProcess.kill("SIGTERM")');
-  expect(electronMain).toContain('serverProcess.kill("SIGKILL")');
-  expect(electronMain).toContain("serverShutdownKillTimer");
+  expect(electronMain).toContain("bundledAgentSupervisor.stop()");
+  expect(supervisor).toContain('stopping.kill("SIGTERM")');
+  expect(supervisor).toContain('stopping.kill("SIGKILL")');
+  expect(supervisor).toContain("shutdownKillTimer");
   expect(electronMain).toContain("function managedGatewayCommand");
   expect(electronMain).toContain('"gateway", "app"');
   expect(electronMain).toContain("process.env.BUTLER_BUN");
@@ -1536,14 +1548,14 @@ test("electron shell owns only the app gateway process and shuts it down cleanly
     "packages/butler-agent/src/gateways/app/cli.ts",
   );
   expect(electronMain).not.toContain("service-control.sh");
-  expect(electronMain).toContain("already starting but is not healthy");
-  expect(electronMain).toContain("Failed to start Butler app server");
-  expect(electronMain).toContain("exited before becoming healthy");
-  expect(electronMain).toContain("if (await healthOk()) return;");
-  expect(electronMain).toContain("BUTLER_APP_GATEWAY_PID_FILE");
-  expect(electronMain).toContain('serverProcess.once("exit"');
-  expect(electronMain).toContain('serverProcess.once("error"');
-  expect(electronMain).not.toContain("serverProcess.unref()");
+  expect(supervisor).toContain("already starting but is not healthy");
+  expect(supervisor).toContain("Failed to start Butler app server");
+  expect(supervisor).toContain("exited before becoming healthy");
+  expect(supervisor).toContain("if (await healthCheck(localAuth))");
+  expect(supervisor).toContain("BUTLER_APP_GATEWAY_PID_FILE");
+  expect(supervisor).toContain('child.once("exit"');
+  expect(supervisor).toContain('child.once("error"');
+  expect(supervisor).not.toContain("child.unref()");
   expect(electronMain).toContain('app.on("before-quit"');
   expect(electronMain).toContain('process.once("SIGINT"');
   expect(electronMain).toContain('process.once("SIGTERM"');
@@ -2543,7 +2555,7 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(modelManagementE2e).toContain("Moonshot / Kimi");
   expect(electronMain).toContain("findAvailablePort");
   expect(electronMain).toContain("syncPreloadServerEnvironment");
-  expect(electronMain).toContain("serverProcess && (await healthOk())");
+  expect(electronMain).toContain("createBundledAgentSupervisor");
 });
 
 test("thinking mark components expose state and theme contracts", () => {

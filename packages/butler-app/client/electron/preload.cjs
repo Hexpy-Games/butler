@@ -26,11 +26,13 @@ function normalizeLocalServerUrl(value) {
 
 async function requestJson(path, options = {}) {
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  const authHeaders = await localAuthHeaders();
   const response = await fetch(new URL(path, serverUrl), {
     ...options,
     headers: {
       ...(options.body && !isFormData ? { "content-type": "application/json" } : {}),
       ...(options.headers ?? {}),
+      ...authHeaders,
     },
   });
   const body = await response.json().catch(() => null);
@@ -47,6 +49,20 @@ async function requestJson(path, options = {}) {
     throw error;
   }
   return body.data;
+}
+
+async function localAuthHeaders() {
+  try {
+    const headers = await ipcRenderer.invoke("butler:get-local-auth-headers");
+    const authorization =
+      headers && typeof headers === "object" && !Array.isArray(headers) &&
+      typeof headers.authorization === "string"
+        ? headers.authorization
+        : "";
+    return authorization ? { authorization } : {};
+  } catch {
+    return {};
+  }
 }
 
 function messageCacheKey(chatId) {
