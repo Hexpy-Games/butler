@@ -313,6 +313,7 @@ export interface ComponentUpdateStatus {
   available_version: string;
   update_available: boolean;
   channel: string;
+  platform: string | null;
   artifact_url: string | null;
   sha256: string | null;
   signature: string | null;
