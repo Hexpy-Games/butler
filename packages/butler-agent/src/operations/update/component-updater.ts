@@ -37,6 +37,14 @@ export interface UpdateIntegrityMetadata {
   signature: string | null;
 }
 
+export type UpdateProtocolCompatibility = {
+  protocol: string;
+  minimumAgentProtocol?: string;
+  maximumAgentProtocol?: string;
+  minimumAppProtocol?: string;
+  maximumAppProtocol?: string;
+};
+
 interface ComponentVersions {
   service: string;
   app: string;
@@ -55,7 +63,7 @@ export interface ComponentUpdateStatus {
   product: UpdateProduct;
   canonical_component: UpdateCanonicalComponent;
   profile: UpdateProfile;
-  protocol_compatibility: Record<string, string>;
+  protocol_compatibility: UpdateProtocolCompatibility;
   integrity: UpdateIntegrityMetadata;
   update_policy: ReleaseUpdatePolicy;
   restart_policy: ReleaseRestartPolicy;
@@ -118,7 +126,7 @@ type ManifestArtifact = {
   product: UpdateProduct;
   canonical_component: UpdateCanonicalComponent;
   profile: UpdateProfile;
-  protocol_compatibility: Record<string, string>;
+  protocol_compatibility: UpdateProtocolCompatibility;
   integrity: UpdateIntegrityMetadata;
   update_policy: ReleaseUpdatePolicy;
   restart_policy: ReleaseRestartPolicy;
@@ -559,8 +567,8 @@ function normalizeProfile(
 function normalizeProtocolCompatibility(
   component: UpdateComponentId,
   value: unknown,
-): Record<string, string> {
-  const expected = component === "service"
+): UpdateProtocolCompatibility {
+  const expected: UpdateProtocolCompatibility = component === "service"
     ? {
         protocol: "butler.agent.v1",
         minimumAgentProtocol: "butler.agent.v1",

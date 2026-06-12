@@ -60,6 +60,7 @@ export function UpdateComponentRow({
 export function emptyComponentStatus(
   component: UpdateComponentId,
 ): ComponentUpdateStatus {
+  const isAgent = component === "service";
   return {
     component,
     current_version: "",
@@ -70,11 +71,36 @@ export function emptyComponentStatus(
     sha256: null,
     signature: null,
     bundled_components: [component],
-    update_policy: component === "service" ? "explicit" : "app-user-action",
-    restart_policy:
-      component === "service"
-        ? "restart-service"
-        : "restart-app",
+    product: isAgent ? "butler-agent" : "butler-app",
+    canonical_component: isAgent ? "agent" : "app",
+    profile: isAgent ? "agent-standalone" : "electron",
+    protocol_compatibility: isAgent
+      ? {
+          protocol: "butler.agent.v1",
+          minimumAgentProtocol: "butler.agent.v1",
+          maximumAgentProtocol: "butler.agent.v1",
+        }
+      : {
+          protocol: "butler.app.v1",
+          minimumAppProtocol: "butler.app.v1",
+          maximumAppProtocol: "butler.app.v1",
+        },
+    integrity: {
+      digestAlgorithm: "sha256",
+      digest: null,
+      signature: null,
+    },
+    update_policy: isAgent ? "explicit" : "app-user-action",
+    restart_policy: isAgent ? "restart-service" : "restart-app",
+    updater_owner: isAgent ? "butler-agent" : "butler-app",
+    payload_format: isAgent ? "agent-archive" : "platform-app-package",
+    staging_policy: isAgent ? "butler-data-updates" : "platform-updater-cache",
+    activation_policy: isAgent
+      ? "versioned-standalone-runtime"
+      : "platform-app-update-then-versioned-app-runtime",
+    rollback_policy: isAgent
+      ? "preserve-previous-standalone-runtime"
+      : "preserve-previous-app-managed-runtime",
     checked_at: "",
     staged: false,
     stage_path: "",
