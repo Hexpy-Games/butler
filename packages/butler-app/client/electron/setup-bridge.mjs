@@ -1,4 +1,10 @@
-export function createFirstRunSetupBridge({ ensureReady, readSettings }) {
+export function createFirstRunSetupBridge({
+  ensureReady,
+  checkExistingReady = ensureReady,
+  existingAgentConfigured = false,
+  readSettings,
+  gatewayProfile = "electron",
+}) {
   let runId = 0;
   let session = createSession("idle");
 
@@ -22,33 +28,53 @@ export function createFirstRunSetupBridge({ ensureReady, readSettings }) {
       });
       return statusView(session);
     },
-    async start(_request = {}) {
+    async start(request = {}) {
+      const mode = setupMode(request?.mode);
       const currentRunId = runId + 1;
       runId = currentRunId;
       const startedAt = new Date().toISOString();
       const currentSession = createSession("checking", {
         checks: [
-          setupCheck("managed_gateway", "Butler Agent 연결"),
+          setupCheck(
+            mode === "existing-agent" ? "existing_agent" : "managed_gateway",
+            mode === "existing-agent" ? "기존 Agent 연결" : "Butler Agent 연결",
+          ),
           setupCheck("settings", "앱 설정 확인"),
-          setupCheck("gateway_profile", "Electron 연결 확인"),
+          setupCheck(
+            mode === "existing-agent" ? "compatibility" : "gateway_profile",
+            mode === "existing-agent" ? "호환성 확인" : "Electron 연결 확인",
+          ),
         ],
         startedAt,
       });
       session = currentSession;
       try {
-        await ensureReady();
+        const checkReady =
+          mode === "existing-agent" ? checkExistingReady : ensureReady;
+        if (mode === "existing-agent" && existingAgentConfigured !== true) {
+          throw setupError("existing_agent_incompatible");
+        }
+        await checkReady();
         if (!isActiveRun(currentRunId, runId, session)) return statusView(session);
         if (currentSession.cancelled) return statusView(currentSession);
-        markCheck(currentSession, "managed_gateway", "passed");
+        markCheck(
+          currentSession,
+          mode === "existing-agent" ? "existing_agent" : "managed_gateway",
+          "passed",
+        );
         const settings = await readSettings();
         if (!isActiveRun(currentRunId, runId, session)) return statusView(session);
         if (currentSession.cancelled) return statusView(currentSession);
         markCheck(currentSession, "settings", "passed");
-        const bridgeMode = safeString(settings?.bridge_mode);
-        if (bridgeMode && bridgeMode !== "electron") {
+        if (mode === "bundled-agent" && gatewayProfile !== "electron") {
           throw setupError("gateway_profile_mismatch");
         }
-        markCheck(currentSession, "gateway_profile", "passed");
+        if (mode === "existing-agent") validateExistingAgentSettings(settings);
+        markCheck(
+          currentSession,
+          mode === "existing-agent" ? "compatibility" : "gateway_profile",
+          "passed",
+        );
         if (isActiveRun(currentRunId, runId, session)) {
           session = createSession("ready", {
             checks: currentSession.checks,
@@ -128,9 +154,13 @@ function failPendingChecks(checks) {
 }
 
 function setupErrorCode(error) {
-  return error?.code === "gateway_profile_mismatch"
-    ? "gateway_profile_mismatch"
-    : "setup_failed";
+  if (
+    error?.code === "gateway_profile_mismatch" ||
+    error?.code === "existing_agent_incompatible"
+  ) {
+    return error.code;
+  }
+  return "setup_failed";
 }
 
 function setupError(code) {
@@ -145,4 +175,19 @@ function isActiveRun(currentRunId, runId, session) {
 
 function safeString(value) {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function setupMode(value) {
+  return value === "existing-agent" ? "existing-agent" : "bundled-agent";
+}
+
+function validateExistingAgentSettings(settings) {
+  const bridgeMode = safeString(settings?.bridge_mode);
+  const serverUrl = safeString(settings?.server_url);
+  if (bridgeMode !== "local" && bridgeMode !== "external") {
+    throw setupError("existing_agent_incompatible");
+  }
+  if (!serverUrl || !/^https?:\/\/[^\s]+$/u.test(serverUrl)) {
+    throw setupError("existing_agent_incompatible");
+  }
 }

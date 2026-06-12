@@ -3,6 +3,7 @@ import { api } from "./api.ts";
 
 export type FirstRunLanguage = "en" | "ko";
 export type FirstRunStep = "language" | "safety" | "install" | "model";
+export type FirstRunConnectionMode = "bundled-agent" | "existing-agent";
 export type FirstRunInstallStatus =
   | "idle"
   | "checking"
@@ -16,7 +17,7 @@ export type FirstRunAction =
   | { type: "back_to_language" }
   | { type: "accept_safety" }
   | { type: "begin_install" }
-  | { type: "install_ready" }
+  | { type: "install_ready"; connection_mode?: FirstRunConnectionMode }
   | { type: "install_failed"; error: string }
   | { type: "retry_install" }
   | { type: "cancel_setup" }
@@ -31,6 +32,7 @@ export interface FirstRunState {
   language_confirmed?: boolean;
   safety_accepted?: boolean;
   install_status?: FirstRunInstallStatus;
+  connection_mode?: FirstRunConnectionMode;
   error_message?: string;
   completed_at?: string;
 }
@@ -79,6 +81,9 @@ export const firstRunCopy = {
     installReady: "준비 완료",
     installChecking: "상태 확인 중",
     installFailed: "Butler Agent를 준비하지 못했습니다.",
+    advanced: "고급",
+    connectExistingAgent: "기존 Agent 연결",
+    checkingCompatibility: "호환성 확인 중",
     retry: "다시 시도",
     modelTitle: "모델 설정",
     modelBody: "모델은 지금 설정하거나 나중에 설정할 수 있습니다.",
@@ -99,6 +104,9 @@ export const firstRunCopy = {
     installReady: "Ready",
     installChecking: "Checking status",
     installFailed: "Butler Agent is not ready.",
+    advanced: "Advanced",
+    connectExistingAgent: "Use existing Agent",
+    checkingCompatibility: "Checking compatibility",
     retry: "Retry",
     modelTitle: "Model setup",
     modelBody: "Set up a model now or continue and configure it later.",
@@ -128,11 +136,13 @@ export function createInitialFirstRunState(
     language_confirmed: false,
     safety_accepted: false,
     install_status: "idle",
+    connection_mode: "bundled-agent",
   };
 }
 
 export function firstRunCompleteState(
   language: FirstRunLanguage,
+  connectionMode: FirstRunConnectionMode = "bundled-agent",
 ): FirstRunState {
   return {
     schema: "butler.app.first-run.v1",
@@ -142,6 +152,7 @@ export function firstRunCompleteState(
     language_confirmed: true,
     safety_accepted: true,
     install_status: "ready",
+    connection_mode: connectionMode,
     completed_at: new Date().toISOString(),
   };
 }
@@ -160,6 +171,7 @@ export function parseFirstRunState(value: unknown): FirstRunState | null {
     ? (record.step as FirstRunStep)
     : "language";
   const installStatus = normalizeInstallStatus(record.install_status);
+  const connectionMode = normalizeConnectionMode(record.connection_mode);
   const languageConfirmed =
     parsedLanguage !== null && record.language_confirmed === true;
   const safetyAccepted = languageConfirmed && record.safety_accepted === true;
@@ -181,6 +193,7 @@ export function parseFirstRunState(value: unknown): FirstRunState | null {
       language_confirmed: true,
       safety_accepted: true,
       install_status: "ready",
+      connection_mode: connectionMode,
       completed_at: record.completed_at,
     };
   }
@@ -200,6 +213,7 @@ export function parseFirstRunState(value: unknown): FirstRunState | null {
     step,
     language_confirmed: languageConfirmed,
     safety_accepted: safetyAccepted,
+    connection_mode: connectionMode,
     install_status:
       step === "install" && installStatus === "checking"
         ? "idle"
@@ -220,6 +234,10 @@ function normalizeInstallStatus(value: unknown): FirstRunInstallStatus {
     : "idle";
 }
 
+function normalizeConnectionMode(value: unknown): FirstRunConnectionMode {
+  return value === "existing-agent" ? "existing-agent" : "bundled-agent";
+}
+
 function pendingState(
   state: FirstRunState,
   patch: Partial<FirstRunState>,
@@ -232,6 +250,8 @@ function pendingState(
     language_confirmed:
       patch.language_confirmed ?? state.language_confirmed ?? false,
     safety_accepted: patch.safety_accepted ?? state.safety_accepted ?? false,
+    connection_mode:
+      patch.connection_mode ?? state.connection_mode ?? "bundled-agent",
     install_status: patch.install_status ?? state.install_status ?? "idle",
     ...(patch.error_message ? { error_message: patch.error_message } : {}),
   };
@@ -276,11 +296,18 @@ export function nextFirstRunState(
         : state;
     case "begin_install":
       return state.step === "install"
-        ? pendingState(state, { install_status: "checking" })
+        ? pendingState(state, {
+          connection_mode: "bundled-agent",
+          install_status: "checking",
+        })
         : state;
     case "install_ready":
       return state.step === "install"
-        ? pendingState(state, { step: "model", install_status: "ready" })
+        ? pendingState(state, {
+          connection_mode: action.connection_mode ?? state.connection_mode,
+          step: "model",
+          install_status: "ready",
+        })
         : state;
     case "install_failed":
       return state.step === "install"
@@ -298,7 +325,10 @@ export function nextFirstRunState(
     case "defer_model_setup":
     case "open_model_setup":
       return state.step === "model"
-        ? firstRunCompleteState(state.language)
+        ? firstRunCompleteState(
+          state.language,
+          state.connection_mode ?? "bundled-agent",
+        )
         : state;
     default:
       return state;
@@ -332,10 +362,12 @@ export function settingsLanguagePatch(
   return { language };
 }
 
-export async function startFirstRunSetup(): Promise<FirstRunSetupStatusView> {
+export async function startFirstRunSetup(
+  mode: FirstRunConnectionMode = "bundled-agent",
+): Promise<FirstRunSetupStatusView> {
   return await api<FirstRunSetupStatusView>("/setup/start", {
     method: "POST",
-    body: JSON.stringify({ mode: "bundled-agent" }),
+    body: JSON.stringify({ mode }),
   });
 }
 
