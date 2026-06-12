@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -7,6 +8,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -37,7 +39,26 @@ const tempDir = mkdtempSync(join(tmpdir(), "butler-app-package-smoke-"));
 const packagedOut = join(tempDir, "packaged");
 const cleanDataRoot = join(tempDir, "clean-data");
 const standaloneHome = join(tempDir, "standalone-agent-home");
+const hostToolBlockBin = join(tempDir, "host-tool-block-bin");
+const hostToolBlockLog = join(tempDir, "host-tool-block-log.txt");
 const packagedArch = process.arch === "arm64" ? "arm64" : "x64";
+const blockedHostTools = [
+  "bun",
+  "node",
+  "npm",
+  "npx",
+  "git",
+  "curl",
+  "wget",
+  "unzip",
+  "tar",
+  "brew",
+  "apt",
+  "apt-get",
+  "dnf",
+  "yum",
+  "pacman",
+];
 
 interface CdpTarget {
   type?: string;
@@ -59,6 +80,49 @@ function assert(condition: unknown, message: string): asserts condition {
 
 function sha256(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function writeHostToolBlockers(): void {
+  mkdirSync(hostToolBlockBin, { recursive: true });
+  for (const tool of blockedHostTools) {
+    const path = join(hostToolBlockBin, tool);
+    writeFileSync(
+      path,
+      [
+        "#!/bin/sh",
+        `printf '%s\\n' '${tool}' >> "$BUTLER_HOST_TOOL_BLOCK_LOG"`,
+        "exit 127",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    chmodSync(path, 0o755);
+  }
+}
+
+function minimalPackagedAppEnv(overrides: Record<string, string>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  delete env.BUTLER_APP_BUNDLED_AGENT_DIR;
+  delete env.BUTLER_APP_MANAGED_RUNTIME_HOME;
+  delete env.BUTLER_APP_MANAGED_RUNTIME_POINTER;
+  delete env.BUTLER_APP_BUTLER_HOME;
+  delete env.BUTLER_BUN;
+  delete env.BUTLER_CLI;
+  delete env.npm_execpath;
+  delete env.npm_node_execpath;
+  delete env.npm_config_user_agent;
+  return {
+    ...env,
+    ...overrides,
+    PATH: hostToolBlockBin,
+    BUTLER_HOST_TOOL_BLOCK_LOG: hostToolBlockLog,
+  };
+}
+
+function assertNoHostToolCalls(): void {
+  if (!existsSync(hostToolBlockLog)) return;
+  const calls = readFileSync(hostToolBlockLog, "utf8").trim();
+  assert(!calls, `packaged App called host tools during minimal PATH first launch: ${calls}`);
 }
 
 function plistValue(appBundle: string, key: string): string {
@@ -339,6 +403,7 @@ assert(
   existsSync(packagerBin),
   "Electron packager is missing; run npm --prefix packages/butler-app/client/electron install first",
 );
+writeHostToolBlockers();
 
 const bundledAgent = prepareBundledAgentResource(root, tempDir);
 
@@ -472,14 +537,12 @@ try {
       `--remote-debugging-port=${debugPort}`,
       `--user-data-dir=${join(tempDir, "packaged-electron-profile")}`,
     ], {
-      env: {
-        ...process.env,
-        BUTLER_BUN: process.execPath,
+      env: minimalPackagedAppEnv({
         BUTLER_HOME: standaloneHome,
         BUTLER_DATA: cleanDataRoot,
         BUTLER_APP_SERVER_PORT: String(serverPort),
         BUTLER_APP_SERVER_BRIDGE: "off",
-      },
+      }),
       stdio: "ignore",
     });
     let cdp: CdpClient | null = null;
@@ -509,9 +572,18 @@ try {
       );
       const pointerPath = join(cleanDataRoot, "app", "runtime", "agent", "current.json");
       const pointer = await waitForJsonFile(pointerPath);
+      const runtimeMetadata = await waitForJsonFile(
+        join(cleanDataRoot, pointer.runtime_home, "runtime.json"),
+      );
       assert(
         pointer.bundled_agent_version === bundledAgent.version,
         "packaged app did not activate the bundled Agent version",
+      );
+      assert(
+        String(runtimeMetadata.source_resource_path).includes(
+          join("Contents", "Resources", "bundled-agent"),
+        ),
+        "packaged app did not activate bundled Agent resources from the packaged app",
       );
       assert(
         !existsSync(join(standaloneHome, "app", "runtime", "agent", "current.json")),
@@ -522,6 +594,7 @@ try {
         "packaged bundled Agent wrote a standalone gateway pid file",
       );
       await packagedRendererCompletesFirstRun(cdp);
+      assertNoHostToolCalls();
     } finally {
       cdp?.close();
       appProcess.kill("SIGTERM");
@@ -542,6 +615,9 @@ try {
         "bundled-agent-version-activated",
         "first-run-completed",
         "workspace-entered",
+        "minimal-path-first-launch",
+        "host-tool-blockers-unused",
+        "packaged-resource-source",
         "standalone-home-unchanged",
       ],
       uiRoot: "packages/butler-app/client/ui/dist",
