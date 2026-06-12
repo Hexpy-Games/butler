@@ -172,6 +172,15 @@ export interface AppReleaseManifest {
   artifacts: AppReleaseArtifact[];
 }
 
+export interface AppReleaseVersionBaseline {
+  version?: string | null;
+  bundledAgentVersion?: string | null;
+}
+
+export interface ValidateAppReleaseManifestOptions {
+  previousManifest?: AppReleaseVersionBaseline | null;
+}
+
 export interface AppComponentVersions {
   app: string;
   bundledAgent: string;
@@ -604,6 +613,7 @@ export function validateAppDependencyClosureManifest(
 export function validateAppReleaseManifest(
   root: string,
   manifest = createAppReleaseManifest(root),
+  options: ValidateAppReleaseManifestOptions = {},
 ): string[] {
   const issues: string[] = [];
   const versions = readAppComponentVersions(root);
@@ -632,9 +642,38 @@ export function validateAppReleaseManifest(
   if (!manifest.version || manifest.version !== versions.app) {
     issues.push("app package version mismatch");
   }
+  issues.push(...validateAppReleaseVersionCoupling(manifest, options.previousManifest));
   validateComponents(root, manifest, versions, issues);
   validateArtifacts(manifest, issues);
   return issues;
+}
+
+export function validateAppReleaseVersionCoupling(
+  current: AppReleaseVersionBaseline,
+  previous?: AppReleaseVersionBaseline | null,
+): string[] {
+  if (!previous) return [];
+  const currentVersion = current.version?.trim();
+  const currentBundledAgentVersion = current.bundledAgentVersion?.trim();
+  const previousVersion = previous.version?.trim();
+  const previousBundledAgentVersion = previous.bundledAgentVersion?.trim();
+  if (
+    !currentVersion ||
+    !currentBundledAgentVersion ||
+    !previousVersion ||
+    !previousBundledAgentVersion
+  ) {
+    return [
+      "app release version coupling requires app version and bundled Agent version",
+    ];
+  }
+  if (
+    currentBundledAgentVersion !== previousBundledAgentVersion &&
+    currentVersion === previousVersion
+  ) {
+    return ["app release version must change when bundled Agent version changes"];
+  }
+  return [];
 }
 
 function artifactName(

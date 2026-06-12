@@ -101,6 +101,33 @@ jobs:
           bun install --frozen-lockfile
           npm --prefix packages/butler-app/client/electron ci
 
+      - name: Fetch previous app release manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release/baseline
+          current_tag="${GITHUB_REF_NAME}"
+          previous_tag=""
+          while IFS= read -r tag; do
+            if [ "$tag" = "$current_tag" ]; then
+              continue
+            fi
+            if gh release view "$tag" --json assets --jq '.assets[].name' | grep -qx 'app-release-manifest.json'; then
+              previous_tag="$tag"
+              break
+            fi
+          done < <(gh release list --limit 50 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[].tagName')
+          if [ -z "$previous_tag" ]; then
+            printf 'No previous app-release-manifest.json asset found. Use --allow-missing-previous-manifest only for the first Butler App release.\n' >&2
+            exit 1
+          fi
+          gh release download "$previous_tag" \
+            --pattern app-release-manifest.json \
+            --dir dist/release/baseline \
+            --clobber
+          echo "BUTLER_APP_PREVIOUS_RELEASE_MANIFEST=$PWD/dist/release/baseline/app-release-manifest.json" >> "$GITHUB_ENV"
+
       - name: Run app release gate
         run: bun run release:app:gate
 

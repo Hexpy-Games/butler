@@ -640,8 +640,15 @@ function createAppUpdateManifest(manifest: AppReleaseManifest): Record<string, u
   return {
     schema: "butler.update-manifest.v1",
     generated_at: new Date().toISOString(),
+    product: manifest.product,
+    app_version: manifest.version,
+    bundled_agent_version: manifest.bundledAgentVersion,
+    gateway_profile: manifest.gatewayProfile,
+    protocol_compatibility: manifest.protocolCompatibility,
+    updater_owner: manifest.updaterOwner,
     artifacts: manifest.artifacts.map((artifact) => ({
       component: artifact.component,
+      app_version: artifact.version,
       version: artifact.version,
       channel: artifact.channel,
       platform: artifact.platform,

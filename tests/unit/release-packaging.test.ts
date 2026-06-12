@@ -19,6 +19,7 @@ import {
   createAppReleaseManifest,
   validateAppDependencyClosureManifest,
   validateAppReleaseManifest,
+  validateAppReleaseVersionCoupling,
 } from "../../packages/butler-app/scripts/release/manifest.ts";
 import {
   appReleaseIconPath,
@@ -303,6 +304,106 @@ test("app release manifest exposes app package files only", () => {
     `butler-app-${currentVersion}-linux-x64.tar.gz`,
   ]);
   expect(validateAppReleaseManifest(root, manifest)).toEqual([]);
+});
+
+test("app release manifest validation enforces bundled Agent version coupling", () => {
+  const current = createAppReleaseManifest(root);
+
+  expect(
+    validateAppReleaseVersionCoupling(current, {
+      version: current.version,
+      bundledAgentVersion: "0.0.0",
+    }),
+  ).toEqual(["app release version must change when bundled Agent version changes"]);
+  expect(
+    validateAppReleaseManifest(root, current, {
+      previousManifest: {
+        version: current.version,
+        bundledAgentVersion: "0.0.0",
+      },
+    }),
+  ).toContain("app release version must change when bundled Agent version changes");
+  expect(
+    validateAppReleaseVersionCoupling(current, {
+      version: "0.0.0",
+      bundledAgentVersion: "0.0.0",
+    }),
+  ).toEqual([]);
+  expect(
+    validateAppReleaseVersionCoupling(current, {
+      version: "0.0.0",
+      bundledAgentVersion: current.bundledAgentVersion,
+    }),
+  ).toEqual([]);
+  expect(validateAppReleaseVersionCoupling(current, { version: current.version })).toEqual([
+    "app release version coupling requires app version and bundled Agent version",
+  ]);
+});
+
+test("app release gate rejects unchanged App version when bundled Agent changes", () => {
+  const workDir = mkdtempSync(join(tmpdir(), "butler-app-version-coupling-"));
+  try {
+    const previousManifestPath = join(workDir, "previous-app-release-manifest.json");
+    writeFileSync(
+      previousManifestPath,
+      JSON.stringify({
+        version: currentVersion,
+        bundledAgentVersion: "0.0.0",
+      }),
+    );
+    const result = spawnSync("bun", [
+      "run",
+      "--silent",
+      "packages/butler-app/scripts/release/release-gate.ts",
+      "--previous-manifest",
+      previousManifestPath,
+    ], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "app release version must change when bundled Agent version changes",
+    );
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("app release gate requires a previous App manifest unless explicitly allowed", () => {
+  const defaultResult = spawnSync("bun", [
+    "run",
+    "--silent",
+    "packages/butler-app/scripts/release/release-gate.ts",
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      BUTLER_APP_PREVIOUS_RELEASE_MANIFEST: "",
+      BUTLER_APP_ALLOW_MISSING_PREVIOUS_MANIFEST: "",
+    },
+  });
+  expect(defaultResult.status).toBe(1);
+  expect(defaultResult.stderr).toContain(
+    "previous app release manifest is required for App release gate",
+  );
+
+  const firstReleaseResult = spawnSync("bun", [
+    "run",
+    "--silent",
+    "packages/butler-app/scripts/release/release-gate.ts",
+    "--allow-missing-previous-manifest",
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      BUTLER_APP_PREVIOUS_RELEASE_MANIFEST: "",
+      BUTLER_APP_ALLOW_MISSING_PREVIOUS_MANIFEST: "",
+    },
+  });
+  expect(firstReleaseResult.status).toBe(0);
 });
 
 test("release manifest validation rejects missing two-product schema fields", () => {
@@ -633,7 +734,9 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(isElfX64(bundledRuntime)).toBe(true);
 
     const releaseManifest = JSON.parse(readText(result.releaseManifestPath));
+    const updateManifest = JSON.parse(readText(result.updateManifestPath));
     expect(releaseManifest).toMatchObject({
+      version: currentVersion,
       gatewayProfile: "electron",
       bundledAgentVersion: currentVersion,
       bundledAgentPayload: {
@@ -643,6 +746,35 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
         managedRuntimePayloadPath: "bundled-agent/runtime",
         dependencyClosureManifestPath: "bundled-agent/dependency-closure.json",
       },
+    });
+    expect(updateManifest).toMatchObject({
+      schema: "butler.update-manifest.v1",
+      product: "butler-app",
+      app_version: currentVersion,
+      bundled_agent_version: currentVersion,
+      gateway_profile: "electron",
+      protocol_compatibility: {
+        protocol: "butler.app.v1",
+        minimumAppProtocol: "butler.app.v1",
+        maximumAppProtocol: "butler.app.v1",
+      },
+      updater_owner: "butler-app",
+    });
+    expect(
+      updateManifest.artifacts.find((artifact: any) => artifact.platform === "linux-x64"),
+    ).toMatchObject({
+      product: "butler-app",
+      component: "app",
+      app_version: currentVersion,
+      version: currentVersion,
+      gateway_profile: "electron",
+      bundled_agent_version: currentVersion,
+      protocol_compatibility: {
+        protocol: "butler.app.v1",
+        minimumAppProtocol: "butler.app.v1",
+        maximumAppProtocol: "butler.app.v1",
+      },
+      updater_owner: "butler-app",
     });
 
     const nestedReleaseManifest = extractTarEntryJson(
@@ -903,6 +1035,19 @@ test("package-owned release gate scripts pass in the repo checkout", () => {
   const defaultEnv = { ...process.env };
   delete defaultEnv.BUTLER_VALIDATE_VERBOSE;
   defaultEnv.BUTLER_HOME = join(root, ".stale-butler-home");
+  const workDir = mkdtempSync(join(tmpdir(), "butler-release-gate-baseline-"));
+  const previousAppManifestPath = join(workDir, "app-release-manifest.json");
+  writeFileSync(
+    previousAppManifestPath,
+    JSON.stringify({
+      version: "0.0.0",
+      bundledAgentVersion: currentVersion,
+    }),
+  );
+  const appEnv = {
+    ...defaultEnv,
+    BUTLER_APP_PREVIOUS_RELEASE_MANIFEST: previousAppManifestPath,
+  };
   const agent = spawnSync(
     "bun",
     ["run", "release:agent:gate"],
@@ -927,7 +1072,7 @@ test("package-owned release gate scripts pass in the repo checkout", () => {
     {
       cwd: root,
       encoding: "utf8",
-      env: defaultEnv,
+      env: appEnv,
     },
   );
   const appVerbose = spawnSync(
@@ -936,31 +1081,36 @@ test("package-owned release gate scripts pass in the repo checkout", () => {
     {
       cwd: root,
       encoding: "utf8",
-      env: defaultEnv,
+      env: appEnv,
     },
   );
   const rootGate = spawnSync("bun", ["run", "release:gate"], {
     cwd: root,
     encoding: "utf8",
-    env: defaultEnv,
+    env: appEnv,
   });
 
-  expect(agent.status).toBe(0);
-  expect(agent.stdout).toBe("");
-  expect(agentVerbose.status).toBe(0);
-  expect(agentVerbose.stdout).toContain(
-    `Butler Agent release gate passed: butler@${currentVersion}`,
-  );
-  expect(agentVerbose.stdout).toContain(`Products: Butler Agent@${currentVersion}`);
-  expect(app.status).toBe(0);
-  expect(app.stdout).toBe("");
-  expect(appVerbose.status).toBe(0);
-  expect(appVerbose.stdout).toContain(
-    `App release gate passed: butler-app@${currentVersion}`,
-  );
-  expect(appVerbose.stdout).toContain(`Components: app@${currentVersion}`);
-  expect(rootGate.status).toBe(0);
-  expect(rootGate.stdout).toBe("");
+  try {
+    expect(agent.status).toBe(0);
+    expect(agent.stdout).toBe("");
+    expect(agentVerbose.status).toBe(0);
+    expect(agentVerbose.stdout).toContain(
+      `Butler Agent release gate passed: butler@${currentVersion}`,
+    );
+    expect(agentVerbose.stdout).toContain(`Products: Butler Agent@${currentVersion}`);
+    expect(app.status).toBe(0);
+    expect(app.stdout).toBe("");
+    expect(appVerbose.status).toBe(0);
+    expect(appVerbose.stdout).toContain(
+      `App release gate passed: butler-app@${currentVersion}`,
+    );
+    expect(appVerbose.stdout).toContain(`Components: app@${currentVersion}`);
+    expect(appVerbose.stdout).toContain(`Previous manifest: ${previousAppManifestPath}`);
+    expect(rootGate.status).toBe(0);
+    expect(rootGate.stdout).toBe("");
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
 });
 
 test("dedicated client package smoke and metadata are available", () => {
