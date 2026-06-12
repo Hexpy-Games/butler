@@ -339,8 +339,8 @@ test("release manifest validation rejects cross-owned bundled artifacts", () => 
   );
 });
 
-test("service release packager creates an installable artifact with app web client", () => {
-  const outDir = mkdtempSync(join(tmpdir(), "butler-service-release-test-"));
+test("agent release packager creates an installable artifact with app web client", () => {
+  const outDir = mkdtempSync(join(tmpdir(), "butler-agent-release-test-"));
   try {
     const currentCliPlatform = currentServiceCliLauncherPlatform();
     const result = createServiceReleasePackage({
@@ -352,6 +352,9 @@ test("service release packager creates an installable artifact with app web clie
     expect(existsSync(result.sha256Path)).toBe(true);
     expect(existsSync(result.releaseManifestPath)).toBe(true);
     expect(existsSync(result.updateManifestPath)).toBe(true);
+    expect(result.artifactName).toBe(`butler-agent-${currentVersion}-all.tar.gz`);
+    expect(result.releaseManifestPath.endsWith("agent-release-manifest.json")).toBe(true);
+    expect(result.updateManifestPath.endsWith("agent-update-manifest.json")).toBe(true);
 
     const listing = spawnSync("tar", ["-tzf", result.artifactPath], {
       encoding: "utf8",
@@ -364,6 +367,9 @@ test("service release packager creates an installable artifact with app web clie
     expect(entries).toContain("./install.sh");
     expect(entries).toContain("./package.json");
     expect(entries).toContain("./bin/butler.js");
+    expect(entries).toContain("./deploy/agent/package-agent.ts");
+    expect(entries).toContain("./deploy/agent/release-gate.ts");
+    expect(entries).toContain("./deploy/agent/smoke.ts");
     expect(entries).toContain(`./${currentCliLauncher}`);
     expect(entries).toContain("./packages/butler-agent/scripts/service-control.sh");
     expect(entries).toContain("./packages/project-ledger/bin/project-ledger");
@@ -372,7 +378,7 @@ test("service release packager creates an installable artifact with app web clie
     expect(entries.some((entry) => entry.includes("packages/butler-app/"))).toBe(false);
     expect(entries.some((entry) => entry.includes("/node_modules/"))).toBe(false);
 
-    const extractDir = mkdtempSync(join(tmpdir(), "butler-service-release-extract-"));
+    const extractDir = mkdtempSync(join(tmpdir(), "butler-agent-release-extract-"));
     try {
       const extract = spawnSync("tar", ["-xzf", result.artifactPath, "-C", extractDir], {
         encoding: "utf8",
@@ -450,8 +456,8 @@ test("service release packager creates an installable artifact with app web clie
     rmSync(outDir, { recursive: true, force: true });
   }
 }, 30_000);
-test("service release packager can write public GitHub artifact URLs", () => {
-  const outDir = mkdtempSync(join(tmpdir(), "butler-service-release-url-test-"));
+test("agent release packager can write public GitHub artifact URLs", () => {
+  const outDir = mkdtempSync(join(tmpdir(), "butler-agent-release-url-test-"));
   try {
     const result = createServiceReleasePackage({
       root,
@@ -494,22 +500,18 @@ test("package-owned release gate scripts pass in the repo checkout", () => {
   const defaultEnv = { ...process.env };
   delete defaultEnv.BUTLER_VALIDATE_VERBOSE;
   defaultEnv.BUTLER_HOME = join(root, ".stale-butler-home");
-  const service = spawnSync(
+  const agent = spawnSync(
     "bun",
-    ["run", "packages/butler-agent/src/operations/release/release-gate.ts"],
+    ["run", "release:agent:gate"],
     {
       cwd: root,
       encoding: "utf8",
       env: defaultEnv,
     },
   );
-  const serviceVerbose = spawnSync(
+  const agentVerbose = spawnSync(
     "bun",
-    [
-      "run",
-      "packages/butler-agent/src/operations/release/release-gate.ts",
-      "--verbose",
-    ],
+    ["run", "release:agent:gate", "--", "--verbose"],
     {
       cwd: root,
       encoding: "utf8",
@@ -518,7 +520,7 @@ test("package-owned release gate scripts pass in the repo checkout", () => {
   );
   const app = spawnSync(
     "bun",
-    ["run", "packages/butler-app/scripts/release/release-gate.ts"],
+    ["run", "release:app:gate"],
     {
       cwd: root,
       encoding: "utf8",
@@ -527,7 +529,7 @@ test("package-owned release gate scripts pass in the repo checkout", () => {
   );
   const appVerbose = spawnSync(
     "bun",
-    ["run", "packages/butler-app/scripts/release/release-gate.ts", "--verbose"],
+    ["run", "release:app:gate", "--", "--verbose"],
     {
       cwd: root,
       encoding: "utf8",
@@ -540,13 +542,13 @@ test("package-owned release gate scripts pass in the repo checkout", () => {
     env: defaultEnv,
   });
 
-  expect(service.status).toBe(0);
-  expect(service.stdout).toBe("");
-  expect(serviceVerbose.status).toBe(0);
-  expect(serviceVerbose.stdout).toContain(
+  expect(agent.status).toBe(0);
+  expect(agent.stdout).toBe("");
+  expect(agentVerbose.status).toBe(0);
+  expect(agentVerbose.stdout).toContain(
     `Butler Agent release gate passed: butler@${currentVersion}`,
   );
-  expect(serviceVerbose.stdout).toContain(`Products: Butler Agent@${currentVersion}`);
+  expect(agentVerbose.stdout).toContain(`Products: Butler Agent@${currentVersion}`);
   expect(app.status).toBe(0);
   expect(app.stdout).toBe("");
   expect(appVerbose.status).toBe(0);
@@ -575,11 +577,42 @@ test("dedicated client package smoke and metadata are available", () => {
 
   expect(rootPackage.scripts).toHaveProperty("app:package:smoke");
   expect(rootPackage.scripts).toHaveProperty("app:layout:smoke");
-  expect(rootPackage.scripts).toHaveProperty("release:service:package");
-  expect(rootPackage.scripts).toHaveProperty("release:app:package");
-  expect(rootPackage.scripts["release:app:package"]).toContain(
-    "packages/butler-app/scripts/release/package-app-release.ts",
+  expect(rootPackage.scripts).toHaveProperty("release:agent:gate");
+  expect(rootPackage.scripts).toHaveProperty("release:agent:package");
+  expect(rootPackage.scripts).toHaveProperty("release:agent:smoke");
+  expect(rootPackage.scripts["release:agent:gate"]).toContain(
+    "deploy/agent/release-gate.ts",
   );
+  expect(rootPackage.scripts["release:agent:smoke"]).toContain(
+    "deploy/agent/smoke.ts",
+  );
+  expect(rootPackage.scripts).toHaveProperty("release:service:package");
+  expect(rootPackage.scripts["release:service:package"]).toContain("release:agent:package");
+  expect(rootPackage.scripts["release:agent:package"]).toContain(
+    "deploy/agent/package-agent.ts",
+  );
+  expect(rootPackage.scripts).toHaveProperty("release:app:gate");
+  expect(rootPackage.scripts).toHaveProperty("release:app:package");
+  expect(rootPackage.scripts).toHaveProperty("release:app:smoke");
+  expect(rootPackage.scripts["release:app:gate"]).toContain(
+    "deploy/app/release-gate.ts",
+  );
+  expect(rootPackage.scripts["release:app:package"]).toContain(
+    "deploy/app/package-app.ts",
+  );
+  expect(rootPackage.scripts["release:app:smoke"]).toContain(
+    "deploy/app/smoke.ts",
+  );
+  for (const deployScript of [
+    "deploy/agent/release-gate.ts",
+    "deploy/agent/package-agent.ts",
+    "deploy/agent/smoke.ts",
+    "deploy/app/release-gate.ts",
+    "deploy/app/package-app.ts",
+    "deploy/app/smoke.ts",
+  ]) {
+    expect(existsSync(join(root, deployScript))).toBe(true);
+  }
   expect(rootPackage.scripts).toHaveProperty("install:docker");
   expect(electronPackage.scripts).toHaveProperty("package:mac");
   expect(electronPackage.scripts).toHaveProperty("package:linux");

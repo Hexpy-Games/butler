@@ -56,8 +56,8 @@ const SERVICE_WORKSPACES = [
 
 const SERVICE_ROOT_SCRIPTS = [
   "setup",
-  "release:service:gate",
-  "release:service:package",
+  "release:agent:gate",
+  "release:agent:package",
 ] as const;
 
 const IGNORED_PATH_SEGMENTS = new Set([
@@ -90,7 +90,7 @@ export function createServiceReleasePackage(
   }
 
   mkdirSync(outDir, { recursive: true });
-  const stageRoot = mkdtempSync(join(tmpdir(), "butler-service-release-"));
+  const stageRoot = mkdtempSync(join(tmpdir(), "butler-agent-release-"));
   try {
     const cliLauncherPlatforms = options.cliLauncherPlatforms ??
       [...SERVICE_CLI_LAUNCHER_PLATFORMS];
@@ -112,7 +112,7 @@ export function createServiceReleasePackage(
     stripMacExtendedAttributes(stageRoot);
     const artifactName = manifest.artifacts.find((artifact) =>
       artifact.component === "service",
-    )?.artifactName ?? `butler-service-${manifest.version}-all.tar.gz`;
+    )?.artifactName ?? `butler-agent-${manifest.version}-all.tar.gz`;
     const artifactPath = join(outDir, artifactName);
     createTarball(stageRoot, artifactPath);
 
@@ -125,7 +125,7 @@ export function createServiceReleasePackage(
       artifactPath,
       artifactName,
     );
-    const releaseManifestPath = join(outDir, "service-release-manifest.json");
+    const releaseManifestPath = join(outDir, "agent-release-manifest.json");
     const releaseManifest = withArtifactMetadata(
       packagedManifest,
       artifactName,
@@ -134,7 +134,7 @@ export function createServiceReleasePackage(
     );
     writeJson(releaseManifestPath, releaseManifest);
 
-    const updateManifestPath = join(outDir, "update-manifest.json");
+    const updateManifestPath = join(outDir, "agent-update-manifest.json");
     writeJson(updateManifestPath, createUpdateManifest(
       releaseManifest,
       artifactUrl,

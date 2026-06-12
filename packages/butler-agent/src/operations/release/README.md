@@ -26,10 +26,11 @@ app release gates, and native purge gates.
 
 Version tags matching `v*` are the automated user-install release trigger. The
 tag workflow must run the Agent release gate, package the Agent release into the
-legacy `dist/release/service` directory, verify the tarball contains
+`dist/release/agent` directory, verify the tarball contains
 `packages/butler-agent/resources/app-client/dist/index.html` and bundled asset
-files, then publish the tarball, SHA256 file, Agent release manifest, and
-update manifest to the GitHub Release for the same tag.
+files, then publish the `butler-agent-*-all.tar.gz` tarball, SHA256 file,
+`agent-release-manifest.json`, and `agent-update-manifest.json` to the GitHub
+Release for the same tag.
 
 When `.github/releases/<tag>.md` exists, the tag workflow must use that file as
 the GitHub Release body. Existing releases must be edited with the same notes

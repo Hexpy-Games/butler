@@ -103,7 +103,7 @@ test("installer explicit language selection does not prompt", () => {
 
 test("docker installer preinstalls container dependencies before running install script", () => {
   const source = readFileSync("tools/install-in-docker.sh", "utf8");
-  const packageIndex = source.indexOf("release:service:package");
+  const packageIndex = source.indexOf("release:agent:package");
   const dockerIndex = source.indexOf("exec docker run --rm -it");
   const dependencyBlockIndex = source.indexOf("install_container_dependencies");
   const extractIndex = source.indexOf("tar -xzf");
@@ -178,7 +178,7 @@ test("README Docker sandbox uses a dependency-only image and leaves install manu
   expect(script).toContain("tail -f /dev/null");
   expect(script).toContain("docker exec -it $CONTAINER_NAME bash -l");
   expect(script).toContain("mkdir -p ~/butler");
-  expect(script).toContain("tar -xzf ~/Downloads/butler-service-*-all.tar.gz -C ~/butler");
+  expect(script).toContain("tar -xzf ~/Downloads/butler-agent-*-all.tar.gz -C ~/butler");
   expect(script).toContain("Host web URL after install: http://127.0.0.1:$HOST_APP_PORT");
   expect(dockerfile).toContain("FROM ubuntu:24.04");
   expect(dockerfile).toContain("apt-get install -y --no-install-recommends");
@@ -220,7 +220,7 @@ JSON
 
 test("release docker verification installs from service artifact and checks health", () => {
   const source = readFileSync("tools/verify-service-release-in-docker.sh", "utf8");
-  const packageIndex = source.indexOf("release:service:package");
+  const packageIndex = source.indexOf("release:agent:package");
   const extractIndex = source.indexOf("tar -xzf");
   const installIndex = source.indexOf("./install.sh");
   const healthIndex = source.indexOf("http://127.0.0.1:18765/health");

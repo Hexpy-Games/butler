@@ -151,6 +151,7 @@ export function createReleaseManifest(root: string): ReleaseManifest {
     "install.sh",
     "butler.config.template.json",
     "LICENSE",
+    "deploy/agent",
     "packages/butler-agent/src/agent",
     "packages/butler-agent/src/gateways",
     "packages/butler-agent/src/integrations",
@@ -302,7 +303,8 @@ export function serviceCliLauncherBuildTarget(
 }
 
 function artifactName(component: ReleaseComponentId, version: string): string {
-  return `butler-${component}-${version}-all.tar.gz`;
+  const product = component === "service" ? "agent" : component;
+  return `butler-${product}-${version}-all.tar.gz`;
 }
 
 function validateRequiredFiles(
