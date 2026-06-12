@@ -23,6 +23,7 @@ import {
   appReleaseIconPath,
   appReleasePackagerIconPath,
   createAppReleasePackage,
+  prepareBundledAgentResource,
 } from "../../packages/butler-app/scripts/release/package-app-release.ts";
 
 const root = process.cwd();
@@ -677,6 +678,53 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
   }
 }, 90_000);
 
+test("app package smoke uses real bundled Agent release resources", () => {
+  const workDir = mkdtempSync(join(tmpdir(), "butler-app-smoke-agent-resource-"));
+  try {
+    const bundledAgent = prepareBundledAgentResource(root, workDir);
+    expect(bundledAgent.artifactName).toBe(`butler-agent-${currentVersion}-all.tar.gz`);
+    expect(bundledAgent.version).toBe(currentVersion);
+    expect(existsSync(join(bundledAgent.resourceDir, bundledAgent.artifactName))).toBe(true);
+    expect(existsSync(join(bundledAgent.resourceDir, "agent-release-manifest.json"))).toBe(true);
+    expect(existsSync(join(bundledAgent.resourceDir, "agent-update-manifest.json"))).toBe(true);
+    expect(existsSync(join(bundledAgent.resourceDir, "dependency-closure.json"))).toBe(true);
+
+    const listing = spawnSync("tar", [
+      "-tzf",
+      join(bundledAgent.resourceDir, bundledAgent.artifactName),
+    ], { encoding: "utf8" });
+    expect(listing.status).toBe(0);
+    expect(listing.stdout).toContain("bin/butler.js");
+    expect(listing.stdout).toContain(
+      "packages/butler-agent/resources/runtime/bun-version",
+    );
+
+    const releaseManifest = JSON.parse(
+      readText(join(bundledAgent.resourceDir, "agent-release-manifest.json")),
+    );
+    expect(releaseManifest.artifacts[0]).toMatchObject({
+      artifactName: bundledAgent.artifactName,
+      sha256: bundledAgent.sha256,
+    });
+
+    const dependencyClosure = JSON.parse(
+      readText(join(bundledAgent.resourceDir, "dependency-closure.json")),
+    );
+    expect(dependencyClosure).toMatchObject({
+      product: "butler-app",
+      bundledAgentVersion: currentVersion,
+      payload: {
+        product: "butler-agent",
+        artifactName: bundledAgent.artifactName,
+        sha256: bundledAgent.sha256,
+      },
+      hostToolsRequiredForFirstLaunch: [],
+    });
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
+}, 60_000);
+
 test("Butler CLI help documents install home and data overrides", () => {
   const result = spawnSync("node", [join(root, "bin", "butler.js"), "--help"], {
     cwd: root,
@@ -848,6 +896,21 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(
     readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
   ).toContain("electron-packager");
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).toContain('from "../../packages/butler-app/scripts/release/package-app-release.ts"');
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).toContain("local-auth-required");
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).toContain("standalone-home-unchanged");
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).not.toContain("createAppServer");
+  expect(
+    readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
+  ).not.toContain("BUTLER_SMOKE_REPO_ROOT");
   expect(
     readText(join(root, "tests", "smoke", "app-package-smoke.ts")),
   ).toContain("packaged app executable");

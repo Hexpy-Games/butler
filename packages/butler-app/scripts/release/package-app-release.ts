@@ -43,7 +43,7 @@ export interface AppReleasePackageResult {
   version: string;
 }
 
-interface BundledAgentResource {
+export interface BundledAgentResource {
   resourceDir: string;
   artifactName: string;
   sha256: string;
@@ -213,7 +213,7 @@ function runElectronPackager(
   }
 }
 
-function prepareBundledAgentResource(root: string, workDir: string): BundledAgentResource {
+export function prepareBundledAgentResource(root: string, workDir: string): BundledAgentResource {
   const agentOutDir = join(workDir, "agent-release");
   const resourceDir = join(workDir, "bundled-agent");
   const agent = createAgentReleasePackage({

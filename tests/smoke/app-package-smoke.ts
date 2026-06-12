@@ -11,7 +11,8 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/server.ts";
+import { createServer } from "node:net";
+import { prepareBundledAgentResource } from "../../packages/butler-app/scripts/release/package-app-release.ts";
 
 const root = process.cwd();
 const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
@@ -34,7 +35,23 @@ const packagerBin = resolve(
 );
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-package-smoke-"));
 const packagedOut = join(tempDir, "packaged");
+const cleanDataRoot = join(tempDir, "clean-data");
+const standaloneHome = join(tempDir, "standalone-agent-home");
 const packagedArch = process.arch === "arm64" ? "arm64" : "x64";
+
+interface CdpTarget {
+  type?: string;
+  url?: string;
+  webSocketDebuggerUrl?: string;
+}
+
+interface CdpClient {
+  send<T = Record<string, unknown>>(
+    method: string,
+    params?: Record<string, unknown>,
+  ): Promise<T>;
+  close(): void;
+}
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -71,6 +88,248 @@ async function readJson(url: string, init?: RequestInit) {
   return body.data;
 }
 
+async function freePort(): Promise<number> {
+  return await new Promise((resolvePort, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("could not allocate local port")));
+        return;
+      }
+      server.close(() => resolvePort(address.port));
+    });
+  });
+}
+
+async function waitForLocalAuth(path: string, timeoutMs = 20_000): Promise<string> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (existsSync(path)) {
+      const parsed = JSON.parse(readFileSync(path, "utf8"));
+      if (typeof parsed?.token === "string" && parsed.token.length >= 32) {
+        return parsed.token;
+      }
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
+  }
+  throw new Error(`timed out waiting for App local auth file: ${path}`);
+}
+
+async function waitForBundledHealth(url: string, authPath: string): Promise<string> {
+  const startedAt = Date.now();
+  let token = "";
+  while (Date.now() - startedAt < 30_000) {
+    if (!token && existsSync(authPath)) {
+      token = await waitForLocalAuth(authPath);
+    }
+    if (token) {
+      try {
+        const response = await fetch(url, {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        const body = await response.json().catch(() => null);
+        if (
+          response.ok &&
+          body?.protocol_version === "butler.app.v1" &&
+          body?.data?.ok === true
+        ) {
+          return token;
+        }
+      } catch {
+        // Retry while Electron prepares the bundled Agent runtime.
+      }
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
+  }
+  throw new Error(`timed out waiting for bundled Agent health: ${url}`);
+}
+
+async function waitForStandaloneHealth(url: string, child: ReturnType<typeof spawn>): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 30_000) {
+    if (child.exitCode !== null) {
+      throw new Error(`standalone Agent exited before health check: ${child.exitCode}`);
+    }
+    try {
+      const response = await fetch(url);
+      const body = await response.json().catch(() => null);
+      if (
+        response.ok &&
+        body?.protocol_version === "butler.app.v1" &&
+        body?.data?.ok === true
+      ) {
+        return;
+      }
+    } catch {
+      // Retry while the standalone gateway starts.
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
+  }
+  throw new Error(`timed out waiting for standalone Agent health: ${url}`);
+}
+
+async function waitForJsonFile(path: string, timeoutMs = 10_000): Promise<any> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (existsSync(path)) {
+      return JSON.parse(readFileSync(path, "utf8"));
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
+  }
+  throw new Error(`timed out waiting for JSON file: ${path}`);
+}
+
+async function connectToElectronPage(port: number, appUrl: string, appProcess: ReturnType<typeof spawn>): Promise<CdpClient> {
+  const origin = new URL(appUrl).origin;
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 30_000) {
+    if (appProcess.exitCode !== null) {
+      throw new Error(`packaged app exited before renderer target appeared: ${appProcess.exitCode}`);
+    }
+    try {
+      const targets = await fetch(`http://127.0.0.1:${port}/json/list`)
+        .then((response) => response.json()) as CdpTarget[];
+      const target = targets.find((item) =>
+        item.type === "page" &&
+        item.url?.startsWith(origin) &&
+        item.webSocketDebuggerUrl,
+      );
+      if (target?.webSocketDebuggerUrl) {
+        const client = await connectCdp(target.webSocketDebuggerUrl);
+        await client.send("Runtime.enable");
+        await client.send("Page.enable");
+        return client;
+      }
+    } catch {
+      // Retry while Electron starts and publishes the renderer target.
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
+  }
+  throw new Error(`timed out waiting for packaged app renderer target at ${origin}`);
+}
+
+async function connectCdp(url: string): Promise<CdpClient> {
+  const socket = new WebSocket(url);
+  const pending = new Map<number, {
+    resolve: (value: unknown) => void;
+    reject: (error: Error) => void;
+  }>();
+  let nextId = 1;
+
+  await new Promise<void>((resolveOpen, rejectOpen) => {
+    const timeout = setTimeout(
+      () => rejectOpen(new Error(`timed out opening CDP socket: ${url}`)),
+      10_000,
+    );
+    socket.addEventListener("open", () => {
+      clearTimeout(timeout);
+      resolveOpen();
+    }, { once: true });
+    socket.addEventListener("error", () => {
+      clearTimeout(timeout);
+      rejectOpen(new Error(`failed to open CDP socket: ${url}`));
+    }, { once: true });
+  });
+
+  socket.addEventListener("message", (message) => {
+    const payload = JSON.parse(String(message.data)) as {
+      id?: number;
+      result?: unknown;
+      error?: { message?: string };
+    };
+    if (!payload.id) return;
+    const entry = pending.get(payload.id);
+    if (!entry) return;
+    pending.delete(payload.id);
+    if (payload.error) entry.reject(new Error(payload.error.message ?? "CDP command failed"));
+    else entry.resolve(payload.result);
+  });
+
+  return {
+    send<T = Record<string, unknown>>(
+      method: string,
+      params: Record<string, unknown> = {},
+    ): Promise<T> {
+      const id = nextId;
+      nextId += 1;
+      return new Promise<T>((resolve, reject) => {
+        pending.set(id, {
+          resolve: (value) => resolve(value as T),
+          reject,
+        });
+        socket.send(JSON.stringify({ id, method, params }));
+      });
+    },
+    close() {
+      socket.close();
+      for (const entry of pending.values()) entry.reject(new Error("CDP socket closed"));
+      pending.clear();
+    },
+  };
+}
+
+async function evaluateRenderer<T>(client: CdpClient, expression: string): Promise<T> {
+  const startedAt = Date.now();
+  let lastError = "";
+  while (Date.now() - startedAt < 30_000) {
+    try {
+      const result = await client.send<{
+        result?: { value?: T };
+        exceptionDetails?: unknown;
+      }>("Runtime.evaluate", {
+        expression,
+        awaitPromise: true,
+        returnByValue: true,
+      });
+      assert(!result.exceptionDetails, `renderer evaluation failed: ${JSON.stringify(result.exceptionDetails)}`);
+      return result.result?.value as T;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      if (!lastError.includes("Execution context was destroyed")) throw error;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 250));
+    }
+  }
+  throw new Error(`renderer evaluation did not stabilize: ${lastError}`);
+}
+
+async function packagedRendererCompletesFirstRun(client: CdpClient): Promise<void> {
+  const result = await evaluateRenderer<{ ok: boolean; step: string }>(client, `new Promise((resolve) => {
+    const clickButton = (labels) => {
+      const buttons = Array.from(document.querySelectorAll("button"));
+      const button = buttons.find((item) => labels.includes((item.textContent || "").trim()));
+      if (!button) return false;
+      button.click();
+      return true;
+    };
+    const waitFor = (predicate, timeoutMs = 30000) => new Promise((resolveWait, rejectWait) => {
+      const startedAt = Date.now();
+      const tick = () => {
+        if (predicate()) {
+          resolveWait(true);
+          return;
+        }
+        if (Date.now() - startedAt > timeoutMs) {
+          rejectWait(new Error("timed out"));
+          return;
+        }
+        setTimeout(tick, 100);
+      };
+      tick();
+    });
+    (async () => {
+      await waitFor(() => document.querySelector('[data-test-class="first-run-setup"]'));
+      if (!clickButton(["계속", "Continue"])) throw new Error("language continue button missing");
+      await waitFor(() => clickButton(["동의", "Accept"]));
+      await waitFor(() => clickButton(["나중에 설정", "Set up later"]));
+      await waitFor(() => document.querySelector('[data-test-class="workspace"]'));
+      resolve({ ok: true, step: "workspace" });
+    })().catch((error) => resolve({ ok: false, step: String(error && error.message || error) }));
+  })`);
+  assert(result?.ok === true, `packaged app did not enter workspace after first-run setup: ${result?.step}`);
+}
+
 assert(
   existsSync(join(uiRoot, "index.html")),
   "Butler app UI dist is missing; run npm --prefix packages/butler-app/client/ui run build first",
@@ -81,46 +340,9 @@ assert(
   "Electron packager is missing; run npm --prefix packages/butler-app/client/electron install first",
 );
 
-const server = createAppServer({
-  dbPath: join(tempDir, "package-smoke.sqlite"),
-  butlerData: tempDir,
-  uiRoot,
-  port: 0,
-  bridgeMode: "external",
-  responder() {
-    return { texts: ["package smoke reply"] };
-  },
-});
+const bundledAgent = prepareBundledAgentResource(root, tempDir);
 
 try {
-  const health = await readJson(`${server.url}health`);
-  assert(health.ok === true, "health did not report ok");
-
-  const settings = await readJson(`${server.url}settings`);
-  assert(
-    settings.bridge_mode === "external",
-    "package smoke should run with external bridge mode",
-  );
-
-  const html = await fetch(server.url).then((response) => response.text());
-  assert(
-    html.includes('<div id="root"></div>'),
-    "packaged UI root did not serve",
-  );
-
-  const turn = await readJson(`${server.url}messages`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: "general",
-      text: "package smoke",
-    }),
-  });
-  assert(
-    turn.reply?.text === "package smoke reply",
-    "package smoke message did not round-trip",
-  );
-
   mkdirSync(packagedOut, { recursive: true });
   const packagerIcon = join(packagedOut, "butler-smoke-icon.icns");
   copyFileSync(butlerIcon, packagerIcon);
@@ -134,6 +356,7 @@ try {
       "--overwrite",
       `--out=${packagedOut}`,
       `--icon=${packagerIcon}`,
+      `--extra-resource=${bundledAgent.resourceDir}`,
       "--ignore=^/dist($|/)",
       "--quiet",
     ],
@@ -226,22 +449,83 @@ try {
   }
 
   if (process.platform === "darwin") {
-    const appProcess = spawn(executable, [], {
+    const serverPort = await freePort();
+    const serverUrl = `http://127.0.0.1:${serverPort}/`;
+    const authPath = join(cleanDataRoot, "app", "runtime", "auth", "local-agent-auth.json");
+    const standalonePort = await freePort();
+    const debugPort = await freePort();
+    const standalone = spawn(process.execPath, [join(root, "bin", "butler.js"), "gateway", "app"], {
+      cwd: root,
       env: {
         ...process.env,
-        BUTLER_APP_SERVER_URL: server.url,
-        BUTLER_APP_SERVER_BRIDGE: "external",
+        BUTLER_BUN: process.execPath,
+        BUTLER_HOME: root,
+        BUTLER_DATA: standaloneHome,
+        BUTLER_APP_BUNDLED_SUPERVISOR: "1",
+        BUTLER_APP_SERVER_PORT: String(standalonePort),
+        BUTLER_APP_SERVER_BRIDGE: "off",
+        BUTLER_APP_GATEWAY_PID_FILE: "off",
       },
       stdio: "ignore",
     });
+    const appProcess = spawn(executable, [
+      `--remote-debugging-port=${debugPort}`,
+      `--user-data-dir=${join(tempDir, "packaged-electron-profile")}`,
+    ], {
+      env: {
+        ...process.env,
+        BUTLER_BUN: process.execPath,
+        BUTLER_HOME: standaloneHome,
+        BUTLER_DATA: cleanDataRoot,
+        BUTLER_APP_SERVER_PORT: String(serverPort),
+        BUTLER_APP_SERVER_BRIDGE: "off",
+      },
+      stdio: "ignore",
+    });
+    let cdp: CdpClient | null = null;
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await waitForStandaloneHealth(`http://127.0.0.1:${standalonePort}/health`, standalone);
+      const token = await waitForBundledHealth(`${serverUrl}health`, authPath);
+      cdp = await connectToElectronPage(debugPort, serverUrl, appProcess);
       assert(
         appProcess.exitCode === null,
         "packaged app exited before smoke validation completed",
       );
+      assert(
+        standalone.exitCode === null,
+        "standalone Agent exited during packaged App smoke",
+      );
+      const unauthorized = await fetch(`${serverUrl}health`);
+      assert(
+        unauthorized.status === 401,
+        "bundled Agent health should require App local auth",
+      );
+      const settings = await readJson(`${serverUrl}settings`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert(
+        settings.gateway_profile === "electron",
+        "packaged bundled Agent did not enforce electron gateway profile",
+      );
+      const pointerPath = join(cleanDataRoot, "app", "runtime", "agent", "current.json");
+      const pointer = await waitForJsonFile(pointerPath);
+      assert(
+        pointer.bundled_agent_version === bundledAgent.version,
+        "packaged app did not activate the bundled Agent version",
+      );
+      assert(
+        !existsSync(join(standaloneHome, "app", "runtime", "agent", "current.json")),
+        "packaged app activated bundled runtime inside standalone Agent home",
+      );
+      assert(
+        !existsSync(join(cleanDataRoot, "state", "gateways", "app.pid")),
+        "packaged bundled Agent wrote a standalone gateway pid file",
+      );
+      await packagedRendererCompletesFirstRun(cdp);
     } finally {
+      cdp?.close();
       appProcess.kill("SIGTERM");
+      standalone.kill("SIGTERM");
     }
   }
 
@@ -249,12 +533,22 @@ try {
     JSON.stringify({
       ok: true,
       service: "butler-app-package-smoke",
-      appServerUrl: server.url,
+      checks: [
+        "packaged-app-launched",
+        "bundled-agent-resource-present",
+        "clean-data-home",
+        "local-auth-required",
+        "electron-gateway-profile",
+        "bundled-agent-version-activated",
+        "first-run-completed",
+        "workspace-entered",
+        "standalone-home-unchanged",
+      ],
       uiRoot: "packages/butler-app/client/ui/dist",
       packagedApp: `Butler-darwin-${packagedArch}/Butler.app`,
+      bundledAgentArtifact: bundledAgent.artifactName,
     }),
   );
 } finally {
-  server.stop();
   rmSync(tempDir, { recursive: true, force: true });
 }
