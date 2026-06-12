@@ -326,6 +326,11 @@ function withArtifactMetadata(
           packaged.artifactName,
         ),
         sha256: packaged.sha256,
+        integrity: {
+          ...artifact.integrity,
+          digest: packaged.sha256,
+          signature: artifact.signature,
+        },
       };
     }),
   };
@@ -344,8 +349,18 @@ function createAppUpdateManifest(manifest: AppReleaseManifest): Record<string, u
       sha256: artifact.sha256,
       signature: artifact.signature,
       bundled_components: artifact.bundledComponents,
+      product: artifact.product,
+      gateway_profile: artifact.gatewayProfile,
+      bundled_agent_version: artifact.bundledAgentVersion,
+      protocol_compatibility: artifact.protocolCompatibility,
+      integrity: artifact.integrity,
       update_policy: artifact.updatePolicy,
       restart_policy: artifact.restartPolicy,
+      updater_owner: artifact.updaterOwner,
+      payload_format: artifact.payloadFormat,
+      staging_policy: artifact.stagingPolicy,
+      activation_policy: artifact.activationPolicy,
+      rollback_policy: artifact.rollbackPolicy,
     })),
   };
 }

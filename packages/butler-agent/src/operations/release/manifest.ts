@@ -6,6 +6,26 @@ export const RELEASE_COMPONENT_IDS = ["service"] as const;
 export type ReleaseComponentId = (typeof RELEASE_COMPONENT_IDS)[number];
 export type ReleaseRestartPolicy = "restart-service";
 export type ReleaseUpdatePolicy = "explicit";
+export type ReleaseProduct = "butler-agent";
+export type ReleaseCanonicalComponent = "agent";
+export type ReleaseProfile = "agent-standalone";
+export type ReleaseUpdaterOwner = "butler-agent";
+export type ReleasePayloadFormat = "agent-archive";
+export type ReleaseStagingPolicy = "butler-data-updates";
+export type ReleaseActivationPolicy = "versioned-standalone-runtime";
+export type ReleaseRollbackPolicy = "preserve-previous-standalone-runtime";
+
+export interface ReleaseProtocolCompatibility {
+  protocol: "butler.agent.v1";
+  minimumAgentProtocol: "butler.agent.v1";
+  maximumAgentProtocol: "butler.agent.v1";
+}
+
+export interface ReleaseIntegrityMetadata {
+  digestAlgorithm: "sha256";
+  digest: string | null;
+  signature: string | null;
+}
 export const SERVICE_CLI_LAUNCHER_PLATFORMS = [
   "darwin-arm64",
   "darwin-x64",
@@ -25,18 +45,31 @@ export interface ServiceCliLauncher {
 
 export interface ReleaseComponent {
   id: ReleaseComponentId;
+  product: ReleaseProduct;
+  canonicalComponent: ReleaseCanonicalComponent;
+  legacyAliases: ReleaseComponentId[];
+  profile: ReleaseProfile;
   name: string;
   version: string;
   versionSource: string;
+  protocolCompatibility: ReleaseProtocolCompatibility;
   bundledComponents: ReleaseComponentId[];
   requiredFiles: string[];
   privateDataPatterns: string[];
   updatePolicy: ReleaseUpdatePolicy;
   restartPolicy: ReleaseRestartPolicy;
+  updaterOwner: ReleaseUpdaterOwner;
+  payloadFormat: ReleasePayloadFormat;
+  stagingPolicy: ReleaseStagingPolicy;
+  activationPolicy: ReleaseActivationPolicy;
+  rollbackPolicy: ReleaseRollbackPolicy;
 }
 
 export interface ReleaseArtifact {
+  product: ReleaseProduct;
   component: ReleaseComponentId;
+  canonicalComponent: ReleaseCanonicalComponent;
+  profile: ReleaseProfile;
   version: string;
   channel: "stable";
   platform: "all";
@@ -46,13 +79,26 @@ export interface ReleaseArtifact {
   signature: string | null;
   bundledComponents: ReleaseComponentId[];
   compatibleProtocol: null;
+  protocolCompatibility: ReleaseProtocolCompatibility;
+  integrity: ReleaseIntegrityMetadata;
   updatePolicy: ReleaseUpdatePolicy;
   restartPolicy: ReleaseRestartPolicy;
+  updaterOwner: ReleaseUpdaterOwner;
+  payloadFormat: ReleasePayloadFormat;
+  stagingPolicy: ReleaseStagingPolicy;
+  activationPolicy: ReleaseActivationPolicy;
+  rollbackPolicy: ReleaseRollbackPolicy;
 }
 
 export interface ReleaseManifest {
   name: string;
+  product: ReleaseProduct;
+  publicProductGroups: ReleaseProduct[];
+  profile: ReleaseProfile;
+  canonicalComponent: ReleaseCanonicalComponent;
+  legacyComponentAliases: ReleaseComponentId[];
   version: string;
+  protocolCompatibility: ReleaseProtocolCompatibility;
   bin: Record<string, string>;
   managedRuntimeVersion: string;
   appWebClientDist: string;
@@ -93,6 +139,11 @@ export function createReleaseManifest(root: string): ReleaseManifest {
   const pkg = readJson(join(root, "package.json"));
   const runtimeVersionPath = butlerAgentResourcesPath(root, "runtime", "bun-version");
   const versions = readComponentVersions(root);
+  const protocolCompatibility: ReleaseProtocolCompatibility = {
+    protocol: "butler.agent.v1",
+    minimumAgentProtocol: "butler.agent.v1",
+    maximumAgentProtocol: "butler.agent.v1",
+  };
   const serviceFiles = [
     "package.json",
     "bun.lock",
@@ -123,18 +174,34 @@ export function createReleaseManifest(root: string): ReleaseManifest {
   ];
   const components: ReleaseComponent[] = [{
     id: "service",
+    product: "butler-agent",
+    canonicalComponent: "agent",
+    legacyAliases: ["service"],
+    profile: "agent-standalone",
     name: "Butler Service",
     version: versions.service,
     versionSource: "VERSION",
+    protocolCompatibility,
     bundledComponents: ["service"],
     requiredFiles: serviceFiles,
     privateDataPatterns,
     updatePolicy: "explicit",
     restartPolicy: "restart-service",
+    updaterOwner: "butler-agent",
+    payloadFormat: "agent-archive",
+    stagingPolicy: "butler-data-updates",
+    activationPolicy: "versioned-standalone-runtime",
+    rollbackPolicy: "preserve-previous-standalone-runtime",
   }];
   return {
     name: String(pkg.name ?? ""),
+    product: "butler-agent",
+    publicProductGroups: ["butler-agent"],
+    profile: "agent-standalone",
+    canonicalComponent: "agent",
+    legacyComponentAliases: ["service"],
     version: versions.service,
+    protocolCompatibility,
     bin: pkg.bin && typeof pkg.bin === "object" ? pkg.bin : {},
     managedRuntimeVersion: existsSync(runtimeVersionPath)
       ? readText(runtimeVersionPath)
@@ -149,7 +216,10 @@ export function createReleaseManifest(root: string): ReleaseManifest {
     privateDataPatterns,
     components,
     artifacts: components.map((component) => ({
+      product: "butler-agent",
       component: component.id,
+      canonicalComponent: "agent",
+      profile: "agent-standalone",
       version: component.version,
       channel: "stable",
       platform: "all",
@@ -159,8 +229,19 @@ export function createReleaseManifest(root: string): ReleaseManifest {
       signature: null,
       bundledComponents: component.bundledComponents,
       compatibleProtocol: null,
+      protocolCompatibility,
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: null,
+        signature: null,
+      },
       updatePolicy: component.updatePolicy,
       restartPolicy: component.restartPolicy,
+      updaterOwner: "butler-agent",
+      payloadFormat: "agent-archive",
+      stagingPolicy: "butler-data-updates",
+      activationPolicy: "versioned-standalone-runtime",
+      rollbackPolicy: "preserve-previous-standalone-runtime",
     })),
   };
 }
@@ -173,6 +254,19 @@ export function validateReleaseManifest(
   const pkg = readJson(join(root, "package.json"));
   const versions = readComponentVersions(root);
   if (manifest.name !== "butler") issues.push("package name must be butler");
+  if (manifest.product !== "butler-agent")
+    issues.push("release product must be butler-agent");
+  if (!sameComponentSet(manifest.publicProductGroups ?? [], ["butler-agent"])) {
+    issues.push("release public product groups must contain only butler-agent");
+  }
+  if (manifest.profile !== "agent-standalone")
+    issues.push("release profile must be agent-standalone");
+  if (manifest.canonicalComponent !== "agent")
+    issues.push("release canonical component must be agent");
+  if (!sameComponentSet(manifest.legacyComponentAliases ?? [], ["service"])) {
+    issues.push("release legacy aliases must contain service");
+  }
+  validateProtocolCompatibility("release manifest", manifest.protocolCompatibility, issues);
   if (
     !manifest.version ||
     manifest.version !== versions.service ||
@@ -251,9 +345,27 @@ function validateComponents(
       issues.push(`duplicate release component: ${component.id}`);
     }
     components.set(component.id, component);
+    if (component.product !== "butler-agent") {
+      issues.push(`component ${component.id} product must be butler-agent`);
+    }
+    if (component.canonicalComponent !== "agent") {
+      issues.push(`component ${component.id} canonical component must be agent`);
+    }
+    if (!sameComponentSet(component.legacyAliases, ["service"])) {
+      issues.push(`component ${component.id} legacy aliases must contain service`);
+    }
+    if (component.profile !== "agent-standalone") {
+      issues.push(`component ${component.id} profile must be agent-standalone`);
+    }
     if (component.version !== versions.service) {
       issues.push(`component ${component.id} version source mismatch`);
     }
+    validateProtocolCompatibility(
+      `component ${component.id}`,
+      component.protocolCompatibility,
+      issues,
+    );
+    validateReleaseOperationMetadata(`component ${component.id}`, component, issues);
     validateRequiredFiles(root, component.requiredFiles, issues);
     validateNoAppInternals(component.requiredFiles, issues);
     validatePrivatePatterns(root, component.privateDataPatterns, issues);
@@ -321,11 +433,27 @@ function validateArtifacts(
       continue;
     }
     artifactComponents.add(artifact.component);
+    if (artifact.product !== "butler-agent") {
+      issues.push(`artifact ${artifact.component} product must be butler-agent`);
+    }
+    if (artifact.canonicalComponent !== "agent") {
+      issues.push(`artifact ${artifact.component} canonical component must be agent`);
+    }
+    if (artifact.profile !== "agent-standalone") {
+      issues.push(`artifact ${artifact.component} profile must be agent-standalone`);
+    }
     const component = manifest.components.find((item) => item.id === artifact.component);
     if (!component) continue;
     if (artifact.version !== component.version) {
       issues.push(`artifact ${artifact.component} version mismatch`);
     }
+    validateProtocolCompatibility(
+      `artifact ${artifact.component}`,
+      artifact.protocolCompatibility,
+      issues,
+    );
+    validateArtifactIntegrity(`artifact ${artifact.component}`, artifact.integrity, issues);
+    validateReleaseOperationMetadata(`artifact ${artifact.component}`, artifact, issues);
     if (!sameComponentSet(artifact.bundledComponents, component.bundledComponents)) {
       issues.push(`artifact ${artifact.component} bundled component mismatch`);
     }
@@ -338,6 +466,77 @@ function validateArtifacts(
   }
   if (!artifactComponents.has("service")) {
     issues.push("missing release artifact: service");
+  }
+}
+
+function validateProtocolCompatibility(
+  label: string,
+  compatibility: ReleaseProtocolCompatibility | undefined,
+  issues: string[],
+): void {
+  if (!compatibility) {
+    issues.push(`${label} protocol compatibility is required`);
+    return;
+  }
+  if (
+    compatibility.protocol !== "butler.agent.v1" ||
+    compatibility.minimumAgentProtocol !== "butler.agent.v1" ||
+    compatibility.maximumAgentProtocol !== "butler.agent.v1"
+  ) {
+    issues.push(`${label} protocol compatibility must be butler.agent.v1`);
+  }
+}
+
+function validateArtifactIntegrity(
+  label: string,
+  integrity: ReleaseIntegrityMetadata | undefined,
+  issues: string[],
+): void {
+  if (!integrity) {
+    issues.push(`${label} integrity metadata is required`);
+    return;
+  }
+  if (integrity.digestAlgorithm !== "sha256") {
+    issues.push(`${label} digest algorithm must be sha256`);
+  }
+  if (integrity.signature !== null && !integrity.signature.trim()) {
+    issues.push(`${label} signature metadata must be null or non-empty`);
+  }
+}
+
+function validateReleaseOperationMetadata(
+  label: string,
+  value: Pick<
+    ReleaseComponent | ReleaseArtifact,
+    | "updatePolicy"
+    | "restartPolicy"
+    | "updaterOwner"
+    | "payloadFormat"
+    | "stagingPolicy"
+    | "activationPolicy"
+    | "rollbackPolicy"
+  >,
+  issues: string[],
+): void {
+  if (value.updatePolicy !== "explicit")
+    issues.push(`${label} update policy must be explicit`);
+  if (value.restartPolicy !== "restart-service")
+    issues.push(`${label} restart policy must be restart-service`);
+  if (value.updaterOwner !== "butler-agent")
+    issues.push(`${label} updater owner must be butler-agent`);
+  if (value.payloadFormat !== "agent-archive")
+    issues.push(`${label} payload format must be agent-archive`);
+  if (value.stagingPolicy !== "butler-data-updates")
+    issues.push(`${label} staging policy must be butler-data-updates`);
+  if (value.activationPolicy !== "versioned-standalone-runtime") {
+    issues.push(
+      `${label} activation policy must be versioned-standalone-runtime`,
+    );
+  }
+  if (value.rollbackPolicy !== "preserve-previous-standalone-runtime") {
+    issues.push(
+      `${label} rollback policy must be preserve-previous-standalone-runtime`,
+    );
   }
 }
 

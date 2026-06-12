@@ -7,20 +7,51 @@ export type AppReleaseComponentId = (typeof APP_RELEASE_COMPONENT_IDS)[number];
 export type AppReleasePlatform = (typeof APP_RELEASE_PLATFORMS)[number];
 export type AppReleaseRestartPolicy = "restart-app";
 export type AppReleaseUpdatePolicy = "app-user-action";
+export type AppReleaseProduct = "butler-app";
+export type AppReleaseGatewayProfile = "electron";
+export type AppReleaseUpdaterOwner = "butler-app";
+export type AppReleasePayloadFormat = "platform-app-package";
+export type AppReleaseStagingPolicy = "platform-updater-cache";
+export type AppReleaseActivationPolicy =
+  "platform-app-update-then-versioned-app-runtime";
+export type AppReleaseRollbackPolicy =
+  "preserve-previous-app-managed-runtime";
+
+export interface AppReleaseProtocolCompatibility {
+  protocol: "butler.app.v1";
+  minimumAppProtocol: "butler.app.v1";
+  maximumAppProtocol: "butler.app.v1";
+}
+
+export interface AppReleaseIntegrityMetadata {
+  digestAlgorithm: "sha256";
+  digest: string | null;
+  signature: string | null;
+}
 
 export interface AppReleaseComponent {
   id: AppReleaseComponentId;
+  product: AppReleaseProduct;
   name: string;
   version: string;
   versionSource: string;
+  gatewayProfile: AppReleaseGatewayProfile;
+  bundledAgentVersion: string;
+  protocolCompatibility: AppReleaseProtocolCompatibility;
   bundledComponents: AppReleaseComponentId[];
   requiredFiles: string[];
   privateDataPatterns: string[];
   updatePolicy: AppReleaseUpdatePolicy;
   restartPolicy: AppReleaseRestartPolicy;
+  updaterOwner: AppReleaseUpdaterOwner;
+  payloadFormat: AppReleasePayloadFormat;
+  stagingPolicy: AppReleaseStagingPolicy;
+  activationPolicy: AppReleaseActivationPolicy;
+  rollbackPolicy: AppReleaseRollbackPolicy;
 }
 
 export interface AppReleaseArtifact {
+  product: AppReleaseProduct;
   component: AppReleaseComponentId;
   version: string;
   channel: "stable";
@@ -31,20 +62,36 @@ export interface AppReleaseArtifact {
   signature: string | null;
   bundledComponents: AppReleaseComponentId[];
   compatibleProtocol: "butler.app.v1";
+  gatewayProfile: AppReleaseGatewayProfile;
+  bundledAgentVersion: string;
+  protocolCompatibility: AppReleaseProtocolCompatibility;
+  integrity: AppReleaseIntegrityMetadata;
   updatePolicy: AppReleaseUpdatePolicy;
   restartPolicy: AppReleaseRestartPolicy;
+  updaterOwner: AppReleaseUpdaterOwner;
+  payloadFormat: AppReleasePayloadFormat;
+  stagingPolicy: AppReleaseStagingPolicy;
+  activationPolicy: AppReleaseActivationPolicy;
+  rollbackPolicy: AppReleaseRollbackPolicy;
 }
 
 export interface AppReleaseManifest {
   name: "butler-app";
+  product: AppReleaseProduct;
+  publicProductGroups: AppReleaseProduct[];
   protocol: "butler.app.v1";
+  protocolCompatibility: AppReleaseProtocolCompatibility;
   version: string;
+  gatewayProfile: AppReleaseGatewayProfile;
+  bundledAgentVersion: string;
+  updaterOwner: AppReleaseUpdaterOwner;
   components: AppReleaseComponent[];
   artifacts: AppReleaseArtifact[];
 }
 
 export interface AppComponentVersions {
   app: string;
+  bundledAgent: string;
 }
 
 const APP_RELEASE_FORBIDDEN_SERVICE_PATH_PREFIXES = [
@@ -60,13 +107,22 @@ export function readAppComponentVersions(root: string): AppComponentVersions {
   const electronPkg = readJson(
     join(root, "packages", "butler-app", "client", "electron", "package.json"),
   );
+  const agentVersionPath = join(root, "VERSION");
   return {
     app: String(electronPkg.version ?? ""),
+    bundledAgent: existsSync(agentVersionPath)
+      ? readFileSync(agentVersionPath, "utf8").trim()
+      : String(electronPkg.version ?? ""),
   };
 }
 
 export function createAppReleaseManifest(root: string): AppReleaseManifest {
   const versions = readAppComponentVersions(root);
+  const protocolCompatibility: AppReleaseProtocolCompatibility = {
+    protocol: "butler.app.v1",
+    minimumAppProtocol: "butler.app.v1",
+    maximumAppProtocol: "butler.app.v1",
+  };
   const appFiles = [
     "packages/butler-app/README.md",
     "packages/butler-app/client/README.md",
@@ -90,23 +146,39 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
   const components: AppReleaseComponent[] = [
     {
       id: "app",
+      product: "butler-app",
       name: "Butler App",
       version: versions.app,
       versionSource: "packages/butler-app/client/electron/package.json",
+      gatewayProfile: "electron",
+      bundledAgentVersion: versions.bundledAgent,
+      protocolCompatibility,
       bundledComponents: ["app"],
       requiredFiles: appFiles,
       privateDataPatterns: [],
       updatePolicy: "app-user-action",
       restartPolicy: "restart-app",
+      updaterOwner: "butler-app",
+      payloadFormat: "platform-app-package",
+      stagingPolicy: "platform-updater-cache",
+      activationPolicy: "platform-app-update-then-versioned-app-runtime",
+      rollbackPolicy: "preserve-previous-app-managed-runtime",
     },
   ];
   return {
     name: "butler-app",
+    product: "butler-app",
+    publicProductGroups: ["butler-app"],
     protocol: "butler.app.v1",
+    protocolCompatibility,
     version: versions.app,
+    gatewayProfile: "electron",
+    bundledAgentVersion: versions.bundledAgent,
+    updaterOwner: "butler-app",
     components,
     artifacts: components.flatMap((component) =>
       APP_RELEASE_PLATFORMS.map((platform) => ({
+        product: "butler-app",
         component: component.id,
         version: component.version,
         channel: "stable",
@@ -117,8 +189,21 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
         signature: null,
         bundledComponents: component.bundledComponents,
         compatibleProtocol: "butler.app.v1",
+        gatewayProfile: "electron",
+        bundledAgentVersion: versions.bundledAgent,
+        protocolCompatibility,
+        integrity: {
+          digestAlgorithm: "sha256",
+          digest: null,
+          signature: null,
+        },
         updatePolicy: component.updatePolicy,
         restartPolicy: component.restartPolicy,
+        updaterOwner: "butler-app",
+        payloadFormat: "platform-app-package",
+        stagingPolicy: "platform-updater-cache",
+        activationPolicy: "platform-app-update-then-versioned-app-runtime",
+        rollbackPolicy: "preserve-previous-app-managed-runtime",
       })),
     ),
   };
@@ -132,8 +217,20 @@ export function validateAppReleaseManifest(
   const versions = readAppComponentVersions(root);
   if (manifest.name !== "butler-app")
     issues.push("app release manifest name must be butler-app");
+  if (manifest.product !== "butler-app")
+    issues.push("app release product must be butler-app");
+  if (!sameComponentSet(manifest.publicProductGroups ?? [], ["butler-app"])) {
+    issues.push("app release public product groups must contain only butler-app");
+  }
   if (manifest.protocol !== "butler.app.v1")
     issues.push("app release protocol must be butler.app.v1");
+  validateProtocolCompatibility("app release manifest", manifest.protocolCompatibility, issues);
+  if (manifest.gatewayProfile !== "electron")
+    issues.push("app release gateway profile must be electron");
+  if (manifest.bundledAgentVersion !== versions.bundledAgent)
+    issues.push("app release bundled agent version mismatch");
+  if (manifest.updaterOwner !== "butler-app")
+    issues.push("app release updater owner must be butler-app");
   if (!manifest.version || manifest.version !== versions.app) {
     issues.push("app package version mismatch");
   }
@@ -193,9 +290,24 @@ function validateComponents(
       issues.push(`duplicate app release component: ${component.id}`);
     }
     components.set(component.id, component);
+    if (component.product !== "butler-app") {
+      issues.push(`component ${component.id} product must be butler-app`);
+    }
     if (component.version !== versions.app) {
       issues.push(`component ${component.id} version source mismatch`);
     }
+    if (component.gatewayProfile !== "electron") {
+      issues.push(`component ${component.id} gateway profile must be electron`);
+    }
+    if (component.bundledAgentVersion !== versions.bundledAgent) {
+      issues.push(`component ${component.id} bundled agent version mismatch`);
+    }
+    validateProtocolCompatibility(
+      `component ${component.id}`,
+      component.protocolCompatibility,
+      issues,
+    );
+    validateAppOperationMetadata(`component ${component.id}`, component, issues);
     validateRequiredFiles(root, component.requiredFiles, issues);
     validateNoServiceInternals(component.requiredFiles, issues);
     validatePrivatePatterns(root, component.privateDataPatterns, issues);
@@ -237,6 +349,9 @@ function validateArtifacts(
       continue;
     }
     artifactComponents.add(artifact.component);
+    if (artifact.product !== "butler-app") {
+      issues.push(`artifact ${artifact.component} product must be butler-app`);
+    }
     if (!APP_RELEASE_PLATFORMS.includes(artifact.platform)) {
       issues.push(`unknown app release artifact platform: ${artifact.platform}`);
       continue;
@@ -256,6 +371,19 @@ function validateArtifacts(
     if (artifact.version !== component.version) {
       issues.push(`artifact ${artifact.component} version mismatch`);
     }
+    if (artifact.gatewayProfile !== "electron") {
+      issues.push(`artifact ${artifact.component} gateway profile must be electron`);
+    }
+    if (artifact.bundledAgentVersion !== manifest.bundledAgentVersion) {
+      issues.push(`artifact ${artifact.component} bundled agent version mismatch`);
+    }
+    validateProtocolCompatibility(
+      `artifact ${artifact.component}`,
+      artifact.protocolCompatibility,
+      issues,
+    );
+    validateArtifactIntegrity(`artifact ${artifact.component}`, artifact.integrity, issues);
+    validateAppOperationMetadata(`artifact ${artifact.component}`, artifact, issues);
     if (
       !sameComponentSet(artifact.bundledComponents, component.bundledComponents)
     ) {
@@ -278,6 +406,79 @@ function validateArtifacts(
         issues.push(`missing app release artifact platform: ${id}/${platform}`);
       }
     }
+  }
+}
+
+function validateProtocolCompatibility(
+  label: string,
+  compatibility: AppReleaseProtocolCompatibility | undefined,
+  issues: string[],
+): void {
+  if (!compatibility) {
+    issues.push(`${label} protocol compatibility is required`);
+    return;
+  }
+  if (
+    compatibility.protocol !== "butler.app.v1" ||
+    compatibility.minimumAppProtocol !== "butler.app.v1" ||
+    compatibility.maximumAppProtocol !== "butler.app.v1"
+  ) {
+    issues.push(`${label} protocol compatibility must be butler.app.v1`);
+  }
+}
+
+function validateArtifactIntegrity(
+  label: string,
+  integrity: AppReleaseIntegrityMetadata | undefined,
+  issues: string[],
+): void {
+  if (!integrity) {
+    issues.push(`${label} integrity metadata is required`);
+    return;
+  }
+  if (integrity.digestAlgorithm !== "sha256") {
+    issues.push(`${label} digest algorithm must be sha256`);
+  }
+  if (integrity.signature !== null && !integrity.signature.trim()) {
+    issues.push(`${label} signature metadata must be null or non-empty`);
+  }
+}
+
+function validateAppOperationMetadata(
+  label: string,
+  value: Pick<
+    AppReleaseComponent | AppReleaseArtifact,
+    | "updatePolicy"
+    | "restartPolicy"
+    | "updaterOwner"
+    | "payloadFormat"
+    | "stagingPolicy"
+    | "activationPolicy"
+    | "rollbackPolicy"
+  >,
+  issues: string[],
+): void {
+  if (value.updatePolicy !== "app-user-action")
+    issues.push(`${label} update policy must be app-user-action`);
+  if (value.restartPolicy !== "restart-app")
+    issues.push(`${label} restart policy must be restart-app`);
+  if (value.updaterOwner !== "butler-app")
+    issues.push(`${label} updater owner must be butler-app`);
+  if (value.payloadFormat !== "platform-app-package")
+    issues.push(`${label} payload format must be platform-app-package`);
+  if (value.stagingPolicy !== "platform-updater-cache")
+    issues.push(`${label} staging policy must be platform-updater-cache`);
+  if (
+    value.activationPolicy !== "platform-app-update-then-versioned-app-runtime"
+  ) {
+    issues.push(
+      `${label} activation policy must be platform-app-update-then-versioned-app-runtime`,
+    );
+  }
+  if (value.rollbackPolicy !== "preserve-previous-app-managed-runtime") {
+    issues.push(
+      `${label} rollback policy must be preserve-previous-app-managed-runtime`,
+    );
   }
 }
 

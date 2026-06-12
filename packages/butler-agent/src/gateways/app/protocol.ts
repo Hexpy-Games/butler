@@ -343,6 +343,20 @@ export interface WebSearchSettingsUpdate {
 export type UpdateComponentId = "service" | "app";
 export type UpdateRestartPolicy = "restart-service" | "restart-app";
 export type UpdatePolicy = "explicit" | "app-user-action";
+export type UpdateProduct = "butler-agent" | "butler-app";
+export type UpdateCanonicalComponent = "agent" | "app";
+export type UpdateProfile = "agent-standalone" | "electron";
+export type UpdateUpdaterOwner = "butler-agent" | "butler-app";
+export type UpdatePayloadFormat = "agent-archive" | "platform-app-package";
+export type UpdateStagingPolicy = "butler-data-updates" | "platform-updater-cache";
+export type UpdateActivationPolicy = "versioned-standalone-runtime" | "platform-app-update-then-versioned-app-runtime";
+export type UpdateRollbackPolicy = "preserve-previous-standalone-runtime" | "preserve-previous-app-managed-runtime";
+
+export interface UpdateIntegrityMetadata {
+  digestAlgorithm: "sha256";
+  digest: string | null;
+  signature: string | null;
+}
 
 export interface ComponentUpdateStatus {
   component: UpdateComponentId;
@@ -354,8 +368,18 @@ export interface ComponentUpdateStatus {
   sha256: string | null;
   signature: string | null;
   bundled_components: UpdateComponentId[];
+  product: UpdateProduct;
+  canonical_component: UpdateCanonicalComponent;
+  profile: UpdateProfile;
+  protocol_compatibility: Record<string, string>;
+  integrity: UpdateIntegrityMetadata;
   update_policy: UpdatePolicy;
   restart_policy: UpdateRestartPolicy;
+  updater_owner: UpdateUpdaterOwner;
+  payload_format: UpdatePayloadFormat;
+  staging_policy: UpdateStagingPolicy;
+  activation_policy: UpdateActivationPolicy;
+  rollback_policy: UpdateRollbackPolicy;
   checked_at: string;
   staged: boolean;
   stage_path: string;

@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { recordOperationalMetric } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
+import { applyComponentUpdate } from "../../packages/butler-agent/src/operations/update/component-updater.ts";
 import { TaskNotificationQueue } from "../../packages/butler-agent/src/agent/work/task-notifications.ts";
 import { createBoxItem, readBoxManifest } from "../../packages/butler-agent/src/agent/cognition/box/store.ts";
 import { addFeedbackEntry } from "../../packages/butler-agent/src/agent/cognition/feedback/buffer.ts";
@@ -882,7 +883,7 @@ test("operator cognition consolidation runs the generic cycle manually", () => {
   }
 });
 
-test("operator lifecycle commands require explicit confirmation for mutation", () => {
+test("operator lifecycle commands require explicit confirmation for mutation", async () => {
   const butlerData = tempRoot();
   const updateVersion = "99.0.0";
   try {
@@ -909,8 +910,26 @@ test("operator lifecycle commands require explicit confirmation for mutation", (
         artifact_url: artifactPath,
         sha256: createHash("sha256").update(artifactContents).digest("hex"),
         bundled_components: ["service"],
+        product: "butler-agent",
+        canonical_component: "agent",
+        profile: "agent-standalone",
+        protocol_compatibility: {
+          protocol: "butler.agent.v1",
+          minimumAgentProtocol: "butler.agent.v1",
+          maximumAgentProtocol: "butler.agent.v1",
+        },
+        integrity: {
+          digestAlgorithm: "sha256",
+          digest: createHash("sha256").update(artifactContents).digest("hex"),
+          signature: null,
+        },
         update_policy: "explicit",
         restart_policy: "restart-service",
+        updater_owner: "butler-agent",
+        payload_format: "agent-archive",
+        staging_policy: "butler-data-updates",
+        activation_policy: "versioned-standalone-runtime",
+        rollback_policy: "preserve-previous-standalone-runtime",
       }],
     }), "utf8");
 
@@ -931,8 +950,129 @@ test("operator lifecycle commands require explicit confirmation for mutation", (
       dryRun: false,
       stage_status: "staged",
       stage_path: join("updates", "staged", "service.json"),
+      product: "butler-agent",
+      canonical_component: "agent",
+      profile: "agent-standalone",
+      updater_owner: "butler-agent",
+      payload_format: "agent-archive",
+      staging_policy: "butler-data-updates",
+      activation_policy: "versioned-standalone-runtime",
+      rollback_policy: "preserve-previous-standalone-runtime",
+    });
+    expect(parsed.data.protocol_compatibility).toEqual({
+      protocol: "butler.agent.v1",
+      minimumAgentProtocol: "butler.agent.v1",
+      maximumAgentProtocol: "butler.agent.v1",
+    });
+    expect(parsed.data.integrity).toMatchObject({
+      digestAlgorithm: "sha256",
+      digest: createHash("sha256").update(artifactContents).digest("hex"),
+      signature: null,
     });
     expect(existsSync(join(butlerData, "updates", "staged", "service.json"))).toBe(true);
+    const staged = JSON.parse(readFileSync(
+      join(butlerData, "updates", "staged", "service.json"),
+      "utf8",
+    ));
+    expect(staged).toMatchObject({
+      product: "butler-agent",
+      canonical_component: "agent",
+      profile: "agent-standalone",
+      updater_owner: "butler-agent",
+      payload_format: "agent-archive",
+      staging_policy: "butler-data-updates",
+      activation_policy: "versioned-standalone-runtime",
+      rollback_policy: "preserve-previous-standalone-runtime",
+    });
+
+    writeFileSync(manifestPath, JSON.stringify({
+      artifacts: [{
+        component: "service",
+        version: updateVersion,
+        channel: "stable",
+        artifact_url: artifactPath,
+        sha256: createHash("sha256").update(artifactContents).digest("hex"),
+        bundled_components: ["service"],
+        product: "service",
+        update_policy: "explicit",
+        restart_policy: "restart-service",
+      }],
+    }), "utf8");
+    const invalidManifest = runCli(["update", "--dry-run", "--manifest", manifestPath, "--json"], butlerData);
+    expect(invalidManifest.exitCode).toBe(1);
+    expect(JSON.parse(stdoutText(invalidManifest)).error.message).toContain(
+      "product must be butler-agent",
+    );
+
+    writeFileSync(manifestPath, JSON.stringify({
+      artifacts: [{
+        component: "service",
+        version: updateVersion,
+        channel: "stable",
+        artifact_url: artifactPath,
+        sha256: createHash("sha256").update(artifactContents).digest("hex"),
+        signature: "signed-but-unverified",
+        bundled_components: ["service"],
+        update_policy: "explicit",
+        restart_policy: "restart-service",
+      }],
+    }), "utf8");
+    const unverifiedSignature = runCli(["update", "--dry-run", "--manifest", manifestPath, "--json"], butlerData);
+    expect(unverifiedSignature.exitCode).toBe(1);
+    expect(JSON.parse(stdoutText(unverifiedSignature)).error.message).toContain(
+      "signature verification is not implemented",
+    );
+
+    const appArtifactPath = join(butlerData, `butler-app-${updateVersion}.zip`);
+    const appArtifactContents = `app artifact v${updateVersion}`;
+    writeFileSync(appArtifactPath, appArtifactContents, "utf8");
+    writeFileSync(manifestPath, JSON.stringify({
+      artifacts: [{
+        component: "app",
+        version: updateVersion,
+        channel: "stable",
+        artifact_url: appArtifactPath,
+        sha256: createHash("sha256").update(appArtifactContents).digest("hex"),
+        bundled_components: ["app"],
+        product: "butler-app",
+        canonical_component: "app",
+        profile: "electron",
+        protocol_compatibility: {
+          protocol: "butler.app.v1",
+          minimumAppProtocol: "butler.app.v1",
+          maximumAppProtocol: "butler.app.v1",
+        },
+        update_policy: "app-user-action",
+        restart_policy: "restart-app",
+        updater_owner: "butler-app",
+        payload_format: "platform-app-package",
+        staging_policy: "platform-updater-cache",
+        activation_policy: "platform-app-update-then-versioned-app-runtime",
+        rollback_policy: "preserve-previous-app-managed-runtime",
+      }],
+    }), "utf8");
+    const appDryRun = await applyComponentUpdate({
+      root,
+      butlerData,
+      component: "app",
+      manifestPath,
+      dryRun: true,
+    });
+    expect(appDryRun.planned_actions).toContain(
+      "hand app update to platform-updater-cache",
+    );
+    let appApplyError: Error | null = null;
+    try {
+      await applyComponentUpdate({
+        root,
+        butlerData,
+        component: "app",
+        manifestPath,
+      });
+    } catch (error) {
+      appApplyError = error instanceof Error ? error : new Error(String(error));
+    }
+    expect(appApplyError?.message).toContain("generic BUTLER_DATA staging is not allowed");
 
     const uninstall = runCli(["uninstall", "--json"], butlerData);
     expect(uninstall.exitCode).toBe(2);
@@ -949,7 +1089,7 @@ test("operator lifecycle commands require explicit confirmation for mutation", (
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
-});
+}, 30_000);
 
 test("operator logs --follow streams appended safe lines", async () => {
   const butlerData = tempRoot();
