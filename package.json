@@ -35,6 +35,7 @@
     "app:client:install": "npm --prefix packages/butler-app/client/electron install && npm --prefix packages/butler-app/client/ui install",
     "app:client": "npm --prefix packages/butler-app/client/ui run build && npm --prefix packages/butler-app/client/electron run start",
     "app:client:dev": "${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-client-dev.ts",
+    "app:first-run:test-env": "npm --prefix packages/butler-app/client/ui run build && exec ${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-first-run-test-env.ts",
     "app:client:managed-server:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-client-managed-server-smoke.ts",
     "app:client:model-management:e2e": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/e2e/app-model-management-e2e.ts",
     "app:client:multiturn:e2e": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",

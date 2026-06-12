@@ -10,6 +10,11 @@ dev renderer can attach without starting a second app-server.
 ## Key Areas
 
 - Client development: `app-client-dev.ts`.
+- Manual first-run testing: `app-first-run-test-env.ts` launches Electron with
+  a clean Butler data root, isolated Electron profile, and local managed
+  app-server port so the App setup path can be inspected without touching the
+  user's real `~/.butler` state. This is a clean-launch inspection harness; it
+  does not prove the first-run setup wizard is implemented.
 - App smoke and E2E: `app-client-managed-server-smoke.ts` and
   `app-ui-hmr-smoke.ts` stay here when they are client-owned. Package, layout,
   design-system, render, model-management, and multi-turn checks live under
