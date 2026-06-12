@@ -42,8 +42,7 @@ test("first-run setup renders the minimal Electron setup order", async () => {
   await clickButton(rendered.container, "동의");
   expect(rendered.container.textContent).toContain("Butler Agent를 준비합니다");
   expect(rendered.container.textContent).toContain("준비 완료");
-  expect(rendered.calls).toContain("health");
-  expect(rendered.calls).toContain("getSettings");
+  expect(rendered.calls).toContain("startSetup");
 
   await waitForText(rendered.container, "모델 설정");
   expect(rendered.container.textContent).toContain(
@@ -72,14 +71,36 @@ test("first-run setup shows concise retry after install readiness failure", asyn
 
   await clickButton(rendered.container, "Retry");
   await waitForText(rendered.container, "Model setup");
-  expect(rendered.calls.filter((call) => call === "health")).toHaveLength(2);
+  expect(rendered.calls.filter((call) => call === "startSetup")).toHaveLength(2);
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run setup does not persist raw bridge errors", async () => {
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("en"),
+      step: "install",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "checking",
+    },
+    { rejectSetupOnce: true },
+  );
+
+  await waitForText(rendered.container, "Butler Agent is not ready.");
+  const storedState = rendered.container.ownerDocument.defaultView?.localStorage
+    .getItem("butler:first-run-setup:v1") ?? "";
+  expect(rendered.container.textContent).not.toContain("/Users/example/.butler");
+  expect(storedState).not.toContain("/Users/example/.butler");
+  expect(storedState).toContain("setup_failed");
 
   await act(async () => rendered.root.unmount());
 });
 
 async function renderFirstRun(
   initialState: FirstRunState,
-  options: { failHealthOnce?: boolean } = {},
+  options: { failHealthOnce?: boolean; rejectSetupOnce?: boolean } = {},
 ): Promise<RenderedFirstRun> {
   const dom = new JSDOM(
     "<!doctype html><html><body><div id=\"root\"></div></body></html>",
@@ -95,20 +116,30 @@ async function renderFirstRun(
   (globalThis as ReactActGlobal).IS_REACT_ACT_ENVIRONMENT = true;
 
   const calls: string[] = [];
-  let healthFailures = options.failHealthOnce ? 1 : 0;
+  let setupFailures = options.failHealthOnce ? 1 : 0;
+  let setupRejections = options.rejectSetupOnce ? 1 : 0;
   Object.assign(dom.window, {
     butlerApp: {
-      health: async () => {
-        calls.push("health");
-        if (healthFailures > 0) {
-          healthFailures -= 1;
-          throw new Error("health failed");
+      startSetup: async () => {
+        calls.push("startSetup");
+        if (setupRejections > 0) {
+          setupRejections -= 1;
+          throw new Error("Failed at /Users/example/.butler/private.env");
         }
-        return { ok: true };
-      },
-      getSettings: async () => {
-        calls.push("getSettings");
-        return {};
+        if (setupFailures > 0) {
+          setupFailures -= 1;
+          return {
+            diagnostics_available: true,
+            error_code: "setup_failed",
+            phase: "failed",
+            status_label: "Butler Agent is not ready.",
+          };
+        }
+        return {
+          diagnostics_available: true,
+          phase: "ready",
+          status_label: "준비 완료",
+        };
       },
       updateSettings: async () => {
         calls.push("updateSettings");

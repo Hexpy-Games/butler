@@ -1,4 +1,5 @@
 import type { SettingsView } from "./types.ts";
+import { api } from "./api.ts";
 
 export type FirstRunLanguage = "en" | "ko";
 export type FirstRunStep = "language" | "safety" | "install" | "model";
@@ -32,6 +33,27 @@ export interface FirstRunState {
   install_status?: FirstRunInstallStatus;
   error_message?: string;
   completed_at?: string;
+}
+
+export interface FirstRunSetupStatusView {
+  phase: "idle" | "checking" | "ready" | "failed" | "cancelled";
+  status_label: string;
+  diagnostics_available: boolean;
+  error_code?: string;
+}
+
+export interface FirstRunSetupDiagnosticsView {
+  generated_at: string;
+  phase: FirstRunSetupStatusView["phase"];
+  checks: Array<{
+    id: string;
+    label: string;
+    status: "pending" | "passed" | "failed" | "cancelled";
+  }>;
+  errors: Array<{
+    code: string;
+    message: string;
+  }>;
 }
 
 export const FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
@@ -308,4 +330,22 @@ export function settingsLanguagePatch(
   language: FirstRunLanguage,
 ): Pick<SettingsView, "language"> {
   return { language };
+}
+
+export async function startFirstRunSetup(): Promise<FirstRunSetupStatusView> {
+  return await api<FirstRunSetupStatusView>("/setup/start", {
+    method: "POST",
+    body: JSON.stringify({ mode: "bundled-agent" }),
+  });
+}
+
+export async function cancelFirstRunSetup(): Promise<FirstRunSetupStatusView> {
+  return await api<FirstRunSetupStatusView>("/setup/cancel", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function exportFirstRunSetupDiagnostics(): Promise<FirstRunSetupDiagnosticsView> {
+  return await api<FirstRunSetupDiagnosticsView>("/setup/diagnostics");
 }

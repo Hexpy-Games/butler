@@ -127,6 +127,10 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   const method = String(options.method ?? "GET").toUpperCase();
   const url = new URL(path, window.location.origin);
   if (method === "GET" && url.pathname === "/health") return await callBridge<T>(bridge, "health");
+  if (method === "GET" && url.pathname === "/setup/status") return await callBridge<T>(bridge, "getSetupStatus");
+  if (method === "POST" && url.pathname === "/setup/start") return await callBridge<T>(bridge, "startSetup", parseBody(options.body));
+  if (method === "POST" && url.pathname === "/setup/cancel") return await callBridge<T>(bridge, "cancelSetup", parseBody(options.body));
+  if (method === "GET" && url.pathname === "/setup/diagnostics") return await callBridge<T>(bridge, "exportSetupDiagnostics");
   if (method === "GET" && url.pathname === "/chats") return await callBridge<T>(bridge, "listChats");
   if (method === "GET" && url.pathname === "/navigation") return await callBridge<T>(bridge, "listNavigation");
   if (method === "GET" && url.pathname === "/new-chat-briefing") {
