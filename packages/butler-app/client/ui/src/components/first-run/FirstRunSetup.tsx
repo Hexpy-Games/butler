@@ -28,7 +28,6 @@ export function FirstRunSetup({
         <FirstRunStepContent
           copy={setup.copy}
           error={setup.error}
-          advancedOpen={setup.advancedOpen}
           language={setup.language}
           status={setup.status}
           step={setup.step}
@@ -38,8 +37,6 @@ export function FirstRunSetup({
           onLanguageChange={setup.onLanguageChange}
           onLanguageContinue={setup.onLanguageContinue}
           onRetryInstall={setup.onRetryInstall}
-          onToggleAdvanced={setup.onToggleAdvanced}
-          onUseExistingAgent={setup.onUseExistingAgent}
         />
       </section>
     </main>

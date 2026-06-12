@@ -1,7 +1,5 @@
 export function createFirstRunSetupBridge({
   ensureReady,
-  checkExistingReady = ensureReady,
-  existingAgentConfigured = false,
   readSettings,
   gatewayProfile = "electron",
 }) {
@@ -28,51 +26,44 @@ export function createFirstRunSetupBridge({
       });
       return statusView(session);
     },
-    async start(request = {}) {
-      const mode = setupMode(request?.mode);
+    async start() {
       const currentRunId = runId + 1;
       runId = currentRunId;
       const startedAt = new Date().toISOString();
       const currentSession = createSession("checking", {
         checks: [
           setupCheck(
-            mode === "existing-agent" ? "existing_agent" : "managed_gateway",
-            mode === "existing-agent" ? "기존 Agent 연결" : "Butler Agent 연결",
+            "managed_gateway",
+            "Butler Agent 연결",
           ),
           setupCheck("settings", "앱 설정 확인"),
           setupCheck(
-            mode === "existing-agent" ? "compatibility" : "gateway_profile",
-            mode === "existing-agent" ? "호환성 확인" : "Electron 연결 확인",
+            "gateway_profile",
+            "Electron 연결 확인",
           ),
         ],
         startedAt,
       });
       session = currentSession;
       try {
-        const checkReady =
-          mode === "existing-agent" ? checkExistingReady : ensureReady;
-        if (mode === "existing-agent" && existingAgentConfigured !== true) {
-          throw setupError("existing_agent_incompatible");
-        }
-        await checkReady();
+        await ensureReady();
         if (!isActiveRun(currentRunId, runId, session)) return statusView(session);
         if (currentSession.cancelled) return statusView(currentSession);
         markCheck(
           currentSession,
-          mode === "existing-agent" ? "existing_agent" : "managed_gateway",
+          "managed_gateway",
           "passed",
         );
         const settings = await readSettings();
         if (!isActiveRun(currentRunId, runId, session)) return statusView(session);
         if (currentSession.cancelled) return statusView(currentSession);
         markCheck(currentSession, "settings", "passed");
-        if (mode === "bundled-agent" && gatewayProfile !== "electron") {
+        if (gatewayProfile !== "electron" || settings?.gateway_profile !== "electron") {
           throw setupError("gateway_profile_mismatch");
         }
-        if (mode === "existing-agent") validateExistingAgentSettings(settings);
         markCheck(
           currentSession,
-          mode === "existing-agent" ? "compatibility" : "gateway_profile",
+          "gateway_profile",
           "passed",
         );
         if (isActiveRun(currentRunId, runId, session)) {
@@ -154,10 +145,7 @@ function failPendingChecks(checks) {
 }
 
 function setupErrorCode(error) {
-  if (
-    error?.code === "gateway_profile_mismatch" ||
-    error?.code === "existing_agent_incompatible"
-  ) {
+  if (error?.code === "gateway_profile_mismatch") {
     return error.code;
   }
   return "setup_failed";
@@ -171,23 +159,4 @@ function setupError(code) {
 
 function isActiveRun(currentRunId, runId, session) {
   return runId === currentRunId && session.phase === "checking";
-}
-
-function safeString(value) {
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function setupMode(value) {
-  return value === "existing-agent" ? "existing-agent" : "bundled-agent";
-}
-
-function validateExistingAgentSettings(settings) {
-  const bridgeMode = safeString(settings?.bridge_mode);
-  const serverUrl = safeString(settings?.server_url);
-  if (bridgeMode !== "local" && bridgeMode !== "external") {
-    throw setupError("existing_agent_incompatible");
-  }
-  if (!serverUrl || !/^https?:\/\/[^\s]+$/u.test(serverUrl)) {
-    throw setupError("existing_agent_incompatible");
-  }
 }

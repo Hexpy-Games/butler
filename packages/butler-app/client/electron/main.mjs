@@ -76,9 +76,7 @@ const nativeNotificationState = {
   lastShownAt: null,
 };
 const firstRunSetupBridge = createFirstRunSetupBridge({
-  checkExistingReady: checkExistingServer,
   ensureReady: ensureServer,
-  existingAgentConfigured: Boolean(explicitServerUrl),
   gatewayProfile: "electron",
   readSettings: readSetupSettings,
 });
@@ -304,15 +302,6 @@ async function readSetupSettings() {
     throw error;
   }
   return body.data ?? {};
-}
-
-async function checkExistingServer() {
-  const response = await fetch(new URL("/health", serverUrl));
-  if (!response.ok) {
-    const error = new Error("existing_agent_unavailable");
-    error.code = "existing_agent_unavailable";
-    throw error;
-  }
 }
 
 function configureAppIdentity() {

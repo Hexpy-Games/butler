@@ -428,6 +428,7 @@ export interface UpdateApplyResult extends ComponentUpdateStatus {
 
 export interface SettingsView {
   bridge_mode: "local" | "external";
+  gateway_profile: "electron";
   server_url: string;
   default_project_workspace_label: string;
   language: "en" | "ko";
@@ -742,7 +743,6 @@ export interface LocalModelDeletionResult {
 }
 
 export interface UpdateSettingsRequest {
-  bridge_mode?: SettingsView["bridge_mode"];
   server_url?: string;
   language?: SettingsView["language"];
   timezone?: SettingsView["timezone"];
@@ -1557,7 +1557,6 @@ export function isCreateProjectRequest(
 }
 
 const UPDATE_SETTINGS_KEYS = new Set([
-  "bridge_mode",
   "server_url",
   "language",
   "timezone",

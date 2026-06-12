@@ -23,6 +23,7 @@ export const DEFAULT_WEB_SEARCH_SETTINGS: WebSearchSettingsView = {
 
 export const EMPTY_SETTINGS: SettingsView = {
   bridge_mode: "local",
+  gateway_profile: "electron",
   server_url: "http://127.0.0.1:18765",
   default_project_workspace_label: "butler-workspace",
   language: "en",
