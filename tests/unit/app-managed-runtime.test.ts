@@ -199,6 +199,80 @@ test("App-managed runtime preparation flips pointer only after readiness commit"
   }
 });
 
+test("App-managed runtime rollback hook restores previous prepared runtime after health failure", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-health-rollback-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const currentRuntime = join("app", "runtime", "agent", "versions", "2.0.0");
+    const standaloneRuntime = join("runtime", "agent", "versions", "9.0.0");
+    writeReadyRuntime(butlerData, currentRuntime);
+    writeFileSync(join(butlerData, currentRuntime, "bin", "butler.js"), "previous launcher\n");
+    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
+    writeFileSync(
+      appManagedAgentPointerPath(butlerData),
+      `${JSON.stringify({
+        schema: APP_MANAGED_RUNTIME_POINTER_SCHEMA,
+        product: "butler-app",
+        gateway_profile: "electron",
+        version: "2.0.0",
+        runtime_home: currentRuntime,
+      }, null, 2)}\n`,
+    );
+    mkdirSync(join(butlerData, "runtime", "agent"), { recursive: true });
+    writeFileSync(
+      join(butlerData, "runtime", "agent", "current.json"),
+      `${JSON.stringify({
+        schema: "butler.agent-standalone-runtime-pointer.v1",
+        product: "butler-agent",
+        profile: "agent-standalone",
+        version: "9.0.0",
+        runtime_home: standaloneRuntime,
+      }, null, 2)}\n`,
+    );
+    const standalonePointerBefore = readFileSync(
+      join(butlerData, "runtime", "agent", "current.json"),
+      "utf8",
+    );
+    const resourceRoot = createBundledAgentResource(join(tempDir, "Private User"), {
+      version: "2.0.0",
+    });
+
+    const prepared = prepareAppManagedAgentRuntime({
+      butlerData,
+      resourceRoot,
+      now: fixedNow,
+    });
+    expect(readFileSync(join(prepared.runtimeHome, "bin", "butler.js"), "utf8")).toContain(
+      "#!/usr/bin/env node",
+    );
+
+    (prepared as any).rollbackActivation(new Error("health check failed at /Users/private/token"));
+
+    expect(readFileSync(join(butlerData, currentRuntime, "bin", "butler.js"), "utf8")).toBe(
+      "previous launcher\n",
+    );
+    expect(readJson(appManagedAgentPointerPath(butlerData))).toMatchObject({
+      version: "2.0.0",
+      runtime_home: currentRuntime,
+    });
+    expect(readFileSync(join(butlerData, "runtime", "agent", "current.json"), "utf8")).toBe(
+      standalonePointerBefore,
+    );
+    const failure = readJson(
+      join(butlerData, "app", "runtime", "agent", "failures", "2.0.0.json"),
+    );
+    expect(failure).toMatchObject({
+      activation_status: "rolled_back",
+      rollback_reason: "health check failed at [redacted-path]",
+      raw_text_included: false,
+    });
+    expect(JSON.stringify(failure)).not.toContain(tempDir);
+    expect(JSON.stringify(failure)).not.toContain("Private User");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("App-managed runtime rejects unsafe bundled Agent archive entries", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-unsafe-"));
   try {

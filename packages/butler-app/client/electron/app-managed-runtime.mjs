@@ -142,6 +142,7 @@ export function prepareAppManagedAgentRuntime({
       activated: false,
       previousRuntimePath: existingPointer.previous?.runtime_home ?? null,
       commitActivation() {},
+      rollbackActivation() {},
     };
   }
 
@@ -186,10 +187,7 @@ export function prepareAppManagedAgentRuntime({
       backupCreated = true;
     }
     renameSync(stagingHome, runtimeHome);
-    if (backupCreated) {
-      rmSync(backupHome, { recursive: true, force: true });
-      backupCreated = false;
-    }
+    let rolledBack = false;
     return {
       runtimeHome,
       runtimeHomeLabel,
@@ -198,6 +196,7 @@ export function prepareAppManagedAgentRuntime({
       activated: false,
       previousRuntimePath: previousSelectablePointer?.runtime_home ?? null,
       commitActivation() {
+        if (rolledBack) return;
         const selectedAt = now().toISOString();
         atomicWriteJson(join(runtimeHome, "runtime.json"), {
           schema: APP_MANAGED_RUNTIME_SCHEMA,
@@ -232,6 +231,53 @@ export function prepareAppManagedAgentRuntime({
           raw_text_included: false,
         });
         this.activated = true;
+        if (backupCreated) {
+          try {
+            rmSync(backupHome, { recursive: true, force: true });
+            backupCreated = false;
+          } catch {
+            // Backup cleanup is secondary once the selected pointer is committed.
+          }
+        }
+      },
+      rollbackActivation(error = new Error("App-managed Agent activation failed")) {
+        if (rolledBack || this.activated) return;
+        rolledBack = true;
+        let restoreError = null;
+        try {
+          if (backupCreated && existsSync(backupHome)) {
+            rmSync(runtimeHome, { recursive: true, force: true });
+            renameSync(backupHome, runtimeHome);
+            backupCreated = false;
+          } else {
+            rmSync(runtimeHome, { recursive: true, force: true });
+            if (previousSelectablePointer) {
+              atomicWriteJson(currentPointerPath, previousSelectablePointer);
+            }
+            backupCreated = false;
+          }
+        } catch (rollbackError) {
+          restoreError = rollbackError;
+        }
+        try {
+          writeAppManagedRuntimeFailure({
+            butlerData,
+            version,
+            artifactVersion: artifact.version,
+            runtimeHomeLabel,
+            payloadLabel,
+            sourceRoot: root,
+            payloadDigest: digest,
+            managedRuntimeDigest: verifiedClosure.managedRuntimeDigest,
+            preparedAt,
+            error,
+          });
+        } catch {
+          // Runtime restoration must not depend on diagnostic persistence.
+        }
+        if (restoreError) {
+          throw restoreError;
+        }
       },
     };
   } catch (error) {
@@ -295,6 +341,7 @@ export function resolveAppManagedGatewayCommand({
       BUTLER_APP_MANAGED_RUNTIME_HOME: activation.runtimeHome,
     },
     commitActivation: activation.commitActivation,
+    rollbackActivation: activation.rollbackActivation,
   };
 }
 

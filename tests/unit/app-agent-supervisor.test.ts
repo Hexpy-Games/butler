@@ -277,6 +277,262 @@ test("supervisor diagnostics redact startup error text and local auth token", as
   }
 });
 
+test("supervisor rolls back prepared App-managed runtime on health timeout", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-health-rollback-"));
+  try {
+    let rolledBack = 0;
+    let committed = 0;
+    const killed: string[] = [];
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: join(tempDir, "data"),
+      resolveGateway: () => ({
+        command: "/runtime/bun",
+        args: ["/runtime/bin/butler.js", "gateway", "app"],
+        cwd: "/runtime",
+        env: { BUTLER_HOME: "/runtime" },
+        appManaged: true,
+        bundledAgentVersion: "2.0.0",
+        commitActivation: () => {
+          committed += 1;
+        },
+        rollbackActivation: (error: Error) => {
+          rolledBack += 1;
+          expect(error.message).toContain("Timed out waiting");
+        },
+      }),
+      spawnProcess: () => new FakeChildProcess(9300, killed),
+      healthCheck: () => false,
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => undefined,
+      startupAttempts: 1,
+      baseEnv: {},
+    });
+
+    await expect(supervisor.ensureReady()).rejects.toThrow("Timed out waiting");
+    expect(committed).toBe(0);
+    expect(rolledBack).toBe(1);
+    expect(killed).toContain("SIGTERM");
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "failed",
+      last_error_code: "health_timeout",
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("supervisor rolls back prepared App-managed runtime when readiness never passes", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-ready-rollback-"));
+  try {
+    let rolledBack = 0;
+    let committed = 0;
+    let readinessChecks = 0;
+    const killed: string[] = [];
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: join(tempDir, "data"),
+      resolveGateway: () => ({
+        command: "/runtime/bun",
+        args: ["/runtime/bin/butler.js", "gateway", "app"],
+        cwd: "/runtime",
+        env: { BUTLER_HOME: "/runtime" },
+        appManaged: true,
+        bundledAgentVersion: "2.0.0",
+        commitActivation: () => {
+          committed += 1;
+        },
+        rollbackActivation: (error: Error) => {
+          rolledBack += 1;
+          expect(error.message).toContain("Timed out waiting");
+        },
+      }),
+      spawnProcess: () => new FakeChildProcess(9400, killed),
+      healthCheck: () => true,
+      readinessCheck: () => {
+        readinessChecks += 1;
+        return false;
+      },
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => undefined,
+      startupAttempts: 2,
+      baseEnv: {},
+    });
+
+    await expect(supervisor.ensureReady()).rejects.toThrow("Timed out waiting");
+    expect(committed).toBe(0);
+    expect(rolledBack).toBe(1);
+    expect(readinessChecks).toBeGreaterThanOrEqual(2);
+    expect(killed).toContain("SIGTERM");
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "failed",
+      last_error_code: "readiness_timeout",
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("supervisor stops candidate and rolls back when activation commit fails", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-commit-rollback-"));
+  try {
+    let rolledBack = 0;
+    let committed = 0;
+    const killed: string[] = [];
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: join(tempDir, "data"),
+      resolveGateway: () => ({
+        command: "/runtime/bun",
+        args: ["/runtime/bin/butler.js", "gateway", "app"],
+        cwd: "/runtime",
+        env: { BUTLER_HOME: "/runtime" },
+        appManaged: true,
+        bundledAgentVersion: "2.0.0",
+        commitActivation: () => {
+          committed += 1;
+          throw new Error("pointer write failed");
+        },
+        rollbackActivation: (error: Error) => {
+          rolledBack += 1;
+          expect(error.message).toContain("pointer write failed");
+        },
+      }),
+      spawnProcess: () => new FakeChildProcess(9500, killed),
+      healthCheck: () => true,
+      readinessCheck: () => true,
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => undefined,
+      startupAttempts: 1,
+      baseEnv: {},
+    });
+
+    await expect(supervisor.ensureReady()).rejects.toThrow("pointer write failed");
+    expect(committed).toBe(1);
+    expect(rolledBack).toBe(1);
+    expect(killed).toContain("SIGTERM");
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "failed",
+      last_error_code: "activation_commit_failed",
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("supervisor probe timeout rolls back when health check hangs", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-health-hang-"));
+  try {
+    let rolledBack = 0;
+    let committed = 0;
+    const killed: string[] = [];
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: join(tempDir, "data"),
+      resolveGateway: () => ({
+        command: "/runtime/bun",
+        args: ["/runtime/bin/butler.js", "gateway", "app"],
+        cwd: "/runtime",
+        env: { BUTLER_HOME: "/runtime" },
+        appManaged: true,
+        bundledAgentVersion: "2.0.0",
+        commitActivation: () => {
+          committed += 1;
+        },
+        rollbackActivation: (error: Error) => {
+          rolledBack += 1;
+          expect(error.message).toContain("Timed out waiting");
+        },
+      }),
+      spawnProcess: () => new FakeChildProcess(9600, killed),
+      healthCheck: () => new Promise(() => undefined),
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => undefined,
+      startupAttempts: 1,
+      probeTimeoutMs: 1,
+      baseEnv: {},
+    });
+
+    await expect(supervisor.ensureReady()).rejects.toThrow("Timed out waiting");
+    expect(committed).toBe(0);
+    expect(rolledBack).toBe(1);
+    expect(killed).toContain("SIGTERM");
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "failed",
+      last_error_code: "health_timeout",
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("supervisor probe timeout rolls back when readiness check hangs", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-ready-hang-"));
+  try {
+    let rolledBack = 0;
+    let committed = 0;
+    const killed: string[] = [];
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: join(tempDir, "data"),
+      resolveGateway: () => ({
+        command: "/runtime/bun",
+        args: ["/runtime/bin/butler.js", "gateway", "app"],
+        cwd: "/runtime",
+        env: { BUTLER_HOME: "/runtime" },
+        appManaged: true,
+        bundledAgentVersion: "2.0.0",
+        commitActivation: () => {
+          committed += 1;
+        },
+        rollbackActivation: (error: Error) => {
+          rolledBack += 1;
+          expect(error.message).toContain("Timed out waiting");
+        },
+      }),
+      spawnProcess: () => new FakeChildProcess(9700, killed),
+      healthCheck: () => true,
+      readinessCheck: () => new Promise(() => undefined),
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => undefined,
+      startupAttempts: 1,
+      probeTimeoutMs: 1,
+      baseEnv: {},
+    });
+
+    await expect(supervisor.ensureReady()).rejects.toThrow("Timed out waiting");
+    expect(committed).toBe(0);
+    expect(rolledBack).toBe(1);
+    expect(killed).toContain("SIGTERM");
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "failed",
+      last_error_code: "readiness_timeout",
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("supervisor records gateway resolution failures for setup diagnostics", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-gateway-"));
   try {
@@ -343,6 +599,9 @@ class FakeChildProcess extends EventEmitter {
 
   kill(signal: string) {
     this.killed.push(signal);
+    queueMicrotask(() => {
+      this.emit("exit", null, signal);
+    });
     return true;
   }
 }

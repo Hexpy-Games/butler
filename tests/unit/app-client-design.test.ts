@@ -626,7 +626,7 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(electronMain).toContain('join(process.resourcesPath, "app-client")');
   expect(electronMain).toContain("serverHealthUrl");
   expect(electronMain).toContain('new URL("/health", serverUrl).toString()');
-  expect(electronMain).toContain('body?.protocol_version === "butler.app.v1"');
+  expect(electronMain).toContain("body?.protocol_version === appProtocolVersion");
   expect(electronMain).toContain("body?.data?.ok === true");
   expect(electronMain).toContain("createBundledAgentSupervisor");
   expect(electronMain).toContain("bundledAgentSupervisor.ensureReady()");
@@ -1560,7 +1560,7 @@ test("electron shell owns only the app gateway process and shuts it down cleanly
   expect(supervisor).toContain("already starting but is not healthy");
   expect(supervisor).toContain("Failed to start Butler app server");
   expect(supervisor).toContain("exited before becoming healthy");
-  expect(supervisor).toContain("if (await healthCheck(localAuth))");
+  expect(supervisor).toContain("async function checkGatewayReadiness");
   expect(supervisor).toContain("BUTLER_APP_GATEWAY_PID_FILE");
   expect(supervisor).toContain('child.once("exit"');
   expect(supervisor).toContain('child.once("error"');

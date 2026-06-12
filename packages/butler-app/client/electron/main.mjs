@@ -42,6 +42,7 @@ const macAppIconPath = resolve(__dirname, "assets/butler.icns");
 const macAppDockIconPath = resolve(__dirname, "assets/butler-mac.png");
 const appRepositoryUrl = "https://github.com/Hexpy-Games/butler";
 const appProtocolVersion = "butler.app.v1";
+const appServerProbeTimeoutMs = 2000;
 const nativeSettingsSchema = "butler.native-settings.v1";
 const nativeSettingsFileName = "butler-native-settings.json";
 const macNotificationSettingsUrl =
@@ -84,6 +85,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   resolveGateway: managedGatewayCommand,
   spawnProcess: spawn,
   healthCheck: healthOk,
+  readinessCheck: gatewayReady,
   isPortAvailable,
   findAvailablePort,
   updatePort: updateManagedServerPort,
@@ -196,19 +198,44 @@ function resolveButlerRuntime(data) {
 
 async function healthOk(localAuth = null) {
   try {
-    const response = await fetch(serverHealthUrl, {
-      headers: localAuth?.token
-        ? { authorization: `Bearer ${localAuth.token}` }
-        : {},
-    });
+    const response = await appServerProbeFetch(serverHealthUrl, localAuth);
     const body = await response.json().catch(() => null);
     return (
       response.ok &&
-      body?.protocol_version === "butler.app.v1" &&
+      body?.protocol_version === appProtocolVersion &&
       body?.data?.ok === true
     );
   } catch {
     return false;
+  }
+}
+
+async function gatewayReady(localAuth = null) {
+  try {
+    const response = await appServerProbeFetch(new URL("/settings", serverUrl), localAuth);
+    const body = await response.json().catch(() => null);
+    return (
+      response.ok &&
+      body?.protocol_version === appProtocolVersion &&
+      body?.data?.gateway_profile === "electron"
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function appServerProbeFetch(url, localAuth = null) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), appServerProbeTimeoutMs);
+  try {
+    return await fetch(url, {
+      headers: localAuth?.token
+        ? { authorization: `Bearer ${localAuth.token}` }
+        : {},
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
