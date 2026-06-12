@@ -21,9 +21,9 @@ dev renderer can attach without starting a second app-server.
 
 ## Boundaries
 
-These scripts validate the optional app product. Agent runtime and service
-release validation stay under `packages/butler-agent/`; repo-wide `tools/`
-should only hold package-neutral orchestration.
+These scripts validate the Butler App product. Agent runtime validation stays
+under `packages/butler-agent/`; repo-wide `tools/` should only hold
+package-neutral orchestration.
 
 ## Related Specs
 

@@ -1,9 +1,10 @@
 # Butler App
 
-`packages/butler-app/` contains the optional desktop app product. Butler App is
-the Electron shell, renderer UI, and app-owned tooling; the HTTP app gateway is
-owned and run by Butler Agent. In development, `bun run app:client:dev` starts
-only the Electron/Vite client and connects to the already running agent gateway.
+`packages/butler-app/` contains the recommended desktop product. Butler App is
+the Electron shell, renderer UI, bundled-Agent lifecycle surface, and app-owned
+tooling; the HTTP app gateway is owned and run by Butler Agent. In development,
+`bun run app:client:dev` starts only the Electron/Vite client and connects to
+the already running agent gateway.
 
 ## Module Map
 
