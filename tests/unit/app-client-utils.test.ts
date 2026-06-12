@@ -485,7 +485,7 @@ test("stale session snapshots cannot revive a terminal turn", () => {
       id: "late-running-row",
       kind: "thinking",
       state: "thinking",
-      safe_label: "Queued for Butler service",
+      safe_label: "Queued for Butler Agent",
       created_at: "2026-05-19T00:01:02.000Z",
     },
   ];
@@ -1094,7 +1094,7 @@ test("lifecycle-only progress rows are not promoted into work blocks", () => {
         id: "queued",
         kind: "thinking",
         state: "thinking",
-        safe_label: "Queued for Butler service",
+        safe_label: "Queued for Butler Agent",
       },
       {
         id: "final-started",

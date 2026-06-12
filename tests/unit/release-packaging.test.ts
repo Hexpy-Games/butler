@@ -300,10 +300,10 @@ test("release manifest validation rejects cross-owned bundled artifacts", () => 
       : artifact,
   );
   expect(validateServiceReleaseManifest(root, brokenService)).toContain(
-    "service component must not bundle app",
+    "Butler Agent component must not bundle app",
   );
   expect(validateServiceReleaseManifest(root, brokenService)).toContain(
-    "service artifact must not bundle app",
+    "Butler Agent artifact must not bundle app",
   );
 
   const brokenApp = structuredClone(createAppReleaseManifest(root));
@@ -544,9 +544,9 @@ test("package-owned release gate scripts pass in the repo checkout", () => {
   expect(service.stdout).toBe("");
   expect(serviceVerbose.status).toBe(0);
   expect(serviceVerbose.stdout).toContain(
-    `Service release gate passed: butler@${currentVersion}`,
+    `Butler Agent release gate passed: butler@${currentVersion}`,
   );
-  expect(serviceVerbose.stdout).toContain(`Components: service@${currentVersion}`);
+  expect(serviceVerbose.stdout).toContain(`Products: Butler Agent@${currentVersion}`);
   expect(app.status).toBe(0);
   expect(app.stdout).toBe("");
   expect(appVerbose.status).toBe(0);

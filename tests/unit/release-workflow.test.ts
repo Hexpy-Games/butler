@@ -16,7 +16,7 @@ function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ");
 }
 
-test("version tag release workflow publishes service artifact with packaged app client", () => {
+test("version tag release workflow publishes Butler Agent artifact with packaged app client", () => {
   const workflowPath = join(root, ".github", "workflows", "release.yml");
   expect(existsSync(workflowPath)).toBe(true);
   const workflow = readFileSync(workflowPath, "utf8");
@@ -30,6 +30,11 @@ test("version tag release workflow publishes service artifact with packaged app 
 
   expect(workflow).toContain("tags:\n      - \"v*\"");
   expect(workflow).toContain("contents: write");
+  expect(workflow).toContain("Build and publish Butler Agent artifact");
+  expect(workflow).toContain("Run Butler Agent release gate");
+  expect(workflow).toContain("Package Butler Agent release");
+  expect(workflow).toContain('notes_args=(--notes "Butler Agent release $tag")');
+  expect(workflow).toContain("Expected 4 Butler Agent release files");
   expect(workflow).toContain("bun install --frozen-lockfile");
   expect(workflow).toContain("npm --prefix packages/butler-app/client/ui ci");
   expect(gateIndex).toBeGreaterThan(-1);

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build or consume a Butler service release artifact, then verify that the
+# Build or consume a Butler Agent release artifact, then verify that the
 # packaged artifact installs and runs inside a disposable Docker container.
 set -euo pipefail
 
@@ -27,7 +27,7 @@ if [[ -z "$ARTIFACT_PATH" ]]; then
 fi
 
 if [[ -z "$ARTIFACT_PATH" || ! -f "$ARTIFACT_PATH" ]]; then
-  echo "service release artifact not found: ${ARTIFACT_PATH:-<empty>}" >&2
+  echo "Butler Agent release artifact not found: ${ARTIFACT_PATH:-<empty>}" >&2
   exit 1
 fi
 
@@ -106,7 +106,7 @@ docker run --rm \
     tar -xzf "/release/'"$ARTIFACT_NAME"'" -C "$BUTLER_HOME"
     app_web_client="$BUTLER_HOME/packages/butler-agent/resources/app-client/dist"
     if [[ ! -f "$app_web_client/index.html" ]]; then
-      echo "Service release artifact is missing the built Butler app web client: $app_web_client" >&2
+      echo "Butler Agent release artifact is missing the built Butler app web client: $app_web_client" >&2
       exit 1
     fi
     cd "$BUTLER_HOME"

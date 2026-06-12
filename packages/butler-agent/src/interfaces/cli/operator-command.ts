@@ -71,6 +71,7 @@ import { listServices } from "../../operations/service/native-service-supervisor
 import {
   applyComponentUpdate,
   checkComponentUpdates,
+  normalizeUpdateComponentId,
   renderServiceUpdateResult,
   type UpdateComponentId,
 } from "../../operations/update/component-updater.ts";
@@ -780,7 +781,7 @@ async function gatewaySetEnabled(
   };
   print(parsed, `butler gateway ${enabled ? "enable" : "disable"} ${gatewayId}`, data, [
     `${gatewayId} gateway ${enabled ? "enabled" : "disabled"}.`,
-    gatewayId === "telegram" && enabled ? "Restart Butler service to start embedded Telegram polling." : "",
+    gatewayId === "telegram" && enabled ? "Restart Butler Agent to start embedded Telegram polling." : "",
     gatewayId === "telegram" && !enabled ? "Embedded Telegram polling will stop shortly if Butler is running." : "",
   ].filter(Boolean).join("\n"));
 }
@@ -840,7 +841,7 @@ async function gatewayConfigureTelegram(parsed: ParsedCommonOptions, args: strin
     "Telegram gateway configured.",
     `chat paired: ${Boolean(view.config.chatPaired)}`,
     `format: ${String(view.config.defaultFormat ?? "markdownv2")}`,
-    "Restart Butler service to apply embedded gateway changes.",
+    "Restart Butler Agent to apply embedded gateway changes.",
   ].join("\n"));
 }
 
@@ -904,7 +905,7 @@ async function gatewayPair(parsed: ParsedCommonOptions, args: string[]): Promise
     }, [
       "Telegram paired.",
       "chat id: [configured]",
-      "Restart Butler service to apply embedded gateway changes.",
+      "Restart Butler Agent to apply embedded gateway changes.",
     ].join("\n"));
   } catch (error) {
     fail(
@@ -932,7 +933,7 @@ async function gatewayUnpair(parsed: ParsedCommonOptions, args: string[]): Promi
   }, [
     "Telegram unpaired.",
     "token retained: yes",
-    "Restart Butler service to apply embedded gateway changes.",
+    "Restart Butler Agent to apply embedded gateway changes.",
   ].join("\n"));
 }
 
@@ -966,7 +967,7 @@ async function gatewayTest(parsed: ParsedCommonOptions, args: string[]): Promise
 
 function ensureAppGateway(parsed: ParsedCommonOptions, gatewayId: ReturnType<typeof gatewayIdOrFail>): void {
   if (gatewayId !== "app") {
-    fail(parsed, "unsupported_operation", `${gatewayId} is embedded in butler-main; restart Butler service to apply lifecycle changes`);
+    fail(parsed, "unsupported_operation", `${gatewayId} is embedded in butler-main; restart Butler Agent to apply lifecycle changes`);
   }
 }
 
@@ -2037,11 +2038,7 @@ async function webRead(parsed: ParsedCommonOptions, args: string[]): Promise<voi
 }
 
 function updateComponentFromArgs(args: string[]): UpdateComponentId | null {
-  const component = optionValue(args, "--component") ?? "service";
-  if (component === "service" || component === "app") {
-    return component;
-  }
-  return null;
+  return normalizeUpdateComponentId(optionValue(args, "--component") ?? "agent");
 }
 
 async function update(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
@@ -2053,8 +2050,8 @@ async function update(parsed: ParsedCommonOptions, args: string[]): Promise<void
   }
   const component = updateComponentFromArgs(args);
   if (!component) fail(parsed, "invalid_arguments", "unknown update component");
-  if (component !== "service") {
-    fail(parsed, "unsupported_component", "CLI updates currently support --component service");
+  if (component !== "service" && apply && !dryRun) {
+    fail(parsed, "unsupported_component", "CLI update apply currently supports --component agent; Butler App updates are applied by the App updater");
   }
   const manifestPath = optionValue(args, "--manifest");
   const channel = optionValue(args, "--channel") ?? "stable";

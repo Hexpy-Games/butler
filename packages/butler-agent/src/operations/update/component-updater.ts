@@ -11,6 +11,7 @@ import { createReleaseManifest } from "../release/manifest.ts";
 
 export const UPDATE_COMPONENT_IDS = ["service", "app"] as const;
 export type UpdateComponentId = (typeof UPDATE_COMPONENT_IDS)[number];
+export type UpdateComponentAlias = UpdateComponentId | "agent" | "butler-agent" | "butler-app" | "app-server";
 export type ReleaseRestartPolicy =
   | "restart-service"
   | "restart-app";
@@ -239,13 +240,13 @@ export function renderServiceUpdateResult(
   const current = result.current_version || "unknown";
   const available = result.available_version || "unknown";
   if (!result.update_available) {
-    return `Butler service is up to date (${current}).`;
+    return `Butler Agent is up to date (${current}).`;
   }
   const applied = "stage_status" in result && result.stage_status === "staged";
   if (applied) {
-    return `Butler service update staged: ${current} -> ${available}. Restart the service to apply it.`;
+    return `Butler Agent update staged: ${current} -> ${available}. Restart Butler Agent to apply it.`;
   }
-  return `Butler service update available: ${current} -> ${available}.`;
+  return `Butler Agent update available: ${current} -> ${available}.`;
 }
 
 function buildComponentStatus(input: {
@@ -326,8 +327,13 @@ function normalizeManifestArtifacts(value: unknown, channel: string): ManifestAr
   const components = new Map<UpdateComponentId, Record<string, any>>();
   for (const component of Array.isArray(input.components) ? input.components : []) {
     const id = component?.id ?? component?.component;
-    if (!isUpdateComponentId(id)) throw new Error(`Unknown update component: ${String(id)}`);
-    components.set(id, component);
+    const normalizedId = normalizeUpdateComponentId(id);
+    if (!normalizedId) throw new Error(`Unknown update component: ${String(id)}`);
+    components.set(normalizedId, {
+      ...component,
+      id: normalizedId,
+      component: normalizedId,
+    });
   }
   const artifacts = Array.isArray(input.artifacts)
     ? input.artifacts
@@ -361,19 +367,23 @@ function normalizeArtifact(
   components: Map<UpdateComponentId, Record<string, any>>,
   channel: string,
 ): ManifestArtifact {
-  const component = artifact.component ?? artifact.id;
-  if (!isUpdateComponentId(component)) throw new Error(`Unknown update component: ${String(component)}`);
+  const rawComponent = artifact.component ?? artifact.id;
+  const component = normalizeUpdateComponentId(rawComponent);
+  if (!component) throw new Error(`Unknown update component: ${String(rawComponent)}`);
   const componentEntry = components.get(component);
-  const bundled = artifact.bundled_components ??
+  const rawBundled = artifact.bundled_components ??
     artifact.bundledComponents ??
     componentEntry?.bundled_components ??
     componentEntry?.bundledComponents ??
     [component];
+  const bundled = Array.isArray(rawBundled)
+    ? rawBundled.map((item) => normalizeUpdateComponentId(item))
+    : rawBundled;
   if (!Array.isArray(bundled) || !bundled.every(isUpdateComponentId)) {
     throw new Error(`Invalid bundled components for ${component}`);
   }
   if (component === "service" && !sameComponentSet(bundled, ["service"])) {
-    throw new Error("Service update artifact must not bundle app components.");
+    throw new Error("Butler Agent update artifact must not bundle app components.");
   }
   if (component === "app" && !sameComponentSet(bundled, ["app"])) {
     throw new Error("App update artifact must not bundle service or gateway host.");
@@ -488,15 +498,16 @@ function localUpdateArtifacts(root: string): ManifestArtifact[] {
 }
 
 function plannedActionsFor(status: ComponentUpdateStatus): string[] {
+  const label = updateComponentLabel(status.component);
   if (!status.update_available) {
-    return [`${status.component} is already at ${status.current_version}`];
+    return [`${label} is already at ${status.current_version}`];
   }
   return [
-    `download ${status.component} artifact`,
+    `download ${label} artifact`,
     "verify artifact sha256",
     status.staging_policy === "butler-data-updates"
-      ? `stage ${status.component} update under BUTLER_DATA updates`
-      : `hand ${status.component} update to ${status.staging_policy}`,
+      ? `stage ${label} update under BUTLER_DATA updates`
+      : `hand ${label} update to ${status.staging_policy}`,
     `activate with ${status.activation_policy}`,
     `rollback with ${status.rollback_policy} on failure`,
     restartAction(status.restart_policy),
@@ -504,8 +515,8 @@ function plannedActionsFor(status: ComponentUpdateStatus): string[] {
 }
 
 function restartAction(policy: ReleaseRestartPolicy): string {
-  if (policy === "restart-app") return "restart app to apply";
-  return "restart service to apply";
+  if (policy === "restart-app") return "restart Butler App to apply";
+  return "restart Butler Agent to apply";
 }
 
 function assertGenericUpdaterCanStage(status: ComponentUpdateStatus): void {
@@ -745,6 +756,16 @@ function compareSemver(left: string, right: string): number {
 
 function isUpdateComponentId(value: unknown): value is UpdateComponentId {
   return typeof value === "string" && UPDATE_COMPONENT_IDS.includes(value as UpdateComponentId);
+}
+
+export function normalizeUpdateComponentId(value: unknown): UpdateComponentId | null {
+  if (value === "agent" || value === "butler-agent" || value === "service") return "service";
+  if (value === "app" || value === "butler-app" || value === "app-server") return "app";
+  return null;
+}
+
+export function updateComponentLabel(component: UpdateComponentId): "Butler Agent" | "Butler App" {
+  return component === "service" ? "Butler Agent" : "Butler App";
 }
 
 function normalizeUpdatePolicy(value: unknown): ReleaseUpdatePolicy {

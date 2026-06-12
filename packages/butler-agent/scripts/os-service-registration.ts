@@ -79,7 +79,7 @@ if (dryRun) {
     process.stdout.write(renderJsonEnvelope({ ok: true, command, data }));
   } else if (!parsed.options.quiet) {
     process.stdout.write([
-      `Butler service ${action} plan (${plan.platform})`,
+      `Butler Agent service ${action} plan (${plan.platform})`,
       `Service file: ${plan.serviceFile}`,
       `Foreground entrypoint: ${plan.foregroundEntrypoint}`,
       "No changes made. Re-run with --yes to apply.",
@@ -103,7 +103,7 @@ try {
     process.stdout.write(renderJsonEnvelope({ ok: true, command, data }));
   } else if (!parsed.options.quiet) {
     process.stdout.write([
-      `Butler service ${action} ${result.mutated ? "applied" : "checked"} (${plan.platform})`,
+      `Butler Agent service ${action} ${result.mutated ? "applied" : "checked"} (${plan.platform})`,
       `Service file: ${result.serviceFile}`,
       ...result.commands.map((step) => `  ${step.exitCode}: ${step.argv.join(" ")}`),
     ].join("\n"));

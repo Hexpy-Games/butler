@@ -62,7 +62,7 @@ function buildHelpText(): string {
   return [
     "Butler commands:",
     "/status — system status snapshot",
-    "/update — service update check",
+    "/update — Butler Agent update check",
     "/help — show this help",
   ].join("\n");
 }
@@ -263,7 +263,7 @@ async function runServiceUpdateSlashCommand(
     return renderServiceUpdateResult(view.components[0]!);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return `Butler service update failed: ${message}`;
+    return `Butler Agent update failed: ${message}`;
   }
 }
 

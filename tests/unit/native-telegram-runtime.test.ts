@@ -253,7 +253,7 @@ test("native Telegram /update command checks service updates without model routi
       delivered: true,
     });
     expect(deliveries.map((delivery) => delivery.text).join("\n")).toContain(
-      "Butler service is up to date",
+      "Butler Agent is up to date",
     );
   } finally {
     store.close();

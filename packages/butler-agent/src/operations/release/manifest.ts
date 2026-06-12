@@ -178,7 +178,7 @@ export function createReleaseManifest(root: string): ReleaseManifest {
     canonicalComponent: "agent",
     legacyAliases: ["service"],
     profile: "agent-standalone",
-    name: "Butler Service",
+    name: "Butler Agent",
     version: versions.service,
     versionSource: "VERSION",
     protocolCompatibility,
@@ -373,7 +373,7 @@ function validateComponents(
   if (!components.has("service")) issues.push("missing release component: service");
   const service = components.get("service");
   if (service && !sameComponentSet(service.bundledComponents, ["service"])) {
-    issues.push("service component must not bundle app");
+    issues.push("Butler Agent component must not bundle app");
   }
 }
 
@@ -387,7 +387,7 @@ function validateNoAppInternals(
         (prefix) => file === prefix || file.startsWith(prefix),
       )
     ) {
-      issues.push(`service release required file must not include app internals: ${file}`);
+      issues.push(`Butler Agent release required file must not include app internals: ${file}`);
     }
   }
 }
@@ -458,7 +458,7 @@ function validateArtifacts(
       issues.push(`artifact ${artifact.component} bundled component mismatch`);
     }
     if (!sameComponentSet(artifact.bundledComponents, ["service"])) {
-      issues.push("service artifact must not bundle app");
+      issues.push("Butler Agent artifact must not bundle app");
     }
     if (!artifact.artifactName.trim()) {
       issues.push(`artifact ${artifact.component} must have an artifact name`);

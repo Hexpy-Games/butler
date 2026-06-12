@@ -86,7 +86,7 @@ export function createServiceReleasePackage(
   const manifest = createReleaseManifest(root);
   const issues = validateReleaseManifest(root, manifest);
   if (issues.length > 0) {
-    throw new Error(`service release manifest is invalid: ${issues.join("; ")}`);
+    throw new Error(`Butler Agent release manifest is invalid: ${issues.join("; ")}`);
   }
 
   mkdirSync(outDir, { recursive: true });
@@ -164,7 +164,7 @@ function copyManifestFiles(
   for (const requiredFile of manifest.requiredFiles) {
     const source = join(root, requiredFile);
     if (!existsSync(source)) {
-      throw new Error(`missing required service release file: ${requiredFile}`);
+      throw new Error(`missing required Butler Agent release file: ${requiredFile}`);
     }
     const destination = join(stageRoot, requiredFile);
     mkdirSync(dirname(destination), { recursive: true });
@@ -456,7 +456,7 @@ if (import.meta.main) {
     if (args.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     } else {
-      process.stdout.write(`Service release artifact: ${result.artifactPath}\n`);
+      process.stdout.write(`Butler Agent release artifact: ${result.artifactPath}\n`);
       process.stdout.write(`SHA256: ${result.sha256}\n`);
       process.stdout.write(`Update manifest: ${result.updateManifestPath}\n`);
     }

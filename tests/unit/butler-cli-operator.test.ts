@@ -887,7 +887,7 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
   const butlerData = tempRoot();
   const updateVersion = "99.0.0";
   try {
-    const check = runCli(["update", "--component", "service", "--check", "--json"], butlerData);
+    const check = runCli(["update", "--component", "agent", "--check", "--json"], butlerData);
     expect(check.exitCode).toBe(0);
     let parsed = JSON.parse(stdoutText(check));
     expect(parsed.data).toMatchObject({
@@ -897,6 +897,9 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
       update_available: false,
       dryRun: false,
     });
+    const legacyCheck = runCli(["update", "--component", "service", "--check", "--json"], butlerData);
+    expect(legacyCheck.exitCode).toBe(0);
+    expect(JSON.parse(stdoutText(legacyCheck)).data.component).toBe("service");
 
     const artifactPath = join(butlerData, `butler-service-${updateVersion}.tar.gz`);
     const artifactContents = `service artifact v${updateVersion}`;
@@ -938,6 +941,9 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
     parsed = JSON.parse(stdoutText(dryRun));
     expect(parsed.data.dryRun).toBe(true);
     expect(parsed.data.update_available).toBe(true);
+    expect(parsed.data.planned_actions).toContain("download Butler Agent artifact");
+    expect(parsed.data.planned_actions).toContain("stage Butler Agent update under BUTLER_DATA updates");
+    expect(parsed.data.planned_actions).toContain("restart Butler Agent to apply");
 
     const apply = runCli(["update", "--apply", "--yes", "--manifest", manifestPath, "--json"], butlerData);
     expect(apply.exitCode).toBe(0);
@@ -1028,12 +1034,12 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
     writeFileSync(appArtifactPath, appArtifactContents, "utf8");
     writeFileSync(manifestPath, JSON.stringify({
       artifacts: [{
-        component: "app",
+        component: "app-server",
         version: updateVersion,
         channel: "stable",
         artifact_url: appArtifactPath,
         sha256: createHash("sha256").update(appArtifactContents).digest("hex"),
-        bundled_components: ["app"],
+        bundled_components: ["app-server"],
         product: "butler-app",
         canonical_component: "app",
         profile: "electron",
@@ -1059,8 +1065,9 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
       dryRun: true,
     });
     expect(appDryRun.planned_actions).toContain(
-      "hand app update to platform-updater-cache",
+      "hand Butler App update to platform-updater-cache",
     );
+    expect(appDryRun.planned_actions).toContain("restart Butler App to apply");
     let appApplyError: Error | null = null;
     try {
       await applyComponentUpdate({
