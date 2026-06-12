@@ -822,6 +822,7 @@ function currentVersion(root: string, butlerData: string, component: UpdateCompo
     ) {
       return pointer.version.trim();
     }
+    return createReleaseManifest(root).version;
   }
   const versions = readComponentVersions(root);
   return versions[component];
@@ -897,13 +898,9 @@ function normalizeActivationStatus(value: unknown): ComponentUpdateStatus["activ
 
 function readComponentVersions(root: string): ComponentVersions {
   const serviceManifest = createReleaseManifest(root);
-  const electronPackage = JSON.parse(readFileSync(
-    join(root, "packages", "butler-app", "client", "electron", "package.json"),
-    "utf8",
-  )) as { version?: unknown };
   return {
     service: serviceManifest.version,
-    app: String(electronPackage.version ?? ""),
+    app: readAppVersion(root),
   };
 }
 
@@ -930,38 +927,53 @@ function localUpdateArtifacts(root: string): ManifestArtifact[] {
     rollback_policy: artifact.rollbackPolicy,
   }));
   const versions = readComponentVersions(root);
-  return [
-    ...serviceArtifacts,
-    {
-      component: "app",
-      version: versions.app,
-      channel: "stable",
-      artifact_url: null,
-      sha256: null,
-      signature: null,
-      bundled_components: ["app"],
-      product: "butler-app",
-      canonical_component: "app",
-      profile: "electron",
-      protocol_compatibility: {
-        protocol: "butler.app.v1",
-        minimumAppProtocol: "butler.app.v1",
-        maximumAppProtocol: "butler.app.v1",
-      },
-      integrity: {
-        digestAlgorithm: "sha256",
-        digest: null,
-        signature: null,
-      },
-      update_policy: "app-user-action",
-      restart_policy: "restart-app",
-      updater_owner: "butler-app",
-      payload_format: "platform-app-package",
-      staging_policy: "platform-updater-cache",
-      activation_policy: "platform-app-update-then-versioned-app-runtime",
-      rollback_policy: "preserve-previous-app-managed-runtime",
+  const artifacts: ManifestArtifact[] = [...serviceArtifacts];
+  if (versions.app) artifacts.push(localAppUpdateArtifact(versions.app));
+  return artifacts;
+}
+
+function readAppVersion(root: string): string {
+  try {
+    const electronPackage = JSON.parse(readFileSync(
+      join(root, "packages", "butler-app", "client", "electron", "package.json"),
+      "utf8",
+    )) as { version?: unknown };
+    return String(electronPackage.version ?? "");
+  } catch {
+    return "";
+  }
+}
+
+function localAppUpdateArtifact(version: string): ManifestArtifact {
+  return {
+    component: "app",
+    version,
+    channel: "stable",
+    artifact_url: null,
+    sha256: null,
+    signature: null,
+    bundled_components: ["app"],
+    product: "butler-app",
+    canonical_component: "app",
+    profile: "electron",
+    protocol_compatibility: {
+      protocol: "butler.app.v1",
+      minimumAppProtocol: "butler.app.v1",
+      maximumAppProtocol: "butler.app.v1",
     },
-  ];
+    integrity: {
+      digestAlgorithm: "sha256",
+      digest: null,
+      signature: null,
+    },
+    update_policy: "app-user-action",
+    restart_policy: "restart-app",
+    updater_owner: "butler-app",
+    payload_format: "platform-app-package",
+    staging_policy: "platform-updater-cache",
+    activation_policy: "platform-app-update-then-versioned-app-runtime",
+    rollback_policy: "preserve-previous-app-managed-runtime",
+  };
 }
 
 function plannedActionsFor(status: ComponentUpdateStatus): string[] {
