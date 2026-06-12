@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/app/api.ts";
 import { setAppCopyLanguage } from "@/app/copy.ts";
 import {
@@ -19,9 +19,6 @@ export function useFirstRunSetupController(
   onComplete: (mode: CompleteMode, state: FirstRunState) => void,
 ) {
   const [state, setState] = useState<FirstRunState>(initialState);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const bundledSetupSuppressedRef = useRef(false);
-  const manualConnectionPendingRef = useRef(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const language = state.language;
@@ -39,25 +36,18 @@ export function useFirstRunSetupController(
 
   useEffect(() => {
     if (step !== "install" || state.install_status !== "checking") return;
-    if (manualConnectionPendingRef.current) return;
     let cancelled = false;
     async function prepareAgent() {
       setError("");
       setStatus(copy.installChecking);
       try {
-        const setupStatus = await startFirstRunSetup("bundled-agent");
+        const setupStatus = await startFirstRunSetup();
         if (setupStatus.phase === "cancelled") return;
         if (setupStatus.phase !== "ready") throw new Error("setup_failed");
         if (!cancelled) {
           setStatus(copy.installReady);
           window.setTimeout(() => {
-            if (
-              !cancelled &&
-              !manualConnectionPendingRef.current &&
-              !bundledSetupSuppressedRef.current
-            ) {
-              markInstallReady("bundled-agent");
-            }
+            if (!cancelled) markInstallReady();
           }, 450);
         }
       } catch {
@@ -75,26 +65,6 @@ export function useFirstRunSetupController(
     step,
   ]);
 
-  async function connectExistingAgent() {
-    bundledSetupSuppressedRef.current = true;
-    manualConnectionPendingRef.current = true;
-    setError("");
-    setStatus(copy.checkingCompatibility);
-    setState((current) =>
-      nextFirstRunState(current, { type: "retry_install" }),
-    );
-    try {
-      const setupStatus = await startFirstRunSetup("existing-agent");
-      if (setupStatus.phase !== "ready") throw new Error("setup_failed");
-      setStatus(copy.installReady);
-      markInstallReady("existing-agent");
-    } catch {
-      markInstallFailed(copy.installFailed);
-    } finally {
-      manualConnectionPendingRef.current = false;
-    }
-  }
-
   async function selectLanguage() {
     setError("");
     try {
@@ -111,19 +81,15 @@ export function useFirstRunSetupController(
   }
 
   function complete(mode: CompleteMode) {
-    const completed = firstRunCompleteState(
-      language,
-      state.connection_mode ?? "bundled-agent",
-    );
+    const completed = firstRunCompleteState(language);
     writeFirstRunState(window.localStorage, completed);
     onComplete(mode, completed);
   }
 
-  function markInstallReady(connectionMode: FirstRunState["connection_mode"]) {
+  function markInstallReady() {
     setState((current) =>
       nextFirstRunState(current, {
         type: "install_ready",
-        connection_mode: connectionMode,
       }),
     );
   }
@@ -147,13 +113,11 @@ export function useFirstRunSetupController(
         ? copy.installFailed
         : ""),
     language,
-    advancedOpen,
     status,
     step,
     stepIndex,
     onAcceptSafety: () =>
       {
-        bundledSetupSuppressedRef.current = false;
         setState((current) =>
           nextFirstRunState(
             nextFirstRunState(current, { type: "accept_safety" }),
@@ -174,15 +138,12 @@ export function useFirstRunSetupController(
         }),
       ),
     onLanguageContinue: () => void selectLanguage(),
-    onToggleAdvanced: () => setAdvancedOpen((current) => !current),
     onRetryInstall: () => {
-      bundledSetupSuppressedRef.current = false;
       setError("");
       setStatus(copy.installChecking);
       setState((current) =>
         nextFirstRunState(current, { type: "retry_install" }),
       );
     },
-    onUseExistingAgent: () => void connectExistingAgent(),
   };
 }

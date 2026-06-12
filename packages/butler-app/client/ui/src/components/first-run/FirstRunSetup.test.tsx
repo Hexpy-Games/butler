@@ -56,7 +56,7 @@ test("first-run setup renders the minimal Electron setup order", async () => {
   await act(async () => rendered.root.unmount());
 });
 
-test("first-run setup uses existing-Agent path only after opt-in", async () => {
+test("first-run setup does not expose existing-Agent connection after failure", async () => {
   const rendered = await renderFirstRun({
     ...createInitialFirstRunState("ko"),
     step: "install",
@@ -66,79 +66,14 @@ test("first-run setup uses existing-Agent path only after opt-in", async () => {
   });
 
   expect(rendered.container.textContent).not.toContain("기존 Agent 연결");
+  expect(rendered.container.textContent).not.toContain("고급");
   expect(rendered.container.textContent).not.toContain("gateway");
-  await clickButton(rendered.container, "고급");
-  expect(rendered.container.textContent).toContain("기존 Agent 연결");
-  await clickButton(rendered.container, "기존 Agent 연결");
-  await waitForText(rendered.container, "모델 설정");
-  expect(rendered.setupModes).toEqual(["existing-agent"]);
-  await clickButton(rendered.container, "나중에 설정");
-  expect(rendered.completedStates[0]?.connection_mode).toBe("existing-agent");
-  const storedState = rendered.container.ownerDocument.defaultView?.localStorage
-    .getItem("butler:first-run-setup:v1") ?? "";
-  expect(storedState).toContain('"connection_mode":"existing-agent"');
+  expect(rendered.setupModes).toEqual([]);
 
   await act(async () => rendered.root.unmount());
 });
 
-test("first-run setup waits for existing-Agent compatibility before model", async () => {
-  const compatibility = deferred<void>();
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "install",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "failed",
-    },
-    { holdExistingAgent: compatibility.promise },
-  );
-
-  await clickButton(rendered.container, "고급");
-  await clickButton(rendered.container, "기존 Agent 연결");
-  expect(rendered.container.textContent).toContain("호환성 확인 중");
-  expect(rendered.container.textContent).not.toContain("모델 설정");
-
-  compatibility.resolve();
-  await waitForText(rendered.container, "모델 설정");
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run setup keeps existing-Agent selection when bundled setup finishes later", async () => {
-  const bundled = deferred<void>();
-  const existing = deferred<void>();
-  const rendered = await renderFirstRun(
-    {
-      ...createInitialFirstRunState("ko"),
-      step: "install",
-      language_confirmed: true,
-      safety_accepted: true,
-      install_status: "checking",
-    },
-    {
-      holdBundledAgent: bundled.promise,
-      holdExistingAgent: existing.promise,
-    },
-  );
-
-  await waitForText(rendered.container, "Butler Agent를 준비합니다");
-  await clickButton(rendered.container, "고급");
-  await clickButton(rendered.container, "기존 Agent 연결");
-  bundled.resolve();
-  await delay(520);
-  expect(rendered.container.textContent).not.toContain("모델 설정");
-
-  existing.resolve();
-  await waitForText(rendered.container, "모델 설정");
-  await clickButton(rendered.container, "나중에 설정");
-  expect(rendered.setupModes).toEqual(["bundled-agent", "existing-agent"]);
-  expect(rendered.completedStates[0]?.connection_mode).toBe("existing-agent");
-
-  await act(async () => rendered.root.unmount());
-});
-
-test("first-run setup does not enter model when existing-Agent fails before bundled setup finishes", async () => {
+test("first-run setup keeps waiting for bundled Agent without alternate connection path", async () => {
   const bundled = deferred<void>();
   const rendered = await renderFirstRun(
     {
@@ -149,21 +84,20 @@ test("first-run setup does not enter model when existing-Agent fails before bund
       install_status: "checking",
     },
     {
-      failExistingAgent: true,
       holdBundledAgent: bundled.promise,
     },
   );
 
   await waitForText(rendered.container, "Butler Agent를 준비합니다");
-  await clickButton(rendered.container, "고급");
-  await clickButton(rendered.container, "기존 Agent 연결");
-  await waitForText(rendered.container, "Butler Agent를 준비하지 못했습니다.");
+  expect(rendered.container.textContent).not.toContain("고급");
+  expect(rendered.container.textContent).not.toContain("기존 Agent 연결");
+  expect(rendered.container.textContent).not.toContain("모델 설정");
 
   bundled.resolve();
-  await delay(520);
-  expect(rendered.container.textContent).not.toContain("모델 설정");
-  expect(rendered.completedStates).toHaveLength(0);
-  expect(rendered.setupModes).toEqual(["bundled-agent", "existing-agent"]);
+  await waitForText(rendered.container, "모델 설정");
+  await clickButton(rendered.container, "나중에 설정");
+  expect(rendered.setupModes).toEqual(["bundled-agent"]);
+  expect(rendered.completedStates[0]?.connection_mode).toBe("bundled-agent");
 
   await act(async () => rendered.root.unmount());
 });
@@ -217,10 +151,8 @@ test("first-run setup does not persist raw bridge errors", async () => {
 async function renderFirstRun(
   initialState: FirstRunState,
   options: {
-    failExistingAgent?: boolean;
     failHealthOnce?: boolean;
     holdBundledAgent?: Promise<void>;
-    holdExistingAgent?: Promise<void>;
     rejectSetupOnce?: boolean;
   } = {},
 ): Promise<RenderedFirstRun> {
@@ -246,20 +178,9 @@ async function renderFirstRun(
     butlerApp: {
       startSetup: async (request?: { mode?: string }) => {
         calls.push("startSetup");
-        setupModes.push(request?.mode ?? "");
-        if (request?.mode !== "existing-agent" && options.holdBundledAgent) {
+        setupModes.push(request?.mode ?? "bundled-agent");
+        if (options.holdBundledAgent) {
           await options.holdBundledAgent;
-        }
-        if (request?.mode === "existing-agent" && options.holdExistingAgent) {
-          await options.holdExistingAgent;
-        }
-        if (request?.mode === "existing-agent" && options.failExistingAgent) {
-          return {
-            diagnostics_available: true,
-            error_code: "existing_agent_incompatible",
-            phase: "failed",
-            status_label: "Butler Agent is not ready.",
-          };
         }
         if (setupRejections > 0) {
           setupRejections -= 1;
@@ -307,12 +228,6 @@ function deferred<T = void>() {
     resolve = resolvePromise;
   });
   return { promise, resolve };
-}
-
-async function delay(ms: number): Promise<void> {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, ms));
-  });
 }
 
 async function clickButton(container: HTMLElement, label: string): Promise<void> {

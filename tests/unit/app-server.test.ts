@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import {
   existsSync,
   mkdirSync,
@@ -237,6 +238,81 @@ test("fresh app settings honor an install-selected local model default", async (
     const catalog = await getJson(`${server.url}model-catalog`);
     expect(catalog.data.default_model_ref).toBe("local/gemma-install");
     expect(catalog.data.default_reasoning_effort).toBe("none");
+  } finally {
+    server.stop();
+  }
+});
+
+test("app settings enforce and repair the Electron gateway profile", async () => {
+  const dbPath = join(tempDir, "gateway-profile.sqlite");
+  const server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    butlerHome: process.cwd(),
+    port: 0,
+  });
+  try {
+    const fresh = await getJson(`${server.url}settings`);
+    expect(fresh.data.gateway_profile).toBe("electron");
+
+    const db = new Database(dbPath);
+    try {
+      db.query(
+        `
+        INSERT INTO app_settings (key, value_json, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json,
+          updated_at = excluded.updated_at
+      `,
+      ).run(
+        "settings",
+        JSON.stringify({
+          ...fresh.data,
+          gateway_profile: "terminal",
+          bridge_mode: "external",
+        }),
+        new Date().toISOString(),
+      );
+    } finally {
+      db.close();
+    }
+
+    const repaired = await getJson(`${server.url}settings`);
+    expect(repaired.data).toMatchObject({
+      bridge_mode: "local",
+      gateway_profile: "electron",
+    });
+
+    const bridgePatch = await fetch(`${server.url}settings`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bridge_mode: "external" }),
+    });
+    expect(bridgePatch.status).toBe(400);
+
+    const eventsDb = new Database(dbPath, { readonly: true });
+    try {
+      const repairEvent = eventsDb
+        .query<{ type: string; payload_json: string }, []>(
+          `
+          SELECT type, payload_json
+          FROM events
+          WHERE type = 'settings.gateway_profile_repaired'
+          ORDER BY id DESC
+          LIMIT 1
+        `,
+        )
+        .get();
+      expect(repairEvent?.type).toBe("settings.gateway_profile_repaired");
+      expect(JSON.parse(repairEvent?.payload_json ?? "{}")).toMatchObject({
+        gateway_profile: "electron",
+        previous_profile_kind: "string",
+        had_previous_profile: true,
+        raw_text_included: false,
+      });
+    } finally {
+      eventsDb.close();
+    }
   } finally {
     server.stop();
   }

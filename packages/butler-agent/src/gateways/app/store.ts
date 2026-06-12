@@ -1159,7 +1159,9 @@ export class AppServerStore {
   }
 
   getSettings(): SettingsView {
-    const stored = this.readSetting<Partial<SettingsView>>("settings") ?? {};
+    const stored = this.repairGatewayProfileState(
+      this.readSetting<Partial<SettingsView>>("settings") ?? {},
+    );
     const registeredModels = this.registeredModelMetadata();
     const consolidationModel = readProfilingExtractorModelConfig(
       this.butlerData,
@@ -1184,7 +1186,8 @@ export class AppServerStore {
       mainScreenThemeCustomColors,
     );
     return {
-      bridge_mode: stored.bridge_mode ?? this.bridgeMode,
+      bridge_mode: this.bridgeMode,
+      gateway_profile: "electron",
       server_url: stored.server_url ?? this.serverUrl,
       default_project_workspace_label: safeWorkspaceLabel(
         this.projectWorkspaceRoot,
@@ -1240,6 +1243,25 @@ export class AppServerStore {
       ),
       profile_label: "Local Butler",
     };
+  }
+
+  private repairGatewayProfileState(
+    stored: Partial<SettingsView>,
+  ): Partial<SettingsView> {
+    const rawProfile = (stored as Record<string, unknown>).gateway_profile;
+    if (rawProfile === "electron") return stored;
+    const repaired = {
+      ...stored,
+      gateway_profile: "electron" as const,
+    };
+    this.writeSetting("settings", repaired);
+    this.appendEvent("settings.gateway_profile_repaired", {
+      gateway_profile: "electron",
+      previous_profile_kind: typeof rawProfile,
+      had_previous_profile: rawProfile !== undefined,
+      raw_text_included: false,
+    });
+    return repaired;
   }
 
   getModelCatalog(): ModelCatalogView {
@@ -7023,8 +7045,6 @@ function sanitizeSettingsUpdate(
   extraModels: ProviderModelMetadata[] = [],
 ): UpdateSettingsRequest {
   const output: UpdateSettingsRequest = {};
-  if (input.bridge_mode === "local" || input.bridge_mode === "external")
-    output.bridge_mode = input.bridge_mode;
   if (typeof input.server_url === "string") {
     const value = input.server_url.trim();
     if (/^https?:\/\/[^\s]+$/u.test(value)) output.server_url = value;

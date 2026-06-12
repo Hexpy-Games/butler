@@ -379,6 +379,7 @@ export interface AppInfoView {
 
 export interface SettingsView {
   bridge_mode: "local" | "external";
+  gateway_profile: "electron";
   server_url: string;
   default_project_workspace_label: string;
   language: "en" | "ko";

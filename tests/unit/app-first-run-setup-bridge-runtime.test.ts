@@ -14,6 +14,7 @@ test("first-run setup bridge prevents stale start from overwriting retry", async
     },
     readSettings: async () => ({
       bridge_mode: "local",
+      gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
   });
@@ -63,22 +64,26 @@ test("first-run setup bridge diagnostics expose redacted shape only", async () =
   expect(serialized).not.toContain("stack");
 });
 
-test("first-run setup bridge records existing-Agent compatibility checks", async () => {
+test("first-run setup bridge ignores existing-Agent mode requests", async () => {
+  let managedReadyCalls = 0;
   const bridge = createFirstRunSetupBridge({
-    ensureReady: async () => undefined,
-    existingAgentConfigured: true,
+    ensureReady: async () => {
+      managedReadyCalls += 1;
+    },
     readSettings: async () => ({
-      bridge_mode: "external",
+      bridge_mode: "local",
+      gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
   });
 
-  await bridge.start({ mode: "existing-agent" });
+  await startWithRawRequest(bridge, { mode: "existing-agent" });
   expect(bridge.status().phase).toBe("ready");
+  expect(managedReadyCalls).toBe(1);
   expect(bridge.diagnostics().checks.map((check) => check.id)).toEqual([
-    "existing_agent",
+    "managed_gateway",
     "settings",
-    "compatibility",
+    "gateway_profile",
   ]);
 });
 
@@ -87,6 +92,7 @@ test("first-run setup bridge defaults to bundled-Agent mode", async () => {
     ensureReady: async () => undefined,
     readSettings: async () => ({
       bridge_mode: "local",
+      gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
   });
@@ -105,16 +111,17 @@ test("first-run setup bridge ignores standalone installer service fields", async
     },
     readSettings: async () => ({
       bridge_mode: "local",
+      gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
   });
 
-  await bridge.start({
+  await startWithRawRequest(bridge, {
     mode: "bundled-agent",
     profile: "agent-standalone",
     registerService: true,
     installSource: "source-checkout",
-  } as never);
+  });
   expect(bridge.status().phase).toBe("ready");
   expect(managedReadyCalls).toBe(1);
   expect(bridge.diagnostics().checks.map((check) => check.id)).toEqual([
@@ -124,69 +131,74 @@ test("first-run setup bridge ignores standalone installer service fields", async
   ]);
 });
 
-test("first-run setup bridge rejects incompatible existing-Agent settings", async () => {
+test("first-run setup bridge rejects damaged bundled gateway profile settings", async () => {
   const bridge = createFirstRunSetupBridge({
     ensureReady: async () => undefined,
-    existingAgentConfigured: true,
     readSettings: async () => ({
       bridge_mode: "local",
-      server_url: "",
-    }),
-  });
-
-  await bridge.start({ mode: "existing-agent" });
-  expect(bridge.status()).toMatchObject({
-    error_code: "existing_agent_incompatible",
-    phase: "failed",
-  });
-});
-
-test("first-run setup bridge does not start managed server for existing-Agent", async () => {
-  let managedReadyCalls = 0;
-  let existingReadyCalls = 0;
-  const bridge = createFirstRunSetupBridge({
-    checkExistingReady: async () => {
-      existingReadyCalls += 1;
-    },
-    ensureReady: async () => {
-      managedReadyCalls += 1;
-    },
-    existingAgentConfigured: true,
-    readSettings: async () => ({
-      bridge_mode: "external",
+      gateway_profile: "terminal",
       server_url: "http://127.0.0.1:18765",
     }),
   });
 
-  await bridge.start({ mode: "existing-agent" });
+  await startWithRawRequest(bridge, { mode: "bundled-agent" });
+  expect(bridge.status()).toMatchObject({
+    error_code: "gateway_profile_mismatch",
+    phase: "failed",
+  });
+});
+
+test("first-run setup bridge still verifies electron profile for existing-Agent mode requests", async () => {
+  const bridge = createFirstRunSetupBridge({
+    ensureReady: async () => undefined,
+    readSettings: async () => ({
+      bridge_mode: "local",
+      gateway_profile: "terminal",
+      server_url: "http://127.0.0.1:18765",
+    }),
+  });
+
+  await startWithRawRequest(bridge, { mode: "existing-agent" });
+  expect(bridge.status()).toMatchObject({
+    error_code: "gateway_profile_mismatch",
+    phase: "failed",
+  });
+});
+
+test("first-run setup bridge uses managed server for existing-Agent mode requests", async () => {
+  let managedReadyCalls = 0;
+  const bridge = createFirstRunSetupBridge({
+    ensureReady: async () => {
+      managedReadyCalls += 1;
+    },
+    readSettings: async () => ({
+      bridge_mode: "local",
+      gateway_profile: "electron",
+      server_url: "http://127.0.0.1:18765",
+    }),
+  });
+
+  await startWithRawRequest(bridge, { mode: "existing-agent" });
   expect(bridge.status().phase).toBe("ready");
-  expect(managedReadyCalls).toBe(0);
-  expect(existingReadyCalls).toBe(1);
+  expect(managedReadyCalls).toBe(1);
 });
 
-test("first-run setup bridge rejects default existing-Agent without explicit endpoint", async () => {
+test("first-run setup bridge does not require existing-Agent endpoint for mode requests", async () => {
   let managedReadyCalls = 0;
-  let existingReadyCalls = 0;
   const bridge = createFirstRunSetupBridge({
-    checkExistingReady: async () => {
-      existingReadyCalls += 1;
-    },
     ensureReady: async () => {
       managedReadyCalls += 1;
     },
     readSettings: async () => ({
       bridge_mode: "local",
+      gateway_profile: "electron",
       server_url: "http://127.0.0.1:18765",
     }),
   });
 
-  await bridge.start({ mode: "existing-agent" });
-  expect(bridge.status()).toMatchObject({
-    error_code: "existing_agent_incompatible",
-    phase: "failed",
-  });
-  expect(managedReadyCalls).toBe(0);
-  expect(existingReadyCalls).toBe(0);
+  await startWithRawRequest(bridge, { mode: "existing-agent" });
+  expect(bridge.status().phase).toBe("ready");
+  expect(managedReadyCalls).toBe(1);
 });
 
 function deferred<T>() {
@@ -197,4 +209,12 @@ function deferred<T>() {
     reject = rejectPromise;
   });
   return { promise, resolve, reject };
+}
+
+async function startWithRawRequest(
+  bridge: ReturnType<typeof createFirstRunSetupBridge>,
+  request: unknown,
+) {
+  const start = bridge.start as (request?: unknown) => Promise<unknown>;
+  await start(request);
 }

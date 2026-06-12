@@ -11,7 +11,6 @@ type FirstRunCopy = (typeof firstRunCopy)[FirstRunLanguage];
 interface FirstRunStepContentProps {
   copy: FirstRunCopy;
   error: string;
-  advancedOpen: boolean;
   language: FirstRunLanguage;
   status: string;
   step: FirstRunStep;
@@ -21,14 +20,11 @@ interface FirstRunStepContentProps {
   onLanguageChange: (language: FirstRunLanguage) => void;
   onLanguageContinue: () => void;
   onRetryInstall: () => void;
-  onToggleAdvanced: () => void;
-  onUseExistingAgent: () => void;
 }
 
 export function FirstRunStepContent({
   copy,
   error,
-  advancedOpen,
   language,
   status,
   step,
@@ -38,8 +34,6 @@ export function FirstRunStepContent({
   onLanguageChange,
   onLanguageContinue,
   onRetryInstall,
-  onToggleAdvanced,
-  onUseExistingAgent,
 }: FirstRunStepContentProps) {
   if (step === "language") {
     return (
@@ -88,14 +82,6 @@ export function FirstRunStepContent({
           {error && (
             <Button type="button" onClick={onRetryInstall}>
               {copy.retry}
-            </Button>
-          )}
-          <Button type="button" variant="outline" onClick={onToggleAdvanced}>
-            {copy.advanced}
-          </Button>
-          {advancedOpen && (
-            <Button type="button" variant="outline" onClick={onUseExistingAgent}>
-              {copy.connectExistingAgent}
             </Button>
           )}
         </div>

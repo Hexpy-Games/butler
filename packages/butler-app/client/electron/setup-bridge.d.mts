@@ -23,18 +23,15 @@ export interface FirstRunSetupBridge {
   status(): FirstRunSetupStatusView;
   diagnostics(): FirstRunSetupDiagnosticsView;
   cancel(): FirstRunSetupStatusView;
-  start(request?: {
-    mode?: "bundled-agent" | "existing-agent";
-  }): Promise<FirstRunSetupStatusView>;
+  start(): Promise<FirstRunSetupStatusView>;
 }
 
 export function createFirstRunSetupBridge(input: {
-  checkExistingReady?: () => Promise<void>;
   ensureReady: () => Promise<void>;
-  existingAgentConfigured?: boolean;
   gatewayProfile?: "electron";
   readSettings: () => Promise<{
     bridge_mode?: string;
+    gateway_profile?: string;
     server_url?: string;
   } | null | undefined>;
 }): FirstRunSetupBridge;

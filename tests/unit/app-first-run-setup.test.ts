@@ -40,14 +40,11 @@ test("first-run state machine enforces language safety install model order", () 
 
   state = nextFirstRunState(state, { type: "accept_safety" });
   expect(state.step).toBe("install");
-  state = nextFirstRunState(state, {
-    type: "install_ready",
-    connection_mode: "existing-agent",
-  });
+  state = nextFirstRunState(state, { type: "install_ready" });
   expect(state.step).toBe("model");
   state = nextFirstRunState(state, { type: "defer_model_setup" });
   expect(state.status).toBe("complete");
-  expect(state.connection_mode).toBe("existing-agent");
+  expect(state.connection_mode).toBe("bundled-agent");
 });
 
 test("first-run install failure can retry without completing setup", () => {
