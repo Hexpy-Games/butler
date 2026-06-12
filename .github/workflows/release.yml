@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  service-artifact:
+  agent-artifact:
     name: Build and publish Butler Agent artifact
     runs-on: ubuntu-latest
     steps:
@@ -35,22 +35,16 @@ jobs:
         run: npm --prefix packages/butler-app/client/ui ci
 
       - name: Run Butler Agent release gate
-        run: bun run release:service:gate
+        run: bun run release:agent:gate
 
       - name: Package Butler Agent release
         run: |
-          bun run release:service:package \
-            --out dist/release/service \
+          bun run release:agent:package \
+            --out dist/release/agent \
             --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
 
-      - name: Verify packaged Butler App web client
-        run: |
-          set -euo pipefail
-          artifact="$(find dist/release/service -maxdepth 1 -name 'butler-service-*-all.tar.gz' -print -quit)"
-          test -n "$artifact"
-          listing="$(tar -tzf "$artifact")"
-          grep -F "./packages/butler-agent/resources/app-client/dist/index.html" <<<"$listing"
-          grep -F "./packages/butler-agent/resources/app-client/dist/assets/" <<<"$listing"
+      - name: Smoke Butler Agent release artifact
+        run: bun run release:agent:smoke -- --out dist/release/agent
 
       - name: Publish GitHub Release
         env:
@@ -65,10 +59,10 @@ jobs:
           fi
           shopt -s nullglob
           files=(
-            dist/release/service/butler-service-*-all.tar.gz
-            dist/release/service/butler-service-*-all.tar.gz.sha256
-            dist/release/service/service-release-manifest.json
-            dist/release/service/update-manifest.json
+            dist/release/agent/butler-agent-*-all.tar.gz
+            dist/release/agent/butler-agent-*-all.tar.gz.sha256
+            dist/release/agent/agent-release-manifest.json
+            dist/release/agent/agent-update-manifest.json
           )
           if [ "${#files[@]}" -ne 4 ]; then
             printf 'Expected 4 Butler Agent release files, got %s\n' "${#files[@]}" >&2
@@ -85,7 +79,7 @@ jobs:
   app-artifact:
     name: Build and publish app artifacts
     runs-on: macos-latest
-    needs: service-artifact
+    needs: agent-artifact
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -117,18 +111,7 @@ jobs:
             --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
 
       - name: Verify packaged app artifacts
-        run: |
-          set -euo pipefail
-          mac_zip="$(find dist/release/app -maxdepth 1 -name 'butler-app-*-darwin-arm64.zip' -print -quit)"
-          linux_tar="$(find dist/release/app -maxdepth 1 -name 'butler-app-*-linux-x64.tar.gz' -print -quit)"
-          test -n "$mac_zip"
-          test -n "$linux_tar"
-          test -f "$mac_zip"
-          test -f "$linux_tar"
-          extract_dir="$(mktemp -d)"
-          ditto -x -k "$mac_zip" "$extract_dir"
-          codesign --verify --deep --strict --verbose=4 "$extract_dir/Butler.app"
-          tar -tzf "$linux_tar" | grep -F "Butler-linux-x64/Butler"
+        run: bun run release:app:smoke -- --out dist/release/app
 
       - name: Publish app GitHub Release files
         env:

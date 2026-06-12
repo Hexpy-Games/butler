@@ -30,16 +30,16 @@ workstreams.
 
 ## Quick Start
 
-Download `butler-service-<version>-all.tar.gz` from the
+Download `butler-agent-<version>-all.tar.gz` from the
 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) page for the
 tag you want to install. Release artifacts already include the built Butler App
 web client that the local app gateway serves.
 
 ```bash
 cd ~
-wget https://github.com/Hexpy-Games/butler/releases/download/v0.0.8/butler-service-0.0.8-all.tar.gz
+wget https://github.com/Hexpy-Games/butler/releases/download/v0.0.8/butler-agent-0.0.8-all.tar.gz
 mkdir -p ~/butler
-tar -xzf ~/butler-service-*-all.tar.gz -C ~/butler
+tar -xzf ~/butler-agent-*-all.tar.gz -C ~/butler
 cd ~/butler
 ./install.sh
 butler install --home ~/butler --data ~/.butler

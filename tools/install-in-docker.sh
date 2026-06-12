@@ -83,8 +83,8 @@ if [[ -z "$ARTIFACT_PATH" ]]; then
   GENERATED_DIR="$REPO_ROOT/.tmp/interactive-install-docker"
   rm -rf "$GENERATED_DIR"
   mkdir -p "$GENERATED_DIR"
-  (cd "$REPO_ROOT" && "${BUTLER_BUN:-bun}" run --silent release:service:package --out "$GENERATED_DIR")
-  ARTIFACT_PATH="$(find "$GENERATED_DIR" -maxdepth 1 -name 'butler-service-*-all.tar.gz' -print | sort | tail -n 1)"
+  (cd "$REPO_ROOT" && "${BUTLER_BUN:-bun}" run --silent release:agent:package --out "$GENERATED_DIR")
+  ARTIFACT_PATH="$(find "$GENERATED_DIR" -maxdepth 1 -name 'butler-agent-*-all.tar.gz' -print | sort | tail -n 1)"
 fi
 
 if [[ -z "$ARTIFACT_PATH" || ! -f "$ARTIFACT_PATH" ]]; then

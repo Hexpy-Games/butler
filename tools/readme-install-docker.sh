@@ -124,7 +124,7 @@ PY
 
 download_release_artifact() {
   local version="${RELEASE_TAG#v}"
-  local artifact_name="butler-service-$version-all.tar.gz"
+  local artifact_name="butler-agent-$version-all.tar.gz"
   local release_url="https://github.com/Hexpy-Games/butler/releases/download/$RELEASE_TAG"
 
   mkdir -p "$GENERATED_DIR"
@@ -201,7 +201,7 @@ EOF
 README install commands:
 
 mkdir -p ~/butler
-tar -xzf ~/Downloads/butler-service-*-all.tar.gz -C ~/butler
+tar -xzf ~/Downloads/butler-agent-*-all.tar.gz -C ~/butler
 cd ~/butler
 ./install.sh
 
@@ -238,7 +238,7 @@ EOF
   echo
   echo "Then follow README commands:"
   echo "  mkdir -p ~/butler"
-  echo "  tar -xzf ~/Downloads/butler-service-*-all.tar.gz -C ~/butler"
+  echo "  tar -xzf ~/Downloads/butler-agent-*-all.tar.gz -C ~/butler"
   echo "  cd ~/butler"
   echo "  ./install.sh"
 }

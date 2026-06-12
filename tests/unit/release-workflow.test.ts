@@ -21,10 +21,10 @@ test("version tag release workflow publishes Butler Agent artifact with packaged
   expect(existsSync(workflowPath)).toBe(true);
   const workflow = readFileSync(workflowPath, "utf8");
 
-  const gateIndex = workflow.indexOf("bun run release:service:gate");
-  const packageIndex = workflow.indexOf("bun run release:service:package");
+  const gateIndex = workflow.indexOf("bun run release:agent:gate");
+  const packageIndex = workflow.indexOf("bun run release:agent:package");
   const verifyIndex = workflow.indexOf(
-    "Verify packaged Butler App web client",
+    "Smoke Butler Agent release artifact",
   );
   const publishIndex = workflow.indexOf("Publish GitHub Release");
 
@@ -41,26 +41,28 @@ test("version tag release workflow publishes Butler Agent artifact with packaged
   expect(packageIndex).toBeGreaterThan(gateIndex);
   expect(verifyIndex).toBeGreaterThan(packageIndex);
   expect(publishIndex).toBeGreaterThan(verifyIndex);
-  expect(workflow).toContain(
+  const agentSmoke = readRepoFile("deploy/agent/smoke.ts");
+  expect(agentSmoke).toContain(
     "./packages/butler-agent/resources/app-client/dist/index.html",
   );
-  expect(workflow).toContain(
+  expect(agentSmoke).toContain(
     "./packages/butler-agent/resources/app-client/dist/assets/",
   );
   expect(workflow).toContain(
-    "dist/release/service/butler-service-*-all.tar.gz",
+    "dist/release/agent/butler-agent-*-all.tar.gz",
   );
+  expect(workflow).toContain("bun run release:agent:smoke -- --out dist/release/agent");
   expect(workflow).toContain("--artifact-base-url");
   expect(workflow).toContain(
     "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}",
   );
   expect(workflow).toContain(
-    "dist/release/service/butler-service-*-all.tar.gz.sha256",
+    "dist/release/agent/butler-agent-*-all.tar.gz.sha256",
   );
   expect(workflow).toContain(
-    "dist/release/service/service-release-manifest.json",
+    "dist/release/agent/agent-release-manifest.json",
   );
-  expect(workflow).toContain("dist/release/service/update-manifest.json");
+  expect(workflow).toContain("dist/release/agent/agent-update-manifest.json");
   expect(workflow).toContain('notes_file=".github/releases/${tag}.md"');
   expect(workflow).toContain('notes_args=(--notes-file "$notes_file")');
   expect(workflow).toContain(
@@ -79,7 +81,7 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(existsSync(workflowPath)).toBe(true);
   const workflow = readFileSync(workflowPath, "utf8");
 
-  const serviceJobIndex = workflow.indexOf("service-artifact:");
+  const serviceJobIndex = workflow.indexOf("agent-artifact:");
   const appJobIndex = workflow.indexOf("app-artifact:");
   const packageIndex = workflow.indexOf("bun run release:app:package");
   const verifyIndex = workflow.indexOf("Verify packaged app artifacts");
@@ -87,14 +89,15 @@ test("version tag release workflow publishes signed app artifacts", () => {
 
   expect(appJobIndex).toBeGreaterThan(serviceJobIndex);
   expect(workflow).toContain("runs-on: macos-latest");
-  expect(workflow).toContain("needs: service-artifact");
+  expect(workflow).toContain("needs: agent-artifact");
   expect(workflow).toContain("npm --prefix packages/butler-app/client/electron ci");
   expect(workflow).toContain("bun run release:app:gate");
   expect(packageIndex).toBeGreaterThan(appJobIndex);
   expect(workflow).toContain("--artifact-base-url");
   expect(verifyIndex).toBeGreaterThan(packageIndex);
-  expect(workflow).toContain("codesign --verify --deep --strict --verbose=4");
-  expect(workflow).toContain('grep -F "Butler-linux-x64/Butler"');
+  expect(workflow).toContain("bun run release:app:smoke -- --out dist/release/app");
+  expect(workflow).not.toContain("codesign --verify --deep --strict --verbose=4");
+  expect(workflow).not.toContain('grep -F "Butler-linux-x64/Butler"');
   expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.zip");
   expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.zip.sha256");
   expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.tar.gz");
@@ -120,7 +123,7 @@ test("README directs user installs to tag artifacts instead of source checkout",
   const development = readme.slice(developmentStart);
 
   expect(quickStart).toContain("GitHub Release");
-  expect(quickStart).toContain("butler-service-*-all.tar.gz");
+  expect(quickStart).toContain("butler-agent-*-all.tar.gz");
   expect(normalizedQuickStart).toContain(
     "Release artifacts already include the built Butler App web client",
   );
