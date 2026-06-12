@@ -2083,6 +2083,9 @@ async function update(parsed: ParsedCommonOptions, args: string[]): Promise<void
     print(parsed, "butler update", result, dryRun
       ? result.planned_actions.map((action) => `would ${action}`).join("\n")
       : renderServiceUpdateResult(result));
+    if (result.stage_status === "rolled_back") {
+      process.exitCode = 1;
+    }
   } catch (error) {
     fail(parsed, "update_failed", error instanceof Error ? error.message : String(error), 1);
   }

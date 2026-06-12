@@ -332,6 +332,12 @@ export interface ComponentUpdateStatus {
   checked_at: string;
   staged: boolean;
   stage_path: string;
+  stage_status: "up_to_date" | "staged" | "activated" | "rolled_back" | "dry_run";
+  activation_status: "not_required" | "activated" | "rolled_back";
+  active_runtime_path: string | null;
+  attempted_runtime_path: string | null;
+  previous_runtime_path: string | null;
+  rollback_reason: string | null;
   manifest_source: string;
 }
 
@@ -348,7 +354,12 @@ export interface UpdateApplyResult extends ComponentUpdateStatus {
   dryRun: boolean;
   artifact_path: string | null;
   planned_actions: string[];
-  stage_status: "up_to_date" | "staged" | "dry_run";
+  stage_status: "up_to_date" | "staged" | "activated" | "rolled_back" | "dry_run";
+  activation_status: "not_required" | "activated" | "rolled_back";
+  active_runtime_path: string | null;
+  attempted_runtime_path: string | null;
+  previous_runtime_path: string | null;
+  rollback_reason: string | null;
   raw_text_included: false;
 }
 

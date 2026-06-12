@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -75,6 +77,12 @@ export interface ComponentUpdateStatus {
   checked_at: string;
   staged: boolean;
   stage_path: string;
+  stage_status: "up_to_date" | "staged" | "activated" | "rolled_back" | "dry_run";
+  activation_status: "not_required" | "activated" | "rolled_back";
+  active_runtime_path: string | null;
+  attempted_runtime_path: string | null;
+  previous_runtime_path: string | null;
+  rollback_reason: string | null;
   manifest_source: string;
 }
 
@@ -91,9 +99,31 @@ export interface ComponentUpdateApplyResult extends ComponentUpdateStatus {
   dryRun: boolean;
   artifact_path: string | null;
   planned_actions: string[];
-  stage_status: "up_to_date" | "staged" | "dry_run";
+  stage_status: "up_to_date" | "staged" | "activated" | "rolled_back" | "dry_run";
+  activation_status: "not_required" | "activated" | "rolled_back";
+  active_runtime_path: string | null;
+  attempted_runtime_path: string | null;
+  previous_runtime_path: string | null;
+  rollback_reason: string | null;
   raw_text_included: false;
 }
+
+export interface StandaloneAgentActivationContext {
+  butlerData: string;
+  component: "service";
+  version: string;
+  artifactPath: string;
+  artifactLabel: string;
+  runtimeHome: string;
+  runtimeHomeLabel: string;
+  currentPointerPath: string;
+  previousRuntimePath: string | null;
+  previousVersion: string | null;
+}
+
+export type StandaloneAgentActivationValidator = (
+  context: StandaloneAgentActivationContext,
+) => void | Promise<void>;
 
 export interface CheckComponentUpdatesOptions {
   root: string;
@@ -113,6 +143,7 @@ export interface ApplyComponentUpdateOptions {
   channel?: string;
   dryRun?: boolean;
   now?: () => Date;
+  validateStandaloneAgentActivation?: StandaloneAgentActivationValidator;
 }
 
 type ManifestArtifact = {
@@ -144,6 +175,9 @@ interface LoadedManifest {
 
 const UPDATE_STAGE_SCHEMA = "butler.update-stage.v1";
 const UPDATE_STATUS_SCHEMA = "butler.update-status.v1";
+const UPDATE_ACTIVATION_SCHEMA = "butler.update-activation.v1";
+const STANDALONE_RUNTIME_SCHEMA = "butler.agent-standalone-runtime.v1";
+const STANDALONE_RUNTIME_POINTER_SCHEMA = "butler.agent-standalone-runtime-pointer.v1";
 
 export async function checkComponentUpdates(
   options: CheckComponentUpdatesOptions,
@@ -193,15 +227,27 @@ export async function applyComponentUpdate(
       artifact_path: null,
       planned_actions: plannedActions,
       stage_status: "dry_run",
+      activation_status: "not_required",
+      active_runtime_path: null,
+      attempted_runtime_path: null,
+      previous_runtime_path: null,
+      rollback_reason: null,
       raw_text_included: false,
     };
   }
   let artifactPath: string | null = null;
+  let activation: StandaloneActivationResult | null = null;
   if (status.update_available) {
     assertGenericUpdaterCanStage(status);
     artifactPath = await downloadAndVerifyArtifact(options.butlerData, status);
+    activation = await activateStandaloneAgentUpdate({
+      butlerData: options.butlerData,
+      status,
+      artifactLabel: artifactPath,
+      validate: options.validateStandaloneAgentActivation,
+    });
   }
-  const stageStatus = status.update_available ? "staged" : "up_to_date";
+  const stageStatus = activation?.stage_status ?? (status.update_available ? "staged" : "up_to_date");
   writeStage(options.butlerData, {
     schema: UPDATE_STAGE_SCHEMA,
     component: status.component,
@@ -226,6 +272,11 @@ export async function applyComponentUpdate(
     activation_policy: status.activation_policy,
     rollback_policy: status.rollback_policy,
     stage_status: stageStatus,
+    activation_status: activation?.activation_status ?? "not_required",
+    active_runtime_path: activation?.active_runtime_path ?? null,
+    attempted_runtime_path: activation?.attempted_runtime_path ?? null,
+    previous_runtime_path: activation?.previous_runtime_path ?? null,
+    rollback_reason: activation?.rollback_reason ?? null,
     planned_actions: plannedActions,
     staged_at: status.checked_at,
     raw_text_included: false,
@@ -238,6 +289,11 @@ export async function applyComponentUpdate(
     artifact_path: artifactPath,
     planned_actions: plannedActions,
     stage_status: stageStatus,
+    activation_status: activation?.activation_status ?? "not_required",
+    active_runtime_path: activation?.active_runtime_path ?? null,
+    attempted_runtime_path: activation?.attempted_runtime_path ?? null,
+    previous_runtime_path: activation?.previous_runtime_path ?? null,
+    rollback_reason: activation?.rollback_reason ?? null,
     raw_text_included: false,
   };
 }
@@ -250,11 +306,327 @@ export function renderServiceUpdateResult(
   if (!result.update_available) {
     return `Butler Agent is up to date (${current}).`;
   }
-  const applied = "stage_status" in result && result.stage_status === "staged";
-  if (applied) {
+  if ("stage_status" in result && result.stage_status === "rolled_back") {
+    const reason = result.rollback_reason ? ` ${result.rollback_reason}` : "";
+    return `Butler Agent update rolled back: ${current} -> ${available}.${reason}`;
+  }
+  if ("stage_status" in result && result.stage_status === "activated") {
+    return `Butler Agent update activated: ${current} -> ${available}.`;
+  }
+  if ("stage_status" in result && result.stage_status === "staged") {
     return `Butler Agent update staged: ${current} -> ${available}. Restart Butler Agent to apply it.`;
   }
   return `Butler Agent update available: ${current} -> ${available}.`;
+}
+
+interface StandaloneActivationResult {
+  stage_status: "staged" | "activated" | "rolled_back";
+  activation_status: "not_required" | "activated" | "rolled_back";
+  active_runtime_path: string | null;
+  attempted_runtime_path: string;
+  previous_runtime_path: string | null;
+  rollback_reason: string | null;
+}
+
+async function activateStandaloneAgentUpdate(input: {
+  butlerData: string;
+  status: ComponentUpdateStatus;
+  artifactLabel: string;
+  validate?: StandaloneAgentActivationValidator;
+}): Promise<StandaloneActivationResult> {
+  const status = input.status;
+  if (
+    status.component !== "service" ||
+    status.profile !== "agent-standalone" ||
+    status.activation_policy !== "versioned-standalone-runtime"
+  ) {
+    return {
+      stage_status: "staged",
+      activation_status: "not_required",
+      active_runtime_path: null,
+      attempted_runtime_path: "",
+      previous_runtime_path: null,
+      rollback_reason: null,
+    };
+  }
+
+  const versionSegment = safeRuntimeVersionSegment(status.available_version);
+  const runtimeHomeLabel = join("runtime", "agent", "versions", versionSegment);
+  const runtimeHome = join(input.butlerData, runtimeHomeLabel);
+  const payloadLabel = join(runtimeHomeLabel, "payloads", basename(input.artifactLabel));
+  const payloadPath = join(input.butlerData, payloadLabel);
+  const sourceArtifactPath = join(input.butlerData, input.artifactLabel);
+  const currentPointerPath = join(input.butlerData, "runtime", "agent", "current.json");
+  const previousPointer = readRuntimePointer(currentPointerPath);
+  const previousRuntimePath = previousPointer?.runtime_home ?? null;
+  const previousVersion = previousPointer?.version ?? null;
+
+  mkdirSync(dirname(payloadPath), { recursive: true });
+  copyFileSync(sourceArtifactPath, payloadPath);
+  atomicWriteJson(join(runtimeHome, "runtime.json"), {
+    schema: STANDALONE_RUNTIME_SCHEMA,
+    component: status.component,
+    product: status.product,
+    canonical_component: status.canonical_component,
+    profile: status.profile,
+    version: status.available_version,
+    runtime_home: runtimeHomeLabel,
+    payload_path: payloadLabel,
+    source_artifact_path: input.artifactLabel,
+    payload_format: status.payload_format,
+    activation_policy: status.activation_policy,
+    rollback_policy: status.rollback_policy,
+    prepared_at: status.checked_at,
+    selected_at: null,
+    activation_status: "prepared",
+    raw_text_included: false,
+  });
+
+  const context: StandaloneAgentActivationContext = {
+    butlerData: input.butlerData,
+    component: "service",
+    version: status.available_version,
+    artifactPath: sourceArtifactPath,
+    artifactLabel: input.artifactLabel,
+    runtimeHome,
+    runtimeHomeLabel,
+    currentPointerPath,
+    previousRuntimePath,
+    previousVersion,
+  };
+
+  try {
+    validatePreparedStandaloneRuntime(context);
+    await input.validate?.(context);
+    const currentPointer = {
+      schema: STANDALONE_RUNTIME_POINTER_SCHEMA,
+      component: status.component,
+      product: status.product,
+      canonical_component: status.canonical_component,
+      profile: status.profile,
+      version: status.available_version,
+      runtime_home: runtimeHomeLabel,
+      payload_path: payloadLabel,
+      source_artifact_path: input.artifactLabel,
+      selected_at: status.checked_at,
+      previous: previousPointer,
+      raw_text_included: false,
+    };
+    atomicWriteJson(join(runtimeHome, "runtime.json"), {
+      schema: STANDALONE_RUNTIME_SCHEMA,
+      component: status.component,
+      product: status.product,
+      canonical_component: status.canonical_component,
+      profile: status.profile,
+      version: status.available_version,
+      runtime_home: runtimeHomeLabel,
+      payload_path: payloadLabel,
+      source_artifact_path: input.artifactLabel,
+      payload_format: status.payload_format,
+      activation_policy: status.activation_policy,
+      rollback_policy: status.rollback_policy,
+      prepared_at: status.checked_at,
+      selected_at: status.checked_at,
+      activation_status: "activated",
+      raw_text_included: false,
+    });
+    atomicWriteJson(currentPointerPath, currentPointer);
+    writeActivationRecord(input.butlerData, {
+      status,
+      activationStatus: "activated",
+      runtimeHomeLabel,
+      payloadLabel,
+      previousRuntimePath,
+      rollbackReason: null,
+    });
+    return {
+      stage_status: "activated",
+      activation_status: "activated",
+      active_runtime_path: runtimeHomeLabel,
+      attempted_runtime_path: runtimeHomeLabel,
+      previous_runtime_path: previousRuntimePath,
+      rollback_reason: null,
+    };
+  } catch (error) {
+    const rollbackReason = error instanceof Error ? error.message : String(error);
+    atomicWriteJson(join(runtimeHome, "runtime.json"), {
+      schema: STANDALONE_RUNTIME_SCHEMA,
+      component: status.component,
+      product: status.product,
+      canonical_component: status.canonical_component,
+      profile: status.profile,
+      version: status.available_version,
+      runtime_home: runtimeHomeLabel,
+      payload_path: payloadLabel,
+      source_artifact_path: input.artifactLabel,
+      payload_format: status.payload_format,
+      activation_policy: status.activation_policy,
+      rollback_policy: status.rollback_policy,
+      prepared_at: status.checked_at,
+      selected_at: null,
+      activation_status: "rolled_back",
+      rollback_reason: rollbackReason,
+      raw_text_included: false,
+    });
+    writeActivationRecord(input.butlerData, {
+      status,
+      activationStatus: "rolled_back",
+      runtimeHomeLabel,
+      payloadLabel,
+      previousRuntimePath,
+      rollbackReason,
+    });
+    return {
+      stage_status: "rolled_back",
+      activation_status: "rolled_back",
+      active_runtime_path: previousRuntimePath,
+      attempted_runtime_path: runtimeHomeLabel,
+      previous_runtime_path: previousRuntimePath,
+      rollback_reason: rollbackReason,
+    };
+  }
+}
+
+function validatePreparedStandaloneRuntime(context: StandaloneAgentActivationContext): void {
+  if (!existsSync(context.artifactPath)) {
+    throw new Error("prepared Agent artifact is missing");
+  }
+  if (!existsSync(context.runtimeHome)) {
+    throw new Error("prepared Agent runtime home is missing");
+  }
+  validateAgentArchiveEntries(context.artifactPath);
+  const extract = spawnSync("tar", ["-xzf", context.artifactPath, "-C", context.runtimeHome], {
+    encoding: "utf8",
+  });
+  if (extract.status !== 0) {
+    throw new Error(`startup check failed: ${summarizeProcessFailure(extract) || "artifact extraction failed"}`);
+  }
+  const launcherPath = join(context.runtimeHome, "bin", "butler.js");
+  if (!existsSync(launcherPath)) {
+    throw new Error("startup check failed: Agent launcher is missing");
+  }
+  const activationEnv = {
+    ...process.env,
+    BUTLER_HOME: context.runtimeHome,
+    BUTLER_DATA: context.butlerData,
+    BUTLER_UPDATE_ACTIVATION_CHECK: "1",
+  };
+  const startup = spawnSync(process.execPath, [launcherPath, "--help"], {
+    cwd: context.runtimeHome,
+    encoding: "utf8",
+    env: activationEnv,
+    timeout: 30_000,
+  });
+  if (startup.status !== 0) {
+    throw new Error(`startup check failed: ${summarizeProcessFailure(startup) || "Agent launcher failed"}`);
+  }
+  const doctor = spawnSync(process.execPath, [launcherPath, "doctor", "--json"], {
+    cwd: context.runtimeHome,
+    encoding: "utf8",
+    env: activationEnv,
+    timeout: 30_000,
+  });
+  if (doctor.status !== 0) {
+    throw new Error(`doctor check failed: ${summarizeProcessFailure(doctor) || "Agent doctor failed"}`);
+  }
+}
+
+function validateAgentArchiveEntries(artifactPath: string): void {
+  const verboseListing = spawnSync("tar", ["-tvzf", artifactPath], {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+  if (verboseListing.status !== 0) {
+    throw new Error(`startup check failed: ${summarizeProcessFailure(verboseListing) || "artifact listing failed"}`);
+  }
+  for (const line of verboseListing.stdout.split(/\r?\n/u).filter(Boolean)) {
+    const entryType = line[0];
+    if (entryType !== "-" && entryType !== "d") {
+      throw new Error("startup check failed: Agent artifact contains an unsafe entry type");
+    }
+  }
+  const listing = spawnSync("tar", ["-tzf", artifactPath], {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+  if (listing.status !== 0) {
+    throw new Error(`startup check failed: ${summarizeProcessFailure(listing) || "artifact listing failed"}`);
+  }
+  const entries = listing.stdout.split(/\r?\n/u).filter(Boolean);
+  if (!entries.some((entry) => normalizeArchiveEntry(entry) === "bin/butler.js")) {
+    throw new Error("startup check failed: Agent launcher is missing from artifact");
+  }
+  for (const entry of entries) {
+    const normalized = normalizeArchiveEntry(entry);
+    if (!normalized) continue;
+    if (normalized.startsWith("/") || normalized.split("/").includes("..")) {
+      throw new Error("startup check failed: Agent artifact contains an unsafe path");
+    }
+  }
+}
+
+function normalizeArchiveEntry(entry: string): string {
+  return entry.replace(/^\.\/+/u, "").replace(/\/+$/u, "");
+}
+
+function summarizeProcessFailure(result: ReturnType<typeof spawnSync>): string {
+  if (result.error) return result.error.message;
+  const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
+  if (stderr) return stderr.split(/\r?\n/u)[0] ?? stderr;
+  const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
+  if (stdout) return stdout.split(/\r?\n/u)[0] ?? stdout;
+  if (typeof result.status === "number") return `exit ${result.status}`;
+  if (result.signal) return `signal ${result.signal}`;
+  return "";
+}
+
+function writeActivationRecord(
+  butlerData: string,
+  input: {
+    status: ComponentUpdateStatus;
+    activationStatus: "activated" | "rolled_back";
+    runtimeHomeLabel: string;
+    payloadLabel: string;
+    previousRuntimePath: string | null;
+    rollbackReason: string | null;
+  },
+): void {
+  atomicWriteJson(join(butlerData, "updates", "activation", `${input.status.component}.json`), {
+    schema: UPDATE_ACTIVATION_SCHEMA,
+    component: input.status.component,
+    product: input.status.product,
+    canonical_component: input.status.canonical_component,
+    profile: input.status.profile,
+    version: input.status.available_version,
+    activation_status: input.activationStatus,
+    active_runtime_path: input.activationStatus === "activated"
+      ? input.runtimeHomeLabel
+      : input.previousRuntimePath,
+    attempted_runtime_path: input.runtimeHomeLabel,
+    previous_runtime_path: input.previousRuntimePath,
+    payload_path: input.payloadLabel,
+    activation_policy: input.status.activation_policy,
+    rollback_policy: input.status.rollback_policy,
+    rollback_reason: input.rollbackReason,
+    checked_at: input.status.checked_at,
+    raw_text_included: false,
+  });
+}
+
+function readRuntimePointer(path: string): Record<string, any> | null {
+  if (!existsSync(path)) return null;
+  try {
+    const value = JSON.parse(readFileSync(path, "utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    return value as Record<string, any>;
+  } catch {
+    return null;
+  }
+}
+
+function safeRuntimeVersionSegment(version: string): string {
+  const normalized = version.trim().replace(/[^0-9A-Za-z._-]+/gu, "-");
+  return normalized || "unknown";
 }
 
 function buildComponentStatus(input: {
@@ -265,10 +637,11 @@ function buildComponentStatus(input: {
   channel: string;
   checkedAt: string;
 }): ComponentUpdateStatus {
-  const current = currentVersion(input.root, input.component);
+  const current = currentVersion(input.root, input.butlerData, input.component);
   const artifact = input.manifest.artifacts.find((item) => item.component === input.component);
   if (!artifact) throw new Error(`Update manifest is missing component: ${input.component}`);
   const available = artifact.version || current;
+  const stage = readStageSnapshot(input.butlerData, input.component);
   return {
     component: input.component,
     current_version: current,
@@ -292,8 +665,14 @@ function buildComponentStatus(input: {
     activation_policy: artifact.activation_policy,
     rollback_policy: artifact.rollback_policy,
     checked_at: input.checkedAt,
-    staged: existsSync(stageFilePath(input.butlerData, input.component)),
+    staged: stage.exists,
     stage_path: stageLabel(input.component),
+    stage_status: stage.stage_status,
+    activation_status: stage.activation_status,
+    active_runtime_path: stage.active_runtime_path,
+    attempted_runtime_path: stage.attempted_runtime_path,
+    previous_runtime_path: stage.previous_runtime_path,
+    rollback_reason: stage.rollback_reason,
     manifest_source: input.manifest.source,
   };
 }
@@ -431,9 +810,89 @@ function normalizeArtifact(
   };
 }
 
-function currentVersion(root: string, component: UpdateComponentId): string {
+function currentVersion(root: string, butlerData: string, component: UpdateComponentId): string {
+  if (component === "service") {
+    const pointer = readRuntimePointer(join(butlerData, "runtime", "agent", "current.json"));
+    if (
+      pointer?.schema === STANDALONE_RUNTIME_POINTER_SCHEMA &&
+      pointer.product === "butler-agent" &&
+      pointer.profile === "agent-standalone" &&
+      typeof pointer.version === "string" &&
+      pointer.version.trim()
+    ) {
+      return pointer.version.trim();
+    }
+  }
   const versions = readComponentVersions(root);
   return versions[component];
+}
+
+function readStageSnapshot(
+  butlerData: string,
+  component: UpdateComponentId,
+): {
+  exists: boolean;
+  stage_status: ComponentUpdateStatus["stage_status"];
+  activation_status: ComponentUpdateStatus["activation_status"];
+  active_runtime_path: string | null;
+  attempted_runtime_path: string | null;
+  previous_runtime_path: string | null;
+  rollback_reason: string | null;
+} {
+  const path = stageFilePath(butlerData, component);
+  if (!existsSync(path)) {
+    return {
+      exists: false,
+      stage_status: "up_to_date",
+      activation_status: "not_required",
+      active_runtime_path: null,
+      attempted_runtime_path: null,
+      previous_runtime_path: null,
+      rollback_reason: null,
+    };
+  }
+  try {
+    const value = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    return {
+      exists: true,
+      stage_status: normalizeStageStatus(value.stage_status),
+      activation_status: normalizeActivationStatus(value.activation_status),
+      active_runtime_path: stringOrNull(value.active_runtime_path),
+      attempted_runtime_path: stringOrNull(value.attempted_runtime_path),
+      previous_runtime_path: stringOrNull(value.previous_runtime_path),
+      rollback_reason: stringOrNull(value.rollback_reason),
+    };
+  } catch {
+    return {
+      exists: true,
+      stage_status: "staged",
+      activation_status: "not_required",
+      active_runtime_path: null,
+      attempted_runtime_path: null,
+      previous_runtime_path: null,
+      rollback_reason: null,
+    };
+  }
+}
+
+function normalizeStageStatus(value: unknown): ComponentUpdateStatus["stage_status"] {
+  if (
+    value === "up_to_date" ||
+    value === "staged" ||
+    value === "activated" ||
+    value === "rolled_back" ||
+    value === "dry_run"
+  ) {
+    return value;
+  }
+  return "staged";
+}
+
+function normalizeActivationStatus(value: unknown): ComponentUpdateStatus["activation_status"] {
+  if (value === "activated" || value === "rolled_back" || value === "not_required") {
+    return value;
+  }
+  return "not_required";
 }
 
 function readComponentVersions(root: string): ComponentVersions {
