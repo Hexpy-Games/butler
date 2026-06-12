@@ -608,6 +608,7 @@ export class AppServerStore {
     return await checkComponentUpdates({
       root: this.butlerHome,
       butlerData: this.butlerData,
+      components: ["app"],
     });
   }
 

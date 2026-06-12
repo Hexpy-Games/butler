@@ -248,7 +248,7 @@ export function useAppBootstrap() {
   useEffect(() => {
     void api("/updates/check", {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify({ component: "app" }),
     }).catch(() => undefined);
   }, []);
 

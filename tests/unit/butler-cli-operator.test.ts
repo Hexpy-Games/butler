@@ -952,6 +952,7 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
         artifact_url: artifactPath,
         sha256: createHash("sha256").update(artifactContents).digest("hex"),
         bundled_components: ["service"],
+        bundledAgentVersion: "should-not-leak-to-standalone-agent",
         product: "butler-agent",
         canonical_component: "agent",
         profile: "agent-standalone",
@@ -980,6 +981,7 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
     parsed = JSON.parse(stdoutText(dryRun));
     expect(parsed.data.dryRun).toBe(true);
     expect(parsed.data.update_available).toBe(true);
+    expect(parsed.data.bundled_agent_version).toBe(null);
     expect(parsed.data.planned_actions).toContain("download Butler Agent artifact");
     expect(parsed.data.planned_actions).toContain("stage Butler Agent update under BUTLER_DATA updates");
     expect(parsed.data.planned_actions).toContain("restart Butler Agent to apply");
@@ -1008,6 +1010,7 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
       staging_policy: "butler-data-updates",
       activation_policy: "versioned-standalone-runtime",
       rollback_policy: "preserve-previous-standalone-runtime",
+      bundled_agent_version: null,
     });
     expect(parsed.data.protocol_compatibility).toEqual({
       protocol: "butler.agent.v1",

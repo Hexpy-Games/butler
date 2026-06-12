@@ -435,14 +435,23 @@ test("app server exposes separate update status check and apply endpoints", asyn
       status.data.components.map(
         (item: { component: string }) => item.component,
       ),
-    ).toEqual(["service", "app"]);
+    ).toEqual(["app"]);
     expect(
       status.data.components.every(
         (item: { current_version: string }) =>
           item.current_version === packageVersion,
       ),
     ).toBe(true);
-
+    expect(
+      status.data.components.find(
+        (item: { component: string }) => item.component === "app",
+      ),
+    ).toMatchObject({
+      component: "app",
+      product: "butler-app",
+      updater_owner: "butler-app",
+      bundled_agent_version: packageVersion,
+    });
     const agentPointerPath = join(tempDir, "runtime", "agent", "current.json");
     mkdirSync(join(tempDir, "runtime", "agent"), { recursive: true });
     writeFileSync(agentPointerPath, `${JSON.stringify({

@@ -3,16 +3,13 @@ import type {
   UpdateComponentId,
 } from "@/app/types.ts";
 import { Button, Field, FieldLabel, Stack, Typo } from "@/butler-ds";
+import {
+  bundledAgentVersionLabel,
+  COMPONENT_LABELS,
+  UPDATE_COMPONENTS,
+} from "./updateComponentDisplay";
 
-export const UPDATE_COMPONENTS: UpdateComponentId[] = [
-  "app",
-  "service",
-];
-
-const COMPONENT_LABELS: Record<UpdateComponentId, string> = {
-  app: "Butler App",
-  service: "Butler Agent",
-};
+export { bundledAgentVersionLabel, UPDATE_COMPONENTS };
 
 export interface UpdateActionLabels {
   updateApplying: string;
@@ -33,6 +30,7 @@ export function UpdateComponentRow({
   labels,
   onApply,
 }: UpdateComponentRowProps) {
+  const bundledAgentDetail = bundledAgentVersionLabel(status);
   return (
     <Field
       data-test-id={`update-component-${status.component}`}
@@ -42,6 +40,7 @@ export function UpdateComponentRow({
         <Stack gap="xs">
           <FieldLabel>{COMPONENT_LABELS[status.component]}</FieldLabel>
           <Typo.Caption>{versionLabel(status)}</Typo.Caption>
+          {bundledAgentDetail ? <Typo.Caption>{bundledAgentDetail}</Typo.Caption> : null}
           {status.stage_status === "rolled_back" && status.rollback_reason ? (
             <Typo.Caption>{status.rollback_reason}</Typo.Caption>
           ) : null}
@@ -75,6 +74,7 @@ export function emptyComponentStatus(
     sha256: null,
     signature: null,
     bundled_components: [component],
+    bundled_agent_version: null,
     product: isAgent ? "butler-agent" : "butler-app",
     canonical_component: isAgent ? "agent" : "app",
     profile: isAgent ? "agent-standalone" : "electron",

@@ -967,7 +967,7 @@ const koKrCopy: AppCopy = {
       systemEvents:
         "정기 정리, 사용자 정보 분석, 유지보수 작업이 언제 어떻게 끝났는지 확인합니다.",
       systemEventsEmpty: "아직 표시할 시스템 이벤트가 없습니다.",
-      updates: "앱, 앱 서버, 버틀러 서비스를 각각 확인하고 업데이트합니다.",
+      updates: "Butler App을 확인하고 업데이트합니다.",
       eolLastLoaded: (value) => `마지막으로 불러온 시각 ${value}`,
       mcpServers:
         "설정은 Butler data home에 저장되고, 활성 서버의 도구와 리소스는 버틀러가 대화 중 바로 호출할 수 있습니다.",
@@ -1614,7 +1614,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       systemEvents:
         "Review regular consolidation, personal information analysis, and maintenance work.",
       systemEventsEmpty: "No system events to show yet.",
-      updates: "Check and update Butler App and Butler Agent separately.",
+      updates: "Check and update Butler App.",
       eolLastLoaded: (value) => `Last loaded at ${value}`,
       mcpServers:
         "Settings are stored in Butler data home. Active server tools and resources can be called by Butler during chats.",

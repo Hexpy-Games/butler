@@ -318,6 +318,7 @@ export interface ComponentUpdateStatus {
   sha256: string | null;
   signature: string | null;
   bundled_components: UpdateComponentId[];
+  bundled_agent_version: string | null;
   product: UpdateProduct;
   canonical_component: UpdateCanonicalComponent;
   profile: UpdateProfile;
