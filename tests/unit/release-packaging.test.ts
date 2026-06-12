@@ -565,7 +565,7 @@ test("Butler CLI help documents install home and data overrides", () => {
   });
 
   expect(result.status).toBe(0);
-  expect(result.stdout).toContain("butler install [--home PATH] [--data PATH]");
+  expect(result.stdout).toContain("butler install [--profile agent-standalone] [--home PATH] [--data PATH]");
   expect(result.stdout).toContain("BUTLER_HOME: ~/butler");
   expect(result.stdout).toContain("BUTLER_DATA: ~/.butler");
 });

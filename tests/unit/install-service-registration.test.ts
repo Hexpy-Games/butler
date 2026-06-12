@@ -101,6 +101,43 @@ test("installer explicit language selection does not prompt", () => {
   expect(result.stdout.trim()).toBe("ko");
 });
 
+test("terminal installer defaults to agent-standalone profile", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    source ./install.sh --profile standalone
+    echo "$BUTLER_INSTALL_PROFILE"
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout.trim()).toBe("agent-standalone");
+});
+
+test("terminal installer rejects App and Electron profiles", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    source ./install.sh --profile electron
+  `);
+
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain("Electron first-run UI");
+  expect(result.stderr).toContain("agent-standalone only");
+});
+
+test("install plan shows standalone Agent profile", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    source ./install.sh --home "$tmp/agent" --data "$tmp/data" --language en --install-source local-artifact
+    detect_platform >/dev/null
+    show_install_plan
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("Profile");
+  expect(result.stdout).toContain("agent-standalone");
+});
+
 test("docker installer preinstalls container dependencies before running install script", () => {
   const source = readFileSync("tools/install-in-docker.sh", "utf8");
   const packageIndex = source.indexOf("release:agent:package");
@@ -595,6 +632,18 @@ test("installer rejects explicit Telegram gateway setup", () => {
 
   expect(result.status).toBe(2);
   expect(result.stderr).toContain("--gateway currently supports app");
+});
+
+test("Electron first-run setup bridge does not expose standalone service prompts", () => {
+  const setupBridge = readFileSync("packages/butler-app/client/electron/setup-bridge.mjs", "utf8");
+  const firstRunUi = readFileSync("packages/butler-app/client/ui/src/components/first-run/FirstRunSetup.tsx", "utf8");
+
+  expect(setupBridge).toContain('gatewayProfile = "electron"');
+  expect(setupBridge).not.toContain("register-service");
+  expect(setupBridge).not.toContain("launchctl");
+  expect(setupBridge).not.toContain("systemctl");
+  expect(firstRunUi).not.toContain("register-service");
+  expect(firstRunUi).not.toContain("OS service");
 });
 
 test("explicit Codex subscription provider uses profile without chooser", () => {
@@ -1371,6 +1420,8 @@ test("minimal non-interactive installer prepares first-chat onboarding without u
       if (cfg.user.name !== '') throw new Error('user.name should stay empty before first chat onboarding');
       if (cfg.user.language !== 'en') throw new Error('install language should initialize user.language');
       if (cfg.user.responseLanguage !== 'en') throw new Error('install language should initialize agent response language');
+      if (cfg.system.profile !== 'agent-standalone') throw new Error('terminal install should write agent-standalone profile');
+      if (cfg.system.installProfile !== 'agent-standalone') throw new Error('terminal install should write agent-standalone install profile');
       if (cfg.system.runtime !== 'codex-api') throw new Error('runtime should be codex-api');
       if (cfg.webSearch.provider !== 'duckduckgo-html') throw new Error('web search should default to no-key provider');
       if (cfg.webSearch.readerBackend !== 'lightweight') throw new Error('reader backend should default to lightweight');

@@ -310,7 +310,8 @@ function commandGroup(prefix) {
 }
 
 function renderCommandHelp(path) {
-  const command = findExactCommand(path);
+  const known = findKnownCommand(path);
+  const command = known || findExactCommand(path);
   if (command) {
     const lines = [
       command.usage,
@@ -400,8 +401,29 @@ function invalidArguments(common) {
   process.exit(2);
 }
 
+function unsupportedJson(commandName, common) {
+  if (common.options.json) {
+    printJsonEnvelope({
+      ok: false,
+      command: `butler ${commandName}`,
+      error: {
+        code: "unsupported_json",
+        message: `${commandName} does not support --json`,
+      },
+    });
+  } else {
+    console.error(`${commandName} does not support --json`);
+  }
+  process.exit(2);
+}
+
 function scriptArgs(args, common) {
   return [...args, ...forwardedCommonArgs(common)];
+}
+
+function installScriptArgs(args, common) {
+  const forwarded = forwardedCommonArgs(common).filter((arg) => arg !== "--json");
+  return [...args, ...forwarded];
 }
 
 function coreCommandArgs(command, args, common) {
@@ -518,7 +540,8 @@ if (knownCommand && !knownCommand.implemented) {
 
 switch (command) {
   case "install":
-    run("bash", [resolve(root, "install.sh"), ...scriptArgs(args, common)], common);
+    if (common.options.json) unsupportedJson("install", common);
+    run("bash", [resolve(root, "install.sh"), ...installScriptArgs(args, common)], common);
     break;
   case "upgrade-report":
     run("bash", [resolve(root, "install.sh"), "--upgrade-report", ...scriptArgs(args, common)], common);

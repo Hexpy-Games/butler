@@ -225,6 +225,34 @@ test("Butler CLI command help uses registry metadata", () => {
   expect(workHelp.stdout).toContain("butler work dashboard");
 });
 
+test("Butler CLI install help survives install-specific flags", () => {
+  const result = spawnSync("node", [cli, "install", "--profile", "agent-standalone", "--help"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("butler install [--profile agent-standalone]");
+});
+
+test("Butler CLI install rejects unsupported json before invoking installer", () => {
+  const result = spawnSync("node", [cli, "install", "--json"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+
+  expect(result.status).toBe(2);
+  const parsed = JSON.parse(result.stdout);
+  expect(parsed).toMatchObject({
+    ok: false,
+    command: "butler install",
+    error: {
+      code: "unsupported_json",
+    },
+  });
+  expect(result.stderr).not.toContain("Unknown option");
+});
+
 test("Butler CLI unknown command returns exit code 2 and JSON envelope", () => {
   const result = spawnSync("node", [cli, "not-a-command", "--json"], {
     cwd: root,
