@@ -18,6 +18,7 @@ import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
@@ -73,6 +74,10 @@ const nativeNotificationState = {
   lastAttemptedAt: null,
   lastShownAt: null,
 };
+const firstRunSetupBridge = createFirstRunSetupBridge({
+  ensureReady: ensureServer,
+  readSettings: readSetupSettings,
+});
 app.setName(appDisplayName);
 syncPreloadServerEnvironment();
 
@@ -268,6 +273,17 @@ function appInfoView() {
     developer_mode_available: true,
     developer_mode_enabled: developerModeEnabled(),
   };
+}
+
+async function readSetupSettings() {
+  const response = await fetch(new URL("/settings", serverUrl));
+  const body = await response.json().catch(() => null);
+  if (!response.ok || body?.protocol_version !== appProtocolVersion) {
+    const error = new Error("settings_unavailable");
+    error.code = "settings_unavailable";
+    throw error;
+  }
+  return body.data ?? {};
 }
 
 function configureAppIdentity() {
@@ -751,6 +767,22 @@ ipcMain.handle("butler:get-app-info", () => appInfoView());
 ipcMain.handle("butler:set-developer-mode", async (_event, input) => {
   return await setDeveloperMode(input?.enabled === true);
 });
+
+ipcMain.handle("butler:first-run-setup-status", () =>
+  firstRunSetupBridge.status(),
+);
+
+ipcMain.handle("butler:first-run-setup-start", async (_event, input) =>
+  await firstRunSetupBridge.start(input ?? {}),
+);
+
+ipcMain.handle("butler:first-run-setup-cancel", () =>
+  firstRunSetupBridge.cancel(),
+);
+
+ipcMain.handle("butler:first-run-setup-diagnostics", () =>
+  firstRunSetupBridge.diagnostics(),
+);
 
 ipcMain.handle("butler:set-native-appearance-theme", (_event, input) => {
   const themeSource = normalizeAppearanceThemeSource(input?.theme);

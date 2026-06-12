@@ -118,6 +118,13 @@ const butlerApp = Object.freeze({
   setDeveloperMode: ({ enabled } = {}) =>
     ipcRenderer.invoke("butler:set-developer-mode", { enabled }),
   health: () => requestJson("/health"),
+  getSetupStatus: () => ipcRenderer.invoke("butler:first-run-setup-status"),
+  startSetup: (request = {}) =>
+    ipcRenderer.invoke("butler:first-run-setup-start", request ?? {}),
+  cancelSetup: (request = {}) =>
+    ipcRenderer.invoke("butler:first-run-setup-cancel", request ?? {}),
+  exportSetupDiagnostics: () =>
+    ipcRenderer.invoke("butler:first-run-setup-diagnostics"),
   listChats: () => requestJson("/chats"),
   listNavigation: () => requestJson("/navigation"),
   getNewChatBriefing: ({ date, projectId } = {}) => {

@@ -202,8 +202,11 @@ async function renderAppShell(
   });
   Object.assign(dom.window, {
     butlerApp: {
-      getSettings: async () => ({}),
-      health: async () => ({ ok: true }),
+      startSetup: async () => ({
+        diagnostics_available: true,
+        phase: "ready",
+        status_label: "준비 완료",
+      }),
       updateSettings: async () => ({}),
     },
   });

@@ -5,6 +5,7 @@ import {
   firstRunCopy,
   nextFirstRunState,
   settingsLanguagePatch,
+  startFirstRunSetup,
   writeFirstRunState,
   type FirstRunState,
 } from "@/app/firstRunSetup.ts";
@@ -35,9 +36,7 @@ export function FirstRunSetup({
 
   useEffect(() => {
     setAppCopyLanguage(language);
-    writeFirstRunState(window.localStorage, {
-      ...state,
-    });
+    writeFirstRunState(window.localStorage, state);
   }, [state]);
 
   useEffect(() => {
@@ -47,8 +46,11 @@ export function FirstRunSetup({
       setError("");
       setStatus(copy.installChecking);
       try {
-        await api("/health");
-        await api("/settings");
+        const setupStatus = await startFirstRunSetup();
+        if (setupStatus.phase === "cancelled") return;
+        if (setupStatus.phase !== "ready") {
+          throw new Error(setupStatus.error_code ?? "setup_not_ready");
+        }
         if (!cancelled) {
           setStatus(copy.installReady);
           window.setTimeout(() => {
@@ -59,7 +61,7 @@ export function FirstRunSetup({
             }
           }, 450);
         }
-      } catch (installError) {
+      } catch (_installError) {
         if (!cancelled) {
           const message = copy.installFailed;
           setStatus("");
@@ -67,10 +69,7 @@ export function FirstRunSetup({
           setState((current) =>
             nextFirstRunState(current, {
               type: "install_failed",
-              error:
-                installError instanceof Error
-                  ? installError.message
-                  : String(installError),
+              error: "setup_failed",
             }),
           );
         }
