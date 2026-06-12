@@ -1079,6 +1079,163 @@ SH
   expect(result.stdout.trim()).toBe("ok");
 });
 
+test("local artifact installer prerequisites do not require git downloader or host unzip", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    source ./install.sh --home "$tmp/agent" --data "$tmp/data" --language en --install-source local-artifact
+    detect_platform >/dev/null
+    install_managed_bun() { echo runtime-ok; return 0; }
+    ensure_dependency() { echo "unexpected-dependency:$1"; return 1; }
+    ensure_core_tool() { echo "unexpected-core-tool:$1"; return 1; }
+    check_dependencies
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("runtime-ok");
+  expect(result.stdout).not.toContain("unexpected-dependency:git");
+  expect(result.stdout).not.toContain("unexpected-core-tool:curl");
+  expect(result.stdout).not.toContain("unexpected-core-tool:unzip");
+});
+
+test("local artifact runtime activation fails without trying host download tools", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    source ./install.sh --home "$tmp/agent" --data "$tmp/data" --language en --install-source local-artifact
+    OS_TYPE=Linux
+    ARCH_TYPE=x86_64
+    ensure_core_tool() { echo "unexpected-core-tool:$1"; return 1; }
+    install_managed_bun || echo local-runtime-missing
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("local-runtime-missing");
+  expect(result.stdout).not.toContain("unexpected-core-tool:curl");
+  expect(result.stdout).not.toContain("unexpected-core-tool:unzip");
+  expect(result.stdout).toContain("missing its managed runtime payload");
+});
+
+test("remote bootstrap accepts curl or wget as downloader prerequisite", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    fake_bin="$tmp/bin"
+    mkdir -p "$fake_bin"
+    trap 'rm -rf "$tmp"' EXIT
+    cat > "$fake_bin/wget" <<'SH'
+#!/usr/bin/env bash
+echo "wget 1.0"
+SH
+    chmod +x "$fake_bin/wget"
+    PATH="$fake_bin:$PATH"
+    source ./install.sh --home "$tmp/agent" --data "$tmp/data" --language en --install-source remote-bootstrap
+    ensure_dependency() { echo "unexpected-dependency:$1"; return 1; }
+    command() {
+      if [[ "$1" == "-v" && "\${2:-}" == "curl" ]]; then
+        return 1
+      fi
+      builtin command "$@"
+    }
+    ensure_downloader
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("downloader: wget");
+  expect(result.stdout).not.toContain("unexpected-dependency:curl");
+});
+
+test("local artifact disables optional gum network bootstrap", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    source ./install.sh --home "$tmp/agent" --data "$tmp/data" --language en --install-source local-artifact
+    if install_source_allows_gum_bootstrap; then
+      echo unexpected-gum-network
+    else
+      echo gum-network-disabled
+    fi
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout.trim()).toBe("gum-network-disabled");
+});
+
+test("remote bootstrap install plan reports archive extractor requirement", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    source ./install.sh --home "$tmp/agent" --data "$tmp/data" --language en --install-source remote-bootstrap
+    detect_platform >/dev/null
+    show_install_plan
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("Install Source");
+  expect(result.stdout).toContain("remote-bootstrap");
+  expect(result.stdout).toContain("extractor");
+});
+
+test("remote bootstrap skips downloader prerequisites when runtime override is already available", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    source ./install.sh --home "$tmp/agent" --data "$tmp/data" --language en --install-source remote-bootstrap
+    detect_platform >/dev/null
+    export BUTLER_BUN="/bin/sh"
+    ensure_downloader() { echo unexpected-downloader; return 1; }
+    show_install_plan
+    check_dependencies
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).not.toContain("unexpected-downloader");
+  expect(result.stdout).not.toContain("downloader ✗");
+  expect(result.stdout).not.toContain("extractor ✗");
+});
+
+test("source-checkout install plan reports runtime downloader when managed runtime is missing", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    source ./install.sh --home "$PWD" --data "$tmp/data" --language en --install-source source-checkout
+    detect_platform >/dev/null
+    show_install_plan
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("Install Source");
+  expect(result.stdout).toContain("source-checkout");
+  expect(result.stdout).toContain("downloader");
+  expect(result.stdout).toContain("extractor");
+});
+
+test("install plan reports versioned managed runtime as available", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    source ./install.sh --home "$tmp/agent" --data "$tmp/data" --language en --install-source remote-bootstrap
+    detect_platform >/dev/null
+    version="$(butler_bun_pinned_version)"
+    mkdir -p "$tmp/data/runtime/bun/$version/bin"
+    printf '#!/usr/bin/env bash\\necho bun-test\\n' > "$tmp/data/runtime/bun/$version/bin/bun"
+    chmod +x "$tmp/data/runtime/bun/$version/bin/bun"
+    show_install_plan
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain("runtime ✓");
+  expect(result.stdout).not.toContain("downloader ✗");
+  expect(result.stdout).not.toContain("extractor ✗");
+});
+
 test("source-checkout installer builds a fallback native CLI binary when prebuilt is absent", () => {
   const result = runInstallerFunction(`
     set -euo pipefail
