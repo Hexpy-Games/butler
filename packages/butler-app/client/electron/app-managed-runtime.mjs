@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -67,14 +71,28 @@ export function prepareAppManagedAgentRuntime({
   if (artifact.sha256 && artifact.sha256 !== digest) {
     throw new Error("bundled Agent artifact digest mismatch");
   }
+  const verifiedClosure = verifyDependencyClosure(root, artifact, digest);
+  const readiness = {
+    artifactName: artifact.artifactName,
+    artifactPath,
+    artifactDigest: digest,
+    managedRuntimeDigest: verifiedClosure.managedRuntimeDigest,
+  };
 
   const version = safeRuntimeVersionSegment(artifact.version);
   const runtimeHomeLabel = join("app", "runtime", "agent", "versions", version);
   const runtimeHome = join(butlerData, runtimeHomeLabel);
   const currentPointerPath = appManagedAgentPointerPath(butlerData);
   const previousPointer = readJsonIfPresent(currentPointerPath);
+  const previousSelectablePointer =
+    previousPointer?.runtime_home === runtimeHomeLabel
+      ? previousPointer.previous ?? null
+      : previousPointer;
   const existingPointer = validPointerForVersion(previousPointer, artifact.version);
-  if (existingPointer && runtimeHomeReady(join(butlerData, existingPointer.runtime_home))) {
+  if (
+    existingPointer &&
+    runtimeHomeReady(join(butlerData, existingPointer.runtime_home), readiness)
+  ) {
     return {
       runtimeHome: join(butlerData, existingPointer.runtime_home),
       runtimeHomeLabel: existingPointer.runtime_home,
@@ -87,20 +105,25 @@ export function prepareAppManagedAgentRuntime({
   }
 
   const payloadLabel = join(runtimeHomeLabel, "payloads", artifact.artifactName);
-  const payloadPath = join(butlerData, payloadLabel);
+  const stagingHome = `${runtimeHome}.staging-${process.pid}-${Date.now()}`;
+  const backupHome = `${runtimeHome}.previous-${process.pid}-${Date.now()}`;
+  const stagingPayloadPath = join(stagingHome, "payloads", artifact.artifactName);
   const preparedAt = now().toISOString();
-  rmSync(runtimeHome, { recursive: true, force: true });
-  mkdirSync(dirname(payloadPath), { recursive: true });
-  copyFileSync(artifactPath, payloadPath);
-  mkdirSync(runtimeHome, { recursive: true });
+  let backupCreated = false;
+  rmSync(stagingHome, { recursive: true, force: true });
+  rmSync(backupHome, { recursive: true, force: true });
 
   try {
     validateAgentArchiveEntries(artifactPath);
-    extractAgentArchive(artifactPath, runtimeHome);
-    if (!runtimeHomeReady(runtimeHome)) {
-      throw new Error("bundled Agent runtime is missing required files");
+    mkdirSync(dirname(stagingPayloadPath), { recursive: true });
+    copyFileSync(artifactPath, stagingPayloadPath);
+    extractAgentArchive(artifactPath, stagingHome);
+    installManagedRuntimePayload(root, stagingHome);
+    const readinessIssue = runtimeHomeReadinessIssue(stagingHome, readiness);
+    if (readinessIssue) {
+      throw new Error(`bundled Agent runtime is missing required files: ${readinessIssue}`);
     }
-    atomicWriteJson(join(runtimeHome, "runtime.json"), {
+    atomicWriteJson(join(stagingHome, "runtime.json"), {
       schema: APP_MANAGED_RUNTIME_SCHEMA,
       product: "butler-app",
       bundled_agent_product: "butler-agent",
@@ -110,6 +133,8 @@ export function prepareAppManagedAgentRuntime({
       payload_path: payloadLabel,
       source_resource_path: root,
       payload_format: "agent-archive",
+      payload_sha256: digest,
+      managed_runtime_sha256: verifiedClosure.managedRuntimeDigest,
       activation_policy: "versioned-app-managed-runtime",
       rollback_policy: "preserve-previous-app-managed-runtime",
       prepared_at: preparedAt,
@@ -117,13 +142,22 @@ export function prepareAppManagedAgentRuntime({
       activation_status: "prepared",
       raw_text_included: false,
     });
+    if (existsSync(runtimeHome)) {
+      renameSync(runtimeHome, backupHome);
+      backupCreated = true;
+    }
+    renameSync(stagingHome, runtimeHome);
+    if (backupCreated) {
+      rmSync(backupHome, { recursive: true, force: true });
+      backupCreated = false;
+    }
     return {
       runtimeHome,
       runtimeHomeLabel,
       version: artifact.version,
       pointerPath: currentPointerPath,
       activated: false,
-      previousRuntimePath: previousPointer?.runtime_home ?? null,
+      previousRuntimePath: previousSelectablePointer?.runtime_home ?? null,
       commitActivation() {
         const selectedAt = now().toISOString();
         atomicWriteJson(join(runtimeHome, "runtime.json"), {
@@ -136,6 +170,8 @@ export function prepareAppManagedAgentRuntime({
           payload_path: payloadLabel,
           source_resource_path: root,
           payload_format: "agent-archive",
+          payload_sha256: digest,
+          managed_runtime_sha256: verifiedClosure.managedRuntimeDigest,
           activation_policy: "versioned-app-managed-runtime",
           rollback_policy: "preserve-previous-app-managed-runtime",
           prepared_at: preparedAt,
@@ -153,14 +189,30 @@ export function prepareAppManagedAgentRuntime({
           runtime_home: runtimeHomeLabel,
           payload_path: payloadLabel,
           selected_at: selectedAt,
-          previous: previousPointer,
+          previous: previousSelectablePointer,
           raw_text_included: false,
         });
         this.activated = true;
       },
     };
   } catch (error) {
-    atomicWriteJson(join(runtimeHome, "runtime.json"), {
+    if (backupCreated && !existsSync(runtimeHome) && existsSync(backupHome)) {
+      renameSync(backupHome, runtimeHome);
+      backupCreated = false;
+    }
+    rmSync(stagingHome, { recursive: true, force: true });
+    if (backupCreated) {
+      rmSync(backupHome, { recursive: true, force: true });
+    }
+    const fallbackPointer = rollbackPointerAfterFailedRuntime(
+      butlerData,
+      previousPointer,
+      runtimeHomeLabel,
+    );
+    if (fallbackPointer) {
+      atomicWriteJson(currentPointerPath, fallbackPointer);
+    }
+    atomicWriteJson(join(butlerData, "app", "runtime", "agent", "failures", `${version}.json`), {
       schema: APP_MANAGED_RUNTIME_SCHEMA,
       product: "butler-app",
       bundled_agent_product: "butler-agent",
@@ -170,6 +222,8 @@ export function prepareAppManagedAgentRuntime({
       payload_path: payloadLabel,
       source_resource_path: root,
       payload_format: "agent-archive",
+      payload_sha256: digest,
+      managed_runtime_sha256: verifiedClosure.managedRuntimeDigest,
       activation_policy: "versioned-app-managed-runtime",
       rollback_policy: "preserve-previous-app-managed-runtime",
       prepared_at: preparedAt,
@@ -186,7 +240,6 @@ export function resolveAppManagedGatewayCommand({
   butlerData,
   env = process.env,
   resourcesPath = process.resourcesPath,
-  resolveRuntime,
 } = {}) {
   const resourceRoot = resolveBundledAgentResourceRoot({ env, resourcesPath });
   if (!resourceRoot) return null;
@@ -194,7 +247,7 @@ export function resolveAppManagedGatewayCommand({
     butlerData,
     resourceRoot,
   });
-  const runtime = resolveRuntime(butlerData);
+  const runtime = resolveAppManagedRuntimeExecutable(activation.runtimeHome);
   const launcher = join(activation.runtimeHome, "bin", "butler.js");
   return {
     command: runtime,
@@ -230,11 +283,127 @@ function resolveBundledAgentArtifact(manifest) {
   if (!artifactName || !version) {
     throw new Error("bundled Agent artifact metadata is incomplete");
   }
+  assertManifestArtifactsUnsigned("bundled Agent release manifest", manifest);
   return {
     artifactName,
     version,
     sha256: safeString(artifact.sha256 ?? artifact.integrity?.digest),
   };
+}
+
+function verifyDependencyClosure(resourceRoot, artifact, artifactDigest) {
+  const closurePath = join(resourceRoot, "dependency-closure.json");
+  if (!existsSync(closurePath)) {
+    throw new Error("dependency closure manifest is missing");
+  }
+  const updateManifest = readJson(join(resourceRoot, "agent-update-manifest.json"));
+  assertManifestArtifactsUnsigned("bundled Agent update manifest", updateManifest);
+  const closure = readJson(closurePath);
+  if (
+    closure?.schema !== "butler.app-bundled-agent-dependency-closure.v1" ||
+    closure.product !== "butler-app" ||
+    closure.gatewayProfile !== "electron"
+  ) {
+    throw new Error("dependency closure manifest is invalid");
+  }
+  if (Array.isArray(closure.hostToolsRequiredForFirstLaunch) &&
+    closure.hostToolsRequiredForFirstLaunch.length > 0) {
+    throw new Error("dependency closure requires host first-launch tools");
+  }
+  assertUnsignedIntegrity("dependency closure bundled Agent payload", closure.payload?.integrity);
+  if (
+    closure.payload?.artifactName !== artifact.artifactName ||
+    closure.payload?.sha256 !== artifactDigest ||
+    closure.payload?.integrity?.digestAlgorithm !== "sha256" ||
+    closure.payload?.integrity?.digest !== artifactDigest
+  ) {
+    throw new Error("dependency closure bundled Agent payload digest mismatch");
+  }
+
+  const runtimeDigest = sha256Directory(join(resourceRoot, "runtime"));
+  const releaseManifestDigest = sha256File(join(resourceRoot, "agent-release-manifest.json"));
+  const updateManifestDigest = sha256File(join(resourceRoot, "agent-update-manifest.json"));
+  const expected = new Map([
+    ["renderer-assets", artifactDigest],
+    ["bootstrap-setup-ui", artifactDigest],
+    ["bundled-agent-payload", artifactDigest],
+    ["managed-runtime-payload", runtimeDigest],
+    ["runtime-package-dependencies", sha256Values([artifactDigest, runtimeDigest])],
+    ["release-manifests", sha256Values([releaseManifestDigest, updateManifestDigest])],
+    [
+      "bundled-payload-repair-source",
+      sha256Values([
+        artifactDigest,
+        releaseManifestDigest,
+        updateManifestDigest,
+        runtimeDigest,
+      ]),
+    ],
+  ]);
+  const dependencies = Array.isArray(closure.appOwnedDependencies)
+    ? closure.appOwnedDependencies
+    : [];
+  for (const [id, digest] of expected) {
+    const dependency = dependencies.find((item) => item?.id === id);
+    if (!dependency) {
+      throw new Error(`dependency closure missing ${id}`);
+    }
+    assertUnsignedIntegrity(`dependency closure ${id}`, dependency.integrity);
+    if (dependency.integrity?.digestAlgorithm !== "sha256" ||
+      dependency.integrity?.digest !== digest) {
+      throw new Error(`dependency closure ${id} digest mismatch`);
+    }
+  }
+  const repairSource = Array.isArray(closure.repairSources)
+    ? closure.repairSources.find((item) => item?.id === "bundled-payload-repair-source")
+    : null;
+  assertUnsignedIntegrity("dependency closure repair source", repairSource?.integrity);
+  if (
+    repairSource?.verification !== "sha256" ||
+    repairSource?.integrity?.digestAlgorithm !== "sha256" ||
+    repairSource?.integrity?.digest !== expected.get("bundled-payload-repair-source")
+  ) {
+    throw new Error("dependency closure repair source digest mismatch");
+  }
+  return {
+    managedRuntimeDigest: runtimeDigest,
+  };
+}
+
+function assertManifestArtifactsUnsigned(label, manifest) {
+  const artifacts = Array.isArray(manifest?.artifacts) ? manifest.artifacts : [];
+  for (const artifact of artifacts) {
+    assertUnsignedIntegrity(label, artifact);
+    assertUnsignedIntegrity(label, artifact?.integrity);
+  }
+}
+
+function assertUnsignedIntegrity(label, value) {
+  if (value && typeof value === "object" && "signature" in value && value.signature != null) {
+    throw new Error(
+      `${label} signature verification is not implemented; signed artifacts must fail closed.`,
+    );
+  }
+}
+
+function rollbackPointerAfterFailedRuntime(butlerData, pointer, failedRuntimeHomeLabel) {
+  if (
+    pointer &&
+    pointer.runtime_home !== failedRuntimeHomeLabel &&
+    typeof pointer.runtime_home === "string" &&
+    runtimeHomeReady(join(butlerData, pointer.runtime_home))
+  ) {
+    return pointer;
+  }
+  const previous = pointer?.previous;
+  if (
+    previous &&
+    typeof previous.runtime_home === "string" &&
+    runtimeHomeReady(join(butlerData, previous.runtime_home))
+  ) {
+    return previous;
+  }
+  return null;
 }
 
 function validPointerForVersion(pointer, version) {
@@ -250,20 +419,90 @@ function validPointerForVersion(pointer, version) {
   return pointer;
 }
 
-function runtimeHomeReady(runtimeHome) {
+function runtimeHomeReady(runtimeHome, expected = null) {
+  return runtimeHomeReadinessIssue(runtimeHome, expected) === null;
+}
+
+function runtimeHomeReadinessIssue(runtimeHome, expected = null) {
+  if (
+    !isFile(join(runtimeHome, "bin", "butler.js"))
+  ) {
+    return "missing bin/butler.js";
+  }
+  if (!isFile(join(runtimeHome, "packages", "butler-agent", "resources", "runtime", "bun-version"))) {
+    return "missing managed runtime version";
+  }
+  if (!isFile(resolveAppManagedRuntimeExecutable(runtimeHome))) {
+    return "missing managed runtime executable";
+  }
+  if (!expected) return null;
+  const payloadPath = join(runtimeHome, "payloads", expected.artifactName);
+  if (!isFile(payloadPath) || sha256File(payloadPath) !== expected.artifactDigest) {
+    return "bundled Agent payload digest mismatch";
+  }
+  const runtimePayloadHome = appManagedRuntimePayloadHome(runtimeHome);
+  if (sha256Directory(runtimePayloadHome) !== expected.managedRuntimeDigest) {
+    return "managed runtime payload digest mismatch";
+  }
+  if (!archiveFilesInstalled(expected.artifactPath, runtimeHome)) {
+    return "bundled Agent payload files mismatch";
+  }
+  return null;
+}
+
+function installManagedRuntimePayload(resourceRoot, runtimeHome) {
+  const source = join(resourceRoot, "runtime");
+  const bun = join(source, "bin", "bun");
+  if (!existsSync(bun)) {
+    throw new Error("managed runtime payload is missing bin/bun");
+  }
+  const target = appManagedRuntimePayloadHome(runtimeHome);
+  rmSync(target, { recursive: true, force: true });
+  mkdirSync(dirname(target), { recursive: true });
+  cpSync(source, target, { recursive: true });
+  try {
+    chmodSync(resolveAppManagedRuntimeExecutable(runtimeHome), 0o755);
+  } catch {
+    // Preserve copy success even on filesystems that do not support chmod.
+  }
+}
+
+function appManagedRuntimePayloadHome(runtimeHome) {
+  return join(runtimeHome, "packages", "butler-agent", "resources", "runtime");
+}
+
+function resolveAppManagedRuntimeExecutable(runtimeHome) {
+  return join(appManagedRuntimePayloadHome(runtimeHome), "bin", "bun");
+}
+
+function archiveFilesInstalled(artifactPath, runtimeHome) {
+  for (const entry of parseTarGz(artifactPath)) {
+    if (entry.type !== "file") continue;
+    if (isManagedRuntimeArchivePath(entry.name)) continue;
+    const target = join(runtimeHome, entry.name);
+    if (!isFile(target) || sha256File(target) !== sha256Bytes(entry.data)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isManagedRuntimeArchivePath(entryName) {
   return (
-    existsSync(join(runtimeHome, "bin", "butler.js")) &&
-    existsSync(join(runtimeHome, "packages", "butler-agent", "resources", "runtime", "bun-version"))
+    entryName === "packages/butler-agent/resources/runtime" ||
+    entryName.startsWith("packages/butler-agent/resources/runtime/")
   );
 }
 
 function validateAgentArchiveEntries(artifactPath) {
   const entries = readTarGzEntries(artifactPath);
-  if (!entries.some((entry) => normalizeArchiveEntry(entry) === "bin/butler.js")) {
+  if (!entries.some((entry) =>
+    normalizeArchiveEntry(entry.name) === "bin/butler.js" && entry.type === "file",
+  )) {
     throw new Error("bundled Agent artifact is missing bin/butler.js");
   }
   for (const entry of entries) {
-    const normalized = normalizeArchiveEntry(entry);
+    const normalized = normalizeArchiveEntry(entry.name);
     if (!normalized) continue;
     if (normalized.startsWith("/") || normalized.split("/").includes("..")) {
       throw new Error("bundled Agent artifact contains an unsafe path");
@@ -286,7 +525,10 @@ function extractAgentArchive(artifactPath, runtimeHome) {
 }
 
 function readTarGzEntries(artifactPath) {
-  return parseTarGz(artifactPath).map((entry) => entry.name);
+  return parseTarGz(artifactPath).map((entry) => ({
+    name: entry.name,
+    type: entry.type,
+  }));
 }
 
 function parseTarGz(artifactPath) {
@@ -384,8 +626,52 @@ function normalizeArchiveEntry(entry) {
   return entry.replace(/^\.\/+/u, "").replace(/\/+$/u, "");
 }
 
+function isFile(path) {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
 function sha256File(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function sha256Bytes(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function sha256Directory(path) {
+  const hash = createHash("sha256");
+  for (const file of listFiles(path)) {
+    const label = file.slice(path.length + 1).replace(/\\/g, "/");
+    hash.update(label);
+    hash.update("\0");
+    hash.update(sha256File(file));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
+function listFiles(path) {
+  const result = [];
+  for (const entry of readdirSync(path).sort()) {
+    const fullPath = join(path, entry);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) result.push(...listFiles(fullPath));
+    else if (stat.isFile()) result.push(fullPath);
+  }
+  return result;
+}
+
+function sha256Values(values) {
+  const hash = createHash("sha256");
+  for (const value of values) {
+    hash.update(value);
+    hash.update("\0");
+  }
+  return hash.digest("hex");
 }
 
 function readJson(path) {

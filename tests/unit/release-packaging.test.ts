@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -601,7 +601,9 @@ test("agent release packager can write public GitHub artifact URLs", () => {
 
 test("app release packager embeds self-contained bundled Agent resources", () => {
   const outDir = mkdtempSync(join(tmpdir(), "butler-app-release-test-"));
+  const previousLinuxRuntime = process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
   try {
+    process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = writeFakeLinuxX64Runtime(outDir);
     const result = createAppReleasePackage({
       root,
       outDir,
@@ -623,6 +625,12 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(entries).toContain(`${resourceRoot}/agent-update-manifest.json`);
     expect(entries).toContain(`${resourceRoot}/dependency-closure.json`);
     expect(entries).toContain(`${resourceRoot}/runtime/bun-version`);
+    expect(entries).toContain(`${resourceRoot}/runtime/bin/bun`);
+    const bundledRuntime = extractTarEntryBuffer(
+      artifact.artifactPath,
+      `${resourceRoot}/runtime/bin/bun`,
+    );
+    expect(isElfX64(bundledRuntime)).toBe(true);
 
     const releaseManifest = JSON.parse(readText(result.releaseManifestPath));
     expect(releaseManifest).toMatchObject({
@@ -675,6 +683,8 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       expect(nestedEntries).toContain(`./${serviceCliLauncherRelativePath(platform)}`);
     }
   } finally {
+    if (previousLinuxRuntime === undefined) delete process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
+    else process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = previousLinuxRuntime;
     rmSync(outDir, { recursive: true, force: true });
   }
 }, 90_000);
@@ -701,6 +711,7 @@ test("app package smoke uses real bundled Agent release resources", () => {
     expect(listing.stdout).toContain(
       "packages/butler-agent/resources/runtime/bun-version",
     );
+    expect(existsSync(join(bundledAgent.resourceDir, "runtime", "bin", "bun"))).toBe(true);
 
     const releaseManifest = JSON.parse(
       readText(join(bundledAgent.resourceDir, "agent-release-manifest.json")),
@@ -791,6 +802,15 @@ test("app package smoke uses real bundled Agent release resources", () => {
     ).not.toBe(bundledAgent.sha256);
     expect(
       dependencyClosure.appOwnedDependencies.find(
+        (item: any) => item.id === "managed-runtime-payload",
+      ).paths,
+    ).toEqual([
+      "bundled-agent/runtime",
+      "bundled-agent/runtime/bun-version",
+      "bundled-agent/runtime/bin/bun",
+    ]);
+    expect(
+      dependencyClosure.appOwnedDependencies.find(
         (item: any) => item.id === "release-manifests",
       ).paths,
     ).toEqual([
@@ -844,6 +864,12 @@ test("app dependency closure manifest validation rejects missing owned dependenc
     dependencyClosure.appOwnedDependencies.find(
       (item: any) => item.id === "managed-runtime-payload",
     ).integrity.digest = null;
+    dependencyClosure.appOwnedDependencies.find(
+      (item: any) => item.id === "managed-runtime-payload",
+    ).paths = [
+      "bundled-agent/runtime",
+      "bundled-agent/runtime/bun-version",
+    ];
     dependencyClosure.repairSources = [];
 
     expect(validateAppDependencyClosureManifest(dependencyClosure)).toEqual(
@@ -852,6 +878,7 @@ test("app dependency closure manifest validation rejects missing owned dependenc
         "dependency closure missing app-owned dependency: bootstrap-setup-ui",
         "dependency closure bundled Agent payload digest is required",
         "dependency closure managed-runtime-payload digest is required",
+        "dependency closure managed runtime must include bundled Bun executable",
         "dependency closure repair source is required",
       ]),
     );
@@ -1115,6 +1142,39 @@ function extractTarEntryJson(artifactPath: string, entryPath: string): any {
   });
   expect(result.status).toBe(0);
   return JSON.parse(result.stdout);
+}
+
+function extractTarEntryBuffer(artifactPath: string, entryPath: string): Buffer {
+  const result = spawnSync("tar", ["-xOf", artifactPath, entryPath]);
+  expect(result.status).toBe(0);
+  return result.stdout as Buffer;
+}
+
+function writeFakeLinuxX64Runtime(dir: string): string {
+  const runtime = join(dir, "fake-linux-x64-bun");
+  const bytes = Buffer.alloc(64);
+  bytes[0] = 0x7f;
+  bytes[1] = 0x45;
+  bytes[2] = 0x4c;
+  bytes[3] = 0x46;
+  bytes[4] = 2;
+  bytes[5] = 1;
+  bytes.writeUInt16LE(0x3e, 18);
+  writeFileSync(runtime, bytes);
+  chmodSync(runtime, 0o755);
+  return runtime;
+}
+
+function isElfX64(bytes: Buffer): boolean {
+  return (
+    bytes.length >= 20 &&
+    bytes[0] === 0x7f &&
+    bytes[1] === 0x45 &&
+    bytes[2] === 0x4c &&
+    bytes[3] === 0x46 &&
+    bytes[4] === 2 &&
+    bytes.readUInt16LE(18) === 0x3e
+  );
 }
 
 function readText(path: string): string {

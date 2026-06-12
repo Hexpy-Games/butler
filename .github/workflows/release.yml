@@ -104,6 +104,20 @@ jobs:
       - name: Run app release gate
         run: bun run release:app:gate
 
+      - name: Prepare Linux app-managed Bun payload
+        run: |
+          set -euo pipefail
+          bun_version="$(bun --version)"
+          archive="${RUNNER_TEMP}/bun-linux-x64.zip"
+          curl -fsSL \
+            "https://github.com/oven-sh/bun/releases/download/bun-v${bun_version}/bun-linux-x64.zip" \
+            -o "$archive"
+          ditto -x -k "$archive" "${RUNNER_TEMP}"
+          linux_bun="${RUNNER_TEMP}/bun-linux-x64/bun"
+          test -x "$linux_bun"
+          file "$linux_bun" | grep -E 'ELF 64-bit.*x86-64'
+          echo "BUTLER_APP_MANAGED_BUN_LINUX_X64=$linux_bun" >> "$GITHUB_ENV"
+
       - name: Package app release
         run: |
           bun run release:app:package \
