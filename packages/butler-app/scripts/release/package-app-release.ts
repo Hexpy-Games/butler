@@ -7,7 +7,9 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,7 +17,9 @@ import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
   APP_RELEASE_PLATFORMS,
+  createAppDependencyClosureManifest,
   createAppReleaseManifest,
+  validateAppDependencyClosureManifest,
   validateAppReleaseManifest,
   type AppReleaseManifest,
   type AppReleasePlatform,
@@ -230,24 +234,32 @@ export function prepareBundledAgentResource(root: string, workDir: string): Bund
     join(resourceDir, "runtime"),
     { recursive: true },
   );
-  writeJson(join(resourceDir, "dependency-closure.json"), {
-    schema: "butler.app-bundled-agent-dependency-closure.v1",
-    product: "butler-app",
+  const releaseManifestSha256 = sha256File(join(resourceDir, "agent-release-manifest.json"));
+  const updateManifestSha256 = sha256File(join(resourceDir, "agent-update-manifest.json"));
+  const managedRuntimeSha256 = sha256Directory(join(resourceDir, "runtime"));
+  const dependencyClosure = createAppDependencyClosureManifest({
     bundledAgentVersion: agent.version,
-    payload: {
-      product: "butler-agent",
-      artifactName: agent.artifactName,
-      sha256: agent.sha256,
-    },
-    hostToolsRequiredForFirstLaunch: [],
-    appOwnedPayloads: [
-      "bundled-agent/agent-release-manifest.json",
-      "bundled-agent/agent-update-manifest.json",
-      `bundled-agent/${agent.artifactName}`,
-      "bundled-agent/runtime/bun-version",
-    ],
-    rawTextIncluded: false,
+    bundledAgentArtifactName: agent.artifactName,
+    bundledAgentSha256: agent.sha256,
+    releaseManifestSha256,
+    updateManifestSha256,
+    managedRuntimeSha256,
+    releaseManifestsSha256: sha256Values([releaseManifestSha256, updateManifestSha256]),
+    runtimePackageDependenciesSha256: sha256Values([agent.sha256, managedRuntimeSha256]),
+    repairSourceSha256: sha256Values([
+      agent.sha256,
+      releaseManifestSha256,
+      updateManifestSha256,
+      managedRuntimeSha256,
+    ]),
   });
+  const dependencyClosureIssues = validateAppDependencyClosureManifest(dependencyClosure);
+  if (dependencyClosureIssues.length > 0) {
+    throw new Error(
+      `app dependency closure manifest is invalid: ${dependencyClosureIssues.join("; ")}`,
+    );
+  }
+  writeJson(join(resourceDir, "dependency-closure.json"), dependencyClosure);
   return {
     resourceDir,
     artifactName: agent.artifactName,
@@ -526,6 +538,38 @@ function packageDirectoryName(platform: AppReleasePlatform): string {
 
 function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function sha256Directory(path: string): string {
+  const hash = createHash("sha256");
+  for (const file of listFiles(path)) {
+    const label = file.slice(path.length + 1).replace(/\\/g, "/");
+    hash.update(label);
+    hash.update("\0");
+    hash.update(sha256File(file));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
+function listFiles(path: string): string[] {
+  const result: string[] = [];
+  for (const entry of readdirSync(path).sort()) {
+    const fullPath = join(path, entry);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) result.push(...listFiles(fullPath));
+    else if (stat.isFile()) result.push(fullPath);
+  }
+  return result;
+}
+
+function sha256Values(values: string[]): string {
+  const hash = createHash("sha256");
+  for (const value of values) {
+    hash.update(value);
+    hash.update("\0");
+  }
+  return hash.digest("hex");
 }
 
 function writeJson(path: string, value: unknown): void {

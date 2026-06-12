@@ -16,6 +16,17 @@ export type AppReleaseActivationPolicy =
   "platform-app-update-then-versioned-app-runtime";
 export type AppReleaseRollbackPolicy =
   "preserve-previous-app-managed-runtime";
+export type AppOwnedDependencyId =
+  | "electron-shell"
+  | "renderer-assets"
+  | "bootstrap-setup-ui"
+  | "bundled-agent-payload"
+  | "managed-runtime-payload"
+  | "runtime-package-dependencies"
+  | "local-setup-bridge"
+  | "release-manifests"
+  | "app-managed-runtime-home"
+  | "bundled-payload-repair-source";
 
 export interface AppReleaseProtocolCompatibility {
   protocol: "butler.app.v1";
@@ -27,6 +38,55 @@ export interface AppReleaseIntegrityMetadata {
   digestAlgorithm: "sha256";
   digest: string | null;
   signature: string | null;
+}
+
+export interface AppOwnedDependency {
+  id: AppOwnedDependencyId;
+  title: string;
+  requiredForFirstLaunch: boolean;
+  source: "app-bundle" | "signed-butler-payload" | "app-managed-runtime-home";
+  paths: string[];
+  integrity: AppReleaseIntegrityMetadata;
+  repairSource: "bundled-payload-repair-source" | null;
+}
+
+export interface AppRuntimePackageDependency {
+  id: "managed-bun-runtime";
+  path: "bundled-agent/runtime";
+  requiredForFirstLaunch: true;
+  repairSource: "bundled-payload-repair-source";
+}
+
+export interface AppDependencyClosureRepairSource {
+  id: "bundled-payload-repair-source";
+  source: "app-bundle";
+  paths: string[];
+  verification: "sha256";
+  integrity: AppReleaseIntegrityMetadata;
+}
+
+export interface AppDependencyClosureManifest {
+  schema: "butler.app-bundled-agent-dependency-closure.v1";
+  product: AppReleaseProduct;
+  gatewayProfile: AppReleaseGatewayProfile;
+  bundledAgentVersion: string;
+  payload: {
+    product: "butler-agent";
+    artifactName: string;
+    sha256: string;
+    integrity: AppReleaseIntegrityMetadata;
+  };
+  hostToolsRequiredForFirstLaunch: string[];
+  appOwnedDependencies: AppOwnedDependency[];
+  runtimePackageDependencies: AppRuntimePackageDependency[];
+  repairSources: AppDependencyClosureRepairSource[];
+  activation: {
+    verification: "sha256-before-activation";
+    target: "versioned-app-managed-runtime-home";
+    rollback: "preserve-previous-app-managed-runtime";
+  };
+  forbiddenDefaultSetupTools: string[];
+  rawTextIncluded: false;
 }
 
 export interface AppBundledAgentPayload {
@@ -123,6 +183,37 @@ const APP_RELEASE_FORBIDDEN_SERVICE_PATH_PREFIXES = [
 ] as const;
 
 const APP_BUNDLED_AGENT_RESOURCE_DIR = "bundled-agent";
+const APP_PACKAGED_RENDERER_DIST =
+  "packages/butler-agent/resources/app-client/dist";
+const APP_OWNED_DEPENDENCY_IDS: AppOwnedDependencyId[] = [
+  "electron-shell",
+  "renderer-assets",
+  "bootstrap-setup-ui",
+  "bundled-agent-payload",
+  "managed-runtime-payload",
+  "runtime-package-dependencies",
+  "local-setup-bridge",
+  "release-manifests",
+  "app-managed-runtime-home",
+  "bundled-payload-repair-source",
+];
+const APP_FORBIDDEN_DEFAULT_SETUP_TOOLS = [
+  "bun",
+  "node",
+  "npm",
+  "git",
+  "curl",
+  "wget",
+  "unzip",
+  "tar",
+  "brew",
+  "apt",
+  "dnf",
+  "yum",
+  "pacman",
+  "terminal",
+  "administrator",
+] as const;
 
 function readJson(path: string): Record<string, any> {
   return JSON.parse(readFileSync(path, "utf8"));
@@ -266,6 +357,241 @@ function createBundledAgentPayloadMetadata(
       signature: null,
     },
   };
+}
+
+export function createAppDependencyClosureManifest(input: {
+  bundledAgentVersion: string;
+  bundledAgentArtifactName: string;
+  bundledAgentSha256: string;
+  releaseManifestSha256: string;
+  updateManifestSha256: string;
+  managedRuntimeSha256: string;
+  releaseManifestsSha256: string;
+  runtimePackageDependenciesSha256: string;
+  repairSourceSha256: string;
+}): AppDependencyClosureManifest {
+  const payloadIntegrity: AppReleaseIntegrityMetadata = {
+    digestAlgorithm: "sha256",
+    digest: input.bundledAgentSha256,
+    signature: null,
+  };
+  const managedRuntimeIntegrity = sha256Integrity(input.managedRuntimeSha256);
+  const runtimePackageDependenciesIntegrity = sha256Integrity(
+    input.runtimePackageDependenciesSha256,
+  );
+  const releaseManifestsIntegrity = sha256Integrity(input.releaseManifestsSha256);
+  const repairSourceIntegrity = sha256Integrity(input.repairSourceSha256);
+  const repairSource: AppDependencyClosureRepairSource = {
+    id: "bundled-payload-repair-source",
+    source: "app-bundle",
+    paths: [
+      `bundled-agent/${input.bundledAgentArtifactName}`,
+      "bundled-agent/agent-release-manifest.json",
+      "bundled-agent/agent-update-manifest.json",
+      "bundled-agent/runtime",
+    ],
+    verification: "sha256",
+    integrity: repairSourceIntegrity,
+  };
+  return {
+    schema: "butler.app-bundled-agent-dependency-closure.v1",
+    product: "butler-app",
+    gatewayProfile: "electron",
+    bundledAgentVersion: input.bundledAgentVersion,
+    payload: {
+      product: "butler-agent",
+      artifactName: input.bundledAgentArtifactName,
+      sha256: input.bundledAgentSha256,
+      integrity: payloadIntegrity,
+    },
+    hostToolsRequiredForFirstLaunch: [],
+    appOwnedDependencies: [
+      ownedDependency("electron-shell", "Electron shell", [
+        "packages/butler-app/client/electron/package.json",
+        "packages/butler-app/client/electron/main.mjs",
+        "packages/butler-app/client/electron/preload.cjs",
+      ], null),
+      ownedDependency("renderer-assets", "Renderer assets", [
+        `bundled-agent/${input.bundledAgentArtifactName}!${APP_PACKAGED_RENDERER_DIST}`,
+        `bundled-agent/${input.bundledAgentArtifactName}!${APP_PACKAGED_RENDERER_DIST}/index.html`,
+      ], "bundled-payload-repair-source", payloadIntegrity),
+      ownedDependency("bootstrap-setup-ui", "Bootstrap setup UI", [
+        `bundled-agent/${input.bundledAgentArtifactName}!${APP_PACKAGED_RENDERER_DIST}`,
+      ], "bundled-payload-repair-source", payloadIntegrity),
+      ownedDependency("bundled-agent-payload", "Bundled Butler Agent payload", [
+        `bundled-agent/${input.bundledAgentArtifactName}`,
+      ], "bundled-payload-repair-source", payloadIntegrity),
+      ownedDependency("managed-runtime-payload", "Managed runtime payload", [
+        "bundled-agent/runtime",
+        "bundled-agent/runtime/bun-version",
+      ], "bundled-payload-repair-source", managedRuntimeIntegrity),
+      ownedDependency("runtime-package-dependencies", "Resolved runtime package dependencies", [
+        `bundled-agent/${input.bundledAgentArtifactName}`,
+        "bundled-agent/runtime",
+      ], "bundled-payload-repair-source", runtimePackageDependenciesIntegrity),
+      ownedDependency("local-setup-bridge", "Local setup bridge", [
+        "packages/butler-app/client/electron/setup-bridge.mjs",
+        "packages/butler-app/client/electron/app-agent-supervisor.mjs",
+      ], null),
+      ownedDependency("release-manifests", "Release manifests", [
+        "bundled-agent/agent-release-manifest.json",
+        "bundled-agent/agent-update-manifest.json",
+      ], "bundled-payload-repair-source", releaseManifestsIntegrity),
+      ownedDependency("app-managed-runtime-home", "App-managed runtime home layout", [
+        "$BUTLER_DATA/app/runtime/agent",
+      ], null),
+      ownedDependency("bundled-payload-repair-source", "Bundled payload repair source", repairSource.paths, null, repairSourceIntegrity),
+    ],
+    runtimePackageDependencies: [
+      {
+        id: "managed-bun-runtime",
+        path: "bundled-agent/runtime",
+        requiredForFirstLaunch: true,
+        repairSource: "bundled-payload-repair-source",
+      },
+    ],
+    repairSources: [repairSource],
+    activation: {
+      verification: "sha256-before-activation",
+      target: "versioned-app-managed-runtime-home",
+      rollback: "preserve-previous-app-managed-runtime",
+    },
+    forbiddenDefaultSetupTools: [...APP_FORBIDDEN_DEFAULT_SETUP_TOOLS],
+    rawTextIncluded: false,
+  };
+}
+
+function sha256Integrity(digest: string): AppReleaseIntegrityMetadata {
+  return {
+    digestAlgorithm: "sha256",
+    digest,
+    signature: null,
+  };
+}
+
+function ownedDependency(
+  id: AppOwnedDependencyId,
+  title: string,
+  paths: string[],
+  repairSource: "bundled-payload-repair-source" | null,
+  integrity: AppReleaseIntegrityMetadata = {
+    digestAlgorithm: "sha256",
+    digest: null,
+    signature: null,
+  },
+): AppOwnedDependency {
+  return {
+    id,
+    title,
+    requiredForFirstLaunch: true,
+    source: id === "app-managed-runtime-home"
+      ? "app-managed-runtime-home"
+      : repairSource
+        ? "signed-butler-payload"
+        : "app-bundle",
+    paths,
+    integrity,
+    repairSource,
+  };
+}
+
+export function validateAppDependencyClosureManifest(
+  manifest: AppDependencyClosureManifest,
+): string[] {
+  const issues: string[] = [];
+  if (manifest.schema !== "butler.app-bundled-agent-dependency-closure.v1") {
+    issues.push("dependency closure schema mismatch");
+  }
+  if (manifest.product !== "butler-app") {
+    issues.push("dependency closure product must be butler-app");
+  }
+  if (manifest.gatewayProfile !== "electron") {
+    issues.push("dependency closure gateway profile must be electron");
+  }
+  if (manifest.hostToolsRequiredForFirstLaunch.length > 0) {
+    issues.push("dependency closure must not require host first-launch tools");
+  }
+  if (manifest.payload?.product !== "butler-agent") {
+    issues.push("dependency closure payload product must be butler-agent");
+  }
+  if (!manifest.payload?.artifactName?.trim()) {
+    issues.push("dependency closure bundled Agent payload artifact is required");
+  }
+  if (!manifest.payload?.sha256?.trim()) {
+    issues.push("dependency closure bundled Agent payload sha256 is required");
+  }
+  if (
+    manifest.payload?.integrity?.digestAlgorithm !== "sha256" ||
+    !manifest.payload?.integrity?.digest?.trim()
+  ) {
+    issues.push("dependency closure bundled Agent payload digest is required");
+  }
+  const dependencyIds = new Set(manifest.appOwnedDependencies.map((item) => item.id));
+  for (const id of APP_OWNED_DEPENDENCY_IDS) {
+    if (!dependencyIds.has(id)) {
+      issues.push(`dependency closure missing app-owned dependency: ${id}`);
+    }
+  }
+  const rendererAssets = manifest.appOwnedDependencies.find((item) =>
+    item.id === "renderer-assets",
+  );
+  if (
+    rendererAssets?.source !== "signed-butler-payload" ||
+    !rendererAssets.paths.some((path) => path.includes(APP_PACKAGED_RENDERER_DIST))
+  ) {
+    issues.push("dependency closure renderer assets must come from packaged Agent app-client dist");
+  }
+  const bootstrapSetup = manifest.appOwnedDependencies.find((item) =>
+    item.id === "bootstrap-setup-ui",
+  );
+  if (
+    bootstrapSetup?.source !== "signed-butler-payload" ||
+    !bootstrapSetup.paths.some((path) => path.includes(APP_PACKAGED_RENDERER_DIST))
+  ) {
+    issues.push("dependency closure bootstrap setup UI must come from packaged Agent app-client dist");
+  }
+  for (const dependency of manifest.appOwnedDependencies) {
+    if (!dependency.paths.length) {
+      issues.push(`dependency closure ${dependency.id} must list paths`);
+    }
+    if (
+      dependency.source === "signed-butler-payload" &&
+      (
+        dependency.integrity?.digestAlgorithm !== "sha256" ||
+        !dependency.integrity?.digest?.trim()
+      )
+    ) {
+      issues.push(`dependency closure ${dependency.id} digest is required`);
+    }
+  }
+  if (!manifest.runtimePackageDependencies.some((item) =>
+    item.id === "managed-bun-runtime" &&
+    item.path === "bundled-agent/runtime" &&
+    item.requiredForFirstLaunch === true,
+  )) {
+    issues.push("dependency closure managed runtime dependency is required");
+  }
+  if (!manifest.repairSources.some((item) =>
+    item.id === "bundled-payload-repair-source" &&
+    item.source === "app-bundle" &&
+    item.verification === "sha256" &&
+    item.paths.length > 0 &&
+    item.integrity?.digestAlgorithm === "sha256" &&
+    Boolean(item.integrity?.digest?.trim()),
+  )) {
+    issues.push("dependency closure repair source is required");
+  }
+  if (
+    manifest.activation?.verification !== "sha256-before-activation" ||
+    manifest.activation?.target !== "versioned-app-managed-runtime-home" ||
+    manifest.activation?.rollback !== "preserve-previous-app-managed-runtime"
+  ) {
+    issues.push("dependency closure activation policy is invalid");
+  }
+  if (manifest.rawTextIncluded !== false) {
+    issues.push("dependency closure must not include raw text payloads");
+  }
+  return issues;
 }
 
 export function validateAppReleaseManifest(

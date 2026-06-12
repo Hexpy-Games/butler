@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { gunzipSync } from "node:zlib";
 
 export const APP_MANAGED_RUNTIME_SCHEMA = "butler.app-managed-agent-runtime.v1";
 export const APP_MANAGED_RUNTIME_POINTER_SCHEMA =
@@ -258,29 +258,9 @@ function runtimeHomeReady(runtimeHome) {
 }
 
 function validateAgentArchiveEntries(artifactPath) {
-  const listing = spawnSync("tar", ["-tzf", artifactPath], {
-    encoding: "utf8",
-    timeout: 30_000,
-  });
-  if (listing.status !== 0) {
-    throw new Error(summarizeProcessFailure(listing) || "bundled Agent artifact listing failed");
-  }
-  const entries = listing.stdout.split(/\r?\n/u).filter(Boolean);
+  const entries = readTarGzEntries(artifactPath);
   if (!entries.some((entry) => normalizeArchiveEntry(entry) === "bin/butler.js")) {
     throw new Error("bundled Agent artifact is missing bin/butler.js");
-  }
-  const verboseListing = spawnSync("tar", ["-tvzf", artifactPath], {
-    encoding: "utf8",
-    timeout: 30_000,
-  });
-  if (verboseListing.status !== 0) {
-    throw new Error(summarizeProcessFailure(verboseListing) || "bundled Agent artifact verbose listing failed");
-  }
-  for (const line of verboseListing.stdout.split(/\r?\n/u).filter(Boolean)) {
-    const entryType = line[0];
-    if (entryType !== "-" && entryType !== "d") {
-      throw new Error("bundled Agent artifact contains an unsafe entry type");
-    }
   }
   for (const entry of entries) {
     const normalized = normalizeArchiveEntry(entry);
@@ -292,13 +272,112 @@ function validateAgentArchiveEntries(artifactPath) {
 }
 
 function extractAgentArchive(artifactPath, runtimeHome) {
-  const extract = spawnSync("tar", ["-xzf", artifactPath, "-C", runtimeHome], {
-    encoding: "utf8",
-    timeout: 30_000,
-  });
-  if (extract.status !== 0) {
-    throw new Error(summarizeProcessFailure(extract) || "bundled Agent artifact extraction failed");
+  for (const entry of parseTarGz(artifactPath)) {
+    const normalized = normalizeArchiveEntry(entry.name);
+    if (!normalized) continue;
+    if (entry.type === "directory") {
+      mkdirSync(join(runtimeHome, normalized), { recursive: true });
+      continue;
+    }
+    const target = join(runtimeHome, normalized);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, entry.data, { mode: entry.mode || 0o644 });
   }
+}
+
+function readTarGzEntries(artifactPath) {
+  return parseTarGz(artifactPath).map((entry) => entry.name);
+}
+
+function parseTarGz(artifactPath) {
+  try {
+    return parseTarBuffer(gunzipSync(readFileSync(artifactPath)));
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("bundled Agent artifact")) {
+      throw error;
+    }
+    throw new Error("bundled Agent artifact extraction failed", { cause: error });
+  }
+}
+
+function parseTarBuffer(buffer) {
+  const entries = [];
+  let offset = 0;
+  let nextPath = null;
+  while (offset + 512 <= buffer.length) {
+    const header = buffer.subarray(offset, offset + 512);
+    offset += 512;
+    if (header.every((byte) => byte === 0)) break;
+
+    const size = parseOctal(header.subarray(124, 136));
+    const typeFlag = String.fromCharCode(header[156] || 0);
+    const data = buffer.subarray(offset, offset + size);
+    offset += Math.ceil(size / 512) * 512;
+
+    if (typeFlag === "L") {
+      nextPath = trimNull(data.toString("utf8"));
+      continue;
+    }
+    if (typeFlag === "x" || typeFlag === "g") {
+      const pax = parsePax(data);
+      if (typeFlag === "x" && typeof pax.path === "string") {
+        nextPath = pax.path;
+      }
+      continue;
+    }
+
+    const name = nextPath ?? tarHeaderPath(header);
+    nextPath = null;
+    const normalized = normalizeArchiveEntry(name);
+    if (!normalized) continue;
+    if (normalized.startsWith("/") || normalized.split("/").includes("..")) {
+      throw new Error("bundled Agent artifact contains an unsafe path");
+    }
+    if (typeFlag !== "0" && typeFlag !== "\0" && typeFlag !== "" && typeFlag !== "5") {
+      throw new Error("bundled Agent artifact contains an unsafe entry type");
+    }
+    entries.push({
+      name: normalized,
+      type: typeFlag === "5" ? "directory" : "file",
+      mode: parseOctal(header.subarray(100, 108)),
+      data,
+    });
+  }
+  return entries;
+}
+
+function tarHeaderPath(header) {
+  const name = trimNull(header.subarray(0, 100).toString("utf8"));
+  const prefix = trimNull(header.subarray(345, 500).toString("utf8"));
+  return prefix ? `${prefix}/${name}` : name;
+}
+
+function parseOctal(bytes) {
+  const text = trimNull(bytes.toString("utf8")).trim();
+  return text ? Number.parseInt(text, 8) : 0;
+}
+
+function parsePax(data) {
+  const result = {};
+  let cursor = 0;
+  const text = data.toString("utf8");
+  while (cursor < text.length) {
+    const space = text.indexOf(" ", cursor);
+    if (space < 0) break;
+    const length = Number.parseInt(text.slice(cursor, space), 10);
+    if (!Number.isFinite(length) || length <= 0) break;
+    const record = text.slice(space + 1, cursor + length - 1);
+    const equals = record.indexOf("=");
+    if (equals > 0) {
+      result[record.slice(0, equals)] = record.slice(equals + 1);
+    }
+    cursor += length;
+  }
+  return result;
+}
+
+function trimNull(value) {
+  return value.replace(/\0.*$/u, "");
 }
 
 function normalizeArchiveEntry(entry) {
@@ -339,15 +418,4 @@ function safeRuntimeVersionSegment(version) {
 
 function safeString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function summarizeProcessFailure(result) {
-  if (result.error) return result.error.message;
-  const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
-  if (stderr) return stderr.split(/\r?\n/u)[0] ?? stderr;
-  const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
-  if (stdout) return stdout.split(/\r?\n/u)[0] ?? stdout;
-  if (typeof result.status === "number") return `exit ${result.status}`;
-  if (result.signal) return `signal ${result.signal}`;
-  return "";
 }

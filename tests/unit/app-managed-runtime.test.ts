@@ -19,6 +19,8 @@ import {
   resolveAppManagedGatewayCommand,
 } from "../../packages/butler-app/client/electron/app-managed-runtime.mjs";
 
+const root = process.cwd();
+
 test("App-managed runtime activation writes an app-owned pointer only", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-"));
   try {
@@ -198,6 +200,16 @@ test("App-managed runtime rejects unsafe bundled Agent archive entries", () => {
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
+});
+
+test("App-managed runtime activation does not shell out to host tar", () => {
+  const source = readFileSync(
+    join(root, "packages", "butler-app", "client", "electron", "app-managed-runtime.mjs"),
+    "utf8",
+  );
+  expect(source).not.toContain("node:child_process");
+  expect(source).not.toContain('spawnSync("tar"');
+  expect(source).not.toContain('"tar", ["-xzf"');
 });
 
 test("App-managed gateway command uses App runtime instead of standalone BUTLER_HOME", () => {
