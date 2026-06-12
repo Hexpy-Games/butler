@@ -1026,6 +1026,48 @@ test("folder backed projects can contain multiple project sessions", async () =>
   }
 });
 
+test("session summaries do not require host git for project workspace metadata", async () => {
+  const workspaceRoot = join(tempDir, "project-workspace");
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    projectWorkspaceRoot: workspaceRoot,
+    port: 0,
+  });
+  try {
+    const project = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "No Git project",
+    });
+    const projectId = project.data.project.id as string;
+    const session = await postJson(`${server.url}sessions`, {
+      kind: "project",
+      project_id: projectId,
+      title: "Workspace summary",
+    });
+    const sessionId = session.data.session.id as string;
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=${encodeURIComponent(sessionId)}`,
+    );
+    expect(view.data.branch).toEqual({
+      available: false,
+      workspace_mode: "folder",
+      safe_status: "Project workspace",
+    });
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=${encodeURIComponent(sessionId)}`,
+    );
+    expect(summary.data.branch_info).toEqual({
+      available: false,
+      workspace_mode: "folder",
+      safe_status: "Project workspace",
+    });
+  } finally {
+    server.stop();
+  }
+});
+
 test("chat sessions can be renamed and archived through session routes", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),

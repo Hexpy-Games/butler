@@ -15,7 +15,6 @@ import {
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, join, resolve, sep } from "node:path";
-import { spawnSync } from "node:child_process";
 import {
   PERSONALIZATION_PROFILE_STORAGE_LABEL,
   readPersonalizationProfile,
@@ -6522,27 +6521,10 @@ export class AppServerStore {
         safe_status: "No project workspace",
       };
     }
-    const result = spawnSync(
-      "git",
-      ["-C", project.workspace_path, "branch", "--show-current"],
-      {
-        encoding: "utf8",
-        timeout: 1000,
-      },
-    );
-    const branch = result.status === 0 ? result.stdout.trim() : "";
-    if (!branch) {
-      return {
-        available: false,
-        workspace_mode: "folder",
-        safe_status: "Folder workspace",
-      };
-    }
     return {
-      available: true,
-      workspace_mode: "git",
-      branch_name: branch,
-      safe_status: "Git branch available",
+      available: false,
+      workspace_mode: "folder",
+      safe_status: "Project workspace",
     };
   }
 
