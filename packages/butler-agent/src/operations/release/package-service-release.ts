@@ -395,6 +395,21 @@ function createUpdateManifest(
         build_target: launcher.buildTarget,
       })),
     app_web_client_dist: manifest.appWebClientDist,
+    agent_artifact_layout: {
+      executable: manifest.agentArtifactLayout.executable,
+      runtime_resolver: manifest.agentArtifactLayout.runtimeResolver,
+      runtime_payload: manifest.agentArtifactLayout.runtimePayload,
+      config_templates: manifest.agentArtifactLayout.configTemplates,
+      service_templates: manifest.agentArtifactLayout.serviceTemplates,
+      manifest_path: manifest.agentArtifactLayout.manifestPath,
+    },
+    operator_commands: manifest.operatorCommands,
+    operator_command_map: Object.fromEntries(
+      Object.entries(manifest.operatorCommandMap).map(([command, argv]) => [
+        command,
+        argv,
+      ]),
+    ),
   };
 }
 

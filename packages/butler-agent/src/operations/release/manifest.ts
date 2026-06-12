@@ -14,6 +14,8 @@ export type ReleasePayloadFormat = "agent-archive";
 export type ReleaseStagingPolicy = "butler-data-updates";
 export type ReleaseActivationPolicy = "versioned-standalone-runtime";
 export type ReleaseRollbackPolicy = "preserve-previous-standalone-runtime";
+export type ReleaseOperatorCommand = "init" | "start" | "status" | "stop" | "doctor";
+export type ReleaseOperatorCommandMap = Record<ReleaseOperatorCommand, string[]>;
 
 export interface ReleaseProtocolCompatibility {
   protocol: "butler.agent.v1";
@@ -25,6 +27,15 @@ export interface ReleaseIntegrityMetadata {
   digestAlgorithm: "sha256";
   digest: string | null;
   signature: string | null;
+}
+
+export interface AgentArtifactLayout {
+  executable: string;
+  runtimeResolver: string;
+  runtimePayload: string;
+  configTemplates: string[];
+  serviceTemplates: string[];
+  manifestPath: string;
 }
 export const SERVICE_CLI_LAUNCHER_PLATFORMS = [
   "darwin-arm64",
@@ -63,6 +74,9 @@ export interface ReleaseComponent {
   stagingPolicy: ReleaseStagingPolicy;
   activationPolicy: ReleaseActivationPolicy;
   rollbackPolicy: ReleaseRollbackPolicy;
+  artifactLayout: AgentArtifactLayout;
+  operatorCommands: ReleaseOperatorCommand[];
+  operatorCommandMap: ReleaseOperatorCommandMap;
 }
 
 export interface ReleaseArtifact {
@@ -107,6 +121,9 @@ export interface ReleaseManifest {
   privateDataPatterns: string[];
   components: ReleaseComponent[];
   artifacts: ReleaseArtifact[];
+  agentArtifactLayout: AgentArtifactLayout;
+  operatorCommands: ReleaseOperatorCommand[];
+  operatorCommandMap: ReleaseOperatorCommandMap;
 }
 
 export interface ComponentVersions {
@@ -116,6 +133,31 @@ export interface ComponentVersions {
 const SERVICE_RELEASE_FORBIDDEN_APP_PATH_PREFIXES = [
   "packages/butler-app/",
 ] as const;
+const AGENT_ARTIFACT_LAYOUT: AgentArtifactLayout = {
+  executable: "bin/butler.js",
+  runtimeResolver: "packages/butler-agent/scripts/start-butler.sh",
+  runtimePayload: "packages/butler-agent",
+  configTemplates: ["butler.config.template.json"],
+  serviceTemplates: [
+    "deploy/agent/templates/launchd.plist.template",
+    "deploy/agent/templates/systemd.service.template",
+  ],
+  manifestPath: "agent-release-manifest.json",
+};
+const AGENT_OPERATOR_COMMANDS: ReleaseOperatorCommand[] = [
+  "init",
+  "start",
+  "status",
+  "stop",
+  "doctor",
+];
+const AGENT_OPERATOR_COMMAND_MAP: ReleaseOperatorCommandMap = {
+  init: ["butler", "install"],
+  start: ["butler", "start"],
+  status: ["butler", "status"],
+  stop: ["butler", "stop"],
+  doctor: ["butler", "doctor"],
+};
 
 function readJson(path: string): Record<string, any> {
   return JSON.parse(readFileSync(path, "utf8"));
@@ -152,6 +194,7 @@ export function createReleaseManifest(root: string): ReleaseManifest {
     "butler.config.template.json",
     "LICENSE",
     "deploy/agent",
+    "deploy/agent/templates",
     "packages/butler-agent/src/agent",
     "packages/butler-agent/src/gateways",
     "packages/butler-agent/src/integrations",
@@ -193,6 +236,9 @@ export function createReleaseManifest(root: string): ReleaseManifest {
     stagingPolicy: "butler-data-updates",
     activationPolicy: "versioned-standalone-runtime",
     rollbackPolicy: "preserve-previous-standalone-runtime",
+    artifactLayout: AGENT_ARTIFACT_LAYOUT,
+    operatorCommands: AGENT_OPERATOR_COMMANDS,
+    operatorCommandMap: AGENT_OPERATOR_COMMAND_MAP,
   }];
   return {
     name: String(pkg.name ?? ""),
@@ -244,6 +290,9 @@ export function createReleaseManifest(root: string): ReleaseManifest {
       activationPolicy: "versioned-standalone-runtime",
       rollbackPolicy: "preserve-previous-standalone-runtime",
     })),
+    agentArtifactLayout: AGENT_ARTIFACT_LAYOUT,
+    operatorCommands: AGENT_OPERATOR_COMMANDS,
+    operatorCommandMap: AGENT_OPERATOR_COMMAND_MAP,
   };
 }
 
@@ -285,6 +334,9 @@ export function validateReleaseManifest(
   validateNoAppInternals(manifest.requiredFiles, issues);
   validatePrivatePatterns(root, manifest.privateDataPatterns, issues);
   validateCliLaunchers(manifest.cliLaunchers, issues);
+  validateAgentArtifactLayout(root, "release", manifest.agentArtifactLayout, issues);
+  validateOperatorCommands("release", manifest.operatorCommands, issues);
+  validateOperatorCommandMap("release", manifest.operatorCommandMap, issues);
   validateComponents(root, manifest, versions, issues);
   validateArtifacts(manifest, issues);
   return issues;
@@ -368,6 +420,9 @@ function validateComponents(
       issues,
     );
     validateReleaseOperationMetadata(`component ${component.id}`, component, issues);
+    validateAgentArtifactLayout(root, `component ${component.id}`, component.artifactLayout, issues);
+    validateOperatorCommands(`component ${component.id}`, component.operatorCommands, issues);
+    validateOperatorCommandMap(`component ${component.id}`, component.operatorCommandMap, issues);
     validateRequiredFiles(root, component.requiredFiles, issues);
     validateNoAppInternals(component.requiredFiles, issues);
     validatePrivatePatterns(root, component.privateDataPatterns, issues);
@@ -376,6 +431,80 @@ function validateComponents(
   const service = components.get("service");
   if (service && !sameComponentSet(service.bundledComponents, ["service"])) {
     issues.push("Butler Agent component must not bundle app");
+  }
+}
+
+function validateAgentArtifactLayout(
+  root: string,
+  label: string,
+  layout: AgentArtifactLayout | undefined,
+  issues: string[],
+): void {
+  if (!layout) {
+    issues.push(`${label} artifact layout is required`);
+    return;
+  }
+  if (layout.executable !== "bin/butler.js") {
+    issues.push(`${label} artifact layout executable must be bin/butler.js`);
+  }
+  if (layout.runtimeResolver !== "packages/butler-agent/scripts/start-butler.sh") {
+    issues.push(`${label} artifact layout runtime resolver mismatch`);
+  }
+  if (layout.runtimePayload !== "packages/butler-agent") {
+    issues.push(`${label} artifact layout runtime payload mismatch`);
+  }
+  if (!sameComponentSet(layout.configTemplates, ["butler.config.template.json"])) {
+    issues.push(`${label} artifact layout must include config templates`);
+  }
+  if (
+    !sameComponentSet(layout.serviceTemplates, [
+      "deploy/agent/templates/launchd.plist.template",
+      "deploy/agent/templates/systemd.service.template",
+    ])
+  ) {
+    issues.push(`${label} artifact layout must include service templates`);
+  }
+  if (layout.manifestPath !== "agent-release-manifest.json") {
+    issues.push(`${label} artifact layout manifest path mismatch`);
+  }
+  for (const file of [
+    layout.executable,
+    layout.runtimeResolver,
+    layout.runtimePayload,
+    ...layout.configTemplates,
+    ...layout.serviceTemplates,
+  ]) {
+    if (!existsSync(join(root, file))) {
+      issues.push(`${label} artifact layout file is missing: ${file}`);
+    }
+  }
+}
+
+function validateOperatorCommands(
+  label: string,
+  commands: ReleaseOperatorCommand[] | undefined,
+  issues: string[],
+): void {
+  if (!sameComponentSet(commands ?? [], AGENT_OPERATOR_COMMANDS)) {
+    issues.push(`${label} operator commands must include init/start/status/stop/doctor`);
+  }
+}
+
+function validateOperatorCommandMap(
+  label: string,
+  commandMap: ReleaseOperatorCommandMap | undefined,
+  issues: string[],
+): void {
+  if (!commandMap) {
+    issues.push(`${label} operator command map is required`);
+    return;
+  }
+  for (const command of AGENT_OPERATOR_COMMANDS) {
+    const expected = AGENT_OPERATOR_COMMAND_MAP[command];
+    const actual = commandMap[command];
+    if (!Array.isArray(actual) || actual.join(" ") !== expected.join(" ")) {
+      issues.push(`${label} operator command ${command} must map to ${expected.join(" ")}`);
+    }
   }
 }
 
