@@ -45,6 +45,8 @@ export function resolveAppManagedGatewayCommand(input?: {
   command: string;
   args: string[];
   cwd: string;
+  appManaged: true;
+  bundledAgentVersion: string;
   env: Record<string, string>;
   commitActivation: () => void;
 } | null;

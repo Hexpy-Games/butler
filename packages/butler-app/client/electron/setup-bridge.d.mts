@@ -29,6 +29,17 @@ export interface FirstRunSetupBridge {
 export function createFirstRunSetupBridge(input: {
   ensureReady: () => Promise<void>;
   gatewayProfile?: "electron";
+  readRuntimeDiagnostics?: () => {
+    phase?: string;
+    bundled_agent?: {
+      source?: string;
+      version_configured?: boolean;
+    };
+    local_auth?: {
+      required?: boolean;
+      token_configured?: boolean;
+    };
+  };
   readSettings: () => Promise<{
     bridge_mode?: string;
     gateway_profile?: string;

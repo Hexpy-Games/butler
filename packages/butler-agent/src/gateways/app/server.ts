@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
@@ -107,6 +108,15 @@ export interface CreateAppServerOptions {
   responderTimeoutMs?: number;
   messageRateLimit?: MessageRateLimitOptions;
   automationSchedulerIntervalMs?: number | false;
+  localAuth?: {
+    required?: boolean;
+    token?: string | null;
+  };
+}
+
+interface LocalAuthConfig {
+  required: boolean;
+  token: string | null;
 }
 
 export interface AppServerHandle {
@@ -198,6 +208,7 @@ export function createAppServer(
   const devCorsOrigin = normalizeLocalHttpOrigin(
     options.devCorsOrigin ?? DEFAULT_DEV_CORS_ORIGIN,
   );
+  const localAuth = normalizeLocalAuth(options.localAuth);
   let automationSchedulerRunning = false;
   const server = Bun.serve({
     port,
@@ -211,7 +222,7 @@ export function createAppServer(
           headers: {
             ...corsHeaders,
             "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS",
-            "access-control-allow-headers": "content-type",
+            "access-control-allow-headers": "authorization, content-type",
             "access-control-max-age": "600",
           },
         });
@@ -224,6 +235,7 @@ export function createAppServer(
           responder: options.responder,
           responderTimeoutMs,
           messageRateLimiter,
+          localAuth,
         });
         return withExtraHeaders(response, corsHeaders);
       } catch (error) {
@@ -379,8 +391,10 @@ async function routeRequest(input: {
   responder?: AppMessageResponder;
   responderTimeoutMs: number;
   messageRateLimiter: FixedWindowRateLimiter;
+  localAuth: LocalAuthConfig;
 }): Promise<Response> {
   const url = new URL(input.request.url);
+  enforceLocalAuth(input.request, input.localAuth);
 
   if (
     input.request.method === "GET" &&
@@ -1381,6 +1395,56 @@ async function routeRequest(input: {
     return await serveStatic(input.uiRoot, url.pathname);
   }
   return json(apiError("not_found", "Route not found."), 404);
+}
+
+function normalizeLocalAuth(
+  input: CreateAppServerOptions["localAuth"],
+): LocalAuthConfig {
+  return {
+    required: input?.required === true,
+    token: safeString(input?.token) ?? null,
+  };
+}
+
+function enforceLocalAuth(
+  request: Request,
+  localAuth: LocalAuthConfig,
+): void {
+  if (!localAuth.required) return;
+  if (isStaticUiRequest(request)) return;
+  if (!localAuth.token) {
+    throw new RequestError(
+      503,
+      "local_auth_unconfigured",
+      "Butler App local auth is not configured.",
+    );
+  }
+  const header = request.headers.get("authorization") ?? "";
+  const match = /^Bearer\s+(.+)$/iu.exec(header);
+  if (!match || !constantTimeTokenEqual(match[1] ?? "", localAuth.token)) {
+    throw new RequestError(
+      401,
+      "local_auth_required",
+      "Butler App local auth is required.",
+    );
+  }
+}
+
+function isStaticUiRequest(request: Request): boolean {
+  if (request.method !== "GET") return false;
+  const pathname = new URL(request.url).pathname;
+  if (pathname === "/") return true;
+  const extension = extname(pathname);
+  return Boolean(extension && MIME_TYPES[extension]);
+}
+
+function constantTimeTokenEqual(actual: string, expected: string): boolean {
+  const actualBuffer = Buffer.from(actual, "utf8");
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  return (
+    actualBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(actualBuffer, expectedBuffer)
+  );
 }
 
 async function parseJson(request: Request): Promise<unknown> {

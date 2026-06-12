@@ -200,6 +200,8 @@ export function resolveAppManagedGatewayCommand({
     command: runtime,
     args: [launcher, "gateway", "app"],
     cwd: activation.runtimeHome,
+    appManaged: true,
+    bundledAgentVersion: activation.version,
     env: {
       BUTLER_HOME: activation.runtimeHome,
       BUTLER_APP_BUTLER_HOME: activation.runtimeHome,

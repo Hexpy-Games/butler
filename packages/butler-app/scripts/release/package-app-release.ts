@@ -20,9 +20,6 @@ import {
   type AppReleaseManifest,
   type AppReleasePlatform,
 } from "./manifest.ts";
-import {
-  createServiceReleasePackage,
-} from "../../../butler-agent/src/operations/release/package-service-release.ts";
 
 export interface AppReleasePackageOptions {
   root: string;
@@ -219,7 +216,7 @@ function runElectronPackager(
 function prepareBundledAgentResource(root: string, workDir: string): BundledAgentResource {
   const agentOutDir = join(workDir, "agent-release");
   const resourceDir = join(workDir, "bundled-agent");
-  const agent = createServiceReleasePackage({
+  const agent = createAgentReleasePackage({
     root,
     outDir: agentOutDir,
     artifactBaseUrl: "bundled-agent",
@@ -257,6 +254,57 @@ function prepareBundledAgentResource(root: string, workDir: string): BundledAgen
     sha256: agent.sha256,
     version: agent.version,
   };
+}
+
+function createAgentReleasePackage(input: {
+  root: string;
+  outDir: string;
+  artifactBaseUrl: string;
+}): {
+  artifactPath: string;
+  releaseManifestPath: string;
+  updateManifestPath: string;
+  artifactName: string;
+  sha256: string;
+  version: string;
+} {
+  const bun = process.env.BUTLER_BUN || "bun";
+  const result = spawnSync(bun, [
+    "run",
+    "--silent",
+    join("deploy", "agent", "package-agent.ts"),
+    "--json",
+    "--out",
+    input.outDir,
+    "--artifact-base-url",
+    input.artifactBaseUrl,
+  ], {
+    cwd: input.root,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `bundled Agent package failed: ${
+        summarizeCommandOutput(result.stderr || result.stdout) || "unknown error"
+      }`,
+    );
+  }
+  try {
+    const parsed = JSON.parse(result.stdout);
+    if (
+      typeof parsed?.artifactPath === "string" &&
+      typeof parsed?.releaseManifestPath === "string" &&
+      typeof parsed?.updateManifestPath === "string" &&
+      typeof parsed?.artifactName === "string" &&
+      typeof parsed?.sha256 === "string" &&
+      typeof parsed?.version === "string"
+    ) {
+      return parsed;
+    }
+  } catch {
+    // Report a stable packaging error below without leaking full command output.
+  }
+  throw new Error("bundled Agent package did not return a valid JSON manifest");
 }
 
 function withBundledAgentMetadata(
@@ -483,6 +531,10 @@ function sha256File(path: string): string {
 function writeJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function summarizeCommandOutput(output: string): string {
+  return output.trim().split(/\r?\n/u).slice(-8).join("\n").slice(0, 4000);
 }
 
 function assertSupportedPlatforms(platforms: AppReleasePlatform[]): void {
