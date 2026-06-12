@@ -78,6 +78,23 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
     stagingPolicy: "butler-data-updates",
     activationPolicy: "versioned-standalone-runtime",
     rollbackPolicy: "preserve-previous-standalone-runtime",
+    artifactLayout: {
+      executable: "bin/butler.js",
+      runtimeResolver: "packages/butler-agent/scripts/start-butler.sh",
+      configTemplates: ["butler.config.template.json"],
+      serviceTemplates: [
+        "deploy/agent/templates/launchd.plist.template",
+        "deploy/agent/templates/systemd.service.template",
+      ],
+    },
+    operatorCommands: ["init", "start", "status", "stop", "doctor"],
+    operatorCommandMap: {
+      init: ["butler", "install"],
+      start: ["butler", "start"],
+      status: ["butler", "status"],
+      stop: ["butler", "stop"],
+      doctor: ["butler", "doctor"],
+    },
   });
   expect(manifest.artifacts[0]).toMatchObject({
     product: "butler-agent",
@@ -117,6 +134,26 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
   expect(manifest.requiredFiles).toContain("packages/butler-agent/scripts");
   expect(manifest.requiredFiles).toContain("packages/butler-agent/resources");
   expect(manifest.requiredFiles).toContain("packages/project-ledger");
+  expect(manifest.requiredFiles).toContain("deploy/agent/templates");
+  expect(manifest.agentArtifactLayout).toMatchObject({
+    executable: "bin/butler.js",
+    runtimeResolver: "packages/butler-agent/scripts/start-butler.sh",
+    configTemplates: ["butler.config.template.json"],
+    serviceTemplates: [
+      "deploy/agent/templates/launchd.plist.template",
+      "deploy/agent/templates/systemd.service.template",
+    ],
+    manifestPath: "agent-release-manifest.json",
+  });
+  expect(manifest.operatorCommands).toEqual([
+    "init",
+    "start",
+    "status",
+    "stop",
+    "doctor",
+  ]);
+  expect(manifest.operatorCommandMap.init).toEqual(["butler", "install"]);
+  expect(manifest.operatorCommandMap.doctor).toEqual(["butler", "doctor"]);
   expect(
     manifest.components.flatMap((component) => component.requiredFiles),
   ).not.toContain("packages/butler-app/client/electron/package.json");
@@ -244,6 +281,15 @@ test("release manifest validation rejects missing two-product schema fields", ()
     integrity: undefined as any,
     stagingPolicy: "shell-download" as any,
   }));
+  brokenAgent.agentArtifactLayout = {
+    ...brokenAgent.agentArtifactLayout,
+    serviceTemplates: [],
+  } as any;
+  brokenAgent.operatorCommands = ["status"] as any;
+  brokenAgent.operatorCommandMap = {
+    ...brokenAgent.operatorCommandMap,
+    init: ["butler", "init"],
+  } as any;
   expect(validateServiceReleaseManifest(root, brokenAgent)).toEqual(
     expect.arrayContaining([
       "release product must be butler-agent",
@@ -254,6 +300,9 @@ test("release manifest validation rejects missing two-product schema fields", ()
       "artifact service profile must be agent-standalone",
       "artifact service integrity metadata is required",
       "artifact service staging policy must be butler-data-updates",
+      "release artifact layout must include service templates",
+      "release operator commands must include init/start/status/stop/doctor",
+      "release operator command init must map to butler install",
     ]),
   );
 
@@ -370,6 +419,8 @@ test("agent release packager creates an installable artifact with app web client
     expect(entries).toContain("./deploy/agent/package-agent.ts");
     expect(entries).toContain("./deploy/agent/release-gate.ts");
     expect(entries).toContain("./deploy/agent/smoke.ts");
+    expect(entries).toContain("./deploy/agent/templates/launchd.plist.template");
+    expect(entries).toContain("./deploy/agent/templates/systemd.service.template");
     expect(entries).toContain(`./${currentCliLauncher}`);
     expect(entries).toContain("./packages/butler-agent/scripts/service-control.sh");
     expect(entries).toContain("./packages/project-ledger/bin/project-ledger");
@@ -396,6 +447,12 @@ test("agent release packager creates an installable artifact with app web client
       expect(
         readText(join(extractDir, SERVICE_APP_WEB_CLIENT_DIST, "index.html")),
       ).toContain("<title>Butler</title>");
+      expect(
+        readText(join(extractDir, "deploy/agent/templates/systemd.service.template")),
+      ).toContain("butler.js service run");
+      expect(
+        readText(join(extractDir, "deploy/agent/templates/launchd.plist.template")),
+      ).toContain("<string>run</string>");
       const prebuiltHelp = spawnSync(join(extractDir, currentCliLauncher), ["--help"], {
         cwd: extractDir,
         encoding: "utf8",
@@ -452,6 +509,23 @@ test("agent release packager creates an installable artifact with app web client
       build_target: `bun-${currentCliPlatform}`,
     });
     expect(updateManifest.app_web_client_dist).toBe(SERVICE_APP_WEB_CLIENT_DIST);
+    expect(updateManifest.agent_artifact_layout).toMatchObject({
+      executable: "bin/butler.js",
+      runtime_resolver: "packages/butler-agent/scripts/start-butler.sh",
+      service_templates: [
+        "deploy/agent/templates/launchd.plist.template",
+        "deploy/agent/templates/systemd.service.template",
+      ],
+    });
+    expect(updateManifest.operator_commands).toEqual([
+      "init",
+      "start",
+      "status",
+      "stop",
+      "doctor",
+    ]);
+    expect(updateManifest.operator_command_map.init).toEqual(["butler", "install"]);
+    expect(updateManifest.operator_command_map.start).toEqual(["butler", "start"]);
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }

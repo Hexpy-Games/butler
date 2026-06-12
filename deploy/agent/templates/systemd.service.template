@@ -1,0 +1,15 @@
+[Unit]
+Description=Butler Agent
+After=network.target
+
+[Service]
+Type=simple
+Environment=BUTLER_HOME={{BUTLER_HOME}}
+Environment=BUTLER_DATA={{BUTLER_DATA}}
+ExecStart={{BUTLER_HOME}}/bin/butler.js service run
+Restart=on-failure
+RestartSec=5
+WorkingDirectory={{BUTLER_HOME}}
+
+[Install]
+WantedBy=default.target

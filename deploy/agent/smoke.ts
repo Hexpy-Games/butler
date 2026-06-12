@@ -33,6 +33,8 @@ for (const requiredEntry of [
   "./package.json",
   "./bin/butler.js",
   "./deploy/agent/package-agent.ts",
+  "./deploy/agent/templates/launchd.plist.template",
+  "./deploy/agent/templates/systemd.service.template",
   "./packages/butler-agent/resources/app-client/dist/index.html",
 ]) {
   if (!listing.stdout.includes(requiredEntry)) {
@@ -50,6 +52,27 @@ if (releaseManifest.product !== "butler-agent") {
 }
 if (!Array.isArray(updateManifest.artifacts) || updateManifest.artifacts[0]?.product !== "butler-agent") {
   throw new Error("Agent update manifest does not expose a Butler Agent artifact");
+}
+if (releaseManifest.agentArtifactLayout?.executable !== "bin/butler.js") {
+  throw new Error("Agent release manifest is missing standalone artifact layout");
+}
+if (!releaseManifest.agentArtifactLayout?.serviceTemplates?.includes("deploy/agent/templates/systemd.service.template")) {
+  throw new Error("Agent release manifest is missing service templates");
+}
+if (!releaseManifest.operatorCommands?.includes("doctor")) {
+  throw new Error("Agent release manifest is missing operator commands");
+}
+if (releaseManifest.operatorCommandMap?.init?.join(" ") !== "butler install") {
+  throw new Error("Agent release manifest init command does not map to butler install");
+}
+if (updateManifest.agent_artifact_layout?.runtime_resolver !== "packages/butler-agent/scripts/start-butler.sh") {
+  throw new Error("Agent update manifest is missing runtime resolver metadata");
+}
+if (!updateManifest.operator_commands?.includes("start")) {
+  throw new Error("Agent update manifest is missing operator command metadata");
+}
+if (updateManifest.operator_command_map?.doctor?.join(" ") !== "butler doctor") {
+  throw new Error("Agent update manifest is missing runnable doctor command metadata");
 }
 
 console.log(`Butler Agent release smoke passed: ${basename(artifactPath)}`);
