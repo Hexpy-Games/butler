@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -19,6 +20,9 @@ import {
   type AppReleaseManifest,
   type AppReleasePlatform,
 } from "./manifest.ts";
+import {
+  createServiceReleasePackage,
+} from "../../../butler-agent/src/operations/release/package-service-release.ts";
 
 export interface AppReleasePackageOptions {
   root: string;
@@ -39,6 +43,13 @@ export interface AppReleasePackageResult {
   artifacts: AppReleasePackageArtifact[];
   releaseManifestPath: string;
   updateManifestPath: string;
+  version: string;
+}
+
+interface BundledAgentResource {
+  resourceDir: string;
+  artifactName: string;
+  sha256: string;
   version: string;
 }
 
@@ -73,6 +84,7 @@ export function createAppReleasePackage(
 
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-release-"));
   try {
+    const bundledAgent = prepareBundledAgentResource(root, workDir);
     const artifacts = platforms.map((platform) =>
       packagePlatform({
         root,
@@ -80,10 +92,11 @@ export function createAppReleasePackage(
         workDir,
         platform,
         manifest,
+        bundledAgentResourceDir: bundledAgent.resourceDir,
       }),
     );
     const releaseManifest = withArtifactMetadata(
-      manifest,
+      withBundledAgentMetadata(manifest, bundledAgent),
       artifacts,
       options.artifactBaseUrl,
     );
@@ -110,6 +123,7 @@ function packagePlatform(input: {
   workDir: string;
   platform: AppReleasePlatform;
   manifest: AppReleaseManifest;
+  bundledAgentResourceDir: string;
 }): AppReleasePackageArtifact {
   if (input.platform === "darwin-arm64" && process.platform !== "darwin") {
     throw new Error("darwin-arm64 app releases must be packaged on macOS for signing");
@@ -121,7 +135,12 @@ function packagePlatform(input: {
 
   const packageOut = join(input.workDir, input.platform);
   mkdirSync(packageOut, { recursive: true });
-  runElectronPackager(input.root, packageOut, input.platform);
+  runElectronPackager(
+    input.root,
+    packageOut,
+    input.platform,
+    input.bundledAgentResourceDir,
+  );
   const packagedDir = join(packageOut, packageDirectoryName(input.platform));
   if (!existsSync(packagedDir)) {
     throw new Error(`electron package directory was not created: ${packagedDir}`);
@@ -155,6 +174,7 @@ function runElectronPackager(
   root: string,
   outDir: string,
   platform: AppReleasePlatform,
+  bundledAgentResourceDir: string,
 ): void {
   const packager = process.env.BUTLER_APP_PACKAGER ||
     join(root, ELECTRON_ROOT, "node_modules", ".bin", "electron-packager");
@@ -180,6 +200,7 @@ function runElectronPackager(
     `--icon=${packagerIconPath}`,
     `--app-bundle-id=${MAC_APP_BUNDLE_IDENTIFIER}`,
     `--helper-bundle-id=${MAC_HELPER_BUNDLE_IDENTIFIER}`,
+    `--extra-resource=${bundledAgentResourceDir}`,
     "--ignore=^/dist($|/)",
     "--quiet",
   ], {
@@ -193,6 +214,80 @@ function runElectronPackager(
       }`,
     );
   }
+}
+
+function prepareBundledAgentResource(root: string, workDir: string): BundledAgentResource {
+  const agentOutDir = join(workDir, "agent-release");
+  const resourceDir = join(workDir, "bundled-agent");
+  const agent = createServiceReleasePackage({
+    root,
+    outDir: agentOutDir,
+    artifactBaseUrl: "bundled-agent",
+  });
+  mkdirSync(resourceDir, { recursive: true });
+  copyFileSync(agent.artifactPath, join(resourceDir, agent.artifactName));
+  copyFileSync(agent.releaseManifestPath, join(resourceDir, "agent-release-manifest.json"));
+  copyFileSync(agent.updateManifestPath, join(resourceDir, "agent-update-manifest.json"));
+  cpSync(
+    join(root, "packages", "butler-agent", "resources", "runtime"),
+    join(resourceDir, "runtime"),
+    { recursive: true },
+  );
+  writeJson(join(resourceDir, "dependency-closure.json"), {
+    schema: "butler.app-bundled-agent-dependency-closure.v1",
+    product: "butler-app",
+    bundledAgentVersion: agent.version,
+    payload: {
+      product: "butler-agent",
+      artifactName: agent.artifactName,
+      sha256: agent.sha256,
+    },
+    hostToolsRequiredForFirstLaunch: [],
+    appOwnedPayloads: [
+      "bundled-agent/agent-release-manifest.json",
+      "bundled-agent/agent-update-manifest.json",
+      `bundled-agent/${agent.artifactName}`,
+      "bundled-agent/runtime/bun-version",
+    ],
+    rawTextIncluded: false,
+  });
+  return {
+    resourceDir,
+    artifactName: agent.artifactName,
+    sha256: agent.sha256,
+    version: agent.version,
+  };
+}
+
+function withBundledAgentMetadata(
+  manifest: AppReleaseManifest,
+  bundledAgent: BundledAgentResource,
+): AppReleaseManifest {
+  const payload = {
+    ...manifest.bundledAgentPayload,
+    version: bundledAgent.version,
+    artifactName: bundledAgent.artifactName,
+    resourcePath: `bundled-agent/${bundledAgent.artifactName}`,
+    integrity: {
+      ...manifest.bundledAgentPayload.integrity,
+      digest: bundledAgent.sha256,
+    },
+  };
+  return {
+    ...manifest,
+    bundledAgentVersion: bundledAgent.version,
+    bundledAgentPayload: payload,
+    components: manifest.components.map((component) => ({
+      ...component,
+      bundledAgentVersion: bundledAgent.version,
+      bundledAgentPayload: payload,
+    })),
+    artifacts: manifest.artifacts.map((artifact) => ({
+      ...artifact,
+      bundledAgentVersion: bundledAgent.version,
+      bundledAgentPayload: payload,
+    })),
+  };
 }
 
 function verifyMacBundleIcon(root: string, appBundle: string): void {
@@ -352,6 +447,7 @@ function createAppUpdateManifest(manifest: AppReleaseManifest): Record<string, u
       product: artifact.product,
       gateway_profile: artifact.gatewayProfile,
       bundled_agent_version: artifact.bundledAgentVersion,
+      bundled_agent_payload: artifact.bundledAgentPayload,
       protocol_compatibility: artifact.protocolCompatibility,
       integrity: artifact.integrity,
       update_policy: artifact.updatePolicy,
