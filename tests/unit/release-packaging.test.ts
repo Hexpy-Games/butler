@@ -370,6 +370,43 @@ test("app release gate rejects unchanged App version when bundled Agent changes"
   }
 });
 
+test("app release metadata ships bundled-Agent-only changes as a new App artifact", () => {
+  const manifest = createAppReleaseManifest(root);
+  const previousBundledAgentOnlyBaseline = {
+    version: "0.0.0",
+    bundledAgentVersion: "0.0.0",
+  };
+
+  expect(
+    validateAppReleaseVersionCoupling(manifest, previousBundledAgentOnlyBaseline),
+  ).toEqual([]);
+  expect(
+    validateAppReleaseVersionCoupling(manifest, {
+      version: manifest.version,
+      bundledAgentVersion: previousBundledAgentOnlyBaseline.bundledAgentVersion,
+    }),
+  ).toEqual(["app release version must change when bundled Agent version changes"]);
+  expect(manifest.components.map((component) => component.id)).toEqual(["app"]);
+  for (const artifact of manifest.artifacts) {
+    expect(artifact).toMatchObject({
+      product: "butler-app",
+      component: "app",
+      version: manifest.version,
+      bundledAgentVersion: manifest.bundledAgentVersion,
+      bundledComponents: ["app"],
+      updaterOwner: "butler-app",
+      payloadFormat: "platform-app-package",
+      activationPolicy: "platform-app-update-then-versioned-app-runtime",
+      rollbackPolicy: "preserve-previous-app-managed-runtime",
+    });
+    expect(artifact.artifactName).toContain(`butler-app-${manifest.version}-`);
+    expect(artifact.bundledAgentPayload.version).toBe(manifest.bundledAgentVersion);
+    expect(artifact.bundledAgentPayload.resourcePath).toBe(
+      `bundled-agent/butler-agent-${manifest.bundledAgentVersion}-all.tar.gz`,
+    );
+  }
+});
+
 test("app release gate requires a previous App manifest unless explicitly allowed", () => {
   const defaultResult = spawnSync("bun", [
     "run",

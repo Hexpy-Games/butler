@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -545,6 +546,72 @@ test("App-managed runtime activation does not shell out to host tar", () => {
   expect(source).not.toContain("apt install");
 });
 
+test("App-managed runtime prepares bundled-Agent-only update and rolls back without host tools", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-agent-only-smoke-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const previousRuntime = join("app", "runtime", "agent", "versions", "42.0.0");
+    writeReadyRuntime(butlerData, previousRuntime);
+    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
+    writeFileSync(
+      appManagedAgentPointerPath(butlerData),
+      `${JSON.stringify({
+        schema: APP_MANAGED_RUNTIME_POINTER_SCHEMA,
+        product: "butler-app",
+        bundled_agent_product: "butler-agent",
+        bundled_agent_version: "42.0.0",
+        gateway_profile: "electron",
+        version: "42.0.0",
+        runtime_home: previousRuntime,
+        raw_text_included: false,
+      }, null, 2)}\n`,
+    );
+    const pointerBefore = readFileSync(appManagedAgentPointerPath(butlerData), "utf8");
+    const resourceRoot = createBundledAgentResource(tempDir, {
+      version: "42.0.1",
+    });
+    const blockedHostTools = join(tempDir, "blocked-host-tools");
+    const hostToolLog = join(tempDir, "host-tool-calls.log");
+    writeHostToolBlockers(blockedHostTools, hostToolLog);
+
+    const previousPath = process.env.PATH;
+    const previousHostToolLog = process.env.BUTLER_HOST_TOOL_BLOCK_LOG;
+    try {
+      process.env.PATH = blockedHostTools;
+      process.env.BUTLER_HOST_TOOL_BLOCK_LOG = hostToolLog;
+      const prepared = prepareAppManagedAgentRuntime({
+        butlerData,
+        resourceRoot,
+        now: fixedNow,
+      });
+
+      expect(prepared).toMatchObject({
+        version: "42.0.1",
+        runtimeHomeLabel: join("app", "runtime", "agent", "versions", "42.0.1"),
+        previousRuntimePath: previousRuntime,
+        activated: false,
+      });
+      expect(existsSync(join(prepared.runtimeHome, "bin", "butler.js"))).toBe(true);
+      expect(readFileSync(appManagedAgentPointerPath(butlerData), "utf8")).toBe(pointerBefore);
+
+      prepared.rollbackActivation(new Error("smoke rollback before App shell commit"));
+
+      expect(readFileSync(appManagedAgentPointerPath(butlerData), "utf8")).toBe(pointerBefore);
+      expect(existsSync(join(butlerData, previousRuntime, "bin", "butler.js"))).toBe(true);
+      expect(existsSync(prepared.runtimeHome)).toBe(false);
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      if (previousHostToolLog === undefined) delete process.env.BUTLER_HOST_TOOL_BLOCK_LOG;
+      else process.env.BUTLER_HOST_TOOL_BLOCK_LOG = previousHostToolLog;
+    }
+
+    expect(existsSync(hostToolLog) ? readFileSync(hostToolLog, "utf8").trim() : "").toBe("");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("App-managed gateway command uses App runtime instead of standalone BUTLER_HOME", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-command-"));
   try {
@@ -712,6 +779,19 @@ function createBundledAgentResource(
     }), null, 2)}\n`,
   );
   return resourceRoot;
+}
+
+function writeHostToolBlockers(dir: string, _logPath: string): void {
+  mkdirSync(dir, { recursive: true });
+  for (const tool of ["curl", "wget", "unzip", "tar"]) {
+    const path = join(dir, tool);
+    writeFileSync(
+      path,
+      `#!/bin/sh\nprintf '%s\\n' '${tool}' >> "$BUTLER_HOST_TOOL_BLOCK_LOG"\nexit 127\n`,
+      "utf8",
+    );
+    chmodSync(path, 0o755);
+  }
 }
 
 function fixedNow(): Date {
