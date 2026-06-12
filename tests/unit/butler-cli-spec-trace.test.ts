@@ -56,7 +56,7 @@ const expectedCommands = [
   "butler runtime repair [--yes]",
   "butler telegram pair",
   "butler telegram status [--json]",
-  "butler update [--component service|app] [--check|--apply] [--manifest PATH] [--dry-run] [--yes]",
+  "butler update [--component agent|app] [--check|--apply] [--manifest PATH] [--dry-run] [--yes]",
   "butler uninstall [--keep-data] [--yes]",
   "butler logs [--service NAME] [--lines N] [--follow]",
   "butler ps [--json]",

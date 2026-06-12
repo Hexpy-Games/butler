@@ -88,7 +88,7 @@
     "status": "implemented",
     "implemented": true,
     "supportsJson": false,
-    "summary": "Start native Butler services.",
+    "summary": "Start Butler Agent services.",
     "spec": "docs/specs/cli/core-commands.md"
   },
   {
@@ -101,7 +101,7 @@
     "status": "implemented",
     "implemented": true,
     "supportsJson": false,
-    "summary": "Stop native Butler services without deleting private data.",
+    "summary": "Stop Butler Agent services without deleting private data.",
     "spec": "docs/specs/cli/core-commands.md"
   },
   {
@@ -142,7 +142,7 @@
     "status": "implemented",
     "implemented": true,
     "supportsJson": true,
-    "summary": "Print a launchd user-agent plist for the single Butler service.",
+    "summary": "Print a launchd user-agent plist for Butler Agent.",
     "spec": "docs/specs/os-service-adapter.md"
   },
   {
@@ -156,7 +156,7 @@
     "status": "implemented",
     "implemented": true,
     "supportsJson": true,
-    "summary": "Print a systemd user service unit for the single Butler service.",
+    "summary": "Print a systemd user service unit for Butler Agent.",
     "spec": "docs/specs/os-service-adapter.md"
   },
   {
@@ -603,12 +603,12 @@
     "path": [
       "update"
     ],
-    "usage": "butler update [--component service|app] [--check|--apply] [--manifest PATH] [--dry-run] [--yes]",
+    "usage": "butler update [--component agent|app] [--check|--apply] [--manifest PATH] [--dry-run] [--yes]",
     "priority": "operator",
     "status": "implemented",
     "implemented": true,
     "supportsJson": true,
-    "summary": "Check or stage a Butler service or app update.",
+    "summary": "Check or stage a Butler Agent or App update.",
     "spec": "docs/specs/cli/operator-commands.md"
   },
   {
@@ -621,7 +621,7 @@
     "status": "implemented",
     "implemented": true,
     "supportsJson": false,
-    "summary": "Remove Butler services and optionally private data.",
+    "summary": "Remove Butler Agent services and optionally private data.",
     "spec": "docs/specs/cli/operator-commands.md"
   },
   {
@@ -647,7 +647,7 @@
     "status": "implemented",
     "implemented": true,
     "supportsJson": true,
-    "summary": "Show Butler service process state.",
+    "summary": "Show Butler Agent process state.",
     "spec": "docs/specs/cli/operator-commands.md"
   },
   {

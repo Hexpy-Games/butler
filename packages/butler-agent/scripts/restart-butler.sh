@@ -20,7 +20,7 @@ BUTLER_RUNTIME_EFFECTIVE="${BUTLER_RUNTIME:-${CONFIG_RUNTIME:-codex-api}}"
 NATIVE_MAIN_STATE_FILE="$BUTLER_DATA/state/butler-main-native.json"
 
 if [ "$DRY_RUN" = true ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [restart-butler] DRY-RUN: would restart native Butler services"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [restart-butler] DRY-RUN: would restart Butler Agent services"
   exit 0
 fi
 

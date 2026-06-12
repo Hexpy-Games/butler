@@ -132,7 +132,7 @@ download_release_artifact() {
   local sha_path="$ARTIFACT_PATH.sha256"
 
   if [[ ! -f "$ARTIFACT_PATH" ]]; then
-    echo "Downloading $RELEASE_TAG service artifact"
+    echo "Downloading $RELEASE_TAG Butler Agent artifact"
     curl -fL --retry 3 -o "$ARTIFACT_PATH" "$release_url/$artifact_name"
   fi
   if [[ ! -f "$sha_path" ]]; then
@@ -147,7 +147,7 @@ prepare_artifact() {
     download_release_artifact
   fi
   if [[ -z "$ARTIFACT_PATH" || ! -f "$ARTIFACT_PATH" ]]; then
-    echo "service release artifact not found: ${ARTIFACT_PATH:-<empty>}" >&2
+    echo "Butler Agent release artifact not found: ${ARTIFACT_PATH:-<empty>}" >&2
     exit 1
   fi
 }

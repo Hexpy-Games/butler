@@ -48,15 +48,15 @@ an existing working managed runtime when a new download fails.
   prebuilt CLI launchers that the installer copies into `$BUTLER_DATA/bin`.
   Source-checkout installs may build the launcher as a fallback. `bin/butler.js`
   remains an internal entrypoint only.
-- The interactive Docker installer must run from a service release artifact,
+- The interactive Docker installer must run from a Butler Agent release artifact,
   keep the container open after a completed install, and publish the Butler App
   gateway to the host for browser/health checks. The container app gateway binds
   to `0.0.0.0:18765`; the host port must avoid the normal host Butler port and
   defaults to the first free port starting at `127.0.0.1:18766`. The Docker
-  harness must verify that the service artifact contains the built app web
+  harness must verify that the Agent artifact contains the built app web
   client and that `/` serves HTML, not an API `not_found` envelope.
 - The README Docker sandbox must use a dependency-only image. It may download or
-  mount the service release artifact into `~/Downloads`, but it must leave
+  mount the Agent release artifact into `~/Downloads`, but it must leave
   `install.sh` execution to the operator so the README Quick Start can be
   followed manually. It must still pre-wire the app gateway to
   `0.0.0.0:18765` and publish it to a non-conflicting host port.

@@ -90,7 +90,7 @@ export function createUpgradeReport(input: {
     "Prepare or repair the managed Butler runtime.",
     "Install workspace dependencies with the managed runtime.",
     "Validate OpenAI/Codex auth and Telegram pairing independently.",
-    "Restart native Butler services after successful checks.",
+    "Restart Butler Agent services after successful checks.",
   ];
   if (dryRun?.removedFields.length) {
     migrationSteps.push(`Remove legacy config fields: ${dryRun.removedFields.join(", ")}.`);

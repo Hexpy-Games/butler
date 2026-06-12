@@ -131,7 +131,7 @@ test("docker installer preinstalls container dependencies before running install
   expect(source).toContain('"host": "0.0.0.0"');
   expect(source).toContain('"port": $container_app_port');
   expect(source).toContain('app_web_client="$BUTLER_HOME/packages/butler-agent/resources/app-client/dist"');
-  expect(source).toContain("Service release artifact is missing the built Butler app web client");
+  expect(source).toContain("Butler Agent release artifact is missing the built Butler app web client");
   expect(source).toContain("Launching interactive install.sh");
   expect(source).toContain("Host web URL: http://127.0.0.1:$host_app_port");
   expect(source).toContain("Host health URL: http://127.0.0.1:$host_app_port/health");
@@ -232,7 +232,7 @@ test("release docker verification installs from service artifact and checks heal
   expect(source).toContain("-v \"$ARTIFACT_DIR:/release:ro\"");
   expect(source).toContain("-e BUTLER_ACCEPT_EXPERIMENTAL=1");
   expect(source).toContain('app_web_client="$BUTLER_HOME/packages/butler-agent/resources/app-client/dist"');
-  expect(source).toContain("Service release artifact is missing the built Butler app web client");
+  expect(source).toContain("Butler Agent release artifact is missing the built Butler app web client");
   expect(source).toContain("service-release-docker-health-ok");
   expect(source).toContain("service-release-docker-web-ok");
   expect(source).toContain("http://127.0.0.1:18765/");

@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   service-artifact:
-    name: Build and publish service artifact
+    name: Build and publish Butler Agent artifact
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -34,10 +34,10 @@ jobs:
       - name: Install app web client dependencies
         run: npm --prefix packages/butler-app/client/ui ci
 
-      - name: Run service release gate
+      - name: Run Butler Agent release gate
         run: bun run release:service:gate
 
-      - name: Package service release
+      - name: Package Butler Agent release
         run: |
           bun run release:service:package \
             --out dist/release/service \
@@ -59,7 +59,7 @@ jobs:
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
           notes_file=".github/releases/${tag}.md"
-          notes_args=(--notes "Butler service release $tag")
+          notes_args=(--notes "Butler Agent release $tag")
           if [ -f "$notes_file" ]; then
             notes_args=(--notes-file "$notes_file")
           fi
@@ -71,7 +71,7 @@ jobs:
             dist/release/service/update-manifest.json
           )
           if [ "${#files[@]}" -ne 4 ]; then
-            printf 'Expected 4 service release files, got %s\n' "${#files[@]}" >&2
+            printf 'Expected 4 Butler Agent release files, got %s\n' "${#files[@]}" >&2
             printf '%s\n' "${files[@]}" >&2
             exit 1
           fi

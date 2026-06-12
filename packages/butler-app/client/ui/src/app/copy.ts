@@ -1614,7 +1614,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       systemEvents:
         "Review regular consolidation, personal information analysis, and maintenance work.",
       systemEventsEmpty: "No system events to show yet.",
-      updates: "Check and update the app, app server, and Butler service separately.",
+      updates: "Check and update Butler App and Butler Agent separately.",
       eolLastLoaded: (value) => `Last loaded at ${value}`,
       mcpServers:
         "Settings are stored in Butler data home. Active server tools and resources can be called by Butler during chats.",

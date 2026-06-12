@@ -11,7 +11,7 @@ export const UPDATE_COMPONENTS: UpdateComponentId[] = [
 
 const COMPONENT_LABELS: Record<UpdateComponentId, string> = {
   app: "Butler App",
-  service: "Butler Service",
+  service: "Butler Agent",
 };
 
 export interface UpdateActionLabels {

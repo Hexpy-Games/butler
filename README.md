@@ -70,8 +70,8 @@ To test the interactive installer in a disposable Docker container:
 bun run install:docker
 ```
 
-The Docker installer builds or consumes a service release artifact, runs the
-interactive `install.sh`, then keeps the container shell open. Service artifacts
+The Docker installer builds or consumes a Butler Agent release artifact, runs the
+interactive `install.sh`, then keeps the container shell open. Agent artifacts
 include the built app web client served by the app gateway. The container app
 gateway stays on `18765`, but the host publish port is selected from the first
 free port starting at `18766` so it does not collide with a host Butler already
@@ -155,17 +155,17 @@ and local OpenAI-compatible models.
 
 See [`.env.example`](.env.example) for configuration options.
 
-## App And Service Releases
+## App And Agent Releases
 
 Butler has two release shapes:
 
 - **Butler App:** the Electron desktop experience.
-- **Butler Service:** the local agent runtime that powers clients and workers.
+- **Butler Agent:** the standalone/headless runtime for advanced operators.
 
 ## Development
 
 Source checkouts are for development, not the normal user install path. User
-installs consume service release artifacts so the Butler App web client is
+installs consume Agent release artifacts so the Butler App web client is
 already built before `install.sh` runs.
 
 ```bash

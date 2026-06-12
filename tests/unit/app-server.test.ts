@@ -3865,7 +3865,7 @@ test("app-server read routes do not execute app-origin worker completions", asyn
     created_at: "2026-05-19T00:00:00.000Z",
     origin_session_id: "butler/app-general",
     decision_policy: "autonomous",
-    acceptance_criteria: ["completion is handled by Butler service"],
+    acceptance_criteria: ["completion is handled by Butler Agent"],
     verification_commands: [],
     review_policy: "review all criteria",
     repair_policy: { max_attempts: 1, allow_autonomous_repair: true },
@@ -4201,7 +4201,7 @@ test("active app transport turns keep follow-up messages in the editable session
       `${server.url}session-view?session_id=general`,
     );
     expect(JSON.stringify(sessionView)).not.toContain(
-      "Queued for Butler service",
+      "Queued for Butler Agent",
     );
 
     const queuedId = queue.data.queued_messages[0].id;
@@ -5563,7 +5563,7 @@ test("app slash update command uses the service updater without routing to the m
       text: "/update",
     });
     expect(check.data.reply.text).toBe(
-      `Butler service is up to date (${packageVersion}).`,
+      `Butler Agent is up to date (${packageVersion}).`,
     );
     expect(runtime.turns).toHaveLength(0);
 
@@ -5572,7 +5572,7 @@ test("app slash update command uses the service updater without routing to the m
       text: "/update apply",
     });
     expect(apply.data.reply.text).toBe(
-      `Butler service is up to date (${packageVersion}).`,
+      `Butler Agent is up to date (${packageVersion}).`,
     );
     expect(existsSync(join(tempDir, "updates", "staged", "service.json"))).toBe(
       true,

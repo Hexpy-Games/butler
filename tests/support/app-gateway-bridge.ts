@@ -191,7 +191,7 @@ export class AppGatewayBridge {
       return { texts: [renderServiceUpdateResult(view.components[0]!)] };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return { texts: [`Butler service update failed: ${message}`] };
+      return { texts: [`Butler Agent update failed: ${message}`] };
     }
   }
 
