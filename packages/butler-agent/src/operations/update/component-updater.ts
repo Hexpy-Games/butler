@@ -68,6 +68,7 @@ export interface ComponentUpdateStatus {
   sha256: string | null;
   signature: string | null;
   bundled_components: UpdateComponentId[];
+  bundled_agent_version: string | null;
   product: UpdateProduct;
   canonical_component: UpdateCanonicalComponent;
   profile: UpdateProfile;
@@ -161,6 +162,7 @@ type ManifestArtifact = {
   sha256: string | null;
   signature: string | null;
   bundled_components: UpdateComponentId[];
+  bundled_agent_version: string | null;
   product: UpdateProduct;
   canonical_component: UpdateCanonicalComponent;
   profile: UpdateProfile;
@@ -665,6 +667,7 @@ function buildComponentStatus(input: {
     sha256: artifact.sha256,
     signature: artifact.signature,
     bundled_components: artifact.bundled_components,
+    bundled_agent_version: artifact.bundled_agent_version,
     product: artifact.product,
     canonical_component: artifact.canonical_component,
     profile: artifact.profile,
@@ -745,6 +748,7 @@ function normalizeManifestArtifacts(value: unknown, channel: string): ManifestAr
         sha256: component.sha256 ?? null,
         signature: component.signature ?? null,
         bundled_components: component.bundled_components ?? component.bundledComponents ?? [component.id ?? component.component],
+        bundled_agent_version: component.bundled_agent_version ?? component.bundledAgentVersion ?? null,
         product: component.product,
         canonical_component: component.canonical_component ?? component.canonicalComponent,
         profile: component.profile,
@@ -802,6 +806,14 @@ function normalizeArtifact(
     sha256: stringOrNull(artifact.sha256),
     signature: stringOrNull(artifact.signature),
     bundled_components: bundled,
+    bundled_agent_version: component === "app"
+      ? stringOrNull(
+          artifact.bundled_agent_version ??
+            artifact.bundledAgentVersion ??
+            componentEntry?.bundled_agent_version ??
+            componentEntry?.bundledAgentVersion,
+        )
+      : null,
     product: normalizeProduct(component, artifact.product ?? componentEntry?.product),
     canonical_component: normalizeCanonicalComponent(
       component,
@@ -949,6 +961,7 @@ function localUpdateArtifacts(root: string): ManifestArtifact[] {
     sha256: artifact.sha256,
     signature: artifact.signature,
     bundled_components: artifact.bundledComponents,
+    bundled_agent_version: null,
     product: artifact.product,
     canonical_component: artifact.canonicalComponent,
     profile: artifact.profile,
@@ -964,7 +977,7 @@ function localUpdateArtifacts(root: string): ManifestArtifact[] {
   }));
   const versions = readComponentVersions(root);
   const artifacts: ManifestArtifact[] = [...serviceArtifacts];
-  if (versions.app) artifacts.push(localAppUpdateArtifact(versions.app));
+  if (versions.app) artifacts.push(localAppUpdateArtifact(versions.app, versions.service));
   return artifacts;
 }
 
@@ -980,7 +993,7 @@ function readAppVersion(root: string): string {
   }
 }
 
-function localAppUpdateArtifact(version: string): ManifestArtifact {
+function localAppUpdateArtifact(version: string, bundledAgentVersion: string): ManifestArtifact {
   return {
     component: "app",
     version,
@@ -990,6 +1003,7 @@ function localAppUpdateArtifact(version: string): ManifestArtifact {
     sha256: null,
     signature: null,
     bundled_components: ["app"],
+    bundled_agent_version: bundledAgentVersion || null,
     product: "butler-app",
     canonical_component: "app",
     profile: "electron",

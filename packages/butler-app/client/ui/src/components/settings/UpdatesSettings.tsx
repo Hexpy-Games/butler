@@ -34,7 +34,7 @@ export function UpdatesSettings() {
     try {
       setView(await api<UpdateStatusView>("/updates/check", {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ component: "app" }),
       }));
     } finally {
       setLoading(false);
