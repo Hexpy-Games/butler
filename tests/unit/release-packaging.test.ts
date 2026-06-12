@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   createReleaseManifest as createServiceReleaseManifest,
+  SERVICE_CLI_LAUNCHER_PLATFORMS,
   SERVICE_APP_WEB_CLIENT_DIST,
   serviceCliLauncherRelativePath,
   validateReleaseManifest as validateServiceReleaseManifest,
@@ -21,6 +22,7 @@ import {
 import {
   appReleaseIconPath,
   appReleasePackagerIconPath,
+  createAppReleasePackage,
 } from "../../packages/butler-app/scripts/release/package-app-release.ts";
 
 const root = process.cwd();
@@ -193,6 +195,29 @@ test("app release manifest exposes app package files only", () => {
     product: "butler-app",
     gatewayProfile: "electron",
     bundledAgentVersion: currentVersion,
+    bundledAgentPayload: {
+      product: "butler-agent",
+      profile: "agent-standalone",
+      version: currentVersion,
+      artifactName: `butler-agent-${currentVersion}-all.tar.gz`,
+      resourcePath: `bundled-agent/butler-agent-${currentVersion}-all.tar.gz`,
+      releaseManifestPath: "bundled-agent/agent-release-manifest.json",
+      updateManifestPath: "bundled-agent/agent-update-manifest.json",
+      runtimeResolver: "packages/butler-agent/scripts/start-butler.sh",
+      runtimePayload: "packages/butler-agent",
+      managedRuntimePayloadPath: "bundled-agent/runtime",
+      dependencyClosureManifestPath: "bundled-agent/dependency-closure.json",
+      protocolCompatibility: {
+        protocol: "butler.agent.v1",
+        minimumAgentProtocol: "butler.agent.v1",
+        maximumAgentProtocol: "butler.agent.v1",
+      },
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: null,
+        signature: null,
+      },
+    },
     protocolCompatibility: {
       protocol: "butler.app.v1",
       minimumAppProtocol: "butler.app.v1",
@@ -210,6 +235,16 @@ test("app release manifest exposes app package files only", () => {
     product: "butler-app",
     gatewayProfile: "electron",
     bundledAgentVersion: currentVersion,
+    bundledAgentPayload: {
+      product: "butler-agent",
+      version: currentVersion,
+      resourcePath: `bundled-agent/butler-agent-${currentVersion}-all.tar.gz`,
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: null,
+        signature: null,
+      },
+    },
     protocolCompatibility: {
       protocol: "butler.app.v1",
       minimumAppProtocol: "butler.app.v1",
@@ -311,11 +346,13 @@ test("release manifest validation rejects missing two-product schema fields", ()
   brokenApp.publicProductGroups = ["butler-app", "butler-service"] as any;
   brokenApp.gatewayProfile = "terminal" as any;
   brokenApp.bundledAgentVersion = "0.0.0";
+  brokenApp.bundledAgentPayload = undefined as any;
   brokenApp.protocolCompatibility = undefined as any;
   brokenApp.artifacts = brokenApp.artifacts.map((artifact) => ({
     ...artifact,
     product: "butler-service" as any,
     gatewayProfile: "terminal" as any,
+    bundledAgentPayload: undefined as any,
     integrity: undefined as any,
     activationPolicy: "in-place" as any,
   }));
@@ -326,9 +363,11 @@ test("release manifest validation rejects missing two-product schema fields", ()
       "app release manifest protocol compatibility is required",
       "app release gateway profile must be electron",
       "app release bundled agent version mismatch",
+      "app release bundled Agent payload metadata is required",
       "artifact app product must be butler-app",
       "artifact app gateway profile must be electron",
       "artifact app bundled agent version mismatch",
+      "artifact app bundled Agent payload metadata is required",
       "artifact app integrity metadata is required",
       "artifact app activation policy must be platform-app-update-then-versioned-app-runtime",
     ]),
@@ -558,6 +597,86 @@ test("agent release packager can write public GitHub artifact URLs", () => {
   }
 }, 30_000);
 
+test("app release packager embeds self-contained bundled Agent resources", () => {
+  const outDir = mkdtempSync(join(tmpdir(), "butler-app-release-test-"));
+  try {
+    const result = createAppReleasePackage({
+      root,
+      outDir,
+      platforms: ["linux-x64"],
+    });
+    const artifact = result.artifacts[0];
+    expect(artifact?.artifactName).toBe(`butler-app-${currentVersion}-linux-x64.tar.gz`);
+    expect(existsSync(artifact.artifactPath)).toBe(true);
+
+    const listing = spawnSync("tar", ["-tzf", artifact.artifactPath], {
+      encoding: "utf8",
+    });
+    expect(listing.status).toBe(0);
+    const entries = listing.stdout.split(/\r?\n/).filter(Boolean);
+    const resourceRoot = "Butler-linux-x64/resources/bundled-agent";
+    const agentArtifact = `butler-agent-${currentVersion}-all.tar.gz`;
+    expect(entries).toContain(`${resourceRoot}/${agentArtifact}`);
+    expect(entries).toContain(`${resourceRoot}/agent-release-manifest.json`);
+    expect(entries).toContain(`${resourceRoot}/agent-update-manifest.json`);
+    expect(entries).toContain(`${resourceRoot}/dependency-closure.json`);
+    expect(entries).toContain(`${resourceRoot}/runtime/bun-version`);
+
+    const releaseManifest = JSON.parse(readText(result.releaseManifestPath));
+    expect(releaseManifest).toMatchObject({
+      gatewayProfile: "electron",
+      bundledAgentVersion: currentVersion,
+      bundledAgentPayload: {
+        version: currentVersion,
+        artifactName: agentArtifact,
+        resourcePath: `bundled-agent/${agentArtifact}`,
+        managedRuntimePayloadPath: "bundled-agent/runtime",
+        dependencyClosureManifestPath: "bundled-agent/dependency-closure.json",
+      },
+    });
+
+    const nestedReleaseManifest = extractTarEntryJson(
+      artifact.artifactPath,
+      `${resourceRoot}/agent-release-manifest.json`,
+    );
+    const nestedUpdateManifest = extractTarEntryJson(
+      artifact.artifactPath,
+      `${resourceRoot}/agent-update-manifest.json`,
+    );
+    expect(nestedReleaseManifest.artifacts[0]).toMatchObject({
+      downloadUrl: `bundled-agent/${agentArtifact}`,
+      sha256: releaseManifest.bundledAgentPayload.integrity.digest,
+    });
+    expect(nestedUpdateManifest.artifacts[0]).toMatchObject({
+      artifact_url: `bundled-agent/${agentArtifact}`,
+      sha256: releaseManifest.bundledAgentPayload.integrity.digest,
+    });
+    expect(JSON.stringify(nestedReleaseManifest)).not.toContain("file://");
+    expect(JSON.stringify(nestedUpdateManifest)).not.toContain("file://");
+
+    const nestedAgentBytes = spawnSync("tar", [
+      "-xOf",
+      artifact.artifactPath,
+      `${resourceRoot}/${agentArtifact}`,
+    ], {
+      maxBuffer: 128 * 1024 * 1024,
+    });
+    expect(nestedAgentBytes.status).toBe(0);
+    const nestedListing = spawnSync("tar", ["-tzf", "-"], {
+      input: nestedAgentBytes.stdout,
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    expect(nestedListing.status).toBe(0);
+    const nestedEntries = nestedListing.stdout.split(/\r?\n/).filter(Boolean);
+    for (const platform of SERVICE_CLI_LAUNCHER_PLATFORMS) {
+      expect(nestedEntries).toContain(`./${serviceCliLauncherRelativePath(platform)}`);
+    }
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
+  }
+}, 90_000);
+
 test("Butler CLI help documents install home and data overrides", () => {
   const result = spawnSync("node", [join(root, "bin", "butler.js"), "--help"], {
     cwd: root,
@@ -738,6 +857,11 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(appReleasePackager).toContain("butler.update-manifest.v1");
   expect(appReleasePackager).toContain("app-release-manifest.json");
   expect(appReleasePackager).toContain("app-update-manifest.json");
+  expect(appReleasePackager).toContain("prepareBundledAgentResource");
+  expect(appReleasePackager).toContain("createServiceReleasePackage");
+  expect(appReleasePackager).not.toContain("currentServiceCliLauncherPlatform");
+  expect(appReleasePackager).toContain("--extra-resource=");
+  expect(appReleasePackager).toContain("bundled-agent");
   expect(appReleasePackager).toContain("adhoc-sign-mac.mjs");
   expect(appReleasePackager).toContain("normalize-mac-bundle.mjs");
   expect(appReleasePackager).toContain("BUTLER_APP_PACKAGER");
@@ -783,6 +907,14 @@ test("dedicated client package smoke and metadata are available", () => {
     ),
   ).toBe(true);
 });
+
+function extractTarEntryJson(artifactPath: string, entryPath: string): any {
+  const result = spawnSync("tar", ["-xOf", artifactPath, entryPath], {
+    encoding: "utf8",
+  });
+  expect(result.status).toBe(0);
+  return JSON.parse(result.stdout);
+}
 
 function readText(path: string): string {
   return readFileSync(path, "utf8");

@@ -29,6 +29,26 @@ export interface AppReleaseIntegrityMetadata {
   signature: string | null;
 }
 
+export interface AppBundledAgentPayload {
+  product: "butler-agent";
+  profile: "agent-standalone";
+  version: string;
+  artifactName: string;
+  resourcePath: string;
+  releaseManifestPath: string;
+  updateManifestPath: string;
+  runtimeResolver: "packages/butler-agent/scripts/start-butler.sh";
+  runtimePayload: "packages/butler-agent";
+  managedRuntimePayloadPath: string;
+  dependencyClosureManifestPath: string;
+  protocolCompatibility: {
+    protocol: "butler.agent.v1";
+    minimumAgentProtocol: "butler.agent.v1";
+    maximumAgentProtocol: "butler.agent.v1";
+  };
+  integrity: AppReleaseIntegrityMetadata;
+}
+
 export interface AppReleaseComponent {
   id: AppReleaseComponentId;
   product: AppReleaseProduct;
@@ -37,6 +57,7 @@ export interface AppReleaseComponent {
   versionSource: string;
   gatewayProfile: AppReleaseGatewayProfile;
   bundledAgentVersion: string;
+  bundledAgentPayload: AppBundledAgentPayload;
   protocolCompatibility: AppReleaseProtocolCompatibility;
   bundledComponents: AppReleaseComponentId[];
   requiredFiles: string[];
@@ -64,6 +85,7 @@ export interface AppReleaseArtifact {
   compatibleProtocol: "butler.app.v1";
   gatewayProfile: AppReleaseGatewayProfile;
   bundledAgentVersion: string;
+  bundledAgentPayload: AppBundledAgentPayload;
   protocolCompatibility: AppReleaseProtocolCompatibility;
   integrity: AppReleaseIntegrityMetadata;
   updatePolicy: AppReleaseUpdatePolicy;
@@ -84,6 +106,7 @@ export interface AppReleaseManifest {
   version: string;
   gatewayProfile: AppReleaseGatewayProfile;
   bundledAgentVersion: string;
+  bundledAgentPayload: AppBundledAgentPayload;
   updaterOwner: AppReleaseUpdaterOwner;
   components: AppReleaseComponent[];
   artifacts: AppReleaseArtifact[];
@@ -98,6 +121,8 @@ const APP_RELEASE_FORBIDDEN_SERVICE_PATH_PREFIXES = [
   "bin/butler.js",
   "packages/butler-agent/",
 ] as const;
+
+const APP_BUNDLED_AGENT_RESOURCE_DIR = "bundled-agent";
 
 function readJson(path: string): Record<string, any> {
   return JSON.parse(readFileSync(path, "utf8"));
@@ -118,6 +143,7 @@ export function readAppComponentVersions(root: string): AppComponentVersions {
 
 export function createAppReleaseManifest(root: string): AppReleaseManifest {
   const versions = readAppComponentVersions(root);
+  const bundledAgentPayload = createBundledAgentPayloadMetadata(versions.bundledAgent);
   const protocolCompatibility: AppReleaseProtocolCompatibility = {
     protocol: "butler.app.v1",
     minimumAppProtocol: "butler.app.v1",
@@ -152,6 +178,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
       versionSource: "packages/butler-app/client/electron/package.json",
       gatewayProfile: "electron",
       bundledAgentVersion: versions.bundledAgent,
+      bundledAgentPayload,
       protocolCompatibility,
       bundledComponents: ["app"],
       requiredFiles: appFiles,
@@ -174,6 +201,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
     version: versions.app,
     gatewayProfile: "electron",
     bundledAgentVersion: versions.bundledAgent,
+    bundledAgentPayload,
     updaterOwner: "butler-app",
     components,
     artifacts: components.flatMap((component) =>
@@ -191,6 +219,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
         compatibleProtocol: "butler.app.v1",
         gatewayProfile: "electron",
         bundledAgentVersion: versions.bundledAgent,
+        bundledAgentPayload,
         protocolCompatibility,
         integrity: {
           digestAlgorithm: "sha256",
@@ -206,6 +235,36 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
         rollbackPolicy: "preserve-previous-app-managed-runtime",
       })),
     ),
+  };
+}
+
+function createBundledAgentPayloadMetadata(
+  version: string,
+  digest: string | null = null,
+): AppBundledAgentPayload {
+  const artifactName = `butler-agent-${version}-all.tar.gz`;
+  return {
+    product: "butler-agent",
+    profile: "agent-standalone",
+    version,
+    artifactName,
+    resourcePath: `${APP_BUNDLED_AGENT_RESOURCE_DIR}/${artifactName}`,
+    releaseManifestPath: `${APP_BUNDLED_AGENT_RESOURCE_DIR}/agent-release-manifest.json`,
+    updateManifestPath: `${APP_BUNDLED_AGENT_RESOURCE_DIR}/agent-update-manifest.json`,
+    runtimeResolver: "packages/butler-agent/scripts/start-butler.sh",
+    runtimePayload: "packages/butler-agent",
+    managedRuntimePayloadPath: `${APP_BUNDLED_AGENT_RESOURCE_DIR}/runtime`,
+    dependencyClosureManifestPath: `${APP_BUNDLED_AGENT_RESOURCE_DIR}/dependency-closure.json`,
+    protocolCompatibility: {
+      protocol: "butler.agent.v1",
+      minimumAgentProtocol: "butler.agent.v1",
+      maximumAgentProtocol: "butler.agent.v1",
+    },
+    integrity: {
+      digestAlgorithm: "sha256",
+      digest,
+      signature: null,
+    },
   };
 }
 
@@ -229,6 +288,12 @@ export function validateAppReleaseManifest(
     issues.push("app release gateway profile must be electron");
   if (manifest.bundledAgentVersion !== versions.bundledAgent)
     issues.push("app release bundled agent version mismatch");
+  validateBundledAgentPayload(
+    "app release bundled Agent payload",
+    manifest.bundledAgentPayload,
+    versions.bundledAgent,
+    issues,
+  );
   if (manifest.updaterOwner !== "butler-app")
     issues.push("app release updater owner must be butler-app");
   if (!manifest.version || manifest.version !== versions.app) {
@@ -302,6 +367,12 @@ function validateComponents(
     if (component.bundledAgentVersion !== versions.bundledAgent) {
       issues.push(`component ${component.id} bundled agent version mismatch`);
     }
+    validateBundledAgentPayload(
+      `component ${component.id} bundled Agent payload`,
+      component.bundledAgentPayload,
+      versions.bundledAgent,
+      issues,
+    );
     validateProtocolCompatibility(
       `component ${component.id}`,
       component.protocolCompatibility,
@@ -377,6 +448,12 @@ function validateArtifacts(
     if (artifact.bundledAgentVersion !== manifest.bundledAgentVersion) {
       issues.push(`artifact ${artifact.component} bundled agent version mismatch`);
     }
+    validateBundledAgentPayload(
+      `artifact ${artifact.component} bundled Agent payload`,
+      artifact.bundledAgentPayload,
+      manifest.bundledAgentVersion,
+      issues,
+    );
     validateProtocolCompatibility(
       `artifact ${artifact.component}`,
       artifact.protocolCompatibility,
@@ -407,6 +484,59 @@ function validateArtifacts(
       }
     }
   }
+}
+
+function validateBundledAgentPayload(
+  label: string,
+  payload: AppBundledAgentPayload | undefined,
+  expectedVersion: string,
+  issues: string[],
+): void {
+  if (!payload) {
+    issues.push(`${label} metadata is required`);
+    return;
+  }
+  if (payload.product !== "butler-agent") {
+    issues.push(`${label} product must be butler-agent`);
+  }
+  if (payload.profile !== "agent-standalone") {
+    issues.push(`${label} profile must be agent-standalone`);
+  }
+  if (payload.version !== expectedVersion) {
+    issues.push(`${label} version mismatch`);
+  }
+  if (payload.artifactName !== `butler-agent-${expectedVersion}-all.tar.gz`) {
+    issues.push(`${label} artifact name mismatch`);
+  }
+  if (payload.resourcePath !== `bundled-agent/${payload.artifactName}`) {
+    issues.push(`${label} resource path mismatch`);
+  }
+  if (payload.releaseManifestPath !== "bundled-agent/agent-release-manifest.json") {
+    issues.push(`${label} release manifest path mismatch`);
+  }
+  if (payload.updateManifestPath !== "bundled-agent/agent-update-manifest.json") {
+    issues.push(`${label} update manifest path mismatch`);
+  }
+  if (payload.dependencyClosureManifestPath !== "bundled-agent/dependency-closure.json") {
+    issues.push(`${label} dependency closure path mismatch`);
+  }
+  if (payload.managedRuntimePayloadPath !== "bundled-agent/runtime") {
+    issues.push(`${label} managed runtime path mismatch`);
+  }
+  if (payload.runtimeResolver !== "packages/butler-agent/scripts/start-butler.sh") {
+    issues.push(`${label} runtime resolver mismatch`);
+  }
+  if (payload.runtimePayload !== "packages/butler-agent") {
+    issues.push(`${label} runtime payload mismatch`);
+  }
+  if (
+    payload.protocolCompatibility?.protocol !== "butler.agent.v1" ||
+    payload.protocolCompatibility?.minimumAgentProtocol !== "butler.agent.v1" ||
+    payload.protocolCompatibility?.maximumAgentProtocol !== "butler.agent.v1"
+  ) {
+    issues.push(`${label} protocol compatibility must be butler.agent.v1`);
+  }
+  validateArtifactIntegrity(label, payload.integrity, issues);
 }
 
 function validateProtocolCompatibility(
