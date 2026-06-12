@@ -15,6 +15,26 @@ export type ReleaseRestartPolicy =
   | "restart-service"
   | "restart-app";
 export type ReleaseUpdatePolicy = "explicit" | "app-user-action";
+export type UpdateProduct = "butler-agent" | "butler-app";
+export type UpdateCanonicalComponent = "agent" | "app";
+export type UpdateProfile = "agent-standalone" | "electron";
+export type UpdateUpdaterOwner = "butler-agent" | "butler-app";
+export type UpdatePayloadFormat = "agent-archive" | "platform-app-package";
+export type UpdateStagingPolicy =
+  | "butler-data-updates"
+  | "platform-updater-cache";
+export type UpdateActivationPolicy =
+  | "versioned-standalone-runtime"
+  | "platform-app-update-then-versioned-app-runtime";
+export type UpdateRollbackPolicy =
+  | "preserve-previous-standalone-runtime"
+  | "preserve-previous-app-managed-runtime";
+
+export interface UpdateIntegrityMetadata {
+  digestAlgorithm: "sha256";
+  digest: string | null;
+  signature: string | null;
+}
 
 interface ComponentVersions {
   service: string;
@@ -31,8 +51,18 @@ export interface ComponentUpdateStatus {
   sha256: string | null;
   signature: string | null;
   bundled_components: UpdateComponentId[];
+  product: UpdateProduct;
+  canonical_component: UpdateCanonicalComponent;
+  profile: UpdateProfile;
+  protocol_compatibility: Record<string, string>;
+  integrity: UpdateIntegrityMetadata;
   update_policy: ReleaseUpdatePolicy;
   restart_policy: ReleaseRestartPolicy;
+  updater_owner: UpdateUpdaterOwner;
+  payload_format: UpdatePayloadFormat;
+  staging_policy: UpdateStagingPolicy;
+  activation_policy: UpdateActivationPolicy;
+  rollback_policy: UpdateRollbackPolicy;
   checked_at: string;
   staged: boolean;
   stage_path: string;
@@ -84,8 +114,18 @@ type ManifestArtifact = {
   sha256: string | null;
   signature: string | null;
   bundled_components: UpdateComponentId[];
+  product: UpdateProduct;
+  canonical_component: UpdateCanonicalComponent;
+  profile: UpdateProfile;
+  protocol_compatibility: Record<string, string>;
+  integrity: UpdateIntegrityMetadata;
   update_policy: ReleaseUpdatePolicy;
   restart_policy: ReleaseRestartPolicy;
+  updater_owner: UpdateUpdaterOwner;
+  payload_format: UpdatePayloadFormat;
+  staging_policy: UpdateStagingPolicy;
+  activation_policy: UpdateActivationPolicy;
+  rollback_policy: UpdateRollbackPolicy;
 };
 
 interface LoadedManifest {
@@ -149,6 +189,7 @@ export async function applyComponentUpdate(
   }
   let artifactPath: string | null = null;
   if (status.update_available) {
+    assertGenericUpdaterCanStage(status);
     artifactPath = await downloadAndVerifyArtifact(options.butlerData, status);
   }
   const stageStatus = status.update_available ? "staged" : "up_to_date";
@@ -163,8 +204,18 @@ export async function applyComponentUpdate(
     sha256: status.sha256,
     signature: status.signature,
     bundled_components: status.bundled_components,
+    product: status.product,
+    canonical_component: status.canonical_component,
+    profile: status.profile,
+    protocol_compatibility: status.protocol_compatibility,
+    integrity: status.integrity,
     update_policy: status.update_policy,
     restart_policy: status.restart_policy,
+    updater_owner: status.updater_owner,
+    payload_format: status.payload_format,
+    staging_policy: status.staging_policy,
+    activation_policy: status.activation_policy,
+    rollback_policy: status.rollback_policy,
     stage_status: stageStatus,
     planned_actions: plannedActions,
     staged_at: status.checked_at,
@@ -219,8 +270,18 @@ function buildComponentStatus(input: {
     sha256: artifact.sha256,
     signature: artifact.signature,
     bundled_components: artifact.bundled_components,
+    product: artifact.product,
+    canonical_component: artifact.canonical_component,
+    profile: artifact.profile,
+    protocol_compatibility: artifact.protocol_compatibility,
+    integrity: artifact.integrity,
     update_policy: artifact.update_policy,
     restart_policy: artifact.restart_policy,
+    updater_owner: artifact.updater_owner,
+    payload_format: artifact.payload_format,
+    staging_policy: artifact.staging_policy,
+    activation_policy: artifact.activation_policy,
+    rollback_policy: artifact.rollback_policy,
     checked_at: input.checkedAt,
     staged: existsSync(stageFilePath(input.butlerData, input.component)),
     stage_path: stageLabel(input.component),
@@ -278,8 +339,18 @@ function normalizeManifestArtifacts(value: unknown, channel: string): ManifestAr
         sha256: component.sha256 ?? null,
         signature: component.signature ?? null,
         bundled_components: component.bundled_components ?? component.bundledComponents ?? [component.id ?? component.component],
+        product: component.product,
+        canonical_component: component.canonical_component ?? component.canonicalComponent,
+        profile: component.profile,
+        protocol_compatibility: component.protocol_compatibility ?? component.protocolCompatibility,
+        integrity: component.integrity,
         update_policy: component.update_policy ?? component.updatePolicy,
         restart_policy: component.restart_policy ?? component.restartPolicy,
+        updater_owner: component.updater_owner ?? component.updaterOwner,
+        payload_format: component.payload_format ?? component.payloadFormat,
+        staging_policy: component.staging_policy ?? component.stagingPolicy,
+        activation_policy: component.activation_policy ?? component.activationPolicy,
+        rollback_policy: component.rollback_policy ?? component.rollbackPolicy,
       }));
   if (artifacts.length === 0) throw new Error("Update manifest has no artifacts.");
   return artifacts.map((artifact) => normalizeArtifact(artifact, components, channel));
@@ -317,8 +388,28 @@ function normalizeArtifact(
     sha256: stringOrNull(artifact.sha256),
     signature: stringOrNull(artifact.signature),
     bundled_components: bundled,
+    product: normalizeProduct(component, artifact.product ?? componentEntry?.product),
+    canonical_component: normalizeCanonicalComponent(
+      component,
+      artifact.canonical_component ?? artifact.canonicalComponent ?? componentEntry?.canonical_component ?? componentEntry?.canonicalComponent,
+    ),
+    profile: normalizeProfile(component, artifact.profile ?? componentEntry?.profile),
+    protocol_compatibility: normalizeProtocolCompatibility(
+      component,
+      artifact.protocol_compatibility ?? artifact.protocolCompatibility ?? componentEntry?.protocol_compatibility ?? componentEntry?.protocolCompatibility,
+    ),
+    integrity: normalizeIntegrity(
+      artifact.integrity ?? componentEntry?.integrity,
+      stringOrNull(artifact.sha256),
+      stringOrNull(artifact.signature),
+    ),
     update_policy: normalizeUpdatePolicy(artifact.update_policy ?? artifact.updatePolicy),
     restart_policy: normalizeRestartPolicy(component, artifact.restart_policy ?? artifact.restartPolicy),
+    updater_owner: normalizeUpdaterOwner(component, artifact.updater_owner ?? artifact.updaterOwner ?? componentEntry?.updater_owner ?? componentEntry?.updaterOwner),
+    payload_format: normalizePayloadFormat(component, artifact.payload_format ?? artifact.payloadFormat ?? componentEntry?.payload_format ?? componentEntry?.payloadFormat),
+    staging_policy: normalizeStagingPolicy(component, artifact.staging_policy ?? artifact.stagingPolicy ?? componentEntry?.staging_policy ?? componentEntry?.stagingPolicy),
+    activation_policy: normalizeActivationPolicy(component, artifact.activation_policy ?? artifact.activationPolicy ?? componentEntry?.activation_policy ?? componentEntry?.activationPolicy),
+    rollback_policy: normalizeRollbackPolicy(component, artifact.rollback_policy ?? artifact.rollbackPolicy ?? componentEntry?.rollback_policy ?? componentEntry?.rollbackPolicy),
   };
 }
 
@@ -348,8 +439,18 @@ function localUpdateArtifacts(root: string): ManifestArtifact[] {
     sha256: artifact.sha256,
     signature: artifact.signature,
     bundled_components: artifact.bundledComponents,
+    product: artifact.product,
+    canonical_component: artifact.canonicalComponent,
+    profile: artifact.profile,
+    protocol_compatibility: artifact.protocolCompatibility,
+    integrity: artifact.integrity,
     update_policy: artifact.updatePolicy,
     restart_policy: artifact.restartPolicy,
+    updater_owner: artifact.updaterOwner,
+    payload_format: artifact.payloadFormat,
+    staging_policy: artifact.stagingPolicy,
+    activation_policy: artifact.activationPolicy,
+    rollback_policy: artifact.rollbackPolicy,
   }));
   const versions = readComponentVersions(root);
   return [
@@ -362,8 +463,26 @@ function localUpdateArtifacts(root: string): ManifestArtifact[] {
       sha256: null,
       signature: null,
       bundled_components: ["app"],
+      product: "butler-app",
+      canonical_component: "app",
+      profile: "electron",
+      protocol_compatibility: {
+        protocol: "butler.app.v1",
+        minimumAppProtocol: "butler.app.v1",
+        maximumAppProtocol: "butler.app.v1",
+      },
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: null,
+        signature: null,
+      },
       update_policy: "app-user-action",
       restart_policy: "restart-app",
+      updater_owner: "butler-app",
+      payload_format: "platform-app-package",
+      staging_policy: "platform-updater-cache",
+      activation_policy: "platform-app-update-then-versioned-app-runtime",
+      rollback_policy: "preserve-previous-app-managed-runtime",
     },
   ];
 }
@@ -375,7 +494,11 @@ function plannedActionsFor(status: ComponentUpdateStatus): string[] {
   return [
     `download ${status.component} artifact`,
     "verify artifact sha256",
-    `stage ${status.component} update under BUTLER_DATA updates`,
+    status.staging_policy === "butler-data-updates"
+      ? `stage ${status.component} update under BUTLER_DATA updates`
+      : `hand ${status.component} update to ${status.staging_policy}`,
+    `activate with ${status.activation_policy}`,
+    `rollback with ${status.rollback_policy} on failure`,
     restartAction(status.restart_policy),
   ];
 }
@@ -383,6 +506,164 @@ function plannedActionsFor(status: ComponentUpdateStatus): string[] {
 function restartAction(policy: ReleaseRestartPolicy): string {
   if (policy === "restart-app") return "restart app to apply";
   return "restart service to apply";
+}
+
+function assertGenericUpdaterCanStage(status: ComponentUpdateStatus): void {
+  if (status.staging_policy === "butler-data-updates") return;
+  throw new Error(
+    `${status.component} updates use ${status.staging_policy}; generic BUTLER_DATA staging is not allowed.`,
+  );
+}
+
+function normalizeProduct(
+  component: UpdateComponentId,
+  value: unknown,
+): UpdateProduct {
+  const expected = component === "service" ? "butler-agent" : "butler-app";
+  if (value == null) return expected;
+  if (value === expected) return expected;
+  throw new Error(`Update artifact ${component} product must be ${expected}.`);
+}
+
+function normalizeCanonicalComponent(
+  component: UpdateComponentId,
+  value: unknown,
+): UpdateCanonicalComponent {
+  const expected = component === "service" ? "agent" : "app";
+  if (value == null) return expected;
+  if (value === expected) return expected;
+  throw new Error(`Update artifact ${component} canonical component must be ${expected}.`);
+}
+
+function normalizeProfile(
+  component: UpdateComponentId,
+  value: unknown,
+): UpdateProfile {
+  const expected = component === "service" ? "agent-standalone" : "electron";
+  if (value == null) return expected;
+  if (value === expected) return expected;
+  throw new Error(`Update artifact ${component} profile must be ${expected}.`);
+}
+
+function normalizeProtocolCompatibility(
+  component: UpdateComponentId,
+  value: unknown,
+): Record<string, string> {
+  const expected = component === "service"
+    ? {
+        protocol: "butler.agent.v1",
+        minimumAgentProtocol: "butler.agent.v1",
+        maximumAgentProtocol: "butler.agent.v1",
+      }
+    : {
+        protocol: "butler.app.v1",
+        minimumAppProtocol: "butler.app.v1",
+        maximumAppProtocol: "butler.app.v1",
+      };
+  if (value == null) return expected;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Update artifact ${component} protocol compatibility must be an object.`);
+  }
+  const candidate = value as Record<string, unknown>;
+  for (const [key, expectedValue] of Object.entries(expected)) {
+    if (candidate[key] !== expectedValue) {
+      throw new Error(
+        `Update artifact ${component} protocol compatibility ${key} must be ${expectedValue}.`,
+      );
+    }
+  }
+  return expected;
+}
+
+function normalizeIntegrity(
+  value: unknown,
+  sha256: string | null,
+  signature: string | null,
+): UpdateIntegrityMetadata {
+  if (value == null) {
+    if (signature) {
+      throw new Error(
+        "Update artifact signature verification is not implemented; signed artifacts must fail closed.",
+      );
+    }
+    return {
+      digestAlgorithm: "sha256",
+      digest: sha256,
+      signature,
+    };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Update artifact integrity metadata must be an object.");
+  }
+  const candidate = value as Record<string, unknown>;
+  if (candidate.digestAlgorithm !== "sha256") {
+    throw new Error("Update artifact integrity digest algorithm must be sha256.");
+  }
+  const normalizedSignature = stringOrNull(candidate.signature) ?? signature;
+  if (normalizedSignature) {
+    throw new Error(
+      "Update artifact signature verification is not implemented; signed artifacts must fail closed.",
+    );
+  }
+  return {
+    digestAlgorithm: "sha256",
+    digest: stringOrNull(candidate.digest) ?? sha256,
+    signature: null,
+  };
+}
+
+function normalizeUpdaterOwner(
+  component: UpdateComponentId,
+  value: unknown,
+): UpdateUpdaterOwner {
+  const expected = component === "service" ? "butler-agent" : "butler-app";
+  if (value == null) return expected;
+  if (value === expected) return expected;
+  throw new Error(`Update artifact ${component} updater owner must be ${expected}.`);
+}
+
+function normalizePayloadFormat(
+  component: UpdateComponentId,
+  value: unknown,
+): UpdatePayloadFormat {
+  const expected = component === "service" ? "agent-archive" : "platform-app-package";
+  if (value == null) return expected;
+  if (value === expected) return expected;
+  throw new Error(`Update artifact ${component} payload format must be ${expected}.`);
+}
+
+function normalizeStagingPolicy(
+  component: UpdateComponentId,
+  value: unknown,
+): UpdateStagingPolicy {
+  const expected = component === "service" ? "butler-data-updates" : "platform-updater-cache";
+  if (value == null) return expected;
+  if (value === expected) return expected;
+  throw new Error(`Update artifact ${component} staging policy must be ${expected}.`);
+}
+
+function normalizeActivationPolicy(
+  component: UpdateComponentId,
+  value: unknown,
+): UpdateActivationPolicy {
+  const expected = component === "service"
+    ? "versioned-standalone-runtime"
+    : "platform-app-update-then-versioned-app-runtime";
+  if (value == null) return expected;
+  if (value === expected) return expected;
+  throw new Error(`Update artifact ${component} activation policy must be ${expected}.`);
+}
+
+function normalizeRollbackPolicy(
+  component: UpdateComponentId,
+  value: unknown,
+): UpdateRollbackPolicy {
+  const expected = component === "service"
+    ? "preserve-previous-standalone-runtime"
+    : "preserve-previous-app-managed-runtime";
+  if (value == null) return expected;
+  if (value === expected) return expected;
+  throw new Error(`Update artifact ${component} rollback policy must be ${expected}.`);
 }
 
 async function downloadAndVerifyArtifact(

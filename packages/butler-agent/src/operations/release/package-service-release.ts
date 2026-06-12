@@ -341,7 +341,16 @@ function withArtifactMetadata(
     ...manifest,
     artifacts: manifest.artifacts.map((artifact) =>
       artifact.artifactName === artifactName
-        ? { ...artifact, downloadUrl, sha256 }
+        ? {
+            ...artifact,
+            downloadUrl,
+            sha256,
+            integrity: {
+              ...artifact.integrity,
+              digest: sha256,
+              signature: artifact.signature,
+            },
+          }
         : artifact,
     ),
   };
@@ -365,8 +374,18 @@ function createUpdateManifest(
       sha256: artifact.sha256 ?? sha256,
       signature: artifact.signature,
       bundled_components: artifact.bundledComponents,
+      product: artifact.product,
+      canonical_component: artifact.canonicalComponent,
+      profile: artifact.profile,
+      protocol_compatibility: artifact.protocolCompatibility,
+      integrity: artifact.integrity,
       update_policy: artifact.updatePolicy,
       restart_policy: artifact.restartPolicy,
+      updater_owner: artifact.updaterOwner,
+      payload_format: artifact.payloadFormat,
+      staging_policy: artifact.stagingPolicy,
+      activation_policy: artifact.activationPolicy,
+      rollback_policy: artifact.rollbackPolicy,
     })),
     cli_launchers: manifest.cliLaunchers
       .filter((launcher) => platformSet.has(launcher.platform))

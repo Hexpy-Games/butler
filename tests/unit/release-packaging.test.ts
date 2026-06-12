@@ -34,7 +34,17 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
 
   expect(manifest).toMatchObject({
     name: "butler",
+    product: "butler-agent",
+    publicProductGroups: ["butler-agent"],
+    profile: "agent-standalone",
+    canonicalComponent: "agent",
+    legacyComponentAliases: ["service"],
     version: currentVersion,
+    protocolCompatibility: {
+      protocol: "butler.agent.v1",
+      minimumAgentProtocol: "butler.agent.v1",
+      maximumAgentProtocol: "butler.agent.v1",
+    },
     bin: {
       butler: "./bin/butler.js",
     },
@@ -49,6 +59,46 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
     manifest.components.find((component) => component.id === "service")
       ?.bundledComponents,
   ).toEqual(["service"]);
+  expect(
+    manifest.components.find((component) => component.id === "service"),
+  ).toMatchObject({
+    product: "butler-agent",
+    canonicalComponent: "agent",
+    legacyAliases: ["service"],
+    profile: "agent-standalone",
+    protocolCompatibility: {
+      protocol: "butler.agent.v1",
+      minimumAgentProtocol: "butler.agent.v1",
+      maximumAgentProtocol: "butler.agent.v1",
+    },
+    updatePolicy: "explicit",
+    restartPolicy: "restart-service",
+    updaterOwner: "butler-agent",
+    payloadFormat: "agent-archive",
+    stagingPolicy: "butler-data-updates",
+    activationPolicy: "versioned-standalone-runtime",
+    rollbackPolicy: "preserve-previous-standalone-runtime",
+  });
+  expect(manifest.artifacts[0]).toMatchObject({
+    product: "butler-agent",
+    canonicalComponent: "agent",
+    profile: "agent-standalone",
+    protocolCompatibility: {
+      protocol: "butler.agent.v1",
+      minimumAgentProtocol: "butler.agent.v1",
+      maximumAgentProtocol: "butler.agent.v1",
+    },
+    integrity: {
+      digestAlgorithm: "sha256",
+      digest: null,
+      signature: null,
+    },
+    updaterOwner: "butler-agent",
+    payloadFormat: "agent-archive",
+    stagingPolicy: "butler-data-updates",
+    activationPolicy: "versioned-standalone-runtime",
+    rollbackPolicy: "preserve-previous-standalone-runtime",
+  });
   expect(manifest.cliLaunchers.map((launcher) => launcher.platform)).toEqual([
     "darwin-arm64",
     "darwin-x64",
@@ -81,7 +131,17 @@ test("app release manifest exposes app package files only", () => {
 
   expect(manifest).toMatchObject({
     name: "butler-app",
+    product: "butler-app",
+    publicProductGroups: ["butler-app"],
     protocol: "butler.app.v1",
+    protocolCompatibility: {
+      protocol: "butler.app.v1",
+      minimumAppProtocol: "butler.app.v1",
+      maximumAppProtocol: "butler.app.v1",
+    },
+    gatewayProfile: "electron",
+    bundledAgentVersion: currentVersion,
+    updaterOwner: "butler-app",
     version: currentVersion,
   });
   expect(manifest.components.map((component) => component.id)).toEqual(["app"]);
@@ -92,6 +152,43 @@ test("app release manifest exposes app package files only", () => {
     manifest.components.find((component) => component.id === "app")
       ?.bundledComponents,
   ).toEqual(["app"]);
+  expect(manifest.components.find((component) => component.id === "app")).toMatchObject({
+    product: "butler-app",
+    gatewayProfile: "electron",
+    bundledAgentVersion: currentVersion,
+    protocolCompatibility: {
+      protocol: "butler.app.v1",
+      minimumAppProtocol: "butler.app.v1",
+      maximumAppProtocol: "butler.app.v1",
+    },
+    updatePolicy: "app-user-action",
+    restartPolicy: "restart-app",
+    updaterOwner: "butler-app",
+    payloadFormat: "platform-app-package",
+    stagingPolicy: "platform-updater-cache",
+    activationPolicy: "platform-app-update-then-versioned-app-runtime",
+    rollbackPolicy: "preserve-previous-app-managed-runtime",
+  });
+  expect(manifest.artifacts[0]).toMatchObject({
+    product: "butler-app",
+    gatewayProfile: "electron",
+    bundledAgentVersion: currentVersion,
+    protocolCompatibility: {
+      protocol: "butler.app.v1",
+      minimumAppProtocol: "butler.app.v1",
+      maximumAppProtocol: "butler.app.v1",
+    },
+    integrity: {
+      digestAlgorithm: "sha256",
+      digest: null,
+      signature: null,
+    },
+    updaterOwner: "butler-app",
+    payloadFormat: "platform-app-package",
+    stagingPolicy: "platform-updater-cache",
+    activationPolicy: "platform-app-update-then-versioned-app-runtime",
+    rollbackPolicy: "preserve-previous-app-managed-runtime",
+  });
   const appReleasePaths = manifest.components.flatMap(
     (component) => component.requiredFiles,
   );
@@ -132,6 +229,61 @@ test("app release manifest exposes app package files only", () => {
     `butler-app-${currentVersion}-linux-x64.tar.gz`,
   ]);
   expect(validateAppReleaseManifest(root, manifest)).toEqual([]);
+});
+
+test("release manifest validation rejects missing two-product schema fields", () => {
+  const brokenAgent = structuredClone(createServiceReleaseManifest(root));
+  brokenAgent.product = "service" as any;
+  brokenAgent.profile = "service" as any;
+  brokenAgent.publicProductGroups = ["butler-agent", "service"] as any;
+  brokenAgent.protocolCompatibility = undefined as any;
+  brokenAgent.artifacts = brokenAgent.artifacts.map((artifact) => ({
+    ...artifact,
+    product: "service" as any,
+    profile: "service" as any,
+    integrity: undefined as any,
+    stagingPolicy: "shell-download" as any,
+  }));
+  expect(validateServiceReleaseManifest(root, brokenAgent)).toEqual(
+    expect.arrayContaining([
+      "release product must be butler-agent",
+      "release public product groups must contain only butler-agent",
+      "release profile must be agent-standalone",
+      "release manifest protocol compatibility is required",
+      "artifact service product must be butler-agent",
+      "artifact service profile must be agent-standalone",
+      "artifact service integrity metadata is required",
+      "artifact service staging policy must be butler-data-updates",
+    ]),
+  );
+
+  const brokenApp = structuredClone(createAppReleaseManifest(root));
+  brokenApp.product = "butler-service" as any;
+  brokenApp.publicProductGroups = ["butler-app", "butler-service"] as any;
+  brokenApp.gatewayProfile = "terminal" as any;
+  brokenApp.bundledAgentVersion = "0.0.0";
+  brokenApp.protocolCompatibility = undefined as any;
+  brokenApp.artifacts = brokenApp.artifacts.map((artifact) => ({
+    ...artifact,
+    product: "butler-service" as any,
+    gatewayProfile: "terminal" as any,
+    integrity: undefined as any,
+    activationPolicy: "in-place" as any,
+  }));
+  expect(validateAppReleaseManifest(root, brokenApp)).toEqual(
+    expect.arrayContaining([
+      "app release product must be butler-app",
+      "app release public product groups must contain only butler-app",
+      "app release manifest protocol compatibility is required",
+      "app release gateway profile must be electron",
+      "app release bundled agent version mismatch",
+      "artifact app product must be butler-app",
+      "artifact app gateway profile must be electron",
+      "artifact app bundled agent version mismatch",
+      "artifact app integrity metadata is required",
+      "artifact app activation policy must be platform-app-update-then-versioned-app-runtime",
+    ]),
+  );
 });
 
 test("release manifest validation rejects cross-owned bundled artifacts", () => {
@@ -267,8 +419,26 @@ test("service release packager creates an installable artifact with app web clie
       artifact_url: `file://${result.artifactPath}`,
       sha256: result.sha256,
       bundled_components: ["service"],
+      product: "butler-agent",
+      canonical_component: "agent",
+      profile: "agent-standalone",
+      protocol_compatibility: {
+        protocol: "butler.agent.v1",
+        minimumAgentProtocol: "butler.agent.v1",
+        maximumAgentProtocol: "butler.agent.v1",
+      },
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: result.sha256,
+        signature: null,
+      },
       update_policy: "explicit",
       restart_policy: "restart-service",
+      updater_owner: "butler-agent",
+      payload_format: "agent-archive",
+      staging_policy: "butler-data-updates",
+      activation_policy: "versioned-standalone-runtime",
+      rollback_policy: "preserve-previous-standalone-runtime",
     });
     expect(updateManifest.cli_launchers).toContainEqual({
       platform: currentCliPlatform,
