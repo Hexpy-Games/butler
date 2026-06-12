@@ -30,10 +30,25 @@ workstreams.
 
 ## Quick Start
 
-Download `butler-agent-<version>-all.tar.gz` from the
+Download Butler App from the
 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) page for the
-tag you want to install. Release artifacts already include the built Butler App
-web client that the local app gateway serves.
+tag you want to install.
+
+- macOS Apple Silicon: `butler-app-<version>-darwin-arm64.zip`
+- Linux x64: `butler-app-<version>-linux-x64.tar.gz`
+
+Butler Agent is included in the app. On first launch, setup runs inside the
+Butler App in this order:
+
+1. Language
+2. Safety notice
+3. `Butler Agent를 준비합니다`
+4. Model setup
+
+Use the standalone Agent only when you want the headless runtime without the
+desktop app.
+
+## Advanced: Butler Agent
 
 ```bash
 cd ~
@@ -63,34 +78,6 @@ For scripted installs:
 ./install.sh --non-interactive --no-register-service
 ./install.sh --non-interactive --register-service
 ```
-
-To test the interactive installer in a disposable Docker container:
-
-```bash
-bun run install:docker
-```
-
-The Docker installer builds or consumes a Butler Agent release artifact, runs the
-interactive `install.sh`, then keeps the container shell open. Agent artifacts
-include the built app web client served by the app gateway. The container app
-gateway stays on `18765`, but the host publish port is selected from the first
-free port starting at `18766` so it does not collide with a host Butler already
-using `18765`. The script prints the host web and health URLs. Set
-`BUTLER_INSTALL_DOCKER_HOST_PORT=18770` to force a specific host port.
-
-To manually follow the README install commands inside a dependency-only Docker
-image:
-
-```bash
-bun run install:docker:readme
-docker exec -it butler-readme-install bash -l
-```
-
-The README sandbox downloads the release artifact into the container's
-`~/Downloads`, prepares only system dependencies in the Docker image, pre-wires
-the app gateway to bind `0.0.0.0:18765`, and publishes it to the first free host
-port starting at `18766`. Run the Quick Start commands inside the shell, then
-open the printed host URL from your browser.
 
 After install:
 
@@ -164,9 +151,9 @@ Butler has two release shapes:
 
 ## Development
 
-Source checkouts are for development, not the normal user install path. User
-installs consume Agent release artifacts so the Butler App web client is
-already built before `install.sh` runs.
+Source checkouts, Docker installer sandboxes, and package scripts are for
+development, not the normal user install path. Public installs use Butler App by
+default or the standalone Butler Agent artifact for headless operators.
 
 ```bash
 git clone https://github.com/Hexpy-Games/butler.git ~/butler
@@ -188,6 +175,20 @@ bun run app:client:dev
 bun run app:ui:build
 bun run app:client
 ```
+
+Installer sandboxes:
+
+```bash
+bun run install:docker
+bun run install:docker:readme
+docker exec -it butler-readme-install bash -l
+```
+
+The Docker installer builds or consumes a Butler Agent release artifact, runs the
+interactive `install.sh`, and keeps the container shell open for inspection. The
+README sandbox downloads the Agent artifact into `~/Downloads` and opens a
+dependency-only Docker container for manually running the Advanced Agent install
+commands.
 
 ## Status
 

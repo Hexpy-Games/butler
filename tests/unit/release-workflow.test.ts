@@ -108,26 +108,32 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).toContain('gh release upload "$tag" "${files[@]}" --clobber');
 });
 
-test("README directs user installs to tag artifacts instead of source checkout", () => {
+test("README directs default installs to Butler App and advanced installs to Agent artifacts", () => {
   const readme = readRepoFile("README.md");
   const quickStartStart = readme.indexOf("## Quick Start");
+  const advancedAgentStart = readme.indexOf("## Advanced: Butler Agent");
   const howButlerWorksStart = readme.indexOf("## How Butler Works");
   const developmentStart = readme.indexOf("## Development");
 
   expect(quickStartStart).toBeGreaterThan(-1);
-  expect(howButlerWorksStart).toBeGreaterThan(quickStartStart);
+  expect(advancedAgentStart).toBeGreaterThan(quickStartStart);
+  expect(howButlerWorksStart).toBeGreaterThan(advancedAgentStart);
   expect(developmentStart).toBeGreaterThan(howButlerWorksStart);
 
-  const quickStart = readme.slice(quickStartStart, howButlerWorksStart);
+  const quickStart = readme.slice(quickStartStart, advancedAgentStart);
+  const advancedAgent = readme.slice(advancedAgentStart, howButlerWorksStart);
   const normalizedQuickStart = normalizeWhitespace(quickStart);
   const development = readme.slice(developmentStart);
 
   expect(quickStart).toContain("GitHub Release");
-  expect(quickStart).toContain("butler-agent-*-all.tar.gz");
-  expect(normalizedQuickStart).toContain(
-    "Release artifacts already include the built Butler App web client",
-  );
-  expect(quickStart).toContain("./install.sh");
+  expect(quickStart).toContain("butler-app-<version>-darwin-arm64.zip");
+  expect(quickStart).toContain("butler-app-<version>-linux-x64.tar.gz");
+  expect(normalizedQuickStart).toContain("Butler Agent is included in the app");
+  expect(quickStart).toContain("Butler Agent를 준비합니다");
+  expect(quickStart).not.toContain("butler-agent-*-all.tar.gz");
+  expect(quickStart).not.toContain("./install.sh");
+  expect(advancedAgent).toContain("butler-agent-*-all.tar.gz");
+  expect(advancedAgent).toContain("./install.sh");
   expect(quickStart).not.toContain("git clone");
   expect(quickStart).not.toContain("bun install");
   expect(development).toContain(
