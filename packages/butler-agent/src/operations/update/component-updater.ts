@@ -2,13 +2,18 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   copyFileSync,
+  createReadStream,
+  createWriteStream,
   existsSync,
   mkdirSync,
   readFileSync,
   renameSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { createReleaseManifest } from "../release/manifest.ts";
 
 export const UPDATE_COMPONENT_IDS = ["service", "app"] as const;
@@ -58,6 +63,7 @@ export interface ComponentUpdateStatus {
   available_version: string;
   update_available: boolean;
   channel: string;
+  platform: string | null;
   artifact_url: string | null;
   sha256: string | null;
   signature: string | null;
@@ -150,6 +156,7 @@ type ManifestArtifact = {
   component: UpdateComponentId;
   version: string;
   channel: string;
+  platform: string | null;
   artifact_url: string | null;
   sha256: string | null;
   signature: string | null;
@@ -238,14 +245,18 @@ export async function applyComponentUpdate(
   let artifactPath: string | null = null;
   let activation: StandaloneActivationResult | null = null;
   if (status.update_available) {
-    assertGenericUpdaterCanStage(status);
+    if (status.component === "service") {
+      assertGenericUpdaterCanStage(status);
+    }
     artifactPath = await downloadAndVerifyArtifact(options.butlerData, status);
-    activation = await activateStandaloneAgentUpdate({
-      butlerData: options.butlerData,
-      status,
-      artifactLabel: artifactPath,
-      validate: options.validateStandaloneAgentActivation,
-    });
+    if (status.component === "service") {
+      activation = await activateStandaloneAgentUpdate({
+        butlerData: options.butlerData,
+        status,
+        artifactLabel: artifactPath,
+        validate: options.validateStandaloneAgentActivation,
+      });
+    }
   }
   const stageStatus = activation?.stage_status ?? (status.update_available ? "staged" : "up_to_date");
   writeStage(options.butlerData, {
@@ -254,6 +265,7 @@ export async function applyComponentUpdate(
     current_version: status.current_version,
     available_version: status.available_version,
     update_available: status.update_available,
+    platform: status.platform,
     artifact_url: status.artifact_url,
     artifact_path: artifactPath,
     sha256: status.sha256,
@@ -638,7 +650,7 @@ function buildComponentStatus(input: {
   checkedAt: string;
 }): ComponentUpdateStatus {
   const current = currentVersion(input.root, input.butlerData, input.component);
-  const artifact = input.manifest.artifacts.find((item) => item.component === input.component);
+  const artifact = selectManifestArtifact(input.manifest.artifacts, input.component);
   if (!artifact) throw new Error(`Update manifest is missing component: ${input.component}`);
   const available = artifact.version || current;
   const stage = readStageSnapshot(input.butlerData, input.component);
@@ -648,6 +660,7 @@ function buildComponentStatus(input: {
     available_version: available,
     update_available: compareSemver(available, current) > 0,
     channel: artifact.channel || input.channel,
+    platform: artifact.platform,
     artifact_url: artifact.artifact_url,
     sha256: artifact.sha256,
     signature: artifact.signature,
@@ -781,6 +794,10 @@ function normalizeArtifact(
     component,
     version,
     channel: String(artifact.channel ?? componentEntry?.channel ?? channel),
+    platform: normalizeArtifactPlatform(
+      component,
+      artifact.platform ?? componentEntry?.platform,
+    ),
     artifact_url: stringOrNull(artifact.artifact_url ?? artifact.downloadUrl ?? artifact.url),
     sha256: stringOrNull(artifact.sha256),
     signature: stringOrNull(artifact.signature),
@@ -808,6 +825,24 @@ function normalizeArtifact(
     activation_policy: normalizeActivationPolicy(component, artifact.activation_policy ?? artifact.activationPolicy ?? componentEntry?.activation_policy ?? componentEntry?.activationPolicy),
     rollback_policy: normalizeRollbackPolicy(component, artifact.rollback_policy ?? artifact.rollbackPolicy ?? componentEntry?.rollback_policy ?? componentEntry?.rollbackPolicy),
   };
+}
+
+function selectManifestArtifact(
+  artifacts: ManifestArtifact[],
+  component: UpdateComponentId,
+): ManifestArtifact | null {
+  const candidates = artifacts.filter((item) => item.component === component);
+  if (candidates.length === 0) return null;
+  if (component === "service") {
+    return candidates.find((item) => !item.platform || item.platform === "all") ??
+      candidates[0]!;
+  }
+  const currentPlatform = currentAppUpdatePlatform();
+  const exact = candidates.find((item) => item.platform === currentPlatform);
+  if (exact) return exact;
+  const legacy = candidates.find((item) => !item.platform);
+  if (legacy) return legacy;
+  throw new Error(`Update manifest is missing app artifact for platform: ${currentPlatform}`);
 }
 
 function currentVersion(root: string, butlerData: string, component: UpdateComponentId): string {
@@ -909,6 +944,7 @@ function localUpdateArtifacts(root: string): ManifestArtifact[] {
     component: artifact.component,
     version: artifact.version,
     channel: artifact.channel,
+    platform: artifact.platform,
     artifact_url: artifact.downloadUrl,
     sha256: artifact.sha256,
     signature: artifact.signature,
@@ -949,6 +985,7 @@ function localAppUpdateArtifact(version: string): ManifestArtifact {
     component: "app",
     version,
     channel: "stable",
+    platform: currentAppUpdatePlatform(),
     artifact_url: null,
     sha256: null,
     signature: null,
@@ -986,7 +1023,7 @@ function plannedActionsFor(status: ComponentUpdateStatus): string[] {
     "verify artifact sha256",
     status.staging_policy === "butler-data-updates"
       ? `stage ${label} update under BUTLER_DATA updates`
-      : `hand ${label} update to ${status.staging_policy}`,
+      : `stage ${label} update for ${status.staging_policy} handoff`,
     `activate with ${status.activation_policy}`,
     `rollback with ${status.rollback_policy} on failure`,
     restartAction(status.restart_policy),
@@ -1013,6 +1050,25 @@ function normalizeProduct(
   if (value == null) return expected;
   if (value === expected) return expected;
   throw new Error(`Update artifact ${component} product must be ${expected}.`);
+}
+
+function normalizeArtifactPlatform(
+  component: UpdateComponentId,
+  value: unknown,
+): string | null {
+  if (value == null) return component === "service" ? "all" : null;
+  if (typeof value !== "string") {
+    throw new Error(`Update artifact ${component} platform must be a string.`);
+  }
+  const platform = value.trim();
+  if (!platform) return component === "service" ? "all" : null;
+  return platform;
+}
+
+function currentAppUpdatePlatform(): string {
+  const os = process.platform === "darwin" ? "darwin" : process.platform;
+  const arch = process.arch === "x64" ? "x64" : process.arch;
+  return `${os}-${arch}`;
 }
 
 function normalizeCanonicalComponent(
@@ -1162,25 +1218,57 @@ async function downloadAndVerifyArtifact(
 ): Promise<string> {
   if (!status.artifact_url) throw new Error(`Update artifact URL is required for ${status.component}.`);
   if (!status.sha256) throw new Error(`Update artifact sha256 is required for ${status.component}.`);
-  const bytes = await readArtifactBytes(status.artifact_url);
-  const digest = createHash("sha256").update(bytes).digest("hex");
-  if (digest !== status.sha256) {
-    throw new Error(`Update artifact checksum mismatch for ${status.component}.`);
-  }
   const fileName = safeArtifactName(status.artifact_url, status.component, status.available_version);
   const label = join("updates", "artifacts", fileName);
-  atomicWrite(join(butlerData, label), bytes);
+  const artifactPath = join(butlerData, label);
+  const tmp = `${artifactPath}.tmp-${process.pid}-${Date.now()}`;
+  mkdirSync(dirname(artifactPath), { recursive: true });
+  try {
+    const digest = await copyArtifactToPath(status.artifact_url, tmp);
+    if (digest !== status.sha256) {
+      throw new Error(`Update artifact checksum mismatch for ${status.component}.`);
+    }
+    renameSync(tmp, artifactPath);
+  } catch (error) {
+    removeIfPresent(tmp);
+    throw error;
+  }
   return label;
 }
 
-async function readArtifactBytes(url: string): Promise<Buffer> {
+async function copyArtifactToPath(url: string, targetPath: string): Promise<string> {
   if (/^https?:\/\//u.test(url)) {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Update artifact request failed: ${response.status}`);
-    return Buffer.from(await response.arrayBuffer());
+    if (!response.body) throw new Error("Update artifact response body is empty.");
+    const input = Readable.fromWeb(response.body as any);
+    return await copyStreamToPathWithHash(input, targetPath);
   }
   const path = url.startsWith("file://") ? new URL(url).pathname : url;
-  return readFileSync(path);
+  return await copyStreamToPathWithHash(createReadStream(path), targetPath);
+}
+
+async function copyStreamToPathWithHash(
+  input: Readable,
+  targetPath: string,
+): Promise<string> {
+  const hash = createHash("sha256");
+  const hashStream = new Transform({
+    transform(chunk, _encoding, callback) {
+      hash.update(chunk);
+      callback(null, chunk);
+    },
+  });
+  await pipeline(input, hashStream, createWriteStream(targetPath));
+  return hash.digest("hex");
+}
+
+function removeIfPresent(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch {
+    // Best effort cleanup for failed update artifact staging.
+  }
 }
 
 function safeArtifactName(url: string, component: UpdateComponentId, version: string): string {

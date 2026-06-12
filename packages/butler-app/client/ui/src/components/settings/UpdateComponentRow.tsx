@@ -70,6 +70,7 @@ export function emptyComponentStatus(
     available_version: "",
     update_available: false,
     channel: "stable",
+    platform: isAgent ? "all" : null,
     artifact_url: null,
     sha256: null,
     signature: null,

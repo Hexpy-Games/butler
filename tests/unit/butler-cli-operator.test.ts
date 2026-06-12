@@ -16,6 +16,12 @@ const root = process.cwd();
 const cli = join(root, "bin", "butler.js");
 const packageVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version as string;
 
+function currentAppUpdatePlatformForTest(): string {
+  const os = process.platform === "darwin" ? "darwin" : process.platform;
+  const arch = process.arch === "x64" ? "x64" : process.arch;
+  return `${os}-${arch}`;
+}
+
 function tempRoot(): string {
   const dir = join(tmpdir(), `butler-cli-operator-${Date.now()}-${Math.random()}`);
   mkdirSync(dir, { recursive: true });
@@ -1243,14 +1249,161 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
     const appArtifactPath = join(butlerData, `butler-app-${updateVersion}.zip`);
     const appArtifactContents = `app artifact v${updateVersion}`;
     writeFileSync(appArtifactPath, appArtifactContents, "utf8");
+    const appArtifactSha256 = createHash("sha256").update(appArtifactContents).digest("hex");
+    const appPlatform = currentAppUpdatePlatformForTest();
+    const otherAppPlatform = appPlatform === "darwin-arm64" ? "linux-x64" : "darwin-arm64";
+    const otherAppArtifactPath = join(butlerData, `butler-app-${updateVersion}-${otherAppPlatform}.artifact`);
+    const otherAppArtifactContents = `wrong platform app artifact v${updateVersion}`;
+    writeFileSync(otherAppArtifactPath, otherAppArtifactContents, "utf8");
+    const otherAppArtifactSha256 = createHash("sha256").update(otherAppArtifactContents).digest("hex");
+    const appManagedPointerDir = join(butlerData, "app", "runtime", "agent");
+    const appManagedPointerPath = join(appManagedPointerDir, "current.json");
+    mkdirSync(appManagedPointerDir, { recursive: true });
+    writeFileSync(appManagedPointerPath, JSON.stringify({
+      schema: "butler.app-managed-agent-runtime-pointer.v1",
+      product: "butler-app",
+      bundled_agent_product: "butler-agent",
+      bundled_agent_version: "88.0.0",
+      gateway_profile: "electron",
+      version: "88.0.0",
+      runtime_home: join("app", "runtime", "agent", "versions", "88.0.0"),
+      raw_text_included: false,
+    }, null, 2), "utf8");
+    const appManagedPointerBefore = readFileSync(appManagedPointerPath, "utf8");
+    writeFileSync(manifestPath, JSON.stringify({
+      artifacts: [
+        {
+          component: "app-server",
+          version: updateVersion,
+          channel: "stable",
+          platform: otherAppPlatform,
+          artifact_url: otherAppArtifactPath,
+          sha256: otherAppArtifactSha256,
+          bundled_components: ["app-server"],
+          product: "butler-app",
+          canonical_component: "app",
+          profile: "electron",
+          protocol_compatibility: {
+            protocol: "butler.app.v1",
+            minimumAppProtocol: "butler.app.v1",
+            maximumAppProtocol: "butler.app.v1",
+          },
+          update_policy: "app-user-action",
+          restart_policy: "restart-app",
+          updater_owner: "butler-app",
+          payload_format: "platform-app-package",
+          staging_policy: "platform-updater-cache",
+          activation_policy: "platform-app-update-then-versioned-app-runtime",
+          rollback_policy: "preserve-previous-app-managed-runtime",
+        },
+        {
+          component: "app-server",
+          version: updateVersion,
+          channel: "stable",
+          platform: appPlatform,
+          artifact_url: appArtifactPath,
+          sha256: appArtifactSha256,
+          bundled_components: ["app-server"],
+          product: "butler-app",
+          canonical_component: "app",
+          profile: "electron",
+          protocol_compatibility: {
+            protocol: "butler.app.v1",
+            minimumAppProtocol: "butler.app.v1",
+            maximumAppProtocol: "butler.app.v1",
+          },
+          update_policy: "app-user-action",
+          restart_policy: "restart-app",
+          updater_owner: "butler-app",
+          payload_format: "platform-app-package",
+          staging_policy: "platform-updater-cache",
+          activation_policy: "platform-app-update-then-versioned-app-runtime",
+          rollback_policy: "preserve-previous-app-managed-runtime",
+        },
+      ],
+    }), "utf8");
+    const appDryRun = await applyComponentUpdate({
+      root,
+      butlerData,
+      component: "app",
+      manifestPath,
+      dryRun: true,
+    });
+    expect(appDryRun.planned_actions).toContain(
+      "stage Butler App update for platform-updater-cache handoff",
+    );
+    expect(appDryRun.planned_actions).toContain("restart Butler App to apply");
+    const previousPath = process.env.PATH;
+    try {
+      process.env.PATH = join(butlerData, "blocked-host-tools");
+      const appApply = await applyComponentUpdate({
+        root,
+        butlerData,
+        component: "app",
+        manifestPath,
+      });
+      expect(appApply).toMatchObject({
+        component: "app",
+        current_version: packageVersion,
+        available_version: updateVersion,
+        update_available: true,
+        platform: appPlatform,
+        dryRun: false,
+        stage_status: "staged",
+        activation_status: "not_required",
+        active_runtime_path: null,
+        attempted_runtime_path: null,
+        previous_runtime_path: null,
+        rollback_reason: null,
+        product: "butler-app",
+        canonical_component: "app",
+        profile: "electron",
+        updater_owner: "butler-app",
+        payload_format: "platform-app-package",
+        staging_policy: "platform-updater-cache",
+        activation_policy: "platform-app-update-then-versioned-app-runtime",
+        rollback_policy: "preserve-previous-app-managed-runtime",
+      });
+      expect(appApply.artifact_path).toBe(join("updates", "artifacts", `butler-app-${updateVersion}.zip`));
+      expect(existsSync(join(butlerData, appApply.artifact_path!))).toBe(true);
+      const appStage = JSON.parse(readFileSync(
+        join(butlerData, "updates", "staged", "app.json"),
+        "utf8",
+      ));
+      expect(appStage).toMatchObject({
+        schema: "butler.update-stage.v1",
+        component: "app",
+        product: "butler-app",
+        platform: appPlatform,
+        artifact_path: join("updates", "artifacts", `butler-app-${updateVersion}.zip`),
+        sha256: appArtifactSha256,
+        payload_format: "platform-app-package",
+        staging_policy: "platform-updater-cache",
+        activation_policy: "platform-app-update-then-versioned-app-runtime",
+        rollback_policy: "preserve-previous-app-managed-runtime",
+        stage_status: "staged",
+        activation_status: "not_required",
+        active_runtime_path: null,
+        attempted_runtime_path: null,
+        previous_runtime_path: null,
+        rollback_reason: null,
+        raw_text_included: false,
+      });
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
+    expect(readFileSync(appManagedPointerPath, "utf8")).toBe(appManagedPointerBefore);
+
     writeFileSync(manifestPath, JSON.stringify({
       artifacts: [{
-        component: "app-server",
-        version: updateVersion,
+        component: "app",
+        version: "99.0.3",
         channel: "stable",
+        platform: appPlatform,
         artifact_url: appArtifactPath,
-        sha256: createHash("sha256").update(appArtifactContents).digest("hex"),
-        bundled_components: ["app-server"],
+        sha256: "0".repeat(64),
+        bundled_components: ["app"],
         product: "butler-app",
         canonical_component: "app",
         profile: "electron",
@@ -1268,18 +1421,7 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
         rollback_policy: "preserve-previous-app-managed-runtime",
       }],
     }), "utf8");
-    const appDryRun = await applyComponentUpdate({
-      root,
-      butlerData,
-      component: "app",
-      manifestPath,
-      dryRun: true,
-    });
-    expect(appDryRun.planned_actions).toContain(
-      "hand Butler App update to platform-updater-cache",
-    );
-    expect(appDryRun.planned_actions).toContain("restart Butler App to apply");
-    let appApplyError: Error | null = null;
+    let checksumError: Error | null = null;
     try {
       await applyComponentUpdate({
         root,
@@ -1288,9 +1430,18 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
         manifestPath,
       });
     } catch (error) {
-      appApplyError = error instanceof Error ? error : new Error(String(error));
+      checksumError = error instanceof Error ? error : new Error(String(error));
     }
-    expect(appApplyError?.message).toContain("generic BUTLER_DATA staging is not allowed");
+    expect(checksumError?.message).toContain("Update artifact checksum mismatch for app");
+    expect(readFileSync(appManagedPointerPath, "utf8")).toBe(appManagedPointerBefore);
+    expect(JSON.parse(readFileSync(
+      join(butlerData, "updates", "staged", "app.json"),
+      "utf8",
+    ))).toMatchObject({
+      available_version: updateVersion,
+      stage_status: "staged",
+      activation_status: "not_required",
+    });
 
     const uninstall = runCli(["uninstall", "--json"], butlerData);
     expect(uninstall.exitCode).toBe(2);
