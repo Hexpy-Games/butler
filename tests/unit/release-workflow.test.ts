@@ -83,6 +83,8 @@ test("version tag release workflow publishes signed app artifacts", () => {
 
   const serviceJobIndex = workflow.indexOf("agent-artifact:");
   const appJobIndex = workflow.indexOf("app-artifact:");
+  const baselineIndex = workflow.indexOf("Fetch previous app release manifest");
+  const appGateIndex = workflow.indexOf("bun run release:app:gate");
   const packageIndex = workflow.indexOf("bun run release:app:package");
   const linuxPrepIndex = workflow.indexOf("Prepare Linux app-managed Bun payload");
   const verifyIndex = workflow.indexOf("Verify packaged app artifacts");
@@ -92,12 +94,19 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).toContain("runs-on: macos-latest");
   expect(workflow).toContain("needs: agent-artifact");
   expect(workflow).toContain("npm --prefix packages/butler-app/client/electron ci");
+  expect(workflow).toContain("Fetch previous app release manifest");
+  expect(workflow).toContain("gh release download \"$previous_tag\"");
+  expect(workflow).toContain("app-release-manifest.json");
+  expect(workflow).toContain("BUTLER_APP_PREVIOUS_RELEASE_MANIFEST");
   expect(workflow).toContain("bun run release:app:gate");
   expect(workflow).toContain("Prepare Linux app-managed Bun payload");
   expect(workflow).toContain("bun-linux-x64.zip");
   expect(workflow).toContain("BUTLER_APP_MANAGED_BUN_LINUX_X64=$linux_bun");
   expect(workflow).toContain("ELF 64-bit.*x86-64");
+  expect(baselineIndex).toBeGreaterThan(appJobIndex);
+  expect(appGateIndex).toBeGreaterThan(baselineIndex);
   expect(linuxPrepIndex).toBeGreaterThan(appJobIndex);
+  expect(linuxPrepIndex).toBeGreaterThan(appGateIndex);
   expect(packageIndex).toBeGreaterThan(linuxPrepIndex);
   expect(packageIndex).toBeGreaterThan(appJobIndex);
   expect(workflow).toContain("--artifact-base-url");
