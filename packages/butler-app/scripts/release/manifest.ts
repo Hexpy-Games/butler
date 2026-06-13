@@ -145,6 +145,28 @@ export interface AppBackgroundServiceReleaseCapability {
   rawTextIncluded: false;
 }
 
+export interface AppServiceInstallerPackageArtifactMetadata {
+  packageFormat: AppReleaseServiceInstallerPackageFormat;
+  selectedV1Path: AppBackgroundServiceV1Path;
+  serviceManager: "launchd" | "systemd-user";
+  serviceDefinitionTarget: string;
+  renderContractPath: string;
+  postInstallPath: string;
+}
+
+export interface AppServiceInstallerBundleMetadata {
+  schema: "butler.app-service-installer-bundle.v1";
+  product: AppReleaseProduct;
+  gatewayProfile: AppReleaseGatewayProfile;
+  resourcePath: "bundled-agent/service-installer/installer-manifest.json";
+  installerRootPath: "bundled-agent/service-installer";
+  servicePlatforms: AppBackgroundServicePlatform[];
+  hostToolsRequiredForFirstLaunch: string[];
+  packageArtifacts: AppServiceInstallerPackageArtifactMetadata[];
+  rawTemplateIncluded: false;
+  rawTextIncluded: false;
+}
+
 export interface AppReleaseComponent {
   id: AppReleaseComponentId;
   product: AppReleaseProduct;
@@ -155,6 +177,7 @@ export interface AppReleaseComponent {
   bundledAgentVersion: string;
   bundledAgentPayload: AppBundledAgentPayload;
   backgroundServiceCapability: AppBackgroundServiceReleaseCapability;
+  serviceInstallerBundle: AppServiceInstallerBundleMetadata;
   protocolCompatibility: AppReleaseProtocolCompatibility;
   bundledComponents: AppReleaseComponentId[];
   requiredFiles: string[];
@@ -184,6 +207,7 @@ export interface AppReleaseArtifact {
   bundledAgentVersion: string;
   bundledAgentPayload: AppBundledAgentPayload;
   backgroundServiceCapability: AppBackgroundServiceReleaseCapability;
+  serviceInstallerBundle: AppServiceInstallerBundleMetadata;
   protocolCompatibility: AppReleaseProtocolCompatibility;
   integrity: AppReleaseIntegrityMetadata;
   updatePolicy: AppReleaseUpdatePolicy;
@@ -206,6 +230,7 @@ export interface AppReleaseManifest {
   bundledAgentVersion: string;
   bundledAgentPayload: AppBundledAgentPayload;
   backgroundServiceCapability: AppBackgroundServiceReleaseCapability;
+  serviceInstallerBundle: AppServiceInstallerBundleMetadata;
   updaterOwner: AppReleaseUpdaterOwner;
   components: AppReleaseComponent[];
   artifacts: AppReleaseArtifact[];
@@ -285,6 +310,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
   const versions = readAppComponentVersions(root);
   const bundledAgentPayload = createBundledAgentPayloadMetadata(versions.bundledAgent);
   const backgroundServiceCapability = createAppBackgroundServiceReleaseCapability();
+  const serviceInstallerBundle = createAppServiceInstallerBundleMetadata();
   const protocolCompatibility: AppReleaseProtocolCompatibility = {
     protocol: "butler.app.v1",
     minimumAppProtocol: "butler.app.v1",
@@ -321,6 +347,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
       bundledAgentVersion: versions.bundledAgent,
       bundledAgentPayload,
       backgroundServiceCapability,
+      serviceInstallerBundle,
       protocolCompatibility,
       bundledComponents: ["app"],
       requiredFiles: appFiles,
@@ -345,6 +372,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
     bundledAgentVersion: versions.bundledAgent,
     bundledAgentPayload,
     backgroundServiceCapability,
+    serviceInstallerBundle,
     updaterOwner: "butler-app",
     components,
     artifacts: components.flatMap((component) =>
@@ -364,6 +392,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
         bundledAgentVersion: versions.bundledAgent,
         bundledAgentPayload,
         backgroundServiceCapability: createAppBackgroundServiceReleaseCapability([platform]),
+        serviceInstallerBundle: createAppServiceInstallerBundleMetadata([platform]),
         protocolCompatibility,
         integrity: {
           digestAlgorithm: "sha256",
@@ -403,6 +432,23 @@ export function createAppBackgroundServiceReleaseCapability(
   };
 }
 
+export function createAppServiceInstallerBundleMetadata(
+  platforms: readonly AppReleasePlatform[] = APP_RELEASE_PLATFORMS,
+): AppServiceInstallerBundleMetadata {
+  return {
+    schema: "butler.app-service-installer-bundle.v1",
+    product: "butler-app",
+    gatewayProfile: "electron",
+    resourcePath: "bundled-agent/service-installer/installer-manifest.json",
+    installerRootPath: "bundled-agent/service-installer",
+    servicePlatforms: uniqueServicePlatforms(platforms),
+    hostToolsRequiredForFirstLaunch: [],
+    packageArtifacts: platforms.flatMap(serviceInstallerPackageArtifactsForPlatform),
+    rawTemplateIncluded: false,
+    rawTextIncluded: false,
+  };
+}
+
 function appServiceInstallerRequirementForPlatform(
   releasePlatform: AppReleasePlatform,
 ): AppBackgroundServiceInstallerRequirement {
@@ -419,6 +465,12 @@ function appServiceInstallerRequirementForPlatform(
     userContext: capability.userContext,
     registersUserService: true,
   };
+}
+
+function uniqueServicePlatforms(
+  platforms: readonly AppReleasePlatform[],
+): AppBackgroundServicePlatform[] {
+  return [...new Set(platforms.map(servicePlatformForReleasePlatform))];
 }
 
 function servicePlatformForReleasePlatform(
@@ -444,6 +496,45 @@ function serviceInstallerPackageFormats(
   if (platform === "darwin") return ["pkg"];
   if (platform === "linux") return ["deb", "rpm"];
   throw new Error(`unsupported App service installer platform: ${platform}`);
+}
+
+function serviceInstallerPackageArtifactsForPlatform(
+  releasePlatform: AppReleasePlatform,
+): AppServiceInstallerPackageArtifactMetadata[] {
+  const platform = servicePlatformForReleasePlatform(releasePlatform);
+  if (platform === "darwin") {
+    return [
+      {
+        packageFormat: "pkg",
+        selectedV1Path: "macos-pkg-launch-agent",
+        serviceManager: "launchd",
+        serviceDefinitionTarget: "$HOME/Library/LaunchAgents/com.hexpy.butler.plist",
+        renderContractPath: "service-installer/darwin/launchd/render-contract.json",
+        postInstallPath: "service-installer/darwin/pkg/postinstall",
+      },
+    ];
+  }
+  if (platform === "linux") {
+    return [
+      {
+        packageFormat: "deb",
+        selectedV1Path: "linux-deb-owned-user-unit",
+        serviceManager: "systemd-user",
+        serviceDefinitionTarget: "$HOME/.config/systemd/user/butler.service",
+        renderContractPath: "service-installer/linux/systemd/render-contract.json",
+        postInstallPath: "service-installer/linux/deb/postinst",
+      },
+      {
+        packageFormat: "rpm",
+        selectedV1Path: "linux-rpm-owned-user-unit",
+        serviceManager: "systemd-user",
+        serviceDefinitionTarget: "$HOME/.config/systemd/user/butler.service",
+        renderContractPath: "service-installer/linux/systemd/render-contract.json",
+        postInstallPath: "service-installer/linux/rpm/postinstall.sh",
+      },
+    ];
+  }
+  throw new Error(`unsupported App service installer package artifact platform: ${platform}`);
 }
 
 function createBundledAgentPayloadMetadata(
@@ -762,6 +853,12 @@ export function validateAppReleaseManifest(
     APP_RELEASE_PLATFORMS,
     issues,
   );
+  validateAppServiceInstallerBundle(
+    "app release service installer bundle",
+    manifest.serviceInstallerBundle,
+    APP_RELEASE_PLATFORMS,
+    issues,
+  );
   if (manifest.updaterOwner !== "butler-app")
     issues.push("app release updater owner must be butler-app");
   if (!manifest.version || manifest.version !== versions.app) {
@@ -876,6 +973,12 @@ function validateComponents(
       APP_RELEASE_PLATFORMS,
       issues,
     );
+    validateAppServiceInstallerBundle(
+      `component ${component.id} service installer bundle`,
+      component.serviceInstallerBundle,
+      APP_RELEASE_PLATFORMS,
+      issues,
+    );
     validateProtocolCompatibility(
       `component ${component.id}`,
       component.protocolCompatibility,
@@ -960,6 +1063,12 @@ function validateArtifacts(
     validateAppBackgroundServiceReleaseCapability(
       `artifact ${artifact.component} background service capability`,
       artifact.backgroundServiceCapability,
+      [artifact.platform],
+      issues,
+    );
+    validateAppServiceInstallerBundle(
+      `artifact ${artifact.component} service installer bundle`,
+      artifact.serviceInstallerBundle,
       [artifact.platform],
       issues,
     );
@@ -1117,6 +1226,72 @@ function validateAppBackgroundServiceReleaseCapability(
     }
   }
   if (capability.rawTextIncluded !== false) {
+    issues.push(`${label} must not include raw text`);
+  }
+}
+
+function validateAppServiceInstallerBundle(
+  label: string,
+  bundle: AppServiceInstallerBundleMetadata | undefined,
+  platforms: readonly AppReleasePlatform[],
+  issues: string[],
+): void {
+  if (!bundle) {
+    issues.push(`${label} metadata is required`);
+    return;
+  }
+  if (bundle.schema !== "butler.app-service-installer-bundle.v1") {
+    issues.push(`${label} schema mismatch`);
+  }
+  if (bundle.product !== "butler-app") {
+    issues.push(`${label} product must be butler-app`);
+  }
+  if (bundle.gatewayProfile !== "electron") {
+    issues.push(`${label} gateway profile must be electron`);
+  }
+  if (bundle.resourcePath !== "bundled-agent/service-installer/installer-manifest.json") {
+    issues.push(`${label} resource path mismatch`);
+  }
+  if (bundle.installerRootPath !== "bundled-agent/service-installer") {
+    issues.push(`${label} installer root path mismatch`);
+  }
+  if (bundle.hostToolsRequiredForFirstLaunch.length > 0) {
+    issues.push(`${label} must not require host first-launch tools`);
+  }
+  const expectedServicePlatforms = uniqueServicePlatforms(platforms);
+  if (!sameComponentSet(bundle.servicePlatforms, expectedServicePlatforms)) {
+    issues.push(`${label} service platform mismatch`);
+  }
+  const expectedArtifacts = platforms.flatMap(serviceInstallerPackageArtifactsForPlatform);
+  if (bundle.packageArtifacts.length !== expectedArtifacts.length) {
+    issues.push(`${label} package artifact count mismatch`);
+  }
+  for (const expected of expectedArtifacts) {
+    const actual = bundle.packageArtifacts.find((item) =>
+      item.packageFormat === expected.packageFormat &&
+      item.selectedV1Path === expected.selectedV1Path,
+    );
+    if (!actual) {
+      issues.push(
+        `${label} missing package artifact: ${expected.packageFormat}/${expected.selectedV1Path}`,
+      );
+      continue;
+    }
+    if (
+      actual.serviceManager !== expected.serviceManager ||
+      actual.serviceDefinitionTarget !== expected.serviceDefinitionTarget ||
+      actual.renderContractPath !== expected.renderContractPath ||
+      actual.postInstallPath !== expected.postInstallPath
+    ) {
+      issues.push(
+        `${label} package artifact path mismatch: ${expected.packageFormat}/${expected.selectedV1Path}`,
+      );
+    }
+  }
+  if (bundle.rawTemplateIncluded !== false) {
+    issues.push(`${label} must not include raw templates`);
+  }
+  if (bundle.rawTextIncluded !== false) {
     issues.push(`${label} must not include raw text`);
   }
 }

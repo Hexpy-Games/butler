@@ -223,6 +223,9 @@ Required changes:
 - App bundle resources must include `service-installer/installer-manifest.json`
   so the signed `.pkg`, `.deb`, or `.rpm` builder can consume the same package
   artifact contract verified by release smoke tests.
+- App release and update manifests must expose service installer bundle
+  metadata so release consumers can discover the packaged installer contract
+  without extracting the App artifact first.
 
 ## Success Criteria
 

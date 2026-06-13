@@ -383,6 +383,8 @@ Implemented surface:
   `bundled-agent/service-installer/installer-manifest.json`, which maps each
   supported package format to its selected v1 path, render contract, and
   post-install hook input.
+- App release and update manifests expose `serviceInstallerBundle` metadata so
+  package artifact inputs can be discovered before extracting the App artifact.
 - The dependency closure lists
   `background-service-registration-metadata` as an App-owned dependency.
 - Current v1 installer requirements are declared as:
@@ -397,6 +399,8 @@ Implemented surface:
 - Packaging smoke verifies the service installer manifest declares macOS `pkg`
   and Linux `deb`/`rpm` package artifact inputs without adding first-run host
   tool requirements.
+- Release manifest validation rejects missing service installer bundle metadata
+  on the top-level App release, component, and artifact records.
 
 Remaining:
 

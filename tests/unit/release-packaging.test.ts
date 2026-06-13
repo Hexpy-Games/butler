@@ -185,6 +185,14 @@ test("app release manifest exposes app package files only", () => {
     bundledAgentVersion: currentVersion,
     updaterOwner: "butler-app",
     version: currentVersion,
+    serviceInstallerBundle: {
+      schema: "butler.app-service-installer-bundle.v1",
+      resourcePath: "bundled-agent/service-installer/installer-manifest.json",
+      installerRootPath: "bundled-agent/service-installer",
+      hostToolsRequiredForFirstLaunch: [],
+      rawTemplateIncluded: false,
+      rawTextIncluded: false,
+    },
     backgroundServiceCapability: {
       schema: "butler.app-background-service-capability.v1",
       serviceCapable: true,
@@ -234,6 +242,14 @@ test("app release manifest exposes app package files only", () => {
       gatewayProfile: "electron",
       appGatewayOwner: "background-agent-service",
     },
+    serviceInstallerBundle: {
+      servicePlatforms: ["darwin", "linux"],
+      packageArtifacts: [
+        { packageFormat: "pkg", selectedV1Path: "macos-pkg-launch-agent" },
+        { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
+        { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
+      ],
+    },
     bundledAgentPayload: {
       product: "butler-agent",
       profile: "agent-standalone",
@@ -278,6 +294,12 @@ test("app release manifest exposes app package files only", () => {
       serviceCapable: true,
       gatewayProfile: "electron",
       appGatewayOwner: "background-agent-service",
+    },
+    serviceInstallerBundle: {
+      servicePlatforms: ["darwin"],
+      packageArtifacts: [
+        { packageFormat: "pkg", selectedV1Path: "macos-pkg-launch-agent" },
+      ],
     },
     bundledAgentPayload: {
       product: "butler-agent",
@@ -453,6 +475,20 @@ test("app release metadata ships bundled-Agent-only changes as a new App artifac
     expect(
       artifact.backgroundServiceCapability.installerRequirements[0]?.platform,
     ).toBe(artifact.platform.startsWith("darwin-") ? "darwin" : "linux");
+    expect(artifact.serviceInstallerBundle.servicePlatforms).toEqual([
+      artifact.platform.startsWith("darwin-") ? "darwin" : "linux",
+    ]);
+    expect(artifact.serviceInstallerBundle.packageArtifacts.map((item) => ({
+      packageFormat: item.packageFormat,
+      selectedV1Path: item.selectedV1Path,
+    }))).toEqual(
+      artifact.platform.startsWith("darwin-")
+        ? [{ packageFormat: "pkg", selectedV1Path: "macos-pkg-launch-agent" }]
+        : [
+          { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
+          { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
+        ],
+    );
   }
 });
 
@@ -537,10 +573,12 @@ test("release manifest validation rejects missing two-product schema fields", ()
   brokenApp.bundledAgentVersion = "0.0.0";
   brokenApp.bundledAgentPayload = undefined as any;
   brokenApp.backgroundServiceCapability = undefined as any;
+  brokenApp.serviceInstallerBundle = undefined as any;
   brokenApp.protocolCompatibility = undefined as any;
   brokenApp.components = brokenApp.components.map((component) => ({
     ...component,
     backgroundServiceCapability: undefined as any,
+    serviceInstallerBundle: undefined as any,
   }));
   brokenApp.artifacts = brokenApp.artifacts.map((artifact) => ({
     ...artifact,
@@ -548,6 +586,7 @@ test("release manifest validation rejects missing two-product schema fields", ()
     gatewayProfile: "terminal" as any,
     bundledAgentPayload: undefined as any,
     backgroundServiceCapability: undefined as any,
+    serviceInstallerBundle: undefined as any,
     integrity: undefined as any,
     activationPolicy: "in-place" as any,
   }));
@@ -560,12 +599,15 @@ test("release manifest validation rejects missing two-product schema fields", ()
       "app release bundled agent version mismatch",
       "app release bundled Agent payload metadata is required",
       "app release background service capability metadata is required",
+      "app release service installer bundle metadata is required",
       "component app background service capability metadata is required",
+      "component app service installer bundle metadata is required",
       "artifact app product must be butler-app",
       "artifact app gateway profile must be electron",
       "artifact app bundled agent version mismatch",
       "artifact app bundled Agent payload metadata is required",
       "artifact app background service capability metadata is required",
+      "artifact app service installer bundle metadata is required",
       "artifact app integrity metadata is required",
       "artifact app activation policy must be platform-app-update-then-versioned-app-runtime",
     ]),
@@ -861,6 +903,14 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
         serviceCapable: true,
         appGatewayOwner: "background-agent-service",
       },
+      service_installer_bundle: {
+        servicePlatforms: ["darwin", "linux"],
+        packageArtifacts: [
+          { packageFormat: "pkg", selectedV1Path: "macos-pkg-launch-agent" },
+          { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
+          { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
+        ],
+      },
       gateway_profile: "electron",
       protocol_compatibility: {
         protocol: "butler.app.v1",
@@ -881,6 +931,9 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       background_service_capability: {
         serviceCapable: true,
         appGatewayOwner: "background-agent-service",
+      },
+      service_installer_bundle: {
+        servicePlatforms: ["linux"],
       },
       protocol_compatibility: {
         protocol: "butler.app.v1",
