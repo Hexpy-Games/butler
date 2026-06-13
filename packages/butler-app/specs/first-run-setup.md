@@ -26,10 +26,15 @@ Agent process.
 - The App distribution uses the bundled Agent path only. It must not offer an
   existing-Agent connection, gateway selection, curl, unzip, or terminal
   dependency path.
-- The current bundled-Agent readiness step is the compatibility baseline for
-  the background service migration. The target behavior is that readiness is
-  satisfied by a service-owned app gateway managed by the App-installed Agent
-  service.
+- The Agent readiness step must check the Electron main service-control bridge
+  before managed gateway readiness. If the background service is not installed,
+  the setup bridge attempts service install/start through service-control.
+- If service registration is unavailable or fails, first-run must stop at the
+  install step with redacted diagnostics. It must not silently fall back to an
+  Electron-owned child gateway in production App distribution.
+- In the current migration phase, service-control is a required gate before the
+  existing managed gateway readiness check. The OS-service-owned gateway
+  readiness implementation lands with the platform service adapters.
 - The installation step uses the title `Butler Agent를 준비합니다`.
 - The model step must reuse the App settings model-management modules instead
   of implementing a separate one-off model picker.
@@ -96,6 +101,9 @@ Agent process.
   default-save retry, OAuth login/registration, immediate OAuth session start,
   automatic/manual OAuth completion checks, OAuth pending recovery controls,
   breadcrumb hiding, and no Settings route.
+- Electron setup bridge tests prove the install step calls service-control
+  before managed gateway readiness and fails closed when registration is
+  unavailable.
 - AppShell first-run tests prove the workspace is gated until the model save
   completes.
 - Manual first-run smoke launches an isolated Electron profile and data root so

@@ -138,6 +138,7 @@ test("first-run setup bridge ignores existing-Agent mode requests", async () => 
   expect(bridge.status().phase).toBe("ready");
   expect(managedReadyCalls).toBe(1);
   expect(bridge.diagnostics().checks.map((check) => check.id)).toEqual([
+    "agent_service",
     "managed_gateway",
     "bundled_agent_version",
     "local_auth",
@@ -187,6 +188,7 @@ test("first-run setup bridge ignores standalone installer service fields", async
   expect(bridge.status().phase).toBe("ready");
   expect(managedReadyCalls).toBe(1);
   expect(bridge.diagnostics().checks.map((check) => check.id)).toEqual([
+    "agent_service",
     "managed_gateway",
     "bundled_agent_version",
     "local_auth",

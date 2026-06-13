@@ -173,10 +173,27 @@ Primary files:
 
 Acceptance:
 
-- The install step verifies service-owned app gateway readiness.
+- The setup bridge uses service-control before managed gateway readiness.
+- The install step fails closed before managed gateway readiness when service
+  registration or startup fails.
+- Service-owned app gateway readiness replaces the current managed readiness
+  implementation when platform adapters land.
 - The UI does not expose terminal dependency prompts.
 - The UI does not offer an existing-Agent connection path in App distribution.
 - Diagnostics are redacted and actionable.
+
+Implemented surface:
+
+- `createFirstRunSetupBridge` checks service-control before managed gateway
+  readiness and fails closed when service registration is unavailable.
+- Startup failure and post-start not-ready service states stay in the install
+  step and do not call managed gateway readiness.
+- Existing first-run UI copy and retry/diagnostics controls are reused for the
+  service setup failure path.
+
+Validation:
+
+- `bun test tests/unit/app-first-run-setup-bridge.test.ts tests/unit/app-first-run-setup-bridge-runtime.test.ts packages/butler-app/client/ui/src/components/first-run/FirstRunSetup.test.tsx tests/unit/app-first-run-setup.test.ts`
 
 ## Phase 4: Tray/Menu Bar Service Controller
 
