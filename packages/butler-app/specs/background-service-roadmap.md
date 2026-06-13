@@ -375,6 +375,10 @@ Implemented surface:
   `bundled-agent/background-service-registration.json` with platform-specific
   LaunchAgent or `systemd --user` registration metadata for installer/helper
   consumption.
+- Bundled App resources include `bundled-agent/service-installer/` render
+  contracts for platform-specific service definitions and package post-install
+  hook inputs. The contracts name the required escaping policy instead of
+  shipping raw placeholder-expanded service files.
 - The dependency closure lists
   `background-service-registration-metadata` as an App-owned dependency.
 - Current v1 installer requirements are declared as:
@@ -384,6 +388,8 @@ Implemented surface:
   the bundled Agent runtime and release manifests.
 - Packaging smoke verifies the service registration metadata is present inside
   packaged App resources.
+- Packaging smoke verifies the service installer render contracts are present inside
+  packaged App resources and covered by the dependency closure digest.
 
 Remaining:
 

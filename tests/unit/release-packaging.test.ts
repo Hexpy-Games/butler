@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "child_process";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -822,6 +822,9 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(entries).toContain(`${resourceRoot}/dependency-closure.json`);
     expect(entries).toContain(`${resourceRoot}/background-service-capability.json`);
     expect(entries).toContain(`${resourceRoot}/background-service-registration.json`);
+    expect(entries).toContain(`${resourceRoot}/service-installer/linux/systemd/render-contract.json`);
+    expect(entries).toContain(`${resourceRoot}/service-installer/linux/deb/postinst`);
+    expect(entries).toContain(`${resourceRoot}/service-installer/linux/rpm/postinstall.sh`);
     expect(entries).toContain(`${resourceRoot}/runtime/bun-version`);
     expect(entries).toContain(`${resourceRoot}/runtime/bin/bun`);
     const bundledRuntime = extractTarEntryBuffer(
@@ -902,6 +905,10 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       artifact.artifactPath,
       `${resourceRoot}/background-service-registration.json`,
     );
+    const systemdRenderContract = extractTarEntryJson(
+      artifact.artifactPath,
+      `${resourceRoot}/service-installer/linux/systemd/render-contract.json`,
+    );
     expect(backgroundServiceCapability).toMatchObject({
       schema: "butler.app-background-service-capability.v1",
       serviceCapable: true,
@@ -916,6 +923,16 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
           registersUserService: true,
         },
       ],
+      rawTextIncluded: false,
+    });
+    expect(systemdRenderContract).toMatchObject({
+      schema: "butler.app-service-render-contract.v1",
+      platform: "linux",
+      manager: "systemd-user",
+      target: "$HOME/.config/systemd/user/butler.service",
+      renderer: "butler-app-native-service-bridge",
+      requiredEscaping: "systemd-quoted",
+      rawTemplateIncluded: false,
       rawTextIncluded: false,
     });
     expect(backgroundServiceRegistration).toMatchObject({
@@ -992,6 +1009,7 @@ test("app package smoke uses real bundled Agent release resources", () => {
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-smoke-agent-resource-"));
   try {
     const bundledAgent = prepareBundledAgentResource(root, workDir);
+    const servicePlatform = servicePlatformForReleasePlatform(bundledAgent.platform);
     expect(bundledAgent.artifactName).toBe(`butler-agent-${currentVersion}-all.tar.gz`);
     expect(bundledAgent.version).toBe(currentVersion);
     expect(existsSync(join(bundledAgent.resourceDir, bundledAgent.artifactName))).toBe(true);
@@ -1000,6 +1018,7 @@ test("app package smoke uses real bundled Agent release resources", () => {
     expect(existsSync(join(bundledAgent.resourceDir, "dependency-closure.json"))).toBe(true);
     expect(existsSync(join(bundledAgent.resourceDir, "background-service-capability.json"))).toBe(true);
     expect(existsSync(join(bundledAgent.resourceDir, "background-service-registration.json"))).toBe(true);
+    expectServiceInstallerPayload(bundledAgent.resourceDir, servicePlatform);
 
     const listing = spawnSync("tar", [
       "-tzf",
@@ -1063,6 +1082,7 @@ test("app package smoke uses real bundled Agent release resources", () => {
       paths: [
         "bundled-agent/background-service-capability.json",
         "bundled-agent/background-service-registration.json",
+        "bundled-agent/service-installer",
       ],
       repairSource: "bundled-payload-repair-source",
       integrity: {
@@ -1147,6 +1167,7 @@ test("app package smoke uses real bundled Agent release resources", () => {
           "bundled-agent/runtime",
           "bundled-agent/background-service-capability.json",
           "bundled-agent/background-service-registration.json",
+          "bundled-agent/service-installer",
         ],
         verification: "sha256",
         integrity: {
@@ -1166,6 +1187,24 @@ test("app package smoke uses real bundled Agent release resources", () => {
     ]);
     expect(validateAppDependencyClosureManifest(dependencyClosure)).toEqual([]);
   } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test("app package smoke includes macOS service installer payload", () => {
+  const workDir = mkdtempSync(join(tmpdir(), "butler-app-smoke-darwin-agent-resource-"));
+  const previousDarwinRuntime = process.env.BUTLER_APP_MANAGED_BUN_DARWIN_ARM64;
+  try {
+    process.env.BUTLER_APP_MANAGED_BUN_DARWIN_ARM64 = writeFakeDarwinArm64Runtime(workDir);
+    const bundledAgent = prepareBundledAgentResource(root, workDir, "darwin-arm64");
+    expect(bundledAgent.platform).toBe("darwin-arm64");
+    expectServiceInstallerPayload(bundledAgent.resourceDir, "darwin");
+  } finally {
+    if (previousDarwinRuntime === undefined) {
+      delete process.env.BUTLER_APP_MANAGED_BUN_DARWIN_ARM64;
+    } else {
+      process.env.BUTLER_APP_MANAGED_BUN_DARWIN_ARM64 = previousDarwinRuntime;
+    }
     rmSync(workDir, { recursive: true, force: true });
   }
 }, 60_000);
@@ -1531,6 +1570,16 @@ function writeFakeLinuxX64Runtime(dir: string): string {
   return runtime;
 }
 
+function writeFakeDarwinArm64Runtime(dir: string): string {
+  const runtime = join(dir, "fake-darwin-arm64-bun");
+  const bytes = Buffer.alloc(64);
+  bytes.writeUInt32LE(0xfeedfacf, 0);
+  bytes.writeInt32LE(0x0100000c, 4);
+  writeFileSync(runtime, bytes);
+  chmodSync(runtime, 0o755);
+  return runtime;
+}
+
 function isElfX64(bytes: Buffer): boolean {
   return (
     bytes.length >= 20 &&
@@ -1541,6 +1590,70 @@ function isElfX64(bytes: Buffer): boolean {
     bytes[4] === 2 &&
     bytes.readUInt16LE(18) === 0x3e
   );
+}
+
+function servicePlatformForReleasePlatform(platform: string): "darwin" | "linux" {
+  if (platform.startsWith("darwin-")) return "darwin";
+  if (platform.startsWith("linux-")) return "linux";
+  throw new Error(`unsupported app release platform in test: ${platform}`);
+}
+
+function expectServiceInstallerPayload(
+  resourceDir: string,
+  servicePlatform: "darwin" | "linux",
+): void {
+  if (servicePlatform === "darwin") {
+    expect(
+      JSON.parse(
+        readText(join(
+          resourceDir,
+          "service-installer",
+          "darwin",
+          "launchd",
+          "render-contract.json",
+        )),
+      ),
+    ).toMatchObject({
+      platform: "darwin",
+      manager: "launchd",
+      requiredEscaping: "xml",
+      rawTemplateIncluded: false,
+      rawTextIncluded: false,
+    });
+    expectExecutable(join(
+      resourceDir,
+      "service-installer",
+      "darwin",
+      "pkg",
+      "postinstall",
+    ));
+    return;
+  }
+
+  expect(
+    JSON.parse(
+      readText(join(
+        resourceDir,
+        "service-installer",
+        "linux",
+        "systemd",
+        "render-contract.json",
+      )),
+    ),
+  ).toMatchObject({
+    platform: "linux",
+    manager: "systemd-user",
+    requiredEscaping: "systemd-quoted",
+    rawTemplateIncluded: false,
+    rawTextIncluded: false,
+  });
+  expectExecutable(join(resourceDir, "service-installer", "linux", "deb", "postinst"));
+  expectExecutable(join(resourceDir, "service-installer", "linux", "rpm", "postinstall.sh"));
+}
+
+function expectExecutable(path: string): void {
+  expect(existsSync(path)).toBe(true);
+  expect((statSync(path).mode & 0o111)).not.toBe(0);
 }
 
 function readText(path: string): string {

@@ -216,6 +216,10 @@ Required changes:
   metadata for the installer/helper path. This metadata is not a substitute for
   signed `.pkg`, `.deb`, or `.rpm` artifacts; it is the packaged contract those
   installers consume.
+- App bundle resources must include service installer render contracts for
+  LaunchAgent and `systemd --user` definitions, plus executable package
+  post-install hook inputs. Render contracts must require XML/systemd escaping
+  and must not rely on raw placeholder substitution.
 
 ## Success Criteria
 
