@@ -377,6 +377,26 @@ Acceptance:
 - Background consolidation can continue while the UI is closed.
 - Service diagnostics are available when the UI is reopened.
 
+Implemented surface:
+
+- `tests/unit/app-background-service-e2e.test.ts` covers the local product
+  contract with a fake service adapter:
+  - first-run installs and starts the background Agent service before gateway
+    readiness.
+  - tray state derives Start/Stop/Restart availability from service-control
+    status.
+  - runtime update prepare/apply promotes a readiness-confirmed candidate.
+  - explicit runtime update rollback restores the previous active pointer.
+
+Remaining:
+
+- Real first-run service install E2E on macOS/Linux once platform adapters
+  register actual user services.
+- Real close-window and quit-UI persistence E2E against an OS-managed service.
+- Real Stop Agent process-group termination E2E.
+- Real app update restart/rollback E2E with previous and next packaged
+  runtimes.
+
 ## Initial Implementation Order
 
 1. Phase 0 baseline contracts and platform registration decision gate.
