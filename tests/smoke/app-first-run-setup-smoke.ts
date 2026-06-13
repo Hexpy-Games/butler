@@ -306,6 +306,31 @@ async function clickButton(client: CdpClient, label: string): Promise<void> {
   assert(clicked, `button click failed: ${label}`);
 }
 
+async function fillInput(
+  client: CdpClient,
+  selector: string,
+  value: string,
+): Promise<void> {
+  await waitForExpression(
+    client,
+    `document.querySelector(${JSON.stringify(selector)}) !== null`,
+    `input ${selector}`,
+  );
+  const filled = await evaluateBoolean(
+    client,
+    `(() => {
+      const input = document.querySelector(${JSON.stringify(selector)});
+      if (!(input instanceof HTMLInputElement)) return false;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, ${JSON.stringify(value)});
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, data: ${JSON.stringify(value)} }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return input.value === ${JSON.stringify(value)};
+    })()`,
+  );
+  assert(filled, `input fill failed: ${selector}`);
+}
+
 async function waitForHeading(
   client: CdpClient,
   label: string,
@@ -446,6 +471,22 @@ async function main(): Promise<void> {
     ),
     "model add provider select is missing",
   );
+  assert(
+    !(await evaluateBoolean(
+      cdp,
+      `Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === ${JSON.stringify("저장하고 시작")})`,
+    )),
+    "finish action is visible before registering a model",
+  );
+  await fillInput(cdp, "input[type=\"password\"]", "sk-smoke-test");
+  await clickButton(cdp, "추가");
+  await waitForText(cdp, "저장하고 시작");
+  await clickButton(cdp, "저장하고 시작");
+  await waitForExpression(
+    cdp,
+    `document.querySelector(${JSON.stringify(firstRunSelector)}) === null && document.querySelector('[data-test-class="workspace"]') !== null`,
+    "workspace after first-run completion",
+  );
 
   console.log(JSON.stringify({
     ok: true,
@@ -459,6 +500,8 @@ async function main(): Promise<void> {
       "no-personal-onboarding-copy",
       "model-setup-after-readiness",
       "model-add-first-screen",
+      "model-register-save-complete",
+      "workspace-gate-opens-after-model-save",
     ],
     appServerUrl: `http://127.0.0.1:${serverPort}/`,
   }));

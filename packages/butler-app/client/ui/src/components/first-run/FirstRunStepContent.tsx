@@ -39,6 +39,7 @@ interface FirstRunStepContentProps {
   onLanguageContinue: () => void;
   onQuit: () => void;
   onRetryModelLoad: () => void;
+  onRetryModelSave: () => void;
   onRetryInstall: () => void;
   onSaveModel: () => void;
 }
@@ -61,6 +62,7 @@ export function FirstRunStepContent({
   onLanguageContinue,
   onQuit,
   onRetryModelLoad,
+  onRetryModelSave,
   onRetryInstall,
   onSaveModel,
 }: FirstRunStepContentProps) {
@@ -122,9 +124,7 @@ export function FirstRunStepContent({
       <SetupWizardContent>
         <Typo.H3 as="h1">{copy.installTitle}</Typo.H3>
         <Typo.Body>{error || status}</Typo.Body>
-        {diagnosticsStatus && (
-          <Typo.Caption>{diagnosticsStatus}</Typo.Caption>
-        )}
+        {diagnosticsStatus && <Typo.Caption>{diagnosticsStatus}</Typo.Caption>}
         <ButtonContainer size="default">
           {error && (
             <>
@@ -152,6 +152,7 @@ export function FirstRunStepContent({
       modelSettingsReady={modelSettingsReady}
       modelSetupReady={modelSetupReady}
       onRetryModelLoad={onRetryModelLoad}
+      onRetryModelSave={onRetryModelSave}
       onSaveModel={onSaveModel}
     />
   );

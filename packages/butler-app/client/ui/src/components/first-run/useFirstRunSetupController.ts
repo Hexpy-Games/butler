@@ -172,6 +172,7 @@ export function useFirstRunSetupController(
         }),
       ),
     onRetryModelLoad: modelSetup.onRetryModelLoad,
+    onRetryModelSave: modelSetup.onRetryModelSave,
     onLanguageContinue: () => void selectLanguage(),
     onRetryInstall: () => {
       setError("");

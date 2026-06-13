@@ -41,6 +41,7 @@ export function FirstRunSetup({
         onQuit={setup.onQuit}
         onRetryInstall={setup.onRetryInstall}
         onRetryModelLoad={setup.onRetryModelLoad}
+        onRetryModelSave={setup.onRetryModelSave}
         onSaveModel={setup.onSaveModel}
       />
     </SetupWizardShell>
