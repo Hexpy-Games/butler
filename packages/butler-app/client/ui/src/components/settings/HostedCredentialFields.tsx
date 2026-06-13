@@ -1,6 +1,8 @@
 import { Input, SettingsField, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { ModelCatalogView, ProviderAuthMethod } from "@/app/types.ts";
+import type { OpenAIOAuthLoginResult } from "./modelManagementApi";
+import { HostedOAuthFields } from "./HostedOAuthFields";
 import { SettingsSelect } from "./SettingsFormComponents";
 import {
   NEW_CREDENTIAL_ID,
@@ -14,8 +16,17 @@ interface HostedCredentialFieldsProps {
   credentialId: string;
   apiKey: string;
   credentialLabel: string;
+  oauthBusy?: boolean;
+  oauthCallbackUrl?: string;
+  oauthLogin?: OpenAIOAuthLoginResult | null;
   onAuthMethodChange: (value: ProviderAuthMethod) => void;
   onCredentialIdChange: (value: string) => void;
+  onOAuthCallbackUrlChange?: (value: string) => void;
+  onOAuthCheck?: () => void;
+  onOAuthCopyUrl?: () => void;
+  onOAuthOpenUrl?: () => void;
+  onOAuthRestart?: () => void;
+  onOAuthSubmitCallback?: () => void;
   onApiKeyChange: (value: string) => void;
   onCredentialLabelChange: (value: string) => void;
   authMethods: ProviderAuthMethod[];
@@ -28,8 +39,17 @@ export function HostedCredentialFields({
   credentialId,
   apiKey,
   credentialLabel,
+  oauthBusy = false,
+  oauthCallbackUrl = "",
+  oauthLogin = null,
   onAuthMethodChange,
   onCredentialIdChange,
+  onOAuthCallbackUrlChange,
+  onOAuthCheck,
+  onOAuthCopyUrl,
+  onOAuthOpenUrl,
+  onOAuthRestart,
+  onOAuthSubmitCallback,
   onApiKeyChange,
   onCredentialLabelChange,
   authMethods,
@@ -89,6 +109,19 @@ export function HostedCredentialFields({
             </>
           ) : null}
         </>
+      ) : null}
+      {authMethod === "codex_oauth" ? (
+        <HostedOAuthFields
+          callbackUrl={oauthCallbackUrl}
+          login={oauthLogin}
+          busy={oauthBusy}
+          onCallbackUrlChange={onOAuthCallbackUrlChange ?? (() => {})}
+          onCheck={onOAuthCheck ?? (() => {})}
+          onCopyUrl={onOAuthCopyUrl ?? (() => {})}
+          onOpenUrl={onOAuthOpenUrl ?? (() => {})}
+          onRestart={onOAuthRestart ?? (() => {})}
+          onSubmitCallback={onOAuthSubmitCallback ?? (() => {})}
+        />
       ) : null}
     </Stack>
   );

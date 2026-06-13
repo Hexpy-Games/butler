@@ -80,6 +80,7 @@ const nativeNotificationState = {
   lastAttemptedAt: null,
   lastShownAt: null,
 };
+let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
   resolveGateway: managedGatewayCommand,
@@ -313,10 +314,16 @@ function oauthScriptButlerHome(scriptPath) {
   return resolve(dirname(scriptPath), "../../..");
 }
 
-async function startOpenAIOAuthLogin() {
-  const existingLabel = await readCodexAuthProfileLabel();
+async function startOpenAIOAuthLogin(input = {}) {
+  if (input?.force === true) {
+    cancelOpenAIOAuthLogin();
+  }
+  const existingLabel = input?.force === true ? null : await readCodexAuthProfileLabel();
   if (existingLabel) {
     return { status: "profile_exists", label: existingLabel };
+  }
+  if (["pending", "starting"].includes(openAIOAuthLoginSession?.status)) {
+    return oauthLoginSessionView(openAIOAuthLoginSession);
   }
   const scriptPath = await oauthLoginScriptPath();
   if (!scriptPath) throw new Error("OpenAI OAuth login helper is missing.");
@@ -327,36 +334,195 @@ async function startOpenAIOAuthLogin() {
     BUTLER_DATA: butlerDataRoot,
     BUTLER_BUN: runtime,
     BUTLER_CODEX_OAUTH_CLIENT_ID: codexOAuthClientId(),
+    BUTLER_CODEX_OAUTH_NO_BROWSER: "1",
   };
-  await runOAuthLoginProcess(runtime, ["run", scriptPath], env);
-  return {
-    status: "completed",
-    label: await readCodexAuthProfileLabel() ?? "OpenAI account",
-  };
+  return await beginOAuthLoginProcess(runtime, ["run", scriptPath], env);
 }
 
-function runOAuthLoginProcess(command, args, env) {
+async function openAIOAuthLoginStatus() {
+  if (
+    openAIOAuthLoginSession?.status === "pending" ||
+    openAIOAuthLoginSession?.status === "starting"
+  ) {
+    const label = await readCodexAuthProfileLabel();
+    if (label) {
+      openAIOAuthLoginSession.status = "completed";
+      openAIOAuthLoginSession.label = label;
+      return oauthLoginSessionView(openAIOAuthLoginSession);
+    }
+  }
+  if (openAIOAuthLoginSession) {
+    return oauthLoginSessionView(openAIOAuthLoginSession);
+  }
+  const existingLabel = await readCodexAuthProfileLabel();
+  return existingLabel
+    ? { status: "profile_exists", label: existingLabel }
+    : { status: "idle" };
+}
+
+async function submitOpenAIOAuthCallback(input = {}) {
+  const session = openAIOAuthLoginSession;
+  if (!session || session.status !== "pending") {
+    throw new Error("OAuth login is not pending.");
+  }
+  const callbackUrl = safeString(input?.callbackUrl);
+  if (!callbackUrl) throw new Error("OAuth callback URL is required.");
+  const url = new URL(callbackUrl);
+  const hostname = url.hostname.toLocaleLowerCase("en-US");
+  const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  if (url.protocol !== "http:" || !isLocalhost || url.pathname !== "/auth/callback") {
+    throw new Error("OAuth callback URL must be a local callback URL.");
+  }
+  assertOAuthCallbackMatchesSession(url, session);
+  const response = await fetch(url.toString());
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return await waitForOAuthCompletion();
+}
+
+function cancelOpenAIOAuthLogin() {
+  if (
+    openAIOAuthLoginSession?.child &&
+    ["pending", "starting"].includes(openAIOAuthLoginSession.status)
+  ) {
+    openAIOAuthLoginSession.child.kill("SIGTERM");
+    openAIOAuthLoginSession.status = "cancelled";
+  }
+  return oauthLoginSessionView(openAIOAuthLoginSession);
+}
+
+function assertOAuthCallbackMatchesSession(url, session) {
+  if (!session.redirectUri) {
+    throw new Error("OAuth login redirect URI is missing.");
+  }
+  const expectedRedirect = new URL(session.redirectUri);
+  if (
+    url.origin !== expectedRedirect.origin ||
+    url.pathname !== expectedRedirect.pathname
+  ) {
+    throw new Error("OAuth callback URL does not match the active login.");
+  }
+  const expectedState = session.state ||
+    (session.authUrl ? new URL(session.authUrl).searchParams.get("state") : null);
+  if (expectedState && url.searchParams.get("state") !== expectedState) {
+    throw new Error("OAuth callback state mismatch.");
+  }
+}
+
+async function waitForOAuthCompletion(timeoutMs = 10_000) {
+  const expiresAt = Date.now() + timeoutMs;
+  while (Date.now() < expiresAt) {
+    const status = await openAIOAuthLoginStatus();
+    if (["completed", "profile_exists", "failed", "cancelled"].includes(status.status)) {
+      return status;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  }
+  return await openAIOAuthLoginStatus();
+}
+
+function beginOAuthLoginProcess(command, args, env) {
   return new Promise((resolveProcess, rejectProcess) => {
+    const session = {
+      id: randomUUID(),
+      status: "starting",
+      authUrl: null,
+      redirectUri: null,
+      error: null,
+      child: null,
+    };
+    openAIOAuthLoginSession = session;
     const child = spawn(command, args, {
       cwd: env.BUTLER_HOME,
       env,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    session.child = child;
     let stderr = "";
+    let stdout = "";
+    let resolved = false;
+    const urlTimeout = setTimeout(() => {
+      session.status = "failed";
+      session.error = "OAuth login URL was not produced.";
+      child.kill("SIGTERM");
+      rejectOnce(new Error(session.error));
+    }, 10_000);
+    const resolveOnce = () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(urlTimeout);
+      resolveProcess(oauthLoginSessionView(session));
+    };
+    const rejectOnce = (error) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(urlTimeout);
+      rejectProcess(error);
+    };
+    child.stdout?.on("data", (chunk) => {
+      stdout = `${stdout}${String(chunk)}`.slice(-4000);
+      const authUrl = stdout.split(/\r?\n/u).find((line) =>
+        /^https?:\/\//u.test(line.trim()),
+      );
+      if (!authUrl || session.authUrl) return;
+      session.status = "pending";
+      session.authUrl = authUrl.trim();
+      session.redirectUri = redirectUriFromAuthUrl(session.authUrl);
+      session.state = stateFromAuthUrl(session.authUrl);
+      void shell.openExternal(session.authUrl);
+      resolveOnce();
+    });
     child.stderr?.on("data", (chunk) => {
       stderr = `${stderr}${String(chunk)}`.slice(-4000);
     });
-    child.on("error", rejectProcess);
+    child.on("error", (error) => {
+      session.status = "failed";
+      session.error = error instanceof Error ? error.message : String(error);
+      rejectOnce(error);
+    });
     child.on("exit", (code, signal) => {
       if (code === 0) {
-        resolveProcess();
+        void readCodexAuthProfileLabel().then((label) => {
+          session.status = "completed";
+          session.label = label ?? "OpenAI account";
+          resolveOnce();
+        });
         return;
       }
-      rejectProcess(new Error(
-        stderr.trim() || `OAuth login exited with ${signal ?? code}.`,
-      ));
+      session.status = session.status === "cancelled" ? "cancelled" : "failed";
+      session.error = stderr.trim() || `OAuth login exited with ${signal ?? code}.`;
+      if (resolved) return;
+      rejectOnce(new Error(session.error));
     });
   });
+}
+
+function redirectUriFromAuthUrl(value) {
+  try {
+    return new URL(value).searchParams.get("redirect_uri") ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function stateFromAuthUrl(value) {
+  try {
+    return new URL(value).searchParams.get("state") ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function oauthLoginSessionView(session) {
+  if (!session) return { status: "idle" };
+  return {
+    status: session.status,
+    ...(session.authUrl ? { auth_url: session.authUrl } : {}),
+    ...(session.redirectUri ? { redirect_uri: session.redirectUri } : {}),
+    ...(session.label ? { label: session.label } : {}),
+    ...(session.error ? { error: session.error } : {}),
+  };
 }
 
 function readLatestAppManagedRuntimeFailure() {
@@ -964,6 +1130,18 @@ ipcMain.handle("butler:get-local-auth-headers", async () =>
 
 ipcMain.handle("butler:start-openai-oauth-login", async () =>
   await startOpenAIOAuthLogin(),
+);
+
+ipcMain.handle("butler:restart-openai-oauth-login", async () =>
+  await startOpenAIOAuthLogin({ force: true }),
+);
+
+ipcMain.handle("butler:get-openai-oauth-login-status", async () =>
+  await openAIOAuthLoginStatus(),
+);
+
+ipcMain.handle("butler:submit-openai-oauth-callback", async (_event, input) =>
+  await submitOpenAIOAuthCallback(input),
 );
 
 ipcMain.handle("butler:set-native-appearance-theme", (_event, input) => {

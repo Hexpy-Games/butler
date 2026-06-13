@@ -120,6 +120,65 @@ test("first-run model setup supports OpenAI OAuth registration", async () => {
   await act(async () => rendered.root.unmount());
 });
 
+test("first-run OAuth setup starts immediately and exposes retry callback controls", async () => {
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+    {
+      modelCatalog: firstRunModelCatalog(["codex_oauth", "api_key"]),
+      oauthLoginResult: {
+        status: "pending",
+        auth_url: "https://auth.openai.com/oauth/authorize?state=test",
+        redirect_uri: "http://localhost:1455/auth/callback",
+      },
+    },
+  );
+
+  await waitForText(rendered.container, "OAuth");
+  await waitForText(rendered.container, "OAuth 링크");
+  await waitForText(rendered.container, "결과 URL 붙여넣기");
+  expect(rendered.calls).toContain("startOpenAIOAuthLogin");
+  expect(buttonByLabel(rendered.container, "다시 인증")).not.toBeUndefined();
+  expect(rendered.calls).not.toContain("registerHostedModel");
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run OAuth setup disables add while the auth URL is starting", async () => {
+  const oauthStarted = deferred<void>();
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+    {
+      holdOAuthLogin: oauthStarted.promise,
+      modelCatalog: firstRunModelCatalog(["codex_oauth", "api_key"]),
+      oauthLoginResult: {
+        status: "pending",
+        auth_url: "https://auth.openai.com/oauth/authorize?state=test",
+        redirect_uri: "http://localhost:1455/auth/callback",
+      },
+    },
+  );
+
+  await waitForCall(rendered, "startOpenAIOAuthLogin");
+  expect(buttonByLabel(rendered.container, "추가")?.disabled).toBe(true);
+  oauthStarted.resolve();
+  await waitForText(rendered.container, "OAuth 링크");
+  expect(buttonByLabel(rendered.container, "추가")?.disabled).toBe(false);
+
+  await act(async () => rendered.root.unmount());
+});
+
 test("first-run setup does not expose existing-Agent connection after failure", async () => {
   const rendered = await renderFirstRun({
     ...createInitialFirstRunState("ko"),
@@ -336,7 +395,9 @@ async function renderFirstRun(
     failDefaultSaveOnce?: boolean;
     failModelCatalogOnce?: boolean;
     holdBundledAgent?: Promise<void>;
+    holdOAuthLogin?: Promise<void>;
     modelCatalog?: ModelCatalogView;
+    oauthLoginResult?: unknown;
     rejectSetupOnce?: boolean;
     settings?: SettingsView;
   } = {},
@@ -439,6 +500,21 @@ async function renderFirstRun(
       },
       startOpenAIOAuthLogin: async () => {
         calls.push("startOpenAIOAuthLogin");
+        if (options.holdOAuthLogin) {
+          await options.holdOAuthLogin;
+        }
+        return options.oauthLoginResult ?? { status: "completed" };
+      },
+      restartOpenAIOAuthLogin: async () => {
+        calls.push("restartOpenAIOAuthLogin");
+        return options.oauthLoginResult ?? { status: "pending" };
+      },
+      getOpenAIOAuthLoginStatus: async () => {
+        calls.push("getOpenAIOAuthLoginStatus");
+        return options.oauthLoginResult ?? { status: "completed" };
+      },
+      submitOpenAIOAuthCallback: async () => {
+        calls.push("submitOpenAIOAuthCallback");
         return { status: "completed" };
       },
       registerHostedModel: async (request?: unknown) => {
@@ -526,6 +602,21 @@ async function waitForCompletion(rendered: RenderedFirstRun): Promise<void> {
   while (rendered.completedStates.length === 0) {
     if (Date.now() > deadline) {
       throw new Error("Timed out waiting for first-run completion");
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+  }
+}
+
+async function waitForCall(
+  rendered: RenderedFirstRun,
+  call: string,
+): Promise<void> {
+  const deadline = Date.now() + 1200;
+  while (!rendered.calls.includes(call)) {
+    if (Date.now() > deadline) {
+      throw new Error(`Timed out waiting for call: ${call}`);
     }
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 25));

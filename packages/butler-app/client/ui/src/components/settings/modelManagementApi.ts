@@ -10,8 +10,18 @@ import type {
 } from "@/app/types.ts";
 
 export interface OpenAIOAuthLoginResult {
+  auth_url?: string;
+  error?: string;
   label?: string;
-  status: "completed" | "profile_exists";
+  redirect_uri?: string;
+  status:
+    | "cancelled"
+    | "completed"
+    | "failed"
+    | "idle"
+    | "pending"
+    | "profile_exists"
+    | "starting";
 }
 
 export async function registerHostedModel(
@@ -27,14 +37,42 @@ export async function registerHostedModel(
 }
 
 export async function startOpenAIOAuthLogin(): Promise<OpenAIOAuthLoginResult> {
+  return await callOpenAIOAuthBridge("startOpenAIOAuthLogin");
+}
+
+export async function restartOpenAIOAuthLogin(): Promise<OpenAIOAuthLoginResult> {
+  return await callOpenAIOAuthBridge("restartOpenAIOAuthLogin");
+}
+
+export async function getOpenAIOAuthLoginStatus(): Promise<OpenAIOAuthLoginResult> {
+  return await callOpenAIOAuthBridge("getOpenAIOAuthLoginStatus");
+}
+
+export async function submitOpenAIOAuthCallback(
+  callbackUrl: string,
+): Promise<OpenAIOAuthLoginResult> {
+  return await callOpenAIOAuthBridge("submitOpenAIOAuthCallback", {
+    callbackUrl,
+  });
+}
+
+async function callOpenAIOAuthBridge(
+  method:
+    | "getOpenAIOAuthLoginStatus"
+    | "restartOpenAIOAuthLogin"
+    | "startOpenAIOAuthLogin"
+    | "submitOpenAIOAuthCallback",
+  input?: unknown,
+): Promise<OpenAIOAuthLoginResult> {
   const bridge = typeof window !== "undefined"
-    ? (window.butlerApp as { startOpenAIOAuthLogin?: () => Promise<OpenAIOAuthLoginResult> } | undefined)
+    ? (window.butlerApp as Record<string, unknown> | undefined)
     : undefined;
   if (!bridge) return { status: "profile_exists" };
-  if (typeof bridge?.startOpenAIOAuthLogin !== "function") {
+  const call = bridge[method];
+  if (typeof call !== "function") {
     throw new Error(appCopy.settings.modelManagement.errors.oauthLogin);
   }
-  return await bridge.startOpenAIOAuthLogin();
+  return await call(input) as OpenAIOAuthLoginResult;
 }
 
 export async function deleteRegisteredModel(

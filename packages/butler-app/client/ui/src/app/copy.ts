@@ -538,6 +538,17 @@ export interface AppCopy {
       newCredential: string;
       codexOauth: string;
       apiKeyAuth: string;
+      oauthCallback: string;
+      oauthCheck: string;
+      oauthComplete: string;
+      oauthCopy: string;
+      oauthFailed: string;
+      oauthLink: string;
+      oauthOpen: string;
+      oauthPending: string;
+      oauthReady: string;
+      oauthRetry: string;
+      oauthSubmitCallback: string;
       save: string;
       saveAdd: string;
       saveEdit: string;
@@ -1179,6 +1190,17 @@ const koKrCopy: AppCopy = {
       newCredential: "새로 작성",
       codexOauth: "OAuth",
       apiKeyAuth: "API key",
+      oauthCallback: "결과 URL 붙여넣기",
+      oauthCheck: "인증 완료 확인",
+      oauthComplete: "OAuth 인증 완료",
+      oauthCopy: "링크 복사",
+      oauthFailed: "OAuth 인증이 완료되지 않았습니다.",
+      oauthLink: "OAuth 링크",
+      oauthOpen: "브라우저에서 열기",
+      oauthPending: "브라우저에서 인증을 완료하세요.",
+      oauthReady: "추가를 누르면 OAuth 인증을 시작합니다.",
+      oauthRetry: "다시 인증",
+      oauthSubmitCallback: "붙여넣은 URL로 완료",
       save: "추가",
       saveAdd: "추가",
       saveEdit: "저장",
@@ -1827,6 +1849,17 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       newCredential: "New credential",
       codexOauth: "OAuth",
       apiKeyAuth: "API key",
+      oauthCallback: "Paste result URL",
+      oauthCheck: "Check completion",
+      oauthComplete: "OAuth complete",
+      oauthCopy: "Copy link",
+      oauthFailed: "OAuth did not complete.",
+      oauthLink: "OAuth link",
+      oauthOpen: "Open in browser",
+      oauthPending: "Complete auth in your browser.",
+      oauthReady: "Add starts OAuth.",
+      oauthRetry: "Authenticate again",
+      oauthSubmitCallback: "Complete with pasted URL",
       save: "Add",
       saveAdd: "Add",
       saveEdit: "Save",
