@@ -49,6 +49,13 @@ test("first-run setup renders the minimal Electron setup order", async () => {
   expect(
     rendered.container.querySelector('[data-test-class="new-chat-fluid-gradient"]'),
   ).not.toBeNull();
+  expect(
+    rendered.container.querySelector('[data-test-class="setup-wizard-drag-lane"]'),
+  ).not.toBeNull();
+  expect(
+    rendered.container.querySelector('[data-test-class="setup-wizard-drag-lane"]')
+      ?.className,
+  ).toContain("drag-region");
   expect(rendered.container.querySelector('[data-slot="tinted-glass"]')).not.toBeNull();
   expect(rendered.container.querySelector("ol button")).toBeNull();
   expect(rendered.container.querySelector('[aria-current="step"]')?.textContent)

@@ -1701,6 +1701,17 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(settingsShellStyles).toContain(".detailScroll");
   expect(settingsShellStyles).toContain("z-index: 1");
   expect(settingsShellStyles).toContain("-webkit-app-region: drag");
+  const setupWizardShell = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/SetupWizardShell/SetupWizardShell.tsx",
+  );
+  const setupWizardShellStyles = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/SetupWizardShell/SetupWizardShell.module.css",
+  );
+  expect(setupWizardShell).toContain('data-test-class="setup-wizard-drag-lane"');
+  expect(setupWizardShell).toContain("styles.dragLane");
+  expect(setupWizardShell).toContain("className={`${styles.header} drag-region`}");
+  expect(setupWizardShellStyles).toContain(".dragLane");
+  expect(setupWizardShellStyles).toContain("-webkit-app-region: drag");
   expect(renderer).toContain("closeSettings");
   expect(renderer).toContain("settingsCopy.panels.butlerModel");
   expect(read("packages/butler-app/client/ui/src/app/copy.ts")).toContain(

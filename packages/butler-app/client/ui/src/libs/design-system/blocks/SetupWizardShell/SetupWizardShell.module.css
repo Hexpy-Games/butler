@@ -17,6 +17,15 @@
   max-height: calc(100vh - var(--space-2xl) * 2);
 }
 
+.dragLane {
+  position: fixed;
+  z-index: 2;
+  inset: 0 0 auto;
+  height: calc(var(--titlebar-height) + var(--space-md));
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
 .header {
   color: var(--text-primary);
 }

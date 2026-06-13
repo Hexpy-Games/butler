@@ -432,6 +432,14 @@ async function main(): Promise<void> {
     `document.querySelector(${JSON.stringify(firstRunSelector)}) !== null`,
     "first-run setup root",
   );
+  const setupDragRegion = await evaluateString(
+    cdp,
+    "getComputedStyle(document.querySelector('[data-test-class=\"setup-wizard-drag-lane\"]')).getPropertyValue(\"-webkit-app-region\")",
+  );
+  assert(
+    setupDragRegion === "drag",
+    `first-run drag lane should be draggable, got ${setupDragRegion}`,
+  );
 
   await waitForHeading(cdp, "언어 선택");
   await expectNoForbiddenCopy(cdp);
@@ -498,6 +506,7 @@ async function main(): Promise<void> {
     service: "butler-app-first-run-setup-smoke",
     checks: [
       "electron-first-run-visible",
+      "first-run-drag-lane",
       "system-language-ko-preselected",
       "language-safety-install-model-order",
       "agent-progress-title",

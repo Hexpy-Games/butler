@@ -33,13 +33,18 @@ export function SetupWizardShell({
   return (
     <main className={styles.screen} {...props}>
       <PromptFluidBackground variant="bloom" />
+      <div
+        aria-hidden="true"
+        className={`${styles.dragLane} drag-region`}
+        data-test-class="setup-wizard-drag-lane"
+      />
       <Stack
         as="section"
         className={styles.shell}
         gap="lg"
         aria-label={regionLabel}
       >
-        <Stack className={styles.header} gap="sm">
+        <Stack className={`${styles.header} drag-region`} gap="sm">
           <p className={styles.productTitle}>{title}</p>
           <ProgressStepper
             activeIndex={activeIndex}
