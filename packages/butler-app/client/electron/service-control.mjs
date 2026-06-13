@@ -9,9 +9,12 @@ const serviceStatuses = new Set([
   "stopped",
   "failed",
   "needs_permission",
+  "staging",
   "draining",
   "updating",
   "restarting",
+  "candidate_ready",
+  "promoting",
   "rollback",
 ]);
 
@@ -68,6 +71,36 @@ export function createAgentServiceControl({
     return runServiceAction("restart", adapter?.restart, request);
   }
 
+  async function prepareAgentRuntimeUpdate(request = {}) {
+    return runServiceAction(
+      "prepare_runtime_update",
+      adapter?.prepareRuntimeUpdate,
+      request,
+      "agent_runtime_update_unavailable",
+      "failed",
+    );
+  }
+
+  async function applyAgentRuntimeUpdate(request = {}) {
+    return runServiceAction(
+      "apply_runtime_update",
+      adapter?.applyRuntimeUpdate,
+      request,
+      "agent_runtime_update_unavailable",
+      "failed",
+    );
+  }
+
+  async function rollbackAgentRuntimeUpdate(request = {}) {
+    return runServiceAction(
+      "rollback_runtime_update",
+      adapter?.rollbackRuntimeUpdate,
+      request,
+      "agent_runtime_update_unavailable",
+      "failed",
+    );
+  }
+
   async function readAgentServiceDiagnostics() {
     const adapterDiagnostics = adapter?.diagnostics
       ? await safeDiagnostics(adapter.diagnostics)
@@ -85,17 +118,23 @@ export function createAgentServiceControl({
     };
   }
 
-  async function runServiceAction(action, handler, request) {
+  async function runServiceAction(
+    action,
+    handler,
+    request,
+    unavailableCode = "service_registration_unavailable",
+    unavailableStatus = "needs_permission",
+  ) {
     if (!handler) {
       lastError = {
-        code: "service_registration_unavailable",
+        code: unavailableCode,
         action,
         at: now().toISOString(),
       };
       return actionResult({
         action,
         ok: false,
-        status: "needs_permission",
+        status: unavailableStatus,
         platform: servicePlatform,
         requiredDecision,
         errorCode: lastError.code,
@@ -139,6 +178,9 @@ export function createAgentServiceControl({
     startAgentService,
     stopAgentService,
     restartAgentService,
+    prepareAgentRuntimeUpdate,
+    applyAgentRuntimeUpdate,
+    rollbackAgentRuntimeUpdate,
     readAgentServiceDiagnostics,
   };
 }

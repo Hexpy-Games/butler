@@ -1556,6 +1556,8 @@ test("electron shell owns only the app gateway process and shuts it down cleanly
   );
 
   expect(electronMain).toContain("function stopServerProcess");
+  expect(electronMain).toContain("app.requestSingleInstanceLock()");
+  expect(electronMain).toContain('app.on("second-instance"');
   expect(electronMain).toContain("bundledAgentSupervisor.stop()");
   expect(supervisor).toContain('stopping.kill("SIGTERM")');
   expect(supervisor).toContain('stopping.kill("SIGKILL")');

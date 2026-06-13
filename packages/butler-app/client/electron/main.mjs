@@ -110,6 +110,15 @@ const firstRunSetupBridge = createFirstRunSetupBridge({
   serviceControl: agentServiceControl,
 });
 app.setName(appDisplayName);
+const appSingleInstanceLock = app.requestSingleInstanceLock();
+if (!appSingleInstanceLock) {
+  isQuitting = true;
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    void showMainWindow().catch(handleFatalStartupError);
+  });
+}
 syncPreloadServerEnvironment();
 
 function projectFolderTokenSecretPath(dataRoot = butlerDataRoot) {
@@ -1194,6 +1203,18 @@ ipcMain.handle("butler:agent-service-restart", (_event, input = {}) =>
   agentServiceControl.restartAgentService(input ?? {}),
 );
 
+ipcMain.handle("butler:agent-runtime-update-prepare", (_event, input = {}) =>
+  agentServiceControl.prepareAgentRuntimeUpdate(input ?? {}),
+);
+
+ipcMain.handle("butler:agent-runtime-update-apply", (_event, input = {}) =>
+  agentServiceControl.applyAgentRuntimeUpdate(input ?? {}),
+);
+
+ipcMain.handle("butler:agent-runtime-update-rollback", (_event, input = {}) =>
+  agentServiceControl.rollbackAgentRuntimeUpdate(input ?? {}),
+);
+
 ipcMain.handle("butler:agent-service-diagnostics", () =>
   agentServiceControl.readAgentServiceDiagnostics(),
 );
@@ -1329,17 +1350,19 @@ function safeSaveFileName(value) {
   return name || fallback;
 }
 
-app
-  .whenReady()
-  .then(async () => {
-    configureAppIdentity();
-    configureAppIcon();
-    Menu.setApplicationMenu(null);
-    nativeTheme.on("updated", updateTrayIcon);
-    await installDevtools();
-    await createWindow();
-  })
-  .catch(handleFatalStartupError);
+if (appSingleInstanceLock) {
+  app
+    .whenReady()
+    .then(async () => {
+      configureAppIdentity();
+      configureAppIcon();
+      Menu.setApplicationMenu(null);
+      nativeTheme.on("updated", updateTrayIcon);
+      await installDevtools();
+      await createWindow();
+    })
+    .catch(handleFatalStartupError);
+}
 
 app.on("window-all-closed", () => {
   if (nativeShellPreferences.trayEnabled) return;

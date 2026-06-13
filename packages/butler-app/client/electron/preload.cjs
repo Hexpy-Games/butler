@@ -170,6 +170,12 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:agent-service-stop", request ?? {}),
   restartAgentService: (request = {}) =>
     ipcRenderer.invoke("butler:agent-service-restart", request ?? {}),
+  prepareAgentRuntimeUpdate: (request = {}) =>
+    ipcRenderer.invoke("butler:agent-runtime-update-prepare", request ?? {}),
+  applyAgentRuntimeUpdate: (request = {}) =>
+    ipcRenderer.invoke("butler:agent-runtime-update-apply", request ?? {}),
+  rollbackAgentRuntimeUpdate: (request = {}) =>
+    ipcRenderer.invoke("butler:agent-runtime-update-rollback", request ?? {}),
   exportAgentServiceDiagnostics: () =>
     ipcRenderer.invoke("butler:agent-service-diagnostics"),
   quitApp: () => ipcRenderer.invoke("butler:quit-app"),

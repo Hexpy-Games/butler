@@ -16,11 +16,21 @@ import { spawnSync } from "node:child_process";
 import { expect, test } from "bun:test";
 import { createAppDependencyClosureManifest } from "../../packages/butler-app/scripts/release/manifest.ts";
 import {
+  APP_MANAGED_RUNTIME_UPDATE_TRANSACTION_SCHEMA,
   APP_MANAGED_RUNTIME_POINTER_SCHEMA,
   activateAppManagedAgentRuntime,
   appManagedAgentPointerPath,
+  appManagedAgentCandidateBootTokenPath,
+  appManagedAgentUpdateTransactionPath,
+  beginAppManagedAgentRuntimeUpdate,
+  consumeAppManagedAgentCandidateBootToken,
+  markAppManagedAgentRuntimeCandidateReady,
   prepareAppManagedAgentRuntime,
+  promoteAppManagedAgentRuntimeCandidate,
+  readAppManagedAgentRuntimeUpdateTransaction,
+  recoverAppManagedAgentRuntimeUpdateTransaction,
   resolveAppManagedGatewayCommand,
+  rollbackAppManagedAgentRuntimeUpdate,
 } from "../../packages/butler-app/client/electron/app-managed-runtime.mjs";
 
 const root = process.cwd();
@@ -612,6 +622,329 @@ test("App-managed runtime prepares bundled-Agent-only update and rolls back with
   }
 });
 
+test("App-managed runtime update transaction promotes candidate only after readiness proof", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-update-transaction-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const activePointer = appPointer("1.0.0");
+    const candidatePointer = appPointer("2.0.0");
+    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
+    writeFileSync(
+      appManagedAgentPointerPath(butlerData),
+      `${JSON.stringify(activePointer, null, 2)}\n`,
+    );
+
+    const transaction = beginAppManagedAgentRuntimeUpdate({
+      butlerData,
+      candidatePointer,
+      candidateDigest: "sha256-next",
+      generateToken: () => "candidate-token",
+      now: fixedNow,
+    });
+
+    expect(transaction).toMatchObject({
+      schema: APP_MANAGED_RUNTIME_UPDATE_TRANSACTION_SCHEMA,
+      status: "restart_required",
+      previous_active_pointer: activePointer,
+      active_pointer: activePointer,
+      candidate_pointer: candidatePointer,
+      candidate_digest: "sha256-next",
+      candidate_boot_token_hash: sha256TextForTest("candidate-token"),
+      readiness_proof: null,
+      started_at: "2026-06-12T00:00:00.000Z",
+      updated_at: "2026-06-12T00:00:00.000Z",
+      raw_text_included: false,
+    });
+    expect(readJson(appManagedAgentPointerPath(butlerData))).toEqual(activePointer);
+    expect(readJson(appManagedAgentCandidateBootTokenPath(butlerData))).toMatchObject({
+      generation: transaction.generation,
+      candidate_pointer: candidatePointer,
+      candidate_digest: "sha256-next",
+      token: "candidate-token",
+      raw_text_included: false,
+    });
+    expect(
+      consumeAppManagedAgentCandidateBootToken({
+        butlerData,
+        generation: transaction.generation,
+        candidateDigest: "sha256-next",
+        token: "candidate-token",
+      }),
+    ).toEqual({
+      generation: transaction.generation,
+      candidate_pointer: candidatePointer,
+      candidate_digest: "sha256-next",
+      raw_text_included: false,
+    });
+    expect(existsSync(appManagedAgentCandidateBootTokenPath(butlerData))).toBe(false);
+    expect(() =>
+      consumeAppManagedAgentCandidateBootToken({
+        butlerData,
+        generation: transaction.generation,
+        candidateDigest: "sha256-next",
+        token: "candidate-token",
+      }),
+    ).toThrow("missing candidate");
+
+    expect(() =>
+      promoteAppManagedAgentRuntimeCandidate({
+        butlerData,
+        generation: transaction.generation,
+        now: fixedNow,
+      }),
+    ).toThrow("not ready");
+    expect(readJson(appManagedAgentPointerPath(butlerData))).toEqual(activePointer);
+
+    const ready = markAppManagedAgentRuntimeCandidateReady({
+      butlerData,
+      generation: transaction.generation,
+      readinessProof: {
+        ok: true,
+        runtime_home: "/Users/private/runtime",
+        token: "secret-token",
+      },
+      now: fixedNow,
+    });
+    expect(ready).toMatchObject({
+      status: "candidate_ready",
+      readiness_proof: {
+        ok: true,
+        runtime_home: "[redacted-path]",
+        token: "[redacted]",
+        raw_text_included: false,
+      },
+    });
+
+    const promoted = promoteAppManagedAgentRuntimeCandidate({
+      butlerData,
+      generation: transaction.generation,
+      now: fixedNow,
+    });
+    expect(promoted).toMatchObject({
+      status: "ready",
+      active_pointer: {
+        version: "2.0.0",
+        previous: activePointer,
+        selected_at: "2026-06-12T00:00:00.000Z",
+      },
+    });
+    expect(readJson(appManagedAgentPointerPath(butlerData))).toMatchObject({
+      version: "2.0.0",
+      previous: activePointer,
+    });
+    expect(existsSync(appManagedAgentCandidateBootTokenPath(butlerData))).toBe(false);
+    expect(readAppManagedAgentRuntimeUpdateTransaction(butlerData)).toMatchObject({
+      status: "ready",
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("App-managed candidate boot token is generation locked", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-update-token-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
+    writeFileSync(
+      appManagedAgentPointerPath(butlerData),
+      `${JSON.stringify(appPointer("1.0.0"), null, 2)}\n`,
+    );
+    const transaction = beginAppManagedAgentRuntimeUpdate({
+      butlerData,
+      candidatePointer: appPointer("2.0.0"),
+      candidateDigest: "sha256-next",
+      generateToken: () => "candidate-token",
+      now: fixedNow,
+    });
+
+    expect(() =>
+      consumeAppManagedAgentCandidateBootToken({
+        butlerData,
+        generation: "older-generation",
+        candidateDigest: "sha256-next",
+        token: "candidate-token",
+      }),
+    ).toThrow("missing App-managed Agent runtime update transaction");
+    expect(() =>
+      consumeAppManagedAgentCandidateBootToken({
+        butlerData,
+        generation: transaction.generation,
+        candidateDigest: "sha256-next",
+        token: "wrong-token",
+      }),
+    ).toThrow("boot token mismatch");
+    expect(existsSync(appManagedAgentCandidateBootTokenPath(butlerData))).toBe(true);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("App-managed runtime update recovery finalizes ready candidate pointer", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-update-recover-ready-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const activePointer = appPointer("1.0.0");
+    const candidatePointer = appPointer("2.0.0");
+    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
+    writeFileSync(
+      appManagedAgentPointerPath(butlerData),
+      `${JSON.stringify(activePointer, null, 2)}\n`,
+    );
+    const transaction = beginAppManagedAgentRuntimeUpdate({
+      butlerData,
+      candidatePointer,
+      candidateDigest: "sha256-next",
+      generateToken: () => "candidate-token",
+      now: fixedNow,
+    });
+    markAppManagedAgentRuntimeCandidateReady({
+      butlerData,
+      generation: transaction.generation,
+      readinessProof: { ok: true },
+      now: fixedNow,
+    });
+    writeFileSync(
+      appManagedAgentPointerPath(butlerData),
+      `${JSON.stringify(candidatePointer, null, 2)}\n`,
+    );
+
+    const recovered = recoverAppManagedAgentRuntimeUpdateTransaction({
+      butlerData,
+      now: fixedNow,
+    });
+
+    expect(recovered).toMatchObject({
+      status: "ready",
+      active_pointer: candidatePointer,
+      last_error: null,
+      raw_text_included: false,
+    });
+    expect(existsSync(appManagedAgentCandidateBootTokenPath(butlerData))).toBe(false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("App-managed runtime update recovery rolls back unready candidate pointer", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-update-recover-rollback-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const activePointer = appPointer("1.0.0");
+    const candidatePointer = appPointer("2.0.0");
+    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
+    writeFileSync(
+      appManagedAgentPointerPath(butlerData),
+      `${JSON.stringify(activePointer, null, 2)}\n`,
+    );
+    beginAppManagedAgentRuntimeUpdate({
+      butlerData,
+      candidatePointer,
+      candidateDigest: "sha256-next",
+      generateToken: () => "candidate-token",
+      now: fixedNow,
+    });
+    writeFileSync(
+      appManagedAgentPointerPath(butlerData),
+      `${JSON.stringify(candidatePointer, null, 2)}\n`,
+    );
+
+    const recovered = recoverAppManagedAgentRuntimeUpdateTransaction({
+      butlerData,
+      now: fixedNow,
+    });
+
+    expect(recovered).toMatchObject({
+      status: "rollback",
+      active_pointer: activePointer,
+      last_error: "recovered unready candidate pointer",
+      raw_text_included: false,
+    });
+    expect(readJson(appManagedAgentPointerPath(butlerData))).toEqual(activePointer);
+    expect(existsSync(appManagedAgentCandidateBootTokenPath(butlerData))).toBe(false);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("App-managed runtime update recovery rolls back missing candidate token", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-update-recover-token-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const activePointer = appPointer("1.0.0");
+    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
+    writeFileSync(
+      appManagedAgentPointerPath(butlerData),
+      `${JSON.stringify(activePointer, null, 2)}\n`,
+    );
+    beginAppManagedAgentRuntimeUpdate({
+      butlerData,
+      candidatePointer: appPointer("2.0.0"),
+      candidateDigest: "sha256-next",
+      generateToken: () => "candidate-token",
+      now: fixedNow,
+    });
+    rmSync(appManagedAgentCandidateBootTokenPath(butlerData), { force: true });
+
+    const recovered = recoverAppManagedAgentRuntimeUpdateTransaction({
+      butlerData,
+      now: fixedNow,
+    });
+
+    expect(recovered).toMatchObject({
+      status: "rollback",
+      active_pointer: activePointer,
+      last_error: "recovered missing candidate boot token",
+      raw_text_included: false,
+    });
+    expect(readJson(appManagedAgentPointerPath(butlerData))).toEqual(activePointer);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("App-managed runtime update transaction rolls back to previous active pointer", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-update-rollback-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const activePointer = appPointer("1.0.0");
+    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
+    writeFileSync(
+      appManagedAgentPointerPath(butlerData),
+      `${JSON.stringify(activePointer, null, 2)}\n`,
+    );
+    const transaction = beginAppManagedAgentRuntimeUpdate({
+      butlerData,
+      candidatePointer: appPointer("2.0.0"),
+      candidateDigest: "sha256-next",
+      generateToken: () => "candidate-token",
+      now: fixedNow,
+    });
+
+    const rollback = rollbackAppManagedAgentRuntimeUpdate({
+      butlerData,
+      generation: transaction.generation,
+      error: new Error("failed at /Users/private/runtime-token"),
+      now: fixedNow,
+    });
+
+    expect(rollback).toMatchObject({
+      status: "rollback",
+      active_pointer: activePointer,
+      last_error: "failed at [redacted-path]",
+      raw_text_included: false,
+    });
+    expect(readJson(appManagedAgentPointerPath(butlerData))).toEqual(activePointer);
+    expect(existsSync(appManagedAgentCandidateBootTokenPath(butlerData))).toBe(false);
+    expect(readJson(appManagedAgentUpdateTransactionPath(butlerData))).toMatchObject({
+      status: "rollback",
+      last_error: "failed at [redacted-path]",
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("App-managed gateway command uses App runtime instead of standalone BUTLER_HOME", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-command-"));
   try {
@@ -781,6 +1114,19 @@ function createBundledAgentResource(
   return resourceRoot;
 }
 
+function appPointer(version: string) {
+  return {
+    schema: APP_MANAGED_RUNTIME_POINTER_SCHEMA,
+    product: "butler-app",
+    bundled_agent_product: "butler-agent",
+    bundled_agent_version: version,
+    gateway_profile: "electron",
+    version,
+    runtime_home: join("app", "runtime", "agent", "versions", version),
+    raw_text_included: false,
+  } as const;
+}
+
 function writeHostToolBlockers(dir: string, _logPath: string): void {
   mkdirSync(dir, { recursive: true });
   for (const tool of ["curl", "wget", "unzip", "tar"]) {
@@ -843,6 +1189,10 @@ function writeReadyRuntime(butlerData: string, runtimeLabel: string): void {
 
 function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function sha256TextForTest(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function sha256Directory(path: string): string {

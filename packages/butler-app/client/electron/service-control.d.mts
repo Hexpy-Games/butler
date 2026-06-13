@@ -9,6 +9,9 @@ export function createAgentServiceControl(options?: {
     start?: (request?: unknown) => unknown | Promise<unknown>;
     stop?: (request?: unknown) => unknown | Promise<unknown>;
     restart?: (request?: unknown) => unknown | Promise<unknown>;
+    prepareRuntimeUpdate?: (request?: unknown) => unknown | Promise<unknown>;
+    applyRuntimeUpdate?: (request?: unknown) => unknown | Promise<unknown>;
+    rollbackRuntimeUpdate?: (request?: unknown) => unknown | Promise<unknown>;
     diagnostics?: () => unknown | Promise<unknown>;
   } | null;
   now?: () => Date;
@@ -18,5 +21,8 @@ export function createAgentServiceControl(options?: {
   startAgentService: (request?: unknown) => Promise<unknown>;
   stopAgentService: (request?: unknown) => Promise<unknown>;
   restartAgentService: (request?: unknown) => Promise<unknown>;
+  prepareAgentRuntimeUpdate: (request?: unknown) => Promise<unknown>;
+  applyAgentRuntimeUpdate: (request?: unknown) => Promise<unknown>;
+  rollbackAgentRuntimeUpdate: (request?: unknown) => Promise<unknown>;
   readAgentServiceDiagnostics: () => Promise<unknown>;
 };

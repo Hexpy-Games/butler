@@ -33,6 +33,17 @@ test("Agent service control fails closed before platform service adapter lands",
     updated_at: "2026-06-13T00:00:00.000Z",
     raw_text_included: false,
   });
+  await expect(control.prepareAgentRuntimeUpdate()).resolves.toEqual({
+    schema: APP_AGENT_SERVICE_CONTROL_SCHEMA,
+    action: "prepare_runtime_update",
+    ok: false,
+    status: "failed",
+    platform: "darwin",
+    required_decision: "macos-registration-path",
+    error_code: "agent_runtime_update_unavailable",
+    updated_at: "2026-06-13T00:00:00.000Z",
+    raw_text_included: false,
+  });
 
   const diagnostics = await control.readAgentServiceDiagnostics();
   expect(diagnostics).toMatchObject({
@@ -40,8 +51,8 @@ test("Agent service control fails closed before platform service adapter lands",
     platform: "darwin",
     service_available: false,
     last_error: {
-      code: "service_registration_unavailable",
-      action: "install",
+      code: "agent_runtime_update_unavailable",
+      action: "prepare_runtime_update",
     },
     raw_text_included: false,
   });
@@ -63,6 +74,18 @@ test("Agent service control normalizes adapter results", async () => {
       restart: async () => {
         calls.push("restart");
         return { ok: true, status: "ready" };
+      },
+      prepareRuntimeUpdate: async (request) => {
+        calls.push(`prepare:${(request as { generation?: string }).generation}`);
+        return { ok: true, status: "staging" };
+      },
+      applyRuntimeUpdate: async () => {
+        calls.push("apply");
+        return { ok: true, status: "restarting" };
+      },
+      rollbackRuntimeUpdate: async () => {
+        calls.push("rollback");
+        return { ok: true, status: "rollback" };
       },
       diagnostics: async () => ({
         status: "ready",
@@ -87,7 +110,27 @@ test("Agent service control normalizes adapter results", async () => {
     status: "ready",
     error_code: null,
   });
-  expect(calls).toEqual(["restart"]);
+  await expect(
+    control.prepareAgentRuntimeUpdate({ generation: "gen-1" }),
+  ).resolves.toMatchObject({
+    action: "prepare_runtime_update",
+    ok: true,
+    status: "staging",
+    error_code: null,
+  });
+  await expect(control.applyAgentRuntimeUpdate()).resolves.toMatchObject({
+    action: "apply_runtime_update",
+    ok: true,
+    status: "restarting",
+    error_code: null,
+  });
+  await expect(control.rollbackAgentRuntimeUpdate()).resolves.toMatchObject({
+    action: "rollback_runtime_update",
+    ok: true,
+    status: "rollback",
+    error_code: null,
+  });
+  expect(calls).toEqual(["restart", "prepare:gen-1", "apply", "rollback"]);
   await expect(control.readAgentServiceDiagnostics()).resolves.toMatchObject({
     adapter: {
       status: "ready",
