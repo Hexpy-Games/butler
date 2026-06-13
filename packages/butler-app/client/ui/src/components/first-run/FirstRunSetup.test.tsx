@@ -15,7 +15,6 @@ import type {
   ProviderAuthMethod,
   SettingsView,
 } from "@/app/types.ts";
-import { hostedModelProviders } from "@/components/settings/modelManagementUtils";
 import { FirstRunSetup } from "./FirstRunSetup";
 
 interface RenderedFirstRun {
@@ -24,6 +23,7 @@ interface RenderedFirstRun {
   completedStates: FirstRunState[];
   copiedDiagnostics: string[];
   root: Root;
+  hostedModelRequests: unknown[];
   settingsPatches: unknown[];
   setupModes: string[];
 }
@@ -88,12 +88,34 @@ test("first-run setup renders the minimal Electron setup order", async () => {
     rendered.container.querySelector(
       '[data-test-class="hosted-auth-method-select"]',
     ),
-  ).toBeNull();
-  expect(hostedModelProviders(firstRunModelCatalog(), ["api_key"]).map(
-    (provider) => provider.provider_id,
-  )).toEqual(["openai"]);
-  expect(rendered.container.textContent).not.toContain("OAuth");
+  ).not.toBeNull();
   await addHostedModelAndFinish(rendered);
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run model setup supports OpenAI OAuth registration", async () => {
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+    {
+      modelCatalog: firstRunModelCatalog(["codex_oauth", "api_key"]),
+    },
+  );
+
+  await waitForText(rendered.container, "OAuth");
+  await clickButton(rendered.container, "추가");
+  expect(rendered.calls).toContain("startOpenAIOAuthLogin");
+  expect(rendered.hostedModelRequests[0]).toMatchObject({
+    provider_id: "openai",
+    auth_type: "codex_oauth",
+  });
+  await waitForCompletion(rendered);
 
   await act(async () => rendered.root.unmount());
 });
@@ -340,6 +362,7 @@ async function renderFirstRun(
   const calls: string[] = [];
   const copiedDiagnostics: string[] = [];
   const completedStates: FirstRunState[] = [];
+  const hostedModelRequests: unknown[] = [];
   const settingsPatches: unknown[] = [];
   const setupModes: string[] = [];
   Object.defineProperty(dom.window.navigator, "clipboard", {
@@ -414,9 +437,17 @@ async function renderFirstRun(
         calls.push("getSettings");
         return options.settings ?? EMPTY_SETTINGS;
       },
-      registerHostedModel: async () => {
+      startOpenAIOAuthLogin: async () => {
+        calls.push("startOpenAIOAuthLogin");
+        return { status: "completed" };
+      },
+      registerHostedModel: async (request?: unknown) => {
         calls.push("registerHostedModel");
-        const catalog = firstRunRegisteredModelCatalog();
+        hostedModelRequests.push(request);
+        const authType = isHostedModelRequest(request) && request.auth_type === "codex_oauth"
+          ? "codex_oauth"
+          : "api_key";
+        const catalog = firstRunRegisteredModelCatalog(authType);
         return {
           model: catalog.registered_models?.[0],
           catalog,
@@ -455,6 +486,7 @@ async function renderFirstRun(
     completedStates,
     copiedDiagnostics,
     container,
+    hostedModelRequests,
     root,
     settingsPatches,
     setupModes,
@@ -510,16 +542,16 @@ function buttonByLabel(
   );
 }
 
-function firstRunModelCatalog(): ModelCatalogView {
+function isHostedModelRequest(
+  value: unknown,
+): value is { auth_type?: ProviderAuthMethod } {
+  return Boolean(value && typeof value === "object" && "auth_type" in value);
+}
+
+function firstRunModelCatalog(
+  authMethods: ProviderAuthMethod[] = ["api_key", "codex_oauth"],
+): ModelCatalogView {
   const defaultModel = EMPTY_MODEL_CATALOG.models[0]!;
-  const oauthOnlyModel: AppModelSummary = {
-    ...defaultModel,
-    provider_id: "codex",
-    provider_label: "Codex",
-    model_id: "gpt-5",
-    model_ref: "codex/gpt-5",
-  };
-  const authMethods: ProviderAuthMethod[] = ["api_key", "codex_oauth"];
   return {
     ...EMPTY_MODEL_CATALOG,
     providers: [
@@ -530,15 +562,8 @@ function firstRunModelCatalog(): ModelCatalogView {
         auth_methods: authMethods,
         models: [defaultModel],
       },
-      {
-        provider_id: "codex",
-        provider_label: "Codex",
-        latest_model_ref: oauthOnlyModel.model_ref,
-        auth_methods: ["codex_oauth"],
-        models: [oauthOnlyModel],
-      },
     ],
-    models: [defaultModel, oauthOnlyModel],
+    models: [defaultModel],
     provider_credentials: [
       {
         id: "cred-existing",
@@ -554,14 +579,20 @@ function firstRunModelCatalog(): ModelCatalogView {
   };
 }
 
-function firstRunRegisteredModelCatalog(): ModelCatalogView {
+function firstRunRegisteredModelCatalog(
+  authType: ProviderAuthMethod = "api_key",
+): ModelCatalogView {
   const defaultModel: AppModelSummary = {
     ...EMPTY_MODEL_CATALOG.models[0]!,
     registered: true,
-    auth_type: "api_key",
-    credential_id: "cred-test",
-    credential_label: "Test key",
-    credential_masked_value: "sk-...",
+    auth_type: authType,
+    ...(authType === "api_key"
+      ? {
+          credential_id: "cred-test",
+          credential_label: "Test key",
+          credential_masked_value: "sk-...",
+        }
+      : {}),
   };
   return {
     ...firstRunModelCatalog(),

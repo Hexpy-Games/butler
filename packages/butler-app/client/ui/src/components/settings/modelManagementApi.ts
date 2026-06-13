@@ -9,6 +9,11 @@ import type {
   LocalModelDeletionResult,
 } from "@/app/types.ts";
 
+export interface OpenAIOAuthLoginResult {
+  label?: string;
+  status: "completed" | "profile_exists";
+}
+
 export async function registerHostedModel(
   request: HostedModelRegistrationRequest,
 ): Promise<HostedModelRegistrationResult> {
@@ -19,6 +24,17 @@ export async function registerHostedModel(
       body: JSON.stringify(request),
     },
   );
+}
+
+export async function startOpenAIOAuthLogin(): Promise<OpenAIOAuthLoginResult> {
+  const bridge = typeof window !== "undefined"
+    ? (window.butlerApp as { startOpenAIOAuthLogin?: () => Promise<OpenAIOAuthLoginResult> } | undefined)
+    : undefined;
+  if (!bridge) return { status: "profile_exists" };
+  if (typeof bridge?.startOpenAIOAuthLogin !== "function") {
+    throw new Error(appCopy.settings.modelManagement.errors.oauthLogin);
+  }
+  return await bridge.startOpenAIOAuthLogin();
 }
 
 export async function deleteRegisteredModel(

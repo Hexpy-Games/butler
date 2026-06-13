@@ -16,7 +16,10 @@ import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import type { ProviderAuthMethod } from "@/app/types.ts";
 
 type FirstRunCopy = (typeof firstRunCopy)[FirstRunLanguage];
-const FIRST_RUN_HOSTED_AUTH_METHODS: ProviderAuthMethod[] = ["api_key"];
+const FIRST_RUN_HOSTED_AUTH_METHODS: ProviderAuthMethod[] = [
+  "api_key",
+  "codex_oauth",
+];
 
 interface FirstRunModelStepProps {
   copy: FirstRunCopy;

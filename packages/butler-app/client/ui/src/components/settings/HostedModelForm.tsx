@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { Button, Stack } from "@/butler-ds";
+import { Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
 import { modelDisplayName } from "@/app/utils.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
-import { SettingsSection, SettingsSelect } from "./SettingsFormComponents";
+import { SettingsSection } from "./SettingsFormComponents";
 import { HostedCredentialSection } from "./HostedCredentialSection";
-import { registerHostedModel } from "./modelManagementApi";
+import { HostedModelSelectFields } from "./HostedModelSelectFields";
+import { HostedModelSaveButton } from "./HostedModelSaveButton";
+import {
+  registerHostedModel,
+  startOpenAIOAuthLogin,
+} from "./modelManagementApi";
 import {
   NEW_CREDENTIAL_ID,
   hostedModelProviders,
-  modelOptionLabel,
   providerAllowedAuthMethods,
   providerCredentials,
   providerModels,
@@ -88,6 +92,9 @@ export function HostedModelForm({
     if (!selectedModel || !canSave) return;
     setBusy(true);
     try {
+      if (authMethod === "codex_oauth") {
+        await startOpenAIOAuthLogin();
+      }
       const result = await registerHostedModel({
         provider_id: providerId,
         model_id: selectedModel.model_id,
@@ -115,27 +122,14 @@ export function HostedModelForm({
   return (
     <SettingsSection title={editingModel ? copy.editTitle : copy.addTitle}>
       <Stack gap="md">
-        {showProviderSelect && (
-          <SettingsSelect
-            label={copy.provider}
-            triggerTestClass="hosted-model-provider-select"
-            value={providerId}
-            onChange={setProviderId}
-            options={providers.map((provider) => ({
-              value: provider.provider_id,
-              label: provider.provider_label,
-            }))}
-          />
-        )}
-        <SettingsSelect
-          label={copy.model}
-          triggerTestClass="hosted-model-select"
-          value={modelRef}
-          onChange={setModelRef}
-          options={providerModelOptions.map((model) => ({
-            value: model.model_ref,
-            label: modelOptionLabel(model),
-          }))}
+        <HostedModelSelectFields
+          modelOptions={providerModelOptions}
+          modelRef={modelRef}
+          providerId={providerId}
+          providers={providers}
+          showProviderSelect={showProviderSelect}
+          onModelRefChange={setModelRef}
+          onProviderIdChange={setProviderId}
         />
         <HostedCredentialSection
           modelCatalog={modelCatalog}
@@ -150,9 +144,13 @@ export function HostedModelForm({
           onApiKeyChange={setApiKey}
           onCredentialLabelChange={setCredentialLabel}
         />
-        <Button type="button" disabled={!canSave || busy} onClick={() => void save()}>
-          {busy ? copy.saving : editingModel ? copy.saveEdit : copy.saveAdd}
-        </Button>
+        <HostedModelSaveButton
+          busy={busy}
+          disabled={!canSave}
+          label={editingModel ? copy.saveEdit : copy.saveAdd}
+          savingLabel={copy.saving}
+          onClick={() => void save()}
+        />
       </Stack>
     </SettingsSection>
   );

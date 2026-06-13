@@ -428,6 +428,8 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
+  startOpenAIOAuthLogin: () =>
+    ipcRenderer.invoke("butler:start-openai-oauth-login"),
   deleteHostedModel: ({ modelRef } = {}) => requestJson(`/model-catalog/registered-models/${encodeURIComponent(modelRef ?? "")}`, {
     method: "DELETE",
   }),

@@ -19,7 +19,7 @@ import {
   readdirSync,
   writeFileSync,
 } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -250,6 +250,113 @@ function readFirstRunRuntimeDiagnostics() {
     app_managed_runtime_failure:
       diagnostics.phase === "failed" ? readLatestAppManagedRuntimeFailure() : null,
   };
+}
+
+function codexOAuthClientId() {
+  return (
+    process.env.BUTLER_CODEX_OAUTH_CLIENT_ID ||
+    process.env.BUTLER_OPENAI_OAUTH_CLIENT_ID ||
+    "app_EMoamEEZ73f0CkXaXp7hrann"
+  );
+}
+
+function codexAuthProfilePath() {
+  return (
+    process.env.BUTLER_CODEX_AUTH_PROFILE ||
+    process.env.BUTLER_OPENAI_AUTH_PROFILE ||
+    join(butlerDataRoot, "auth", "openai-codex.json")
+  );
+}
+
+async function readCodexAuthProfileLabel() {
+  try {
+    const parsed = JSON.parse(await readFile(codexAuthProfilePath(), "utf8"));
+    return safeString(parsed.email) ||
+      safeString(parsed.accountId) ||
+      "OpenAI account";
+  } catch {
+    return null;
+  }
+}
+
+async function oauthLoginScriptPath() {
+  const candidates = [
+    process.resourcesPath
+      ? join(
+          process.resourcesPath,
+          "bundled-agent",
+          "packages",
+          "butler-agent",
+          "scripts",
+          "openai-oauth-login.ts",
+        )
+      : null,
+    resolve(repoRoot, "packages", "butler-agent", "scripts", "openai-oauth-login.ts"),
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (await pathExists(candidate)) return candidate;
+  }
+  return null;
+}
+
+async function pathExists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function oauthScriptButlerHome(scriptPath) {
+  return resolve(dirname(scriptPath), "../../..");
+}
+
+async function startOpenAIOAuthLogin() {
+  const existingLabel = await readCodexAuthProfileLabel();
+  if (existingLabel) {
+    return { status: "profile_exists", label: existingLabel };
+  }
+  const scriptPath = await oauthLoginScriptPath();
+  if (!scriptPath) throw new Error("OpenAI OAuth login helper is missing.");
+  const runtime = resolveButlerRuntime(butlerDataRoot);
+  const env = {
+    ...process.env,
+    BUTLER_HOME: oauthScriptButlerHome(scriptPath),
+    BUTLER_DATA: butlerDataRoot,
+    BUTLER_BUN: runtime,
+    BUTLER_CODEX_OAUTH_CLIENT_ID: codexOAuthClientId(),
+  };
+  await runOAuthLoginProcess(runtime, ["run", scriptPath], env);
+  return {
+    status: "completed",
+    label: await readCodexAuthProfileLabel() ?? "OpenAI account",
+  };
+}
+
+function runOAuthLoginProcess(command, args, env) {
+  return new Promise((resolveProcess, rejectProcess) => {
+    const child = spawn(command, args, {
+      cwd: env.BUTLER_HOME,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => {
+      stderr = `${stderr}${String(chunk)}`.slice(-4000);
+    });
+    child.on("error", rejectProcess);
+    child.on("exit", (code, signal) => {
+      if (code === 0) {
+        resolveProcess();
+        return;
+      }
+      rejectProcess(new Error(
+        stderr.trim() || `OAuth login exited with ${signal ?? code}.`,
+      ));
+    });
+  });
 }
 
 function readLatestAppManagedRuntimeFailure() {
@@ -853,6 +960,10 @@ ipcMain.handle("butler:quit-app", () => {
 
 ipcMain.handle("butler:get-local-auth-headers", async () =>
   await appLocalAuthHeaders(),
+);
+
+ipcMain.handle("butler:start-openai-oauth-login", async () =>
+  await startOpenAIOAuthLogin(),
 );
 
 ipcMain.handle("butler:set-native-appearance-theme", (_event, input) => {

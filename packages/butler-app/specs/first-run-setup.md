@@ -25,12 +25,14 @@ the App-owned setup flow inside Electron before the workspace is shown.
 - The model step must reuse the App settings model-management modules instead
   of implementing a separate one-off model picker.
 - The model step opens directly on the App model-add route.
-- The first-run model-add route must support hosted models with API key and
-  local OpenAI-compatible models.
-- The first-run model-add route must not expose OAuth until the Electron UI can
-  perform the OAuth login and token registration flow end-to-end.
-- Hosted providers that do not support any first-run-allowed authentication
-  method must be excluded from first-run provider choices.
+- The first-run model-add route must support hosted models with API key,
+  OpenAI Codex OAuth, and local OpenAI-compatible models.
+- OpenAI Codex OAuth must follow the same install-time behavior as
+  `install.sh`: use the app's isolated `BUTLER_DATA`, detect an existing
+  Codex auth profile, otherwise launch the OAuth login helper, then register
+  the selected model with `auth_type: "codex_oauth"`.
+- Hosted providers that do not support any available authentication method must
+  be excluded from provider choices.
 - After a model is added during first-run setup, that added model becomes the
   Butler default model before setup can complete.
 - After the added model has been saved as the Butler default model, the setup
@@ -67,7 +69,8 @@ the App-owned setup flow inside Electron before the workspace is shown.
 - Component tests cover the four-step order, absence of gateway/persona copy,
   bundled-Agent-only installation, model-add-first setup, added-model default
   persistence, automatic completion after add, post-save recovery,
-  default-save retry, OAuth hiding, breadcrumb hiding, and no Settings route.
+  default-save retry, OAuth login/registration, breadcrumb hiding, and no
+  Settings route.
 - AppShell first-run tests prove the workspace is gated until the model save
   completes.
 - Manual first-run smoke launches an isolated Electron profile and data root so
