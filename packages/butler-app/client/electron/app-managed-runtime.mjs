@@ -459,7 +459,8 @@ export function prepareAppManagedAgentRuntime({
     }
     renameSync(stagingHome, runtimeHome);
     let rolledBack = false;
-    return {
+    let activationCommitted = false;
+    const activation = {
       runtimeHome,
       runtimeHomeLabel,
       version: artifact.version,
@@ -501,7 +502,8 @@ export function prepareAppManagedAgentRuntime({
           previous: previousSelectablePointer,
           raw_text_included: false,
         });
-        this.activated = true;
+        activationCommitted = true;
+        activation.activated = true;
         if (backupCreated) {
           try {
             rmSync(backupHome, { recursive: true, force: true });
@@ -512,11 +514,20 @@ export function prepareAppManagedAgentRuntime({
         }
       },
       rollbackActivation(error = new Error("App-managed Agent activation failed")) {
-        if (rolledBack || this.activated) return;
+        if (rolledBack) return;
         rolledBack = true;
         let restoreError = null;
         try {
-          if (backupCreated && existsSync(backupHome)) {
+          if (activationCommitted) {
+            if (previousSelectablePointer) {
+              atomicWriteJson(currentPointerPath, previousSelectablePointer);
+            } else {
+              rmSync(currentPointerPath, { force: true });
+            }
+            if (previousSelectablePointer?.runtime_home !== runtimeHomeLabel) {
+              rmSync(runtimeHome, { recursive: true, force: true });
+            }
+          } else if (backupCreated && existsSync(backupHome)) {
             rmSync(runtimeHome, { recursive: true, force: true });
             renameSync(backupHome, runtimeHome);
             backupCreated = false;
@@ -551,6 +562,7 @@ export function prepareAppManagedAgentRuntime({
         }
       },
     };
+    return activation;
   } catch (error) {
     if (backupCreated && !existsSync(runtimeHome) && existsSync(backupHome)) {
       renameSync(backupHome, runtimeHome);

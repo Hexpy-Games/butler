@@ -4,6 +4,9 @@ export function createFirstRunSetupBridge({
   readRuntimeDiagnostics = () => ({}),
   serviceControl = null,
   gatewayProfile = "electron",
+  serviceReadyPollAttempts = 20,
+  serviceReadyPollDelayMs = 250,
+  sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }) {
   let runId = 0;
   let session = createSession("idle");
@@ -60,7 +63,13 @@ export function createFirstRunSetupBridge({
         if (!serviceReady(serviceStatus)) {
           await installOrStartService(serviceControl, serviceStatus);
         }
-        const nextServiceStatus = await readServiceStatus(serviceControl);
+        const nextServiceStatus = await waitForServiceReady(serviceControl, {
+          attempts: serviceReadyPollAttempts,
+          delayMs: serviceReadyPollDelayMs,
+          sleepMs,
+          shouldContinue: () => isActiveRun(currentRunId, runId, session) &&
+            !currentSession.cancelled,
+        });
         if (!serviceReady(nextServiceStatus)) {
           throw setupError(serviceSetupErrorCode(nextServiceStatus));
         }
@@ -229,7 +238,10 @@ async function readServiceStatus(serviceControl) {
 
 async function installOrStartService(serviceControl, serviceStatus) {
   if (!serviceControl) return;
-  if (serviceStatus?.status === "not_installed" && serviceControl.installAgentService) {
+  if (
+    ["not_installed", "stopped", "needs_permission"].includes(serviceStatus?.status) &&
+    serviceControl.installAgentService
+  ) {
     const install = sanitizeDiagnosticsValue(await serviceControl.installAgentService({ source: "first-run" }));
     if (install?.ok === false) {
       throw setupError(install.error_code || serviceSetupErrorCode(install));
@@ -244,6 +256,22 @@ async function installOrStartService(serviceControl, serviceStatus) {
       throw setupError(start.error_code || serviceSetupErrorCode(start));
     }
   }
+}
+
+async function waitForServiceReady(
+  serviceControl,
+  { attempts, delayMs, sleepMs, shouldContinue },
+) {
+  let lastStatus = await readServiceStatus(serviceControl);
+  if (serviceReady(lastStatus)) return lastStatus;
+  const maxAttempts = Math.max(1, Number(attempts) || 1);
+  for (let attempt = 1; attempt < maxAttempts && shouldContinue(); attempt += 1) {
+    await sleepMs(delayMs);
+    lastStatus = await readServiceStatus(serviceControl);
+    if (serviceReady(lastStatus)) return lastStatus;
+    if (lastStatus?.status === "failed") return lastStatus;
+  }
+  return lastStatus;
 }
 
 async function safeReadServiceDiagnostics(serviceControl) {

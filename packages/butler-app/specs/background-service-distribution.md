@@ -78,7 +78,9 @@ The service setup step must:
 
 - Activate the bundled Agent runtime under App-managed runtime storage.
 - Register the user-level service when required.
-- Start or restart the service.
+- Install or repair registration when the current service status is
+  `not_installed`, `stopped`, or `needs_permission`, then start or restart the
+  service.
 - Verify app gateway health, protocol compatibility, local auth, and
   `gateway_profile=electron`.
 - Show concise recovery actions when registration or health checks fail.
@@ -202,7 +204,11 @@ Required changes:
 - Move production App first-run readiness from Electron child supervisor to
   OS-service-backed supervisor control.
 - Add App-owned service registration bridge APIs. Before OS-specific adapters
-  land, bridge actions must fail closed with structured redacted diagnostics.
+  are enabled for a packaged platform, bridge actions must fail closed with
+  structured redacted diagnostics.
+- Use the packaged-safe Electron native service bridge only for packaged
+  macOS/Linux App builds. Development builds and unsupported platforms must not
+  register host services.
 - Teach native service specs to run from an App-managed runtime pointer.
 - Add Windows service support after the user/security context decision is made.
 - Add installer packaging that can register or prepare the service.

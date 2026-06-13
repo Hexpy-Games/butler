@@ -28,13 +28,18 @@ Agent process.
   dependency path.
 - The Agent readiness step must check the Electron main service-control bridge
   before managed gateway readiness. If the background service is not installed,
-  the setup bridge attempts service install/start through service-control.
+  stopped, or requires permission, the setup bridge attempts service
+  install/start through service-control.
 - If service registration is unavailable or fails, first-run must stop at the
   install step with redacted diagnostics. It must not silently fall back to an
   Electron-owned child gateway in production App distribution.
 - In the current migration phase, service-control is a required gate before the
-  existing managed gateway readiness check. The OS-service-owned gateway
-  readiness implementation lands with the platform service adapters.
+  existing managed gateway readiness check. Packaged macOS/Linux builds wire
+  service-control to the native service bridge; development and unsupported
+  platforms fail closed without registering host services. In packaged
+  native-service mode, readiness verifies the service-owned gateway health and
+  protocol directly and must not spawn an Electron-owned child gateway as a
+  fallback.
 - The installation step uses the title `Butler Agent를 준비합니다`.
 - The model step must reuse the App settings model-management modules instead
   of implementing a separate one-off model picker.

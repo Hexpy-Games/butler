@@ -143,20 +143,39 @@ Implemented surface:
   native service projections and registration hooks. It fails closed when
   native status cannot be collected and only reports `ready` after required
   native services, including `butler-main` and `app-gateway`, are online.
+- `app-agent-native-service-bridge.mjs` provides the packaged-safe Electron
+  native service bridge for macOS LaunchAgent and Linux `systemd --user`
+  registration. Before registration or start it activates the bundled
+  App-managed Agent runtime pointer, prepares App-local auth, writes the
+  service definition, and invokes the OS service manager.
+- `main.mjs` wires the native bridge through `app-agent-service-adapter.mjs`
+  only for packaged macOS/Linux App builds. Development and unsupported
+  platforms keep failing closed instead of attempting to register a host
+  service from an unpackaged Electron process.
+- In packaged native-service mode, first-run gateway readiness verifies the
+  service-owned app gateway health/protocol and fails closed instead of falling
+  back to an Electron-owned child gateway.
+- App-managed runtime activation can be rolled back after a service
+  registration failure, restoring the previous active pointer when one exists.
 - `main.mjs` and `preload.cjs` expose the service-control IPC surface without
   shelling out from renderer code.
-- Until platform adapters land, service actions fail closed with
-  `service_registration_unavailable` and return redacted diagnostics.
+- First-run treats `not_installed`, `stopped`, and `needs_permission` as
+  registration states that should attempt install before start, so a clean
+  packaged App can create the service file before starting the Agent process
+  group.
 
 Remaining:
 
-- Wire the App-side adapter to a packaged-safe native service bridge.
-- Wire launchd/systemd registration plans to the App distribution path without
-  importing TypeScript-only Agent source from Electron main.
+- Replace shell-command bridge execution with signed installer/helper-backed
+  registration where required by final macOS/Linux packaging policy.
+- Add packaged smoke tests that exercise actual LaunchAgent and `systemd
+  --user` registration on target OS runners.
+- Add the Windows service adapter after the Windows user/security-context
+  decision.
 
 Validation:
 
-- `bun test tests/unit/app-agent-service-control.test.ts tests/unit/app-first-run-setup-bridge.test.ts`
+- `bun test tests/unit/app-agent-native-service-bridge.test.ts tests/unit/app-agent-service-adapter.test.ts tests/unit/app-agent-service-control.test.ts tests/unit/app-first-run-setup-bridge.test.ts`
 
 ## Phase 3: First-Run Service Setup UI
 
@@ -400,8 +419,8 @@ Implemented surface:
 
 Remaining:
 
-- Real first-run service install E2E on macOS/Linux once platform adapters
-  register actual user services.
+- Real first-run service install E2E on macOS/Linux against packaged App
+  artifacts that register actual user services.
 - Real close-window and quit-UI persistence E2E against an OS-managed service.
 - Real Stop Agent process-group termination E2E.
 - Real app update restart/rollback E2E with previous and next packaged
