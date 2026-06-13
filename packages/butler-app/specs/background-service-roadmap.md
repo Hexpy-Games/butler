@@ -139,10 +139,20 @@ Implemented surface:
 
 - `service-control.mjs` exposes a narrow Electron-main-owned Agent service
   control API for status/install/start/stop/restart/diagnostics.
+- `app-agent-service-adapter.mjs` defines the App-side adapter contract for
+  native service projections and registration hooks. It fails closed when
+  native status cannot be collected and only reports `ready` after required
+  native services, including `butler-main` and `app-gateway`, are online.
 - `main.mjs` and `preload.cjs` expose the service-control IPC surface without
   shelling out from renderer code.
 - Until platform adapters land, service actions fail closed with
   `service_registration_unavailable` and return redacted diagnostics.
+
+Remaining:
+
+- Wire the App-side adapter to a packaged-safe native service bridge.
+- Wire launchd/systemd registration plans to the App distribution path without
+  importing TypeScript-only Agent source from Electron main.
 
 Validation:
 

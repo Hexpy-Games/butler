@@ -3,6 +3,7 @@ import {
   APP_AGENT_SERVICE_CONTROL_SCHEMA,
   createAgentServiceControl,
 } from "../../packages/butler-app/client/electron/service-control.mjs";
+import { createAppAgentServiceAdapter } from "../../packages/butler-app/client/electron/app-agent-service-adapter.mjs";
 
 const fixedNow = () => new Date("2026-06-13T00:00:00.000Z");
 
@@ -197,4 +198,42 @@ test("Agent service control redacts adapter failures", async () => {
   const diagnostics = await control.readAgentServiceDiagnostics();
   expect(JSON.stringify(diagnostics)).not.toContain("alice");
   expect(JSON.stringify(diagnostics)).not.toContain(".butler");
+});
+
+test("Agent service control accepts App Agent service adapter status and actions", async () => {
+  const calls: string[] = [];
+  const adapter = createAppAgentServiceAdapter({
+    registration: {
+      install: async () => calls.push("install"),
+    },
+    nativeServices: {
+      list: async () => [
+        { serviceId: "butler-main", status: "online" },
+        { serviceId: "app-gateway", status: "online" },
+      ],
+      start: async () => calls.push("start"),
+      stop: async () => calls.push("stop"),
+    },
+  });
+  const control = createAgentServiceControl({
+    platform: "darwin",
+    now: fixedNow,
+    adapter,
+  });
+
+  await expect(control.getAgentServiceStatus()).resolves.toMatchObject({
+    status: "ready",
+    service_available: true,
+  });
+  await expect(control.installAgentService()).resolves.toMatchObject({
+    action: "install",
+    ok: true,
+    status: "stopped",
+  });
+  await expect(control.restartAgentService()).resolves.toMatchObject({
+    action: "restart",
+    ok: true,
+    status: "ready",
+  });
+  expect(calls).toEqual(["install", "stop", "start"]);
 });
