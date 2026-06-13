@@ -28,6 +28,7 @@ import { createBundledAgentSupervisor } from "./app-agent-supervisor.mjs";
 import { resolveAppManagedGatewayCommand } from "./app-managed-runtime.mjs";
 import { createAgentServiceControl } from "./service-control.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
+import { createTrayAgentMenuModel } from "./tray-agent-menu.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
@@ -706,6 +707,28 @@ async function recentTraySessions() {
     }));
 }
 
+async function trayAgentServiceStatus() {
+  try {
+    return await agentServiceControl.getAgentServiceStatus();
+  } catch {
+    return {
+      status: "failed",
+      service_available: false,
+      diagnostics_available: true,
+    };
+  }
+}
+
+async function runTrayAgentServiceAction(action) {
+  const actions = {
+    start: () => agentServiceControl.startAgentService({ source: "tray" }),
+    stop: () => agentServiceControl.stopAgentService({ source: "tray" }),
+    restart: () => agentServiceControl.restartAgentService({ source: "tray" }),
+  };
+  await actions[action]?.();
+  await refreshTrayMenu();
+}
+
 async function refreshTrayMenu() {
   if (!nativeShellPreferences.trayEnabled) {
     if (tray) {
@@ -724,6 +747,8 @@ async function refreshTrayMenu() {
     updateTrayIcon();
   }
   const sessions = await recentTraySessions();
+  const agentServiceStatus = await trayAgentServiceStatus();
+  const agentMenu = createTrayAgentMenuModel(agentServiceStatus);
   const recentMenu =
     sessions.length > 0
       ? sessions.map((session) => ({
@@ -738,11 +763,37 @@ async function refreshTrayMenu() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
-        label: "Show Butler",
+        label: "Open Butler",
         click: () => {
           void showMainWindow();
         },
       },
+      {
+        label: agentMenu.label,
+        enabled: false,
+      },
+      {
+        label: "Start Butler Agent",
+        enabled: agentMenu.canStart,
+        click: () => {
+          void runTrayAgentServiceAction("start");
+        },
+      },
+      {
+        label: "Restart Butler Agent",
+        enabled: agentMenu.canRestart,
+        click: () => {
+          void runTrayAgentServiceAction("restart");
+        },
+      },
+      {
+        label: "Stop Butler Agent",
+        enabled: agentMenu.canStop,
+        click: () => {
+          void runTrayAgentServiceAction("stop");
+        },
+      },
+      { type: "separator" },
       {
         label: "New Chat",
         click: () => sendNativeNavigation({ action: "new-chat" }),
@@ -753,7 +804,7 @@ async function refreshTrayMenu() {
       },
       { type: "separator" },
       {
-        label: "Quit Butler",
+        label: "Quit Butler UI",
         click: () => {
           isQuitting = true;
           app.quit();

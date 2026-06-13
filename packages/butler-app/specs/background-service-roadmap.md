@@ -230,6 +230,19 @@ Acceptance:
 - Explicit Stop Agent stops the service process group.
 - Tray state reflects diagnostics after failure.
 
+Implemented surface:
+
+- The tray/menu bar reads Agent status through Electron main service-control.
+- The tray/menu bar exposes Open Butler, Start Butler Agent, Restart Butler
+  Agent, Stop Butler Agent, and Quit Butler UI.
+- Quit Butler UI exits the Electron UI/tray process only. It does not call the
+  Agent service stop action.
+
+Validation:
+
+- `bun test tests/unit/app-agent-tray-menu.test.ts`
+- `bun test tests/unit/app-client-design.test.ts -t "desktop native shell|electron shell owns"`
+
 ## Phase 5: App Update, Restart, And Rollback
 
 Goal: Agent runtime updates restart the service group safely.
