@@ -17,6 +17,7 @@ interface SetupWizardShellProps
 
 interface SetupWizardContentProps {
   children: ReactNode;
+  width?: "default" | "wide";
 }
 
 export function SetupWizardShell({
@@ -39,7 +40,7 @@ export function SetupWizardShell({
         aria-label={regionLabel}
       >
         <Stack className={styles.header} gap="sm">
-          <Typo.PanelTitle as="p">{title}</Typo.PanelTitle>
+          <Typo.AppTitle as="p">{title}</Typo.AppTitle>
           <ProgressStepper
             activeIndex={activeIndex}
             ariaLabel={progressLabel}
@@ -59,9 +60,12 @@ export function SetupWizardShell({
   );
 }
 
-export function SetupWizardContent({ children }: SetupWizardContentProps) {
+export function SetupWizardContent({
+  children,
+  width = "default",
+}: SetupWizardContentProps) {
   return (
-    <Stack className={styles.content} gap="lg">
+    <Stack className={styles.content} data-width={width} gap="lg">
       {children}
     </Stack>
   );

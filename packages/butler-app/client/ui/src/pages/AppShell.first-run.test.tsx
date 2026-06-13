@@ -4,11 +4,12 @@ import { afterEach, expect, mock, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { EMPTY_MODEL_CATALOG } from "@/app/constants.ts";
+import { EMPTY_MODEL_CATALOG, EMPTY_SETTINGS } from "@/app/constants.ts";
 import {
   createInitialFirstRunState,
   FIRST_RUN_STORAGE_KEY,
 } from "@/app/firstRunSetup.ts";
+import type { ModelCatalogView, SettingsView } from "@/app/types.ts";
 
 interface TestStoreState {
   activeChatId: string;
@@ -21,10 +22,10 @@ interface TestStoreState {
   renameSession: null;
   resizingPanel: null;
   rightAvailable: boolean;
-  settings: {
-    appearance_theme: "system";
-    sidebar_style: "translucent";
-  };
+  modelCatalog: ModelCatalogView;
+  setModelCatalog: (catalog: ModelCatalogView) => void;
+  setSettings: (settings: SettingsView) => void;
+  settings: SettingsView & { sidebar_style?: "translucent" };
   view: { kind: "session" };
 }
 
@@ -43,10 +44,14 @@ const storeState: TestStoreState = {
   renameSession: null,
   resizingPanel: null,
   rightAvailable: false,
-  settings: {
-    appearance_theme: "system",
-    sidebar_style: "translucent",
+  modelCatalog: EMPTY_MODEL_CATALOG,
+  setModelCatalog: (catalog) => {
+    storeState.modelCatalog = catalog;
   },
+  setSettings: (settings) => {
+    storeState.settings = { ...settings, sidebar_style: "translucent" };
+  },
+  settings: { ...EMPTY_SETTINGS, sidebar_style: "translucent" },
   view: { kind: "session" },
 };
 
@@ -125,17 +130,25 @@ mock.module("@/app/store.ts", () => ({
   selectEffectiveRightOpen: (state: TestStoreState) => state.effectiveRightOpen,
   selectIsSettingsView: (state: TestStoreState) => state.isSettingsView,
   selectRightAvailable: (state: TestStoreState) => state.rightAvailable,
-  useButlerStore<T>(selector: (state: TestStoreState) => T): T {
-    return selector({
-      ...storeState,
-      openSettings(section = "general") {
-        storeState.openSettingsCalls.push(String(section));
-        storeState.isSettingsView = true;
-      },
-      setLeftOpen() {},
-    } as TestStoreState);
-  },
+  useButlerStore,
 }));
+
+function useButlerStore<T>(selector: (state: TestStoreState) => T): T {
+  return selector(testStoreSnapshot());
+}
+
+useButlerStore.getState = testStoreSnapshot;
+
+function testStoreSnapshot(): TestStoreState {
+  return {
+    ...storeState,
+    openSettings(section = "general") {
+      storeState.openSettingsCalls.push(String(section));
+      storeState.isSettingsView = true;
+    },
+    setLeftOpen() {},
+  } as TestStoreState;
+}
 
 afterEach(() => {
   delete (globalThis as { window?: unknown }).window;
@@ -143,8 +156,11 @@ afterEach(() => {
   delete (globalThis as { navigator?: unknown }).navigator;
   delete (globalThis as { HTMLElement?: unknown }).HTMLElement;
   delete (globalThis as { Node?: unknown }).Node;
+  delete (globalThis as { DocumentFragment?: unknown }).DocumentFragment;
   storeState.isSettingsView = false;
   storeState.openSettingsCalls = [];
+  storeState.modelCatalog = EMPTY_MODEL_CATALOG;
+  storeState.settings = { ...EMPTY_SETTINGS, sidebar_style: "translucent" };
 });
 
 test("AppShell gates workspace behind pending first-run setup", async () => {
@@ -198,6 +214,7 @@ async function renderAppShell(
     navigator: dom.window.navigator,
     HTMLElement: dom.window.HTMLElement,
     Node: dom.window.Node,
+    DocumentFragment: dom.window.DocumentFragment,
   });
   Object.defineProperty(dom.window.HTMLCanvasElement.prototype, "getContext", {
     configurable: true,
@@ -217,9 +234,18 @@ async function renderAppShell(
       }),
       getModelCatalog: async () => ({
         ...EMPTY_MODEL_CATALOG,
+        providers: [
+          {
+            provider_id: "openai",
+            provider_label: "OpenAI",
+            latest_model_ref: EMPTY_MODEL_CATALOG.models[0]!.model_ref,
+            auth_methods: ["api_key", "codex_oauth"],
+            models: [EMPTY_MODEL_CATALOG.models[0]!],
+          },
+        ],
         registered_models: [],
       }),
-      getSettings: async () => ({ model: "openai/gpt-5.5" }),
+      getSettings: async () => EMPTY_SETTINGS,
       updateSettings: async () => ({}),
     },
   });

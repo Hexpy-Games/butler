@@ -4,11 +4,16 @@ import { afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { EMPTY_MODEL_CATALOG } from "@/app/constants.ts";
+import { EMPTY_MODEL_CATALOG, EMPTY_SETTINGS } from "@/app/constants.ts";
 import {
   createInitialFirstRunState,
   type FirstRunState,
 } from "@/app/firstRunSetup.ts";
+import type {
+  AppModelSummary,
+  ModelCatalogView,
+  SettingsView,
+} from "@/app/types.ts";
 import { FirstRunSetup } from "./FirstRunSetup";
 
 interface RenderedFirstRun {
@@ -31,12 +36,14 @@ afterEach(() => {
   delete (globalThis as { navigator?: unknown }).navigator;
   delete (globalThis as { HTMLElement?: unknown }).HTMLElement;
   delete (globalThis as { Node?: unknown }).Node;
+  delete (globalThis as { DocumentFragment?: unknown }).DocumentFragment;
 });
 
 test("first-run setup renders the minimal Electron setup order", async () => {
   const rendered = await renderFirstRun(createInitialFirstRunState("ko"));
 
   expect(rendered.container.textContent).toContain("언어 선택");
+  expect(rendered.container.textContent).toContain("Butler");
   expect(
     rendered.container.querySelector('[data-test-class="new-chat-fluid-gradient"]'),
   ).not.toBeNull();
@@ -62,11 +69,33 @@ test("first-run setup renders the minimal Electron setup order", async () => {
 
   await waitForText(rendered.container, "모델 설정");
   expect(rendered.container.textContent).toContain(
-    "Butler Agent가 준비되었습니다.",
+    "기본 모델과 연결 방식을 설정하세요.",
   );
+  await waitForText(rendered.container, "기본 모델");
+  expect(
+    rendered.container.querySelector(
+      '[data-test-class="settings-primary-model-select"]',
+    ),
+  ).not.toBeNull();
+  expect(rendered.container.querySelector("select")).toBeNull();
+  await clickButton(rendered.container, "모델 관리");
+  await waitForText(rendered.container, "등록된 모델");
+  await clickButton(rendered.container, "모델 추가");
+  await waitForText(rendered.container, "API key");
+  expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
+  expect(
+    rendered.container.querySelector(
+      '[data-test-class="model-add-provider-select"]',
+    ),
+  ).not.toBeNull();
+  expect(
+    rendered.container.querySelector(
+      '[data-test-class="hosted-auth-method-select"]',
+    ),
+  ).not.toBeNull();
+  await clickButtonByAriaLabel(rendered.container, "돌아가기");
   await waitForText(rendered.container, "저장하고 시작");
   await clickButton(rendered.container, "저장하고 시작");
-  expect(rendered.settingsPatches).toContainEqual({ model: "openai/gpt-5.5" });
   expect(rendered.completedStates[0]?.status).toBe("complete");
 
   await act(async () => rendered.root.unmount());
@@ -137,7 +166,33 @@ test("first-run model setup surfaces catalog load failure and retries", async ()
   await waitForText(rendered.container, "저장하고 시작");
   await clickButton(rendered.container, "저장하고 시작");
 
-  expect(rendered.settingsPatches).toContainEqual({ model: "openai/gpt-5.5" });
+  expect(rendered.completedStates[0]?.status).toBe("complete");
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run model setup persists the first registered model when current default is unavailable", async () => {
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+    {
+      modelCatalog: registeredOnlyModelCatalog(),
+      settings: { ...EMPTY_SETTINGS, model: "openai/gpt-5.5" },
+    },
+  );
+
+  await waitForText(rendered.container, "저장하고 시작");
+  expect(rendered.settingsPatches).toContainEqual({
+    model: "local/llama-3.3",
+    reasoning_effort: "medium",
+    context_window_tokens: 8192,
+  });
+  await clickButton(rendered.container, "저장하고 시작");
   expect(rendered.completedStates[0]?.status).toBe("complete");
 
   await act(async () => rendered.root.unmount());
@@ -207,7 +262,9 @@ async function renderFirstRun(
     failHealthOnce?: boolean;
     failModelCatalogOnce?: boolean;
     holdBundledAgent?: Promise<void>;
+    modelCatalog?: ModelCatalogView;
     rejectSetupOnce?: boolean;
+    settings?: SettingsView;
   } = {},
 ): Promise<RenderedFirstRun> {
   const dom = new JSDOM(
@@ -220,6 +277,7 @@ async function renderFirstRun(
     navigator: dom.window.navigator,
     HTMLElement: dom.window.HTMLElement,
     Node: dom.window.Node,
+    DocumentFragment: dom.window.DocumentFragment,
   });
   Object.defineProperty(dom.window.HTMLCanvasElement.prototype, "getContext", {
     configurable: true,
@@ -297,11 +355,11 @@ async function renderFirstRun(
           modelCatalogFailures -= 1;
           throw new Error("model catalog failed");
         }
-        return { ...EMPTY_MODEL_CATALOG, registered_models: [] };
+        return options.modelCatalog ?? firstRunModelCatalog();
       },
       getSettings: async () => {
         calls.push("getSettings");
-        return { model: "openai/gpt-5.5" };
+        return options.settings ?? EMPTY_SETTINGS;
       },
       updateSettings: async (patch?: unknown) => {
         calls.push("updateSettings");
@@ -351,13 +409,67 @@ async function clickButton(container: HTMLElement, label: string): Promise<void>
   });
 }
 
+async function clickButtonByAriaLabel(
+  container: HTMLElement,
+  label: string,
+): Promise<void> {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (candidate) => candidate.getAttribute("aria-label") === label,
+  );
+  if (!button) throw new Error(`Missing button aria-label: ${label}`);
+  const win = container.ownerDocument.defaultView;
+  if (!win) throw new Error("Missing DOM window");
+  await act(async () => {
+    button.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
+  });
+}
+
 function buttonByLabel(
   container: HTMLElement,
   label: string,
 ): HTMLButtonElement | undefined {
   return Array.from(container.querySelectorAll("button")).find(
-    (candidate) => candidate.textContent === label,
+    (candidate) => candidate.textContent?.trim() === label,
   );
+}
+
+function firstRunModelCatalog() {
+  const defaultModel = EMPTY_MODEL_CATALOG.models[0]!;
+  return {
+    ...EMPTY_MODEL_CATALOG,
+    providers: [
+      {
+        provider_id: "openai",
+        provider_label: "OpenAI",
+        latest_model_ref: defaultModel.model_ref,
+        auth_methods: ["api_key", "codex_oauth"] as const,
+        models: [defaultModel],
+      },
+    ],
+    registered_models: [],
+  };
+}
+
+function registeredOnlyModelCatalog(): ModelCatalogView {
+  const localModel: AppModelSummary = {
+    ...EMPTY_MODEL_CATALOG.models[0]!,
+    provider_id: "local",
+    provider_label: "Local",
+    model_id: "llama-3.3",
+    model_ref: "local/llama-3.3",
+    display_name: "Llama 3.3",
+    context_window_tokens: 8192,
+    default_reasoning_effort: "medium" as const,
+    reasoning_efforts: ["none", "low", "medium"],
+    runtime_supported: true,
+    registered: true,
+  };
+  return {
+    ...EMPTY_MODEL_CATALOG,
+    default_model_ref: localModel.model_ref,
+    models: [localModel],
+    registered_models: [localModel],
+  };
 }
 
 async function waitForText(

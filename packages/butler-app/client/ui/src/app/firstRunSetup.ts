@@ -92,7 +92,7 @@ export const firstRunCopy = {
     quit: "종료",
     modelTitle: "모델 설정",
     modelBody:
-      "Butler Agent가 준비되었습니다. 사용할 기본 모델을 선택하면 설치 과정이 완료됩니다.",
+      "기본 모델과 연결 방식을 설정하세요.",
     modelSelectLabel: "기본 모델",
     modelLoading: "모델 목록을 불러오는 중",
     modelLoadFailed: "모델 목록을 불러오지 못했습니다.",
@@ -128,7 +128,7 @@ export const firstRunCopy = {
     quit: "Quit",
     modelTitle: "Model setup",
     modelBody:
-      "Butler Agent is ready. Choose the default model to finish setup.",
+      "Set the default model and connection method.",
     modelSelectLabel: "Default model",
     modelLoading: "Loading models",
     modelLoadFailed: "Could not load models.",

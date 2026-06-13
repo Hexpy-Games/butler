@@ -50,13 +50,16 @@ export function AppShell() {
   const openSettings = useButlerStore((state) => state.openSettings);
   if (firstRunState.status !== "complete") {
     return (
-      <FirstRunSetup
-        initialState={firstRunState}
-        onComplete={(mode, completedState) => {
-          setFirstRunState(completedState);
-          if (mode === "model-settings") openSettings("models");
-        }}
-      />
+      <>
+        <FirstRunSetup
+          initialState={firstRunState}
+          onComplete={(mode, completedState) => {
+            setFirstRunState(completedState);
+            if (mode === "model-settings") openSettings("models");
+          }}
+        />
+        <AppToaster />
+      </>
     );
   }
   return <AppWorkspaceShell />;

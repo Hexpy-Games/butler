@@ -11,7 +11,9 @@ export function ModelRouteFrame({ title, children }: ModelRouteFrameProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    ref.current?.animate([
+    const element = ref.current;
+    if (!element || typeof element.animate !== "function") return;
+    element.animate([
       {
         opacity: 0,
         transform: `translateX(${direction === "forward" ? 28 : -28}px)`,

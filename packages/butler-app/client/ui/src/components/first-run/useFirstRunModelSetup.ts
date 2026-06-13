@@ -1,141 +1,173 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/app/api.ts";
-import { firstRunCopy, type FirstRunLanguage } from "@/app/firstRunSetup.ts";
-import type {
-  AppModelSummary,
-  ModelCatalogView,
-  SettingsView,
-} from "@/app/types.ts";
 import {
-  modelDisplayName,
-  tokenWindowLabel,
-} from "@/app/utils.ts";
+  firstRunCopy,
+  type FirstRunLanguage,
+} from "@/app/firstRunSetup.ts";
+import { useButlerStore } from "@/app/store.ts";
+import type { ModelCatalogView, SettingsView } from "@/app/types.ts";
+import { runtimeModels } from "@/app/utils.ts";
+import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 
 type FirstRunCopy = (typeof firstRunCopy)[FirstRunLanguage];
-
-export interface FirstRunModelOption {
-  description: string;
-  label: string;
-  value: string;
-}
 
 interface UseFirstRunModelSetupOptions {
   copy: FirstRunCopy;
   enabled: boolean;
+  language: FirstRunLanguage;
   onComplete: () => void;
 }
 
 export function useFirstRunModelSetup({
   copy,
   enabled,
+  language,
   onComplete,
 }: UseFirstRunModelSetupOptions) {
-  const [modelOptions, setModelOptions] = useState<FirstRunModelOption[]>([]);
-  const [selectedModel, setSelectedModel] = useState("");
+  const availableModelCount = useButlerStore(
+    (state) => runtimeModels(state.modelCatalog).length,
+  );
+  const modelCatalog = useButlerStore((state) => state.modelCatalog);
+  const settingsDraft = useSettingsUIStore((state) => state.draft);
+  const setSettingsDraft = useSettingsUIStore((state) => state.setDraft);
   const [modelSaveStatus, setModelSaveStatus] = useState("");
-  const [modelSaving, setModelSaving] = useState(false);
   const [modelLoadFailed, setModelLoadFailed] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const autoSavingModelRef = useRef("");
+  const runtimeModelRefs = useMemo(
+    () => runtimeModels(modelCatalog).map((model) => model.model_ref),
+    [modelCatalog],
+  );
+  const defaultModelSaved =
+    settingsDraft?.model
+      ? runtimeModelRefs.includes(settingsDraft.model)
+      : false;
 
   useEffect(() => {
     if (!enabled) return undefined;
     let cancelled = false;
-    async function loadModels() {
+    async function loadModelSettings() {
+      setLoading(true);
       setModelSaveStatus(copy.modelLoading);
       setModelLoadFailed(false);
       try {
-        const [catalog, settings] = await Promise.all([
+        const [settings, catalog] = await Promise.all([
+          api<SettingsView>("/settings"),
           api<ModelCatalogView>("/model-catalog"),
-          api<Partial<SettingsView>>("/settings").catch(() => ({})),
         ]);
         if (cancelled) return;
-        const options = modelOptionsFromCatalog(catalog);
-        if (options.length === 0) throw new Error("model_catalog_empty");
-        setModelOptions(options);
-        setSelectedModel(resolveSelectedModel(catalog, settings, options));
+        const localizedSettings = { ...settings, language };
+        useButlerStore.getState().setSettings(localizedSettings);
+        useButlerStore.getState().setModelCatalog(catalog);
+        useSettingsUIStore.setState({
+          activeSection: "models",
+          draft: localizedSettings,
+          localMessage: null,
+          modelRoute: { page: "root" },
+          modelRouteDirection: "back",
+          modelRouteLeaveGuard: null,
+        });
+        const supportedModels = runtimeModels(catalog);
+        if (supportedModels.length === 0) {
+          throw new Error("model_catalog_empty");
+        }
         setModelSaveStatus("");
       } catch {
         if (cancelled) return;
-        setModelOptions([]);
-        setSelectedModel("");
         setModelLoadFailed(true);
         setModelSaveStatus(copy.modelLoadFailed);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
-    void loadModels();
+    void loadModelSettings();
     return () => {
       cancelled = true;
     };
-  }, [copy.modelLoadFailed, copy.modelLoading, enabled, loadAttempt]);
+  }, [copy.modelLoadFailed, copy.modelLoading, enabled, language, loadAttempt]);
 
-  const selectedDescription = useMemo(
-    () =>
-      modelOptions.find((option) => option.value === selectedModel)
-        ?.description ?? "",
-    [modelOptions, selectedModel],
-  );
-
-  async function saveModel() {
-    if (!selectedModel || modelSaving || modelLoadFailed) return;
-    setModelSaving(true);
-    setModelSaveStatus(copy.modelSaving);
-    try {
-      await api("/settings", {
-        method: "PATCH",
-        body: JSON.stringify({ model: selectedModel }),
-      });
-      setModelSaveStatus(copy.modelSaved);
-      onComplete();
-    } catch {
-      setModelSaveStatus(copy.modelSaveFailed);
-    } finally {
-      setModelSaving(false);
+  useEffect(() => {
+    if (
+      !enabled ||
+      loading ||
+      modelLoadFailed ||
+      !settingsDraft ||
+      runtimeModelRefs.length === 0 ||
+      defaultModelSaved
+    ) {
+      return undefined;
     }
-  }
+    const targetModel = runtimeModels(modelCatalog)[0];
+    if (!targetModel || autoSavingModelRef.current === targetModel.model_ref) {
+      return undefined;
+    }
+    let cancelled = false;
+    autoSavingModelRef.current = targetModel.model_ref;
+    async function saveAvailableDefaultModel() {
+      setModelSaveStatus(copy.modelSaving);
+      const fallbackSettings: SettingsView = {
+        ...settingsDraft!,
+        language,
+        model: targetModel!.model_ref,
+        reasoning_effort: targetModel!.default_reasoning_effort,
+        context_window_tokens: targetModel!.context_window_tokens,
+      };
+      try {
+        const result = await api<Partial<SettingsView>>("/settings", {
+          method: "PATCH",
+          body: JSON.stringify({
+            model: fallbackSettings.model,
+            reasoning_effort: fallbackSettings.reasoning_effort,
+            context_window_tokens: fallbackSettings.context_window_tokens,
+          }),
+        });
+        if (cancelled) return;
+        const nextSettings = { ...fallbackSettings, ...result, language };
+        useButlerStore.getState().setSettings(nextSettings);
+        setSettingsDraft(nextSettings);
+        setModelSaveStatus("");
+      } catch {
+        if (cancelled) return;
+        setModelLoadFailed(true);
+        setModelSaveStatus(copy.modelSaveFailed);
+      } finally {
+        if (!cancelled) autoSavingModelRef.current = "";
+      }
+    }
+    void saveAvailableDefaultModel();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    copy.modelSaveFailed,
+    copy.modelSaving,
+    defaultModelSaved,
+    enabled,
+    language,
+    loading,
+    modelCatalog,
+    modelLoadFailed,
+    runtimeModelRefs,
+    setSettingsDraft,
+    settingsDraft,
+  ]);
+
+  const modelSetupReady =
+    enabled &&
+    !loading &&
+    !modelLoadFailed &&
+    availableModelCount > 0 &&
+    Boolean(settingsDraft) &&
+    defaultModelSaved;
 
   return {
-    modelOptions,
     modelLoadFailed,
     modelSaveStatus,
-    modelSaving,
-    selectedDescription,
-    selectedModel,
-    onModelChange: setSelectedModel,
+    modelSetupReady,
     onRetryModelLoad: () => setLoadAttempt((current) => current + 1),
-    onSaveModel: () => void saveModel(),
+    onSaveModel: () => {
+      if (modelSetupReady) onComplete();
+    },
   };
-}
-
-function modelOptionsFromCatalog(
-  catalog: ModelCatalogView,
-): FirstRunModelOption[] {
-  const supportedModels = supportedRuntimeModels(catalog);
-  return supportedModels.map((model) => ({
-    value: model.model_ref,
-    label: modelDisplayName(model),
-    description: `${model.provider_label} - ${tokenWindowLabel(
-      model.context_window_tokens,
-    )}`,
-  }));
-}
-
-function resolveSelectedModel(
-  catalog: ModelCatalogView,
-  settings: Partial<SettingsView>,
-  options: FirstRunModelOption[],
-): string {
-  const values = new Set(options.map((option) => option.value));
-  if (settings.model && values.has(settings.model)) return settings.model;
-  if (catalog.default_model_ref && values.has(catalog.default_model_ref)) {
-    return catalog.default_model_ref;
-  }
-  return options[0]?.value ?? "";
-}
-
-function supportedRuntimeModels(catalog: ModelCatalogView): AppModelSummary[] {
-  const registeredModels = Array.isArray(catalog.registered_models)
-    ? catalog.registered_models.filter((model) => model.runtime_supported)
-    : [];
-  if (registeredModels.length > 0) return registeredModels;
-  return (catalog.models ?? []).filter((model) => model.runtime_supported);
 }
