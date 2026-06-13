@@ -39,10 +39,12 @@ the App-owned setup flow inside Electron before the workspace is shown.
 - Step labels are progress text, not button-like pills.
 - The main body uses `TintedGlass`.
 - The first-run body must not add card shadows.
-- The product title must be visually prominent enough to anchor the setup
-  screen.
-- The setup shell and body content must align from the top-left of the setup
-  panel, not vertically center the active step.
+- The setup shell remains centered in the viewport.
+- The product title uses the new-chat title scale so `Butler` anchors the
+  screen more strongly than the active step title.
+- Only the content inside the `TintedGlass` body aligns from the top-left.
+- The `TintedGlass` body has a bounded height and scrolls internally when
+  model-management content exceeds the visible area.
 
 ## Validation
 

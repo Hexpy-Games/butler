@@ -2,9 +2,9 @@
   position: relative;
   display: grid;
   min-height: 100vh;
-  place-items: start center;
+  place-items: center;
   overflow: hidden;
-  padding: var(--space-3xl) var(--space-2xl) var(--space-2xl);
+  padding: var(--space-2xl);
   background: var(--workspace-bg);
   color: var(--text-primary);
   isolation: isolate;
@@ -14,10 +14,23 @@
   position: relative;
   z-index: 1;
   width: min(880px, 100%);
+  max-height: calc(100vh - var(--space-2xl) * 2);
 }
 
 .header {
   color: var(--text-primary);
+}
+
+.productTitle {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--typo-new-chat-title-size);
+  font-weight: var(--typo-new-chat-title-weight);
+  letter-spacing: var(--typo-new-chat-title-letter-spacing);
+  line-height: var(--typo-new-chat-title-line-height);
+  text-wrap: balance;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .body {
@@ -25,10 +38,11 @@
   --tinted-glass-shadow: none;
 
   display: grid;
-  min-height: 420px;
-  max-height: calc(100vh - var(--space-3xl) - var(--space-2xl));
+  height: clamp(360px, 54vh, 560px);
+  max-height: calc(100vh - var(--space-2xl) * 2 - 104px);
   align-content: start;
-  overflow: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .content {
@@ -52,8 +66,22 @@
     padding: var(--space-lg);
   }
 
-  .body {
-    min-height: 440px;
+  .shell {
     max-height: calc(100vh - var(--space-lg) * 2);
+  }
+
+  .productTitle {
+    font-size: var(--typo-new-chat-title-size-sm);
+  }
+
+  .body {
+    height: min(520px, calc(100vh - var(--space-lg) * 2 - 96px));
+    max-height: calc(100vh - var(--space-lg) * 2 - 96px);
+  }
+}
+
+@media (width > 560px) and (width <= 920px) {
+  .productTitle {
+    font-size: var(--typo-new-chat-title-size-md);
   }
 }
