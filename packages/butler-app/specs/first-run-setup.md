@@ -22,9 +22,13 @@ the App-owned setup flow inside Electron before the workspace is shown.
   existing-Agent connection, gateway selection, curl, unzip, or terminal
   dependency path.
 - The installation step uses the title `Butler Agent를 준비합니다`.
-- The model step must load runtime-supported model options, save the selected
-  default model through App settings, and complete first-run setup from inside
-  the wizard.
+- The model step must reuse the App settings model-management modules instead
+  of implementing a separate one-off model picker.
+- The model step must let the user choose the Butler default model, open model
+  management, register hosted models with API key or OAuth, and add local
+  OpenAI-compatible models.
+- The model step may complete setup only after App settings and model catalog
+  are loaded and at least one runtime-supported model is available.
 - The model step must not route the user to the Settings screen during
   first-run setup.
 
@@ -35,13 +39,16 @@ the App-owned setup flow inside Electron before the workspace is shown.
 - Step labels are progress text, not button-like pills.
 - The main body uses `TintedGlass`.
 - The first-run body must not add card shadows.
-- Text hierarchy must stay compact: product label, step title, body copy,
-  secondary status.
+- The product title must be visually prominent enough to anchor the setup
+  screen.
+- The setup shell and body content must align from the top-left of the setup
+  panel, not vertically center the active step.
 
 ## Validation
 
 - Component tests cover the four-step order, absence of gateway/persona copy,
-  bundled-Agent-only installation, internal model save, and no Settings route.
+  bundled-Agent-only installation, settings-module model setup, model
+  management/add routes, and no Settings route.
 - AppShell first-run tests prove the workspace is gated until the model save
   completes.
 - Manual first-run smoke launches an isolated Electron profile and data root so

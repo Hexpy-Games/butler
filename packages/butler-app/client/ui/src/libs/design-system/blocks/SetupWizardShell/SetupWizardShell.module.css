@@ -2,9 +2,9 @@
   position: relative;
   display: grid;
   min-height: 100vh;
-  place-items: center;
+  place-items: start center;
   overflow: hidden;
-  padding: var(--space-2xl);
+  padding: var(--space-3xl) var(--space-2xl) var(--space-2xl);
   background: var(--workspace-bg);
   color: var(--text-primary);
   isolation: isolate;
@@ -13,7 +13,7 @@
 .shell {
   position: relative;
   z-index: 1;
-  width: min(640px, 100%);
+  width: min(880px, 100%);
 }
 
 .header {
@@ -25,14 +25,21 @@
   --tinted-glass-shadow: none;
 
   display: grid;
-  min-height: 368px;
-  align-content: center;
+  min-height: 420px;
+  max-height: calc(100vh - var(--space-3xl) - var(--space-2xl));
+  align-content: start;
+  overflow: auto;
 }
 
 .content {
   max-width: 52ch;
   overflow-wrap: break-word;
   word-break: keep-all;
+}
+
+.content[data-width="wide"] {
+  width: 100%;
+  max-width: none;
 }
 
 .list {
@@ -46,6 +53,7 @@
   }
 
   .body {
-    min-height: 420px;
+    min-height: 440px;
+    max-height: calc(100vh - var(--space-lg) * 2);
   }
 }

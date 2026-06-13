@@ -34,6 +34,7 @@ export function useFirstRunSetupController(
   const modelSetup = useFirstRunModelSetup({
     copy,
     enabled: step === "model",
+    language,
     onComplete: () => complete("workspace"),
   });
 
@@ -143,11 +144,8 @@ export function useFirstRunSetupController(
         : ""),
     language,
     modelLoadFailed: modelSetup.modelLoadFailed,
-    modelOptions: modelSetup.modelOptions,
     modelSaveStatus: modelSetup.modelSaveStatus,
-    modelSaving: modelSetup.modelSaving,
-    selectedDescription: modelSetup.selectedDescription,
-    selectedModel: modelSetup.selectedModel,
+    modelSetupReady: modelSetup.modelSetupReady,
     status,
     step,
     stepIndex,
@@ -172,7 +170,6 @@ export function useFirstRunSetupController(
           language: nextLanguage,
         }),
       ),
-    onModelChange: modelSetup.onModelChange,
     onRetryModelLoad: modelSetup.onRetryModelLoad,
     onLanguageContinue: () => void selectLanguage(),
     onRetryInstall: () => {

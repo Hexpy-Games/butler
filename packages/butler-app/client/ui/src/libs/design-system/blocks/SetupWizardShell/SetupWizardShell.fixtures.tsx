@@ -1,5 +1,12 @@
 import { Button } from "../../components/Button";
-import { NativeSelect, NativeSelectOption } from "../../components/NativeSelect";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../shadcn/ui/select";
 import { Typo } from "../../components/Typo";
 import {
   SetupWizardContent,
@@ -20,10 +27,17 @@ export function SetupWizardShellFixture() {
     >
       <SetupWizardContent>
         <Typo.H3 as="h1">Language</Typo.H3>
-        <NativeSelect aria-label="Language" defaultValue="en" stretch>
-          <NativeSelectOption value="en">English</NativeSelectOption>
-          <NativeSelectOption value="ko">Korean</NativeSelectOption>
-        </NativeSelect>
+        <Select defaultValue="en">
+          <SelectTrigger aria-label="Language">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="en">English</SelectItem>
+              <SelectItem value="ko">Korean</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         <Button type="button">Continue</Button>
       </SetupWizardContent>
     </SetupWizardShell>

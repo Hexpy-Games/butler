@@ -6,15 +6,18 @@ import {
 import {
   Button,
   ButtonContainer,
-  NativeSelect,
-  NativeSelectOption,
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   SetupWizardContent,
   SetupWizardList,
   Stack,
   Typo,
 } from "@/butler-ds";
 import { FirstRunModelStep } from "./FirstRunModelStep";
-import type { FirstRunModelOption } from "./useFirstRunModelSetup";
 
 type FirstRunCopy = (typeof firstRunCopy)[FirstRunLanguage];
 
@@ -24,11 +27,8 @@ interface FirstRunStepContentProps {
   error: string;
   language: FirstRunLanguage;
   modelLoadFailed: boolean;
-  modelOptions: FirstRunModelOption[];
   modelSaveStatus: string;
-  modelSaving: boolean;
-  selectedDescription: string;
-  selectedModel: string;
+  modelSetupReady: boolean;
   status: string;
   step: FirstRunStep;
   onAcceptSafety: () => void;
@@ -36,7 +36,6 @@ interface FirstRunStepContentProps {
   onCopyDiagnostics: () => void;
   onLanguageChange: (language: FirstRunLanguage) => void;
   onLanguageContinue: () => void;
-  onModelChange: (modelRef: string) => void;
   onQuit: () => void;
   onRetryModelLoad: () => void;
   onRetryInstall: () => void;
@@ -49,11 +48,8 @@ export function FirstRunStepContent({
   error,
   language,
   modelLoadFailed,
-  modelOptions,
   modelSaveStatus,
-  modelSaving,
-  selectedDescription,
-  selectedModel,
+  modelSetupReady,
   status,
   step,
   onAcceptSafety,
@@ -61,7 +57,6 @@ export function FirstRunStepContent({
   onCopyDiagnostics,
   onLanguageChange,
   onLanguageContinue,
-  onModelChange,
   onQuit,
   onRetryModelLoad,
   onRetryInstall,
@@ -71,17 +66,22 @@ export function FirstRunStepContent({
     return (
       <SetupWizardContent>
         <Typo.H3 as="h1">{copy.languageTitle}</Typo.H3>
-        <NativeSelect
-          stretch
+        <Select
           value={language}
-          onChange={(event) =>
-            onLanguageChange(event.currentTarget.value as FirstRunLanguage)
+          onValueChange={(value) =>
+            onLanguageChange(value as FirstRunLanguage)
           }
-          aria-label={copy.languageTitle}
         >
-          <NativeSelectOption value="ko">한국어</NativeSelectOption>
-          <NativeSelectOption value="en">English</NativeSelectOption>
-        </NativeSelect>
+          <SelectTrigger aria-label={copy.languageTitle}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="ko">한국어</SelectItem>
+              <SelectItem value="en">English</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         <Button type="button" onClick={onLanguageContinue}>
           {copy.continue}
         </Button>
@@ -146,12 +146,8 @@ export function FirstRunStepContent({
     <FirstRunModelStep
       copy={copy}
       modelLoadFailed={modelLoadFailed}
-      modelOptions={modelOptions}
       modelSaveStatus={modelSaveStatus}
-      modelSaving={modelSaving}
-      selectedDescription={selectedDescription}
-      selectedModel={selectedModel}
-      onModelChange={onModelChange}
+      modelSetupReady={modelSetupReady}
       onRetryModelLoad={onRetryModelLoad}
       onSaveModel={onSaveModel}
     />

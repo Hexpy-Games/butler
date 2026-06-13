@@ -28,11 +28,8 @@ export function FirstRunSetup({
         error={setup.error}
         language={setup.language}
         modelLoadFailed={setup.modelLoadFailed}
-        modelOptions={setup.modelOptions}
         modelSaveStatus={setup.modelSaveStatus}
-        modelSaving={setup.modelSaving}
-        selectedDescription={setup.selectedDescription}
-        selectedModel={setup.selectedModel}
+        modelSetupReady={setup.modelSetupReady}
         status={setup.status}
         step={setup.step}
         onAcceptSafety={setup.onAcceptSafety}
@@ -40,7 +37,6 @@ export function FirstRunSetup({
         onCopyDiagnostics={setup.onCopyDiagnostics}
         onLanguageChange={setup.onLanguageChange}
         onLanguageContinue={setup.onLanguageContinue}
-        onModelChange={setup.onModelChange}
         onQuit={setup.onQuit}
         onRetryInstall={setup.onRetryInstall}
         onRetryModelLoad={setup.onRetryModelLoad}

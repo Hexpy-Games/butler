@@ -2037,9 +2037,10 @@ export function runtimeModels(
   modelCatalog: ModelCatalogView,
 ): AppModelSummary[] {
   if (Array.isArray(modelCatalog?.registered_models)) {
-    return modelCatalog.registered_models.filter(
+    const registered = modelCatalog.registered_models.filter(
       (model) => model.runtime_supported === true,
     );
+    if (registered.length > 0) return registered;
   }
   const models = modelCatalog?.models?.length
     ? modelCatalog.models

@@ -406,11 +406,14 @@ async function main(): Promise<void> {
 
   await waitForHeading(cdp, "언어 선택");
   await expectNoForbiddenCopy(cdp);
-  const languageValue = await evaluateString(
+  const selectedLanguageLabel = await evaluateString(
     cdp,
-    "document.querySelector('select')?.value ?? ''",
+    "document.querySelector('[role=\"combobox\"][aria-label=\"언어 선택\"]')?.textContent?.trim() ?? \"\"",
   );
-  assert(languageValue === "ko", "system language did not preselect Korean");
+  assert(
+    selectedLanguageLabel.includes("한국어"),
+    "system language did not preselect Korean",
+  );
 
   await clickButton(cdp, "계속");
   await waitForHeading(cdp, "안전고지");
