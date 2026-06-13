@@ -4,6 +4,7 @@ import { afterEach, expect, mock, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { EMPTY_MODEL_CATALOG } from "@/app/constants.ts";
 import {
   createInitialFirstRunState,
   FIRST_RUN_STORAGE_KEY,
@@ -157,7 +158,8 @@ test("AppShell gates workspace behind pending first-run setup", async () => {
   await clickButton(rendered.container, "계속");
   await clickButton(rendered.container, "동의");
   await waitForText(rendered.container, "모델 설정");
-  await clickButton(rendered.container, "나중에 설정");
+  await waitForText(rendered.container, "저장하고 시작");
+  await clickButton(rendered.container, "저장하고 시작");
 
   expect(rendered.container.textContent).toContain("Workspace");
   expect(storeState.openSettingsCalls).toEqual([]);
@@ -165,7 +167,7 @@ test("AppShell gates workspace behind pending first-run setup", async () => {
   await act(async () => rendered.root.unmount());
 });
 
-test("AppShell opens model settings after first-run model setup action", async () => {
+test("AppShell keeps model setup inside first-run wizard", async () => {
   const rendered = await renderAppShell({
     [FIRST_RUN_STORAGE_KEY]: JSON.stringify(createInitialFirstRunState("ko")),
   });
@@ -173,10 +175,12 @@ test("AppShell opens model settings after first-run model setup action", async (
   await clickButton(rendered.container, "계속");
   await clickButton(rendered.container, "동의");
   await waitForText(rendered.container, "모델 설정");
-  await clickButton(rendered.container, "모델 설정 열기");
+  expect(rendered.container.textContent).not.toContain("모델 설정 열기");
+  await waitForText(rendered.container, "저장하고 시작");
+  await clickButton(rendered.container, "저장하고 시작");
 
-  expect(storeState.openSettingsCalls).toEqual(["models"]);
-  expect(rendered.container.textContent).toContain("Settings");
+  expect(storeState.openSettingsCalls).toEqual([]);
+  expect(rendered.container.textContent).toContain("Workspace");
 
   await act(async () => rendered.root.unmount());
 });
@@ -195,6 +199,10 @@ async function renderAppShell(
     HTMLElement: dom.window.HTMLElement,
     Node: dom.window.Node,
   });
+  Object.defineProperty(dom.window.HTMLCanvasElement.prototype, "getContext", {
+    configurable: true,
+    value: () => null,
+  });
   (globalThis as ReactActGlobal).IS_REACT_ACT_ENVIRONMENT = true;
 
   Object.entries(storageValues).forEach(([key, value]) => {
@@ -207,6 +215,11 @@ async function renderAppShell(
         phase: "ready",
         status_label: "준비 완료",
       }),
+      getModelCatalog: async () => ({
+        ...EMPTY_MODEL_CATALOG,
+        registered_models: [],
+      }),
+      getSettings: async () => ({ model: "openai/gpt-5.5" }),
       updateSettings: async () => ({}),
     },
   });

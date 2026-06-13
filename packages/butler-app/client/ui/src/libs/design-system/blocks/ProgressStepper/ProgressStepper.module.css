@@ -1,0 +1,29 @@
+.root {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--text-tertiary);
+}
+
+.item[data-active="true"] {
+  color: var(--text-primary);
+}
+
+.index {
+  color: inherit;
+}
+
+.label {
+  color: inherit;
+}
+
+.item[data-active="true"] .label {
+  font-weight: var(--typo-label-weight);
+}
