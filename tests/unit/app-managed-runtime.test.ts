@@ -1129,6 +1129,37 @@ function createBundledAgentResource(
   );
   const releaseManifestSha256 = sha256File(join(resourceRoot, "agent-release-manifest.json"));
   const updateManifestSha256 = sha256File(join(resourceRoot, "agent-update-manifest.json"));
+  writeFileSync(
+    join(resourceRoot, "background-service-capability.json"),
+    `${JSON.stringify({
+      schema: "butler.app-background-service-capability.v1",
+      serviceCapable: true,
+      gatewayProfile: "electron",
+      appGatewayOwner: "background-agent-service",
+      rawTextIncluded: false,
+    }, null, 2)}\n`,
+  );
+  writeFileSync(
+    join(resourceRoot, "background-service-registration.json"),
+    `${JSON.stringify({
+      schema: "butler.app-background-service-registration.v1",
+      product: "butler-app",
+      releasePlatform: "darwin-arm64",
+      servicePlatform: "darwin",
+      gatewayProfile: "electron",
+      rawTextIncluded: false,
+    }, null, 2)}\n`,
+  );
+  const backgroundServiceCapabilitySha256 = sha256File(
+    join(resourceRoot, "background-service-capability.json"),
+  );
+  const backgroundServiceRegistrationSha256 = sha256File(
+    join(resourceRoot, "background-service-registration.json"),
+  );
+  const backgroundServiceRegistrationMetadataSha256 = sha256Values([
+    backgroundServiceCapabilitySha256,
+    backgroundServiceRegistrationSha256,
+  ]);
   const managedRuntimeSha256 = sha256Directory(
     join(resourceRoot, "runtime"),
   );
@@ -1141,6 +1172,7 @@ function createBundledAgentResource(
       releaseManifestSha256,
       updateManifestSha256,
       managedRuntimeSha256,
+      backgroundServiceRegistrationMetadataSha256,
       releaseManifestsSha256: sha256Values([
         releaseManifestSha256,
         updateManifestSha256,
@@ -1154,6 +1186,7 @@ function createBundledAgentResource(
         releaseManifestSha256,
         updateManifestSha256,
         managedRuntimeSha256,
+        backgroundServiceRegistrationMetadataSha256,
       ]),
     }), null, 2)}\n`,
   );

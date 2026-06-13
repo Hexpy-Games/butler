@@ -684,6 +684,9 @@ function verifyDependencyClosure(resourceRoot, artifact, artifactDigest) {
   const runtimeDigest = sha256Directory(join(resourceRoot, "runtime"));
   const releaseManifestDigest = sha256File(join(resourceRoot, "agent-release-manifest.json"));
   const updateManifestDigest = sha256File(join(resourceRoot, "agent-update-manifest.json"));
+  const capabilityDigest = sha256File(join(resourceRoot, "background-service-capability.json"));
+  const registrationDigest = sha256File(join(resourceRoot, "background-service-registration.json"));
+  const registrationMetadataDigest = sha256Values([capabilityDigest, registrationDigest]);
   const expected = new Map([
     ["renderer-assets", artifactDigest],
     ["bootstrap-setup-ui", artifactDigest],
@@ -691,6 +694,7 @@ function verifyDependencyClosure(resourceRoot, artifact, artifactDigest) {
     ["managed-runtime-payload", runtimeDigest],
     ["runtime-package-dependencies", sha256Values([artifactDigest, runtimeDigest])],
     ["release-manifests", sha256Values([releaseManifestDigest, updateManifestDigest])],
+    ["background-service-registration-metadata", registrationMetadataDigest],
     [
       "bundled-payload-repair-source",
       sha256Values([
@@ -698,6 +702,7 @@ function verifyDependencyClosure(resourceRoot, artifact, artifactDigest) {
         releaseManifestDigest,
         updateManifestDigest,
         runtimeDigest,
+        registrationMetadataDigest,
       ]),
     ],
   ]);
