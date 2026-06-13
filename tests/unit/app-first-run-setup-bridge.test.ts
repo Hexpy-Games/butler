@@ -76,6 +76,9 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(main).toContain("readRuntimeDiagnostics");
   expect(main).toContain("readLatestAppManagedRuntimeFailure");
   expect(setupBridge).toContain("createFirstRunSetupBridge");
+  expect(setupBridge).toContain("serviceControl");
+  expect(setupBridge).toContain("agent_service");
+  expect(setupBridge).toContain("service_registration_unavailable");
   expect(setupBridge).toContain("bundled_agent_version");
   expect(setupBridge).toContain("local_auth");
   expect(setupBridge).toContain("health");
@@ -140,6 +143,7 @@ test("first-run setup passes only after version auth health protocol and profile
 
   expect(status.phase).toBe("ready");
   expect(bridge.diagnostics().checks.map((check) => check.id)).toEqual([
+    "agent_service",
     "managed_gateway",
     "bundled_agent_version",
     "local_auth",
@@ -175,6 +179,7 @@ test("default first-run setup does not run optional external tool preflights", a
 
   const checkIds = bridge.diagnostics().checks.map((check) => check.id);
   expect(checkIds).toEqual([
+    "agent_service",
     "managed_gateway",
     "bundled_agent_version",
     "local_auth",
@@ -259,6 +264,7 @@ test("default first-run setup exercises bundled supervisor readiness without hos
       "/Applications/Butler.app/Contents/Resources/bundled-agent/runtime/bin/bun",
     ]);
     expect(bridge.diagnostics().checks.map((check) => check.id)).toEqual([
+      "agent_service",
       "managed_gateway",
       "bundled_agent_version",
       "local_auth",
@@ -269,6 +275,202 @@ test("default first-run setup exercises bundled supervisor readiness without hos
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
+});
+
+test("first-run setup uses service-control before managed gateway readiness", async () => {
+  const calls: string[] = [];
+  const bridge = createFirstRunSetupBridge({
+    serviceControl: {
+      getAgentServiceStatus: async () => {
+        calls.push("status");
+        return { status: calls.length > 1 ? "ready" : "not_installed" };
+      },
+      installAgentService: async () => {
+        calls.push("install");
+        return { ok: true, status: "starting" };
+      },
+      startAgentService: async () => {
+        calls.push("start");
+        return { ok: true, status: "ready" };
+      },
+      readAgentServiceDiagnostics: async () => ({
+        status: "ready",
+        raw_text_included: false,
+      }),
+    },
+    ensureReady: async () => {
+      calls.push("ensure-ready");
+    },
+    readRuntimeDiagnostics: () => ({
+      phase: "running",
+      bundled_agent: {
+        source: "app-managed",
+        version_configured: true,
+      },
+      local_auth: {
+        required: true,
+        token_configured: true,
+      },
+    }),
+    readSettings: async () => ({
+      gateway_profile: "electron",
+    }),
+  });
+
+  const status = await bridge.start();
+
+  expect(status.phase).toBe("ready");
+  expect(calls).toEqual(["status", "install", "start", "status", "ensure-ready"]);
+  expect(bridge.diagnostics().checks[0]).toEqual({
+    id: "agent_service",
+    label: "Butler Agent 서비스",
+    status: "passed",
+  });
+});
+
+test("first-run setup fails closed when service registration is unavailable", async () => {
+  let ensureReadyCalls = 0;
+  const bridge = createFirstRunSetupBridge({
+    serviceControl: {
+      getAgentServiceStatus: async () => ({
+        status: "not_installed",
+      }),
+      installAgentService: async () => ({
+        ok: false,
+        status: "needs_permission",
+        error_code: "service_registration_unavailable",
+      }),
+      readAgentServiceDiagnostics: async () => ({
+        private_path: "/Users/alice/.butler/secret",
+        status: "needs_permission",
+      }),
+    },
+    ensureReady: async () => {
+      ensureReadyCalls += 1;
+    },
+    readRuntimeDiagnostics: () => ({
+      phase: "running",
+      bundled_agent: {
+        source: "app-managed",
+        version_configured: true,
+      },
+      local_auth: {
+        required: true,
+        token_configured: true,
+      },
+    }),
+    readSettings: async () => ({
+      gateway_profile: "electron",
+    }),
+  });
+
+  const status = await bridge.start();
+  const diagnostics = bridge.diagnostics();
+
+  expect(status).toMatchObject({
+    phase: "failed",
+    error_code: "service_registration_unavailable",
+  });
+  expect(ensureReadyCalls).toBe(0);
+  expect(diagnostics.checks[0]).toEqual({
+    id: "agent_service",
+    label: "Butler Agent 서비스",
+    status: "failed",
+  });
+  expect(JSON.stringify(diagnostics)).not.toContain("/Users/alice");
+  expect(JSON.stringify(diagnostics)).not.toContain(".butler/secret");
+});
+
+test("first-run setup fails closed when service start fails", async () => {
+  let ensureReadyCalls = 0;
+  const bridge = createFirstRunSetupBridge({
+    serviceControl: {
+      getAgentServiceStatus: async () => ({
+        status: "stopped",
+      }),
+      startAgentService: async () => ({
+        ok: false,
+        status: "failed",
+        error_code: "service_start_failed",
+      }),
+      readAgentServiceDiagnostics: async () => ({
+        status: "failed",
+        raw_text_included: false,
+      }),
+    },
+    ensureReady: async () => {
+      ensureReadyCalls += 1;
+    },
+    readRuntimeDiagnostics: () => ({
+      phase: "running",
+      bundled_agent: {
+        source: "app-managed",
+        version_configured: true,
+      },
+      local_auth: {
+        required: true,
+        token_configured: true,
+      },
+    }),
+    readSettings: async () => ({
+      gateway_profile: "electron",
+    }),
+  });
+
+  const status = await bridge.start();
+
+  expect(status).toMatchObject({
+    phase: "failed",
+    error_code: "setup_failed",
+  });
+  expect(ensureReadyCalls).toBe(0);
+  expect(bridge.diagnostics().errors[0]?.details).toMatchObject({
+    exception_code: "service_start_failed",
+  });
+});
+
+test("first-run setup fails closed when service remains not ready after start", async () => {
+  let ensureReadyCalls = 0;
+  const bridge = createFirstRunSetupBridge({
+    serviceControl: {
+      getAgentServiceStatus: async () => ({
+        status: "stopped",
+      }),
+      startAgentService: async () => ({
+        ok: true,
+        status: "starting",
+      }),
+      readAgentServiceDiagnostics: async () => ({
+        status: "starting",
+        raw_text_included: false,
+      }),
+    },
+    ensureReady: async () => {
+      ensureReadyCalls += 1;
+    },
+    readRuntimeDiagnostics: () => ({
+      phase: "running",
+      bundled_agent: {
+        source: "app-managed",
+        version_configured: true,
+      },
+      local_auth: {
+        required: true,
+        token_configured: true,
+      },
+    }),
+    readSettings: async () => ({
+      gateway_profile: "electron",
+    }),
+  });
+
+  const status = await bridge.start();
+
+  expect(status).toMatchObject({
+    phase: "failed",
+    error_code: "agent_service_not_ready",
+  });
+  expect(ensureReadyCalls).toBe(0);
 });
 
 test("optional external tool probes stay behind selected feature actions", () => {

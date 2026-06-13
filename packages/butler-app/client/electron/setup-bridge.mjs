@@ -2,6 +2,7 @@ export function createFirstRunSetupBridge({
   ensureReady,
   readSettings,
   readRuntimeDiagnostics = () => ({}),
+  serviceControl = null,
   gatewayProfile = "electron",
 }) {
   let runId = 0;
@@ -34,6 +35,10 @@ export function createFirstRunSetupBridge({
       const currentSession = createSession("checking", {
         checks: [
           setupCheck(
+            "agent_service",
+            "Butler Agent 서비스",
+          ),
+          setupCheck(
             "managed_gateway",
             "Butler Agent 연결",
           ),
@@ -51,6 +56,19 @@ export function createFirstRunSetupBridge({
       session = currentSession;
       try {
         let runtimeDiagnostics = null;
+        const serviceStatus = await readServiceStatus(serviceControl);
+        if (!serviceReady(serviceStatus)) {
+          await installOrStartService(serviceControl, serviceStatus);
+        }
+        const nextServiceStatus = await readServiceStatus(serviceControl);
+        if (!serviceReady(nextServiceStatus)) {
+          throw setupError(serviceSetupErrorCode(nextServiceStatus));
+        }
+        markCheck(
+          currentSession,
+          "agent_service",
+          "passed",
+        );
         await ensureReady();
         if (!isActiveRun(currentRunId, runId, session)) return statusView(session);
         if (currentSession.cancelled) return statusView(currentSession);
@@ -101,6 +119,7 @@ export function createFirstRunSetupBridge({
             errorCode,
             error,
             runtimeDiagnostics: safeReadRuntimeDiagnostics(readRuntimeDiagnostics),
+            serviceDiagnostics: await safeReadServiceDiagnostics(serviceControl),
           }),
           startedAt,
         });
@@ -176,6 +195,9 @@ function failPendingChecks(checks) {
 
 function setupErrorCode(error) {
   if (
+    error?.code === "service_registration_unavailable" ||
+    error?.code === "agent_service_not_ready" ||
+    error?.code === "agent_service_failed" ||
     error?.code === "gateway_profile_mismatch" ||
     error?.code === "bundled_agent_version_missing" ||
     error?.code === "local_auth_unavailable" ||
@@ -184,6 +206,56 @@ function setupErrorCode(error) {
     return error.code;
   }
   return "setup_failed";
+}
+
+function serviceReady(status) {
+  return status?.status === "ready";
+}
+
+function serviceSetupErrorCode(status) {
+  if (status?.error_code === "service_registration_unavailable") {
+    return "service_registration_unavailable";
+  }
+  if (status?.status === "failed") return "agent_service_failed";
+  return "agent_service_not_ready";
+}
+
+async function readServiceStatus(serviceControl) {
+  if (!serviceControl?.getAgentServiceStatus) {
+    return { status: "ready", raw_text_included: false };
+  }
+  return sanitizeDiagnosticsValue(await serviceControl.getAgentServiceStatus());
+}
+
+async function installOrStartService(serviceControl, serviceStatus) {
+  if (!serviceControl) return;
+  if (serviceStatus?.status === "not_installed" && serviceControl.installAgentService) {
+    const install = sanitizeDiagnosticsValue(await serviceControl.installAgentService({ source: "first-run" }));
+    if (install?.ok === false) {
+      throw setupError(install.error_code || serviceSetupErrorCode(install));
+    }
+  }
+  if (
+    ["not_installed", "stopped", "needs_permission"].includes(serviceStatus?.status) &&
+    serviceControl.startAgentService
+  ) {
+    const start = sanitizeDiagnosticsValue(await serviceControl.startAgentService({ source: "first-run" }));
+    if (start?.ok === false) {
+      throw setupError(start.error_code || serviceSetupErrorCode(start));
+    }
+  }
+}
+
+async function safeReadServiceDiagnostics(serviceControl) {
+  if (!serviceControl?.readAgentServiceDiagnostics) return null;
+  try {
+    return sanitizeDiagnosticsValue(await serviceControl.readAgentServiceDiagnostics());
+  } catch {
+    return {
+      status: "unavailable",
+      raw_text_included: false,
+    };
+  }
 }
 
 function bundledAgentVersionReady(diagnostics) {
@@ -212,7 +284,12 @@ function safeReadRuntimeDiagnostics(readRuntimeDiagnostics) {
   }
 }
 
-function setupSupportDetails({ errorCode, error, runtimeDiagnostics }) {
+function setupSupportDetails({
+  errorCode,
+  error,
+  runtimeDiagnostics,
+  serviceDiagnostics = null,
+}) {
   return sanitizeDiagnosticsValue({
     setup_error_code: errorCode,
     exception_code:
@@ -222,6 +299,7 @@ function setupSupportDetails({ errorCode, error, runtimeDiagnostics }) {
     exception_message:
       error instanceof Error ? redactDiagnosticsText(error.message) : undefined,
     runtime: runtimeDiagnostics,
+    service: serviceDiagnostics,
     raw_text_included: false,
   });
 }
@@ -239,6 +317,10 @@ function sanitizeDiagnosticsValue(value) {
       continue;
     }
     if (/stack|trace|stdout|stderr|raw_output|raw_error/iu.test(key)) {
+      continue;
+    }
+    if (/code$/iu.test(key) && typeof raw === "string") {
+      output[key] = raw.replace(/[^a-z0-9_:-]/giu, "_").slice(0, 80);
       continue;
     }
     if (/token|secret|authorization|password|credential/iu.test(key)) {

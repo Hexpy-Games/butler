@@ -16,6 +16,7 @@ export interface FirstRunSetupDiagnosticsView {
   errors: Array<{
     code: string;
     message: string;
+    details?: unknown;
   }>;
 }
 
@@ -24,6 +25,13 @@ export interface FirstRunSetupBridge {
   diagnostics(): FirstRunSetupDiagnosticsView;
   cancel(): FirstRunSetupStatusView;
   start(): Promise<FirstRunSetupStatusView>;
+}
+
+export interface FirstRunServiceControlBridge {
+  getAgentServiceStatus?: () => Promise<unknown> | unknown;
+  installAgentService?: (request?: unknown) => Promise<unknown> | unknown;
+  startAgentService?: (request?: unknown) => Promise<unknown> | unknown;
+  readAgentServiceDiagnostics?: () => Promise<unknown> | unknown;
 }
 
 export function createFirstRunSetupBridge(input: {
@@ -40,6 +48,7 @@ export function createFirstRunSetupBridge(input: {
       token_configured?: boolean;
     };
   };
+  serviceControl?: FirstRunServiceControlBridge | null;
   readSettings: () => Promise<{
     bridge_mode?: string;
     gateway_profile?: string;

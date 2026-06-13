@@ -106,6 +106,7 @@ const firstRunSetupBridge = createFirstRunSetupBridge({
   gatewayProfile: "electron",
   readSettings: readSetupSettings,
   readRuntimeDiagnostics: readFirstRunRuntimeDiagnostics,
+  serviceControl: agentServiceControl,
 });
 app.setName(appDisplayName);
 syncPreloadServerEnvironment();
