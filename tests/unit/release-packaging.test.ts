@@ -185,6 +185,32 @@ test("app release manifest exposes app package files only", () => {
     bundledAgentVersion: currentVersion,
     updaterOwner: "butler-app",
     version: currentVersion,
+    backgroundServiceCapability: {
+      schema: "butler.app-background-service-capability.v1",
+      serviceCapable: true,
+      gatewayProfile: "electron",
+      serviceOwner: "butler-agent",
+      processGroupOwner: "native-service-supervisor",
+      appGatewayOwner: "background-agent-service",
+      runtimePointerPath: "$BUTLER_DATA/app/runtime/agent/current.json",
+      installerRequirements: [
+        {
+          platform: "darwin",
+          selectedV1Path: "macos-pkg-launch-agent",
+          installerRequired: "yes",
+          packageFormats: ["pkg"],
+          registersUserService: true,
+        },
+        {
+          platform: "linux",
+          selectedV1Path: "linux-deb-owned-user-unit",
+          installerRequired: "yes",
+          packageFormats: ["deb", "rpm"],
+          registersUserService: true,
+        },
+      ],
+      rawTextIncluded: false,
+    },
   });
   expect(manifest.components.map((component) => component.id)).toEqual(["app"]);
   expect(
@@ -194,10 +220,20 @@ test("app release manifest exposes app package files only", () => {
     manifest.components.find((component) => component.id === "app")
       ?.bundledComponents,
   ).toEqual(["app"]);
+  expect(manifest.backgroundServiceCapability.requiredRuntimeFields).toContain(
+    "BUTLER_APP_MANAGED_RUNTIME_POINTER",
+  );
+  expect(manifest.backgroundServiceCapability.serviceStatuses).toContain("ready");
+  expect(manifest.backgroundServiceCapability.updateStatuses).toContain("rollback");
   expect(manifest.components.find((component) => component.id === "app")).toMatchObject({
     product: "butler-app",
     gatewayProfile: "electron",
     bundledAgentVersion: currentVersion,
+    backgroundServiceCapability: {
+      serviceCapable: true,
+      gatewayProfile: "electron",
+      appGatewayOwner: "background-agent-service",
+    },
     bundledAgentPayload: {
       product: "butler-agent",
       profile: "agent-standalone",
@@ -238,6 +274,11 @@ test("app release manifest exposes app package files only", () => {
     product: "butler-app",
     gatewayProfile: "electron",
     bundledAgentVersion: currentVersion,
+    backgroundServiceCapability: {
+      serviceCapable: true,
+      gatewayProfile: "electron",
+      appGatewayOwner: "background-agent-service",
+    },
     bundledAgentPayload: {
       product: "butler-agent",
       version: currentVersion,
@@ -398,12 +439,20 @@ test("app release metadata ships bundled-Agent-only changes as a new App artifac
       payloadFormat: "platform-app-package",
       activationPolicy: "platform-app-update-then-versioned-app-runtime",
       rollbackPolicy: "preserve-previous-app-managed-runtime",
+      backgroundServiceCapability: {
+        serviceCapable: true,
+        appGatewayOwner: "background-agent-service",
+      },
     });
     expect(artifact.artifactName).toContain(`butler-app-${manifest.version}-`);
     expect(artifact.bundledAgentPayload.version).toBe(manifest.bundledAgentVersion);
     expect(artifact.bundledAgentPayload.resourcePath).toBe(
       `bundled-agent/butler-agent-${manifest.bundledAgentVersion}-all.tar.gz`,
     );
+    expect(artifact.backgroundServiceCapability.installerRequirements).toHaveLength(1);
+    expect(
+      artifact.backgroundServiceCapability.installerRequirements[0]?.platform,
+    ).toBe(artifact.platform.startsWith("darwin-") ? "darwin" : "linux");
   }
 });
 
@@ -487,12 +536,18 @@ test("release manifest validation rejects missing two-product schema fields", ()
   brokenApp.gatewayProfile = "terminal" as any;
   brokenApp.bundledAgentVersion = "0.0.0";
   brokenApp.bundledAgentPayload = undefined as any;
+  brokenApp.backgroundServiceCapability = undefined as any;
   brokenApp.protocolCompatibility = undefined as any;
+  brokenApp.components = brokenApp.components.map((component) => ({
+    ...component,
+    backgroundServiceCapability: undefined as any,
+  }));
   brokenApp.artifacts = brokenApp.artifacts.map((artifact) => ({
     ...artifact,
     product: "butler-service" as any,
     gatewayProfile: "terminal" as any,
     bundledAgentPayload: undefined as any,
+    backgroundServiceCapability: undefined as any,
     integrity: undefined as any,
     activationPolicy: "in-place" as any,
   }));
@@ -504,10 +559,13 @@ test("release manifest validation rejects missing two-product schema fields", ()
       "app release gateway profile must be electron",
       "app release bundled agent version mismatch",
       "app release bundled Agent payload metadata is required",
+      "app release background service capability metadata is required",
+      "component app background service capability metadata is required",
       "artifact app product must be butler-app",
       "artifact app gateway profile must be electron",
       "artifact app bundled agent version mismatch",
       "artifact app bundled Agent payload metadata is required",
+      "artifact app background service capability metadata is required",
       "artifact app integrity metadata is required",
       "artifact app activation policy must be platform-app-update-then-versioned-app-runtime",
     ]),
@@ -762,6 +820,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(entries).toContain(`${resourceRoot}/agent-release-manifest.json`);
     expect(entries).toContain(`${resourceRoot}/agent-update-manifest.json`);
     expect(entries).toContain(`${resourceRoot}/dependency-closure.json`);
+    expect(entries).toContain(`${resourceRoot}/background-service-capability.json`);
     expect(entries).toContain(`${resourceRoot}/runtime/bun-version`);
     expect(entries).toContain(`${resourceRoot}/runtime/bin/bun`);
     const bundledRuntime = extractTarEntryBuffer(
@@ -783,12 +842,20 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
         managedRuntimePayloadPath: "bundled-agent/runtime",
         dependencyClosureManifestPath: "bundled-agent/dependency-closure.json",
       },
+      backgroundServiceCapability: {
+        serviceCapable: true,
+        appGatewayOwner: "background-agent-service",
+      },
     });
     expect(updateManifest).toMatchObject({
       schema: "butler.update-manifest.v1",
       product: "butler-app",
       app_version: currentVersion,
       bundled_agent_version: currentVersion,
+      background_service_capability: {
+        serviceCapable: true,
+        appGatewayOwner: "background-agent-service",
+      },
       gateway_profile: "electron",
       protocol_compatibility: {
         protocol: "butler.app.v1",
@@ -806,6 +873,10 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       version: currentVersion,
       gateway_profile: "electron",
       bundled_agent_version: currentVersion,
+      background_service_capability: {
+        serviceCapable: true,
+        appGatewayOwner: "background-agent-service",
+      },
       protocol_compatibility: {
         protocol: "butler.app.v1",
         minimumAppProtocol: "butler.app.v1",
@@ -822,6 +893,26 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       artifact.artifactPath,
       `${resourceRoot}/agent-update-manifest.json`,
     );
+    const backgroundServiceCapability = extractTarEntryJson(
+      artifact.artifactPath,
+      `${resourceRoot}/background-service-capability.json`,
+    );
+    expect(backgroundServiceCapability).toMatchObject({
+      schema: "butler.app-background-service-capability.v1",
+      serviceCapable: true,
+      gatewayProfile: "electron",
+      appGatewayOwner: "background-agent-service",
+      installerRequirements: [
+        {
+          platform: "linux",
+          selectedV1Path: "linux-deb-owned-user-unit",
+          installerRequired: "yes",
+          packageFormats: ["deb", "rpm"],
+          registersUserService: true,
+        },
+      ],
+      rawTextIncluded: false,
+    });
     expect(nestedReleaseManifest.artifacts[0]).toMatchObject({
       downloadUrl: `bundled-agent/${agentArtifact}`,
       sha256: releaseManifest.bundledAgentPayload.integrity.digest,
@@ -868,6 +959,7 @@ test("app package smoke uses real bundled Agent release resources", () => {
     expect(existsSync(join(bundledAgent.resourceDir, "agent-release-manifest.json"))).toBe(true);
     expect(existsSync(join(bundledAgent.resourceDir, "agent-update-manifest.json"))).toBe(true);
     expect(existsSync(join(bundledAgent.resourceDir, "dependency-closure.json"))).toBe(true);
+    expect(existsSync(join(bundledAgent.resourceDir, "background-service-capability.json"))).toBe(true);
 
     const listing = spawnSync("tar", [
       "-tzf",
@@ -918,9 +1010,19 @@ test("app package smoke uses real bundled Agent release resources", () => {
       "runtime-package-dependencies",
       "local-setup-bridge",
       "release-manifests",
+      "background-service-registration-metadata",
       "app-managed-runtime-home",
       "bundled-payload-repair-source",
     ]);
+    expect(
+      dependencyClosure.appOwnedDependencies.find(
+        (item: any) => item.id === "background-service-registration-metadata",
+      ),
+    ).toMatchObject({
+      source: "app-bundle",
+      paths: ["bundled-agent/background-service-capability.json"],
+      repairSource: null,
+    });
     expect(
       dependencyClosure.appOwnedDependencies.find(
         (item: any) => item.id === "renderer-assets",

@@ -336,6 +336,28 @@ Acceptance:
 - Installer smoke verifies service registration artifacts.
 - App release still bundles Agent runtime and dependency closure.
 
+Implemented surface:
+
+- App release manifest, component metadata, artifact metadata, and update
+  manifest declare `butler.app-background-service-capability.v1`.
+- Bundled App resources include
+  `bundled-agent/background-service-capability.json`.
+- The dependency closure lists
+  `background-service-registration-metadata` as an App-owned dependency.
+- Current v1 installer requirements are declared as:
+  - macOS: `macos-pkg-launch-agent` with `pkg`.
+  - Linux: `linux-deb-owned-user-unit` with `deb` and `rpm`.
+- Packaging smoke verifies the service capability metadata is present beside
+  the bundled Agent runtime and release manifests.
+
+Remaining:
+
+- Generate signed/notarized macOS `.pkg` service installer payloads.
+- Generate Linux `.deb`/`.rpm` packages that install user service units.
+- Add Windows release platform and installer path after the Windows
+  user/security-context implementation.
+- Run real installer E2E on each target OS.
+
 ## Phase 7: End-To-End Verification
 
 Goal: prove the product behavior users will rely on.

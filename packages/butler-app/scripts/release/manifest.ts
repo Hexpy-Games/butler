@@ -1,5 +1,13 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import {
+  APP_AGENT_SERVICE_STATUSES,
+  APP_AGENT_UPDATE_STATUSES,
+  APP_BACKGROUND_SERVICE_RUNTIME_FIELDS,
+  appBackgroundServiceCapability,
+  type AppBackgroundServicePlatform,
+  type AppBackgroundServiceV1Path,
+} from "../background-service-contract.ts";
 
 export const APP_RELEASE_COMPONENT_IDS = ["app"] as const;
 export const APP_RELEASE_PLATFORMS = ["darwin-arm64", "linux-x64"] as const;
@@ -16,6 +24,7 @@ export type AppReleaseActivationPolicy =
   "platform-app-update-then-versioned-app-runtime";
 export type AppReleaseRollbackPolicy =
   "preserve-previous-app-managed-runtime";
+export type AppReleaseServiceInstallerPackageFormat = "pkg" | "deb" | "rpm";
 export type AppOwnedDependencyId =
   | "electron-shell"
   | "renderer-assets"
@@ -25,6 +34,7 @@ export type AppOwnedDependencyId =
   | "runtime-package-dependencies"
   | "local-setup-bridge"
   | "release-manifests"
+  | "background-service-registration-metadata"
   | "app-managed-runtime-home"
   | "bundled-payload-repair-source";
 
@@ -109,6 +119,32 @@ export interface AppBundledAgentPayload {
   integrity: AppReleaseIntegrityMetadata;
 }
 
+export interface AppBackgroundServiceInstallerRequirement {
+  platform: AppBackgroundServicePlatform;
+  selectedV1Path: AppBackgroundServiceV1Path;
+  installerRequired: "yes";
+  packageFormats: AppReleaseServiceInstallerPackageFormat[];
+  requiredDecision: string;
+  allowedMechanisms: string[];
+  userContext: string;
+  registersUserService: true;
+}
+
+export interface AppBackgroundServiceReleaseCapability {
+  schema: "butler.app-background-service-capability.v1";
+  serviceCapable: true;
+  gatewayProfile: AppReleaseGatewayProfile;
+  serviceOwner: "butler-agent";
+  processGroupOwner: "native-service-supervisor";
+  appGatewayOwner: "background-agent-service";
+  runtimePointerPath: "$BUTLER_DATA/app/runtime/agent/current.json";
+  requiredRuntimeFields: string[];
+  serviceStatuses: string[];
+  updateStatuses: string[];
+  installerRequirements: AppBackgroundServiceInstallerRequirement[];
+  rawTextIncluded: false;
+}
+
 export interface AppReleaseComponent {
   id: AppReleaseComponentId;
   product: AppReleaseProduct;
@@ -118,6 +154,7 @@ export interface AppReleaseComponent {
   gatewayProfile: AppReleaseGatewayProfile;
   bundledAgentVersion: string;
   bundledAgentPayload: AppBundledAgentPayload;
+  backgroundServiceCapability: AppBackgroundServiceReleaseCapability;
   protocolCompatibility: AppReleaseProtocolCompatibility;
   bundledComponents: AppReleaseComponentId[];
   requiredFiles: string[];
@@ -146,6 +183,7 @@ export interface AppReleaseArtifact {
   gatewayProfile: AppReleaseGatewayProfile;
   bundledAgentVersion: string;
   bundledAgentPayload: AppBundledAgentPayload;
+  backgroundServiceCapability: AppBackgroundServiceReleaseCapability;
   protocolCompatibility: AppReleaseProtocolCompatibility;
   integrity: AppReleaseIntegrityMetadata;
   updatePolicy: AppReleaseUpdatePolicy;
@@ -167,6 +205,7 @@ export interface AppReleaseManifest {
   gatewayProfile: AppReleaseGatewayProfile;
   bundledAgentVersion: string;
   bundledAgentPayload: AppBundledAgentPayload;
+  backgroundServiceCapability: AppBackgroundServiceReleaseCapability;
   updaterOwner: AppReleaseUpdaterOwner;
   components: AppReleaseComponent[];
   artifacts: AppReleaseArtifact[];
@@ -203,6 +242,7 @@ const APP_OWNED_DEPENDENCY_IDS: AppOwnedDependencyId[] = [
   "runtime-package-dependencies",
   "local-setup-bridge",
   "release-manifests",
+  "background-service-registration-metadata",
   "app-managed-runtime-home",
   "bundled-payload-repair-source",
 ];
@@ -244,6 +284,7 @@ export function readAppComponentVersions(root: string): AppComponentVersions {
 export function createAppReleaseManifest(root: string): AppReleaseManifest {
   const versions = readAppComponentVersions(root);
   const bundledAgentPayload = createBundledAgentPayloadMetadata(versions.bundledAgent);
+  const backgroundServiceCapability = createAppBackgroundServiceReleaseCapability();
   const protocolCompatibility: AppReleaseProtocolCompatibility = {
     protocol: "butler.app.v1",
     minimumAppProtocol: "butler.app.v1",
@@ -279,6 +320,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
       gatewayProfile: "electron",
       bundledAgentVersion: versions.bundledAgent,
       bundledAgentPayload,
+      backgroundServiceCapability,
       protocolCompatibility,
       bundledComponents: ["app"],
       requiredFiles: appFiles,
@@ -302,6 +344,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
     gatewayProfile: "electron",
     bundledAgentVersion: versions.bundledAgent,
     bundledAgentPayload,
+    backgroundServiceCapability,
     updaterOwner: "butler-app",
     components,
     artifacts: components.flatMap((component) =>
@@ -320,6 +363,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
         gatewayProfile: "electron",
         bundledAgentVersion: versions.bundledAgent,
         bundledAgentPayload,
+        backgroundServiceCapability: createAppBackgroundServiceReleaseCapability([platform]),
         protocolCompatibility,
         integrity: {
           digestAlgorithm: "sha256",
@@ -336,6 +380,70 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
       })),
     ),
   };
+}
+
+export function createAppBackgroundServiceReleaseCapability(
+  platforms: readonly AppReleasePlatform[] = APP_RELEASE_PLATFORMS,
+): AppBackgroundServiceReleaseCapability {
+  return {
+    schema: "butler.app-background-service-capability.v1",
+    serviceCapable: true,
+    gatewayProfile: "electron",
+    serviceOwner: "butler-agent",
+    processGroupOwner: "native-service-supervisor",
+    appGatewayOwner: "background-agent-service",
+    runtimePointerPath: "$BUTLER_DATA/app/runtime/agent/current.json",
+    requiredRuntimeFields: [...APP_BACKGROUND_SERVICE_RUNTIME_FIELDS],
+    serviceStatuses: [...APP_AGENT_SERVICE_STATUSES],
+    updateStatuses: [...APP_AGENT_UPDATE_STATUSES],
+    installerRequirements: platforms.map((platform) =>
+      appServiceInstallerRequirementForPlatform(platform),
+    ),
+    rawTextIncluded: false,
+  };
+}
+
+function appServiceInstallerRequirementForPlatform(
+  releasePlatform: AppReleasePlatform,
+): AppBackgroundServiceInstallerRequirement {
+  const servicePlatform = servicePlatformForReleasePlatform(releasePlatform);
+  const capability = appBackgroundServiceCapability(servicePlatform);
+  const selectedV1Path = selectedInstallerV1Path(servicePlatform);
+  return {
+    platform: servicePlatform,
+    selectedV1Path,
+    installerRequired: "yes",
+    packageFormats: serviceInstallerPackageFormats(servicePlatform),
+    requiredDecision: capability.requiredDecision,
+    allowedMechanisms: [...capability.allowedMechanisms],
+    userContext: capability.userContext,
+    registersUserService: true,
+  };
+}
+
+function servicePlatformForReleasePlatform(
+  platform: AppReleasePlatform,
+): AppBackgroundServicePlatform {
+  if (platform.startsWith("darwin-")) return "darwin";
+  if (platform.startsWith("linux-")) return "linux";
+  throw new Error(`unsupported App service release platform: ${platform}`);
+}
+
+function selectedInstallerV1Path(
+  platform: AppBackgroundServicePlatform,
+): AppBackgroundServiceV1Path {
+  if (platform === "darwin") return "macos-pkg-launch-agent";
+  if (platform === "linux") return "linux-deb-owned-user-unit";
+  if (platform === "win32") return "windows-least-privilege-user-service";
+  throw new Error(`unsupported App service platform: ${platform}`);
+}
+
+function serviceInstallerPackageFormats(
+  platform: AppBackgroundServicePlatform,
+): AppReleaseServiceInstallerPackageFormat[] {
+  if (platform === "darwin") return ["pkg"];
+  if (platform === "linux") return ["deb", "rpm"];
+  throw new Error(`unsupported App service installer platform: ${platform}`);
 }
 
 function createBundledAgentPayloadMetadata(
@@ -447,6 +555,9 @@ export function createAppDependencyClosureManifest(input: {
         "bundled-agent/agent-release-manifest.json",
         "bundled-agent/agent-update-manifest.json",
       ], "bundled-payload-repair-source", releaseManifestsIntegrity),
+      ownedDependency("background-service-registration-metadata", "Background service registration metadata", [
+        "bundled-agent/background-service-capability.json",
+      ], null),
       ownedDependency("app-managed-runtime-home", "App-managed runtime home layout", [
         "$BUTLER_DATA/app/runtime/agent",
       ], null),
@@ -637,6 +748,12 @@ export function validateAppReleaseManifest(
     versions.bundledAgent,
     issues,
   );
+  validateAppBackgroundServiceReleaseCapability(
+    "app release background service capability",
+    manifest.backgroundServiceCapability,
+    APP_RELEASE_PLATFORMS,
+    issues,
+  );
   if (manifest.updaterOwner !== "butler-app")
     issues.push("app release updater owner must be butler-app");
   if (!manifest.version || manifest.version !== versions.app) {
@@ -745,6 +862,12 @@ function validateComponents(
       versions.bundledAgent,
       issues,
     );
+    validateAppBackgroundServiceReleaseCapability(
+      `component ${component.id} background service capability`,
+      component.backgroundServiceCapability,
+      APP_RELEASE_PLATFORMS,
+      issues,
+    );
     validateProtocolCompatibility(
       `component ${component.id}`,
       component.protocolCompatibility,
@@ -824,6 +947,12 @@ function validateArtifacts(
       `artifact ${artifact.component} bundled Agent payload`,
       artifact.bundledAgentPayload,
       manifest.bundledAgentVersion,
+      issues,
+    );
+    validateAppBackgroundServiceReleaseCapability(
+      `artifact ${artifact.component} background service capability`,
+      artifact.backgroundServiceCapability,
+      [artifact.platform],
       issues,
     );
     validateProtocolCompatibility(
@@ -909,6 +1038,79 @@ function validateBundledAgentPayload(
     issues.push(`${label} protocol compatibility must be butler.agent.v1`);
   }
   validateArtifactIntegrity(label, payload.integrity, issues);
+}
+
+function validateAppBackgroundServiceReleaseCapability(
+  label: string,
+  capability: AppBackgroundServiceReleaseCapability | undefined,
+  platforms: readonly AppReleasePlatform[],
+  issues: string[],
+): void {
+  if (!capability) {
+    issues.push(`${label} metadata is required`);
+    return;
+  }
+  if (capability.schema !== "butler.app-background-service-capability.v1") {
+    issues.push(`${label} schema mismatch`);
+  }
+  if (capability.serviceCapable !== true) {
+    issues.push(`${label} must be service capable`);
+  }
+  if (capability.gatewayProfile !== "electron") {
+    issues.push(`${label} gateway profile must be electron`);
+  }
+  if (capability.serviceOwner !== "butler-agent") {
+    issues.push(`${label} service owner must be butler-agent`);
+  }
+  if (capability.appGatewayOwner !== "background-agent-service") {
+    issues.push(`${label} app gateway owner must be background-agent-service`);
+  }
+  if (capability.runtimePointerPath !== "$BUTLER_DATA/app/runtime/agent/current.json") {
+    issues.push(`${label} runtime pointer path mismatch`);
+  }
+  for (const field of APP_BACKGROUND_SERVICE_RUNTIME_FIELDS) {
+    if (!capability.requiredRuntimeFields.includes(field)) {
+      issues.push(`${label} missing runtime field: ${field}`);
+    }
+  }
+  for (const status of APP_AGENT_SERVICE_STATUSES) {
+    if (!capability.serviceStatuses.includes(status)) {
+      issues.push(`${label} missing service status: ${status}`);
+    }
+  }
+  for (const status of APP_AGENT_UPDATE_STATUSES) {
+    if (!capability.updateStatuses.includes(status)) {
+      issues.push(`${label} missing update status: ${status}`);
+    }
+  }
+  const expectedPlatforms = platforms.map(servicePlatformForReleasePlatform);
+  for (const platform of expectedPlatforms) {
+    const requirement = capability.installerRequirements.find(
+      (item) => item.platform === platform,
+    );
+    if (!requirement) {
+      issues.push(`${label} missing installer requirement for ${platform}`);
+      continue;
+    }
+    const expectedPath = selectedInstallerV1Path(platform);
+    if (requirement.selectedV1Path !== expectedPath) {
+      issues.push(`${label} ${platform} selected installer path mismatch`);
+    }
+    if (requirement.installerRequired !== "yes") {
+      issues.push(`${label} ${platform} installer must be required`);
+    }
+    if (!requirement.registersUserService) {
+      issues.push(`${label} ${platform} must register a user service`);
+    }
+    for (const format of serviceInstallerPackageFormats(platform)) {
+      if (!requirement.packageFormats.includes(format)) {
+        issues.push(`${label} ${platform} missing package format: ${format}`);
+      }
+    }
+  }
+  if (capability.rawTextIncluded !== false) {
+    issues.push(`${label} must not include raw text`);
+  }
 }
 
 function validateProtocolCompatibility(
