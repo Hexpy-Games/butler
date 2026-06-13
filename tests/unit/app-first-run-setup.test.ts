@@ -3,6 +3,7 @@ import {
   createInitialFirstRunState,
   detectFirstRunLanguage,
   FIRST_RUN_STORAGE_KEY,
+  firstRunCompleteState,
   nextFirstRunState,
   parseFirstRunState,
   readFirstRunState,
@@ -34,17 +35,16 @@ test("first-run state machine enforces language safety install model order", () 
 
   state = nextFirstRunState(state, { type: "continue_language" });
   expect(state.step).toBe("safety");
-  state = nextFirstRunState(state, { type: "open_model_setup" });
-  expect(state.status).toBe("pending");
-  expect(state.step).toBe("safety");
 
   state = nextFirstRunState(state, { type: "accept_safety" });
   expect(state.step).toBe("install");
   state = nextFirstRunState(state, { type: "install_ready" });
   expect(state.step).toBe("model");
-  state = nextFirstRunState(state, { type: "defer_model_setup" });
-  expect(state.status).toBe("complete");
-  expect(state.connection_mode).toBe("bundled-agent");
+  expect(state.status).toBe("pending");
+
+  const completed = firstRunCompleteState(state.language);
+  expect(completed.status).toBe("complete");
+  expect(completed.connection_mode).toBe("bundled-agent");
 });
 
 test("first-run install failure can retry without completing setup", () => {

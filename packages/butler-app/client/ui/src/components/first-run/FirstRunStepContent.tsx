@@ -3,7 +3,18 @@ import {
   type FirstRunLanguage,
   type FirstRunStep,
 } from "@/app/firstRunSetup.ts";
-import { Button, NativeSelect, NativeSelectOption } from "@/butler-ds";
+import {
+  Button,
+  ButtonContainer,
+  NativeSelect,
+  NativeSelectOption,
+  SetupWizardContent,
+  SetupWizardList,
+  Stack,
+  Typo,
+} from "@/butler-ds";
+import { FirstRunModelStep } from "./FirstRunModelStep";
+import type { FirstRunModelOption } from "./useFirstRunModelSetup";
 
 type FirstRunCopy = (typeof firstRunCopy)[FirstRunLanguage];
 
@@ -12,16 +23,24 @@ interface FirstRunStepContentProps {
   diagnosticsStatus: string;
   error: string;
   language: FirstRunLanguage;
+  modelLoadFailed: boolean;
+  modelOptions: FirstRunModelOption[];
+  modelSaveStatus: string;
+  modelSaving: boolean;
+  selectedDescription: string;
+  selectedModel: string;
   status: string;
   step: FirstRunStep;
   onAcceptSafety: () => void;
   onBackToLanguage: () => void;
-  onComplete: (mode: "workspace" | "model-settings") => void;
   onCopyDiagnostics: () => void;
   onLanguageChange: (language: FirstRunLanguage) => void;
   onLanguageContinue: () => void;
+  onModelChange: (modelRef: string) => void;
   onQuit: () => void;
+  onRetryModelLoad: () => void;
   onRetryInstall: () => void;
+  onSaveModel: () => void;
 }
 
 export function FirstRunStepContent({
@@ -29,22 +48,31 @@ export function FirstRunStepContent({
   diagnosticsStatus,
   error,
   language,
+  modelLoadFailed,
+  modelOptions,
+  modelSaveStatus,
+  modelSaving,
+  selectedDescription,
+  selectedModel,
   status,
   step,
   onAcceptSafety,
   onBackToLanguage,
-  onComplete,
   onCopyDiagnostics,
   onLanguageChange,
   onLanguageContinue,
+  onModelChange,
   onQuit,
+  onRetryModelLoad,
   onRetryInstall,
+  onSaveModel,
 }: FirstRunStepContentProps) {
   if (step === "language") {
     return (
-      <div className="first-run-setup-content">
-        <h1>{copy.languageTitle}</h1>
+      <SetupWizardContent>
+        <Typo.H3 as="h1">{copy.languageTitle}</Typo.H3>
         <NativeSelect
+          stretch
           value={language}
           onChange={(event) =>
             onLanguageChange(event.currentTarget.value as FirstRunLanguage)
@@ -57,36 +85,45 @@ export function FirstRunStepContent({
         <Button type="button" onClick={onLanguageContinue}>
           {copy.continue}
         </Button>
-      </div>
+      </SetupWizardContent>
     );
   }
 
   if (step === "safety") {
     return (
-      <div className="first-run-setup-content">
-        <h1>{copy.safetyTitle}</h1>
-        <p>{copy.safetyBody}</p>
-        <div className="first-run-setup-actions">
+      <SetupWizardContent>
+        <Stack gap="md">
+          <Typo.H3 as="h1">{copy.safetyTitle}</Typo.H3>
+          <Typo.Body>{copy.safetyBody}</Typo.Body>
+          <SetupWizardList>
+            {copy.safetyItems.map((item) => (
+              <li key={item}>
+                <Typo.Body as="span">{item}</Typo.Body>
+              </li>
+            ))}
+          </SetupWizardList>
+        </Stack>
+        <ButtonContainer size="default">
           <Button type="button" variant="outline" onClick={onBackToLanguage}>
             {copy.back}
           </Button>
           <Button type="button" onClick={onAcceptSafety}>
             {copy.accept}
           </Button>
-        </div>
-      </div>
+        </ButtonContainer>
+      </SetupWizardContent>
     );
   }
 
   if (step === "install") {
     return (
-      <div className="first-run-setup-content">
-        <h1>{copy.installTitle}</h1>
-        <p>{error || status}</p>
+      <SetupWizardContent>
+        <Typo.H3 as="h1">{copy.installTitle}</Typo.H3>
+        <Typo.Body>{error || status}</Typo.Body>
         {diagnosticsStatus && (
-          <p className="first-run-setup-secondary-status">{diagnosticsStatus}</p>
+          <Typo.Caption>{diagnosticsStatus}</Typo.Caption>
         )}
-        <div className="first-run-setup-actions">
+        <ButtonContainer size="default">
           {error && (
             <>
               <Button type="button" onClick={onRetryInstall}>
@@ -100,27 +137,23 @@ export function FirstRunStepContent({
               </Button>
             </>
           )}
-        </div>
-      </div>
+        </ButtonContainer>
+      </SetupWizardContent>
     );
   }
 
   return (
-    <div className="first-run-setup-content">
-      <h1>{copy.modelTitle}</h1>
-      <p>{copy.modelBody}</p>
-      <div className="first-run-setup-actions">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onComplete("workspace")}
-        >
-          {copy.finish}
-        </Button>
-        <Button type="button" onClick={() => onComplete("model-settings")}>
-          {copy.openModelSettings}
-        </Button>
-      </div>
-    </div>
+    <FirstRunModelStep
+      copy={copy}
+      modelLoadFailed={modelLoadFailed}
+      modelOptions={modelOptions}
+      modelSaveStatus={modelSaveStatus}
+      modelSaving={modelSaving}
+      selectedDescription={selectedDescription}
+      selectedModel={selectedModel}
+      onModelChange={onModelChange}
+      onRetryModelLoad={onRetryModelLoad}
+      onSaveModel={onSaveModel}
+    />
   );
 }

@@ -90,6 +90,8 @@ import { InspectorPanelFixture } from "./blocks/InspectorPanel/InspectorPanel.fi
 import { InspectorShellFixture } from "./blocks/InspectorShell/InspectorShell.fixtures";
 import { KeyValueRowFixture } from "./blocks/KeyValueRow/KeyValueRow.fixtures";
 import { ProgressMeterFixture } from "./blocks/ProgressMeter/ProgressMeter.fixtures";
+import { ProgressStepperFixture } from "./blocks/ProgressStepper/ProgressStepper.fixtures";
+import { SetupWizardShellFixture } from "./blocks/SetupWizardShell/SetupWizardShell.fixtures";
 import { TodoProgressPanelFixture } from "./blocks/TodoProgressPanel/TodoProgressPanel.fixtures";
 import { WorkerActivityPanelFixture } from "./blocks/WorkerActivityPanel/WorkerActivityPanel.fixtures";
 import { WorkerActivityRowFixture } from "./blocks/WorkerActivityRow/WorkerActivityRow.fixtures";
@@ -1089,6 +1091,18 @@ export const designSystemBlocks: DesignSystemBlockMeta[] = [
     path: "blocks/ProgressMeter",
     tags: ["progress", "meter", "status"],
     fixture: ProgressMeterFixture,
+  },
+  {
+    name: "ProgressStepper",
+    path: "blocks/ProgressStepper",
+    tags: ["progress", "stepper", "wizard"],
+    fixture: ProgressStepperFixture,
+  },
+  {
+    name: "SetupWizardShell",
+    path: "blocks/SetupWizardShell",
+    tags: ["setup", "wizard", "glass"],
+    fixture: SetupWizardShellFixture,
   },
   {
     name: "TodoProgressPanel",

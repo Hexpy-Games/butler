@@ -4,6 +4,7 @@ import { afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { EMPTY_MODEL_CATALOG } from "@/app/constants.ts";
 import {
   createInitialFirstRunState,
   type FirstRunState,
@@ -16,6 +17,7 @@ interface RenderedFirstRun {
   completedStates: FirstRunState[];
   copiedDiagnostics: string[];
   root: Root;
+  settingsPatches: unknown[];
   setupModes: string[];
 }
 
@@ -35,12 +37,21 @@ test("first-run setup renders the minimal Electron setup order", async () => {
   const rendered = await renderFirstRun(createInitialFirstRunState("ko"));
 
   expect(rendered.container.textContent).toContain("언어 선택");
+  expect(
+    rendered.container.querySelector('[data-test-class="new-chat-fluid-gradient"]'),
+  ).not.toBeNull();
+  expect(rendered.container.querySelector('[data-slot="tinted-glass"]')).not.toBeNull();
+  expect(rendered.container.querySelector("ol button")).toBeNull();
+  expect(rendered.container.querySelector('[aria-current="step"]')?.textContent)
+    .toContain("언어");
   expect(rendered.container.textContent).not.toContain("gateway");
   expect(rendered.container.textContent).not.toContain("persona");
 
   await clickButton(rendered.container, "계속");
   expect(rendered.calls).toContain("updateSettings");
   expect(rendered.container.textContent).toContain("안전고지");
+  expect(rendered.container.querySelector('[aria-current="step"]')?.textContent)
+    .toContain("안전고지");
 
   await clickButton(rendered.container, "동의");
   expect(rendered.container.textContent).toContain("Butler Agent를 준비합니다");
@@ -51,8 +62,12 @@ test("first-run setup renders the minimal Electron setup order", async () => {
 
   await waitForText(rendered.container, "모델 설정");
   expect(rendered.container.textContent).toContain(
-    "모델은 지금 설정하거나 나중에 설정할 수 있습니다.",
+    "Butler Agent가 준비되었습니다.",
   );
+  await waitForText(rendered.container, "저장하고 시작");
+  await clickButton(rendered.container, "저장하고 시작");
+  expect(rendered.settingsPatches).toContainEqual({ model: "openai/gpt-5.5" });
+  expect(rendered.completedStates[0]?.status).toBe("complete");
 
   await act(async () => rendered.root.unmount());
 });
@@ -96,9 +111,34 @@ test("first-run setup keeps waiting for bundled Agent without alternate connecti
 
   bundled.resolve();
   await waitForText(rendered.container, "모델 설정");
-  await clickButton(rendered.container, "나중에 설정");
+  await waitForText(rendered.container, "저장하고 시작");
+  await clickButton(rendered.container, "저장하고 시작");
   expect(rendered.setupModes).toEqual(["bundled-agent"]);
   expect(rendered.completedStates[0]?.connection_mode).toBe("bundled-agent");
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run model setup surfaces catalog load failure and retries", async () => {
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+    { failModelCatalogOnce: true },
+  );
+
+  await waitForText(rendered.container, "모델 목록을 불러오지 못했습니다.");
+  expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
+  await clickButton(rendered.container, "다시 불러오기");
+  await waitForText(rendered.container, "저장하고 시작");
+  await clickButton(rendered.container, "저장하고 시작");
+
+  expect(rendered.settingsPatches).toContainEqual({ model: "openai/gpt-5.5" });
+  expect(rendered.completedStates[0]?.status).toBe("complete");
 
   await act(async () => rendered.root.unmount());
 });
@@ -165,6 +205,7 @@ async function renderFirstRun(
   initialState: FirstRunState,
   options: {
     failHealthOnce?: boolean;
+    failModelCatalogOnce?: boolean;
     holdBundledAgent?: Promise<void>;
     rejectSetupOnce?: boolean;
   } = {},
@@ -180,11 +221,16 @@ async function renderFirstRun(
     HTMLElement: dom.window.HTMLElement,
     Node: dom.window.Node,
   });
+  Object.defineProperty(dom.window.HTMLCanvasElement.prototype, "getContext", {
+    configurable: true,
+    value: () => null,
+  });
   (globalThis as ReactActGlobal).IS_REACT_ACT_ENVIRONMENT = true;
 
   const calls: string[] = [];
   const copiedDiagnostics: string[] = [];
   const completedStates: FirstRunState[] = [];
+  const settingsPatches: unknown[] = [];
   const setupModes: string[] = [];
   Object.defineProperty(dom.window.navigator, "clipboard", {
     configurable: true,
@@ -195,6 +241,7 @@ async function renderFirstRun(
     },
   });
   let setupFailures = options.failHealthOnce ? 1 : 0;
+  let modelCatalogFailures = options.failModelCatalogOnce ? 1 : 0;
   let setupRejections = options.rejectSetupOnce ? 1 : 0;
   Object.assign(dom.window, {
     butlerApp: {
@@ -244,8 +291,21 @@ async function renderFirstRun(
         calls.push("quitApp");
         return { quitting: true };
       },
-      updateSettings: async () => {
+      getModelCatalog: async () => {
+        calls.push("getModelCatalog");
+        if (modelCatalogFailures > 0) {
+          modelCatalogFailures -= 1;
+          throw new Error("model catalog failed");
+        }
+        return { ...EMPTY_MODEL_CATALOG, registered_models: [] };
+      },
+      getSettings: async () => {
+        calls.push("getSettings");
+        return { model: "openai/gpt-5.5" };
+      },
+      updateSettings: async (patch?: unknown) => {
         calls.push("updateSettings");
+        settingsPatches.push(patch);
         return {};
       },
     },
@@ -262,7 +322,15 @@ async function renderFirstRun(
       />,
     );
   });
-  return { calls, completedStates, copiedDiagnostics, container, root, setupModes };
+  return {
+    calls,
+    completedStates,
+    copiedDiagnostics,
+    container,
+    root,
+    settingsPatches,
+    setupModes,
+  };
 }
 
 function deferred<T = void>() {
@@ -274,15 +342,22 @@ function deferred<T = void>() {
 }
 
 async function clickButton(container: HTMLElement, label: string): Promise<void> {
-  const button = Array.from(container.querySelectorAll("button")).find(
-    (candidate) => candidate.textContent === label,
-  );
+  const button = buttonByLabel(container, label);
   if (!button) throw new Error(`Missing button: ${label}`);
   const win = container.ownerDocument.defaultView;
   if (!win) throw new Error("Missing DOM window");
   await act(async () => {
     button.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
   });
+}
+
+function buttonByLabel(
+  container: HTMLElement,
+  label: string,
+): HTMLButtonElement | undefined {
+  return Array.from(container.querySelectorAll("button")).find(
+    (candidate) => candidate.textContent === label,
+  );
 }
 
 async function waitForText(

@@ -12,6 +12,7 @@ import {
   type FirstRunLanguage,
   type FirstRunState,
 } from "@/app/firstRunSetup.ts";
+import { useFirstRunModelSetup } from "./useFirstRunModelSetup";
 
 type CompleteMode = "workspace" | "model-settings";
 
@@ -30,6 +31,11 @@ export function useFirstRunSetupController(
     () => ["language", "safety", "install", "model"].indexOf(step),
     [step],
   );
+  const modelSetup = useFirstRunModelSetup({
+    copy,
+    enabled: step === "model",
+    onComplete: () => complete("workspace"),
+  });
 
   useEffect(() => {
     setAppCopyLanguage(language);
@@ -136,6 +142,12 @@ export function useFirstRunSetupController(
         ? copy.installFailed
         : ""),
     language,
+    modelLoadFailed: modelSetup.modelLoadFailed,
+    modelOptions: modelSetup.modelOptions,
+    modelSaveStatus: modelSetup.modelSaveStatus,
+    modelSaving: modelSetup.modelSaving,
+    selectedDescription: modelSetup.selectedDescription,
+    selectedModel: modelSetup.selectedModel,
     status,
     step,
     stepIndex,
@@ -152,7 +164,6 @@ export function useFirstRunSetupController(
       setState((current) =>
         nextFirstRunState(current, { type: "back_to_language" }),
       ),
-    onComplete: complete,
     onCopyDiagnostics: () => void copyDiagnostics(),
     onLanguageChange: (nextLanguage: FirstRunLanguage) =>
       setState((current) =>
@@ -161,6 +172,8 @@ export function useFirstRunSetupController(
           language: nextLanguage,
         }),
       ),
+    onModelChange: modelSetup.onModelChange,
+    onRetryModelLoad: modelSetup.onRetryModelLoad,
     onLanguageContinue: () => void selectLanguage(),
     onRetryInstall: () => {
       setError("");
@@ -170,6 +183,7 @@ export function useFirstRunSetupController(
         nextFirstRunState(current, { type: "retry_install" }),
       );
     },
+    onSaveModel: modelSetup.onSaveModel,
     onQuit: quitApp,
   };
 }
