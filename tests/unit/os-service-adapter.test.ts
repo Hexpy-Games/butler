@@ -34,13 +34,70 @@ test("systemd adapter registers one foreground Butler service with control-group
 
   expect(unit).toContain("[Service]");
   expect(unit).toContain("ExecStart=/bin/bash /home/alice/butler/packages/butler-agent/scripts/service-daemon.sh");
-  expect(unit).toContain("Environment=BUTLER_HOME=/home/alice/butler");
-  expect(unit).toContain("Environment=BUTLER_DATA=/home/alice/.butler");
+  expect(unit).toContain('Environment=BUTLER_HOME="/home/alice/butler"');
+  expect(unit).toContain('Environment=BUTLER_DATA="/home/alice/.butler"');
   expect(unit).toContain("KillMode=control-group");
   expect(unit.match(/service-daemon\.sh/g)?.length).toBe(1);
   expect(unit).not.toContain("native-scheduler.ts");
   expect(unit).not.toContain("sync-consumer.ts");
   expect(unit).not.toContain("embed-server.ts");
+});
+
+test("OS service adapters include App-managed runtime environment", () => {
+  const appManagedEnv = {
+    BUTLER_APP_MANAGED_RUNTIME_POINTER: "/data/app/runtime/agent/current.json",
+    BUTLER_APP_LOCAL_AUTH_FILE: "/data/app/runtime/auth/local-agent-auth.json",
+    BUTLER_APP_SERVER_PORT: "19123",
+  };
+  const plist = buildLaunchdPlist({
+    butlerHome: "/data/app/runtime/agent/versions/9.9.9",
+    butlerData: "/data",
+    env: appManagedEnv,
+  });
+  expect(plist).toContain("<key>BUTLER_APP_MANAGED_RUNTIME_POINTER</key>");
+  expect(plist).toContain("<string>/data/app/runtime/agent/current.json</string>");
+  expect(plist).toContain("<key>BUTLER_APP_LOCAL_AUTH_FILE</key>");
+  expect(plist).toContain("<string>/data/app/runtime/auth/local-agent-auth.json</string>");
+  expect(plist).toContain("<key>BUTLER_APP_SERVER_PORT</key>");
+  expect(plist).toContain("<string>19123</string>");
+
+  const unit = buildSystemdUnit({
+    butlerHome: "/data/app/runtime/agent/versions/9.9.9",
+    butlerData: "/data",
+    env: appManagedEnv,
+  });
+  expect(unit).toContain(
+    'Environment=BUTLER_APP_MANAGED_RUNTIME_POINTER="/data/app/runtime/agent/current.json"',
+  );
+  expect(unit).toContain(
+    'Environment=BUTLER_APP_LOCAL_AUTH_FILE="/data/app/runtime/auth/local-agent-auth.json"',
+  );
+  expect(unit).toContain('Environment=BUTLER_APP_SERVER_PORT="19123"');
+  expect(() =>
+    buildSystemdUnit({
+      butlerHome: "/data/app/runtime/agent/versions/9.9.9",
+      butlerData: "/data",
+      env: {
+        "BAD KEY": "value",
+      },
+    }),
+  ).toThrow("invalid service environment key");
+  expect(() =>
+    buildSystemdUnit({
+      butlerHome: "/data/app/runtime/agent/versions/9.9.9",
+      butlerData: "/data",
+      env: {
+        BUTLER_APP_LOCAL_AUTH_FILE: "/data/auth\nExecStart=/bin/false",
+      },
+    }),
+  ).toThrow("invalid service environment value");
+  expect(buildSystemdUnit({
+    butlerHome: "/data/app/runtime/agent/versions/9.9.9",
+    butlerData: "/data",
+    env: {
+      BUTLER_APP_LOCAL_AUTH_FILE: "/data/auth%token\"quoted",
+    },
+  })).toContain('Environment=BUTLER_APP_LOCAL_AUTH_FILE="/data/auth%%token\\"quoted"');
 });
 
 test("OS service preview is safe and deterministic", () => {

@@ -7,6 +7,7 @@ import {
 import { dirname } from "path";
 import {
   NATIVE_SUPERVISOR_ID,
+  appManagedNativeServiceSpecs,
   defaultNativeServiceSpecs,
   isPidRunning,
   readServiceState,
@@ -84,7 +85,28 @@ function serviceStateMatchesSpec(state: { command: string; args: string[]; cwd: 
 
 export function defaultDaemonServiceSpecs(input: Partial<NativeSupervisorPaths> = {}): NativeServiceSpec[] {
   const paths = resolveNativeSupervisorPaths(input);
+  const appManagedPointer = process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER?.trim();
+  const appManagedLocalAuth = process.env.BUTLER_APP_LOCAL_AUTH_FILE?.trim();
+  if (appManagedPointer && appManagedLocalAuth) {
+    return appManagedNativeServiceSpecs({
+      butlerData: paths.butlerData,
+      runtimePointerPath: appManagedPointer,
+      localAuthFile: appManagedLocalAuth,
+    }, {
+      gatewayPort: appManagedGatewayPortFromEnv(),
+    });
+  }
   return defaultNativeServiceSpecs(paths);
+}
+
+function appManagedGatewayPortFromEnv(): number | undefined {
+  const raw = process.env.BUTLER_APP_SERVER_PORT?.trim();
+  if (!raw) return undefined;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
+    throw new Error("invalid App-managed gateway port");
+  }
+  return port;
 }
 
 export class ManagedServiceDaemon {
@@ -191,6 +213,7 @@ export class ManagedServiceDaemon {
       stdoutFile: spec.stdoutFile,
       stderrFile: spec.stderrFile,
       restartPolicy: spec.restartPolicy,
+      ...(spec.runtime ? { runtime: spec.runtime } : {}),
     });
     child.on?.("exit", (code, signal) => {
       this.handleChildExit(spec.id, code, signal);
