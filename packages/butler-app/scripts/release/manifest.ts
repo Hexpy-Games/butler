@@ -509,6 +509,7 @@ export function createAppDependencyClosureManifest(input: {
       "bundled-agent/runtime",
       "bundled-agent/background-service-capability.json",
       "bundled-agent/background-service-registration.json",
+      "bundled-agent/service-installer",
     ],
     verification: "sha256",
     integrity: repairSourceIntegrity,
@@ -561,6 +562,7 @@ export function createAppDependencyClosureManifest(input: {
       ownedDependency("background-service-registration-metadata", "Background service registration metadata", [
         "bundled-agent/background-service-capability.json",
         "bundled-agent/background-service-registration.json",
+        "bundled-agent/service-installer",
       ], "bundled-payload-repair-source", sha256Integrity(input.backgroundServiceRegistrationMetadataSha256)),
       ownedDependency("app-managed-runtime-home", "App-managed runtime home layout", [
         "$BUTLER_DATA/app/runtime/agent",

@@ -294,6 +294,10 @@ function prepareBundledAgentResourceFromPackage(
     join(resourceDir, "background-service-registration.json"),
     createAppBackgroundServiceRegistrationMetadata(platform),
   );
+  writeAppServiceInstallerPayloads({
+    resourceDir,
+    platform,
+  });
   const releaseManifestSha256 = sha256File(join(resourceDir, "agent-release-manifest.json"));
   const updateManifestSha256 = sha256File(join(resourceDir, "agent-update-manifest.json"));
   const backgroundServiceCapabilitySha256 = sha256File(
@@ -303,9 +307,13 @@ function prepareBundledAgentResourceFromPackage(
     resourceDir,
     "background-service-registration.json",
   ));
+  const backgroundServiceInstallerPayloadSha256 = sha256Directory(
+    join(resourceDir, "service-installer"),
+  );
   const backgroundServiceRegistrationMetadataSha256 = sha256Values([
     backgroundServiceCapabilitySha256,
     backgroundServiceRegistrationSha256,
+    backgroundServiceInstallerPayloadSha256,
   ]);
   const managedRuntimeSha256 = sha256Directory(join(resourceDir, "runtime"));
   const dependencyClosure = createAppDependencyClosureManifest({
@@ -340,6 +348,110 @@ function prepareBundledAgentResourceFromPackage(
     version: agent.version,
     platform,
   };
+}
+
+function writeAppServiceInstallerPayloads(input: {
+  resourceDir: string;
+  platform: AppReleasePlatform;
+}): void {
+  const capability = createAppBackgroundServiceReleaseCapability([input.platform]);
+  const requirement = capability.installerRequirements[0];
+  if (!requirement) {
+    throw new Error(`missing background service installer requirement for ${input.platform}`);
+  }
+  if (requirement.platform === "darwin") {
+    writeJson(
+      join(input.resourceDir, "service-installer", "darwin", "launchd", "render-contract.json"),
+      serviceRenderContract({
+        platform: "darwin",
+        manager: "launchd",
+        target: "$HOME/Library/LaunchAgents/com.hexpy.butler.plist",
+        escaping: "xml",
+      }),
+    );
+    writeExecutableText(
+      join(input.resourceDir, "service-installer", "darwin", "pkg", "postinstall"),
+      macPkgPostinstallScript(),
+    );
+    return;
+  }
+  if (requirement.platform === "linux") {
+    writeJson(
+      join(input.resourceDir, "service-installer", "linux", "systemd", "render-contract.json"),
+      serviceRenderContract({
+        platform: "linux",
+        manager: "systemd-user",
+        target: "$HOME/.config/systemd/user/butler.service",
+        escaping: "systemd-quoted",
+      }),
+    );
+    writeExecutableText(
+      join(input.resourceDir, "service-installer", "linux", "deb", "postinst"),
+      linuxDebPostinstScript(),
+    );
+    writeExecutableText(
+      join(input.resourceDir, "service-installer", "linux", "rpm", "postinstall.sh"),
+      linuxRpmPostinstallScript(),
+    );
+    return;
+  }
+  throw new Error(`unsupported background service installer payload platform: ${requirement.platform}`);
+}
+
+function serviceRenderContract(input: {
+  platform: "darwin" | "linux";
+  manager: "launchd" | "systemd-user";
+  target: string;
+  escaping: "xml" | "systemd-quoted";
+}): Record<string, unknown> {
+  return {
+    schema: "butler.app-service-render-contract.v1",
+    platform: input.platform,
+    manager: input.manager,
+    target: input.target,
+    renderer: "butler-app-native-service-bridge",
+    requiredEscaping: input.escaping,
+    label: "com.hexpy.butler",
+    unit: input.platform === "linux" ? "butler.service" : null,
+    requiredEnvironment: [
+      "BUTLER_HOME",
+      "BUTLER_DATA",
+      "BUTLER_BUN",
+      "BUTLER_APP_MANAGED_RUNTIME_POINTER",
+      "BUTLER_APP_MANAGED_RUNTIME_HOME",
+      "BUTLER_APP_SERVER_HOST",
+      "BUTLER_APP_SERVER_PORT",
+      "BUTLER_APP_GATEWAY_PID_FILE",
+      "BUTLER_APP_LOCAL_AUTH_REQUIRED",
+      "BUTLER_APP_LOCAL_AUTH_FILE",
+    ],
+    rawTemplateIncluded: false,
+    rawTextIncluded: false,
+  };
+}
+
+function macPkgPostinstallScript(): string {
+  return `#!/bin/sh
+set -eu
+echo "Butler App LaunchAgent payload installed. First-run will render user paths and bootstrap the service."
+exit 0
+`;
+}
+
+function linuxDebPostinstScript(): string {
+  return `#!/bin/sh
+set -eu
+echo "Butler App systemd user service payload installed. First-run will render user paths and enable the service."
+exit 0
+`;
+}
+
+function linuxRpmPostinstallScript(): string {
+  return `#!/bin/sh
+set -eu
+echo "Butler App systemd user service payload installed. First-run will render user paths and enable the service."
+exit 0
+`;
 }
 
 function createAppBackgroundServiceRegistrationMetadata(
@@ -827,6 +939,16 @@ function sha256Values(values: string[]): string {
 function writeJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function writeExecutableText(path: string, value: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, value, { encoding: "utf8", mode: 0o755 });
+  try {
+    chmodSync(path, 0o755);
+  } catch {
+    // Preserve file creation on filesystems that ignore chmod.
+  }
 }
 
 function summarizeCommandOutput(output: string): string {

@@ -1156,9 +1156,27 @@ function createBundledAgentResource(
   const backgroundServiceRegistrationSha256 = sha256File(
     join(resourceRoot, "background-service-registration.json"),
   );
+  mkdirSync(join(resourceRoot, "service-installer", "darwin", "launchd"), {
+    recursive: true,
+  });
+  writeFileSync(
+    join(resourceRoot, "service-installer", "darwin", "launchd", "render-contract.json"),
+    `${JSON.stringify({
+      schema: "butler.app-service-render-contract.v1",
+      platform: "darwin",
+      manager: "launchd",
+      requiredEscaping: "xml",
+      rawTemplateIncluded: false,
+      rawTextIncluded: false,
+    }, null, 2)}\n`,
+  );
+  const backgroundServiceInstallerPayloadSha256 = sha256Directory(
+    join(resourceRoot, "service-installer"),
+  );
   const backgroundServiceRegistrationMetadataSha256 = sha256Values([
     backgroundServiceCapabilitySha256,
     backgroundServiceRegistrationSha256,
+    backgroundServiceInstallerPayloadSha256,
   ]);
   const managedRuntimeSha256 = sha256Directory(
     join(resourceRoot, "runtime"),

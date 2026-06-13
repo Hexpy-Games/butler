@@ -686,7 +686,12 @@ function verifyDependencyClosure(resourceRoot, artifact, artifactDigest) {
   const updateManifestDigest = sha256File(join(resourceRoot, "agent-update-manifest.json"));
   const capabilityDigest = sha256File(join(resourceRoot, "background-service-capability.json"));
   const registrationDigest = sha256File(join(resourceRoot, "background-service-registration.json"));
-  const registrationMetadataDigest = sha256Values([capabilityDigest, registrationDigest]);
+  const installerPayloadDigest = sha256Directory(join(resourceRoot, "service-installer"));
+  const registrationMetadataDigest = sha256Values([
+    capabilityDigest,
+    registrationDigest,
+    installerPayloadDigest,
+  ]);
   const expected = new Map([
     ["renderer-assets", artifactDigest],
     ["bootstrap-setup-ui", artifactDigest],
