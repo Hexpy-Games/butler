@@ -28,6 +28,7 @@ interface FirstRunStepContentProps {
   language: FirstRunLanguage;
   modelLoadFailed: boolean;
   modelSaveStatus: string;
+  modelSettingsReady: boolean;
   modelSetupReady: boolean;
   status: string;
   step: FirstRunStep;
@@ -49,6 +50,7 @@ export function FirstRunStepContent({
   language,
   modelLoadFailed,
   modelSaveStatus,
+  modelSettingsReady,
   modelSetupReady,
   status,
   step,
@@ -147,6 +149,7 @@ export function FirstRunStepContent({
       copy={copy}
       modelLoadFailed={modelLoadFailed}
       modelSaveStatus={modelSaveStatus}
+      modelSettingsReady={modelSettingsReady}
       modelSetupReady={modelSetupReady}
       onRetryModelLoad={onRetryModelLoad}
       onSaveModel={onSaveModel}

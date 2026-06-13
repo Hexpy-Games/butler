@@ -7,7 +7,9 @@ import {
 import { useButlerStore } from "@/app/store.ts";
 import type { ModelCatalogView, SettingsView } from "@/app/types.ts";
 import { runtimeModels } from "@/app/utils.ts";
+import { registeredModels } from "@/components/settings/modelManagementUtils";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
+import { useFirstRunAddedModelDefault } from "./useFirstRunAddedModelDefault";
 
 type FirstRunCopy = (typeof firstRunCopy)[FirstRunLanguage];
 
@@ -34,15 +36,30 @@ export function useFirstRunModelSetup({
   const [modelLoadFailed, setModelLoadFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const autoSavingModelRef = useRef("");
+  const [modelSettingsLoaded, setModelSettingsLoaded] = useState(false);
+  const initialRegisteredModelRefs = useRef<Set<string> | null>(null);
   const runtimeModelRefs = useMemo(
     () => runtimeModels(modelCatalog).map((model) => model.model_ref),
     [modelCatalog],
   );
-  const defaultModelSaved =
-    settingsDraft?.model
-      ? runtimeModelRefs.includes(settingsDraft.model)
-      : false;
+  const registeredRuntimeModels = useMemo(
+    () => registeredModels(modelCatalog).filter((model) => model.runtime_supported),
+    [modelCatalog],
+  );
+  const { addedDefaultSaved } = useFirstRunAddedModelDefault({
+    copy,
+    enabled,
+    initialRegisteredModelRefs,
+    language,
+    loading,
+    modelLoadFailed,
+    registeredRuntimeModels,
+    resetKey: loadAttempt,
+    runtimeModelRefs,
+    setModelSaveStatus,
+    setSettingsDraft,
+    settingsDraft,
+  });
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -51,6 +68,7 @@ export function useFirstRunModelSetup({
       setLoading(true);
       setModelSaveStatus(copy.modelLoading);
       setModelLoadFailed(false);
+      setModelSettingsLoaded(false);
       try {
         const [settings, catalog] = await Promise.all([
           api<SettingsView>("/settings"),
@@ -60,18 +78,18 @@ export function useFirstRunModelSetup({
         const localizedSettings = { ...settings, language };
         useButlerStore.getState().setSettings(localizedSettings);
         useButlerStore.getState().setModelCatalog(catalog);
+        initialRegisteredModelRefs.current = new Set(
+          registeredModels(catalog).map((model) => model.model_ref),
+        );
         useSettingsUIStore.setState({
           activeSection: "models",
           draft: localizedSettings,
           localMessage: null,
-          modelRoute: { page: "root" },
-          modelRouteDirection: "back",
+          modelRoute: { page: "add" },
+          modelRouteDirection: "forward",
           modelRouteLeaveGuard: null,
         });
-        const supportedModels = runtimeModels(catalog);
-        if (supportedModels.length === 0) {
-          throw new Error("model_catalog_empty");
-        }
+        setModelSettingsLoaded(true);
         setModelSaveStatus("");
       } catch {
         if (cancelled) return;
@@ -87,83 +105,15 @@ export function useFirstRunModelSetup({
     };
   }, [copy.modelLoadFailed, copy.modelLoading, enabled, language, loadAttempt]);
 
-  useEffect(() => {
-    if (
-      !enabled ||
-      loading ||
-      modelLoadFailed ||
-      !settingsDraft ||
-      runtimeModelRefs.length === 0 ||
-      defaultModelSaved
-    ) {
-      return undefined;
-    }
-    const targetModel = runtimeModels(modelCatalog)[0];
-    if (!targetModel || autoSavingModelRef.current === targetModel.model_ref) {
-      return undefined;
-    }
-    let cancelled = false;
-    autoSavingModelRef.current = targetModel.model_ref;
-    async function saveAvailableDefaultModel() {
-      setModelSaveStatus(copy.modelSaving);
-      const fallbackSettings: SettingsView = {
-        ...settingsDraft!,
-        language,
-        model: targetModel!.model_ref,
-        reasoning_effort: targetModel!.default_reasoning_effort,
-        context_window_tokens: targetModel!.context_window_tokens,
-      };
-      try {
-        const result = await api<Partial<SettingsView>>("/settings", {
-          method: "PATCH",
-          body: JSON.stringify({
-            model: fallbackSettings.model,
-            reasoning_effort: fallbackSettings.reasoning_effort,
-            context_window_tokens: fallbackSettings.context_window_tokens,
-          }),
-        });
-        if (cancelled) return;
-        const nextSettings = { ...fallbackSettings, ...result, language };
-        useButlerStore.getState().setSettings(nextSettings);
-        setSettingsDraft(nextSettings);
-        setModelSaveStatus("");
-      } catch {
-        if (cancelled) return;
-        setModelLoadFailed(true);
-        setModelSaveStatus(copy.modelSaveFailed);
-      } finally {
-        if (!cancelled) autoSavingModelRef.current = "";
-      }
-    }
-    void saveAvailableDefaultModel();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    copy.modelSaveFailed,
-    copy.modelSaving,
-    defaultModelSaved,
-    enabled,
-    language,
-    loading,
-    modelCatalog,
-    modelLoadFailed,
-    runtimeModelRefs,
-    setSettingsDraft,
-    settingsDraft,
-  ]);
-
+  const modelSettingsReady =
+    enabled && !loading && !modelLoadFailed && modelSettingsLoaded;
   const modelSetupReady =
-    enabled &&
-    !loading &&
-    !modelLoadFailed &&
-    availableModelCount > 0 &&
-    Boolean(settingsDraft) &&
-    defaultModelSaved;
+    modelSettingsReady && availableModelCount > 0 && addedDefaultSaved;
 
   return {
     modelLoadFailed,
     modelSaveStatus,
+    modelSettingsReady,
     modelSetupReady,
     onRetryModelLoad: () => setLoadAttempt((current) => current + 1),
     onSaveModel: () => {

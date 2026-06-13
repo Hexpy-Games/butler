@@ -21,6 +21,7 @@ interface FirstRunModelStepProps {
   copy: FirstRunCopy;
   modelLoadFailed: boolean;
   modelSaveStatus: string;
+  modelSettingsReady: boolean;
   modelSetupReady: boolean;
   onRetryModelLoad: () => void;
   onSaveModel: () => void;
@@ -30,6 +31,7 @@ export function FirstRunModelStep({
   copy,
   modelLoadFailed,
   modelSaveStatus,
+  modelSettingsReady,
   modelSetupReady,
   onRetryModelLoad,
   onSaveModel,
@@ -54,8 +56,9 @@ export function FirstRunModelStep({
             </Button>
           </ButtonContainer>
         </Stack>
-      ) : modelSetupReady ? (
+      ) : modelSettingsReady ? (
         <>
+          {modelSaveStatus && <Typo.Body>{modelSaveStatus}</Typo.Body>}
           <FirstRunModelSettingsSurface />
           {canFinishModelSetup && (
             <ButtonContainer size="default">

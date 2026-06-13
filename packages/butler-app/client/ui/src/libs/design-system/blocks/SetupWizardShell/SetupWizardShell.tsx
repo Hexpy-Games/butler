@@ -1,6 +1,7 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { TintedGlass } from "../../components/TintedGlass";
+import { ScrollArea } from "../ScrollArea";
 import { ProgressStepper, type ProgressStepperStep } from "../ProgressStepper";
 import { PromptFluidBackground } from "../PromptSuggestionList/PromptFluidBackground";
 import styles from "./SetupWizardShell.module.css";
@@ -52,7 +53,13 @@ export function SetupWizardShell({
           padding="lg"
           radius="panel"
         >
-          {children}
+          <ScrollArea
+            className={styles.scrollArea}
+            contentClassName={styles.scrollContent}
+            dataTestClass="setup-wizard-scroll"
+          >
+            {children}
+          </ScrollArea>
         </TintedGlass>
       </Stack>
     </main>

@@ -145,6 +145,7 @@ export function useFirstRunSetupController(
     language,
     modelLoadFailed: modelSetup.modelLoadFailed,
     modelSaveStatus: modelSetup.modelSaveStatus,
+    modelSettingsReady: modelSetup.modelSettingsReady,
     modelSetupReady: modelSetup.modelSetupReady,
     status,
     step,
