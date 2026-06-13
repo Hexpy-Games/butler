@@ -30,6 +30,9 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(preload).toContain("butler:get-local-auth-headers");
   expect(preload).toContain("startOpenAIOAuthLogin");
   expect(preload).toContain("butler:start-openai-oauth-login");
+  expect(preload).toContain("restartOpenAIOAuthLogin");
+  expect(preload).toContain("getOpenAIOAuthLoginStatus");
+  expect(preload).toContain("submitOpenAIOAuthCallback");
   expect(preload).not.toContain("getLocalAuthHeaders");
 
   expect(main).not.toContain("async function createWindow() {\n  await ensureServer();");
@@ -45,8 +48,15 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(main).toContain("isQuitting = true");
   expect(main).toContain('ipcMain.handle("butler:get-local-auth-headers"');
   expect(main).toContain('ipcMain.handle("butler:start-openai-oauth-login"');
+  expect(main).toContain('ipcMain.handle("butler:restart-openai-oauth-login"');
+  expect(main).toContain('ipcMain.handle("butler:get-openai-oauth-login-status"');
+  expect(main).toContain('ipcMain.handle("butler:submit-openai-oauth-callback"');
   expect(main).toContain("openai-oauth-login.ts");
   expect(main).toContain("BUTLER_CODEX_OAUTH_CLIENT_ID");
+  expect(main).toContain("BUTLER_CODEX_OAUTH_NO_BROWSER");
+  expect(main).toContain("OAuth login is not pending.");
+  expect(main).toContain("OAuth callback state mismatch.");
+  expect(main).toContain("waitForOAuthCompletion");
   expect(main).toContain("createFirstRunSetupBridge");
   expect(main).toContain("readRuntimeDiagnostics");
   expect(main).toContain("readLatestAppManagedRuntimeFailure");

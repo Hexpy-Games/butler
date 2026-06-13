@@ -1844,7 +1844,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   ).toContain('triggerTestClass="model-add-provider-select"');
   expect(
     read(
-      "packages/butler-app/client/ui/src/components/settings/HostedModelForm.tsx",
+      "packages/butler-app/client/ui/src/components/settings/HostedModelSelectFields.tsx",
     ),
   ).toContain('triggerTestClass="hosted-model-select"');
   expect(

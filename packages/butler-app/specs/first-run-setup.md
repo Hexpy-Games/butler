@@ -31,6 +31,17 @@ the App-owned setup flow inside Electron before the workspace is shown.
   `install.sh`: use the app's isolated `BUTLER_DATA`, detect an existing
   Codex auth profile, otherwise launch the OAuth login helper, then register
   the selected model with `auth_type: "codex_oauth"`.
+- During OpenAI Codex OAuth, the first-run UI must keep recovery controls on
+  screen: show the OAuth URL, allow copying/opening it, accept a pasted local
+  callback/result URL, allow completion checks, and allow re-authentication
+  when the browser window is closed or the prior login session fails.
+- Selecting OpenAI Codex OAuth during first-run model setup starts a recoverable
+  OAuth login session immediately, before the user presses the model-add
+  button.
+- Pasted OAuth callback/result URLs must be accepted only for the active
+  pending OAuth session by matching the active redirect URI and OAuth state, and
+  the App must wait for the helper to finish writing the auth profile before it
+  reports completion.
 - Hosted providers that do not support any available authentication method must
   be excluded from provider choices.
 - After a model is added during first-run setup, that added model becomes the
@@ -69,8 +80,8 @@ the App-owned setup flow inside Electron before the workspace is shown.
 - Component tests cover the four-step order, absence of gateway/persona copy,
   bundled-Agent-only installation, model-add-first setup, added-model default
   persistence, automatic completion after add, post-save recovery,
-  default-save retry, OAuth login/registration, breadcrumb hiding, and no
-  Settings route.
+  default-save retry, OAuth login/registration, immediate OAuth session start,
+  OAuth pending recovery controls, breadcrumb hiding, and no Settings route.
 - AppShell first-run tests prove the workspace is gated until the model save
   completes.
 - Manual first-run smoke launches an isolated Electron profile and data root so

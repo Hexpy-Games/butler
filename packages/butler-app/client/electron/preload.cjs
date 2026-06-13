@@ -430,6 +430,12 @@ const butlerApp = Object.freeze({
   }),
   startOpenAIOAuthLogin: () =>
     ipcRenderer.invoke("butler:start-openai-oauth-login"),
+  restartOpenAIOAuthLogin: () =>
+    ipcRenderer.invoke("butler:restart-openai-oauth-login"),
+  getOpenAIOAuthLoginStatus: () =>
+    ipcRenderer.invoke("butler:get-openai-oauth-login-status"),
+  submitOpenAIOAuthCallback: (request = {}) =>
+    ipcRenderer.invoke("butler:submit-openai-oauth-callback", request ?? {}),
   deleteHostedModel: ({ modelRef } = {}) => requestJson(`/model-catalog/registered-models/${encodeURIComponent(modelRef ?? "")}`, {
     method: "DELETE",
   }),
