@@ -24,11 +24,13 @@ the App-owned setup flow inside Electron before the workspace is shown.
 - The installation step uses the title `Butler Agent를 준비합니다`.
 - The model step must reuse the App settings model-management modules instead
   of implementing a separate one-off model picker.
-- The model step must let the user choose the Butler default model, open model
-  management, register hosted models with API key or OAuth, and add local
-  OpenAI-compatible models.
+- The model step opens directly on the App model-add route.
+- The model-add route must support hosted models with API key or OAuth and
+  local OpenAI-compatible models.
+- After a model is added during first-run setup, that added model becomes the
+  Butler default model before setup can complete.
 - The model step may complete setup only after App settings and model catalog
-  are loaded and at least one runtime-supported model is available.
+  are loaded and a runtime-supported model has been saved as the default model.
 - The model step must not route the user to the Settings screen during
   first-run setup.
 
@@ -43,14 +45,14 @@ the App-owned setup flow inside Electron before the workspace is shown.
 - The product title uses the new-chat title scale so `Butler` anchors the
   screen more strongly than the active step title.
 - Only the content inside the `TintedGlass` body aligns from the top-left.
-- The `TintedGlass` body has a bounded height and scrolls internally when
-  model-management content exceeds the visible area.
+- The `TintedGlass` body uses the design-system `ScrollArea` block for bounded
+  internal scrolling when model-management content exceeds the visible area.
 
 ## Validation
 
 - Component tests cover the four-step order, absence of gateway/persona copy,
-  bundled-Agent-only installation, settings-module model setup, model
-  management/add routes, and no Settings route.
+  bundled-Agent-only installation, model-add-first setup, added-model default
+  persistence, and no Settings route.
 - AppShell first-run tests prove the workspace is gated until the model save
   completes.
 - Manual first-run smoke launches an isolated Electron profile and data root so

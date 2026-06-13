@@ -332,12 +332,16 @@ async function waitForText(
   );
 }
 
-async function expectNoForbiddenCopy(client: CdpClient): Promise<void> {
+async function expectNoForbiddenCopy(
+  client: CdpClient,
+  allowed = new Set<string>(),
+): Promise<void> {
   const text = await evaluateString(
     client,
     "document.body?.innerText?.trim() ?? ''",
   );
   for (const forbidden of forbiddenCopy) {
+    if (allowed.has(forbidden)) continue;
     assert(!text.includes(forbidden), `unexpected first-run copy: ${forbidden}`);
   }
 }
@@ -432,7 +436,16 @@ async function main(): Promise<void> {
   await waitForText(cdp, "준비 완료");
 
   await waitForHeading(cdp, "모델 설정");
-  await expectNoForbiddenCopy(cdp);
+  await waitForHeading(cdp, "모델 추가");
+  await waitForText(cdp, "API key");
+  await expectNoForbiddenCopy(cdp, new Set(["이름"]));
+  assert(
+    await evaluateBoolean(
+      cdp,
+      "document.querySelector('[data-test-class=\"model-add-provider-select\"]') !== null",
+    ),
+    "model add provider select is missing",
+  );
 
   console.log(JSON.stringify({
     ok: true,
@@ -445,6 +458,7 @@ async function main(): Promise<void> {
       "no-normal-gateway-selector",
       "no-personal-onboarding-copy",
       "model-setup-after-readiness",
+      "model-add-first-screen",
     ],
     appServerUrl: `http://127.0.0.1:${serverPort}/`,
   }));

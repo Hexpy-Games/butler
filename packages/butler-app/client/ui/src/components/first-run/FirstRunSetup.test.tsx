@@ -12,6 +12,7 @@ import {
 import type {
   AppModelSummary,
   ModelCatalogView,
+  ProviderAuthMethod,
   SettingsView,
 } from "@/app/types.ts";
 import { FirstRunSetup } from "./FirstRunSetup";
@@ -71,16 +72,7 @@ test("first-run setup renders the minimal Electron setup order", async () => {
   expect(rendered.container.textContent).toContain(
     "기본 모델과 연결 방식을 설정하세요.",
   );
-  await waitForText(rendered.container, "기본 모델");
-  expect(
-    rendered.container.querySelector(
-      '[data-test-class="settings-primary-model-select"]',
-    ),
-  ).not.toBeNull();
   expect(rendered.container.querySelector("select")).toBeNull();
-  await clickButton(rendered.container, "모델 관리");
-  await waitForText(rendered.container, "등록된 모델");
-  await clickButton(rendered.container, "모델 추가");
   await waitForText(rendered.container, "API key");
   expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
   expect(
@@ -93,10 +85,12 @@ test("first-run setup renders the minimal Electron setup order", async () => {
       '[data-test-class="hosted-auth-method-select"]',
     ),
   ).not.toBeNull();
-  await clickButtonByAriaLabel(rendered.container, "돌아가기");
-  await waitForText(rendered.container, "저장하고 시작");
-  await clickButton(rendered.container, "저장하고 시작");
-  expect(rendered.completedStates[0]?.status).toBe("complete");
+  await addHostedModelAndFinish(rendered);
+  expect(rendered.settingsPatches).toContainEqual({
+    model: "openai/gpt-5.5",
+    reasoning_effort: "xhigh",
+    context_window_tokens: 258000,
+  });
 
   await act(async () => rendered.root.unmount());
 });
@@ -140,8 +134,7 @@ test("first-run setup keeps waiting for bundled Agent without alternate connecti
 
   bundled.resolve();
   await waitForText(rendered.container, "모델 설정");
-  await waitForText(rendered.container, "저장하고 시작");
-  await clickButton(rendered.container, "저장하고 시작");
+  await addHostedModelAndFinish(rendered);
   expect(rendered.setupModes).toEqual(["bundled-agent"]);
   expect(rendered.completedStates[0]?.connection_mode).toBe("bundled-agent");
 
@@ -163,15 +156,38 @@ test("first-run model setup surfaces catalog load failure and retries", async ()
   await waitForText(rendered.container, "모델 목록을 불러오지 못했습니다.");
   expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
   await clickButton(rendered.container, "다시 불러오기");
-  await waitForText(rendered.container, "저장하고 시작");
-  await clickButton(rendered.container, "저장하고 시작");
+  await addHostedModelAndFinish(rendered);
 
   expect(rendered.completedStates[0]?.status).toBe("complete");
 
   await act(async () => rendered.root.unmount());
 });
 
-test("first-run model setup persists the first registered model when current default is unavailable", async () => {
+test("first-run model setup waits for a newly added model before completion", async () => {
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+  );
+
+  await waitForText(rendered.container, "API key");
+  expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
+  await addHostedModelAndFinish(rendered);
+  expect(rendered.settingsPatches).toContainEqual({
+    model: "openai/gpt-5.5",
+    reasoning_effort: "xhigh",
+    context_window_tokens: 258000,
+  });
+  expect(rendered.completedStates[0]?.status).toBe("complete");
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run model setup surfaces default-save failure after adding a model", async () => {
   const rendered = await renderFirstRun(
     {
       ...createInitialFirstRunState("ko"),
@@ -181,19 +197,16 @@ test("first-run model setup persists the first registered model when current def
       install_status: "ready",
     },
     {
-      modelCatalog: registeredOnlyModelCatalog(),
-      settings: { ...EMPTY_SETTINGS, model: "openai/gpt-5.5" },
+      failDefaultSaveOnce: true,
+      settings: { ...EMPTY_SETTINGS, model: "missing/model" },
     },
   );
 
-  await waitForText(rendered.container, "저장하고 시작");
-  expect(rendered.settingsPatches).toContainEqual({
-    model: "local/llama-3.3",
-    reasoning_effort: "medium",
-    context_window_tokens: 8192,
-  });
-  await clickButton(rendered.container, "저장하고 시작");
-  expect(rendered.completedStates[0]?.status).toBe("complete");
+  await waitForText(rendered.container, "API key");
+  await clickButton(rendered.container, "추가");
+  await waitForText(rendered.container, "모델 설정을 저장하지 못했습니다.");
+  expect(rendered.calls).toContain("registerHostedModel");
+  expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
 
   await act(async () => rendered.root.unmount());
 });
@@ -260,6 +273,7 @@ async function renderFirstRun(
   initialState: FirstRunState,
   options: {
     failHealthOnce?: boolean;
+    failDefaultSaveOnce?: boolean;
     failModelCatalogOnce?: boolean;
     holdBundledAgent?: Promise<void>;
     modelCatalog?: ModelCatalogView;
@@ -300,6 +314,7 @@ async function renderFirstRun(
   });
   let setupFailures = options.failHealthOnce ? 1 : 0;
   let modelCatalogFailures = options.failModelCatalogOnce ? 1 : 0;
+  let defaultSaveFailures = options.failDefaultSaveOnce ? 1 : 0;
   let setupRejections = options.rejectSetupOnce ? 1 : 0;
   Object.assign(dom.window, {
     butlerApp: {
@@ -361,9 +376,26 @@ async function renderFirstRun(
         calls.push("getSettings");
         return options.settings ?? EMPTY_SETTINGS;
       },
+      registerHostedModel: async () => {
+        calls.push("registerHostedModel");
+        const catalog = firstRunRegisteredModelCatalog();
+        return {
+          model: catalog.registered_models?.[0],
+          catalog,
+        };
+      },
       updateSettings: async (patch?: unknown) => {
         calls.push("updateSettings");
         settingsPatches.push(patch);
+        if (
+          defaultSaveFailures > 0 &&
+          typeof patch === "object" &&
+          patch !== null &&
+          "model" in patch
+        ) {
+          defaultSaveFailures -= 1;
+          throw new Error("default model save failed");
+        }
         return {};
       },
     },
@@ -409,19 +441,15 @@ async function clickButton(container: HTMLElement, label: string): Promise<void>
   });
 }
 
-async function clickButtonByAriaLabel(
-  container: HTMLElement,
-  label: string,
+async function addHostedModelAndFinish(
+  rendered: RenderedFirstRun,
 ): Promise<void> {
-  const button = Array.from(container.querySelectorAll("button")).find(
-    (candidate) => candidate.getAttribute("aria-label") === label,
-  );
-  if (!button) throw new Error(`Missing button aria-label: ${label}`);
-  const win = container.ownerDocument.defaultView;
-  if (!win) throw new Error("Missing DOM window");
-  await act(async () => {
-    button.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
-  });
+  await waitForText(rendered.container, "API key");
+  await clickButton(rendered.container, "추가");
+  await waitForText(rendered.container, "저장하고 시작");
+  expect(rendered.calls).toContain("registerHostedModel");
+  await clickButton(rendered.container, "저장하고 시작");
+  expect(rendered.completedStates[0]?.status).toBe("complete");
 }
 
 function buttonByLabel(
@@ -433,8 +461,9 @@ function buttonByLabel(
   );
 }
 
-function firstRunModelCatalog() {
+function firstRunModelCatalog(): ModelCatalogView {
   const defaultModel = EMPTY_MODEL_CATALOG.models[0]!;
+  const authMethods: ProviderAuthMethod[] = ["api_key", "codex_oauth"];
   return {
     ...EMPTY_MODEL_CATALOG,
     providers: [
@@ -442,33 +471,37 @@ function firstRunModelCatalog() {
         provider_id: "openai",
         provider_label: "OpenAI",
         latest_model_ref: defaultModel.model_ref,
-        auth_methods: ["api_key", "codex_oauth"] as const,
+        auth_methods: authMethods,
         models: [defaultModel],
+      },
+    ],
+    provider_credentials: [
+      {
+        id: "cred-existing",
+        provider_id: "openai",
+        label: "Existing key",
+        masked_value: "sk-...",
+        auth_type: "api_key",
+        created_at: "2026-06-13T00:00:00.000Z",
+        updated_at: "2026-06-13T00:00:00.000Z",
       },
     ],
     registered_models: [],
   };
 }
 
-function registeredOnlyModelCatalog(): ModelCatalogView {
-  const localModel: AppModelSummary = {
+function firstRunRegisteredModelCatalog(): ModelCatalogView {
+  const defaultModel: AppModelSummary = {
     ...EMPTY_MODEL_CATALOG.models[0]!,
-    provider_id: "local",
-    provider_label: "Local",
-    model_id: "llama-3.3",
-    model_ref: "local/llama-3.3",
-    display_name: "Llama 3.3",
-    context_window_tokens: 8192,
-    default_reasoning_effort: "medium" as const,
-    reasoning_efforts: ["none", "low", "medium"],
-    runtime_supported: true,
     registered: true,
+    auth_type: "api_key",
+    credential_id: "cred-test",
+    credential_label: "Test key",
+    credential_masked_value: "sk-...",
   };
   return {
-    ...EMPTY_MODEL_CATALOG,
-    default_model_ref: localModel.model_ref,
-    models: [localModel],
-    registered_models: [localModel],
+    ...firstRunModelCatalog(),
+    registered_models: [defaultModel],
   };
 }
 

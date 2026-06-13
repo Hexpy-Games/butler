@@ -36,13 +36,22 @@
 .body {
   --tinted-glass-bg: color-mix(in srgb, var(--surface-raised) 62%, transparent);
   --tinted-glass-shadow: none;
+  --scroll-area-edge-padding: 0;
 
   display: grid;
   height: clamp(360px, 54vh, 560px);
   max-height: calc(100vh - var(--space-2xl) * 2 - 104px);
   align-content: start;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: hidden;
+}
+
+.scrollArea {
+  min-height: 0;
+  height: 100%;
+}
+
+.scrollContent {
+  min-height: 100%;
 }
 
 .content {

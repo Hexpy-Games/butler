@@ -29,6 +29,7 @@ export function FirstRunSetup({
         language={setup.language}
         modelLoadFailed={setup.modelLoadFailed}
         modelSaveStatus={setup.modelSaveStatus}
+        modelSettingsReady={setup.modelSettingsReady}
         modelSetupReady={setup.modelSetupReady}
         status={setup.status}
         step={setup.step}

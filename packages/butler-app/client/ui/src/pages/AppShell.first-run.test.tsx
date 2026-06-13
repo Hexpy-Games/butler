@@ -9,7 +9,12 @@ import {
   createInitialFirstRunState,
   FIRST_RUN_STORAGE_KEY,
 } from "@/app/firstRunSetup.ts";
-import type { ModelCatalogView, SettingsView } from "@/app/types.ts";
+import type {
+  AppModelSummary,
+  ModelCatalogView,
+  ProviderAuthMethod,
+  SettingsView,
+} from "@/app/types.ts";
 
 interface TestStoreState {
   activeChatId: string;
@@ -47,13 +52,18 @@ const storeState: TestStoreState = {
   modelCatalog: EMPTY_MODEL_CATALOG,
   setModelCatalog: (catalog) => {
     storeState.modelCatalog = catalog;
+    emitStoreChange();
   },
   setSettings: (settings) => {
     storeState.settings = { ...settings, sidebar_style: "translucent" };
+    emitStoreChange();
   },
   settings: { ...EMPTY_SETTINGS, sidebar_style: "translucent" },
   view: { kind: "session" },
 };
+
+const storeListeners = new Set<() => void>();
+let cachedStoreSnapshot: TestStoreState | null = null;
 
 mock.module("@/components/layout/Chrome.tsx", () => ({
   WindowChromeLayer: () => <div data-test-class="chrome-layer" />,
@@ -134,20 +144,37 @@ mock.module("@/app/store.ts", () => ({
 }));
 
 function useButlerStore<T>(selector: (state: TestStoreState) => T): T {
-  return selector(testStoreSnapshot());
+  return React.useSyncExternalStore(
+    subscribeToTestStore,
+    () => selector(testStoreSnapshot()),
+    () => selector(testStoreSnapshot()),
+  );
 }
 
 useButlerStore.getState = testStoreSnapshot;
 
+function subscribeToTestStore(listener: () => void): () => void {
+  storeListeners.add(listener);
+  return () => storeListeners.delete(listener);
+}
+
+function emitStoreChange() {
+  cachedStoreSnapshot = null;
+  for (const listener of storeListeners) listener();
+}
+
 function testStoreSnapshot(): TestStoreState {
-  return {
+  if (cachedStoreSnapshot) return cachedStoreSnapshot;
+  cachedStoreSnapshot = {
     ...storeState,
     openSettings(section = "general") {
       storeState.openSettingsCalls.push(String(section));
       storeState.isSettingsView = true;
+      emitStoreChange();
     },
     setLeftOpen() {},
   } as TestStoreState;
+  return cachedStoreSnapshot;
 }
 
 afterEach(() => {
@@ -161,6 +188,8 @@ afterEach(() => {
   storeState.openSettingsCalls = [];
   storeState.modelCatalog = EMPTY_MODEL_CATALOG;
   storeState.settings = { ...EMPTY_SETTINGS, sidebar_style: "translucent" };
+  storeListeners.clear();
+  cachedStoreSnapshot = null;
 });
 
 test("AppShell gates workspace behind pending first-run setup", async () => {
@@ -174,8 +203,7 @@ test("AppShell gates workspace behind pending first-run setup", async () => {
   await clickButton(rendered.container, "계속");
   await clickButton(rendered.container, "동의");
   await waitForText(rendered.container, "모델 설정");
-  await waitForText(rendered.container, "저장하고 시작");
-  await clickButton(rendered.container, "저장하고 시작");
+  await addHostedModelAndFinish(rendered.container);
 
   expect(rendered.container.textContent).toContain("Workspace");
   expect(storeState.openSettingsCalls).toEqual([]);
@@ -192,8 +220,7 @@ test("AppShell keeps model setup inside first-run wizard", async () => {
   await clickButton(rendered.container, "동의");
   await waitForText(rendered.container, "모델 설정");
   expect(rendered.container.textContent).not.toContain("모델 설정 열기");
-  await waitForText(rendered.container, "저장하고 시작");
-  await clickButton(rendered.container, "저장하고 시작");
+  await addHostedModelAndFinish(rendered.container);
 
   expect(storeState.openSettingsCalls).toEqual([]);
   expect(rendered.container.textContent).toContain("Workspace");
@@ -225,6 +252,7 @@ async function renderAppShell(
   Object.entries(storageValues).forEach(([key, value]) => {
     dom.window.localStorage.setItem(key, value);
   });
+  const authMethods: ProviderAuthMethod[] = ["api_key", "codex_oauth"];
   Object.assign(dom.window, {
     butlerApp: {
       startSetup: async () => ({
@@ -239,13 +267,31 @@ async function renderAppShell(
             provider_id: "openai",
             provider_label: "OpenAI",
             latest_model_ref: EMPTY_MODEL_CATALOG.models[0]!.model_ref,
-            auth_methods: ["api_key", "codex_oauth"],
+            auth_methods: authMethods,
             models: [EMPTY_MODEL_CATALOG.models[0]!],
+          },
+        ],
+        provider_credentials: [
+          {
+            id: "cred-existing",
+            provider_id: "openai",
+            label: "Existing key",
+            masked_value: "sk-...",
+            auth_type: "api_key",
+            created_at: "2026-06-13T00:00:00.000Z",
+            updated_at: "2026-06-13T00:00:00.000Z",
           },
         ],
         registered_models: [],
       }),
       getSettings: async () => EMPTY_SETTINGS,
+      registerHostedModel: async () => {
+        const catalog = firstRunRegisteredModelCatalog();
+        return {
+          model: catalog.registered_models?.[0],
+          catalog,
+        };
+      },
       updateSettings: async () => ({}),
     },
   });
@@ -270,6 +316,59 @@ async function clickButton(container: HTMLElement, label: string): Promise<void>
   await act(async () => {
     button.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
   });
+}
+
+async function addHostedModelAndFinish(container: HTMLElement): Promise<void> {
+  await waitForText(container, "API key");
+  expect(buttonByLabel(container, "저장하고 시작")).toBeUndefined();
+  await clickButton(container, "추가");
+  await waitForText(container, "저장하고 시작");
+  await clickButton(container, "저장하고 시작");
+}
+
+function buttonByLabel(
+  container: HTMLElement,
+  label: string,
+): HTMLButtonElement | undefined {
+  return Array.from(container.querySelectorAll("button")).find(
+    (candidate) => candidate.textContent?.trim() === label,
+  );
+}
+
+function firstRunRegisteredModelCatalog(): ModelCatalogView {
+  const defaultModel: AppModelSummary = {
+    ...EMPTY_MODEL_CATALOG.models[0]!,
+    registered: true,
+    auth_type: "api_key",
+    credential_id: "cred-test",
+    credential_label: "Test key",
+    credential_masked_value: "sk-...",
+  };
+  const authMethods: ProviderAuthMethod[] = ["api_key", "codex_oauth"];
+  return {
+    ...EMPTY_MODEL_CATALOG,
+    providers: [
+      {
+        provider_id: "openai",
+        provider_label: "OpenAI",
+        latest_model_ref: defaultModel.model_ref,
+        auth_methods: authMethods,
+        models: [defaultModel],
+      },
+    ],
+    provider_credentials: [
+      {
+        id: "cred-existing",
+        provider_id: "openai",
+        label: "Existing key",
+        masked_value: "sk-...",
+        auth_type: "api_key",
+        created_at: "2026-06-13T00:00:00.000Z",
+        updated_at: "2026-06-13T00:00:00.000Z",
+      },
+    ],
+    registered_models: [defaultModel],
+  };
 }
 
 async function waitForText(
