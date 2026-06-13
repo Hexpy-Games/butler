@@ -54,7 +54,7 @@ Tasks:
    - bundled Bun path
    - app gateway port
    - local auth file
-2. Extend native service specs so `defaultNativeServiceSpecs` can emit
+2. Extend native service specs so `appManagedNativeServiceSpecs` can emit
    App-managed specs.
 3. Ensure app gateway is included and service-owned for App distribution.
 4. Preserve standalone Agent specs unchanged.
@@ -81,6 +81,20 @@ Acceptance:
 - Process group state records expose runtime version and pointer path.
 - App-managed stop/restart contracts can prove the previous process group has
   released pids and ports before a new runtime starts.
+
+Implemented surface:
+
+- `appManagedNativeServiceSpecs` resolves the active App-managed runtime pointer
+  into native service specs.
+- `resolveAppManagedNativeSupervisorPaths` fails closed on damaged or
+  non-`electron` runtime pointers.
+- `stopServiceBounded` is the update-facing stop primitive. It waits for pid
+  exit, escalates to `SIGKILL`, verifies app gateway port release, and preserves
+  service state if stop cannot be proven.
+
+Validation:
+
+- `bun test tests/unit/native-service-supervisor.test.ts tests/unit/app-background-service-contract.test.ts`
 
 ## Phase 2: OS Service Registration For App Distribution
 

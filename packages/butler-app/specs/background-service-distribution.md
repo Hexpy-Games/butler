@@ -185,6 +185,8 @@ Reusable service components:
   - `butler-watchdog`
   - `butler-main`
   - `app-gateway`
+  - App-managed specs are emitted by `appManagedNativeServiceSpecs`.
+  - Update-safe stop is exposed through `stopServiceBounded`.
 - `packages/butler-agent/src/operations/service/os-service-adapter.ts`
   already supports launchd and systemd registration plans.
 - `packages/butler-app/client/electron/app-managed-runtime.mjs` already stages
