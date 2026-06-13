@@ -1,7 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { Stack } from "../../components/Stack";
 import { TintedGlass } from "../../components/TintedGlass";
-import { Typo } from "../../components/Typo";
 import { ProgressStepper, type ProgressStepperStep } from "../ProgressStepper";
 import { PromptFluidBackground } from "../PromptSuggestionList/PromptFluidBackground";
 import styles from "./SetupWizardShell.module.css";
@@ -40,7 +39,7 @@ export function SetupWizardShell({
         aria-label={regionLabel}
       >
         <Stack className={styles.header} gap="sm">
-          <Typo.AppTitle as="p">{title}</Typo.AppTitle>
+          <p className={styles.productTitle}>{title}</p>
           <ProgressStepper
             activeIndex={activeIndex}
             ariaLabel={progressLabel}
