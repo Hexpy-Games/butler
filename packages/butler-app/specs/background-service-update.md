@@ -84,6 +84,10 @@ Restart must also be bounded and observable:
 
 ## Runtime Pointer Transaction
 
+The Phase 0 source of truth for update status names, transaction fields, and
+candidate boot token fields is
+`packages/butler-app/scripts/background-service-contract.ts`.
+
 The active runtime pointer and staged candidate pointer must be separate files.
 The App must persist an update transaction before service restart:
 
@@ -128,9 +132,13 @@ The service supervisor needs an explicit update state:
 
 - `idle`: normal operation.
 - `update_available`: update can be staged.
+- `staging`: candidate runtime is being verified without pointer mutation.
 - `draining`: new work is blocked; existing critical work may finish.
 - `restart_required`: runtime pointer is staged and service restart is required.
 - `restarting`: process group is being restarted.
+- `candidate_ready`: candidate runtime has passed service readiness and can be
+  promoted.
+- `promoting`: active pointer promotion is being committed.
 - `ready`: update complete.
 - `rollback`: new runtime failed and previous runtime is being restored.
 - `failed`: update requires user recovery.
@@ -187,6 +195,7 @@ The bridge must return structured, redacted status objects.
 
 ## Validation Targets
 
+- `bun test tests/unit/app-background-service-contract.test.ts`
 - Unit test for runtime staging without pointer mutation.
 - Unit test for active/candidate pointer transaction recovery.
 - Unit test that normal service boot ignores candidate pointer.

@@ -85,6 +85,12 @@ The service setup step must:
 
 ### Runtime Contract
 
+The Phase 0 source of truth is
+`packages/butler-app/scripts/background-service-contract.ts`. Service
+implementation, first-run UI, tray/menu status, and updater code must consume or
+mirror that contract instead of inventing separate status strings or runtime
+field lists.
+
 The service must run with:
 
 - `BUTLER_HOME`: active App-managed Agent runtime home.
@@ -96,6 +102,7 @@ The service must run with:
 - `BUTLER_APP_SERVER_PORT`: resolved app gateway port.
 - `BUTLER_APP_GATEWAY_PID_FILE=off` or a service-owned pid policy.
 - `BUTLER_APP_LOCAL_AUTH_REQUIRED=1`.
+- `BUTLER_APP_LOCAL_AUTH_FILE`: App-managed local auth file path.
 
 The app gateway is service-owned and must not be detached by the Electron UI.
 
@@ -114,6 +121,11 @@ Packaging implication:
 - A `.pkg` installer or an App first-run helper registration flow is required.
 - Notarization/signing must cover the App, helper/service payload, and service
   registration artifacts.
+
+Phase 0 gate:
+
+- The v1 implementation must choose `.pkg` installer registration or first-run
+  user LaunchAgent registration before service UI work starts.
 
 ### Windows
 
@@ -140,6 +152,11 @@ Packaging implication:
   Windows App release can provide persistent background service behavior.
 - Installer UX must explain elevation only when it is actually required.
 
+Phase 0 gate:
+
+- The v1 implementation must choose the user/security context before any
+  Windows service code ships.
+
 ### Linux
 
 Use `systemd --user` for desktop Linux.
@@ -150,6 +167,11 @@ Packaging implication:
   behavior.
 - AppImage or tarball can be supported later as a manual service-registration
   path, but it is not the primary production target.
+
+Phase 0 gate:
+
+- The v1 implementation should prefer package-owned user units for production
+  and keep manual registration as a later path.
 
 ## Current Code Reuse
 
@@ -172,6 +194,9 @@ Reusable service components:
 
 Required changes:
 
+- Consume `background-service-contract.ts` for service status, platform
+  capability, App-managed runtime field names, and unresolved v1 registration
+  decisions.
 - Move production App first-run readiness from Electron child supervisor to
   OS-service-backed supervisor control.
 - Add App-owned service registration bridge APIs.
@@ -195,6 +220,7 @@ Required changes:
 
 ## Validation Targets
 
+- `bun test tests/unit/app-background-service-contract.test.ts`
 - Unit tests for service spec generation from App-managed runtime pointers.
 - Unit tests for platform registration capability decisions.
 - Unit tests for first-run service install/readiness states.

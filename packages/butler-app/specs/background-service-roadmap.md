@@ -14,7 +14,8 @@ Tasks:
 1. Add App background service specs.
 2. Add test guard proving production App first-run no longer depends on
    Electron child supervisor semantics once migration starts.
-3. Add service status vocabulary shared by first-run, tray, and updater.
+3. Add `packages/butler-app/scripts/background-service-contract.ts` with the
+   service status vocabulary shared by first-run, tray, and updater.
 4. Identify the App-managed runtime pointer fields required by the service
    supervisor.
 5. Add platform registration capability matrix:
@@ -28,6 +29,9 @@ Acceptance:
 
 - Specs exist for background service distribution and update/restart behavior.
 - The task backlog maps every implementation phase to tests.
+- `background-service-contract.ts` exports Phase 0 service statuses, update
+  statuses, runtime fields, transaction fields, platform capabilities, and
+  structured unresolved v1 registration decisions.
 - Platform registration and installer constraints are fixed before service
   bridge/UI implementation starts.
 - No runtime behavior changes are included in this phase.
@@ -35,7 +39,7 @@ Acceptance:
 Validation:
 
 - `git diff --check`
-- targeted unit/doc guard tests if added
+- `bun test tests/unit/app-background-service-contract.test.ts`
 
 ## Phase 1: App-Managed Service Runtime Contract
 
@@ -63,6 +67,7 @@ Tasks:
 
 Primary files:
 
+- `packages/butler-app/scripts/background-service-contract.ts`
 - `packages/butler-agent/src/operations/service/native-service-supervisor.ts`
 - `packages/butler-app/client/electron/app-managed-runtime.mjs`
 - `tests/unit/native-service-supervisor.test.ts`
@@ -98,6 +103,7 @@ Tasks:
 
 Primary files:
 
+- `packages/butler-app/scripts/background-service-contract.ts`
 - `packages/butler-app/client/electron/*service*.mjs`
 - `packages/butler-app/client/electron/preload.cjs`
 - `packages/butler-agent/src/operations/service/os-service-adapter.ts`
@@ -196,6 +202,7 @@ Tasks:
 
 Primary files:
 
+- `packages/butler-app/scripts/background-service-contract.ts`
 - `packages/butler-app/client/electron/app-managed-runtime.mjs`
 - `packages/butler-agent/src/operations/update/component-updater.ts`
 - new App updater bridge module
