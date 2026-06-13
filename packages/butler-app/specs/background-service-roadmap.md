@@ -371,6 +371,10 @@ Implemented surface:
   manifest declare `butler.app-background-service-capability.v1`.
 - Bundled App resources include
   `bundled-agent/background-service-capability.json`.
+- Bundled App resources include
+  `bundled-agent/background-service-registration.json` with platform-specific
+  LaunchAgent or `systemd --user` registration metadata for installer/helper
+  consumption.
 - The dependency closure lists
   `background-service-registration-metadata` as an App-owned dependency.
 - Current v1 installer requirements are declared as:
@@ -378,11 +382,15 @@ Implemented surface:
   - Linux: `linux-deb-owned-user-unit` with `deb` and `rpm`.
 - Packaging smoke verifies the service capability metadata is present beside
   the bundled Agent runtime and release manifests.
+- Packaging smoke verifies the service registration metadata is present inside
+  packaged App resources.
 
 Remaining:
 
-- Generate signed/notarized macOS `.pkg` service installer payloads.
-- Generate Linux `.deb`/`.rpm` packages that install user service units.
+- Generate signed/notarized macOS `.pkg` service installer payloads from the
+  registration metadata.
+- Generate Linux `.deb`/`.rpm` packages that install user service units from
+  the registration metadata.
 - Add Windows release platform and installer path after the Windows
   user/security-context implementation.
 - Run real installer E2E on each target OS.

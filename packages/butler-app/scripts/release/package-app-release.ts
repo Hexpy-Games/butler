@@ -290,8 +290,23 @@ function prepareBundledAgentResourceFromPackage(
     join(resourceDir, "background-service-capability.json"),
     createAppBackgroundServiceReleaseCapability([platform]),
   );
+  writeJson(
+    join(resourceDir, "background-service-registration.json"),
+    createAppBackgroundServiceRegistrationMetadata(platform),
+  );
   const releaseManifestSha256 = sha256File(join(resourceDir, "agent-release-manifest.json"));
   const updateManifestSha256 = sha256File(join(resourceDir, "agent-update-manifest.json"));
+  const backgroundServiceCapabilitySha256 = sha256File(
+    join(resourceDir, "background-service-capability.json"),
+  );
+  const backgroundServiceRegistrationSha256 = sha256File(join(
+    resourceDir,
+    "background-service-registration.json",
+  ));
+  const backgroundServiceRegistrationMetadataSha256 = sha256Values([
+    backgroundServiceCapabilitySha256,
+    backgroundServiceRegistrationSha256,
+  ]);
   const managedRuntimeSha256 = sha256Directory(join(resourceDir, "runtime"));
   const dependencyClosure = createAppDependencyClosureManifest({
     bundledAgentVersion: agent.version,
@@ -300,6 +315,7 @@ function prepareBundledAgentResourceFromPackage(
     releaseManifestSha256,
     updateManifestSha256,
     managedRuntimeSha256,
+    backgroundServiceRegistrationMetadataSha256,
     releaseManifestsSha256: sha256Values([releaseManifestSha256, updateManifestSha256]),
     runtimePackageDependenciesSha256: sha256Values([agent.sha256, managedRuntimeSha256]),
     repairSourceSha256: sha256Values([
@@ -307,6 +323,7 @@ function prepareBundledAgentResourceFromPackage(
       releaseManifestSha256,
       updateManifestSha256,
       managedRuntimeSha256,
+      backgroundServiceRegistrationMetadataSha256,
     ]),
   });
   const dependencyClosureIssues = validateAppDependencyClosureManifest(dependencyClosure);
@@ -323,6 +340,82 @@ function prepareBundledAgentResourceFromPackage(
     version: agent.version,
     platform,
   };
+}
+
+function createAppBackgroundServiceRegistrationMetadata(
+  platform: AppReleasePlatform,
+): Record<string, unknown> {
+  const capability = createAppBackgroundServiceReleaseCapability([platform]);
+  const requirement = capability.installerRequirements[0];
+  if (!requirement) {
+    throw new Error(`missing background service installer requirement for ${platform}`);
+  }
+  return {
+    schema: "butler.app-background-service-registration.v1",
+    product: "butler-app",
+    releasePlatform: platform,
+    servicePlatform: requirement.platform,
+    gatewayProfile: "electron",
+    installerRequired: requirement.installerRequired,
+    packageFormats: requirement.packageFormats,
+    packageInstallerTargets: packageInstallerTargets(requirement.platform),
+    registersUserService: requirement.registersUserService,
+    runtimePointerPath: "$BUTLER_DATA/app/runtime/agent/current.json",
+    runtimeHomeEnv: "BUTLER_APP_MANAGED_RUNTIME_HOME",
+    localAuthPath: "$BUTLER_DATA/app/runtime/auth/local-agent-auth.json",
+    serviceDefinition: serviceDefinitionMetadata(requirement.platform),
+    requiredEnvironment: [
+      "BUTLER_HOME",
+      "BUTLER_DATA",
+      "BUTLER_BUN",
+      "BUTLER_APP_MANAGED_RUNTIME_POINTER",
+      "BUTLER_APP_MANAGED_RUNTIME_HOME",
+      "BUTLER_APP_SERVER_HOST",
+      "BUTLER_APP_SERVER_PORT",
+      "BUTLER_APP_GATEWAY_PID_FILE",
+      "BUTLER_APP_LOCAL_AUTH_REQUIRED",
+      "BUTLER_APP_LOCAL_AUTH_FILE",
+    ],
+    rawTextIncluded: false,
+  };
+}
+
+function packageInstallerTargets(servicePlatform: string): Array<Record<string, string>> {
+  if (servicePlatform === "darwin") {
+    return [{ packageFormat: "pkg", selectedV1Path: "macos-pkg-launch-agent" }];
+  }
+  if (servicePlatform === "linux") {
+    return [
+      { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
+      { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
+    ];
+  }
+  throw new Error(`unsupported background service installer target platform: ${servicePlatform}`);
+}
+
+function serviceDefinitionMetadata(servicePlatform: string): Record<string, unknown> {
+  if (servicePlatform === "darwin") {
+    return {
+      manager: "launchd",
+      label: "com.hexpy.butler",
+      serviceFile: "$HOME/Library/LaunchAgents/com.hexpy.butler.plist",
+      userDomain: "gui/$UID",
+      installAction: "pkg-install-or-first-run-bootstrap",
+      startAction: "launchctl kickstart -k gui/$UID/com.hexpy.butler",
+      stopAction: "launchctl bootout gui/$UID/com.hexpy.butler",
+    };
+  }
+  if (servicePlatform === "linux") {
+    return {
+      manager: "systemd-user",
+      unit: "butler.service",
+      serviceFile: "$HOME/.config/systemd/user/butler.service",
+      installAction: "package-owned-user-unit-or-first-run-enable",
+      startAction: "systemctl --user start butler.service",
+      stopAction: "systemctl --user stop butler.service",
+    };
+  }
+  throw new Error(`unsupported background service registration platform: ${servicePlatform}`);
 }
 
 function copyManagedRuntimeExecutable(runtimeDir: string, platform: AppReleasePlatform): void {

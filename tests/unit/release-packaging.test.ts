@@ -821,6 +821,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(entries).toContain(`${resourceRoot}/agent-update-manifest.json`);
     expect(entries).toContain(`${resourceRoot}/dependency-closure.json`);
     expect(entries).toContain(`${resourceRoot}/background-service-capability.json`);
+    expect(entries).toContain(`${resourceRoot}/background-service-registration.json`);
     expect(entries).toContain(`${resourceRoot}/runtime/bun-version`);
     expect(entries).toContain(`${resourceRoot}/runtime/bin/bun`);
     const bundledRuntime = extractTarEntryBuffer(
@@ -897,6 +898,10 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       artifact.artifactPath,
       `${resourceRoot}/background-service-capability.json`,
     );
+    const backgroundServiceRegistration = extractTarEntryJson(
+      artifact.artifactPath,
+      `${resourceRoot}/background-service-registration.json`,
+    );
     expect(backgroundServiceCapability).toMatchObject({
       schema: "butler.app-background-service-capability.v1",
       serviceCapable: true,
@@ -910,6 +915,40 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
           packageFormats: ["deb", "rpm"],
           registersUserService: true,
         },
+      ],
+      rawTextIncluded: false,
+    });
+    expect(backgroundServiceRegistration).toMatchObject({
+      schema: "butler.app-background-service-registration.v1",
+      product: "butler-app",
+      releasePlatform: "linux-x64",
+      servicePlatform: "linux",
+      gatewayProfile: "electron",
+      installerRequired: "yes",
+      packageFormats: ["deb", "rpm"],
+      packageInstallerTargets: [
+        { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
+        { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
+      ],
+      registersUserService: true,
+      runtimePointerPath: "$BUTLER_DATA/app/runtime/agent/current.json",
+      localAuthPath: "$BUTLER_DATA/app/runtime/auth/local-agent-auth.json",
+      serviceDefinition: {
+        manager: "systemd-user",
+        unit: "butler.service",
+        serviceFile: "$HOME/.config/systemd/user/butler.service",
+      },
+      requiredEnvironment: [
+        "BUTLER_HOME",
+        "BUTLER_DATA",
+        "BUTLER_BUN",
+        "BUTLER_APP_MANAGED_RUNTIME_POINTER",
+        "BUTLER_APP_MANAGED_RUNTIME_HOME",
+        "BUTLER_APP_SERVER_HOST",
+        "BUTLER_APP_SERVER_PORT",
+        "BUTLER_APP_GATEWAY_PID_FILE",
+        "BUTLER_APP_LOCAL_AUTH_REQUIRED",
+        "BUTLER_APP_LOCAL_AUTH_FILE",
       ],
       rawTextIncluded: false,
     });
@@ -960,6 +999,7 @@ test("app package smoke uses real bundled Agent release resources", () => {
     expect(existsSync(join(bundledAgent.resourceDir, "agent-update-manifest.json"))).toBe(true);
     expect(existsSync(join(bundledAgent.resourceDir, "dependency-closure.json"))).toBe(true);
     expect(existsSync(join(bundledAgent.resourceDir, "background-service-capability.json"))).toBe(true);
+    expect(existsSync(join(bundledAgent.resourceDir, "background-service-registration.json"))).toBe(true);
 
     const listing = spawnSync("tar", [
       "-tzf",
@@ -1020,8 +1060,16 @@ test("app package smoke uses real bundled Agent release resources", () => {
       ),
     ).toMatchObject({
       source: "app-bundle",
-      paths: ["bundled-agent/background-service-capability.json"],
-      repairSource: null,
+      paths: [
+        "bundled-agent/background-service-capability.json",
+        "bundled-agent/background-service-registration.json",
+      ],
+      repairSource: "bundled-payload-repair-source",
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: expect.stringMatching(/^[a-f0-9]{64}$/),
+        signature: null,
+      },
     });
     expect(
       dependencyClosure.appOwnedDependencies.find(
@@ -1097,6 +1145,8 @@ test("app package smoke uses real bundled Agent release resources", () => {
           "bundled-agent/agent-release-manifest.json",
           "bundled-agent/agent-update-manifest.json",
           "bundled-agent/runtime",
+          "bundled-agent/background-service-capability.json",
+          "bundled-agent/background-service-registration.json",
         ],
         verification: "sha256",
         integrity: {

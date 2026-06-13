@@ -483,6 +483,7 @@ export function createAppDependencyClosureManifest(input: {
   releaseManifestSha256: string;
   updateManifestSha256: string;
   managedRuntimeSha256: string;
+  backgroundServiceRegistrationMetadataSha256: string;
   releaseManifestsSha256: string;
   runtimePackageDependenciesSha256: string;
   repairSourceSha256: string;
@@ -506,6 +507,8 @@ export function createAppDependencyClosureManifest(input: {
       "bundled-agent/agent-release-manifest.json",
       "bundled-agent/agent-update-manifest.json",
       "bundled-agent/runtime",
+      "bundled-agent/background-service-capability.json",
+      "bundled-agent/background-service-registration.json",
     ],
     verification: "sha256",
     integrity: repairSourceIntegrity,
@@ -557,7 +560,8 @@ export function createAppDependencyClosureManifest(input: {
       ], "bundled-payload-repair-source", releaseManifestsIntegrity),
       ownedDependency("background-service-registration-metadata", "Background service registration metadata", [
         "bundled-agent/background-service-capability.json",
-      ], null),
+        "bundled-agent/background-service-registration.json",
+      ], "bundled-payload-repair-source", sha256Integrity(input.backgroundServiceRegistrationMetadataSha256)),
       ownedDependency("app-managed-runtime-home", "App-managed runtime home layout", [
         "$BUTLER_DATA/app/runtime/agent",
       ], null),
@@ -607,6 +611,8 @@ function ownedDependency(
     requiredForFirstLaunch: true,
     source: id === "app-managed-runtime-home"
       ? "app-managed-runtime-home"
+      : id === "background-service-registration-metadata"
+        ? "app-bundle"
       : repairSource
         ? "signed-butler-payload"
         : "app-bundle",

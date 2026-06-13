@@ -212,6 +212,10 @@ Required changes:
 - Teach native service specs to run from an App-managed runtime pointer.
 - Add Windows service support after the user/security context decision is made.
 - Add installer packaging that can register or prepare the service.
+- App bundle resources must include platform-specific service registration
+  metadata for the installer/helper path. This metadata is not a substitute for
+  signed `.pkg`, `.deb`, or `.rpm` artifacts; it is the packaged contract those
+  installers consume.
 
 ## Success Criteria
 
