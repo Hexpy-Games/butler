@@ -25,6 +25,44 @@ export function providerAuthMethods(
   return provider?.auth_methods?.length ? provider.auth_methods : ["api_key"];
 }
 
+export function providerAllowedAuthMethods(
+  modelCatalog: ModelCatalogView,
+  providerId: string,
+  allowedAuthMethods?: ProviderAuthMethod[],
+): ProviderAuthMethod[] {
+  const methods = providerAuthMethods(modelCatalog, providerId);
+  return allowedAuthMethods
+    ? methods.filter((method) => allowedAuthMethods.includes(method))
+    : methods;
+}
+
+export function providerSupportsAuthMethods(
+  modelCatalog: ModelCatalogView,
+  providerId: string,
+  allowedAuthMethods?: ProviderAuthMethod[],
+): boolean {
+  return providerAllowedAuthMethods(
+    modelCatalog,
+    providerId,
+    allowedAuthMethods,
+  ).length > 0;
+}
+
+export function hostedModelProviders(
+  modelCatalog: ModelCatalogView,
+  allowedAuthMethods?: ProviderAuthMethod[],
+): ModelCatalogView["providers"] {
+  return modelCatalog.providers.filter(
+    (provider) =>
+      provider.provider_id !== LOCAL_PROVIDER_ID &&
+      providerSupportsAuthMethods(
+        modelCatalog,
+        provider.provider_id,
+        allowedAuthMethods,
+      ),
+  );
+}
+
 export function providerCredentials(
   modelCatalog: ModelCatalogView,
   providerId: string,

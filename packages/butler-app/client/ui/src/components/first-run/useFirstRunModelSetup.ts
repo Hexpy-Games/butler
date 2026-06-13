@@ -37,6 +37,7 @@ export function useFirstRunModelSetup({
   const [loading, setLoading] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [modelSettingsLoaded, setModelSettingsLoaded] = useState(false);
+  const completedRef = useRef(false);
   const initialRegisteredModelRefs = useRef<Set<string> | null>(null);
   const registeredRuntimeModels = useMemo(
     () => registeredModels(modelCatalog).filter((model) => model.runtime_supported),
@@ -72,6 +73,7 @@ export function useFirstRunModelSetup({
       setModelSaveStatus(copy.modelLoading);
       setModelLoadFailed(false);
       setModelSettingsLoaded(false);
+      completedRef.current = false;
       try {
         const [settings, catalog] = await Promise.all([
           api<SettingsView>("/settings"),
@@ -113,6 +115,12 @@ export function useFirstRunModelSetup({
   const modelSetupReady =
     modelSettingsReady && availableModelCount > 0 && registeredDefaultSaved;
 
+  useEffect(() => {
+    if (!modelSetupReady || completedRef.current) return;
+    completedRef.current = true;
+    onComplete();
+  }, [modelSetupReady, onComplete]);
+
   return {
     modelLoadFailed,
     modelSaveStatus,
@@ -120,8 +128,5 @@ export function useFirstRunModelSetup({
     modelSetupReady,
     onRetryModelLoad: () => setLoadAttempt((current) => current + 1),
     onRetryModelSave: onRetryDefaultModelSave,
-    onSaveModel: () => {
-      if (modelSetupReady) onComplete();
-    },
   };
 }

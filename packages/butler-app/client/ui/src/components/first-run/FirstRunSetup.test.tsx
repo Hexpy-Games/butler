@@ -15,6 +15,7 @@ import type {
   ProviderAuthMethod,
   SettingsView,
 } from "@/app/types.ts";
+import { hostedModelProviders } from "@/components/settings/modelManagementUtils";
 import { FirstRunSetup } from "./FirstRunSetup";
 
 interface RenderedFirstRun {
@@ -76,6 +77,9 @@ test("first-run setup renders the minimal Electron setup order", async () => {
   await waitForText(rendered.container, "API key");
   expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
   expect(
+    rendered.container.querySelector('[data-test-class="settings-model-route-nav"]'),
+  ).toBeNull();
+  expect(
     rendered.container.querySelector(
       '[data-test-class="model-add-provider-select"]',
     ),
@@ -84,7 +88,11 @@ test("first-run setup renders the minimal Electron setup order", async () => {
     rendered.container.querySelector(
       '[data-test-class="hosted-auth-method-select"]',
     ),
-  ).not.toBeNull();
+  ).toBeNull();
+  expect(hostedModelProviders(firstRunModelCatalog(), ["api_key"]).map(
+    (provider) => provider.provider_id,
+  )).toEqual(["openai"]);
+  expect(rendered.container.textContent).not.toContain("OAuth");
   await addHostedModelAndFinish(rendered);
 
   await act(async () => rendered.root.unmount());
@@ -199,8 +207,7 @@ test("first-run model setup recovers when default was saved before completion", 
   );
 
   await waitForText(rendered.container, "모델 추가");
-  await waitForText(rendered.container, "저장하고 시작");
-  await clickButton(rendered.container, "저장하고 시작");
+  await waitForCompletion(rendered);
   expect(rendered.calls).not.toContain("registerHostedModel");
   expect(rendered.completedStates[0]?.status).toBe("complete");
 
@@ -228,8 +235,7 @@ test("first-run model setup retries default-save failure after adding a model", 
   expect(rendered.calls).toContain("registerHostedModel");
   expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
   await clickButton(rendered.container, "다시 불러오기");
-  await waitForText(rendered.container, "저장하고 시작");
-  await clickButton(rendered.container, "저장하고 시작");
+  await waitForCompletion(rendered);
   expect(
     rendered.settingsPatches.filter(
       (patch) =>
@@ -478,10 +484,21 @@ async function addHostedModelAndFinish(
 ): Promise<void> {
   await waitForText(rendered.container, "API key");
   await clickButton(rendered.container, "추가");
-  await waitForText(rendered.container, "저장하고 시작");
   expect(rendered.calls).toContain("registerHostedModel");
-  await clickButton(rendered.container, "저장하고 시작");
+  await waitForCompletion(rendered);
   expect(rendered.completedStates[0]?.status).toBe("complete");
+}
+
+async function waitForCompletion(rendered: RenderedFirstRun): Promise<void> {
+  const deadline = Date.now() + 1200;
+  while (rendered.completedStates.length === 0) {
+    if (Date.now() > deadline) {
+      throw new Error("Timed out waiting for first-run completion");
+    }
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+  }
 }
 
 function buttonByLabel(
@@ -495,6 +512,13 @@ function buttonByLabel(
 
 function firstRunModelCatalog(): ModelCatalogView {
   const defaultModel = EMPTY_MODEL_CATALOG.models[0]!;
+  const oauthOnlyModel: AppModelSummary = {
+    ...defaultModel,
+    provider_id: "codex",
+    provider_label: "Codex",
+    model_id: "gpt-5",
+    model_ref: "codex/gpt-5",
+  };
   const authMethods: ProviderAuthMethod[] = ["api_key", "codex_oauth"];
   return {
     ...EMPTY_MODEL_CATALOG,
@@ -506,7 +530,15 @@ function firstRunModelCatalog(): ModelCatalogView {
         auth_methods: authMethods,
         models: [defaultModel],
       },
+      {
+        provider_id: "codex",
+        provider_label: "Codex",
+        latest_model_ref: oauthOnlyModel.model_ref,
+        auth_methods: ["codex_oauth"],
+        models: [oauthOnlyModel],
+      },
     ],
+    models: [defaultModel, oauthOnlyModel],
     provider_credentials: [
       {
         id: "cred-existing",

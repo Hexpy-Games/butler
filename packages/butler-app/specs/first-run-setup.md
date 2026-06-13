@@ -25,10 +25,16 @@ the App-owned setup flow inside Electron before the workspace is shown.
 - The model step must reuse the App settings model-management modules instead
   of implementing a separate one-off model picker.
 - The model step opens directly on the App model-add route.
-- The model-add route must support hosted models with API key or OAuth and
+- The first-run model-add route must support hosted models with API key and
   local OpenAI-compatible models.
+- The first-run model-add route must not expose OAuth until the Electron UI can
+  perform the OAuth login and token registration flow end-to-end.
+- Hosted providers that do not support any first-run-allowed authentication
+  method must be excluded from first-run provider choices.
 - After a model is added during first-run setup, that added model becomes the
   Butler default model before setup can complete.
+- After the added model has been saved as the Butler default model, the setup
+  completes immediately without requiring a second confirmation button.
 - The model step may complete setup only after App settings and model catalog
   are loaded and a registered, runtime-supported model has been saved as the
   default model.
@@ -53,12 +59,15 @@ the App-owned setup flow inside Electron before the workspace is shown.
 - Only the content inside the `TintedGlass` body aligns from the top-left.
 - The `TintedGlass` body uses the design-system `ScrollArea` block for bounded
   internal scrolling when model-management content exceeds the visible area.
+- The model-add body does not show model-management breadcrumbs during
+  first-run setup.
 
 ## Validation
 
 - Component tests cover the four-step order, absence of gateway/persona copy,
   bundled-Agent-only installation, model-add-first setup, added-model default
-  persistence, post-save recovery, default-save retry, and no Settings route.
+  persistence, automatic completion after add, post-save recovery,
+  default-save retry, OAuth hiding, breadcrumb hiding, and no Settings route.
 - AppShell first-run tests prove the workspace is gated until the model save
   completes.
 - Manual first-run smoke launches an isolated Electron profile and data root so

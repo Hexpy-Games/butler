@@ -480,8 +480,6 @@ async function main(): Promise<void> {
   );
   await fillInput(cdp, "input[type=\"password\"]", "sk-smoke-test");
   await clickButton(cdp, "추가");
-  await waitForText(cdp, "저장하고 시작");
-  await clickButton(cdp, "저장하고 시작");
   await waitForExpression(
     cdp,
     `document.querySelector(${JSON.stringify(firstRunSelector)}) === null && document.querySelector('[data-test-class="workspace"]') !== null`,
