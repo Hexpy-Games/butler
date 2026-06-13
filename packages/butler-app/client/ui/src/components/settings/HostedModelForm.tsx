@@ -6,22 +6,20 @@ import { modelDisplayName } from "@/app/utils.ts";
 import { useButlerStore } from "@/app/store.ts";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
 import { SettingsSection, SettingsSelect } from "./SettingsFormComponents";
-import { HostedCredentialFields } from "./HostedCredentialFields";
+import { HostedCredentialSection } from "./HostedCredentialSection";
 import { registerHostedModel } from "./modelManagementApi";
 import {
-  LOCAL_PROVIDER_ID,
   NEW_CREDENTIAL_ID,
+  hostedModelProviders,
   modelOptionLabel,
-  providerAuthMethods,
+  providerAllowedAuthMethods,
   providerCredentials,
   providerModels,
 } from "./modelManagementUtils";
-import type {
-  AppModelSummary,
-  ProviderAuthMethod,
-} from "@/app/types.ts";
+import type { AppModelSummary, ProviderAuthMethod } from "@/app/types.ts";
 
 interface HostedModelFormProps {
+  allowedAuthMethods?: ProviderAuthMethod[];
   editingModel?: AppModelSummary | null;
   providerId?: string;
   onProviderIdChange?: (providerId: string) => void;
@@ -29,6 +27,7 @@ interface HostedModelFormProps {
 }
 
 export function HostedModelForm({
+  allowedAuthMethods,
   editingModel,
   providerId: controlledProviderId,
   onProviderIdChange,
@@ -38,20 +37,19 @@ export function HostedModelForm({
   const setModelCatalog = useButlerStore((state) => state.setModelCatalog);
   const back = useSettingsUIStore((state) => state.backModelRoute);
   const copy = appCopy.settings.modelManagement;
-  const providers = modelCatalog.providers.filter(
-    (provider) => provider.provider_id !== LOCAL_PROVIDER_ID,
-  );
+  const providers = hostedModelProviders(modelCatalog, allowedAuthMethods);
   const [internalProviderId, setInternalProviderId] = useState(
     editingModel?.provider_id ?? providers[0]?.provider_id ?? "openai",
   );
   const providerId = controlledProviderId ?? internalProviderId;
   const setProviderId = onProviderIdChange ?? setInternalProviderId;
-  const providerModelOptions = useMemo(
-    () => providerModels(modelCatalog, providerId),
-    [modelCatalog, providerId],
-  );
+  const providerModelOptions = useMemo(() => providerModels(modelCatalog, providerId), [modelCatalog, providerId]);
   const [modelRef, setModelRef] = useState(editingModel?.model_ref ?? "");
-  const authMethods = providerAuthMethods(modelCatalog, providerId);
+  const authMethods = providerAllowedAuthMethods(
+    modelCatalog,
+    providerId,
+    allowedAuthMethods,
+  );
   const [authMethod, setAuthMethod] = useState<ProviderAuthMethod>(
     editingModel?.auth_type ?? authMethods[0] ?? "api_key",
   );
@@ -69,7 +67,9 @@ export function HostedModelForm({
         ? current
         : (providerModelOptions[0]?.model_ref ?? ""),
     );
-    setAuthMethod((current) => authMethods.includes(current) ? current : authMethods[0] ?? "api_key");
+    setAuthMethod((current) =>
+      authMethods.includes(current) ? current : authMethods[0] ?? "api_key",
+    );
     setCredentialId((current) =>
       credentials.some((credential) => credential.id === current)
         ? current
@@ -79,6 +79,7 @@ export function HostedModelForm({
 
   const selectedModel = providerModelOptions.find((model) => model.model_ref === modelRef);
   const canSave = Boolean(selectedModel) &&
+    authMethods.includes(authMethod) &&
     (authMethod !== "api_key" ||
       credentialId !== NEW_CREDENTIAL_ID ||
       apiKey.trim().length > 0);
@@ -136,7 +137,7 @@ export function HostedModelForm({
             label: modelOptionLabel(model),
           }))}
         />
-        <HostedCredentialFields
+        <HostedCredentialSection
           modelCatalog={modelCatalog}
           providerId={providerId}
           authMethod={authMethod}

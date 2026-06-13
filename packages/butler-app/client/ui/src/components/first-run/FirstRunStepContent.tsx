@@ -29,7 +29,6 @@ interface FirstRunStepContentProps {
   modelLoadFailed: boolean;
   modelSaveStatus: string;
   modelSettingsReady: boolean;
-  modelSetupReady: boolean;
   status: string;
   step: FirstRunStep;
   onAcceptSafety: () => void;
@@ -41,7 +40,6 @@ interface FirstRunStepContentProps {
   onRetryModelLoad: () => void;
   onRetryModelSave: () => void;
   onRetryInstall: () => void;
-  onSaveModel: () => void;
 }
 
 export function FirstRunStepContent({
@@ -52,7 +50,6 @@ export function FirstRunStepContent({
   modelLoadFailed,
   modelSaveStatus,
   modelSettingsReady,
-  modelSetupReady,
   status,
   step,
   onAcceptSafety,
@@ -64,7 +61,6 @@ export function FirstRunStepContent({
   onRetryModelLoad,
   onRetryModelSave,
   onRetryInstall,
-  onSaveModel,
 }: FirstRunStepContentProps) {
   if (step === "language") {
     return (
@@ -150,10 +146,8 @@ export function FirstRunStepContent({
       modelLoadFailed={modelLoadFailed}
       modelSaveStatus={modelSaveStatus}
       modelSettingsReady={modelSettingsReady}
-      modelSetupReady={modelSetupReady}
       onRetryModelLoad={onRetryModelLoad}
       onRetryModelSave={onRetryModelSave}
-      onSaveModel={onSaveModel}
     />
   );
 }

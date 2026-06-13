@@ -12,20 +12,19 @@ import {
 import { ButlerModelSettings } from "@/components/settings/ButlerModelSettings";
 import { ModelAddEditPage } from "@/components/settings/ModelAddEditPage";
 import { ModelManagementPage } from "@/components/settings/ModelManagementPage";
-import { ModelSettingsTitle } from "@/components/settings/ModelSettingsTitle";
 import { useSettingsUIStore } from "@/stores/settingsUIStore.ts";
+import type { ProviderAuthMethod } from "@/app/types.ts";
 
 type FirstRunCopy = (typeof firstRunCopy)[FirstRunLanguage];
+const FIRST_RUN_HOSTED_AUTH_METHODS: ProviderAuthMethod[] = ["api_key"];
 
 interface FirstRunModelStepProps {
   copy: FirstRunCopy;
   modelLoadFailed: boolean;
   modelSaveStatus: string;
   modelSettingsReady: boolean;
-  modelSetupReady: boolean;
   onRetryModelLoad: () => void;
   onRetryModelSave: () => void;
-  onSaveModel: () => void;
 }
 
 export function FirstRunModelStep({
@@ -33,14 +32,9 @@ export function FirstRunModelStep({
   modelLoadFailed,
   modelSaveStatus,
   modelSettingsReady,
-  modelSetupReady,
   onRetryModelLoad,
   onRetryModelSave,
-  onSaveModel,
 }: FirstRunModelStepProps) {
-  const modelRoute = useSettingsUIStore((state) => state.modelRoute);
-  const canFinishModelSetup = modelSetupReady && modelRoute.page !== "edit";
-
   return (
     <SetupWizardContent width="wide">
       <Stack gap="md">
@@ -75,13 +69,6 @@ export function FirstRunModelStep({
             </Stack>
           )}
           <FirstRunModelSettingsSurface />
-          {canFinishModelSetup && (
-            <ButtonContainer size="default">
-              <Button type="button" onClick={onSaveModel}>
-                {copy.modelSave}
-              </Button>
-            </ButtonContainer>
-          )}
         </>
       ) : (
         <Typo.Body>{modelSaveStatus}</Typo.Body>
@@ -92,26 +79,18 @@ export function FirstRunModelStep({
 
 function FirstRunModelSettingsSurface() {
   const modelRoute = useSettingsUIStore((state) => state.modelRoute);
-  const backModelRoute = useSettingsUIStore((state) => state.backModelRoute);
-  const resetModelRoute = useSettingsUIStore((state) => state.resetModelRoute);
-  const openModelManagement = useSettingsUIStore(
-    (state) => state.openModelManagement,
-  );
 
   return (
     <Stack gap="md">
-      <ModelSettingsTitle
-        modelRoute={modelRoute}
-        onBack={backModelRoute}
-        onRoot={resetModelRoute}
-        onManagement={openModelManagement}
-      />
       {modelRoute.page === "management" ? (
         <ModelManagementPage />
       ) : modelRoute.page === "add" ? (
-        <ModelAddEditPage />
+        <ModelAddEditPage allowedAuthMethods={FIRST_RUN_HOSTED_AUTH_METHODS} />
       ) : modelRoute.page === "edit" ? (
-        <ModelAddEditPage modelRef={modelRoute.modelRef} />
+        <ModelAddEditPage
+          allowedAuthMethods={FIRST_RUN_HOSTED_AUTH_METHODS}
+          modelRef={modelRoute.modelRef}
+        />
       ) : (
         <ButlerModelSettings />
       )}

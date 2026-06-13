@@ -146,7 +146,6 @@ export function useFirstRunSetupController(
     modelLoadFailed: modelSetup.modelLoadFailed,
     modelSaveStatus: modelSetup.modelSaveStatus,
     modelSettingsReady: modelSetup.modelSettingsReady,
-    modelSetupReady: modelSetup.modelSetupReady,
     status,
     step,
     stepIndex,
@@ -182,7 +181,6 @@ export function useFirstRunSetupController(
         nextFirstRunState(current, { type: "retry_install" }),
       );
     },
-    onSaveModel: modelSetup.onSaveModel,
     onQuit: quitApp,
   };
 }
