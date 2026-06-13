@@ -220,6 +220,9 @@ Required changes:
   LaunchAgent and `systemd --user` definitions, plus executable package
   post-install hook inputs. Render contracts must require XML/systemd escaping
   and must not rely on raw placeholder substitution.
+- App bundle resources must include `service-installer/installer-manifest.json`
+  so the signed `.pkg`, `.deb`, or `.rpm` builder can consume the same package
+  artifact contract verified by release smoke tests.
 
 ## Success Criteria
 
