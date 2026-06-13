@@ -28,6 +28,8 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(preload).toContain("butler:ensure-server");
   expect(preload).toContain("butler:get-server-url");
   expect(preload).toContain("butler:get-local-auth-headers");
+  expect(preload).toContain("startOpenAIOAuthLogin");
+  expect(preload).toContain("butler:start-openai-oauth-login");
   expect(preload).not.toContain("getLocalAuthHeaders");
 
   expect(main).not.toContain("async function createWindow() {\n  await ensureServer();");
@@ -42,6 +44,9 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(main).toContain('ipcMain.handle("butler:quit-app"');
   expect(main).toContain("isQuitting = true");
   expect(main).toContain('ipcMain.handle("butler:get-local-auth-headers"');
+  expect(main).toContain('ipcMain.handle("butler:start-openai-oauth-login"');
+  expect(main).toContain("openai-oauth-login.ts");
+  expect(main).toContain("BUTLER_CODEX_OAUTH_CLIENT_ID");
   expect(main).toContain("createFirstRunSetupBridge");
   expect(main).toContain("readRuntimeDiagnostics");
   expect(main).toContain("readLatestAppManagedRuntimeFailure");

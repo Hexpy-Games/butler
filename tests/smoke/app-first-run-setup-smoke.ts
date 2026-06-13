@@ -472,6 +472,13 @@ async function main(): Promise<void> {
     "model add provider select is missing",
   );
   assert(
+    await evaluateBoolean(
+      cdp,
+      "document.querySelector('[data-test-class=\"hosted-auth-method-select\"]') !== null",
+    ),
+    "hosted auth method select is missing",
+  );
+  assert(
     !(await evaluateBoolean(
       cdp,
       `Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === ${JSON.stringify("저장하고 시작")})`,
@@ -498,6 +505,7 @@ async function main(): Promise<void> {
       "no-personal-onboarding-copy",
       "model-setup-after-readiness",
       "model-add-first-screen",
+      "oauth-auth-method-available",
       "model-register-save-complete",
       "workspace-gate-opens-after-model-save",
     ],

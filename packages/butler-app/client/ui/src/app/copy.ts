@@ -553,6 +553,7 @@ export interface AppCopy {
       errors: {
         save: string;
         delete: string;
+        oauthLogin: string;
       };
     };
   };
@@ -1194,6 +1195,7 @@ const koKrCopy: AppCopy = {
       errors: {
         save: "모델 등록 실패",
         delete: "모델 삭제 실패",
+        oauthLogin: "OAuth 로그인을 시작할 수 없습니다.",
       },
     },
   },
@@ -1841,6 +1843,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       errors: {
         save: "Failed to register model",
         delete: "Failed to delete model",
+        oauthLogin: "Could not start OAuth login.",
       },
     },
   },
