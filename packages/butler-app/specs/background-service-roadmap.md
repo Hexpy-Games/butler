@@ -118,9 +118,11 @@ Tasks:
 Primary files:
 
 - `packages/butler-app/scripts/background-service-contract.ts`
+- `packages/butler-app/client/electron/service-control.mjs`
 - `packages/butler-app/client/electron/*service*.mjs`
 - `packages/butler-app/client/electron/preload.cjs`
 - `packages/butler-agent/src/operations/service/os-service-adapter.ts`
+- `tests/unit/app-agent-service-control.test.ts`
 - `tests/unit/app-first-run-setup-bridge*.test.ts`
 - `tests/unit/os-service-adapter.test.ts`
 
@@ -132,6 +134,19 @@ Acceptance:
   silently.
 - Windows has an explicit installer-required path instead of pretending
   launchd/systemd applies.
+
+Implemented surface:
+
+- `service-control.mjs` exposes a narrow Electron-main-owned Agent service
+  control API for status/install/start/stop/restart/diagnostics.
+- `main.mjs` and `preload.cjs` expose the service-control IPC surface without
+  shelling out from renderer code.
+- Until platform adapters land, service actions fail closed with
+  `service_registration_unavailable` and return redacted diagnostics.
+
+Validation:
+
+- `bun test tests/unit/app-agent-service-control.test.ts tests/unit/app-first-run-setup-bridge.test.ts`
 
 ## Phase 3: First-Run Service Setup UI
 

@@ -201,7 +201,8 @@ Required changes:
   decisions.
 - Move production App first-run readiness from Electron child supervisor to
   OS-service-backed supervisor control.
-- Add App-owned service registration bridge APIs.
+- Add App-owned service registration bridge APIs. Before OS-specific adapters
+  land, bridge actions must fail closed with structured redacted diagnostics.
 - Teach native service specs to run from an App-managed runtime pointer.
 - Add Windows service support after the user/security context decision is made.
 - Add installer packaging that can register or prepare the service.
