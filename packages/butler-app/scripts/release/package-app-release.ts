@@ -18,6 +18,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
   APP_RELEASE_PLATFORMS,
+  createAppBackgroundServiceReleaseCapability,
   createAppDependencyClosureManifest,
   createAppReleaseManifest,
   validateAppDependencyClosureManifest,
@@ -285,6 +286,10 @@ function prepareBundledAgentResourceFromPackage(
     { recursive: true },
   );
   copyManagedRuntimeExecutable(join(resourceDir, "runtime"), platform);
+  writeJson(
+    join(resourceDir, "background-service-capability.json"),
+    createAppBackgroundServiceReleaseCapability([platform]),
+  );
   const releaseManifestSha256 = sha256File(join(resourceDir, "agent-release-manifest.json"));
   const updateManifestSha256 = sha256File(join(resourceDir, "agent-update-manifest.json"));
   const managedRuntimeSha256 = sha256Directory(join(resourceDir, "runtime"));
@@ -643,6 +648,7 @@ function createAppUpdateManifest(manifest: AppReleaseManifest): Record<string, u
     product: manifest.product,
     app_version: manifest.version,
     bundled_agent_version: manifest.bundledAgentVersion,
+    background_service_capability: manifest.backgroundServiceCapability,
     gateway_profile: manifest.gatewayProfile,
     protocol_compatibility: manifest.protocolCompatibility,
     updater_owner: manifest.updaterOwner,
@@ -660,6 +666,7 @@ function createAppUpdateManifest(manifest: AppReleaseManifest): Record<string, u
       gateway_profile: artifact.gatewayProfile,
       bundled_agent_version: artifact.bundledAgentVersion,
       bundled_agent_payload: artifact.bundledAgentPayload,
+      background_service_capability: artifact.backgroundServiceCapability,
       protocol_compatibility: artifact.protocolCompatibility,
       integrity: artifact.integrity,
       update_policy: artifact.updatePolicy,
