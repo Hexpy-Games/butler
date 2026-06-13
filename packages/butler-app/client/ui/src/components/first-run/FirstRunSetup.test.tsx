@@ -120,7 +120,7 @@ test("first-run model setup supports OpenAI OAuth registration", async () => {
   await act(async () => rendered.root.unmount());
 });
 
-test("first-run OAuth setup starts immediately and exposes retry callback controls", async () => {
+test("first-run OAuth setup starts immediately without paste-url recovery copy", async () => {
   const rendered = await renderFirstRun(
     {
       ...createInitialFirstRunState("ko"),
@@ -141,10 +141,76 @@ test("first-run OAuth setup starts immediately and exposes retry callback contro
 
   await waitForText(rendered.container, "OAuth");
   await waitForText(rendered.container, "OAuth 링크");
-  await waitForText(rendered.container, "결과 URL 붙여넣기");
+  await waitForText(rendered.container, "인증 완료 확인");
   expect(rendered.calls).toContain("startOpenAIOAuthLogin");
   expect(buttonByLabel(rendered.container, "다시 인증")).not.toBeUndefined();
+  expect(rendered.container.textContent).not.toContain("결과 URL 붙여넣기");
+  expect(rendered.container.textContent).not.toContain("붙여넣은 URL로 완료");
   expect(rendered.calls).not.toContain("registerHostedModel");
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run OAuth setup auto-completes when browser auth finishes", async () => {
+  const pendingOAuth = {
+    status: "pending",
+    auth_url: "https://auth.openai.com/oauth/authorize?state=test",
+    redirect_uri: "http://localhost:1455/auth/callback",
+  };
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+    {
+      modelCatalog: firstRunModelCatalog(["codex_oauth", "api_key"]),
+      oauthLoginResult: pendingOAuth,
+      oauthStatusResults: [pendingOAuth, pendingOAuth, { status: "completed" }],
+    },
+  );
+
+  await waitForText(rendered.container, "OAuth 링크");
+  await waitForCompletion(rendered);
+  expect(rendered.calls).toContain("getOpenAIOAuthLoginStatus");
+  expect(rendered.hostedModelRequests[0]).toMatchObject({
+    provider_id: "openai",
+    auth_type: "codex_oauth",
+  });
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run OAuth setup disables add while auto registration is running", async () => {
+  const registerStarted = deferred<void>();
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+    {
+      holdHostedRegister: registerStarted.promise,
+      modelCatalog: firstRunModelCatalog(["codex_oauth", "api_key"]),
+      oauthLoginResult: {
+        status: "pending",
+        auth_url: "https://auth.openai.com/oauth/authorize?state=test",
+        redirect_uri: "http://localhost:1455/auth/callback",
+      },
+      oauthStatusResults: [{ status: "completed" }],
+    },
+  );
+
+  await waitForCall(rendered, "registerHostedModel");
+  const savingButton = buttonByLabel(rendered.container, "저장 중") ??
+    buttonByLabel(rendered.container, "추가");
+  expect(savingButton?.disabled).toBe(true);
+  registerStarted.resolve();
+  await waitForCompletion(rendered);
 
   await act(async () => rendered.root.unmount());
 });
@@ -395,9 +461,11 @@ async function renderFirstRun(
     failDefaultSaveOnce?: boolean;
     failModelCatalogOnce?: boolean;
     holdBundledAgent?: Promise<void>;
+    holdHostedRegister?: Promise<void>;
     holdOAuthLogin?: Promise<void>;
     modelCatalog?: ModelCatalogView;
     oauthLoginResult?: unknown;
+    oauthStatusResults?: unknown[];
     rejectSetupOnce?: boolean;
     settings?: SettingsView;
   } = {},
@@ -438,6 +506,7 @@ async function renderFirstRun(
   let modelCatalogFailures = options.failModelCatalogOnce ? 1 : 0;
   let defaultSaveFailures = options.failDefaultSaveOnce ? 1 : 0;
   let setupRejections = options.rejectSetupOnce ? 1 : 0;
+  const oauthStatusResults = [...(options.oauthStatusResults ?? [])];
   Object.assign(dom.window, {
     butlerApp: {
       startSetup: async (request?: { mode?: string }) => {
@@ -511,6 +580,9 @@ async function renderFirstRun(
       },
       getOpenAIOAuthLoginStatus: async () => {
         calls.push("getOpenAIOAuthLoginStatus");
+        if (oauthStatusResults.length > 0) {
+          return oauthStatusResults.shift();
+        }
         return options.oauthLoginResult ?? { status: "completed" };
       },
       submitOpenAIOAuthCallback: async () => {
@@ -520,6 +592,9 @@ async function renderFirstRun(
       registerHostedModel: async (request?: unknown) => {
         calls.push("registerHostedModel");
         hostedModelRequests.push(request);
+        if (options.holdHostedRegister) {
+          await options.holdHostedRegister;
+        }
         const authType = isHostedModelRequest(request) && request.auth_type === "codex_oauth"
           ? "codex_oauth"
           : "api_key";
@@ -598,7 +673,7 @@ async function addHostedModelAndFinish(
 }
 
 async function waitForCompletion(rendered: RenderedFirstRun): Promise<void> {
-  const deadline = Date.now() + 1200;
+  const deadline = Date.now() + 5000;
   while (rendered.completedStates.length === 0) {
     if (Date.now() > deadline) {
       throw new Error("Timed out waiting for first-run completion");

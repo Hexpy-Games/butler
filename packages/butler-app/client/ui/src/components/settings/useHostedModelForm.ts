@@ -9,7 +9,6 @@ import {
   registerHostedModel,
   restartOpenAIOAuthLogin,
   startOpenAIOAuthLogin,
-  submitOpenAIOAuthCallback,
   type OpenAIOAuthLoginResult,
 } from "./modelManagementApi";
 import {
@@ -65,9 +64,11 @@ export function useHostedModelForm({
   const [credentialLabel, setCredentialLabel] = useState("");
   const [busy, setBusy] = useState(false);
   const [oauthBusy, setOauthBusy] = useState(false);
-  const [oauthCallbackUrl, setOauthCallbackUrl] = useState("");
+  const [oauthRegistering, setOauthRegistering] = useState(false);
   const [oauthLogin, setOauthLogin] = useState<OpenAIOAuthLoginResult | null>(null);
   const oauthAutoStartKeyRef = useRef<string | null>(null);
+  const oauthPollingRef = useRef(false);
+  const oauthRegisteringRef = useRef(false);
 
   useEffect(() => {
     setModelRef((current) =>
@@ -86,7 +87,8 @@ export function useHostedModelForm({
   }, [providerId, providerModelOptions, authMethods, credentials]);
 
   const selectedModel = providerModelOptions.find((model) => model.model_ref === modelRef);
-  const oauthSaveBlocked = authMethod === "codex_oauth" && oauthBusy;
+  const oauthSaveBlocked = authMethod === "codex_oauth" &&
+    (oauthBusy || oauthRegistering);
   const canSave = Boolean(selectedModel) &&
     authMethods.includes(authMethod) &&
     !oauthSaveBlocked &&
@@ -111,8 +113,37 @@ export function useHostedModelForm({
     void startOAuthSession();
   }, [authMethod, editingModel, modelRef, oauthBusy, oauthSessionActive, providerId]);
 
+  useEffect(() => {
+    if (
+      authMethod !== "codex_oauth" ||
+      (oauthLogin?.status !== "pending" && oauthLogin?.status !== "starting") ||
+      oauthBusy ||
+      oauthRegistering
+    ) return;
+    let cancelled = false;
+    const poll = () => {
+      if (oauthPollingRef.current || oauthRegisteringRef.current) return;
+      oauthPollingRef.current = true;
+      void checkOAuthCompletion({ silent: true, cancelled: () => cancelled })
+        .finally(() => {
+          oauthPollingRef.current = false;
+        });
+    };
+    const timer = window.setInterval(poll, 1000);
+    poll();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [authMethod, oauthBusy, oauthLogin?.status, oauthRegistering]);
+
   async function save() {
-    if (!selectedModel || !canSave || oauthSaveBlocked) return;
+    if (
+      !selectedModel ||
+      !canSave ||
+      oauthSaveBlocked ||
+      oauthRegisteringRef.current
+    ) return;
     setBusy(true);
     try {
       if (authMethod === "codex_oauth" && !oauthReady) {
@@ -153,26 +184,12 @@ export function useHostedModelForm({
 
   async function handleOAuthCheck() {
     await withOAuthBusy(async () => {
-      const status = await getOpenAIOAuthLoginStatus();
-      setOauthLogin(status);
-      if (status.status === "completed" || status.status === "profile_exists") {
-        await registerCurrentModel();
-      }
+      await checkOAuthCompletion();
     });
   }
 
   async function handleOAuthRestart() {
     await startOAuthSession(true);
-  }
-
-  async function handleOAuthSubmitCallback() {
-    await withOAuthBusy(async () => {
-      const status = await submitOpenAIOAuthCallback(oauthCallbackUrl);
-      setOauthLogin(status);
-      if (status.status === "completed" || status.status === "profile_exists") {
-        await registerCurrentModel();
-      }
-    });
   }
 
   async function withOAuthBusy(action: () => Promise<void>) {
@@ -183,6 +200,37 @@ export function useHostedModelForm({
       notifyError(error, copy.errors.oauthLogin, { id: "hosted-model-oauth" });
     } finally {
       setOauthBusy(false);
+    }
+  }
+
+  async function checkOAuthCompletion(input?: {
+    cancelled?: () => boolean;
+    silent?: boolean;
+  }) {
+    let status: OpenAIOAuthLoginResult;
+    try {
+      status = await getOpenAIOAuthLoginStatus();
+    } catch (error) {
+      if (!input?.silent) {
+        notifyError(error, copy.errors.oauthLogin, { id: "hosted-model-oauth" });
+      }
+      return;
+    }
+    if (input?.cancelled?.()) return;
+    setOauthLogin(status);
+    if (
+      (status.status === "completed" || status.status === "profile_exists") &&
+      !oauthRegisteringRef.current
+    ) {
+      oauthRegisteringRef.current = true;
+      setOauthRegistering(true);
+      try {
+        await registerCurrentModel();
+      } catch (error) {
+        oauthRegisteringRef.current = false;
+        setOauthRegistering(false);
+        notifyError(error, copy.errors.save, { id: "hosted-model-save" });
+      }
     }
   }
 
@@ -205,7 +253,7 @@ export function useHostedModelForm({
     apiKey,
     authMethod,
     authMethods,
-    busy,
+    busy: busy || oauthRegistering,
     canSave,
     copy,
     credentialId,
@@ -213,7 +261,6 @@ export function useHostedModelForm({
     modelCatalog,
     modelRef,
     oauthBusy,
-    oauthCallbackUrl,
     oauthLogin,
     providerId,
     providerModelOptions,
@@ -223,11 +270,9 @@ export function useHostedModelForm({
     setCredentialId,
     setCredentialLabel,
     setModelRef,
-    setOauthCallbackUrl,
     setProviderId,
     handleOAuthCheck,
     handleOAuthRestart,
-    handleOAuthSubmitCallback,
     save,
   };
 }

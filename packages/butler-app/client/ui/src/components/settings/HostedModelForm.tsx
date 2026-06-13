@@ -51,13 +51,11 @@ export function HostedModelForm({
           credentialLabel={form.credentialLabel}
           authMethods={form.authMethods}
           oauthBusy={form.oauthBusy}
-          oauthCallbackUrl={form.oauthCallbackUrl}
           oauthLogin={form.oauthLogin}
           onAuthMethodChange={form.setAuthMethod}
           onCredentialIdChange={form.setCredentialId}
           onApiKeyChange={form.setApiKey}
           onCredentialLabelChange={form.setCredentialLabel}
-          onOAuthCallbackUrlChange={form.setOauthCallbackUrl}
           onOAuthCheck={() => void form.handleOAuthCheck()}
           onOAuthCopyUrl={() => {
             if (form.oauthLogin?.auth_url) {
@@ -70,7 +68,6 @@ export function HostedModelForm({
             }
           }}
           onOAuthRestart={() => void form.handleOAuthRestart()}
-          onOAuthSubmitCallback={() => void form.handleOAuthSubmitCallback()}
         />
         <HostedModelSaveButton
           busy={form.busy}

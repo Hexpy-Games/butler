@@ -32,16 +32,20 @@ the App-owned setup flow inside Electron before the workspace is shown.
   Codex auth profile, otherwise launch the OAuth login helper, then register
   the selected model with `auth_type: "codex_oauth"`.
 - During OpenAI Codex OAuth, the first-run UI must keep recovery controls on
-  screen: show the OAuth URL, allow copying/opening it, accept a pasted local
-  callback/result URL, allow completion checks, and allow re-authentication
-  when the browser window is closed or the prior login session fails.
+  screen: show the OAuth URL, allow copying/opening it, automatically check
+  completion after the browser finishes authentication, allow a manual
+  `인증 완료 확인` action, and allow re-authentication when the browser window is
+  closed or the prior login session fails.
+- The OAuth recovery UI must not make callback/result URL paste the primary
+  path. The browser success screen asks the user to close the window, so the
+  App UI should ask the user to return to Butler and confirm completion.
 - Selecting OpenAI Codex OAuth during first-run model setup starts a recoverable
   OAuth login session immediately, before the user presses the model-add
   button.
-- Pasted OAuth callback/result URLs must be accepted only for the active
-  pending OAuth session by matching the active redirect URI and OAuth state, and
-  the App must wait for the helper to finish writing the auth profile before it
-  reports completion.
+- If an internal fallback submits a pasted OAuth callback/result URL, it must be
+  accepted only for the active pending OAuth session by matching the active
+  redirect URI and OAuth state, and the App must wait for the helper to finish
+  writing the auth profile before it reports completion.
 - Hosted providers that do not support any available authentication method must
   be excluded from provider choices.
 - After a model is added during first-run setup, that added model becomes the
@@ -81,7 +85,8 @@ the App-owned setup flow inside Electron before the workspace is shown.
   bundled-Agent-only installation, model-add-first setup, added-model default
   persistence, automatic completion after add, post-save recovery,
   default-save retry, OAuth login/registration, immediate OAuth session start,
-  OAuth pending recovery controls, breadcrumb hiding, and no Settings route.
+  automatic/manual OAuth completion checks, OAuth pending recovery controls,
+  breadcrumb hiding, and no Settings route.
 - AppShell first-run tests prove the workspace is gated until the model save
   completes.
 - Manual first-run smoke launches an isolated Electron profile and data root so

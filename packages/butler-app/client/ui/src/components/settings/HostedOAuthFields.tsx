@@ -3,27 +3,21 @@ import { appCopy } from "@/app/copy.ts";
 import type { OpenAIOAuthLoginResult } from "./modelManagementApi";
 
 interface HostedOAuthFieldsProps {
-  callbackUrl: string;
   login: OpenAIOAuthLoginResult | null;
   busy: boolean;
-  onCallbackUrlChange: (value: string) => void;
   onCheck: () => void;
   onCopyUrl: () => void;
   onOpenUrl: () => void;
   onRestart: () => void;
-  onSubmitCallback: () => void;
 }
 
 export function HostedOAuthFields({
-  callbackUrl,
   login,
   busy,
-  onCallbackUrlChange,
   onCheck,
   onCopyUrl,
   onOpenUrl,
   onRestart,
-  onSubmitCallback,
 }: HostedOAuthFieldsProps) {
   const copy = appCopy.settings.modelManagement;
   const pending = login?.status === "pending" || login?.status === "starting";
@@ -57,16 +51,7 @@ export function HostedOAuthFields({
         </ButtonContainer>
       )}
       {pending && (
-        <SettingsField
-          label={copy.oauthCallback}
-          control={<Input value={callbackUrl} onChange={(event) => onCallbackUrlChange(event.target.value)} />}
-        />
-      )}
-      {pending && (
         <ButtonContainer size="sm">
-          <Button type="button" variant="outline" disabled={busy || !callbackUrl.trim()} onClick={onSubmitCallback}>
-            {copy.oauthSubmitCallback}
-          </Button>
           <Button type="button" variant="outline" disabled={busy} onClick={onCheck}>
             {copy.oauthCheck}
           </Button>
