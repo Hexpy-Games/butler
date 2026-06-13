@@ -373,6 +373,21 @@ function writeAppServiceInstallerPayloads(input: {
       join(input.resourceDir, "service-installer", "darwin", "pkg", "postinstall"),
       macPkgPostinstallScript(),
     );
+    writeServiceInstallerManifest({
+      resourceDir: input.resourceDir,
+      releasePlatform: input.platform,
+      servicePlatform: "darwin",
+      packageArtifacts: [
+        {
+          packageFormat: "pkg",
+          selectedV1Path: "macos-pkg-launch-agent",
+          serviceManager: "launchd",
+          serviceDefinitionTarget: "$HOME/Library/LaunchAgents/com.hexpy.butler.plist",
+          renderContractPath: "service-installer/darwin/launchd/render-contract.json",
+          postInstallPath: "service-installer/darwin/pkg/postinstall",
+        },
+      ],
+    });
     return;
   }
   if (requirement.platform === "linux") {
@@ -393,9 +408,55 @@ function writeAppServiceInstallerPayloads(input: {
       join(input.resourceDir, "service-installer", "linux", "rpm", "postinstall.sh"),
       linuxRpmPostinstallScript(),
     );
+    writeServiceInstallerManifest({
+      resourceDir: input.resourceDir,
+      releasePlatform: input.platform,
+      servicePlatform: "linux",
+      packageArtifacts: [
+        {
+          packageFormat: "deb",
+          selectedV1Path: "linux-deb-owned-user-unit",
+          serviceManager: "systemd-user",
+          serviceDefinitionTarget: "$HOME/.config/systemd/user/butler.service",
+          renderContractPath: "service-installer/linux/systemd/render-contract.json",
+          postInstallPath: "service-installer/linux/deb/postinst",
+        },
+        {
+          packageFormat: "rpm",
+          selectedV1Path: "linux-rpm-owned-user-unit",
+          serviceManager: "systemd-user",
+          serviceDefinitionTarget: "$HOME/.config/systemd/user/butler.service",
+          renderContractPath: "service-installer/linux/systemd/render-contract.json",
+          postInstallPath: "service-installer/linux/rpm/postinstall.sh",
+        },
+      ],
+    });
     return;
   }
   throw new Error(`unsupported background service installer payload platform: ${requirement.platform}`);
+}
+
+function writeServiceInstallerManifest(input: {
+  resourceDir: string;
+  releasePlatform: AppReleasePlatform;
+  servicePlatform: "darwin" | "linux";
+  packageArtifacts: Array<Record<string, string>>;
+}): void {
+  writeJson(
+    join(input.resourceDir, "service-installer", "installer-manifest.json"),
+    {
+      schema: "butler.app-service-installer-bundle.v1",
+      product: "butler-app",
+      releasePlatform: input.releasePlatform,
+      servicePlatform: input.servicePlatform,
+      gatewayProfile: "electron",
+      renderer: "butler-app-native-service-bridge",
+      hostToolsRequiredForFirstLaunch: [],
+      packageArtifacts: input.packageArtifacts,
+      rawTemplateIncluded: false,
+      rawTextIncluded: false,
+    },
+  );
 }
 
 function serviceRenderContract(input: {

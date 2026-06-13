@@ -822,6 +822,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(entries).toContain(`${resourceRoot}/dependency-closure.json`);
     expect(entries).toContain(`${resourceRoot}/background-service-capability.json`);
     expect(entries).toContain(`${resourceRoot}/background-service-registration.json`);
+    expect(entries).toContain(`${resourceRoot}/service-installer/installer-manifest.json`);
     expect(entries).toContain(`${resourceRoot}/service-installer/linux/systemd/render-contract.json`);
     expect(entries).toContain(`${resourceRoot}/service-installer/linux/deb/postinst`);
     expect(entries).toContain(`${resourceRoot}/service-installer/linux/rpm/postinstall.sh`);
@@ -905,6 +906,10 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       artifact.artifactPath,
       `${resourceRoot}/background-service-registration.json`,
     );
+    const serviceInstallerManifest = extractTarEntryJson(
+      artifact.artifactPath,
+      `${resourceRoot}/service-installer/installer-manifest.json`,
+    );
     const systemdRenderContract = extractTarEntryJson(
       artifact.artifactPath,
       `${resourceRoot}/service-installer/linux/systemd/render-contract.json`,
@@ -924,6 +929,33 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
         },
       ],
       rawTextIncluded: false,
+    });
+    expect(serviceInstallerManifest).toMatchObject({
+      schema: "butler.app-service-installer-bundle.v1",
+      product: "butler-app",
+      releasePlatform: "linux-x64",
+      servicePlatform: "linux",
+      gatewayProfile: "electron",
+      renderer: "butler-app-native-service-bridge",
+      hostToolsRequiredForFirstLaunch: [],
+      rawTemplateIncluded: false,
+      rawTextIncluded: false,
+      packageArtifacts: [
+        {
+          packageFormat: "deb",
+          selectedV1Path: "linux-deb-owned-user-unit",
+          serviceManager: "systemd-user",
+          renderContractPath: "service-installer/linux/systemd/render-contract.json",
+          postInstallPath: "service-installer/linux/deb/postinst",
+        },
+        {
+          packageFormat: "rpm",
+          selectedV1Path: "linux-rpm-owned-user-unit",
+          serviceManager: "systemd-user",
+          renderContractPath: "service-installer/linux/systemd/render-contract.json",
+          postInstallPath: "service-installer/linux/rpm/postinstall.sh",
+        },
+      ],
     });
     expect(systemdRenderContract).toMatchObject({
       schema: "butler.app-service-render-contract.v1",
@@ -1018,6 +1050,11 @@ test("app package smoke uses real bundled Agent release resources", () => {
     expect(existsSync(join(bundledAgent.resourceDir, "dependency-closure.json"))).toBe(true);
     expect(existsSync(join(bundledAgent.resourceDir, "background-service-capability.json"))).toBe(true);
     expect(existsSync(join(bundledAgent.resourceDir, "background-service-registration.json"))).toBe(true);
+    expect(existsSync(join(
+      bundledAgent.resourceDir,
+      "service-installer",
+      "installer-manifest.json",
+    ))).toBe(true);
     expectServiceInstallerPayload(bundledAgent.resourceDir, servicePlatform);
 
     const listing = spawnSync("tar", [
@@ -1199,6 +1236,26 @@ test("app package smoke includes macOS service installer payload", () => {
     const bundledAgent = prepareBundledAgentResource(root, workDir, "darwin-arm64");
     expect(bundledAgent.platform).toBe("darwin-arm64");
     expectServiceInstallerPayload(bundledAgent.resourceDir, "darwin");
+    expect(
+      JSON.parse(readText(join(
+        bundledAgent.resourceDir,
+        "service-installer",
+        "installer-manifest.json",
+      ))),
+    ).toMatchObject({
+      schema: "butler.app-service-installer-bundle.v1",
+      releasePlatform: "darwin-arm64",
+      servicePlatform: "darwin",
+      packageArtifacts: [
+        {
+          packageFormat: "pkg",
+          selectedV1Path: "macos-pkg-launch-agent",
+          serviceManager: "launchd",
+          renderContractPath: "service-installer/darwin/launchd/render-contract.json",
+          postInstallPath: "service-installer/darwin/pkg/postinstall",
+        },
+      ],
+    });
   } finally {
     if (previousDarwinRuntime === undefined) {
       delete process.env.BUTLER_APP_MANAGED_BUN_DARWIN_ARM64;

@@ -379,6 +379,10 @@ Implemented surface:
   contracts for platform-specific service definitions and package post-install
   hook inputs. The contracts name the required escaping policy instead of
   shipping raw placeholder-expanded service files.
+- Bundled App resources include
+  `bundled-agent/service-installer/installer-manifest.json`, which maps each
+  supported package format to its selected v1 path, render contract, and
+  post-install hook input.
 - The dependency closure lists
   `background-service-registration-metadata` as an App-owned dependency.
 - Current v1 installer requirements are declared as:
@@ -390,13 +394,16 @@ Implemented surface:
   packaged App resources.
 - Packaging smoke verifies the service installer render contracts are present inside
   packaged App resources and covered by the dependency closure digest.
+- Packaging smoke verifies the service installer manifest declares macOS `pkg`
+  and Linux `deb`/`rpm` package artifact inputs without adding first-run host
+  tool requirements.
 
 Remaining:
 
 - Generate signed/notarized macOS `.pkg` service installer payloads from the
-  registration metadata.
+  registration metadata and installer manifest.
 - Generate Linux `.deb`/`.rpm` packages that install user service units from
-  the registration metadata.
+  the registration metadata and installer manifest.
 - Add Windows release platform and installer path after the Windows
   user/security-context implementation.
 - Run real installer E2E on each target OS.
