@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { spawn } from "child_process";
+import { createServer } from "net";
 import {
   closeSync,
   mkdirSync,
@@ -10,7 +11,7 @@ import {
   writeFileSync,
 } from "fs";
 import { homedir } from "os";
-import { dirname, join } from "path";
+import { dirname, isAbsolute, join, normalize } from "path";
 import { resolveBunPath } from "../../interfaces/cli/runtime.ts";
 import { butlerAgentScriptPath, butlerAgentSourcePath } from "../../runtime/paths.ts";
 import {
@@ -40,6 +41,14 @@ export interface NativeServiceSpec {
   stdoutFile: string;
   stderrFile: string;
   restartPolicy: "manual" | "watchdog";
+  runtime?: NativeServiceRuntimeMetadata;
+}
+
+export interface NativeServiceRuntimeMetadata {
+  managedBy: "butler-app";
+  runtimePointerPath: string;
+  runtimeHome: string;
+  version: string | null;
 }
 
 export interface NativeServiceState {
@@ -57,6 +66,7 @@ export interface NativeServiceState {
   stdoutFile: string;
   stderrFile: string;
   restartPolicy: NativeServiceSpec["restartPolicy"];
+  runtime?: NativeServiceRuntimeMetadata;
 }
 
 export interface NativeServiceProjection {
@@ -74,6 +84,7 @@ export interface NativeServiceProjection {
   stdoutFile: string;
   stderrFile: string;
   restartPolicy: NativeServiceSpec["restartPolicy"];
+  runtime?: NativeServiceRuntimeMetadata;
 }
 
 export interface NativeSupervisorPaths {
@@ -85,6 +96,25 @@ interface NativeServiceSpecOptions {
   createProjectFolderTokenSecret?: boolean;
 }
 
+interface AppManagedNativeServiceSpecOptions extends NativeServiceSpecOptions {
+  gatewayHost?: string;
+  gatewayPort?: number;
+}
+
+export interface AppManagedNativeServiceSpecInput {
+  butlerData: string;
+  runtimePointerPath?: string;
+  localAuthFile: string;
+}
+
+interface AppManagedRuntimePointer {
+  schema: string;
+  product: string;
+  gateway_profile: string;
+  runtime_home: string;
+  version?: string;
+}
+
 interface StartServiceOptions {
   now?: () => Date;
   isPidRunning?: (pid: number) => boolean;
@@ -94,6 +124,16 @@ interface StartServiceOptions {
 interface StopServiceOptions {
   isPidRunning?: (pid: number) => boolean;
   killPid?: (pid: number, signal: NodeJS.Signals) => void;
+}
+
+interface BoundedStopServiceOptions extends StopServiceOptions {
+  gatewayPort?: number;
+  isPortAvailable?: (port: number) => boolean | Promise<boolean>;
+  isProcessGroupRunning?: (processGroupId: number) => boolean;
+  sleepMs?: (ms: number) => Promise<void>;
+  waitIntervalMs?: number;
+  terminateTimeoutMs?: number;
+  killTimeoutMs?: number;
 }
 
 function defaultButlerHome(): string {
@@ -156,6 +196,65 @@ function logPath(butlerData: string, name: string): string {
   return join(butlerData, "logs", name);
 }
 
+export function appManagedRuntimePointerPath(butlerData: string): string {
+  return join(butlerData, "app", "runtime", "agent", "current.json");
+}
+
+function safeAppManagedRuntimeHome(butlerData: string, pointer: AppManagedRuntimePointer): string {
+  if (
+    pointer.schema !== "butler.app-managed-agent-runtime-pointer.v1" ||
+    pointer.product !== "butler-app" ||
+    pointer.gateway_profile !== "electron" ||
+    typeof pointer.runtime_home !== "string" ||
+    pointer.runtime_home.trim() === "" ||
+    isAbsolute(pointer.runtime_home)
+  ) {
+    throw new Error("invalid App-managed Agent runtime pointer");
+  }
+  const normalized = normalize(pointer.runtime_home);
+  if (normalized === "." || normalized.startsWith("..")) {
+    throw new Error("invalid App-managed Agent runtime pointer");
+  }
+  return join(butlerData, normalized);
+}
+
+export function resolveAppManagedNativeSupervisorPaths(
+  input: AppManagedNativeServiceSpecInput,
+): NativeSupervisorPaths & {
+  runtimePointerPath: string;
+  localAuthFile: string;
+  runtimeVersion: string | null;
+} {
+  const runtimePointerPath = input.runtimePointerPath ?? appManagedRuntimePointerPath(input.butlerData);
+  const pointer = readJson<AppManagedRuntimePointer>(runtimePointerPath);
+  if (!pointer) {
+    throw new Error("missing App-managed Agent runtime pointer");
+  }
+  assertValidAppManagedLocalAuth(input.localAuthFile);
+  return {
+    butlerHome: safeAppManagedRuntimeHome(input.butlerData, pointer),
+    butlerData: input.butlerData,
+    runtimePointerPath,
+    localAuthFile: input.localAuthFile,
+    runtimeVersion: typeof pointer.version === "string" ? pointer.version : null,
+  };
+}
+
+function assertValidAppManagedLocalAuth(localAuthFile: string): void {
+  if (!localAuthFile.trim()) {
+    throw new Error("missing App-managed local auth file");
+  }
+  const auth = readJson<{ schema?: string; token?: string }>(localAuthFile);
+  if (
+    !auth ||
+    auth.schema !== "butler.app-local-agent-auth.v1" ||
+    typeof auth.token !== "string" ||
+    auth.token.length < 32
+  ) {
+    throw new Error("invalid App-managed local auth file");
+  }
+}
+
 export function projectFolderTokenSecretPath(butlerData: string): string {
   return join(
     butlerData,
@@ -186,15 +285,70 @@ export function defaultNativeServiceSpecs(
   options: NativeServiceSpecOptions = {},
 ): NativeServiceSpec[] {
   const paths = resolveNativeSupervisorPaths(input);
+  return nativeServiceSpecsForRuntime(paths, {}, options);
+}
+
+export function appManagedNativeServiceSpecs(
+  input: AppManagedNativeServiceSpecInput,
+  options: AppManagedNativeServiceSpecOptions = {},
+): NativeServiceSpec[] {
+  const paths = resolveAppManagedNativeSupervisorPaths(input);
+  return nativeServiceSpecsForRuntime(paths, {
+    runtimePointerPath: paths.runtimePointerPath,
+    runtimeHome: paths.butlerHome,
+    runtimeVersion: paths.runtimeVersion,
+    localAuthFile: paths.localAuthFile,
+    gatewayHost: options.gatewayHost,
+    gatewayPort: options.gatewayPort,
+  }, options);
+}
+
+function nativeServiceSpecsForRuntime(
+  paths: NativeSupervisorPaths,
+  appManaged: {
+    runtimePointerPath?: string;
+    runtimeHome?: string;
+    runtimeVersion?: string | null;
+    localAuthFile?: string;
+    gatewayHost?: string;
+    gatewayPort?: number;
+  } = {},
+  options: NativeServiceSpecOptions = {},
+): NativeServiceSpec[] {
   const createProjectFolderTokenSecret = options.createProjectFolderTokenSecret ?? true;
   const bun = resolveBunPath({ butlerData: paths.butlerData });
+  const serviceBun = appManaged.runtimeHome
+    ? join(
+        appManaged.runtimeHome,
+        "packages",
+        "butler-agent",
+        "resources",
+        "runtime",
+        "bin",
+        "bun",
+      )
+    : bun;
   const commonEnv = {
     NODE_ENV: "production",
     BUTLER_HOME: paths.butlerHome,
     BUTLER_DATA: paths.butlerData,
-    BUTLER_BUN: bun,
+    BUTLER_BUN: serviceBun,
+    ...(appManaged.runtimePointerPath
+      ? { BUTLER_APP_MANAGED_RUNTIME_POINTER: appManaged.runtimePointerPath }
+      : {}),
+    ...(appManaged.runtimeHome
+      ? { BUTLER_APP_MANAGED_RUNTIME_HOME: appManaged.runtimeHome }
+      : {}),
     TELEGRAM_SILENCE_LOG: logPath(paths.butlerData, "telegram-silence.log"),
   };
+  const runtimeMetadata = appManaged.runtimePointerPath && appManaged.runtimeHome
+    ? {
+        managedBy: "butler-app" as const,
+        runtimePointerPath: appManaged.runtimePointerPath,
+        runtimeHome: appManaged.runtimeHome,
+        version: appManaged.runtimeVersion ?? null,
+      }
+    : undefined;
 
   const specs: NativeServiceSpec[] = [
     {
@@ -206,36 +360,40 @@ export function defaultNativeServiceSpecs(
       stdoutFile: logPath(paths.butlerData, "embed-server-out.log"),
       stderrFile: logPath(paths.butlerData, "embed-server-err.log"),
       restartPolicy: "watchdog",
+      ...(runtimeMetadata ? { runtime: runtimeMetadata } : {}),
     },
     {
       id: "butler-sync-consumer",
-      command: bun,
+      command: serviceBun,
       args: ["run", butlerAgentSourcePath(paths.butlerHome, "agent", "cognition", "memory", "scripts", "sync-consumer.ts")],
       cwd: paths.butlerHome,
       env: commonEnv,
       stdoutFile: logPath(paths.butlerData, "sync-consumer-out.log"),
       stderrFile: logPath(paths.butlerData, "sync-consumer-err.log"),
       restartPolicy: "watchdog",
+      ...(runtimeMetadata ? { runtime: runtimeMetadata } : {}),
     },
     {
       id: "butler-scheduler",
-      command: bun,
+      command: serviceBun,
       args: ["run", butlerAgentScriptPath(paths.butlerHome, "native-scheduler.ts")],
       cwd: paths.butlerHome,
       env: commonEnv,
       stdoutFile: logPath(paths.butlerData, "scheduler-out.log"),
       stderrFile: logPath(paths.butlerData, "scheduler-err.log"),
       restartPolicy: "watchdog",
+      ...(runtimeMetadata ? { runtime: runtimeMetadata } : {}),
     },
     {
       id: "butler-watchdog",
-      command: bun,
+      command: serviceBun,
       args: ["run", butlerAgentSourcePath(paths.butlerHome, "interfaces", "mcp-server", "watchdog.ts")],
       cwd: paths.butlerHome,
       env: commonEnv,
       stdoutFile: logPath(paths.butlerData, "watchdog-out.log"),
       stderrFile: logPath(paths.butlerData, "watchdog-err.log"),
       restartPolicy: "manual",
+      ...(runtimeMetadata ? { runtime: runtimeMetadata } : {}),
     },
     {
       id: "butler-main",
@@ -250,28 +408,38 @@ export function defaultNativeServiceSpecs(
       stdoutFile: logPath(paths.butlerData, "butler-out.log"),
       stderrFile: logPath(paths.butlerData, "butler-err.log"),
       restartPolicy: "watchdog",
+      ...(runtimeMetadata ? { runtime: runtimeMetadata } : {}),
     },
   ];
 
-  if (isGatewayEnabled(paths.butlerData, "app")) {
+  if (appManaged.runtimeHome || isGatewayEnabled(paths.butlerData, "app")) {
     const app = resolveAppGatewayRuntimeConfig({
       butlerData: paths.butlerData,
       env: {},
     });
+    const appHost = appManaged.gatewayHost ?? app.host;
+    const appPort = appManaged.gatewayPort ?? app.port;
     const appLogs = appGatewayLogPaths(paths.butlerData);
     specs.push({
       id: "app-gateway",
-      command: bun,
+      command: serviceBun,
       args: [
         "run",
         butlerAgentSourcePath(paths.butlerHome, "gateways", "app", "cli.ts"),
-        `--port=${app.port}`,
+        `--port=${appPort}`,
       ],
       cwd: paths.butlerHome,
       env: {
         ...commonEnv,
-        BUTLER_APP_SERVER_HOST: app.host,
-        BUTLER_APP_SERVER_PORT: String(app.port),
+        BUTLER_APP_SERVER_HOST: appHost,
+        BUTLER_APP_SERVER_PORT: String(appPort),
+        ...(appManaged.localAuthFile
+          ? {
+              BUTLER_APP_GATEWAY_PID_FILE: "off",
+              BUTLER_APP_LOCAL_AUTH_REQUIRED: "1",
+              BUTLER_APP_LOCAL_AUTH_FILE: appManaged.localAuthFile,
+            }
+          : {}),
         ...(app.dbPath ? { BUTLER_APP_SERVER_DB: app.dbPath } : {}),
         ...(createProjectFolderTokenSecret
           ? { BUTLER_PROJECT_FOLDER_TOKEN_SECRET: readOrCreateProjectFolderTokenSecret(paths.butlerData) }
@@ -280,6 +448,7 @@ export function defaultNativeServiceSpecs(
       stdoutFile: appLogs.stdout,
       stderrFile: appLogs.stderr,
       restartPolicy: "watchdog",
+      ...(runtimeMetadata ? { runtime: runtimeMetadata } : {}),
     });
   }
 
@@ -344,6 +513,7 @@ export function startService(
     stdoutFile: spec.stdoutFile,
     stderrFile: spec.stderrFile,
     restartPolicy: spec.restartPolicy,
+    ...(spec.runtime ? { runtime: spec.runtime } : {}),
   };
   atomicWriteJson(serviceStatePath(butlerData, spec.id), state);
   return projectService(spec, state, "online");
@@ -400,6 +570,92 @@ export function stopService(
   return projectService(spec, state, "offline");
 }
 
+export async function stopServiceBounded(
+  butlerData: string,
+  spec: NativeServiceSpec,
+  options: BoundedStopServiceOptions = {},
+): Promise<NativeServiceProjection> {
+  const state = readServiceState(butlerData, spec.id);
+  const alive = options.isPidRunning ?? isPidRunning;
+  const groupAlive = options.isProcessGroupRunning ?? isProcessGroupRunning;
+  const kill = options.killPid ?? ((pid, signal) => process.kill(pid, signal));
+  const sleep = options.sleepMs ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const waitIntervalMs = options.waitIntervalMs ?? 100;
+  const terminateTimeoutMs = options.terminateTimeoutMs ?? 5_000;
+  const killTimeoutMs = options.killTimeoutMs ?? 2_000;
+  const pids = new Set<number>();
+  const processGroups = new Set<number>();
+  if (state?.pid) {
+    const processGroupId = state.processGroupId ?? state.pid;
+    const stateProcessRunning = groupAlive(processGroupId) || alive(state.pid);
+    pids.add(state.pid);
+    processGroups.add(processGroupId);
+    if (stateProcessRunning) {
+      signalServiceProcess(kill, processGroupId, "SIGTERM");
+    }
+  }
+  if (spec.id === "app-gateway") {
+    const gatewayPid = readAppGatewayPid(butlerData);
+    if (
+      gatewayPid &&
+      (!state || gatewayPid !== state.pid) &&
+      (groupAlive(gatewayPid) || alive(gatewayPid))
+    ) {
+      pids.add(gatewayPid);
+      processGroups.add(gatewayPid);
+      signalServiceProcess(kill, gatewayPid, "SIGTERM");
+    }
+  }
+
+  const terminated = await waitForProcessGroupsToExit(
+    [...processGroups],
+    groupAlive,
+    alive,
+    sleep,
+    waitIntervalMs,
+    terminateTimeoutMs,
+  );
+  if (!terminated) {
+    for (const processGroupId of processGroups) {
+      if (groupAlive(processGroupId) || alive(processGroupId)) {
+        signalServiceProcess(kill, processGroupId, "SIGKILL");
+      }
+    }
+    const killed = await waitForProcessGroupsToExit(
+      [...processGroups],
+      groupAlive,
+      alive,
+      sleep,
+      waitIntervalMs,
+      killTimeoutMs,
+    );
+    if (!killed) {
+      throw new Error(`failed to stop ${spec.id}: process group still running`);
+    }
+  }
+
+  if (spec.id === "app-gateway") {
+    const gatewayPort = options.gatewayPort ?? Number(spec.env?.BUTLER_APP_SERVER_PORT);
+    if (Number.isInteger(gatewayPort) && gatewayPort > 0) {
+      const portAvailable = options.isPortAvailable ?? ((port) =>
+        defaultIsPortAvailable(port, spec.env?.BUTLER_APP_SERVER_HOST ?? "127.0.0.1"));
+      const released = await waitForPortRelease(
+        gatewayPort,
+        portAvailable,
+        sleep,
+        waitIntervalMs,
+        terminateTimeoutMs + killTimeoutMs,
+      );
+      if (!released) {
+        throw new Error(`failed to stop ${spec.id}: app gateway port still in use`);
+      }
+    }
+    clearAppGatewayPid(butlerData);
+  }
+  removeServiceState(butlerData, spec.id);
+  return projectService(spec, state, "offline");
+}
+
 export function stopServices(
   paths: Partial<NativeSupervisorPaths> = {},
   options: StopServiceOptions = {},
@@ -434,6 +690,84 @@ export function listServices(
   });
 }
 
+function signalServiceProcess(
+  kill: (pid: number, signal: NodeJS.Signals) => void,
+  pid: number,
+  signal: NodeJS.Signals,
+): void {
+  let signaled = false;
+  try {
+    kill(-pid, signal);
+    signaled = true;
+  } catch {}
+  if (!signaled) {
+    try {
+      kill(pid, signal);
+    } catch {}
+  }
+}
+
+function isProcessGroupRunning(processGroupId: number): boolean {
+  if (!Number.isInteger(processGroupId) || processGroupId <= 0) return false;
+  try {
+    process.kill(-processGroupId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForProcessGroupsToExit(
+  processGroupIds: number[],
+  groupAlive: (processGroupId: number) => boolean,
+  alive: (pid: number) => boolean,
+  sleep: (ms: number) => Promise<void>,
+  waitIntervalMs: number,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (processGroupIds.length === 0) return true;
+  let elapsedMs = 0;
+  while (elapsedMs <= timeoutMs) {
+    if (processGroupIds.every((processGroupId) =>
+      !groupAlive(processGroupId) && !alive(processGroupId),
+    )) {
+      return true;
+    }
+    await sleep(waitIntervalMs);
+    elapsedMs += waitIntervalMs;
+  }
+  return processGroupIds.every((processGroupId) =>
+    !groupAlive(processGroupId) && !alive(processGroupId),
+  );
+}
+
+async function waitForPortRelease(
+  port: number,
+  isPortAvailable: (port: number) => boolean | Promise<boolean>,
+  sleep: (ms: number) => Promise<void>,
+  waitIntervalMs: number,
+  timeoutMs: number,
+): Promise<boolean> {
+  let elapsedMs = 0;
+  while (elapsedMs <= timeoutMs) {
+    if (await isPortAvailable(port)) return true;
+    await sleep(waitIntervalMs);
+    elapsedMs += waitIntervalMs;
+  }
+  return Boolean(await isPortAvailable(port));
+}
+
+function defaultIsPortAvailable(port: number, host: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port, host);
+  });
+}
+
 function projectService(
   spec: NativeServiceSpec,
   state: NativeServiceState | null,
@@ -454,5 +788,6 @@ function projectService(
     stdoutFile: state?.stdoutFile ?? spec.stdoutFile,
     stderrFile: state?.stderrFile ?? spec.stderrFile,
     restartPolicy: state?.restartPolicy ?? spec.restartPolicy,
+    runtime: state?.runtime ?? spec.runtime,
   };
 }

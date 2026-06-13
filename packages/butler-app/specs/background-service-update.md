@@ -82,6 +82,11 @@ Restart must also be bounded and observable:
 - Restart must fail closed if the previous process group cannot be stopped.
 - Service state must not be removed before stop outcome is known.
 
+`packages/butler-agent/src/operations/service/native-service-supervisor.ts`
+exposes this primitive as `stopServiceBounded`. App updater code must use the
+bounded path for Agent runtime restarts instead of the legacy immediate
+`stopServices` path.
+
 ## Runtime Pointer Transaction
 
 The Phase 0 source of truth for update status names, transaction fields, and
