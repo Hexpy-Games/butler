@@ -25,7 +25,12 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createBundledAgentSupervisor } from "./app-agent-supervisor.mjs";
-import { resolveAppManagedGatewayCommand } from "./app-managed-runtime.mjs";
+import { createAppAgentNativeServiceBridge } from "./app-agent-native-service-bridge.mjs";
+import { createAppAgentServiceAdapter } from "./app-agent-service-adapter.mjs";
+import {
+  appManagedAgentPointerPath,
+  resolveAppManagedGatewayCommand,
+} from "./app-managed-runtime.mjs";
 import { createAgentServiceControl } from "./service-control.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
 import { createTrayAgentMenuModel } from "./tray-agent-menu.mjs";
@@ -74,6 +79,8 @@ let nativeSettingsCache = null;
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+let nativeServiceGatewayReady = false;
+let nativeServiceGatewayLastErrorCode = null;
 const nativeShellPreferences = {
   trayEnabled: true,
 };
@@ -99,8 +106,19 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   explicitUiUrl,
   projectFolderTokenSecret,
 });
+const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
+  ? createAppAgentNativeServiceBridge({
+      butlerData: butlerDataRoot,
+      getPort: () => port,
+      ensureRuntimePointer: ensureAppManagedAgentRuntimePointer,
+    })
+  : null;
+const appAgentServiceAdapter = appAgentNativeServiceBridge
+  ? createAppAgentServiceAdapter(appAgentNativeServiceBridge)
+  : null;
 const agentServiceControl = createAgentServiceControl({
   platform: process.platform,
+  adapter: appAgentServiceAdapter,
 });
 const firstRunSetupBridge = createFirstRunSetupBridge({
   ensureReady: ensureServer,
@@ -181,6 +199,25 @@ function managedGatewayCommand() {
   };
 }
 
+function ensureAppManagedAgentRuntimePointer() {
+  const appManagedGateway = resolveAppManagedGatewayCommand({
+    butlerData: butlerDataRoot,
+    env: process.env,
+    resourcesPath: process.resourcesPath,
+  });
+  if (!appManagedGateway?.appManaged) {
+    const error = new Error("App-managed Agent runtime is unavailable.");
+    error.code = "app_managed_runtime_unavailable";
+    throw error;
+  }
+  appManagedGateway.commitActivation?.();
+  return appManagedGateway;
+}
+
+function shouldUseAppAgentNativeServiceBridge() {
+  return app.isPackaged && ["darwin", "linux"].includes(process.platform);
+}
+
 function candidateButlerHomes() {
   const homes = [
     repoRoot,
@@ -245,9 +282,11 @@ async function appServerProbeFetch(url, localAuth = null) {
   const timeout = setTimeout(() => controller.abort(), appServerProbeTimeoutMs);
   try {
     return await fetch(url, {
-      headers: localAuth?.token
-        ? { authorization: `Bearer ${localAuth.token}` }
-        : {},
+      headers: localAuth?.authorization
+        ? { authorization: localAuth.authorization }
+        : localAuth?.token
+          ? { authorization: `Bearer ${localAuth.token}` }
+          : {},
       signal: controller.signal,
     });
   } finally {
@@ -256,16 +295,64 @@ async function appServerProbeFetch(url, localAuth = null) {
 }
 
 async function ensureServer() {
+  if (shouldUseAppAgentNativeServiceBridge()) {
+    const authHeaders = bundledAgentSupervisor.authHeaders();
+    const healthy = await healthOk(authHeaders);
+    const ready = healthy && await gatewayReady(authHeaders);
+    if (ready) {
+      nativeServiceGatewayReady = true;
+      nativeServiceGatewayLastErrorCode = null;
+      return;
+    }
+    nativeServiceGatewayReady = false;
+    nativeServiceGatewayLastErrorCode = healthy
+      ? "service_gateway_not_ready"
+      : "service_gateway_unhealthy";
+    const error = new Error("Butler Agent service gateway is not ready.");
+    error.code = nativeServiceGatewayLastErrorCode;
+    throw error;
+  }
   await bundledAgentSupervisor.ensureReady();
 }
 
 function readFirstRunRuntimeDiagnostics() {
+  if (shouldUseAppAgentNativeServiceBridge()) {
+    const authHeaders = bundledAgentSupervisor.authHeaders();
+    return {
+      phase: nativeServiceGatewayReady ? "running" : "failed",
+      bundled_agent: {
+        source: "app-managed",
+        version_configured: appManagedRuntimePointerReady(),
+      },
+      local_auth: {
+        required: true,
+        token_configured: Boolean(authHeaders.authorization),
+      },
+      last_error_code: nativeServiceGatewayLastErrorCode,
+      app_managed_runtime_failure: nativeServiceGatewayReady
+        ? null
+        : readLatestAppManagedRuntimeFailure(),
+      raw_text_included: false,
+    };
+  }
   const diagnostics = bundledAgentSupervisor.diagnostics();
   return {
     ...diagnostics,
     app_managed_runtime_failure:
       diagnostics.phase === "failed" ? readLatestAppManagedRuntimeFailure() : null,
   };
+}
+
+function appManagedRuntimePointerReady() {
+  try {
+    const pointer = JSON.parse(readFileSync(appManagedAgentPointerPath(butlerDataRoot), "utf8"));
+    return pointer?.product === "butler-app" &&
+      pointer?.gateway_profile === "electron" &&
+      typeof pointer?.runtime_home === "string" &&
+      pointer.runtime_home.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 function codexOAuthClientId() {

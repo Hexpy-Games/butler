@@ -478,6 +478,52 @@ test("App-managed runtime repairs damaged selected runtime from App-owned payloa
   }
 });
 
+test("App-managed runtime can roll back a committed service registration activation", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-post-commit-rollback-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const firstResource = createBundledAgentResource(join(tempDir, "first"), {
+      version: "1.0.0",
+    });
+    const first = activateAppManagedAgentRuntime({
+      butlerData,
+      resourceRoot: firstResource,
+      now: fixedNow,
+    });
+    const firstPointer = readJson(appManagedAgentPointerPath(butlerData));
+    const nextResource = createBundledAgentResource(join(tempDir, "next"), {
+      version: "2.0.0",
+    });
+    const prepared = prepareAppManagedAgentRuntime({
+      butlerData,
+      resourceRoot: nextResource,
+      now: fixedNow,
+    });
+
+    prepared.commitActivation();
+    expect(readJson(appManagedAgentPointerPath(butlerData))).toMatchObject({
+      version: "2.0.0",
+      runtime_home: prepared.runtimeHomeLabel,
+    });
+
+    prepared.rollbackActivation(new Error("service registration failed"));
+
+    expect(readJson(appManagedAgentPointerPath(butlerData))).toEqual(firstPointer);
+    expect(existsSync(first.runtimeHome)).toBe(true);
+    expect(existsSync(prepared.runtimeHome)).toBe(false);
+    const failure = readJson(
+      join(butlerData, "app", "runtime", "agent", "failures", "2.0.0.json"),
+    );
+    expect(failure).toMatchObject({
+      activation_status: "rolled_back",
+      rollback_reason: "service registration failed",
+      raw_text_included: false,
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("App-managed runtime rolls failed same-version repair back to previous runtime", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-repair-rollback-"));
   try {

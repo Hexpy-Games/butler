@@ -975,6 +975,9 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("refreshTrayMenu");
   expect(electronMain).toContain("trayAgentServiceStatus");
   expect(electronMain).toContain("createTrayAgentMenuModel");
+  expect(electronMain).toContain("createAppAgentNativeServiceBridge");
+  expect(electronMain).toContain("createAppAgentServiceAdapter");
+  expect(electronMain).toContain("adapter: appAgentServiceAdapter");
   expect(electronMain).toContain("runTrayAgentServiceAction");
   expect(electronMain).toContain("Start Butler Agent");
   expect(electronMain).toContain("Restart Butler Agent");

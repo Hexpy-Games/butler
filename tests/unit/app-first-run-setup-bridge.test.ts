@@ -339,6 +339,61 @@ test("first-run setup uses service-control before managed gateway readiness", as
   });
 });
 
+test("first-run setup waits for service readiness after start", async () => {
+  const calls: string[] = [];
+  let statusChecks = 0;
+  const bridge = createFirstRunSetupBridge({
+    serviceReadyPollAttempts: 4,
+    serviceReadyPollDelayMs: 1,
+    sleepMs: async () => {
+      calls.push("sleep");
+    },
+    serviceControl: {
+      getAgentServiceStatus: async () => {
+        statusChecks += 1;
+        calls.push(`status:${statusChecks}`);
+        if (statusChecks === 1) return { status: "stopped" };
+        return { status: statusChecks >= 3 ? "ready" : "starting" };
+      },
+      startAgentService: async () => {
+        calls.push("start");
+        return { ok: true, status: "starting" };
+      },
+      readAgentServiceDiagnostics: async () => ({
+        status: "ready",
+        raw_text_included: false,
+      }),
+    },
+    ensureReady: async () => {
+      calls.push("ensure-ready");
+    },
+    readRuntimeDiagnostics: () => ({
+      phase: "running",
+      bundled_agent: {
+        source: "app-managed",
+        version_configured: true,
+      },
+      local_auth: {
+        required: true,
+        token_configured: true,
+      },
+    }),
+    readSettings: async () => ({
+      gateway_profile: "electron",
+    }),
+  });
+
+  await expect(bridge.start()).resolves.toMatchObject({ phase: "ready" });
+  expect(calls).toEqual([
+    "status:1",
+    "start",
+    "status:2",
+    "sleep",
+    "status:3",
+    "ensure-ready",
+  ]);
+});
+
 test("first-run setup fails closed when service registration is unavailable", async () => {
   let ensureReadyCalls = 0;
   const bridge = createFirstRunSetupBridge({
@@ -395,8 +450,14 @@ test("first-run setup fails closed when service registration is unavailable", as
 test("first-run setup fails closed when service start fails", async () => {
   let ensureReadyCalls = 0;
   const bridge = createFirstRunSetupBridge({
+    serviceReadyPollAttempts: 2,
+    serviceReadyPollDelayMs: 1,
     serviceControl: {
       getAgentServiceStatus: async () => ({
+        status: "stopped",
+      }),
+      installAgentService: async () => ({
+        ok: true,
         status: "stopped",
       }),
       startAgentService: async () => ({
@@ -440,11 +501,61 @@ test("first-run setup fails closed when service start fails", async () => {
   });
 });
 
+test("first-run setup installs before start when a service is stopped", async () => {
+  const calls: string[] = [];
+  const bridge = createFirstRunSetupBridge({
+    serviceControl: {
+      getAgentServiceStatus: async () => {
+        calls.push("status");
+        return { status: calls.includes("start") ? "ready" : "stopped" };
+      },
+      installAgentService: async () => {
+        calls.push("install");
+        return { ok: true, status: "stopped" };
+      },
+      startAgentService: async () => {
+        calls.push("start");
+        return { ok: true, status: "ready" };
+      },
+      readAgentServiceDiagnostics: async () => ({
+        status: "ready",
+        raw_text_included: false,
+      }),
+    },
+    ensureReady: async () => {
+      calls.push("ensure-ready");
+    },
+    readRuntimeDiagnostics: () => ({
+      phase: "running",
+      bundled_agent: {
+        source: "app-managed",
+        version_configured: true,
+      },
+      local_auth: {
+        required: true,
+        token_configured: true,
+      },
+    }),
+    readSettings: async () => ({
+      gateway_profile: "electron",
+    }),
+  });
+
+  await expect(bridge.start()).resolves.toMatchObject({ phase: "ready" });
+  expect(calls).toEqual(["status", "install", "start", "status", "ensure-ready"]);
+});
+
 test("first-run setup fails closed when service remains not ready after start", async () => {
   let ensureReadyCalls = 0;
   const bridge = createFirstRunSetupBridge({
+    serviceReadyPollAttempts: 2,
+    serviceReadyPollDelayMs: 1,
     serviceControl: {
       getAgentServiceStatus: async () => ({
+        status: "stopped",
+      }),
+      installAgentService: async () => ({
+        ok: true,
         status: "stopped",
       }),
       startAgentService: async () => ({
@@ -633,6 +744,11 @@ test("Electron bundled-Agent setup does not attach to a pre-existing gateway", (
 
   expect(main).toContain("createBundledAgentSupervisor");
   expect(main).toContain("resolveGateway: managedGatewayCommand");
+  expect(main).toContain("createAppAgentNativeServiceBridge");
+  expect(main).toContain("createAppAgentServiceAdapter");
+  expect(main).toContain("shouldUseAppAgentNativeServiceBridge()");
+  expect(main).toContain("ensureRuntimePointer: ensureAppManagedAgentRuntimePointer");
+  expect(main).toContain("adapter: appAgentServiceAdapter");
   expect(main).toContain("healthCheck: healthOk");
   expect(main).toContain("readinessCheck: gatewayReady");
   const gatewayResolveIndex = ensureReady.indexOf("gateway = resolveGateway();");
@@ -646,6 +762,19 @@ test("Electron bundled-Agent setup does not attach to a pre-existing gateway", (
   expect(ensureReady).toContain("if (!gateway.commitActivation)");
   expect(ensureReady).toContain("updatePort(await findAvailablePort(getPort() + 1))");
   expect(ensureReady).toContain("startupPromise = start(gateway);");
+  expect(main).toContain("function ensureAppManagedAgentRuntimePointer");
+  expect(main).toContain("appManagedGateway.commitActivation?.()");
+  const ensureServerStart = main.indexOf("async function ensureServer()");
+  const diagnosticsStart = main.indexOf("function readFirstRunRuntimeDiagnostics", ensureServerStart);
+  const ensureServer = main.slice(ensureServerStart, diagnosticsStart);
+  expect(ensureServer).toContain("if (shouldUseAppAgentNativeServiceBridge())");
+  expect(ensureServer).toContain("service_gateway_unhealthy");
+  expect(ensureServer).toContain("service_gateway_not_ready");
+  expect(ensureServer).toContain("throw error");
+  expect(ensureServer).toContain("await bundledAgentSupervisor.ensureReady()");
+  expect(ensureServer.indexOf("throw error")).toBeLessThan(
+    ensureServer.indexOf("await bundledAgentSupervisor.ensureReady()"),
+  );
 });
 
 function readRepoFile(path: string): string {
