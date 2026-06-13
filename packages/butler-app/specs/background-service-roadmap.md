@@ -275,6 +275,35 @@ Acceptance:
 - A crash before candidate readiness never makes the candidate active.
 - Rollback restores previous runtime and reports status.
 
+Implemented surface:
+
+- App-managed Agent runtime updates now use a persisted transaction with
+  previous active pointer, active pointer, candidate pointer, candidate digest,
+  candidate boot token hash, readiness proof, status, and last error.
+- The candidate boot token is generation and digest locked, consumed on first
+  valid candidate boot, and cannot be replayed after consumption.
+- Candidate promotion requires readiness proof and keeps the previous pointer
+  attached for rollback/audit.
+- Rollback restores the previous active pointer and clears candidate boot.
+- Crash recovery reconciles partial writes around candidate readiness,
+  promotion, rollback, and active pointer restoration.
+- Electron main/preload expose update prepare/apply/rollback through the
+  service-control bridge. Renderer code still has no direct shell surface.
+- Before platform update adapters land, runtime update actions fail closed with
+  `agent_runtime_update_unavailable`.
+
+Remaining:
+
+- Wire prepare/apply/rollback to real platform service adapters.
+- Use bounded service drain/restart primitives from the adapter path.
+- Add update status UI/tray copy once adapter status events exist.
+- Add fake previous/next runtime E2E restart and rollback smoke tests.
+
+Validation:
+
+- `bun test tests/unit/app-managed-runtime.test.ts tests/unit/app-agent-service-control.test.ts tests/unit/app-first-run-setup-bridge.test.ts tests/unit/app-background-service-contract.test.ts`
+- `git diff --check`
+
 ## Phase 6: Installer And Release Packaging
 
 Goal: release artifacts can install and operate the background service.

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
@@ -18,9 +18,280 @@ import { gunzipSync } from "node:zlib";
 export const APP_MANAGED_RUNTIME_SCHEMA = "butler.app-managed-agent-runtime.v1";
 export const APP_MANAGED_RUNTIME_POINTER_SCHEMA =
   "butler.app-managed-agent-runtime-pointer.v1";
+export const APP_MANAGED_RUNTIME_UPDATE_TRANSACTION_SCHEMA =
+  "butler.app-managed-agent-runtime-update-transaction.v1";
+const maxAgentArchiveUncompressedBytes = 512 * 1024 * 1024;
 
 export function appManagedAgentPointerPath(butlerData) {
   return join(butlerData, "app", "runtime", "agent", "current.json");
+}
+
+export function appManagedAgentUpdateTransactionPath(butlerData) {
+  return join(butlerData, "app", "runtime", "agent", "update-transaction.json");
+}
+
+export function appManagedAgentCandidateBootTokenPath(butlerData) {
+  return join(butlerData, "app", "runtime", "agent", "candidate-boot-token.json");
+}
+
+export function beginAppManagedAgentRuntimeUpdate({
+  butlerData,
+  candidatePointer,
+  candidateDigest,
+  now = () => new Date(),
+  generateToken = () => randomUUID(),
+}) {
+  const activePointer = readJson(appManagedAgentPointerPath(butlerData));
+  if (!validAppManagedPointer(activePointer)) {
+    throw new Error("missing active App-managed Agent runtime pointer");
+  }
+  if (!validAppManagedPointer(candidatePointer)) {
+    throw new Error("invalid candidate App-managed Agent runtime pointer");
+  }
+  const digest = safeString(candidateDigest);
+  if (!digest) {
+    throw new Error("missing candidate App-managed Agent runtime digest");
+  }
+  const generation = randomUUID();
+  const token = String(generateToken());
+  const startedAt = now().toISOString();
+  const transaction = {
+    schema: APP_MANAGED_RUNTIME_UPDATE_TRANSACTION_SCHEMA,
+    generation,
+    status: "restart_required",
+    previous_active_pointer: activePointer,
+    active_pointer: activePointer,
+    candidate_pointer: candidatePointer,
+    candidate_digest: digest,
+    candidate_boot_token_hash: sha256Text(token),
+    readiness_proof: null,
+    started_at: startedAt,
+    updated_at: startedAt,
+    last_error: null,
+    raw_text_included: false,
+  };
+  atomicWriteJson(appManagedAgentCandidateBootTokenPath(butlerData), {
+    generation,
+    candidate_pointer: candidatePointer,
+    candidate_digest: digest,
+    token,
+    raw_text_included: false,
+  });
+  atomicWriteJson(appManagedAgentUpdateTransactionPath(butlerData), transaction);
+  return transaction;
+}
+
+export function readAppManagedAgentRuntimeUpdateTransaction(butlerData) {
+  return readJsonIfPresent(appManagedAgentUpdateTransactionPath(butlerData));
+}
+
+export function recoverAppManagedAgentRuntimeUpdateTransaction({
+  butlerData,
+  now = () => new Date(),
+}) {
+  const transaction = readAppManagedAgentRuntimeUpdateTransaction(butlerData);
+  if (!transaction) {
+    rmSync(appManagedAgentCandidateBootTokenPath(butlerData), { force: true });
+    return null;
+  }
+  const activePointer = readJsonIfPresent(appManagedAgentPointerPath(butlerData));
+  if (
+    transaction.schema !== APP_MANAGED_RUNTIME_UPDATE_TRANSACTION_SCHEMA ||
+    !validAppManagedPointer(transaction.previous_active_pointer) ||
+    !validAppManagedPointer(transaction.active_pointer) ||
+    !validAppManagedPointer(transaction.candidate_pointer)
+  ) {
+    throw new Error("invalid App-managed Agent runtime update transaction");
+  }
+
+  if (
+    transaction.status === "candidate_ready" &&
+    sameAppManagedPointer(activePointer, transaction.candidate_pointer)
+  ) {
+    rmSync(appManagedAgentCandidateBootTokenPath(butlerData), { force: true });
+    return writeRecoveredTransaction(butlerData, {
+      ...transaction,
+      status: "ready",
+      active_pointer: activePointer,
+      updated_at: now().toISOString(),
+      last_error: null,
+      raw_text_included: false,
+    });
+  }
+
+  if (
+    transaction.status === "restart_required" &&
+    !readJsonIfPresent(appManagedAgentCandidateBootTokenPath(butlerData))
+  ) {
+    atomicWriteJson(
+      appManagedAgentPointerPath(butlerData),
+      transaction.previous_active_pointer,
+    );
+    return writeRecoveredTransaction(butlerData, {
+      ...transaction,
+      status: "rollback",
+      active_pointer: transaction.previous_active_pointer,
+      updated_at: now().toISOString(),
+      last_error: "recovered missing candidate boot token",
+      raw_text_included: false,
+    });
+  }
+
+  if (
+    transaction.status === "restart_required" &&
+    activePointer &&
+    !sameAppManagedPointer(activePointer, transaction.previous_active_pointer)
+  ) {
+    atomicWriteJson(
+      appManagedAgentPointerPath(butlerData),
+      transaction.previous_active_pointer,
+    );
+    rmSync(appManagedAgentCandidateBootTokenPath(butlerData), { force: true });
+    return writeRecoveredTransaction(butlerData, {
+      ...transaction,
+      status: "rollback",
+      active_pointer: transaction.previous_active_pointer,
+      updated_at: now().toISOString(),
+      last_error: "recovered unready candidate pointer",
+      raw_text_included: false,
+    });
+  }
+
+  if (
+    transaction.status === "rollback" &&
+    !sameAppManagedPointer(activePointer, transaction.previous_active_pointer)
+  ) {
+    atomicWriteJson(
+      appManagedAgentPointerPath(butlerData),
+      transaction.previous_active_pointer,
+    );
+    rmSync(appManagedAgentCandidateBootTokenPath(butlerData), { force: true });
+    return writeRecoveredTransaction(butlerData, {
+      ...transaction,
+      active_pointer: transaction.previous_active_pointer,
+      updated_at: now().toISOString(),
+      raw_text_included: false,
+    });
+  }
+
+  if (
+    transaction.status === "ready" &&
+    !sameAppManagedPointer(activePointer, transaction.active_pointer)
+  ) {
+    atomicWriteJson(appManagedAgentPointerPath(butlerData), transaction.active_pointer);
+    rmSync(appManagedAgentCandidateBootTokenPath(butlerData), { force: true });
+    return writeRecoveredTransaction(butlerData, {
+      ...transaction,
+      updated_at: now().toISOString(),
+      raw_text_included: false,
+    });
+  }
+
+  return transaction;
+}
+
+export function consumeAppManagedAgentCandidateBootToken({
+  butlerData,
+  generation,
+  candidateDigest,
+  token,
+}) {
+  const transaction = requireUpdateTransaction(butlerData, generation);
+  if (transaction.status !== "restart_required") {
+    throw new Error("candidate App-managed Agent runtime boot is not pending");
+  }
+  if (transaction.candidate_digest !== safeString(candidateDigest)) {
+    throw new Error("candidate App-managed Agent runtime digest mismatch");
+  }
+  if (transaction.candidate_boot_token_hash !== sha256Text(token)) {
+    throw new Error("candidate App-managed Agent runtime boot token mismatch");
+  }
+  const bootToken = readJsonIfPresent(appManagedAgentCandidateBootTokenPath(butlerData));
+  if (
+    bootToken?.generation !== generation ||
+    bootToken.candidate_digest !== transaction.candidate_digest ||
+    !validAppManagedPointer(bootToken.candidate_pointer)
+  ) {
+    throw new Error("missing candidate App-managed Agent runtime boot token");
+  }
+  rmSync(appManagedAgentCandidateBootTokenPath(butlerData), { force: true });
+  return {
+    generation,
+    candidate_pointer: transaction.candidate_pointer,
+    candidate_digest: transaction.candidate_digest,
+    raw_text_included: false,
+  };
+}
+
+export function markAppManagedAgentRuntimeCandidateReady({
+  butlerData,
+  generation,
+  readinessProof,
+  now = () => new Date(),
+}) {
+  const transaction = requireUpdateTransaction(butlerData, generation);
+  const updated = {
+    ...transaction,
+    status: "candidate_ready",
+    readiness_proof: sanitizeUpdateProof(readinessProof),
+    updated_at: now().toISOString(),
+    last_error: null,
+    raw_text_included: false,
+  };
+  atomicWriteJson(appManagedAgentUpdateTransactionPath(butlerData), updated);
+  return updated;
+}
+
+export function promoteAppManagedAgentRuntimeCandidate({
+  butlerData,
+  generation,
+  now = () => new Date(),
+}) {
+  const transaction = requireUpdateTransaction(butlerData, generation);
+  if (transaction.status !== "candidate_ready" || !transaction.readiness_proof) {
+    throw new Error("candidate App-managed Agent runtime is not ready");
+  }
+  const selectedAt = now().toISOString();
+  const promotedPointer = {
+    ...transaction.candidate_pointer,
+    selected_at: selectedAt,
+    previous: transaction.previous_active_pointer,
+    raw_text_included: false,
+  };
+  atomicWriteJson(appManagedAgentPointerPath(butlerData), promotedPointer);
+  const updated = {
+    ...transaction,
+    status: "ready",
+    active_pointer: promotedPointer,
+    updated_at: selectedAt,
+    last_error: null,
+    raw_text_included: false,
+  };
+  atomicWriteJson(appManagedAgentUpdateTransactionPath(butlerData), updated);
+  rmSync(appManagedAgentCandidateBootTokenPath(butlerData), { force: true });
+  return updated;
+}
+
+export function rollbackAppManagedAgentRuntimeUpdate({
+  butlerData,
+  generation,
+  error = new Error("App-managed Agent runtime update failed"),
+  now = () => new Date(),
+}) {
+  const transaction = requireUpdateTransaction(butlerData, generation);
+  const restoredPointer = transaction.previous_active_pointer;
+  atomicWriteJson(appManagedAgentPointerPath(butlerData), restoredPointer);
+  const updated = {
+    ...transaction,
+    status: "rollback",
+    active_pointer: restoredPointer,
+    updated_at: now().toISOString(),
+    last_error: redactDiagnosticsText(error instanceof Error ? error.message : String(error)),
+    raw_text_included: false,
+  };
+  atomicWriteJson(appManagedAgentUpdateTransactionPath(butlerData), updated);
+  rmSync(appManagedAgentCandidateBootTokenPath(butlerData), { force: true });
+  return updated;
 }
 
 export function resolveBundledAgentResourceRoot({
@@ -497,6 +768,74 @@ function validPointerForVersion(pointer, version) {
   return pointer;
 }
 
+function validAppManagedPointer(pointer) {
+  return Boolean(
+    pointer &&
+      pointer.schema === APP_MANAGED_RUNTIME_POINTER_SCHEMA &&
+      pointer.product === "butler-app" &&
+      pointer.gateway_profile === "electron" &&
+      typeof pointer.version === "string" &&
+      typeof pointer.runtime_home === "string" &&
+      pointer.runtime_home.trim(),
+  );
+}
+
+function requireUpdateTransaction(butlerData, generation) {
+  const transaction = readJsonIfPresent(appManagedAgentUpdateTransactionPath(butlerData));
+  if (
+    transaction?.schema !== APP_MANAGED_RUNTIME_UPDATE_TRANSACTION_SCHEMA ||
+    transaction.generation !== generation
+  ) {
+    throw new Error("missing App-managed Agent runtime update transaction");
+  }
+  if (
+    !validAppManagedPointer(transaction.previous_active_pointer) ||
+    !validAppManagedPointer(transaction.active_pointer) ||
+    !validAppManagedPointer(transaction.candidate_pointer)
+  ) {
+    throw new Error("invalid App-managed Agent runtime update transaction");
+  }
+  return transaction;
+}
+
+function writeRecoveredTransaction(butlerData, transaction) {
+  atomicWriteJson(appManagedAgentUpdateTransactionPath(butlerData), transaction);
+  return transaction;
+}
+
+function sameAppManagedPointer(left, right) {
+  return Boolean(
+    validAppManagedPointer(left) &&
+      validAppManagedPointer(right) &&
+      left.version === right.version &&
+      left.runtime_home === right.runtime_home,
+  );
+}
+
+function sanitizeUpdateProof(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      ready: true,
+      raw_text_included: false,
+    };
+  }
+  const proof = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (/token|secret|authorization|password|credential/iu.test(key)) {
+      proof[key] = "[redacted]";
+      continue;
+    }
+    if (/path|file|dir|home|root|cwd/iu.test(key) && typeof raw === "string") {
+      proof[key] = redactDiagnosticsPath(raw);
+      continue;
+    }
+    if (typeof raw === "string") proof[key] = redactDiagnosticsText(raw);
+    else if (typeof raw === "number" || typeof raw === "boolean") proof[key] = raw;
+  }
+  proof.raw_text_included = false;
+  return proof;
+}
+
 function runtimeHomeReady(runtimeHome, expected = null) {
   return runtimeHomeReadinessIssue(runtimeHome, expected) === null;
 }
@@ -611,7 +950,11 @@ function readTarGzEntries(artifactPath) {
 
 function parseTarGz(artifactPath) {
   try {
-    return parseTarBuffer(gunzipSync(readFileSync(artifactPath)));
+    return parseTarBuffer(
+      gunzipSync(readFileSync(artifactPath), {
+        maxOutputLength: maxAgentArchiveUncompressedBytes,
+      }),
+    );
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("bundled Agent artifact")) {
       throw error;
@@ -714,6 +1057,10 @@ function isFile(path) {
 
 function sha256File(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function sha256Text(value) {
+  return createHash("sha256").update(String(value)).digest("hex");
 }
 
 function sha256Bytes(bytes) {

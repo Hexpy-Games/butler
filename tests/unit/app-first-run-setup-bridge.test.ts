@@ -30,9 +30,15 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(preload).toContain("startAgentService");
   expect(preload).toContain("stopAgentService");
   expect(preload).toContain("restartAgentService");
+  expect(preload).toContain("prepareAgentRuntimeUpdate");
+  expect(preload).toContain("applyAgentRuntimeUpdate");
+  expect(preload).toContain("rollbackAgentRuntimeUpdate");
   expect(preload).toContain("exportAgentServiceDiagnostics");
   expect(preload).toContain("butler:agent-service-status");
   expect(preload).toContain("butler:agent-service-diagnostics");
+  expect(preload).toContain("butler:agent-runtime-update-prepare");
+  expect(preload).toContain("butler:agent-runtime-update-apply");
+  expect(preload).toContain("butler:agent-runtime-update-rollback");
   expect(preload).toContain("butler:ensure-server");
   expect(preload).toContain("butler:get-server-url");
   expect(preload).toContain("butler:get-local-auth-headers");
@@ -46,6 +52,8 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(main).not.toContain("async function createWindow() {\n  await ensureServer();");
   expect(main).toContain("function defaultRendererUrl()");
   expect(main).toContain('join(process.resourcesPath, "app-client")');
+  expect(main).toContain("app.requestSingleInstanceLock()");
+  expect(main).toContain('app.on("second-instance"');
   expect(main).toContain('ipcMain.handle("butler:ensure-server"');
   expect(main).toContain('ipcMain.handle("butler:get-server-url"');
   expect(main).toContain('ipcMain.handle("butler:first-run-setup-status"');
@@ -58,6 +66,9 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(main).toContain('ipcMain.handle("butler:agent-service-start"');
   expect(main).toContain('ipcMain.handle("butler:agent-service-stop"');
   expect(main).toContain('ipcMain.handle("butler:agent-service-restart"');
+  expect(main).toContain('ipcMain.handle("butler:agent-runtime-update-prepare"');
+  expect(main).toContain('ipcMain.handle("butler:agent-runtime-update-apply"');
+  expect(main).toContain('ipcMain.handle("butler:agent-runtime-update-rollback"');
   expect(main).toContain('ipcMain.handle("butler:agent-service-diagnostics"');
   expect(main).toContain('ipcMain.handle("butler:quit-app"');
   expect(main).toContain("isQuitting = true");

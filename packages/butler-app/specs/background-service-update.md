@@ -2,8 +2,10 @@
 
 ## Status
 
-Planning. This spec defines how Butler App updates affect the background Agent
-service process group.
+Partially implemented. This spec defines how Butler App updates affect the
+background Agent service process group. The App-managed runtime transaction,
+candidate boot token, promotion, rollback, and Electron service-control bridge
+surface exist. Platform service adapters and release updater E2E remain pending.
 
 ## Goal
 
@@ -101,6 +103,26 @@ The App must persist an update transaction before service restart:
 - `transaction`: update generation, previous active pointer, candidate pointer,
   update status, started timestamp, and last error.
 
+Current implementation:
+
+- `appManagedAgentUpdateTransactionPath` persists the generation-locked
+  transaction at `app/runtime/agent/update-transaction.json`.
+- `beginAppManagedAgentRuntimeUpdate` writes the transaction without mutating
+  the active pointer. It writes the candidate boot token before the transaction
+  so a crash cannot leave a restart-required transaction without token state.
+- `consumeAppManagedAgentCandidateBootToken` allows exactly one candidate boot
+  when generation, digest, and token hash match.
+- `markAppManagedAgentRuntimeCandidateReady` records redacted readiness proof.
+- `promoteAppManagedAgentRuntimeCandidate` promotes only a ready candidate.
+- `rollbackAppManagedAgentRuntimeUpdate` restores the previous active pointer
+  and removes the candidate boot token.
+- `recoverAppManagedAgentRuntimeUpdateTransaction` reconciles crash boundaries
+  between transaction writes, active pointer writes, promotion, and rollback.
+- Electron main holds a single-instance lock so two App UI processes do not
+  concurrently mutate the same App-managed runtime pointers.
+- Bundled Agent archive decompression has a bounded uncompressed size until the
+  updater is moved to a streaming worker/utility process.
+
 Crash recovery rules:
 
 - If the App dies before candidate readiness succeeds, the next service start
@@ -182,6 +204,18 @@ a narrow service-control bridge owned by the Electron main process:
 
 The bridge must return structured, redacted status objects.
 
+Current implementation:
+
+- `service-control.mjs` exposes runtime update prepare/apply/rollback actions
+  beside service install/start/stop/restart.
+- `main.mjs` owns the IPC handlers:
+  - `butler:agent-runtime-update-prepare`
+  - `butler:agent-runtime-update-apply`
+  - `butler:agent-runtime-update-rollback`
+- `preload.cjs` exposes the renderer-safe methods without shell access.
+- Until platform/update adapters land, update actions fail closed with
+  `agent_runtime_update_unavailable`.
+
 ## Success Criteria
 
 - Agent runtime update restarts the whole service process group exactly once.
@@ -215,3 +249,7 @@ The bridge must return structured, redacted status objects.
 - E2E update smoke with a fake previous runtime and fake next runtime.
 - Release smoke proving App artifact contains service-capable Agent runtime
   metadata.
+
+Covered by Phase 5 local validation:
+
+- `bun test tests/unit/app-managed-runtime.test.ts tests/unit/app-agent-service-control.test.ts tests/unit/app-first-run-setup-bridge.test.ts tests/unit/app-background-service-contract.test.ts`
