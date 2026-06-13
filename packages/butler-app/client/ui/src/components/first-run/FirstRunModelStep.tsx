@@ -24,6 +24,7 @@ interface FirstRunModelStepProps {
   modelSettingsReady: boolean;
   modelSetupReady: boolean;
   onRetryModelLoad: () => void;
+  onRetryModelSave: () => void;
   onSaveModel: () => void;
 }
 
@@ -34,12 +35,11 @@ export function FirstRunModelStep({
   modelSettingsReady,
   modelSetupReady,
   onRetryModelLoad,
+  onRetryModelSave,
   onSaveModel,
 }: FirstRunModelStepProps) {
   const modelRoute = useSettingsUIStore((state) => state.modelRoute);
-  const canFinishModelSetup =
-    modelSetupReady &&
-    (modelRoute.page === "root" || modelRoute.page === "management");
+  const canFinishModelSetup = modelSetupReady && modelRoute.page !== "edit";
 
   return (
     <SetupWizardContent width="wide">
@@ -58,7 +58,22 @@ export function FirstRunModelStep({
         </Stack>
       ) : modelSettingsReady ? (
         <>
-          {modelSaveStatus && <Typo.Body>{modelSaveStatus}</Typo.Body>}
+          {modelSaveStatus && (
+            <Stack gap="sm">
+              <Typo.Body>{modelSaveStatus}</Typo.Body>
+              {modelSaveStatus === copy.modelSaveFailed && (
+                <ButtonContainer size="default">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={onRetryModelSave}
+                  >
+                    {copy.modelRetry}
+                  </Button>
+                </ButtonContainer>
+              )}
+            </Stack>
+          )}
           <FirstRunModelSettingsSurface />
           {canFinishModelSetup && (
             <ButtonContainer size="default">

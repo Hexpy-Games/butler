@@ -38,24 +38,27 @@ export function useFirstRunModelSetup({
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [modelSettingsLoaded, setModelSettingsLoaded] = useState(false);
   const initialRegisteredModelRefs = useRef<Set<string> | null>(null);
-  const runtimeModelRefs = useMemo(
-    () => runtimeModels(modelCatalog).map((model) => model.model_ref),
-    [modelCatalog],
-  );
   const registeredRuntimeModels = useMemo(
     () => registeredModels(modelCatalog).filter((model) => model.runtime_supported),
     [modelCatalog],
   );
-  const { addedDefaultSaved } = useFirstRunAddedModelDefault({
+  const registeredRuntimeModelRefs = useMemo(
+    () => registeredRuntimeModels.map((model) => model.model_ref),
+    [registeredRuntimeModels],
+  );
+  const registeredDefaultSaved =
+    Boolean(settingsDraft?.model) &&
+    registeredRuntimeModelRefs.includes(settingsDraft?.model ?? "");
+  const { onRetryDefaultModelSave } = useFirstRunAddedModelDefault({
     copy,
     enabled,
     initialRegisteredModelRefs,
     language,
     loading,
     modelLoadFailed,
+    registeredDefaultSaved,
     registeredRuntimeModels,
     resetKey: loadAttempt,
-    runtimeModelRefs,
     setModelSaveStatus,
     setSettingsDraft,
     settingsDraft,
@@ -108,7 +111,7 @@ export function useFirstRunModelSetup({
   const modelSettingsReady =
     enabled && !loading && !modelLoadFailed && modelSettingsLoaded;
   const modelSetupReady =
-    modelSettingsReady && availableModelCount > 0 && addedDefaultSaved;
+    modelSettingsReady && availableModelCount > 0 && registeredDefaultSaved;
 
   return {
     modelLoadFailed,
@@ -116,6 +119,7 @@ export function useFirstRunModelSetup({
     modelSettingsReady,
     modelSetupReady,
     onRetryModelLoad: () => setLoadAttempt((current) => current + 1),
+    onRetryModelSave: onRetryDefaultModelSave,
     onSaveModel: () => {
       if (modelSetupReady) onComplete();
     },

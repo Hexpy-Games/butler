@@ -86,11 +86,6 @@ test("first-run setup renders the minimal Electron setup order", async () => {
     ),
   ).not.toBeNull();
   await addHostedModelAndFinish(rendered);
-  expect(rendered.settingsPatches).toContainEqual({
-    model: "openai/gpt-5.5",
-    reasoning_effort: "xhigh",
-    context_window_tokens: 258000,
-  });
 
   await act(async () => rendered.root.unmount());
 });
@@ -172,6 +167,7 @@ test("first-run model setup waits for a newly added model before completion", as
       safety_accepted: true,
       install_status: "ready",
     },
+    { settings: { ...EMPTY_SETTINGS, model: "missing/model" } },
   );
 
   await waitForText(rendered.container, "API key");
@@ -187,7 +183,31 @@ test("first-run model setup waits for a newly added model before completion", as
   await act(async () => rendered.root.unmount());
 });
 
-test("first-run model setup surfaces default-save failure after adding a model", async () => {
+test("first-run model setup recovers when default was saved before completion", async () => {
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+    {
+      modelCatalog: firstRunRegisteredModelCatalog(),
+      settings: { ...EMPTY_SETTINGS, model: "openai/gpt-5.5" },
+    },
+  );
+
+  await waitForText(rendered.container, "모델 추가");
+  await waitForText(rendered.container, "저장하고 시작");
+  await clickButton(rendered.container, "저장하고 시작");
+  expect(rendered.calls).not.toContain("registerHostedModel");
+  expect(rendered.completedStates[0]?.status).toBe("complete");
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run model setup retries default-save failure after adding a model", async () => {
   const rendered = await renderFirstRun(
     {
       ...createInitialFirstRunState("ko"),
@@ -207,6 +227,18 @@ test("first-run model setup surfaces default-save failure after adding a model",
   await waitForText(rendered.container, "모델 설정을 저장하지 못했습니다.");
   expect(rendered.calls).toContain("registerHostedModel");
   expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
+  await clickButton(rendered.container, "다시 불러오기");
+  await waitForText(rendered.container, "저장하고 시작");
+  await clickButton(rendered.container, "저장하고 시작");
+  expect(
+    rendered.settingsPatches.filter(
+      (patch) =>
+        typeof patch === "object" &&
+        patch !== null &&
+        "model" in patch,
+    ),
+  ).toHaveLength(2);
+  expect(rendered.completedStates[0]?.status).toBe("complete");
 
   await act(async () => rendered.root.unmount());
 });

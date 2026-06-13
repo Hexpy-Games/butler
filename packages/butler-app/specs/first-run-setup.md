@@ -30,7 +30,13 @@ the App-owned setup flow inside Electron before the workspace is shown.
 - After a model is added during first-run setup, that added model becomes the
   Butler default model before setup can complete.
 - The model step may complete setup only after App settings and model catalog
-  are loaded and a runtime-supported model has been saved as the default model.
+  are loaded and a registered, runtime-supported model has been saved as the
+  default model.
+- If the App restarts after the model was registered and saved as default but
+  before the final setup confirmation, the model step must allow completion
+  without requiring the user to add the same model again.
+- If saving the added model as the default model fails, the model step must show
+  the failure and offer a retry that repeats the default-model save.
 - The model step must not route the user to the Settings screen during
   first-run setup.
 
@@ -52,7 +58,7 @@ the App-owned setup flow inside Electron before the workspace is shown.
 
 - Component tests cover the four-step order, absence of gateway/persona copy,
   bundled-Agent-only installation, model-add-first setup, added-model default
-  persistence, and no Settings route.
+  persistence, post-save recovery, default-save retry, and no Settings route.
 - AppShell first-run tests prove the workspace is gated until the model save
   completes.
 - Manual first-run smoke launches an isolated Electron profile and data root so

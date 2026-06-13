@@ -17,8 +17,8 @@ interface UseFirstRunAddedModelDefaultOptions {
   resetKey: number;
   loading: boolean;
   modelLoadFailed: boolean;
+  registeredDefaultSaved: boolean;
   registeredRuntimeModels: AppModelSummary[];
-  runtimeModelRefs: string[];
   settingsDraft: SettingsView | null;
   setModelSaveStatus: (status: string) => void;
   setSettingsDraft: (settings: SettingsView) => void;
@@ -32,21 +32,23 @@ export function useFirstRunAddedModelDefault({
   resetKey,
   loading,
   modelLoadFailed,
+  registeredDefaultSaved,
   registeredRuntimeModels,
-  runtimeModelRefs,
   settingsDraft,
   setModelSaveStatus,
   setSettingsDraft,
 }: UseFirstRunAddedModelDefaultOptions) {
   const [addedDefaultModelRef, setAddedDefaultModelRef] = useState("");
+  const [saveAttempt, setSaveAttempt] = useState(0);
   const autoSavingModelRef = useRef("");
   const addedDefaultSaved =
     Boolean(addedDefaultModelRef) &&
     settingsDraft?.model === addedDefaultModelRef &&
-    runtimeModelRefs.includes(addedDefaultModelRef);
+    registeredDefaultSaved;
 
   useEffect(() => {
     setAddedDefaultModelRef("");
+    setSaveAttempt(0);
     autoSavingModelRef.current = "";
   }, [resetKey]);
 
@@ -57,21 +59,25 @@ export function useFirstRunAddedModelDefault({
           (model) => !initialRefs.has(model.model_ref),
         )
       : null;
+    const targetModel = addedModel ?? (
+      registeredDefaultSaved ? null : registeredRuntimeModels[0]
+    );
     if (
       !enabled ||
       loading ||
       modelLoadFailed ||
       !settingsDraft ||
-      !addedModel ||
+      !targetModel ||
+      registeredDefaultSaved ||
       addedDefaultSaved ||
-      autoSavingModelRef.current === addedModel.model_ref
+      autoSavingModelRef.current === targetModel.model_ref
     ) {
       return undefined;
     }
 
     let cancelled = false;
     const baseSettings = settingsDraft;
-    autoSavingModelRef.current = addedModel.model_ref;
+    autoSavingModelRef.current = targetModel.model_ref;
     async function saveAddedDefaultModel(targetModel: AppModelSummary) {
       setModelSaveStatus(copy.modelSaving);
       const fallbackSettings: SettingsView = {
@@ -102,7 +108,6 @@ export function useFirstRunAddedModelDefault({
         setModelSaveStatus("");
       } catch {
         if (!cancelled) {
-          setAddedDefaultModelRef(targetModel.model_ref);
           setModelSaveStatus(copy.modelSaveFailed);
         }
       } finally {
@@ -110,7 +115,7 @@ export function useFirstRunAddedModelDefault({
       }
     }
 
-    void saveAddedDefaultModel(addedModel);
+    void saveAddedDefaultModel(targetModel);
     return () => {
       cancelled = true;
     };
@@ -123,11 +128,19 @@ export function useFirstRunAddedModelDefault({
     language,
     loading,
     modelLoadFailed,
+    registeredDefaultSaved,
     registeredRuntimeModels,
+    saveAttempt,
     setModelSaveStatus,
     setSettingsDraft,
     settingsDraft,
   ]);
 
-  return { addedDefaultSaved };
+  return {
+    addedDefaultSaved,
+    onRetryDefaultModelSave: () => {
+      autoSavingModelRef.current = "";
+      setSaveAttempt((current) => current + 1);
+    },
+  };
 }
