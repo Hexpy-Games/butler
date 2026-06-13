@@ -973,6 +973,16 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("Notification.isSupported");
   expect(electronMain).toContain("failed");
   expect(electronMain).toContain("refreshTrayMenu");
+  expect(electronMain).toContain("trayAgentServiceStatus");
+  expect(electronMain).toContain("createTrayAgentMenuModel");
+  expect(electronMain).toContain("runTrayAgentServiceAction");
+  expect(electronMain).toContain("Start Butler Agent");
+  expect(electronMain).toContain("Restart Butler Agent");
+  expect(electronMain).toContain("Stop Butler Agent");
+  expect(electronMain).toContain("Quit Butler UI");
+  expect(electronMain).toContain('agentServiceControl.startAgentService({ source: "tray" })');
+  expect(electronMain).toContain('agentServiceControl.stopAgentService({ source: "tray" })');
+  expect(electronMain).toContain('agentServiceControl.restartAgentService({ source: "tray" })');
   expect(electronMain).toContain(
     'const trayIconLightThemePath = resolve(__dirname, "assets/butler-mark-flat.png")',
   );
@@ -1568,6 +1578,9 @@ test("electron shell owns only the app gateway process and shuts it down cleanly
   expect(electronMain).toContain('app.on("before-quit"');
   expect(electronMain).toContain('process.once("SIGINT"');
   expect(electronMain).toContain('process.once("SIGTERM"');
+  expect(electronMain).toContain("Quit Butler UI");
+  expect(electronMain).not.toContain("stopAgentService({ source: \"quit\" })");
+  expect(electronMain).not.toContain("stopAgentService({ source: \"before-quit\" })");
 });
 
 test("conversation message context menu provides copy action", () => {
