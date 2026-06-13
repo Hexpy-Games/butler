@@ -1,14 +1,18 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { ManagedServiceDaemon } from "../../packages/butler-agent/src/operations/service/native-service-daemon.ts";
+import {
+  ManagedServiceDaemon,
+  defaultDaemonServiceSpecs,
+} from "../../packages/butler-agent/src/operations/service/native-service-daemon.ts";
 import {
   readAppGatewayPid,
   writeAppGatewayPid,
 } from "../../packages/butler-agent/src/operations/gateway/registry.ts";
 import {
   NATIVE_SUPERVISOR_ID,
+  appManagedRuntimePointerPath,
   defaultNativeServiceSpecs,
   serviceStatePath,
   writeServiceState,
@@ -20,6 +24,17 @@ function tempRoot(): string {
   const dir = join(tmpdir(), `butler-service-daemon-${Date.now()}-${Math.random()}`);
   mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+function writeValidAppLocalAuth(path: string) {
+  mkdirSync(join(path, ".."), { recursive: true });
+  writeFileSync(
+    path,
+    `${JSON.stringify({
+      schema: "butler.app-local-agent-auth.v1",
+      token: "abcdefghijklmnopqrstuvwxyz123456",
+    }, null, 2)}\n`,
+  );
 }
 
 function smallSpecs(butlerHome: string, butlerData: string): NativeServiceSpec[] {
@@ -63,6 +78,139 @@ test("foreground daemon starts manifest children and writes native state", () =>
       startedAt: "2026-04-28T00:00:00.000Z",
     });
   } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("foreground daemon uses App-managed specs when runtime pointer env is present", () => {
+  const butlerData = tempRoot();
+  const previousPointer = process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER;
+  const previousAuth = process.env.BUTLER_APP_LOCAL_AUTH_FILE;
+  const previousPort = process.env.BUTLER_APP_SERVER_PORT;
+  let spawnedEnv: Record<string, string> | null = null;
+  try {
+    const runtimeHomeLabel = join("app", "runtime", "agent", "versions", "9.9.9");
+    const runtimeHome = join(butlerData, runtimeHomeLabel);
+    const pointerPath = appManagedRuntimePointerPath(butlerData);
+    const localAuthFile = join(butlerData, "app", "runtime", "auth", "local-agent-auth.json");
+    mkdirSync(join(runtimeHome, "packages", "butler-agent", "resources", "runtime", "bin"), {
+      recursive: true,
+    });
+    mkdirSync(join(runtimeHome, "bin"), { recursive: true });
+    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
+    writeFileSync(join(runtimeHome, "bin", "butler.js"), "");
+    writeFileSync(
+      join(runtimeHome, "packages", "butler-agent", "resources", "runtime", "bin", "bun"),
+      "",
+    );
+    writeValidAppLocalAuth(localAuthFile);
+    writeFileSync(
+      pointerPath,
+      `${JSON.stringify({
+        schema: "butler.app-managed-agent-runtime-pointer.v1",
+        product: "butler-app",
+        gateway_profile: "electron",
+        version: "9.9.9",
+        runtime_home: runtimeHomeLabel,
+      }, null, 2)}\n`,
+    );
+    process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER = pointerPath;
+    process.env.BUTLER_APP_LOCAL_AUTH_FILE = localAuthFile;
+    process.env.BUTLER_APP_SERVER_PORT = "19123";
+
+    const specs = defaultDaemonServiceSpecs({
+      butlerHome: "/standalone/ignored",
+      butlerData,
+    });
+    const appGateway = specs.find((spec) => spec.id === "app-gateway");
+    expect(specs.every((spec) => spec.cwd === runtimeHome)).toBe(true);
+    expect(appGateway?.env).toMatchObject({
+      BUTLER_APP_MANAGED_RUNTIME_POINTER: pointerPath,
+      BUTLER_APP_LOCAL_AUTH_FILE: localAuthFile,
+      BUTLER_APP_SERVER_PORT: "19123",
+    });
+
+    const daemon = new ManagedServiceDaemon({
+      butlerData,
+      specs: [appGateway!],
+      parentPid: 11_000,
+      spawnChild: (_spec, env) => {
+        spawnedEnv = env;
+        return { pid: 11_100 };
+      },
+    });
+    daemon.startAll();
+    expect(spawnedEnv).toMatchObject({
+      BUTLER_APP_MANAGED_RUNTIME_POINTER: pointerPath,
+      BUTLER_APP_LOCAL_AUTH_FILE: localAuthFile,
+      BUTLER_APP_SERVER_PORT: "19123",
+    });
+    const state = JSON.parse(readFileSync(serviceStatePath(butlerData, "app-gateway"), "utf8"));
+    expect(state.runtime).toMatchObject({
+      managedBy: "butler-app",
+      runtimePointerPath: pointerPath,
+      runtimeHome,
+      version: "9.9.9",
+    });
+  } finally {
+    if (previousPointer === undefined) delete process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER;
+    else process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER = previousPointer;
+    if (previousAuth === undefined) delete process.env.BUTLER_APP_LOCAL_AUTH_FILE;
+    else process.env.BUTLER_APP_LOCAL_AUTH_FILE = previousAuth;
+    if (previousPort === undefined) delete process.env.BUTLER_APP_SERVER_PORT;
+    else process.env.BUTLER_APP_SERVER_PORT = previousPort;
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("foreground daemon rejects invalid App-managed gateway port env", () => {
+  const butlerData = tempRoot();
+  const previousPointer = process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER;
+  const previousAuth = process.env.BUTLER_APP_LOCAL_AUTH_FILE;
+  const previousPort = process.env.BUTLER_APP_SERVER_PORT;
+  try {
+    const runtimeHomeLabel = join("app", "runtime", "agent", "versions", "9.9.9");
+    const runtimeHome = join(butlerData, runtimeHomeLabel);
+    const pointerPath = appManagedRuntimePointerPath(butlerData);
+    const localAuthFile = join(butlerData, "app", "runtime", "auth", "local-agent-auth.json");
+    mkdirSync(join(runtimeHome, "packages", "butler-agent", "resources", "runtime", "bin"), {
+      recursive: true,
+    });
+    mkdirSync(join(runtimeHome, "bin"), { recursive: true });
+    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
+    writeFileSync(join(runtimeHome, "bin", "butler.js"), "");
+    writeFileSync(
+      join(runtimeHome, "packages", "butler-agent", "resources", "runtime", "bin", "bun"),
+      "",
+    );
+    writeValidAppLocalAuth(localAuthFile);
+    writeFileSync(
+      pointerPath,
+      `${JSON.stringify({
+        schema: "butler.app-managed-agent-runtime-pointer.v1",
+        product: "butler-app",
+        gateway_profile: "electron",
+        version: "9.9.9",
+        runtime_home: runtimeHomeLabel,
+      }, null, 2)}\n`,
+    );
+    process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER = pointerPath;
+    process.env.BUTLER_APP_LOCAL_AUTH_FILE = localAuthFile;
+    process.env.BUTLER_APP_SERVER_PORT = "not-a-port";
+
+    expect(() =>
+      defaultDaemonServiceSpecs({
+        butlerHome: "/standalone/ignored",
+        butlerData,
+      }),
+    ).toThrow("invalid App-managed gateway port");
+  } finally {
+    if (previousPointer === undefined) delete process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER;
+    else process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER = previousPointer;
+    if (previousAuth === undefined) delete process.env.BUTLER_APP_LOCAL_AUTH_FILE;
+    else process.env.BUTLER_APP_LOCAL_AUTH_FILE = previousAuth;
+    if (previousPort === undefined) delete process.env.BUTLER_APP_SERVER_PORT;
+    else process.env.BUTLER_APP_SERVER_PORT = previousPort;
     rmSync(butlerData, { recursive: true, force: true });
   }
 });

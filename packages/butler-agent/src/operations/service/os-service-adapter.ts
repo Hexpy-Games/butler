@@ -16,6 +16,7 @@ export interface OsServiceAdapterInput {
   butlerHome: string;
   butlerData: string;
   label?: string;
+  env?: Record<string, string>;
 }
 
 export interface OsServicePreviewInput extends OsServiceAdapterInput {
@@ -110,6 +111,41 @@ function escapeXml(value: string): string {
     .replaceAll("'", "&apos;");
 }
 
+function serviceEnvironment(input: OsServiceAdapterInput): Record<string, string> {
+  const env = {
+    BUTLER_HOME: input.butlerHome,
+    BUTLER_DATA: input.butlerData,
+    ...(input.env ?? {}),
+  };
+  for (const [key, value] of Object.entries(env)) {
+    assertSafeEnvironmentEntry(key, value);
+  }
+  return env;
+}
+
+function assertSafeEnvironmentEntry(key: string, value: string): void {
+  if (!/^[A-Z_][A-Z0-9_]*$/u.test(key)) {
+    throw new Error(`invalid service environment key: ${key}`);
+  }
+  if (typeof value !== "string" || hasControlCharacter(value)) {
+    throw new Error(`invalid service environment value for ${key}`);
+  }
+}
+
+function hasControlCharacter(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint < 32 || codePoint === 127;
+  });
+}
+
+function systemdEnvironmentValue(value: string): string {
+  return `"${value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("\"", "\\\"")
+    .replaceAll("%", "%%")}"`;
+}
+
 export function buildLaunchdPlist(input: OsServiceAdapterInput): string {
   const serviceLabel = label(input.label);
   const script = daemonScript(input.butlerHome);
@@ -126,10 +162,11 @@ export function buildLaunchdPlist(input: OsServiceAdapterInput): string {
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>BUTLER_HOME</key>
-    <string>${escapeXml(input.butlerHome)}</string>
-    <key>BUTLER_DATA</key>
-    <string>${escapeXml(input.butlerData)}</string>
+${Object.entries(serviceEnvironment(input))
+    .map(([key, value]) =>
+      `    <key>${escapeXml(key)}</key>\n    <string>${escapeXml(value)}</string>`,
+    )
+    .join("\n")}
   </dict>
   <key>WorkingDirectory</key>
   <string>${escapeXml(input.butlerHome)}</string>
@@ -156,8 +193,9 @@ After=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${input.butlerHome}
-Environment=BUTLER_HOME=${input.butlerHome}
-Environment=BUTLER_DATA=${input.butlerData}
+${Object.entries(serviceEnvironment(input))
+    .map(([key, value]) => `Environment=${key}=${systemdEnvironmentValue(value)}`)
+    .join("\n")}
 ExecStart=/bin/bash ${script}
 Restart=always
 RestartSec=5
