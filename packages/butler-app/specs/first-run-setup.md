@@ -5,6 +5,11 @@
 Butler App distribution includes Butler Agent. A clean App launch must complete
 the App-owned setup flow inside Electron before the workspace is shown.
 
+The long-term App distribution target is defined in
+`background-service-distribution.md`: first-run should install or verify the
+background Butler Agent service, not rely on a production Electron-owned child
+Agent process.
+
 ## Flow
 
 1. Language
@@ -21,6 +26,10 @@ the App-owned setup flow inside Electron before the workspace is shown.
 - The App distribution uses the bundled Agent path only. It must not offer an
   existing-Agent connection, gateway selection, curl, unzip, or terminal
   dependency path.
+- The current bundled-Agent readiness step is the compatibility baseline for
+  the background service migration. The target behavior is that readiness is
+  satisfied by a service-owned app gateway managed by the App-installed Agent
+  service.
 - The installation step uses the title `Butler Agent를 준비합니다`.
 - The model step must reuse the App settings model-management modules instead
   of implementing a separate one-off model picker.
