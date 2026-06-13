@@ -26,6 +26,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createBundledAgentSupervisor } from "./app-agent-supervisor.mjs";
 import { resolveAppManagedGatewayCommand } from "./app-managed-runtime.mjs";
+import { createAgentServiceControl } from "./service-control.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -96,6 +97,9 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   explicitServerUrl,
   explicitUiUrl,
   projectFolderTokenSecret,
+});
+const agentServiceControl = createAgentServiceControl({
+  platform: process.platform,
 });
 const firstRunSetupBridge = createFirstRunSetupBridge({
   ensureReady: ensureServer,
@@ -1116,6 +1120,30 @@ ipcMain.handle("butler:first-run-setup-cancel", () =>
 
 ipcMain.handle("butler:first-run-setup-diagnostics", () =>
   firstRunSetupBridge.diagnostics(),
+);
+
+ipcMain.handle("butler:agent-service-status", () =>
+  agentServiceControl.getAgentServiceStatus(),
+);
+
+ipcMain.handle("butler:agent-service-install", (_event, input = {}) =>
+  agentServiceControl.installAgentService(input ?? {}),
+);
+
+ipcMain.handle("butler:agent-service-start", (_event, input = {}) =>
+  agentServiceControl.startAgentService(input ?? {}),
+);
+
+ipcMain.handle("butler:agent-service-stop", (_event, input = {}) =>
+  agentServiceControl.stopAgentService(input ?? {}),
+);
+
+ipcMain.handle("butler:agent-service-restart", (_event, input = {}) =>
+  agentServiceControl.restartAgentService(input ?? {}),
+);
+
+ipcMain.handle("butler:agent-service-diagnostics", () =>
+  agentServiceControl.readAgentServiceDiagnostics(),
 );
 
 ipcMain.handle("butler:quit-app", () => {

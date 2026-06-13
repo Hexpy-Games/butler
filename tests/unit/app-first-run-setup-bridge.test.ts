@@ -25,6 +25,14 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(preload).toContain("quitApp");
   expect(preload).toContain("butler:first-run-setup-start");
   expect(preload).toContain("butler:first-run-setup-diagnostics");
+  expect(preload).toContain("getAgentServiceStatus");
+  expect(preload).toContain("installAgentService");
+  expect(preload).toContain("startAgentService");
+  expect(preload).toContain("stopAgentService");
+  expect(preload).toContain("restartAgentService");
+  expect(preload).toContain("exportAgentServiceDiagnostics");
+  expect(preload).toContain("butler:agent-service-status");
+  expect(preload).toContain("butler:agent-service-diagnostics");
   expect(preload).toContain("butler:ensure-server");
   expect(preload).toContain("butler:get-server-url");
   expect(preload).toContain("butler:get-local-auth-headers");
@@ -44,6 +52,13 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(main).toContain('ipcMain.handle("butler:first-run-setup-start"');
   expect(main).toContain('ipcMain.handle("butler:first-run-setup-cancel"');
   expect(main).toContain('ipcMain.handle("butler:first-run-setup-diagnostics"');
+  expect(main).toContain("createAgentServiceControl");
+  expect(main).toContain('ipcMain.handle("butler:agent-service-status"');
+  expect(main).toContain('ipcMain.handle("butler:agent-service-install"');
+  expect(main).toContain('ipcMain.handle("butler:agent-service-start"');
+  expect(main).toContain('ipcMain.handle("butler:agent-service-stop"');
+  expect(main).toContain('ipcMain.handle("butler:agent-service-restart"');
+  expect(main).toContain('ipcMain.handle("butler:agent-service-diagnostics"');
   expect(main).toContain('ipcMain.handle("butler:quit-app"');
   expect(main).toContain("isQuitting = true");
   expect(main).toContain('ipcMain.handle("butler:get-local-auth-headers"');
