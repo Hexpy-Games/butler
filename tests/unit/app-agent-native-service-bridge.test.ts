@@ -58,6 +58,45 @@ test("App Agent native service bridge installs launchd service with App-managed 
   }
 });
 
+test("App Agent native service bridge can isolate launchd service label for tests", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-launchd-test-label-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    writeAppManagedRuntime(butlerData, "9.9.9");
+    const writes: Array<{ path: string; body: string }> = [];
+    const commands: string[] = [];
+    const bridge = createAppAgentNativeServiceBridge({
+      butlerData,
+      platform: "darwin",
+      homeDir: "/Users/alice",
+      serviceLabel: "com.hexpy.butler.test.local",
+      getPort: () => 19124,
+      prepareLocalAuth: () => ({
+        filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
+      }),
+      writeFile: (path, body) => writes.push({ path, body }),
+      runCommand: (argv) => {
+        commands.push(argv.join(" "));
+        return { exitCode: argv[1] === "bootout" ? 1 : 0 };
+      },
+    });
+
+    await bridge.registration.install();
+
+    expect(writes[0]?.path).toBe(
+      "/Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist",
+    );
+    expect(writes[0]?.body).toContain("<string>com.hexpy.butler.test.local</string>");
+    expect(commands[0]).toContain("/com.hexpy.butler.test.local");
+    expect(commands[1]).toContain(
+      "/Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist",
+    );
+    expect(commands[2]).toContain("/com.hexpy.butler.test.local");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("App Agent native service bridge ensures App-managed runtime before registration", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-ensure-"));
   try {
@@ -247,6 +286,45 @@ test("App Agent native service bridge installs systemd service with escaped env"
       "systemctl --user enable --now butler.service",
       "systemctl --user stop butler.service",
       "systemctl --user start butler.service",
+    ]);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("App Agent native service bridge can isolate systemd unit for tests", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-systemd-test-unit-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    writeAppManagedRuntime(butlerData, "9.9.9");
+    const writes: Array<{ path: string; body: string }> = [];
+    const commands: string[] = [];
+    const bridge = createAppAgentNativeServiceBridge({
+      butlerData,
+      platform: "linux",
+      homeDir: "/home/alice",
+      systemdUnit: "butler-test-local.service",
+      getPort: () => 19124,
+      prepareLocalAuth: () => ({
+        filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
+      }),
+      writeFile: (path, body) => writes.push({ path, body }),
+      runCommand: (argv) => {
+        commands.push(argv.join(" "));
+        return { exitCode: 0 };
+      },
+    });
+
+    await bridge.registration.install();
+    await bridge.nativeServices.stop();
+    await bridge.nativeServices.start();
+
+    expect(writes[0]?.path).toBe("/home/alice/.config/systemd/user/butler-test-local.service");
+    expect(commands).toEqual([
+      "systemctl --user daemon-reload",
+      "systemctl --user enable --now butler-test-local.service",
+      "systemctl --user stop butler-test-local.service",
+      "systemctl --user start butler-test-local.service",
     ]);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });

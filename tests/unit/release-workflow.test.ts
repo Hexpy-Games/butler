@@ -205,9 +205,22 @@ test("manual first-run test environment launches isolated Electron state", () =>
   expect(packageJson.scripts?.["app:first-run:test-env"]).toContain(
     "packages/butler-app/client/ui run build",
   );
+  expect(packageJson.scripts?.["app:first-run:service-test-env"]).toContain(
+    "packages/butler-app/scripts/app-first-run-test-env.ts --native-service",
+  );
   expect(script).toContain("BUTLER_DATA: dataDir");
   expect(script).toContain("BUTLER_HOME: root");
   expect(script).toContain("BUTLER_APP_SERVER_PORT: String(serverPort)");
+  expect(script).toContain("BUTLER_APP_FORCE_NATIVE_SERVICE_BRIDGE");
+  expect(script).toContain("BUTLER_APP_ALLOW_NATIVE_SERVICE_TEST_ENV");
+  expect(script).toContain("BUTLER_APP_SERVICE_LABEL: serviceLabel");
+  expect(script).toContain("BUTLER_APP_SYSTEMD_UNIT: systemdUnit");
+  expect(script).toContain("BUTLER_APP_BUNDLED_AGENT_DIR");
+  expect(script).toContain("prepareBundledAgentResource");
+  expect(script).toContain("cleanupNativeService({ serviceLabel, systemdUnit })");
+  expect(script).toContain("Refusing to use the production LaunchAgent label");
+  expect(script).toContain("Refusing to use the production systemd unit");
+  expect(script).toContain("Refusing to use the production app-server port");
   expect(script).toContain("--user-data-dir=${electronProfileDir}");
   expect(script).toContain("baseEnvAllowlist");
   expect(script).toContain("delete env.BUTLER_APP_SERVER_URL");

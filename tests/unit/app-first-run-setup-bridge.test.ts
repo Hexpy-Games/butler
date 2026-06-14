@@ -747,6 +747,12 @@ test("Electron bundled-Agent setup does not attach to a pre-existing gateway", (
   expect(main).toContain("createAppAgentNativeServiceBridge");
   expect(main).toContain("createAppAgentServiceAdapter");
   expect(main).toContain("shouldUseAppAgentNativeServiceBridge()");
+  expect(main).toContain("BUTLER_APP_FORCE_NATIVE_SERVICE_BRIDGE");
+  expect(main).toContain("assertNativeServiceTestBridgeEnvironment");
+  expect(main).toContain("Native service bridge test mode requires a non-production service label");
+  expect(main).toContain("Native service bridge test mode requires a non-production app server port");
+  expect(main).toContain("serviceLabel: appAgentServiceLabel()");
+  expect(main).toContain("systemdUnit: appAgentSystemdUnit()");
   expect(main).toContain("ensureRuntimePointer: ensureAppManagedAgentRuntimePointer");
   expect(main).toContain("adapter: appAgentServiceAdapter");
   expect(main).toContain("healthCheck: healthOk");

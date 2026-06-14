@@ -22,7 +22,7 @@ import {
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createBundledAgentSupervisor } from "./app-agent-supervisor.mjs";
 import { createAppAgentNativeServiceBridge } from "./app-agent-native-service-bridge.mjs";
@@ -109,6 +109,8 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
 const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
   ? createAppAgentNativeServiceBridge({
       butlerData: butlerDataRoot,
+      serviceLabel: appAgentServiceLabel(),
+      systemdUnit: appAgentSystemdUnit(),
       getPort: () => port,
       ensureRuntimePointer: ensureAppManagedAgentRuntimePointer,
     })
@@ -215,7 +217,47 @@ function ensureAppManagedAgentRuntimePointer() {
 }
 
 function shouldUseAppAgentNativeServiceBridge() {
-  return app.isPackaged && ["darwin", "linux"].includes(process.platform);
+  if (app.isPackaged && ["darwin", "linux"].includes(process.platform)) return true;
+  if (process.env.BUTLER_APP_FORCE_NATIVE_SERVICE_BRIDGE !== "1") return false;
+  assertNativeServiceTestBridgeEnvironment();
+  return ["darwin", "linux"].includes(process.platform);
+}
+
+function appAgentServiceLabel() {
+  if (process.env.BUTLER_APP_FORCE_NATIVE_SERVICE_BRIDGE !== "1") return undefined;
+  return process.env.BUTLER_APP_SERVICE_LABEL?.trim() || undefined;
+}
+
+function appAgentSystemdUnit() {
+  if (process.env.BUTLER_APP_FORCE_NATIVE_SERVICE_BRIDGE !== "1") return undefined;
+  return process.env.BUTLER_APP_SYSTEMD_UNIT?.trim() || undefined;
+}
+
+function assertNativeServiceTestBridgeEnvironment() {
+  if (process.env.BUTLER_APP_ALLOW_NATIVE_SERVICE_TEST_ENV !== "1") {
+    throw new Error("Native service bridge force mode requires test-env consent.");
+  }
+  const serviceLabel = appAgentServiceLabel();
+  if (!serviceLabel || serviceLabel === "com.hexpy.butler") {
+    throw new Error("Native service bridge test mode requires a non-production service label.");
+  }
+  const systemdUnit = appAgentSystemdUnit();
+  if (!systemdUnit || systemdUnit === "butler.service") {
+    throw new Error("Native service bridge test mode requires a non-production systemd unit.");
+  }
+  if (port === 18765) {
+    throw new Error("Native service bridge test mode requires a non-production app server port.");
+  }
+  const realButlerData = resolve(userHome, ".butler");
+  const resolvedData = resolve(butlerDataRoot);
+  if (resolvedData === realButlerData || isInsidePath(realButlerData, resolvedData)) {
+    throw new Error("Native service bridge test mode refuses to use the production Butler data directory.");
+  }
+}
+
+function isInsidePath(parent, child) {
+  const diff = relative(parent, child);
+  return diff === "" || (!diff.startsWith("..") && !isAbsolute(diff));
 }
 
 function candidateButlerHomes() {
