@@ -235,6 +235,8 @@ Required changes:
   package-owned user units, without adding host dependency prompts to the App
   first-run UI. The release runner, not the user desktop, owns `dpkg-deb` and
   `rpmbuild` availability.
+- Published Linux App service installer artifacts must include checksum files
+  beside the `.deb` and `.rpm` packages.
 
 ## Success Criteria
 

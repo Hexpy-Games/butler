@@ -124,6 +124,40 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).toContain('gh release upload "$tag" "${files[@]}" --clobber');
 });
 
+test("version tag release workflow publishes Linux app service installer packages", () => {
+  const workflowPath = join(root, ".github", "workflows", "release.yml");
+  expect(existsSync(workflowPath)).toBe(true);
+  const workflow = readFileSync(workflowPath, "utf8");
+
+  const appJobIndex = workflow.indexOf("app-artifact:");
+  const installerJobIndex = workflow.indexOf("app-linux-service-installers:");
+  const downloadIndex = workflow.indexOf("gh release download \"$tag\"");
+  const buildIndex = workflow.indexOf("linux-service-installer-package.ts");
+  const publishIndex = workflow.indexOf("Publish Linux app service installer packages");
+
+  expect(installerJobIndex).toBeGreaterThan(appJobIndex);
+  expect(workflow).toContain("Build and publish Linux app service installers");
+  expect(workflow).toContain("runs-on: ubuntu-latest");
+  expect(workflow).toContain("needs: app-artifact");
+  expect(workflow).toContain("sudo apt-get install -y rpm");
+  expect(workflow).toContain("command -v dpkg-deb");
+  expect(workflow).toContain("command -v rpmbuild");
+  expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.tar.gz'");
+  expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.tar.gz.sha256'");
+  expect(workflow).toContain("sha256sum -c");
+  expect(workflow).toContain("Expected one Linux App tarball and checksum");
+  expect(workflow).toContain("Butler-linux-x64/resources/bundled-agent");
+  expect(workflow).toContain("--build");
+  expect(downloadIndex).toBeGreaterThan(installerJobIndex);
+  expect(buildIndex).toBeGreaterThan(downloadIndex);
+  expect(publishIndex).toBeGreaterThan(buildIndex);
+  expect(workflow).toContain("dist/release/app/butler-app-service_*_amd64.deb");
+  expect(workflow).toContain("dist/release/app/butler-app-service_*_amd64.deb.sha256");
+  expect(workflow).toContain("dist/release/app/butler-app-service-*-1.x86_64.rpm");
+  expect(workflow).toContain("dist/release/app/butler-app-service-*-1.x86_64.rpm.sha256");
+  expect(workflow).toContain("Expected 4 Linux app service installer files");
+});
+
 test("README directs default installs to Butler App and advanced installs to Agent artifacts", () => {
   const readme = readRepoFile("README.md");
   const quickStartStart = readme.indexOf("## Quick Start");

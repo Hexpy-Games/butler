@@ -1403,6 +1403,14 @@ printf 'fake rpm\\n' > "$topdir/RPMS/x86_64/butler-app-service-${currentVersion}
 
     expect(readText(result.debPackagePath)).toBe("fake deb\n");
     expect(readText(result.rpmPackagePath)).toBe("fake rpm\n");
+    expect(result.debSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.rpmSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(readText(result.debSha256Path)).toBe(
+      `${result.debSha256}  butler-app-service_${currentVersion}_amd64.deb\n`,
+    );
+    expect(readText(result.rpmSha256Path)).toBe(
+      `${result.rpmSha256}  butler-app-service-${currentVersion}-1.x86_64.rpm\n`,
+    );
     expect(readText(join(dirname(result.rpmSpecPath), "butler-app-service.spec"))).toContain(
       "%files",
     );

@@ -175,3 +175,82 @@ jobs:
             exit 1
           fi
           gh release upload "$tag" "${files[@]}" --clobber
+
+  app-linux-service-installers:
+    name: Build and publish Linux app service installers
+    runs-on: ubuntu-latest
+    needs: app-artifact
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install package toolchains
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y rpm
+          command -v dpkg-deb
+          command -v rpmbuild
+
+      - name: Build Linux app service installer packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          mkdir -p dist/release/app dist/release/linux-service
+          gh release download "$tag" \
+            --pattern 'butler-app-*-linux-x64.tar.gz' \
+            --dir dist/release/app \
+            --clobber
+          gh release download "$tag" \
+            --pattern 'butler-app-*-linux-x64.tar.gz.sha256' \
+            --dir dist/release/app \
+            --clobber
+          shopt -s nullglob
+          linux_tars=(dist/release/app/butler-app-*-linux-x64.tar.gz)
+          linux_tar_checksums=(dist/release/app/butler-app-*-linux-x64.tar.gz.sha256)
+          if [ "${#linux_tars[@]}" -ne 1 ] || [ "${#linux_tar_checksums[@]}" -ne 1 ]; then
+            printf 'Expected one Linux App tarball and checksum, got %s and %s\n' "${#linux_tars[@]}" "${#linux_tar_checksums[@]}" >&2
+            printf '%s\n' "${linux_tars[@]}" >&2
+            printf '%s\n' "${linux_tar_checksums[@]}" >&2
+            exit 1
+          fi
+          (cd dist/release/app && sha256sum -c "$(basename "${linux_tar_checksums[0]}")")
+          tar -xzf "${linux_tars[0]}" -C dist/release/linux-service
+          resource_dir="dist/release/linux-service/Butler-linux-x64/resources/bundled-agent"
+          test -f "$resource_dir/service-installer/installer-manifest.json"
+          bun packages/butler-app/scripts/release/linux-service-installer-package.ts \
+            --resource-dir "$resource_dir" \
+            --out dist/release/app \
+            --version "$version" \
+            --build
+          for checksum in dist/release/app/butler-app-service_*.deb.sha256 dist/release/app/butler-app-service-*.rpm.sha256; do
+            (cd dist/release/app && sha256sum -c "$(basename "$checksum")")
+          done
+
+      - name: Publish Linux app service installer packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          shopt -s nullglob
+          files=(
+            dist/release/app/butler-app-service_*_amd64.deb
+            dist/release/app/butler-app-service_*_amd64.deb.sha256
+            dist/release/app/butler-app-service-*-1.x86_64.rpm
+            dist/release/app/butler-app-service-*-1.x86_64.rpm.sha256
+          )
+          if [ "${#files[@]}" -ne 4 ]; then
+            printf 'Expected 4 Linux app service installer files, got %s\n' "${#files[@]}" >&2
+            printf '%s\n' "${files[@]}" >&2
+            exit 1
+          fi
+          gh release upload "$tag" "${files[@]}" --clobber
