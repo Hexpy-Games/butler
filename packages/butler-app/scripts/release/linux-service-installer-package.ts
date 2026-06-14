@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
@@ -9,7 +10,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 export interface LinuxServiceInstallerPackageStagingOptions {
@@ -38,7 +39,11 @@ export interface LinuxServiceInstallerPackageStagingResult {
 export interface LinuxServiceInstallerPackageBuildResult
   extends LinuxServiceInstallerPackageStagingResult {
   debPackagePath: string;
+  debSha256: string;
+  debSha256Path: string;
   rpmPackagePath: string;
+  rpmSha256: string;
+  rpmSha256Path: string;
 }
 
 const UNIT_NAME = "butler.service";
@@ -161,11 +166,17 @@ export function buildLinuxServiceInstallerPackages(
   ]);
   const builtRpm = findBuiltRpm(join(rpmTopDir, "RPMS"));
   copyFileSync(builtRpm, rpmPackagePath);
+  const debSha256 = writeSha256File(debPackagePath);
+  const rpmSha256 = writeSha256File(rpmPackagePath);
 
   return {
     ...staging,
     debPackagePath,
+    debSha256,
+    debSha256Path: `${debPackagePath}.sha256`,
     rpmPackagePath,
+    rpmSha256,
+    rpmSha256Path: `${rpmPackagePath}.sha256`,
   };
 }
 
@@ -270,6 +281,12 @@ function listFiles(dir: string): string[] {
     else if (entry.isFile()) out.push(path);
   }
   return out;
+}
+
+function writeSha256File(path: string): string {
+  const sha256 = createHash("sha256").update(readFileSync(path)).digest("hex");
+  writeFileSync(`${path}.sha256`, `${sha256}  ${basename(path)}\n`, "utf8");
+  return sha256;
 }
 
 if (import.meta.main) {

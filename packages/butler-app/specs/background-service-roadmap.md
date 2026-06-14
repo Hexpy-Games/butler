@@ -406,6 +406,9 @@ Implemented surface:
   against the staged package trees and returns the generated `.deb` and `.rpm`
   artifact paths. These tools are release-runner requirements only and are not
   part of App first-run dependency prompts.
+- The release workflow publishes Linux App service installer `.deb` and `.rpm`
+  artifacts, plus checksum files, from an Ubuntu runner after the Linux App tar
+  artifact is available in the GitHub Release.
 - Packaging smoke verifies the service capability metadata is present beside
   the bundled Agent runtime and release manifests.
 - Packaging smoke verifies the service registration metadata is present inside
@@ -422,8 +425,6 @@ Remaining:
 
 - Configure production macOS Developer ID signing and notarization credentials
   for `.pkg` publication.
-- Wire Linux `.deb`/`.rpm` package generation into the production release
-  workflow on a Linux runner and publish the resulting artifacts.
 - Add Windows release platform and installer path after the Windows
   user/security-context implementation.
 - Run real installer E2E on each target OS.
