@@ -37,6 +37,7 @@
     "app:client:dev": "${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-client-dev.ts",
     "app:first-run:test-env": "npm --prefix packages/butler-app/client/ui run build && exec ${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-first-run-test-env.ts",
     "app:first-run:service-test-env": "npm --prefix packages/butler-app/client/ui run build && exec ${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-first-run-test-env.ts --native-service",
+    "app:install:test-env": "npm --prefix packages/butler-app/client/ui run build && exec ${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-install-test-env.ts",
     "app:first-run:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-first-run-setup-smoke.ts",
     "app:client:managed-server:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-client-managed-server-smoke.ts",
     "app:client:model-management:e2e": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/e2e/app-model-management-e2e.ts",

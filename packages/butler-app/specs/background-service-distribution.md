@@ -244,6 +244,12 @@ Required changes:
   systemd), a non-production app gateway port, and a non-production
   `BUTLER_DATA`. Test mode must refuse the production service label, production
   unit, production port, and real `~/.butler` data root.
+- Manual installer testing must not install the production App package into
+  `/Applications` or register the production service namespace. Local installer
+  E2E uses a test-only `.pkg`, test-only bundle identifier, user-home install
+  target, isolated Electron profile, isolated `BUTLER_DATA`, non-production
+  gateway port, and test-only service label/unit. Cleanup must remove the
+  installed test App and test service by default.
 
 ## Success Criteria
 
@@ -271,6 +277,8 @@ Required changes:
 - Release packaging tests proving Linux App service installer staging can be
   built through `.deb` and `.rpm` package toolchains.
 - Smoke test for isolated first-run service setup.
+- Smoke/manual test for isolated macOS `.pkg` installation followed by the
+  installed App first-run service setup.
 - E2E test for "close UI, service remains online".
 - E2E test for "stop Agent, service process group terminates".
 - Platform package smoke for macOS, Windows, and Linux artifacts as each

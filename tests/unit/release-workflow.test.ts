@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { spawnSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -232,6 +233,86 @@ test("manual first-run test environment launches isolated Electron state", () =>
   expect(script).toContain("not proof that the first-run wizard is implemented");
   expect(script).toContain("Electron profile:");
   expect(script).toContain("Quit Butler from the app/tray, or press Ctrl-C here to stop.");
+});
+
+test("manual app install test environment installs an isolated test pkg", () => {
+  const packageJson = JSON.parse(readRepoFile("package.json")) as {
+    scripts?: Record<string, string>;
+  };
+  const script = readRepoFile("packages/butler-app/scripts/app-install-test-env.ts");
+  const distributionSpec = readRepoFile(
+    "packages/butler-app/specs/background-service-distribution.md",
+  );
+
+  expect(packageJson.scripts?.["app:install:test-env"]).toContain(
+    "packages/butler-app/scripts/app-install-test-env.ts",
+  );
+  expect(packageJson.scripts?.["app:install:test-env"]).toContain("exec ");
+  expect(packageJson.scripts?.["app:install:test-env"]).toContain(
+    "packages/butler-app/client/ui run build",
+  );
+  expect(script).toContain("Butler Install Tests");
+  expect(script).toContain("installer");
+  expect(script).toContain("-target");
+  expect(script).toContain("CurrentUserHomeDirectory");
+  expect(script).toContain("--validate-only");
+  expect(script).toContain("isInsideRealPath");
+  expect(script).toContain("Butler Install Test ${serviceSafeName}");
+  expect(script).toContain("com.hexpy.butler.test.install");
+  expect(script).toContain("BUTLER_DATA: dataDir");
+  expect(script).toContain("BUTLER_APP_FORCE_NATIVE_SERVICE_BRIDGE");
+  expect(script).toContain("BUTLER_APP_ALLOW_NATIVE_SERVICE_TEST_ENV");
+  expect(script).toContain("BUTLER_APP_SERVICE_LABEL: serviceLabel");
+  expect(script).toContain("BUTLER_APP_SYSTEMD_UNIT: systemdUnit");
+  expect(script).toContain("Refusing to use the production LaunchAgent label");
+  expect(script).toContain("Refusing to use the production systemd unit");
+  expect(script).toContain("Refusing to use the production app-server port");
+  expect(script).toContain("Refusing to use the real ~/.butler directory");
+  expect(script).toContain("Refusing to use the normal Butler Electron profile");
+  expect(script).toContain("cleanupNativeService({ serviceLabel, systemdUnit })");
+  expect(script).toContain("rmSync(installedRoot, { recursive: true, force: true })");
+  expect(script).toContain("rmSync(packageWorkDir, { recursive: true, force: true })");
+  expect(script).toContain("--user-data-dir=${electronProfileDir}");
+  expect(distributionSpec).toContain("Manual installer testing must not install the production App package");
+  expect(distributionSpec).toContain("Cleanup must remove the");
+});
+
+test("manual app install test environment validates isolation guards", () => {
+  const ok = spawnSync(
+    "bun",
+    [
+      "run",
+      "packages/butler-app/scripts/app-install-test-env.ts",
+      "--validate-only",
+      "--profile",
+      "unit-validate",
+    ],
+    {
+      cwd: root,
+      encoding: "utf8",
+    },
+  );
+  expect(ok.status).toBe(0);
+  expect(ok.stdout).toContain("validation passed");
+
+  const productionData = spawnSync(
+    "bun",
+    [
+      "run",
+      "packages/butler-app/scripts/app-install-test-env.ts",
+      "--validate-only",
+      "--data",
+      join(process.env.HOME ?? "", ".butler"),
+    ],
+    {
+      cwd: root,
+      encoding: "utf8",
+    },
+  );
+  expect(productionData.status).not.toBe(0);
+  expect(`${productionData.stdout}\n${productionData.stderr}`).toContain(
+    "Refusing to use the real ~/.butler directory",
+  );
 });
 
 test("current release notes describe the GitHub release changelog", () => {

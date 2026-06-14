@@ -224,6 +224,12 @@ Implemented surface:
   non-production port, bundled Agent resource directory, and non-production
   `BUTLER_DATA` are present. The helper refuses production labels/units and
   cleans up the test service by default.
+- Manual installer testing can build a test-only macOS `.pkg`, install it via
+  the macOS `installer` command into a user-home test target, and launch the
+  installed App with an isolated Electron profile, isolated `BUTLER_DATA`,
+  non-production gateway port, and test-only service label/unit. This covers
+  package installation before first-run without touching `/Applications`,
+  `~/Library/Application Support/Butler`, `~/.butler`, or `com.hexpy.butler`.
 
 Validation:
 
@@ -426,6 +432,9 @@ Implemented surface:
 - Packaging smoke verifies the service installer manifest declares macOS `pkg`
   and Linux `deb`/`rpm` package artifact inputs without adding first-run host
   tool requirements.
+- Manual installer smoke can execute the macOS `.pkg` installation path against
+  a test-only package and then launch the installed App into the first-run
+  service setup flow.
 - Release manifest validation rejects missing service installer bundle metadata
   on the top-level App release, component, and artifact records.
 
@@ -435,7 +444,7 @@ Remaining:
   for `.pkg` publication.
 - Add Windows release platform and installer path after the Windows
   user/security-context implementation.
-- Run real installer E2E on each target OS.
+- Run production-signed installer E2E on each target OS.
 
 ## Phase 7: End-To-End Verification
 
@@ -471,6 +480,8 @@ Remaining:
 
 - Real first-run service install E2E on macOS/Linux against packaged App
   artifacts that register actual user services.
+- Real installer-from-package E2E on macOS/Linux against production-style
+  signed/notarized App artifacts.
 - Real close-window and quit-UI persistence E2E against an OS-managed service.
 - Real Stop Agent process-group termination E2E.
 - Real app update restart/rollback E2E with previous and next packaged
