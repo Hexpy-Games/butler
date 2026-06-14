@@ -134,6 +134,24 @@ test("App Agent service adapter sequences install start stop and restart", async
   expect(calls).toEqual(["install", "start", "stop", "stop", "start"]);
 });
 
+test("App Agent service adapter treats start command success as asynchronous readiness", async () => {
+  const adapter = createAppAgentServiceAdapter({
+    nativeServices: {
+      list: async () => [
+        projection("butler-main", "offline"),
+        projection("app-gateway", "offline"),
+      ],
+      start: async () => {},
+    },
+  });
+
+  await expect(adapter.start()).resolves.toMatchObject({
+    ok: true,
+    status: "stopped",
+    raw_text_included: false,
+  });
+});
+
 test("App Agent service adapter fails closed without registration native hooks or status access", async () => {
   const adapter = createAppAgentServiceAdapter();
 

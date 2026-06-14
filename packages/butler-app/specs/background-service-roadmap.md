@@ -219,6 +219,17 @@ Implemented surface:
   step and do not call managed gateway readiness.
 - Existing first-run UI copy and retry/diagnostics controls are reused for the
   service setup failure path.
+- Native service gateway readiness is retried after service start so launchd or
+  systemd can finish spawning the service-owned app gateway before first-run or
+  renderer API bootstrap reports failure.
+- App-managed native service registration passes isolated embed-server
+  environment (`EMBED_SOCKET` below the App `BUTLER_DATA`, ephemeral
+  `EMBED_HEALTH_PORT`) so install tests and production App services cannot
+  remove or bind the standalone Agent embed socket.
+- Native-service watchdog children skip the legacy machine-global singleton
+  guard and rely on the native service daemon's per-`BUTLER_DATA` process state,
+  so isolated App install tests can run beside an operating standalone Butler
+  Agent.
 - Manual first-run service testing can force the native service bridge in a
   development Electron launch only when a test-only service namespace,
   non-production port, bundled Agent resource directory, and non-production

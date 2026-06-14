@@ -53,6 +53,7 @@ function daemonEnv(spec: NativeServiceSpec): Record<string, string> {
     BUTLER_SUPERVISOR_MODE: "foreground-daemon",
   } as Record<string, string>;
   if (spec.id === "butler-watchdog") {
+    env.BUTLER_WATCHDOG_DISABLE_SINGLETON = "true";
     env.BUTLER_WATCHDOG_DISABLE_SERVICE_LIVENESS = "true";
   }
   return env;

@@ -47,6 +47,11 @@ function appGatewaySpecs(butlerHome: string, butlerData: string): NativeServiceS
     .filter((spec) => spec.id === "app-gateway");
 }
 
+function watchdogSpecs(butlerHome: string, butlerData: string): NativeServiceSpec[] {
+  return defaultNativeServiceSpecs({ butlerHome, butlerData })
+    .filter((spec) => spec.id === "butler-watchdog");
+}
+
 test("foreground daemon starts manifest children and writes native state", () => {
   const butlerHome = "/opt/butler";
   const butlerData = tempRoot();
@@ -76,6 +81,34 @@ test("foreground daemon starts manifest children and writes native state", () =>
       processGroupId: 4101,
       mode: "daemon-child",
       startedAt: "2026-04-28T00:00:00.000Z",
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("foreground daemon delegates watchdog singleton ownership to the native service", () => {
+  const butlerHome = "/opt/butler";
+  const butlerData = tempRoot();
+  let spawnedEnv: Record<string, string> | null = null;
+
+  try {
+    const daemon = new ManagedServiceDaemon({
+      butlerData,
+      specs: watchdogSpecs(butlerHome, butlerData),
+      parentPid: 4300,
+      spawnChild: (_spec, env) => {
+        spawnedEnv = env;
+        return { pid: 4301 };
+      },
+    });
+
+    daemon.startAll();
+
+    expect(spawnedEnv).toMatchObject({
+      BUTLER_SUPERVISOR_MODE: "foreground-daemon",
+      BUTLER_WATCHDOG_DISABLE_SINGLETON: "true",
+      BUTLER_WATCHDOG_DISABLE_SERVICE_LIVENESS: "true",
     });
   } finally {
     rmSync(butlerData, { recursive: true, force: true });

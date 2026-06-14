@@ -192,6 +192,8 @@ function resolveAppManagedServiceRuntime({ butlerData, getPort, prepareLocalAuth
   if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
     throw new Error("invalid App-managed gateway port");
   }
+  const embedSocketDir = join(butlerData, "app", "runtime", "embed");
+  mkdirSync(embedSocketDir, { recursive: true, mode: 0o700 });
   return {
     butlerData,
     runtimeHome,
@@ -209,6 +211,8 @@ function resolveAppManagedServiceRuntime({ butlerData, getPort, prepareLocalAuth
       BUTLER_APP_LOCAL_AUTH_REQUIRED: "1",
       BUTLER_APP_GATEWAY_PID_FILE: "off",
       BUTLER_APP_SERVER_PORT: String(port),
+      EMBED_SOCKET: join(embedSocketDir, "embed.sock"),
+      EMBED_HEALTH_PORT: "0",
     },
   };
 }

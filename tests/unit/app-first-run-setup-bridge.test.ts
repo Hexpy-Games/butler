@@ -56,6 +56,8 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(main).toContain('app.on("second-instance"');
   expect(main).toContain('ipcMain.handle("butler:ensure-server"');
   expect(main).toContain('ipcMain.handle("butler:get-server-url"');
+  expect(main).toContain("waitForNativeServiceGatewayReady");
+  expect(main).toContain("nativeServiceGatewayReadyPollAttempts");
   expect(main).toContain('ipcMain.handle("butler:first-run-setup-status"');
   expect(main).toContain('ipcMain.handle("butler:first-run-setup-start"');
   expect(main).toContain('ipcMain.handle("butler:first-run-setup-cancel"');
@@ -394,6 +396,165 @@ test("first-run setup waits for service readiness after start", async () => {
   ]);
 });
 
+test("first-run setup waits for native gateway readiness after service is ready", async () => {
+  const calls: string[] = [];
+  let ensureReadyCalls = 0;
+  const bridge = createFirstRunSetupBridge({
+    gatewayReadyPollAttempts: 4,
+    gatewayReadyPollDelayMs: 1,
+    sleepMs: async () => {
+      calls.push("sleep");
+    },
+    serviceControl: {
+      getAgentServiceStatus: async () => {
+        calls.push("status");
+        return { status: "ready" };
+      },
+      readAgentServiceDiagnostics: async () => ({
+        status: "ready",
+        raw_text_included: false,
+      }),
+    },
+    ensureReady: async () => {
+      ensureReadyCalls += 1;
+      calls.push(`ensure-ready:${ensureReadyCalls}`);
+      if (ensureReadyCalls < 3) {
+        const error = new Error("Butler Agent service gateway is not ready.");
+        (error as Error & { code?: string }).code = "service_gateway_unhealthy";
+        throw error;
+      }
+    },
+    readRuntimeDiagnostics: () => ({
+      phase: "running",
+      bundled_agent: {
+        source: "app-managed",
+        version_configured: true,
+      },
+      local_auth: {
+        required: true,
+        token_configured: true,
+      },
+    }),
+    readSettings: async () => ({
+      gateway_profile: "electron",
+    }),
+  });
+
+  await expect(bridge.start()).resolves.toMatchObject({ phase: "ready" });
+  expect(calls).toEqual([
+    "status",
+    "status",
+    "ensure-ready:1",
+    "sleep",
+    "ensure-ready:2",
+    "sleep",
+    "ensure-ready:3",
+  ]);
+});
+
+test("first-run setup accepts healthy gateway when service state files lag", async () => {
+  const calls: string[] = [];
+  const bridge = createFirstRunSetupBridge({
+    serviceReadyPollAttempts: 3,
+    serviceReadyPollDelayMs: 1,
+    gatewayReadyPollAttempts: 2,
+    gatewayReadyPollDelayMs: 1,
+    sleepMs: async () => {
+      calls.push("sleep");
+    },
+    serviceControl: {
+      getAgentServiceStatus: async () => {
+        calls.push("status");
+        return { status: "stopped" };
+      },
+      installAgentService: async () => {
+        calls.push("install");
+        return { ok: true, status: "stopped" };
+      },
+      startAgentService: async () => {
+        calls.push("start");
+        return { ok: true, status: "starting" };
+      },
+      readAgentServiceDiagnostics: async () => ({
+        status: "stopped",
+        raw_text_included: false,
+      }),
+    },
+    ensureReady: async () => {
+      calls.push("ensure-ready");
+    },
+    readRuntimeDiagnostics: () => ({
+      phase: "running",
+      bundled_agent: {
+        source: "app-managed",
+        version_configured: true,
+      },
+      local_auth: {
+        required: true,
+        token_configured: true,
+      },
+    }),
+    readSettings: async () => ({
+      gateway_profile: "electron",
+    }),
+  });
+
+  await expect(bridge.start()).resolves.toMatchObject({ phase: "ready" });
+  expect(bridge.diagnostics().checks[0]).toEqual({
+    id: "agent_service",
+    label: "Butler Agent 서비스",
+    status: "passed",
+  });
+  expect(calls).toContain("ensure-ready");
+});
+
+test("first-run setup accepts healthy gateway when optional service projections lag", async () => {
+  let ensureReadyCalls = 0;
+  const bridge = createFirstRunSetupBridge({
+    serviceReadyPollAttempts: 2,
+    serviceReadyPollDelayMs: 1,
+    gatewayReadyPollAttempts: 2,
+    gatewayReadyPollDelayMs: 1,
+    sleepMs: async () => {},
+    serviceControl: {
+      getAgentServiceStatus: async () => ({
+        status: "failed",
+      }),
+      startAgentService: async () => ({
+        ok: true,
+        status: "failed",
+      }),
+      readAgentServiceDiagnostics: async () => ({
+        status: "failed",
+        service_count: 6,
+        online_count: 5,
+        stale_count: 1,
+        raw_text_included: false,
+      }),
+    },
+    ensureReady: async () => {
+      ensureReadyCalls += 1;
+    },
+    readRuntimeDiagnostics: () => ({
+      phase: "running",
+      bundled_agent: {
+        source: "app-managed",
+        version_configured: true,
+      },
+      local_auth: {
+        required: true,
+        token_configured: true,
+      },
+    }),
+    readSettings: async () => ({
+      gateway_profile: "electron",
+    }),
+  });
+
+  await expect(bridge.start()).resolves.toMatchObject({ phase: "ready" });
+  expect(ensureReadyCalls).toBe(1);
+});
+
 test("first-run setup fails closed when service registration is unavailable", async () => {
   let ensureReadyCalls = 0;
   const bridge = createFirstRunSetupBridge({
@@ -413,6 +574,9 @@ test("first-run setup fails closed when service registration is unavailable", as
     },
     ensureReady: async () => {
       ensureReadyCalls += 1;
+      const error = new Error("Butler Agent service gateway is not ready.");
+      (error as Error & { code?: string }).code = "service_gateway_unhealthy";
+      throw error;
     },
     readRuntimeDiagnostics: () => ({
       phase: "running",
@@ -450,6 +614,8 @@ test("first-run setup fails closed when service registration is unavailable", as
 test("first-run setup fails closed when service start fails", async () => {
   let ensureReadyCalls = 0;
   const bridge = createFirstRunSetupBridge({
+    gatewayReadyPollAttempts: 2,
+    gatewayReadyPollDelayMs: 1,
     serviceReadyPollAttempts: 2,
     serviceReadyPollDelayMs: 1,
     serviceControl: {
@@ -472,6 +638,9 @@ test("first-run setup fails closed when service start fails", async () => {
     },
     ensureReady: async () => {
       ensureReadyCalls += 1;
+      const error = new Error("Butler Agent service gateway is not ready.");
+      (error as Error & { code?: string }).code = "service_gateway_unhealthy";
+      throw error;
     },
     readRuntimeDiagnostics: () => ({
       phase: "running",
@@ -548,6 +717,8 @@ test("first-run setup installs before start when a service is stopped", async ()
 test("first-run setup fails closed when service remains not ready after start", async () => {
   let ensureReadyCalls = 0;
   const bridge = createFirstRunSetupBridge({
+    gatewayReadyPollAttempts: 2,
+    gatewayReadyPollDelayMs: 1,
     serviceReadyPollAttempts: 2,
     serviceReadyPollDelayMs: 1,
     serviceControl: {
@@ -569,6 +740,9 @@ test("first-run setup fails closed when service remains not ready after start", 
     },
     ensureReady: async () => {
       ensureReadyCalls += 1;
+      const error = new Error("Butler Agent service gateway is not ready.");
+      (error as Error & { code?: string }).code = "service_gateway_unhealthy";
+      throw error;
     },
     readRuntimeDiagnostics: () => ({
       phase: "running",
@@ -592,7 +766,7 @@ test("first-run setup fails closed when service remains not ready after start", 
     phase: "failed",
     error_code: "agent_service_not_ready",
   });
-  expect(ensureReadyCalls).toBe(0);
+  expect(ensureReadyCalls).toBeGreaterThan(0);
 });
 
 test("optional external tool probes stay behind selected feature actions", () => {
@@ -773,14 +947,19 @@ test("Electron bundled-Agent setup does not attach to a pre-existing gateway", (
   const ensureServerStart = main.indexOf("async function ensureServer()");
   const diagnosticsStart = main.indexOf("function readFirstRunRuntimeDiagnostics", ensureServerStart);
   const ensureServer = main.slice(ensureServerStart, diagnosticsStart);
+  const nativeGatewayReadyStart = main.indexOf("async function waitForNativeServiceGatewayReady");
+  const nativeGatewayReadyEnd = main.indexOf("function sleep", nativeGatewayReadyStart);
+  const nativeGatewayReady = main.slice(nativeGatewayReadyStart, nativeGatewayReadyEnd);
   expect(ensureServer).toContain("if (shouldUseAppAgentNativeServiceBridge())");
-  expect(ensureServer).toContain("service_gateway_unhealthy");
-  expect(ensureServer).toContain("service_gateway_not_ready");
-  expect(ensureServer).toContain("throw error");
+  expect(ensureServer).toContain("await waitForNativeServiceGatewayReady()");
   expect(ensureServer).toContain("await bundledAgentSupervisor.ensureReady()");
-  expect(ensureServer.indexOf("throw error")).toBeLessThan(
+  expect(ensureServer.indexOf("waitForNativeServiceGatewayReady")).toBeLessThan(
     ensureServer.indexOf("await bundledAgentSupervisor.ensureReady()"),
   );
+  expect(nativeGatewayReady).toContain("service_gateway_unhealthy");
+  expect(nativeGatewayReady).toContain("service_gateway_not_ready");
+  expect(nativeGatewayReady).toContain("throw error");
+  expect(nativeGatewayReady).toContain("await sleep(delayMs)");
 });
 
 function readRepoFile(path: string): string {

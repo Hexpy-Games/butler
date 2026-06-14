@@ -50,6 +50,8 @@ const macAppDockIconPath = resolve(__dirname, "assets/butler-mac.png");
 const appRepositoryUrl = "https://github.com/Hexpy-Games/butler";
 const appProtocolVersion = "butler.app.v1";
 const appServerProbeTimeoutMs = 2000;
+const nativeServiceGatewayReadyPollAttempts = 120;
+const nativeServiceGatewayReadyPollDelayMs = 250;
 const nativeSettingsSchema = "butler.native-settings.v1";
 const nativeSettingsFileName = "butler-native-settings.json";
 const macNotificationSettingsUrl =
@@ -338,6 +340,19 @@ async function appServerProbeFetch(url, localAuth = null) {
 
 async function ensureServer() {
   if (shouldUseAppAgentNativeServiceBridge()) {
+    await waitForNativeServiceGatewayReady();
+    return;
+  }
+  await bundledAgentSupervisor.ensureReady();
+}
+
+async function waitForNativeServiceGatewayReady({
+  attempts = nativeServiceGatewayReadyPollAttempts,
+  delayMs = nativeServiceGatewayReadyPollDelayMs,
+} = {}) {
+  let lastErrorCode = "service_gateway_unhealthy";
+  const maxAttempts = Math.max(1, Number(attempts) || 1);
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const authHeaders = bundledAgentSupervisor.authHeaders();
     const healthy = await healthOk(authHeaders);
     const ready = healthy && await gatewayReady(authHeaders);
@@ -346,15 +361,18 @@ async function ensureServer() {
       nativeServiceGatewayLastErrorCode = null;
       return;
     }
-    nativeServiceGatewayReady = false;
-    nativeServiceGatewayLastErrorCode = healthy
-      ? "service_gateway_not_ready"
-      : "service_gateway_unhealthy";
-    const error = new Error("Butler Agent service gateway is not ready.");
-    error.code = nativeServiceGatewayLastErrorCode;
-    throw error;
+    lastErrorCode = healthy ? "service_gateway_not_ready" : "service_gateway_unhealthy";
+    if (attempt + 1 < maxAttempts) await sleep(delayMs);
   }
-  await bundledAgentSupervisor.ensureReady();
+  nativeServiceGatewayReady = false;
+  nativeServiceGatewayLastErrorCode = lastErrorCode;
+  const error = new Error("Butler Agent service gateway is not ready.");
+  error.code = nativeServiceGatewayLastErrorCode;
+  throw error;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function readFirstRunRuntimeDiagnostics() {
