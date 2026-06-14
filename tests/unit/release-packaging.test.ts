@@ -27,6 +27,9 @@ import {
   createAppReleasePackage,
   prepareBundledAgentResource,
 } from "../../packages/butler-app/scripts/release/package-app-release.ts";
+import {
+  createLinuxServiceInstallerPackageStaging,
+} from "../../packages/butler-app/scripts/release/linux-service-installer-package.ts";
 
 const root = process.cwd();
 const currentVersion = String(
@@ -1321,6 +1324,39 @@ test("app package smoke includes macOS service installer payload", () => {
     } else {
       process.env.BUTLER_APP_MANAGED_BUN_DARWIN_ARM64 = previousDarwinRuntime;
     }
+    rmSync(workDir, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test("linux service installer package staging uses package-owned systemd unit", () => {
+  const workDir = mkdtempSync(join(tmpdir(), "butler-linux-service-package-staging-"));
+  const previousLinuxRuntime = process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
+  try {
+    process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = writeFakeLinuxX64Runtime(workDir);
+    const bundledAgent = prepareBundledAgentResource(root, workDir, "linux-x64");
+    const result = createLinuxServiceInstallerPackageStaging({
+      resourceDir: bundledAgent.resourceDir,
+      outDir: join(workDir, "linux-service-installer"),
+      version: currentVersion,
+    });
+
+    const unit = readText(result.systemdUnitPath);
+    expect(unit).toContain("ExecStart=/usr/lib/butler/butler-app-managed-agent-service");
+    expect(unit).toContain("WantedBy=default.target");
+    expect(readText(result.launcherPath)).toContain("BUTLER_APP_MANAGED_RUNTIME_POINTER");
+    expect((statSync(result.launcherPath).mode & 0o111)).not.toBe(0);
+    expect(readText(result.debControlPath)).toContain("Package: butler-app-service");
+    expect(readText(result.debControlPath)).toContain(`Version: ${currentVersion}`);
+    expect(readText(result.debPostinstPath)).toContain("systemd user service payload installed");
+    expect((statSync(result.debPostinstPath).mode & 0o111)).not.toBe(0);
+    expect(readText(result.rpmSpecPath)).toContain("Name: butler-app-service");
+    expect(readText(result.rpmSpecPath)).toContain("%post -p /bin/sh");
+    expect(readText(result.rpmSpecPath)).toContain("/usr/lib/systemd/user/butler.service");
+    expect(readText(result.rpmPostinstallPath)).toContain("systemd user service payload installed");
+    expect((statSync(result.rpmPostinstallPath).mode & 0o111)).not.toBe(0);
+  } finally {
+    if (previousLinuxRuntime === undefined) delete process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
+    else process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = previousLinuxRuntime;
     rmSync(workDir, { recursive: true, force: true });
   }
 }, 60_000);

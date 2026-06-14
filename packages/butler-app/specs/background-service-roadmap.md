@@ -399,6 +399,9 @@ Implemented surface:
   builders install it at `/usr/lib/butler/butler-app-managed-agent-service` so
   the package-owned user unit can start the active App-managed Agent runtime
   selected by `$BUTLER_DATA/app/runtime/agent/current.json`.
+- Linux service installer package staging can generate the Debian control tree,
+  RPM spec input, package-owned `systemd --user` unit, launcher, and post-install
+  hooks from the bundled service-installer resources.
 - Packaging smoke verifies the service capability metadata is present beside
   the bundled Agent runtime and release manifests.
 - Packaging smoke verifies the service registration metadata is present inside
@@ -415,8 +418,8 @@ Remaining:
 
 - Configure production macOS Developer ID signing and notarization credentials
   for `.pkg` publication.
-- Generate Linux `.deb`/`.rpm` packages that install user service units from
-  the registration metadata and installer manifest.
+- Wire Linux `.deb`/`.rpm` binary generation to `dpkg-deb` and `rpmbuild` on a
+  Linux release runner.
 - Add Windows release platform and installer path after the Windows
   user/security-context implementation.
 - Run real installer E2E on each target OS.
