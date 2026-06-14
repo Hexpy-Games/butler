@@ -998,6 +998,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
           packageFormat: "deb",
           selectedV1Path: "linux-deb-owned-user-unit",
           serviceManager: "systemd-user",
+          serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
           renderContractPath: "service-installer/linux/systemd/render-contract.json",
           postInstallPath: "service-installer/linux/deb/postinst",
         },
@@ -1005,6 +1006,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
           packageFormat: "rpm",
           selectedV1Path: "linux-rpm-owned-user-unit",
           serviceManager: "systemd-user",
+          serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
           renderContractPath: "service-installer/linux/systemd/render-contract.json",
           postInstallPath: "service-installer/linux/rpm/postinstall.sh",
         },
@@ -1014,7 +1016,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       schema: "butler.app-service-render-contract.v1",
       platform: "linux",
       manager: "systemd-user",
-      target: "$HOME/.config/systemd/user/butler.service",
+      target: "/usr/lib/systemd/user/butler.service",
       renderer: "butler-app-native-service-bridge",
       requiredEscaping: "systemd-quoted",
       rawTemplateIncluded: false,
@@ -1038,7 +1040,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       serviceDefinition: {
         manager: "systemd-user",
         unit: "butler.service",
-        serviceFile: "$HOME/.config/systemd/user/butler.service",
+        serviceFile: "/usr/lib/systemd/user/butler.service",
       },
       requiredEnvironment: [
         "BUTLER_HOME",

@@ -392,7 +392,8 @@ Implemented surface:
   `background-service-registration-metadata` as an App-owned dependency.
 - Current v1 installer requirements are declared as:
   - macOS: `macos-pkg-launch-agent` with `pkg`.
-  - Linux: `linux-deb-owned-user-unit` with `deb` and `rpm`.
+  - Linux: `linux-deb-owned-user-unit` with `deb` and `rpm`, targeting the
+    package-owned `/usr/lib/systemd/user/butler.service` unit path.
 - Packaging smoke verifies the service capability metadata is present beside
   the bundled Agent runtime and release manifests.
 - Packaging smoke verifies the service registration metadata is present inside

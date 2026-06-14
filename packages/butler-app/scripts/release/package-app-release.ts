@@ -401,7 +401,7 @@ function writeAppServiceInstallerPayloads(input: {
       serviceRenderContract({
         platform: "linux",
         manager: "systemd-user",
-        target: "$HOME/.config/systemd/user/butler.service",
+        target: "/usr/lib/systemd/user/butler.service",
         escaping: "systemd-quoted",
       }),
     );
@@ -422,7 +422,7 @@ function writeAppServiceInstallerPayloads(input: {
           packageFormat: "deb",
           selectedV1Path: "linux-deb-owned-user-unit",
           serviceManager: "systemd-user",
-          serviceDefinitionTarget: "$HOME/.config/systemd/user/butler.service",
+          serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
           renderContractPath: "service-installer/linux/systemd/render-contract.json",
           postInstallPath: "service-installer/linux/deb/postinst",
         },
@@ -430,7 +430,7 @@ function writeAppServiceInstallerPayloads(input: {
           packageFormat: "rpm",
           selectedV1Path: "linux-rpm-owned-user-unit",
           serviceManager: "systemd-user",
-          serviceDefinitionTarget: "$HOME/.config/systemd/user/butler.service",
+          serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
           renderContractPath: "service-installer/linux/systemd/render-contract.json",
           postInstallPath: "service-installer/linux/rpm/postinstall.sh",
         },
@@ -587,7 +587,7 @@ function serviceDefinitionMetadata(servicePlatform: string): Record<string, unkn
     return {
       manager: "systemd-user",
       unit: "butler.service",
-      serviceFile: "$HOME/.config/systemd/user/butler.service",
+      serviceFile: "/usr/lib/systemd/user/butler.service",
       installAction: "package-owned-user-unit-or-first-run-enable",
       startAction: "systemctl --user start butler.service",
       stopAction: "systemctl --user stop butler.service",
