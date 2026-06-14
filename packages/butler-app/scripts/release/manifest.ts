@@ -153,6 +153,8 @@ export interface AppServiceInstallerPackageArtifactMetadata {
   renderContractPath: string;
   launcherPath?: string;
   postInstallPath: string;
+  publishedArtifactName: string | null;
+  publishedSha256Name: string | null;
 }
 
 export interface AppServiceInstallerBundleMetadata {
@@ -311,7 +313,10 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
   const versions = readAppComponentVersions(root);
   const bundledAgentPayload = createBundledAgentPayloadMetadata(versions.bundledAgent);
   const backgroundServiceCapability = createAppBackgroundServiceReleaseCapability();
-  const serviceInstallerBundle = createAppServiceInstallerBundleMetadata();
+  const serviceInstallerBundle = createAppServiceInstallerBundleMetadata(
+    APP_RELEASE_PLATFORMS,
+    versions.app,
+  );
   const protocolCompatibility: AppReleaseProtocolCompatibility = {
     protocol: "butler.app.v1",
     minimumAppProtocol: "butler.app.v1",
@@ -393,7 +398,9 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
         bundledAgentVersion: versions.bundledAgent,
         bundledAgentPayload,
         backgroundServiceCapability: createAppBackgroundServiceReleaseCapability([platform]),
-        serviceInstallerBundle: createAppServiceInstallerBundleMetadata([platform]),
+        serviceInstallerBundle: createAppServiceInstallerBundleMetadata([
+          platform,
+        ], component.version),
         protocolCompatibility,
         integrity: {
           digestAlgorithm: "sha256",
@@ -435,6 +442,7 @@ export function createAppBackgroundServiceReleaseCapability(
 
 export function createAppServiceInstallerBundleMetadata(
   platforms: readonly AppReleasePlatform[] = APP_RELEASE_PLATFORMS,
+  version: string | null = null,
 ): AppServiceInstallerBundleMetadata {
   return {
     schema: "butler.app-service-installer-bundle.v1",
@@ -444,7 +452,9 @@ export function createAppServiceInstallerBundleMetadata(
     installerRootPath: "bundled-agent/service-installer",
     servicePlatforms: uniqueServicePlatforms(platforms),
     hostToolsRequiredForFirstLaunch: [],
-    packageArtifacts: platforms.flatMap(serviceInstallerPackageArtifactsForPlatform),
+    packageArtifacts: platforms.flatMap((platform) =>
+      serviceInstallerPackageArtifactsForPlatform(platform, version),
+    ),
     rawTemplateIncluded: false,
     rawTextIncluded: false,
   };
@@ -501,9 +511,11 @@ function serviceInstallerPackageFormats(
 
 function serviceInstallerPackageArtifactsForPlatform(
   releasePlatform: AppReleasePlatform,
+  version: string | null,
 ): AppServiceInstallerPackageArtifactMetadata[] {
   const platform = servicePlatformForReleasePlatform(releasePlatform);
   if (platform === "darwin") {
+    const publishedArtifactName = version ? artifactName("app", version, releasePlatform) : null;
     return [
       {
         packageFormat: "pkg",
@@ -512,10 +524,14 @@ function serviceInstallerPackageArtifactsForPlatform(
         serviceDefinitionTarget: "$HOME/Library/LaunchAgents/com.hexpy.butler.plist",
         renderContractPath: "service-installer/darwin/launchd/render-contract.json",
         postInstallPath: "service-installer/darwin/pkg/postinstall",
+        publishedArtifactName,
+        publishedSha256Name: publishedArtifactName ? `${publishedArtifactName}.sha256` : null,
       },
     ];
   }
   if (platform === "linux") {
+    const debArtifactName = version ? `butler-app-service_${version}_amd64.deb` : null;
+    const rpmArtifactName = version ? `butler-app-service-${version}-1.x86_64.rpm` : null;
     return [
       {
         packageFormat: "deb",
@@ -525,6 +541,8 @@ function serviceInstallerPackageArtifactsForPlatform(
         renderContractPath: "service-installer/linux/systemd/render-contract.json",
         launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
         postInstallPath: "service-installer/linux/deb/postinst",
+        publishedArtifactName: debArtifactName,
+        publishedSha256Name: debArtifactName ? `${debArtifactName}.sha256` : null,
       },
       {
         packageFormat: "rpm",
@@ -534,6 +552,8 @@ function serviceInstallerPackageArtifactsForPlatform(
         renderContractPath: "service-installer/linux/systemd/render-contract.json",
         launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
         postInstallPath: "service-installer/linux/rpm/postinstall.sh",
+        publishedArtifactName: rpmArtifactName,
+        publishedSha256Name: rpmArtifactName ? `${rpmArtifactName}.sha256` : null,
       },
     ];
   }
@@ -860,6 +880,7 @@ export function validateAppReleaseManifest(
     "app release service installer bundle",
     manifest.serviceInstallerBundle,
     APP_RELEASE_PLATFORMS,
+    manifest.version,
     issues,
   );
   if (manifest.updaterOwner !== "butler-app")
@@ -980,6 +1001,7 @@ function validateComponents(
       `component ${component.id} service installer bundle`,
       component.serviceInstallerBundle,
       APP_RELEASE_PLATFORMS,
+      component.version,
       issues,
     );
     validateProtocolCompatibility(
@@ -1073,6 +1095,7 @@ function validateArtifacts(
       `artifact ${artifact.component} service installer bundle`,
       artifact.serviceInstallerBundle,
       [artifact.platform],
+      artifact.version,
       issues,
     );
     validateProtocolCompatibility(
@@ -1237,6 +1260,7 @@ function validateAppServiceInstallerBundle(
   label: string,
   bundle: AppServiceInstallerBundleMetadata | undefined,
   platforms: readonly AppReleasePlatform[],
+  version: string,
   issues: string[],
 ): void {
   if (!bundle) {
@@ -1265,7 +1289,9 @@ function validateAppServiceInstallerBundle(
   if (!sameComponentSet(bundle.servicePlatforms, expectedServicePlatforms)) {
     issues.push(`${label} service platform mismatch`);
   }
-  const expectedArtifacts = platforms.flatMap(serviceInstallerPackageArtifactsForPlatform);
+  const expectedArtifacts = platforms.flatMap((platform) =>
+    serviceInstallerPackageArtifactsForPlatform(platform, version),
+  );
   if (bundle.packageArtifacts.length !== expectedArtifacts.length) {
     issues.push(`${label} package artifact count mismatch`);
   }
@@ -1285,7 +1311,9 @@ function validateAppServiceInstallerBundle(
       actual.serviceDefinitionTarget !== expected.serviceDefinitionTarget ||
       actual.renderContractPath !== expected.renderContractPath ||
       actual.launcherPath !== expected.launcherPath ||
-      actual.postInstallPath !== expected.postInstallPath
+      actual.postInstallPath !== expected.postInstallPath ||
+      actual.publishedArtifactName !== expected.publishedArtifactName ||
+      actual.publishedSha256Name !== expected.publishedSha256Name
     ) {
       issues.push(
         `${label} package artifact path mismatch: ${expected.packageFormat}/${expected.selectedV1Path}`,

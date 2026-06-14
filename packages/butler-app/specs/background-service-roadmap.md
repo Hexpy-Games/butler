@@ -409,6 +409,9 @@ Implemented surface:
 - The release workflow publishes Linux App service installer `.deb` and `.rpm`
   artifacts, plus checksum files, from an Ubuntu runner after the Linux App tar
   artifact is available in the GitHub Release.
+- App release and update manifests expose published service installer package
+  asset names and checksum asset names for macOS `pkg` and Linux `deb`/`rpm`
+  formats.
 - Packaging smoke verifies the service capability metadata is present beside
   the bundled Agent runtime and release manifests.
 - Packaging smoke verifies the service registration metadata is present inside

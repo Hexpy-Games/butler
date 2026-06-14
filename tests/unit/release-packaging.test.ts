@@ -485,12 +485,29 @@ test("app release metadata ships bundled-Agent-only changes as a new App artifac
     expect(artifact.serviceInstallerBundle.packageArtifacts.map((item) => ({
       packageFormat: item.packageFormat,
       selectedV1Path: item.selectedV1Path,
+      publishedArtifactName: item.publishedArtifactName,
+      publishedSha256Name: item.publishedSha256Name,
     }))).toEqual(
       artifact.platform.startsWith("darwin-")
-        ? [{ packageFormat: "pkg", selectedV1Path: "macos-pkg-launch-agent" }]
+        ? [{
+          packageFormat: "pkg",
+          selectedV1Path: "macos-pkg-launch-agent",
+          publishedArtifactName: `butler-app-${manifest.version}-darwin-arm64.pkg`,
+          publishedSha256Name: `butler-app-${manifest.version}-darwin-arm64.pkg.sha256`,
+        }]
         : [
-          { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
-          { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
+          {
+            packageFormat: "deb",
+            selectedV1Path: "linux-deb-owned-user-unit",
+            publishedArtifactName: `butler-app-service_${manifest.version}_amd64.deb`,
+            publishedSha256Name: `butler-app-service_${manifest.version}_amd64.deb.sha256`,
+          },
+          {
+            packageFormat: "rpm",
+            selectedV1Path: "linux-rpm-owned-user-unit",
+            publishedArtifactName: `butler-app-service-${manifest.version}-1.x86_64.rpm`,
+            publishedSha256Name: `butler-app-service-${manifest.version}-1.x86_64.rpm.sha256`,
+          },
         ],
     );
   }
@@ -668,6 +685,17 @@ test("release manifest validation rejects cross-owned bundled artifacts", () => 
   );
   expect(validateAppReleaseManifest(root, brokenAppPlatforms)).toContain(
     "missing app release artifact platform: app/linux-x64",
+  );
+  const brokenInstallerAsset = structuredClone(createAppReleaseManifest(root));
+  const linuxArtifact = brokenInstallerAsset.artifacts.find(
+    (artifact) => artifact.platform === "linux-x64",
+  );
+  const debPackage = linuxArtifact?.serviceInstallerBundle.packageArtifacts.find(
+    (item) => item.packageFormat === "deb",
+  );
+  if (debPackage) debPackage.publishedArtifactName = null;
+  expect(validateAppReleaseManifest(root, brokenInstallerAsset)).toContain(
+    "artifact app service installer bundle package artifact path mismatch: deb/linux-deb-owned-user-unit",
   );
 });
 
@@ -911,9 +939,23 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       service_installer_bundle: {
         servicePlatforms: ["darwin", "linux"],
         packageArtifacts: [
-          { packageFormat: "pkg", selectedV1Path: "macos-pkg-launch-agent" },
-          { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
-          { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
+          {
+            packageFormat: "pkg",
+            selectedV1Path: "macos-pkg-launch-agent",
+            publishedArtifactName: `butler-app-${currentVersion}-darwin-arm64.pkg`,
+          },
+          {
+            packageFormat: "deb",
+            selectedV1Path: "linux-deb-owned-user-unit",
+            publishedArtifactName: `butler-app-service_${currentVersion}_amd64.deb`,
+            publishedSha256Name: `butler-app-service_${currentVersion}_amd64.deb.sha256`,
+          },
+          {
+            packageFormat: "rpm",
+            selectedV1Path: "linux-rpm-owned-user-unit",
+            publishedArtifactName: `butler-app-service-${currentVersion}-1.x86_64.rpm`,
+            publishedSha256Name: `butler-app-service-${currentVersion}-1.x86_64.rpm.sha256`,
+          },
         ],
       },
       gateway_profile: "electron",
@@ -939,6 +981,16 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       },
       service_installer_bundle: {
         servicePlatforms: ["linux"],
+        packageArtifacts: [
+          {
+            packageFormat: "deb",
+            publishedArtifactName: `butler-app-service_${currentVersion}_amd64.deb`,
+          },
+          {
+            packageFormat: "rpm",
+            publishedArtifactName: `butler-app-service-${currentVersion}-1.x86_64.rpm`,
+          },
+        ],
       },
       protocol_compatibility: {
         protocol: "butler.app.v1",
