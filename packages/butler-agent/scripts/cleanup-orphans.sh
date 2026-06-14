@@ -13,6 +13,8 @@ BUTLER_HOME="${BUTLER_HOME:-$HOME/butler}"
 BUTLER_DATA="${BUTLER_DATA:-$HOME/.butler}"
 LOCK_DIR="$BUTLER_DATA/locks"
 MIN_AGE_SECONDS="${MIN_AGE_SECONDS:-300}"  # Only kill processes older than 5 minutes
+CLEANUP_ORPHANS_DRY_RUN="${CLEANUP_ORPHANS_DRY_RUN:-0}"
+BUTLER_CLEANUP_ALLOW_HOME_SCOPE="${BUTLER_CLEANUP_ALLOW_HOME_SCOPE:-0}"
 
 SERVICE_PIDS=""
 if [ -d "$BUTLER_DATA/state/services" ]; then
@@ -74,6 +76,17 @@ list_processes() {
   ps aux 2>/dev/null || true
 }
 
+process_belongs_to_current_instance() {
+  local command_line="$1"
+  if echo "$command_line" | grep -Fq "$BUTLER_DATA"; then return 0; fi
+  if [ "$BUTLER_CLEANUP_ALLOW_HOME_SCOPE" = "1" ]; then
+    if echo "$command_line" | grep -Fq "$BUTLER_HOME"; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
 KILLED=0
 
 # 1. Find orphan Butler runtime processes with butler-related paths
@@ -94,11 +107,17 @@ while IFS= read -r line; do
     log "Skipping PID=$pid — process identity changed since scan"
     continue
   fi
+  if ! process_belongs_to_current_instance "$live_cmd"; then
+    log "Skipping PID=$pid — outside current Butler data root"
+    continue
+  fi
   log "Killing orphan Butler runtime process: PID=$pid CMD=$cmd"
-  kill -TERM "$pid" 2>/dev/null || true
+  if [ "$CLEANUP_ORPHANS_DRY_RUN" != "1" ]; then
+    kill -TERM "$pid" 2>/dev/null || true
+  fi
   KILLED=$((KILLED + 1))
 done < <(list_processes | grep -E '[b]un.*(\.butler|butler-home|butler-data|/butler/)' | grep -v "cleanup-orphans" || true)
-# Pattern: matches Butler runtime processes with .butler, butler-home, butler-data, or /butler/ in their args.
+# Pattern: broad scan, followed by current BUTLER_DATA scoping above.
 
 # 2. Remove stale lock files
 if [ -d "$LOCK_DIR" ]; then
