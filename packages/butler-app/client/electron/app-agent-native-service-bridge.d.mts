@@ -2,6 +2,8 @@ export function createAppAgentNativeServiceBridge(options?: {
   butlerData: string;
   platform?: string;
   homeDir?: string;
+  serviceLabel?: string;
+  systemdUnit?: string;
   getPort?: () => number;
   ensureRuntimePointer?: () => {
     rollbackActivation?: (error?: Error) => void;

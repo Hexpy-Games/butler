@@ -219,6 +219,11 @@ Implemented surface:
   step and do not call managed gateway readiness.
 - Existing first-run UI copy and retry/diagnostics controls are reused for the
   service setup failure path.
+- Manual first-run service testing can force the native service bridge in a
+  development Electron launch only when a test-only service namespace,
+  non-production port, bundled Agent resource directory, and non-production
+  `BUTLER_DATA` are present. The helper refuses production labels/units and
+  cleans up the test service by default.
 
 Validation:
 

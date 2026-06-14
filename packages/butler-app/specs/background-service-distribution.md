@@ -239,6 +239,11 @@ Required changes:
   beside the `.deb` and `.rpm` packages.
 - App release and update manifests must expose the published service installer
   package asset names and checksum asset names for every package format.
+- Manual first-run service testing must use a test-only service namespace
+  (`com.hexpy.butler.test.*` on launchd and `butler-test-*.service` on
+  systemd), a non-production app gateway port, and a non-production
+  `BUTLER_DATA`. Test mode must refuse the production service label, production
+  unit, production port, and real `~/.butler` data root.
 
 ## Success Criteria
 

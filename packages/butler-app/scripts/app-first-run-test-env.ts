@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import { prepareBundledAgentResource } from "./release/package-app-release.ts";
 
 const root = process.cwd();
 const electronBin = resolve(
@@ -29,9 +30,13 @@ type Options = {
   cleanOnExit: boolean;
   dataDir?: string;
   electronProfileDir?: string;
+  keepService: boolean;
+  nativeService: boolean;
   profile?: string;
   reset: boolean;
   serverPort?: number;
+  serviceLabel?: string;
+  systemdUnit?: string;
 };
 
 const baseEnvAllowlist = [
@@ -64,6 +69,10 @@ function usage(): string {
     "  --data <path>               Use an explicit Butler data directory.",
     "  --electron-profile <path>   Use an explicit Electron user-data-dir.",
     "  --port <number>             Use an explicit app-server port.",
+    "  --native-service            Enable the real OS service install/start path with test-only names.",
+    "  --service-label <label>     LaunchAgent label for --native-service.",
+    "  --systemd-unit <unit>       systemd user unit for --native-service.",
+    "  --keep-service              Leave the test service installed after Electron exits.",
     "  --reset                     Delete the selected test profile before launch.",
     "  --clean-on-exit             Delete the test profile when Electron exits.",
     "  --help                      Show this help.",
@@ -82,6 +91,8 @@ function takeValue(args: string[], index: number, name: string): string {
 function parseOptions(args: string[]): Options {
   const options: Options = {
     cleanOnExit: false,
+    keepService: false,
+    nativeService: false,
     reset: false,
   };
   for (let i = 0; i < args.length; i += 1) {
@@ -96,6 +107,14 @@ function parseOptions(args: string[]): Options {
     }
     if (arg === "--clean-on-exit") {
       options.cleanOnExit = true;
+      continue;
+    }
+    if (arg === "--native-service") {
+      options.nativeService = true;
+      continue;
+    }
+    if (arg === "--keep-service") {
+      options.keepService = true;
       continue;
     }
     if (arg === "--profile" || arg.startsWith("--profile=")) {
@@ -120,6 +139,16 @@ function parseOptions(args: string[]): Options {
       }
       options.serverPort = port;
       if (arg === "--port") i += 1;
+      continue;
+    }
+    if (arg === "--service-label" || arg.startsWith("--service-label=")) {
+      options.serviceLabel = takeValue(args, i, "--service-label");
+      if (arg === "--service-label") i += 1;
+      continue;
+    }
+    if (arg === "--systemd-unit" || arg.startsWith("--systemd-unit=")) {
+      options.systemdUnit = takeValue(args, i, "--systemd-unit");
+      if (arg === "--systemd-unit") i += 1;
       continue;
     }
     throw new Error(`Unknown option: ${arg}`);
@@ -268,6 +297,67 @@ function assertPortAvailable(port: number): void {
   }
 }
 
+function nativeServiceSafeName(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/gu, "-").replace(/^-+|-+$/gu, "") || "default";
+}
+
+function assertNativeServiceTestNamespace(input: {
+  serviceLabel: string;
+  systemdUnit: string;
+  serverPort: number;
+}): void {
+  if (input.serviceLabel === "com.hexpy.butler") {
+    throw new Error("Refusing to use the production LaunchAgent label for native service testing.");
+  }
+  if (!/^com\.hexpy\.butler\.test[.A-Za-z0-9_-]*$/u.test(input.serviceLabel)) {
+    throw new Error("Native service test label must start with com.hexpy.butler.test.");
+  }
+  if (input.systemdUnit === "butler.service") {
+    throw new Error("Refusing to use the production systemd unit for native service testing.");
+  }
+  if (!/^butler-test[-A-Za-z0-9_.]*\.service$/u.test(input.systemdUnit)) {
+    throw new Error("Native service test unit must start with butler-test and end with .service.");
+  }
+  if (input.serverPort === 18765) {
+    throw new Error("Refusing to use the production app-server port for native service testing.");
+  }
+}
+
+function assertNativeServiceTestIdentity(input: {
+  serviceLabel: string;
+  systemdUnit: string;
+}): void {
+  assertNativeServiceTestNamespace({
+    ...input,
+    serverPort: 1,
+  });
+}
+
+function cleanupNativeService(input: {
+  serviceLabel: string;
+  systemdUnit: string;
+}): void {
+  assertNativeServiceTestIdentity(input);
+  if (process.platform === "darwin") {
+    const uid = typeof process.getuid === "function" ? process.getuid() : null;
+    const target = `gui/${uid ?? "$UID"}/${input.serviceLabel}`;
+    spawnSync("launchctl", ["bootout", target], { stdio: "ignore" });
+    rmSync(join(homedir(), "Library", "LaunchAgents", `${input.serviceLabel}.plist`), {
+      force: true,
+    });
+    return;
+  }
+  if (process.platform === "linux") {
+    spawnSync("systemctl", ["--user", "disable", "--now", input.systemdUnit], {
+      stdio: "ignore",
+    });
+    rmSync(join(homedir(), ".config", "systemd", "user", input.systemdUnit), {
+      force: true,
+    });
+    spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
+  }
+}
+
 async function waitForPortClear(port: number, timeoutMs = 2500): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -284,14 +374,6 @@ async function waitForPortClear(port: number, timeoutMs = 2500): Promise<void> {
 
 async function cleanupOwnedPort(port: number, ownedPids: Set<number>): Promise<void> {
   if (process.platform === "win32" || ownedPids.size === 0) return;
-  const pids = listenerPids(port).filter((pid) => ownedPids.has(pid));
-  for (const pid of pids) {
-    try {
-      process.kill(pid, "SIGTERM");
-    } catch {
-      // Best-effort cleanup for the test-owned managed app-server.
-    }
-  }
   await waitForPortClear(port);
 }
 
@@ -309,6 +391,9 @@ const dataDir = options.dataDir ?? join(runRoot, "data");
 const electronProfileDir =
   options.electronProfileDir ?? join(runRoot, "electron-profile");
 const serverPort = options.serverPort ?? (await freePort());
+const nativeServiceName = nativeServiceSafeName(runName);
+const serviceLabel = options.serviceLabel ?? `com.hexpy.butler.test.${nativeServiceName}`;
+const systemdUnit = options.systemdUnit ?? `butler-test-${nativeServiceName}.service`;
 const serverUrl = `http://127.0.0.1:${serverPort}/`;
 const healthUrl = new URL("/health", serverUrl).toString();
 const nodePath = existingNodePath();
@@ -319,6 +404,9 @@ assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; run npm --pr
 assertNotRealButlerData(dataDir);
 assertNotRealElectronProfile(electronProfileDir);
 assertPortAvailable(serverPort);
+if (options.nativeService) {
+  assertNativeServiceTestNamespace({ serviceLabel, systemdUnit, serverPort });
+}
 
 if (options.reset) {
   assertSafeDestructivePaths([dataDir, electronProfileDir]);
@@ -329,6 +417,14 @@ if (options.cleanOnExit) {
 }
 mkdirSync(dataDir, { recursive: true });
 mkdirSync(electronProfileDir, { recursive: true });
+
+if (options.nativeService) {
+  cleanupNativeService({ serviceLabel, systemdUnit });
+}
+
+const bundledAgentResourceDir = options.nativeService
+  ? prepareBundledAgentResource(root, join(runRoot, "bundled-agent-resource")).resourceDir
+  : null;
 
 const env: NodeJS.ProcessEnv = {
   ...buildBaseEnv(
@@ -341,6 +437,15 @@ const env: NodeJS.ProcessEnv = {
   BUTLER_BUN: runtimePath,
   BUTLER_APP_SERVER_PORT: String(serverPort),
   BUTLER_APP_GATEWAY_PID_FILE: "off",
+  ...(options.nativeService
+    ? {
+        BUTLER_APP_ALLOW_NATIVE_SERVICE_TEST_ENV: "1",
+        BUTLER_APP_BUNDLED_AGENT_DIR: bundledAgentResourceDir ?? "",
+        BUTLER_APP_FORCE_NATIVE_SERVICE_BRIDGE: "1",
+        BUTLER_APP_SERVICE_LABEL: serviceLabel,
+        BUTLER_APP_SYSTEMD_UNIT: systemdUnit,
+      }
+    : {}),
 };
 delete env.BUTLER_APP_SERVER_URL;
 delete env.BUTLER_APP_UI_URL;
@@ -353,6 +458,11 @@ console.log("Butler App first-run test environment");
 console.log(`Data: ${dataDir}`);
 console.log(`Electron profile: ${electronProfileDir}`);
 console.log(`App server: ${serverUrl}`);
+if (options.nativeService) {
+  console.log(`Native service label: ${serviceLabel}`);
+  console.log(`Native systemd unit: ${systemdUnit}`);
+  console.log(options.keepService ? "Native test service cleanup: disabled" : "Native test service cleanup: on exit");
+}
 console.log("This launches the current App UI in a clean state; it is not proof that the first-run wizard is implemented.");
 console.log("Quit Butler from the app/tray, or press Ctrl-C here to stop.");
 
@@ -380,8 +490,13 @@ try {
   console.log("Ready.");
 } catch (error) {
   stopChild(electron);
-  const startupListenerPids = new Set(listenerPids(serverPort));
-  await cleanupOwnedPort(serverPort, startupListenerPids);
+  if (options.nativeService && !options.keepService) {
+    cleanupNativeService({ serviceLabel, systemdUnit });
+    await waitForPortClear(serverPort);
+  } else if (!options.nativeService) {
+    const startupListenerPids = new Set(listenerPids(serverPort));
+    await cleanupOwnedPort(serverPort, startupListenerPids);
+  }
   throw error;
 }
 
@@ -395,6 +510,11 @@ const exitCode = await new Promise<number>((resolveExit) => {
   });
 });
 
-await cleanupOwnedPort(serverPort, ownedListenerPids ?? new Set<number>());
+if (options.nativeService && !options.keepService) {
+  cleanupNativeService({ serviceLabel, systemdUnit });
+  await waitForPortClear(serverPort);
+} else if (!options.nativeService) {
+  await cleanupOwnedPort(serverPort, ownedListenerPids ?? new Set<number>());
+}
 if (options.cleanOnExit) cleanSelectedRoots();
 process.exit(exitCode);

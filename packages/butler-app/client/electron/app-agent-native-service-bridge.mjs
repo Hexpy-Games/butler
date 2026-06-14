@@ -19,14 +19,16 @@ const APP_AGENT_SERVICE_IDS = [
   "app-gateway",
 ];
 
-const SERVICE_LABEL = "com.hexpy.butler";
-const SYSTEMD_UNIT = "butler.service";
+const DEFAULT_SERVICE_LABEL = "com.hexpy.butler";
+const DEFAULT_SYSTEMD_UNIT = "butler.service";
 const SERVICE_COMMAND_TIMEOUT_MS = 15_000;
 
 export function createAppAgentNativeServiceBridge({
   butlerData,
   platform = process.platform,
   homeDir = homedir(),
+  serviceLabel = DEFAULT_SERVICE_LABEL,
+  systemdUnit = DEFAULT_SYSTEMD_UNIT,
   getPort = () => 18765,
   ensureRuntimePointer = () => {},
   prepareLocalAuth = () => prepareAppLocalAuth({ butlerData }),
@@ -37,6 +39,8 @@ export function createAppAgentNativeServiceBridge({
   if (!butlerData) {
     throw new Error("missing Butler data root");
   }
+  const resolvedServiceLabel = normalizeLaunchdLabel(serviceLabel);
+  const resolvedSystemdUnit = normalizeSystemdUnit(systemdUnit);
   return {
     nativeServices: {
       list: async () => listNativeServiceProjections({ butlerData, isPidRunning }),
@@ -46,6 +50,8 @@ export function createAppAgentNativeServiceBridge({
           butlerData,
           platform,
           homeDir,
+          serviceLabel: resolvedServiceLabel,
+          systemdUnit: resolvedSystemdUnit,
           getPort,
           ensureRuntimePointer,
           prepareLocalAuth,
@@ -58,6 +64,8 @@ export function createAppAgentNativeServiceBridge({
           butlerData,
           platform,
           homeDir,
+          serviceLabel: resolvedServiceLabel,
+          systemdUnit: resolvedSystemdUnit,
           getPort,
           ensureRuntimePointer,
           prepareLocalAuth,
@@ -72,6 +80,8 @@ export function createAppAgentNativeServiceBridge({
           butlerData,
           platform,
           homeDir,
+          serviceLabel: resolvedServiceLabel,
+          systemdUnit: resolvedSystemdUnit,
           getPort,
           ensureRuntimePointer,
           prepareLocalAuth,
@@ -105,6 +115,8 @@ function createRegistrationPlan({
   butlerData,
   platform,
   homeDir,
+  serviceLabel,
+  systemdUnit,
   getPort,
   ensureRuntimePointer,
   prepareLocalAuth,
@@ -114,8 +126,8 @@ function createRegistrationPlan({
   }
   if (action === "stop") {
     return platform === "darwin"
-      ? launchdPlan({ action, homeDir, runtime: null })
-      : systemdPlan({ action, homeDir, runtime: null });
+      ? launchdPlan({ action, homeDir, runtime: null, serviceLabel })
+      : systemdPlan({ action, homeDir, runtime: null, systemdUnit });
   }
   const activation = ensureRuntimePointer();
   try {
@@ -125,9 +137,9 @@ function createRegistrationPlan({
       prepareLocalAuth,
     });
     if (platform === "darwin") {
-      return { ...launchdPlan({ action, homeDir, runtime }), activation };
+      return { ...launchdPlan({ action, homeDir, runtime, serviceLabel }), activation };
     }
-    return { ...systemdPlan({ action, homeDir, runtime }), activation };
+    return { ...systemdPlan({ action, homeDir, runtime, systemdUnit }), activation };
   } catch (error) {
     activation?.rollbackActivation?.(normalizeError(error));
     throw error;
@@ -201,15 +213,15 @@ function resolveAppManagedServiceRuntime({ butlerData, getPort, prepareLocalAuth
   };
 }
 
-function launchdPlan({ action, homeDir, runtime }) {
-  const serviceFile = join(homeDir, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`);
+function launchdPlan({ action, homeDir, runtime, serviceLabel }) {
+  const serviceFile = join(homeDir, "Library", "LaunchAgents", `${serviceLabel}.plist`);
   const domain = `gui/${typeof process.getuid === "function" ? process.getuid() : "$UID"}`;
-  const target = `${domain}/${SERVICE_LABEL}`;
+  const target = `${domain}/${serviceLabel}`;
   if (action === "install") {
     return {
       action,
       serviceFile,
-      body: launchdPlist(runtime),
+      body: launchdPlist(runtime, serviceLabel),
       steps: [
         serviceStep(["launchctl", "bootout", target], { optional: true }),
         serviceStep(["launchctl", "bootstrap", domain, serviceFile]),
@@ -231,33 +243,33 @@ function launchdPlan({ action, homeDir, runtime }) {
   };
 }
 
-function systemdPlan({ action, homeDir, runtime }) {
-  const serviceFile = join(homeDir, ".config", "systemd", "user", SYSTEMD_UNIT);
+function systemdPlan({ action, homeDir, runtime, systemdUnit }) {
+  const serviceFile = join(homeDir, ".config", "systemd", "user", systemdUnit);
   if (action === "install") {
     return {
       action,
       serviceFile,
-      body: systemdUnit(runtime),
+      body: systemdUnitBody(runtime),
       steps: [
         serviceStep(["systemctl", "--user", "daemon-reload"]),
-        serviceStep(["systemctl", "--user", "enable", "--now", SYSTEMD_UNIT]),
+        serviceStep(["systemctl", "--user", "enable", "--now", systemdUnit]),
       ],
     };
   }
   return {
     action,
     serviceFile,
-    steps: [serviceStep(["systemctl", "--user", action, SYSTEMD_UNIT])],
+    steps: [serviceStep(["systemctl", "--user", action, systemdUnit])],
   };
 }
 
-function launchdPlist(runtime) {
+function launchdPlist(runtime, serviceLabel) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>${xml(SERVICE_LABEL)}</string>
+  <string>${xml(serviceLabel)}</string>
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
@@ -280,7 +292,7 @@ ${Object.entries(runtime.env).map(([key, value]) =>
 `;
 }
 
-function systemdUnit(runtime) {
+function systemdUnitBody(runtime) {
   return `[Unit]
 Description=Butler Agent service
 After=network-online.target
@@ -320,6 +332,22 @@ async function applyPlan(plan, { runCommand, writeFile = defaultWriteFile }) {
 
 function serviceStep(argv, { optional = false } = {}) {
   return { argv, optional };
+}
+
+function normalizeLaunchdLabel(value) {
+  const label = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9._-]+$/u.test(label)) {
+    throw new Error("invalid App Agent service label");
+  }
+  return label;
+}
+
+function normalizeSystemdUnit(value) {
+  const unit = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_.@-]+\.service$/u.test(unit)) {
+    throw new Error("invalid App Agent systemd unit");
+  }
+  return unit;
 }
 
 function serviceStatePath(butlerData, serviceId) {
