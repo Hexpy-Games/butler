@@ -151,6 +151,7 @@ export interface AppServiceInstallerPackageArtifactMetadata {
   serviceManager: "launchd" | "systemd-user";
   serviceDefinitionTarget: string;
   renderContractPath: string;
+  launcherPath?: string;
   postInstallPath: string;
 }
 
@@ -522,6 +523,7 @@ function serviceInstallerPackageArtifactsForPlatform(
         serviceManager: "systemd-user",
         serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
         renderContractPath: "service-installer/linux/systemd/render-contract.json",
+        launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
         postInstallPath: "service-installer/linux/deb/postinst",
       },
       {
@@ -530,6 +532,7 @@ function serviceInstallerPackageArtifactsForPlatform(
         serviceManager: "systemd-user",
         serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
         renderContractPath: "service-installer/linux/systemd/render-contract.json",
+        launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
         postInstallPath: "service-installer/linux/rpm/postinstall.sh",
       },
     ];
@@ -1281,6 +1284,7 @@ function validateAppServiceInstallerBundle(
       actual.serviceManager !== expected.serviceManager ||
       actual.serviceDefinitionTarget !== expected.serviceDefinitionTarget ||
       actual.renderContractPath !== expected.renderContractPath ||
+      actual.launcherPath !== expected.launcherPath ||
       actual.postInstallPath !== expected.postInstallPath
     ) {
       issues.push(

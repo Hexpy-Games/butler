@@ -868,6 +868,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(entries).toContain(`${resourceRoot}/service-installer/linux/systemd/render-contract.json`);
     expect(entries).toContain(`${resourceRoot}/service-installer/linux/deb/postinst`);
     expect(entries).toContain(`${resourceRoot}/service-installer/linux/rpm/postinstall.sh`);
+    expect(entries).toContain(`${resourceRoot}/service-installer/linux/launcher/butler-app-managed-agent-service`);
     expect(entries).toContain(`${resourceRoot}/runtime/bun-version`);
     expect(entries).toContain(`${resourceRoot}/runtime/bin/bun`);
     const bundledRuntime = extractTarEntryBuffer(
@@ -1000,6 +1001,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
           serviceManager: "systemd-user",
           serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
           renderContractPath: "service-installer/linux/systemd/render-contract.json",
+          launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
           postInstallPath: "service-installer/linux/deb/postinst",
         },
         {
@@ -1008,6 +1010,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
           serviceManager: "systemd-user",
           serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
           renderContractPath: "service-installer/linux/systemd/render-contract.json",
+          launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
           postInstallPath: "service-installer/linux/rpm/postinstall.sh",
         },
       ],
@@ -1019,6 +1022,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       target: "/usr/lib/systemd/user/butler.service",
       renderer: "butler-app-native-service-bridge",
       requiredEscaping: "systemd-quoted",
+      launcherPath: "/usr/lib/butler/butler-app-managed-agent-service",
       rawTemplateIncluded: false,
       rawTextIncluded: false,
     });
@@ -1761,6 +1765,17 @@ function expectServiceInstallerPayload(
   });
   expectExecutable(join(resourceDir, "service-installer", "linux", "deb", "postinst"));
   expectExecutable(join(resourceDir, "service-installer", "linux", "rpm", "postinstall.sh"));
+  const launcher = join(
+    resourceDir,
+    "service-installer",
+    "linux",
+    "launcher",
+    "butler-app-managed-agent-service",
+  );
+  expectExecutable(launcher);
+  expect(readText(launcher)).toContain("BUTLER_APP_MANAGED_RUNTIME_POINTER");
+  expect(readText(launcher)).toContain("runtime_home");
+  expect(readText(launcher)).toContain("*/../*");
 }
 
 function expectExecutable(path: string): void {
