@@ -162,8 +162,8 @@ jobs:
           tag="${GITHUB_REF_NAME}"
           shopt -s nullglob
           files=(
-            dist/release/app/butler-app-*-darwin-arm64.zip
-            dist/release/app/butler-app-*-darwin-arm64.zip.sha256
+            dist/release/app/butler-app-*-darwin-arm64.pkg
+            dist/release/app/butler-app-*-darwin-arm64.pkg.sha256
             dist/release/app/butler-app-*-linux-x64.tar.gz
             dist/release/app/butler-app-*-linux-x64.tar.gz.sha256
             dist/release/app/app-release-manifest.json

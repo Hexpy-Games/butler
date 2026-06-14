@@ -226,6 +226,10 @@ Required changes:
 - App release and update manifests must expose service installer bundle
   metadata so release consumers can discover the packaged installer contract
   without extracting the App artifact first.
+- macOS App release artifacts must be `.pkg` installers instead of zipped
+  `.app` bundles so service registration payloads can travel through the
+  installer path. Production release signing and notarization are configured by
+  release credentials.
 
 ## Success Criteria
 

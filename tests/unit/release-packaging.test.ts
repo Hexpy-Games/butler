@@ -363,7 +363,7 @@ test("app release manifest exposes app package files only", () => {
     ...APP_RELEASE_PLATFORMS,
   ]);
   expect(manifest.artifacts.map((artifact) => artifact.artifactName)).toEqual([
-    `butler-app-${currentVersion}-darwin-arm64.zip`,
+    `butler-app-${currentVersion}-darwin-arm64.pkg`,
     `butler-app-${currentVersion}-linux-x64.tar.gz`,
   ]);
   expect(validateAppReleaseManifest(root, manifest)).toEqual([]);

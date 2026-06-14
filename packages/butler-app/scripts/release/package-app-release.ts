@@ -179,7 +179,12 @@ function packagePlatform(input: {
     normalizeMacBundle(input.root, appBundle);
     verifyMacBundleIcon(input.root, appBundle);
     signMacBundle(input.root, appBundle);
-    createMacZip(appBundle, artifactPath);
+    createMacPkg({
+      appBundle,
+      artifactPath,
+      bundledAgentResourceDir: input.bundledAgentResourceDir,
+      version: input.manifest.version,
+    });
   } else {
     createTarball(packagedDir, artifactPath);
   }
@@ -834,21 +839,147 @@ function signMacBundle(root: string, appBundle: string): void {
   }
 }
 
-function createMacZip(appBundle: string, artifactPath: string): void {
-  rmSync(artifactPath, { force: true });
-  const result = spawnSync("ditto", [
-    "-c",
-    "-k",
-    "--sequesterRsrc",
-    "--keepParent",
-    appBundle,
-    artifactPath,
+function createMacPkg(input: {
+  appBundle: string;
+  artifactPath: string;
+  bundledAgentResourceDir: string;
+  version: string;
+}): void {
+  const workDir = mkdtempSync(join(tmpdir(), "butler-app-pkg-"));
+  try {
+    const pkgRoot = join(workDir, "root");
+    const applicationsDir = join(pkgRoot, "Applications");
+    const scriptsDir = join(workDir, "scripts");
+    mkdirSync(applicationsDir, { recursive: true });
+    mkdirSync(scriptsDir, { recursive: true });
+    cpSync(input.appBundle, join(applicationsDir, "Butler.app"), {
+      dereference: false,
+      errorOnExist: false,
+      force: true,
+      recursive: true,
+    });
+    const postinstall = join(
+      input.bundledAgentResourceDir,
+      "service-installer",
+      "darwin",
+      "pkg",
+      "postinstall",
+    );
+    if (!existsSync(postinstall)) {
+      throw new Error(`mac pkg postinstall script is missing: ${postinstall}`);
+    }
+    copyFileSync(postinstall, join(scriptsDir, "postinstall"));
+    chmodSync(join(scriptsDir, "postinstall"), 0o755);
+
+    rmSync(input.artifactPath, { force: true });
+    const unsignedPkg = process.env.BUTLER_APP_PKG_SIGN_IDENTITY
+      ? join(workDir, "Butler-unsigned.pkg")
+      : input.artifactPath;
+    runPkgbuild({
+      root: pkgRoot,
+      scripts: scriptsDir,
+      version: input.version,
+      artifactPath: unsignedPkg,
+    });
+    if (process.env.BUTLER_APP_PKG_SIGN_IDENTITY) {
+      runProductbuild({
+        packagePath: unsignedPkg,
+        artifactPath: input.artifactPath,
+        signIdentity: process.env.BUTLER_APP_PKG_SIGN_IDENTITY,
+      });
+    }
+    notarizeMacPkgIfConfigured(input.artifactPath);
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+function runPkgbuild(input: {
+  root: string;
+  scripts: string;
+  version: string;
+  artifactPath: string;
+}): void {
+  rmSync(input.artifactPath, { force: true });
+  const result = spawnSync("pkgbuild", [
+    "--root",
+    input.root,
+    "--scripts",
+    input.scripts,
+    "--identifier",
+    MAC_APP_BUNDLE_IDENTIFIER,
+    "--version",
+    input.version,
+    "--install-location",
+    "/",
+    input.artifactPath,
   ], {
     encoding: "utf8",
   });
   if (result.status !== 0) {
     throw new Error(
-      `mac app zip failed: ${result.stderr.trim() || result.stdout.trim() || "unknown error"}`,
+      `mac app pkgbuild failed: ${
+        result.stderr.trim() || result.stdout.trim() || "unknown error"
+      }`,
+    );
+  }
+}
+
+function runProductbuild(input: {
+  packagePath: string;
+  artifactPath: string;
+  signIdentity: string;
+}): void {
+  rmSync(input.artifactPath, { force: true });
+  const result = spawnSync("productbuild", [
+    "--package",
+    input.packagePath,
+    "--sign",
+    input.signIdentity,
+    input.artifactPath,
+  ], {
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `mac app productbuild signing failed: ${
+        result.stderr.trim() || result.stdout.trim() || "unknown error"
+      }`,
+    );
+  }
+}
+
+function notarizeMacPkgIfConfigured(artifactPath: string): void {
+  const keychainProfile = process.env.BUTLER_APP_NOTARY_KEYCHAIN_PROFILE?.trim();
+  if (!keychainProfile) return;
+  if (!process.env.BUTLER_APP_PKG_SIGN_IDENTITY?.trim()) {
+    throw new Error(
+      "BUTLER_APP_PKG_SIGN_IDENTITY is required when BUTLER_APP_NOTARY_KEYCHAIN_PROFILE is set",
+    );
+  }
+  const submit = spawnSync("xcrun", [
+    "notarytool",
+    "submit",
+    artifactPath,
+    "--keychain-profile",
+    keychainProfile,
+    "--wait",
+  ], { encoding: "utf8" });
+  if (submit.status !== 0) {
+    throw new Error(
+      `mac app pkg notarization failed: ${
+        submit.stderr.trim() || submit.stdout.trim() || "unknown error"
+      }`,
+    );
+  }
+  const staple = spawnSync("xcrun", ["stapler", "staple", artifactPath], {
+    encoding: "utf8",
+  });
+  if (staple.status !== 0) {
+    throw new Error(
+      `mac app pkg notarization staple failed: ${
+        staple.stderr.trim() || staple.stdout.trim() || "unknown error"
+      }`,
     );
   }
 }

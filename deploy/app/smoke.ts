@@ -6,24 +6,25 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const outDir = resolve(optionValue("--out") ?? "dist/release/app");
-const macZip = findOne(/^butler-app-.*-darwin-arm64\.zip$/u);
+const macPkg = findOne(/^butler-app-.*-darwin-arm64\.pkg$/u);
 const linuxTar = findOne(/^butler-app-.*-linux-x64\.tar\.gz$/u);
 const releaseManifestPath = join(outDir, "app-release-manifest.json");
 const updateManifestPath = join(outDir, "app-update-manifest.json");
 
-for (const path of [macZip, `${macZip}.sha256`, linuxTar, `${linuxTar}.sha256`, releaseManifestPath, updateManifestPath]) {
+for (const path of [macPkg, `${macPkg}.sha256`, linuxTar, `${linuxTar}.sha256`, releaseManifestPath, updateManifestPath]) {
   if (!existsSync(path)) throw new Error(`missing Butler App release file: ${path}`);
 }
-verifySha(macZip);
+verifySha(macPkg);
 verifySha(linuxTar);
 verifyLinuxTar(linuxTar);
-verifyMacZip(macZip);
+verifyMacPkg(macPkg);
 
 const releaseManifest = JSON.parse(readFileSync(releaseManifestPath, "utf8"));
 const updateManifest = JSON.parse(readFileSync(updateManifestPath, "utf8"));
@@ -34,7 +35,7 @@ if (!Array.isArray(updateManifest.artifacts) || updateManifest.artifacts.some((a
   throw new Error("App update manifest includes a non-App artifact");
 }
 
-console.log(`Butler App release smoke passed: ${basename(macZip)}, ${basename(linuxTar)}`);
+console.log(`Butler App release smoke passed: ${basename(macPkg)}, ${basename(linuxTar)}`);
 
 function optionValue(name: string): string | null {
   const index = process.argv.indexOf(name);
@@ -68,25 +69,38 @@ function verifyLinuxTar(path: string): void {
   }
 }
 
-function verifyMacZip(path: string): void {
+function verifyMacPkg(path: string): void {
   if (process.platform !== "darwin") return;
-  const extractDir = mkdtempSync(join(tmpdir(), "butler-app-release-smoke-"));
+  const tempRoot = mkdtempSync(join(tmpdir(), "butler-app-release-smoke-"));
+  const extractDir = join(tempRoot, "expanded");
   try {
-    const extract = spawnSync("ditto", ["-x", "-k", path, extractDir], { encoding: "utf8" });
+    const extract = spawnSync("pkgutil", ["--expand-full", path, extractDir], { encoding: "utf8" });
     if (extract.status !== 0) {
-      throw new Error(`Mac App artifact extraction failed: ${extract.stderr.trim() || extract.stdout.trim() || "unknown error"}`);
+      throw new Error(`Mac App pkg extraction failed: ${extract.stderr.trim() || extract.stdout.trim() || "unknown error"}`);
+    }
+    const payloadRoot = join(extractDir, "Payload");
+    const appPath = join(payloadRoot, "Applications", "Butler.app");
+    if (!existsSync(appPath)) {
+      throw new Error("Mac App pkg is missing Applications/Butler.app payload");
+    }
+    const postinstallPath = join(extractDir, "Scripts", "postinstall");
+    if (!existsSync(postinstallPath)) {
+      throw new Error("Mac App pkg is missing postinstall service hook");
+    }
+    if ((statSync(postinstallPath).mode & 0o111) === 0) {
+      throw new Error("Mac App pkg postinstall service hook is not executable");
     }
     const verify = spawnSync("codesign", [
       "--verify",
       "--deep",
       "--strict",
       "--verbose=4",
-      join(extractDir, "Butler.app"),
+      appPath,
     ], { encoding: "utf8" });
     if (verify.status !== 0) {
       throw new Error(`Mac App codesign verification failed: ${verify.stderr.trim() || verify.stdout.trim() || "unknown error"}`);
     }
   } finally {
-    rmSync(extractDir, { recursive: true, force: true });
+    rmSync(tempRoot, { recursive: true, force: true });
   }
 }

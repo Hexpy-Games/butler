@@ -34,7 +34,7 @@ Download Butler App from the
 [GitHub Releases](https://github.com/Hexpy-Games/butler/releases) page for the
 tag you want to install.
 
-- macOS Apple Silicon: `butler-app-<version>-darwin-arm64.zip`
+- macOS Apple Silicon: `butler-app-<version>-darwin-arm64.pkg`
 - Linux x64: `butler-app-<version>-linux-x64.tar.gz`
 
 Butler Agent is included in the app. On first launch, setup runs inside the

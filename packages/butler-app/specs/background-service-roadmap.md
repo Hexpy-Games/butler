@@ -385,6 +385,9 @@ Implemented surface:
   post-install hook input.
 - App release and update manifests expose `serviceInstallerBundle` metadata so
   package artifact inputs can be discovered before extracting the App artifact.
+- macOS App release artifacts are emitted as `.pkg` installers. The pkg payload
+  installs `Butler.app` under `/Applications`, includes the bundled Agent
+  resources, and uses the packaged post-install hook input.
 - The dependency closure lists
   `background-service-registration-metadata` as an App-owned dependency.
 - Current v1 installer requirements are declared as:
@@ -404,8 +407,8 @@ Implemented surface:
 
 Remaining:
 
-- Generate signed/notarized macOS `.pkg` service installer payloads from the
-  registration metadata and installer manifest.
+- Configure production macOS Developer ID signing and notarization credentials
+  for `.pkg` publication.
 - Generate Linux `.deb`/`.rpm` packages that install user service units from
   the registration metadata and installer manifest.
 - Add Windows release platform and installer path after the Windows
