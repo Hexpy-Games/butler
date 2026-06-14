@@ -114,8 +114,8 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).toContain("bun run release:app:smoke -- --out dist/release/app");
   expect(workflow).not.toContain("codesign --verify --deep --strict --verbose=4");
   expect(workflow).not.toContain('grep -F "Butler-linux-x64/Butler"');
-  expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.zip");
-  expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.zip.sha256");
+  expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.pkg");
+  expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.pkg.sha256");
   expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.tar.gz");
   expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.tar.gz.sha256");
   expect(workflow).toContain("dist/release/app/app-release-manifest.json");
@@ -142,7 +142,7 @@ test("README directs default installs to Butler App and advanced installs to Age
   const development = readme.slice(developmentStart);
 
   expect(quickStart).toContain("GitHub Release");
-  expect(quickStart).toContain("butler-app-<version>-darwin-arm64.zip");
+  expect(quickStart).toContain("butler-app-<version>-darwin-arm64.pkg");
   expect(quickStart).toContain("butler-app-<version>-linux-x64.tar.gz");
   expect(normalizedQuickStart).toContain("Butler Agent is included in the app");
   expect(quickStart).toContain("Butler Agent를 준비합니다");

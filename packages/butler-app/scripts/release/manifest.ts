@@ -903,7 +903,7 @@ function artifactName(
   version: string,
   platform: AppReleasePlatform,
 ): string {
-  const extension = platform === "darwin-arm64" ? "zip" : "tar.gz";
+  const extension = platform === "darwin-arm64" ? "pkg" : "tar.gz";
   return `butler-app-${version}-${platform}.${extension}`;
 }
 
