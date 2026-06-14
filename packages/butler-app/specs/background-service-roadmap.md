@@ -394,6 +394,11 @@ Implemented surface:
   - macOS: `macos-pkg-launch-agent` with `pkg`.
   - Linux: `linux-deb-owned-user-unit` with `deb` and `rpm`, targeting the
     package-owned `/usr/lib/systemd/user/butler.service` unit path.
+- Linux service installer resources include
+  `service-installer/linux/launcher/butler-app-managed-agent-service`; package
+  builders install it at `/usr/lib/butler/butler-app-managed-agent-service` so
+  the package-owned user unit can start the active App-managed Agent runtime
+  selected by `$BUTLER_DATA/app/runtime/agent/current.json`.
 - Packaging smoke verifies the service capability metadata is present beside
   the bundled Agent runtime and release manifests.
 - Packaging smoke verifies the service registration metadata is present inside

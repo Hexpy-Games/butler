@@ -413,6 +413,16 @@ function writeAppServiceInstallerPayloads(input: {
       join(input.resourceDir, "service-installer", "linux", "rpm", "postinstall.sh"),
       linuxRpmPostinstallScript(),
     );
+    writeExecutableText(
+      join(
+        input.resourceDir,
+        "service-installer",
+        "linux",
+        "launcher",
+        "butler-app-managed-agent-service",
+      ),
+      linuxAppManagedAgentServiceLauncher(),
+    );
     writeServiceInstallerManifest({
       resourceDir: input.resourceDir,
       releasePlatform: input.platform,
@@ -424,6 +434,7 @@ function writeAppServiceInstallerPayloads(input: {
           serviceManager: "systemd-user",
           serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
           renderContractPath: "service-installer/linux/systemd/render-contract.json",
+          launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
           postInstallPath: "service-installer/linux/deb/postinst",
         },
         {
@@ -432,6 +443,7 @@ function writeAppServiceInstallerPayloads(input: {
           serviceManager: "systemd-user",
           serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
           renderContractPath: "service-installer/linux/systemd/render-contract.json",
+          launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
           postInstallPath: "service-installer/linux/rpm/postinstall.sh",
         },
       ],
@@ -477,6 +489,9 @@ function serviceRenderContract(input: {
     target: input.target,
     renderer: "butler-app-native-service-bridge",
     requiredEscaping: input.escaping,
+    launcherPath: input.platform === "linux"
+      ? "/usr/lib/butler/butler-app-managed-agent-service"
+      : null,
     label: "com.hexpy.butler",
     unit: input.platform === "linux" ? "butler.service" : null,
     requiredEnvironment: [
@@ -517,6 +532,51 @@ function linuxRpmPostinstallScript(): string {
 set -eu
 echo "Butler App systemd user service payload installed. First-run will render user paths and enable the service."
 exit 0
+`;
+}
+
+function linuxAppManagedAgentServiceLauncher(): string {
+  return `#!/usr/bin/env bash
+set -euo pipefail
+
+BUTLER_DATA="\${BUTLER_DATA:-$HOME/.butler}"
+POINTER="$BUTLER_DATA/app/runtime/agent/current.json"
+AUTH_FILE="\${BUTLER_APP_LOCAL_AUTH_FILE:-$BUTLER_DATA/app/runtime/auth/local-agent-auth.json}"
+PORT="\${BUTLER_APP_SERVER_PORT:-18765}"
+
+if [ ! -f "$POINTER" ]; then
+  echo "Butler App-managed Agent runtime pointer is missing: $POINTER" >&2
+  exit 1
+fi
+
+RUNTIME_HOME_REL="$(sed -n 's/.*"runtime_home"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' "$POINTER" | head -n 1)"
+case "$RUNTIME_HOME_REL" in
+  ""|/*|..|../*|*/..|*/../*)
+    echo "Butler App-managed Agent runtime pointer is invalid." >&2
+    exit 1
+    ;;
+esac
+RUNTIME_HOME="$BUTLER_DATA/$RUNTIME_HOME_REL"
+SERVICE_DAEMON="$RUNTIME_HOME/packages/butler-agent/scripts/service-daemon.sh"
+BUTLER_BUN="$RUNTIME_HOME/packages/butler-agent/resources/runtime/bin/bun"
+
+if [ ! -x "$BUTLER_BUN" ] || [ ! -f "$SERVICE_DAEMON" ]; then
+  echo "Butler App-managed Agent runtime is not ready." >&2
+  exit 1
+fi
+
+export BUTLER_HOME="$RUNTIME_HOME"
+export BUTLER_DATA
+export BUTLER_BUN
+export BUTLER_APP_MANAGED_RUNTIME_POINTER="$POINTER"
+export BUTLER_APP_MANAGED_RUNTIME_HOME="$RUNTIME_HOME"
+export BUTLER_APP_SERVER_HOST="\${BUTLER_APP_SERVER_HOST:-127.0.0.1}"
+export BUTLER_APP_SERVER_PORT="$PORT"
+export BUTLER_APP_GATEWAY_PID_FILE="\${BUTLER_APP_GATEWAY_PID_FILE:-off}"
+export BUTLER_APP_LOCAL_AUTH_REQUIRED="\${BUTLER_APP_LOCAL_AUTH_REQUIRED:-1}"
+export BUTLER_APP_LOCAL_AUTH_FILE="$AUTH_FILE"
+
+exec /bin/bash "$SERVICE_DAEMON"
 `;
 }
 
