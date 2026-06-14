@@ -237,6 +237,8 @@ Required changes:
   `rpmbuild` availability.
 - Published Linux App service installer artifacts must include checksum files
   beside the `.deb` and `.rpm` packages.
+- App release and update manifests must expose the published service installer
+  package asset names and checksum asset names for every package format.
 
 ## Success Criteria
 
