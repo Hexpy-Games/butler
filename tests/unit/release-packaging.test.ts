@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { spawnSync } from "child_process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import {
   createReleaseManifest as createServiceReleaseManifest,
   SERVICE_CLI_LAUNCHER_PLATFORMS,
@@ -28,6 +28,7 @@ import {
   prepareBundledAgentResource,
 } from "../../packages/butler-app/scripts/release/package-app-release.ts";
 import {
+  buildLinuxServiceInstallerPackages,
   createLinuxServiceInstallerPackageStaging,
 } from "../../packages/butler-app/scripts/release/linux-service-installer-package.ts";
 
@@ -1361,6 +1362,63 @@ test("linux service installer package staging uses package-owned systemd unit", 
   }
 }, 60_000);
 
+test("linux service installer package builder invokes deb and rpm toolchains", () => {
+  const workDir = mkdtempSync(join(tmpdir(), "butler-linux-service-package-build-"));
+  const previousLinuxRuntime = process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
+  const previousDpkgDeb = process.env.BUTLER_APP_DPKG_DEB;
+  const previousRpmbuild = process.env.BUTLER_APP_RPMBUILD;
+  try {
+    process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = writeFakeLinuxX64Runtime(workDir);
+    const fakeDpkg = join(workDir, "fake-dpkg-deb");
+    const fakeRpmbuild = join(workDir, "fake-rpmbuild");
+    writeExecutableScript(fakeDpkg, `#!/bin/sh
+set -eu
+out="$4"
+printf 'fake deb\\n' > "$out"
+`);
+    writeExecutableScript(fakeRpmbuild, `#!/bin/sh
+set -eu
+topdir=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--define" ]; then
+    shift
+    case "$1" in
+      _topdir*) topdir="\${1#_topdir }" ;;
+    esac
+  fi
+  shift || true
+done
+mkdir -p "$topdir/RPMS/x86_64"
+printf 'fake rpm\\n' > "$topdir/RPMS/x86_64/butler-app-service-${currentVersion}-1.x86_64.rpm"
+`);
+    process.env.BUTLER_APP_DPKG_DEB = fakeDpkg;
+    process.env.BUTLER_APP_RPMBUILD = fakeRpmbuild;
+
+    const bundledAgent = prepareBundledAgentResource(root, workDir, "linux-x64");
+    const result = buildLinuxServiceInstallerPackages({
+      resourceDir: bundledAgent.resourceDir,
+      outDir: join(workDir, "linux-service-installer-build"),
+      version: currentVersion,
+    });
+
+    expect(readText(result.debPackagePath)).toBe("fake deb\n");
+    expect(readText(result.rpmPackagePath)).toBe("fake rpm\n");
+    expect(readText(join(dirname(result.rpmSpecPath), "butler-app-service.spec"))).toContain(
+      "%files",
+    );
+    for (const dir of ["BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"]) {
+      expect(existsSync(join(workDir, "linux-service-installer-build", "rpmbuild", dir))).toBe(
+        true,
+      );
+    }
+  } finally {
+    restoreEnv("BUTLER_APP_MANAGED_BUN_LINUX_X64", previousLinuxRuntime);
+    restoreEnv("BUTLER_APP_DPKG_DEB", previousDpkgDeb);
+    restoreEnv("BUTLER_APP_RPMBUILD", previousRpmbuild);
+    rmSync(workDir, { recursive: true, force: true });
+  }
+}, 60_000);
+
 test("app dependency closure manifest validation rejects missing owned dependencies", () => {
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-dependency-closure-validation-"));
   try {
@@ -1817,6 +1875,16 @@ function expectServiceInstallerPayload(
 function expectExecutable(path: string): void {
   expect(existsSync(path)).toBe(true);
   expect((statSync(path).mode & 0o111)).not.toBe(0);
+}
+
+function writeExecutableScript(path: string, body: string): void {
+  writeFileSync(path, body);
+  chmodSync(path, 0o755);
+}
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
 }
 
 function readText(path: string): string {
