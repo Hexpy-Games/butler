@@ -2,18 +2,26 @@
 import {
   chmodSync,
   copyFileSync,
+  existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 
 export interface LinuxServiceInstallerPackageStagingOptions {
   resourceDir: string;
   outDir: string;
   version: string;
   architecture?: "amd64" | "x86_64";
+}
+
+interface LinuxServiceInstallerPackageCliOptions
+  extends LinuxServiceInstallerPackageStagingOptions {
+  build: boolean;
 }
 
 export interface LinuxServiceInstallerPackageStagingResult {
@@ -25,6 +33,12 @@ export interface LinuxServiceInstallerPackageStagingResult {
   rpmPostinstallPath: string;
   systemdUnitPath: string;
   launcherPath: string;
+}
+
+export interface LinuxServiceInstallerPackageBuildResult
+  extends LinuxServiceInstallerPackageStagingResult {
+  debPackagePath: string;
+  rpmPackagePath: string;
 }
 
 const UNIT_NAME = "butler.service";
@@ -114,6 +128,47 @@ export function createLinuxServiceInstallerPackageStaging(
   };
 }
 
+export function buildLinuxServiceInstallerPackages(
+  options: LinuxServiceInstallerPackageStagingOptions,
+): LinuxServiceInstallerPackageBuildResult {
+  const staging = createLinuxServiceInstallerPackageStaging(options);
+  const outDir = resolve(options.outDir);
+  const version = options.version.trim();
+  const debPackagePath = join(outDir, `${LINUX_PACKAGE_NAME}_${version}_amd64.deb`);
+  const rpmPackagePath = join(outDir, `${LINUX_PACKAGE_NAME}-${version}-1.x86_64.rpm`);
+  runCommand(process.env.BUTLER_APP_DPKG_DEB || "dpkg-deb", [
+    "--build",
+    "--root-owner-group",
+    staging.debRoot,
+    debPackagePath,
+  ]);
+
+  const rpmTopDir = join(outDir, "rpmbuild");
+  const rpmSourcesDir = join(rpmTopDir, "SOURCES");
+  const rpmSpecsDir = join(rpmTopDir, "SPECS");
+  for (const dir of ["BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"]) {
+    mkdirSync(join(rpmTopDir, dir), { recursive: true });
+  }
+  copyFileSync(staging.systemdUnitPath, join(rpmSourcesDir, "butler.service"));
+  copyFileSync(staging.launcherPath, join(rpmSourcesDir, "butler-app-managed-agent-service"));
+  chmodSync(join(rpmSourcesDir, "butler-app-managed-agent-service"), 0o755);
+  copyFileSync(staging.rpmSpecPath, join(rpmSpecsDir, `${LINUX_PACKAGE_NAME}.spec`));
+  runCommand(process.env.BUTLER_APP_RPMBUILD || "rpmbuild", [
+    "--define",
+    `_topdir ${rpmTopDir}`,
+    "-bb",
+    join(rpmSpecsDir, `${LINUX_PACKAGE_NAME}.spec`),
+  ]);
+  const builtRpm = findBuiltRpm(join(rpmTopDir, "RPMS"));
+  copyFileSync(builtRpm, rpmPackagePath);
+
+  return {
+    ...staging,
+    debPackagePath,
+    rpmPackagePath,
+  };
+}
+
 function linuxSystemdUserUnit(): string {
   return `[Unit]
 Description=Butler Agent background service
@@ -185,16 +240,51 @@ function writeText(path: string, value: string, mode: number): void {
   chmodSync(path, mode);
 }
 
+function runCommand(command: string, args: string[]): void {
+  const result = spawnSync(command, args, { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(
+      `${command} failed: ${
+        result.error?.message || result.stderr.trim() || result.stdout.trim() || "unknown error"
+      }`,
+    );
+  }
+}
+
+function findBuiltRpm(dir: string): string {
+  if (!existsSync(dir)) {
+    throw new Error(`rpmbuild output directory is missing: ${dir}`);
+  }
+  const matches = listFiles(dir).filter((file) => file.endsWith(".rpm")).sort();
+  if (matches.length !== 1) {
+    throw new Error(`expected exactly one built rpm in ${dir}, got ${matches.length}`);
+  }
+  return matches[0]!;
+}
+
+function listFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listFiles(path));
+    else if (entry.isFile()) out.push(path);
+  }
+  return out;
+}
+
 if (import.meta.main) {
   const args = parseArgs(process.argv.slice(2));
-  const result = createLinuxServiceInstallerPackageStaging(args);
+  const result = args.build
+    ? buildLinuxServiceInstallerPackages(args)
+    : createLinuxServiceInstallerPackageStaging(args);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
-function parseArgs(args: string[]): LinuxServiceInstallerPackageStagingOptions {
+function parseArgs(args: string[]): LinuxServiceInstallerPackageCliOptions {
   let resourceDir = "";
   let outDir = "";
   let version = "";
+  let build = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--resource-dir") {
@@ -209,10 +299,14 @@ function parseArgs(args: string[]): LinuxServiceInstallerPackageStagingOptions {
       version = args[++index] ?? "";
       continue;
     }
+    if (arg === "--build") {
+      build = true;
+      continue;
+    }
     throw new Error(`unknown option: ${arg}`);
   }
   if (!resourceDir || !outDir || !version) {
     throw new Error("--resource-dir, --out, and --version are required");
   }
-  return { resourceDir, outDir, version };
+  return { resourceDir, outDir, version, build };
 }

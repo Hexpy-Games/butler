@@ -230,6 +230,11 @@ Required changes:
   `.app` bundles so service registration payloads can travel through the
   installer path. Production release signing and notarization are configured by
   release credentials.
+- Linux App service installer packaging must be able to turn the bundled
+  service-installer resources into `.deb` and `.rpm` artifacts with
+  package-owned user units, without adding host dependency prompts to the App
+  first-run UI. The release runner, not the user desktop, owns `dpkg-deb` and
+  `rpmbuild` availability.
 
 ## Success Criteria
 
@@ -254,6 +259,8 @@ Required changes:
 - Unit tests for tray/menu service actions.
 - Release manifest tests proving App artifacts declare service-install
   capability.
+- Release packaging tests proving Linux App service installer staging can be
+  built through `.deb` and `.rpm` package toolchains.
 - Smoke test for isolated first-run service setup.
 - E2E test for "close UI, service remains online".
 - E2E test for "stop Agent, service process group terminates".
