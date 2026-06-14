@@ -42,6 +42,7 @@ const BROWSER_DAEMON_MAX_SECS = 3600; // 1 hour
 
 const WORKER_TIMEOUT_SEC = parseInt(process.env.WORKER_TIMEOUT || "600", 10);
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+const SINGLETON_DISABLED = process.env.BUTLER_WATCHDOG_DISABLE_SINGLETON === "true";
 const SERVICE_LIVENESS_DISABLED = process.env.BUTLER_WATCHDOG_DISABLE_SERVICE_LIVENESS === "true";
 
 // ── Pure/exported functions (testable) ───────────────────────────────────────
@@ -824,7 +825,7 @@ async function ensureSingleton(): Promise<void> {
 }
 
 if (import.meta.main) {
-  await ensureSingleton();
+  if (!SINGLETON_DISABLED) await ensureSingleton();
   log("Butler watchdog starting");
   runCycle().catch((err) => log(`Cycle error: ${err.message}`));
   setInterval(() => {

@@ -42,6 +42,10 @@ test("App Agent native service bridge installs launchd service with App-managed 
     expect(writes[0]?.body).toContain("<key>BUTLER_APP_LOCAL_AUTH_FILE</key>");
     expect(writes[0]?.body).toContain("<key>BUTLER_APP_LOCAL_AUTH_REQUIRED</key>");
     expect(writes[0]?.body).toContain("<key>BUTLER_APP_GATEWAY_PID_FILE</key>");
+    expect(writes[0]?.body).toContain("<key>EMBED_SOCKET</key>");
+    expect(writes[0]?.body).toContain("/app/runtime/embed/embed.sock");
+    expect(writes[0]?.body).toContain("<key>EMBED_HEALTH_PORT</key>");
+    expect(writes[0]?.body).toContain("<string>0</string>");
     expect(writes[0]?.body).toContain("<string>19123</string>");
     expect(commands[0]).toContain("launchctl bootout gui/");
     expect(commands[0]).toContain("/com.hexpy.butler");
@@ -281,6 +285,9 @@ test("App Agent native service bridge installs systemd service with escaped env"
     expect(writes[0]?.body).toContain('Environment=BUTLER_APP_LOCAL_AUTH_REQUIRED="1"');
     expect(writes[0]?.body).toContain('Environment=BUTLER_APP_GATEWAY_PID_FILE="off"');
     expect(writes[0]?.body).toContain('Environment=BUTLER_APP_SERVER_PORT="19123"');
+    expect(writes[0]?.body).toContain('Environment=EMBED_SOCKET="');
+    expect(writes[0]?.body).toContain('/app/runtime/embed/embed.sock"');
+    expect(writes[0]?.body).toContain('Environment=EMBED_HEALTH_PORT="0"');
     expect(commands).toEqual([
       "systemctl --user daemon-reload",
       "systemctl --user enable --now butler.service",

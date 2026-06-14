@@ -4,7 +4,9 @@ export function createFirstRunSetupBridge({
   readRuntimeDiagnostics = () => ({}),
   serviceControl = null,
   gatewayProfile = "electron",
-  serviceReadyPollAttempts = 20,
+  gatewayReadyPollAttempts = 120,
+  gatewayReadyPollDelayMs = 250,
+  serviceReadyPollAttempts = 120,
   serviceReadyPollDelayMs = 250,
   sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }) {
@@ -70,15 +72,35 @@ export function createFirstRunSetupBridge({
           shouldContinue: () => isActiveRun(currentRunId, runId, session) &&
             !currentSession.cancelled,
         });
+        let gatewayReadyConfirmed = false;
         if (!serviceReady(nextServiceStatus)) {
-          throw setupError(serviceSetupErrorCode(nextServiceStatus));
+          try {
+            await waitForGatewayReady(ensureReady, {
+              attempts: gatewayReadyPollAttempts,
+              delayMs: gatewayReadyPollDelayMs,
+              sleepMs,
+              shouldContinue: () => isActiveRun(currentRunId, runId, session) &&
+                !currentSession.cancelled,
+            });
+            gatewayReadyConfirmed = true;
+          } catch {
+            throw setupError(serviceSetupErrorCode(nextServiceStatus));
+          }
         }
         markCheck(
           currentSession,
           "agent_service",
           "passed",
         );
-        await ensureReady();
+        if (!gatewayReadyConfirmed) {
+          await waitForGatewayReady(ensureReady, {
+            attempts: gatewayReadyPollAttempts,
+            delayMs: gatewayReadyPollDelayMs,
+            sleepMs,
+            shouldContinue: () => isActiveRun(currentRunId, runId, session) &&
+              !currentSession.cancelled,
+          });
+        }
         if (!isActiveRun(currentRunId, runId, session)) return statusView(session);
         if (currentSession.cancelled) return statusView(currentSession);
         markCheck(
@@ -272,6 +294,25 @@ async function waitForServiceReady(
     if (lastStatus?.status === "failed") return lastStatus;
   }
   return lastStatus;
+}
+
+async function waitForGatewayReady(
+  ensureReady,
+  { attempts, delayMs, sleepMs, shouldContinue },
+) {
+  const maxAttempts = Math.max(1, Number(attempts) || 1);
+  let lastError = null;
+  for (let attempt = 0; attempt < maxAttempts && shouldContinue(); attempt += 1) {
+    try {
+      await ensureReady();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 >= maxAttempts) break;
+      await sleepMs(delayMs);
+    }
+  }
+  throw lastError ?? setupError("agent_service_not_ready");
 }
 
 async function safeReadServiceDiagnostics(serviceControl) {

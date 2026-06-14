@@ -34,7 +34,7 @@ export function createAppAgentServiceAdapter({
         return unavailable("service_start_unavailable");
       }
       await nativeServices.start({ source: "app-service-adapter", ...request });
-      return actionFromStatus(await serviceStatus(nativeServices), "agent_service_not_ready");
+      return asyncActionFromStatus(await serviceStatus(nativeServices));
     },
     async stop(request = {}) {
       if (!nativeServices?.stop) {
@@ -51,7 +51,7 @@ export function createAppAgentServiceAdapter({
       }
       await nativeServices.stop({ source: "app-service-adapter", ...request });
       await nativeServices.start({ source: "app-service-adapter", ...request });
-      return actionFromStatus(await serviceStatus(nativeServices), "agent_service_not_ready");
+      return asyncActionFromStatus(await serviceStatus(nativeServices));
     },
     async diagnostics() {
       const status = await serviceStatus(nativeServices);
@@ -87,6 +87,7 @@ async function serviceStatus(nativeServices) {
       service_count: 0,
       online_count: 0,
       stale_count: 0,
+      status_read_failed: true,
     };
   }
   const serviceCount = projections.length;
@@ -153,6 +154,22 @@ function actionFromStatus(status, code, { successStatus = "ready" } = {}) {
     ok,
     status: status.status,
     ...(ok ? {} : { code }),
+    raw_text_included: false,
+  };
+}
+
+function asyncActionFromStatus(status) {
+  if (status.status_read_failed) {
+    return {
+      ok: false,
+      status: status.status,
+      code: "agent_service_not_ready",
+      raw_text_included: false,
+    };
+  }
+  return {
+    ok: true,
+    status: status.status,
     raw_text_included: false,
   };
 }

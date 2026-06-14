@@ -260,6 +260,18 @@ Required changes:
   task worker process groups are owned by the Agent service supervisor.
 - First-run setup verifies the service-owned app gateway before opening the
   workspace.
+- First-run and renderer API bootstrap must treat native service startup as
+  asynchronous. After service registration/start succeeds, gateway health and
+  Electron profile readiness are polled within the readiness window instead of
+  failing on the first transient `service_gateway_unhealthy` result.
+- App-managed Agent services must not share the standalone Agent embed socket
+  or fixed embed health port. Each App-managed service receives an
+  `EMBED_SOCKET` under its isolated `BUTLER_DATA` and uses an ephemeral
+  `EMBED_HEALTH_PORT`.
+- Watchdog singleton ownership is delegated to the native service supervisor for
+  service-owned watchdog children, so an App-managed Agent service and a
+  standalone Agent service do not block each other through a machine-global
+  watchdog `pgrep`.
 - App release artifacts install without host `curl`, `unzip`, Git, or terminal
   dependency prompts.
 - App uninstall can unregister the service and report residual runtime/data

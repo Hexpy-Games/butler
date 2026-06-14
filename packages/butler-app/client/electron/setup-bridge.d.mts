@@ -49,6 +49,8 @@ export function createFirstRunSetupBridge(input: {
     };
   };
   serviceControl?: FirstRunServiceControlBridge | null;
+  gatewayReadyPollAttempts?: number;
+  gatewayReadyPollDelayMs?: number;
   serviceReadyPollAttempts?: number;
   serviceReadyPollDelayMs?: number;
   sleepMs?: (ms: number) => Promise<void>;
