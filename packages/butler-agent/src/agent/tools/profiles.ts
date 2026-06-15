@@ -27,6 +27,7 @@ const STARTUP_TOOL_NAMES = [
 const PROJECT_TOOL_NAMES = [
   "inspect_project_status",
   "query_project_work",
+  "render_project_dashboard",
 ] as const;
 
 const WORKSPACE_TOOL_NAMES = [
@@ -174,6 +175,10 @@ function profilesFromText(text: string): ButlerToolProfile[] {
   const value = normalizedText(text);
   if (!value) return [];
 
+  if (/\b(project ledger|ledger|project status|project work|next actions?)\b/u.test(value) ||
+    /프로젝트\s*원장|프로젝트\s*상태|프로젝트\s*작업|다음\s*작업/u.test(value)) {
+    addProfile(profiles, "project");
+  }
   if (/\b(search|web|source|citation|cite|news|latest|current|url|http|public)\b/u.test(value) ||
     /검색|출처|최신|현재|뉴스|인용|공개|웹/u.test(value)) {
     addProfile(profiles, "public-web");

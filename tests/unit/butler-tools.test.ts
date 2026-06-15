@@ -173,6 +173,7 @@ test("basic project turns expose a bounded startup and project tool profile", ()
   expect(names).toEqual([
     "inspect_project_status",
     "query_project_work",
+    "render_project_dashboard",
     "get_context_monitor",
     "list_tool_capabilities",
     "update_todo_list",
@@ -185,6 +186,24 @@ test("basic project turns expose a bounded startup and project tool profile", ()
   expect(names).not.toContain("create_planned_task");
   expect(names).not.toContain("create_work_orchestration");
   expect(toolContractJsonChars(tools)).toBeLessThan(8_000);
+});
+
+test("Project Ledger requests without project metadata still expose project tools", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "Project Ledger 상태와 next action을 확인하고 dashboard를 갱신해줘.",
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "Project Ledger 상태와 next action을 확인하고 dashboard를 갱신해줘.",
+  })).toContain("project");
+  expect(names).toContain("inspect_project_status");
+  expect(names).toContain("query_project_work");
+  expect(names).toContain("render_project_dashboard");
+  expect(names).not.toContain("get_weather_with_knowhow");
+  expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
 });
 
 test("explicit required tools can extend a profile without enabling domain weather tools", () => {

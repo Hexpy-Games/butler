@@ -591,6 +591,7 @@ test("native runtime sends a profiled tool surface for basic project turns", asy
   expect(toolNames).toEqual([
     "inspect_project_status",
     "query_project_work",
+    "render_project_dashboard",
     "get_context_monitor",
     "list_tool_capabilities",
     "update_todo_list",
