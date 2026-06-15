@@ -8,7 +8,8 @@ import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
 import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
 import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
-import { createButlerToolExecutor } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
+import { BUTLER_TOOLS, createButlerToolExecutor } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
+import { toolContractJsonChars } from "../../packages/butler-agent/src/agent/tools/profiles.ts";
 import { indexTranscriptLinesForQuery } from "../../packages/butler-agent/src/agent/cognition/memory/exact-query.ts";
 import { loadPrivateEnvIntoProcess } from "../../packages/butler-agent/src/interfaces/cli/private-env.ts";
 import { runFunctionToolPromptText } from "../../packages/butler-agent/src/integrations/providers/provider.ts";
@@ -39,6 +40,7 @@ const sourceButlerData = process.env.BUTLER_LIVE_SOURCE_BUTLER_DATA ||
 const screenshotDir = resolve(root, ".tmp", "app-client-multiturn-e2e");
 type E2eMode =
   | "deterministic"
+  | "tool-profile"
   | "live-llm"
   | "toolchain"
   | "live-llm-toolchain"
@@ -55,6 +57,8 @@ type E2eMode =
 const requestedMode = process.env.BUTLER_APP_CLIENT_E2E_MODE;
 const e2eMode: E2eMode = requestedMode === "live-llm"
   ? "live-llm"
+  : requestedMode === "tool-profile"
+    ? "tool-profile"
   : requestedMode === "toolchain"
     ? "toolchain"
     : requestedMode === "live-llm-toolchain"
@@ -109,6 +113,7 @@ const usesDynamicWorkLabels = e2eMode === "live-llm-toolchain" ||
   usesArtifactReportScenario ||
   usesWatlWorkerScenario;
 const usesToolchainScenario = e2eMode === "toolchain" ||
+  e2eMode === "tool-profile" ||
   e2eMode === "live-llm-toolchain" ||
   usesDecisionContextScenario ||
   usesWorkStreamScenario ||
@@ -136,6 +141,7 @@ const turnWorkCollapsedBlockSelector = `${turnWorkCollapsedSelector} ${turnWorkB
 const turnWorkCollapsedHeaderSelector = `${turnWorkCollapsedSelector} ${turnWorkBlockHeaderSelector}`;
 const turnResultSectionSelector = "[data-test-class~=\"turn-result-section\"]";
 const composerModelButtonSelector = "[data-test-class~=\"model-button\"]";
+const FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
 let liveClientModel = process.env.BUTLER_APP_CLIENT_E2E_MODEL?.trim();
 let liveClientReasoning = process.env.BUTLER_APP_CLIENT_E2E_REASONING?.trim();
 const runId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -344,6 +350,11 @@ const fakeProvider: ModelProviderAdapter = {
 
 const prompts: string[] = [];
 const observedToolCalls: string[] = [];
+const observedToolSurfaces: Array<{
+  count: number;
+  contractJsonChars: number;
+  names: string[];
+}> = [];
 let liveLlmCalls = 0;
 const runtime = new NativeToolLoopRuntime({
   butlerHome: root,
@@ -363,6 +374,13 @@ const runtime = new NativeToolLoopRuntime({
   },
   runFunctionToolPromptText: async (input) => {
     prompts.push(input.prompt);
+    const toolNames = input.tools.map((tool) => tool.name);
+    observedToolSurfaces.push({
+      count: toolNames.length,
+      contractJsonChars: toolContractJsonChars(input.tools),
+      names: toolNames,
+    });
+    assertProfiledToolSurface(toolNames, input.tools);
     if (e2eMode === "decision-context") {
       await runDeterministicDecisionContext(input);
       return [
@@ -370,7 +388,7 @@ const runtime = new NativeToolLoopRuntime({
         TOOLCHAIN_FINAL,
       ].join("\n");
     }
-    if (e2eMode === "toolchain") {
+    if (e2eMode === "toolchain" || e2eMode === "tool-profile") {
       await runDeterministicToolchain(input);
       return [
         "Project Ledger check completed.",
@@ -482,6 +500,7 @@ try {
   electronProcess.stderr?.on("data", (chunk) => output.push(String(chunk)));
 
   cdp = await connectToElectronPage(debugPort, server.url);
+  await completeFirstRunSetupForE2e(cdp);
   await waitForVisible(cdp, composerTextareaSelector, "composer textarea");
   if (usesExternalButlerService && liveClientModel?.startsWith("local/")) {
     await waitForComposerModel(cdp, liveClientModel);
@@ -528,6 +547,9 @@ try {
         : ["status-only-final-activity-hidden"]),
       ...(usesToolchainScenario
         ? [
+          ...(e2eMode === "tool-profile"
+            ? ["provider-tool-surface-profiled", "weather-tools-excluded-from-provider-surface"]
+            : []),
           "single-prompt-multi-toolchain",
           ...(usesDecisionContextScenario
             ? ["public-decision-context-toolchain", "public-data-csv-output"]
@@ -578,6 +600,11 @@ try {
         ]),
     ],
     toolCalls: observedToolCalls,
+    toolSurfaces: observedToolSurfaces,
+    globalToolSurface: {
+      count: BUTLER_TOOLS.length,
+      contractJsonChars: toolContractJsonChars(BUTLER_TOOLS),
+    },
     durableToolCalls: usesBeegAutonomousScenario
       ? durableTranscriptToolCalls(latestE2eSessionId())
       : durableTranscriptToolCalls(),
@@ -849,9 +876,35 @@ function isReasoningEffort(value: string | undefined): value is "none" | "low" |
   return value === "none" || value === "low" || value === "medium" || value === "high" || value === "xhigh";
 }
 
+function assertProfiledToolSurface(
+  toolNames: string[],
+  tools: Parameters<typeof runFunctionToolPromptText>[0]["tools"],
+): void {
+  const forbiddenWeatherTools = [
+    "get_weather_with_knowhow",
+    "record_weather_source_feedback",
+    "run_weather_knowhow_consolidation",
+  ];
+  for (const name of forbiddenWeatherTools) {
+    assert(!toolNames.includes(name), `provider-facing tool surface unexpectedly included weather tool: ${name}`);
+  }
+  assert(
+    toolNames.length < BUTLER_TOOLS.length,
+    `provider-facing tool surface was not profiled: ${toolNames.length}/${BUTLER_TOOLS.length}`,
+  );
+  assert(
+    toolContractJsonChars(tools) < toolContractJsonChars(BUTLER_TOOLS),
+    "provider-facing tool contract JSON was not smaller than the global Butler registry.",
+  );
+}
+
 async function runDeterministicToolchain(
   input: Parameters<typeof runFunctionToolPromptText>[0],
 ): Promise<void> {
+  const toolNames = input.tools.map((tool) => tool.name);
+  for (const name of requiredToolchainCalls) {
+    assert(toolNames.includes(name), `deterministic toolchain provider surface did not include required tool: ${name}`);
+  }
   for (const name of requiredToolchainCalls) {
     if (name === "inspect_project_status") {
       await input.executeTool({
@@ -1221,6 +1274,29 @@ function readBeegAutonomousEvidence(): Record<string, unknown> {
 
 async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
   await sendComposerTurn(client, toolchainPrompt);
+  if (e2eMode === "tool-profile") {
+    await waitForAssistantFinalText(client, TOOLCHAIN_FINAL, waitForFinalTimeoutMs);
+    const durableToolCalls = durableTranscriptToolCalls();
+    for (const name of activeRequiredToolCalls) {
+      assert(observedToolCalls.includes(name), `tool-profile E2E did not execute observed tool: ${name}`);
+      assert(durableToolCalls.includes(name), `tool-profile E2E did not persist durable tool call: ${name}`);
+    }
+    assertRequiredToolchainOrder(observedToolCalls, "observed runtime tool calls");
+    assertRequiredToolchainOrder(durableToolCalls, "durable transcript tool calls");
+    assert(
+      observedToolSurfaces.length === 1,
+      `tool-profile E2E should use one provider-facing prompt, observed ${observedToolSurfaces.length}`,
+    );
+    assert(
+      observedToolSurfaces[0]!.count < BUTLER_TOOLS.length,
+      `tool-profile E2E provider surface was not smaller than global registry: ${JSON.stringify(observedToolSurfaces[0])}`,
+    );
+    assert(
+      !observedToolSurfaces[0]!.names.some((name) => name.includes("weather")),
+      `tool-profile E2E provider surface included weather tools: ${JSON.stringify(observedToolSurfaces[0])}`,
+    );
+    return;
+  }
   if (usesWorkStreamScenario) {
     await waitForAnyVisible(
       client,
@@ -1539,12 +1615,19 @@ async function reloadElectronPageAndAssertStable(client: CdpClient): Promise<voi
     "app shell after reload",
     30_000,
   );
-  if (!(await assistantFinalTextIncludes(client, before.slice(0, 80)))) {
-    await evaluateBoolean(client, `(() => {
+  await waitForExpression(
+    client,
+    `(() => {
+      const documents = Array.from(document.querySelectorAll(${JSON.stringify(assistantFinalMarkdownSelector)}));
+      const hasFinal = documents.some((element) =>
+        (element.textContent ?? "").replace(/\\s+/g, " ").trim().includes(${JSON.stringify(before.slice(0, 80))})
+      );
+      if (hasFinal) return true;
+
       const chatRow = document.querySelector(".chat-row[role='button']");
       if (chatRow instanceof HTMLElement) {
         chatRow.click();
-        return true;
+        return false;
       }
       const needles = [
         "Local private Butler workspace E2E toolchain",
@@ -1561,14 +1644,7 @@ async function reloadElectronPageAndAssertStable(client: CdpClient): Promise<voi
       });
       if (!(target instanceof HTMLElement)) return false;
       target.click();
-      return true;
-    })()`);
-  }
-  await waitForExpression(
-    client,
-    `(() => {
-      const documents = Array.from(document.querySelectorAll(${JSON.stringify(assistantFinalMarkdownSelector)}));
-      return documents.some((element) => (element.textContent ?? "").replace(/\\s+/g, " ").trim().includes(${JSON.stringify(before.slice(0, 80))}));
+      return false;
     })()`,
     "final answer after Electron reload",
     30_000,
@@ -1679,11 +1755,17 @@ async function waitForToolchainActivityContext(client: CdpClient): Promise<void>
       waitForFinalTimeoutMs,
     );
   }
+  const expectedTriggerText = `${activeWorkBlockLabels[0]} 외 ${activeWorkBlockLabels.length - 1}개 진행 내역`;
+  await waitForExpression(
+    client,
+    `(document.querySelector(${JSON.stringify(turnWorkCollapsedTriggerSelector)})?.textContent ?? "").replace(/\\s+/g, " ").trim() === ${JSON.stringify(expectedTriggerText)}`,
+    "collapsed public work summary trigger",
+    waitForFinalTimeoutMs,
+  );
   const triggerText = await evaluateString(
     client,
     `(document.querySelector(${JSON.stringify(turnWorkCollapsedTriggerSelector)})?.textContent ?? "").replace(/\\s+/g, " ").trim()`,
   );
-  const expectedTriggerText = `${activeWorkBlockLabels[0]} 외 ${activeWorkBlockLabels.length - 1}개 진행 내역`;
   assert(
     triggerText === expectedTriggerText,
     `collapsed work trigger should use the public work summary, observed: ${triggerText}`,
@@ -2179,6 +2261,28 @@ async function connectToElectronPage(port: number, appUrl: string): Promise<CdpC
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
   }
   throw new Error(`Timed out waiting for Electron page target at ${origin}.`);
+}
+
+async function completeFirstRunSetupForE2e(client: CdpClient): Promise<void> {
+  const stateJson = JSON.stringify({
+    schema: "butler.app.first-run.v1",
+    status: "complete",
+    language: "ko",
+    step: "model",
+    language_confirmed: true,
+    safety_accepted: true,
+    install_status: "ready",
+    connection_mode: "bundled-agent",
+    completed_at: "2026-06-15T00:00:00.000Z",
+  });
+  await client.send("Runtime.evaluate", {
+    expression: `localStorage.setItem(${JSON.stringify(FIRST_RUN_STORAGE_KEY)}, ${JSON.stringify(stateJson)}); true`,
+    returnByValue: true,
+  });
+  await client.send("Runtime.evaluate", {
+    expression: "setTimeout(() => location.reload(), 0); true",
+    returnByValue: true,
+  });
 }
 
 async function connectCdp(url: string): Promise<CdpClient> {

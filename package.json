@@ -44,6 +44,7 @@
     "app:client:multiturn:e2e": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:multiturn:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:toolchain:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=toolchain ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
+    "app:client:tool-profile:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=tool-profile ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:toolchain:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-toolchain ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:decision-context:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=decision-context ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:decision-context:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-decision-context ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
