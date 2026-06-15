@@ -919,15 +919,17 @@ export function validateAppReleaseVersionCoupling(
   const currentBundledAgentVersion = current.bundledAgentVersion?.trim();
   const previousVersion = previous.version?.trim();
   const previousBundledAgentVersion = previous.bundledAgentVersion?.trim();
-  if (
-    !currentVersion ||
-    !currentBundledAgentVersion ||
-    !previousVersion ||
-    !previousBundledAgentVersion
-  ) {
+  if (!currentVersion || !currentBundledAgentVersion || !previousVersion) {
     return [
       "app release version coupling requires app version and bundled Agent version",
     ];
+  }
+  if (!previousBundledAgentVersion) {
+    return currentVersion === previousVersion
+      ? [
+          "app release version must change when previous bundled Agent version is unavailable",
+        ]
+      : [];
   }
   if (
     currentBundledAgentVersion !== previousBundledAgentVersion &&

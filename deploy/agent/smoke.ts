@@ -271,6 +271,16 @@ function smokeEnv(input: {
 
 function findPackagedLauncher(extractDir: string, manifest: any): string {
   const launchers = Array.isArray(manifest.cliLaunchers) ? manifest.cliLaunchers : [];
+  const hostPlatform = hostReleasePlatform();
+  if (hostPlatform) {
+    for (const launcher of launchers) {
+      const platform = typeof launcher?.platform === "string" ? launcher.platform : "";
+      const relativePath = typeof launcher?.path === "string" ? launcher.path : "";
+      if (platform !== hostPlatform || !relativePath) continue;
+      const path = join(extractDir, relativePath);
+      if (existsSync(path)) return path;
+    }
+  }
   for (const launcher of launchers) {
     const relativePath = typeof launcher?.path === "string" ? launcher.path : "";
     if (!relativePath) continue;
@@ -280,6 +290,19 @@ function findPackagedLauncher(extractDir: string, manifest: any): string {
   const fallback = join(extractDir, "bin", "butler.js");
   if (existsSync(fallback)) return fallback;
   throw new Error("Agent release artifact does not contain a runnable launcher");
+}
+
+function hostReleasePlatform(): string | null {
+  if (process.platform === "darwin" && process.arch === "arm64") {
+    return "darwin-arm64";
+  }
+  if (process.platform === "linux" && process.arch === "x64") {
+    return "linux-x64";
+  }
+  if (process.platform === "linux" && process.arch === "arm64") {
+    return "linux-arm64";
+  }
+  return null;
 }
 
 function runSmokeCommand(
