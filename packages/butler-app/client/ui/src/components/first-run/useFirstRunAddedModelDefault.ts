@@ -91,6 +91,7 @@ export function useFirstRunAddedModelDefault({
         const result = await api<Partial<SettingsView>>("/settings", {
           method: "PATCH",
           body: JSON.stringify({
+            language,
             model: fallbackSettings.model,
             reasoning_effort: fallbackSettings.reasoning_effort,
             context_window_tokens: fallbackSettings.context_window_tokens,

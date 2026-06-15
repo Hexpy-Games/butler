@@ -260,6 +260,8 @@ Required changes:
   task worker process groups are owned by the Agent service supervisor.
 - First-run setup verifies the service-owned app gateway before opening the
   workspace.
+- The language step is local-only and must not call the Agent gateway or App
+  settings API before the user reaches Agent installation.
 - First-run and renderer API bootstrap must treat native service startup as
   asynchronous. After service registration/start succeeds, gateway health and
   Electron profile readiness are polled within the readiness window instead of
