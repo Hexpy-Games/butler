@@ -141,6 +141,7 @@ const turnWorkCollapsedBlockSelector = `${turnWorkCollapsedSelector} ${turnWorkB
 const turnWorkCollapsedHeaderSelector = `${turnWorkCollapsedSelector} ${turnWorkBlockHeaderSelector}`;
 const turnResultSectionSelector = "[data-test-class~=\"turn-result-section\"]";
 const composerModelButtonSelector = "[data-test-class~=\"model-button\"]";
+const FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
 let liveClientModel = process.env.BUTLER_APP_CLIENT_E2E_MODEL?.trim();
 let liveClientReasoning = process.env.BUTLER_APP_CLIENT_E2E_REASONING?.trim();
 const runId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -499,6 +500,7 @@ try {
   electronProcess.stderr?.on("data", (chunk) => output.push(String(chunk)));
 
   cdp = await connectToElectronPage(debugPort, server.url);
+  await completeFirstRunSetupForE2e(cdp);
   await waitForVisible(cdp, composerTextareaSelector, "composer textarea");
   if (usesExternalButlerService && liveClientModel?.startsWith("local/")) {
     await waitForComposerModel(cdp, liveClientModel);
@@ -1613,12 +1615,19 @@ async function reloadElectronPageAndAssertStable(client: CdpClient): Promise<voi
     "app shell after reload",
     30_000,
   );
-  if (!(await assistantFinalTextIncludes(client, before.slice(0, 80)))) {
-    await evaluateBoolean(client, `(() => {
+  await waitForExpression(
+    client,
+    `(() => {
+      const documents = Array.from(document.querySelectorAll(${JSON.stringify(assistantFinalMarkdownSelector)}));
+      const hasFinal = documents.some((element) =>
+        (element.textContent ?? "").replace(/\\s+/g, " ").trim().includes(${JSON.stringify(before.slice(0, 80))})
+      );
+      if (hasFinal) return true;
+
       const chatRow = document.querySelector(".chat-row[role='button']");
       if (chatRow instanceof HTMLElement) {
         chatRow.click();
-        return true;
+        return false;
       }
       const needles = [
         "Local private Butler workspace E2E toolchain",
@@ -1635,14 +1644,7 @@ async function reloadElectronPageAndAssertStable(client: CdpClient): Promise<voi
       });
       if (!(target instanceof HTMLElement)) return false;
       target.click();
-      return true;
-    })()`);
-  }
-  await waitForExpression(
-    client,
-    `(() => {
-      const documents = Array.from(document.querySelectorAll(${JSON.stringify(assistantFinalMarkdownSelector)}));
-      return documents.some((element) => (element.textContent ?? "").replace(/\\s+/g, " ").trim().includes(${JSON.stringify(before.slice(0, 80))}));
+      return false;
     })()`,
     "final answer after Electron reload",
     30_000,
@@ -2259,6 +2261,28 @@ async function connectToElectronPage(port: number, appUrl: string): Promise<CdpC
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
   }
   throw new Error(`Timed out waiting for Electron page target at ${origin}.`);
+}
+
+async function completeFirstRunSetupForE2e(client: CdpClient): Promise<void> {
+  const stateJson = JSON.stringify({
+    schema: "butler.app.first-run.v1",
+    status: "complete",
+    language: "ko",
+    step: "model",
+    language_confirmed: true,
+    safety_accepted: true,
+    install_status: "ready",
+    connection_mode: "bundled-agent",
+    completed_at: "2026-06-15T00:00:00.000Z",
+  });
+  await client.send("Runtime.evaluate", {
+    expression: `localStorage.setItem(${JSON.stringify(FIRST_RUN_STORAGE_KEY)}, ${JSON.stringify(stateJson)}); true`,
+    returnByValue: true,
+  });
+  await client.send("Runtime.evaluate", {
+    expression: "setTimeout(() => location.reload(), 0); true",
+    returnByValue: true,
+  });
 }
 
 async function connectCdp(url: string): Promise<CdpClient> {
