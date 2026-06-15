@@ -10,6 +10,7 @@ export interface TitlebarShellProps {
   leading?: ReactNode;
   leadingVisibility?: "always" | "narrow";
   trailing?: ReactNode;
+  windowControls?: ReactNode;
   collapsed?: boolean;
   className?: string;
   dataTestClass?: string;
@@ -21,6 +22,7 @@ export function TitlebarShell({
   leading,
   leadingVisibility = "always",
   trailing,
+  windowControls,
   collapsed = false,
   className,
   dataTestClass,
@@ -51,6 +53,11 @@ export function TitlebarShell({
       </Stack>
       {trailing ? (
         <div className={cn(styles.trailing, "no-drag")}>{trailing}</div>
+      ) : null}
+      {windowControls ? (
+        <div className={cn(styles.windowControls, "no-drag")}>
+          {windowControls}
+        </div>
       ) : null}
     </header>
   );

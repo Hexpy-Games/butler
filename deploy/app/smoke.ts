@@ -14,16 +14,28 @@ import { spawnSync } from "node:child_process";
 
 const outDir = resolve(optionValue("--out") ?? "dist/release/app");
 const macPkg = findOne(/^butler-app-.*-darwin-arm64\.pkg$/u);
-const linuxTar = findOne(/^butler-app-.*-linux-x64\.tar\.gz$/u);
+const linuxX64Deb = findOne(/^butler-app-.*-linux-x64\.deb$/u);
+const linuxArm64Deb = findOne(/^butler-app-.*-linux-arm64\.deb$/u);
 const releaseManifestPath = join(outDir, "app-release-manifest.json");
 const updateManifestPath = join(outDir, "app-update-manifest.json");
 
-for (const path of [macPkg, `${macPkg}.sha256`, linuxTar, `${linuxTar}.sha256`, releaseManifestPath, updateManifestPath]) {
+for (const path of [
+  macPkg,
+  `${macPkg}.sha256`,
+  linuxX64Deb,
+  `${linuxX64Deb}.sha256`,
+  linuxArm64Deb,
+  `${linuxArm64Deb}.sha256`,
+  releaseManifestPath,
+  updateManifestPath,
+]) {
   if (!existsSync(path)) throw new Error(`missing Butler App release file: ${path}`);
 }
 verifySha(macPkg);
-verifySha(linuxTar);
-verifyLinuxTar(linuxTar);
+verifySha(linuxX64Deb);
+verifySha(linuxArm64Deb);
+verifyLinuxDeb(linuxX64Deb, "linux-x64");
+verifyLinuxDeb(linuxArm64Deb, "linux-arm64");
 verifyMacPkg(macPkg);
 
 const releaseManifest = JSON.parse(readFileSync(releaseManifestPath, "utf8"));
@@ -35,7 +47,7 @@ if (!Array.isArray(updateManifest.artifacts) || updateManifest.artifacts.some((a
   throw new Error("App update manifest includes a non-App artifact");
 }
 
-console.log(`Butler App release smoke passed: ${basename(macPkg)}, ${basename(linuxTar)}`);
+console.log(`Butler App release smoke passed: ${basename(macPkg)}, ${basename(linuxX64Deb)}, ${basename(linuxArm64Deb)}`);
 
 function optionValue(name: string): string | null {
   const index = process.argv.indexOf(name);
@@ -59,13 +71,22 @@ function verifySha(path: string): void {
   }
 }
 
-function verifyLinuxTar(path: string): void {
-  const listing = spawnSync("tar", ["-tzf", path], { encoding: "utf8" });
+function verifyLinuxDeb(path: string, platform: "linux-x64" | "linux-arm64"): void {
+  const listing = spawnSync("dpkg-deb", ["-c", path], { encoding: "utf8" });
   if (listing.status !== 0) {
     throw new Error(`Linux App artifact listing failed: ${listing.stderr.trim() || listing.stdout.trim() || "unknown error"}`);
   }
-  if (!listing.stdout.includes("Butler-linux-x64/Butler")) {
+  if (!listing.stdout.includes(`./opt/butler/Butler-${platform}/Butler`)) {
     throw new Error("Linux App artifact is missing Butler executable");
+  }
+  if (!listing.stdout.includes("./usr/bin/butler-app")) {
+    throw new Error("Linux App artifact is missing butler-app launcher");
+  }
+  if (!listing.stdout.includes("./usr/lib/systemd/user/butler.service")) {
+    throw new Error("Linux App artifact is missing systemd user service unit");
+  }
+  if (!listing.stdout.includes("./usr/lib/butler/butler-app-managed-agent-service")) {
+    throw new Error("Linux App artifact is missing App-managed Agent service launcher");
   }
 }
 

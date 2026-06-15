@@ -1068,104 +1068,17 @@ function runtimePreparationProgressSummary(input: {
   useTools: boolean;
 }): ToolProgressSummary {
   const ko = input.language === "ko";
-  const modelLabel = publicModelLabel(input.model);
-  const promptInputChars = input.prompt.prompt.length + input.attachmentContextChars;
-  const detailRows = runtimePreparationDetailRows({
-    prompt: input.prompt,
-    attachmentContextChars: input.attachmentContextChars,
-    attachmentCount: input.attachmentCount,
-    language: input.language,
-  });
-  const contextParts = detailRows
-    .filter((row) => row.kind === "context" && row.safe_value)
-    .slice(0, 2)
-    .map((row) => row.safe_label);
-  const contextLabel = contextParts.length > 0
-    ? ko
-      ? `${contextParts.join(" + ")} 포함`
-      : `including ${contextParts.join(" + ")}`
-    : ko
-      ? "현재 요청 중심"
-      : "current request";
-  const inputLabel = ko
-    ? `${formatRuntimeCharCount(promptInputChars, input.language)} 모델 입력`
-    : `${formatRuntimeCharCount(promptInputChars, input.language)} model input`;
-  const routeLabel = input.useTools
-    ? ko ? "도구 루프" : "tool loop"
-    : ko ? "응답 생성" : "response generation";
   const safeLabel = ko
-    ? `${contextLabel} ${inputLabel}을 ${modelLabel} ${routeLabel}에 넣어 판단하는 중`
-    : `Evaluating ${inputLabel} ${contextLabel} with ${modelLabel} for ${routeLabel}`;
+    ? "응답 준비 중"
+    : "Preparing response";
   return {
     kind: "model",
     toolName: ko ? "모델 준비" : "Model preparation",
     safeLabel,
     workBlockLabel: safeLabel,
-    inputLabel,
-    detailRows,
+    inputLabel: "",
+    detailRows: [],
   };
-}
-
-function runtimePreparationDetailRows(input: {
-  prompt: NormalizedTurnPrompt;
-  attachmentContextChars: number;
-  attachmentCount: number;
-  language: RuntimeMessageLanguage;
-}): ToolProgressSummary["detailRows"] {
-  const ko = input.language === "ko";
-  const rows: ToolProgressSummary["detailRows"] = [];
-  const addChars = (id: string, labelKo: string, labelEn: string, count: number) => {
-    if (count <= 0) return;
-    rows.push({
-      id,
-      kind: "context",
-      safe_label: ko ? labelKo : labelEn,
-      safe_value: formatRuntimeCharCount(count, input.language),
-      state: "running",
-    });
-  };
-  addChars("prompt-context", "프로젝트/세션 맥락", "Project/session context", input.prompt.promptContextChars);
-  addChars("recent-conversation", "최근 대화", "Recent conversation", input.prompt.recentConversationChars);
-  addChars("recall-context", "기억 검색 결과", "Memory recall", input.prompt.recallContextChars);
-  addChars("working-memory", "작업 기억", "Working memory", input.prompt.workingMemoryContextChars);
-  addChars("compaction-context", "압축된 대화", "Compacted conversation", input.prompt.compactionContextChars);
-  addChars("feedback-buffer", "피드백 버퍼", "Feedback buffer", input.prompt.feedbackBufferContextChars);
-  addChars("inbound-message", "현재 요청", "Current request", input.prompt.inboundMessageChars);
-  addChars("attachment-context", "첨부 맥락", "Attachment context", input.attachmentContextChars);
-  if (input.attachmentCount > 0) {
-    rows.push({
-      id: "attachments",
-      kind: "context",
-      safe_label: ko ? "첨부 파일" : "Attachments",
-      safe_value: ko ? `${input.attachmentCount}개` : String(input.attachmentCount),
-      state: "running",
-    });
-  }
-  rows.push({
-    id: "total-model-input",
-    kind: "model",
-    safe_label: ko ? "전체 모델 입력" : "Total model input",
-    safe_value: formatRuntimeCharCount(input.prompt.prompt.length + input.attachmentContextChars, input.language),
-    state: "running",
-  });
-  return rows.slice(0, 10);
-}
-
-function formatRuntimeCharCount(count: number, language: RuntimeMessageLanguage): string {
-  const safeCount = Math.max(0, Math.round(count));
-  const formatted = new Intl.NumberFormat("en-US").format(safeCount);
-  return language === "ko" ? `${formatted}자` : `${formatted} chars`;
-}
-
-function publicModelLabel(model: string): string {
-  const raw = String(model || "");
-  const lastSegment = raw.split(/[/:]/u).filter(Boolean).at(-1) ?? raw;
-  const compact = lastSegment
-    .replace(/[^a-zA-Z0-9._-]+/gu, "-")
-    .replace(/-+/gu, "-")
-    .replace(/^-|-$/gu, "")
-    .slice(0, 48);
-  return compact || `model-${raw.length}`;
 }
 
 async function emitRuntimePreparationProgressBestEffort(input: {

@@ -101,6 +101,11 @@ jobs:
           bun install --frozen-lockfile
           npm --prefix packages/butler-app/client/electron ci
 
+      - name: Install Linux package toolchain
+        run: |
+          brew install dpkg
+          command -v dpkg-deb
+
       - name: Fetch previous app release manifest
         env:
           GH_TOKEN: ${{ github.token }}
@@ -144,6 +149,15 @@ jobs:
           test -x "$linux_bun"
           file "$linux_bun" | grep -E 'ELF 64-bit.*x86-64'
           echo "BUTLER_APP_MANAGED_BUN_LINUX_X64=$linux_bun" >> "$GITHUB_ENV"
+          arm_archive="${RUNNER_TEMP}/bun-linux-aarch64.zip"
+          curl -fsSL \
+            "https://github.com/oven-sh/bun/releases/download/bun-v${bun_version}/bun-linux-aarch64.zip" \
+            -o "$arm_archive"
+          ditto -x -k "$arm_archive" "${RUNNER_TEMP}"
+          arm_linux_bun="${RUNNER_TEMP}/bun-linux-aarch64/bun"
+          test -x "$arm_linux_bun"
+          file "$arm_linux_bun" | grep -E 'ELF 64-bit.*aarch64|ELF 64-bit.*ARM aarch64'
+          echo "BUTLER_APP_MANAGED_BUN_LINUX_ARM64=$arm_linux_bun" >> "$GITHUB_ENV"
 
       - name: Package app release
         run: |
@@ -164,13 +178,15 @@ jobs:
           files=(
             dist/release/app/butler-app-*-darwin-arm64.pkg
             dist/release/app/butler-app-*-darwin-arm64.pkg.sha256
-            dist/release/app/butler-app-*-linux-x64.tar.gz
-            dist/release/app/butler-app-*-linux-x64.tar.gz.sha256
+            dist/release/app/butler-app-*-linux-x64.deb
+            dist/release/app/butler-app-*-linux-x64.deb.sha256
+            dist/release/app/butler-app-*-linux-arm64.deb
+            dist/release/app/butler-app-*-linux-arm64.deb.sha256
             dist/release/app/app-release-manifest.json
             dist/release/app/app-update-manifest.json
           )
-          if [ "${#files[@]}" -ne 6 ]; then
-            printf 'Expected 6 app release files, got %s\n' "${#files[@]}" >&2
+          if [ "${#files[@]}" -ne 8 ]; then
+            printf 'Expected 8 app release files, got %s\n' "${#files[@]}" >&2
             printf '%s\n' "${files[@]}" >&2
             exit 1
           fi
@@ -206,25 +222,25 @@ jobs:
           version="${tag#v}"
           mkdir -p dist/release/app dist/release/linux-service
           gh release download "$tag" \
-            --pattern 'butler-app-*-linux-x64.tar.gz' \
+            --pattern 'butler-app-*-linux-x64.deb' \
             --dir dist/release/app \
             --clobber
           gh release download "$tag" \
-            --pattern 'butler-app-*-linux-x64.tar.gz.sha256' \
+            --pattern 'butler-app-*-linux-x64.deb.sha256' \
             --dir dist/release/app \
             --clobber
           shopt -s nullglob
-          linux_tars=(dist/release/app/butler-app-*-linux-x64.tar.gz)
-          linux_tar_checksums=(dist/release/app/butler-app-*-linux-x64.tar.gz.sha256)
-          if [ "${#linux_tars[@]}" -ne 1 ] || [ "${#linux_tar_checksums[@]}" -ne 1 ]; then
-            printf 'Expected one Linux App tarball and checksum, got %s and %s\n' "${#linux_tars[@]}" "${#linux_tar_checksums[@]}" >&2
-            printf '%s\n' "${linux_tars[@]}" >&2
-            printf '%s\n' "${linux_tar_checksums[@]}" >&2
+          linux_debs=(dist/release/app/butler-app-*-linux-x64.deb)
+          linux_deb_checksums=(dist/release/app/butler-app-*-linux-x64.deb.sha256)
+          if [ "${#linux_debs[@]}" -ne 1 ] || [ "${#linux_deb_checksums[@]}" -ne 1 ]; then
+            printf 'Expected one Linux App deb and checksum, got %s and %s\n' "${#linux_debs[@]}" "${#linux_deb_checksums[@]}" >&2
+            printf '%s\n' "${linux_debs[@]}" >&2
+            printf '%s\n' "${linux_deb_checksums[@]}" >&2
             exit 1
           fi
-          (cd dist/release/app && sha256sum -c "$(basename "${linux_tar_checksums[0]}")")
-          tar -xzf "${linux_tars[0]}" -C dist/release/linux-service
-          resource_dir="dist/release/linux-service/Butler-linux-x64/resources/bundled-agent"
+          (cd dist/release/app && sha256sum -c "$(basename "${linux_deb_checksums[0]}")")
+          dpkg-deb -x "${linux_debs[0]}" dist/release/linux-service
+          resource_dir="dist/release/linux-service/opt/butler/Butler-linux-x64/resources/bundled-agent"
           test -f "$resource_dir/service-installer/installer-manifest.json"
           bun packages/butler-app/scripts/release/linux-service-installer-package.ts \
             --resource-dir "$resource_dir" \

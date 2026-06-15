@@ -10,6 +10,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -20,7 +21,7 @@ export const APP_MANAGED_RUNTIME_POINTER_SCHEMA =
   "butler.app-managed-agent-runtime-pointer.v1";
 export const APP_MANAGED_RUNTIME_UPDATE_TRANSACTION_SCHEMA =
   "butler.app-managed-agent-runtime-update-transaction.v1";
-const maxAgentArchiveUncompressedBytes = 512 * 1024 * 1024;
+const maxAgentArchiveUncompressedBytes = 2 * 1024 * 1024 * 1024;
 
 export function appManagedAgentPointerPath(butlerData) {
   return join(butlerData, "app", "runtime", "agent", "current.json");
@@ -425,10 +426,12 @@ export function prepareAppManagedAgentRuntime({
   rmSync(backupHome, { recursive: true, force: true });
 
   try {
-    validateAgentArchiveEntries(artifactPath);
     mkdirSync(dirname(stagingPayloadPath), { recursive: true });
     copyFileSync(artifactPath, stagingPayloadPath);
-    extractAgentArchive(artifactPath, stagingHome);
+    const extraction = extractAgentArchive(artifactPath, stagingHome);
+    if (!extraction.hasLauncher) {
+      throw new Error("bundled Agent artifact is missing bin/butler.js");
+    }
     installManagedRuntimePayload(root, stagingHome);
     const readinessIssue = runtimeHomeReadinessIssue(stagingHome, readiness);
     if (readinessIssue) {
@@ -933,23 +936,8 @@ function isManagedRuntimeArchivePath(entryName) {
   );
 }
 
-function validateAgentArchiveEntries(artifactPath) {
-  const entries = readTarGzEntries(artifactPath);
-  if (!entries.some((entry) =>
-    normalizeArchiveEntry(entry.name) === "bin/butler.js" && entry.type === "file",
-  )) {
-    throw new Error("bundled Agent artifact is missing bin/butler.js");
-  }
-  for (const entry of entries) {
-    const normalized = normalizeArchiveEntry(entry.name);
-    if (!normalized) continue;
-    if (normalized.startsWith("/") || normalized.split("/").includes("..")) {
-      throw new Error("bundled Agent artifact contains an unsafe path");
-    }
-  }
-}
-
 function extractAgentArchive(artifactPath, runtimeHome) {
+  let hasLauncher = false;
   for (const entry of parseTarGz(artifactPath)) {
     const normalized = normalizeArchiveEntry(entry.name);
     if (!normalized) continue;
@@ -959,15 +947,15 @@ function extractAgentArchive(artifactPath, runtimeHome) {
     }
     const target = join(runtimeHome, normalized);
     mkdirSync(dirname(target), { recursive: true });
+    if (entry.type === "symlink") {
+      const linkTarget = safeSymlinkTarget(runtimeHome, target, entry.linkName);
+      symlinkSync(linkTarget, target);
+      continue;
+    }
     writeFileSync(target, entry.data, { mode: entry.mode || 0o644 });
+    if (normalized === "bin/butler.js") hasLauncher = true;
   }
-}
-
-function readTarGzEntries(artifactPath) {
-  return parseTarGz(artifactPath).map((entry) => ({
-    name: entry.name,
-    type: entry.type,
-  }));
+  return { hasLauncher };
 }
 
 function parseTarGz(artifactPath) {
@@ -989,6 +977,7 @@ function parseTarBuffer(buffer) {
   const entries = [];
   let offset = 0;
   let nextPath = null;
+  let nextLinkPath = null;
   while (offset + 512 <= buffer.length) {
     const header = buffer.subarray(offset, offset + 512);
     offset += 512;
@@ -1008,27 +997,52 @@ function parseTarBuffer(buffer) {
       if (typeFlag === "x" && typeof pax.path === "string") {
         nextPath = pax.path;
       }
+      if (typeFlag === "x" && typeof pax.linkpath === "string") {
+        nextLinkPath = pax.linkpath;
+      }
       continue;
     }
 
     const name = nextPath ?? tarHeaderPath(header);
+    const linkName = nextLinkPath ?? trimNull(header.subarray(157, 257).toString("utf8"));
     nextPath = null;
+    nextLinkPath = null;
     const normalized = normalizeArchiveEntry(name);
     if (!normalized) continue;
     if (normalized.startsWith("/") || normalized.split("/").includes("..")) {
       throw new Error("bundled Agent artifact contains an unsafe path");
     }
-    if (typeFlag !== "0" && typeFlag !== "\0" && typeFlag !== "" && typeFlag !== "5") {
+    if (
+      typeFlag !== "0" &&
+      typeFlag !== "\0" &&
+      typeFlag !== "" &&
+      typeFlag !== "5" &&
+      typeFlag !== "2"
+    ) {
       throw new Error("bundled Agent artifact contains an unsafe entry type");
     }
     entries.push({
       name: normalized,
-      type: typeFlag === "5" ? "directory" : "file",
+      type: typeFlag === "5" ? "directory" : typeFlag === "2" ? "symlink" : "file",
+      linkName,
       mode: parseOctal(header.subarray(100, 108)),
       data,
     });
   }
   return entries;
+}
+
+function safeSymlinkTarget(root, target, linkName) {
+  const linkTarget = String(linkName ?? "");
+  if (!linkTarget || linkTarget.startsWith("/")) {
+    throw new Error("bundled Agent artifact contains an unsafe symlink");
+  }
+  const resolvedRoot = `${resolve(root)}/`;
+  const resolvedTarget = resolve(dirname(target), linkTarget);
+  if (resolvedTarget !== resolve(root) && !resolvedTarget.startsWith(resolvedRoot)) {
+    throw new Error("bundled Agent artifact contains an unsafe symlink");
+  }
+  return linkTarget;
 }
 
 function tarHeaderPath(header) {

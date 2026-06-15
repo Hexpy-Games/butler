@@ -368,7 +368,8 @@ test("app release manifest exposes app package files only", () => {
   ]);
   expect(manifest.artifacts.map((artifact) => artifact.artifactName)).toEqual([
     `butler-app-${currentVersion}-darwin-arm64.pkg`,
-    `butler-app-${currentVersion}-linux-x64.tar.gz`,
+    `butler-app-${currentVersion}-linux-x64.deb`,
+    `butler-app-${currentVersion}-linux-arm64.deb`,
   ]);
   expect(validateAppReleaseManifest(root, manifest)).toEqual([]);
 });
@@ -718,6 +719,7 @@ test("agent release packager creates an installable artifact with app web client
 
     const listing = spawnSync("tar", ["-tzf", result.artifactPath], {
       encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
     });
     expect(listing.status).toBe(0);
     const entries = listing.stdout.split(/\r?\n/).filter(Boolean);
@@ -738,7 +740,23 @@ test("agent release packager creates an installable artifact with app web client
     expect(entries).toContain(`./${SERVICE_APP_WEB_CLIENT_DIST}/index.html`);
     expect(entries.some((entry) => entry.startsWith(`./${SERVICE_APP_WEB_CLIENT_DIST}/assets/`))).toBe(true);
     expect(entries.some((entry) => entry.includes("packages/butler-app/"))).toBe(false);
-    expect(entries.some((entry) => entry.includes("/node_modules/"))).toBe(false);
+    expect(entries.some((entry) =>
+      entry.includes("/node_modules/@huggingface/transformers/package.json"),
+    )).toBe(true);
+    expect(entries.some((entry) =>
+      entry.includes("/node_modules/onnxruntime-common/package.json"),
+    )).toBe(true);
+    expect(entries.some((entry) =>
+      entry.includes("/node_modules/onnxruntime-node/package.json"),
+    )).toBe(true);
+    expect(entries).toContain("./node_modules/@asamuzakjp/css-color/package.json");
+    expect(entries).toContain(
+      "./node_modules/@csstools/css-parser-algorithms/package.json",
+    );
+    expect(entries).toContain("./node_modules/micromark-extension-gfm/package.json");
+    expect(entries).toContain(
+      "./node_modules/micromark-extension-gfm-autolink-literal/package.json",
+    );
 
     const extractDir = mkdtempSync(join(tmpdir(), "butler-agent-release-extract-"));
     try {
@@ -755,6 +773,9 @@ test("agent release packager creates an installable artifact with app web client
         "packages/butler-agent/src/integrations/telegram",
       ]);
       expect(JSON.stringify(packagedRootPackage)).not.toContain("packages/butler-app");
+      expect(entries.some((entry) =>
+        entry.includes("/node_modules/onnxruntime-common/dist/"),
+      )).toBe(true);
       expect(
         readText(join(extractDir, SERVICE_APP_WEB_CLIENT_DIST, "index.html")),
       ).toContain("<title>Butler</title>");
@@ -764,6 +785,16 @@ test("agent release packager creates an installable artifact with app web client
       expect(
         readText(join(extractDir, "deploy/agent/templates/launchd.plist.template")),
       ).toContain("<string>run</string>");
+      const dependencyResolution = spawnSync(process.execPath, ["-e", `
+        const { pathToFileURL } = require("url");
+        const { join } = require("path");
+        await import(pathToFileURL(join(process.cwd(), "node_modules/@asamuzakjp/css-color/dist/esm/index.js")).href);
+        await import(pathToFileURL(join(process.cwd(), "node_modules/micromark-extension-gfm/index.js")).href);
+      `], {
+        cwd: extractDir,
+        encoding: "utf8",
+      });
+      expect(dependencyResolution.status).toBe(0);
       const prebuiltHelp = spawnSync(join(extractDir, currentCliLauncher), ["--help"], {
         cwd: extractDir,
         encoding: "utf8",
@@ -840,7 +871,7 @@ test("agent release packager creates an installable artifact with app web client
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
-}, 30_000);
+}, 90_000);
 test("agent release packager can write public GitHub artifact URLs", () => {
   const outDir = mkdtempSync(join(tmpdir(), "butler-agent-release-url-test-"));
   try {
@@ -872,15 +903,17 @@ test("agent release packager can write public GitHub artifact URLs", () => {
 test("app release packager embeds self-contained bundled Agent resources", () => {
   const outDir = mkdtempSync(join(tmpdir(), "butler-app-release-test-"));
   const previousLinuxRuntime = process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
+  const previousDpkgDeb = process.env.BUTLER_APP_DPKG_DEB;
   try {
     process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = writeFakeLinuxX64Runtime(outDir);
+    process.env.BUTLER_APP_DPKG_DEB = writeFakeDpkgDeb(outDir);
     const result = createAppReleasePackage({
       root,
       outDir,
       platforms: ["linux-x64"],
     });
     const artifact = result.artifacts[0];
-    expect(artifact?.artifactName).toBe(`butler-app-${currentVersion}-linux-x64.tar.gz`);
+    expect(artifact?.artifactName).toBe(`butler-app-${currentVersion}-linux-x64.deb`);
     expect(existsSync(artifact.artifactPath)).toBe(true);
 
     const listing = spawnSync("tar", ["-tzf", artifact.artifactPath], {
@@ -888,8 +921,15 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     });
     expect(listing.status).toBe(0);
     const entries = listing.stdout.split(/\r?\n/).filter(Boolean);
-    const resourceRoot = "Butler-linux-x64/resources/bundled-agent";
+    const resourceRoot = "./opt/butler/Butler-linux-x64/resources/bundled-agent";
     const agentArtifact = `butler-agent-${currentVersion}-all.tar.gz`;
+    expect(tarVerboseListing(artifact.artifactPath)).toContain("drwxr-xr-x");
+    expect(entries).toContain("./opt/butler/Butler-linux-x64/Butler");
+    expect(entries).toContain("./usr/bin/butler-app");
+    expect(entries).toContain("./usr/lib/systemd/user/butler.service");
+    expect(entries).toContain("./usr/lib/butler/butler-app-managed-agent-service");
+    expect(entries).toContain("./usr/share/applications/butler.desktop");
+    expect(entries).toContain("./usr/share/icons/hicolor/512x512/apps/butler.png");
     expect(entries).toContain(`${resourceRoot}/${agentArtifact}`);
     expect(entries).toContain(`${resourceRoot}/agent-release-manifest.json`);
     expect(entries).toContain(`${resourceRoot}/agent-update-manifest.json`);
@@ -903,6 +943,18 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(entries).toContain(`${resourceRoot}/service-installer/linux/launcher/butler-app-managed-agent-service`);
     expect(entries).toContain(`${resourceRoot}/runtime/bun-version`);
     expect(entries).toContain(`${resourceRoot}/runtime/bin/bun`);
+    expect(extractTarEntryText(artifact.artifactPath, "./usr/bin/butler-app")).toContain(
+      'exec "/opt/butler/Butler-linux-x64/Butler" "${chromium_flags[@]}" "$@"',
+    );
+    expect(extractTarEntryText(artifact.artifactPath, "./usr/bin/butler-app")).toContain(
+      "BUTLER_APP_ENABLE_GPU",
+    );
+    expect(extractTarEntryText(artifact.artifactPath, "./DEBIAN/postinst")).toContain(
+      'find "/opt/butler/Butler-linux-x64" -type d -exec chmod 755 {} +',
+    );
+    expect(extractTarEntryText(artifact.artifactPath, "./DEBIAN/postinst")).toContain(
+      'if [ -f "/opt/butler/Butler-linux-x64/chrome-sandbox" ] && [ ! -L "/opt/butler/Butler-linux-x64/chrome-sandbox" ]; then',
+    );
     const bundledRuntime = extractTarEntryBuffer(
       artifact.artifactPath,
       `${resourceRoot}/runtime/bin/bun`,
@@ -1132,7 +1184,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       artifact.artifactPath,
       `${resourceRoot}/${agentArtifact}`,
     ], {
-      maxBuffer: 128 * 1024 * 1024,
+      maxBuffer: 768 * 1024 * 1024,
     });
     expect(nestedAgentBytes.status).toBe(0);
     const nestedListing = spawnSync("tar", ["-tzf", "-"], {
@@ -1148,6 +1200,63 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
   } finally {
     if (previousLinuxRuntime === undefined) delete process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
     else process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = previousLinuxRuntime;
+    if (previousDpkgDeb === undefined) delete process.env.BUTLER_APP_DPKG_DEB;
+    else process.env.BUTLER_APP_DPKG_DEB = previousDpkgDeb;
+    rmSync(outDir, { recursive: true, force: true });
+  }
+}, 90_000);
+
+test("app release packager creates Linux ARM64 deb staging", () => {
+  const outDir = mkdtempSync(join(tmpdir(), "butler-app-linux-arm64-release-test-"));
+  const previousLinuxRuntime = process.env.BUTLER_APP_MANAGED_BUN_LINUX_ARM64;
+  const previousDpkgDeb = process.env.BUTLER_APP_DPKG_DEB;
+  try {
+    process.env.BUTLER_APP_MANAGED_BUN_LINUX_ARM64 = writeFakeLinuxArm64Runtime(outDir);
+    process.env.BUTLER_APP_DPKG_DEB = writeFakeDpkgDeb(outDir);
+    const result = createAppReleasePackage({
+      root,
+      outDir,
+      platforms: ["linux-arm64"],
+    });
+    const artifact = result.artifacts[0];
+    expect(artifact?.artifactName).toBe(`butler-app-${currentVersion}-linux-arm64.deb`);
+    expect(existsSync(artifact.artifactPath)).toBe(true);
+
+    const listing = spawnSync("tar", ["-tzf", artifact.artifactPath], {
+      encoding: "utf8",
+    });
+    expect(listing.status).toBe(0);
+    expect(tarVerboseListing(artifact.artifactPath)).toContain("drwxr-xr-x");
+    expect(listing.stdout).toContain("./opt/butler/Butler-linux-arm64/Butler");
+    expect(listing.stdout).toContain("./usr/bin/butler-app");
+    expect(listing.stdout).toContain("./usr/lib/systemd/user/butler.service");
+    expect(listing.stdout).toContain("./usr/lib/butler/butler-app-managed-agent-service");
+    expect(listing.stdout).toContain(
+      "./opt/butler/Butler-linux-arm64/resources/bundled-agent/runtime/bin/bun",
+    );
+    expect(extractTarEntryText(artifact.artifactPath, "./DEBIAN/control")).toContain(
+      "Architecture: arm64",
+    );
+    expect(extractTarEntryText(artifact.artifactPath, "./usr/bin/butler-app")).toContain(
+      'exec "/opt/butler/Butler-linux-arm64/Butler" "${chromium_flags[@]}" "$@"',
+    );
+    expect(extractTarEntryText(artifact.artifactPath, "./usr/bin/butler-app")).toContain(
+      "--disable-gpu",
+    );
+    expect(extractTarEntryText(artifact.artifactPath, "./DEBIAN/postinst")).toContain(
+      'find "/opt/butler/Butler-linux-arm64" -type d -exec chmod 755 {} +',
+    );
+    expect(extractTarEntryText(artifact.artifactPath, "./DEBIAN/postinst")).toContain(
+      'if [ -f "/opt/butler/Butler-linux-arm64/chrome-sandbox" ] && [ ! -L "/opt/butler/Butler-linux-arm64/chrome-sandbox" ]; then',
+    );
+    expect(extractTarEntryText(artifact.artifactPath, "./usr/lib/systemd/user/butler.service")).toContain(
+      "ExecStart=/usr/lib/butler/butler-app-managed-agent-service",
+    );
+  } finally {
+    if (previousLinuxRuntime === undefined) delete process.env.BUTLER_APP_MANAGED_BUN_LINUX_ARM64;
+    else process.env.BUTLER_APP_MANAGED_BUN_LINUX_ARM64 = previousLinuxRuntime;
+    if (previousDpkgDeb === undefined) delete process.env.BUTLER_APP_DPKG_DEB;
+    else process.env.BUTLER_APP_DPKG_DEB = previousDpkgDeb;
     rmSync(outDir, { recursive: true, force: true });
   }
 }, 90_000);
@@ -1825,6 +1934,22 @@ function extractTarEntryBuffer(artifactPath: string, entryPath: string): Buffer 
   return result.stdout as Buffer;
 }
 
+function extractTarEntryText(artifactPath: string, entryPath: string): string {
+  const result = spawnSync("tar", ["-xOf", artifactPath, entryPath], {
+    encoding: "utf8",
+  });
+  expect(result.status).toBe(0);
+  return result.stdout;
+}
+
+function tarVerboseListing(artifactPath: string): string {
+  const result = spawnSync("tar", ["-tvzf", artifactPath], {
+    encoding: "utf8",
+  });
+  expect(result.status).toBe(0);
+  return result.stdout;
+}
+
 function writeFakeLinuxX64Runtime(dir: string): string {
   const runtime = join(dir, "fake-linux-x64-bun");
   const bytes = Buffer.alloc(64);
@@ -1837,6 +1962,32 @@ function writeFakeLinuxX64Runtime(dir: string): string {
   bytes.writeUInt16LE(0x3e, 18);
   writeFileSync(runtime, bytes);
   chmodSync(runtime, 0o755);
+  return runtime;
+}
+
+function writeFakeLinuxArm64Runtime(dir: string): string {
+  const runtime = join(dir, "fake-linux-arm64-bun");
+  const bytes = Buffer.alloc(64);
+  bytes[0] = 0x7f;
+  bytes[1] = 0x45;
+  bytes[2] = 0x4c;
+  bytes[3] = 0x46;
+  bytes[4] = 2;
+  bytes[5] = 1;
+  bytes.writeUInt16LE(0xb7, 18);
+  writeFileSync(runtime, bytes);
+  chmodSync(runtime, 0o755);
+  return runtime;
+}
+
+function writeFakeDpkgDeb(dir: string): string {
+  const runtime = join(dir, "fake-dpkg-deb");
+  writeExecutableScript(runtime, `#!/bin/sh
+set -eu
+root="$3"
+out="$4"
+tar -czf "$out" -C "$root" .
+`);
   return runtime;
 }
 

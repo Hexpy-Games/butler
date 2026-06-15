@@ -102,8 +102,12 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).toContain("bun run release:app:gate");
   expect(workflow).toContain("Prepare Linux app-managed Bun payload");
   expect(workflow).toContain("bun-linux-x64.zip");
+  expect(workflow).toContain("bun-linux-aarch64.zip");
   expect(workflow).toContain("BUTLER_APP_MANAGED_BUN_LINUX_X64=$linux_bun");
+  expect(workflow).toContain("BUTLER_APP_MANAGED_BUN_LINUX_ARM64=$arm_linux_bun");
   expect(workflow).toContain("ELF 64-bit.*x86-64");
+  expect(workflow).toContain("brew install dpkg");
+  expect(workflow).toContain("command -v dpkg-deb");
   expect(baselineIndex).toBeGreaterThan(appJobIndex);
   expect(appGateIndex).toBeGreaterThan(baselineIndex);
   expect(linuxPrepIndex).toBeGreaterThan(appJobIndex);
@@ -117,10 +121,13 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).not.toContain('grep -F "Butler-linux-x64/Butler"');
   expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.pkg");
   expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.pkg.sha256");
-  expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.tar.gz");
-  expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.tar.gz.sha256");
+  expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.deb");
+  expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.deb.sha256");
+  expect(workflow).toContain("dist/release/app/butler-app-*-linux-arm64.deb");
+  expect(workflow).toContain("dist/release/app/butler-app-*-linux-arm64.deb.sha256");
   expect(workflow).toContain("dist/release/app/app-release-manifest.json");
   expect(workflow).toContain("dist/release/app/app-update-manifest.json");
+  expect(workflow).toContain("Expected 8 app release files");
   expect(publishIndex).toBeGreaterThan(verifyIndex);
   expect(workflow).toContain('gh release upload "$tag" "${files[@]}" --clobber');
 });
@@ -143,11 +150,12 @@ test("version tag release workflow publishes Linux app service installer package
   expect(workflow).toContain("sudo apt-get install -y rpm");
   expect(workflow).toContain("command -v dpkg-deb");
   expect(workflow).toContain("command -v rpmbuild");
-  expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.tar.gz'");
-  expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.tar.gz.sha256'");
+  expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.deb'");
+  expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.deb.sha256'");
   expect(workflow).toContain("sha256sum -c");
-  expect(workflow).toContain("Expected one Linux App tarball and checksum");
-  expect(workflow).toContain("Butler-linux-x64/resources/bundled-agent");
+  expect(workflow).toContain("Expected one Linux App deb and checksum");
+  expect(workflow).toContain("dpkg-deb -x");
+  expect(workflow).toContain("opt/butler/Butler-linux-x64/resources/bundled-agent");
   expect(workflow).toContain("--build");
   expect(downloadIndex).toBeGreaterThan(installerJobIndex);
   expect(buildIndex).toBeGreaterThan(downloadIndex);
@@ -178,7 +186,8 @@ test("README directs default installs to Butler App and advanced installs to Age
 
   expect(quickStart).toContain("GitHub Release");
   expect(quickStart).toContain("butler-app-<version>-darwin-arm64.pkg");
-  expect(quickStart).toContain("butler-app-<version>-linux-x64.tar.gz");
+  expect(quickStart).toContain("butler-app-<version>-linux-x64.deb");
+  expect(quickStart).toContain("butler-app-<version>-linux-arm64.deb");
   expect(normalizedQuickStart).toContain("Butler Agent is included in the app");
   expect(quickStart).toContain("Butler Agent를 준비합니다");
   expect(quickStart).not.toContain("butler-agent-*-all.tar.gz");

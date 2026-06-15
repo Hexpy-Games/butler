@@ -179,6 +179,10 @@ const butlerApp = Object.freeze({
   exportAgentServiceDiagnostics: () =>
     ipcRenderer.invoke("butler:agent-service-diagnostics"),
   quitApp: () => ipcRenderer.invoke("butler:quit-app"),
+  minimizeWindow: () => ipcRenderer.invoke("butler:window-minimize"),
+  toggleWindowMaximize: () =>
+    ipcRenderer.invoke("butler:window-toggle-maximize"),
+  closeWindow: () => ipcRenderer.invoke("butler:window-close"),
   listChats: () => requestJson("/chats"),
   listNavigation: () => requestJson("/navigation"),
   getNewChatBriefing: ({ date, projectId } = {}) => {

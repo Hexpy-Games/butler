@@ -28,6 +28,7 @@ import {
 } from "@/app/utils.ts";
 import type { ActiveChatView } from "@/app/types.ts";
 import { TitlebarShell } from "@/butler-ds";
+import { WindowControls } from "./WindowControls";
 
 export function Titlebar() {
   const [sessionMenuOpen, setSessionMenuOpen] = useState(false);
@@ -81,6 +82,7 @@ export function Titlebar() {
       collapsed={!leftOpen}
       className="drag-region"
       dataTestClass="custom-titlebar"
+      windowControls={<WindowControls />}
       trailing={
         <ButtonContainer size="icon-sm" data-test-class="project-controls">
           {activeSession ? (

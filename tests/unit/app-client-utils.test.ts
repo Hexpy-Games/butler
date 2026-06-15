@@ -1106,6 +1106,39 @@ test("lifecycle-only progress rows are not promoted into work blocks", () => {
   ).toEqual([]);
 });
 
+test("runtime model preparation progress is not promoted into visible work blocks", () => {
+  const snapshot: TurnProgressSnapshot = {
+    turn_id: "turn-preparation-only",
+    state: "delivered",
+    safe_progress_rows: [
+      {
+        id: "prep-turn-event",
+        kind: "model",
+        state: "delivered",
+        safe_label: "응답 준비 중",
+        safe_tool_name: "모델 준비",
+        work_block_label: "응답 준비 중",
+      },
+      {
+        id: "prep-intermediate",
+        kind: "model",
+        state: "delivered",
+        safe_label: "응답 준비 중",
+        safe_tool_name: "모델 준비",
+        work_block_label: "응답 준비 중",
+      },
+    ],
+  };
+
+  const [frozen] = freezeMessageWorkBlocks(
+    [message("assistant-preparation", "assistant", 2, "turn-preparation-only")],
+    { "turn-preparation-only": snapshot },
+  );
+
+  expect(workBlocksFromProgressRows(snapshot.safe_progress_rows)).toEqual([]);
+  expect(frozen?.work_blocks).toBeUndefined();
+});
+
 test("semantic progress rows merge running and delivered todo updates", () => {
   const rows = semanticProgressRows([
     {

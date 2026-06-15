@@ -71,6 +71,8 @@ let rendererUrl = explicitUiUrl
 let rendererOrigin = new URL(rendererUrl).origin;
 let serverHealthUrl = new URL("/health", serverUrl).toString();
 const isMac = process.platform === "darwin";
+const isLinux = process.platform === "linux";
+const usesTransparentWindow = isMac || isLinux;
 const macTrafficLightPosition = { x: 20, y: 18 };
 const macTransparentBackground = "#00000000";
 const macVibrancy = "sidebar";
@@ -1205,7 +1207,7 @@ function safeString(value) {
 }
 
 async function createWindow() {
-  if (rendererUrl === serverUrl) {
+  if (rendererUrl === serverUrl && !shouldUseAppAgentNativeServiceBridge()) {
     await ensureServer();
   }
   await loadInitialNativeShellPreferences();
@@ -1218,15 +1220,16 @@ async function createWindow() {
     minHeight: 480,
     title: appDisplayName,
     icon: appIconForWindow(),
+    frame: isLinux ? false : undefined,
     titleBarStyle: "hidden",
     trafficLightPosition: macTrafficLightPosition,
-    transparent: isMac,
+    transparent: usesTransparentWindow,
     vibrancy: isMac ? macVibrancy : undefined,
     visualEffectState: isMac ? "active" : undefined,
     roundedCorners: true,
     hasShadow: true,
     autoHideMenuBar: true,
-    backgroundColor: isMac ? macTransparentBackground : "#f6f6f4",
+    backgroundColor: usesTransparentWindow ? macTransparentBackground : "#f6f6f4",
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -1343,6 +1346,34 @@ ipcMain.handle("butler:quit-app", () => {
   isQuitting = true;
   app.quit();
   return { quitting: true };
+});
+
+function windowForControlEvent(event) {
+  return BrowserWindow.fromWebContents(event.sender) ??
+    BrowserWindow.getFocusedWindow() ??
+    mainWindow;
+}
+
+ipcMain.handle("butler:window-minimize", (event) => {
+  const win = windowForControlEvent(event);
+  if (!win || win.isDestroyed()) return { ok: false };
+  win.minimize();
+  return { ok: true };
+});
+
+ipcMain.handle("butler:window-toggle-maximize", (event) => {
+  const win = windowForControlEvent(event);
+  if (!win || win.isDestroyed()) return { ok: false, maximized: false };
+  if (win.isMaximized()) win.unmaximize();
+  else win.maximize();
+  return { ok: true, maximized: win.isMaximized() };
+});
+
+ipcMain.handle("butler:window-close", (event) => {
+  const win = windowForControlEvent(event);
+  if (!win || win.isDestroyed()) return { ok: false };
+  win.close();
+  return { ok: true };
 });
 
 ipcMain.handle("butler:get-local-auth-headers", async () =>

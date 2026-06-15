@@ -105,6 +105,7 @@ export function createAppReleasePackage(
       root,
       outDir: join(workDir, "agent-release"),
       artifactBaseUrl: "bundled-agent",
+      dependencyTarget: dependencyTargetForAppPlatforms(platforms),
     });
     const bundledAgents = new Map(platforms.map((platform) => [
       platform,
@@ -186,7 +187,13 @@ function packagePlatform(input: {
       version: input.manifest.version,
     });
   } else {
-    createTarball(packagedDir, artifactPath);
+    createLinuxAppDeb({
+      artifactPath,
+      root: input.root,
+      packagedDir,
+      platform: input.platform,
+      version: input.manifest.version,
+    });
   }
 
   const sha256 = sha256File(artifactPath);
@@ -688,6 +695,7 @@ function assertManagedRuntimeExecutablePlatform(
 ): void {
   const bytes = readFileSync(path);
   if (platform === "linux-x64" && isElfX64(bytes)) return;
+  if (platform === "linux-arm64" && isElfArm64(bytes)) return;
   if (platform === "darwin-arm64" && isMachOArm64(bytes)) return;
   throw new Error(`managed App runtime executable does not match ${platform}: ${path}`);
 }
@@ -707,6 +715,23 @@ function isElfX64(bytes: Buffer): boolean {
     ? bytes.readUInt16BE(18)
     : bytes.readUInt16LE(18);
   return machine === 0x3e;
+}
+
+function isElfArm64(bytes: Buffer): boolean {
+  if (
+    bytes.length < 20 ||
+    bytes[0] !== 0x7f ||
+    bytes[1] !== 0x45 ||
+    bytes[2] !== 0x4c ||
+    bytes[3] !== 0x46 ||
+    bytes[4] !== 2
+  ) {
+    return false;
+  }
+  const machine = bytes[5] === 2
+    ? bytes.readUInt16BE(18)
+    : bytes.readUInt16LE(18);
+  return machine === 0xb7;
 }
 
 function isMachOArm64(bytes: Buffer): boolean {
@@ -740,6 +765,7 @@ function platformEnvSuffix(platform: AppReleasePlatform): string {
 function currentHostAppReleasePlatform(): AppReleasePlatform {
   if (process.platform === "darwin" && process.arch === "arm64") return "darwin-arm64";
   if (process.platform === "linux" && process.arch === "x64") return "linux-x64";
+  if (process.platform === "linux" && process.arch === "arm64") return "linux-arm64";
   throw new Error(
     "current host platform is not a supported App release runtime; set BUTLER_APP_MANAGED_BUN_<PLATFORM>",
   );
@@ -749,8 +775,18 @@ function createAgentReleasePackage(input: {
   root: string;
   outDir: string;
   artifactBaseUrl: string;
+  dependencyTarget?: { os?: string; cpu?: string } | null;
 }): BundledAgentPackage {
   const bun = process.env.BUTLER_BUN || "bun";
+  const env = {
+    ...process.env,
+    ...(input.dependencyTarget?.os
+      ? { BUTLER_AGENT_DEPENDENCY_OS: input.dependencyTarget.os }
+      : {}),
+    ...(input.dependencyTarget?.cpu
+      ? { BUTLER_AGENT_DEPENDENCY_CPU: input.dependencyTarget.cpu }
+      : {}),
+  };
   const result = spawnSync(bun, [
     "run",
     "--silent",
@@ -763,6 +799,7 @@ function createAgentReleasePackage(input: {
   ], {
     cwd: input.root,
     encoding: "utf8",
+    env,
   });
   if (result.status !== 0) {
     throw new Error(
@@ -787,6 +824,21 @@ function createAgentReleasePackage(input: {
     // Report a stable packaging error below without leaking full command output.
   }
   throw new Error("bundled Agent package did not return a valid JSON manifest");
+}
+
+function dependencyTargetForAppPlatforms(
+  platforms: AppReleasePlatform[],
+): { os?: string; cpu?: string } | null {
+  const targets = platforms.map((platform) => {
+    const [os, cpu] = platform.split("-");
+    return { os, cpu };
+  });
+  const osValues = [...new Set(targets.map((target) => target.os))];
+  const cpuValues = [...new Set(targets.map((target) => target.cpu))];
+  return {
+    ...(osValues.length === 1 ? { os: osValues[0] } : {}),
+    ...(cpuValues.length === 1 ? { cpu: cpuValues[0] } : {}),
+  };
 }
 
 function mustGetBundledAgentResource(
@@ -1044,29 +1096,171 @@ function notarizeMacPkgIfConfigured(artifactPath: string): void {
   }
 }
 
-function createTarball(sourceDir: string, artifactPath: string): void {
-  rmSync(artifactPath, { force: true });
-  const result = spawnSync("tar", [
-    "--format",
-    "ustar",
-    "-czf",
-    artifactPath,
-    "-C",
-    dirname(sourceDir),
-    basename(sourceDir),
-  ], {
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      COPYFILE_DISABLE: "1",
-      COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
-    },
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `app tarball failed: ${result.stderr.trim() || result.stdout.trim() || "unknown error"}`,
+function createLinuxAppDeb(input: {
+  artifactPath: string;
+  root: string;
+  packagedDir: string;
+  platform: AppReleasePlatform;
+  version: string;
+}): void {
+  const architecture = linuxDebArchitecture(input.platform);
+  const workDir = mkdtempSync(join(tmpdir(), "butler-app-deb-"));
+  try {
+    const debRoot = join(workDir, "root");
+    const finalInstallDir = join("/opt", "butler", packageDirectoryName(input.platform));
+    const installDir = join(debRoot, finalInstallDir.slice(1));
+    const binDir = join(debRoot, "usr", "bin");
+    const serviceUnitDir = join(debRoot, "usr", "lib", "systemd", "user");
+    const serviceLauncherDir = join(debRoot, "usr", "lib", "butler");
+    const appDir = join(debRoot, "usr", "share", "applications");
+    const iconDir = join(debRoot, "usr", "share", "icons", "hicolor", "512x512", "apps");
+    const controlDir = join(debRoot, "DEBIAN");
+    mkdirSync(dirname(installDir), { recursive: true });
+    mkdirSync(binDir, { recursive: true });
+    mkdirSync(serviceUnitDir, { recursive: true });
+    mkdirSync(serviceLauncherDir, { recursive: true });
+    mkdirSync(appDir, { recursive: true });
+    mkdirSync(iconDir, { recursive: true });
+    mkdirSync(controlDir, { recursive: true });
+    cpSync(input.packagedDir, installDir, {
+      dereference: false,
+      errorOnExist: false,
+      force: true,
+      recursive: true,
+    });
+    chmodPackageDirectories(installDir);
+    writeExecutableText(join(binDir, "butler-app"), linuxAppLauncher(finalInstallDir));
+    writeFileSync(join(serviceUnitDir, "butler.service"), linuxSystemdUserUnit(), "utf8");
+    copyFileSync(
+      join(
+        input.packagedDir,
+        "resources",
+        "bundled-agent",
+        "service-installer",
+        "linux",
+        "launcher",
+        "butler-app-managed-agent-service",
+      ),
+      join(serviceLauncherDir, "butler-app-managed-agent-service"),
     );
+    chmodSync(join(serviceLauncherDir, "butler-app-managed-agent-service"), 0o755);
+    copyFileSync(join(input.root, ELECTRON_ROOT, "assets", "icon.png"), join(iconDir, "butler.png"));
+    writeFileSync(join(appDir, "butler.desktop"), linuxDesktopEntry(), "utf8");
+    writeFileSync(
+      join(controlDir, "control"),
+      linuxDebControl({ architecture, version: input.version }),
+      "utf8",
+    );
+    writeExecutableText(join(controlDir, "postinst"), linuxAppDebPostinst(finalInstallDir));
+    rmSync(input.artifactPath, { force: true });
+    const result = spawnSync(process.env.BUTLER_APP_DPKG_DEB || "dpkg-deb", [
+      "--build",
+      "--root-owner-group",
+      debRoot,
+      input.artifactPath,
+    ], {
+      encoding: "utf8",
+    });
+    if (result.status !== 0) {
+      throw new Error(
+        `linux app deb package failed: ${
+          result.stderr.trim() || result.stdout.trim() || "unknown error"
+        }`,
+      );
+    }
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
   }
+}
+
+function chmodPackageDirectories(path: string): void {
+  chmodSync(path, 0o755);
+  for (const entry of readdirSync(path)) {
+    const child = join(path, entry);
+    if (statSync(child).isDirectory()) chmodPackageDirectories(child);
+  }
+}
+
+function linuxDebArchitecture(platform: AppReleasePlatform): "amd64" | "arm64" {
+  if (platform === "linux-x64") return "amd64";
+  if (platform === "linux-arm64") return "arm64";
+  throw new Error(`unsupported Linux deb platform: ${platform}`);
+}
+
+function linuxAppLauncher(installDir: string): string {
+  return `#!/usr/bin/env bash
+set -euo pipefail
+chromium_flags=()
+if [ "\${BUTLER_APP_ENABLE_GPU:-0}" != "1" ]; then
+  chromium_flags+=(--disable-gpu --disable-gpu-compositing)
+fi
+exec "${installDir}/Butler" "\${chromium_flags[@]}" "$@"
+`;
+}
+
+function linuxSystemdUserUnit(): string {
+  return `[Unit]
+Description=Butler Agent background service
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/butler/butler-app-managed-agent-service
+Restart=always
+RestartSec=5
+KillMode=control-group
+
+[Install]
+WantedBy=default.target
+`;
+}
+
+function linuxDesktopEntry(): string {
+  return `[Desktop Entry]
+Type=Application
+Name=Butler
+Comment=Butler desktop app
+Exec=butler-app %U
+Icon=butler
+Terminal=false
+Categories=Utility;Development;
+StartupWMClass=Butler
+`;
+}
+
+function linuxDebControl(input: { architecture: "amd64" | "arm64"; version: string }): string {
+  return `Package: butler-app
+Version: ${input.version}
+Section: utils
+Priority: optional
+Architecture: ${input.architecture}
+Maintainer: Hexpy Games <support@hexpy.games>
+Depends: libgtk-3-0, libnss3, libxss1, libasound2t64 | libasound2, libgbm1
+Description: Butler App
+ Butler desktop app with bundled Butler Agent runtime.
+`;
+}
+
+function linuxAppDebPostinst(installDir: string): string {
+  return `#!/bin/sh
+set -eu
+
+if [ -d "${installDir}" ]; then
+  find "${installDir}" -type d -exec chmod 755 {} +
+  if [ -f "${installDir}/Butler" ] && [ ! -L "${installDir}/Butler" ]; then
+    chmod 755 "${installDir}/Butler" 2>/dev/null || true
+  fi
+  if [ -f "${installDir}/chrome-sandbox" ] && [ ! -L "${installDir}/chrome-sandbox" ]; then
+    chmod 4755 "${installDir}/chrome-sandbox" 2>/dev/null || true
+  fi
+fi
+
+chmod 755 /usr/bin/butler-app 2>/dev/null || true
+chmod 755 /usr/lib/butler/butler-app-managed-agent-service 2>/dev/null || true
+
+echo "Butler App installed. First-run will render user paths and enable the service."
+exit 0
+`;
 }
 
 function withArtifactMetadata(

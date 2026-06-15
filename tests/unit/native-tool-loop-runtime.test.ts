@@ -476,28 +476,15 @@ test("native runtime emits dynamic preparation progress before the first model r
   const preparationProgress = progressActions.find((action) =>
     action.kind === "tool_progress" && action.activityKind === "model",
   );
-  expect(preparationProgress?.safeLabel).toContain("gpt-5.5");
-  expect(preparationProgress?.safeLabel).toMatch(/\d+(?:,\d+)*자/u);
+  expect(preparationProgress?.safeLabel).toBe("응답 준비 중");
+  expect(preparationProgress?.inputLabel).toBe("");
+  expect(preparationProgress?.detailRows).toEqual([]);
   expect(preparationProgress?.safeLabel).not.toBe("Working");
   expect(preparationProgress?.safeLabel).not.toBe("Thinking");
-  expect(preparationProgress?.detailRows).toEqual(expect.arrayContaining([
-    expect.objectContaining({
-      id: "prompt-context",
-      kind: "context",
-      safe_value: expect.stringMatching(/\d+(?:,\d+)*자/u),
-    }),
-    expect.objectContaining({
-      id: "inbound-message",
-      kind: "context",
-      safe_value: expect.stringMatching(/\d+(?:,\d+)*자/u),
-    }),
-    expect.objectContaining({
-      id: "total-model-input",
-      kind: "model",
-      safe_value: expect.stringMatching(/\d+(?:,\d+)*자/u),
-    }),
-  ]));
   const serialized = JSON.stringify(progressActions);
+  expect(serialized).not.toContain("gpt-5.5");
+  expect(serialized).not.toContain("도구 루프");
+  expect(serialized).not.toContain("tool loop");
   expect(serialized).not.toContain("/Users/example/private");
   expect(serialized).not.toContain("Runtime visibility spec fixture");
   expect(serialized).not.toContain("그대로 노출");

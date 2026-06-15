@@ -13,7 +13,9 @@ Use it inside `ChromeFrame` or product titlebar presenters.
 It standardizes app identity, subtitle, and trailing controls.
 
 ## How to use this component
-Pass title, optional subtitle, leading, and trailing nodes.
+Pass title, optional subtitle, leading, trailing nodes, and optional
+windowControls for App-owned platform controls that must anchor to the window
+edge instead of joining normal toolbar flow.
 
 ## Who can use this component
 Shell components and DS fixtures.

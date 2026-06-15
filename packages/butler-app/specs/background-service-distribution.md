@@ -165,8 +165,8 @@ Use `systemd --user` for desktop Linux.
 
 Packaging implication:
 
-- `.deb`/`.rpm` packages should own unit placement and first-run enable/start
-  behavior.
+- `.deb`/`.rpm` packages should own installable desktop artifacts, unit
+  placement, and first-run enable/start behavior.
 - AppImage or tarball can be supported later as a manual service-registration
   path, but it is not the primary production target.
 
@@ -230,6 +230,9 @@ Required changes:
   `.app` bundles so service registration payloads can travel through the
   installer path. Production release signing and notarization are configured by
   release credentials.
+- Linux App release packaging must publish installable `.deb` artifacts for
+  supported Linux architectures. The package installs the Electron App, bundled
+  Agent payload, desktop launcher, and App launcher command.
 - Linux App service installer packaging must be able to turn the bundled
   service-installer resources into `.deb` and `.rpm` artifacts with
   package-owned user units, without adding host dependency prompts to the App

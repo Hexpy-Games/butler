@@ -10,7 +10,7 @@ import {
 } from "../background-service-contract.ts";
 
 export const APP_RELEASE_COMPONENT_IDS = ["app"] as const;
-export const APP_RELEASE_PLATFORMS = ["darwin-arm64", "linux-x64"] as const;
+export const APP_RELEASE_PLATFORMS = ["darwin-arm64", "linux-x64", "linux-arm64"] as const;
 export type AppReleaseComponentId = (typeof APP_RELEASE_COMPONENT_IDS)[number];
 export type AppReleasePlatform = (typeof APP_RELEASE_PLATFORMS)[number];
 export type AppReleaseRestartPolicy = "restart-app";
@@ -422,6 +422,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
 export function createAppBackgroundServiceReleaseCapability(
   platforms: readonly AppReleasePlatform[] = APP_RELEASE_PLATFORMS,
 ): AppBackgroundServiceReleaseCapability {
+  const installerPlatforms = uniqueReleasePlatformsByServicePlatform(platforms);
   return {
     schema: "butler.app-background-service-capability.v1",
     serviceCapable: true,
@@ -433,7 +434,7 @@ export function createAppBackgroundServiceReleaseCapability(
     requiredRuntimeFields: [...APP_BACKGROUND_SERVICE_RUNTIME_FIELDS],
     serviceStatuses: [...APP_AGENT_SERVICE_STATUSES],
     updateStatuses: [...APP_AGENT_UPDATE_STATUSES],
-    installerRequirements: platforms.map((platform) =>
+    installerRequirements: installerPlatforms.map((platform) =>
       appServiceInstallerRequirementForPlatform(platform),
     ),
     rawTextIncluded: false,
@@ -444,6 +445,7 @@ export function createAppServiceInstallerBundleMetadata(
   platforms: readonly AppReleasePlatform[] = APP_RELEASE_PLATFORMS,
   version: string | null = null,
 ): AppServiceInstallerBundleMetadata {
+  const packagePlatforms = uniqueReleasePlatformsByServicePlatform(platforms);
   return {
     schema: "butler.app-service-installer-bundle.v1",
     product: "butler-app",
@@ -452,7 +454,7 @@ export function createAppServiceInstallerBundleMetadata(
     installerRootPath: "bundled-agent/service-installer",
     servicePlatforms: uniqueServicePlatforms(platforms),
     hostToolsRequiredForFirstLaunch: [],
-    packageArtifacts: platforms.flatMap((platform) =>
+    packageArtifacts: packagePlatforms.flatMap((platform) =>
       serviceInstallerPackageArtifactsForPlatform(platform, version),
     ),
     rawTemplateIncluded: false,
@@ -482,6 +484,20 @@ function uniqueServicePlatforms(
   platforms: readonly AppReleasePlatform[],
 ): AppBackgroundServicePlatform[] {
   return [...new Set(platforms.map(servicePlatformForReleasePlatform))];
+}
+
+function uniqueReleasePlatformsByServicePlatform(
+  platforms: readonly AppReleasePlatform[],
+): AppReleasePlatform[] {
+  const seen = new Set<AppBackgroundServicePlatform>();
+  const result: AppReleasePlatform[] = [];
+  for (const platform of platforms) {
+    const servicePlatform = servicePlatformForReleasePlatform(platform);
+    if (seen.has(servicePlatform)) continue;
+    seen.add(servicePlatform);
+    result.push(platform);
+  }
+  return result;
 }
 
 function servicePlatformForReleasePlatform(
@@ -927,7 +943,7 @@ function artifactName(
   version: string,
   platform: AppReleasePlatform,
 ): string {
-  const extension = platform === "darwin-arm64" ? "pkg" : "tar.gz";
+  const extension = platform === "darwin-arm64" ? "pkg" : "deb";
   return `butler-app-${version}-${platform}.${extension}`;
 }
 
@@ -1289,7 +1305,7 @@ function validateAppServiceInstallerBundle(
   if (!sameComponentSet(bundle.servicePlatforms, expectedServicePlatforms)) {
     issues.push(`${label} service platform mismatch`);
   }
-  const expectedArtifacts = platforms.flatMap((platform) =>
+  const expectedArtifacts = uniqueReleasePlatformsByServicePlatform(platforms).flatMap((platform) =>
     serviceInstallerPackageArtifactsForPlatform(platform, version),
   );
   if (bundle.packageArtifacts.length !== expectedArtifacts.length) {

@@ -276,7 +276,9 @@ test("App Agent native service bridge installs systemd service with escaped env"
     await bridge.nativeServices.start();
 
     expect(writes[0]?.path).toBe("/home/alice/.config/systemd/user/butler.service");
-    expect(writes[0]?.body).toContain('WorkingDirectory="');
+    expect(writes[0]?.body).toContain("WorkingDirectory=");
+    expect(writes[0]?.body).not.toContain('WorkingDirectory="');
+    expect(writes[0]?.body).toContain("butler\\x20app\\x20native\\x20bridge\\x20systemd-");
     expect(writes[0]?.body).toContain('ExecStart=/bin/bash "');
     expect(writes[0]?.body).toContain(
       'Environment=BUTLER_APP_MANAGED_RUNTIME_POINTER="',
