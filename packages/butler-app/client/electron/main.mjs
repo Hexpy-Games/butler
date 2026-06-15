@@ -19,7 +19,7 @@ import {
   readdirSync,
   writeFileSync,
 } from "node:fs";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -31,6 +31,7 @@ import {
   appManagedAgentPointerPath,
   resolveAppManagedGatewayCommand,
 } from "./app-managed-runtime.mjs";
+import { resolveOpenAIOAuthLoginHelper } from "./openai-oauth-login-helper.mjs";
 import { createAgentServiceControl } from "./service-control.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
 import { createTrayAgentMenuModel } from "./tray-agent-menu.mjs";
@@ -442,40 +443,6 @@ async function readCodexAuthProfileLabel() {
   }
 }
 
-async function oauthLoginScriptPath() {
-  const candidates = [
-    process.resourcesPath
-      ? join(
-          process.resourcesPath,
-          "bundled-agent",
-          "packages",
-          "butler-agent",
-          "scripts",
-          "openai-oauth-login.ts",
-        )
-      : null,
-    resolve(repoRoot, "packages", "butler-agent", "scripts", "openai-oauth-login.ts"),
-  ];
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    if (await pathExists(candidate)) return candidate;
-  }
-  return null;
-}
-
-async function pathExists(path) {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function oauthScriptButlerHome(scriptPath) {
-  return resolve(dirname(scriptPath), "../../..");
-}
-
 async function startOpenAIOAuthLogin(input = {}) {
   if (input?.force === true) {
     cancelOpenAIOAuthLogin();
@@ -487,18 +454,24 @@ async function startOpenAIOAuthLogin(input = {}) {
   if (["pending", "starting"].includes(openAIOAuthLoginSession?.status)) {
     return oauthLoginSessionView(openAIOAuthLoginSession);
   }
-  const scriptPath = await oauthLoginScriptPath();
-  if (!scriptPath) throw new Error("OpenAI OAuth login helper is missing.");
-  const runtime = resolveButlerRuntime(butlerDataRoot);
+  const helper = resolveOpenAIOAuthLoginHelper({
+    butlerData: butlerDataRoot,
+    repoRoot,
+    resourcesPath: process.resourcesPath,
+    fallbackRuntime: resolveButlerRuntime(butlerDataRoot),
+    allowBundledResourceFallback: !app.isPackaged,
+    allowDevelopmentFallback: !app.isPackaged,
+  });
+  if (!helper) throw new Error("OpenAI OAuth login helper is missing.");
   const env = {
     ...process.env,
-    BUTLER_HOME: oauthScriptButlerHome(scriptPath),
+    BUTLER_HOME: helper.butlerHome,
     BUTLER_DATA: butlerDataRoot,
-    BUTLER_BUN: runtime,
+    BUTLER_BUN: helper.runtime,
     BUTLER_CODEX_OAUTH_CLIENT_ID: codexOAuthClientId(),
     BUTLER_CODEX_OAUTH_NO_BROWSER: "1",
   };
-  return await beginOAuthLoginProcess(runtime, ["run", scriptPath], env);
+  return await beginOAuthLoginProcess(helper.runtime, ["run", helper.scriptPath], env);
 }
 
 async function openAIOAuthLoginStatus() {
