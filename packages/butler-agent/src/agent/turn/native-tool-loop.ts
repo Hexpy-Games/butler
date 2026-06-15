@@ -33,6 +33,9 @@ import {
   createButlerToolExecutor,
   satisfiedCompletionObligationsForToolResult,
 } from "../tools/butler-tools.ts";
+import {
+  selectButlerToolsForTurn,
+} from "../tools/profiles.ts";
 import { buildTaskOriginContext } from "../work/task-origin.ts";
 import { TaskStore } from "../work/task-store.ts";
 import { TodoListStore, type TodoItemInput } from "../work/todo-list.ts";
@@ -1982,6 +1985,13 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       ): Promise<string> => {
         throwIfRuntimeTurnAborted(input.signal);
         const grantedToolRounds = directToolRoundLimit(maxToolRounds);
+        const selectedTools = selectButlerToolsForTurn({
+          role: session.init.role,
+          text: userText,
+          sessionMetadata: session.init.metadata,
+          turnMetadata: input.metadata,
+          tools: BUTLER_TOOLS,
+        });
         const usageAttribution: PromptUsageAttribution = {
           turnId,
           phase,
@@ -2004,7 +2014,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           cacheScope: "session-turn",
           signal: input.signal,
           attachments,
-          tools: BUTLER_TOOLS,
+          tools: selectedTools,
           maxToolRounds: grantedToolRounds,
           butlerData: this.butlerData,
           usageAttribution,
@@ -2114,7 +2124,16 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       }
       throwIfRuntimeTurnAborted(input.signal);
       if (useTools) {
-        const explicitTools = requiredExplicitToolNames(input.metadata, BUTLER_TOOLS.map((tool) => tool.name));
+        const explicitTools = requiredExplicitToolNames(
+          input.metadata,
+          selectButlerToolsForTurn({
+            role: session.init.role,
+            text: userText,
+            sessionMetadata: session.init.metadata,
+            turnMetadata: input.metadata,
+            tools: BUTLER_TOOLS,
+          }).map((tool) => tool.name),
+        );
         for (let repairAttempt = 0; repairAttempt < 2; repairAttempt += 1) {
           const missingExplicitTools = explicitTools
             .filter((toolName) => !hasSuccessfulTool(audit, [toolName]));

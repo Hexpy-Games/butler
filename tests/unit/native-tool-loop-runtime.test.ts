@@ -560,6 +560,50 @@ test("native runtime exposes direct command toolchains to Butler and Steward ses
   }
 });
 
+test("native runtime sends a profiled tool surface for basic project turns", async () => {
+  let toolNames: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runFunctionToolPromptText: async (input) => {
+      toolNames = input.tools.map((tool) => tool.name);
+      return "프로젝트 상태를 확인했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/project-tool-profile",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+    metadata: { projectId: "butler" },
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: {
+      text: "Project Ledger 기준으로 상태를 확인해줘.",
+    },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(toolNames).toEqual([
+    "inspect_project_status",
+    "query_project_work",
+    "get_context_monitor",
+    "list_tool_capabilities",
+    "update_todo_list",
+    "list_todo_list",
+    "read_conversation_context",
+  ]);
+  expect(toolNames).not.toContain("get_weather_with_knowhow");
+  expect(toolNames).not.toContain("create_automation");
+  expect(toolNames).not.toContain("call_mcp_tool");
+  expect(toolNames).not.toContain("create_planned_task");
+  expect(toolNames).not.toContain("create_work_orchestration");
+});
+
 test("native runtime attaches turn budget attribution to direct tool prompts", async () => {
   const captured: Array<{
     maxToolRounds?: number;

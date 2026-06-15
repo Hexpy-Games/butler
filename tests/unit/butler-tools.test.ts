@@ -8,6 +8,11 @@ import {
   butlerToolsForAgentLoop,
   createButlerToolExecutor,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
+import {
+  selectButlerToolProfiles,
+  selectButlerToolsForTurn,
+  toolContractJsonChars,
+} from "../../packages/butler-agent/src/agent/tools/profiles.ts";
 import { TaskStore } from "../../packages/butler-agent/src/agent/work/task-store.ts";
 import { PlannedTaskStore } from "../../packages/butler-agent/src/agent/work/planned-task.ts";
 import { DisabledWebSearchProvider, MockWebSearchProvider, readWebSearchMetrics } from "../../packages/butler-agent/src/integrations/search/provider.ts";
@@ -146,6 +151,54 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   const personaPresetProperty = onboardingProperties?.persona_preset as { enum?: unknown; description?: unknown } | undefined;
   expect(personaPresetProperty?.enum).toBeUndefined();
   expect(String(personaPresetProperty?.description)).toContain("persona_preset id");
+});
+
+test("basic project turns expose a bounded startup and project tool profile", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "Project Ledger 기준으로 상태를 확인해줘.",
+    sessionMetadata: { projectId: "butler" },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "Project Ledger 기준으로 상태를 확인해줘.",
+    sessionMetadata: { projectId: "butler" },
+  })).toEqual(["startup", "project"]);
+  expect(names).toEqual([
+    "inspect_project_status",
+    "query_project_work",
+    "get_context_monitor",
+    "list_tool_capabilities",
+    "update_todo_list",
+    "list_todo_list",
+    "read_conversation_context",
+  ]);
+  expect(names).not.toContain("get_weather_with_knowhow");
+  expect(names).not.toContain("create_automation");
+  expect(names).not.toContain("call_mcp_tool");
+  expect(names).not.toContain("create_planned_task");
+  expect(names).not.toContain("create_work_orchestration");
+  expect(toolContractJsonChars(tools)).toBeLessThan(8_000);
+});
+
+test("explicit required tools can extend a profile without enabling domain weather tools", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "반드시 표 artifact를 만들어줘.",
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata: {
+      requiredNativeTools: [
+        "transform_public_data_table",
+        "get_weather_with_knowhow",
+      ],
+    },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(names).toContain("transform_public_data_table");
+  expect(names).not.toContain("get_weather_with_knowhow");
 });
 
 test("web_search schema exposes query and domain filters", () => {
