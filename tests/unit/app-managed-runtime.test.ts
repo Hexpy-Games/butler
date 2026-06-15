@@ -290,6 +290,7 @@ test("App-managed runtime rejects unsafe bundled Agent archive entries", () => {
     const resourceRoot = createBundledAgentResource(tempDir, {
       version: "4.0.0",
       symlink: true,
+      unsafeSymlink: true,
     });
     expect(() =>
       activateAppManagedAgentRuntime({
@@ -297,7 +298,7 @@ test("App-managed runtime rejects unsafe bundled Agent archive entries", () => {
         resourceRoot,
         now: fixedNow,
       }),
-    ).toThrow("unsafe entry type");
+    ).toThrow("unsafe symlink");
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -1051,6 +1052,7 @@ function createBundledAgentResource(
     version: string;
     sha256?: string;
     symlink?: boolean;
+    unsafeSymlink?: boolean;
     signature?: string;
     omitLauncher?: boolean;
     launcherDirectory?: boolean;
@@ -1077,9 +1079,11 @@ function createBundledAgentResource(
     "1.3.11\n",
   );
   if (input.symlink) {
-    const link = spawnSync("ln", ["-s", "bin/butler.js", join(stageRoot, "unsafe-link")], {
-      encoding: "utf8",
-    });
+    const link = spawnSync(
+      "ln",
+      ["-s", input.unsafeSymlink ? "../escape" : "bin/butler.js", join(stageRoot, "unsafe-link")],
+      { encoding: "utf8" },
+    );
     expect(link.status).toBe(0);
   }
   mkdirSync(resourceRoot, { recursive: true });

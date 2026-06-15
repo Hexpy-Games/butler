@@ -49,10 +49,13 @@ const WORK_BLOCK_MARKER_KIND = "work_block";
 const INTERNAL_PROGRESS_TOOL_NAMES = new Set([
   "Update Todo List",
   "List Todo List",
+  "Model preparation",
+  "모델 준비",
 ]);
 const INTERNAL_PROGRESS_RAW_TOOL_NAMES = new Set([
   "update_todo_list",
   "list_todo_list",
+  "model_preparation",
 ]);
 export function clientTurnIdFromMessageId(messageId: string): string {
   return `${CLIENT_TURN_PREFIX}${messageId}`;

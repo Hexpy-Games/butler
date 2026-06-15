@@ -53,6 +53,10 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(preload).not.toContain("getLocalAuthHeaders");
 
   expect(main).not.toContain("async function createWindow() {\n  await ensureServer();");
+  expect(main).not.toContain("if (rendererUrl === serverUrl) {\n    await ensureServer();");
+  expect(main).toContain(
+    "if (rendererUrl === serverUrl && !shouldUseAppAgentNativeServiceBridge())",
+  );
   expect(main).toContain("function defaultRendererUrl()");
   expect(main).toContain('join(process.resourcesPath, "app-client")');
   expect(main).toContain("app.requestSingleInstanceLock()");

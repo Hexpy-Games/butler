@@ -21,7 +21,10 @@
 
 .collapsed {
   left: 0;
-  padding-left: calc(var(--traffic-controls-width) + 54px);
+  padding-left: var(
+    --titlebar-collapsed-left-padding,
+    calc(var(--traffic-controls-width) + 54px)
+  );
 }
 
 .identity,
@@ -80,6 +83,20 @@
 
 .trailing {
   flex: 0 0 auto;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.windowControls {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 10px;
+  z-index: 2;
+  display: flex;
+  min-width: max(0px, calc(var(--window-controls-width, 0px) - 20px));
+  align-items: center;
+  justify-content: flex-end;
+  transform: translateY(-50%);
   app-region: no-drag;
   -webkit-app-region: no-drag;
 }

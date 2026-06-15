@@ -570,6 +570,9 @@ export interface AppCopy {
     commandPalette: string;
     hideRightPanel: string;
     showRightPanel: string;
+    minimizeWindow: string;
+    maximizeWindow: string;
+    closeWindow: string;
   };
   commandPalette: {
     label: string;
@@ -1221,6 +1224,9 @@ const koKrCopy: AppCopy = {
     commandPalette: "명령 팔레트",
     hideRightPanel: "오른쪽 패널 숨기기",
     showRightPanel: "오른쪽 패널 보기",
+    minimizeWindow: "창 최소화",
+    maximizeWindow: "창 최대화",
+    closeWindow: "창 닫기",
   },
   commandPalette: {
     label: "명령 팔레트",
@@ -1878,6 +1884,9 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     commandPalette: "Command palette",
     hideRightPanel: "Hide right panel",
     showRightPanel: "Show right panel",
+    minimizeWindow: "Minimize window",
+    maximizeWindow: "Maximize window",
+    closeWindow: "Close window",
   },
   commandPalette: {
     label: "Command palette",

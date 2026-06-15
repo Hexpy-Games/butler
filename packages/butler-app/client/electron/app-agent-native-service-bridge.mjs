@@ -303,7 +303,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=${systemdValue(runtime.runtimeHome)}
+WorkingDirectory=${systemdPathValue(runtime.runtimeHome)}
 ${Object.entries(runtime.env).map(([key, value]) =>
     `Environment=${key}=${systemdValue(value)}`,
   ).join("\n")}
@@ -423,4 +423,18 @@ function systemdValue(value) {
     .replaceAll("\\", "\\\\")
     .replaceAll("\"", "\\\"")
     .replaceAll("%", "%%")}"`;
+}
+
+function systemdPathValue(value) {
+  let escaped = "";
+  for (const character of String(value)) {
+    if (/^[A-Za-z0-9/_.:-]$/u.test(character)) {
+      escaped += character;
+      continue;
+    }
+    for (const byte of Buffer.from(character, "utf8")) {
+      escaped += `\\x${byte.toString(16).padStart(2, "0")}`;
+    }
+  }
+  return escaped;
 }

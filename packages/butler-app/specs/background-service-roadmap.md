@@ -249,6 +249,34 @@ Validation:
 
 - `bun test tests/unit/app-first-run-setup-bridge.test.ts tests/unit/app-first-run-setup-bridge-runtime.test.ts packages/butler-app/client/ui/src/components/first-run/FirstRunSetup.test.tsx tests/unit/app-first-run-setup.test.ts`
 
+## Phase 3A: App Chrome For Linux Packages
+
+Goal: make packaged Linux App chrome match the integrated App distribution
+contract without relying on macOS traffic-light spacing.
+
+Tasks:
+
+1. Keep macOS traffic-light spacing only on macOS.
+2. Render Linux and Windows App-owned window controls at the titlebar edge,
+   outside normal trailing toolbar flow.
+3. Keep the sidebar toggle flush to the left edge when App-owned window
+   controls are shown on the right.
+4. Use a frameless transparent Linux window so the renderer-owned rounded
+   shell frame can define the visible window radius.
+5. Verify the packaged Linux `.deb` in Ubuntu before reporting completion.
+
+Acceptance:
+
+- Linux/Windows titlebars do not reserve left traffic-light space.
+- Linux/Windows window controls are visually anchored to the top-right edge.
+- The renderer shell clips to a rounded outer frame on Linux packaged builds.
+- macOS keeps native traffic lights and native rounded window behavior.
+
+Validation:
+
+- `bun test tests/unit/app-client-design.test.ts --test-name-pattern "desktop native shell supports notifications tray and cross-platform titlebar reserves|dedicated client sidebar collapse keeps a normal clickable titlebar toggle|electron shell uses native macOS corners"`
+- Packaged Ubuntu ARM64 `.deb` smoke screenshot
+
 ## Phase 4: Tray/Menu Bar Service Controller
 
 Goal: make the tray/menu bar represent background service state.

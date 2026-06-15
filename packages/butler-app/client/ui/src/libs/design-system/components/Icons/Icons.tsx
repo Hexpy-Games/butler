@@ -60,6 +60,7 @@ export const ImageIcon = createIcon("Image01Icon");
 export const LayoutDashboard = createIcon("LayoutGridIcon");
 export const ListChecks = createIcon("Task01Icon");
 export const MessageSquarePlus = createIcon("MessageAdd01Icon");
+export const Minus = createIcon("MinusSignIcon");
 export const Monitor = createIcon("ComputerIcon");
 export const Moon = createIcon("Moon02Icon");
 export const MoreHorizontal = createIcon("MoreHorizontalIcon");

@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  renameSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -103,6 +104,7 @@ export function createServiceReleasePackage(
     };
     copyManifestFiles(root, stageRoot, manifest);
     writeServicePackageJson(root, stageRoot);
+    installServiceProductionDependencies(stageRoot);
     buildAppWebClientDist(root, stageRoot);
     buildPrebuiltCliLaunchers(
       root,
@@ -205,6 +207,44 @@ function writeServicePackageJson(root: string, stageRoot: string): void {
     workspaces: [...SERVICE_WORKSPACES],
     scripts: serviceScripts,
   });
+}
+
+function installServiceProductionDependencies(stageRoot: string): void {
+  const lockfilePath = join(stageRoot, "bun.lock");
+  const preservedLockfilePath = join(stageRoot, "bun.lock.release");
+  const targetOs = process.env.BUTLER_AGENT_DEPENDENCY_OS?.trim();
+  const targetCpu = process.env.BUTLER_AGENT_DEPENDENCY_CPU?.trim();
+  const targetArgs = [
+    ...(targetOs ? [`--os=${targetOs}`] : []),
+    ...(targetCpu ? [`--cpu=${targetCpu}`] : []),
+  ];
+  if (existsSync(lockfilePath)) {
+    rmSync(preservedLockfilePath, { force: true });
+    renameSync(lockfilePath, preservedLockfilePath);
+  }
+  const result = spawnSync(process.env.BUTLER_BUN || "bun", [
+    "install",
+    "--production",
+    "--no-save",
+    "--no-frozen-lockfile",
+    "--linker=hoisted",
+    "--backend=copyfile",
+    ...targetArgs,
+  ], {
+    cwd: stageRoot,
+    encoding: "utf8",
+  });
+  rmSync(lockfilePath, { force: true });
+  if (existsSync(preservedLockfilePath)) {
+    renameSync(preservedLockfilePath, lockfilePath);
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `service dependency install failed: ${
+        summarizeCommandOutput(result.stderr || result.stdout) || "unknown error"
+      }`,
+    );
+  }
 }
 
 function buildAppWebClientDist(root: string, stageRoot: string): void {

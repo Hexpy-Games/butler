@@ -287,6 +287,11 @@ test("dedicated client sidebar collapse keeps a normal clickable titlebar toggle
   expect(css).toContain(":global(.mac-window.browser-chrome)");
   expect(css).toContain("--traffic-controls-width: 0px");
   expect(css).toContain("--chrome-floating-toggle-left: 0px");
+  expect(css).toContain(":global(.electron-chrome.platform-linux)");
+  expect(collapseWhitespace(css)).toContain(
+    "--titlebar-collapsed-left-padding: calc( var(--chrome-floating-toggle-left) + 44px )",
+  );
+  expect(css).toContain("--chrome-floating-toggle-left: 10px");
   expect(css).toMatch(
     /grid-template-columns:\s*minmax\(\s*0,\s*var\(--shell-left-column-target-width\)\s*\)\s*minmax\(\s*0,\s*1fr\s*\)\s*minmax\(\s*0,\s*var\(--shell-right-column-target-width\)\s*\);/,
   );
@@ -572,7 +577,8 @@ test("electron shell uses native macOS corners and sidebar vibrancy", () => {
   expect(electronMain).toContain(
     "trafficLightPosition: macTrafficLightPosition",
   );
-  expect(electronMain).toContain("transparent: isMac");
+  expect(electronMain).toContain("frame: isLinux ? false : undefined");
+  expect(electronMain).toContain("transparent: usesTransparentWindow");
   expect(electronMain).toContain("vibrancy: isMac ? macVibrancy : undefined");
   expect(electronMain).toContain("win.setVibrancy(macVibrancy)");
   expect(electronMain).toContain(
@@ -932,6 +938,12 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   const appShell = read("packages/butler-app/client/ui/src/pages/AppShell.tsx");
   const appApi = read("packages/butler-app/client/ui/src/app/api.ts");
   const appCopy = read("packages/butler-app/client/ui/src/app/copy.ts");
+  const titlebar = read(
+    "packages/butler-app/client/ui/src/components/layout/Titlebar.tsx",
+  );
+  const nativeWindowControls = read(
+    "packages/butler-app/client/ui/src/app/nativeWindowControls.ts",
+  );
   const nativeNotifications = read(
     "packages/butler-app/client/ui/src/app/nativeNotifications.ts",
   );
@@ -965,6 +977,12 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("ms-settings:notifications");
   expect(electronMain).toContain("butler:set-native-shell-preferences");
   expect(electronMain).toContain("butler:native-navigation");
+  expect(electronMain).toContain("butler:window-minimize");
+  expect(electronMain).toContain("butler:window-toggle-maximize");
+  expect(electronMain).toContain("butler:window-close");
+  expect(electronMain).toContain("win.minimize()");
+  expect(electronMain).toContain("win.isMaximized()");
+  expect(electronMain).toContain("win.close()");
   expect(electronMain).toContain("nativeNotificationStatus");
   expect(electronMain).toContain("details_code");
   expect(electronMain).toContain("settings_target");
@@ -1004,6 +1022,9 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronPreload).toContain("openNativeNotificationSettings");
   expect(electronPreload).toContain("setNativeShellPreferences");
   expect(electronPreload).toContain("onNativeNavigation");
+  expect(electronPreload).toContain("minimizeWindow");
+  expect(electronPreload).toContain("toggleWindowMaximize");
+  expect(electronPreload).toContain("closeWindow");
   expect(appApi).toContain("showDesktopNotification?:");
   expect(appApi).toContain("getNativeNotificationStatus?:");
   expect(appApi).toContain("testDesktopNotification?:");
@@ -1018,7 +1039,20 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(nativeNotifications).toContain("showDesktopNotification");
   expect(nativeNotifications).toContain("subscribeNativeNavigation");
   expect(appCopy).toContain("nativeNotifications");
+  expect(appCopy).toContain("minimizeWindow");
+  expect(appCopy).toContain("maximizeWindow");
+  expect(appCopy).toContain("closeWindow");
   expect(appCopy).toContain("macosPermission");
+  expect(nativeWindowControls).toContain('bridge.platform === "darwin"');
+  expect(nativeWindowControls).toContain("shouldShowAppWindowControls");
+  expect(titlebar).toContain("windowControls={<WindowControls />}");
+  const windowControls = read(
+    "packages/butler-app/client/ui/src/components/layout/WindowControls.tsx",
+  );
+  expect(windowControls).toContain('data-test-class="app-window-controls"');
+  expect(windowControls).toContain("minimizeNativeWindow");
+  expect(windowControls).toContain("toggleNativeWindowMaximize");
+  expect(windowControls).toContain("closeNativeWindow");
   expect(appShell).toContain("platformClassName()");
   expect(appShell).toContain("useNativeShellPreferences");
   expect(generalSettings).toContain("DesktopShellSettings");
@@ -1033,9 +1067,16 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(nativeNotificationStatusPanel).toContain("openNativeNotificationSettings");
   expect(shellStyles).toContain(":global(.electron-chrome.platform-win32)");
   expect(shellStyles).toContain("--window-controls-width");
+  expect(shellStyles).toContain("--traffic-controls-width: 0px");
+  expect(shellStyles).toContain("--chrome-floating-toggle-left: 10px");
+  expect(shellStyles).toContain("border-radius: var(--app-window-radius)");
+  expect(shellStyles).toContain("padding: var(--app-window-frame-inset)");
   expect(titlebarShellStyles).toContain(
     "padding-right: calc(18px + var(--window-controls-width, 0px))",
   );
+  expect(titlebarShellStyles).toContain("windowControls");
+  expect(titlebarShellStyles).toContain("inset-inline-end: 10px");
+  expect(titlebarShellStyles).toContain("position: absolute");
   expect(packageJson.scripts).toHaveProperty("package:win");
   expect(packageJson.scripts).toHaveProperty("package:linux");
 });

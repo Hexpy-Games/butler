@@ -7,6 +7,8 @@
   --shell-right-column-width: min(var(--right-panel-width), 100vw);
   --shell-left-column-target-width: var(--shell-left-column-width);
   --shell-right-column-target-width: 0px;
+  --app-window-frame-inset: 0px;
+  --app-window-radius: 18px;
 
   grid-template-columns:
     minmax(0, var(--shell-left-column-target-width)) minmax(0, 1fr)
@@ -15,10 +17,12 @@
   height: 100vh;
   color: var(--text-primary);
   background: var(--sidebar-bg);
+  border-radius: var(--app-window-radius);
   transition: grid-template-columns 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   display: grid;
   position: relative;
   overflow: hidden;
+  padding: var(--app-window-frame-inset);
 }
 
 :global(.mac-window.browser-chrome) {
@@ -34,6 +38,14 @@
 :global(.electron-chrome.platform-linux) {
   --traffic-controls-width: 0px;
   --window-controls-width: 138px;
+  --chrome-floating-toggle-left: 10px;
+  --titlebar-collapsed-left-padding: calc(
+    var(--chrome-floating-toggle-left) + 44px
+  );
+}
+
+:global(.electron-chrome.platform-linux) {
+  --app-window-frame-inset: 1px;
 }
 
 :global(.mac-window.right-open) {
@@ -73,7 +85,7 @@
   position: relative;
   z-index: 6;
   min-width: 0;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
   contain: layout paint style;
 }
@@ -136,7 +148,7 @@
   position: relative;
   background: var(--workspace-bg);
   min-width: 0;
-  height: 100vh;
+  height: 100%;
   transition: background 0.18s;
   display: grid;
   border-radius: 18px;
