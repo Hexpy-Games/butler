@@ -185,9 +185,9 @@ test("README directs default installs to Butler App and advanced installs to Age
   const development = readme.slice(developmentStart);
 
   expect(quickStart).toContain("GitHub Release");
-  expect(quickStart).toContain("butler-app-<version>-darwin-arm64.pkg");
-  expect(quickStart).toContain("butler-app-<version>-linux-x64.deb");
-  expect(quickStart).toContain("butler-app-<version>-linux-arm64.deb");
+  expect(quickStart).toContain(`butler-app-${currentVersion}-darwin-arm64.pkg`);
+  expect(quickStart).toContain(`butler-app-${currentVersion}-linux-x64.deb`);
+  expect(quickStart).toContain(`butler-app-${currentVersion}-linux-arm64.deb`);
   expect(normalizedQuickStart).toContain("Butler Agent is included in the app");
   expect(quickStart).toContain("Butler Agent를 준비합니다");
   expect(quickStart).not.toContain("butler-agent-*-all.tar.gz");
@@ -329,9 +329,11 @@ test("current release notes describe the GitHub release changelog", () => {
 
   expect(notes).toContain(`# Butler ${currentReleaseTag}`);
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("bounded concurrent session execution");
-  expect(notes).toContain("WorkStream continuity");
-  expect(notes).toContain("live context usage telemetry");
-  expect(notes).toContain("scroll-to-bottom");
-  expect(notes).toContain("Project Ledger dashboard freshness");
+  expect(notes).toContain("Butler App integrated distribution path");
+  expect(notes).toContain("bundled Agent runtime");
+  expect(notes).toContain("macOS `.pkg`");
+  expect(notes).toContain("Linux `.deb` artifacts for x64 and ARM64");
+  expect(notes).toContain("first-run setup");
+  expect(notes).toContain("App release manifests");
+  expect(notes).toContain("README install guidance");
 });

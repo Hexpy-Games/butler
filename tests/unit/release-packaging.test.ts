@@ -403,7 +403,11 @@ test("app release manifest validation enforces bundled Agent version coupling", 
       bundledAgentVersion: current.bundledAgentVersion,
     }),
   ).toEqual([]);
+  expect(validateAppReleaseVersionCoupling(current, { version: "0.0.0" })).toEqual([]);
   expect(validateAppReleaseVersionCoupling(current, { version: current.version })).toEqual([
+    "app release version must change when previous bundled Agent version is unavailable",
+  ]);
+  expect(validateAppReleaseVersionCoupling({ version: current.version }, current)).toEqual([
     "app release version coupling requires app version and bundled Agent version",
   ]);
 });
