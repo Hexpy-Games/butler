@@ -5,6 +5,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   BUTLER_TOOLS,
+  WEATHER_TOOL_PACK,
   butlerToolsForAgentLoop,
   createButlerToolExecutor,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
@@ -47,9 +48,6 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   expect(BUTLER_TOOLS.map((tool) => tool.name)).toEqual([
     "web_search",
     "web_read",
-    "get_weather_with_knowhow",
-    "record_weather_source_feedback",
-    "run_weather_knowhow_consolidation",
     "transform_public_data_table",
     "run_command",
     "get_work_dashboard",
@@ -99,9 +97,6 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   ]);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "web_search")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "web_read")?.concurrencySafe).toBe(true);
-  expect(BUTLER_TOOLS.find((tool) => tool.name === "get_weather_with_knowhow")?.concurrencySafe).toBe(true);
-  expect(BUTLER_TOOLS.find((tool) => tool.name === "record_weather_source_feedback")?.concurrencySafe).toBe(true);
-  expect(BUTLER_TOOLS.find((tool) => tool.name === "run_weather_knowhow_consolidation")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "transform_public_data_table")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "run_command")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "get_work_dashboard")?.concurrencySafe).toBe(true);
@@ -151,6 +146,15 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   const personaPresetProperty = onboardingProperties?.persona_preset as { enum?: unknown; description?: unknown } | undefined;
   expect(personaPresetProperty?.enum).toBeUndefined();
   expect(String(personaPresetProperty?.description)).toContain("persona_preset id");
+});
+
+test("weather tools are isolated in an optional domain pack outside the core registry", () => {
+  expect(BUTLER_TOOLS.map((tool) => tool.name)).not.toContain("get_weather_with_knowhow");
+  expect(WEATHER_TOOL_PACK.tools.map((tool) => tool.name)).toEqual([
+    "get_weather_with_knowhow",
+    "record_weather_source_feedback",
+    "run_weather_knowhow_consolidation",
+  ]);
 });
 
 test("basic project turns expose a bounded startup and project tool profile", () => {
@@ -227,9 +231,9 @@ test("web_read schema exposes bounded page evidence controls", () => {
 });
 
 test("weather know-how schemas expose live weather and feedback controls", () => {
-  const weatherTool = BUTLER_TOOLS.find((item) => item.name === "get_weather_with_knowhow");
-  const feedbackTool = BUTLER_TOOLS.find((item) => item.name === "record_weather_source_feedback");
-  const consolidationTool = BUTLER_TOOLS.find((item) => item.name === "run_weather_knowhow_consolidation");
+  const weatherTool = WEATHER_TOOL_PACK.tools.find((item) => item.name === "get_weather_with_knowhow");
+  const feedbackTool = WEATHER_TOOL_PACK.tools.find((item) => item.name === "record_weather_source_feedback");
+  const consolidationTool = WEATHER_TOOL_PACK.tools.find((item) => item.name === "run_weather_knowhow_consolidation");
 
   expect(weatherTool?.parameters.required).toEqual(["latitude", "longitude"]);
   expect(Object.keys(weatherTool?.parameters.properties ?? {})).toEqual([
@@ -2254,7 +2258,7 @@ test("tool capability tools list disabled reasons without ranking intent", async
     args: { category: "search", include_disabled: false },
     rawArguments: "{}",
   }) as Record<string, any>;
-  expect(enabledOnly.capabilities.map((item: any) => item.name)).toEqual(["get_weather_with_knowhow", "web_read"]);
+  expect(enabledOnly.capabilities.map((item: any) => item.name)).toEqual(["web_read"]);
 
   expect(BUTLER_TOOLS.find((tool) => tool.name === "select_tool_capability")).toBeUndefined();
 });
