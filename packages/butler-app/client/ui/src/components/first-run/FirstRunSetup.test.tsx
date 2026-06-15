@@ -64,7 +64,7 @@ test("first-run setup renders the minimal Electron setup order", async () => {
   expect(rendered.container.textContent).not.toContain("persona");
 
   await clickButton(rendered.container, "계속");
-  expect(rendered.calls).toContain("updateSettings");
+  expect(rendered.calls).not.toContain("updateSettings");
   expect(rendered.container.textContent).toContain("안전고지");
   expect(rendered.container.querySelector('[aria-current="step"]')?.textContent)
     .toContain("안전고지");
@@ -335,11 +335,17 @@ test("first-run model setup waits for a newly added model before completion", as
   await waitForText(rendered.container, "API key");
   expect(buttonByLabel(rendered.container, "저장하고 시작")).toBeUndefined();
   await addHostedModelAndFinish(rendered);
-  expect(rendered.settingsPatches).toContainEqual({
-    model: "openai/gpt-5.5",
-    reasoning_effort: "xhigh",
-    context_window_tokens: 258000,
-  });
+  expect(rendered.settingsPatches.some((patch) =>
+    hasSettingsPatchFields(
+      patch,
+      {
+        language: "ko",
+        model: "openai/gpt-5.5",
+        reasoning_effort: "xhigh",
+        context_window_tokens: 258000,
+      },
+    ),
+  )).toBe(true);
   expect(rendered.completedStates[0]?.status).toBe("complete");
 
   await act(async () => rendered.root.unmount());
@@ -719,6 +725,15 @@ function isHostedModelRequest(
   value: unknown,
 ): value is { auth_type?: ProviderAuthMethod } {
   return Boolean(value && typeof value === "object" && "auth_type" in value);
+}
+
+function hasSettingsPatchFields(
+  value: unknown,
+  expected: Record<string, unknown>,
+): boolean {
+  if (!value || typeof value !== "object") return false;
+  const patch = value as Record<string, unknown>;
+  return Object.entries(expected).every(([key, field]) => patch[key] === field);
 }
 
 function firstRunModelCatalog(

@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "@/app/api.ts";
 import { setAppCopyLanguage } from "@/app/copy.ts";
 import {
   firstRunCompleteState,
   firstRunCopy,
   nextFirstRunState,
-  settingsLanguagePatch,
   startFirstRunSetup,
   exportFirstRunSetupDiagnostics,
   writeFirstRunState,
@@ -74,16 +72,8 @@ export function useFirstRunSetupController(
     step,
   ]);
 
-  async function selectLanguage() {
+  function selectLanguage() {
     setError("");
-    try {
-      await api("/settings", {
-        method: "PATCH",
-        body: JSON.stringify(settingsLanguagePatch(language)),
-      });
-    } catch {
-      // The visible app language still follows the selected first-run language.
-    }
     setState((current) =>
       nextFirstRunState(current, { type: "continue_language" }),
     );

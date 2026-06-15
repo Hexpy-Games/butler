@@ -219,6 +219,9 @@ Implemented surface:
   step and do not call managed gateway readiness.
 - Existing first-run UI copy and retry/diagnostics controls are reused for the
   service setup failure path.
+- Language selection advances locally without touching `/settings` or
+  `butler:ensure-server`; the selected language is persisted with the model
+  settings patch after the Agent gateway is ready.
 - Native service gateway readiness is retried after service start so launchd or
   systemd can finish spawning the service-owned app gateway before first-run or
   renderer API bootstrap reports failure.
