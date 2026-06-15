@@ -369,7 +369,37 @@ test("first-run model setup recovers when default was saved before completion", 
   await waitForText(rendered.container, "모델 추가");
   await waitForCompletion(rendered);
   expect(rendered.calls).not.toContain("registerHostedModel");
+  expect(rendered.settingsPatches.some((patch) =>
+    hasSettingsPatchFields(patch, { language: "ko" }),
+  )).toBe(true);
   expect(rendered.completedStates[0]?.status).toBe("complete");
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run model setup blocks completion when selected language cannot be saved", async () => {
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "model",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "ready",
+    },
+    {
+      failLanguageSaveOnce: true,
+      modelCatalog: firstRunRegisteredModelCatalog(),
+      settings: { ...EMPTY_SETTINGS, model: "openai/gpt-5.5" },
+    },
+  );
+
+  await waitForText(rendered.container, "모델 설정을 저장하지 못했습니다.");
+  expect(rendered.completedStates).toHaveLength(0);
+  await clickButton(rendered.container, "다시 불러오기");
+  await waitForCompletion(rendered);
+  expect(rendered.settingsPatches.filter((patch) =>
+    hasSettingsPatchFields(patch, { language: "ko" }),
+  )).toHaveLength(2);
 
   await act(async () => rendered.root.unmount());
 });
@@ -472,6 +502,7 @@ async function renderFirstRun(
   options: {
     failHealthOnce?: boolean;
     failDefaultSaveOnce?: boolean;
+    failLanguageSaveOnce?: boolean;
     failModelCatalogOnce?: boolean;
     holdBundledAgent?: Promise<void>;
     holdHostedRegister?: Promise<void>;
@@ -518,6 +549,7 @@ async function renderFirstRun(
   let setupFailures = options.failHealthOnce ? 1 : 0;
   let modelCatalogFailures = options.failModelCatalogOnce ? 1 : 0;
   let defaultSaveFailures = options.failDefaultSaveOnce ? 1 : 0;
+  let languageSaveFailures = options.failLanguageSaveOnce ? 1 : 0;
   let setupRejections = options.rejectSetupOnce ? 1 : 0;
   const oauthStatusResults = [...(options.oauthStatusResults ?? [])];
   Object.assign(dom.window, {
@@ -620,6 +652,14 @@ async function renderFirstRun(
       updateSettings: async (patch?: unknown) => {
         calls.push("updateSettings");
         settingsPatches.push(patch);
+        if (
+          languageSaveFailures > 0 &&
+          hasSettingsPatchFields(patch, { language: "ko" }) &&
+          !hasSettingsPatchFields(patch, { model: "openai/gpt-5.5" })
+        ) {
+          languageSaveFailures -= 1;
+          throw new Error("language save failed");
+        }
         if (
           defaultSaveFailures > 0 &&
           typeof patch === "object" &&

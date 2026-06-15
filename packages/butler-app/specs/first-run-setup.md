@@ -77,6 +77,10 @@ Agent process.
 - The model step may complete setup only after App settings and model catalog
   are loaded and a registered, runtime-supported model has been saved as the
   default model.
+- The selected first-run language must be persisted to App settings after the
+  Agent is ready and before first-run setup can complete, including recovery
+  paths where a registered default model already exists and no model-default
+  save is needed.
 - If the App restarts after the model was registered and saved as default but
   before the final setup confirmation, the model step must allow completion
   without requiring the user to add the same model again.
@@ -106,7 +110,8 @@ Agent process.
 - Component tests cover the four-step order, absence of gateway/persona copy,
   bundled-Agent-only installation, model-add-first setup, added-model default
   persistence, automatic completion after add, post-save recovery,
-  default-save retry, OAuth login/registration, immediate OAuth session start,
+  selected-language persistence before completion, default-save retry,
+  OAuth login/registration, immediate OAuth session start,
   automatic/manual OAuth completion checks, OAuth pending recovery controls,
   breadcrumb hiding, and no Settings route.
 - Electron OAuth helper tests prove packaged App-managed installs resolve the

@@ -80,7 +80,27 @@ export function useFirstRunModelSetup({
           api<ModelCatalogView>("/model-catalog"),
         ]);
         if (cancelled) return;
-        const localizedSettings = { ...settings, language };
+        let persistedLanguageSettings: Partial<SettingsView> = {};
+        if (settings.language !== language) {
+          try {
+            persistedLanguageSettings = await api<Partial<SettingsView>>("/settings", {
+              method: "PATCH",
+              body: JSON.stringify({ language }),
+            });
+          } catch {
+            if (!cancelled) {
+              setModelLoadFailed(true);
+              setModelSaveStatus(copy.modelSaveFailed);
+            }
+            return;
+          }
+        }
+        if (cancelled) return;
+        const localizedSettings = {
+          ...settings,
+          ...persistedLanguageSettings,
+          language,
+        };
         useButlerStore.getState().setSettings(localizedSettings);
         useButlerStore.getState().setModelCatalog(catalog);
         initialRegisteredModelRefs.current = new Set(
@@ -108,7 +128,14 @@ export function useFirstRunModelSetup({
     return () => {
       cancelled = true;
     };
-  }, [copy.modelLoadFailed, copy.modelLoading, enabled, language, loadAttempt]);
+  }, [
+    copy.modelLoadFailed,
+    copy.modelLoading,
+    copy.modelSaveFailed,
+    enabled,
+    language,
+    loadAttempt,
+  ]);
 
   const modelSettingsReady =
     enabled && !loading && !modelLoadFailed && modelSettingsLoaded;
