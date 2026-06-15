@@ -11,7 +11,9 @@ interface NotifyStatusOptions {
 }
 
 export function safeErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() ? error.message : fallback;
+  if (!(error instanceof Error) || !error.message.trim()) return fallback;
+  if (/^Error invoking remote method/u.test(error.message)) return fallback;
+  return error.message;
 }
 
 export function notifyLoading(message: string, options: NotifyOptions = {}): void {

@@ -16,6 +16,9 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   const setupBridge = readRepoFile(
     "packages/butler-app/client/electron/setup-bridge.mjs",
   );
+  const oauthHelper = readRepoFile(
+    "packages/butler-app/client/electron/openai-oauth-login-helper.mjs",
+  );
   const api = readRepoFile("packages/butler-app/client/ui/src/app/api.ts");
 
   expect(preload).toContain("getSetupStatus");
@@ -79,7 +82,13 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(main).toContain('ipcMain.handle("butler:restart-openai-oauth-login"');
   expect(main).toContain('ipcMain.handle("butler:get-openai-oauth-login-status"');
   expect(main).toContain('ipcMain.handle("butler:submit-openai-oauth-callback"');
-  expect(main).toContain("openai-oauth-login.ts");
+  expect(main).toContain("resolveOpenAIOAuthLoginHelper");
+  expect(oauthHelper).toContain("openai-oauth-login.ts");
+  expect(oauthHelper).toContain("appManagedAgentPointerPath");
+  expect(oauthHelper).toContain("resources");
+  expect(oauthHelper).toContain("runtime");
+  expect(oauthHelper).toContain("bin");
+  expect(oauthHelper).toContain("bun");
   expect(main).toContain("BUTLER_CODEX_OAUTH_CLIENT_ID");
   expect(main).toContain("BUTLER_CODEX_OAUTH_NO_BROWSER");
   expect(main).toContain("OAuth login is not pending.");

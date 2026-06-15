@@ -50,6 +50,9 @@ Agent process.
   `install.sh`: use the app's isolated `BUTLER_DATA`, detect an existing
   Codex auth profile, otherwise launch the OAuth login helper, then register
   the selected model with `auth_type: "codex_oauth"`.
+- In App-managed installs, OpenAI Codex OAuth must resolve the login helper and
+  Bun runtime from the active App-managed Agent pointer under the isolated
+  `BUTLER_DATA` before falling back to development checkout paths.
 - During OpenAI Codex OAuth, the first-run UI must keep recovery controls on
   screen: show the OAuth URL, allow copying/opening it, automatically check
   completion after the browser finishes authentication, allow a manual
@@ -106,6 +109,8 @@ Agent process.
   default-save retry, OAuth login/registration, immediate OAuth session start,
   automatic/manual OAuth completion checks, OAuth pending recovery controls,
   breadcrumb hiding, and no Settings route.
+- Electron OAuth helper tests prove packaged App-managed installs resolve the
+  helper and runtime from the active App-managed Agent pointer.
 - Electron setup bridge tests prove the install step calls service-control
   before managed gateway readiness and fails closed when registration is
   unavailable.
