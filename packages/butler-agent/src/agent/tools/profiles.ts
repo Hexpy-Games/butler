@@ -28,6 +28,7 @@ const PROJECT_TOOL_NAMES = [
   "inspect_project_status",
   "query_project_work",
   "render_project_dashboard",
+  "complete_project_work",
 ] as const;
 
 const WORKSPACE_TOOL_NAMES = [

@@ -368,7 +368,6 @@ function recentCommandArtifacts(input: {
       if (artifact) artifacts.push(artifact);
     }
   };
-  visit(input.cwd, 0);
   visit(commandGeneratedArtifactRoot(input.butlerData), 0);
   return artifacts;
 }

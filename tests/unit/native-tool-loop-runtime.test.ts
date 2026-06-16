@@ -710,6 +710,7 @@ test("native runtime sends a profiled tool surface for basic project turns", asy
     "inspect_project_status",
     "query_project_work",
     "render_project_dashboard",
+    "complete_project_work",
     "get_context_monitor",
     "list_tool_capabilities",
     "update_todo_list",
@@ -987,13 +988,20 @@ test("native runtime can drive the real run_command tool through the default exe
         text: "작업: 워크스페이스 안에서 검증 파일을 생성합니다.\n이유: 직접 명령 도구가 실제 파일 작업까지 수행하는지 확인해야 합니다.\n다음: 생성된 파일을 근거로 결과를 보고합니다.",
         toolCalls: [{
           name: "run_command",
-          args: { command: "printf 'ok\\n' > command-proof.txt && cat command-proof.txt" },
+          args: {
+            command: "printf 'ok\\n' > command-proof.txt && cat command-proof.txt",
+            output_paths: ["command-proof.txt"],
+          },
         }],
       });
+      const args = {
+        command: "printf 'ok\\n' > command-proof.txt && cat command-proof.txt",
+        output_paths: ["command-proof.txt"],
+      };
       const result = await input.executeTool({
         name: "run_command",
-        args: { command: "printf 'ok\\n' > command-proof.txt && cat command-proof.txt" },
-        rawArguments: JSON.stringify({ command: "printf 'ok\\n' > command-proof.txt && cat command-proof.txt" }),
+        args,
+        rawArguments: JSON.stringify(args),
       }) as { stdout?: string };
       expect(result.stdout).toContain("ok");
       return "검증 파일을 만들고 확인했습니다.";
