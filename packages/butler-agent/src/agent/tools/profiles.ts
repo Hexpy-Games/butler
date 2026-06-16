@@ -152,12 +152,6 @@ const WORKER_FORBIDDEN_TOOL_NAMES = new Set([
   "complete_project_work",
 ]);
 
-const DOMAIN_PACK_TOOL_NAMES = new Set([
-  "get_weather_with_knowhow",
-  "record_weather_source_feedback",
-  "run_weather_knowhow_consolidation",
-]);
-
 const ALL_TOOL_NAMES = new Set(BUTLER_TOOLS.map((tool) => tool.name));
 
 function recordValue(value: unknown): Record<string, unknown> {
@@ -297,13 +291,11 @@ export function selectButlerToolsForTurn(input: {
     }
   }
   for (const name of requiredToolNames(input.turnMetadata)) {
-    if (DOMAIN_PACK_TOOL_NAMES.has(name)) continue;
     if (input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(name)) continue;
     allowedNames.add(name);
   }
   return tools.filter((tool) =>
     allowedNames.has(tool.name) &&
-    !DOMAIN_PACK_TOOL_NAMES.has(tool.name) &&
     !(input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(tool.name)),
   );
 }

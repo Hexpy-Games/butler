@@ -1,9 +1,6 @@
 import type { ButlerToolDefinition, ToolCapabilityMetadata } from "./types.ts";
 import { webSearchToolDefinition, webSearchToolMetadata } from "./web_search/index.ts";
 import { webReadToolDefinition, webReadToolMetadata } from "./web_read/index.ts";
-import { getWeatherWithKnowhowToolDefinition, getWeatherWithKnowhowToolMetadata } from "../tool-packs/weather/get_weather_with_knowhow/index.ts";
-import { recordWeatherSourceFeedbackToolDefinition, recordWeatherSourceFeedbackToolMetadata } from "../tool-packs/weather/record_weather_source_feedback/index.ts";
-import { runWeatherKnowhowConsolidationToolDefinition, runWeatherKnowhowConsolidationToolMetadata } from "../tool-packs/weather/run_weather_knowhow_consolidation/index.ts";
 import { transformPublicDataTableToolDefinition, transformPublicDataTableToolMetadata } from "./transform_public_data_table/index.ts";
 import { runCommandToolDefinition, runCommandToolMetadata } from "./run_command/index.ts";
 import { getWorkDashboardToolDefinition, getWorkDashboardToolMetadata } from "./get_work_dashboard/index.ts";
@@ -101,24 +98,6 @@ export const CORE_BUTLER_TOOLS = [
   listTasksToolDefinition,
   getTaskResultToolDefinition,
 ] satisfies ButlerToolDefinition[];
-
-export const WEATHER_TOOL_PACK = {
-  id: "weather",
-  tools: [
-    getWeatherWithKnowhowToolDefinition,
-    recordWeatherSourceFeedbackToolDefinition,
-    runWeatherKnowhowConsolidationToolDefinition,
-  ] satisfies ButlerToolDefinition[],
-  metadata: {
-    [getWeatherWithKnowhowToolDefinition.name]: getWeatherWithKnowhowToolMetadata,
-    [recordWeatherSourceFeedbackToolDefinition.name]: recordWeatherSourceFeedbackToolMetadata,
-    [runWeatherKnowhowConsolidationToolDefinition.name]: runWeatherKnowhowConsolidationToolMetadata,
-  } satisfies Record<string, ToolCapabilityMetadata>,
-} as const;
-
-export const OPTIONAL_BUTLER_TOOL_PACKS = {
-  weather: WEATHER_TOOL_PACK,
-} as const;
 
 export const BUTLER_TOOLS = CORE_BUTLER_TOOLS;
 
