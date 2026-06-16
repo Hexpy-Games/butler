@@ -23,13 +23,6 @@ import {
   buildCognitionNamespaceMigrationPlan,
 } from "../../agent/cognition/migration.ts";
 import {
-  recordWeatherFeedback,
-  runWeatherConsolidationReview,
-  runWeatherKnowHow,
-  weatherKnowHowState,
-  type WeatherSourceId,
-} from "../../agent/cognition/weather-knowhow.ts";
-import {
   aggregateSourceQuality,
   listKnowHowEntries,
   readKnowHowEntry,
@@ -1589,20 +1582,6 @@ function cognitionMigrate(parsed: ParsedCommonOptions, args: string[], commandBa
   ].filter(Boolean).join("\n"));
 }
 
-function requiredNumber(parsed: ParsedCommonOptions, args: string[], name: string): number {
-  const value = optionValue(args, name);
-  if (!value) fail(parsed, "invalid_arguments", `${name} requires a number`);
-  const parsedNumber = Number(value);
-  if (!Number.isFinite(parsedNumber)) fail(parsed, "invalid_arguments", `${name} requires a valid number`);
-  return parsedNumber;
-}
-
-function sourceIdOption(parsed: ParsedCommonOptions, args: string[], fallback: WeatherSourceId = "open-meteo"): WeatherSourceId {
-  const value = optionValue(args, "--source") ?? fallback;
-  if (value === "open-meteo" || value === "nws") return value;
-  fail(parsed, "invalid_arguments", "--source must be open-meteo or nws");
-}
-
 function cognitionFeedback(parsed: ParsedCommonOptions, args: string[], commandBase: string): void {
   const subcommand = args[0] ?? "list";
   if (subcommand === "list") {
@@ -1819,10 +1798,18 @@ function cognitionKnowHow(parsed: ParsedCommonOptions, args: string[], commandBa
 async function cognitionConsolidation(parsed: ParsedCommonOptions, args: string[], commandBase: string): Promise<void> {
   const subcommand = args[0] ?? "status";
   if (subcommand === "status") {
-    const state = weatherKnowHowState(parsed.options.data);
+    const feedbackEntries = listFeedbackEntries(parsed.options.data);
+    const knowHowEntries = listKnowHowEntries(parsed.options.data);
+    const boxItems = listIndexedBoxItems(parsed.options.data, 100);
+    const state = {
+      feedbackCount: feedbackEntries.length,
+      activeFeedbackCount: feedbackEntries.filter((entry) => entry.status === "active").length,
+      knowhowCount: knowHowEntries.length,
+      boxItems: boxItems.length,
+    };
     print(parsed, `${commandBase} status`, state, [
       `feedback=${state.feedbackCount} active=${state.activeFeedbackCount}`,
-      `knowhow=${state.knowhowCount} sourceQualityEvents=${state.sourceQualityEvents}`,
+      `knowhow=${state.knowhowCount}`,
       `boxItems=${state.boxItems}`,
     ].join("\n"));
     return;
@@ -1837,43 +1824,7 @@ async function cognitionConsolidation(parsed: ParsedCommonOptions, args: string[
     print(parsed, `${commandBase} run --manual`, result, `Consolidation cycle ${result.status}: phases=${result.phases.length}`);
     return;
   }
-  if (subcommand === "weather-review") {
-    const result = runWeatherConsolidationReview(parsed.options.data);
-    print(parsed, `${commandBase} weather-review`, result, `Weather consolidation review complete: revised=${result.revisedKnowHowIds.length}`);
-    return;
-  }
   fail(parsed, "unknown_command", `unknown consolidation command: ${subcommand}`);
-}
-
-async function cognitionWeather(parsed: ParsedCommonOptions, args: string[], commandBase: string): Promise<void> {
-  const subcommand = args[0] ?? "run";
-  if (subcommand === "run") {
-    const latitude = requiredNumber(parsed, args, "--latitude");
-    const longitude = requiredNumber(parsed, args, "--longitude");
-    const result = await runWeatherKnowHow({
-      butlerData: parsed.options.data,
-      latitude,
-      longitude,
-      locationName: optionValue(args, "--location") ?? undefined,
-    });
-    print(parsed, `${commandBase} run`, result, [
-      `${result.location.name}: ${result.summary}`,
-      `source=${result.source} fresh=${result.fresh} age=${result.freshnessAgeMinutes}m`,
-      `knowhow=${result.knowhowId} used=${result.usedKnowHow}`,
-    ].join("\n"));
-    return;
-  }
-  if (subcommand === "feedback") {
-    const text = optionValue(args, "--text");
-    if (!text) fail(parsed, "invalid_arguments", "weather feedback requires --text");
-    const entry = recordWeatherFeedback(parsed.options.data, {
-      sourceId: sourceIdOption(parsed, args),
-      text,
-    });
-    print(parsed, `${commandBase} feedback`, { entry }, `Weather feedback recorded: ${entry.feedback_id}`);
-    return;
-  }
-  fail(parsed, "unknown_command", `unknown weather command: ${subcommand}`);
 }
 
 async function cognition(parsed: ParsedCommonOptions, args: string[], commandBase: "butler cognition" | "butler cog"): Promise<void> {
@@ -1884,7 +1835,6 @@ async function cognition(parsed: ParsedCommonOptions, args: string[], commandBas
   if (subcommand === "box") return cognitionBox(parsed, rest, `${commandBase} box`);
   if (subcommand === "know-how") return cognitionKnowHow(parsed, rest, `${commandBase} know-how`);
   if (subcommand === "consolidation") return await cognitionConsolidation(parsed, rest, `${commandBase} consolidation`);
-  if (subcommand === "weather") return await cognitionWeather(parsed, rest, `${commandBase} weather`);
   fail(parsed, "unknown_command", `unknown cognition command: ${subcommand ?? ""}`);
 }
 

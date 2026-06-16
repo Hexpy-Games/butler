@@ -79,12 +79,6 @@ import type { VectorEpisodeBackend } from "../cognition/memory/recall/vector.ts"
 import { queryMemory } from "../cognition/memory/exact-query.ts";
 import { readReflectiveProfileSummary, type ProfilingMode } from "../../personalization/profiling.ts";
 import {
-  recordWeatherFeedback,
-  runWeatherConsolidationReview,
-  runWeatherKnowHow,
-  type WeatherSourceId,
-} from "../cognition/weather-knowhow.ts";
-import {
   budgetToolOutput,
   readToolOutputArtifactSlice,
   type ShellCommandResult,
@@ -229,8 +223,6 @@ import type {
 export {
   BUTLER_TOOLS,
   CORE_BUTLER_TOOLS,
-  OPTIONAL_BUTLER_TOOL_PACKS,
-  WEATHER_TOOL_PACK,
 } from "./registry.ts";
 export type {
   ButlerToolDefinition,
@@ -2798,45 +2790,6 @@ export function createButlerToolExecutor(input: {
       };
     }
 
-    if (call.name === "get_weather_with_knowhow") {
-      const latitude = typeof call.args.latitude === "number" ? call.args.latitude : Number(call.args.latitude);
-      const longitude = typeof call.args.longitude === "number" ? call.args.longitude : Number(call.args.longitude);
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        throw new Error("get_weather_with_knowhow requires numeric latitude and longitude");
-      }
-      return {
-        ok: true,
-        ...await runWeatherKnowHow({
-          butlerData: input.butlerData,
-          latitude,
-          longitude,
-          locationName: typeof call.args.location === "string" ? call.args.location : undefined,
-        }),
-      };
-    }
-
-    if (call.name === "record_weather_source_feedback") {
-      const source = weatherSourceFromValue(call.args.source) ??
-        latestWeatherSourceFromTranscript(input.butlerData, input.sessionId);
-      if (!source) throw new Error("record_weather_source_feedback requires source or a prior weather result");
-      const text = typeof call.args.text === "string" ? call.args.text.trim() : "";
-      if (!text) throw new Error("record_weather_source_feedback requires text");
-      return {
-        ok: true,
-        entry: recordWeatherFeedback(input.butlerData, {
-          sourceId: source,
-          text,
-        }),
-      };
-    }
-
-    if (call.name === "run_weather_knowhow_consolidation") {
-      return {
-        ok: true,
-        ...runWeatherConsolidationReview(input.butlerData),
-      };
-    }
-
     if (call.name === "transform_public_data_table") {
       return transformPublicDataTable({
         butlerData: input.butlerData,
@@ -3513,42 +3466,4 @@ export function createButlerToolExecutor(input: {
 
     throw new Error(`Unknown Butler tool: ${call.name}`);
   };
-}
-
-function weatherSourceFromValue(value: unknown): WeatherSourceId | null {
-  if (value === "open-meteo" || value === "nws") return value;
-  return null;
-}
-
-function latestWeatherSourceFromTranscript(butlerData: string, sessionId?: string): WeatherSourceId | null {
-  if (!sessionId) return null;
-  const path = join(butlerData, "transcripts", `${sanitizeTranscriptSessionId(sessionId)}.jsonl`);
-  if (!existsSync(path)) return null;
-  const lines = readFileSync(path, "utf8").split(/\r?\n/u).filter(Boolean).reverse();
-  for (const line of lines) {
-    try {
-      const event = JSON.parse(line) as {
-        kind?: unknown;
-        payload?: {
-          name?: unknown;
-          ok?: unknown;
-          result?: { source?: unknown };
-        };
-      };
-      if (
-        event.kind === "tool_result" &&
-        event.payload?.name === "get_weather_with_knowhow" &&
-        event.payload.ok === true
-      ) {
-        return weatherSourceFromValue(event.payload.result?.source);
-      }
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
-function sanitizeTranscriptSessionId(sessionId: string): string {
-  return sessionId.replace(/[^A-Za-z0-9._-]/g, "_");
 }

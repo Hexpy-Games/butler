@@ -936,6 +936,20 @@ test("operator cognition consolidation runs the generic cycle manually", () => {
   }
 });
 
+test("operator cognition weather command is not available", () => {
+  const butlerData = tempRoot();
+  try {
+    const result = runCli(["cognition", "weather", "run", "--latitude", "37.5665", "--longitude", "126.9780", "--json"], butlerData);
+    expect(result.exitCode).toBe(2);
+    const parsed = JSON.parse(stdoutText(result));
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error.code).toBe("unknown_command");
+    expect(parsed.error.message).toContain("unknown cognition command: weather");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("operator lifecycle commands require explicit confirmation for mutation", async () => {
   const butlerData = tempRoot();
   const updateVersion = "99.0.0";

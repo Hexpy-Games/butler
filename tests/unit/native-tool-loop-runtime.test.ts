@@ -2798,30 +2798,6 @@ test("completion obligation guard detects unsatisfied command execution", () => 
   })).toBeNull();
 });
 
-test("completion obligation guard accepts fresh weather know-how source evidence", () => {
-  expect(completionObligationIncompleteReason({
-    audit: [{
-      name: "get_weather_with_knowhow",
-      args: { latitude: 37.5665, longitude: 126.9780 },
-      ok: true,
-      result: {
-        ok: true,
-        sourceUri: "https://api.open-meteo.com/v1/forecast?latitude=37.5665&longitude=126.9780",
-        sourceTimestamp: "2026-05-14T12:00",
-        fresh: true,
-        summary: "temperature=20°C wind=6km/h",
-      },
-    }],
-    decisions: [{
-      decisionId: "decision-weather",
-      summary: "서울의 현재 날씨 소스를 확인합니다.",
-      completionObligations: ["source_verified"],
-      evidenceRefs: [],
-      source: "assistant-authored",
-    }],
-  })).toBeNull();
-});
-
 test("completion obligation guard accepts durable worker status inspection as source evidence", () => {
   expect(completionObligationIncompleteReason({
     audit: [{
@@ -3132,29 +3108,6 @@ test("native runtime satisfies source verification from tool capability audit co
 
   expect(result.text).toBe("현재 카탈로그를 확인했습니다.");
   expect(executedTools).toEqual(["list_tool_capabilities"]);
-});
-
-test("completion obligation guard accepts weather cognition action tools as executed actions", () => {
-  expect(completionObligationIncompleteReason({
-    audit: [{
-      name: "run_weather_knowhow_consolidation",
-      args: {},
-      ok: true,
-      result: {
-        ok: true,
-        consolidationRunId: "cr_weather",
-        revisedKnowHowIds: ["kh_weather"],
-        appliedFeedbackIds: ["fb_weather"],
-      },
-    }],
-    decisions: [{
-      decisionId: "decision-weather-consolidation",
-      summary: "날씨 소스 피드백을 처리 방식에 반영합니다.",
-      completionObligations: ["command_executed"],
-      evidenceRefs: [],
-      source: "assistant-authored",
-    }],
-  })).toBeNull();
 });
 
 test("completion obligation guard accepts command-created CSV and chart artifacts", () => {

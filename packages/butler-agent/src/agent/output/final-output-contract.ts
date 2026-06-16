@@ -125,7 +125,6 @@ function renderFinalEvidenceForRepair(audit: ToolAuditEntry[], decisions: Public
   }
   const readSourceUrls = [
     ...sourceUrlsFromAuditByTool(audit, "web_read"),
-    ...sourceUrlsFromAuditByTool(audit, "get_weather_with_knowhow"),
   ].slice(0, 5);
   if (readSourceUrls.length > 0) {
     lines.push(
@@ -329,9 +328,6 @@ function satisfiedCompletionObligations(audit: ToolAuditEntry[]): Set<PublicWork
       satisfied.add("command_executed");
       if (commandRenderedChart(result)) satisfied.add("chart_rendered");
     }
-    if (weatherActionSucceeded(entry.name, result)) {
-      satisfied.add("command_executed");
-    }
     if (entry.name === "transform_public_data_table" || commandCreatedDataTable(result)) {
       satisfied.add("data_table_created");
     }
@@ -341,16 +337,6 @@ function satisfiedCompletionObligations(audit: ToolAuditEntry[]): Set<PublicWork
     }
   }
   return satisfied;
-}
-
-function weatherActionSucceeded(toolName: string, result: Record<string, unknown> | undefined): boolean {
-  if (
-    toolName !== "record_weather_source_feedback" &&
-    toolName !== "run_weather_knowhow_consolidation"
-  ) {
-    return false;
-  }
-  return result?.ok === true;
 }
 
 function durableStateInspectionCompleted(toolName: string): boolean {
@@ -367,11 +353,8 @@ function durableStateInspectionCompleted(toolName: string): boolean {
   return true;
 }
 
-function hasVerifiedSourceEvidence(entry: ToolAuditEntry, result: Record<string, unknown> | undefined): boolean {
+function hasVerifiedSourceEvidence(entry: ToolAuditEntry, _result: Record<string, unknown> | undefined): boolean {
   if (entry.name === "web_read") return sourceUrlsFromToolEvidence([entry]).length > 0;
-  if (entry.name === "get_weather_with_knowhow") {
-    return result?.fresh === true && sourceUrlsFromToolEvidence([entry]).length > 0;
-  }
   if (durableStateInspectionCompleted(entry.name)) return true;
   return false;
 }
