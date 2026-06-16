@@ -44,8 +44,8 @@ const GENERAL_FALLBACK: Record<AppLocale, {
       {
         id: "daily-briefing",
         title: "오늘 볼 만한 소식",
-        description: "날씨와 주요 이슈를 짧게 훑어두면 하루의 방향을 잡는 데 도움이 됩니다.",
-        text: "오늘 볼 만한 날씨와 주요 이슈를 짧게 브리핑해줘.",
+        description: "주요 이슈와 공개 자료를 짧게 훑어두면 하루의 방향을 잡는 데 도움이 됩니다.",
+        text: "오늘 볼 만한 주요 이슈와 공개 자료를 짧게 브리핑해줘.",
       },
       {
         id: "open-source-trends",
@@ -74,8 +74,8 @@ const GENERAL_FALLBACK: Record<AppLocale, {
       {
         id: "daily-briefing",
         title: "Worth a short look today",
-        description: "A compact pass over weather and notable news can make the day easier to place.",
-        text: "Give me a short briefing on today's weather and notable news.",
+        description: "A compact pass over notable news and public sources can make the day easier to place.",
+        text: "Give me a short briefing on today's notable news and public sources.",
       },
       {
         id: "open-source-trends",

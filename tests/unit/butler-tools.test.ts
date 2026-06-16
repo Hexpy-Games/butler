@@ -234,6 +234,7 @@ test("basic project turns expose a bounded startup and project tool profile", ()
     "inspect_project_status",
     "query_project_work",
     "render_project_dashboard",
+    "complete_project_work",
     "get_context_monitor",
     "list_tool_capabilities",
     "update_todo_list",
@@ -264,6 +265,20 @@ test("Project Ledger requests without project metadata still expose project tool
   expect(names).toContain("render_project_dashboard");
   expect(names).not.toContain("get_weather_with_knowhow");
   expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
+});
+
+test("Project Ledger completion requests expose complete_project_work", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "Project Ledger work W-RUNTIME-TOOL-MODULARIZATION를 complete 처리해줘.",
+    sessionMetadata: { projectId: "butler" },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(names).toContain("inspect_project_status");
+  expect(names).toContain("query_project_work");
+  expect(names).toContain("render_project_dashboard");
+  expect(names).toContain("complete_project_work");
 });
 
 test("explicit required tools can extend a profile while removed tool names are ignored", () => {
@@ -469,32 +484,54 @@ test("run_command executes in the session workspace and returns structured outpu
   expect(result.stdout).toContain(workspace);
   expect(result.stdout).toContain("2 sample.csv");
   expect(result.stderr).toBe("");
-  expect(result.durable_artifact_created).toBe(true);
-  expect(result.data_table_created).toBe(true);
-  expect(result.written_files).toContain("sample.csv");
-  expect(result.artifact_kind).toBe("csv_file");
-  expect(result.verified_output_files).toContainEqual(expect.objectContaining({
-    path: "sample.csv",
-    artifact_kind: "csv_file",
-  }));
-  expect(result.evidence_receipts).toEqual(expect.arrayContaining([
+  expect(result.durable_artifact_created).toBeUndefined();
+  expect(result.data_table_created).toBeUndefined();
+  expect(result.written_files).toBeUndefined();
+  expect(result.artifact_kind).toBeUndefined();
+  expect(result.verified_output_files).toBeUndefined();
+  expect(result.evidence_receipts).toEqual([
     expect.objectContaining({
       receiptType: "execution",
       verified: true,
       satisfies: ["command_executed"],
     }),
-    expect.objectContaining({
-      receiptType: "deliverable",
-      verified: true,
-      satisfies: expect.arrayContaining(["durable_artifact", "data_table_created"]),
-      artifacts: [expect.objectContaining({
-        label: "sample.csv",
-        mediaType: "text/csv",
-        role: "table",
-      })],
-    }),
-  ]));
+  ]);
   expect(readFileSync(join(workspace, "sample.csv"), "utf8")).toContain("Seoul,9300000");
+});
+
+test("run_command implicit artifact discovery does not auto-promote workspace files", async () => {
+  const workspace = join(tempDir, "workspace");
+  mkdirSync(workspace, { recursive: true });
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: "mkdir -p reports && printf 'city,population\\nSeoul,9300000\\n' > reports/population.csv",
+    },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    durable_artifact_created?: boolean;
+    verified_output_files?: Array<{ path: string; artifact_kind: string }>;
+    evidence_receipts: Array<Record<string, any>>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.durable_artifact_created).toBeUndefined();
+  expect(result.verified_output_files).toBeUndefined();
+  expect(result.evidence_receipts).toEqual([
+    expect.objectContaining({
+      receiptType: "execution",
+      verified: true,
+      satisfies: ["command_executed"],
+    }),
+  ]);
+  expect(readFileSync(join(workspace, "reports", "population.csv"), "utf8")).toContain("Seoul,9300000");
 });
 
 test("run_command verifies declared output paths as durable artifact evidence", async () => {
@@ -616,6 +653,20 @@ test("run_command verifies structured stdout artifact paths under Butler data", 
       })],
     }),
   ]));
+});
+
+test("default app suggestions do not advertise weather workflows", () => {
+  const agentBriefing = readFileSync(
+    join(root, "packages", "butler-agent", "src", "gateways", "app", "new-chat-briefing.ts"),
+    "utf8",
+  );
+  const clientSuggestions = readFileSync(
+    join(root, "packages", "butler-app", "client", "ui", "src", "components", "conversation", "emptyStateSuggestions.ts"),
+    "utf8",
+  );
+
+  expect(agentBriefing).not.toMatch(/weather|날씨|forecast/iu);
+  expect(clientSuggestions).not.toMatch(/weather|날씨|forecast/iu);
 });
 
 test("run_command rejects cwd outside the active workspace", async () => {
