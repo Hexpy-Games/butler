@@ -3,15 +3,30 @@ import { webSearchToolDefinition, webSearchToolMetadata } from "./web-search/ind
 import { webReadToolDefinition, webReadToolMetadata } from "./web-read/index.ts";
 import { transformPublicDataTableToolDefinition, transformPublicDataTableToolMetadata } from "./data-table/index.ts";
 import { runCommandToolDefinition, runCommandToolMetadata } from "./run-command/index.ts";
-import { getWorkDashboardToolDefinition, getWorkDashboardToolMetadata } from "./get_work_dashboard/index.ts";
-import { inspectProjectStatusToolDefinition, inspectProjectStatusToolMetadata } from "./inspect_project_status/index.ts";
-import { queryProjectWorkToolDefinition, queryProjectWorkToolMetadata } from "./query_project_work/index.ts";
-import { renderProjectDashboardToolDefinition, renderProjectDashboardToolMetadata } from "./render_project_dashboard/index.ts";
-import { completeProjectWorkToolDefinition, completeProjectWorkToolMetadata } from "./complete_project_work/index.ts";
-import { getContextMonitorToolDefinition, getContextMonitorToolMetadata } from "./get_context_monitor/index.ts";
-import { readToolOutputArtifactToolDefinition, readToolOutputArtifactToolMetadata } from "./read_tool_output_artifact/index.ts";
-import { getUsageMonitorToolDefinition, getUsageMonitorToolMetadata } from "./get_usage_monitor/index.ts";
-import { listToolCapabilitiesToolDefinition, listToolCapabilitiesToolMetadata } from "./list_tool_capabilities/index.ts";
+import {
+  completeProjectWorkToolDefinition,
+  completeProjectWorkToolMetadata,
+  getWorkDashboardToolDefinition,
+  getWorkDashboardToolMetadata,
+  inspectProjectStatusToolDefinition,
+  inspectProjectStatusToolMetadata,
+  queryProjectWorkToolDefinition,
+  queryProjectWorkToolMetadata,
+  renderProjectDashboardToolDefinition,
+  renderProjectDashboardToolMetadata,
+} from "./project-ledger/index.ts";
+import {
+  getContextMonitorToolDefinition,
+  getContextMonitorToolMetadata,
+  getMemoryHealthToolDefinition,
+  getMemoryHealthToolMetadata,
+  getUsageMonitorToolDefinition,
+  getUsageMonitorToolMetadata,
+  listToolCapabilitiesToolDefinition,
+  listToolCapabilitiesToolMetadata,
+  readToolOutputArtifactToolDefinition,
+  readToolOutputArtifactToolMetadata,
+} from "./monitoring/index.ts";
 import { listMcpCapabilitiesToolDefinition, listMcpCapabilitiesToolMetadata } from "./list_mcp_capabilities/index.ts";
 import { callMcpToolToolDefinition, callMcpToolToolMetadata } from "./call_mcp_tool/index.ts";
 import { readMcpResourceToolDefinition, readMcpResourceToolMetadata } from "./read_mcp_resource/index.ts";
@@ -24,7 +39,6 @@ import { listTodoListToolDefinition, listTodoListToolMetadata } from "./list_tod
 import { listWorkStreamsToolDefinition, listWorkStreamsToolMetadata } from "./list_work_streams/index.ts";
 import { updateWorkStreamStateToolDefinition, updateWorkStreamStateToolMetadata } from "./update_work_stream_state/index.ts";
 import { controlWorkToolDefinition, controlWorkToolMetadata } from "./control_work/index.ts";
-import { getMemoryHealthToolDefinition, getMemoryHealthToolMetadata } from "./get_memory_health/index.ts";
 import { ingestTaskMemoryToolDefinition, ingestTaskMemoryToolMetadata } from "./ingest_task_memory/index.ts";
 import { recallMemoryToolDefinition, recallMemoryToolMetadata } from "./recall_memory/index.ts";
 import { queryMemoryToolDefinition, queryMemoryToolMetadata } from "./query_memory/index.ts";

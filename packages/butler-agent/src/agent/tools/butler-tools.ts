@@ -32,30 +32,19 @@ import {
   type WorkStreamState,
 } from "../work/work-stream.ts";
 import { buildTaskOriginContext } from "../work/task-origin.ts";
-import {
-  createConfiguredWebSearchProvider,
-  type WebSearchProvider,
-} from "../../integrations/search/provider.ts";
+import type { WebSearchProvider } from "../../integrations/search/provider.ts";
 import {
   type SmartSearchPlanningInput,
   type SmartSearchPlanningResult,
 } from "../../integrations/search/planning.ts";
 import { readPageConfigured } from "../../integrations/search/page-reader.ts";
-import {
-  projectLedgerProjectPath,
-  projectLedgerRenderedViewEvidence,
-  runProjectLedgerTool,
-} from "../../integrations/project-ledger/client.ts";
 import { butlerAgentScriptPath } from "../../runtime/paths.ts";
-import { createWorkDashboard, performWorkControl } from "../work/work-dashboard.ts";
-import { readContextMonitor } from "../../operations/metrics/context-monitor.ts";
+import { performWorkControl } from "../work/work-dashboard.ts";
 import { AutomationStore, type AutomationSchedule } from "../../operations/service/automation-store.ts";
-import { readUsageMonitor } from "../../operations/metrics/usage-monitor.ts";
 import {
   ingestTaskOutcomeMemory,
   recallMemoryEvidence,
   recallMemoryEvidenceWithVector,
-  readMemoryHealth,
   updateExplicitMemory,
 } from "../cognition/memory/quality.ts";
 import {
@@ -69,7 +58,6 @@ import {
 import type { VectorEpisodeBackend } from "../cognition/memory/recall/vector.ts";
 import { queryMemory } from "../cognition/memory/exact-query.ts";
 import { readReflectiveProfileSummary, type ProfilingMode } from "../../personalization/profiling.ts";
-import { readToolOutputArtifactSlice } from "../context/tool-output-budgeter.ts";
 import {
   readConversationContext,
   type ConversationContextDirection,
@@ -194,6 +182,8 @@ import {
 } from "../output/evidence-receipts.ts";
 import { butlerToolProcessEnvironment } from "./executor-support.ts";
 import { transformPublicDataTable } from "./data-table/index.ts";
+import { createMonitoringToolHandlers } from "./monitoring/index.ts";
+import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
 import { runCommandTool } from "./run-command/index.ts";
 import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
@@ -202,8 +192,6 @@ import {
   TOOL_CAPABILITY_METADATA,
 } from "./registry.ts";
 import type {
-  ButlerToolDefinition,
-  ToolCapabilityCategory,
   ToolCapabilityMetadata,
 } from "./types.ts";
 export {
@@ -232,19 +220,6 @@ async function executeRegisteredButlerTool(
   const execute = registry[call.name];
   if (!execute) throw new Error(`Unknown Butler tool: ${call.name}`);
   return await execute(call);
-}
-
-interface ToolCapabilityView {
-  name: string;
-  description: string;
-  category: ToolCapabilityCategory;
-  enabled: boolean;
-  disabled_reason: string | null;
-  concurrency_safe: boolean;
-  interrupt_behavior: ButlerToolDefinition["interruptBehavior"];
-  transcript_visibility: ButlerToolDefinition["transcriptVisibility"];
-  tags: string[];
-  safety_notes: string[];
 }
 
 const DEFAULT_TOOL_CAPABILITY: ToolCapabilityMetadata = {
@@ -497,72 +472,6 @@ function automationNow(value: unknown): Date {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) throw new Error("run_due_automations now must be a valid ISO date");
   return date;
-}
-
-function toolCategory(value: unknown): ToolCapabilityCategory | undefined {
-  if (
-    value === "search" ||
-    value === "data" ||
-    value === "command" ||
-    value === "work" ||
-    value === "monitoring" ||
-    value === "automation" ||
-    value === "todo" ||
-    value === "memory" ||
-    value === "project" ||
-    value === "skill" ||
-    value === "mcp" ||
-    value === "dispatch" ||
-    value === "control"
-  ) return value;
-  return undefined;
-}
-
-function capabilityAvailability(tool: ButlerToolDefinition, input: {
-  butlerData: string;
-  webSearchProvider?: WebSearchProvider;
-}): { enabled: boolean; disabled_reason: string | null } {
-  if (tool.name !== "web_search") return { enabled: true, disabled_reason: null };
-  const provider = createConfiguredWebSearchProvider({
-    butlerData: input.butlerData,
-    provider: input.webSearchProvider,
-  });
-  if (provider.id === "disabled") {
-    return {
-      enabled: false,
-      disabled_reason: "web search provider is disabled by configuration",
-    };
-  }
-  return { enabled: true, disabled_reason: null };
-}
-
-function listToolCapabilities(input: {
-  butlerData: string;
-  webSearchProvider?: WebSearchProvider;
-  category?: ToolCapabilityCategory;
-  includeDisabled?: boolean;
-}): ToolCapabilityView[] {
-  const includeDisabled = input.includeDisabled !== false;
-  return BUTLER_TOOLS
-    .map((tool) => {
-      const metadata = TOOL_CAPABILITY_METADATA[tool.name] ?? DEFAULT_TOOL_CAPABILITY;
-      const availability = capabilityAvailability(tool, input);
-      return {
-        name: tool.name,
-        description: tool.description,
-        category: metadata.category,
-        enabled: availability.enabled,
-        disabled_reason: availability.disabled_reason,
-        concurrency_safe: tool.concurrencySafe,
-        interrupt_behavior: tool.interruptBehavior,
-        transcript_visibility: tool.transcriptVisibility,
-        tags: metadata.tags,
-        safety_notes: metadata.safetyNotes,
-      };
-    })
-    .filter((capability) => !input.category || capability.category === input.category)
-    .filter((capability) => includeDisabled || capability.enabled)
-    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 }
 
 export function satisfiedCompletionObligationsForToolResult(
@@ -1063,138 +972,17 @@ export function createButlerToolExecutor(input: {
   const orchestrationStore = new WorkOrchestrationStore(input.butlerData);
   const dispatchTask = input.dispatchTask ?? dispatchBackgroundTask;
   const toolExecutors = createButlerToolExecutorRegistry({
-    "get_work_dashboard": async (call) => {
-      return {
-        ok: true,
-        ...createWorkDashboard({
-          butlerData: input.butlerData,
-          debug: call.args.debug === true,
-          limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
-        }),
-      };
-    },
-    "inspect_project_status": async (call) => {
-      const projectPath = projectLedgerProjectPath(input, call.args);
-      return runProjectLedgerTool(input, [
-        "status",
-        "--project",
-        projectPath,
-      ]);
-    },
-    "query_project_work": async (call) => {
-      const kind = typeof call.args.kind === "string" ? call.args.kind.trim() : "";
-      if (!kind) throw new Error("query_project_work requires kind");
-      const projectPath = projectLedgerProjectPath(input, call.args);
-      return runProjectLedgerTool(input, [
-        "query",
-        "--project",
-        projectPath,
-        "--kind",
-        kind,
-      ]);
-    },
-    "render_project_dashboard": async (call) => {
-      const view = typeof call.args.view === "string" ? call.args.view.trim() : "";
-      if (!view) throw new Error("render_project_dashboard requires view");
-      const projectPath = projectLedgerProjectPath(input, call.args);
-      const args = [
-        "render",
-        "--project",
-        projectPath,
-        view,
-      ];
-      if (call.args.write === true) args.push("--write");
-      const result = runProjectLedgerTool(input, args);
-      return {
-        ...result,
-        ...projectLedgerRenderedViewEvidence({
-          projectPath,
-          result,
-          view,
-          write: call.args.write === true,
-        }),
-      };
-    },
-    "complete_project_work": async (call) => {
-      const id = typeof call.args.id === "string" ? call.args.id.trim() : "";
-      const validation = typeof call.args.validation === "string" ? call.args.validation.trim() : "";
-      const review = typeof call.args.review === "string" ? call.args.review.trim() : "";
-      const report = typeof call.args.report === "string" ? call.args.report.trim() : "";
-      if (!id) throw new Error("complete_project_work requires id");
-      if (!validation || !review || !report) {
-        throw new Error("complete_project_work requires validation review and report");
-      }
-      return runProjectLedgerTool(input, [
-        "work",
-        "complete",
-        "--project",
-        projectLedgerProjectPath(input, call.args),
-        "--id",
-        id,
-        "--validation",
-        validation,
-        "--review",
-        review,
-        "--report",
-        report,
-      ]);
-    },
-    "get_context_monitor": async (call) => {
-      return {
-        ok: true,
-        ...readContextMonitor({
-          butlerData: input.butlerData,
-          sessionId: typeof call.args.session_id === "string" && call.args.session_id.trim()
-            ? call.args.session_id.trim()
-            : input.sessionId,
-        }),
-      };
-    },
-    "read_tool_output_artifact": async (call) => {
-      return readToolOutputArtifactSlice({
-        butlerData: input.butlerData,
-        artifactId: typeof call.args.artifact_id === "string" && call.args.artifact_id.trim()
-          ? call.args.artifact_id.trim()
-          : undefined,
-        path: typeof call.args.path === "string" && call.args.path.trim()
-          ? call.args.path.trim()
-          : undefined,
-        stream:
-          call.args.stream === "stdout" || call.args.stream === "stderr" || call.args.stream === "both"
-            ? call.args.stream
-            : undefined,
-        offsetLines: typeof call.args.offset_lines === "number" ? call.args.offset_lines : undefined,
-        limitLines: typeof call.args.limit_lines === "number" ? call.args.limit_lines : undefined,
-        maxTokens: typeof call.args.max_tokens === "number" ? call.args.max_tokens : undefined,
-      });
-    },
-    "get_usage_monitor": async (call) => {
-      const sinceHours = typeof call.args.since_hours === "number" && call.args.since_hours > 0
-        ? call.args.since_hours
-        : null;
-      return {
-        ok: true,
-        ...readUsageMonitor({
-          butlerData: input.butlerData,
-          sessionId: typeof call.args.session_id === "string" && call.args.session_id.trim()
-            ? call.args.session_id.trim()
-            : input.sessionId,
-          sinceTs: sinceHours === null ? null : Date.now() - sinceHours * 60 * 60 * 1000,
-        }),
-      };
-    },
-    "list_tool_capabilities": async (call) => {
-      const category = toolCategory(call.args.category);
-      return {
-        ok: true,
-        capabilities: listToolCapabilities({
-          butlerData: input.butlerData,
-          webSearchProvider: input.webSearchProvider,
-          category,
-          includeDisabled: call.args.include_disabled !== false,
-        }),
-      };
-    },
+    ...createProjectLedgerToolHandlers({
+      butlerHome: input.butlerHome,
+      butlerData: input.butlerData,
+      sessionId: input.sessionId,
+      projectId: input.projectId,
+    }),
+    ...createMonitoringToolHandlers({
+      butlerData: input.butlerData,
+      sessionId: input.sessionId,
+      webSearchProvider: input.webSearchProvider,
+    }),
     "list_mcp_capabilities": async (call) => {
       return {
         ok: true,
@@ -1364,14 +1152,6 @@ export function createButlerToolExecutor(input: {
         taskId: typeof call.args.task_id === "string" ? call.args.task_id : undefined,
         notificationId: typeof call.args.notification_id === "string" ? call.args.notification_id : undefined,
       });
-    },
-    "get_memory_health": async (_call) => {
-      return {
-        ok: true,
-        ...readMemoryHealth({
-          butlerData: input.butlerData,
-        }),
-      };
     },
     "ingest_task_memory": async (call) => {
       const taskId = typeof call.args.task_id === "string" ? call.args.task_id.trim() : "";
