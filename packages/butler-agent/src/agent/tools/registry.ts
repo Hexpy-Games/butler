@@ -74,20 +74,40 @@ import {
   updateOnboardingProfileToolMetadata,
 } from "./memory/index.ts";
 import { listSkillsToolDefinition, listSkillsToolMetadata } from "./list_skills/index.ts";
-import { dispatchWorkerToolDefinition, dispatchWorkerToolMetadata } from "./dispatch_worker/index.ts";
-import { createPlannedTaskToolDefinition, createPlannedTaskToolMetadata } from "./create_planned_task/index.ts";
-import { runPlannedTaskToolDefinition, runPlannedTaskToolMetadata } from "./run_planned_task/index.ts";
-import { reviewPlannedTaskToolDefinition, reviewPlannedTaskToolMetadata } from "./review_planned_task/index.ts";
-import { repairPlannedTaskToolDefinition, repairPlannedTaskToolMetadata } from "./repair_planned_task/index.ts";
-import { requestPrincipalDecisionToolDefinition, requestPrincipalDecisionToolMetadata } from "./request_principal_decision/index.ts";
-import { writePlannedPublicReportToolDefinition, writePlannedPublicReportToolMetadata } from "./write_planned_public_report/index.ts";
-import { resumeWorkerToolDefinition, resumeWorkerToolMetadata } from "./resume_worker/index.ts";
-import { createWorkOrchestrationToolDefinition, createWorkOrchestrationToolMetadata } from "./create_work_orchestration/index.ts";
-import { runReadyWorkStreamsToolDefinition, runReadyWorkStreamsToolMetadata } from "./run_ready_work_streams/index.ts";
-import { syncWorkOrchestrationToolDefinition, syncWorkOrchestrationToolMetadata } from "./sync_work_orchestration/index.ts";
-import { writeWorkOrchestrationReportToolDefinition, writeWorkOrchestrationReportToolMetadata } from "./write_work_orchestration_report/index.ts";
-import { listTasksToolDefinition, listTasksToolMetadata } from "./list_tasks/index.ts";
-import { getTaskResultToolDefinition, getTaskResultToolMetadata } from "./get_task_result/index.ts";
+import {
+  createPlannedTaskToolDefinition,
+  createPlannedTaskToolMetadata,
+  repairPlannedTaskToolDefinition,
+  repairPlannedTaskToolMetadata,
+  requestPrincipalDecisionToolDefinition,
+  requestPrincipalDecisionToolMetadata,
+  reviewPlannedTaskToolDefinition,
+  reviewPlannedTaskToolMetadata,
+  runPlannedTaskToolDefinition,
+  runPlannedTaskToolMetadata,
+  writePlannedPublicReportToolDefinition,
+  writePlannedPublicReportToolMetadata,
+} from "./planned-task/index.ts";
+import {
+  dispatchWorkerToolDefinition,
+  dispatchWorkerToolMetadata,
+  getTaskResultToolDefinition,
+  getTaskResultToolMetadata,
+  listTasksToolDefinition,
+  listTasksToolMetadata,
+  resumeWorkerToolDefinition,
+  resumeWorkerToolMetadata,
+} from "./worker/index.ts";
+import {
+  createWorkOrchestrationToolDefinition,
+  createWorkOrchestrationToolMetadata,
+  runReadyWorkStreamsToolDefinition,
+  runReadyWorkStreamsToolMetadata,
+  syncWorkOrchestrationToolDefinition,
+  syncWorkOrchestrationToolMetadata,
+  writeWorkOrchestrationReportToolDefinition,
+  writeWorkOrchestrationReportToolMetadata,
+} from "./orchestration/index.ts";
 
 export const CORE_BUTLER_TOOLS = [
   webSearchToolDefinition,
