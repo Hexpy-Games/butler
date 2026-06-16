@@ -550,6 +550,8 @@ function selectWorkerModel(
   },
   preference: WorkerModelRulePreference,
 ): { model?: string; reasoningEffort?: ReasoningEffort } {
+  const inheritedModel = input.workerModel?.trim();
+  if (inheritedModel) return { model: inheritedModel };
   const rules = (input.workerModelRules ?? [])
     .filter((rule) => rule.enabled !== false && typeof rule.model === "string" && rule.model.trim());
   const preferredRule = rules.find((rule) => workerRuleMatchesPreference(rule, preference)) ?? rules[0];
@@ -609,6 +611,14 @@ export function createPlannedWorkerToolHandlers(input: {
         model: workerModel.model,
         reasoningEffort: workerModel.reasoningEffort,
       });
+      if (input.sessionId) {
+        taskStore.writeOrigin(worker.task_id, buildTaskOriginContext({
+          sessionId: input.sessionId,
+          taskSummary: task,
+          project: input.projectId ?? projectPath,
+          topicSummary: "Direct Worker dispatch",
+        }));
+      }
       const linkedStream = workStreamStore.link({
         sessionId: input.sessionId,
         workerTaskIds: [worker.task_id],
@@ -1125,6 +1135,14 @@ export function createPlannedWorkerToolHandlers(input: {
           model: workerModel.model,
           reasoningEffort: workerModel.reasoningEffort,
         });
+        if (input.sessionId) {
+          taskStore.writeOrigin(worker.task_id, buildTaskOriginContext({
+            sessionId: input.sessionId,
+            taskSummary: stream.objective || record.goal,
+            project: input.projectId ?? input.butlerHome,
+            topicSummary: `Work orchestration stream ${stream.id}`,
+          }));
+        }
         return {
           stream_id: stream.id,
           worker_task_id: worker.task_id,
