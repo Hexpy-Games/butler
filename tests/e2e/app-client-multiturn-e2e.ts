@@ -1118,8 +1118,8 @@ async function runMemoryRecallBrowserScenario(client: CdpClient): Promise<void> 
   );
 }
 
-function readWatlWorkerEvidence(): Record<string, unknown> {
-  const taskDirs = listTaskDirs(tempDir);
+function readWatlWorkerEvidence(sinceMs = 0): Record<string, unknown> {
+  const taskDirs = listTaskDirs(tempDir, sinceMs);
   const eventFiles = taskDirs.map((dir) => join(dir, "worker_activity_events.jsonl")).filter(existsSync);
   const projectionFiles = taskDirs.map((dir) => join(dir, "worker_activity.json")).filter(existsSync);
   const events = eventFiles.flatMap((file) => readJsonlObjects(file));
@@ -1131,12 +1131,15 @@ function readWatlWorkerEvidence(): Record<string, unknown> {
   return { taskDirs, eventFiles, projectionFiles, eventCount: events.length, projectionCount: projections.length, phases, actions, completionObligations, evidenceRefs };
 }
 
-function listTaskDirs(butlerData: string): string[] {
+function listTaskDirs(butlerData: string, sinceMs = 0): string[] {
   const tasksRoot = join(butlerData, "tasks");
   if (!existsSync(tasksRoot)) return [];
   return readdirSync(tasksRoot)
     .map((entry) => join(tasksRoot, entry))
-    .filter((candidate) => statSync(candidate).isDirectory());
+    .filter((candidate) => {
+      const stats = statSync(candidate);
+      return stats.isDirectory() && stats.mtimeMs >= sinceMs;
+    });
 }
 
 function readJsonlObjects(file: string): Array<Record<string, unknown>> {
@@ -1156,23 +1159,17 @@ function stringField(value: Record<string, unknown>, key: string): string | unde
   return typeof candidate === "string" ? candidate : undefined;
 }
 
-async function waitForWatlWorkerOutcome(client: CdpClient): Promise<void> {
-  await waitForExpression(
-    client,
-    `(() => {
-      const text = document.body?.innerText || "";
-      return /(?:Worker|작업자|Create Planned Task|run_planned_task|dispatch_worker|별도 작업|맡겨서)/iu.test(text);
-    })()`,
-    "WATL worker/planned work surface",
-    120_000,
-  );
+async function waitForWatlWorkerOutcome(client: CdpClient, sinceMs: number): Promise<void> {
   const startedAt = Date.now();
   let evidence: Record<string, unknown> = {};
+  let durableToolCalls: string[] = [];
   while (Date.now() - startedAt < 300_000) {
-    evidence = readWatlWorkerEvidence();
+    evidence = readWatlWorkerEvidence(sinceMs);
+    durableToolCalls = durableTranscriptToolCalls(latestE2eSessionId());
     const phases = stringArray(evidence.phases);
     const actions = stringArray(evidence.actions);
-    if (Number(evidence.eventCount) > 0
+    if ((durableToolCalls.includes("dispatch_worker") || durableToolCalls.includes("create_planned_task") || durableToolCalls.includes("run_planned_task"))
+      && Number(evidence.eventCount) > 0
       && phases.includes("executing")
       && phases.includes("verifying")
       && actions.some((action) => ["edit_file", "apply_patch", "write_file"].includes(action))) {
@@ -1180,7 +1177,6 @@ async function waitForWatlWorkerOutcome(client: CdpClient): Promise<void> {
     }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_000));
   }
-  const durableToolCalls = durableTranscriptToolCalls(latestE2eSessionId());
   assert(durableToolCalls.includes("dispatch_worker") || durableToolCalls.includes("create_planned_task") || durableToolCalls.includes("run_planned_task"), `WATL worker Electron E2E did not start worker/planned work: ${durableToolCalls.join(" -> ")}`);
   const phases = stringArray(evidence.phases);
   const actions = stringArray(evidence.actions);
@@ -1191,6 +1187,7 @@ async function waitForWatlWorkerOutcome(client: CdpClient): Promise<void> {
 }
 
 async function runWatlWorkerBrowserScenario(client: CdpClient): Promise<void> {
+  const scenarioStartedAt = Date.now() - 1_000;
   const prompt = [
     "WATL 문서에서 Electron 앱으로 worker timeline을 확인하는 절차가 아직 부족한 것 같아.",
     "이건 앱 실행 흐름까지 확인해야 해서 조금 길어질 수 있으니, 별도 작업으로 맡겨서 진행해줘.",
@@ -1198,7 +1195,7 @@ async function runWatlWorkerBrowserScenario(client: CdpClient): Promise<void> {
   ].join("\n");
   assert(!/테스트를 위해|WATL e2e|semantic phase|activity event|tool/iu.test(prompt), "WATL worker prompt must remain natural and must not name test internals.");
   await sendComposerTurn(client, prompt);
-  await waitForWatlWorkerOutcome(client);
+  await waitForWatlWorkerOutcome(client, scenarioStartedAt);
 }
 
 async function runBeegAutonomousBrowserScenario(client: CdpClient): Promise<void> {
@@ -2275,14 +2272,24 @@ async function completeFirstRunSetupForE2e(client: CdpClient): Promise<void> {
     connection_mode: "bundled-agent",
     completed_at: "2026-06-15T00:00:00.000Z",
   });
+  const seedFirstRunStateExpression =
+    `localStorage.setItem(${JSON.stringify(FIRST_RUN_STORAGE_KEY)}, ${JSON.stringify(stateJson)});`;
+  await client.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: seedFirstRunStateExpression,
+  });
   await client.send("Runtime.evaluate", {
-    expression: `localStorage.setItem(${JSON.stringify(FIRST_RUN_STORAGE_KEY)}, ${JSON.stringify(stateJson)}); true`,
+    expression: `${seedFirstRunStateExpression} true`,
     returnByValue: true,
   });
   await client.send("Runtime.evaluate", {
-    expression: "setTimeout(() => location.reload(), 0); true",
+    expression: "location.reload(); true",
     returnByValue: true,
   });
+  await waitForExpression(
+    client,
+    `localStorage.getItem(${JSON.stringify(FIRST_RUN_STORAGE_KEY)}) === ${JSON.stringify(stateJson)}`,
+    "first-run setup completion state seeded",
+  );
 }
 
 async function connectCdp(url: string): Promise<CdpClient> {

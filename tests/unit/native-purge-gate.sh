@@ -13,6 +13,63 @@ done
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+if ! command -v rg >/dev/null 2>&1; then
+  rg() {
+    local quiet=false
+    local line_numbers=false
+    local ignore_case=false
+    local patterns=()
+    local paths=()
+
+    while [[ "$#" -gt 0 ]]; do
+      case "$1" in
+        -q)
+          quiet=true
+          ;;
+        -n)
+          line_numbers=true
+          ;;
+        -i)
+          ignore_case=true
+          ;;
+        -e)
+          shift
+          patterns+=("$1")
+          ;;
+        --glob)
+          shift
+          ;;
+        --glob=*)
+          ;;
+        --)
+          ;;
+        -*)
+          ;;
+        *)
+          if [[ "${#patterns[@]}" -eq 0 ]]; then
+            patterns+=("$1")
+          else
+            paths+=("$1")
+          fi
+          ;;
+      esac
+      shift
+    done
+
+    [[ "${#patterns[@]}" -gt 0 ]] || return 2
+    [[ "${#paths[@]}" -gt 0 ]] || paths=(".")
+
+    local joined_pattern
+    joined_pattern="$(printf '%s\n' "${patterns[@]}" | paste -sd '|' -)"
+    local grep_args=(-E -I --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=data --exclude-dir=.project-ledger --exclude=native-purge-gate.sh)
+    if [[ "$quiet" == true ]]; then grep_args+=(-q); fi
+    if [[ "$line_numbers" == true ]]; then grep_args+=(-n); fi
+    if [[ "$ignore_case" == true ]]; then grep_args+=(-i); fi
+
+    grep "${grep_args[@]}" -R -- "$joined_pattern" "${paths[@]}"
+  }
+fi
+
 LEDGER_ROOT="${PROJECT_LEDGER_ROOT:-}"
 if [[ -z "$LEDGER_ROOT" && -n "${BUTLER_DATA:-}" && -s "$BUTLER_DATA/project-ledger/projects/butler/project.json" ]]; then
   LEDGER_ROOT="$BUTLER_DATA/project-ledger/projects/butler"

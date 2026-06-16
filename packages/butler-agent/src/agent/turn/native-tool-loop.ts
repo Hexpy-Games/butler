@@ -1832,7 +1832,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       throw new Error(`NativeToolLoopRuntime has no stored session for ${input.handle.sessionId}`);
     }
 
-    const useTools = session.init.role === "butler" || session.init.role === "steward";
+    const useTools = session.init.role === "butler" || session.init.role === "steward" || session.init.role === "worker";
 
     try {
       throwIfRuntimeTurnAborted(input.signal);
@@ -2010,7 +2010,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         return await this.toolPromptRunner({
           prompt: promptText,
           model: input.model,
-          instructions: appendButlerToolInstructions(session.init.systemPrompt),
+          instructions: appendRoleToolPolicyInstructions(session.init.role, appendButlerToolInstructions(session.init.systemPrompt)),
           cacheScope: "session-turn",
           signal: input.signal,
           attachments,
@@ -3209,4 +3209,28 @@ function appendButlerToolInstructions(systemPrompt?: string): string {
     "- If worker, review, or planned-dispatch tooling cannot complete, do not expose raw tool errors, worker text, retry-cap text, provider payloads, stack traces, or internal prompts. Summarize what was attempted, what was verified, what blocked completion, and the next useful action.",
   ].join("\n");
   return [systemPrompt?.trim(), toolContract].filter(Boolean).join("\n\n");
+}
+
+function appendRoleToolPolicyInstructions(role: SessionRole, systemPrompt: string): string {
+  if (role === "steward") {
+    const stewardPolicy = [
+      "## Steward Role Policy",
+      "- You are a Steward runtime actor and internal project/workstream custodian.",
+      "- Use the same Butler Turn Cognition Cycle and WorkStream discipline as a main Butler session for non-trivial custody, review, synthesis, or routing work.",
+      "- Keep review and completion claims grounded in WorkStream state, acceptance criteria, and durable evidence. Do not publish completion claims that bypass goal, criteria, or evidence review.",
+      "- Steward is not a replacement principal-facing role. Route user-facing project chat through Butler-facing sessions unless the gateway explicitly routed this internal steward turn.",
+    ].join("\n");
+    return [systemPrompt.trim(), stewardPolicy].filter(Boolean).join("\n\n");
+  }
+  if (role !== "worker") return systemPrompt;
+  const workerPolicy = [
+    "## Worker Role Policy",
+    "- You are a Worker runtime actor. Use the same Butler Turn Cognition Cycle and WorkStream discipline as a main Butler session for non-trivial work.",
+    "- Start non-trivial work with `update_todo_list`, keep phase-tagged steps current, execute the task with ordinary tools, review evidence, then report the worker outcome.",
+    "- Your provider-facing tool profile intentionally includes ordinary execution tools such as workspace commands, source/search reads, artifacts, and WorkStream updates when parent policy permits them.",
+    "- You must not spawn or orchestrate child work. Do not call recursive worker, planned-task, repair, orchestration, or public principal-report publication tools even if a prompt mentions them.",
+    "- Do not publish the principal-facing final report. Produce worker evidence and a concise worker result for the owning Butler or Steward actor to review and report.",
+    "- Do not treat planning, searching, reading, or summarizing alone as completion for implementation-required work. Produce implementation evidence, validation evidence, or an explicit blocker.",
+  ].join("\n");
+  return [systemPrompt.trim(), workerPolicy].filter(Boolean).join("\n\n");
 }

@@ -180,6 +180,20 @@ test("task summaries expose mode safety for direct workers", () => {
     const taskDir = join(tempDir, "tasks", taskId);
     mkdirSync(taskDir, { recursive: true });
     writeFileSync(join(taskDir, "status"), `${status}\n`, "utf8");
+    if (taskId === "task-done") {
+      writeFileSync(join(taskDir, "request.md"), "Implement a small fixture change.\n", "utf8");
+      writeFileSync(join(taskDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+        schema: "butler.worker-activity-event.v1",
+        event_id: "ev-1",
+        created_at: "2026-04-24T00:00:00.000Z",
+        actor: "worker",
+        event: "activity_updated",
+        semantic_phase: "executing",
+        action_kind: "write_file",
+        status_line: "Executing: wrote fixture.txt",
+        evidence_refs: ["fixture.txt"],
+      })}\n`, "utf8");
+    }
   }
 
   const summaries = new TaskStore(tempDir).summaries(10);
@@ -199,6 +213,60 @@ test("task summaries expose mode safety for direct workers", () => {
     safe_to_report: true,
     completion_claim_allowed: false,
   });
+});
+
+test("implementation-required worker completion is not reportable from planning-only evidence", () => {
+  const taskDir = join(tempDir, "tasks", "task-planning-only");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "Implement the fixture change.\n", "utf8");
+  writeFileSync(join(taskDir, "result.md"), "I inspected the task and prepared a plan.\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+    schema: "butler.worker-activity-event.v1",
+    event_id: "ev-plan",
+    created_at: "2026-04-24T00:00:00.000Z",
+    actor: "worker",
+    event: "activity_updated",
+    semantic_phase: "planning",
+    action_kind: "plan",
+    status_line: "Planning: chose the implementation path.",
+  })}\n`, "utf8");
+
+  const store = new TaskStore(tempDir);
+  const summary = store.summaries(1)[0]!;
+
+  expect(summary).toMatchObject({
+    task_id: "task-planning-only",
+    work_mode: "reviewing",
+    safe_to_report: false,
+    completion_claim_allowed: false,
+  });
+  expect(summary.guard_reason).toContain("no implementation evidence");
+  expect(store.reportableTasks().map((task) => task.taskId)).not.toContain("task-planning-only");
+});
+
+test("explicit blocker evidence can report a blocked outcome without claiming completion", () => {
+  const taskDir = join(tempDir, "tasks", "task-blocked");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "Implement the fixture change.\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+    schema: "butler.worker-activity-event.v1",
+    event_id: "ev-blocked",
+    created_at: "2026-04-24T00:00:00.000Z",
+    actor: "worker",
+    event: "worker_failed",
+    semantic_phase: "blocked",
+    action_kind: "unknown",
+    status_line: "Blocked: missing credentials required for the fixture.",
+    evidence_refs: ["blocked:missing-credentials"],
+  })}\n`, "utf8");
+
+  const summary = new TaskStore(tempDir).summaries(1)[0]!;
+
+  expect(summary.safe_to_report).toBe(true);
+  expect(summary.completion_claim_allowed).toBe(false);
+  expect(summary.guard_reason).toContain("explicit blocker");
 });
 
 test("task store summarizes useful worker log when result file is empty", () => {

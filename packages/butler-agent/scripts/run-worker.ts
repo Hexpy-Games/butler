@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 
-import { runWorkerTask } from "../src/integrations/providers/provider.ts";
+import { NativeToolLoopRuntime } from "../src/agent/turn/native-tool-loop.ts";
+import { WorkStreamStore } from "../src/agent/work/work-stream.ts";
+import type { ModelProviderAdapter, ModelRef } from "../src/test-support/harness/contracts.ts";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
@@ -176,42 +178,6 @@ function _completionObligationsForActivity(semanticPhase: string | undefined, ac
   return [...obligations];
 }
 
-function decisionSummaryForActivity(phase: string, semanticPhase: string | undefined, actionKind: string | undefined, statusLine: string): string {
-  const semantic = semanticPhase ? `${semanticPhase}` : phase;
-  const action = actionKind ? ` via ${actionKind}` : "";
-  return `${semantic}${action}: ${statusLine}`;
-}
-
-function decisionRationaleForActivity(semanticPhase: string | undefined): string {
-  switch (semanticPhase) {
-    case "orienting": return "The worker is establishing task and repository context before choosing concrete actions.";
-    case "planning": return "The worker is selecting the next work path before using execution tools.";
-    case "inspecting": return "The worker is gathering bounded evidence needed for the current task step.";
-    case "executing": return "The worker is producing or modifying task deliverables.";
-    case "verifying": return "The worker is checking whether observed evidence satisfies the task.";
-    case "committing": return "The worker is preserving completed changes as a source-control checkpoint.";
-    case "consolidating": return "The worker is combining observed evidence into a reviewed outcome.";
-    case "reporting": return "The worker is preparing the final task report.";
-    case "blocked": return "The worker has encountered a blocker that prevents safe continuation.";
-    default: return "The worker activity was recorded for timeline continuity.";
-  }
-}
-
-function decisionNextStepForActivity(semanticPhase: string | undefined): string {
-  switch (semanticPhase) {
-    case "orienting":
-    case "planning": return "Use the selected path to inspect, execute, or verify the next concrete step.";
-    case "inspecting": return "Use the gathered evidence to decide whether to execute, verify, or report a blocker.";
-    case "executing": return "Verify the produced or modified deliverable before claiming completion.";
-    case "verifying": return "Use the validation result to consolidate, repair, or continue execution.";
-    case "committing": return "Confirm the commit and proceed to the next task or final report.";
-    case "consolidating": return "Prepare a concise report backed by the observed evidence.";
-    case "reporting": return "Finish the task attempt with the reviewed public result.";
-    case "blocked": return "Surface the blocker with the evidence needed for a safe decision.";
-    default: return "Continue from the recorded worker activity.";
-  }
-}
-
 function readActivity(): StoredWorkerActivity {
   const path = join(taskDir, "worker_activity.json");
   if (!existsSync(path)) return {};
@@ -221,6 +187,126 @@ function readActivity(): StoredWorkerActivity {
   } catch {
     return {};
   }
+}
+
+function loadFileIfExists(path: string): string {
+  if (!existsSync(path)) return "";
+  try {
+    return readFileSync(path, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function butlerHome(): string {
+  return process.env.BUTLER_HOME || process.cwd();
+}
+
+function butlerData(): string {
+  return process.env.BUTLER_DATA || join(process.env.HOME || process.cwd(), ".butler");
+}
+
+function workerSessionId(): string {
+  const stored = loadFileIfExists(join(taskDir, "session_id"));
+  return `worker/${stored || taskIdFromDir() || "unknown"}`;
+}
+
+function workerModelRef(value: string): ModelRef {
+  const trimmed = value.trim();
+  if (trimmed.includes("/")) return trimmed as ModelRef;
+  return `openai/${trimmed || "auto:codex-latest"}` as ModelRef;
+}
+
+function workerSystemPrompt(): string {
+  const home = butlerHome();
+  const core = loadFileIfExists(join(home, "packages", "butler-agent", "resources", "prompts", "runtime-system-contract.md"));
+  const worker = loadFileIfExists(join(home, "packages", "butler-agent", "resources", "prompts", "worker.md"));
+  const nativeContract = [
+    "You are a Butler Worker runtime actor.",
+    "Use the same BTCC and WorkStream discipline as the main Butler session.",
+    "Do not spawn child workers or orchestrations. Do not publish the principal-facing final report.",
+    "For implementation-required work, produce implementation evidence, validation evidence, or an explicit blocker before finishing.",
+  ].join("\n");
+  return [core, worker, nativeContract].filter(Boolean).join("\n\n");
+}
+
+function workerPrompt(requestText: string): string {
+  return [
+    `Task ID: ${taskIdFromDir() ?? "unknown"}`,
+    `Project path: ${projectPath}`,
+    "",
+    "Task:",
+    requestText,
+  ].join("\n");
+}
+
+const nativeProvider: ModelProviderAdapter = {
+  id: "native-worker-provider",
+  capabilities: {
+    supportsStreaming: false,
+    supportsToolCalls: true,
+    supportsImages: false,
+    supportsAudio: false,
+    supportsServerThreads: false,
+    supportsReasoningConfig: true,
+    supportsPromptCaching: true,
+  },
+  async invoke() {
+    return { text: "" };
+  },
+};
+
+async function runNativeWorkerTask(input: {
+  requestText: string;
+}): Promise<string> {
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: butlerHome(),
+    butlerData: butlerData(),
+    disableAutomaticRecall: true,
+  });
+  const handle = await runtime.createSession({
+    sessionId: workerSessionId(),
+    role: "worker",
+    workspacePath: projectPath,
+    systemPrompt: workerSystemPrompt(),
+    metadata: {
+      projectPath,
+      workerTaskId: taskIdFromDir(),
+      parentTaskDir: taskDir,
+    },
+  });
+  const result = await runtime.runTurn({
+    handle,
+    provider: nativeProvider,
+    model: workerModelRef(model),
+    input: {
+      text: workerPrompt(input.requestText),
+    },
+    metadata: {
+      runtimePolicy: {
+        requiredNativeTools: [
+          "update_todo_list",
+          "run_command",
+        ],
+      },
+    },
+    emitTurnEvent: (event) => {
+      writeTrace("native.turn_event", {
+        kind: event.kind,
+        payload: event.payload,
+      });
+      projectNativeTurnEvent(event.kind, event.payload);
+    },
+  });
+  try {
+    new WorkStreamStore(butlerData()).link({
+      sessionId: workerSessionId(),
+      workerTaskIds: [taskIdFromDir() ?? ""].filter(Boolean),
+    });
+  } catch {
+    // WorkStream linkage is best-effort for legacy task directories.
+  }
+  return result.text;
 }
 
 function mergeWorkBlock(
@@ -279,6 +365,95 @@ function writeActivity(
   }
 }
 
+function stringFromPayload(payload: unknown, key: string): string {
+  if (!payload || typeof payload !== "object") return "";
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
+}
+
+function classifyNativeWorkerActivity(kind: string, payload: unknown): {
+  semanticPhase: string;
+  actionKind: string;
+  statusLine: string;
+  currentTitle: string;
+} | null {
+  if (kind !== "tool.completed" && kind !== "tool.failed") return null;
+  const toolName = stringFromPayload(payload, "toolName");
+  const activityKind = stringFromPayload(payload, "activityKind");
+  const label = [
+    stringFromPayload(payload, "workBlockLabel"),
+    stringFromPayload(payload, "label"),
+    stringFromPayload(payload, "inputLabel"),
+    stringFromPayload(payload, "safeLabel"),
+    stringFromPayload(payload, "decisionSummary"),
+  ].join(" ").toLocaleLowerCase("en-US");
+  const failed = kind === "tool.failed";
+  if (failed) {
+    return {
+      semanticPhase: "blocked",
+      actionKind: "unknown",
+      statusLine: "Blocked: worker tool call failed.",
+      currentTitle: "도구 실행이 실패했습니다.",
+    };
+  }
+  if (/edit|updat|writ|patch|수정|보강|변경/u.test(label)) {
+    return {
+      semanticPhase: "executing",
+      actionKind: "edit_file",
+      statusLine: "Editing worker deliverable.",
+      currentTitle: "작업 산출물을 수정하는 중입니다.",
+    };
+  }
+  if (/verif|review|검증|확인|diff|test|lint|typecheck/u.test(label)) {
+    return {
+      semanticPhase: "verifying",
+      actionKind: /diff/u.test(label) ? "git_diff" : "test",
+      statusLine: "Verifying worker changes.",
+      currentTitle: "수정 결과를 검증하는 중입니다.",
+    };
+  }
+  if (toolName || activityKind) {
+    return {
+      semanticPhase: "inspecting",
+      actionKind: toolName === "Bash" || activityKind === "ran_command" ? "run_command" : "read",
+      statusLine: "Inspecting worker context.",
+      currentTitle: "작업 맥락을 확인하는 중입니다.",
+    };
+  }
+  return null;
+}
+
+function projectNativeTurnEvent(kind: string, payload: unknown): void {
+  const activity = classifyNativeWorkerActivity(kind, payload);
+  if (!activity) return;
+  const workBlockId = stringFromPayload(payload, "workBlockId") || undefined;
+  writeActivityEvent({
+    event: "activity_updated",
+    semantic_phase: activity.semanticPhase,
+    action_kind: activity.actionKind,
+    status_line: activity.statusLine,
+    current_title: activity.currentTitle,
+    decision_summary: stringFromPayload(payload, "decisionSummary") || activity.statusLine,
+    decision_rationale: stringFromPayload(payload, "decisionRationale") || "Projected from the native Worker runtime tool timeline.",
+    decision_next_step: stringFromPayload(payload, "decisionNextStep") || "Continue the Worker BTCC execution loop.",
+    evidence_refs: [kind, workBlockId].filter((value): value is string => Boolean(value)),
+    completion_obligations: _completionObligationsForActivity(activity.semanticPhase, activity.actionKind),
+    work_block_id: workBlockId,
+  });
+  writeActivity(
+    activity.semanticPhase,
+    activity.statusLine,
+    activity.currentTitle,
+    workBlockId ? {
+      id: workBlockId,
+      label: stringFromPayload(payload, "workBlockLabel") || activity.currentTitle,
+      state: kind === "tool.completed" ? "delivered" : "failed",
+    } : undefined,
+    activity.semanticPhase,
+    activity.actionKind,
+  );
+}
+
 function workerFailureStatusLine(message: string): string {
   if (/exceeded \d+ tool rounds|tool budget/iu.test(message)) {
     return "Failed: worker reached the tool budget before producing a report.";
@@ -315,43 +490,7 @@ try {
     evidence_refs: [`request:${stableHash(requestText)}`],
   });
   const startedAt = Date.now();
-  const result = await runWorkerTask({
-    taskDir,
-    projectPath,
-    model: model || undefined,
-    log,
-    onActivity: ({ phase, semanticPhase, actionKind, statusLine, currentTitle, workBlock }) => {
-      const workBlockId = workBlock && typeof workBlock === "object" ? (workBlock as { id?: unknown }).id : undefined;
-      writeTrace("worker.activity", {
-        phase,
-        semantic_phase: semanticPhase,
-        action_kind: actionKind,
-        status_line: statusLine,
-        current_title: currentTitle,
-        work_block_id: workBlockId,
-      });
-      writeActivityEvent({
-        event: "activity_updated",
-        phase,
-        semantic_phase: semanticPhase,
-        action_kind: actionKind,
-        status_line: statusLine,
-        current_title: currentTitle,
-        work_block_id: typeof workBlockId === "string" ? workBlockId : undefined,
-        decision_summary: decisionSummaryForActivity(phase, semanticPhase, actionKind, statusLine),
-        decision_rationale: decisionRationaleForActivity(semanticPhase),
-        decision_next_step: decisionNextStepForActivity(semanticPhase),
-      });
-      writeActivity(
-        phase,
-        statusLine,
-        currentTitle,
-        workBlock as NonNullable<StoredWorkerActivity["work_blocks"]>[number] | undefined,
-        semanticPhase,
-        actionKind,
-      );
-    },
-  });
+  const result = await runNativeWorkerTask({ requestText });
   writeTrace("worker.finish", {
     duration_ms: Date.now() - startedAt,
     result_chars: result.length,

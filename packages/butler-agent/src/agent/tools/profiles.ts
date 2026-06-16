@@ -116,6 +116,42 @@ const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
   "artifact-data": ARTIFACT_DATA_TOOL_NAMES,
 };
 
+const WORKER_DEFAULT_TOOL_NAMES = [
+  "run_command",
+  "read_tool_output_artifact",
+  "inspect_project_status",
+  "query_project_work",
+  "render_project_dashboard",
+  "web_search",
+  "web_read",
+  "get_work_dashboard",
+  "get_context_monitor",
+  "get_usage_monitor",
+  "read_conversation_context",
+  "recall_memory",
+  "query_memory",
+  "update_todo_list",
+  "list_todo_list",
+  "list_work_streams",
+  "update_work_stream_state",
+  "transform_public_data_table",
+] as const;
+
+const WORKER_FORBIDDEN_TOOL_NAMES = new Set([
+  "dispatch_worker",
+  "resume_worker",
+  "create_planned_task",
+  "run_planned_task",
+  "repair_planned_task",
+  "request_principal_decision",
+  "write_planned_public_report",
+  "create_work_orchestration",
+  "run_ready_work_streams",
+  "sync_work_orchestration",
+  "write_work_orchestration_report",
+  "complete_project_work",
+]);
+
 const DOMAIN_PACK_TOOL_NAMES = new Set([
   "get_weather_with_knowhow",
   "record_weather_source_feedback",
@@ -230,6 +266,9 @@ export function selectButlerToolProfiles(input: {
   sessionMetadata?: Record<string, unknown>;
   turnMetadata?: Record<string, unknown>;
 }): ButlerToolProfile[] {
+  if (input.role === "worker") {
+    return ["startup", "project", "workspace", "public-web", "memory-read", "monitoring", "artifact-data"];
+  }
   const profiles = new Set<ButlerToolProfile>(["startup"]);
   if (hasProjectContext(input)) addProfile(profiles, "project");
   for (const profile of profilesFromText(input.text ?? "")) addProfile(profiles, profile);
@@ -250,13 +289,23 @@ export function selectButlerToolsForTurn(input: {
 }): FunctionToolDefinition[] {
   const tools = input.tools ?? BUTLER_TOOLS;
   const allowedNames = new Set<string>();
-  for (const profile of selectButlerToolProfiles(input)) {
-    for (const name of PROFILE_TOOL_NAMES[profile]) allowedNames.add(name);
+  if (input.role === "worker") {
+    for (const name of WORKER_DEFAULT_TOOL_NAMES) allowedNames.add(name);
+  } else {
+    for (const profile of selectButlerToolProfiles(input)) {
+      for (const name of PROFILE_TOOL_NAMES[profile]) allowedNames.add(name);
+    }
   }
   for (const name of requiredToolNames(input.turnMetadata)) {
-    if (!DOMAIN_PACK_TOOL_NAMES.has(name)) allowedNames.add(name);
+    if (DOMAIN_PACK_TOOL_NAMES.has(name)) continue;
+    if (input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(name)) continue;
+    allowedNames.add(name);
   }
-  return tools.filter((tool) => allowedNames.has(tool.name) && !DOMAIN_PACK_TOOL_NAMES.has(tool.name));
+  return tools.filter((tool) =>
+    allowedNames.has(tool.name) &&
+    !DOMAIN_PACK_TOOL_NAMES.has(tool.name) &&
+    !(input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(tool.name)),
+  );
 }
 
 export function toolContractJsonChars(tools: readonly FunctionToolDefinition[]): number {

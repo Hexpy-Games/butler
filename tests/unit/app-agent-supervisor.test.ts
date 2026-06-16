@@ -194,6 +194,52 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
   }
 });
 
+test("supervisor retries explicit app server readiness before failing", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-explicit-"));
+  try {
+    let healthChecks = 0;
+    let readinessChecks = 0;
+    let sleeps = 0;
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: join(tempDir, "data"),
+      explicitServerUrl: "http://127.0.0.1:19999/",
+      resolveGateway: () => {
+        throw new Error("explicit server should not resolve bundled gateway");
+      },
+      spawnProcess: () => {
+        throw new Error("explicit server should not spawn bundled gateway");
+      },
+      healthCheck: () => {
+        healthChecks += 1;
+        return healthChecks >= 2;
+      },
+      readinessCheck: () => {
+        readinessChecks += 1;
+        return readinessChecks >= 2;
+      },
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 19999,
+      getServerUrl: () => "http://127.0.0.1:19999/",
+      getRendererOrigin: () => "http://127.0.0.1:19999",
+      sleepMs: async () => {
+        sleeps += 1;
+      },
+      startupAttempts: 4,
+    });
+
+    await supervisor.ensureReady();
+
+    expect(healthChecks).toBe(3);
+    expect(readinessChecks).toBe(2);
+    expect(sleeps).toBe(2);
+    expect(supervisor.diagnostics().phase).toBe("running");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("supervisor relocates App-managed runtime when a healthy listener already exists", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-port-"));
   try {

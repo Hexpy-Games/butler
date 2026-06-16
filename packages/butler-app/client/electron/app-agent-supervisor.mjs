@@ -116,13 +116,8 @@ export function createBundledAgentSupervisor({
   async function ensureReady() {
     localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
     if (explicitServerUrl) {
-      const state = await checkGatewayReadiness();
-      if (state.ready) {
-        phase = "running";
-        return;
-      }
-      recordError(state.healthy ? "external_not_ready" : "external_unhealthy");
-      throw new Error(`Butler app server is not healthy: ${explicitServerUrl}`);
+      await waitForExplicitServerReady();
+      return;
     }
     if (child && (await checkGatewayReadiness()).ready) {
       phase = "running";
@@ -159,6 +154,26 @@ export function createBundledAgentSupervisor({
     } finally {
       startupPromise = null;
     }
+  }
+
+  async function waitForExplicitServerReady() {
+    let observedHealthy = false;
+    for (let attempt = 0; attempt < startupAttempts; attempt += 1) {
+      const state = await checkGatewayReadiness();
+      observedHealthy = observedHealthy || state.healthy;
+      if (state.ready) {
+        phase = "running";
+        lastErrorCode = null;
+        lastErrorDetails = null;
+        return;
+      }
+      if (attempt + 1 < startupAttempts) await sleepMs(startupDelayMs);
+    }
+    recordError(observedHealthy ? "external_not_ready" : "external_unhealthy", {
+      attempts: startupAttempts,
+      server_url: explicitServerUrl,
+    });
+    throw new Error(`Butler app server is not healthy: ${explicitServerUrl}`);
   }
 
   async function start(gateway = resolveGateway()) {

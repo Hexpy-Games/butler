@@ -55,6 +55,25 @@ not provide a meaningful activity-specific icon, the block marks the timeline
 with a small dot on the line instead. Toolchain rows may still use
 activity-specific icons.
 
+## Electron App Worker Timeline Check
+
+Use this quick path when validating worker activity through the desktop app:
+
+1. From the repository root, install client dependencies if needed with
+   `npm run app:client:install`, then open the Electron client with
+   `npm run app:client`. For iterative UI work, `npm run app:client:dev` is
+   the dev flow.
+2. In the running app, trigger a worker-backed action from the conversation or
+   resume an existing worker so the inspector has worker history to display.
+3. Open the right inspector and select `Workers`. Expand `Show details` for the
+   worker row. The expected evidence is a chronological work timeline rendered
+   with `WorkActivityBlock` rows, including the work label, decision body,
+   toolchain rows, and a running marker while the worker is active.
+4. If the timeline is missing, first confirm the worker row is present and has
+   detail blocks. Then check the app gateway/agent logs for worker activity
+   summaries, and verify the UI mapping still passes `work_blocks` from
+   `WorkersPanel` into `WorkActivityBlock`.
+
 ## Wrong Use Cases
 
 Do not use it for generic inspector lists; use ActivityFeed or KeyValueRow. Do

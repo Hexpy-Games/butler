@@ -281,6 +281,20 @@ test("native butler-main proactively delivers worker completion through delivery
   writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "build chart\n", "utf8");
   writeFileSync(join(taskDir, "result.md"), "chart is ready\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), [
+    JSON.stringify({
+      semantic_phase: "executing",
+      action_kind: "edit_file",
+      status_line: "Created chart output.",
+      evidence_refs: ["result.md"],
+    }),
+    JSON.stringify({
+      semantic_phase: "verifying",
+      action_kind: "test",
+      status_line: "Verified chart output.",
+      evidence_refs: ["result.md"],
+    }),
+  ].join("\n") + "\n", "utf8");
 
   globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
     const url = String(input);

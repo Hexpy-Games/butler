@@ -24,6 +24,23 @@ import { createButlerToolExecutor } from "../../packages/butler-agent/src/agent/
 let tempDir = "";
 let originalButlerData: string | undefined;
 
+function writeWorkerCompletionEvidence(taskDir: string): void {
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), [
+    JSON.stringify({
+      semantic_phase: "executing",
+      action_kind: "edit_file",
+      status_line: "Worker wrote the requested deliverable.",
+      evidence_refs: ["result.md"],
+    }),
+    JSON.stringify({
+      semantic_phase: "verifying",
+      action_kind: "test",
+      status_line: "Worker verified the requested deliverable.",
+      evidence_refs: ["result.md"],
+    }),
+  ].join("\n") + "\n", "utf8");
+}
+
 class ScriptedRuntime implements AgentRuntimeAdapter {
   readonly id = "scripted-runtime";
   readonly turns: RuntimeTurnInput[] = [];
@@ -193,6 +210,7 @@ test("worker completion can be delivered through mock transport without Telegram
   writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "run mock worker\n", "utf8");
   writeFileSync(join(taskDir, "result.md"), "mock worker result\n", "utf8");
+  writeWorkerCompletionEvidence(taskDir);
 
   const mock = new MockTransportAdapter({ id: "mock" });
   const guard = new DeliveryGuard({ adapters: [mock] });
@@ -227,6 +245,7 @@ test("mock transport reliability harness retries failed worker completion delive
   writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "run retryable mock worker\n", "utf8");
   writeFileSync(join(taskDir, "result.md"), "retryable mock worker result\n", "utf8");
+  writeWorkerCompletionEvidence(taskDir);
 
   let sendAttempts = 0;
   const mock = new MockTransportAdapter({
@@ -445,6 +464,7 @@ test("worker completion reports topic A origin while topic B conversation remain
   writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "generate topic A chart\n", "utf8");
   writeFileSync(join(taskDir, "result.md"), "topic A chart is ready\n", "utf8");
+  writeWorkerCompletionEvidence(taskDir);
   writeFileSync(join(taskDir, "origin.json"), `${JSON.stringify({
     version: 1,
     origin_session_id: "butler/main",

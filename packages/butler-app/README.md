@@ -28,6 +28,31 @@ settings load. The model catalog default returned by the gateway must also
 reflect the installed Butler model, including `local/<id>` models registered
 during install.
 
+## Worker Timeline Check
+
+Use the Electron app when validating that a delegated worker turn exposes a
+visible worker timeline, not only persisted task files.
+
+1. Start the app against the local Agent gateway:
+   `bun run app:client:dev`. The script starts Vite for `client/ui`, launches
+   the Electron shell from `client/electron`, and points it at the configured
+   local app gateway with `BUTLER_APP_SERVER_URL` / `BUTLER_APP_UI_URL`.
+2. In the Electron window, send a normal request that asks Butler to delegate a
+   small document-only task to a worker. For the WATL path, the automated live
+   scenario uses `BUTLER_APP_CLIENT_E2E_MODE=live-llm-watl-worker bun run
+   tests/e2e/app-client-multiturn-e2e.ts` after the UI build.
+3. While the worker runs, inspect the assistant turn's work/turn activity area
+   in the conversation view. The worker activity panel should show timeline
+   rows for the worker, including executing and verifying phases plus
+   implementation evidence such as an edit/write action.
+4. If the timeline is missing or stale, check the app gateway process output
+   and the Electron/Vite terminal output from `app:client:dev`, then confirm
+   worker state through the app inspector/workers surface before treating it as
+   a UI projection issue.
+5. If the Electron app cannot be automated in the current environment, record
+   the exact launch command, the prompt used, and whether the activity panel
+   showed the worker timeline before reporting the check as manual.
+
 ## Related Specs
 
 - `SPEC-BUTLER-DEDICATED-CLIENT` - Butler Dedicated Client

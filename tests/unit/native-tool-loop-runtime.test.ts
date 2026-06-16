@@ -128,6 +128,50 @@ test("native runtime injects Project Ledger Runtime Context only for project-ori
   expect(nonProjectPrompt).not.toContain("query_project_work");
 });
 
+test("native runtime gives worker sessions the execution tool loop and role-limited tool profile", async () => {
+  const toolCatalogs: string[][] = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runFunctionToolPromptText: async (input) => {
+      toolCatalogs.push(input.tools.map((tool) => tool.name));
+      return "Worker evidence recorded.";
+    },
+    runPromptText: async () => {
+      throw new Error("worker sessions must not fall back to text-only prompt execution");
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "worker/native-tool-profile",
+    role: "worker",
+    workspacePath: tempDir,
+    systemPrompt: "You are a Butler worker.",
+    metadata: { projectPath: tempDir },
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Implement the assigned fixture change and verify it." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toBe("Worker evidence recorded.");
+  expect(toolCatalogs).toHaveLength(1);
+  const names = toolCatalogs[0]!;
+  expect(names).toContain("run_command");
+  expect(names).toContain("update_todo_list");
+  expect(names).toContain("update_work_stream_state");
+  expect(names).not.toContain("dispatch_worker");
+  expect(names).not.toContain("create_planned_task");
+  expect(names).not.toContain("run_planned_task");
+  expect(names).not.toContain("repair_planned_task");
+  expect(names).not.toContain("create_work_orchestration");
+  expect(names).not.toContain("run_ready_work_streams");
+  expect(names).not.toContain("write_planned_public_report");
+});
+
 test("native runtime injects recent transcript context and excludes current inbound event", async () => {
   appendTranscriptEvent(createTranscriptEvent({
     sessionId: "butler/main",
@@ -558,6 +602,80 @@ test("native runtime exposes direct command toolchains to Butler and Steward ses
     expect(events.find((event) => event.kind === "tool.started")?.payload?.safeLabel)
       .toBe("Bash: pwd");
   }
+});
+
+test("native runtime advances durable WorkStreams for Steward non-trivial work", async () => {
+  const defaultExecutor = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+    sessionId: "steward/workstream-custody",
+    projectId: "butler",
+  });
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    executeButlerTool: defaultExecutor,
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: "작업: Steward custody turn을 WorkStream으로 정리합니다.\n이유: 비 trivial steward work도 BTCC 상태로 남아야 합니다.\n다음: 생성된 WorkStream을 확인합니다.",
+        toolCalls: [{ name: "update_todo_list", args: { title: "Steward custody review", todos: [] } }],
+      });
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          title: "Steward custody review",
+          todos: [{
+            id: "review",
+            content: "Review custody evidence",
+            active_form: "Reviewing custody evidence",
+            status: "in_progress",
+            phase: "review",
+          }],
+        },
+        rawArguments: JSON.stringify({
+          title: "Steward custody review",
+          todos: [{
+            id: "review",
+            content: "Review custody evidence",
+            active_form: "Reviewing custody evidence",
+            status: "in_progress",
+            phase: "review",
+          }],
+        }),
+      });
+      return "Steward custody review is underway.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "steward/workstream-custody",
+    role: "steward",
+    workspacePath: tempDir,
+    systemPrompt: "You are Steward.",
+    metadata: { projectId: "butler" },
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "프로젝트 custody 상태를 검토해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  })).rejects.toThrow("active direct work stream is not deliverable");
+
+  const streams = new WorkStreamStore(tempDir).list({
+    sessionId: "steward/workstream-custody",
+    includeTerminal: true,
+  });
+  expect(streams[0]).toMatchObject({
+    owner_session_id: "steward/workstream-custody",
+    project_id: "butler",
+    title: "Steward custody review",
+    current_phase: "review",
+  });
+  expect(["reviewing", "reporting", "complete", "recoverable"]).toContain(streams[0]!.state);
 });
 
 test("native runtime sends a profiled tool surface for basic project turns", async () => {
