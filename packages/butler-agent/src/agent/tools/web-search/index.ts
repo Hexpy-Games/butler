@@ -1,2 +1,1 @@
-export * from "./definition.ts";
-export { createWebSearchHandler } from "./executor.ts";
+export { createWebSearchHandler } from "./web_search/executor.ts";

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { spawnSync } from "child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -151,6 +151,50 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   const personaPresetProperty = onboardingProperties?.persona_preset as { enum?: unknown; description?: unknown } | undefined;
   expect(personaPresetProperty?.enum).toBeUndefined();
   expect(String(personaPresetProperty?.description)).toContain("persona_preset id");
+});
+
+test("agent tools directory groups canonical tool-name entrypoints", () => {
+  const toolsRoot = join(root, "packages", "butler-agent", "src", "agent", "tools");
+  const groupNames = readdirSync(toolsRoot)
+    .filter((name) => statSync(join(toolsRoot, name)).isDirectory())
+    .sort();
+  const expectedGroups = [
+    "automation",
+    "data-table",
+    "mcp",
+    "memory",
+    "monitoring",
+    "orchestration",
+    "planned-task",
+    "project-ledger",
+    "run-command",
+    "skills",
+    "web-read",
+    "web-search",
+    "work-tracking",
+    "worker",
+  ];
+  const groupedToolNames = groupNames.flatMap((groupName) => (
+    readdirSync(join(toolsRoot, groupName))
+      .filter((name) => statSync(join(toolsRoot, groupName, name)).isDirectory())
+      .map((name) => `${groupName}/${name}`)
+  )).sort();
+  const toolNames = BUTLER_TOOLS.map((tool) => tool.name).sort();
+  const nestedToolNames = groupedToolNames.map((name) => name.split("/").at(1)).sort();
+
+  expect(groupNames).toEqual(expectedGroups);
+  expect(nestedToolNames).toEqual(toolNames);
+
+  for (const groupName of groupNames) {
+    expect(existsSync(join(toolsRoot, groupName, "executor.ts"))).toBe(false);
+  }
+
+  for (const name of groupedToolNames) {
+    const source = readFileSync(join(toolsRoot, name, "index.ts"), "utf8");
+    expect(source).not.toContain("export * from");
+    expect(source).toContain("./definition.ts");
+    expect(existsSync(join(toolsRoot, name, "executor.ts"))).toBe(true);
+  }
 });
 
 test("weather native tools are absent from the registry, profiles, and executor", async () => {

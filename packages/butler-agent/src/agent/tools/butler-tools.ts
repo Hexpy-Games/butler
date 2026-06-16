@@ -27,13 +27,15 @@ import { createDataTableToolHandlers } from "./data-table/index.ts";
 import { createMcpToolHandlers } from "./mcp/index.ts";
 import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
-import { createPlannedWorkerToolHandlers, dispatchBackgroundTask, type WorkerModelSelectionRule } from "./planned-task/index.ts";
+import { createOrchestrationToolHandlers } from "./orchestration/index.ts";
+import { createPlannedTaskToolHandlers, dispatchBackgroundTask, type WorkerModelSelectionRule } from "./planned-task/index.ts";
 import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
 import { createRunCommandToolHandlers } from "./run-command/index.ts";
 import { createSkillToolHandlers } from "./skills/index.ts";
 import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
+import { createWorkerToolHandlers } from "./worker/index.ts";
 import {
   BUTLER_TOOLS,
   TOOL_CAPABILITY_METADATA,
@@ -203,7 +205,35 @@ export function createButlerToolExecutor(input: {
       butlerData: input.butlerData,
       workspacePath: input.workspacePath ?? input.butlerHome,
     }),
-    ...createPlannedWorkerToolHandlers({
+    ...createWorkerToolHandlers({
+      butlerHome: input.butlerHome,
+      butlerData: input.butlerData,
+      sessionId: input.sessionId,
+      projectId: input.projectId,
+      turnContext: input.turnContext,
+      workerModel: input.workerModel,
+      workerModelRules: input.workerModelRules,
+      taskStore,
+      plannedTaskStore,
+      workStreamStore,
+      orchestrationStore,
+      dispatchTask: input.dispatchTask,
+    }),
+    ...createPlannedTaskToolHandlers({
+      butlerHome: input.butlerHome,
+      butlerData: input.butlerData,
+      sessionId: input.sessionId,
+      projectId: input.projectId,
+      turnContext: input.turnContext,
+      workerModel: input.workerModel,
+      workerModelRules: input.workerModelRules,
+      taskStore,
+      plannedTaskStore,
+      workStreamStore,
+      orchestrationStore,
+      dispatchTask: input.dispatchTask,
+    }),
+    ...createOrchestrationToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
       sessionId: input.sessionId,
