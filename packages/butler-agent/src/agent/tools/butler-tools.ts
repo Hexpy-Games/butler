@@ -2870,6 +2870,14 @@ export function createButlerToolExecutor(input: {
         model: workerModel.model,
         reasoningEffort: workerModel.reasoningEffort,
       });
+      if (input.sessionId) {
+        taskStore.writeOrigin(worker.task_id, buildTaskOriginContext({
+          sessionId: input.sessionId,
+          taskSummary: task,
+          project: input.projectId ?? projectPath,
+          topicSummary: "Direct Worker dispatch",
+        }));
+      }
       const linkedStream = workStreamStore.link({
         sessionId: input.sessionId,
         workerTaskIds: [worker.task_id],
@@ -3395,6 +3403,14 @@ export function createButlerToolExecutor(input: {
           model: workerModel.model,
           reasoningEffort: workerModel.reasoningEffort,
         });
+        if (input.sessionId) {
+          taskStore.writeOrigin(worker.task_id, buildTaskOriginContext({
+            sessionId: input.sessionId,
+            taskSummary: stream.objective || record.goal,
+            project: input.projectId ?? input.workspacePath ?? input.butlerHome,
+            topicSummary: `Work orchestration stream ${stream.id}`,
+          }));
+        }
         return {
           stream_id: stream.id,
           worker_task_id: worker.task_id,

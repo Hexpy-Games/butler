@@ -31,6 +31,7 @@ import { runWorkerResultMonitor } from "./worker-result-monitor.ts";
 import { runPromptText } from "../../integrations/providers/provider.ts";
 import { plannedInternalGoal, PlannedTaskStore } from "../../agent/work/planned-task.ts";
 import type { TaskRecord } from "../../agent/work/task-store.ts";
+import { WorkOrchestrationStore } from "../../agent/work/work-orchestration.ts";
 import { NativeInboundQueue, type ClaimedInboundEvent } from "../../gateways/core/inbound-queue.ts";
 import {
   resolveAppGatewayRuntimeConfig,
@@ -135,15 +136,31 @@ function buildWorkerCompletionEnvelope(input: {
   accountId: string;
   peerId: string;
   task: TaskRecord;
+  butlerData: string;
 }): InboundEnvelope {
   const result = trimForCompletionEvent(input.task.observedResult, 6_000) ||
     "No result.md was produced and no worker log summary was available.";
   const origin = trimForCompletionEvent(input.task.origin?.task_summary ?? input.task.request, 1_200);
+  const orchestrationLink = new WorkOrchestrationStore(input.butlerData).findByWorkerTaskId(input.task.taskId);
+  const orchestrationInstructions = orchestrationLink
+    ? [
+        "",
+        "Orchestration continuation:",
+        `- Orchestration ID: ${orchestrationLink.record.id}`,
+        `- Completed stream ID: ${orchestrationLink.stream.id}`,
+        "- First call `sync_work_orchestration` for this orchestration id.",
+        "- If dependency-ready streams remain, call `run_ready_work_streams` and do not produce a final completion report yet.",
+        "- Only call `write_work_orchestration_report` and deliver a user-facing report after every orchestration stream is terminal.",
+      ]
+    : [];
   const text = [
     "System event: a background worker task completed.",
     "This is not a user request to start new work.",
-    "Read the worker result and produce a concise user-facing completion report in the active Butler persona and response language.",
+    orchestrationLink
+      ? "Continue the linked work orchestration from durable state before reporting to the user."
+      : "Read the worker result and produce a concise user-facing completion report in the active Butler persona and response language.",
     "Do not dump raw internal fields. Do not include the full request unless it is necessary. Mention clear next steps when useful.",
+    ...orchestrationInstructions,
     "",
     `Task ID: ${input.task.taskId}`,
     `Status: ${input.task.status}`,
@@ -586,6 +603,7 @@ export async function runNativeButlerMain(
           accountId: "default",
           peerId: currentTelegramChatId()?.trim() || targetBinding.sessionId,
           task,
+          butlerData,
         }), {
           sessionId: targetBinding.sessionId,
           role: "butler",
@@ -656,6 +674,7 @@ export async function runNativeButlerMain(
           accountId: "local",
           peerId: targetBinding.sessionId,
           task,
+          butlerData,
         }), {
           sessionId: targetBinding.sessionId,
           role: "butler",

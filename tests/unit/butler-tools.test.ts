@@ -3987,7 +3987,8 @@ test("work orchestration tools dispatch dependency-ready streams and gate report
   const execute = createButlerToolExecutor({
     butlerHome: tempDir,
     butlerData: tempDir,
-    sessionId: "butler/main",
+    sessionId: "butler/app-general",
+    projectId: "general-project",
     dispatchTask: (input) => {
       dispatchIndex += 1;
       expect(input.task).toContain("Execute Butler orchestration work stream");
@@ -4051,6 +4052,11 @@ test("work orchestration tools dispatch dependency-ready streams and gate report
     status: "running",
     counts: { running: 1, pending: 1 },
   });
+  expect(new TaskStore(tempDir).read("orch-worker-1")?.origin).toMatchObject({
+    origin_session_id: "butler/app-general",
+    project: "general-project",
+    topic_summary: "Work orchestration stream research",
+  });
 
   await expect(execute({
     name: "write_work_orchestration_report",
@@ -4080,6 +4086,11 @@ test("work orchestration tools dispatch dependency-ready streams and gate report
     rawArguments: "{}",
   }) as Record<string, any>;
   expect(secondRun.dispatched).toEqual([{ stream_id: "build", worker_task_id: "orch-worker-2" }]);
+  expect(new TaskStore(tempDir).read("orch-worker-2")?.origin).toMatchObject({
+    origin_session_id: "butler/app-general",
+    project: "general-project",
+    topic_summary: "Work orchestration stream build",
+  });
 
   const workerTwo = join(tempDir, "tasks", "orch-worker-2");
   mkdirSync(workerTwo, { recursive: true });
@@ -4110,6 +4121,35 @@ test("Butler tool registry converts to agent-loop schemas", () => {
   const dispatch = tools.find((tool) => tool.name === "dispatch_worker");
   expect(dispatch?.inputSchema?.required).toEqual(["task"]);
   expect(dispatch?.inputSchema?.additionalProperties).toBe(false);
+});
+
+test("direct worker dispatch records durable app origin", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    sessionId: "butler/app-general",
+    projectId: "general-project",
+    dispatchTask: (input) => {
+      expect(input.task).toBe("Inspect the current issue");
+      return {
+        task_id: "direct-worker-origin",
+        status: "RUNNING",
+        message: "stubbed",
+      };
+    },
+  });
+
+  await execute({
+    name: "dispatch_worker",
+    args: { task: "Inspect the current issue" },
+    rawArguments: "{}",
+  });
+
+  expect(new TaskStore(tempDir).read("direct-worker-origin")?.origin).toMatchObject({
+    origin_session_id: "butler/app-general",
+    project: "general-project",
+    task_summary: "Inspect the current issue",
+  });
 });
 
 test("list_tasks returns durable task summaries from Butler data", async () => {

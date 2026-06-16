@@ -31,6 +31,7 @@ import { PlannedTaskStore } from "../../packages/butler-agent/src/agent/work/pla
 import { buildTaskOriginContext } from "../../packages/butler-agent/src/agent/work/task-origin.ts";
 import { TaskStore } from "../../packages/butler-agent/src/agent/work/task-store.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
+import { WorkOrchestrationStore } from "../../packages/butler-agent/src/agent/work/work-orchestration.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import {
@@ -4175,6 +4176,109 @@ test("app-server read routes do not execute app-origin worker completions", asyn
     expect(JSON.stringify(messages.data.messages)).not.toContain(
       "worker evidence ready",
     );
+  } finally {
+    server.stop();
+  }
+});
+
+test("session view syncs linked orchestration workers without delivering reports", async () => {
+  const orchestrationStore = new WorkOrchestrationStore(tempDir);
+  orchestrationStore.create({
+    id: "orch-session-view",
+    goal: "Build a small canvas game",
+    originSessionId: "butler/app-general",
+    streams: [{
+      id: "implementation",
+      role: "builder",
+      objective: "Implement the game",
+      acceptance_criteria: ["snake.html exists"],
+    }],
+  });
+  orchestrationStore.markDispatched("orch-session-view", [{
+    stream_id: "implementation",
+    worker_task_id: "worker-orch-session-view",
+  }]);
+  const workStreamStore = new WorkStreamStore(tempDir);
+  workStreamStore.updateFromTodoList({
+    ownerSessionId: "butler/app-general",
+    projectId: "general",
+    listId: "main",
+    title: "Build a small canvas game",
+    items: [{
+      id: "orchestrate",
+      content: "Run orchestration",
+      active_form: "Running orchestration",
+      status: "in_progress",
+      phase: "planning",
+      priority: "normal",
+      blocked_by: [],
+      note: null,
+      created_at: "2026-05-15T00:00:00.000Z",
+      updated_at: "2026-05-15T00:00:00.000Z",
+      completed_at: null,
+    }],
+  });
+  workStreamStore.link({
+    sessionId: "butler/app-general",
+    orchestrationIds: ["orch-session-view"],
+    workerTaskIds: ["worker-orch-session-view"],
+  });
+
+  const workerDir = join(tempDir, "tasks", "worker-orch-session-view");
+  mkdirSync(workerDir, { recursive: true });
+  writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(workerDir, "project"), "general\n", "utf8");
+  writeFileSync(join(workerDir, "request.md"), "Implement the snake game\n", "utf8");
+  writeFileSync(join(workerDir, "result.md"), "Created snake.html and verified game behavior.\n", "utf8");
+  writeFileSync(join(workerDir, "worker_activity.json"), JSON.stringify({
+    phase: "complete",
+    semantic_phase: "verifying",
+    action_kind: "test",
+    status_line: "Complete: worker result is ready.",
+    updated_at: "2026-05-15T00:00:00.000Z",
+  }), "utf8");
+  writeFileSync(join(workerDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+    schema: "butler.worker-activity-event.v1",
+    event_id: "ev-orch-session-view",
+    created_at: "2026-05-15T00:00:00.000Z",
+    actor: "worker",
+    event: "activity_updated",
+    semantic_phase: "executing",
+    action_kind: "write_file",
+    status_line: "Executing: created snake.html.",
+    evidence_refs: ["snake.html"],
+  })}\n`, "utf8");
+
+  const responderInputs: string[] = [];
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder: (input) => {
+      responderInputs.push(input.text);
+      return { texts: ["read route should not call this responder"] };
+    },
+  });
+  try {
+    const view = await getJson(`${server.url}session-view?session_id=general`);
+    expect(view.data.workers).toEqual([
+      expect.objectContaining({
+        task_id: "worker-orch-session-view",
+        session_id: "general",
+        orchestration_id: "orch-session-view",
+        phase: "complete",
+        terminal: true,
+      }),
+    ]);
+    expect(orchestrationStore.read("orch-session-view")).toMatchObject({
+      status: "ready_for_report",
+      streams: [expect.objectContaining({
+        id: "implementation",
+        status: "done",
+      })],
+    });
+    expect(responderInputs).toEqual([]);
+    expect(JSON.stringify(view.data.messages)).not.toContain("Created snake.html");
   } finally {
     server.stop();
   }

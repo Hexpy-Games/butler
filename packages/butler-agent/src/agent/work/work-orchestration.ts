@@ -209,6 +209,28 @@ export class WorkOrchestrationStore {
       .map(summarize);
   }
 
+  records(): WorkOrchestrationRecord[] {
+    if (!existsSync(this.dir)) return [];
+    return readdirSync(this.dir)
+      .filter((entry) => entry.endsWith(".json"))
+      .map((entry) => readJson<WorkOrchestrationRecord>(join(this.dir, entry)))
+      .filter((record): record is WorkOrchestrationRecord => Boolean(record))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  }
+
+  findByWorkerTaskId(workerTaskId: string): {
+    record: WorkOrchestrationRecord;
+    stream: WorkStreamRecord;
+  } | null {
+    const safeWorkerTaskId = workerTaskId.trim();
+    if (!safeWorkerTaskId) return null;
+    for (const record of this.records()) {
+      const stream = record.streams.find((item) => item.worker_task_id === safeWorkerTaskId);
+      if (stream) return { record, stream };
+    }
+    return null;
+  }
+
   create(input: {
     id?: string;
     title?: string;

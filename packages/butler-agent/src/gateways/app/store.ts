@@ -2511,6 +2511,7 @@ export class AppServerStore {
         ? latestTurnView
         : null;
     const runtimeSessionId = sessionHintForRow(sessionId);
+    this.syncLinkedWorkOrchestrationsForSession(sessionId, runtimeSessionId);
     const workStreamStore = new WorkStreamStore(this.butlerData);
     const seenWorkStreams = new Set<string>();
     const workStreams = [
@@ -2908,16 +2909,48 @@ export class AppServerStore {
     );
   }
 
+  private syncLinkedWorkOrchestrationsForSession(
+    sessionId: string,
+    runtimeSessionId = sessionHintForRow(sessionId),
+  ): void {
+    const workStreamStore = new WorkStreamStore(this.butlerData);
+    const orchestrationStore = new WorkOrchestrationStore(this.butlerData);
+    const orchestrationIds = new Set<string>();
+    for (const stream of [
+      ...workStreamStore.list({ sessionId, includeTerminal: false }),
+      ...workStreamStore.list({ sessionId: runtimeSessionId, includeTerminal: false }),
+    ]) {
+      const record = workStreamStore.read(stream.id);
+      for (const orchestrationId of record?.linked_orchestration_ids ?? []) {
+        orchestrationIds.add(orchestrationId);
+      }
+    }
+    const taskStore = new TaskStore(this.butlerData);
+    for (const orchestrationId of orchestrationIds) {
+      try {
+        orchestrationStore.syncFromTasks(orchestrationId, taskStore);
+      } catch {
+        // Session read routes may project stale linked ids; projection should
+        // remain available even when an old orchestration file was removed.
+      }
+    }
+  }
+
   listWorkerActivity(
     options: { sessionId?: string; includeHistory?: boolean } = {},
   ): WorkerActivityListView {
     const projectAliases = options.sessionId
       ? this.workerProjectAliasesForSession(options.sessionId)
       : new Set<string>();
+    const linkedWorkerTaskIds = options.sessionId
+      ? this.linkedWorkerTaskIdsForSession(options.sessionId)
+      : new Set<string>();
     const plannedStore = new PlannedTaskStore(this.butlerData);
+    const orchestrationStore = new WorkOrchestrationStore(this.butlerData);
     const rawWorkers = new TaskStore(this.butlerData)
       .summaries(200)
       .map((task) => {
+        const linkedToSession = linkedWorkerTaskIds.has(task.task_id);
         const linkedPlan =
           task.task_type === "planned"
             ? null
@@ -2925,12 +2958,17 @@ export class AppServerStore {
         const orchestrationId =
           task.task_type === "planned"
             ? task.task_id
-            : linkedPlan?.record.taskId;
+            : linkedPlan?.record.taskId ??
+              orchestrationStore.findByWorkerTaskId(task.task_id)?.record.id;
         const worker = workerActivityFromTaskSummary(task, orchestrationId);
         const appChatId = worker.session_id?.startsWith("butler/app-")
           ? this.chatIdForRuntimeSession(worker.session_id)
           : null;
-        return appChatId ? { ...worker, session_id: appChatId } : worker;
+        if (appChatId) return { ...worker, session_id: appChatId };
+        if (linkedToSession && options.sessionId && !worker.session_id) {
+          return { ...worker, session_id: options.sessionId };
+        }
+        return worker;
       })
       .filter((worker) => options.includeHistory || !worker.terminal)
       // Session-scoped UI prefers exact origin sessions and only recovers
@@ -2939,12 +2977,41 @@ export class AppServerStore {
         (worker) =>
           !options.sessionId ||
           worker.session_id === options.sessionId ||
+          (worker.task_id && linkedWorkerTaskIds.has(worker.task_id)) ||
           (!worker.session_id &&
             !worker.terminal &&
             workerProjectMatches(worker.project_id, projectAliases)),
       );
     const workers = relabelWorkerActivities(orderWorkerActivities(rawWorkers));
     return { workers };
+  }
+
+  private linkedWorkerTaskIdsForSession(sessionId: string): Set<string> {
+    const runtimeSessionId = sessionHintForRow(sessionId);
+    const workStreamStore = new WorkStreamStore(this.butlerData);
+    const orchestrationStore = new WorkOrchestrationStore(this.butlerData);
+    const workerTaskIds = new Set<string>();
+    const seen = new Set<string>();
+    for (const stream of [
+      ...workStreamStore.list({ sessionId, includeTerminal: true }),
+      ...workStreamStore.list({ sessionId: runtimeSessionId, includeTerminal: true }),
+    ]) {
+      if (seen.has(stream.id)) continue;
+      seen.add(stream.id);
+      const record = workStreamStore.read(stream.id);
+      for (const workerTaskId of record?.linked_worker_task_ids ?? []) {
+        workerTaskIds.add(workerTaskId);
+      }
+      for (const orchestrationId of record?.linked_orchestration_ids ?? []) {
+        const orchestration = orchestrationStore.read(orchestrationId);
+        for (const orchestrationStream of orchestration?.streams ?? []) {
+          if (orchestrationStream.worker_task_id) {
+            workerTaskIds.add(orchestrationStream.worker_task_id);
+          }
+        }
+      }
+    }
+    return workerTaskIds;
   }
 
   getWorkerActivity(workerId: string): WorkerActivitySummary {
@@ -8064,7 +8131,14 @@ function workerActivityFromTaskSummary(
   task: TaskSummary,
   orchestrationId?: string,
 ): WorkerActivitySummary {
-  const phase = task.activity_phase ?? workModeToPhase(task.work_mode);
+  const workModePhase = workModeToPhase(task.work_mode);
+  const phase = (
+    workModePhase === "complete" ||
+    workModePhase === "failed" ||
+    workModePhase === "cancelled"
+  )
+    ? workModePhase
+    : task.activity_phase ?? workModePhase;
   const terminal = ["complete", "failed", "cancelled"].includes(phase);
   return {
     worker_id: `worker-${task.task_id}`,
