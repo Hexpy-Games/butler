@@ -27,13 +27,24 @@ import {
   readToolOutputArtifactToolDefinition,
   readToolOutputArtifactToolMetadata,
 } from "./monitoring/index.ts";
-import { listMcpCapabilitiesToolDefinition, listMcpCapabilitiesToolMetadata } from "./list_mcp_capabilities/index.ts";
-import { callMcpToolToolDefinition, callMcpToolToolMetadata } from "./call_mcp_tool/index.ts";
-import { readMcpResourceToolDefinition, readMcpResourceToolMetadata } from "./read_mcp_resource/index.ts";
-import { createAutomationToolDefinition, createAutomationToolMetadata } from "./create_automation/index.ts";
-import { listAutomationsToolDefinition, listAutomationsToolMetadata } from "./list_automations/index.ts";
-import { deleteAutomationToolDefinition, deleteAutomationToolMetadata } from "./delete_automation/index.ts";
-import { runDueAutomationsToolDefinition, runDueAutomationsToolMetadata } from "./run_due_automations/index.ts";
+import {
+  callMcpToolToolDefinition,
+  callMcpToolToolMetadata,
+  listMcpCapabilitiesToolDefinition,
+  listMcpCapabilitiesToolMetadata,
+  readMcpResourceToolDefinition,
+  readMcpResourceToolMetadata,
+} from "./mcp/index.ts";
+import {
+  createAutomationToolDefinition,
+  createAutomationToolMetadata,
+  deleteAutomationToolDefinition,
+  deleteAutomationToolMetadata,
+  listAutomationsToolDefinition,
+  listAutomationsToolMetadata,
+  runDueAutomationsToolDefinition,
+  runDueAutomationsToolMetadata,
+} from "./automation/index.ts";
 import {
   controlWorkToolDefinition,
   controlWorkToolMetadata,
