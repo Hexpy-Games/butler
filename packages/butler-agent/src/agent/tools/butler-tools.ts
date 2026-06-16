@@ -30,7 +30,7 @@ import {
 } from "../../integrations/search/planning.ts";
 import { readPageConfigured } from "../../integrations/search/page-reader.ts";
 import { butlerAgentScriptPath } from "../../runtime/paths.ts";
-import { AutomationStore, type AutomationSchedule } from "../../operations/service/automation-store.ts";
+import { AutomationStore } from "../../operations/service/automation-store.ts";
 import {
   type RetrievalPlanningInput,
   type RetrievalPlanningResult,
@@ -40,11 +40,6 @@ import {
   validateSkillCatalog,
 } from "../../integrations/skills/catalog.ts";
 import { loadRuntimeSkills } from "../../integrations/skills/manager.ts";
-import {
-  callMcpTool,
-  listMcpServerCapabilities,
-  readMcpResource,
-} from "../../interfaces/mcp-client/client.ts";
 import type { AgentLoopToolDefinition } from "../turn/agent-loop.ts";
 import type { FunctionToolPromptOptions } from "../../integrations/providers/provider.ts";
 import type { ReasoningEffort } from "../../integrations/providers/model-catalog.ts";
@@ -53,8 +48,10 @@ import {
   evidenceReceiptsFromResult,
   satisfiedCompletionObligationsFromEvidenceReceipts,
 } from "../output/evidence-receipts.ts";
+import { createAutomationToolHandlers } from "./automation/index.ts";
 import { butlerToolProcessEnvironment } from "./executor-support.ts";
 import { transformPublicDataTable } from "./data-table/index.ts";
+import { createMcpToolHandlers } from "./mcp/index.ts";
 import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
 import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
@@ -231,39 +228,6 @@ function workStreamInputs(value: unknown): WorkStreamInput[] {
       acceptance_criteria: stringArray(item.acceptance_criteria),
       depends_on: stringArray(item.depends_on),
     }));
-}
-
-function automationSchedule(args: Record<string, unknown>): AutomationSchedule {
-  const scheduleType = typeof args.schedule_type === "string" ? args.schedule_type.trim() : "";
-  if (scheduleType === "once") {
-    if (typeof args.run_at !== "string" || !args.run_at.trim()) {
-      throw new Error("create_automation once schedule requires run_at");
-    }
-    return {
-      type: "once",
-      run_at: args.run_at.trim(),
-    };
-  }
-  if (scheduleType === "interval") {
-    if (typeof args.interval_minutes !== "number") {
-      throw new Error("create_automation interval schedule requires interval_minutes");
-    }
-    return {
-      type: "interval",
-      interval_minutes: args.interval_minutes,
-      start_at: typeof args.start_at === "string" && args.start_at.trim()
-        ? args.start_at.trim()
-        : undefined,
-    };
-  }
-  throw new Error("create_automation requires schedule_type once or interval");
-}
-
-function automationNow(value: unknown): Date {
-  if (typeof value !== "string" || !value.trim()) return new Date();
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) throw new Error("run_due_automations now must be a valid ISO date");
-  return date;
 }
 
 export function satisfiedCompletionObligationsForToolResult(
@@ -760,89 +724,13 @@ export function createButlerToolExecutor(input: {
       sessionId: input.sessionId,
       webSearchProvider: input.webSearchProvider,
     }),
-    "list_mcp_capabilities": async (call) => {
-      return {
-        ok: true,
-        ...await listMcpServerCapabilities({
-          butlerData: input.butlerData,
-          includeDisabled: call.args.include_disabled === true,
-        }),
-      };
-    },
-    "call_mcp_tool": async (call) => {
-      const serverId = typeof call.args.server_id === "string" ? call.args.server_id.trim() : "";
-      const toolName = typeof call.args.tool_name === "string" ? call.args.tool_name.trim() : "";
-      if (!serverId) throw new Error("call_mcp_tool requires server_id");
-      if (!toolName) throw new Error("call_mcp_tool requires tool_name");
-      const mcpArguments = call.args.arguments &&
-        typeof call.args.arguments === "object" &&
-        !Array.isArray(call.args.arguments)
-        ? call.args.arguments as Record<string, unknown>
-        : {};
-      return {
-        ok: true,
-        ...await callMcpTool({
-          butlerData: input.butlerData,
-          serverId,
-          toolName,
-          args: mcpArguments,
-        }),
-      };
-    },
-    "read_mcp_resource": async (call) => {
-      const serverId = typeof call.args.server_id === "string" ? call.args.server_id.trim() : "";
-      const uri = typeof call.args.uri === "string" ? call.args.uri.trim() : "";
-      if (!serverId) throw new Error("read_mcp_resource requires server_id");
-      if (!uri) throw new Error("read_mcp_resource requires uri");
-      return {
-        ok: true,
-        ...await readMcpResource({
-          butlerData: input.butlerData,
-          serverId,
-          uri,
-        }),
-      };
-    },
-    "create_automation": async (call) => {
-      const prompt = typeof call.args.prompt === "string" ? call.args.prompt : "";
-      const sessionId = typeof call.args.session_id === "string" && call.args.session_id.trim()
-        ? call.args.session_id.trim()
-        : input.sessionId ?? "butler/main";
-      return {
-        ok: true,
-        automation: automationStore.create({
-          id: typeof call.args.id === "string" && call.args.id.trim() ? call.args.id.trim() : undefined,
-          title: typeof call.args.title === "string" ? call.args.title : undefined,
-          prompt,
-          sessionId,
-          schedule: automationSchedule(call.args),
-        }),
-      };
-    },
-    "list_automations": async (call) => {
-      return {
-        ok: true,
-        automations: automationStore.list({
-          includeDeleted: call.args.include_deleted === true,
-        }),
-      };
-    },
-    "delete_automation": async (call) => {
-      const id = typeof call.args.id === "string" ? call.args.id.trim() : "";
-      if (!id) throw new Error("delete_automation requires id");
-      return {
-        ok: true,
-        automation: automationStore.delete(id),
-      };
-    },
-    "run_due_automations": async (call) => {
-      const runs = automationStore.claimDue(automationNow(call.args.now));
-      return {
-        ok: true,
-        claimed: runs.length,
-        runs,
-      };
-    },
+    ...createMcpToolHandlers({
+      butlerData: input.butlerData,
+    }),
+    ...createAutomationToolHandlers({
+      sessionId: input.sessionId,
+      automationStore,
+    }),
     ...createWorkTrackingToolHandlers({
       butlerData: input.butlerData,
       sessionId: input.sessionId,
