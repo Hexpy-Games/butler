@@ -1,2 +1,2 @@
 export * from "./definition.ts";
-export { transformPublicDataTable } from "./executor.ts";
+export { createDataTableToolHandlers, transformPublicDataTable } from "./executor.ts";

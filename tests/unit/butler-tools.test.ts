@@ -204,6 +204,19 @@ test("Butler tool executor dispatch is registry-based instead of a call-name if-
   expect(executorSource).not.toMatch(/if\s*\(\s*call\.name\s*===/u);
 });
 
+test("Butler tool compatibility entrypoint does not own capability executor bodies", () => {
+  const source = readFileSync(
+    join(root, "packages", "butler-agent", "src", "agent", "tools", "butler-tools.ts"),
+    "utf8",
+  );
+  const lineCount = source.split("\n").length;
+  expect(lineCount).toBeLessThanOrEqual(280);
+  expect(source).not.toMatch(/"[^"]+":\s*async\s*\(/u);
+  expect(source).not.toContain("loadRuntimeSkills");
+  expect(source).not.toContain("runProjectLedgerTool");
+  expect(source).not.toContain("spawn(\"/bin/bash\"");
+});
+
 test("basic project turns expose a bounded startup and project tool profile", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",

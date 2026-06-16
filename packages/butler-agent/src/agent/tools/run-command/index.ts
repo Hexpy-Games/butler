@@ -1,2 +1,2 @@
 export * from "./definition.ts";
-export { runCommandTool } from "./executor.ts";
+export { createRunCommandToolHandlers, runCommandTool } from "./executor.ts";
