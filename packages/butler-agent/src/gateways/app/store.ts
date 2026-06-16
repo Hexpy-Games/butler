@@ -2511,6 +2511,7 @@ export class AppServerStore {
         ? latestTurnView
         : null;
     const runtimeSessionId = sessionHintForRow(sessionId);
+    this.syncLinkedWorkOrchestrationsForSession(sessionId, runtimeSessionId);
     const workStreamStore = new WorkStreamStore(this.butlerData);
     const seenWorkStreams = new Set<string>();
     const workStreams = [
@@ -2908,16 +2909,48 @@ export class AppServerStore {
     );
   }
 
+  private syncLinkedWorkOrchestrationsForSession(
+    sessionId: string,
+    runtimeSessionId = sessionHintForRow(sessionId),
+  ): void {
+    const workStreamStore = new WorkStreamStore(this.butlerData);
+    const orchestrationStore = new WorkOrchestrationStore(this.butlerData);
+    const orchestrationIds = new Set<string>();
+    for (const stream of [
+      ...workStreamStore.list({ sessionId, includeTerminal: false }),
+      ...workStreamStore.list({ sessionId: runtimeSessionId, includeTerminal: false }),
+    ]) {
+      const record = workStreamStore.read(stream.id);
+      for (const orchestrationId of record?.linked_orchestration_ids ?? []) {
+        orchestrationIds.add(orchestrationId);
+      }
+    }
+    const taskStore = new TaskStore(this.butlerData);
+    for (const orchestrationId of orchestrationIds) {
+      try {
+        orchestrationStore.syncFromTasks(orchestrationId, taskStore);
+      } catch {
+        // Session read routes may project stale linked ids; projection should
+        // remain available even when an old orchestration file was removed.
+      }
+    }
+  }
+
   listWorkerActivity(
     options: { sessionId?: string; includeHistory?: boolean } = {},
   ): WorkerActivityListView {
     const projectAliases = options.sessionId
       ? this.workerProjectAliasesForSession(options.sessionId)
       : new Set<string>();
+    const linkedWorkerTaskIds = options.sessionId
+      ? this.linkedWorkerTaskIdsForSession(options.sessionId)
+      : new Set<string>();
     const plannedStore = new PlannedTaskStore(this.butlerData);
+    const orchestrationStore = new WorkOrchestrationStore(this.butlerData);
     const rawWorkers = new TaskStore(this.butlerData)
       .summaries(200)
       .map((task) => {
+        const linkedToSession = linkedWorkerTaskIds.has(task.task_id);
         const linkedPlan =
           task.task_type === "planned"
             ? null
@@ -2925,12 +2958,17 @@ export class AppServerStore {
         const orchestrationId =
           task.task_type === "planned"
             ? task.task_id
-            : linkedPlan?.record.taskId;
+            : linkedPlan?.record.taskId ??
+              orchestrationStore.findByWorkerTaskId(task.task_id)?.record.id;
         const worker = workerActivityFromTaskSummary(task, orchestrationId);
         const appChatId = worker.session_id?.startsWith("butler/app-")
           ? this.chatIdForRuntimeSession(worker.session_id)
           : null;
-        return appChatId ? { ...worker, session_id: appChatId } : worker;
+        if (appChatId) return { ...worker, session_id: appChatId };
+        if (linkedToSession && options.sessionId && !worker.session_id) {
+          return { ...worker, session_id: options.sessionId };
+        }
+        return worker;
       })
       .filter((worker) => options.includeHistory || !worker.terminal)
       // Session-scoped UI prefers exact origin sessions and only recovers
@@ -2939,12 +2977,48 @@ export class AppServerStore {
         (worker) =>
           !options.sessionId ||
           worker.session_id === options.sessionId ||
+          (worker.task_id && linkedWorkerTaskIds.has(worker.task_id)) ||
           (!worker.session_id &&
             !worker.terminal &&
             workerProjectMatches(worker.project_id, projectAliases)),
       );
-    const workers = relabelWorkerActivities(orderWorkerActivities(rawWorkers));
+    const workers = relabelWorkerActivities(orderWorkerActivities(
+      synthesizeOrchestrationParentActivities({
+        workers: rawWorkers,
+        orchestrationStore,
+        sessionId: options.sessionId,
+        includeHistory: options.includeHistory ?? false,
+      }),
+    ));
     return { workers };
+  }
+
+  private linkedWorkerTaskIdsForSession(sessionId: string): Set<string> {
+    const runtimeSessionId = sessionHintForRow(sessionId);
+    const workStreamStore = new WorkStreamStore(this.butlerData);
+    const orchestrationStore = new WorkOrchestrationStore(this.butlerData);
+    const workerTaskIds = new Set<string>();
+    const seen = new Set<string>();
+    for (const stream of [
+      ...workStreamStore.list({ sessionId, includeTerminal: true }),
+      ...workStreamStore.list({ sessionId: runtimeSessionId, includeTerminal: true }),
+    ]) {
+      if (seen.has(stream.id)) continue;
+      seen.add(stream.id);
+      const record = workStreamStore.read(stream.id);
+      for (const workerTaskId of record?.linked_worker_task_ids ?? []) {
+        workerTaskIds.add(workerTaskId);
+      }
+      for (const orchestrationId of record?.linked_orchestration_ids ?? []) {
+        const orchestration = orchestrationStore.read(orchestrationId);
+        for (const orchestrationStream of orchestration?.streams ?? []) {
+          if (orchestrationStream.worker_task_id) {
+            workerTaskIds.add(orchestrationStream.worker_task_id);
+          }
+        }
+      }
+    }
+    return workerTaskIds;
   }
 
   getWorkerActivity(workerId: string): WorkerActivitySummary {
@@ -8064,7 +8138,14 @@ function workerActivityFromTaskSummary(
   task: TaskSummary,
   orchestrationId?: string,
 ): WorkerActivitySummary {
-  const phase = task.activity_phase ?? workModeToPhase(task.work_mode);
+  const workModePhase = workModeToPhase(task.work_mode);
+  const phase = (
+    workModePhase === "complete" ||
+    workModePhase === "failed" ||
+    workModePhase === "cancelled"
+  )
+    ? workModePhase
+    : task.activity_phase ?? workModePhase;
   const terminal = ["complete", "failed", "cancelled"].includes(phase);
   return {
     worker_id: `worker-${task.task_id}`,
@@ -8148,6 +8229,106 @@ function orderWorkerActivities(
     ordered.push(worker);
   }
   return ordered;
+}
+
+function synthesizeOrchestrationParentActivities(input: {
+  workers: WorkerActivitySummary[];
+  orchestrationStore: WorkOrchestrationStore;
+  sessionId?: string;
+  includeHistory: boolean;
+}): WorkerActivitySummary[] {
+  const plannedKeys = new Set(
+    input.workers
+      .filter((worker) => worker.activity_kind === "planned")
+      .map((worker) => worker.task_id ?? worker.orchestration_id)
+      .filter((key): key is string => Boolean(key)),
+  );
+  const childrenByOrchestration = new Map<string, WorkerActivitySummary[]>();
+  for (const worker of input.workers) {
+    if (worker.activity_kind !== "worker" || !worker.orchestration_id) continue;
+    const children = childrenByOrchestration.get(worker.orchestration_id) ?? [];
+    children.push(worker);
+    childrenByOrchestration.set(worker.orchestration_id, children);
+  }
+  if (childrenByOrchestration.size === 0) return input.workers;
+
+  const syntheticParents: WorkerActivitySummary[] = [];
+  for (const orchestration of input.orchestrationStore.records()) {
+    if (plannedKeys.has(orchestration.id)) continue;
+    const children = childrenByOrchestration.get(orchestration.id) ?? [];
+    if (children.length === 0) continue;
+    if (
+      input.sessionId &&
+      orchestration.origin_session_id &&
+      orchestration.origin_session_id !== input.sessionId &&
+      !children.some((child) => child.session_id === input.sessionId)
+    ) {
+      continue;
+    }
+    const parent = workerActivityFromOrchestration(orchestration, children);
+    if (!input.includeHistory && parent.terminal) continue;
+    syntheticParents.push(parent);
+  }
+  return syntheticParents.length > 0
+    ? [...input.workers, ...syntheticParents]
+    : input.workers;
+}
+
+function workerActivityFromOrchestration(
+  orchestration: WorkOrchestrationRecord,
+  children: WorkerActivitySummary[],
+): WorkerActivitySummary {
+  const phase = orchestrationActivityPhase(orchestration);
+  const terminal = ["complete", "failed", "cancelled"].includes(phase);
+  const latestChild = children
+    .slice()
+    .sort((left, right) => right.updated_at.localeCompare(left.updated_at))[0];
+  return {
+    worker_id: `planned-${orchestration.id}`,
+    activity_kind: "planned",
+    worker_label: "Plan",
+    objective: sanitizeWorkerDisplayText(orchestration.goal) ||
+      sanitizeWorkerDisplayText(orchestration.title) ||
+      "Coordinated worker plan",
+    phase,
+    status_line: orchestrationStatusLine(orchestration, phase),
+    current_activity_title: sanitizeWorkerDisplayText(orchestration.title) ?? undefined,
+    session_id: orchestration.origin_session_id ?? latestChild?.session_id,
+    project_id: latestChild?.project_id,
+    task_id: orchestration.id,
+    orchestration_id: orchestration.id,
+    terminal,
+    updated_at: orchestration.updated_at || latestChild?.updated_at || new Date().toISOString(),
+    supported_controls: terminal ? [] : ["cancel"],
+  };
+}
+
+function orchestrationActivityPhase(
+  orchestration: WorkOrchestrationRecord,
+): WorkerActivityPhase {
+  if (orchestration.status === "cancelled") return "cancelled";
+  if (orchestration.status === "failed") return "failed";
+  if (orchestration.status === "reported") return "complete";
+  if (orchestration.status === "ready_for_report") return "reporting";
+  if (orchestration.streams.some((stream) => stream.status === "running")) return "executing";
+  if (orchestration.streams.some((stream) => stream.status !== "pending")) return "executing";
+  return "planning";
+}
+
+function orchestrationStatusLine(
+  orchestration: WorkOrchestrationRecord,
+  phase: WorkerActivityPhase,
+): string {
+  const running = orchestration.streams.filter((stream) => stream.status === "running").length;
+  const done = orchestration.streams.filter((stream) => stream.status === "done" || stream.status === "skipped").length;
+  const total = orchestration.streams.length;
+  if (phase === "cancelled") return "Cancelled: coordinated worker plan stopped.";
+  if (phase === "failed") return "Failed: one or more worker streams need review.";
+  if (phase === "complete") return "Complete: coordinated worker plan reported.";
+  if (phase === "reporting") return "Reporting: worker streams are ready for review.";
+  if (running > 0) return `Executing: ${running} of ${total} worker streams running.`;
+  if (done > 0) return `Executing: ${done} of ${total} worker streams complete.`;
+  return "Planning: coordinated worker streams are queued.";
 }
 
 function projectAliasKey(value?: string | null): string | null {

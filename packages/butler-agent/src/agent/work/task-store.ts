@@ -15,6 +15,10 @@ import {
   type PlannedTaskStatus,
   type PlannedReviewVerdict,
 } from "./planned-task.ts";
+import {
+  summarizeWorkerCompletionEvidence,
+  type WorkerCompletionEvidenceSummary,
+} from "./worker-evidence.ts";
 
 export type TaskStatus =
   | "APPROVED"
@@ -66,6 +70,7 @@ export interface TaskRecord {
   notifiedAt: string | null;
   origin: TaskOriginContext | null;
   planned: PlannedTaskRecord | null;
+  completionEvidence: WorkerCompletionEvidenceSummary;
 }
 
 export interface TaskSummary {
@@ -98,6 +103,7 @@ export interface TaskSummary {
   activity_current_title: string | null;
   activity_work_blocks: WorkerActivityWorkBlock[];
   activity_updated_at: string | null;
+  completion_evidence: WorkerCompletionEvidenceSummary;
   updated_at: string | null;
 }
 
@@ -119,6 +125,11 @@ export interface WorkerActivityProgressRow {
   tool_call_id?: string;
   work_block_id?: string;
   work_block_label?: string;
+  work_decision_summary?: string;
+  work_decision_rationale?: string;
+  work_decision_next_step?: string;
+  work_decision_source?: string;
+  work_decision_evidence_refs?: string[];
   safe_detail_rows?: WorkerActivityProgressDetailRow[];
   created_at: string;
 }
@@ -231,7 +242,10 @@ function taskNextStep(task: TaskRecord): string {
   return "Answer from durable task state and avoid exposing internal ids unless asked.";
 }
 
-function directModeSafety(status: TaskStatus): {
+function directModeSafety(
+  status: TaskStatus,
+  evidence: WorkerCompletionEvidenceSummary,
+): {
   work_mode: WorkMode;
   safe_to_report: boolean;
   completion_claim_allowed: boolean;
@@ -254,11 +268,19 @@ function directModeSafety(status: TaskStatus): {
     };
   }
   if (status === "DONE" || status === "REVIEWED") {
+    if (!evidence.safe_to_report) {
+      return {
+        work_mode: "reviewing",
+        safe_to_report: false,
+        completion_claim_allowed: false,
+        guard_reason: evidence.guard_reason ?? "Worker completion evidence is insufficient.",
+      };
+    }
     return {
       work_mode: "complete",
       safe_to_report: true,
-      completion_claim_allowed: true,
-      guard_reason: null,
+      completion_claim_allowed: evidence.completion_claim_allowed,
+      guard_reason: evidence.guard_reason,
     };
   }
   if (status === "KILLED") {
@@ -285,7 +307,7 @@ export function workSafetyForTask(task: TaskRecord): {
   completion_claim_allowed: boolean;
   guard_reason: string | null;
 } {
-  if (!task.planned) return directModeSafety(task.status);
+  if (!task.planned) return directModeSafety(task.status, task.completionEvidence);
   return plannedModeSafety(task.planned);
 }
 
@@ -471,7 +493,8 @@ function readWorkerActivityProjection(taskDir: string): {
   updated_at: string | null;
 } {
   const raw = readText(join(taskDir, "worker_activity.json"));
-  if (!raw) return { phase: null, status_line: null, current_title: null, semantic_phase: null, action_kind: null, work_blocks: [], updated_at: null };
+  const timelineWorkBlocks = readWorkerTimelineWorkBlocks(taskDir);
+  if (!raw) return { phase: null, status_line: null, current_title: null, semantic_phase: null, action_kind: null, work_blocks: timelineWorkBlocks, updated_at: null };
   try {
     const parsed = JSON.parse(raw) as {
       phase?: unknown;
@@ -488,12 +511,281 @@ function readWorkerActivityProjection(taskDir: string): {
       current_title: typeof parsed.current_title === "string" ? compactOneLine(parsed.current_title, 180) : null,
       semantic_phase: normalizeWorkerActivityPhase(parsed.semantic_phase),
       action_kind: typeof parsed.action_kind === "string" ? compactOneLine(parsed.action_kind, 80) : null,
-      work_blocks: safeWorkerActivityWorkBlocks(parsed.work_blocks),
+      work_blocks: mergeWorkerActivityWorkBlocks(
+        safeWorkerActivityWorkBlocks(parsed.work_blocks),
+        timelineWorkBlocks,
+      ),
       updated_at: typeof parsed.updated_at === "string" ? parsed.updated_at : null,
     };
   } catch {
-    return { phase: null, status_line: null, current_title: null, semantic_phase: null, action_kind: null, work_blocks: [], updated_at: null };
+    return { phase: null, status_line: null, current_title: null, semantic_phase: null, action_kind: null, work_blocks: timelineWorkBlocks, updated_at: null };
   }
+}
+
+function mergeWorkerActivityWorkBlocks(
+  primary: WorkerActivityWorkBlock[],
+  timeline: WorkerActivityWorkBlock[],
+): WorkerActivityWorkBlock[] {
+  const blocks = new Map<string, WorkerActivityWorkBlock>();
+  for (const block of [...primary, ...timeline]) {
+    const current = blocks.get(block.id);
+    if (!current) {
+      blocks.set(block.id, { ...block, rows: [...block.rows] });
+      continue;
+    }
+    blocks.set(block.id, {
+      ...current,
+      state: mergeActivityState(current.state, block.state),
+      rows: mergeWorkerActivityRows(current.rows, block.rows),
+      decision_summary: current.decision_summary ?? block.decision_summary,
+      decision_rationale: current.decision_rationale ?? block.decision_rationale,
+      decision_next_step: current.decision_next_step ?? block.decision_next_step,
+      decision_source: current.decision_source ?? block.decision_source,
+      decision_evidence_refs: current.decision_evidence_refs ?? block.decision_evidence_refs,
+      created_at: current.created_at ?? block.created_at,
+    });
+  }
+  return [...blocks.values()].slice(-25);
+}
+
+function mergeWorkerActivityRows(
+  primary: WorkerActivityProgressRow[],
+  timeline: WorkerActivityProgressRow[],
+): WorkerActivityProgressRow[] {
+  const rows = new Map<string, WorkerActivityProgressRow>();
+  for (const row of [...primary, ...timeline]) rows.set(row.id, row);
+  return [...rows.values()].slice(-40);
+}
+
+function mergeActivityState(left: string, right: string): string {
+  if (left === "failed" || right === "failed") return "failed";
+  if (right === "running") return "running";
+  if (right === "delivered" || right === "complete") return "delivered";
+  if (left === "running") return "running";
+  if (left === "delivered" || left === "complete") return "delivered";
+  return right || left || "running";
+}
+
+function readWorkerTimelineWorkBlocks(taskDir: string): WorkerActivityWorkBlock[] {
+  const rows: WorkerActivityProgressRow[] = [
+    ...workerActivityRowsFromEvents(taskDir),
+    ...workerActivityRowsFromTranscript(taskDir),
+  ];
+  if (rows.length === 0) return [];
+  const blocks = new Map<string, WorkerActivityWorkBlock>();
+  for (const row of rows) {
+    const blockId = row.work_block_id ?? row.tool_call_id ?? `worker-timeline-${row.id}`;
+    const blockLabel = row.work_block_label ?? row.safe_label;
+    const current = blocks.get(blockId);
+    if (current) {
+      current.rows.push(row);
+      current.state = mergeActivityState(current.state, row.state);
+      continue;
+    }
+    blocks.set(blockId, {
+      id: blockId,
+      label: blockLabel,
+      state: row.state,
+      rows: [row],
+      decision_summary: row.work_decision_summary,
+      decision_rationale: row.work_decision_rationale,
+      decision_next_step: row.work_decision_next_step,
+      decision_source: row.work_decision_source,
+      decision_evidence_refs: row.work_decision_evidence_refs,
+      created_at: row.created_at,
+    });
+  }
+  return [...blocks.values()].slice(-25);
+}
+
+function workerActivityRowsFromEvents(taskDir: string): WorkerActivityProgressRow[] {
+  return readJsonlRecords(join(taskDir, "worker_activity_events.jsonl"))
+    .map((event, index) => rowFromWorkerActivityEvent(event, index))
+    .filter((row): row is WorkerActivityProgressRow => Boolean(row))
+    .slice(-40);
+}
+
+function rowFromWorkerActivityEvent(
+  event: Record<string, unknown>,
+  index: number,
+): WorkerActivityProgressRow | null {
+  const eventName = safeActivityText(event.event, 80);
+  if (
+    eventName !== "activity_updated" &&
+    eventName !== "public_work_decision" &&
+    eventName !== "tool_call" &&
+    eventName !== "tool_result" &&
+    eventName !== "evidence_receipt"
+  ) {
+    return null;
+  }
+  const createdAt = typeof event.created_at === "string" ? event.created_at : new Date(0).toISOString();
+  const actionKind = safeTimelineKind(event.action_kind ?? eventName);
+  const title = safeTimelineText(event.current_title, 180) ??
+    safeTimelineText(event.decision_summary, 180) ??
+    safeTimelineText(event.status_line, 180) ??
+    workerTimelineFallbackLabel(actionKind);
+  const statusLine = safeTimelineText(event.status_line, 220);
+  const workBlockId = safeActivityToken(event.work_block_id) ?? `worker-timeline-${index + 1}`;
+  const row: WorkerActivityProgressRow = {
+    id: safeActivityToken(event.event_id) ?? `${workBlockId}-row-${index + 1}`,
+    kind: actionKind,
+    safe_label: title,
+    state: workerTimelineState(eventName, event),
+    safe_tool_name: eventName === "public_work_decision" ? "Decision" : "Worker timeline",
+    ...(statusLine ? { safe_input_label: statusLine } : {}),
+    work_block_id: workBlockId,
+    work_block_label: title,
+    ...workerDecisionFieldsFromRecord(event),
+    created_at: createdAt,
+  };
+  return row;
+}
+
+function workerActivityRowsFromTranscript(taskDir: string): WorkerActivityProgressRow[] {
+  const sessionId = readText(join(taskDir, "session_id")).trim();
+  if (!sessionId) return [];
+  const butlerData = join(taskDir, "..", "..");
+  const transcriptPath = join(butlerData, "transcripts", `${sanitizeWorkerTranscriptId(`worker/${sessionId}`)}.jsonl`);
+  return readJsonlRecords(transcriptPath)
+    .map((event, index) => rowFromWorkerTranscriptEvent(event, index))
+    .filter((row): row is WorkerActivityProgressRow => Boolean(row))
+    .slice(-40);
+}
+
+function rowFromWorkerTranscriptEvent(
+  event: Record<string, unknown>,
+  index: number,
+): WorkerActivityProgressRow | null {
+  const kind = typeof event.kind === "string" ? event.kind : "";
+  const payload = event.payload && typeof event.payload === "object" ? event.payload as Record<string, unknown> : {};
+  if (kind === "system" && payload.category === "public_work_decision") {
+    const decision = payload.public_work_decision && typeof payload.public_work_decision === "object"
+      ? payload.public_work_decision as Record<string, unknown>
+      : payload;
+    const title = safeTimelineText(decision.decisionSummary ?? decision.summary, 180) ?? "Recorded worker decision.";
+    const createdAt = typeof event.created_at === "string" ? event.created_at : new Date(0).toISOString();
+    return {
+      id: safeActivityToken(event.id) ?? `worker-transcript-decision-${index + 1}`,
+      kind: "decision",
+      safe_label: title,
+      state: "delivered",
+      safe_tool_name: "Decision",
+      work_block_id: `worker-transcript-decision-${index + 1}`,
+      work_block_label: title,
+      ...workerDecisionFieldsFromRecord(decision),
+      created_at: createdAt,
+    };
+  }
+  if (kind !== "tool_call" && kind !== "tool_result") return null;
+  const name = safeTimelineText(payload.name, 80) ?? "tool";
+  const toolCallId = safeActivityText(payload.tool_call_id ?? payload.id, 120) ?? `transcript-tool-${index + 1}`;
+  const label = kind === "tool_call" ? `Started ${name}.` : `Completed ${name}.`;
+  const command = transcriptCommandLabel(payload);
+  const createdAt = typeof event.created_at === "string" ? event.created_at : new Date(0).toISOString();
+  return {
+    id: safeActivityToken(event.id) ?? `${toolCallId}-${kind}`,
+    kind: kind === "tool_call" ? "used_tool" : "tool_result",
+    safe_label: label,
+    state: kind === "tool_result" ? "delivered" : "running",
+    safe_tool_name: name,
+    ...(command ? { safe_input_label: command } : {}),
+    tool_call_id: toolCallId,
+    work_block_id: toolCallId,
+    work_block_label: label,
+    created_at: createdAt,
+  };
+}
+
+function transcriptCommandLabel(payload: Record<string, unknown>): string | null {
+  const args = payload.arguments && typeof payload.arguments === "object" ? payload.arguments as Record<string, unknown> : {};
+  const result = payload.result && typeof payload.result === "object" ? payload.result as Record<string, unknown> : {};
+  return safeTimelineText(args.command, 220) ?? safeTimelineText(result.command, 220);
+}
+
+function workerDecisionFieldsFromRecord(
+  record: Record<string, unknown>,
+): Partial<WorkerActivityProgressRow> {
+  const summary = safeTimelineText(record.decision_summary ?? record.decisionSummary ?? record.summary, 220);
+  const rationale = safeTimelineText(record.decision_rationale ?? record.decisionRationale ?? record.rationale, 300);
+  const nextStep = safeTimelineText(record.decision_next_step ?? record.decisionNextStep ?? record.nextStep, 300);
+  const source = safeTimelineText(record.decision_source ?? record.decisionSource ?? record.source, 80);
+  const rawRefs = record.evidence_refs ?? record.decision_evidence_refs ?? record.decisionEvidenceRefs ?? record.evidenceRefs;
+  const refs = Array.isArray(rawRefs)
+    ? rawRefs.map((ref) => safeTimelineText(ref, 220)).filter((ref): ref is string => Boolean(ref)).slice(0, 8)
+    : [];
+  return {
+    ...(summary ? { work_decision_summary: summary } : {}),
+    ...(rationale ? { work_decision_rationale: rationale } : {}),
+    ...(nextStep ? { work_decision_next_step: nextStep } : {}),
+    ...(source ? { work_decision_source: source } : {}),
+    ...(refs.length > 0 ? { work_decision_evidence_refs: refs } : {}),
+  };
+}
+
+function readJsonlRecords(path: string): Array<Record<string, unknown>> {
+  const raw = readText(path);
+  if (!raw) return [];
+  return raw
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        const parsed = JSON.parse(line) as unknown;
+        return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter((record): record is Record<string, unknown> => Boolean(record));
+}
+
+function safeTimelineKind(value: unknown): string {
+  const text = safeTimelineText(value, 60);
+  return text?.replace(/[^a-zA-Z0-9_.:-]/gu, "_") || "used_tool";
+}
+
+function safeTimelineText(value: unknown, limit: number): string | null {
+  const text = safeActivityText(value, limit);
+  if (!text || looksUnsafeTimelineText(text)) return null;
+  return text;
+}
+
+function looksUnsafeTimelineText(value: string): boolean {
+  return /<\s*\/?\s*(?:think|thinking|reasoning)\b[^>]*>/iu.test(value) ||
+    /\b(?:hidden reasoning|chain[- ]of[- ]thought|scratchpad|raw prompt|raw transcript|provider payload|argumentsJson|sessionId|eventId|tool_call|tool_result)\b/iu.test(value) ||
+    /\b(?:api[_-]?key|token|secret|password|authorization|auth)\s*[:=]\s*(?:bearer\s+)?\S+/iu.test(value) ||
+    /(?:^|[\s"'`:=])\/(?:Users|private|tmp|var\/folders|home|Volumes|opt|usr|etc)\b/u.test(value) ||
+    /^\s*[{[]/u.test(value);
+}
+
+function workerTimelineFallbackLabel(kind: string): string {
+  if (kind === "run_command") return "Running a worker tool.";
+  if (kind === "tool_call") return "Starting a worker tool.";
+  if (kind === "tool_result") return "Recording a worker tool result.";
+  if (kind === "evidence_receipt") return "Recording worker evidence.";
+  return "Updating worker progress.";
+}
+
+function workerTimelineState(
+  eventName: string,
+  record: Record<string, unknown>,
+): string {
+  const state = safeActivityText(record.state, 40);
+  if (state) return state;
+  if (eventName === "tool_call") return "running";
+  if (
+    eventName === "activity_updated" ||
+    eventName === "tool_result" ||
+    eventName === "evidence_receipt" ||
+    eventName === "public_work_decision"
+  ) return "delivered";
+  return "running";
+}
+
+function sanitizeWorkerTranscriptId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
 function safeWorkerActivityWorkBlocks(value: unknown): WorkerActivityWorkBlock[] {
@@ -537,6 +829,7 @@ function safeWorkerActivityRows(value: unknown): WorkerActivityProgressRow[] {
       const workBlockId = safeActivityText(record.work_block_id, 120);
       const workBlockLabel = safeActivityText(record.work_block_label, 180);
       const detailRows = safeWorkerActivityDetailRows(record.safe_detail_rows);
+      const decisionFields = workerDecisionFieldsFromRecord(record);
       return {
         id,
         kind: safeActivityText(record.kind, 60) || "used_tool",
@@ -547,6 +840,7 @@ function safeWorkerActivityRows(value: unknown): WorkerActivityProgressRow[] {
         ...(toolCallId ? { tool_call_id: toolCallId } : {}),
         ...(workBlockId ? { work_block_id: workBlockId } : {}),
         ...(workBlockLabel ? { work_block_label: workBlockLabel } : {}),
+        ...decisionFields,
         ...(detailRows.length > 0 ? { safe_detail_rows: detailRows } : {}),
         created_at: typeof record.created_at === "string" ? record.created_at : new Date(0).toISOString(),
       } satisfies WorkerActivityProgressRow;
@@ -631,6 +925,7 @@ export class TaskStore {
     const log = readText(join(taskDir, "log.txt"));
     const logSummary = summarizeWorkerLog(log);
     const planned = readPlannedTaskRecord(taskDir, taskId);
+    const completionEvidence = summarizeWorkerCompletionEvidence(taskDir);
     return {
       taskId,
       taskDir,
@@ -646,6 +941,7 @@ export class TaskStore {
       notifiedAt,
       origin: readTaskOrigin(taskDir),
       planned,
+      completionEvidence,
     };
   }
 
@@ -693,6 +989,7 @@ export class TaskStore {
         activity_current_title: activity.current_title,
         activity_work_blocks: activity.work_blocks,
         activity_updated_at: activity.updated_at,
+        completion_evidence: task.completionEvidence,
         updated_at: taskUpdatedAt(task.taskDir),
       };
     });
@@ -700,7 +997,7 @@ export class TaskStore {
 
   reportableTasks(): TaskRecord[] {
     const reportable = new Set<TaskStatus>(["DONE", "FAILED", "REVIEWED"]);
-    return this.list(250).filter((task) => reportable.has(task.status));
+    return this.list(250).filter((task) => reportable.has(task.status) && workSafetyForTask(task).safe_to_report);
   }
 
   plannedReportReadyTasks(): TaskRecord[] {

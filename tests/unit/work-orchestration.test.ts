@@ -102,8 +102,20 @@ test("ready-stream dispatch and sync follow durable worker task state", () => {
 
     const workerDir = join(butlerData, "tasks", "worker-a");
     mkdirSync(workerDir, { recursive: true });
+    writeFileSync(join(workerDir, "request.md"), "Implement stream A.\n", "utf8");
     writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
     writeFileSync(join(workerDir, "result.md"), "A completed with evidence.\n", "utf8");
+    writeFileSync(join(workerDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-a",
+      created_at: "2026-04-27T00:00:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "executing",
+      action_kind: "write_file",
+      status_line: "Executing: wrote stream A output.",
+      evidence_refs: ["stream-a-output"],
+    })}\n`, "utf8");
 
     expect(store.syncFromTasks("orch-sync")).toMatchObject({
       status: "running",
@@ -187,8 +199,20 @@ test("work orchestration reports are blocked until streams are terminal", () => 
     store.markDispatched("orch-report", [{ stream_id: "report", worker_task_id: "worker-report" }]);
     const workerDir = join(butlerData, "tasks", "worker-report");
     mkdirSync(workerDir, { recursive: true });
+    writeFileSync(join(workerDir, "request.md"), "Review stream result.\n", "utf8");
     writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
     writeFileSync(join(workerDir, "result.md"), "Review complete.\n", "utf8");
+    writeFileSync(join(workerDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-review",
+      created_at: "2026-04-27T00:00:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "reporting",
+      action_kind: "report",
+      status_line: "Reporting: review complete.",
+      evidence_refs: ["review-summary"],
+    })}\n`, "utf8");
     store.syncFromTasks("orch-report");
 
     expect(() => store.writeReport("orch-report", "   "))
@@ -197,6 +221,53 @@ test("work orchestration reports are blocked until streams are terminal", () => 
       status: "reported",
       safe_to_report: true,
       completion_claim_allowed: true,
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("work orchestration does not mark planning-only implementation streams done", () => {
+  const butlerData = tempRoot();
+  const store = new WorkOrchestrationStore(butlerData);
+
+  try {
+    store.create({
+      id: "orch-planning-only",
+      goal: "Implement a stream",
+      streams: [{
+        id: "implementation",
+        role: "builder",
+        objective: "Implement the change.",
+        acceptance_criteria: ["Implementation evidence exists"],
+      }],
+    });
+    store.markDispatched("orch-planning-only", [{ stream_id: "implementation", worker_task_id: "worker-plan" }]);
+    const workerDir = join(butlerData, "tasks", "worker-plan");
+    mkdirSync(workerDir, { recursive: true });
+    writeFileSync(join(workerDir, "request.md"), "Implement the change.\n", "utf8");
+    writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
+    writeFileSync(join(workerDir, "result.md"), "I inspected the repository and planned the change.\n", "utf8");
+    writeFileSync(join(workerDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-plan",
+      created_at: "2026-04-27T00:00:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "planning",
+      action_kind: "plan",
+      status_line: "Planning: identified files to edit.",
+    })}\n`, "utf8");
+
+    expect(store.syncFromTasks("orch-planning-only")).toMatchObject({
+      status: "failed",
+      counts: { failed: 1 },
+      safe_to_report: true,
+      completion_claim_allowed: false,
+    });
+    expect(store.read("orch-planning-only")?.streams[0]).toMatchObject({
+      status: "failed",
+      result_summary: expect.stringContaining("no implementation evidence"),
     });
   } finally {
     rmSync(butlerData, { recursive: true, force: true });

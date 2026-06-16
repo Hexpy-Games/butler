@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
-import { TaskStore } from "./task-store.ts";
+import { TaskStore, workSafetyForTask } from "./task-store.ts";
 
 export type WorkOrchestrationStatus =
   | "draft"
@@ -209,6 +209,28 @@ export class WorkOrchestrationStore {
       .map(summarize);
   }
 
+  records(): WorkOrchestrationRecord[] {
+    if (!existsSync(this.dir)) return [];
+    return readdirSync(this.dir)
+      .filter((entry) => entry.endsWith(".json"))
+      .map((entry) => readJson<WorkOrchestrationRecord>(join(this.dir, entry)))
+      .filter((record): record is WorkOrchestrationRecord => Boolean(record))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  }
+
+  findByWorkerTaskId(workerTaskId: string): {
+    record: WorkOrchestrationRecord;
+    stream: WorkStreamRecord;
+  } | null {
+    const safeWorkerTaskId = workerTaskId.trim();
+    if (!safeWorkerTaskId) return null;
+    for (const record of this.records()) {
+      const stream = record.streams.find((item) => item.worker_task_id === safeWorkerTaskId);
+      if (stream) return { record, stream };
+    }
+    return null;
+  }
+
   create(input: {
     id?: string;
     title?: string;
@@ -292,6 +314,15 @@ export class WorkOrchestrationStore {
         const task = taskStore.read(stream.worker_task_id);
         if (!task) return stream;
         if (task.status === "DONE" || task.status === "REVIEWED") {
+          const safety = workSafetyForTask(task);
+          if (!safety.safe_to_report || !safety.completion_claim_allowed) {
+            return {
+              ...stream,
+              status: "failed",
+              result_summary: compact(safety.guard_reason ?? "Worker completion evidence was insufficient for this stream."),
+              updated_at: nowIso,
+            };
+          }
           return {
             ...stream,
             status: "done",

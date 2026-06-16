@@ -10,8 +10,26 @@ import {
   taskNotificationToOutboundAction,
 } from "../../packages/butler-agent/src/agent/work/task-notifications.ts";
 import { TaskStore } from "../../packages/butler-agent/src/agent/work/task-store.ts";
+import { WorkOrchestrationStore } from "../../packages/butler-agent/src/agent/work/work-orchestration.ts";
 
 let tempDir = "";
+
+function writeWorkerCompletionEvidence(taskDir: string): void {
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), [
+    JSON.stringify({
+      semantic_phase: "executing",
+      action_kind: "edit_file",
+      status_line: "Worker wrote the requested deliverable.",
+      evidence_refs: ["result.md"],
+    }),
+    JSON.stringify({
+      semantic_phase: "verifying",
+      action_kind: "test",
+      status_line: "Worker verified the requested deliverable.",
+      evidence_refs: ["result.md"],
+    }),
+  ].join("\n") + "\n", "utf8");
+}
 
 beforeEach(() => {
   tempDir = join(tmpdir(), `butler-task-notifications-${Date.now()}-${Math.random()}`);
@@ -282,6 +300,7 @@ test("task notification fallback includes origin summary when available", () => 
   writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "make chart\n", "utf8");
   writeFileSync(join(taskDir, "result.md"), "chart ready\n", "utf8");
+  writeWorkerCompletionEvidence(taskDir);
   writeFileSync(join(taskDir, "origin.json"), `${JSON.stringify({
     version: 1,
     origin_session_id: "butler/main",
@@ -311,6 +330,43 @@ test("task notification fallback includes origin summary when available", () => 
     originSummary: "topic A chart generation",
     originSessionId: "butler/main",
     originEventId: "mock:77",
+  });
+});
+
+test("completion router recovers app ownership from linked work orchestration origin", () => {
+  const taskDir = join(tempDir, "tasks", "worker-orchestration-originless");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "implement stream\n", "utf8");
+  writeFileSync(join(taskDir, "result.md"), "stream result ready\n", "utf8");
+  writeWorkerCompletionEvidence(taskDir);
+
+  const orchestration = new WorkOrchestrationStore(tempDir);
+  orchestration.create({
+    id: "orch-app-origin",
+    goal: "Coordinate app-origin work",
+    originSessionId: "butler/app-project-origin",
+    streams: [{
+      id: "implementation",
+      role: "builder",
+      objective: "Implement the app-origin stream",
+      acceptance_criteria: ["stream result exists"],
+    }],
+    now: new Date("2026-06-16T00:00:00.000Z"),
+  });
+  orchestration.markDispatched("orch-app-origin", [{
+    stream_id: "implementation",
+    worker_task_id: "worker-orchestration-originless",
+  }]);
+
+  expect(routeCompletionNotifications({ butlerData: tempDir, consumer: "native" }).enqueued).toBe(0);
+  expect(routeCompletionNotifications({ butlerData: tempDir, consumer: "app" }).enqueued).toBe(1);
+
+  const notification = new TaskNotificationQueue(tempDir).pending()[0];
+  expect(notification).toMatchObject({
+    taskId: "worker-orchestration-originless",
+    originSummary: "Implement the app-origin stream",
+    originSessionId: "butler/app-project-origin",
   });
 });
 
