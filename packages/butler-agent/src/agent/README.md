@@ -13,7 +13,10 @@ policy, output contracts, and public event contracts.
 - `cognition/`: memory, recall, feedback, know-how, profile-adjacent memory,
   and consolidation.
 - `work/`: task, planned-task, todo, dashboard, and work orchestration state.
-- `tools/`: agent-visible tool definitions and execution glue.
+- `tools/`: native tool groups. Immediate subdirectories are group names, and
+  each second-level directory is an exact snake_case provider-visible tool name
+  with its own definition and executor entrypoint.
+- `tool-support/`: shared helpers for native tool execution that are not tools.
 - `policy/`: runtime, routing, session-context, and tool-filtering policies.
 - `output/`: localized messages, final-output contracts, tool progress, and
   session-title helpers.
