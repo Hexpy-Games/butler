@@ -1,2 +1,1 @@
-export * from "./definition.ts";
-export { createWebReadHandler } from "./executor.ts";
+export { createWebReadHandler } from "./web_read/executor.ts";
