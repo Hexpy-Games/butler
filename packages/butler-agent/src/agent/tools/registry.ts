@@ -73,7 +73,7 @@ import {
   updateOnboardingProfileToolDefinition,
   updateOnboardingProfileToolMetadata,
 } from "./memory/index.ts";
-import { listSkillsToolDefinition, listSkillsToolMetadata } from "./list_skills/index.ts";
+import { listSkillsToolDefinition, listSkillsToolMetadata } from "./skills/index.ts";
 import {
   createPlannedTaskToolDefinition,
   createPlannedTaskToolMetadata,

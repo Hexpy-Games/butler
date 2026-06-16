@@ -5,6 +5,21 @@ import { budgetToolOutput, type ShellCommandResult } from "../../context/tool-ou
 import type { EvidenceReceipt, PublicWorkObligationKind } from "../../turn/native-tool-types.ts";
 import { butlerToolProcessEnvironment, evidenceReceipt } from "../executor-support.ts";
 
+type ToolCall = { args: Record<string, unknown> };
+
+export function createRunCommandToolHandlers(input: {
+  butlerData: string;
+  workspacePath: string;
+}) {
+  return {
+    "run_command": async (call: ToolCall) => await runCommandTool({
+      butlerData: input.butlerData,
+      workspacePath: input.workspacePath,
+      args: call.args,
+    }),
+  };
+}
+
 function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value

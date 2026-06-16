@@ -4,6 +4,19 @@ import { join } from "path";
 import { sanitizePublicText } from "../../events/turn-events.ts";
 import { evidenceReceipt } from "../executor-support.ts";
 
+type ToolCall = { args: Record<string, unknown> };
+
+export function createDataTableToolHandlers(input: {
+  butlerData: string;
+}) {
+  return {
+    "transform_public_data_table": async (call: ToolCall) => transformPublicDataTable({
+      butlerData: input.butlerData,
+      args: call.args,
+    }),
+  };
+}
+
 function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean);

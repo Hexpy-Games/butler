@@ -15,10 +15,6 @@ import {
   type RetrievalPlanningResult,
 } from "../cognition/memory/retrieval-planning.ts";
 import type { VectorEpisodeBackend } from "../cognition/memory/recall/vector.ts";
-import {
-  validateSkillCatalog,
-} from "../../integrations/skills/catalog.ts";
-import { loadRuntimeSkills } from "../../integrations/skills/manager.ts";
 import type { AgentLoopToolDefinition } from "../turn/agent-loop.ts";
 import type { FunctionToolPromptOptions } from "../../integrations/providers/provider.ts";
 import type { PublicWorkObligationKind } from "../turn/native-tool-types.ts";
@@ -27,13 +23,14 @@ import {
   satisfiedCompletionObligationsFromEvidenceReceipts,
 } from "../output/evidence-receipts.ts";
 import { createAutomationToolHandlers } from "./automation/index.ts";
-import { transformPublicDataTable } from "./data-table/index.ts";
+import { createDataTableToolHandlers } from "./data-table/index.ts";
 import { createMcpToolHandlers } from "./mcp/index.ts";
 import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
 import { createPlannedWorkerToolHandlers, dispatchBackgroundTask, type WorkerModelSelectionRule } from "./planned-task/index.ts";
 import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
-import { runCommandTool } from "./run-command/index.ts";
+import { createRunCommandToolHandlers } from "./run-command/index.ts";
+import { createSkillToolHandlers } from "./skills/index.ts";
 import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
@@ -181,27 +178,11 @@ export function createButlerToolExecutor(input: {
       memoryVectorBackend: input.memoryVectorBackend,
       memoryVectorTimeoutMs: input.memoryVectorTimeoutMs,
     }),
-    "list_skills": async (_call) => {
-      const skills = loadRuntimeSkills({
-        butlerHome: input.butlerHome,
-        butlerData: input.butlerData,
-        projectId: input.projectId,
-      });
-      return {
-        ok: true,
-        skills: skills.map((skill) => ({
-          name: skill.name,
-          description: skill.description,
-          applicability: skill.applicability,
-          allowed_tools: skill.allowedTools,
-          dispatch: skill.dispatchPreference,
-          review: skill.reviewRequirement,
-          reporting: skill.reporting,
-          user_invocable: skill.userInvocable,
-        })),
-        validation_issues: validateSkillCatalog(skills),
-      };
-    },
+    ...createSkillToolHandlers({
+      butlerHome: input.butlerHome,
+      butlerData: input.butlerData,
+      projectId: input.projectId,
+    }),
     "web_search": createWebSearchHandler({
       butlerData: input.butlerData,
       turnContext: input.turnContext,
@@ -215,19 +196,13 @@ export function createButlerToolExecutor(input: {
       butlerData: input.butlerData,
       pageReader: input.pageReader,
     }),
-    "transform_public_data_table": async (call) => {
-      return transformPublicDataTable({
-        butlerData: input.butlerData,
-        args: call.args,
-      });
-    },
-    "run_command": async (call) => {
-      return await runCommandTool({
-        butlerData: input.butlerData,
-        workspacePath: input.workspacePath ?? input.butlerHome,
-        args: call.args,
-      });
-    },
+    ...createDataTableToolHandlers({
+      butlerData: input.butlerData,
+    }),
+    ...createRunCommandToolHandlers({
+      butlerData: input.butlerData,
+      workspacePath: input.workspacePath ?? input.butlerHome,
+    }),
     ...createPlannedWorkerToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
