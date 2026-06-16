@@ -4103,6 +4103,220 @@ test("session worker activity links planned orchestration rows with worker attem
   }
 });
 
+test("session worker activity synthesizes planned parent for orphan work orchestration streams", async () => {
+  const origin = buildTaskOriginContext({
+    sessionId: "btcc-panel",
+    taskSummary: "Ship the projection fix",
+    project: "project-btcc",
+  });
+  const orchestrationStore = new WorkOrchestrationStore(tempDir);
+  orchestrationStore.create({
+    id: "orch-btcc-projection",
+    title: "Projection closeout",
+    goal: "Project BTCC worker streams in the app panel",
+    originSessionId: "btcc-panel",
+    streams: [{
+      id: "implementation",
+      role: "builder",
+      objective: "Implement worker activity projection",
+      acceptance_criteria: ["details are visible"],
+    }],
+    now: new Date("2026-05-16T00:00:00.000Z"),
+  });
+  orchestrationStore.markDispatched(
+    "orch-btcc-projection",
+    [{ stream_id: "implementation", worker_task_id: "worker-btcc-projection" }],
+    new Date("2026-05-16T00:01:00.000Z"),
+  );
+
+  const workerDir = join(tempDir, "tasks", "worker-btcc-projection");
+  mkdirSync(workerDir, { recursive: true });
+  writeFileSync(join(workerDir, "status"), "RUNNING\n", "utf8");
+  writeFileSync(join(workerDir, "request.md"), "private raw worker request sentinel\n", "utf8");
+  writeFileSync(
+    join(workerDir, "worker_activity.json"),
+    JSON.stringify({
+      phase: "executing",
+      status_line: "Executing: worker implementation is running.",
+      current_title: "Applying projection changes.",
+      updated_at: "2026-05-16T00:02:00.000Z",
+    }),
+    "utf8",
+  );
+  writeFileSync(
+    join(workerDir, "worker_activity_events.jsonl"),
+    [
+      {
+        schema: "butler.worker-activity-event.v1",
+        event_id: "ev-decision",
+        created_at: "2026-05-16T00:02:01.000Z",
+        actor: "worker",
+        event: "activity_updated",
+        semantic_phase: "executing",
+        action_kind: "run_command",
+        status_line: "Executing: inspecting projection code.",
+        current_title: "Inspecting projection code.",
+        decision_summary: "Inspect existing worker activity projection.",
+        decision_rationale: "The UI already groups planned parents with worker children.",
+        decision_next_step: "Add the missing backend parent and details projection.",
+        evidence_refs: ["store.ts projection"],
+        work_block_id: "worker-timeline-call-1",
+        raw_prompt: "unsafe raw prompt sentinel",
+      },
+      {
+        schema: "butler.worker-activity-event.v1",
+        event_id: "ev-secret",
+        created_at: "2026-05-16T00:02:02.000Z",
+        actor: "worker",
+        event: "activity_updated",
+        semantic_phase: "executing",
+        action_kind: "run_command",
+        status_line: "Executing: token=unsafe-secret should not leak.",
+        current_title: "Running local inspection.",
+        decision_summary: "<think>hidden reasoning sentinel</think>",
+        decision_rationale: "sessionId unsafe internal sentinel",
+        decision_next_step: "Continue safely.",
+        evidence_refs: ["safe evidence ref", "authorization: bearer unsafe-token"],
+        work_block_id: "worker-timeline-call-2",
+      },
+    ].map((event) => JSON.stringify(event)).join("\n") + "\n",
+    "utf8",
+  );
+  writeFileSync(join(workerDir, "session_id"), "worker-btcc-session\n", "utf8");
+  const transcriptDir = join(tempDir, "transcripts");
+  mkdirSync(transcriptDir, { recursive: true });
+  writeFileSync(
+    join(transcriptDir, "worker_worker-btcc-session.jsonl"),
+    [
+      {
+        id: "tr-decision",
+        kind: "system",
+        created_at: "2026-05-16T00:02:03.000Z",
+        payload: {
+          category: "public_work_decision",
+          public_work_decision: {
+            decisionSummary: "Run a focused app-server projection test.",
+            decisionRationale: "A route-level fixture proves SessionView receives safe worker details.",
+            decisionNextStep: "Assert the worker block and no unsafe fields leak.",
+            decisionEvidenceRefs: ["app-server worker activity test"],
+          },
+        },
+      },
+      {
+        id: "tr-tool-call",
+        kind: "tool_call",
+        created_at: "2026-05-16T00:02:04.000Z",
+        payload: {
+          id: "tool-transcript-1",
+          name: "run_command",
+          arguments: { command: "bun test tests/unit/app-server.test.ts" },
+          raw_payload: "unsafe provider payload sentinel",
+        },
+      },
+      {
+        id: "tr-tool-result",
+        kind: "tool_result",
+        created_at: "2026-05-16T00:02:05.000Z",
+        payload: {
+          tool_call_id: "tool-transcript-1",
+          name: "run_command",
+          result: {
+            command: "bun test tests/unit/app-server.test.ts",
+            stdout: "unsafe full raw log sentinel",
+          },
+        },
+      },
+    ].map((event) => JSON.stringify(event)).join("\n") + "\n",
+    "utf8",
+  );
+  new TaskStore(tempDir).writeOrigin("worker-btcc-projection", origin);
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    server.store.createSession({
+      kind: "chat",
+      title: "BTCC panel",
+      session_hint: "btcc-panel",
+    });
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=btcc-panel`,
+    );
+    expect(
+      summary.data.worker_activity.map(
+        (worker: { activity_kind: string; task_id?: string; orchestration_id?: string }) =>
+          `${worker.activity_kind}:${worker.task_id ?? worker.orchestration_id}`,
+      ),
+    ).toEqual([
+      "planned:orch-btcc-projection",
+      "worker:worker-btcc-projection",
+    ]);
+    expect(summary.data.worker_activity[0]).toMatchObject({
+      activity_kind: "planned",
+      task_id: "orch-btcc-projection",
+      orchestration_id: "orch-btcc-projection",
+      objective: "Project BTCC worker streams in the app panel",
+      terminal: false,
+    });
+    expect(summary.data.worker_activity[1]).toMatchObject({
+      activity_kind: "worker",
+      orchestration_id: "orch-btcc-projection",
+    });
+    const projectedBlock = summary.data.worker_activity[1].work_blocks.find(
+      (block: { id: string }) => block.id === "worker-timeline-call-1",
+    );
+    expect(projectedBlock).toMatchObject({
+      id: "worker-timeline-call-1",
+      decision_summary: "Inspect existing worker activity projection.",
+      decision_rationale: "The UI already groups planned parents with worker children.",
+      decision_next_step: "Add the missing backend parent and details projection.",
+      rows: [{
+        kind: "run_command",
+        safe_label: "Inspecting projection code.",
+        safe_tool_name: "Worker timeline",
+        safe_input_label: "Executing: inspecting projection code.",
+      }],
+    });
+    const transcriptDecisionBlock = summary.data.worker_activity[1].work_blocks.find(
+      (block: { decision_summary?: string }) =>
+        block.decision_summary === "Run a focused app-server projection test.",
+    );
+    expect(transcriptDecisionBlock).toMatchObject({
+      decision_rationale: "A route-level fixture proves SessionView receives safe worker details.",
+      decision_next_step: "Assert the worker block and no unsafe fields leak.",
+    });
+    const transcriptToolBlock = summary.data.worker_activity[1].work_blocks.find(
+      (block: { id: string }) => block.id === "tool-transcript-1",
+    );
+    expect(transcriptToolBlock).toMatchObject({
+      rows: [
+        {
+          safe_tool_name: "run_command",
+          safe_input_label: "bun test tests/unit/app-server.test.ts",
+        },
+        {
+          safe_tool_name: "run_command",
+          safe_input_label: "bun test tests/unit/app-server.test.ts",
+        },
+      ],
+    });
+    const serialized = JSON.stringify(summary);
+    expect(serialized).not.toContain("private raw worker request sentinel");
+    expect(serialized).not.toContain("unsafe raw prompt sentinel");
+    expect(serialized).not.toContain("hidden reasoning sentinel");
+    expect(serialized).not.toContain("unsafe-secret");
+    expect(serialized).not.toContain("unsafe-token");
+    expect(serialized).not.toContain("sessionId unsafe internal sentinel");
+    expect(serialized).not.toContain("unsafe provider payload sentinel");
+    expect(serialized).not.toContain("unsafe full raw log sentinel");
+  } finally {
+    server.stop();
+  }
+});
+
 test("app-server read routes do not execute app-origin worker completions", async () => {
   const planned = new PlannedTaskStore(tempDir);
   planned.create({
@@ -4263,6 +4477,14 @@ test("session view syncs linked orchestration workers without delivering reports
     const view = await getJson(`${server.url}session-view?session_id=general`);
     expect(view.data.workers).toEqual([
       expect.objectContaining({
+        activity_kind: "planned",
+        task_id: "orch-session-view",
+        orchestration_id: "orch-session-view",
+        phase: "reporting",
+        terminal: false,
+      }),
+      expect.objectContaining({
+        activity_kind: "worker",
         task_id: "worker-orch-session-view",
         session_id: "general",
         orchestration_id: "orch-session-view",
