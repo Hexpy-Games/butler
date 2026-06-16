@@ -5,8 +5,8 @@ export const GENERAL_FALLBACK_SUGGESTIONS: NewChatBriefingSuggestion[] = [
     id: "daily-briefing",
     title: "오늘 볼 만한 소식",
     description:
-      "날씨와 주요 이슈를 짧게 훑어두면 하루의 방향을 잡는 데 도움이 됩니다.",
-    text: "오늘 볼 만한 날씨와 주요 이슈를 짧게 브리핑해줘.",
+      "주요 이슈와 공개 자료를 짧게 훑어두면 하루의 방향을 잡는 데 도움이 됩니다.",
+    text: "오늘 볼 만한 주요 이슈와 공개 자료를 짧게 브리핑해줘.",
   },
   {
     id: "open-source-trends",

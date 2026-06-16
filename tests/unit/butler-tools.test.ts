@@ -5,9 +5,9 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   BUTLER_TOOLS,
-  WEATHER_TOOL_PACK,
   butlerToolsForAgentLoop,
   createButlerToolExecutor,
+  createButlerToolExecutorRegistry,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import {
   selectButlerToolProfiles,
@@ -25,6 +25,11 @@ import { indexTranscriptLinesForQuery } from "../../packages/butler-agent/src/ag
 let tempDir = "";
 const root = process.cwd();
 const projectLedgerCli = join(root, "packages", "project-ledger", "bin", "project-ledger");
+const removedWeatherToolNames = [
+  "get_weather_with_knowhow",
+  "record_weather_source_feedback",
+  "run_weather_knowhow_consolidation",
+] as const;
 
 beforeEach(() => {
   tempDir = join(tmpdir(), `butler-tools-${Date.now()}-${Math.random()}`);
@@ -148,13 +153,68 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   expect(String(personaPresetProperty?.description)).toContain("persona_preset id");
 });
 
-test("weather tools are isolated in an optional domain pack outside the core registry", () => {
-  expect(BUTLER_TOOLS.map((tool) => tool.name)).not.toContain("get_weather_with_knowhow");
-  expect(WEATHER_TOOL_PACK.tools.map((tool) => tool.name)).toEqual([
-    "get_weather_with_knowhow",
-    "record_weather_source_feedback",
-    "run_weather_knowhow_consolidation",
-  ]);
+test("weather native tools are absent from the registry, profiles, and executor", async () => {
+  const registryNames = BUTLER_TOOLS.map((tool) => tool.name);
+  for (const name of removedWeatherToolNames) {
+    expect(registryNames).not.toContain(name);
+  }
+
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "반드시 공개 데이터 표를 만들어줘.",
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata: {
+      requiredNativeTools: [
+        "transform_public_data_table",
+        ...removedWeatherToolNames,
+      ],
+    },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(names).toContain("transform_public_data_table");
+  for (const name of removedWeatherToolNames) {
+    expect(names).not.toContain(name);
+  }
+
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+  });
+  await expect(executor({
+    name: "get_weather_with_knowhow",
+    args: { latitude: 37.5665, longitude: 126.9780 },
+    rawArguments: "{}",
+  })).rejects.toThrow("Unknown Butler tool: get_weather_with_knowhow");
+});
+
+test("Butler tool executor dispatch is registry-based instead of a call-name if-chain", () => {
+  const registry = createButlerToolExecutorRegistry({
+    sample_tool: () => ({ ok: true }),
+  });
+  expect(Object.keys(registry)).toEqual(["sample_tool"]);
+
+  const source = readFileSync(
+    join(root, "packages", "butler-agent", "src", "agent", "tools", "butler-tools.ts"),
+    "utf8",
+  );
+  const executorSource = source.slice(source.indexOf("export function createButlerToolExecutor("));
+  expect(executorSource).toContain("createButlerToolExecutorRegistry");
+  expect(executorSource).toContain("executeRegisteredButlerTool(toolExecutors, call)");
+  expect(executorSource).not.toMatch(/if\s*\(\s*call\.name\s*===/u);
+});
+
+test("Butler tool compatibility entrypoint does not own capability executor bodies", () => {
+  const source = readFileSync(
+    join(root, "packages", "butler-agent", "src", "agent", "tools", "butler-tools.ts"),
+    "utf8",
+  );
+  const lineCount = source.split("\n").length;
+  expect(lineCount).toBeLessThanOrEqual(280);
+  expect(source).not.toMatch(/"[^"]+":\s*async\s*\(/u);
+  expect(source).not.toContain("loadRuntimeSkills");
+  expect(source).not.toContain("runProjectLedgerTool");
+  expect(source).not.toContain("spawn(\"/bin/bash\"");
 });
 
 test("basic project turns expose a bounded startup and project tool profile", () => {
@@ -174,6 +234,7 @@ test("basic project turns expose a bounded startup and project tool profile", ()
     "inspect_project_status",
     "query_project_work",
     "render_project_dashboard",
+    "complete_project_work",
     "get_context_monitor",
     "list_tool_capabilities",
     "update_todo_list",
@@ -206,7 +267,21 @@ test("Project Ledger requests without project metadata still expose project tool
   expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
 });
 
-test("explicit required tools can extend a profile without enabling domain weather tools", () => {
+test("Project Ledger completion requests expose complete_project_work", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "Project Ledger work W-RUNTIME-TOOL-MODULARIZATION를 complete 처리해줘.",
+    sessionMetadata: { projectId: "butler" },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(names).toContain("inspect_project_status");
+  expect(names).toContain("query_project_work");
+  expect(names).toContain("render_project_dashboard");
+  expect(names).toContain("complete_project_work");
+});
+
+test("explicit required tools can extend a profile while removed tool names are ignored", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "반드시 표 artifact를 만들어줘.",
@@ -285,59 +360,6 @@ test("web_read schema exposes bounded page evidence controls", () => {
     "max_chunks",
     "backend",
   ]);
-});
-
-test("weather know-how schemas expose live weather and feedback controls", () => {
-  const weatherTool = WEATHER_TOOL_PACK.tools.find((item) => item.name === "get_weather_with_knowhow");
-  const feedbackTool = WEATHER_TOOL_PACK.tools.find((item) => item.name === "record_weather_source_feedback");
-  const consolidationTool = WEATHER_TOOL_PACK.tools.find((item) => item.name === "run_weather_knowhow_consolidation");
-
-  expect(weatherTool?.parameters.required).toEqual(["latitude", "longitude"]);
-  expect(Object.keys(weatherTool?.parameters.properties ?? {})).toEqual([
-    "latitude",
-    "longitude",
-    "location",
-  ]);
-  expect(feedbackTool?.parameters.required).toEqual(["text"]);
-  const feedbackProperties = feedbackTool?.parameters.properties as Record<string, unknown> | undefined;
-  expect(feedbackProperties?.source).toMatchObject({
-    type: "string",
-    enum: ["open-meteo", "nws"],
-  });
-  expect(consolidationTool?.parameters.required).toEqual([]);
-});
-
-test("weather feedback tool can attach implicit feedback to the latest weather source", async () => {
-  const sessionId = "butler/main/weather-feedback";
-  const transcriptsDir = join(tempDir, "transcripts");
-  mkdirSync(transcriptsDir, { recursive: true });
-  writeFileSync(join(transcriptsDir, "butler_main_weather-feedback.jsonl"), `${JSON.stringify({
-    eventId: "event-weather-result",
-    sessionId,
-    kind: "tool_result",
-    timestamp: new Date().toISOString(),
-    payload: {
-      name: "get_weather_with_knowhow",
-      ok: true,
-      result: {
-        source: "open-meteo",
-      },
-    },
-  })}\n`, "utf8");
-
-  const executor = createButlerToolExecutor({
-    butlerHome: root,
-    butlerData: tempDir,
-    sessionId,
-  });
-  const result = await executor({
-    name: "record_weather_source_feedback",
-    args: { text: "요새 이 날씨 소스가 잘 안 맞아요." },
-    rawArguments: "{}",
-  }) as { ok: boolean; entry: { target_ref: string } };
-
-  expect(result.ok).toBe(true);
-  expect(result.entry.target_ref).toBe("source:open-meteo");
 });
 
 test("transform_public_data_table writes bounded public CSV artifacts", async () => {
@@ -462,32 +484,54 @@ test("run_command executes in the session workspace and returns structured outpu
   expect(result.stdout).toContain(workspace);
   expect(result.stdout).toContain("2 sample.csv");
   expect(result.stderr).toBe("");
-  expect(result.durable_artifact_created).toBe(true);
-  expect(result.data_table_created).toBe(true);
-  expect(result.written_files).toContain("sample.csv");
-  expect(result.artifact_kind).toBe("csv_file");
-  expect(result.verified_output_files).toContainEqual(expect.objectContaining({
-    path: "sample.csv",
-    artifact_kind: "csv_file",
-  }));
-  expect(result.evidence_receipts).toEqual(expect.arrayContaining([
+  expect(result.durable_artifact_created).toBeUndefined();
+  expect(result.data_table_created).toBeUndefined();
+  expect(result.written_files).toBeUndefined();
+  expect(result.artifact_kind).toBeUndefined();
+  expect(result.verified_output_files).toBeUndefined();
+  expect(result.evidence_receipts).toEqual([
     expect.objectContaining({
       receiptType: "execution",
       verified: true,
       satisfies: ["command_executed"],
     }),
-    expect.objectContaining({
-      receiptType: "deliverable",
-      verified: true,
-      satisfies: expect.arrayContaining(["durable_artifact", "data_table_created"]),
-      artifacts: [expect.objectContaining({
-        label: "sample.csv",
-        mediaType: "text/csv",
-        role: "table",
-      })],
-    }),
-  ]));
+  ]);
   expect(readFileSync(join(workspace, "sample.csv"), "utf8")).toContain("Seoul,9300000");
+});
+
+test("run_command implicit artifact discovery does not auto-promote workspace files", async () => {
+  const workspace = join(tempDir, "workspace");
+  mkdirSync(workspace, { recursive: true });
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: "mkdir -p reports && printf 'city,population\\nSeoul,9300000\\n' > reports/population.csv",
+    },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    durable_artifact_created?: boolean;
+    verified_output_files?: Array<{ path: string; artifact_kind: string }>;
+    evidence_receipts: Array<Record<string, any>>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.durable_artifact_created).toBeUndefined();
+  expect(result.verified_output_files).toBeUndefined();
+  expect(result.evidence_receipts).toEqual([
+    expect.objectContaining({
+      receiptType: "execution",
+      verified: true,
+      satisfies: ["command_executed"],
+    }),
+  ]);
+  expect(readFileSync(join(workspace, "reports", "population.csv"), "utf8")).toContain("Seoul,9300000");
 });
 
 test("run_command verifies declared output paths as durable artifact evidence", async () => {
@@ -609,6 +653,20 @@ test("run_command verifies structured stdout artifact paths under Butler data", 
       })],
     }),
   ]));
+});
+
+test("default app suggestions do not advertise weather workflows", () => {
+  const agentBriefing = readFileSync(
+    join(root, "packages", "butler-agent", "src", "gateways", "app", "new-chat-briefing.ts"),
+    "utf8",
+  );
+  const clientSuggestions = readFileSync(
+    join(root, "packages", "butler-app", "client", "ui", "src", "components", "conversation", "emptyStateSuggestions.ts"),
+    "utf8",
+  );
+
+  expect(agentBriefing).not.toMatch(/weather|날씨|forecast/iu);
+  expect(clientSuggestions).not.toMatch(/weather|날씨|forecast/iu);
 });
 
 test("run_command rejects cwd outside the active workspace", async () => {

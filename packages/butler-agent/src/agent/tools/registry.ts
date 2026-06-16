@@ -1,55 +1,113 @@
 import type { ButlerToolDefinition, ToolCapabilityMetadata } from "./types.ts";
-import { webSearchToolDefinition, webSearchToolMetadata } from "./web_search/index.ts";
-import { webReadToolDefinition, webReadToolMetadata } from "./web_read/index.ts";
-import { getWeatherWithKnowhowToolDefinition, getWeatherWithKnowhowToolMetadata } from "../tool-packs/weather/get_weather_with_knowhow/index.ts";
-import { recordWeatherSourceFeedbackToolDefinition, recordWeatherSourceFeedbackToolMetadata } from "../tool-packs/weather/record_weather_source_feedback/index.ts";
-import { runWeatherKnowhowConsolidationToolDefinition, runWeatherKnowhowConsolidationToolMetadata } from "../tool-packs/weather/run_weather_knowhow_consolidation/index.ts";
-import { transformPublicDataTableToolDefinition, transformPublicDataTableToolMetadata } from "./transform_public_data_table/index.ts";
-import { runCommandToolDefinition, runCommandToolMetadata } from "./run_command/index.ts";
-import { getWorkDashboardToolDefinition, getWorkDashboardToolMetadata } from "./get_work_dashboard/index.ts";
-import { inspectProjectStatusToolDefinition, inspectProjectStatusToolMetadata } from "./inspect_project_status/index.ts";
-import { queryProjectWorkToolDefinition, queryProjectWorkToolMetadata } from "./query_project_work/index.ts";
-import { renderProjectDashboardToolDefinition, renderProjectDashboardToolMetadata } from "./render_project_dashboard/index.ts";
-import { completeProjectWorkToolDefinition, completeProjectWorkToolMetadata } from "./complete_project_work/index.ts";
-import { getContextMonitorToolDefinition, getContextMonitorToolMetadata } from "./get_context_monitor/index.ts";
-import { readToolOutputArtifactToolDefinition, readToolOutputArtifactToolMetadata } from "./read_tool_output_artifact/index.ts";
-import { getUsageMonitorToolDefinition, getUsageMonitorToolMetadata } from "./get_usage_monitor/index.ts";
-import { listToolCapabilitiesToolDefinition, listToolCapabilitiesToolMetadata } from "./list_tool_capabilities/index.ts";
-import { listMcpCapabilitiesToolDefinition, listMcpCapabilitiesToolMetadata } from "./list_mcp_capabilities/index.ts";
-import { callMcpToolToolDefinition, callMcpToolToolMetadata } from "./call_mcp_tool/index.ts";
-import { readMcpResourceToolDefinition, readMcpResourceToolMetadata } from "./read_mcp_resource/index.ts";
-import { createAutomationToolDefinition, createAutomationToolMetadata } from "./create_automation/index.ts";
-import { listAutomationsToolDefinition, listAutomationsToolMetadata } from "./list_automations/index.ts";
-import { deleteAutomationToolDefinition, deleteAutomationToolMetadata } from "./delete_automation/index.ts";
-import { runDueAutomationsToolDefinition, runDueAutomationsToolMetadata } from "./run_due_automations/index.ts";
-import { updateTodoListToolDefinition, updateTodoListToolMetadata } from "./update_todo_list/index.ts";
-import { listTodoListToolDefinition, listTodoListToolMetadata } from "./list_todo_list/index.ts";
-import { listWorkStreamsToolDefinition, listWorkStreamsToolMetadata } from "./list_work_streams/index.ts";
-import { updateWorkStreamStateToolDefinition, updateWorkStreamStateToolMetadata } from "./update_work_stream_state/index.ts";
-import { controlWorkToolDefinition, controlWorkToolMetadata } from "./control_work/index.ts";
-import { getMemoryHealthToolDefinition, getMemoryHealthToolMetadata } from "./get_memory_health/index.ts";
-import { ingestTaskMemoryToolDefinition, ingestTaskMemoryToolMetadata } from "./ingest_task_memory/index.ts";
-import { recallMemoryToolDefinition, recallMemoryToolMetadata } from "./recall_memory/index.ts";
-import { queryMemoryToolDefinition, queryMemoryToolMetadata } from "./query_memory/index.ts";
-import { summarizeUserProfileToolDefinition, summarizeUserProfileToolMetadata } from "./summarize_user_profile/index.ts";
-import { updateOnboardingProfileToolDefinition, updateOnboardingProfileToolMetadata } from "./update_onboarding_profile/index.ts";
-import { readConversationContextToolDefinition, readConversationContextToolMetadata } from "./read_conversation_context/index.ts";
-import { updateExplicitMemoryToolDefinition, updateExplicitMemoryToolMetadata } from "./update_explicit_memory/index.ts";
-import { listSkillsToolDefinition, listSkillsToolMetadata } from "./list_skills/index.ts";
-import { dispatchWorkerToolDefinition, dispatchWorkerToolMetadata } from "./dispatch_worker/index.ts";
-import { createPlannedTaskToolDefinition, createPlannedTaskToolMetadata } from "./create_planned_task/index.ts";
-import { runPlannedTaskToolDefinition, runPlannedTaskToolMetadata } from "./run_planned_task/index.ts";
-import { reviewPlannedTaskToolDefinition, reviewPlannedTaskToolMetadata } from "./review_planned_task/index.ts";
-import { repairPlannedTaskToolDefinition, repairPlannedTaskToolMetadata } from "./repair_planned_task/index.ts";
-import { requestPrincipalDecisionToolDefinition, requestPrincipalDecisionToolMetadata } from "./request_principal_decision/index.ts";
-import { writePlannedPublicReportToolDefinition, writePlannedPublicReportToolMetadata } from "./write_planned_public_report/index.ts";
-import { resumeWorkerToolDefinition, resumeWorkerToolMetadata } from "./resume_worker/index.ts";
-import { createWorkOrchestrationToolDefinition, createWorkOrchestrationToolMetadata } from "./create_work_orchestration/index.ts";
-import { runReadyWorkStreamsToolDefinition, runReadyWorkStreamsToolMetadata } from "./run_ready_work_streams/index.ts";
-import { syncWorkOrchestrationToolDefinition, syncWorkOrchestrationToolMetadata } from "./sync_work_orchestration/index.ts";
-import { writeWorkOrchestrationReportToolDefinition, writeWorkOrchestrationReportToolMetadata } from "./write_work_orchestration_report/index.ts";
-import { listTasksToolDefinition, listTasksToolMetadata } from "./list_tasks/index.ts";
-import { getTaskResultToolDefinition, getTaskResultToolMetadata } from "./get_task_result/index.ts";
+import { webSearchToolDefinition, webSearchToolMetadata } from "./web-search/index.ts";
+import { webReadToolDefinition, webReadToolMetadata } from "./web-read/index.ts";
+import { transformPublicDataTableToolDefinition, transformPublicDataTableToolMetadata } from "./data-table/index.ts";
+import { runCommandToolDefinition, runCommandToolMetadata } from "./run-command/index.ts";
+import {
+  completeProjectWorkToolDefinition,
+  completeProjectWorkToolMetadata,
+  getWorkDashboardToolDefinition,
+  getWorkDashboardToolMetadata,
+  inspectProjectStatusToolDefinition,
+  inspectProjectStatusToolMetadata,
+  queryProjectWorkToolDefinition,
+  queryProjectWorkToolMetadata,
+  renderProjectDashboardToolDefinition,
+  renderProjectDashboardToolMetadata,
+} from "./project-ledger/index.ts";
+import {
+  getContextMonitorToolDefinition,
+  getContextMonitorToolMetadata,
+  getMemoryHealthToolDefinition,
+  getMemoryHealthToolMetadata,
+  getUsageMonitorToolDefinition,
+  getUsageMonitorToolMetadata,
+  listToolCapabilitiesToolDefinition,
+  listToolCapabilitiesToolMetadata,
+  readToolOutputArtifactToolDefinition,
+  readToolOutputArtifactToolMetadata,
+} from "./monitoring/index.ts";
+import {
+  callMcpToolToolDefinition,
+  callMcpToolToolMetadata,
+  listMcpCapabilitiesToolDefinition,
+  listMcpCapabilitiesToolMetadata,
+  readMcpResourceToolDefinition,
+  readMcpResourceToolMetadata,
+} from "./mcp/index.ts";
+import {
+  createAutomationToolDefinition,
+  createAutomationToolMetadata,
+  deleteAutomationToolDefinition,
+  deleteAutomationToolMetadata,
+  listAutomationsToolDefinition,
+  listAutomationsToolMetadata,
+  runDueAutomationsToolDefinition,
+  runDueAutomationsToolMetadata,
+} from "./automation/index.ts";
+import {
+  controlWorkToolDefinition,
+  controlWorkToolMetadata,
+  listTodoListToolDefinition,
+  listTodoListToolMetadata,
+  listWorkStreamsToolDefinition,
+  listWorkStreamsToolMetadata,
+  updateTodoListToolDefinition,
+  updateTodoListToolMetadata,
+  updateWorkStreamStateToolDefinition,
+  updateWorkStreamStateToolMetadata,
+} from "./work-tracking/index.ts";
+import {
+  ingestTaskMemoryToolDefinition,
+  ingestTaskMemoryToolMetadata,
+  queryMemoryToolDefinition,
+  queryMemoryToolMetadata,
+  readConversationContextToolDefinition,
+  readConversationContextToolMetadata,
+  recallMemoryToolDefinition,
+  recallMemoryToolMetadata,
+  summarizeUserProfileToolDefinition,
+  summarizeUserProfileToolMetadata,
+  updateExplicitMemoryToolDefinition,
+  updateExplicitMemoryToolMetadata,
+  updateOnboardingProfileToolDefinition,
+  updateOnboardingProfileToolMetadata,
+} from "./memory/index.ts";
+import { listSkillsToolDefinition, listSkillsToolMetadata } from "./skills/index.ts";
+import {
+  createPlannedTaskToolDefinition,
+  createPlannedTaskToolMetadata,
+  repairPlannedTaskToolDefinition,
+  repairPlannedTaskToolMetadata,
+  requestPrincipalDecisionToolDefinition,
+  requestPrincipalDecisionToolMetadata,
+  reviewPlannedTaskToolDefinition,
+  reviewPlannedTaskToolMetadata,
+  runPlannedTaskToolDefinition,
+  runPlannedTaskToolMetadata,
+  writePlannedPublicReportToolDefinition,
+  writePlannedPublicReportToolMetadata,
+} from "./planned-task/index.ts";
+import {
+  dispatchWorkerToolDefinition,
+  dispatchWorkerToolMetadata,
+  getTaskResultToolDefinition,
+  getTaskResultToolMetadata,
+  listTasksToolDefinition,
+  listTasksToolMetadata,
+  resumeWorkerToolDefinition,
+  resumeWorkerToolMetadata,
+} from "./worker/index.ts";
+import {
+  createWorkOrchestrationToolDefinition,
+  createWorkOrchestrationToolMetadata,
+  runReadyWorkStreamsToolDefinition,
+  runReadyWorkStreamsToolMetadata,
+  syncWorkOrchestrationToolDefinition,
+  syncWorkOrchestrationToolMetadata,
+  writeWorkOrchestrationReportToolDefinition,
+  writeWorkOrchestrationReportToolMetadata,
+} from "./orchestration/index.ts";
 
 export const CORE_BUTLER_TOOLS = [
   webSearchToolDefinition,
@@ -101,24 +159,6 @@ export const CORE_BUTLER_TOOLS = [
   listTasksToolDefinition,
   getTaskResultToolDefinition,
 ] satisfies ButlerToolDefinition[];
-
-export const WEATHER_TOOL_PACK = {
-  id: "weather",
-  tools: [
-    getWeatherWithKnowhowToolDefinition,
-    recordWeatherSourceFeedbackToolDefinition,
-    runWeatherKnowhowConsolidationToolDefinition,
-  ] satisfies ButlerToolDefinition[],
-  metadata: {
-    [getWeatherWithKnowhowToolDefinition.name]: getWeatherWithKnowhowToolMetadata,
-    [recordWeatherSourceFeedbackToolDefinition.name]: recordWeatherSourceFeedbackToolMetadata,
-    [runWeatherKnowhowConsolidationToolDefinition.name]: runWeatherKnowhowConsolidationToolMetadata,
-  } satisfies Record<string, ToolCapabilityMetadata>,
-} as const;
-
-export const OPTIONAL_BUTLER_TOOL_PACKS = {
-  weather: WEATHER_TOOL_PACK,
-} as const;
 
 export const BUTLER_TOOLS = CORE_BUTLER_TOOLS;
 
