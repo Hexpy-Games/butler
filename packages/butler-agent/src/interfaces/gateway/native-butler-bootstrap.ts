@@ -253,6 +253,17 @@ function buildPlannedReviewEnvelope(input: {
   };
 }
 
+function completionTargetSessionIdForTask(input: {
+  task: TaskRecord;
+  butlerData: string;
+  fallbackSessionId: string;
+}): string {
+  const taskOriginSessionId = input.task.origin?.origin_session_id?.trim();
+  if (taskOriginSessionId) return taskOriginSessionId;
+  const link = new WorkOrchestrationStore(input.butlerData).findByWorkerTaskId(input.task.taskId);
+  return link?.record.origin_session_id?.trim() || input.fallbackSessionId;
+}
+
 function sessionPointerPath(butlerData: string): string {
   return join(butlerData, "config", "session-id.txt");
 }
@@ -590,7 +601,11 @@ export async function runNativeButlerMain(
       chatId: telegramGateway.chatId ?? undefined,
       pollMs: input.workerResultPollMs,
       renderNotificationText: async ({ task }) => {
-        const targetSessionId = task.origin?.origin_session_id?.trim() || binding.sessionId;
+        const targetSessionId = completionTargetSessionIdForTask({
+          task,
+          butlerData,
+          fallbackSessionId: binding.sessionId,
+        });
         const targetBinding = store.getBySessionId(targetSessionId) ?? binding;
         const actor = await lifecycle.actorForRoute({
           sessionId: targetBinding.sessionId,

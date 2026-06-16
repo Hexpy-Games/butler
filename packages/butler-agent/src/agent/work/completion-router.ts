@@ -3,7 +3,8 @@ import { join } from "path";
 import { PlannedTaskStore, type PlannedTaskRecord, type PlannedTaskStatus } from "./planned-task.ts";
 import { TaskNotificationQueue } from "./task-notifications.ts";
 import { TaskStore, workSafetyForTask, type TaskRecord } from "./task-store.ts";
-import type { TaskCompletionOwner, TaskOriginContext } from "./task-origin.ts";
+import { buildTaskOriginContext, type TaskCompletionOwner, type TaskOriginContext } from "./task-origin.ts";
+import { WorkOrchestrationStore } from "./work-orchestration.ts";
 
 export type CompletionConsumer = TaskCompletionOwner;
 
@@ -237,7 +238,22 @@ function originSessionIdForPlannedWorker(
 function originForTask(task: TaskRecord | null, butlerData: string): TaskOriginContext | null {
   if (task?.origin) return task.origin;
   const workerTaskId = latestPlannedWorkerTaskId(task);
-  return workerTaskId ? new TaskStore(butlerData).read(workerTaskId)?.origin ?? null : null;
+  if (workerTaskId) {
+    const workerOrigin = new TaskStore(butlerData).read(workerTaskId)?.origin;
+    if (workerOrigin) return workerOrigin;
+  }
+  if (!task?.taskId) return null;
+  const link = new WorkOrchestrationStore(butlerData).findByWorkerTaskId(task.taskId);
+  if (!link) return null;
+  const originSessionId = link.record.origin_session_id?.trim();
+  if (!originSessionId) return null;
+  return buildTaskOriginContext({
+    sessionId: originSessionId,
+    taskSummary: link.stream.objective || link.record.goal || task.request || "Work orchestration stream",
+    project: task.project ?? null,
+    topicSummary: `Work orchestration stream ${link.stream.id}`,
+    createdAt: link.record.created_at,
+  });
 }
 
 function latestPlannedWorkerTaskId(task: TaskRecord | null): string {

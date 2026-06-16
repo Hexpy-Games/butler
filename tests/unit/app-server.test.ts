@@ -7670,7 +7670,7 @@ test("app server allows only configured local Vite dev origin for HMR mode", asy
   }
 });
 
-test("app server allows the default local Vite dev origin", async () => {
+test("app server allows local Vite dev origins by default", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -7683,8 +7683,15 @@ test("app server allows the default local Vite dev origin", async () => {
       "http://127.0.0.1:5173",
     );
 
-    const rejected = await fetch(`${server.url}health`, {
+    const alternateVitePort = await fetch(`${server.url}health`, {
       headers: { origin: "http://127.0.0.1:5174" },
+    });
+    expect(alternateVitePort.headers.get("access-control-allow-origin")).toBe(
+      "http://127.0.0.1:5174",
+    );
+
+    const rejected = await fetch(`${server.url}health`, {
+      headers: { origin: "http://evil.localhost:5173" },
     });
     expect(rejected.headers.get("access-control-allow-origin")).toBe(null);
   } finally {

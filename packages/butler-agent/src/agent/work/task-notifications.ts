@@ -3,7 +3,8 @@ import { join } from "path";
 import type { OutboundAction } from "../../test-support/harness/contracts.ts";
 import { TaskStore, type TaskRecord } from "./task-store.ts";
 import { resolveRuntimeMessageLanguage } from "../output/messages.ts";
-import type { TaskOriginContext } from "./task-origin.ts";
+import { buildTaskOriginContext, type TaskOriginContext } from "./task-origin.ts";
+import { WorkOrchestrationStore } from "./work-orchestration.ts";
 
 export type TaskNotificationStatus = "pending" | "delivered" | "failed";
 
@@ -84,8 +85,21 @@ function latestPlannedWorkerTaskId(task: TaskRecord): string {
 function notificationOrigin(task: TaskRecord, butlerData: string): TaskOriginContext | null {
   if (task.origin) return task.origin;
   const workerTaskId = latestPlannedWorkerTaskId(task);
-  if (!workerTaskId) return null;
-  return new TaskStore(butlerData).read(workerTaskId)?.origin ?? null;
+  if (workerTaskId) {
+    const workerOrigin = new TaskStore(butlerData).read(workerTaskId)?.origin;
+    if (workerOrigin) return workerOrigin;
+  }
+  const link = new WorkOrchestrationStore(butlerData).findByWorkerTaskId(task.taskId);
+  if (!link) return null;
+  const originSessionId = link.record.origin_session_id?.trim();
+  if (!originSessionId) return null;
+  return buildTaskOriginContext({
+    sessionId: originSessionId,
+    taskSummary: link.stream.objective || link.record.goal || task.request || "Work orchestration stream",
+    project: task.project ?? null,
+    topicSummary: `Work orchestration stream ${link.stream.id}`,
+    createdAt: link.record.created_at,
+  });
 }
 
 function shouldRecoverDeliveredPlannedReport(
@@ -134,6 +148,7 @@ export class TaskNotificationQueue {
     const notificationId = this.taskNotificationId(task.taskId);
     const existing = this.read(notificationId);
     if (existing) return existing;
+    const origin = notificationOrigin(task, this.butlerData);
     return this.upsert({
       notificationId,
       taskId: task.taskId,
@@ -141,9 +156,9 @@ export class TaskNotificationQueue {
       text: renderTaskResult(task, this.butlerData),
       status: "pending",
       createdAt: new Date().toISOString(),
-      originSummary: task.origin?.task_summary ?? undefined,
-      originSessionId: task.origin?.origin_session_id ?? undefined,
-      originEventId: task.origin?.origin_inbound_event_id ?? undefined,
+      originSummary: origin?.task_summary ?? undefined,
+      originSessionId: origin?.origin_session_id ?? undefined,
+      originEventId: origin?.origin_inbound_event_id ?? undefined,
     });
   }
 

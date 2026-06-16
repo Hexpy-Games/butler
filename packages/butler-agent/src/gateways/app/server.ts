@@ -164,6 +164,10 @@ const DEFAULT_MESSAGE_RATE_LIMIT = {
   windowMs: 60_000,
 } as const;
 const DEFAULT_DEV_CORS_ORIGIN = "http://127.0.0.1:5173";
+interface DevCorsPolicy {
+  origins: Set<string>;
+  allowLocalLoopback: boolean;
+}
 
 const MESSAGE_FILE_ID_PATTERN = /^file-[0-9a-f-]{36}$/iu;
 
@@ -205,9 +209,7 @@ export function createAppServer(
       : existsSync(builtUiRoot)
       ? builtUiRoot
       : resolve(uiBaseRoot, "packages", "butler-app", "client", "ui"));
-  const devCorsOrigin = normalizeLocalHttpOrigin(
-    options.devCorsOrigin ?? DEFAULT_DEV_CORS_ORIGIN,
-  );
+  const devCorsPolicy = normalizeDevCorsPolicy(options.devCorsOrigin);
   const localAuth = normalizeLocalAuth(options.localAuth);
   let automationSchedulerRunning = false;
   const server = Bun.serve({
@@ -215,7 +217,7 @@ export function createAppServer(
     hostname,
     idleTimeout,
     async fetch(request) {
-      const corsHeaders = devCorsHeaders(request, devCorsOrigin);
+      const corsHeaders = devCorsHeaders(request, devCorsPolicy);
       if (request.method === "OPTIONS" && Object.keys(corsHeaders).length > 0) {
         return new Response(null, {
           status: 204,
@@ -1585,23 +1587,47 @@ function maxCursor(
 
 function normalizeLocalHttpOrigin(value?: string): string | null {
   if (!value) return null;
-  const url = new URL(value);
-  const hostname = url.hostname.toLocaleLowerCase("en-US");
-  const isLocalhost =
-    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  if (url.protocol !== "http:" || !isLocalhost) return null;
-  return url.origin;
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLocaleLowerCase("en-US");
+    const isLocalhost =
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1";
+    if (url.protocol !== "http:" || !isLocalhost) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDevCorsPolicy(value?: string): DevCorsPolicy {
+  const configuredOrigins = String(value ?? "")
+    .split(",")
+    .map((origin) => normalizeLocalHttpOrigin(origin.trim()))
+    .filter((origin): origin is string => Boolean(origin));
+  if (configuredOrigins.length > 0) {
+    return { origins: new Set(configuredOrigins), allowLocalLoopback: false };
+  }
+  return {
+    origins: new Set([DEFAULT_DEV_CORS_ORIGIN]),
+    allowLocalLoopback: true,
+  };
 }
 
 function devCorsHeaders(
   request: Request,
-  devCorsOrigin: string | null,
+  devCorsPolicy: DevCorsPolicy,
 ): Record<string, string> {
-  if (!devCorsOrigin) return {};
   const origin = request.headers.get("origin");
-  if (origin !== devCorsOrigin) return {};
+  const normalizedOrigin = normalizeLocalHttpOrigin(origin ?? undefined);
+  if (!normalizedOrigin) return {};
+  const allowed =
+    devCorsPolicy.origins.has(normalizedOrigin) ||
+    devCorsPolicy.allowLocalLoopback;
+  if (!allowed) return {};
   return {
-    "access-control-allow-origin": devCorsOrigin,
+    "access-control-allow-origin": normalizedOrigin,
     vary: "Origin",
   };
 }
