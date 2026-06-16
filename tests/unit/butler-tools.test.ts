@@ -534,6 +534,49 @@ test("run_command implicit artifact discovery does not auto-promote workspace fi
   expect(readFileSync(join(workspace, "reports", "population.csv"), "utf8")).toContain("Seoul,9300000");
 });
 
+test("run_command structured stdout does not auto-promote workspace-root generated artifacts", async () => {
+  const workspace = join(tempDir, "workspace");
+  mkdirSync(workspace, { recursive: true });
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: [
+        "mkdir -p artifacts/generated/leak",
+        "printf 'city,population\\nSeoul,9300000\\n' > artifacts/generated/leak/report.csv",
+        "python3 -c 'import json; print(json.dumps({\"report_path\":\"artifacts/generated/leak/report.csv\"}))'",
+      ].join("; "),
+      output_mode: "full",
+    },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    durable_artifact_created?: boolean;
+    artifact_label?: string;
+    verified_output_files?: Array<{ path: string; artifact_kind: string }>;
+    evidence_receipts: Array<Record<string, any>>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(existsSync(join(workspace, "artifacts", "generated", "leak", "report.csv"))).toBe(true);
+  expect(existsSync(join(tempDir, "artifacts", "generated", "leak", "report.csv"))).toBe(false);
+  expect(result.durable_artifact_created).toBeUndefined();
+  expect(result.artifact_label).toBeUndefined();
+  expect(result.verified_output_files).toBeUndefined();
+  expect(result.evidence_receipts).toEqual([
+    expect.objectContaining({
+      receiptType: "execution",
+      verified: true,
+      satisfies: ["command_executed"],
+    }),
+  ]);
+});
+
 test("run_command verifies declared output paths as durable artifact evidence", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });
