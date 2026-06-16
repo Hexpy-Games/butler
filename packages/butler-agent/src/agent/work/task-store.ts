@@ -15,6 +15,10 @@ import {
   type PlannedTaskStatus,
   type PlannedReviewVerdict,
 } from "./planned-task.ts";
+import {
+  summarizeWorkerCompletionEvidence,
+  type WorkerCompletionEvidenceSummary,
+} from "./worker-evidence.ts";
 
 export type TaskStatus =
   | "APPROVED"
@@ -66,6 +70,7 @@ export interface TaskRecord {
   notifiedAt: string | null;
   origin: TaskOriginContext | null;
   planned: PlannedTaskRecord | null;
+  completionEvidence: WorkerCompletionEvidenceSummary;
 }
 
 export interface TaskSummary {
@@ -98,6 +103,7 @@ export interface TaskSummary {
   activity_current_title: string | null;
   activity_work_blocks: WorkerActivityWorkBlock[];
   activity_updated_at: string | null;
+  completion_evidence: WorkerCompletionEvidenceSummary;
   updated_at: string | null;
 }
 
@@ -231,7 +237,10 @@ function taskNextStep(task: TaskRecord): string {
   return "Answer from durable task state and avoid exposing internal ids unless asked.";
 }
 
-function directModeSafety(status: TaskStatus): {
+function directModeSafety(
+  status: TaskStatus,
+  evidence: WorkerCompletionEvidenceSummary,
+): {
   work_mode: WorkMode;
   safe_to_report: boolean;
   completion_claim_allowed: boolean;
@@ -254,11 +263,19 @@ function directModeSafety(status: TaskStatus): {
     };
   }
   if (status === "DONE" || status === "REVIEWED") {
+    if (!evidence.safe_to_report) {
+      return {
+        work_mode: "reviewing",
+        safe_to_report: false,
+        completion_claim_allowed: false,
+        guard_reason: evidence.guard_reason ?? "Worker completion evidence is insufficient.",
+      };
+    }
     return {
       work_mode: "complete",
       safe_to_report: true,
-      completion_claim_allowed: true,
-      guard_reason: null,
+      completion_claim_allowed: evidence.completion_claim_allowed,
+      guard_reason: evidence.guard_reason,
     };
   }
   if (status === "KILLED") {
@@ -285,7 +302,7 @@ export function workSafetyForTask(task: TaskRecord): {
   completion_claim_allowed: boolean;
   guard_reason: string | null;
 } {
-  if (!task.planned) return directModeSafety(task.status);
+  if (!task.planned) return directModeSafety(task.status, task.completionEvidence);
   return plannedModeSafety(task.planned);
 }
 
@@ -631,6 +648,7 @@ export class TaskStore {
     const log = readText(join(taskDir, "log.txt"));
     const logSummary = summarizeWorkerLog(log);
     const planned = readPlannedTaskRecord(taskDir, taskId);
+    const completionEvidence = summarizeWorkerCompletionEvidence(taskDir);
     return {
       taskId,
       taskDir,
@@ -646,6 +664,7 @@ export class TaskStore {
       notifiedAt,
       origin: readTaskOrigin(taskDir),
       planned,
+      completionEvidence,
     };
   }
 
@@ -693,6 +712,7 @@ export class TaskStore {
         activity_current_title: activity.current_title,
         activity_work_blocks: activity.work_blocks,
         activity_updated_at: activity.updated_at,
+        completion_evidence: task.completionEvidence,
         updated_at: taskUpdatedAt(task.taskDir),
       };
     });
@@ -700,7 +720,7 @@ export class TaskStore {
 
   reportableTasks(): TaskRecord[] {
     const reportable = new Set<TaskStatus>(["DONE", "FAILED", "REVIEWED"]);
-    return this.list(250).filter((task) => reportable.has(task.status));
+    return this.list(250).filter((task) => reportable.has(task.status) && workSafetyForTask(task).safe_to_report);
   }
 
   plannedReportReadyTasks(): TaskRecord[] {

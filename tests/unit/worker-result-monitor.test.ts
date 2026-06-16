@@ -34,6 +34,17 @@ test("worker result monitor delivers completed task results once", async () => {
   writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "run a quick test\n", "utf8");
   writeFileSync(join(taskDir, "result.md"), "test result ok\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+    schema: "butler.worker-activity-event.v1",
+    event_id: "ev-test",
+    created_at: "2026-04-24T00:00:00.000Z",
+    actor: "worker",
+    event: "activity_updated",
+    semantic_phase: "verifying",
+    action_kind: "test",
+    status_line: "Verifying: ran the quick test.",
+    evidence_refs: ["test-result"],
+  })}\n`, "utf8");
 
   const deliveries: Array<{ chatId: string; text: string }> = [];
   const first = await pollWorkerResultsOnce({
@@ -72,6 +83,17 @@ test("worker result monitor delivers app-origin results through app transport", 
   writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "run app-origin work\n", "utf8");
   writeFileSync(join(taskDir, "result.md"), "app result ready\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+    schema: "butler.worker-activity-event.v1",
+    event_id: "ev-app",
+    created_at: "2026-04-24T00:00:00.000Z",
+    actor: "worker",
+    event: "activity_updated",
+    semantic_phase: "executing",
+    action_kind: "write_file",
+    status_line: "Executing: wrote app-origin worker result.",
+    evidence_refs: ["app-result"],
+  })}\n`, "utf8");
   new TaskStore(tempDir).writeOrigin("task-app-origin", buildTaskOriginContext({
     sessionId: "butler/app-general",
     taskSummary: "App-origin worker result",
@@ -271,6 +293,60 @@ test("worker result monitor promotes planned worker completion instead of delive
   expect(promotions).toEqual(["planned-1:worker-linked:WORKER_DONE"]);
   expect(record?.status).toBe("WORKER_DONE");
   expect(record?.latestResult).toBe("raw planned worker result");
+});
+
+test("worker result monitor does not promote planned implementation work from planning-only evidence", async () => {
+  const planned = new PlannedTaskStore(tempDir);
+  planned.create({
+    task_id: "planned-planning-only",
+    type: "planned",
+    goal: "Implement before reporting",
+    project: "/tmp/project",
+    created_at: "2026-04-25T00:00:00.000Z",
+    decision_policy: "autonomous",
+    acceptance_criteria: ["implementation evidence exists"],
+    verification_commands: [],
+    review_policy: "review all criteria",
+    repair_policy: { max_attempts: 1, allow_autonomous_repair: true },
+    public_report_policy: "brief",
+  });
+  planned.writeAttemptDispatch("planned-planning-only", 1, {
+    worker_task_id: "worker-planning-only",
+    prompt: "execute planned work",
+  });
+  planned.transition("planned-planning-only", "PLANNED_RUNNING");
+
+  const workerDir = join(tempDir, "tasks", "worker-planning-only");
+  mkdirSync(workerDir, { recursive: true });
+  writeFileSync(join(workerDir, "request.md"), "Implement the planned change.\n", "utf8");
+  writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(workerDir, "result.md"), "I inspected the repository and prepared the implementation plan.\n", "utf8");
+  writeFileSync(join(workerDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+    schema: "butler.worker-activity-event.v1",
+    event_id: "ev-plan",
+    created_at: "2026-04-25T00:00:00.000Z",
+    actor: "worker",
+    event: "activity_updated",
+    semantic_phase: "planning",
+    action_kind: "plan",
+    status_line: "Planning: identified files to edit.",
+  })}\n`, "utf8");
+
+  const promotions: string[] = [];
+  const delivered = await pollWorkerResultsOnce({
+    butlerHome: "fixtures/butler-project",
+    butlerData: tempDir,
+    sessionId: "butler/main",
+    chatId: "123",
+    handlePlannedTaskReadyForReview: async (promotion) => {
+      promotions.push(`${promotion.plannedTaskId}:${promotion.workerTaskId}:${promotion.status}`);
+    },
+  });
+
+  expect(delivered).toBe(0);
+  expect(promotions).toEqual([]);
+  expect(planned.read("planned-planning-only")?.status).toBe("PLANNED_RUNNING");
+  expect(new TaskStore(tempDir).reportableTasks().map((task) => task.taskId)).not.toContain("worker-planning-only");
 });
 
 test("native worker result monitor leaves app-origin planned reviews for the app server", async () => {

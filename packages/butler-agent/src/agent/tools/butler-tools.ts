@@ -2064,6 +2064,8 @@ function selectWorkerModel(
   },
   preference: WorkerModelRulePreference,
 ): { model?: string; reasoningEffort?: ReasoningEffort } {
+  const inheritedModel = input.workerModel?.trim();
+  if (inheritedModel) return { model: inheritedModel };
   const rules = (input.workerModelRules ?? [])
     .filter((rule) => rule.enabled !== false && typeof rule.model === "string" && rule.model.trim());
   const preferredRule = rules.find((rule) => workerRuleMatchesPreference(rule, preference)) ?? rules[0];

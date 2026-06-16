@@ -13,6 +13,23 @@ import { TaskStore } from "../../packages/butler-agent/src/agent/work/task-store
 
 let tempDir = "";
 
+function writeWorkerCompletionEvidence(taskDir: string): void {
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), [
+    JSON.stringify({
+      semantic_phase: "executing",
+      action_kind: "edit_file",
+      status_line: "Worker wrote the requested deliverable.",
+      evidence_refs: ["result.md"],
+    }),
+    JSON.stringify({
+      semantic_phase: "verifying",
+      action_kind: "test",
+      status_line: "Worker verified the requested deliverable.",
+      evidence_refs: ["result.md"],
+    }),
+  ].join("\n") + "\n", "utf8");
+}
+
 beforeEach(() => {
   tempDir = join(tmpdir(), `butler-task-notifications-${Date.now()}-${Math.random()}`);
   mkdirSync(tempDir, { recursive: true });
@@ -282,6 +299,7 @@ test("task notification fallback includes origin summary when available", () => 
   writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "make chart\n", "utf8");
   writeFileSync(join(taskDir, "result.md"), "chart ready\n", "utf8");
+  writeWorkerCompletionEvidence(taskDir);
   writeFileSync(join(taskDir, "origin.json"), `${JSON.stringify({
     version: 1,
     origin_session_id: "butler/main",

@@ -23,10 +23,19 @@ Transport adapters should not own conversation logic. Session actors consume
 transport-neutral envelopes from gateway core and return outbound actions;
 transport-specific rendering stays below the transport layer.
 
+Steward is a durable gateway session actor and runs through the same native
+tool-loop and WorkStream completion gates as Butler-facing sessions for
+non-trivial custody, review, synthesis, and routing work. Worker remains an
+internal runtime actor behind task dispatch, but its native turn events are
+projected into safe worker activity timelines and legacy task summaries.
+Gateway read routes must expose derived safe timeline/progress data rather than
+raw prompts, provider payloads, task internals, or secrets.
+
 ## Related Specs
 
 - `SPEC-NATIVE-PRODUCT` - Native Butler Product
 - `SPEC-BUTLER-AGENT-LOOP` - Butler Agent Loop
 - `SPEC-AUTONOMOUS-PLANNED-DISPATCH` - Autonomous Planned Dispatch
+- `SPEC-WORKER-BTCC-RUNTIME-NORMALIZATION` - Worker BTCC Runtime Normalization
 - `SPEC-OPERATIONAL-RELIABILITY` - Operational Reliability
 - `SPEC-TRANSPORT-EXPANSION-READINESS` - Transport Expansion Readiness

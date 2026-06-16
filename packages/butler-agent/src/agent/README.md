@@ -32,10 +32,18 @@ continuation prompt must preserve the current-turn persona reminder along with
 the compact WorkStream state so long-running work does not drift into a neutral
 reporting voice.
 
+Worker and Steward non-trivial work share the same native tool-loop and
+WorkStream discipline as Butler-facing sessions. Role differences are policy:
+Workers cannot spawn child workers/orchestrations or publish principal-facing
+reports, while Stewards remain internal project/workstream custodians. Neither
+role may claim completion from task status alone; implementation work needs
+durable execution evidence, validation evidence, or an explicit blocker.
+
 ## Related Specs
 
 - `SPEC-BUTLER-AGENT-LOOP` - Butler Agent Loop
 - `SPEC-OPENAI-AUTH-AND-MODELS` - OpenAI Auth And Model Discovery
 - `SPEC-MODEL-PROVIDER-CONTROL-UX` - Model And Provider Control UX
 - `SPEC-AUTONOMOUS-PLANNED-DISPATCH` - Autonomous Planned Dispatch
+- `SPEC-WORKER-BTCC-RUNTIME-NORMALIZATION` - Worker BTCC Runtime Normalization
 - `SPEC-BUTLER-EXPERIENCE-POLISH` - Butler Experience Polish

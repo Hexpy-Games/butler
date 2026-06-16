@@ -224,6 +224,44 @@ test("explicit required tools can extend a profile without enabling domain weath
   expect(names).not.toContain("get_weather_with_knowhow");
 });
 
+test("worker tool profile keeps execution tools and blocks recursive orchestration tools", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "worker",
+    text: "Implement the assigned change, verify it, and report worker evidence.",
+    sessionMetadata: { projectPath: root },
+    turnMetadata: {
+      requiredNativeTools: [
+        "dispatch_worker",
+        "create_planned_task",
+        "run_ready_work_streams",
+        "write_planned_public_report",
+        "run_command",
+        "update_work_stream_state",
+      ],
+    },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(names).toEqual(expect.arrayContaining([
+    "run_command",
+    "read_tool_output_artifact",
+    "update_todo_list",
+    "list_todo_list",
+    "list_work_streams",
+    "update_work_stream_state",
+    "web_search",
+    "web_read",
+  ]));
+  expect(names).not.toContain("dispatch_worker");
+  expect(names).not.toContain("resume_worker");
+  expect(names).not.toContain("create_planned_task");
+  expect(names).not.toContain("run_planned_task");
+  expect(names).not.toContain("repair_planned_task");
+  expect(names).not.toContain("create_work_orchestration");
+  expect(names).not.toContain("run_ready_work_streams");
+  expect(names).not.toContain("write_planned_public_report");
+});
+
 test("web_search schema exposes query and domain filters", () => {
   const tool = BUTLER_TOOLS.find((item) => item.name === "web_search");
 
@@ -1334,6 +1372,53 @@ test("dispatch_worker remains a direct background dispatch", async () => {
     projectPath: "/tmp/project",
     model: "openai/gpt-5.4-mini",
     reasoningEffort: "medium",
+  }]);
+});
+
+test("dispatch_worker inherits the active session model before worker rules", async () => {
+  const dispatched: Array<{
+    model?: string;
+    reasoningEffort?: string;
+  }> = [];
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    workerModel: "openai/gpt-5.5",
+    workerModelRules: [
+      {
+        id: "routine_work",
+        label: "Routine work",
+        condition: "Simple inspection",
+        model: "local/gemma-4-31B-it",
+        reasoning_effort: "medium",
+        enabled: true,
+      },
+    ],
+    dispatchTask: (input) => {
+      dispatched.push({
+        model: input.model,
+        reasoningEffort: input.reasoningEffort,
+      });
+      return {
+        task_id: "task-direct",
+        status: "RUNNING",
+        message: "stubbed",
+      };
+    },
+  });
+
+  await execute({
+    name: "dispatch_worker",
+    args: {
+      task: "문서를 짧게 보강한다",
+      project_path: "/tmp/project",
+    },
+    rawArguments: "{}",
+  });
+
+  expect(dispatched).toEqual([{
+    model: "openai/gpt-5.5",
+    reasoningEffort: undefined,
   }]);
 });
 
@@ -2915,8 +3000,8 @@ test("run_planned_task consumes a plan and starts a linked worker attempt", asyn
     ],
     dispatchTask: (input) => {
       expect(input.projectPath).toBe("/tmp/planned-project");
-      expect(input.model).toBe("openai/gpt-5.5");
-      expect(input.reasoningEffort).toBe("high");
+      expect(input.model).toBe("openai/gpt-5.4-mini");
+      expect(input.reasoningEffort).toBeUndefined();
       expect(input.task).toContain("Execute planned Butler task");
       expect(input.task).toContain("GOAL: 조사하고 보고한다");
       expect(input.task).toContain("User-facing objective: 조사하고 보고한다");
@@ -4066,6 +4151,11 @@ test("list_tasks returns durable task summaries from Butler data", async () => {
       work_mode: "complete",
       safe_to_report: true,
       completion_claim_allowed: true,
+      completion_evidence: expect.objectContaining({
+        classification: "diagnosis-only",
+        safe_to_report: true,
+        completion_claim_allowed: true,
+      }),
       guard_reason: null,
       can_resume: false,
       user_summary: "check the project: worker completed.",

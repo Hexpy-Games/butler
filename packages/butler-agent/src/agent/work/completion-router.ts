@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { PlannedTaskStore, type PlannedTaskRecord, type PlannedTaskStatus } from "./planned-task.ts";
 import { TaskNotificationQueue } from "./task-notifications.ts";
-import { TaskStore, type TaskRecord } from "./task-store.ts";
+import { TaskStore, workSafetyForTask, type TaskRecord } from "./task-store.ts";
 import type { TaskCompletionOwner, TaskOriginContext } from "./task-origin.ts";
 
 export type CompletionConsumer = TaskCompletionOwner;
@@ -88,7 +88,8 @@ export function claimPlannedWorkerCompletions(input: {
         plannedLink.attempt,
         task.observedResult ?? task.result ?? "",
       );
-      const status = task.status === "FAILED" ? "WORKER_FAILED" : "WORKER_DONE";
+      const safety = workSafetyForTask(task);
+      const status = task.status === "FAILED" || !safety.completion_claim_allowed ? "WORKER_FAILED" : "WORKER_DONE";
       plannedStore.transition(plannedLink.record.taskId, status);
       taskStore.markResultNotified(task.taskId);
       promotions.push({
