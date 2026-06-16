@@ -34,18 +34,34 @@ import { createAutomationToolDefinition, createAutomationToolMetadata } from "./
 import { listAutomationsToolDefinition, listAutomationsToolMetadata } from "./list_automations/index.ts";
 import { deleteAutomationToolDefinition, deleteAutomationToolMetadata } from "./delete_automation/index.ts";
 import { runDueAutomationsToolDefinition, runDueAutomationsToolMetadata } from "./run_due_automations/index.ts";
-import { updateTodoListToolDefinition, updateTodoListToolMetadata } from "./update_todo_list/index.ts";
-import { listTodoListToolDefinition, listTodoListToolMetadata } from "./list_todo_list/index.ts";
-import { listWorkStreamsToolDefinition, listWorkStreamsToolMetadata } from "./list_work_streams/index.ts";
-import { updateWorkStreamStateToolDefinition, updateWorkStreamStateToolMetadata } from "./update_work_stream_state/index.ts";
-import { controlWorkToolDefinition, controlWorkToolMetadata } from "./control_work/index.ts";
-import { ingestTaskMemoryToolDefinition, ingestTaskMemoryToolMetadata } from "./ingest_task_memory/index.ts";
-import { recallMemoryToolDefinition, recallMemoryToolMetadata } from "./recall_memory/index.ts";
-import { queryMemoryToolDefinition, queryMemoryToolMetadata } from "./query_memory/index.ts";
-import { summarizeUserProfileToolDefinition, summarizeUserProfileToolMetadata } from "./summarize_user_profile/index.ts";
-import { updateOnboardingProfileToolDefinition, updateOnboardingProfileToolMetadata } from "./update_onboarding_profile/index.ts";
-import { readConversationContextToolDefinition, readConversationContextToolMetadata } from "./read_conversation_context/index.ts";
-import { updateExplicitMemoryToolDefinition, updateExplicitMemoryToolMetadata } from "./update_explicit_memory/index.ts";
+import {
+  controlWorkToolDefinition,
+  controlWorkToolMetadata,
+  listTodoListToolDefinition,
+  listTodoListToolMetadata,
+  listWorkStreamsToolDefinition,
+  listWorkStreamsToolMetadata,
+  updateTodoListToolDefinition,
+  updateTodoListToolMetadata,
+  updateWorkStreamStateToolDefinition,
+  updateWorkStreamStateToolMetadata,
+} from "./work-tracking/index.ts";
+import {
+  ingestTaskMemoryToolDefinition,
+  ingestTaskMemoryToolMetadata,
+  queryMemoryToolDefinition,
+  queryMemoryToolMetadata,
+  readConversationContextToolDefinition,
+  readConversationContextToolMetadata,
+  recallMemoryToolDefinition,
+  recallMemoryToolMetadata,
+  summarizeUserProfileToolDefinition,
+  summarizeUserProfileToolMetadata,
+  updateExplicitMemoryToolDefinition,
+  updateExplicitMemoryToolMetadata,
+  updateOnboardingProfileToolDefinition,
+  updateOnboardingProfileToolMetadata,
+} from "./memory/index.ts";
 import { listSkillsToolDefinition, listSkillsToolMetadata } from "./list_skills/index.ts";
 import { dispatchWorkerToolDefinition, dispatchWorkerToolMetadata } from "./dispatch_worker/index.ts";
 import { createPlannedTaskToolDefinition, createPlannedTaskToolMetadata } from "./create_planned_task/index.ts";
