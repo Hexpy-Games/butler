@@ -231,6 +231,22 @@ export type {
 } from "./types.ts";
 
 export type ButlerToolExecutor = FunctionToolPromptOptions["executeTool"];
+export type ButlerToolCall = Parameters<ButlerToolExecutor>[0];
+export type ButlerToolHandler = (call: ButlerToolCall) => Promise<unknown> | unknown;
+export type ButlerToolExecutorRegistry = Record<string, ButlerToolHandler>;
+
+export function createButlerToolExecutorRegistry<T extends ButlerToolExecutorRegistry>(handlers: T): T {
+  return handlers;
+}
+
+async function executeRegisteredButlerTool(
+  registry: ButlerToolExecutorRegistry,
+  call: ButlerToolCall,
+): Promise<unknown> {
+  const execute = registry[call.name];
+  if (!execute) throw new Error(`Unknown Butler tool: ${call.name}`);
+  return await execute(call);
+}
 
 interface ToolCapabilityView {
   name: string;
@@ -2109,8 +2125,8 @@ export function createButlerToolExecutor(input: {
   const dispatchTask = input.dispatchTask ?? dispatchBackgroundTask;
   let smartSearchPlanningConsumed = false;
   const pageReadCache = new Map<string, PageReadResult>();
-  return async (call) => {
-    if (call.name === "get_work_dashboard") {
+  const toolExecutors = createButlerToolExecutorRegistry({
+    "get_work_dashboard": async (call) => {
       return {
         ok: true,
         ...createWorkDashboard({
@@ -2119,18 +2135,16 @@ export function createButlerToolExecutor(input: {
           limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
         }),
       };
-    }
-
-    if (call.name === "inspect_project_status") {
+    },
+    "inspect_project_status": async (call) => {
       const projectPath = projectLedgerProjectPath(input, call.args);
       return runProjectLedgerTool(input, [
         "status",
         "--project",
         projectPath,
       ]);
-    }
-
-    if (call.name === "query_project_work") {
+    },
+    "query_project_work": async (call) => {
       const kind = typeof call.args.kind === "string" ? call.args.kind.trim() : "";
       if (!kind) throw new Error("query_project_work requires kind");
       const projectPath = projectLedgerProjectPath(input, call.args);
@@ -2141,9 +2155,8 @@ export function createButlerToolExecutor(input: {
         "--kind",
         kind,
       ]);
-    }
-
-    if (call.name === "render_project_dashboard") {
+    },
+    "render_project_dashboard": async (call) => {
       const view = typeof call.args.view === "string" ? call.args.view.trim() : "";
       if (!view) throw new Error("render_project_dashboard requires view");
       const projectPath = projectLedgerProjectPath(input, call.args);
@@ -2164,9 +2177,8 @@ export function createButlerToolExecutor(input: {
           write: call.args.write === true,
         }),
       };
-    }
-
-    if (call.name === "complete_project_work") {
+    },
+    "complete_project_work": async (call) => {
       const id = typeof call.args.id === "string" ? call.args.id.trim() : "";
       const validation = typeof call.args.validation === "string" ? call.args.validation.trim() : "";
       const review = typeof call.args.review === "string" ? call.args.review.trim() : "";
@@ -2189,9 +2201,8 @@ export function createButlerToolExecutor(input: {
         "--report",
         report,
       ]);
-    }
-
-    if (call.name === "get_context_monitor") {
+    },
+    "get_context_monitor": async (call) => {
       return {
         ok: true,
         ...readContextMonitor({
@@ -2201,9 +2212,8 @@ export function createButlerToolExecutor(input: {
             : input.sessionId,
         }),
       };
-    }
-
-    if (call.name === "read_tool_output_artifact") {
+    },
+    "read_tool_output_artifact": async (call) => {
       return readToolOutputArtifactSlice({
         butlerData: input.butlerData,
         artifactId: typeof call.args.artifact_id === "string" && call.args.artifact_id.trim()
@@ -2220,9 +2230,8 @@ export function createButlerToolExecutor(input: {
         limitLines: typeof call.args.limit_lines === "number" ? call.args.limit_lines : undefined,
         maxTokens: typeof call.args.max_tokens === "number" ? call.args.max_tokens : undefined,
       });
-    }
-
-    if (call.name === "get_usage_monitor") {
+    },
+    "get_usage_monitor": async (call) => {
       const sinceHours = typeof call.args.since_hours === "number" && call.args.since_hours > 0
         ? call.args.since_hours
         : null;
@@ -2236,9 +2245,8 @@ export function createButlerToolExecutor(input: {
           sinceTs: sinceHours === null ? null : Date.now() - sinceHours * 60 * 60 * 1000,
         }),
       };
-    }
-
-    if (call.name === "list_tool_capabilities") {
+    },
+    "list_tool_capabilities": async (call) => {
       const category = toolCategory(call.args.category);
       return {
         ok: true,
@@ -2249,9 +2257,8 @@ export function createButlerToolExecutor(input: {
           includeDisabled: call.args.include_disabled !== false,
         }),
       };
-    }
-
-    if (call.name === "list_mcp_capabilities") {
+    },
+    "list_mcp_capabilities": async (call) => {
       return {
         ok: true,
         ...await listMcpServerCapabilities({
@@ -2259,9 +2266,8 @@ export function createButlerToolExecutor(input: {
           includeDisabled: call.args.include_disabled === true,
         }),
       };
-    }
-
-    if (call.name === "call_mcp_tool") {
+    },
+    "call_mcp_tool": async (call) => {
       const serverId = typeof call.args.server_id === "string" ? call.args.server_id.trim() : "";
       const toolName = typeof call.args.tool_name === "string" ? call.args.tool_name.trim() : "";
       if (!serverId) throw new Error("call_mcp_tool requires server_id");
@@ -2280,9 +2286,8 @@ export function createButlerToolExecutor(input: {
           args: mcpArguments,
         }),
       };
-    }
-
-    if (call.name === "read_mcp_resource") {
+    },
+    "read_mcp_resource": async (call) => {
       const serverId = typeof call.args.server_id === "string" ? call.args.server_id.trim() : "";
       const uri = typeof call.args.uri === "string" ? call.args.uri.trim() : "";
       if (!serverId) throw new Error("read_mcp_resource requires server_id");
@@ -2295,9 +2300,8 @@ export function createButlerToolExecutor(input: {
           uri,
         }),
       };
-    }
-
-    if (call.name === "create_automation") {
+    },
+    "create_automation": async (call) => {
       const prompt = typeof call.args.prompt === "string" ? call.args.prompt : "";
       const sessionId = typeof call.args.session_id === "string" && call.args.session_id.trim()
         ? call.args.session_id.trim()
@@ -2312,36 +2316,32 @@ export function createButlerToolExecutor(input: {
           schedule: automationSchedule(call.args),
         }),
       };
-    }
-
-    if (call.name === "list_automations") {
+    },
+    "list_automations": async (call) => {
       return {
         ok: true,
         automations: automationStore.list({
           includeDeleted: call.args.include_deleted === true,
         }),
       };
-    }
-
-    if (call.name === "delete_automation") {
+    },
+    "delete_automation": async (call) => {
       const id = typeof call.args.id === "string" ? call.args.id.trim() : "";
       if (!id) throw new Error("delete_automation requires id");
       return {
         ok: true,
         automation: automationStore.delete(id),
       };
-    }
-
-    if (call.name === "run_due_automations") {
+    },
+    "run_due_automations": async (call) => {
       const runs = automationStore.claimDue(automationNow(call.args.now));
       return {
         ok: true,
         claimed: runs.length,
         runs,
       };
-    }
-
-    if (call.name === "update_todo_list") {
+    },
+    "update_todo_list": async (call) => {
       const listId = scopedTodoListId(call.args.list_id, input.turnId);
       const view = todoListStore.update({
         listId,
@@ -2363,9 +2363,8 @@ export function createButlerToolExecutor(input: {
         progress: view.progress,
         work_stream: workStream,
       };
-    }
-
-    if (call.name === "list_todo_list") {
+    },
+    "list_todo_list": async (call) => {
       const listId = scopedTodoListId(call.args.list_id, input.turnId);
       const view = todoListStore.view(
         listId,
@@ -2379,9 +2378,8 @@ export function createButlerToolExecutor(input: {
         items: view.items,
         progress: view.progress,
       };
-    }
-
-    if (call.name === "list_work_streams") {
+    },
+    "list_work_streams": async (call) => {
       const sessionId = typeof call.args.session_id === "string" && call.args.session_id.trim()
         ? call.args.session_id.trim()
         : input.sessionId;
@@ -2396,9 +2394,8 @@ export function createButlerToolExecutor(input: {
           includeTerminal: call.args.include_terminal === true,
         }),
       };
-    }
-
-    if (call.name === "update_work_stream_state") {
+    },
+    "update_work_stream_state": async (call) => {
       const requestedId = typeof call.args.work_stream_id === "string" && call.args.work_stream_id.trim()
         ? call.args.work_stream_id.trim()
         : undefined;
@@ -2413,9 +2410,8 @@ export function createButlerToolExecutor(input: {
           statusNote: typeof call.args.status_note === "string" ? call.args.status_note : undefined,
         }),
       };
-    }
-
-    if (call.name === "control_work") {
+    },
+    "control_work": async (call) => {
       const action = typeof call.args.action === "string" ? call.args.action.trim() : "";
       if (
         action !== "view_result" &&
@@ -2431,27 +2427,24 @@ export function createButlerToolExecutor(input: {
         taskId: typeof call.args.task_id === "string" ? call.args.task_id : undefined,
         notificationId: typeof call.args.notification_id === "string" ? call.args.notification_id : undefined,
       });
-    }
-
-    if (call.name === "get_memory_health") {
+    },
+    "get_memory_health": async (_call) => {
       return {
         ok: true,
         ...readMemoryHealth({
           butlerData: input.butlerData,
         }),
       };
-    }
-
-    if (call.name === "ingest_task_memory") {
+    },
+    "ingest_task_memory": async (call) => {
       const taskId = typeof call.args.task_id === "string" ? call.args.task_id.trim() : "";
       if (!taskId) throw new Error("ingest_task_memory requires task_id");
       return ingestTaskOutcomeMemory({
         butlerData: input.butlerData,
         taskId,
       });
-    }
-
-    if (call.name === "recall_memory") {
+    },
+    "recall_memory": async (call) => {
       const cue = typeof call.args.cue === "string" ? call.args.cue.trim() : "";
       if (!cue) throw new Error("recall_memory requires cue");
       const explicitVectorQueries = stringArray(call.args.vector_queries);
@@ -2528,9 +2521,8 @@ export function createButlerToolExecutor(input: {
           ...retrievalPlannerDiagnostics(plannerResult),
         ],
       };
-    }
-
-    if (call.name === "query_memory") {
+    },
+    "query_memory": async (call) => {
       const scope = call.args.scope === "session" ? "session" : "all_sessions";
       const sessionId = typeof call.args.session_id === "string" && call.args.session_id.trim()
         ? call.args.session_id.trim()
@@ -2558,14 +2550,12 @@ export function createButlerToolExecutor(input: {
           includePlaceholders: call.args.include_placeholders === true,
         }),
       };
-    }
-
-    if (call.name === "summarize_user_profile") {
+    },
+    "summarize_user_profile": async (call) => {
       const locale = call.args.locale === "en" ? "en" : "ko";
       return readReflectiveProfileSummary(input.butlerData, locale);
-    }
-
-    if (call.name === "update_onboarding_profile") {
+    },
+    "update_onboarding_profile": async (call) => {
       const personaPreset = onboardingPersonaPreset(call.args.persona_preset);
       const profilingMode = onboardingProfilingMode(call.args.profiling_mode);
       return updateFirstChatOnboarding(input.butlerData, {
@@ -2585,9 +2575,8 @@ export function createButlerToolExecutor(input: {
         locale: call.args.locale === "en" ? "en" : "ko",
         butlerHome: input.butlerHome,
       });
-    }
-
-    if (call.name === "read_conversation_context") {
+    },
+    "read_conversation_context": async (call) => {
       const direction = call.args.direction === "before" ||
         call.args.direction === "after" ||
         call.args.direction === "around"
@@ -2603,9 +2592,8 @@ export function createButlerToolExecutor(input: {
         limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
         maxChars: typeof call.args.max_chars === "number" ? call.args.max_chars : undefined,
       });
-    }
-
-    if (call.name === "update_explicit_memory") {
+    },
+    "update_explicit_memory": async (call) => {
       const kind = typeof call.args.kind === "string" ? call.args.kind.trim() : "";
       if (kind !== "rule") {
         throw new Error("update_explicit_memory requires kind rule");
@@ -2622,9 +2610,8 @@ export function createButlerToolExecutor(input: {
           source,
         },
       });
-    }
-
-    if (call.name === "list_skills") {
+    },
+    "list_skills": async (_call) => {
       const skills = loadRuntimeSkills({
         butlerHome: input.butlerHome,
         butlerData: input.butlerData,
@@ -2644,9 +2631,8 @@ export function createButlerToolExecutor(input: {
         })),
         validation_issues: validateSkillCatalog(skills),
       };
-    }
-
-    if (call.name === "web_search") {
+    },
+    "web_search": async (call) => {
       const query = typeof call.args.query === "string" ? call.args.query.trim() : "";
       if (query.length < 2) {
         throw new Error("web_search requires a query with at least 2 characters");
@@ -2735,9 +2721,8 @@ export function createButlerToolExecutor(input: {
         });
         throw error;
       }
-    }
-
-    if (call.name === "web_read") {
+    },
+    "web_read": async (call) => {
       const url = typeof call.args.url === "string" ? call.args.url.trim() : "";
       let parsed: URL;
       try {
@@ -2788,24 +2773,21 @@ export function createButlerToolExecutor(input: {
         ],
         cache_hit: Boolean(cached),
       };
-    }
-
-    if (call.name === "transform_public_data_table") {
+    },
+    "transform_public_data_table": async (call) => {
       return transformPublicDataTable({
         butlerData: input.butlerData,
         args: call.args,
       });
-    }
-
-    if (call.name === "run_command") {
+    },
+    "run_command": async (call) => {
       return await runCommandTool({
         butlerData: input.butlerData,
         workspacePath: input.workspacePath ?? input.butlerHome,
         args: call.args,
       });
-    }
-
-    if (call.name === "dispatch_worker") {
+    },
+    "dispatch_worker": async (call) => {
       const task = typeof call.args.task === "string" ? call.args.task.trim() : "";
       if (!task) {
         throw new Error("dispatch_worker requires a non-empty task");
@@ -2840,9 +2822,8 @@ export function createButlerToolExecutor(input: {
         ...worker,
         work_stream: linkedStream,
       };
-    }
-
-    if (call.name === "create_planned_task") {
+    },
+    "create_planned_task": async (call) => {
       const goal = typeof call.args.goal === "string" ? call.args.goal.trim() : "";
       if (!goal) {
         throw new Error("create_planned_task requires a non-empty goal");
@@ -2897,9 +2878,8 @@ export function createButlerToolExecutor(input: {
         public_plan_summary: publicPlanSummary(plan),
         work_stream: linkedStream,
       };
-    }
-
-    if (call.name === "run_planned_task") {
+    },
+    "run_planned_task": async (call) => {
       const taskId = typeof call.args.task_id === "string" ? call.args.task_id.trim() : "";
       if (!taskId) {
         throw new Error("run_planned_task requires task_id");
@@ -2949,9 +2929,8 @@ export function createButlerToolExecutor(input: {
         message: "Planned worker attempt started. Review will run before public reporting.",
         work_stream: linkedStream,
       };
-    }
-
-    if (call.name === "review_planned_task") {
+    },
+    "review_planned_task": async (call) => {
       const taskId = typeof call.args.task_id === "string" ? call.args.task_id.trim() : "";
       if (!taskId) {
         throw new Error("review_planned_task requires task_id");
@@ -3049,9 +3028,8 @@ export function createButlerToolExecutor(input: {
         missing_evidence: updated.review?.missing_evidence ?? [],
         repair_recommendation: updated.review?.repair_recommendation ?? null,
       };
-    }
-
-    if (call.name === "repair_planned_task") {
+    },
+    "repair_planned_task": async (call) => {
       const taskId = typeof call.args.task_id === "string" ? call.args.task_id.trim() : "";
       if (!taskId) {
         throw new Error("repair_planned_task requires task_id");
@@ -3169,9 +3147,8 @@ export function createButlerToolExecutor(input: {
         message: "Planned repair worker attempt started. Review will run again before public reporting.",
         work_stream: linkedStream,
       };
-    }
-
-    if (call.name === "request_principal_decision") {
+    },
+    "request_principal_decision": async (call) => {
       const taskId = typeof call.args.task_id === "string" ? call.args.task_id.trim() : "";
       const situation = typeof call.args.situation === "string" ? call.args.situation.trim() : "";
       const recommendedOptionId = typeof call.args.recommended_option_id === "string"
@@ -3224,9 +3201,8 @@ export function createButlerToolExecutor(input: {
           },
         },
       };
-    }
-
-    if (call.name === "write_planned_public_report") {
+    },
+    "write_planned_public_report": async (call) => {
       const taskId = typeof call.args.task_id === "string" ? call.args.task_id.trim() : "";
       const userReport = typeof call.args.report === "string" ? call.args.report.trim() : "";
       const outcome = typeof call.args.outcome === "string" ? call.args.outcome.trim() : "";
@@ -3264,9 +3240,8 @@ export function createButlerToolExecutor(input: {
         status: updated.status,
         report,
       };
-    }
-
-    if (call.name === "resume_worker") {
+    },
+    "resume_worker": async (call) => {
       taskStore.reconcileRecoverableTasks();
       const requestedTaskId = typeof call.args.task_id === "string" ? call.args.task_id.trim() : "";
       const task = requestedTaskId
@@ -3308,9 +3283,8 @@ export function createButlerToolExecutor(input: {
         ...resumed,
         message: "Recoverable worker was resumed in a new background task.",
       };
-    }
-
-    if (call.name === "create_work_orchestration") {
+    },
+    "create_work_orchestration": async (call) => {
       const goal = typeof call.args.goal === "string" ? call.args.goal.trim() : "";
       if (!goal) throw new Error("create_work_orchestration requires goal");
       const requestedOriginSessionId = typeof call.args.origin_session_id === "string"
@@ -3335,9 +3309,8 @@ export function createButlerToolExecutor(input: {
         orchestration,
         work_stream: linkedStream,
       };
-    }
-
-    if (call.name === "run_ready_work_streams") {
+    },
+    "run_ready_work_streams": async (call) => {
       const orchestrationId = typeof call.args.orchestration_id === "string" ? call.args.orchestration_id.trim() : "";
       if (!orchestrationId) throw new Error("run_ready_work_streams requires orchestration_id");
       const record = orchestrationStore.read(orchestrationId);
@@ -3380,18 +3353,16 @@ export function createButlerToolExecutor(input: {
         orchestration: orchestrationStore.markDispatched(orchestrationId, dispatches),
         work_stream: linkedStream,
       };
-    }
-
-    if (call.name === "sync_work_orchestration") {
+    },
+    "sync_work_orchestration": async (call) => {
       const orchestrationId = typeof call.args.orchestration_id === "string" ? call.args.orchestration_id.trim() : "";
       if (!orchestrationId) throw new Error("sync_work_orchestration requires orchestration_id");
       return {
         ok: true,
         orchestration: orchestrationStore.syncFromTasks(orchestrationId, taskStore),
       };
-    }
-
-    if (call.name === "write_work_orchestration_report") {
+    },
+    "write_work_orchestration_report": async (call) => {
       const orchestrationId = typeof call.args.orchestration_id === "string" ? call.args.orchestration_id.trim() : "";
       const report = typeof call.args.report === "string" ? call.args.report.trim() : "";
       if (!orchestrationId) throw new Error("write_work_orchestration_report requires orchestration_id");
@@ -3404,9 +3375,8 @@ export function createButlerToolExecutor(input: {
           orchestrationIds: [orchestrationId],
         }),
       };
-    }
-
-    if (call.name === "list_tasks") {
+    },
+    "list_tasks": async (call) => {
       const limit = typeof call.args.limit === "number" && Number.isFinite(call.args.limit)
         ? Math.max(1, Math.min(25, Math.trunc(call.args.limit)))
         : 10;
@@ -3428,9 +3398,8 @@ export function createButlerToolExecutor(input: {
         };
       });
       return { ok: true, tasks };
-    }
-
-    if (call.name === "get_task_result") {
+    },
+    "get_task_result": async (call) => {
       const taskId = typeof call.args.task_id === "string" ? call.args.task_id.trim() : "";
       if (!taskId) {
         throw new Error("get_task_result requires task_id");
@@ -3462,8 +3431,8 @@ export function createButlerToolExecutor(input: {
         log_tail: task.logTail,
         origin: task.origin,
       };
-    }
+    },
+  });
 
-    throw new Error(`Unknown Butler tool: ${call.name}`);
-  };
+  return async (call) => executeRegisteredButlerTool(toolExecutors, call);
 }

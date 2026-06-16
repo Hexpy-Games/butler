@@ -7,6 +7,7 @@ import {
   BUTLER_TOOLS,
   butlerToolsForAgentLoop,
   createButlerToolExecutor,
+  createButlerToolExecutorRegistry,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import {
   selectButlerToolProfiles,
@@ -185,6 +186,22 @@ test("weather native tools are absent from the registry, profiles, and executor"
     args: { latitude: 37.5665, longitude: 126.9780 },
     rawArguments: "{}",
   })).rejects.toThrow("Unknown Butler tool: get_weather_with_knowhow");
+});
+
+test("Butler tool executor dispatch is registry-based instead of a call-name if-chain", () => {
+  const registry = createButlerToolExecutorRegistry({
+    sample_tool: () => ({ ok: true }),
+  });
+  expect(Object.keys(registry)).toEqual(["sample_tool"]);
+
+  const source = readFileSync(
+    join(root, "packages", "butler-agent", "src", "agent", "tools", "butler-tools.ts"),
+    "utf8",
+  );
+  const executorSource = source.slice(source.indexOf("export function createButlerToolExecutor("));
+  expect(executorSource).toContain("createButlerToolExecutorRegistry");
+  expect(executorSource).toContain("executeRegisteredButlerTool(toolExecutors, call)");
+  expect(executorSource).not.toMatch(/if\s*\(\s*call\.name\s*===/u);
 });
 
 test("basic project turns expose a bounded startup and project tool profile", () => {
