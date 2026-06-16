@@ -73,47 +73,6 @@ function contextualToolProgressSummary(
         : [],
     };
   }
-  if (name === "get_weather_with_knowhow") {
-    const location = safeTextValue(args.location, "weather location");
-    return {
-      kind: "searched",
-      toolName: "Weather",
-      safeLabel: `Checking live weather: ${location}`,
-      inputLabel: location,
-      detailRows: [{
-        id: "weather-location",
-        kind: "location",
-        safe_label: "Location",
-        safe_value: location,
-        state: "running",
-      }],
-    };
-  }
-  if (name === "record_weather_source_feedback") {
-    const source = safeTextValue(args.source, "weather source");
-    return {
-      kind: "used_tool",
-      toolName: "Feedback Buffer",
-      safeLabel: `Recording weather source feedback: ${source}`,
-      inputLabel: source,
-      detailRows: [{
-        id: "weather-feedback-source",
-        kind: "source",
-        safe_label: "Source",
-        safe_value: source,
-        state: "running",
-      }],
-    };
-  }
-  if (name === "run_weather_knowhow_consolidation") {
-    return {
-      kind: "used_tool",
-      toolName: "Consolidation",
-      safeLabel: "Reviewing weather know-how feedback",
-      inputLabel: "weather know-how",
-      detailRows: [],
-    };
-  }
   if (name === "summarize_user_profile") {
     return {
       kind: "read",
@@ -244,9 +203,6 @@ function workBlockLabelForTool(
         : "공개 웹에서 필요한 정보를 검색합니다.";
     }
     if (normalized === "web_read") return "선택한 출처의 내용을 확인합니다.";
-    if (normalized === "get_weather_with_knowhow") return "날씨 노하우를 확인하고 실시간 소스를 조회합니다.";
-    if (normalized === "record_weather_source_feedback") return "날씨 소스 피드백을 즉시 반영합니다.";
-    if (normalized === "run_weather_knowhow_consolidation") return "날씨 노하우 피드백을 정리합니다.";
     if (normalized === "summarize_user_profile") return "버틀러가 사용자를 어떻게 이해하고 있는지 요약합니다.";
     if (normalized === "transform_public_data_table") return "수집한 공개 데이터를 표로 정제합니다.";
     if (normalized === "read_conversation_context") return "이전 대화 맥락에서 필요한 단서를 확인합니다.";
@@ -268,9 +224,6 @@ function workBlockLabelForTool(
       : "Searching public web sources for the needed information.";
   }
   if (normalized === "web_read") return "Reading the selected source for evidence.";
-  if (normalized === "get_weather_with_knowhow") return "Checking weather know-how and live source data.";
-  if (normalized === "record_weather_source_feedback") return "Recording weather source feedback.";
-  if (normalized === "run_weather_knowhow_consolidation") return "Reviewing weather know-how feedback.";
   if (normalized === "summarize_user_profile") return "Summarizing Butler's understanding of the user.";
   if (normalized === "transform_public_data_table") return "Transforming collected public data into a table.";
   if (normalized === "read_conversation_context") return "Checking prior conversation context for relevant clues.";
