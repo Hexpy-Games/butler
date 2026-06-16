@@ -132,10 +132,12 @@ function verifiedCommandArtifact(input: {
   cwd: string;
   workspace: string;
   butlerData: string;
+  allowWorkspace: boolean;
 }): CommandArtifactEvidence | null {
   const resolved = resolve(input.cwd, input.path);
   const artifactRoot = commandArtifactDataRoot(input.butlerData);
-  const isAllowedWorkspaceFile = isPathInsideWorkspace({ path: resolved, workspace: input.workspace });
+  const isAllowedWorkspaceFile = input.allowWorkspace &&
+    isPathInsideWorkspace({ path: resolved, workspace: input.workspace });
   const isAllowedDataArtifact = isPathInsideWorkspace({ path: resolved, workspace: artifactRoot });
   if (!isAllowedWorkspaceFile && !isAllowedDataArtifact) return null;
   if (!existsSync(resolved)) return null;
@@ -201,6 +203,7 @@ function commandArtifactsFromPaths(input: {
   cwd: string;
   workspace: string;
   butlerData: string;
+  allowWorkspace: boolean;
 }): CommandArtifactEvidence[] {
   return uniqueCommandArtifacts(input.paths
     .slice(0, MAX_COMMAND_ARTIFACT_EVIDENCE)
@@ -211,6 +214,7 @@ function commandArtifactsFromPaths(input: {
           cwd: input.cwd,
           workspace: input.workspace,
           butlerData: input.butlerData,
+          allowWorkspace: input.allowWorkspace,
         });
         if (artifact) return artifact;
       }
@@ -230,6 +234,7 @@ function declaredCommandArtifacts(
     cwd,
     workspace,
     butlerData,
+    allowWorkspace: true,
   });
 }
 
@@ -320,6 +325,7 @@ function structuredStdoutCommandArtifacts(input: {
     cwd: input.cwd,
     workspace: input.workspace,
     butlerData: input.butlerData,
+    allowWorkspace: false,
   });
 }
 
@@ -364,6 +370,7 @@ function recentCommandArtifacts(input: {
         cwd: input.cwd,
         workspace: input.workspace,
         butlerData: input.butlerData,
+        allowWorkspace: false,
       });
       if (artifact) artifacts.push(artifact);
     }
