@@ -1,8 +1,8 @@
 import type { ButlerToolDefinition, ToolCapabilityMetadata } from "./types.ts";
-import { webSearchToolDefinition, webSearchToolMetadata } from "./web_search/index.ts";
-import { webReadToolDefinition, webReadToolMetadata } from "./web_read/index.ts";
-import { transformPublicDataTableToolDefinition, transformPublicDataTableToolMetadata } from "./transform_public_data_table/index.ts";
-import { runCommandToolDefinition, runCommandToolMetadata } from "./run_command/index.ts";
+import { webSearchToolDefinition, webSearchToolMetadata } from "./web-search/index.ts";
+import { webReadToolDefinition, webReadToolMetadata } from "./web-read/index.ts";
+import { transformPublicDataTableToolDefinition, transformPublicDataTableToolMetadata } from "./data-table/index.ts";
+import { runCommandToolDefinition, runCommandToolMetadata } from "./run-command/index.ts";
 import { getWorkDashboardToolDefinition, getWorkDashboardToolMetadata } from "./get_work_dashboard/index.ts";
 import { inspectProjectStatusToolDefinition, inspectProjectStatusToolMetadata } from "./inspect_project_status/index.ts";
 import { queryProjectWorkToolDefinition, queryProjectWorkToolMetadata } from "./query_project_work/index.ts";
