@@ -59,6 +59,7 @@ import {
   applyTimelineEventsToViewState,
   clientTurnIdFromMessageId,
   firstCancellableWorker,
+  isWorkerVisibleInComposer,
   isDraftChatId,
   freezeMessageWorkBlocks,
   freezeMessageWorkBlocksForRecord,
@@ -433,7 +434,9 @@ function summaryFromSessionView(view: SessionView): SessionSummaryView {
     artifacts: view.artifacts,
     automation_targets: view.automations,
     skills_used: view.skills_used ?? [],
-    worker_activity: view.workers,
+    worker_activity: view.workers.filter((worker) =>
+      isWorkerVisibleInComposer(worker),
+    ),
     work_streams: view.work_streams,
   };
 }
