@@ -213,6 +213,10 @@ export class AppGatewayBridge {
     const chatId = input?.chatId ?? "general";
     const sessionId = sessionIdForChat(chatId);
     const projectId = input?.projectId ?? (chatId === "project-butler" ? "butler" : undefined);
+    const runtimePolicy = appBridgeRuntimePolicy({
+      existing: this.runtimePolicy,
+      accessMode: input?.accessMode,
+    });
     return this.store.upsert({
       sessionId,
       role: "butler",
@@ -233,10 +237,10 @@ export class AppGatewayBridge {
         source: "app-server",
         appSessionKind: input?.sessionKind ?? "chat",
         accessMode: input?.accessMode ?? "full_access",
-        runtimePolicy: appBridgeRuntimePolicy({
-          existing: this.runtimePolicy,
-          accessMode: input?.accessMode,
-        }),
+        requiredNativeTools: policyStringArray(runtimePolicy?.requiredNativeTools),
+        required_tools: policyStringArray(runtimePolicy?.required_tools),
+        requiredNativeToolProfiles: policyStringArray(runtimePolicy?.requiredNativeToolProfiles),
+        runtimePolicy,
         workerModelRules: safeWorkerModelRules(input?.workerModelRules),
       },
     });
