@@ -298,6 +298,30 @@ test("first-run setup keeps waiting for bundled Agent without alternate connecti
   await act(async () => rendered.root.unmount());
 });
 
+test("first-run setup resumes install from persisted idle state without blank body", async () => {
+  const bundled = deferred<void>();
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("ko"),
+      step: "install",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "idle",
+    },
+    {
+      holdBundledAgent: bundled.promise,
+    },
+  );
+
+  await waitForText(rendered.container, "상태 확인 중");
+  bundled.resolve();
+  await waitForText(rendered.container, "모델 설정");
+  expect(rendered.calls.filter((call) => call === "startSetup")).toHaveLength(1);
+  expect(rendered.setupModes).toEqual(["bundled-agent"]);
+
+  await act(async () => rendered.root.unmount());
+});
+
 test("first-run model setup surfaces catalog load failure and retries", async () => {
   const rendered = await renderFirstRun(
     {
