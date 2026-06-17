@@ -20,7 +20,9 @@ import {
   isWorkerVisibleInComposer,
   phaseLabel,
   semanticProgressRows,
+  shouldShowTurnActivity,
   workerActivityCollapsedSummaryLine,
+  workerActivityDisplayName,
   workerActivityDescription,
   workerActivityMeta,
   workerActivityStatusLine,
@@ -190,6 +192,32 @@ test("worker activity status uses durable activity titles without client-side do
   }))).toBe("Aligning composer controls");
 });
 
+test("worker activity labels prefer stable display names with ordinal fallback", () => {
+  const named = worker("executing", false, "2026-05-15T12:31:00.000Z", {
+    worker_label: "Ari",
+    worker_display_name: "Ari",
+    worker_ordinal_label: "Worker 1",
+    status_line: "Executing: Aligning composer controls",
+  });
+  const legacy = worker("executing", false, "2026-05-15T12:31:00.000Z", {
+    worker_label: "",
+    worker_ordinal_label: "Worker 7",
+    status_line: "Executing: Checking worker history",
+  });
+  const genericLegacy = worker("executing", false, "2026-05-15T12:31:00.000Z", {
+    worker_label: "Worker",
+    worker_ordinal_label: "Worker 8",
+    status_line: "Executing: Checking worker history",
+  });
+
+  expect(workerActivityDisplayName(named)).toBe("Ari");
+  expect(workerActivityCollapsedSummaryLine(named)).toBe(
+    "Ari Executing: Aligning composer controls",
+  );
+  expect(workerActivityDisplayName(legacy)).toBe("Worker 7");
+  expect(workerActivityDisplayName(genericLegacy)).toBe("Worker 8");
+});
+
 test("app-client worker utilities do not carry runtime-domain status dictionaries", () => {
   const source = Buffer.from(
     readFileSync("packages/butler-app/client/ui/src/app/utils.ts"),
@@ -214,6 +242,40 @@ test("composer shows only active workers", () => {
   expect(isWorkerVisibleInComposer(worker("planning", false, "2026-05-15T12:30:00.000Z"), now)).toBe(true);
   expect(hasFollowableWorkerActivity([worker("failed", true, "2026-05-15T12:47:00.000Z")], now)).toBe(false);
   expect(hasFollowableWorkerActivity([worker("failed", true, "2026-05-15T12:30:00.000Z")], now)).toBe(false);
+});
+
+test("turn activity remains visible while worker activity exists", () => {
+  const activeWorker = worker(
+    "executing",
+    false,
+    "2026-05-15T12:49:00.000Z",
+  );
+
+  expect(isWorkerVisibleInComposer(activeWorker)).toBe(true);
+  expect(
+    shouldShowTurnActivity({
+      activeTurn: true,
+      hasTodoProgress: false,
+      isSending: false,
+      timelineProgressRowCount: 1,
+    }),
+  ).toBe(true);
+  expect(
+    shouldShowTurnActivity({
+      activeTurn: true,
+      hasTodoProgress: true,
+      isSending: false,
+      timelineProgressRowCount: 1,
+    }),
+  ).toBe(true);
+  expect(
+    shouldShowTurnActivity({
+      activeTurn: true,
+      hasTodoProgress: true,
+      isSending: false,
+      timelineProgressRowCount: 0,
+    }),
+  ).toBe(false);
 });
 
 test("composer can find the active worker cancel target", () => {

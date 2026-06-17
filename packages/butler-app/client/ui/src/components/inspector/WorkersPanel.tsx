@@ -11,6 +11,7 @@ import {
 } from "@/butler-ds";
 import {
   groupWorkerActivities,
+  workerActivityDisplayName,
   workerActivityDescription,
   workerActivityMeta,
   workerControlLabel,
@@ -86,7 +87,7 @@ export function WorkersPanel({
     return {
       id: worker.worker_id,
       icon: <span className={`worker-dot ${worker.phase}`} />,
-      title: worker.worker_label,
+      title: workerActivityDisplayName(worker),
       description: workerActivityDescription(worker),
       meta: workerActivityMeta(worker),
       phase: worker.semantic_phase ?? worker.phase,

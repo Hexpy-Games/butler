@@ -6,6 +6,7 @@ import {
   collapseAssistantAttempts,
   isInternalProgressRow,
   isWorkerVisibleInComposer,
+  shouldShowTurnActivity,
 } from "@/app/utils.ts";
 import type {
   MessageRecord,
@@ -67,10 +68,12 @@ export function useMessageList(
     summary?.latest_progress?.state ??
     summary?.turn_state;
 
-  const showTurnActivity =
-    workers.length === 0 &&
-    (isSending || Boolean(activeTurn)) &&
-    (!hasTodoProgress || timelineProgressRows.length > 0);
+  const showTurnActivity = shouldShowTurnActivity({
+    activeTurn,
+    hasTodoProgress,
+    isSending,
+    timelineProgressRowCount: timelineProgressRows.length,
+  });
 
   const itemCount = visibleMessages.length + (showTurnActivity ? 1 : 0);
 

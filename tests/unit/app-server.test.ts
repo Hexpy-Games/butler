@@ -3859,6 +3859,8 @@ test("worker activity projects durable worker state without raw worker requests"
       worker_id: "worker-20260501010101",
       activity_kind: "worker",
       worker_label: "Worker 1",
+      worker_display_name: "Juno",
+      worker_ordinal_label: "Worker 1",
       phase: "planning",
       objective: "Background worker task",
       status_line: "Planning: Making plan for background task.",
@@ -3944,6 +3946,8 @@ test("worker activity projects reporting phase from durable state", async () => 
       worker_id: "worker-20260502020202",
       activity_kind: "worker",
       worker_label: "Worker 1",
+      worker_display_name: "Ivy",
+      worker_ordinal_label: "Worker 1",
       phase: "reporting",
       status_line: "Reporting: preparing reviewed result.",
       terminal: false,
@@ -4096,6 +4100,8 @@ test("session worker activity links planned orchestration rows with worker attem
       activity_kind: "worker",
       task_id: "worker-session-panel",
       orchestration_id: "planned-session-worker-panel",
+      worker_display_name: "Leo",
+      worker_ordinal_label: "Worker 1",
       phase: "consolidating",
     });
   } finally {
@@ -4552,6 +4558,61 @@ test("session summary reconciles orphaned system responder turns after public re
   }
 });
 
+test("worker display names stay tied to worker ids when the active roster changes", async () => {
+  const taskStore = new TaskStore(tempDir);
+  const origin = buildTaskOriginContext({
+    sessionId: "stable-session",
+    taskSummary: "Keep worker identity stable",
+    project: null,
+  });
+  const firstDir = join(tempDir, "tasks", "20260501010103");
+  const secondDir = join(tempDir, "tasks", "20260501010102");
+  for (const taskDir of [firstDir, secondDir]) {
+    mkdirSync(taskDir, { recursive: true });
+    writeFileSync(join(taskDir, "status"), "RUNNING\n", "utf8");
+    writeFileSync(
+      join(taskDir, "worker_activity.json"),
+      JSON.stringify({
+        phase: "executing",
+        status_line: "Executing: worker is active.",
+        updated_at: "2026-05-15T00:00:00.000Z",
+      }),
+      "utf8",
+    );
+  }
+  taskStore.writeOrigin("20260501010103", origin);
+  taskStore.writeOrigin("20260501010102", origin);
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const initial = await getJson(`${server.url}worker-activity`);
+    const secondInitial = initial.data.workers.find(
+      (worker: { task_id: string }) => worker.task_id === "20260501010102",
+    );
+    expect(secondInitial).toMatchObject({
+      worker_label: "Worker 2",
+      worker_display_name: "Theo",
+      worker_ordinal_label: "Worker 2",
+    });
+
+    writeFileSync(join(firstDir, "status"), "DONE\n", "utf8");
+    const updated = await getJson(`${server.url}worker-activity`);
+    expect(updated.data.workers).toHaveLength(1);
+    expect(updated.data.workers[0]).toMatchObject({
+      task_id: "20260501010102",
+      worker_label: "Worker 1",
+      worker_display_name: "Theo",
+      worker_ordinal_label: "Worker 1",
+    });
+  } finally {
+    server.stop();
+  }
+});
+
 test("session summaries show only workers that belong to the active session", async () => {
   function writeTask(
     taskId: string,
@@ -4624,6 +4685,7 @@ test("session summaries show only workers that belong to the active session", as
     writeTask("20260501010101", "RUNNING");
     writeTask("20260501010100", "FAILED", undefined, projectId);
     writeTask("20260501010099", "RUNNING", undefined, projectId);
+    writeTask("20260501010104", "DONE", projectSessionId, projectId);
 
     const general = await getJson(
       `${server.url}session-summary?session_id=general`,
@@ -4646,17 +4708,11 @@ test("session summaries show only workers that belong to the active session", as
       projectSummary.data.worker_activity.map(
         (worker: { task_id: string }) => worker.task_id,
       ),
-    ).toEqual(["20260501010102", "20260501010099"]);
+    ).toEqual(["20260501010102"]);
     expect(projectSummary.data.worker_activity[0]).toMatchObject({
       session_id: projectSessionId,
       project_id: projectId,
       objective: "Safe worker summary 20260501010102",
-    });
-    expect(projectSummary.data.worker_activity[1]).toMatchObject({
-      task_id: "20260501010099",
-      phase: "executing",
-      project_id: projectId,
-      objective: "Background worker task",
     });
 
     const global = await getJson(
@@ -4665,12 +4721,21 @@ test("session summaries show only workers that belong to the active session", as
     expect(
       global.data.workers.map((worker: { task_id: string }) => worker.task_id),
     ).toEqual([
+      "20260501010104",
       "20260501010103",
       "20260501010102",
       "20260501010101",
       "20260501010100",
       "20260501010099",
     ]);
+    const completed = global.data.workers.find(
+      (worker: { task_id: string }) => worker.task_id === "20260501010104",
+    );
+    expect(completed).toMatchObject({
+      phase: "verifying",
+      terminal: true,
+      supported_controls: [],
+    });
     expect(JSON.stringify(general)).not.toContain("private request");
     expect(JSON.stringify(projectSummary)).not.toContain("private request");
   } finally {

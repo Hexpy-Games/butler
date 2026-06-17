@@ -1011,6 +1011,8 @@ export interface WorkerActivitySummary {
   worker_id: string;
   activity_kind?: "planned" | "worker";
   worker_label: string;
+  worker_display_name?: string;
+  worker_ordinal_label?: string;
   objective: string;
   phase: WorkerActivityPhase;
   semantic_phase?: WorkerActivityPhase;

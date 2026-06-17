@@ -2233,8 +2233,23 @@ export function isPlannedWorkerActivity(
   return (
     worker.activity_kind === "planned" ||
     worker.task_id?.startsWith("planned-") === true ||
-    /^planned\b/iu.test(worker.worker_label)
+    /^planned\b/iu.test(workerActivityDisplayName(worker))
   );
+}
+
+export function workerActivityDisplayName(worker: WorkerActivitySummary): string {
+  const ordinal = worker.worker_ordinal_label?.trim();
+  const label = worker.worker_label.trim();
+  return (
+    worker.worker_display_name?.trim() ||
+    (isGenericWorkerLabel(label) ? ordinal : label) ||
+    ordinal ||
+    "Worker"
+  );
+}
+
+function isGenericWorkerLabel(label: string): boolean {
+  return /^worker$/iu.test(label);
 }
 
 export function groupWorkerActivities(
@@ -2308,7 +2323,7 @@ export function workerActivityMeta(
 export function workerActivityCollapsedSummaryLine(
   worker: WorkerActivitySummary,
 ): string {
-  const label = worker.worker_label.trim() || "Worker";
+  const label = workerActivityDisplayName(worker);
   const phase = phaseLabel(worker.semantic_phase ?? worker.phase);
   const action = worker.action_kind?.trim();
   const meta = action ? `${phase}/${action}` : phase;
@@ -2340,6 +2355,18 @@ export function isWorkerVisibleInComposer(
   _now = Date.now(),
 ): boolean {
   return !worker.terminal;
+}
+
+export function shouldShowTurnActivity(input: {
+  activeTurn: boolean;
+  hasTodoProgress: boolean;
+  isSending: boolean;
+  timelineProgressRowCount: number;
+}): boolean {
+  return (
+    (input.isSending || input.activeTurn) &&
+    (!input.hasTodoProgress || input.timelineProgressRowCount > 0)
+  );
 }
 
 export function isWorkerCancellable(worker: WorkerActivitySummary): boolean {
