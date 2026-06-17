@@ -2550,7 +2550,7 @@ export class AppServerStore {
     const automations = this.listAutomationTargets(sessionId);
     const workers = this.listWorkerActivity({
       sessionId,
-      includeHistory: true,
+      includeHistory: false,
     }).workers;
     const errors = messages
       .filter((message) => message.safe_error_code)
@@ -2939,9 +2939,6 @@ export class AppServerStore {
   listWorkerActivity(
     options: { sessionId?: string; includeHistory?: boolean } = {},
   ): WorkerActivityListView {
-    const projectAliases = options.sessionId
-      ? this.workerProjectAliasesForSession(options.sessionId)
-      : new Set<string>();
     const linkedWorkerTaskIds = options.sessionId
       ? this.linkedWorkerTaskIdsForSession(options.sessionId)
       : new Set<string>();
@@ -2977,10 +2974,7 @@ export class AppServerStore {
         (worker) =>
           !options.sessionId ||
           worker.session_id === options.sessionId ||
-          (worker.task_id && linkedWorkerTaskIds.has(worker.task_id)) ||
-          (!worker.session_id &&
-            !worker.terminal &&
-            workerProjectMatches(worker.project_id, projectAliases)),
+          (worker.task_id && linkedWorkerTaskIds.has(worker.task_id)),
       );
     const workers = relabelWorkerActivities(orderWorkerActivities(
       synthesizeOrchestrationParentActivities({
@@ -8146,7 +8140,9 @@ function workerActivityFromTaskSummary(
   )
     ? workModePhase
     : task.activity_phase ?? workModePhase;
-  const terminal = ["complete", "failed", "cancelled"].includes(phase);
+  const terminal =
+    taskStatusIsTerminalForWorkerActivity(task.status) ||
+    ["complete", "failed", "cancelled"].includes(phase);
   return {
     worker_id: `worker-${task.task_id}`,
     activity_kind: task.task_type === "planned" ? "planned" : "worker",
@@ -8172,6 +8168,15 @@ function workerActivityFromTaskSummary(
         ? []
         : ["cancel"],
   };
+}
+
+function taskStatusIsTerminalForWorkerActivity(status: TaskSummary["status"]): boolean {
+  return (
+    status === "DONE" ||
+    status === "REVIEWED" ||
+    status === "FAILED" ||
+    status === "KILLED"
+  );
 }
 
 function relabelWorkerActivities(
