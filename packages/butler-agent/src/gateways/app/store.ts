@@ -4520,6 +4520,10 @@ export class AppServerStore {
       appBinding,
     ]);
     const settings = this.getSettings();
+    const runtimePolicy = appRuntimePolicy({
+      existing: existing?.metadata?.runtimePolicy,
+      accessMode: input.controls.access_mode,
+    });
     this.sessionBindingStore.upsert({
       sessionId: input.sessionId,
       role: existing?.role ?? "butler",
@@ -4540,6 +4544,8 @@ export class AppServerStore {
         ...(existing?.metadata ?? {}),
         source: "app-server",
         appSessionKind: input.sessionKind,
+        accessMode: input.controls.access_mode,
+        runtimePolicy,
         workerModelRules: settings.worker_model_rules,
       },
     });
@@ -7969,6 +7975,34 @@ function normalizeSessionControls(
         ? input.access_mode
         : "full_access",
     plan_mode: Boolean(input.plan_mode),
+  };
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .map((item) => item.trim())
+    : [];
+}
+
+function appRuntimePolicy(input: {
+  existing?: unknown;
+  accessMode: SettingsView["access_mode"];
+}): Record<string, unknown> {
+  const existing = input.existing && typeof input.existing === "object" && !Array.isArray(input.existing)
+    ? input.existing as Record<string, unknown>
+    : {};
+  const requestedProfiles = stringArray(existing.requiredNativeToolProfiles)
+    .filter((profile) => profile !== "workspace");
+
+  if (input.accessMode !== "read_only") {
+    requestedProfiles.push("workspace");
+  }
+
+  return {
+    ...existing,
+    accessMode: input.accessMode,
+    requiredNativeToolProfiles: [...new Set(requestedProfiles)],
   };
 }
 
