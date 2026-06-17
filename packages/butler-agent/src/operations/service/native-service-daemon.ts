@@ -94,6 +94,7 @@ export function defaultDaemonServiceSpecs(input: Partial<NativeSupervisorPaths> 
       runtimePointerPath: appManagedPointer,
       localAuthFile: appManagedLocalAuth,
     }, {
+      appVersion: process.env.BUTLER_APP_VERSION,
       gatewayPort: appManagedGatewayPortFromEnv(),
     });
   }

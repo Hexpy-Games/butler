@@ -135,6 +135,7 @@ export type StandaloneAgentActivationValidator = (
 export interface CheckComponentUpdatesOptions {
   root: string;
   butlerData: string;
+  appVersion?: string | null;
   components?: UpdateComponentId[];
   manifestPath?: string | null;
   channel?: string;
@@ -145,6 +146,7 @@ export interface CheckComponentUpdatesOptions {
 export interface ApplyComponentUpdateOptions {
   root: string;
   butlerData: string;
+  appVersion?: string | null;
   component: UpdateComponentId;
   manifestPath?: string | null;
   channel?: string;
@@ -192,12 +194,18 @@ export async function checkComponentUpdates(
   options: CheckComponentUpdatesOptions,
 ): Promise<UpdateStatusView> {
   const now = (options.now ?? (() => new Date()))().toISOString();
-  const manifest = await loadUpdateManifest(options.root, options.manifestPath, options.channel);
+  const manifest = await loadUpdateManifest(
+    options.root,
+    options.manifestPath,
+    options.channel,
+    options.appVersion,
+  );
   const components = options.components ?? [...UPDATE_COMPONENT_IDS];
   const statuses = components.map((component) =>
     buildComponentStatus({
       root: options.root,
       butlerData: options.butlerData,
+      appVersion: options.appVersion,
       manifest,
       component,
       channel: options.channel ?? "stable",
@@ -221,6 +229,7 @@ export async function applyComponentUpdate(
   const status = (await checkComponentUpdates({
     root: options.root,
     butlerData: options.butlerData,
+    appVersion: options.appVersion,
     components: [options.component],
     manifestPath: options.manifestPath,
     channel: options.channel,
@@ -647,12 +656,13 @@ function safeRuntimeVersionSegment(version: string): string {
 function buildComponentStatus(input: {
   root: string;
   butlerData: string;
+  appVersion?: string | null;
   manifest: LoadedManifest;
   component: UpdateComponentId;
   channel: string;
   checkedAt: string;
 }): ComponentUpdateStatus {
-  const current = currentVersion(input.root, input.butlerData, input.component);
+  const current = currentVersion(input.root, input.butlerData, input.component, input.appVersion);
   const artifact = selectManifestArtifact(input.manifest.artifacts, input.component);
   if (!artifact) throw new Error(`Update manifest is missing component: ${input.component}`);
   const available = artifact.version || current;
@@ -698,12 +708,13 @@ async function loadUpdateManifest(
   root: string,
   manifestPath?: string | null,
   channel = "stable",
+  appVersion?: string | null,
 ): Promise<LoadedManifest> {
   const source = manifestPath ?? process.env.BUTLER_UPDATE_MANIFEST ?? "";
   if (!source) {
     return {
       source: "local-release-manifest",
-      artifacts: localUpdateArtifacts(root),
+      artifacts: localUpdateArtifacts(root, appVersion),
     };
   }
   const value = await readManifestValue(source);
@@ -858,7 +869,12 @@ function selectManifestArtifact(
   throw new Error(`Update manifest is missing app artifact for platform: ${currentPlatform}`);
 }
 
-function currentVersion(root: string, butlerData: string, component: UpdateComponentId): string {
+function currentVersion(
+  root: string,
+  butlerData: string,
+  component: UpdateComponentId,
+  appVersion?: string | null,
+): string {
   if (component === "service") {
     const pointer = readRuntimePointer(join(butlerData, "runtime", "agent", "current.json"));
     if (
@@ -872,7 +888,7 @@ function currentVersion(root: string, butlerData: string, component: UpdateCompo
     }
     return createReleaseManifest(root).version;
   }
-  const versions = readComponentVersions(root);
+  const versions = readComponentVersions(root, appVersion);
   return versions[component];
 }
 
@@ -944,15 +960,15 @@ function normalizeActivationStatus(value: unknown): ComponentUpdateStatus["activ
   return "not_required";
 }
 
-function readComponentVersions(root: string): ComponentVersions {
+function readComponentVersions(root: string, appVersion?: string | null): ComponentVersions {
   const serviceManifest = createReleaseManifest(root);
   return {
     service: serviceManifest.version,
-    app: readAppVersion(root),
+    app: safeVersion(appVersion) ?? readAppVersion(root),
   };
 }
 
-function localUpdateArtifacts(root: string): ManifestArtifact[] {
+function localUpdateArtifacts(root: string, appVersion?: string | null): ManifestArtifact[] {
   const serviceArtifacts = createReleaseManifest(root).artifacts.map((artifact) => ({
     component: artifact.component,
     version: artifact.version,
@@ -976,7 +992,7 @@ function localUpdateArtifacts(root: string): ManifestArtifact[] {
     activation_policy: artifact.activationPolicy,
     rollback_policy: artifact.rollbackPolicy,
   }));
-  const versions = readComponentVersions(root);
+  const versions = readComponentVersions(root, appVersion);
   const artifacts: ManifestArtifact[] = [...serviceArtifacts];
   if (versions.app) artifacts.push(localAppUpdateArtifact(versions.app, versions.service));
   return artifacts;
@@ -992,6 +1008,12 @@ function readAppVersion(root: string): string {
   } catch {
     return "";
   }
+}
+
+function safeVersion(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const version = value.trim();
+  return version || null;
 }
 
 function localAppUpdateArtifact(version: string, bundledAgentVersion: string): ManifestArtifact {

@@ -120,6 +120,7 @@ test("foreground daemon uses App-managed specs when runtime pointer env is prese
   const previousPointer = process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER;
   const previousAuth = process.env.BUTLER_APP_LOCAL_AUTH_FILE;
   const previousPort = process.env.BUTLER_APP_SERVER_PORT;
+  const previousAppVersion = process.env.BUTLER_APP_VERSION;
   let spawnedEnv: Record<string, string> | null = null;
   try {
     const runtimeHomeLabel = join("app", "runtime", "agent", "versions", "9.9.9");
@@ -150,6 +151,7 @@ test("foreground daemon uses App-managed specs when runtime pointer env is prese
     process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER = pointerPath;
     process.env.BUTLER_APP_LOCAL_AUTH_FILE = localAuthFile;
     process.env.BUTLER_APP_SERVER_PORT = "19123";
+    process.env.BUTLER_APP_VERSION = "2.3.4";
 
     const specs = defaultDaemonServiceSpecs({
       butlerHome: "/standalone/ignored",
@@ -161,6 +163,7 @@ test("foreground daemon uses App-managed specs when runtime pointer env is prese
       BUTLER_APP_MANAGED_RUNTIME_POINTER: pointerPath,
       BUTLER_APP_LOCAL_AUTH_FILE: localAuthFile,
       BUTLER_APP_SERVER_PORT: "19123",
+      BUTLER_APP_VERSION: "2.3.4",
     });
 
     const daemon = new ManagedServiceDaemon({
@@ -177,6 +180,7 @@ test("foreground daemon uses App-managed specs when runtime pointer env is prese
       BUTLER_APP_MANAGED_RUNTIME_POINTER: pointerPath,
       BUTLER_APP_LOCAL_AUTH_FILE: localAuthFile,
       BUTLER_APP_SERVER_PORT: "19123",
+      BUTLER_APP_VERSION: "2.3.4",
     });
     const state = JSON.parse(readFileSync(serviceStatePath(butlerData, "app-gateway"), "utf8"));
     expect(state.runtime).toMatchObject({
@@ -192,6 +196,8 @@ test("foreground daemon uses App-managed specs when runtime pointer env is prese
     else process.env.BUTLER_APP_LOCAL_AUTH_FILE = previousAuth;
     if (previousPort === undefined) delete process.env.BUTLER_APP_SERVER_PORT;
     else process.env.BUTLER_APP_SERVER_PORT = previousPort;
+    if (previousAppVersion === undefined) delete process.env.BUTLER_APP_VERSION;
+    else process.env.BUTLER_APP_VERSION = previousAppVersion;
     rmSync(butlerData, { recursive: true, force: true });
   }
 });

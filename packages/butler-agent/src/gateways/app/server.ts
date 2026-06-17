@@ -96,6 +96,7 @@ export interface CreateAppServerOptions {
   dbPath?: string;
   butlerData?: string;
   butlerHome?: string;
+  appVersion?: string;
   serverUrl?: string;
   bridgeMode?: "local" | "external";
   projectWorkspaceRoot?: string;
@@ -183,6 +184,7 @@ export function createAppServer(
     dbPath: options.dbPath,
     butlerData: options.butlerData,
     butlerHome: options.butlerHome,
+    appVersion: options.appVersion,
     serverUrl: options.serverUrl,
     bridgeMode: options.bridgeMode,
     projectWorkspaceRoot: options.projectWorkspaceRoot,

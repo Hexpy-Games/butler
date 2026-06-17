@@ -484,6 +484,9 @@ test("app server exposes separate update status check and apply endpoints", asyn
     });
     expect(apply.data).toMatchObject({
       component: "app",
+      current_version: packageVersion,
+      available_version: packageVersion,
+      update_available: false,
       stage_status: "up_to_date",
       stage_path: join("updates", "staged", "app.json"),
     });
@@ -497,6 +500,63 @@ test("app server exposes separate update status check and apply endpoints", asyn
     expect(existsSync(join(tempDir, "runtime", "agent", "versions", packageVersion))).toBe(
       false,
     );
+  } finally {
+    server.stop();
+  }
+});
+
+test("packaged app update endpoints use the Electron-provided app version", async () => {
+  const runtimeRoot = join(tempDir, "app-runtime");
+  mkdirSync(runtimeRoot, { recursive: true });
+  writeFileSync(
+    join(runtimeRoot, "package.json"),
+    `${JSON.stringify({ name: "butler", version: packageVersion }, null, 2)}\n`,
+    "utf8",
+  );
+  writeFileSync(join(runtimeRoot, "VERSION"), `${packageVersion}\n`, "utf8");
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    butlerHome: runtimeRoot,
+    appVersion: packageVersion,
+    port: 0,
+  });
+  try {
+    const status = await getJson(`${server.url}updates`);
+    expect(status.data.components).toHaveLength(1);
+    expect(status.data.components[0]).toMatchObject({
+      component: "app",
+      current_version: packageVersion,
+      available_version: packageVersion,
+      update_available: false,
+      bundled_agent_version: packageVersion,
+      manifest_source: "local-release-manifest",
+    });
+
+    const check = await postJson(`${server.url}updates/check`, {
+      component: "app",
+    });
+    expect(check.data.components).toHaveLength(1);
+    expect(check.data.components[0]).toMatchObject({
+      component: "app",
+      current_version: packageVersion,
+      available_version: packageVersion,
+      update_available: false,
+    });
+
+    const apply = await postJson(`${server.url}updates/apply`, {
+      component: "app",
+      dry_run: true,
+    });
+    expect(apply.data).toMatchObject({
+      component: "app",
+      current_version: packageVersion,
+      available_version: packageVersion,
+      update_available: false,
+      stage_status: "dry_run",
+      stage_path: join("updates", "staged", "app.json"),
+    });
   } finally {
     server.stop();
   }

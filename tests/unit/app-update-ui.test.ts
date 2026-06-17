@@ -43,3 +43,18 @@ test("App bootstrap checks only the public App update path", () => {
   expect(updateCheck).toContain('component: "app"');
   expect(updateCheck).not.toContain("JSON.stringify({})");
 });
+
+test("Settings update panel surfaces update load, check, and apply failures", () => {
+  const source = readFileSync(
+    join(
+      import.meta.dir,
+      "../../packages/butler-app/client/ui/src/components/settings/UpdatesSettings.tsx",
+    ),
+    "utf8",
+  );
+
+  expect(source).toContain("notifyError");
+  expect(source).toContain("copy.errors.loadUpdates");
+  expect(source).toContain("copy.errors.checkUpdates");
+  expect(source).toContain("copy.errors.applyUpdate");
+});
