@@ -4624,6 +4624,7 @@ test("session summaries show only workers that belong to the active session", as
     writeTask("20260501010101", "RUNNING");
     writeTask("20260501010100", "FAILED", undefined, projectId);
     writeTask("20260501010099", "RUNNING", undefined, projectId);
+    writeTask("20260501010104", "DONE", projectSessionId, projectId);
 
     const general = await getJson(
       `${server.url}session-summary?session_id=general`,
@@ -4646,17 +4647,11 @@ test("session summaries show only workers that belong to the active session", as
       projectSummary.data.worker_activity.map(
         (worker: { task_id: string }) => worker.task_id,
       ),
-    ).toEqual(["20260501010102", "20260501010099"]);
+    ).toEqual(["20260501010102"]);
     expect(projectSummary.data.worker_activity[0]).toMatchObject({
       session_id: projectSessionId,
       project_id: projectId,
       objective: "Safe worker summary 20260501010102",
-    });
-    expect(projectSummary.data.worker_activity[1]).toMatchObject({
-      task_id: "20260501010099",
-      phase: "executing",
-      project_id: projectId,
-      objective: "Background worker task",
     });
 
     const global = await getJson(
@@ -4665,12 +4660,21 @@ test("session summaries show only workers that belong to the active session", as
     expect(
       global.data.workers.map((worker: { task_id: string }) => worker.task_id),
     ).toEqual([
+      "20260501010104",
       "20260501010103",
       "20260501010102",
       "20260501010101",
       "20260501010100",
       "20260501010099",
     ]);
+    const completed = global.data.workers.find(
+      (worker: { task_id: string }) => worker.task_id === "20260501010104",
+    );
+    expect(completed).toMatchObject({
+      phase: "verifying",
+      terminal: true,
+      supported_controls: [],
+    });
     expect(JSON.stringify(general)).not.toContain("private request");
     expect(JSON.stringify(projectSummary)).not.toContain("private request");
   } finally {
