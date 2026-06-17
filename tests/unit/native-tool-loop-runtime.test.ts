@@ -23,6 +23,7 @@ import {
   readOperationalMetricEvents,
 } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
 import { addFeedbackEntry } from "../../packages/butler-agent/src/agent/cognition/feedback/buffer.ts";
+import { requiredExplicitToolNames } from "../../packages/butler-agent/src/agent/policy/runtime-policy.ts";
 import {
   completionObligationIncompleteReason,
   completionReviewIncompleteReason,
@@ -1855,6 +1856,20 @@ test("native runtime repairs skipped tools required by session metadata", async 
   expect(readTranscript("butler/session-required-tool")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name)).toContain("run_command");
+});
+
+test("explicit required tool merging dedupes before applying the repair cap", () => {
+  expect(requiredExplicitToolNames([
+    { runtimePolicy: { requiredNativeTools: [
+      "run_command",
+      "run_command",
+      "run_command",
+      "run_command",
+      "run_command",
+      "run_command",
+    ] } },
+    { runtimePolicy: { requiredNativeTools: ["web_search"] } },
+  ], ["run_command", "web_search"])).toEqual(["run_command", "web_search"]);
 });
 
 test("native runtime does not infer semantic workflow tools from natural CSV wording", async () => {

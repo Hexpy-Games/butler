@@ -18,7 +18,10 @@ import { createAppServer } from "../../packages/butler-agent/src/gateways/app/se
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
 import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/new-chat-briefing.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
-import { createProjectFolderSelectionToken } from "../../packages/butler-agent/src/gateways/app/store.ts";
+import {
+  appRuntimePolicy,
+  createProjectFolderSelectionToken,
+} from "../../packages/butler-agent/src/gateways/app/store.ts";
 import { compactionPath } from "../../packages/butler-agent/src/agent/context/compaction.ts";
 import { appendRuntimeTurnContextMetric } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
 import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
@@ -1366,6 +1369,11 @@ test("project session gateway routing uses the app session hint and project id",
     butlerData: tempDir,
     runtime,
     provider: fakeProvider,
+    runtimePolicy: {
+      requiredNativeTools: ["run_command"],
+      required_tools: ["read_tool_output_artifact"],
+      requiredNativeToolProfiles: ["workspace"],
+    },
   });
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -1444,18 +1452,75 @@ test("app session access mode supplies structured workspace tool policy", async 
 
     await postJson(`${server.url}messages`, {
       chat_id: session.data.session.id,
+      text: "변경은 먼저 물어보고 진행해줘.",
+      access_mode: "ask_first",
+    });
+    const askFirstPolicy = runtime.turns.at(-1)?.metadata?.runtimePolicy as Record<string, unknown>;
+    expect(askFirstPolicy).toMatchObject({
+      accessMode: "ask_first",
+      requiredNativeTools: [],
+      required_tools: [],
+      requiredNativeToolProfiles: [],
+    });
+
+    await postJson(`${server.url}messages`, {
+      chat_id: session.data.session.id,
       text: "이번에는 읽기 전용으로 상태만 확인해줘.",
       access_mode: "read_only",
     });
     const readOnlyPolicy = runtime.turns.at(-1)?.metadata?.runtimePolicy as Record<string, unknown>;
     expect(readOnlyPolicy).toMatchObject({
       accessMode: "read_only",
+      requiredNativeTools: [],
+      required_tools: [],
       requiredNativeToolProfiles: [],
     });
   } finally {
     server.stop();
     bridge.close();
   }
+});
+
+test("app runtime policy strips stale workspace required tools outside full access", () => {
+  expect(appRuntimePolicy({
+    existing: {
+      requiredNativeTools: ["run_command", "web_search"],
+      required_tools: ["read_tool_output_artifact", "web_read"],
+      requiredNativeToolProfiles: ["workspace", "public-web"],
+    },
+    accessMode: "ask_first",
+  })).toMatchObject({
+    accessMode: "ask_first",
+    requiredNativeTools: ["web_search"],
+    required_tools: ["web_read"],
+    requiredNativeToolProfiles: ["public-web"],
+  });
+  expect(appRuntimePolicy({
+    existing: {
+      requiredNativeTools: ["run_command"],
+      required_tools: ["read_tool_output_artifact"],
+      requiredNativeToolProfiles: ["workspace"],
+    },
+    accessMode: "read_only",
+  })).toMatchObject({
+    accessMode: "read_only",
+    requiredNativeTools: [],
+    required_tools: [],
+    requiredNativeToolProfiles: [],
+  });
+  expect(appRuntimePolicy({
+    existing: {
+      requiredNativeTools: ["run_command"],
+      required_tools: ["read_tool_output_artifact"],
+      requiredNativeToolProfiles: ["workspace"],
+    },
+    accessMode: "full_access",
+  })).toMatchObject({
+    accessMode: "full_access",
+    requiredNativeTools: ["run_command"],
+    required_tools: ["read_tool_output_artifact"],
+    requiredNativeToolProfiles: ["workspace"],
+  });
 });
 
 test("project session hints are normalized before becoming local ids", async () => {

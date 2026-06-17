@@ -664,6 +664,21 @@ function policyStringArray(value: unknown): string[] {
     : [];
 }
 
+const APP_BRIDGE_WORKSPACE_REQUIRED_TOOL_NAMES = new Set([
+  "run_command",
+  "read_tool_output_artifact",
+]);
+
+function bridgeRequiredToolsForAccessMode(
+  value: unknown,
+  accessMode: AppMessageResponderInput["accessMode"],
+): string[] {
+  const names = policyStringArray(value);
+  return accessMode === "full_access"
+    ? names
+    : names.filter((name) => !APP_BRIDGE_WORKSPACE_REQUIRED_TOOL_NAMES.has(name));
+}
+
 function appBridgeRuntimePolicy(input: {
   existing?: Record<string, unknown>;
   accessMode?: AppMessageResponderInput["accessMode"];
@@ -672,10 +687,12 @@ function appBridgeRuntimePolicy(input: {
   const existing = input.existing ?? {};
   const requestedProfiles = policyStringArray(existing.requiredNativeToolProfiles)
     .filter((profile) => profile !== "workspace");
-  if (accessMode !== "read_only") requestedProfiles.push("workspace");
+  if (accessMode === "full_access") requestedProfiles.push("workspace");
   return {
     ...existing,
     accessMode,
+    requiredNativeTools: bridgeRequiredToolsForAccessMode(existing.requiredNativeTools, accessMode),
+    required_tools: bridgeRequiredToolsForAccessMode(existing.required_tools, accessMode),
     requiredNativeToolProfiles: [...new Set(requestedProfiles)],
   };
 }

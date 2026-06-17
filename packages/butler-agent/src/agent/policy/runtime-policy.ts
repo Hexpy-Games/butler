@@ -34,8 +34,8 @@ export function requiredExplicitToolNames(metadata: unknown, availableToolNames:
     return Array.isArray(raw) ? raw : [];
   });
   return [...new Set(values
-    .filter((value): value is string => typeof value === "string" && available.has(value))
-    .slice(0, 6))];
+    .filter((value): value is string => typeof value === "string" && available.has(value)))]
+    .slice(0, 6);
 }
 
 export function explicitToolRequirementRepairPrompt(input: {
