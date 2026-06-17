@@ -132,6 +132,7 @@ export function createButlerToolExecutor(input: {
   webSearchProvider?: WebSearchProvider;
   searchPlanner?: (input: SmartSearchPlanningInput) => Promise<SmartSearchPlanningResult>;
   pageReader?: typeof readPageConfigured;
+  currentToolNames?: readonly string[] | (() => readonly string[]);
 }): ButlerToolExecutor {
   const taskStore = new TaskStore(input.butlerData);
   const plannedTaskStore = new PlannedTaskStore(input.butlerData);
@@ -150,6 +151,7 @@ export function createButlerToolExecutor(input: {
       butlerData: input.butlerData,
       sessionId: input.sessionId,
       webSearchProvider: input.webSearchProvider,
+      currentToolNames: input.currentToolNames,
     }),
     ...createMcpToolHandlers({
       butlerData: input.butlerData,
