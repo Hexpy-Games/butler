@@ -20,6 +20,7 @@ import {
   isWorkerVisibleInComposer,
   phaseLabel,
   semanticProgressRows,
+  shouldShowTurnActivity,
   workerActivityCollapsedSummaryLine,
   workerActivityDescription,
   workerActivityMeta,
@@ -214,6 +215,40 @@ test("composer shows only active workers", () => {
   expect(isWorkerVisibleInComposer(worker("planning", false, "2026-05-15T12:30:00.000Z"), now)).toBe(true);
   expect(hasFollowableWorkerActivity([worker("failed", true, "2026-05-15T12:47:00.000Z")], now)).toBe(false);
   expect(hasFollowableWorkerActivity([worker("failed", true, "2026-05-15T12:30:00.000Z")], now)).toBe(false);
+});
+
+test("turn activity remains visible while worker activity exists", () => {
+  const activeWorker = worker(
+    "executing",
+    false,
+    "2026-05-15T12:49:00.000Z",
+  );
+
+  expect(isWorkerVisibleInComposer(activeWorker)).toBe(true);
+  expect(
+    shouldShowTurnActivity({
+      activeTurn: true,
+      hasTodoProgress: false,
+      isSending: false,
+      timelineProgressRowCount: 1,
+    }),
+  ).toBe(true);
+  expect(
+    shouldShowTurnActivity({
+      activeTurn: true,
+      hasTodoProgress: true,
+      isSending: false,
+      timelineProgressRowCount: 1,
+    }),
+  ).toBe(true);
+  expect(
+    shouldShowTurnActivity({
+      activeTurn: true,
+      hasTodoProgress: true,
+      isSending: false,
+      timelineProgressRowCount: 0,
+    }),
+  ).toBe(false);
 });
 
 test("composer can find the active worker cancel target", () => {

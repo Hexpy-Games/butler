@@ -2342,6 +2342,18 @@ export function isWorkerVisibleInComposer(
   return !worker.terminal;
 }
 
+export function shouldShowTurnActivity(input: {
+  activeTurn: boolean;
+  hasTodoProgress: boolean;
+  isSending: boolean;
+  timelineProgressRowCount: number;
+}): boolean {
+  return (
+    (input.isSending || input.activeTurn) &&
+    (!input.hasTodoProgress || input.timelineProgressRowCount > 0)
+  );
+}
+
 export function isWorkerCancellable(worker: WorkerActivitySummary): boolean {
   return !worker.terminal && worker.supported_controls.includes("cancel");
 }
