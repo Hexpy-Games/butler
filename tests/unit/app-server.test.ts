@@ -502,6 +502,50 @@ test("app server exposes separate update status check and apply endpoints", asyn
   }
 });
 
+test("packaged app update endpoints use the Electron-provided app version", async () => {
+  const runtimeRoot = join(tempDir, "app-runtime");
+  mkdirSync(runtimeRoot, { recursive: true });
+  writeFileSync(
+    join(runtimeRoot, "package.json"),
+    `${JSON.stringify({ name: "butler", version: packageVersion }, null, 2)}\n`,
+    "utf8",
+  );
+  writeFileSync(join(runtimeRoot, "VERSION"), `${packageVersion}\n`, "utf8");
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    butlerHome: runtimeRoot,
+    appVersion: packageVersion,
+    port: 0,
+  });
+  try {
+    const status = await getJson(`${server.url}updates`);
+    expect(status.data.components).toHaveLength(1);
+    expect(status.data.components[0]).toMatchObject({
+      component: "app",
+      current_version: packageVersion,
+      available_version: packageVersion,
+      update_available: false,
+      bundled_agent_version: packageVersion,
+      manifest_source: "local-release-manifest",
+    });
+
+    const check = await postJson(`${server.url}updates/check`, {
+      component: "app",
+    });
+    expect(check.data.components).toHaveLength(1);
+    expect(check.data.components[0]).toMatchObject({
+      component: "app",
+      current_version: packageVersion,
+      available_version: packageVersion,
+      update_available: false,
+    });
+  } finally {
+    server.stop();
+  }
+});
+
 test("app server migrates message indexes for exact memory queries", () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),

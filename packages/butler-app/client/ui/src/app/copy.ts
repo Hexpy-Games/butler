@@ -477,6 +477,9 @@ export interface AppCopy {
       updateLocalReasoningBudget: string;
       loadAppInfo: string;
       updateDeveloperMode: string;
+      loadUpdates: string;
+      checkUpdates: string;
+      applyUpdate: string;
     };
     localModels: {
       title: string;
@@ -1125,6 +1128,9 @@ const koKrCopy: AppCopy = {
       updateLocalReasoningBudget: "로컬 추론 예산 업데이트 실패",
       loadAppInfo: "앱 정보 불러오기 실패",
       updateDeveloperMode: "개발자 모드 변경 실패",
+      loadUpdates: "업데이트 정보 불러오기 실패",
+      checkUpdates: "업데이트 확인 실패",
+      applyUpdate: "업데이트 적용 실패",
     },
     localModels: {
       title: "로컬 모델",
@@ -1785,6 +1791,9 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       updateLocalReasoningBudget: "Failed to update local reasoning budget",
       loadAppInfo: "Failed to load app info",
       updateDeveloperMode: "Failed to change developer mode",
+      loadUpdates: "Failed to load update info",
+      checkUpdates: "Failed to check updates",
+      applyUpdate: "Failed to apply update",
     },
     localModels: {
       title: "Local models",
