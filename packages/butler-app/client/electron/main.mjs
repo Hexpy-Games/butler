@@ -70,6 +70,7 @@ const appServerProbeTimeoutMs = 2000;
 const nativeServiceGatewayReadyPollAttempts = 120;
 const nativeServiceGatewayReadyPollDelayMs = 250;
 const menuBarHelperHandoffCheckDelayMs = 3000;
+const signalProcessHardExitDelayMs = 1000;
 const nativeSettingsSchema = "butler.native-settings.v1";
 const nativeSettingsFileName = "butler-native-settings.json";
 const macNotificationSettingsUrl =
@@ -177,9 +178,16 @@ if (isMenuBarHelperProcess || isQuitMenuBarHelperSignalProcess) {
   );
 }
 const appSingleInstanceLock = app.requestSingleInstanceLock();
+if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {
+  scheduleSignalProcessHardExit();
+}
 if (!appSingleInstanceLock) {
   isQuitting = true;
-  app.quit();
+  if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {
+    process.exit(0);
+  } else {
+    app.quit();
+  }
 } else if (isMenuBarHelperProcess || isQuitMenuBarHelperSignalProcess) {
   app.on("second-instance", (_event, argv) => {
     if (isQuitMenuBarHelperSignalMode({ argv })) {
@@ -898,10 +906,14 @@ function appLaunchArgs(extraArgs = []) {
   return [app.getAppPath(), ...extraArgs];
 }
 
+function appLaunchCwd() {
+  return app.isPackaged ? dirname(process.execPath) : __dirname;
+}
+
 function spawnDetachedApp(args = [], env = {}, label = "Butler helper process") {
   try {
     const child = spawn(process.execPath, appLaunchArgs(args), {
-      cwd: __dirname,
+      cwd: appLaunchCwd(),
       detached: true,
       env: {
         ...process.env,
@@ -946,6 +958,13 @@ function scheduleMenuBarHelperQuitCheck() {
     if (!helperPid) return;
     console.warn(`Butler menu bar helper did not clear pid after quit signal: pid=${helperPid}`);
   }, menuBarHelperHandoffCheckDelayMs);
+  timer.unref?.();
+}
+
+function scheduleSignalProcessHardExit() {
+  const timer = setTimeout(() => {
+    process.exit(0);
+  }, signalProcessHardExitDelayMs);
   timer.unref?.();
 }
 
@@ -1766,7 +1785,7 @@ if (appSingleInstanceLock) {
       Menu.setApplicationMenu(null);
       nativeTheme.on("updated", updateTrayIcon);
       if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {
-        app.quit();
+        process.exit(0);
         return;
       }
       if (isMenuBarHelperProcess) {

@@ -1001,6 +1001,8 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("QUIT_MENU_BAR_HELPER_ARG");
   expect(electronMain).toContain("persistentMenuBarHelperSupported");
   expect(electronMain).toContain("shouldLaunchPersistentMenuBarHelper");
+  expect(electronMain).toContain("function appLaunchCwd()");
+  expect(electronMain).toContain("app.isPackaged ? dirname(process.execPath) : __dirname");
   expect(electronMain).toContain("mainProcessOwnsTray");
   expect(electronMain).toContain("helperProcessOwnsTray");
   expect(electronMain).toContain("ensurePersistentMenuBarHelper");
@@ -1008,12 +1010,15 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("exited before handoff");
   expect(electronMain).toContain("did not publish a pid after launch");
   expect(electronMain).toContain("did not clear pid after quit signal");
+  expect(electronMain).toContain("signalProcessHardExitDelayMs");
+  expect(electronMain).toContain("scheduleSignalProcessHardExit");
   expect(electronMain).toContain("runTrayAgentServiceAction");
   expect(electronMain).toContain("Start Butler Agent");
   expect(electronMain).toContain("Restart Butler Agent");
   expect(electronMain).toContain("Stop Butler Agent");
   expect(electronMain).toContain("Quit Butler UI");
   expect(electronMain).toContain("Quit Menu Bar Helper");
+  expect(electronMain).toContain("process.exit(0)");
   expect(electronMain).toContain("menu-bar-helper");
   expect(electronMain).toContain("trayActionSource()");
   expect(electronMain).toContain(
