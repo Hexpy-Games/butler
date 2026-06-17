@@ -2472,7 +2472,7 @@ export class AppServerStore {
       context_details: view.context ?? this.getContextDetails(sessionId),
       safe_errors: view.errors,
       automation_targets: view.automations,
-      worker_activity: view.workers,
+      worker_activity: view.workers.filter((worker) => !worker.terminal),
       work_streams: view.work_streams,
       staleness: {
         state: "fresh",
@@ -2550,7 +2550,7 @@ export class AppServerStore {
     const automations = this.listAutomationTargets(sessionId);
     const workers = this.listWorkerActivity({
       sessionId,
-      includeHistory: false,
+      includeHistory: true,
     }).workers;
     const errors = messages
       .filter((message) => message.safe_error_code)
