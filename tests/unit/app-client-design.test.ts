@@ -1023,6 +1023,9 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("process.exit(0)");
   expect(electronMain).not.toContain('tray.on("click"');
   expect(electronMain).not.toContain("openButlerFromTray();\n    });");
+  expect(electronMain).toContain("function activateButlerApp()");
+  expect(electronMain).toContain("if (isMenuBarHelperProcess) {\n    openButlerFromTray();");
+  expect(electronMain).toContain('app.on("activate", activateButlerApp)');
   expect(electronMain).toContain("menu-bar-helper");
   expect(electronMain).toContain("trayActionSource()");
   expect(electronMain).toContain(

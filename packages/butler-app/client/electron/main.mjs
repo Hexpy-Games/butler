@@ -1233,6 +1233,14 @@ function flushPendingNativeNavigation() {
   sendNativeNavigation(request);
 }
 
+function activateButlerApp() {
+  if (isMenuBarHelperProcess) {
+    openButlerFromTray();
+    return;
+  }
+  void showMainWindow().catch(handleFatalStartupError);
+}
+
 function normalizeDesktopNotification(input = {}) {
   return {
     kind:
@@ -1804,9 +1812,7 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("activate", () => {
-  void showMainWindow().catch(handleFatalStartupError);
-});
+app.on("activate", activateButlerApp);
 
 app.on("before-quit", () => {
   isQuitting = true;
