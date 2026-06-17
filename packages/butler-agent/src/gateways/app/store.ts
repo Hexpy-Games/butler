@@ -7985,7 +7985,19 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
-function appRuntimePolicy(input: {
+const APP_WORKSPACE_REQUIRED_TOOL_NAMES = new Set([
+  "run_command",
+  "read_tool_output_artifact",
+]);
+
+function requiredToolsForAccessMode(value: unknown, accessMode: SettingsView["access_mode"]): string[] {
+  const names = stringArray(value);
+  return accessMode === "full_access"
+    ? names
+    : names.filter((name) => !APP_WORKSPACE_REQUIRED_TOOL_NAMES.has(name));
+}
+
+export function appRuntimePolicy(input: {
   existing?: unknown;
   accessMode: SettingsView["access_mode"];
 }): Record<string, unknown> {
@@ -7995,13 +8007,15 @@ function appRuntimePolicy(input: {
   const requestedProfiles = stringArray(existing.requiredNativeToolProfiles)
     .filter((profile) => profile !== "workspace");
 
-  if (input.accessMode !== "read_only") {
+  if (input.accessMode === "full_access") {
     requestedProfiles.push("workspace");
   }
 
   return {
     ...existing,
     accessMode: input.accessMode,
+    requiredNativeTools: requiredToolsForAccessMode(existing.requiredNativeTools, input.accessMode),
+    required_tools: requiredToolsForAccessMode(existing.required_tools, input.accessMode),
     requiredNativeToolProfiles: [...new Set(requestedProfiles)],
   };
 }
