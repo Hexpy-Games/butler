@@ -1292,6 +1292,14 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
       !observedToolSurfaces[0]!.names.some((name) => name.includes("weather")),
       `tool-profile E2E provider surface included weather tools: ${JSON.stringify(observedToolSurfaces[0])}`,
     );
+    for (const name of ["run_command", "read_tool_output_artifact"]) {
+      assert(
+        observedToolSurfaces[0]!.names.includes(name),
+        `tool-profile E2E full-access project turn did not expose workspace tool ${name}: ${
+          JSON.stringify(observedToolSurfaces[0])
+        }`,
+      );
+    }
     return;
   }
   if (usesWorkStreamScenario) {
@@ -1299,6 +1307,7 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
       client,
       [turnActivityPanelSelector, todoComposerPanelSelector],
       "workstream progress surface",
+      waitForFinalTimeoutMs,
     );
     const activeScreenshotPath = join(screenshotDir, `${e2eMode}-workstream-progress.png`);
     await captureScreenshot(client, activeScreenshotPath);
@@ -1998,6 +2007,7 @@ async function waitForAnyVisible(
   client: CdpClient,
   selectors: string[],
   label: string,
+  timeoutMs?: number,
 ): Promise<void> {
   await waitForExpression(client, `(() => {
     return ${JSON.stringify(selectors)}.some((selector) => {
@@ -2007,7 +2017,7 @@ async function waitForAnyVisible(
       const box = element.getBoundingClientRect();
       return box.width > 0 && box.height > 0 && style.display !== "none" && style.visibility !== "hidden";
     });
-  })()`, `${label} visible`);
+  })()`, `${label} visible`, timeoutMs);
 }
 
 async function waitForVisibleOrAssistantFinalText(

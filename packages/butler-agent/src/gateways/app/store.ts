@@ -4514,6 +4514,10 @@ export class AppServerStore {
       appBinding,
     ]);
     const settings = this.getSettings();
+    const runtimePolicy = appRuntimePolicy({
+      existing: existing?.metadata?.runtimePolicy,
+      accessMode: input.controls.access_mode,
+    });
     this.sessionBindingStore.upsert({
       sessionId: input.sessionId,
       role: existing?.role ?? "butler",
@@ -4534,6 +4538,11 @@ export class AppServerStore {
         ...(existing?.metadata ?? {}),
         source: "app-server",
         appSessionKind: input.sessionKind,
+        accessMode: input.controls.access_mode,
+        requiredNativeTools: stringArray(runtimePolicy.requiredNativeTools),
+        required_tools: stringArray(runtimePolicy.required_tools),
+        requiredNativeToolProfiles: stringArray(runtimePolicy.requiredNativeToolProfiles),
+        runtimePolicy,
         workerModelRules: settings.worker_model_rules,
       },
     });
@@ -7950,6 +7959,48 @@ function normalizeSessionControls(
         ? input.access_mode
         : "full_access",
     plan_mode: Boolean(input.plan_mode),
+  };
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .map((item) => item.trim())
+    : [];
+}
+
+const APP_WORKSPACE_REQUIRED_TOOL_NAMES = new Set([
+  "run_command",
+  "read_tool_output_artifact",
+]);
+
+function requiredToolsForAccessMode(value: unknown, accessMode: SettingsView["access_mode"]): string[] {
+  const names = stringArray(value);
+  return accessMode === "full_access"
+    ? names
+    : names.filter((name) => !APP_WORKSPACE_REQUIRED_TOOL_NAMES.has(name));
+}
+
+export function appRuntimePolicy(input: {
+  existing?: unknown;
+  accessMode: SettingsView["access_mode"];
+}): Record<string, unknown> {
+  const existing = input.existing && typeof input.existing === "object" && !Array.isArray(input.existing)
+    ? input.existing as Record<string, unknown>
+    : {};
+  const requestedProfiles = stringArray(existing.requiredNativeToolProfiles)
+    .filter((profile) => profile !== "workspace");
+
+  if (input.accessMode === "full_access") {
+    requestedProfiles.push("workspace");
+  }
+
+  return {
+    ...existing,
+    accessMode: input.accessMode,
+    requiredNativeTools: requiredToolsForAccessMode(existing.requiredNativeTools, input.accessMode),
+    required_tools: requiredToolsForAccessMode(existing.required_tools, input.accessMode),
+    requiredNativeToolProfiles: [...new Set(requestedProfiles)],
   };
 }
 

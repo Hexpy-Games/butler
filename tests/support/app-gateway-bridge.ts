@@ -213,6 +213,10 @@ export class AppGatewayBridge {
     const chatId = input?.chatId ?? "general";
     const sessionId = sessionIdForChat(chatId);
     const projectId = input?.projectId ?? (chatId === "project-butler" ? "butler" : undefined);
+    const runtimePolicy = appBridgeRuntimePolicy({
+      existing: this.runtimePolicy,
+      accessMode: input?.accessMode,
+    });
     return this.store.upsert({
       sessionId,
       role: "butler",
@@ -232,7 +236,11 @@ export class AppGatewayBridge {
       metadata: {
         source: "app-server",
         appSessionKind: input?.sessionKind ?? "chat",
-        runtimePolicy: this.runtimePolicy,
+        accessMode: input?.accessMode ?? "full_access",
+        requiredNativeTools: policyStringArray(runtimePolicy?.requiredNativeTools),
+        required_tools: policyStringArray(runtimePolicy?.required_tools),
+        requiredNativeToolProfiles: policyStringArray(runtimePolicy?.requiredNativeToolProfiles),
+        runtimePolicy,
         workerModelRules: safeWorkerModelRules(input?.workerModelRules),
       },
     });
@@ -650,6 +658,46 @@ function defaultProvider(): ModelProviderAdapter {
       });
       return { text };
     },
+  };
+}
+
+function policyStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .map((item) => item.trim())
+    : [];
+}
+
+const APP_BRIDGE_WORKSPACE_REQUIRED_TOOL_NAMES = new Set([
+  "run_command",
+  "read_tool_output_artifact",
+]);
+
+function bridgeRequiredToolsForAccessMode(
+  value: unknown,
+  accessMode: AppMessageResponderInput["accessMode"],
+): string[] {
+  const names = policyStringArray(value);
+  return accessMode === "full_access"
+    ? names
+    : names.filter((name) => !APP_BRIDGE_WORKSPACE_REQUIRED_TOOL_NAMES.has(name));
+}
+
+function appBridgeRuntimePolicy(input: {
+  existing?: Record<string, unknown>;
+  accessMode?: AppMessageResponderInput["accessMode"];
+}): Record<string, unknown> | undefined {
+  const accessMode = input.accessMode ?? "full_access";
+  const existing = input.existing ?? {};
+  const requestedProfiles = policyStringArray(existing.requiredNativeToolProfiles)
+    .filter((profile) => profile !== "workspace");
+  if (accessMode === "full_access") requestedProfiles.push("workspace");
+  return {
+    ...existing,
+    accessMode,
+    requiredNativeTools: bridgeRequiredToolsForAccessMode(existing.requiredNativeTools, accessMode),
+    required_tools: bridgeRequiredToolsForAccessMode(existing.required_tools, accessMode),
+    requiredNativeToolProfiles: [...new Set(requestedProfiles)],
   };
 }
 

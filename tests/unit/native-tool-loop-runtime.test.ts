@@ -23,6 +23,7 @@ import {
   readOperationalMetricEvents,
 } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
 import { addFeedbackEntry } from "../../packages/butler-agent/src/agent/cognition/feedback/buffer.ts";
+import { requiredExplicitToolNames } from "../../packages/butler-agent/src/agent/policy/runtime-policy.ts";
 import {
   completionObligationIncompleteReason,
   completionReviewIncompleteReason,
@@ -585,7 +586,12 @@ test("native runtime exposes direct command toolchains to Butler and Steward ses
       provider: fakeProvider,
       model: "openai/auto:codex-latest",
       input: { text: "현재 작업공간을 확인해줘" },
-      metadata: { runtimePolicy: { completionReview: "disabled" } },
+      metadata: {
+        runtimePolicy: {
+          completionReview: "disabled",
+          requiredNativeToolProfiles: ["workspace"],
+        },
+      },
       emitTurnEvent: (event) => {
         events.push({ kind: event.kind, payload: event.payload });
       },
@@ -717,11 +723,56 @@ test("native runtime sends a profiled tool surface for basic project turns", asy
     "list_todo_list",
     "read_conversation_context",
   ]);
+  expect(toolNames).not.toContain("run_command");
+  expect(toolNames).not.toContain("read_tool_output_artifact");
   expect(toolNames).not.toContain("get_weather_with_knowhow");
   expect(toolNames).not.toContain("create_automation");
   expect(toolNames).not.toContain("call_mcp_tool");
   expect(toolNames).not.toContain("create_planned_task");
   expect(toolNames).not.toContain("create_work_orchestration");
+});
+
+test("native runtime exposes workspace tools when structured policy requires them", async () => {
+  let toolNames: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runFunctionToolPromptText: async (input) => {
+      toolNames = input.tools.map((tool) => tool.name);
+      return "프로젝트 작업을 처리했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/project-tool-profile-required-workspace",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+    metadata: { projectId: "butler" },
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: {
+      text: "Project Ledger에 Work와 Task를 등록하고 GitHub issue와 연결해줘.",
+    },
+    metadata: {
+      runtimePolicy: {
+        completionReview: "disabled",
+        requiredNativeToolProfiles: ["workspace"],
+      },
+    },
+  });
+
+  expect(toolNames).toEqual(expect.arrayContaining([
+    "inspect_project_status",
+    "run_command",
+    "read_tool_output_artifact",
+    "list_tool_capabilities",
+  ]));
+  expect(toolNames).not.toContain("create_automation");
+  expect(toolNames).not.toContain("call_mcp_tool");
 });
 
 test("native runtime attaches turn budget attribution to direct tool prompts", async () => {
@@ -1757,6 +1808,68 @@ test("native runtime repairs turns that skip explicitly required tools", async (
     decisionNextStep: "정제 표를 기준으로 결과만 보고합니다.",
     decisionSource: "assistant-authored",
   });
+});
+
+test("native runtime repairs skipped tools required by session metadata", async () => {
+  const attempts: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    executeButlerTool: async (call) => ({ ok: true, tool: call.name }),
+    runFunctionToolPromptText: async (input) => {
+      attempts.push(input.prompt);
+      if (attempts.length === 1) {
+        return "명령 실행 없이 마쳤습니다.";
+      }
+      expect(input.prompt).toContain("Explicit Tool Requirement Repair");
+      expect(input.prompt).toContain("run_command");
+      await input.onAssistantTextBeforeTools?.({
+        text: "작업: 필수 명령 실행을 완료합니다.\n이유: 세션 정책이 run_command를 요구했습니다.\n다음: 실행 결과만 요약합니다.",
+        toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "pwd" },
+        rawArguments: JSON.stringify({ command: "pwd" }),
+      });
+      return "필수 명령 실행을 마쳤습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/session-required-tool",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+    metadata: { runtimePolicy: { requiredNativeTools: ["run_command"] } },
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "작업을 처리해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(attempts.length).toBe(2);
+  expect(result.text).toBe("필수 명령 실행을 마쳤습니다.");
+  expect(readTranscript("butler/session-required-tool")
+    .filter((event) => event.kind === "tool_call")
+    .map((event) => event.payload.name)).toContain("run_command");
+});
+
+test("explicit required tool merging dedupes before applying the repair cap", () => {
+  expect(requiredExplicitToolNames([
+    { runtimePolicy: { requiredNativeTools: [
+      "run_command",
+      "run_command",
+      "run_command",
+      "run_command",
+      "run_command",
+      "run_command",
+    ] } },
+    { runtimePolicy: { requiredNativeTools: ["web_search"] } },
+  ], ["run_command", "web_search"])).toEqual(["run_command", "web_search"]);
 });
 
 test("native runtime does not infer semantic workflow tools from natural CSV wording", async () => {

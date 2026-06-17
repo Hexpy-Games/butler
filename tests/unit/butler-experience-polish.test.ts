@@ -109,6 +109,7 @@ test("runtime omits leaked pre-dispatch internals and keeps model heartbeat", as
   const progressActions: Array<Record<string, unknown>> = [];
   const runtime = new NativeToolLoopRuntime({
     messageLanguage: "ko",
+    disableAutomaticRecall: true,
     executeButlerTool: async () => ({
       ok: true,
       task_id: "task-hidden-from-user",
@@ -178,6 +179,7 @@ test("CQ-4 simple questions answer directly without plan or heartbeat ceremony",
   const deliveries: string[] = [];
   const runtime = new NativeToolLoopRuntime({
     messageLanguage: "ko",
+    disableAutomaticRecall: true,
     executeButlerTool: async (call) => {
       throw new Error(`unexpected tool ${call.name}`);
     },
