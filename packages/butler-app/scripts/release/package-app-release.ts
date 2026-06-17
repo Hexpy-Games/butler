@@ -20,6 +20,7 @@ import {
   APP_RELEASE_PLATFORMS,
   createAppBackgroundServiceReleaseCapability,
   createAppDependencyClosureManifest,
+  createAppDesktopHelperMetadata,
   createAppReleaseManifest,
   validateAppDependencyClosureManifest,
   validateAppReleaseManifest,
@@ -609,6 +610,7 @@ function createAppBackgroundServiceRegistrationMetadata(
     runtimeHomeEnv: "BUTLER_APP_MANAGED_RUNTIME_HOME",
     localAuthPath: "$BUTLER_DATA/app/runtime/auth/local-agent-auth.json",
     serviceDefinition: serviceDefinitionMetadata(requirement.platform),
+    desktopHelper: createAppDesktopHelperMetadata([platform]),
     requiredEnvironment: [
       "BUTLER_HOME",
       "BUTLER_DATA",
