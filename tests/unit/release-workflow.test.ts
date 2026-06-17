@@ -329,11 +329,9 @@ test("current release notes describe the GitHub release changelog", () => {
 
   expect(notes).toContain(`# Butler ${currentReleaseTag}`);
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("default startup tool surface");
-  expect(notes).toContain("weather tools");
-  expect(notes).toContain("agent/tools/{tool-group-name}/{tool-name}");
-  expect(notes).toContain("per-tool definition");
-  expect(notes).toContain("agent/tool-support");
-  expect(notes).toContain("run_command");
-  expect(notes).toContain("worker runtime tool behavior");
+  expect(notes).toContain("first-run App setup recovery");
+  expect(notes).toContain("interrupted Agent preparation");
+  expect(notes).toContain("blank body");
+  expect(notes).toContain("install_status");
+  expect(notes).toContain("recovered idle state");
 });
