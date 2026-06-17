@@ -1936,6 +1936,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           useTools,
         }),
       });
+      let currentProviderToolNames: readonly string[] = [];
       const executor = createAuditedButlerToolExecutor({
         sessionId: input.handle.sessionId,
         audit,
@@ -1959,6 +1960,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           searchPlannerOriginalRequest: userText,
           workerModelRules: workerModelRulesFromMetadata(input.metadata?.workerModelRules ?? session.init.metadata?.workerModelRules),
           turnContext: [prompt, currentAttachmentContext].filter(Boolean).join("\n\n"),
+          currentToolNames: () => currentProviderToolNames,
         }),
       });
       try {
@@ -1992,6 +1994,8 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           turnMetadata: input.metadata,
           tools: BUTLER_TOOLS,
         });
+        const previousProviderToolNames = currentProviderToolNames;
+        currentProviderToolNames = selectedTools.map((tool) => tool.name);
         const usageAttribution: PromptUsageAttribution = {
           turnId,
           phase,
@@ -2007,47 +2011,51 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           }),
           promptSections,
         };
-        return await this.toolPromptRunner({
-          prompt: promptText,
-          model: input.model,
-          instructions: appendRoleToolPolicyInstructions(session.init.role, appendButlerToolInstructions(session.init.systemPrompt)),
-          cacheScope: "session-turn",
-          signal: input.signal,
-          attachments,
-          tools: selectedTools,
-          maxToolRounds: grantedToolRounds,
-          butlerData: this.butlerData,
-          usageAttribution,
-          executeTool: executor,
-          finalTextFromToolResult: ({ name, output }) => {
-            if (name === "write_planned_public_report") {
-              return publicReportFromToolOutput(output);
-            }
-            if (plannedReview) {
-              return plannedReviewTerminalToolText({
-                name,
-                output,
+        try {
+          return await this.toolPromptRunner({
+            prompt: promptText,
+            model: input.model,
+            instructions: appendRoleToolPolicyInstructions(session.init.role, appendButlerToolInstructions(session.init.systemPrompt)),
+            cacheScope: "session-turn",
+            signal: input.signal,
+            attachments,
+            tools: selectedTools,
+            maxToolRounds: grantedToolRounds,
+            butlerData: this.butlerData,
+            usageAttribution,
+            executeTool: executor,
+            finalTextFromToolResult: ({ name, output }) => {
+              if (name === "write_planned_public_report") {
+                return publicReportFromToolOutput(output);
+              }
+              if (plannedReview) {
+                return plannedReviewTerminalToolText({
+                  name,
+                  output,
+                  language: this.messageLanguage,
+                });
+              }
+              return null;
+            },
+            onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
+              throwIfRuntimeTurnAborted(input.signal);
+              pendingPublicDecisions.push(...publicWorkDecisionsFromAssistantText({
+                text,
+                toolCalls,
+                language: this.messageLanguage,
+                existingDecisions: publicDecisionContext,
+              }));
+              await emitAssistantTextBeforeTools({
+                turnInput: input,
+                text,
+                toolCalls,
                 language: this.messageLanguage,
               });
-            }
-            return null;
-          },
-          onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
-            throwIfRuntimeTurnAborted(input.signal);
-            pendingPublicDecisions.push(...publicWorkDecisionsFromAssistantText({
-              text,
-              toolCalls,
-              language: this.messageLanguage,
-              existingDecisions: publicDecisionContext,
-            }));
-            await emitAssistantTextBeforeTools({
-              turnInput: input,
-              text,
-              toolCalls,
-              language: this.messageLanguage,
-            });
-          },
-        });
+            },
+          });
+        } finally {
+          currentProviderToolNames = previousProviderToolNames;
+        }
       };
       const successfulToolAuditCount = () => audit.filter((entry) => entry.ok).length;
       const runGoalCompletionReviewGate = async (

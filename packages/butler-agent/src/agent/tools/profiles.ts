@@ -201,6 +201,15 @@ function addProfile(profiles: Set<ButlerToolProfile>, profile: ButlerToolProfile
   profiles.add(profile);
 }
 
+function hasProjectManagementWriteIntent(value: string): boolean {
+  const durableWriteIntent = /\b(add|create|open|link|connect|record|register|write)\b/u.test(value) ||
+    /등록|생성|작성|연결|링크|추가|열어|열고|만들/u.test(value);
+  const projectManagementObject =
+    /\b(project ledger|ledger|github issue|issue|work|task|spec|feature)\b/u.test(value) ||
+    /프로젝트\s*원장|github|깃허브|이슈|워크|태스크|작업|스펙|기능/u.test(value);
+  return durableWriteIntent && projectManagementObject;
+}
+
 function profilesFromText(text: string): ButlerToolProfile[] {
   const profiles = new Set<ButlerToolProfile>();
   const value = normalizedText(text);
@@ -216,6 +225,10 @@ function profilesFromText(text: string): ButlerToolProfile[] {
   }
   if (/\b(file|repo|repository|code|command|shell|terminal|run|verify|test|script|log|manifest|package)\b/u.test(value) ||
     /파일|레포|저장소|작업공간|워크스페이스|코드|명령|터미널|검증|테스트|스크립트|로그/u.test(value)) {
+    addProfile(profiles, "workspace");
+  }
+  if (hasProjectManagementWriteIntent(value)) {
+    addProfile(profiles, "project");
     addProfile(profiles, "workspace");
   }
   if (/\b(memory|remember|recall|previous|earlier|conversation|transcript)\b/u.test(value) ||

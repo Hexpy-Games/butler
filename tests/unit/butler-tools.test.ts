@@ -293,6 +293,40 @@ test("basic project turns expose a bounded startup and project tool profile", ()
   expect(toolContractJsonChars(tools)).toBeLessThan(8_000);
 });
 
+test("Project Ledger write-intent turns expose workspace execution for durable registration", () => {
+  const text = "그럼 이 목록들을 정리해서 다음 Feature 작업들로 등록하자. Project ledger에 등록해두고, github issue도 열어서 연결해놔. 각 phase가 work가 되고, 각 세부 구현이 task되겠지? 각 단계별로 세부적으로 스펙 작성해.";
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text,
+    sessionMetadata: { projectId: "butler" },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text,
+    sessionMetadata: { projectId: "butler" },
+  })).toEqual(expect.arrayContaining(["startup", "project", "workspace"]));
+  expect(names).toContain("inspect_project_status");
+  expect(names).toContain("run_command");
+  expect(names).toContain("read_tool_output_artifact");
+  expect(names).not.toContain("create_automation");
+  expect(names).not.toContain("call_mcp_tool");
+  expect(toolContractJsonChars(tools)).toBeLessThan(12_000);
+});
+
+test("GitHub issue linkage requests expose workspace execution with project tools", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "GitHub issue를 열어서 Project Ledger task랑 연결해줘.",
+    sessionMetadata: { projectId: "butler" },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(names).toContain("inspect_project_status");
+  expect(names).toContain("run_command");
+});
+
 test("Project Ledger requests without project metadata still expose project tools", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
@@ -1128,6 +1162,7 @@ test("tool capability discovery exposes run_command as enabled command capabilit
     butlerHome: root,
     butlerData: tempDir,
     workspacePath: tempDir,
+    currentToolNames: ["list_tool_capabilities", "inspect_project_status"],
   });
 
   const result = await execute({
@@ -1136,15 +1171,84 @@ test("tool capability discovery exposes run_command as enabled command capabilit
     rawArguments: "{}",
   }) as {
     ok: boolean;
-    capabilities: Array<{ name: string; category: string; enabled: boolean }>;
+    current_turn_surface_known: boolean;
+    capabilities: Array<{
+      name: string;
+      category: string;
+      enabled: boolean;
+      current_turn_callable: boolean | null;
+      omitted_by_profile: boolean | null;
+      availability_scope: string;
+    }>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.current_turn_surface_known).toBe(true);
+  expect(result.capabilities).toContainEqual(expect.objectContaining({
+    name: "run_command",
+    category: "command",
+    enabled: true,
+    current_turn_callable: false,
+    omitted_by_profile: true,
+    availability_scope: "registry",
+  }));
+});
+
+test("tool capability discovery marks tools callable when the current profile exposes them", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+    currentToolNames: ["list_tool_capabilities", "run_command", "read_tool_output_artifact"],
+  });
+
+  const result = await execute({
+    name: "list_tool_capabilities",
+    args: { category: "command" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    capabilities: Array<{
+      name: string;
+      current_turn_callable: boolean | null;
+      omitted_by_profile: boolean | null;
+      availability_scope: string;
+    }>;
   };
 
   expect(result.ok).toBe(true);
   expect(result.capabilities).toContainEqual(expect.objectContaining({
     name: "run_command",
-    category: "command",
-    enabled: true,
+    current_turn_callable: true,
+    omitted_by_profile: false,
+    availability_scope: "current_turn",
   }));
+});
+
+test("tool capability discovery rejects unknown categories instead of widening to the full registry", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+  });
+
+  const result = await execute({
+    name: "list_tool_capabilities",
+    args: { category: "github" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    error: { code: string };
+    invalid_category: string;
+    valid_categories: string[];
+    capabilities: unknown[];
+  };
+
+  expect(result.ok).toBe(false);
+  expect(result.error.code).toBe("invalid_tool_category");
+  expect(result.invalid_category).toBe("github");
+  expect(result.valid_categories).toContain("command");
+  expect(result.capabilities).toEqual([]);
 });
 
 test("automation tool schemas expose native schedule contracts", () => {

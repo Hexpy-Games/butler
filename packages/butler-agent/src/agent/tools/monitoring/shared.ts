@@ -14,6 +14,9 @@ interface ToolCapabilityView {
   category: ToolCapabilityCategory;
   enabled: boolean;
   disabled_reason: string | null;
+  current_turn_callable: boolean | null;
+  omitted_by_profile: boolean | null;
+  availability_scope: "current_turn" | "registry";
   concurrency_safe: boolean;
   interrupt_behavior: ButlerToolDefinition["interruptBehavior"];
   transcript_visibility: ButlerToolDefinition["transcriptVisibility"];
@@ -27,10 +30,27 @@ const DEFAULT_TOOL_CAPABILITY: ToolCapabilityMetadata = {
   safetyNotes: ["Use only when the tool schema matches the user's intent."],
 };
 
+const TOOL_CAPABILITY_CATEGORIES = [
+  "search",
+  "data",
+  "command",
+  "work",
+  "monitoring",
+  "automation",
+  "todo",
+  "memory",
+  "project",
+  "skill",
+  "mcp",
+  "dispatch",
+  "control",
+] as const satisfies readonly ToolCapabilityCategory[];
+
 export function createMonitoringToolHandlers(input: {
   butlerData: string;
   sessionId?: string;
   webSearchProvider?: WebSearchProvider;
+  currentToolNames?: readonly string[] | (() => readonly string[]);
 }) {
   return {
     "get_context_monitor": async (call: ToolCall) => ({
@@ -73,15 +93,34 @@ export function createMonitoringToolHandlers(input: {
         }),
       };
     },
-    "list_tool_capabilities": async (call: ToolCall) => ({
-      ok: true,
-      capabilities: listToolCapabilities({
-        butlerData: input.butlerData,
-        webSearchProvider: input.webSearchProvider,
-        category: toolCategory(call.args.category),
-        includeDisabled: call.args.include_disabled !== false,
-      }),
-    }),
+    "list_tool_capabilities": async (call: ToolCall) => {
+      const category = parseToolCategory(call.args.category);
+      if (category.invalid) {
+        return {
+          ok: false,
+          error: {
+            code: "invalid_tool_category",
+            message: `Unknown tool capability category: ${category.invalid}`,
+          },
+          invalid_category: category.invalid,
+          valid_categories: [...TOOL_CAPABILITY_CATEGORIES],
+          capabilities: [],
+        };
+      }
+      const currentToolNames = resolveCurrentToolNames(input.currentToolNames);
+      return {
+        ok: true,
+        current_turn_surface_known: currentToolNames !== null,
+        valid_categories: [...TOOL_CAPABILITY_CATEGORIES],
+        capabilities: listToolCapabilities({
+          butlerData: input.butlerData,
+          webSearchProvider: input.webSearchProvider,
+          category: category.category,
+          includeDisabled: call.args.include_disabled !== false,
+          currentToolNames,
+        }),
+      };
+    },
     "get_memory_health": async (_call: ToolCall) => ({
       ok: true,
       ...readMemoryHealth({
@@ -91,23 +130,24 @@ export function createMonitoringToolHandlers(input: {
   };
 }
 
-function toolCategory(value: unknown): ToolCapabilityCategory | undefined {
-  if (
-    value === "search" ||
-    value === "data" ||
-    value === "command" ||
-    value === "work" ||
-    value === "monitoring" ||
-    value === "automation" ||
-    value === "todo" ||
-    value === "memory" ||
-    value === "project" ||
-    value === "skill" ||
-    value === "mcp" ||
-    value === "dispatch" ||
-    value === "control"
-  ) return value;
-  return undefined;
+function parseToolCategory(value: unknown): {
+  category?: ToolCapabilityCategory;
+  invalid?: string;
+} {
+  if (value === undefined || value === null || value === "") return {};
+  if (typeof value !== "string") return { invalid: String(value) };
+  const normalized = value.trim();
+  if (!normalized) return {};
+  if ((TOOL_CAPABILITY_CATEGORIES as readonly string[]).includes(normalized)) {
+    return { category: normalized as ToolCapabilityCategory };
+  }
+  return { invalid: normalized };
+}
+
+function resolveCurrentToolNames(value: readonly string[] | (() => readonly string[]) | undefined): Set<string> | null {
+  if (!value) return null;
+  const names = typeof value === "function" ? value() : value;
+  return new Set(names);
 }
 
 function capabilityAvailability(tool: ButlerToolDefinition, input: {
@@ -133,18 +173,24 @@ function listToolCapabilities(input: {
   webSearchProvider?: WebSearchProvider;
   category?: ToolCapabilityCategory;
   includeDisabled?: boolean;
+  currentToolNames?: Set<string> | null;
 }): ToolCapabilityView[] {
   const includeDisabled = input.includeDisabled !== false;
+  const currentToolNames = input.currentToolNames ?? null;
   return BUTLER_TOOLS
     .map((tool) => {
       const metadata = TOOL_CAPABILITY_METADATA[tool.name] ?? DEFAULT_TOOL_CAPABILITY;
       const availability = capabilityAvailability(tool, input);
+      const currentTurnCallable = currentToolNames === null ? null : currentToolNames.has(tool.name);
       return {
         name: tool.name,
         description: tool.description,
         category: metadata.category,
         enabled: availability.enabled,
         disabled_reason: availability.disabled_reason,
+        current_turn_callable: currentTurnCallable,
+        omitted_by_profile: currentTurnCallable === null ? null : !currentTurnCallable,
+        availability_scope: currentTurnCallable === true ? "current_turn" as const : "registry" as const,
         concurrency_safe: tool.concurrencySafe,
         interrupt_behavior: tool.interruptBehavior,
         transcript_visibility: tool.transcriptVisibility,
