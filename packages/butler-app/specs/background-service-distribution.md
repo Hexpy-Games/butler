@@ -3,8 +3,8 @@
 ## Status
 
 Planning. This spec defines the target architecture for Butler App releases
-where the bundled Butler Agent keeps running after the UI window or UI process
-is closed.
+where the bundled Butler Agent and App-owned menu bar helper keep running after
+the main App window or main App UI process is closed.
 
 ## Goal
 
@@ -13,11 +13,15 @@ local assistant service:
 
 - The App installs and controls a bundled Butler Agent background service.
 - The Agent service owns the long-running process group.
+- The App installs and starts a lightweight menu bar or tray helper that owns the
+  desktop status icon independently from the main App UI process.
 - Consolidation, scheduler, sync, watchdog, app gateway, and task workers keep
   running when the App UI is closed.
-- The menu bar or tray controller reflects service state and lets the user open
-  the UI, restart the service, stop background work, or quit the controller.
-- The standalone Agent distribution remains a terminal/CLI installation path.
+- The menu bar or tray helper reflects service state and lets the user open the
+  UI, restart the service, stop background work, or quit the helper.
+- The standalone Agent distribution remains a headless terminal/CLI installation
+  path by default. A desktop tray companion may be offered as an explicit opt-in
+  package or command, but it is not installed implicitly by the standalone Agent.
 
 ## Non-Goals
 
@@ -29,6 +33,10 @@ local assistant service:
   product. The App may bundle the Agent payload, but public release channels
   remain Butler App and Butler Agent.
 - Do not silently stop the background Agent when the user closes the App window.
+- Do not tie the App product's persistent menu bar or tray icon to the lifetime
+  of the main Electron window process.
+- Do not make a GUI tray/menu process a default side effect of standalone Agent
+  installation.
 
 ## Product Model
 
@@ -37,6 +45,7 @@ local assistant service:
 ```mermaid
 flowchart TD
   OS["OS service manager"] --> S["Butler Agent Service Supervisor"]
+  Login["OS login item / helper manager"] --> Helper["Butler Menu Bar Helper"]
   S --> E["embed-server"]
   S --> C["butler-sync-consumer"]
   S --> H["butler-scheduler"]
@@ -45,24 +54,56 @@ flowchart TD
   S --> G["app-gateway"]
   M --> T["task worker process groups"]
   UI["Butler App UI"] --> G
-  Tray["Menu bar / Tray controller"] --> S
+  Helper --> S
+  Helper --> G
+  Helper --> UI
 ```
 
 The OS service manager starts one foreground service entrypoint. That entrypoint
 starts and supervises the Butler process group. The App UI never owns the
-production Agent process tree.
+production Agent process tree. The desktop status icon is owned by a small
+menu-bar/tray helper, not by the main App UI process, so quitting the main UI can
+leave the helper and Agent service online.
 
 ### User-Facing Lifecycle
 
 - **Open Butler**: shows the App UI and connects to the service-owned app
   gateway.
 - **Close window**: hides the UI. The Agent service continues.
-- **Quit Butler UI**: quits UI/tray controller only. The Agent service
-  continues unless the user chooses a stop action.
+- **Quit Butler UI**: quits or hides the main App UI only. The Agent service and
+  menu bar/tray helper continue unless the user chooses an explicit stop or quit
+  helper action.
+- **Quit Menu Bar Helper**: removes the status icon and helper process only. The
+  Agent service continues unless the user chooses **Stop Butler Agent**.
 - **Stop Butler Agent**: explicitly stops the service process group.
 - **Restart Butler Agent**: drains and restarts the service process group.
 - **Uninstall Butler**: unregisters the service and removes App-managed runtime
   files according to the uninstall policy.
+
+### Menu Bar Helper Contract
+
+The App distribution must provide a persistent desktop controller similar to
+Docker Desktop on macOS:
+
+- The helper owns the menu bar/tray icon and survives main App UI quit.
+- The helper starts at login or after first-run registration whenever the App
+  background service is enabled.
+- The helper is the default entry point for quick Agent status and service
+  actions in the App distribution.
+- The helper can open or relaunch the main App UI.
+- The helper must not host Agent runtime internals. It talks to the service
+  control bridge and service-owned app gateway through the same local auth and
+  protocol checks used by the App UI.
+- Helper quit is separate from Agent stop. Copy and actions must not imply that
+  removing the icon stops background work.
+- On unsupported desktop environments, the App may degrade to service-only
+  operation with diagnostics, but macOS App releases must treat helper
+  registration as part of the normal product contract.
+
+For the standalone Agent distribution, the default is headless. A standalone tray
+companion may be delivered later as an explicit opt-in operator path, such as a
+separate package or `butler tray install`, and must use separate naming so it is
+not confused with Butler App.
 
 ### First-Run Flow
 
@@ -220,6 +261,8 @@ Required changes:
   LaunchAgent and `systemd --user` definitions, plus executable package
   post-install hook inputs. Render contracts must require XML/systemd escaping
   and must not rely on raw placeholder substitution.
+- App bundle resources must include the packaged helper registration contract
+  required to keep the menu bar/tray icon alive after the main UI exits.
 - App bundle resources must include `service-installer/installer-manifest.json`
   so the signed `.pkg`, `.deb`, or `.rpm` builder can consume the same package
   artifact contract verified by release smoke tests.
@@ -257,8 +300,14 @@ Required changes:
 ## Success Criteria
 
 - Closing the App window does not stop the Agent service.
-- Quitting the App UI does not stop the Agent service by default.
-- The tray/menu bar can display service status without opening the main window.
+- Quitting the App UI does not stop the Agent service or remove the default
+  menu bar/tray helper.
+- The tray/menu bar can display service status without opening the main window
+  and without keeping the main UI process alive.
+- Quitting the menu bar/tray helper removes only the icon/helper unless the user
+  explicitly chooses **Stop Butler Agent**.
+- Standalone Agent install stays headless by default, with any tray companion
+  exposed only as an opt-in desktop add-on.
 - `butler-main`, `app-gateway`, consolidation, scheduler, sync, watchdog, and
   task worker process groups are owned by the Agent service supervisor.
 - First-run setup verifies the service-owned app gateway before opening the
@@ -289,6 +338,8 @@ Required changes:
 - Unit tests for platform registration capability decisions.
 - Unit tests for first-run service install/readiness states.
 - Unit tests for tray/menu service actions.
+- Unit tests for helper lifecycle semantics: close UI, quit UI, quit helper, and
+  stop Agent are distinct actions.
 - Release manifest tests proving App artifacts declare service-install
   capability.
 - Release packaging tests proving Linux App service installer staging can be
@@ -297,6 +348,8 @@ Required changes:
 - Smoke/manual test for isolated macOS `.pkg` installation followed by the
   installed App first-run service setup.
 - E2E test for "close UI, service remains online".
+- E2E test for "quit UI, helper and service remain online".
+- E2E test for "quit helper, service remains online".
 - E2E test for "stop Agent, service process group terminates".
 - Platform package smoke for macOS, Windows, and Linux artifacts as each
   installer target lands.
