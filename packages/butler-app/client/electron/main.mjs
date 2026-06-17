@@ -143,6 +143,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   updatePort: updateManagedServerPort,
   getPort: () => port,
   getServerUrl: () => serverUrl,
+  getAppVersion: () => appInfoView().version,
   getRendererOrigin: () => rendererOrigin,
   explicitServerUrl,
   explicitUiUrl,
@@ -154,6 +155,7 @@ const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
       serviceLabel: appAgentServiceLabel(),
       systemdUnit: appAgentSystemdUnit(),
       getPort: () => port,
+      getAppVersion: () => appInfoView().version,
       ensureRuntimePointer: ensureAppManagedAgentRuntimePointer,
     })
   : null;

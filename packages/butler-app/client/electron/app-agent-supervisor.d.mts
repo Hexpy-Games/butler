@@ -17,6 +17,7 @@ export function buildBundledAgentSupervisorEnv(input: {
   gatewayEnv?: Record<string, string | undefined>;
   port: number;
   serverUrl: string;
+  appVersion?: string | null;
   rendererOrigin: string;
   explicitUiUrl?: string | null;
   projectFolderTokenSecret?: string | null;
@@ -60,6 +61,7 @@ export function createBundledAgentSupervisor(input: {
   updatePort: (port: number) => void;
   getPort: () => number;
   getServerUrl: () => string;
+  getAppVersion?: () => string | null;
   getRendererOrigin: () => string;
   explicitServerUrl?: string | null;
   explicitUiUrl?: string | null;

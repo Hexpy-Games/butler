@@ -58,7 +58,7 @@ export interface BundledAgentResource {
   platform: AppReleasePlatform;
 }
 
-interface BundledAgentPackage {
+export interface BundledAgentPackage {
   artifactPath: string;
   releaseManifestPath: string;
   updateManifestPath: string;
@@ -110,7 +110,13 @@ export function createAppReleasePackage(
     });
     const bundledAgents = new Map(platforms.map((platform) => [
       platform,
-      prepareBundledAgentResourceFromPackage(root, workDir, platform, bundledAgentPackage),
+      prepareBundledAgentResourceFromPackage(
+        root,
+        workDir,
+        platform,
+        bundledAgentPackage,
+        manifest.version,
+      ),
     ]));
     const artifacts = platforms.map((platform) =>
       packagePlatform({
@@ -273,20 +279,22 @@ export function prepareBundledAgentResource(
   workDir: string,
   platform: AppReleasePlatform = currentHostAppReleasePlatform(),
 ): BundledAgentResource {
+  const manifest = createAppReleaseManifest(root);
   const agentOutDir = join(workDir, "agent-release");
   const agent = createAgentReleasePackage({
     root,
     outDir: agentOutDir,
     artifactBaseUrl: "bundled-agent",
   });
-  return prepareBundledAgentResourceFromPackage(root, workDir, platform, agent);
+  return prepareBundledAgentResourceFromPackage(root, workDir, platform, agent, manifest.version);
 }
 
-function prepareBundledAgentResourceFromPackage(
+export function prepareBundledAgentResourceFromPackage(
   root: string,
   workDir: string,
   platform: AppReleasePlatform,
   agent: BundledAgentPackage,
+  appVersion: string,
 ): BundledAgentResource {
   const resourceDir = join(workDir, platform, "bundled-agent");
   mkdirSync(resourceDir, { recursive: true });
@@ -310,6 +318,7 @@ function prepareBundledAgentResourceFromPackage(
   writeAppServiceInstallerPayloads({
     resourceDir,
     platform,
+    appVersion,
   });
   const releaseManifestSha256 = sha256File(join(resourceDir, "agent-release-manifest.json"));
   const updateManifestSha256 = sha256File(join(resourceDir, "agent-update-manifest.json"));
@@ -366,6 +375,7 @@ function prepareBundledAgentResourceFromPackage(
 function writeAppServiceInstallerPayloads(input: {
   resourceDir: string;
   platform: AppReleasePlatform;
+  appVersion: string;
 }): void {
   const capability = createAppBackgroundServiceReleaseCapability([input.platform]);
   const requirement = capability.installerRequirements[0];
@@ -429,7 +439,7 @@ function writeAppServiceInstallerPayloads(input: {
         "launcher",
         "butler-app-managed-agent-service",
       ),
-      linuxAppManagedAgentServiceLauncher(),
+      linuxAppManagedAgentServiceLauncher(input.appVersion),
     );
     writeServiceInstallerManifest({
       resourceDir: input.resourceDir,
@@ -543,7 +553,7 @@ exit 0
 `;
 }
 
-function linuxAppManagedAgentServiceLauncher(): string {
+function linuxAppManagedAgentServiceLauncher(version: string): string {
   return `#!/usr/bin/env bash
 set -euo pipefail
 
@@ -583,6 +593,7 @@ export BUTLER_APP_SERVER_PORT="$PORT"
 export BUTLER_APP_GATEWAY_PID_FILE="\${BUTLER_APP_GATEWAY_PID_FILE:-off}"
 export BUTLER_APP_LOCAL_AUTH_REQUIRED="\${BUTLER_APP_LOCAL_AUTH_REQUIRED:-1}"
 export BUTLER_APP_LOCAL_AUTH_FILE="$AUTH_FILE"
+export BUTLER_APP_VERSION="\${BUTLER_APP_VERSION:-${version}}"
 
 exec /bin/bash "$SERVICE_DAEMON"
 `;

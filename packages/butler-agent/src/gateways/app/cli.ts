@@ -36,6 +36,7 @@ const butlerHome =
   process.env.BUTLER_APP_BUTLER_HOME ??
   process.env.BUTLER_HOME ??
   process.cwd();
+const appVersion = process.env.BUTLER_APP_VERSION?.trim();
 const dbPath =
   appGatewayConfig.dbPath ??
   join(dataRoot, "app-server", "butler-client.sqlite");
@@ -64,6 +65,7 @@ const app = createAppServer({
   dbPath,
   butlerData: dataRoot,
   butlerHome,
+  appVersion,
   serverUrl: `http://${hostname}:${Number.isFinite(port) ? port : 18765}`,
   bridgeMode,
   projectWorkspaceRoot,

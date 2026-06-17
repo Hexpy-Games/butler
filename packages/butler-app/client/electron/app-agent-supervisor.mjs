@@ -56,6 +56,7 @@ export function buildBundledAgentSupervisorEnv({
   gatewayEnv = {},
   port,
   serverUrl,
+  appVersion,
   rendererOrigin,
   explicitUiUrl = null,
   projectFolderTokenSecret,
@@ -71,6 +72,7 @@ export function buildBundledAgentSupervisorEnv({
     BUTLER_APP_BUNDLED_SUPERVISOR: "1",
     BUTLER_APP_LOCAL_AUTH_REQUIRED: "1",
     BUTLER_APP_LOCAL_AUTH_FILE: localAuth.filePath,
+    ...(safeString(appVersion) ? { BUTLER_APP_VERSION: safeString(appVersion) } : {}),
     ...(explicitUiUrl ? { BUTLER_APP_DEV_ORIGIN: rendererOrigin } : {}),
     ...(projectFolderTokenSecret
       ? { BUTLER_PROJECT_FOLDER_TOKEN_SECRET: projectFolderTokenSecret }
@@ -89,6 +91,7 @@ export function createBundledAgentSupervisor({
   updatePort,
   getPort,
   getServerUrl,
+  getAppVersion = () => null,
   getRendererOrigin,
   explicitServerUrl = null,
   explicitUiUrl = null,
@@ -191,6 +194,7 @@ export function createBundledAgentSupervisor({
       gatewayEnv: gateway.env,
       port: getPort(),
       serverUrl: getServerUrl(),
+      appVersion: getAppVersion(),
       rendererOrigin: getRendererOrigin(),
       explicitUiUrl,
       projectFolderTokenSecret,
@@ -429,6 +433,10 @@ function readJsonIfPresent(path) {
   } catch {
     return null;
   }
+}
+
+function safeString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function atomicWriteJson(path, value) {

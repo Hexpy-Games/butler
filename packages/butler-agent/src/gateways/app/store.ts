@@ -449,6 +449,7 @@ export interface AppServerStoreOptions {
   folderSelectionSecret?: string;
   butlerData?: string;
   butlerHome?: string;
+  appVersion?: string;
   serverUrl?: string;
   bridgeMode?: SettingsView["bridge_mode"];
   serviceClient?: ButlerServiceClient;
@@ -543,6 +544,7 @@ export class AppServerStore {
   private readonly folderSelectionSecret?: string;
   private readonly butlerData: string;
   private readonly butlerHome: string;
+  private readonly appVersion?: string;
   private readonly serverUrl: string;
   private readonly bridgeMode: SettingsView["bridge_mode"];
   private readonly serviceClient: ButlerServiceClient;
@@ -572,6 +574,7 @@ export class AppServerStore {
     this.butlerHome = resolve(
       options.butlerHome ?? process.env.BUTLER_HOME ?? process.cwd(),
     );
+    this.appVersion = safeString(options.appVersion);
     this.serverUrl = options.serverUrl ?? "http://127.0.0.1:18765";
     this.bridgeMode = options.bridgeMode ?? "local";
     this.serviceClient =
@@ -608,6 +611,7 @@ export class AppServerStore {
     return await checkComponentUpdates({
       root: this.butlerHome,
       butlerData: this.butlerData,
+      appVersion: this.appVersion,
       components: ["app"],
     });
   }
@@ -621,6 +625,7 @@ export class AppServerStore {
     return await checkComponentUpdates({
       root: this.butlerHome,
       butlerData: this.butlerData,
+      appVersion: this.appVersion,
       components,
       channel: request.channel,
     });
@@ -630,6 +635,7 @@ export class AppServerStore {
     return await applyComponentUpdate({
       root: this.butlerHome,
       butlerData: this.butlerData,
+      appVersion: this.appVersion,
       component: request.component,
       channel: request.channel,
       dryRun: request.dry_run,

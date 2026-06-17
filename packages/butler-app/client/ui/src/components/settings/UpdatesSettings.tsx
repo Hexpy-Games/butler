@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
+import { notifyError } from "@/app/notifications.ts";
 import type {
   UpdateApplyResult,
   UpdateComponentId,
@@ -24,10 +25,12 @@ export function UpdatesSettings() {
     setLoading(true);
     try {
       setView(await api<UpdateStatusView>("/updates"));
+    } catch (error) {
+      notifyError(error, copy.errors.loadUpdates, { id: "settings-updates-load" });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [copy.errors.loadUpdates]);
 
   const check = useCallback(async () => {
     setLoading(true);
@@ -36,10 +39,12 @@ export function UpdatesSettings() {
         method: "POST",
         body: JSON.stringify({ component: "app" }),
       }));
+    } catch (error) {
+      notifyError(error, copy.errors.checkUpdates, { id: "settings-updates-check" });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [copy.errors.checkUpdates]);
 
   const apply = useCallback(async (component: UpdateComponentId) => {
     setApplying(component);
@@ -49,10 +54,12 @@ export function UpdatesSettings() {
         body: JSON.stringify({ component }),
       });
       setView((previous) => mergeUpdateResult(previous, result));
+    } catch (error) {
+      notifyError(error, copy.errors.applyUpdate, { id: "settings-updates-apply" });
     } finally {
       setApplying(null);
     }
-  }, []);
+  }, [copy.errors.applyUpdate]);
 
   useEffect(() => {
     void load();

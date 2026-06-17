@@ -97,6 +97,7 @@ interface NativeServiceSpecOptions {
 }
 
 interface AppManagedNativeServiceSpecOptions extends NativeServiceSpecOptions {
+  appVersion?: string | null;
   gatewayHost?: string;
   gatewayPort?: number;
 }
@@ -298,6 +299,7 @@ export function appManagedNativeServiceSpecs(
     runtimeHome: paths.butlerHome,
     runtimeVersion: paths.runtimeVersion,
     localAuthFile: paths.localAuthFile,
+    appVersion: options.appVersion,
     gatewayHost: options.gatewayHost,
     gatewayPort: options.gatewayPort,
   }, options);
@@ -309,6 +311,7 @@ function nativeServiceSpecsForRuntime(
     runtimePointerPath?: string;
     runtimeHome?: string;
     runtimeVersion?: string | null;
+    appVersion?: string | null;
     localAuthFile?: string;
     gatewayHost?: string;
     gatewayPort?: number;
@@ -316,6 +319,7 @@ function nativeServiceSpecsForRuntime(
   options: NativeServiceSpecOptions = {},
 ): NativeServiceSpec[] {
   const createProjectFolderTokenSecret = options.createProjectFolderTokenSecret ?? true;
+  const appVersion = safeString(appManaged.appVersion);
   const bun = resolveBunPath({ butlerData: paths.butlerData });
   const serviceBun = appManaged.runtimeHome
     ? join(
@@ -441,6 +445,7 @@ function nativeServiceSpecsForRuntime(
             }
           : {}),
         ...(app.dbPath ? { BUTLER_APP_SERVER_DB: app.dbPath } : {}),
+        ...(appVersion ? { BUTLER_APP_VERSION: appVersion } : {}),
         ...(createProjectFolderTokenSecret
           ? { BUTLER_PROJECT_FOLDER_TOKEN_SECRET: readOrCreateProjectFolderTokenSecret(paths.butlerData) }
           : {}),
@@ -766,6 +771,12 @@ function defaultIsPortAvailable(port: number, host: string): Promise<boolean> {
     });
     server.listen(port, host);
   });
+}
+
+function safeString(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
 }
 
 function projectService(

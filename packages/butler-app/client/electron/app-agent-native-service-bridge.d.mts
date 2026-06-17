@@ -5,6 +5,7 @@ export function createAppAgentNativeServiceBridge(options?: {
   serviceLabel?: string;
   systemdUnit?: string;
   getPort?: () => number;
+  getAppVersion?: () => string | null | undefined;
   ensureRuntimePointer?: () => {
     rollbackActivation?: (error?: Error) => void;
   } | void;
