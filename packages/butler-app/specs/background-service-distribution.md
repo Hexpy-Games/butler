@@ -99,6 +99,12 @@ Docker Desktop on macOS:
 - On unsupported desktop environments, the App may degrade to service-only
   operation with diagnostics, but macOS App releases must treat helper
   registration as part of the normal product contract.
+- Release metadata must not imply that every packaged App artifact has a
+  default persistent helper. It must list all desktop platforms covered by the
+  helper schema separately from platforms where the helper is default-enabled
+  and expected to survive main UI quit. Phase 4 enables that default persistent
+  helper contract for packaged macOS App releases; Linux App packages remain
+  service-capable but service-only until a tray packaging path is implemented.
 
 For the standalone Agent distribution, the default is headless. A standalone tray
 companion may be delivered later as an explicit opt-in operator path, such as a

@@ -209,8 +209,8 @@ test("app release manifest exposes app package files only", () => {
       product: "butler-app",
       owner: "butler-app",
       helperMode: "same-app-menu-bar-helper",
-      defaultEnabled: true,
-      survivesMainUiQuit: true,
+      defaultEnabledPlatforms: ["darwin"],
+      survivesMainUiQuitPlatforms: ["darwin"],
       stopsAgentOnHelperQuit: false,
       launchArgument: "--butler-menu-bar-helper",
       quitMainUiArgument: "--butler-quit-main-ui",
@@ -277,7 +277,8 @@ test("app release manifest exposes app package files only", () => {
     },
     desktopHelper: {
       helperMode: "same-app-menu-bar-helper",
-      survivesMainUiQuit: true,
+      defaultEnabledPlatforms: ["darwin"],
+      survivesMainUiQuitPlatforms: ["darwin"],
       stopsAgentOnHelperQuit: false,
       platforms: ["darwin", "linux"],
     },
@@ -335,7 +336,8 @@ test("app release manifest exposes app package files only", () => {
     desktopHelper: {
       helperMode: "same-app-menu-bar-helper",
       platforms: ["darwin"],
-      survivesMainUiQuit: true,
+      defaultEnabledPlatforms: ["darwin"],
+      survivesMainUiQuitPlatforms: ["darwin"],
       stopsAgentOnHelperQuit: false,
     },
     bundledAgentPayload: {
@@ -363,6 +365,17 @@ test("app release manifest exposes app package files only", () => {
     stagingPolicy: "platform-updater-cache",
     activationPolicy: "platform-app-update-then-versioned-app-runtime",
     rollbackPolicy: "preserve-previous-app-managed-runtime",
+  });
+  expect(
+    manifest.artifacts.find((artifact) => artifact.platform === "linux-x64"),
+  ).toMatchObject({
+    desktopHelper: {
+      helperMode: "same-app-menu-bar-helper",
+      platforms: ["linux"],
+      defaultEnabledPlatforms: [],
+      survivesMainUiQuitPlatforms: [],
+      stopsAgentOnHelperQuit: false,
+    },
   });
   const appReleasePaths = manifest.components.flatMap(
     (component) => component.requiredFiles,
@@ -1200,8 +1213,8 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       desktopHelper: {
         schema: "butler.app-desktop-helper.v1",
         helperMode: "same-app-menu-bar-helper",
-        defaultEnabled: true,
-        survivesMainUiQuit: true,
+        defaultEnabledPlatforms: [],
+        survivesMainUiQuitPlatforms: [],
         stopsAgentOnHelperQuit: false,
         launchArgument: "--butler-menu-bar-helper",
         quitMainUiArgument: "--butler-quit-main-ui",

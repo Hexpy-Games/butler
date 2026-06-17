@@ -21,6 +21,12 @@ export interface TrayOwnershipInput {
   persistentHelperSupported?: boolean;
 }
 
+export interface PersistentMenuBarHelperLaunchInput {
+  trayEnabled?: boolean;
+  persistentHelperSupported?: boolean;
+  launchAttempted?: boolean;
+}
+
 export type HelperLifecycleAction =
   | "close-window"
   | "quit-main-ui"
@@ -43,6 +49,9 @@ export declare function isQuitMainUiSignalMode(input?: ProcessModeInput): boolea
 export declare function isQuitMenuBarHelperSignalMode(input?: ProcessModeInput): boolean;
 export declare function persistentMenuBarHelperSupported(
   input?: PersistentMenuBarHelperInput,
+): boolean;
+export declare function shouldLaunchPersistentMenuBarHelper(
+  input?: PersistentMenuBarHelperLaunchInput,
 ): boolean;
 export declare function mainProcessOwnsTray(input?: TrayOwnershipInput): boolean;
 export declare function helperProcessOwnsTray(input?: TrayOwnershipInput): boolean;
