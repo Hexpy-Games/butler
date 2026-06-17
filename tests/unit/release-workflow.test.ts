@@ -331,9 +331,9 @@ test("current release notes describe the GitHub release changelog", () => {
 
   expect(notes).toContain(`# Butler ${currentReleaseTag}`);
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("first-run App setup recovery");
-  expect(notes).toContain("interrupted Agent preparation");
-  expect(notes).toContain("blank body");
-  expect(notes).toContain("install_status");
-  expect(notes).toContain("recovered idle state");
+  expect(notes).toContain("packaged Butler App update status");
+  expect(notes).toContain("Electron-provided App version");
+  expect(notes).toContain("BUTLER_APP_VERSION");
+  expect(notes).toContain("launchd/systemd");
+  expect(notes).toContain("divergent App and bundled");
 });
