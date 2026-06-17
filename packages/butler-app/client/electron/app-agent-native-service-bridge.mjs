@@ -30,6 +30,7 @@ export function createAppAgentNativeServiceBridge({
   serviceLabel = DEFAULT_SERVICE_LABEL,
   systemdUnit = DEFAULT_SYSTEMD_UNIT,
   getPort = () => 18765,
+  getAppVersion = () => null,
   ensureRuntimePointer = () => {},
   prepareLocalAuth = () => prepareAppLocalAuth({ butlerData }),
   isPidRunning = defaultIsPidRunning,
@@ -53,10 +54,11 @@ export function createAppAgentNativeServiceBridge({
           serviceLabel: resolvedServiceLabel,
           systemdUnit: resolvedSystemdUnit,
           getPort,
+          getAppVersion,
           ensureRuntimePointer,
           prepareLocalAuth,
         });
-        await applyPlan(plan, { runCommand });
+        await applyPlan(plan, { runCommand, writeFile });
       },
       stop: async () => {
         const plan = createRegistrationPlan({
@@ -67,10 +69,11 @@ export function createAppAgentNativeServiceBridge({
           serviceLabel: resolvedServiceLabel,
           systemdUnit: resolvedSystemdUnit,
           getPort,
+          getAppVersion,
           ensureRuntimePointer,
           prepareLocalAuth,
         });
-        await applyPlan(plan, { runCommand });
+        await applyPlan(plan, { runCommand, writeFile });
       },
     },
     registration: {
@@ -83,6 +86,7 @@ export function createAppAgentNativeServiceBridge({
           serviceLabel: resolvedServiceLabel,
           systemdUnit: resolvedSystemdUnit,
           getPort,
+          getAppVersion,
           ensureRuntimePointer,
           prepareLocalAuth,
         });
@@ -118,6 +122,7 @@ function createRegistrationPlan({
   serviceLabel,
   systemdUnit,
   getPort,
+  getAppVersion,
   ensureRuntimePointer,
   prepareLocalAuth,
 }) {
@@ -134,6 +139,7 @@ function createRegistrationPlan({
     const runtime = resolveAppManagedServiceRuntime({
       butlerData,
       getPort,
+      getAppVersion,
       prepareLocalAuth,
     });
     if (platform === "darwin") {
@@ -146,7 +152,7 @@ function createRegistrationPlan({
   }
 }
 
-function resolveAppManagedServiceRuntime({ butlerData, getPort, prepareLocalAuth }) {
+function resolveAppManagedServiceRuntime({ butlerData, getPort, getAppVersion, prepareLocalAuth }) {
   const pointerPath = appManagedAgentPointerPath(butlerData);
   const pointer = readJson(pointerPath);
   if (
@@ -194,6 +200,7 @@ function resolveAppManagedServiceRuntime({ butlerData, getPort, prepareLocalAuth
   }
   const embedSocketDir = join(butlerData, "app", "runtime", "embed");
   mkdirSync(embedSocketDir, { recursive: true, mode: 0o700 });
+  const appVersion = safeString(getAppVersion());
   return {
     butlerData,
     runtimeHome,
@@ -211,10 +218,15 @@ function resolveAppManagedServiceRuntime({ butlerData, getPort, prepareLocalAuth
       BUTLER_APP_LOCAL_AUTH_REQUIRED: "1",
       BUTLER_APP_GATEWAY_PID_FILE: "off",
       BUTLER_APP_SERVER_PORT: String(port),
+      ...(appVersion ? { BUTLER_APP_VERSION: appVersion } : {}),
       EMBED_SOCKET: join(embedSocketDir, "embed.sock"),
       EMBED_HEALTH_PORT: "0",
     },
   };
+}
+
+function safeString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function launchdPlan({ action, homeDir, runtime, serviceLabel }) {
@@ -237,7 +249,12 @@ function launchdPlan({ action, homeDir, runtime, serviceLabel }) {
     return {
       action,
       serviceFile,
-      steps: [serviceStep(["launchctl", "kickstart", "-k", target])],
+      body: launchdPlist(runtime, serviceLabel),
+      steps: [
+        serviceStep(["launchctl", "bootout", target], { optional: true }),
+        serviceStep(["launchctl", "bootstrap", domain, serviceFile]),
+        serviceStep(["launchctl", "kickstart", "-k", target]),
+      ],
     };
   }
   return {
@@ -257,6 +274,17 @@ function systemdPlan({ action, homeDir, runtime, systemdUnit }) {
       steps: [
         serviceStep(["systemctl", "--user", "daemon-reload"]),
         serviceStep(["systemctl", "--user", "enable", "--now", systemdUnit]),
+      ],
+    };
+  }
+  if (action === "start" || action === "restart") {
+    return {
+      action,
+      serviceFile,
+      body: systemdUnitBody(runtime),
+      steps: [
+        serviceStep(["systemctl", "--user", "daemon-reload"]),
+        serviceStep(["systemctl", "--user", action, systemdUnit]),
       ],
     };
   }

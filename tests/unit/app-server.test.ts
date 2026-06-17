@@ -484,6 +484,9 @@ test("app server exposes separate update status check and apply endpoints", asyn
     });
     expect(apply.data).toMatchObject({
       component: "app",
+      current_version: packageVersion,
+      available_version: packageVersion,
+      update_available: false,
       stage_status: "up_to_date",
       stage_path: join("updates", "staged", "app.json"),
     });
@@ -540,6 +543,19 @@ test("packaged app update endpoints use the Electron-provided app version", asyn
       current_version: packageVersion,
       available_version: packageVersion,
       update_available: false,
+    });
+
+    const apply = await postJson(`${server.url}updates/apply`, {
+      component: "app",
+      dry_run: true,
+    });
+    expect(apply.data).toMatchObject({
+      component: "app",
+      current_version: packageVersion,
+      available_version: packageVersion,
+      update_available: false,
+      stage_status: "dry_run",
+      stage_path: join("updates", "staged", "app.json"),
     });
   } finally {
     server.stop();

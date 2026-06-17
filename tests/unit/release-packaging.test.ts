@@ -26,6 +26,7 @@ import {
   appReleasePackagerIconPath,
   createAppReleasePackage,
   prepareBundledAgentResource,
+  prepareBundledAgentResourceFromPackage,
 } from "../../packages/butler-app/scripts/release/package-app-release.ts";
 import {
   buildLinuxServiceInstallerPackages,
@@ -956,6 +957,49 @@ test("agent release packager can write public GitHub artifact URLs", () => {
   }
 }, 30_000);
 
+test("app bundled Agent service launcher uses App version when Agent version differs", () => {
+  const outDir = mkdtempSync(join(tmpdir(), "butler-app-launcher-app-version-test-"));
+  const previousLinuxRuntime = process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
+  try {
+    process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = writeFakeLinuxX64Runtime(outDir);
+    const agentArtifactPath = join(outDir, "butler-agent-9.9.9-all.tar.gz");
+    const agentReleaseManifestPath = join(outDir, "agent-release-manifest.json");
+    const agentUpdateManifestPath = join(outDir, "agent-update-manifest.json");
+    writeFileSync(agentArtifactPath, "fake agent archive");
+    writeFileSync(agentReleaseManifestPath, "{}\n");
+    writeFileSync(agentUpdateManifestPath, "{}\n");
+
+    const resource = prepareBundledAgentResourceFromPackage(
+      root,
+      outDir,
+      "linux-x64",
+      {
+        artifactPath: agentArtifactPath,
+        releaseManifestPath: agentReleaseManifestPath,
+        updateManifestPath: agentUpdateManifestPath,
+        artifactName: "butler-agent-9.9.9-all.tar.gz",
+        sha256: "a".repeat(64),
+        version: "9.9.9",
+      },
+      "2.3.4",
+    );
+
+    const launcher = readText(join(
+      resource.resourceDir,
+      "service-installer",
+      "linux",
+      "launcher",
+      "butler-app-managed-agent-service",
+    ));
+    expect(launcher).toContain('export BUTLER_APP_VERSION="${BUTLER_APP_VERSION:-2.3.4}"');
+    expect(launcher).not.toContain('export BUTLER_APP_VERSION="${BUTLER_APP_VERSION:-9.9.9}"');
+  } finally {
+    if (previousLinuxRuntime === undefined) delete process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
+    else process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = previousLinuxRuntime;
+    rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
 test("app release packager embeds self-contained bundled Agent resources", () => {
   const outDir = mkdtempSync(join(tmpdir(), "butler-app-release-test-"));
   const previousLinuxRuntime = process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
@@ -1005,6 +1049,15 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(extractTarEntryText(artifact.artifactPath, "./usr/bin/butler-app")).toContain(
       "BUTLER_APP_ENABLE_GPU",
     );
+    expect(
+      extractTarEntryText(artifact.artifactPath, "./usr/lib/butler/butler-app-managed-agent-service"),
+    ).toContain(`export BUTLER_APP_VERSION="\${BUTLER_APP_VERSION:-${currentVersion}}"`);
+    expect(
+      extractTarEntryText(
+        artifact.artifactPath,
+        `${resourceRoot}/service-installer/linux/launcher/butler-app-managed-agent-service`,
+      ),
+    ).toContain(`export BUTLER_APP_VERSION="\${BUTLER_APP_VERSION:-${currentVersion}}"`);
     expect(extractTarEntryText(artifact.artifactPath, "./DEBIAN/postinst")).toContain(
       'find "/opt/butler/Butler-linux-x64" -type d -exec chmod 755 {} +',
     );
@@ -1320,6 +1373,9 @@ test("app release packager creates Linux ARM64 deb staging", () => {
     expect(extractTarEntryText(artifact.artifactPath, "./usr/lib/systemd/user/butler.service")).toContain(
       "ExecStart=/usr/lib/butler/butler-app-managed-agent-service",
     );
+    expect(
+      extractTarEntryText(artifact.artifactPath, "./usr/lib/butler/butler-app-managed-agent-service"),
+    ).toContain(`export BUTLER_APP_VERSION="\${BUTLER_APP_VERSION:-${currentVersion}}"`);
   } finally {
     if (previousLinuxRuntime === undefined) delete process.env.BUTLER_APP_MANAGED_BUN_LINUX_ARM64;
     else process.env.BUTLER_APP_MANAGED_BUN_LINUX_ARM64 = previousLinuxRuntime;
