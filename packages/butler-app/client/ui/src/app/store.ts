@@ -59,6 +59,7 @@ import {
   applyTimelineEventsToViewState,
   clientTurnIdFromMessageId,
   firstCancellableWorker,
+  isWorkerVisibleInComposer,
   isDraftChatId,
   freezeMessageWorkBlocks,
   freezeMessageWorkBlocksForRecord,
@@ -433,7 +434,9 @@ function summaryFromSessionView(view: SessionView): SessionSummaryView {
     artifacts: view.artifacts,
     automation_targets: view.automations,
     skills_used: view.skills_used ?? [],
-    worker_activity: view.workers,
+    worker_activity: view.workers.filter((worker) =>
+      isWorkerVisibleInComposer(worker),
+    ),
     work_streams: view.work_streams,
   };
 }
@@ -448,13 +451,9 @@ function mergeWorkerActivityForActiveSummary(
   const incomingById = new Set(
     incomingWorkers.map((worker) => worker.worker_id),
   );
-  const currentState =
-    current?.latest_progress?.state ?? current?.turn_state ?? "";
   const incomingState =
     incoming.latest_progress?.state ?? incoming.turn_state ?? "";
-  const shouldPreserveActiveWorkers =
-    isNonTerminalTurnState(currentState) ||
-    isNonTerminalTurnState(incomingState);
+  const shouldPreserveActiveWorkers = isNonTerminalTurnState(incomingState);
   if (!shouldPreserveActiveWorkers) return incoming;
   const preserved = currentWorkers.filter(
     (worker) => !worker.terminal && !incomingById.has(worker.worker_id),

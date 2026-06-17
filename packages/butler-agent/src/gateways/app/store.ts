@@ -2472,7 +2472,7 @@ export class AppServerStore {
       context_details: view.context ?? this.getContextDetails(sessionId),
       safe_errors: view.errors,
       automation_targets: view.automations,
-      worker_activity: view.workers,
+      worker_activity: view.workers.filter((worker) => !worker.terminal),
       work_streams: view.work_streams,
       staleness: {
         state: "fresh",
@@ -2939,9 +2939,6 @@ export class AppServerStore {
   listWorkerActivity(
     options: { sessionId?: string; includeHistory?: boolean } = {},
   ): WorkerActivityListView {
-    const projectAliases = options.sessionId
-      ? this.workerProjectAliasesForSession(options.sessionId)
-      : new Set<string>();
     const linkedWorkerTaskIds = options.sessionId
       ? this.linkedWorkerTaskIdsForSession(options.sessionId)
       : new Set<string>();
@@ -2972,15 +2969,12 @@ export class AppServerStore {
       })
       .filter((worker) => options.includeHistory || !worker.terminal)
       // Session-scoped UI prefers exact origin sessions and only recovers
-      // originless workers when their durable project label matches.
+      // originless workers when an explicit work-stream link exists.
       .filter(
         (worker) =>
           !options.sessionId ||
           worker.session_id === options.sessionId ||
-          (worker.task_id && linkedWorkerTaskIds.has(worker.task_id)) ||
-          (!worker.session_id &&
-            !worker.terminal &&
-            workerProjectMatches(worker.project_id, projectAliases)),
+          (worker.task_id && linkedWorkerTaskIds.has(worker.task_id)),
       );
     const workers = relabelWorkerActivities(orderWorkerActivities(
       synthesizeOrchestrationParentActivities({
@@ -3049,7 +3043,7 @@ export class AppServerStore {
     if (input.action === "cancel") {
       return this.cancelWorkerActivity(worker);
     }
-    const noticeText = `Worker ${worker.worker_label} received ${input.action}. What should Butler do next?`;
+    const noticeText = `Worker ${worker.worker_display_name} received ${input.action}. What should Butler do next?`;
     const notice = this.insertMessage(
       worker.session_id ?? DEFAULT_CHAT_ID,
       "system_event",
@@ -6428,19 +6422,6 @@ export class AppServerStore {
     return chat?.project_id ? this.getProjectRow(chat.project_id) : null;
   }
 
-  private workerProjectAliasesForSession(sessionId: string): Set<string> {
-    const project = this.getProjectForSession(sessionId);
-    const aliases = new Set<string>();
-    addProjectAlias(aliases, project?.id);
-    addProjectAlias(aliases, project?.display_name);
-    addProjectAlias(aliases, project?.workspace_path);
-    addProjectAlias(aliases, project?.workspace_label);
-    addProjectAlias(aliases, project?.safe_path_label);
-    if (project?.workspace_path)
-      addProjectAlias(aliases, basename(project.workspace_path));
-    return aliases;
-  }
-
   private safeSessionLabel(sessionId: string): string {
     try {
       return this.getSession(sessionId).title;
@@ -8146,11 +8127,15 @@ function workerActivityFromTaskSummary(
   )
     ? workModePhase
     : task.activity_phase ?? workModePhase;
-  const terminal = ["complete", "failed", "cancelled"].includes(phase);
+  const terminal =
+    taskStatusIsTerminalForWorkerActivity(task.status) ||
+    ["complete", "failed", "cancelled"].includes(phase);
   return {
     worker_id: `worker-${task.task_id}`,
     activity_kind: task.task_type === "planned" ? "planned" : "worker",
     worker_label: task.task_type === "planned" ? "Plan" : "Worker",
+    worker_display_name: task.task_type === "planned" ? "Plan" : "Worker",
+    worker_ordinal_label: task.task_type === "planned" ? "Plan" : "Worker",
     objective: safeWorkerObjective(task),
     phase,
     status_line: task.activity_status_line ?? safeWorkerStatusLine(task, phase),
@@ -8174,6 +8159,15 @@ function workerActivityFromTaskSummary(
   };
 }
 
+function taskStatusIsTerminalForWorkerActivity(status: TaskSummary["status"]): boolean {
+  return (
+    status === "DONE" ||
+    status === "REVIEWED" ||
+    status === "FAILED" ||
+    status === "KILLED"
+  );
+}
+
 function relabelWorkerActivities(
   workers: WorkerActivitySummary[],
 ): WorkerActivitySummary[] {
@@ -8188,14 +8182,48 @@ function relabelWorkerActivities(
       return {
         ...worker,
         worker_label: planTotal === 1 ? "Plan" : `Plan ${planIndex}`,
+        worker_display_name: planTotal === 1 ? "Plan" : `Plan ${planIndex}`,
+        worker_ordinal_label: planTotal === 1 ? "Plan" : `Plan ${planIndex}`,
       };
     }
     workerIndex += 1;
+    const ordinalLabel = `Worker ${workerIndex}`;
+    const displayName = workerDisplayNameFor(worker.worker_id);
     return {
       ...worker,
-      worker_label: `Worker ${workerIndex}`,
+      worker_label: ordinalLabel,
+      worker_display_name: displayName,
+      worker_ordinal_label: ordinalLabel,
     };
   });
+}
+
+const WORKER_DISPLAY_NAMES = [
+  "Ari",
+  "Mina",
+  "Juno",
+  "Theo",
+  "Nora",
+  "Leo",
+  "Ivy",
+  "Sage",
+  "Kai",
+  "Rina",
+  "Noel",
+  "Yuna",
+] as const;
+
+function workerDisplayNameFor(workerId: string): string {
+  const seed = stableNameSeed(workerId);
+  return WORKER_DISPLAY_NAMES[seed % WORKER_DISPLAY_NAMES.length] ?? "Ari";
+}
+
+function stableNameSeed(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
 }
 
 function orderWorkerActivities(
@@ -8287,6 +8315,8 @@ function workerActivityFromOrchestration(
     worker_id: `planned-${orchestration.id}`,
     activity_kind: "planned",
     worker_label: "Plan",
+    worker_display_name: "Plan",
+    worker_ordinal_label: "Plan",
     objective: sanitizeWorkerDisplayText(orchestration.goal) ||
       sanitizeWorkerDisplayText(orchestration.title) ||
       "Coordinated worker plan",
@@ -8329,24 +8359,6 @@ function orchestrationStatusLine(
   if (running > 0) return `Executing: ${running} of ${total} worker streams running.`;
   if (done > 0) return `Executing: ${done} of ${total} worker streams complete.`;
   return "Planning: coordinated worker streams are queued.";
-}
-
-function projectAliasKey(value?: string | null): string | null {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed.toLocaleLowerCase("en-US") : null;
-}
-
-function addProjectAlias(aliases: Set<string>, value?: string | null): void {
-  const key = projectAliasKey(value);
-  if (key) aliases.add(key);
-}
-
-function workerProjectMatches(
-  value: string | undefined,
-  aliases: Set<string>,
-): boolean {
-  const key = projectAliasKey(value);
-  return Boolean(key && aliases.has(key));
 }
 
 function safeWorkerObjective(task: TaskSummary): string {
