@@ -170,6 +170,21 @@ export interface AppServiceInstallerBundleMetadata {
   rawTextIncluded: false;
 }
 
+export interface AppDesktopHelperMetadata {
+  schema: "butler.app-desktop-helper.v1";
+  product: AppReleaseProduct;
+  owner: "butler-app";
+  helperMode: "same-app-menu-bar-helper";
+  defaultEnabled: true;
+  survivesMainUiQuit: true;
+  stopsAgentOnHelperQuit: false;
+  launchArgument: "--butler-menu-bar-helper";
+  quitMainUiArgument: "--butler-quit-main-ui";
+  quitHelperArgument: "--butler-quit-menu-bar-helper";
+  platforms: AppBackgroundServicePlatform[];
+  rawTextIncluded: false;
+}
+
 export interface AppReleaseComponent {
   id: AppReleaseComponentId;
   product: AppReleaseProduct;
@@ -181,6 +196,7 @@ export interface AppReleaseComponent {
   bundledAgentPayload: AppBundledAgentPayload;
   backgroundServiceCapability: AppBackgroundServiceReleaseCapability;
   serviceInstallerBundle: AppServiceInstallerBundleMetadata;
+  desktopHelper: AppDesktopHelperMetadata;
   protocolCompatibility: AppReleaseProtocolCompatibility;
   bundledComponents: AppReleaseComponentId[];
   requiredFiles: string[];
@@ -211,6 +227,7 @@ export interface AppReleaseArtifact {
   bundledAgentPayload: AppBundledAgentPayload;
   backgroundServiceCapability: AppBackgroundServiceReleaseCapability;
   serviceInstallerBundle: AppServiceInstallerBundleMetadata;
+  desktopHelper: AppDesktopHelperMetadata;
   protocolCompatibility: AppReleaseProtocolCompatibility;
   integrity: AppReleaseIntegrityMetadata;
   updatePolicy: AppReleaseUpdatePolicy;
@@ -234,6 +251,7 @@ export interface AppReleaseManifest {
   bundledAgentPayload: AppBundledAgentPayload;
   backgroundServiceCapability: AppBackgroundServiceReleaseCapability;
   serviceInstallerBundle: AppServiceInstallerBundleMetadata;
+  desktopHelper: AppDesktopHelperMetadata;
   updaterOwner: AppReleaseUpdaterOwner;
   components: AppReleaseComponent[];
   artifacts: AppReleaseArtifact[];
@@ -317,6 +335,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
     APP_RELEASE_PLATFORMS,
     versions.app,
   );
+  const desktopHelper = createAppDesktopHelperMetadata(APP_RELEASE_PLATFORMS);
   const protocolCompatibility: AppReleaseProtocolCompatibility = {
     protocol: "butler.app.v1",
     minimumAppProtocol: "butler.app.v1",
@@ -354,6 +373,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
       bundledAgentPayload,
       backgroundServiceCapability,
       serviceInstallerBundle,
+      desktopHelper,
       protocolCompatibility,
       bundledComponents: ["app"],
       requiredFiles: appFiles,
@@ -379,6 +399,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
     bundledAgentPayload,
     backgroundServiceCapability,
     serviceInstallerBundle,
+    desktopHelper,
     updaterOwner: "butler-app",
     components,
     artifacts: components.flatMap((component) =>
@@ -401,6 +422,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
         serviceInstallerBundle: createAppServiceInstallerBundleMetadata([
           platform,
         ], component.version),
+        desktopHelper: createAppDesktopHelperMetadata([platform]),
         protocolCompatibility,
         integrity: {
           digestAlgorithm: "sha256",
@@ -458,6 +480,25 @@ export function createAppServiceInstallerBundleMetadata(
       serviceInstallerPackageArtifactsForPlatform(platform, version),
     ),
     rawTemplateIncluded: false,
+    rawTextIncluded: false,
+  };
+}
+
+export function createAppDesktopHelperMetadata(
+  platforms: readonly AppReleasePlatform[] = APP_RELEASE_PLATFORMS,
+): AppDesktopHelperMetadata {
+  return {
+    schema: "butler.app-desktop-helper.v1",
+    product: "butler-app",
+    owner: "butler-app",
+    helperMode: "same-app-menu-bar-helper",
+    defaultEnabled: true,
+    survivesMainUiQuit: true,
+    stopsAgentOnHelperQuit: false,
+    launchArgument: "--butler-menu-bar-helper",
+    quitMainUiArgument: "--butler-quit-main-ui",
+    quitHelperArgument: "--butler-quit-menu-bar-helper",
+    platforms: uniqueServicePlatforms(platforms),
     rawTextIncluded: false,
   };
 }
@@ -899,6 +940,12 @@ export function validateAppReleaseManifest(
     manifest.version,
     issues,
   );
+  validateAppDesktopHelper(
+    "app release desktop helper",
+    manifest.desktopHelper,
+    APP_RELEASE_PLATFORMS,
+    issues,
+  );
   if (manifest.updaterOwner !== "butler-app")
     issues.push("app release updater owner must be butler-app");
   if (!manifest.version || manifest.version !== versions.app) {
@@ -1022,6 +1069,12 @@ function validateComponents(
       component.version,
       issues,
     );
+    validateAppDesktopHelper(
+      `component ${component.id} desktop helper`,
+      component.desktopHelper,
+      APP_RELEASE_PLATFORMS,
+      issues,
+    );
     validateProtocolCompatibility(
       `component ${component.id}`,
       component.protocolCompatibility,
@@ -1114,6 +1167,12 @@ function validateArtifacts(
       artifact.serviceInstallerBundle,
       [artifact.platform],
       artifact.version,
+      issues,
+    );
+    validateAppDesktopHelper(
+      `artifact ${artifact.component} desktop helper`,
+      artifact.desktopHelper,
+      [artifact.platform],
       issues,
     );
     validateProtocolCompatibility(
@@ -1342,6 +1401,52 @@ function validateAppServiceInstallerBundle(
     issues.push(`${label} must not include raw templates`);
   }
   if (bundle.rawTextIncluded !== false) {
+    issues.push(`${label} must not include raw text`);
+  }
+}
+
+function validateAppDesktopHelper(
+  label: string,
+  helper: AppDesktopHelperMetadata | undefined,
+  platforms: readonly AppReleasePlatform[],
+  issues: string[],
+): void {
+  if (!helper) {
+    issues.push(`${label} metadata is required`);
+    return;
+  }
+  if (helper.schema !== "butler.app-desktop-helper.v1") {
+    issues.push(`${label} schema mismatch`);
+  }
+  if (helper.product !== "butler-app" || helper.owner !== "butler-app") {
+    issues.push(`${label} owner must be butler-app`);
+  }
+  if (helper.helperMode !== "same-app-menu-bar-helper") {
+    issues.push(`${label} helper mode mismatch`);
+  }
+  if (helper.defaultEnabled !== true) {
+    issues.push(`${label} must be enabled by default`);
+  }
+  if (helper.survivesMainUiQuit !== true) {
+    issues.push(`${label} must survive main UI quit`);
+  }
+  if (helper.stopsAgentOnHelperQuit !== false) {
+    issues.push(`${label} helper quit must not stop Agent`);
+  }
+  if (helper.launchArgument !== "--butler-menu-bar-helper") {
+    issues.push(`${label} launch argument mismatch`);
+  }
+  if (helper.quitMainUiArgument !== "--butler-quit-main-ui") {
+    issues.push(`${label} quit main UI argument mismatch`);
+  }
+  if (helper.quitHelperArgument !== "--butler-quit-menu-bar-helper") {
+    issues.push(`${label} quit helper argument mismatch`);
+  }
+  const expectedPlatforms = uniqueServicePlatforms(platforms);
+  if (!sameComponentSet(helper.platforms, expectedPlatforms)) {
+    issues.push(`${label} platform mismatch`);
+  }
+  if (helper.rawTextIncluded !== false) {
     issues.push(`${label} must not include raw text`);
   }
 }
