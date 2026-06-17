@@ -1000,9 +1000,14 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("QUIT_MAIN_UI_ARG");
   expect(electronMain).toContain("QUIT_MENU_BAR_HELPER_ARG");
   expect(electronMain).toContain("persistentMenuBarHelperSupported");
+  expect(electronMain).toContain("shouldLaunchPersistentMenuBarHelper");
   expect(electronMain).toContain("mainProcessOwnsTray");
   expect(electronMain).toContain("helperProcessOwnsTray");
   expect(electronMain).toContain("ensurePersistentMenuBarHelper");
+  expect(electronMain).toContain("launch failed");
+  expect(electronMain).toContain("exited before handoff");
+  expect(electronMain).toContain("did not publish a pid after launch");
+  expect(electronMain).toContain("did not clear pid after quit signal");
   expect(electronMain).toContain("runTrayAgentServiceAction");
   expect(electronMain).toContain("Start Butler Agent");
   expect(electronMain).toContain("Restart Butler Agent");

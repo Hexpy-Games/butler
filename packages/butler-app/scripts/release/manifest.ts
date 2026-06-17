@@ -175,8 +175,8 @@ export interface AppDesktopHelperMetadata {
   product: AppReleaseProduct;
   owner: "butler-app";
   helperMode: "same-app-menu-bar-helper";
-  defaultEnabled: true;
-  survivesMainUiQuit: true;
+  defaultEnabledPlatforms: AppBackgroundServicePlatform[];
+  survivesMainUiQuitPlatforms: AppBackgroundServicePlatform[];
   stopsAgentOnHelperQuit: false;
   launchArgument: "--butler-menu-bar-helper";
   quitMainUiArgument: "--butler-quit-main-ui";
@@ -487,13 +487,14 @@ export function createAppServiceInstallerBundleMetadata(
 export function createAppDesktopHelperMetadata(
   platforms: readonly AppReleasePlatform[] = APP_RELEASE_PLATFORMS,
 ): AppDesktopHelperMetadata {
+  const defaultEnabledPlatforms = persistentMenuBarHelperDefaultPlatforms(platforms);
   return {
     schema: "butler.app-desktop-helper.v1",
     product: "butler-app",
     owner: "butler-app",
     helperMode: "same-app-menu-bar-helper",
-    defaultEnabled: true,
-    survivesMainUiQuit: true,
+    defaultEnabledPlatforms,
+    survivesMainUiQuitPlatforms: defaultEnabledPlatforms,
     stopsAgentOnHelperQuit: false,
     launchArgument: "--butler-menu-bar-helper",
     quitMainUiArgument: "--butler-quit-main-ui",
@@ -501,6 +502,12 @@ export function createAppDesktopHelperMetadata(
     platforms: uniqueServicePlatforms(platforms),
     rawTextIncluded: false,
   };
+}
+
+function persistentMenuBarHelperDefaultPlatforms(
+  platforms: readonly AppReleasePlatform[],
+): AppBackgroundServicePlatform[] {
+  return uniqueServicePlatforms(platforms).filter((platform) => platform === "darwin");
 }
 
 function appServiceInstallerRequirementForPlatform(
@@ -1424,11 +1431,12 @@ function validateAppDesktopHelper(
   if (helper.helperMode !== "same-app-menu-bar-helper") {
     issues.push(`${label} helper mode mismatch`);
   }
-  if (helper.defaultEnabled !== true) {
-    issues.push(`${label} must be enabled by default`);
+  const expectedDefaultPlatforms = persistentMenuBarHelperDefaultPlatforms(platforms);
+  if (!sameComponentSet(helper.defaultEnabledPlatforms ?? [], expectedDefaultPlatforms)) {
+    issues.push(`${label} default-enabled platform mismatch`);
   }
-  if (helper.survivesMainUiQuit !== true) {
-    issues.push(`${label} must survive main UI quit`);
+  if (!sameComponentSet(helper.survivesMainUiQuitPlatforms ?? [], expectedDefaultPlatforms)) {
+    issues.push(`${label} persistent platform mismatch`);
   }
   if (helper.stopsAgentOnHelperQuit !== false) {
     issues.push(`${label} helper quit must not stop Agent`);

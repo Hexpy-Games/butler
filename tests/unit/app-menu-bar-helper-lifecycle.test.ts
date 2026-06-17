@@ -14,6 +14,7 @@ import {
   mainProcessOwnsTray,
   navigationRequestFromArgs,
   persistentMenuBarHelperSupported,
+  shouldLaunchPersistentMenuBarHelper,
 } from "../../packages/butler-app/client/electron/menu-bar-helper-lifecycle.mjs";
 
 test("packaged macOS App uses a persistent menu bar helper by default", () => {
@@ -57,6 +58,29 @@ test("main process and helper process have distinct tray ownership", () => {
   expect(helperProcessOwnsTray({
     trayEnabled: false,
     helperMode: true,
+  })).toBe(false);
+});
+
+test("persistent helper launch policy does not trust stale pid files", () => {
+  expect(shouldLaunchPersistentMenuBarHelper({
+    trayEnabled: true,
+    persistentHelperSupported: true,
+    launchAttempted: false,
+  })).toBe(true);
+  expect(shouldLaunchPersistentMenuBarHelper({
+    trayEnabled: true,
+    persistentHelperSupported: true,
+    launchAttempted: true,
+  })).toBe(false);
+  expect(shouldLaunchPersistentMenuBarHelper({
+    trayEnabled: true,
+    persistentHelperSupported: false,
+    launchAttempted: false,
+  })).toBe(false);
+  expect(shouldLaunchPersistentMenuBarHelper({
+    trayEnabled: false,
+    persistentHelperSupported: true,
+    launchAttempted: false,
   })).toBe(false);
 });
 

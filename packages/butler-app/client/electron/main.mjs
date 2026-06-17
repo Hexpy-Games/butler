@@ -48,6 +48,7 @@ import {
   mainProcessOwnsTray,
   navigationRequestFromArgs,
   persistentMenuBarHelperSupported,
+  shouldLaunchPersistentMenuBarHelper,
 } from "./menu-bar-helper-lifecycle.mjs";
 import { createTrayAgentMenuModel } from "./tray-agent-menu.mjs";
 
@@ -68,6 +69,7 @@ const appProtocolVersion = "butler.app.v1";
 const appServerProbeTimeoutMs = 2000;
 const nativeServiceGatewayReadyPollAttempts = 120;
 const nativeServiceGatewayReadyPollDelayMs = 250;
+const menuBarHelperHandoffCheckDelayMs = 3000;
 const nativeSettingsSchema = "butler.native-settings.v1";
 const nativeSettingsFileName = "butler-native-settings.json";
 const macNotificationSettingsUrl =
@@ -116,6 +118,7 @@ let mainWindow = null;
 let tray = null;
 let isQuitting = false;
 let pendingNativeNavigation = navigationRequestFromArgs(process.argv);
+let menuBarHelperLaunchAttempted = false;
 let nativeServiceGatewayReady = false;
 let nativeServiceGatewayLastErrorCode = null;
 const nativeShellPreferences = {
@@ -890,48 +893,88 @@ function readPidFile(path) {
   }
 }
 
-function pidIsRunning(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function appLaunchArgs(extraArgs = []) {
   if (app.isPackaged) return extraArgs;
   return [app.getAppPath(), ...extraArgs];
 }
 
-function spawnDetachedApp(args = [], env = {}) {
-  const child = spawn(process.execPath, appLaunchArgs(args), {
-    cwd: __dirname,
-    detached: true,
-    env: {
-      ...process.env,
-      ...env,
-    },
-    stdio: "ignore",
-  });
-  child.unref();
-  return child.pid;
+function spawnDetachedApp(args = [], env = {}, label = "Butler helper process") {
+  try {
+    const child = spawn(process.execPath, appLaunchArgs(args), {
+      cwd: __dirname,
+      detached: true,
+      env: {
+        ...process.env,
+        ...env,
+      },
+      stdio: "ignore",
+    });
+    child.once("error", (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`${label} launch failed: ${message}`);
+    });
+    child.once("exit", (code, signal) => {
+      if (code === 0 || code === null) return;
+      console.warn(`${label} exited before handoff: code=${code} signal=${signal ?? "none"}`);
+    });
+    child.unref();
+    if (!Number.isFinite(child.pid)) {
+      console.warn(`${label} launched without a child pid`);
+      return null;
+    }
+    return child.pid;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`${label} launch failed: ${message}`);
+    return null;
+  }
+}
+
+function scheduleMenuBarHelperLaunchCheck() {
+  const timer = setTimeout(() => {
+    const helperPid = readPidFile(menuBarHelperPidFile);
+    if (helperPid) return;
+    menuBarHelperLaunchAttempted = false;
+    console.warn("Butler menu bar helper did not publish a pid after launch");
+  }, menuBarHelperHandoffCheckDelayMs);
+  timer.unref?.();
+}
+
+function scheduleMenuBarHelperQuitCheck() {
+  const timer = setTimeout(() => {
+    const helperPid = readPidFile(menuBarHelperPidFile);
+    if (!helperPid) return;
+    console.warn(`Butler menu bar helper did not clear pid after quit signal: pid=${helperPid}`);
+  }, menuBarHelperHandoffCheckDelayMs);
+  timer.unref?.();
 }
 
 function ensurePersistentMenuBarHelper() {
-  if (!nativeShellPreferences.trayEnabled) return;
-  if (!isPersistentMenuBarHelperSupported()) return;
-  const existingPid = readPidFile(menuBarHelperPidFile);
-  if (existingPid && pidIsRunning(existingPid)) return;
+  if (!shouldLaunchPersistentMenuBarHelper({
+    trayEnabled: nativeShellPreferences.trayEnabled,
+    persistentHelperSupported: isPersistentMenuBarHelperSupported(),
+    launchAttempted: menuBarHelperLaunchAttempted,
+  })) {
+    return;
+  }
+  menuBarHelperLaunchAttempted = true;
   mkdirSync(dirname(menuBarHelperPidFile), { recursive: true, mode: 0o700 });
-  spawnDetachedApp([MENU_BAR_HELPER_ARG], {
+  const pid = spawnDetachedApp([MENU_BAR_HELPER_ARG], {
     BUTLER_APP_MENU_BAR_HELPER: "1",
-  });
+  }, "Butler menu bar helper");
+  if (!pid) menuBarHelperLaunchAttempted = false;
+  else scheduleMenuBarHelperLaunchCheck();
 }
 
 function signalPersistentMenuBarHelperToQuit() {
   if (!isPersistentMenuBarHelperSupported()) return;
-  spawnDetachedApp([QUIT_MENU_BAR_HELPER_ARG], {});
+  menuBarHelperLaunchAttempted = false;
+  const pid = spawnDetachedApp(
+    [QUIT_MENU_BAR_HELPER_ARG],
+    {},
+    "Butler menu bar helper quit signal",
+  );
+  if (pid) scheduleMenuBarHelperQuitCheck();
 }
 
 function writeMenuBarHelperPid() {
@@ -949,7 +992,7 @@ function removeMenuBarHelperPid() {
 function launchMainUi(args = []) {
   spawnDetachedApp(args, {
     BUTLER_APP_MENU_BAR_HELPER: "",
-  });
+  }, "Butler main UI");
 }
 
 async function readAppData(path) {

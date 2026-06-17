@@ -31,6 +31,16 @@ export function persistentMenuBarHelperSupported({
   return platform === "darwin" && isPackaged === true;
 }
 
+export function shouldLaunchPersistentMenuBarHelper({
+  trayEnabled = true,
+  persistentHelperSupported = false,
+  launchAttempted = false,
+} = {}) {
+  return trayEnabled === true &&
+    persistentHelperSupported === true &&
+    launchAttempted !== true;
+}
+
 export function mainProcessOwnsTray({
   trayEnabled = true,
   helperMode = false,
