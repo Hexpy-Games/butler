@@ -104,7 +104,14 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
       stop: ["butler", "stop"],
       doctor: ["butler", "doctor"],
     },
+    desktopCompanion: {
+      defaultMode: "headless",
+      autoRegister: false,
+      optInCommand: null,
+    },
   });
+  expect(JSON.stringify(manifest)).not.toContain("--butler-menu-bar-helper");
+  expect(JSON.stringify(manifest)).not.toContain("app-desktop-helper");
   expect(manifest.artifacts[0]).toMatchObject({
     product: "butler-agent",
     canonicalComponent: "agent",
@@ -197,6 +204,20 @@ test("app release manifest exposes app package files only", () => {
       rawTemplateIncluded: false,
       rawTextIncluded: false,
     },
+    desktopHelper: {
+      schema: "butler.app-desktop-helper.v1",
+      product: "butler-app",
+      owner: "butler-app",
+      helperMode: "same-app-menu-bar-helper",
+      defaultEnabled: true,
+      survivesMainUiQuit: true,
+      stopsAgentOnHelperQuit: false,
+      launchArgument: "--butler-menu-bar-helper",
+      quitMainUiArgument: "--butler-quit-main-ui",
+      quitHelperArgument: "--butler-quit-menu-bar-helper",
+      platforms: ["darwin", "linux"],
+      rawTextIncluded: false,
+    },
     backgroundServiceCapability: {
       schema: "butler.app-background-service-capability.v1",
       serviceCapable: true,
@@ -254,6 +275,12 @@ test("app release manifest exposes app package files only", () => {
         { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
       ],
     },
+    desktopHelper: {
+      helperMode: "same-app-menu-bar-helper",
+      survivesMainUiQuit: true,
+      stopsAgentOnHelperQuit: false,
+      platforms: ["darwin", "linux"],
+    },
     bundledAgentPayload: {
       product: "butler-agent",
       profile: "agent-standalone",
@@ -304,6 +331,12 @@ test("app release manifest exposes app package files only", () => {
       packageArtifacts: [
         { packageFormat: "pkg", selectedV1Path: "macos-pkg-launch-agent" },
       ],
+    },
+    desktopHelper: {
+      helperMode: "same-app-menu-bar-helper",
+      platforms: ["darwin"],
+      survivesMainUiQuit: true,
+      stopsAgentOnHelperQuit: false,
     },
     bundledAgentPayload: {
       product: "butler-agent",
@@ -600,11 +633,13 @@ test("release manifest validation rejects missing two-product schema fields", ()
   brokenApp.bundledAgentPayload = undefined as any;
   brokenApp.backgroundServiceCapability = undefined as any;
   brokenApp.serviceInstallerBundle = undefined as any;
+  brokenApp.desktopHelper = undefined as any;
   brokenApp.protocolCompatibility = undefined as any;
   brokenApp.components = brokenApp.components.map((component) => ({
     ...component,
     backgroundServiceCapability: undefined as any,
     serviceInstallerBundle: undefined as any,
+    desktopHelper: undefined as any,
   }));
   brokenApp.artifacts = brokenApp.artifacts.map((artifact) => ({
     ...artifact,
@@ -613,6 +648,7 @@ test("release manifest validation rejects missing two-product schema fields", ()
     bundledAgentPayload: undefined as any,
     backgroundServiceCapability: undefined as any,
     serviceInstallerBundle: undefined as any,
+    desktopHelper: undefined as any,
     integrity: undefined as any,
     activationPolicy: "in-place" as any,
   }));
@@ -626,14 +662,17 @@ test("release manifest validation rejects missing two-product schema fields", ()
       "app release bundled Agent payload metadata is required",
       "app release background service capability metadata is required",
       "app release service installer bundle metadata is required",
+      "app release desktop helper metadata is required",
       "component app background service capability metadata is required",
       "component app service installer bundle metadata is required",
+      "component app desktop helper metadata is required",
       "artifact app product must be butler-app",
       "artifact app gateway profile must be electron",
       "artifact app bundled agent version mismatch",
       "artifact app bundled Agent payload metadata is required",
       "artifact app background service capability metadata is required",
       "artifact app service installer bundle metadata is required",
+      "artifact app desktop helper metadata is required",
       "artifact app integrity metadata is required",
       "artifact app activation policy must be platform-app-update-then-versioned-app-runtime",
     ]),
@@ -1157,6 +1196,18 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
         manager: "systemd-user",
         unit: "butler.service",
         serviceFile: "/usr/lib/systemd/user/butler.service",
+      },
+      desktopHelper: {
+        schema: "butler.app-desktop-helper.v1",
+        helperMode: "same-app-menu-bar-helper",
+        defaultEnabled: true,
+        survivesMainUiQuit: true,
+        stopsAgentOnHelperQuit: false,
+        launchArgument: "--butler-menu-bar-helper",
+        quitMainUiArgument: "--butler-quit-main-ui",
+        quitHelperArgument: "--butler-quit-menu-bar-helper",
+        platforms: ["linux"],
+        rawTextIncluded: false,
       },
       requiredEnvironment: [
         "BUTLER_HOME",

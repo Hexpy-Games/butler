@@ -67,3 +67,15 @@ test("tray Agent status labels stay coarse and path-free", () => {
     service_available: true,
   }))).not.toContain("/Users");
 });
+
+test("tray Agent menu stays source-agnostic for helper-owned Agent actions", () => {
+  const menu = createTrayAgentMenuModel({
+    status: "ready",
+    service_available: true,
+  });
+  expect(menu).toMatchObject({
+    label: "Butler Agent: Running",
+    canStop: true,
+    canRestart: true,
+  });
+});

@@ -1,0 +1,117 @@
+import { expect, test } from "bun:test";
+import {
+  MENU_BAR_HELPER_ARG,
+  NEW_CHAT_ARG,
+  OPEN_SESSION_ARG_PREFIX,
+  QUIT_MAIN_UI_ARG,
+  QUIT_MENU_BAR_HELPER_ARG,
+  argsForNavigationRequest,
+  helperLifecycleAction,
+  helperProcessOwnsTray,
+  isMenuBarHelperMode,
+  isQuitMainUiSignalMode,
+  isQuitMenuBarHelperSignalMode,
+  mainProcessOwnsTray,
+  navigationRequestFromArgs,
+  persistentMenuBarHelperSupported,
+} from "../../packages/butler-app/client/electron/menu-bar-helper-lifecycle.mjs";
+
+test("packaged macOS App uses a persistent menu bar helper by default", () => {
+  expect(persistentMenuBarHelperSupported({
+    platform: "darwin",
+    isPackaged: true,
+    env: {},
+  })).toBe(true);
+  expect(persistentMenuBarHelperSupported({
+    platform: "linux",
+    isPackaged: true,
+    env: {},
+  })).toBe(false);
+  expect(persistentMenuBarHelperSupported({
+    platform: "darwin",
+    isPackaged: false,
+    env: {},
+  })).toBe(false);
+  expect(persistentMenuBarHelperSupported({
+    platform: "linux",
+    isPackaged: false,
+    env: { BUTLER_APP_FORCE_PERSISTENT_MENU_BAR_HELPER: "1" },
+  })).toBe(true);
+});
+
+test("main process and helper process have distinct tray ownership", () => {
+  expect(mainProcessOwnsTray({
+    trayEnabled: true,
+    helperMode: false,
+    persistentHelperSupported: false,
+  })).toBe(true);
+  expect(mainProcessOwnsTray({
+    trayEnabled: true,
+    helperMode: false,
+    persistentHelperSupported: true,
+  })).toBe(false);
+  expect(helperProcessOwnsTray({
+    trayEnabled: true,
+    helperMode: true,
+  })).toBe(true);
+  expect(helperProcessOwnsTray({
+    trayEnabled: false,
+    helperMode: true,
+  })).toBe(false);
+});
+
+test("helper lifecycle actions keep UI helper and Agent stop separate", () => {
+  expect(helperLifecycleAction("close-window")).toEqual({
+    quitsMainUi: false,
+    quitsHelper: false,
+    stopsAgent: false,
+  });
+  expect(helperLifecycleAction("quit-main-ui")).toEqual({
+    quitsMainUi: true,
+    quitsHelper: false,
+    stopsAgent: false,
+  });
+  expect(helperLifecycleAction("quit-helper")).toEqual({
+    quitsMainUi: false,
+    quitsHelper: true,
+    stopsAgent: false,
+  });
+  expect(helperLifecycleAction("stop-agent")).toEqual({
+    quitsMainUi: false,
+    quitsHelper: false,
+    stopsAgent: true,
+  });
+});
+
+test("helper and quit signal flags are explicit", () => {
+  expect(isMenuBarHelperMode({
+    argv: [MENU_BAR_HELPER_ARG],
+    env: {},
+  })).toBe(true);
+  expect(isMenuBarHelperMode({
+    argv: [],
+    env: { BUTLER_APP_MENU_BAR_HELPER: "1" },
+  })).toBe(true);
+  expect(isQuitMainUiSignalMode({ argv: [QUIT_MAIN_UI_ARG] })).toBe(true);
+  expect(isQuitMenuBarHelperSignalMode({
+    argv: [QUIT_MENU_BAR_HELPER_ARG],
+  })).toBe(true);
+});
+
+test("helper navigation requests round-trip through process args", () => {
+  expect(argsForNavigationRequest({ action: "new-chat" })).toEqual([
+    NEW_CHAT_ARG,
+  ]);
+  expect(navigationRequestFromArgs([NEW_CHAT_ARG])).toEqual({
+    action: "new-chat",
+  });
+  const openSessionArg = `${OPEN_SESSION_ARG_PREFIX}session-1`;
+  expect(argsForNavigationRequest({
+    action: "open-session",
+    sessionId: "session-1",
+  })).toEqual([openSessionArg]);
+  expect(navigationRequestFromArgs([openSessionArg])).toEqual({
+    action: "open-session",
+    sessionId: "session-1",
+  });
+});

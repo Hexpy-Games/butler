@@ -996,14 +996,30 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("createAppAgentNativeServiceBridge");
   expect(electronMain).toContain("createAppAgentServiceAdapter");
   expect(electronMain).toContain("adapter: appAgentServiceAdapter");
+  expect(electronMain).toContain("MENU_BAR_HELPER_ARG");
+  expect(electronMain).toContain("QUIT_MAIN_UI_ARG");
+  expect(electronMain).toContain("QUIT_MENU_BAR_HELPER_ARG");
+  expect(electronMain).toContain("persistentMenuBarHelperSupported");
+  expect(electronMain).toContain("mainProcessOwnsTray");
+  expect(electronMain).toContain("helperProcessOwnsTray");
+  expect(electronMain).toContain("ensurePersistentMenuBarHelper");
   expect(electronMain).toContain("runTrayAgentServiceAction");
   expect(electronMain).toContain("Start Butler Agent");
   expect(electronMain).toContain("Restart Butler Agent");
   expect(electronMain).toContain("Stop Butler Agent");
   expect(electronMain).toContain("Quit Butler UI");
-  expect(electronMain).toContain('agentServiceControl.startAgentService({ source: "tray" })');
-  expect(electronMain).toContain('agentServiceControl.stopAgentService({ source: "tray" })');
-  expect(electronMain).toContain('agentServiceControl.restartAgentService({ source: "tray" })');
+  expect(electronMain).toContain("Quit Menu Bar Helper");
+  expect(electronMain).toContain("menu-bar-helper");
+  expect(electronMain).toContain("trayActionSource()");
+  expect(electronMain).toContain(
+    "agentServiceControl.startAgentService({ source: trayActionSource() })",
+  );
+  expect(electronMain).toContain(
+    "agentServiceControl.stopAgentService({ source: trayActionSource() })",
+  );
+  expect(electronMain).toContain(
+    "agentServiceControl.restartAgentService({ source: trayActionSource() })",
+  );
   expect(electronMain).toContain(
     'const trayIconLightThemePath = resolve(__dirname, "assets/butler-mark-flat.png")',
   );
