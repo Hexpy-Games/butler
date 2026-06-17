@@ -277,53 +277,71 @@ Validation:
 - `bun test tests/unit/app-client-design.test.ts --test-name-pattern "desktop native shell supports notifications tray and cross-platform titlebar reserves|dedicated client sidebar collapse keeps a normal clickable titlebar toggle|electron shell uses native macOS corners"`
 - Packaged Ubuntu ARM64 `.deb` smoke screenshot
 
-## Phase 4: Tray/Menu Bar Service Controller
+## Phase 4: Persistent Menu Bar Helper
 
-Goal: make the tray/menu bar represent background service state.
+Goal: make the App-owned menu bar/tray icon represent background service state
+without depending on the lifetime of the main App UI process.
 
 Tasks:
 
-1. Add service status polling/subscription in Electron main.
-2. Add tray states:
+1. Split the desktop status icon owner from the main App UI process:
+   - macOS: App-bundled menu bar helper or login item.
+   - Linux/Windows: tray helper plan matched to the selected packaging path.
+2. Add service status polling/subscription in the helper.
+3. Add helper states:
    - running
    - starting
    - stopped
    - updating
    - failed
-3. Add tray actions:
+4. Add helper actions:
    - Open Butler
    - Restart Butler Agent
    - Stop Butler Agent
    - Start Butler Agent
    - Quit Butler UI
-4. Ensure Quit UI does not stop the service by default.
-5. Add tests around `before-quit`, tray action handlers, and service calls.
+   - Quit Menu Bar Helper
+5. Ensure Quit UI does not stop the service or terminate the helper by default.
+6. Ensure Quit Menu Bar Helper does not stop the service by default.
+7. Keep standalone Agent installs headless by default; design any standalone tray
+   companion as an explicit opt-in package or command.
+8. Add tests around UI quit, helper quit, helper action handlers, service calls,
+   and standalone headless install defaults.
 
 Primary files:
 
 - `packages/butler-app/client/electron/main.mjs`
+- new App helper entrypoint/package files
+- App installer/helper registration resources
 - `tests/unit/app-client-design.test.ts`
 - new Electron service controller tests
 
 Acceptance:
 
 - Closing the window leaves service online.
-- Quitting UI leaves service online.
+- Quitting UI leaves service and helper online.
+- Quitting helper removes the icon/helper but leaves service online.
 - Explicit Stop Agent stops the service process group.
-- Tray state reflects diagnostics after failure.
+- Helper state reflects diagnostics after failure.
+- macOS packaged App behaves like a persistent desktop product: the Agent process
+  and menu bar icon remain after the main UI is quit.
+- Standalone Agent install does not show a tray/menu icon unless the operator
+  explicitly installs the optional desktop companion.
 
 Implemented surface:
 
-- The tray/menu bar reads Agent status through Electron main service-control.
-- The tray/menu bar exposes Open Butler, Start Butler Agent, Restart Butler
-  Agent, Stop Butler Agent, and Quit Butler UI.
-- Quit Butler UI exits the Electron UI/tray process only. It does not call the
-  Agent service stop action.
+- Current implementation is incomplete for the target contract: the menu bar icon
+  is owned by the main Electron process, so it disappears when the App UI quits.
+  This phase must replace that behavior with a persistent helper.
 
 Validation:
 
 - `bun test tests/unit/app-agent-tray-menu.test.ts`
 - `bun test tests/unit/app-client-design.test.ts -t "desktop native shell|electron shell owns"`
+- packaged macOS helper lifecycle smoke: quit UI, verify helper icon and Agent
+  service remain online
+- standalone Agent install smoke: verify no tray/menu helper is installed by
+  default
 
 ## Phase 5: App Update, Restart, And Rollback
 
@@ -496,15 +514,19 @@ Tasks:
 
 1. E2E: first-run installs service and reaches workspace.
 2. E2E: close window, service remains online.
-3. E2E: quit UI, service remains online.
-4. E2E: Stop Agent terminates process group.
-5. E2E: update Agent runtime restarts process group.
-6. E2E: failed update rolls back.
+3. E2E: quit UI, service and menu bar helper remain online.
+4. E2E: quit menu bar helper, service remains online.
+5. E2E: Stop Agent terminates process group.
+6. E2E: standalone Agent install remains headless by default.
+7. E2E: update Agent runtime restarts process group.
+8. E2E: failed update rolls back.
 
 Acceptance:
 
 - No production App path relies on an Electron-owned Agent child process.
 - Background consolidation can continue while the UI is closed.
+- The App-owned menu bar helper remains available after the main UI exits.
+- Standalone Agent installs do not create desktop UI by default.
 - Service diagnostics are available when the UI is reopened.
 
 Implemented surface:
@@ -524,7 +546,10 @@ Remaining:
   artifacts that register actual user services.
 - Real installer-from-package E2E on macOS/Linux against production-style
   signed/notarized App artifacts.
-- Real close-window and quit-UI persistence E2E against an OS-managed service.
+- Real close-window, quit-UI, and quit-helper persistence E2E against an
+  OS-managed service.
+- Real standalone headless install E2E proving no tray/menu helper is installed
+  by default.
 - Real Stop Agent process-group termination E2E.
 - Real app update restart/rollback E2E with previous and next packaged
   runtimes.
@@ -535,7 +560,7 @@ Remaining:
 2. Phase 1 App-managed service specs.
 3. Phase 2 service-control bridge.
 4. Phase 3 first-run service setup.
-5. Phase 4 tray/menu controller.
+5. Phase 4 persistent menu bar helper.
 6. Phase 5 update/restart/rollback.
 7. Phase 6 installer packaging.
 8. Phase 7 cross-platform E2E.

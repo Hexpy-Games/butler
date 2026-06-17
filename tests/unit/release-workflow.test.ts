@@ -273,6 +273,7 @@ test("manual app install test environment installs an isolated test pkg", () => 
   expect(script).toContain("BUTLER_APP_ALLOW_NATIVE_SERVICE_TEST_ENV");
   expect(script).toContain("BUTLER_APP_SERVICE_LABEL: serviceLabel");
   expect(script).toContain("BUTLER_APP_SYSTEMD_UNIT: systemdUnit");
+  expect(script).toContain("BUTLER_APP_ELECTRON_USER_DATA_DIR: electronProfileDir");
   expect(script).toContain("Refusing to use the production LaunchAgent label");
   expect(script).toContain("Refusing to use the production systemd unit");
   expect(script).toContain("Refusing to use the production app-server port");
@@ -284,6 +285,7 @@ test("manual app install test environment installs an isolated test pkg", () => 
   expect(script).toContain("--user-data-dir=${electronProfileDir}");
   expect(distributionSpec).toContain("Manual installer testing must not install the production App package");
   expect(distributionSpec).toContain("Cleanup must remove the");
+  expect(distributionSpec).toContain("isolated Electron profile instead of falling back");
 });
 
 test("manual app install test environment validates isolation guards", () => {

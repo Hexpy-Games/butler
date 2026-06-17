@@ -996,14 +996,47 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("createAppAgentNativeServiceBridge");
   expect(electronMain).toContain("createAppAgentServiceAdapter");
   expect(electronMain).toContain("adapter: appAgentServiceAdapter");
+  expect(electronMain).toContain("MENU_BAR_HELPER_ARG");
+  expect(electronMain).toContain("QUIT_MAIN_UI_ARG");
+  expect(electronMain).toContain("QUIT_MENU_BAR_HELPER_ARG");
+  expect(electronMain).toContain("persistentMenuBarHelperSupported");
+  expect(electronMain).toContain("shouldLaunchPersistentMenuBarHelper");
+  expect(electronMain).toContain("BUTLER_APP_ELECTRON_USER_DATA_DIR");
+  expect(electronMain).toContain('app.setPath("userData", explicitElectronUserDataDir)');
+  expect(electronMain).toContain("function appLaunchCwd()");
+  expect(electronMain).toContain("app.isPackaged ? dirname(process.execPath) : __dirname");
+  expect(electronMain).toContain("mainProcessOwnsTray");
+  expect(electronMain).toContain("helperProcessOwnsTray");
+  expect(electronMain).toContain("ensurePersistentMenuBarHelper");
+  expect(electronMain).toContain("launch failed");
+  expect(electronMain).toContain("exited before handoff");
+  expect(electronMain).toContain("did not publish a pid after launch");
+  expect(electronMain).toContain("did not clear pid after quit signal");
+  expect(electronMain).toContain("signalProcessHardExitDelayMs");
+  expect(electronMain).toContain("scheduleSignalProcessHardExit");
   expect(electronMain).toContain("runTrayAgentServiceAction");
   expect(electronMain).toContain("Start Butler Agent");
   expect(electronMain).toContain("Restart Butler Agent");
   expect(electronMain).toContain("Stop Butler Agent");
   expect(electronMain).toContain("Quit Butler UI");
-  expect(electronMain).toContain('agentServiceControl.startAgentService({ source: "tray" })');
-  expect(electronMain).toContain('agentServiceControl.stopAgentService({ source: "tray" })');
-  expect(electronMain).toContain('agentServiceControl.restartAgentService({ source: "tray" })');
+  expect(electronMain).toContain("Quit Menu Bar Helper");
+  expect(electronMain).toContain("process.exit(0)");
+  expect(electronMain).not.toContain('tray.on("click"');
+  expect(electronMain).not.toContain("openButlerFromTray();\n    });");
+  expect(electronMain).toContain("function activateButlerApp()");
+  expect(electronMain).toContain("if (isMenuBarHelperProcess) {\n    openButlerFromTray();");
+  expect(electronMain).toContain('app.on("activate", activateButlerApp)');
+  expect(electronMain).toContain("menu-bar-helper");
+  expect(electronMain).toContain("trayActionSource()");
+  expect(electronMain).toContain(
+    "agentServiceControl.startAgentService({ source: trayActionSource() })",
+  );
+  expect(electronMain).toContain(
+    "agentServiceControl.stopAgentService({ source: trayActionSource() })",
+  );
+  expect(electronMain).toContain(
+    "agentServiceControl.restartAgentService({ source: trayActionSource() })",
+  );
   expect(electronMain).toContain(
     'const trayIconLightThemePath = resolve(__dirname, "assets/butler-mark-flat.png")',
   );

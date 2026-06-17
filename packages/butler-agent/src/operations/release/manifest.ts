@@ -17,6 +17,12 @@ export type ReleaseRollbackPolicy = "preserve-previous-standalone-runtime";
 export type ReleaseOperatorCommand = "init" | "start" | "status" | "stop" | "doctor";
 export type ReleaseOperatorCommandMap = Record<ReleaseOperatorCommand, string[]>;
 
+export interface ReleaseDesktopCompanionPolicy {
+  defaultMode: "headless";
+  autoRegister: false;
+  optInCommand: string | null;
+}
+
 export interface ReleaseProtocolCompatibility {
   protocol: "butler.agent.v1";
   minimumAgentProtocol: "butler.agent.v1";
@@ -77,6 +83,7 @@ export interface ReleaseComponent {
   artifactLayout: AgentArtifactLayout;
   operatorCommands: ReleaseOperatorCommand[];
   operatorCommandMap: ReleaseOperatorCommandMap;
+  desktopCompanion: ReleaseDesktopCompanionPolicy;
 }
 
 export interface ReleaseArtifact {
@@ -124,6 +131,7 @@ export interface ReleaseManifest {
   agentArtifactLayout: AgentArtifactLayout;
   operatorCommands: ReleaseOperatorCommand[];
   operatorCommandMap: ReleaseOperatorCommandMap;
+  desktopCompanion: ReleaseDesktopCompanionPolicy;
 }
 
 export interface ComponentVersions {
@@ -157,6 +165,11 @@ const AGENT_OPERATOR_COMMAND_MAP: ReleaseOperatorCommandMap = {
   status: ["butler", "status"],
   stop: ["butler", "stop"],
   doctor: ["butler", "doctor"],
+};
+const AGENT_DESKTOP_COMPANION_POLICY: ReleaseDesktopCompanionPolicy = {
+  defaultMode: "headless",
+  autoRegister: false,
+  optInCommand: null,
 };
 
 function readJson(path: string): Record<string, any> {
@@ -239,6 +252,7 @@ export function createReleaseManifest(root: string): ReleaseManifest {
     artifactLayout: AGENT_ARTIFACT_LAYOUT,
     operatorCommands: AGENT_OPERATOR_COMMANDS,
     operatorCommandMap: AGENT_OPERATOR_COMMAND_MAP,
+    desktopCompanion: AGENT_DESKTOP_COMPANION_POLICY,
   }];
   return {
     name: String(pkg.name ?? ""),
@@ -293,6 +307,7 @@ export function createReleaseManifest(root: string): ReleaseManifest {
     agentArtifactLayout: AGENT_ARTIFACT_LAYOUT,
     operatorCommands: AGENT_OPERATOR_COMMANDS,
     operatorCommandMap: AGENT_OPERATOR_COMMAND_MAP,
+    desktopCompanion: AGENT_DESKTOP_COMPANION_POLICY,
   };
 }
 
@@ -337,9 +352,30 @@ export function validateReleaseManifest(
   validateAgentArtifactLayout(root, "release", manifest.agentArtifactLayout, issues);
   validateOperatorCommands("release", manifest.operatorCommands, issues);
   validateOperatorCommandMap("release", manifest.operatorCommandMap, issues);
+  validateDesktopCompanionPolicy("release", manifest.desktopCompanion, issues);
   validateComponents(root, manifest, versions, issues);
   validateArtifacts(manifest, issues);
   return issues;
+}
+
+function validateDesktopCompanionPolicy(
+  label: string,
+  policy: ReleaseDesktopCompanionPolicy | undefined,
+  issues: string[],
+): void {
+  if (!policy) {
+    issues.push(`${label} desktop companion policy is required`);
+    return;
+  }
+  if (policy.defaultMode !== "headless") {
+    issues.push(`${label} desktop companion default must be headless`);
+  }
+  if (policy.autoRegister !== false) {
+    issues.push(`${label} desktop companion must not auto-register`);
+  }
+  if (policy.optInCommand !== null && typeof policy.optInCommand !== "string") {
+    issues.push(`${label} desktop companion opt-in command must be null or string`);
+  }
 }
 
 export function serviceCliLauncherRelativePath(
@@ -423,6 +459,11 @@ function validateComponents(
     validateAgentArtifactLayout(root, `component ${component.id}`, component.artifactLayout, issues);
     validateOperatorCommands(`component ${component.id}`, component.operatorCommands, issues);
     validateOperatorCommandMap(`component ${component.id}`, component.operatorCommandMap, issues);
+    validateDesktopCompanionPolicy(
+      `component ${component.id}`,
+      component.desktopCompanion,
+      issues,
+    );
     validateRequiredFiles(root, component.requiredFiles, issues);
     validateNoAppInternals(component.requiredFiles, issues);
     validatePrivatePatterns(root, component.privateDataPatterns, issues);
