@@ -41,6 +41,10 @@ Agent process.
   protocol directly and must not spawn an Electron-owned child gateway as a
   fallback.
 - The installation step uses the title `Butler Agent를 준비합니다`.
+- If the App restarts while the installation step was in progress, persisted
+  `install_status: "checking"` may be normalized back to `idle`, but the install
+  step must immediately restart readiness checks. The install step must never
+  render a blank body with no status text or recovery action.
 - The model step must reuse the App settings model-management modules instead
   of implementing a separate one-off model picker.
 - The model step opens directly on the App model-add route.

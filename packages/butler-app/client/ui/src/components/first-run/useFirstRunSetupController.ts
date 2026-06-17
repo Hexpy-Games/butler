@@ -42,7 +42,12 @@ export function useFirstRunSetupController(
   }, [language, state]);
 
   useEffect(() => {
-    if (step !== "install" || state.install_status !== "checking") return;
+    if (
+      step !== "install" ||
+      !["checking", "idle"].includes(state.install_status ?? "idle")
+    ) {
+      return;
+    }
     let cancelled = false;
     async function prepareAgent() {
       setError("");
