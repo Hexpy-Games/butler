@@ -1184,6 +1184,50 @@ test("session view hydration preserves active worker activity from stale snapsho
   );
 });
 
+test("session view hydration drops preserved worker activity once the incoming turn is terminal", () => {
+  useButlerStore.setState({
+    activeChatId: "session-a",
+    summary: {
+      session_id: "session-a",
+      turn_state: "running",
+      latest_progress: {
+        turn_id: "turn-a",
+        state: "running",
+        safe_progress_rows: [],
+      },
+      worker_activity: [
+        {
+          worker_id: "worker-live",
+          activity_kind: "worker",
+          worker_label: "Worker 1",
+          worker_display_name: "Ari",
+          objective: "조사",
+          phase: "executing",
+          status_line: "Executing",
+          terminal: false,
+          updated_at: "2026-05-16T00:00:02.000Z",
+          supported_controls: ["cancel"],
+        },
+      ],
+    },
+  });
+
+  useButlerStore.getState().setSessionView(
+    sessionView("session-a", {
+      messages: [],
+      turnState: "delivered",
+      latestProgress: {
+        turn_id: "turn-a",
+        state: "delivered",
+        safe_progress_rows: [],
+      },
+      workers: [],
+    }),
+  );
+
+  expect(useButlerStore.getState().summary?.worker_activity).toEqual([]);
+});
+
 test("message list hydration preserves existing turn progress when server delta is partial", () => {
   const turnProgress: Record<string, TurnProgressSnapshot> = {
     "turn-a": {

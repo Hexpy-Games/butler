@@ -2238,12 +2238,18 @@ export function isPlannedWorkerActivity(
 }
 
 export function workerActivityDisplayName(worker: WorkerActivitySummary): string {
+  const ordinal = worker.worker_ordinal_label?.trim();
+  const label = worker.worker_label.trim();
   return (
     worker.worker_display_name?.trim() ||
-    worker.worker_label.trim() ||
-    worker.worker_ordinal_label?.trim() ||
+    (isGenericWorkerLabel(label) ? ordinal : label) ||
+    ordinal ||
     "Worker"
   );
+}
+
+function isGenericWorkerLabel(label: string): boolean {
+  return /^worker$/iu.test(label);
 }
 
 export function groupWorkerActivities(
