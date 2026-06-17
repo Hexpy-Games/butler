@@ -150,6 +150,7 @@ test("App-managed native service manifest resolves from active runtime pointer",
       butlerData,
       localAuthFile,
     }, {
+      appVersion: "2.3.4",
       gatewayPort: 19123,
       createProjectFolderTokenSecret: false,
     });
@@ -199,6 +200,7 @@ test("App-managed native service manifest resolves from active runtime pointer",
       BUTLER_APP_GATEWAY_PID_FILE: "off",
       BUTLER_APP_LOCAL_AUTH_REQUIRED: "1",
       BUTLER_APP_LOCAL_AUTH_FILE: localAuthFile,
+      BUTLER_APP_VERSION: "2.3.4",
     });
     expect(APP_BACKGROUND_SERVICE_RUNTIME_FIELDS.every((field) => field in (appGateway?.env ?? {})))
       .toBe(true);

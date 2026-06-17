@@ -75,6 +75,7 @@ test("App Agent native service bridge can isolate launchd service label for test
       homeDir: "/Users/alice",
       serviceLabel: "com.hexpy.butler.test.local",
       getPort: () => 19124,
+      getAppVersion: () => "2.3.4",
       prepareLocalAuth: () => ({
         filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
       }),
@@ -86,16 +87,26 @@ test("App Agent native service bridge can isolate launchd service label for test
     });
 
     await bridge.registration.install();
+    await bridge.nativeServices.start();
 
     expect(writes[0]?.path).toBe(
       "/Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist",
     );
     expect(writes[0]?.body).toContain("<string>com.hexpy.butler.test.local</string>");
+    expect(writes[0]?.body).toContain("<key>BUTLER_APP_VERSION</key>");
+    expect(writes[0]?.body).toContain("<string>2.3.4</string>");
+    expect(writes[1]?.body).toContain("<key>BUTLER_APP_VERSION</key>");
+    expect(writes[1]?.body).toContain("<string>2.3.4</string>");
     expect(commands[0]).toContain("/com.hexpy.butler.test.local");
     expect(commands[1]).toContain(
       "/Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist",
     );
     expect(commands[2]).toContain("/com.hexpy.butler.test.local");
+    expect(commands[3]).toContain("/com.hexpy.butler.test.local");
+    expect(commands[4]).toContain(
+      "/Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist",
+    );
+    expect(commands[5]).toContain("/com.hexpy.butler.test.local");
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
@@ -290,10 +301,12 @@ test("App Agent native service bridge installs systemd service with escaped env"
     expect(writes[0]?.body).toContain('Environment=EMBED_SOCKET="');
     expect(writes[0]?.body).toContain('/app/runtime/embed/embed.sock"');
     expect(writes[0]?.body).toContain('Environment=EMBED_HEALTH_PORT="0"');
+    expect(writes[1]?.body).toContain('Environment=BUTLER_APP_SERVER_PORT="19123"');
     expect(commands).toEqual([
       "systemctl --user daemon-reload",
       "systemctl --user enable --now butler.service",
       "systemctl --user stop butler.service",
+      "systemctl --user daemon-reload",
       "systemctl --user start butler.service",
     ]);
   } finally {
@@ -314,6 +327,7 @@ test("App Agent native service bridge can isolate systemd unit for tests", async
       homeDir: "/home/alice",
       systemdUnit: "butler-test-local.service",
       getPort: () => 19124,
+      getAppVersion: () => "2.3.4",
       prepareLocalAuth: () => ({
         filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
       }),
@@ -329,10 +343,14 @@ test("App Agent native service bridge can isolate systemd unit for tests", async
     await bridge.nativeServices.start();
 
     expect(writes[0]?.path).toBe("/home/alice/.config/systemd/user/butler-test-local.service");
+    expect(writes[0]?.body).toContain('Environment=BUTLER_APP_VERSION="2.3.4"');
+    expect(writes[1]?.path).toBe("/home/alice/.config/systemd/user/butler-test-local.service");
+    expect(writes[1]?.body).toContain('Environment=BUTLER_APP_VERSION="2.3.4"');
     expect(commands).toEqual([
       "systemctl --user daemon-reload",
       "systemctl --user enable --now butler-test-local.service",
       "systemctl --user stop butler-test-local.service",
+      "systemctl --user daemon-reload",
       "systemctl --user start butler-test-local.service",
     ]);
   } finally {

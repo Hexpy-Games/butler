@@ -155,6 +155,7 @@ const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
       serviceLabel: appAgentServiceLabel(),
       systemdUnit: appAgentSystemdUnit(),
       getPort: () => port,
+      getAppVersion: () => appInfoView().version,
       ensureRuntimePointer: ensureAppManagedAgentRuntimePointer,
     })
   : null;
