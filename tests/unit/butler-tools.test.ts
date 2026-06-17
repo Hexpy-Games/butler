@@ -10,6 +10,7 @@ import {
   createButlerToolExecutorRegistry,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import {
+  diagnoseButlerToolPolicy,
   selectButlerToolProfiles,
   selectButlerToolsForTurn,
   toolContractJsonChars,
@@ -261,7 +262,7 @@ test("Butler tool compatibility entrypoint does not own capability executor bodi
   expect(source).not.toContain("spawn(\"/bin/bash\"");
 });
 
-test("basic project turns expose a bounded startup and project tool profile", () => {
+test("project sessions expose bounded project tools without workspace escalation", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "Project Ledger 기준으로 상태를 확인해줘.",
@@ -285,12 +286,137 @@ test("basic project turns expose a bounded startup and project tool profile", ()
     "list_todo_list",
     "read_conversation_context",
   ]);
+  expect(names).not.toContain("run_command");
+  expect(names).not.toContain("read_tool_output_artifact");
   expect(names).not.toContain("get_weather_with_knowhow");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
   expect(names).not.toContain("create_planned_task");
   expect(names).not.toContain("create_work_orchestration");
-  expect(toolContractJsonChars(tools)).toBeLessThan(8_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(10_000);
+});
+
+test("Korean Project Ledger registration prompts require explicit workspace policy", () => {
+  const text = "그럼 이 목록들을 정리해서 다음 Feature 작업들로 등록하자. Project ledger에 등록해두고, github issue도 열어서 연결해놔. 각 phase가 work가 되고, 각 세부 구현이 task되겠지? 각 단계별로 세부적으로 스펙 작성해.";
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text,
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text,
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+  })).toEqual(expect.arrayContaining(["startup", "project", "workspace"]));
+  expect(names).toContain("inspect_project_status");
+  expect(names).toContain("run_command");
+  expect(names).toContain("read_tool_output_artifact");
+  expect(names).not.toContain("create_automation");
+  expect(names).not.toContain("call_mcp_tool");
+  expect(toolContractJsonChars(tools)).toBeLessThan(12_000);
+});
+
+test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
+  const text = "그럼 이 목록들을 정리해서 다음 Feature 작업들로 등록하자. Project ledger에 등록해두고, github issue도 열어서 연결해놔. 각 phase가 work가 되고, 각 세부 구현이 task되겠지? 각 단계별로 세부적으로 스펙 작성해.";
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text,
+    sessionMetadata: { projectId: "butler" },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text,
+    sessionMetadata: { projectId: "butler" },
+  })).not.toContain("workspace");
+  expect(names).toContain("inspect_project_status");
+  expect(names).not.toContain("run_command");
+  expect(names).not.toContain("read_tool_output_artifact");
+});
+
+test("workspace wording alone does not expose command execution without structured policy", () => {
+  const text = "코드를 수정하고 테스트를 실행해서 결과를 검증해줘.";
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text,
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text,
+  })).toEqual(["startup"]);
+  expect(names).not.toContain("run_command");
+  expect(names).not.toContain("read_tool_output_artifact");
+});
+
+test("explicit required native tool profiles expose command execution without prompt regex matching", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "이 작업을 처리해줘.",
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "이 작업을 처리해줘.",
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+  })).toEqual(["startup", "workspace"]);
+  expect(names).toContain("run_command");
+  expect(names).toContain("read_tool_output_artifact");
+});
+
+test("session-level required native tools expose command execution consistently", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "이 작업을 처리해줘.",
+    sessionMetadata: { runtimePolicy: { requiredNativeTools: ["run_command"] } },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "이 작업을 처리해줘.",
+    sessionMetadata: { runtimePolicy: { requiredNativeTools: ["run_command"] } },
+  })).toEqual(["startup", "workspace"]);
+  expect(names).toContain("run_command");
+});
+
+test("invalid required native tool profiles are diagnosable", () => {
+  expect(diagnoseButlerToolPolicy({
+    sessionMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspaec", "workspace"] } },
+    turnMetadata: { requiredNativeToolProfiles: ["github", "workspace", "github"] },
+  })).toEqual({
+    unknownRequiredNativeToolProfiles: ["workspaec", "github"],
+  });
+});
+
+test("free-form GitHub issue linkage text alone does not expand tools without project policy or metadata", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "GitHub issue를 열어서 Project Ledger task랑 연결해줘.",
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(names).toContain("inspect_project_status");
+  expect(names).not.toContain("run_command");
+});
+
+test("project write bridge selection does not depend on free-form write-intent regexes", () => {
+  const source = readFileSync(
+    join(root, "packages", "butler-agent", "src", "agent", "tools", "profiles.ts"),
+    "utf8",
+  );
+
+  expect(source).not.toContain("hasProjectManagementWriteIntent");
+  expect(source).not.toContain("ProjectManagementWriteIntent");
+  expect(source).not.toContain("등록|생성|작성|연결|링크");
 });
 
 test("Project Ledger requests without project metadata still expose project tools", () => {
@@ -1128,6 +1254,7 @@ test("tool capability discovery exposes run_command as enabled command capabilit
     butlerHome: root,
     butlerData: tempDir,
     workspacePath: tempDir,
+    currentToolNames: ["list_tool_capabilities", "inspect_project_status"],
   });
 
   const result = await execute({
@@ -1136,15 +1263,124 @@ test("tool capability discovery exposes run_command as enabled command capabilit
     rawArguments: "{}",
   }) as {
     ok: boolean;
-    capabilities: Array<{ name: string; category: string; enabled: boolean }>;
+    current_turn_surface_known: boolean;
+    capabilities: Array<{
+      name: string;
+      category: string;
+      enabled: boolean;
+      current_turn_selected: boolean | null;
+      current_turn_callable: boolean | null;
+      omitted_by_profile: boolean | null;
+      availability_scope: string;
+    }>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.current_turn_surface_known).toBe(true);
+  expect(result.capabilities).toContainEqual(expect.objectContaining({
+    name: "run_command",
+    category: "command",
+    enabled: true,
+    current_turn_selected: false,
+    current_turn_callable: false,
+    omitted_by_profile: true,
+    availability_scope: "registry",
+  }));
+});
+
+test("tool capability discovery marks tools callable when the current profile exposes them", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+    currentToolNames: ["list_tool_capabilities", "run_command", "read_tool_output_artifact"],
+  });
+
+  const result = await execute({
+    name: "list_tool_capabilities",
+    args: { category: "command" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    capabilities: Array<{
+      name: string;
+      current_turn_selected: boolean | null;
+      current_turn_callable: boolean | null;
+      omitted_by_profile: boolean | null;
+      availability_scope: string;
+    }>;
   };
 
   expect(result.ok).toBe(true);
   expect(result.capabilities).toContainEqual(expect.objectContaining({
     name: "run_command",
-    category: "command",
-    enabled: true,
+    current_turn_selected: true,
+    current_turn_callable: true,
+    omitted_by_profile: false,
+    availability_scope: "current_turn",
   }));
+});
+
+test("tool capability discovery does not mark disabled selected tools callable", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+    webSearchProvider: new DisabledWebSearchProvider("disabled for test"),
+    currentToolNames: ["list_tool_capabilities", "web_search"],
+  });
+
+  const result = await execute({
+    name: "list_tool_capabilities",
+    args: { category: "search" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    capabilities: Array<{
+      name: string;
+      enabled: boolean;
+      current_turn_selected: boolean | null;
+      current_turn_callable: boolean | null;
+      omitted_by_profile: boolean | null;
+      availability_scope: string;
+    }>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.capabilities).toContainEqual(expect.objectContaining({
+    name: "web_search",
+    enabled: false,
+    current_turn_selected: true,
+    current_turn_callable: false,
+    omitted_by_profile: false,
+    availability_scope: "registry",
+  }));
+});
+
+test("tool capability discovery rejects unknown categories instead of widening to the full registry", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+  });
+
+  const result = await execute({
+    name: "list_tool_capabilities",
+    args: { category: "github" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    error: { code: string };
+    invalid_category: string;
+    valid_categories: string[];
+    capabilities: unknown[];
+  };
+
+  expect(result.ok).toBe(false);
+  expect(result.error.code).toBe("invalid_tool_category");
+  expect(result.invalid_category).toBe("github");
+  expect(result.valid_categories).toContain("command");
+  expect(result.capabilities).toEqual([]);
 });
 
 test("automation tool schemas expose native schedule contracts", () => {

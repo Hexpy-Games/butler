@@ -48,6 +48,7 @@ async function runRuntimeFixture(input: {
   const tools: string[] = [];
   const runtime = new NativeToolLoopRuntime({
     messageLanguage: "ko",
+    disableAutomaticRecall: true,
     executeButlerTool: async (call) => {
       tools.push(call.name);
       if (input.executeTool) return input.executeTool(call);

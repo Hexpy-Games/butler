@@ -15,17 +15,26 @@ export function shouldEnforceGrounding(input: RuntimeTurnInput): boolean {
   return input.input.transport !== "system";
 }
 
+function metadataRecords(metadata: unknown): Record<string, unknown>[] {
+  const values = Array.isArray(metadata) ? metadata : [metadata];
+  return values
+    .filter((value): value is Record<string, unknown> =>
+      Boolean(value) && typeof value === "object" && !Array.isArray(value),
+    );
+}
+
 export function requiredExplicitToolNames(metadata: unknown, availableToolNames: string[]): string[] {
   const available = new Set(availableToolNames);
-  const record = metadata && typeof metadata === "object" ? metadata as Record<string, unknown> : {};
-  const runtimePolicy = record.runtimePolicy && typeof record.runtimePolicy === "object"
-    ? record.runtimePolicy as Record<string, unknown>
-    : {};
-  const raw = record.requiredNativeTools ?? record.required_tools ?? runtimePolicy.requiredNativeTools ??
-    runtimePolicy.required_tools;
-  const values = Array.isArray(raw) ? raw : [];
-  return values
-    .filter((value): value is string => typeof value === "string" && available.has(value))
+  const values = metadataRecords(metadata).flatMap((record) => {
+    const runtimePolicy = record.runtimePolicy && typeof record.runtimePolicy === "object"
+      ? record.runtimePolicy as Record<string, unknown>
+      : {};
+    const raw = record.requiredNativeTools ?? record.required_tools ?? runtimePolicy.requiredNativeTools ??
+      runtimePolicy.required_tools;
+    return Array.isArray(raw) ? raw : [];
+  });
+  return [...new Set(values
+    .filter((value): value is string => typeof value === "string" && available.has(value)))]
     .slice(0, 6);
 }
 
