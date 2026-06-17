@@ -329,11 +329,11 @@ test("current release notes describe the GitHub release changelog", () => {
 
   expect(notes).toContain(`# Butler ${currentReleaseTag}`);
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("Butler App integrated distribution path");
-  expect(notes).toContain("bundled Agent runtime");
-  expect(notes).toContain("macOS `.pkg`");
-  expect(notes).toContain("Linux `.deb` artifacts for x64 and ARM64");
-  expect(notes).toContain("first-run setup");
-  expect(notes).toContain("App release manifests");
-  expect(notes).toContain("README install guidance");
+  expect(notes).toContain("default startup tool surface");
+  expect(notes).toContain("weather tools");
+  expect(notes).toContain("agent/tools/{tool-group-name}/{tool-name}");
+  expect(notes).toContain("per-tool definition");
+  expect(notes).toContain("agent/tool-support");
+  expect(notes).toContain("run_command");
+  expect(notes).toContain("worker runtime tool behavior");
 });
