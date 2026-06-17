@@ -232,7 +232,11 @@ export class AppGatewayBridge {
       metadata: {
         source: "app-server",
         appSessionKind: input?.sessionKind ?? "chat",
-        runtimePolicy: this.runtimePolicy,
+        accessMode: input?.accessMode ?? "full_access",
+        runtimePolicy: appBridgeRuntimePolicy({
+          existing: this.runtimePolicy,
+          accessMode: input?.accessMode,
+        }),
         workerModelRules: safeWorkerModelRules(input?.workerModelRules),
       },
     });
@@ -650,6 +654,29 @@ function defaultProvider(): ModelProviderAdapter {
       });
       return { text };
     },
+  };
+}
+
+function policyStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .map((item) => item.trim())
+    : [];
+}
+
+function appBridgeRuntimePolicy(input: {
+  existing?: Record<string, unknown>;
+  accessMode?: AppMessageResponderInput["accessMode"];
+}): Record<string, unknown> | undefined {
+  const accessMode = input.accessMode ?? "full_access";
+  const existing = input.existing ?? {};
+  const requestedProfiles = policyStringArray(existing.requiredNativeToolProfiles)
+    .filter((profile) => profile !== "workspace");
+  if (accessMode !== "read_only") requestedProfiles.push("workspace");
+  return {
+    ...existing,
+    accessMode,
+    requiredNativeToolProfiles: [...new Set(requestedProfiles)],
   };
 }
 

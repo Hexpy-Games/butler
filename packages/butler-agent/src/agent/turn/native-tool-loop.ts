@@ -2133,7 +2133,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       throwIfRuntimeTurnAborted(input.signal);
       if (useTools) {
         const explicitTools = requiredExplicitToolNames(
-          input.metadata,
+          [session.init.metadata, input.metadata],
           selectButlerToolsForTurn({
             role: session.init.role,
             text: userText,

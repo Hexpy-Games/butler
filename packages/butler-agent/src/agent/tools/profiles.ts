@@ -154,21 +154,11 @@ const WORKER_FORBIDDEN_TOOL_NAMES = new Set([
 ]);
 
 const ALL_TOOL_NAMES = new Set(BUTLER_TOOLS.map((tool) => tool.name));
-const ALL_PROFILE_NAMES = new Set<ButlerToolProfile>([
-  "startup",
-  "project",
-  "workspace",
-  "public-web",
-  "memory-read",
-  "memory-write",
-  "monitoring",
-  "automation",
-  "mcp",
-  "delegation",
-  "planned-work",
-  "orchestration",
-  "artifact-data",
-]);
+const ALL_PROFILE_NAMES = new Set(Object.keys(PROFILE_TOOL_NAMES) as ButlerToolProfile[]);
+
+export interface ButlerToolPolicyDiagnostics {
+  unknownRequiredNativeToolProfiles: string[];
+}
 
 function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -196,26 +186,58 @@ function hasProjectContext(input: { sessionMetadata?: Record<string, unknown>; t
   );
 }
 
-function requiredToolNames(metadata: unknown): string[] {
+function policyArray(metadata: unknown, camelKey: string, snakeKey: string): unknown[] {
   const record = recordValue(metadata);
   const runtimePolicy = recordValue(record.runtimePolicy);
-  const raw = record.requiredNativeTools ?? record.required_tools ?? runtimePolicy.requiredNativeTools ??
-    runtimePolicy.required_tools;
-  if (!Array.isArray(raw)) return [];
-  return raw
+  const raw = record[camelKey] ?? record[snakeKey] ?? runtimePolicy[camelKey] ?? runtimePolicy[snakeKey];
+  return Array.isArray(raw) ? raw : [];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function requiredToolNames(metadata: unknown): string[] {
+  return uniqueStrings(policyArray(metadata, "requiredNativeTools", "required_tools")
     .filter((value): value is string => typeof value === "string")
     .map((value) => value.trim())
-    .filter((value) => value.length > 0 && ALL_TOOL_NAMES.has(value));
+    .filter((value) => value.length > 0 && ALL_TOOL_NAMES.has(value)));
 }
 
 function requiredToolProfiles(metadata: unknown): ButlerToolProfile[] {
-  const record = recordValue(metadata);
-  const runtimePolicy = recordValue(record.runtimePolicy);
-  const raw = record.requiredNativeToolProfiles ?? record.required_tool_profiles ??
-    runtimePolicy.requiredNativeToolProfiles ?? runtimePolicy.required_tool_profiles;
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter((value): value is ButlerToolProfile => typeof value === "string" && ALL_PROFILE_NAMES.has(value as ButlerToolProfile));
+  return uniqueStrings(policyArray(metadata, "requiredNativeToolProfiles", "required_tool_profiles")
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter((value): value is ButlerToolProfile =>
+      value.length > 0 && ALL_PROFILE_NAMES.has(value as ButlerToolProfile),
+    )) as ButlerToolProfile[];
+}
+
+export function diagnoseButlerToolPolicy(input: {
+  sessionMetadata?: Record<string, unknown>;
+  turnMetadata?: Record<string, unknown>;
+}): ButlerToolPolicyDiagnostics {
+  const invalidProfiles = [
+    ...policyArray(input.sessionMetadata, "requiredNativeToolProfiles", "required_tool_profiles"),
+    ...policyArray(input.turnMetadata, "requiredNativeToolProfiles", "required_tool_profiles"),
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0 && !ALL_PROFILE_NAMES.has(value as ButlerToolProfile));
+
+  return {
+    unknownRequiredNativeToolProfiles: uniqueStrings(invalidProfiles),
+  };
+}
+
+function requiredToolNamesForTurn(input: {
+  sessionMetadata?: Record<string, unknown>;
+  turnMetadata?: Record<string, unknown>;
+}): string[] {
+  return uniqueStrings([
+    ...requiredToolNames(input.sessionMetadata),
+    ...requiredToolNames(input.turnMetadata),
+  ]);
 }
 
 function normalizedText(value: unknown): string {
@@ -238,10 +260,6 @@ function profilesFromText(text: string): ButlerToolProfile[] {
   if (/\b(search|web|source|citation|cite|news|latest|current|url|http|public)\b/u.test(value) ||
     /검색|출처|최신|현재|뉴스|인용|공개|웹/u.test(value)) {
     addProfile(profiles, "public-web");
-  }
-  if (/\b(file|repo|repository|code|command|shell|terminal|run|verify|test|script|log|manifest|package)\b/u.test(value) ||
-    /파일|레포|저장소|작업공간|워크스페이스|코드|명령|터미널|검증|테스트|스크립트|로그/u.test(value)) {
-    addProfile(profiles, "workspace");
   }
   if (/\b(memory|remember|recall|previous|earlier|conversation|transcript)\b/u.test(value) ||
     /기억|이전|앞서|대화|위에서|방금|지난/u.test(value)) {
@@ -292,12 +310,11 @@ export function selectButlerToolProfiles(input: {
   const profiles = new Set<ButlerToolProfile>(["startup"]);
   if (hasProjectContext(input)) {
     addProfile(profiles, "project");
-    addProfile(profiles, "workspace");
   }
   for (const profile of profilesFromText(input.text ?? "")) addProfile(profiles, profile);
   for (const profile of requiredToolProfiles(input.sessionMetadata)) addProfile(profiles, profile);
   for (const profile of requiredToolProfiles(input.turnMetadata)) addProfile(profiles, profile);
-  for (const name of requiredToolNames(input.turnMetadata)) {
+  for (const name of requiredToolNamesForTurn(input)) {
     for (const [profile, names] of Object.entries(PROFILE_TOOL_NAMES) as Array<[ButlerToolProfile, readonly string[]]>) {
       if (names.includes(name)) addProfile(profiles, profile);
     }
@@ -321,7 +338,7 @@ export function selectButlerToolsForTurn(input: {
       for (const name of PROFILE_TOOL_NAMES[profile]) allowedNames.add(name);
     }
   }
-  for (const name of requiredToolNames(input.turnMetadata)) {
+  for (const name of requiredToolNamesForTurn(input)) {
     if (input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(name)) continue;
     allowedNames.add(name);
   }

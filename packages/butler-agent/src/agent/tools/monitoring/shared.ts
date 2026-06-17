@@ -14,6 +14,7 @@ interface ToolCapabilityView {
   category: ToolCapabilityCategory;
   enabled: boolean;
   disabled_reason: string | null;
+  current_turn_selected: boolean | null;
   current_turn_callable: boolean | null;
   omitted_by_profile: boolean | null;
   availability_scope: "current_turn" | "registry";
@@ -181,15 +182,17 @@ function listToolCapabilities(input: {
     .map((tool) => {
       const metadata = TOOL_CAPABILITY_METADATA[tool.name] ?? DEFAULT_TOOL_CAPABILITY;
       const availability = capabilityAvailability(tool, input);
-      const currentTurnCallable = currentToolNames === null ? null : currentToolNames.has(tool.name);
+      const currentTurnSelected = currentToolNames === null ? null : currentToolNames.has(tool.name);
+      const currentTurnCallable = currentTurnSelected === null ? null : currentTurnSelected && availability.enabled;
       return {
         name: tool.name,
         description: tool.description,
         category: metadata.category,
         enabled: availability.enabled,
         disabled_reason: availability.disabled_reason,
+        current_turn_selected: currentTurnSelected,
         current_turn_callable: currentTurnCallable,
-        omitted_by_profile: currentTurnCallable === null ? null : !currentTurnCallable,
+        omitted_by_profile: currentTurnSelected === null ? null : !currentTurnSelected,
         availability_scope: currentTurnCallable === true ? "current_turn" as const : "registry" as const,
         concurrency_safe: tool.concurrencySafe,
         interrupt_behavior: tool.interruptBehavior,

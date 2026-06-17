@@ -1404,6 +1404,60 @@ test("project session gateway routing uses the app session hint and project id",
   }
 });
 
+test("app session access mode supplies structured workspace tool policy", async () => {
+  const runtime = new ScriptedRuntime("access mode reply");
+  const workspaceRoot = join(tempDir, "access-mode-workspace");
+  const bridge = new AppGatewayBridge({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runtime,
+    provider: fakeProvider,
+  });
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    projectWorkspaceRoot: workspaceRoot,
+    port: 0,
+    responder: bridge.responder,
+  });
+  try {
+    const project = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "Access mode project",
+    });
+    const projectId = project.data.project.id as string;
+    const session = await postJson(`${server.url}sessions`, {
+      kind: "project",
+      project_id: projectId,
+      title: "Access mode routing",
+      session_hint: "access-mode-routing",
+    });
+
+    await postJson(`${server.url}messages`, {
+      chat_id: session.data.session.id,
+      text: "코드를 수정하고 검증해줘.",
+    });
+    const fullAccessPolicy = runtime.turns.at(-1)?.metadata?.runtimePolicy as Record<string, unknown>;
+    expect(fullAccessPolicy).toMatchObject({
+      accessMode: "full_access",
+      requiredNativeToolProfiles: ["workspace"],
+    });
+
+    await postJson(`${server.url}messages`, {
+      chat_id: session.data.session.id,
+      text: "이번에는 읽기 전용으로 상태만 확인해줘.",
+      access_mode: "read_only",
+    });
+    const readOnlyPolicy = runtime.turns.at(-1)?.metadata?.runtimePolicy as Record<string, unknown>;
+    expect(readOnlyPolicy).toMatchObject({
+      accessMode: "read_only",
+      requiredNativeToolProfiles: [],
+    });
+  } finally {
+    server.stop();
+    bridge.close();
+  }
+});
+
 test("project session hints are normalized before becoming local ids", async () => {
   const workspaceRoot = join(tempDir, "hint-workspace");
   const server = createAppServer({

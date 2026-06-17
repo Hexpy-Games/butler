@@ -10,6 +10,7 @@ import {
   createButlerToolExecutorRegistry,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import {
+  diagnoseButlerToolPolicy,
   selectButlerToolProfiles,
   selectButlerToolsForTurn,
   toolContractJsonChars,
@@ -261,7 +262,7 @@ test("Butler tool compatibility entrypoint does not own capability executor bodi
   expect(source).not.toContain("spawn(\"/bin/bash\"");
 });
 
-test("project sessions expose a bounded project-write bridge by policy", () => {
+test("project sessions expose bounded project tools without workspace escalation", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "Project Ledger 기준으로 상태를 확인해줘.",
@@ -273,29 +274,53 @@ test("project sessions expose a bounded project-write bridge by policy", () => {
     role: "butler",
     text: "Project Ledger 기준으로 상태를 확인해줘.",
     sessionMetadata: { projectId: "butler" },
-  })).toEqual(["startup", "project", "workspace"]);
+  })).toEqual(["startup", "project"]);
   expect(names).toEqual([
-    "run_command",
     "inspect_project_status",
     "query_project_work",
     "render_project_dashboard",
     "complete_project_work",
     "get_context_monitor",
-    "read_tool_output_artifact",
     "list_tool_capabilities",
     "update_todo_list",
     "list_todo_list",
     "read_conversation_context",
   ]);
+  expect(names).not.toContain("run_command");
+  expect(names).not.toContain("read_tool_output_artifact");
   expect(names).not.toContain("get_weather_with_knowhow");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
   expect(names).not.toContain("create_planned_task");
   expect(names).not.toContain("create_work_orchestration");
+  expect(toolContractJsonChars(tools)).toBeLessThan(10_000);
+});
+
+test("Korean Project Ledger registration prompts require explicit workspace policy", () => {
+  const text = "그럼 이 목록들을 정리해서 다음 Feature 작업들로 등록하자. Project ledger에 등록해두고, github issue도 열어서 연결해놔. 각 phase가 work가 되고, 각 세부 구현이 task되겠지? 각 단계별로 세부적으로 스펙 작성해.";
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text,
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text,
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+  })).toEqual(expect.arrayContaining(["startup", "project", "workspace"]));
+  expect(names).toContain("inspect_project_status");
+  expect(names).toContain("run_command");
+  expect(names).toContain("read_tool_output_artifact");
+  expect(names).not.toContain("create_automation");
+  expect(names).not.toContain("call_mcp_tool");
   expect(toolContractJsonChars(tools)).toBeLessThan(12_000);
 });
 
-test("Korean Project Ledger registration prompts are covered by project-session policy rather than regex intent matching", () => {
+test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
   const text = "그럼 이 목록들을 정리해서 다음 Feature 작업들로 등록하자. Project ledger에 등록해두고, github issue도 열어서 연결해놔. 각 phase가 work가 되고, 각 세부 구현이 task되겠지? 각 단계별로 세부적으로 스펙 작성해.";
   const tools = selectButlerToolsForTurn({
     role: "butler",
@@ -308,13 +333,26 @@ test("Korean Project Ledger registration prompts are covered by project-session 
     role: "butler",
     text,
     sessionMetadata: { projectId: "butler" },
-  })).toEqual(expect.arrayContaining(["startup", "project", "workspace"]));
+  })).not.toContain("workspace");
   expect(names).toContain("inspect_project_status");
-  expect(names).toContain("run_command");
-  expect(names).toContain("read_tool_output_artifact");
-  expect(names).not.toContain("create_automation");
-  expect(names).not.toContain("call_mcp_tool");
-  expect(toolContractJsonChars(tools)).toBeLessThan(12_000);
+  expect(names).not.toContain("run_command");
+  expect(names).not.toContain("read_tool_output_artifact");
+});
+
+test("workspace wording alone does not expose command execution without structured policy", () => {
+  const text = "코드를 수정하고 테스트를 실행해서 결과를 검증해줘.";
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text,
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text,
+  })).toEqual(["startup"]);
+  expect(names).not.toContain("run_command");
+  expect(names).not.toContain("read_tool_output_artifact");
 });
 
 test("explicit required native tool profiles expose command execution without prompt regex matching", () => {
@@ -332,6 +370,31 @@ test("explicit required native tool profiles expose command execution without pr
   })).toEqual(["startup", "workspace"]);
   expect(names).toContain("run_command");
   expect(names).toContain("read_tool_output_artifact");
+});
+
+test("session-level required native tools expose command execution consistently", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "이 작업을 처리해줘.",
+    sessionMetadata: { runtimePolicy: { requiredNativeTools: ["run_command"] } },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "이 작업을 처리해줘.",
+    sessionMetadata: { runtimePolicy: { requiredNativeTools: ["run_command"] } },
+  })).toEqual(["startup", "workspace"]);
+  expect(names).toContain("run_command");
+});
+
+test("invalid required native tool profiles are diagnosable", () => {
+  expect(diagnoseButlerToolPolicy({
+    sessionMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspaec", "workspace"] } },
+    turnMetadata: { requiredNativeToolProfiles: ["github", "workspace", "github"] },
+  })).toEqual({
+    unknownRequiredNativeToolProfiles: ["workspaec", "github"],
+  });
 });
 
 test("free-form GitHub issue linkage text alone does not expand tools without project policy or metadata", () => {
@@ -1205,6 +1268,7 @@ test("tool capability discovery exposes run_command as enabled command capabilit
       name: string;
       category: string;
       enabled: boolean;
+      current_turn_selected: boolean | null;
       current_turn_callable: boolean | null;
       omitted_by_profile: boolean | null;
       availability_scope: string;
@@ -1217,6 +1281,7 @@ test("tool capability discovery exposes run_command as enabled command capabilit
     name: "run_command",
     category: "command",
     enabled: true,
+    current_turn_selected: false,
     current_turn_callable: false,
     omitted_by_profile: true,
     availability_scope: "registry",
@@ -1239,6 +1304,7 @@ test("tool capability discovery marks tools callable when the current profile ex
     ok: boolean;
     capabilities: Array<{
       name: string;
+      current_turn_selected: boolean | null;
       current_turn_callable: boolean | null;
       omitted_by_profile: boolean | null;
       availability_scope: string;
@@ -1248,9 +1314,46 @@ test("tool capability discovery marks tools callable when the current profile ex
   expect(result.ok).toBe(true);
   expect(result.capabilities).toContainEqual(expect.objectContaining({
     name: "run_command",
+    current_turn_selected: true,
     current_turn_callable: true,
     omitted_by_profile: false,
     availability_scope: "current_turn",
+  }));
+});
+
+test("tool capability discovery does not mark disabled selected tools callable", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+    webSearchProvider: new DisabledWebSearchProvider("disabled for test"),
+    currentToolNames: ["list_tool_capabilities", "web_search"],
+  });
+
+  const result = await execute({
+    name: "list_tool_capabilities",
+    args: { category: "search" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    capabilities: Array<{
+      name: string;
+      enabled: boolean;
+      current_turn_selected: boolean | null;
+      current_turn_callable: boolean | null;
+      omitted_by_profile: boolean | null;
+      availability_scope: string;
+    }>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.capabilities).toContainEqual(expect.objectContaining({
+    name: "web_search",
+    enabled: false,
+    current_turn_selected: true,
+    current_turn_callable: false,
+    omitted_by_profile: false,
+    availability_scope: "registry",
   }));
 });
 
