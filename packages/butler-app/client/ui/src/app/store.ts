@@ -451,13 +451,9 @@ function mergeWorkerActivityForActiveSummary(
   const incomingById = new Set(
     incomingWorkers.map((worker) => worker.worker_id),
   );
-  const currentState =
-    current?.latest_progress?.state ?? current?.turn_state ?? "";
   const incomingState =
     incoming.latest_progress?.state ?? incoming.turn_state ?? "";
-  const shouldPreserveActiveWorkers =
-    isNonTerminalTurnState(currentState) ||
-    isNonTerminalTurnState(incomingState);
+  const shouldPreserveActiveWorkers = isNonTerminalTurnState(incomingState);
   if (!shouldPreserveActiveWorkers) return incoming;
   const preserved = currentWorkers.filter(
     (worker) => !worker.terminal && !incomingById.has(worker.worker_id),

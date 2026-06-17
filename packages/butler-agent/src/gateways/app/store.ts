@@ -2969,7 +2969,7 @@ export class AppServerStore {
       })
       .filter((worker) => options.includeHistory || !worker.terminal)
       // Session-scoped UI prefers exact origin sessions and only recovers
-      // originless workers when their durable project label matches.
+      // originless workers when an explicit work-stream link exists.
       .filter(
         (worker) =>
           !options.sessionId ||
@@ -8188,10 +8188,10 @@ function relabelWorkerActivities(
     }
     workerIndex += 1;
     const ordinalLabel = `Worker ${workerIndex}`;
-    const displayName = workerDisplayNameFor(worker.worker_id, workerIndex);
+    const displayName = workerDisplayNameFor(worker.worker_id);
     return {
       ...worker,
-      worker_label: displayName,
+      worker_label: ordinalLabel,
       worker_display_name: displayName,
       worker_ordinal_label: ordinalLabel,
     };
@@ -8213,8 +8213,8 @@ const WORKER_DISPLAY_NAMES = [
   "Yuna",
 ] as const;
 
-function workerDisplayNameFor(workerId: string, ordinal: number): string {
-  const seed = stableNameSeed(workerId) + Math.max(0, ordinal - 1);
+function workerDisplayNameFor(workerId: string): string {
+  const seed = stableNameSeed(workerId);
   return WORKER_DISPLAY_NAMES[seed % WORKER_DISPLAY_NAMES.length] ?? "Ari";
 }
 

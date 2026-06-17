@@ -204,12 +204,18 @@ test("worker activity labels prefer stable display names with ordinal fallback",
     worker_ordinal_label: "Worker 7",
     status_line: "Executing: Checking worker history",
   });
+  const genericLegacy = worker("executing", false, "2026-05-15T12:31:00.000Z", {
+    worker_label: "Worker",
+    worker_ordinal_label: "Worker 8",
+    status_line: "Executing: Checking worker history",
+  });
 
   expect(workerActivityDisplayName(named)).toBe("Ari");
   expect(workerActivityCollapsedSummaryLine(named)).toBe(
     "Ari Executing: Aligning composer controls",
   );
   expect(workerActivityDisplayName(legacy)).toBe("Worker 7");
+  expect(workerActivityDisplayName(genericLegacy)).toBe("Worker 8");
 });
 
 test("app-client worker utilities do not carry runtime-domain status dictionaries", () => {

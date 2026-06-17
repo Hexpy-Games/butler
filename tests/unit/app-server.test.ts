@@ -3858,7 +3858,7 @@ test("worker activity projects durable worker state without raw worker requests"
     expect(workers.data.workers[0]).toMatchObject({
       worker_id: "worker-20260501010101",
       activity_kind: "worker",
-      worker_label: "Juno",
+      worker_label: "Worker 1",
       worker_display_name: "Juno",
       worker_ordinal_label: "Worker 1",
       phase: "planning",
@@ -3945,7 +3945,7 @@ test("worker activity projects reporting phase from durable state", async () => 
     expect(workers.data.workers[0]).toMatchObject({
       worker_id: "worker-20260502020202",
       activity_kind: "worker",
-      worker_label: "Ivy",
+      worker_label: "Worker 1",
       worker_display_name: "Ivy",
       worker_ordinal_label: "Worker 1",
       phase: "reporting",
@@ -4090,7 +4090,7 @@ test("session worker activity links planned orchestration rows with worker attem
       summary.data.worker_activity.map(
         (worker: { worker_label: string }) => worker.worker_label,
       ),
-    ).toEqual(["Plan", "Leo"]);
+    ).toEqual(["Plan", "Worker 1"]);
     expect(summary.data.worker_activity[0]).toMatchObject({
       activity_kind: "planned",
       task_id: "planned-session-worker-panel",
@@ -4553,6 +4553,61 @@ test("session summary reconciles orphaned system responder turns after public re
     expect(summary.data.turn_state).toBe("delivered");
     expect(summary.data.latest_progress.state).toBe("delivered");
     expect(summary.data.latest_progress.safe_progress_rows).toEqual([]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("worker display names stay tied to worker ids when the active roster changes", async () => {
+  const taskStore = new TaskStore(tempDir);
+  const origin = buildTaskOriginContext({
+    sessionId: "stable-session",
+    taskSummary: "Keep worker identity stable",
+    project: null,
+  });
+  const firstDir = join(tempDir, "tasks", "20260501010103");
+  const secondDir = join(tempDir, "tasks", "20260501010102");
+  for (const taskDir of [firstDir, secondDir]) {
+    mkdirSync(taskDir, { recursive: true });
+    writeFileSync(join(taskDir, "status"), "RUNNING\n", "utf8");
+    writeFileSync(
+      join(taskDir, "worker_activity.json"),
+      JSON.stringify({
+        phase: "executing",
+        status_line: "Executing: worker is active.",
+        updated_at: "2026-05-15T00:00:00.000Z",
+      }),
+      "utf8",
+    );
+  }
+  taskStore.writeOrigin("20260501010103", origin);
+  taskStore.writeOrigin("20260501010102", origin);
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const initial = await getJson(`${server.url}worker-activity`);
+    const secondInitial = initial.data.workers.find(
+      (worker: { task_id: string }) => worker.task_id === "20260501010102",
+    );
+    expect(secondInitial).toMatchObject({
+      worker_label: "Worker 2",
+      worker_display_name: "Theo",
+      worker_ordinal_label: "Worker 2",
+    });
+
+    writeFileSync(join(firstDir, "status"), "DONE\n", "utf8");
+    const updated = await getJson(`${server.url}worker-activity`);
+    expect(updated.data.workers).toHaveLength(1);
+    expect(updated.data.workers[0]).toMatchObject({
+      task_id: "20260501010102",
+      worker_label: "Worker 1",
+      worker_display_name: "Theo",
+      worker_ordinal_label: "Worker 1",
+    });
   } finally {
     server.stop();
   }
