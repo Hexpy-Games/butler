@@ -154,6 +154,21 @@ const WORKER_FORBIDDEN_TOOL_NAMES = new Set([
 ]);
 
 const ALL_TOOL_NAMES = new Set(BUTLER_TOOLS.map((tool) => tool.name));
+const ALL_PROFILE_NAMES = new Set<ButlerToolProfile>([
+  "startup",
+  "project",
+  "workspace",
+  "public-web",
+  "memory-read",
+  "memory-write",
+  "monitoring",
+  "automation",
+  "mcp",
+  "delegation",
+  "planned-work",
+  "orchestration",
+  "artifact-data",
+]);
 
 function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -193,21 +208,22 @@ function requiredToolNames(metadata: unknown): string[] {
     .filter((value) => value.length > 0 && ALL_TOOL_NAMES.has(value));
 }
 
+function requiredToolProfiles(metadata: unknown): ButlerToolProfile[] {
+  const record = recordValue(metadata);
+  const runtimePolicy = recordValue(record.runtimePolicy);
+  const raw = record.requiredNativeToolProfiles ?? record.required_tool_profiles ??
+    runtimePolicy.requiredNativeToolProfiles ?? runtimePolicy.required_tool_profiles;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((value): value is ButlerToolProfile => typeof value === "string" && ALL_PROFILE_NAMES.has(value as ButlerToolProfile));
+}
+
 function normalizedText(value: unknown): string {
   return typeof value === "string" ? value.toLocaleLowerCase("en-US") : "";
 }
 
 function addProfile(profiles: Set<ButlerToolProfile>, profile: ButlerToolProfile): void {
   profiles.add(profile);
-}
-
-function hasProjectManagementWriteIntent(value: string): boolean {
-  const durableWriteIntent = /\b(add|create|open|link|connect|record|register|write)\b/u.test(value) ||
-    /등록|생성|작성|연결|링크|추가|열어|열고|만들/u.test(value);
-  const projectManagementObject =
-    /\b(project ledger|ledger|github issue|issue|work|task|spec|feature)\b/u.test(value) ||
-    /프로젝트\s*원장|github|깃허브|이슈|워크|태스크|작업|스펙|기능/u.test(value);
-  return durableWriteIntent && projectManagementObject;
 }
 
 function profilesFromText(text: string): ButlerToolProfile[] {
@@ -225,10 +241,6 @@ function profilesFromText(text: string): ButlerToolProfile[] {
   }
   if (/\b(file|repo|repository|code|command|shell|terminal|run|verify|test|script|log|manifest|package)\b/u.test(value) ||
     /파일|레포|저장소|작업공간|워크스페이스|코드|명령|터미널|검증|테스트|스크립트|로그/u.test(value)) {
-    addProfile(profiles, "workspace");
-  }
-  if (hasProjectManagementWriteIntent(value)) {
-    addProfile(profiles, "project");
     addProfile(profiles, "workspace");
   }
   if (/\b(memory|remember|recall|previous|earlier|conversation|transcript)\b/u.test(value) ||
@@ -278,8 +290,13 @@ export function selectButlerToolProfiles(input: {
     return ["startup", "project", "workspace", "public-web", "memory-read", "monitoring", "artifact-data"];
   }
   const profiles = new Set<ButlerToolProfile>(["startup"]);
-  if (hasProjectContext(input)) addProfile(profiles, "project");
+  if (hasProjectContext(input)) {
+    addProfile(profiles, "project");
+    addProfile(profiles, "workspace");
+  }
   for (const profile of profilesFromText(input.text ?? "")) addProfile(profiles, profile);
+  for (const profile of requiredToolProfiles(input.sessionMetadata)) addProfile(profiles, profile);
+  for (const profile of requiredToolProfiles(input.turnMetadata)) addProfile(profiles, profile);
   for (const name of requiredToolNames(input.turnMetadata)) {
     for (const [profile, names] of Object.entries(PROFILE_TOOL_NAMES) as Array<[ButlerToolProfile, readonly string[]]>) {
       if (names.includes(name)) addProfile(profiles, profile);

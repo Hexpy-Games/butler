@@ -261,7 +261,7 @@ test("Butler tool compatibility entrypoint does not own capability executor bodi
   expect(source).not.toContain("spawn(\"/bin/bash\"");
 });
 
-test("basic project turns expose a bounded startup and project tool profile", () => {
+test("project sessions expose a bounded project-write bridge by policy", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "Project Ledger 기준으로 상태를 확인해줘.",
@@ -273,13 +273,15 @@ test("basic project turns expose a bounded startup and project tool profile", ()
     role: "butler",
     text: "Project Ledger 기준으로 상태를 확인해줘.",
     sessionMetadata: { projectId: "butler" },
-  })).toEqual(["startup", "project"]);
+  })).toEqual(["startup", "project", "workspace"]);
   expect(names).toEqual([
+    "run_command",
     "inspect_project_status",
     "query_project_work",
     "render_project_dashboard",
     "complete_project_work",
     "get_context_monitor",
+    "read_tool_output_artifact",
     "list_tool_capabilities",
     "update_todo_list",
     "list_todo_list",
@@ -290,10 +292,10 @@ test("basic project turns expose a bounded startup and project tool profile", ()
   expect(names).not.toContain("call_mcp_tool");
   expect(names).not.toContain("create_planned_task");
   expect(names).not.toContain("create_work_orchestration");
-  expect(toolContractJsonChars(tools)).toBeLessThan(8_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(12_000);
 });
 
-test("Project Ledger write-intent turns expose workspace execution for durable registration", () => {
+test("Korean Project Ledger registration prompts are covered by project-session policy rather than regex intent matching", () => {
   const text = "그럼 이 목록들을 정리해서 다음 Feature 작업들로 등록하자. Project ledger에 등록해두고, github issue도 열어서 연결해놔. 각 phase가 work가 되고, 각 세부 구현이 task되겠지? 각 단계별로 세부적으로 스펙 작성해.";
   const tools = selectButlerToolsForTurn({
     role: "butler",
@@ -315,16 +317,43 @@ test("Project Ledger write-intent turns expose workspace execution for durable r
   expect(toolContractJsonChars(tools)).toBeLessThan(12_000);
 });
 
-test("GitHub issue linkage requests expose workspace execution with project tools", () => {
+test("explicit required native tool profiles expose command execution without prompt regex matching", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "이 작업을 처리해줘.",
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "이 작업을 처리해줘.",
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+  })).toEqual(["startup", "workspace"]);
+  expect(names).toContain("run_command");
+  expect(names).toContain("read_tool_output_artifact");
+});
+
+test("free-form GitHub issue linkage text alone does not expand tools without project policy or metadata", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "GitHub issue를 열어서 Project Ledger task랑 연결해줘.",
-    sessionMetadata: { projectId: "butler" },
   });
   const names = tools.map((tool) => tool.name);
 
   expect(names).toContain("inspect_project_status");
-  expect(names).toContain("run_command");
+  expect(names).not.toContain("run_command");
+});
+
+test("project write bridge selection does not depend on free-form write-intent regexes", () => {
+  const source = readFileSync(
+    join(root, "packages", "butler-agent", "src", "agent", "tools", "profiles.ts"),
+    "utf8",
+  );
+
+  expect(source).not.toContain("hasProjectManagementWriteIntent");
+  expect(source).not.toContain("ProjectManagementWriteIntent");
+  expect(source).not.toContain("등록|생성|작성|연결|링크");
 });
 
 test("Project Ledger requests without project metadata still expose project tools", () => {

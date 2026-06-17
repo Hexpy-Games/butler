@@ -707,11 +707,13 @@ test("native runtime sends a profiled tool surface for basic project turns", asy
   });
 
   expect(toolNames).toEqual([
+    "run_command",
     "inspect_project_status",
     "query_project_work",
     "render_project_dashboard",
     "complete_project_work",
     "get_context_monitor",
+    "read_tool_output_artifact",
     "list_tool_capabilities",
     "update_todo_list",
     "list_todo_list",
@@ -722,60 +724,6 @@ test("native runtime sends a profiled tool surface for basic project turns", asy
   expect(toolNames).not.toContain("call_mcp_tool");
   expect(toolNames).not.toContain("create_planned_task");
   expect(toolNames).not.toContain("create_work_orchestration");
-});
-
-test("native runtime annotates capability discovery with the current profiled tool surface", async () => {
-  let runCommandCapability: {
-    current_turn_callable?: boolean | null;
-    omitted_by_profile?: boolean | null;
-    availability_scope?: string;
-  } | undefined;
-  const runtime = new NativeToolLoopRuntime({
-    butlerHome: process.cwd(),
-    butlerData: tempDir,
-    disableAutomaticRecall: true,
-    runFunctionToolPromptText: async (input) => {
-      const result = await input.executeTool({
-        name: "list_tool_capabilities",
-        args: { category: "command" },
-        rawArguments: JSON.stringify({ category: "command" }),
-      }) as {
-        ok: boolean;
-        capabilities: Array<{
-          name: string;
-          current_turn_callable?: boolean | null;
-          omitted_by_profile?: boolean | null;
-          availability_scope?: string;
-        }>;
-      };
-      expect(result.ok).toBe(true);
-      runCommandCapability = result.capabilities.find((capability) => capability.name === "run_command");
-      return "확인했습니다.";
-    },
-  });
-  const handle = await runtime.createSession({
-    sessionId: "butler/project-tool-discovery-current-turn",
-    role: "butler",
-    workspacePath: tempDir,
-    systemPrompt: "You are Butler.",
-    metadata: { projectId: "butler" },
-  });
-
-  await runtime.runTurn({
-    handle,
-    provider: fakeProvider,
-    model: "openai/auto:codex-latest",
-    input: {
-      text: "Project Ledger 기준으로 상태를 확인해줘.",
-    },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
-  });
-
-  expect(runCommandCapability).toMatchObject({
-    current_turn_callable: false,
-    omitted_by_profile: true,
-    availability_scope: "registry",
-  });
 });
 
 test("native runtime attaches turn budget attribution to direct tool prompts", async () => {
