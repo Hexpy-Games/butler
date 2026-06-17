@@ -1001,6 +1001,8 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("QUIT_MENU_BAR_HELPER_ARG");
   expect(electronMain).toContain("persistentMenuBarHelperSupported");
   expect(electronMain).toContain("shouldLaunchPersistentMenuBarHelper");
+  expect(electronMain).toContain("BUTLER_APP_ELECTRON_USER_DATA_DIR");
+  expect(electronMain).toContain('app.setPath("userData", explicitElectronUserDataDir)');
   expect(electronMain).toContain("function appLaunchCwd()");
   expect(electronMain).toContain("app.isPackaged ? dirname(process.execPath) : __dirname");
   expect(electronMain).toContain("mainProcessOwnsTray");
@@ -1019,6 +1021,8 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("Quit Butler UI");
   expect(electronMain).toContain("Quit Menu Bar Helper");
   expect(electronMain).toContain("process.exit(0)");
+  expect(electronMain).not.toContain('tray.on("click"');
+  expect(electronMain).not.toContain("openButlerFromTray();\n    });");
   expect(electronMain).toContain("menu-bar-helper");
   expect(electronMain).toContain("trayActionSource()");
   expect(electronMain).toContain(
