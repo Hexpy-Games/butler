@@ -130,6 +130,7 @@ const nativeNotificationState = {
   lastAttemptedAt: null,
   lastShownAt: null,
 };
+const explicitElectronUserDataDir = process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR?.trim();
 let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
@@ -176,6 +177,8 @@ if (isMenuBarHelperProcess || isQuitMenuBarHelperSignalProcess) {
     "userData",
     join(butlerDataRoot, "app", "runtime", "menu-bar-helper-profile"),
   );
+} else if (explicitElectronUserDataDir) {
+  app.setPath("userData", explicitElectronUserDataDir);
 }
 const appSingleInstanceLock = app.requestSingleInstanceLock();
 if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {
@@ -1110,9 +1113,6 @@ async function refreshTrayMenu() {
   if (!tray) {
     tray = new Tray(trayIconForMenuBar());
     tray.setToolTip(appDisplayName);
-    tray.on("click", () => {
-      openButlerFromTray();
-    });
   } else {
     updateTrayIcon();
   }

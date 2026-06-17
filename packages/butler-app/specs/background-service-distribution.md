@@ -68,7 +68,11 @@ leave the helper and Agent service online.
 ### User-Facing Lifecycle
 
 - **Open Butler**: shows the App UI and connects to the service-owned app
-  gateway.
+  gateway. If the App UI is already running, this action focuses the existing
+  window instead of starting a duplicate UI process.
+- **Status icon click**: opens the OS menu only. A plain status icon click must
+  not reopen the App UI; reopening is reserved for the explicit **Open Butler**
+  menu action.
 - **Close window**: hides the UI. The Agent service continues.
 - **Quit Butler UI**: quits or hides the main App UI only. The Agent service and
   menu bar/tray helper continue unless the user chooses an explicit stop or quit
@@ -300,8 +304,10 @@ Required changes:
   `/Applications` or register the production service namespace. Local installer
   E2E uses a test-only `.pkg`, test-only bundle identifier, user-home install
   target, isolated Electron profile, isolated `BUTLER_DATA`, non-production
-  gateway port, and test-only service label/unit. Cleanup must remove the
-  installed test App and test service by default.
+  gateway port, and test-only service label/unit. If the test menu-bar helper
+  reopens the App UI through **Open Butler**, that relaunched UI must keep the
+  isolated Electron profile instead of falling back to the normal Butler profile.
+  Cleanup must remove the installed test App and test service by default.
 
 ## Success Criteria
 

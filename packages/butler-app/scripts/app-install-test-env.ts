@@ -618,6 +618,7 @@ const env: NodeJS.ProcessEnv = {
   BUTLER_APP_SERVER_PORT: String(serverPort),
   BUTLER_APP_SERVICE_LABEL: serviceLabel,
   BUTLER_APP_SYSTEMD_UNIT: systemdUnit,
+  BUTLER_APP_ELECTRON_USER_DATA_DIR: electronProfileDir,
 };
 delete env.BUTLER_APP_SERVER_URL;
 delete env.BUTLER_APP_UI_URL;
