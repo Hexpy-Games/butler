@@ -2233,7 +2233,16 @@ export function isPlannedWorkerActivity(
   return (
     worker.activity_kind === "planned" ||
     worker.task_id?.startsWith("planned-") === true ||
-    /^planned\b/iu.test(worker.worker_label)
+    /^planned\b/iu.test(workerActivityDisplayName(worker))
+  );
+}
+
+export function workerActivityDisplayName(worker: WorkerActivitySummary): string {
+  return (
+    worker.worker_display_name?.trim() ||
+    worker.worker_label.trim() ||
+    worker.worker_ordinal_label?.trim() ||
+    "Worker"
   );
 }
 
@@ -2308,7 +2317,7 @@ export function workerActivityMeta(
 export function workerActivityCollapsedSummaryLine(
   worker: WorkerActivitySummary,
 ): string {
-  const label = worker.worker_label.trim() || "Worker";
+  const label = workerActivityDisplayName(worker);
   const phase = phaseLabel(worker.semantic_phase ?? worker.phase);
   const action = worker.action_kind?.trim();
   const meta = action ? `${phase}/${action}` : phase;

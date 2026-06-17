@@ -2,6 +2,7 @@ import { appCopy } from "@/app/copy.ts";
 import {
   groupWorkerActivities,
   workerActivityCollapsedSummaryLine,
+  workerActivityDisplayName,
   workerActivityDescription,
   workerActivityMeta,
 } from "@/app/utils.ts";
@@ -12,7 +13,7 @@ import { WorkerActivityPanel } from "@/butler-ds";
 function activityRow(worker: WorkerActivitySummary, depth = 0) {
   return {
     id: worker.worker_id,
-    title: worker.worker_label,
+    title: workerActivityDisplayName(worker),
     description: workerActivityDescription(worker),
     meta: workerActivityMeta(worker),
     phase: worker.semantic_phase ?? worker.phase,

@@ -22,6 +22,7 @@ import {
   semanticProgressRows,
   shouldShowTurnActivity,
   workerActivityCollapsedSummaryLine,
+  workerActivityDisplayName,
   workerActivityDescription,
   workerActivityMeta,
   workerActivityStatusLine,
@@ -189,6 +190,26 @@ test("worker activity status uses durable activity titles without client-side do
     worker_label: "Worker A",
     status_line: "Executing: Aligning composer controls",
   }))).toBe("Aligning composer controls");
+});
+
+test("worker activity labels prefer stable display names with ordinal fallback", () => {
+  const named = worker("executing", false, "2026-05-15T12:31:00.000Z", {
+    worker_label: "Ari",
+    worker_display_name: "Ari",
+    worker_ordinal_label: "Worker 1",
+    status_line: "Executing: Aligning composer controls",
+  });
+  const legacy = worker("executing", false, "2026-05-15T12:31:00.000Z", {
+    worker_label: "",
+    worker_ordinal_label: "Worker 7",
+    status_line: "Executing: Checking worker history",
+  });
+
+  expect(workerActivityDisplayName(named)).toBe("Ari");
+  expect(workerActivityCollapsedSummaryLine(named)).toBe(
+    "Ari Executing: Aligning composer controls",
+  );
+  expect(workerActivityDisplayName(legacy)).toBe("Worker 7");
 });
 
 test("app-client worker utilities do not carry runtime-domain status dictionaries", () => {

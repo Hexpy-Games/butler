@@ -3858,7 +3858,9 @@ test("worker activity projects durable worker state without raw worker requests"
     expect(workers.data.workers[0]).toMatchObject({
       worker_id: "worker-20260501010101",
       activity_kind: "worker",
-      worker_label: "Worker 1",
+      worker_label: "Juno",
+      worker_display_name: "Juno",
+      worker_ordinal_label: "Worker 1",
       phase: "planning",
       objective: "Background worker task",
       status_line: "Planning: Making plan for background task.",
@@ -3943,7 +3945,9 @@ test("worker activity projects reporting phase from durable state", async () => 
     expect(workers.data.workers[0]).toMatchObject({
       worker_id: "worker-20260502020202",
       activity_kind: "worker",
-      worker_label: "Worker 1",
+      worker_label: "Ivy",
+      worker_display_name: "Ivy",
+      worker_ordinal_label: "Worker 1",
       phase: "reporting",
       status_line: "Reporting: preparing reviewed result.",
       terminal: false,
@@ -4086,7 +4090,7 @@ test("session worker activity links planned orchestration rows with worker attem
       summary.data.worker_activity.map(
         (worker: { worker_label: string }) => worker.worker_label,
       ),
-    ).toEqual(["Plan", "Worker 1"]);
+    ).toEqual(["Plan", "Leo"]);
     expect(summary.data.worker_activity[0]).toMatchObject({
       activity_kind: "planned",
       task_id: "planned-session-worker-panel",
@@ -4096,6 +4100,8 @@ test("session worker activity links planned orchestration rows with worker attem
       activity_kind: "worker",
       task_id: "worker-session-panel",
       orchestration_id: "planned-session-worker-panel",
+      worker_display_name: "Leo",
+      worker_ordinal_label: "Worker 1",
       phase: "consolidating",
     });
   } finally {
