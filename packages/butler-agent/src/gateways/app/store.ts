@@ -108,6 +108,7 @@ import {
   type CreateSessionResult,
   type HostedModelDeletionResult,
   type HostedModelRegistrationRequest,
+  type GitWorkspaceView,
   type HostedModelRegistrationResult,
   type MessageRecord,
   type MessageFileKind,
@@ -232,6 +233,7 @@ import {
   skillSettingsView,
 } from "../../integrations/skills/manager.ts";
 import { readUsageMonitor } from "../../operations/metrics/usage-monitor.ts";
+import { resolveGitWorkspace, type GitWorkspaceMetadata } from "../../agent/workspace/git-workspace-resolver.ts";
 
 const DEFAULT_CHAT_ID = "general";
 const DEFAULT_PROJECT_ID = "butler";
@@ -4542,6 +4544,11 @@ export class AppServerStore {
       transportBindings,
       metadata: {
         ...(existing?.metadata ?? {}),
+        ...gitWorkspaceMetadataForBinding(
+          input.project?.workspace_path ??
+            existing?.workspacePath ??
+            this.butlerHome,
+        ),
         source: "app-server",
         appSessionKind: input.sessionKind,
         accessMode: input.controls.access_mode,
@@ -7066,6 +7073,29 @@ function chatFromRow(row: ChatRow): ChatSummary {
   };
 }
 
+function gitWorkspaceMetadataForBinding(
+  workspacePath: string | null | undefined,
+): { gitWorkspace?: GitWorkspaceMetadata } {
+  try {
+    const gitWorkspace = resolveGitWorkspace(workspacePath);
+    return { gitWorkspace };
+  } catch {
+    return {};
+  }
+}
+
+function gitWorkspaceViewForProject(
+  workspacePath: string | null | undefined,
+): { gitWorkspace?: GitWorkspaceView } {
+  try {
+    const gitWorkspace = resolveGitWorkspace(workspacePath);
+    return gitWorkspace.available ? { gitWorkspace } : {};
+  } catch {
+    return {};
+  }
+}
+
+
 function projectFromRow(
   row: ProjectRow,
   sessions?: SessionSummary[],
@@ -7088,6 +7118,7 @@ function projectFromRow(
     error_summary: row.error_summary ?? undefined,
     workspace_label: row.workspace_label,
     safe_path_label: row.safe_path_label,
+    ...gitWorkspaceViewForProject(row.workspace_path),
   };
   if (sessions) project.sessions = sessions;
   return project;
