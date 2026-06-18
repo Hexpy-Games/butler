@@ -24,7 +24,7 @@ export type AppReleaseActivationPolicy =
   "platform-app-update-then-versioned-app-runtime";
 export type AppReleaseRollbackPolicy =
   "preserve-previous-app-managed-runtime";
-export type AppReleaseServiceInstallerPackageFormat = "pkg" | "deb" | "rpm";
+export type AppReleaseServiceInstallerPackageFormat = "pkg" | "deb" | "pacman" | "rpm";
 export type AppOwnedDependencyId =
   | "electron-shell"
   | "renderer-assets"
@@ -571,7 +571,7 @@ function serviceInstallerPackageFormats(
   platform: AppBackgroundServicePlatform,
 ): AppReleaseServiceInstallerPackageFormat[] {
   if (platform === "darwin") return ["pkg"];
-  if (platform === "linux") return ["deb", "rpm"];
+  if (platform === "linux") return ["deb", "pacman", "rpm"];
   throw new Error(`unsupported App service installer platform: ${platform}`);
 }
 
@@ -597,6 +597,7 @@ function serviceInstallerPackageArtifactsForPlatform(
   }
   if (platform === "linux") {
     const debArtifactName = version ? `butler-app-service_${version}_amd64.deb` : null;
+    const pacmanArtifactName = version ? `butler-app-service-${version}-1-x86_64.pkg.tar.zst` : null;
     const rpmArtifactName = version ? `butler-app-service-${version}-1.x86_64.rpm` : null;
     return [
       {
@@ -609,6 +610,17 @@ function serviceInstallerPackageArtifactsForPlatform(
         postInstallPath: "service-installer/linux/deb/postinst",
         publishedArtifactName: debArtifactName,
         publishedSha256Name: debArtifactName ? `${debArtifactName}.sha256` : null,
+      },
+      {
+        packageFormat: "pacman",
+        selectedV1Path: "linux-pacman-owned-user-unit",
+        serviceManager: "systemd-user",
+        serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
+        renderContractPath: "service-installer/linux/systemd/render-contract.json",
+        launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
+        postInstallPath: "service-installer/linux/pacman/post_install",
+        publishedArtifactName: pacmanArtifactName,
+        publishedSha256Name: pacmanArtifactName ? `${pacmanArtifactName}.sha256` : null,
       },
       {
         packageFormat: "rpm",

@@ -86,6 +86,7 @@ export type AppBackgroundServiceV1Path =
   | "windows-split-elevated-helper"
   | "linux-systemd-user-service"
   | "linux-deb-owned-user-unit"
+  | "linux-pacman-owned-user-unit"
   | "linux-rpm-owned-user-unit";
 
 export interface AppBackgroundServiceCapability {
@@ -148,12 +149,14 @@ export const APP_BACKGROUND_SERVICE_CAPABILITIES: AppBackgroundServiceCapability
     allowedMechanisms: [
       "systemd-user-service",
       "deb-owned-user-unit",
+      "pacman-owned-user-unit",
       "rpm-owned-user-unit",
     ],
     requiredDecision: "linux-package-service-path",
     allowedV1Paths: [
       "linux-systemd-user-service",
       "linux-deb-owned-user-unit",
+      "linux-pacman-owned-user-unit",
       "linux-rpm-owned-user-unit",
     ],
     selectedV1Path: null,
