@@ -56,6 +56,25 @@ export interface AppInfoView {
   developer_mode_enabled: boolean;
 }
 
+export interface GitWorkspaceView {
+  available: boolean;
+  workspaceMode: "none" | "folder" | "git-repository" | "git-worktree" | "git-subdirectory" | "unknown";
+  workspacePath: string;
+  repoRoot?: string;
+  worktreePath?: string;
+  commonDir?: string;
+  gitDir?: string;
+  branch?: string;
+  headSha?: string;
+  detached?: boolean;
+  dirty?: boolean;
+  upstream?: string;
+  isMainWorktree?: boolean;
+  isLinkedWorktree?: boolean;
+  capturedAt: string;
+  error?: { code: string; message: string };
+}
+
 export interface ChatSummary {
   id: string;
   title: string;
@@ -85,6 +104,7 @@ export interface SessionSummary {
   pinned: boolean;
   archived: boolean;
   automation_target_count: number;
+  gitWorkspace?: GitWorkspaceView;
 }
 
 export interface ProjectSummary {
@@ -99,6 +119,7 @@ export interface ProjectSummary {
   workspace_label: string;
   safe_path_label: string;
   sessions?: SessionSummary[];
+  gitWorkspace?: GitWorkspaceView;
 }
 
 export interface NavigationView {
