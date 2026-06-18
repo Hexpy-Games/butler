@@ -174,7 +174,7 @@ export interface AppDesktopHelperMetadata {
   schema: "butler.app-desktop-helper.v1";
   product: AppReleaseProduct;
   owner: "butler-app";
-  helperMode: "same-app-menu-bar-helper";
+  helperMode: "background-helper-executable";
   defaultEnabledPlatforms: AppBackgroundServicePlatform[];
   survivesMainUiQuitPlatforms: AppBackgroundServicePlatform[];
   stopsAgentOnHelperQuit: false;
@@ -492,7 +492,7 @@ export function createAppDesktopHelperMetadata(
     schema: "butler.app-desktop-helper.v1",
     product: "butler-app",
     owner: "butler-app",
-    helperMode: "same-app-menu-bar-helper",
+    helperMode: "background-helper-executable",
     defaultEnabledPlatforms,
     survivesMainUiQuitPlatforms: defaultEnabledPlatforms,
     stopsAgentOnHelperQuit: false,
@@ -507,7 +507,9 @@ export function createAppDesktopHelperMetadata(
 function persistentMenuBarHelperDefaultPlatforms(
   platforms: readonly AppReleasePlatform[],
 ): AppBackgroundServicePlatform[] {
-  return uniqueServicePlatforms(platforms).filter((platform) => platform === "darwin");
+  return uniqueServicePlatforms(
+    platforms.filter((platform) => servicePlatformForReleasePlatform(platform) === "darwin"),
+  );
 }
 
 function appServiceInstallerRequirementForPlatform(
@@ -1428,7 +1430,7 @@ function validateAppDesktopHelper(
   if (helper.product !== "butler-app" || helper.owner !== "butler-app") {
     issues.push(`${label} owner must be butler-app`);
   }
-  if (helper.helperMode !== "same-app-menu-bar-helper") {
+  if (helper.helperMode !== "background-helper-executable") {
     issues.push(`${label} helper mode mismatch`);
   }
   const expectedDefaultPlatforms = persistentMenuBarHelperDefaultPlatforms(platforms);

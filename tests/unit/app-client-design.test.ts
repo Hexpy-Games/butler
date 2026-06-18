@@ -995,10 +995,19 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("createTrayAgentMenuModel");
   expect(electronMain).toContain("createAppAgentNativeServiceBridge");
   expect(electronMain).toContain("createAppAgentServiceAdapter");
+  expect(electronMain).toContain("reconcileAgentServiceOnAppLaunch");
+  expect(electronMain).toContain("reconcileAppAgentServiceForLaunch");
+  expect(electronMain).toContain("appManagedAgentRuntimeCurrent");
+  expect(electronMain).toContain("currentBundledAgentVersion");
+  expect(electronMain).toContain('source: "app-launch"');
+  expect(electronMain).toContain("bundled_agent_version");
+  expect(electronMain).toContain(
+    "await reconcileAppAgentServiceForLaunch();\n  if (rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {\n    await ensureServer();\n  }",
+  );
   expect(electronMain).toContain("adapter: appAgentServiceAdapter");
   expect(electronMain).toContain("MENU_BAR_HELPER_ARG");
-  expect(electronMain).toContain("QUIT_MAIN_UI_ARG");
-  expect(electronMain).toContain("QUIT_MENU_BAR_HELPER_ARG");
+  expect(electronMain).toContain("isQuitMainUiSignalMode");
+  expect(electronMain).toContain("isQuitMenuBarHelperSignalMode");
   expect(electronMain).toContain("persistentMenuBarHelperSupported");
   expect(electronMain).toContain("shouldLaunchPersistentMenuBarHelper");
   expect(electronMain).toContain("BUTLER_APP_ELECTRON_USER_DATA_DIR");
@@ -1018,8 +1027,10 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("Start Butler Agent");
   expect(electronMain).toContain("Restart Butler Agent");
   expect(electronMain).toContain("Stop Butler Agent");
-  expect(electronMain).toContain("Quit Butler UI");
-  expect(electronMain).toContain("Quit Menu Bar Helper");
+  expect(electronMain).toContain("Stop Butler Agent?");
+  expect(electronMain).toContain("Do not show this warning again");
+  expect(electronMain).not.toContain("Quit Butler UI");
+  expect(electronMain).not.toContain("Quit Menu Bar Helper");
   expect(electronMain).toContain("process.exit(0)");
   expect(electronMain).not.toContain('tray.on("click"');
   expect(electronMain).not.toContain("openButlerFromTray();\n    });");
@@ -1657,7 +1668,7 @@ test("electron shell owns only the app gateway process and shuts it down cleanly
   expect(electronMain).toContain('app.on("before-quit"');
   expect(electronMain).toContain('process.once("SIGINT"');
   expect(electronMain).toContain('process.once("SIGTERM"');
-  expect(electronMain).toContain("Quit Butler UI");
+  expect(electronMain).not.toContain("Quit Butler UI");
   expect(electronMain).not.toContain("stopAgentService({ source: \"quit\" })");
   expect(electronMain).not.toContain("stopAgentService({ source: \"before-quit\" })");
 });

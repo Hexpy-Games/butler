@@ -33,6 +33,7 @@ export function createAppAgentNativeServiceBridge({
   getAppVersion = () => null,
   ensureRuntimePointer = () => {},
   prepareLocalAuth = () => prepareAppLocalAuth({ butlerData }),
+  menuBarHelper = null,
   isPidRunning = defaultIsPidRunning,
   runCommand = defaultRunCommand,
   writeFile = defaultWriteFile,
@@ -42,6 +43,7 @@ export function createAppAgentNativeServiceBridge({
   }
   const resolvedServiceLabel = normalizeLaunchdLabel(serviceLabel);
   const resolvedSystemdUnit = normalizeSystemdUnit(systemdUnit);
+  const resolvedMenuBarHelper = normalizeMenuBarHelper(menuBarHelper, resolvedServiceLabel);
   return {
     nativeServices: {
       list: async () => listNativeServiceProjections({ butlerData, isPidRunning }),
@@ -57,6 +59,7 @@ export function createAppAgentNativeServiceBridge({
           getAppVersion,
           ensureRuntimePointer,
           prepareLocalAuth,
+          menuBarHelper: resolvedMenuBarHelper,
         });
         await applyPlan(plan, { runCommand, writeFile });
       },
@@ -72,6 +75,7 @@ export function createAppAgentNativeServiceBridge({
           getAppVersion,
           ensureRuntimePointer,
           prepareLocalAuth,
+          menuBarHelper: resolvedMenuBarHelper,
         });
         await applyPlan(plan, { runCommand, writeFile });
       },
@@ -89,6 +93,7 @@ export function createAppAgentNativeServiceBridge({
           getAppVersion,
           ensureRuntimePointer,
           prepareLocalAuth,
+          menuBarHelper: resolvedMenuBarHelper,
         });
         await applyPlan(plan, { runCommand, writeFile });
       },
@@ -125,6 +130,7 @@ function createRegistrationPlan({
   getAppVersion,
   ensureRuntimePointer,
   prepareLocalAuth,
+  menuBarHelper,
 }) {
   if (platform !== "darwin" && platform !== "linux") {
     throw new Error(`unsupported App Agent service platform: ${platform}`);
@@ -143,7 +149,10 @@ function createRegistrationPlan({
       prepareLocalAuth,
     });
     if (platform === "darwin") {
-      return { ...launchdPlan({ action, homeDir, runtime, serviceLabel }), activation };
+      return {
+        ...launchdPlan({ action, homeDir, runtime, serviceLabel, menuBarHelper }),
+        activation,
+      };
     }
     return { ...systemdPlan({ action, homeDir, runtime, systemdUnit }), activation };
   } catch (error) {
@@ -229,19 +238,24 @@ function safeString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function launchdPlan({ action, homeDir, runtime, serviceLabel }) {
+function launchdPlan({ action, homeDir, runtime, serviceLabel, menuBarHelper = null }) {
   const serviceFile = join(homeDir, "Library", "LaunchAgents", `${serviceLabel}.plist`);
   const domain = `gui/${typeof process.getuid === "function" ? process.getuid() : "$UID"}`;
   const target = `${domain}/${serviceLabel}`;
+  const helperPlan = runtime && menuBarHelper
+    ? launchdMenuBarHelperPlan({ homeDir, runtime, serviceLabel, domain, menuBarHelper })
+    : null;
   if (action === "install") {
     return {
       action,
       serviceFile,
       body: launchdPlist(runtime, serviceLabel),
+      files: helperPlan ? [{ path: helperPlan.serviceFile, body: helperPlan.body }] : [],
       steps: [
         serviceStep(["launchctl", "bootout", target], { optional: true }),
         serviceStep(["launchctl", "bootstrap", domain, serviceFile]),
         serviceStep(["launchctl", "kickstart", "-k", target]),
+        ...(helperPlan?.steps ?? []),
       ],
     };
   }
@@ -250,10 +264,12 @@ function launchdPlan({ action, homeDir, runtime, serviceLabel }) {
       action,
       serviceFile,
       body: launchdPlist(runtime, serviceLabel),
+      files: helperPlan ? [{ path: helperPlan.serviceFile, body: helperPlan.body }] : [],
       steps: [
         serviceStep(["launchctl", "bootout", target], { optional: true }),
         serviceStep(["launchctl", "bootstrap", domain, serviceFile]),
         serviceStep(["launchctl", "kickstart", "-k", target]),
+        ...(helperPlan?.steps ?? []),
       ],
     };
   }
@@ -261,6 +277,26 @@ function launchdPlan({ action, homeDir, runtime, serviceLabel }) {
     action,
     serviceFile,
     steps: [serviceStep(["launchctl", "bootout", target], { optional: true })],
+  };
+}
+
+function launchdMenuBarHelperPlan({ homeDir, runtime, serviceLabel, domain, menuBarHelper }) {
+  const helperLabel = menuBarHelper.label;
+  const serviceFile = join(homeDir, "Library", "LaunchAgents", `${helperLabel}.plist`);
+  const target = `${domain}/${helperLabel}`;
+  return {
+    serviceFile,
+    body: launchdMenuBarHelperPlist({
+      runtime,
+      serviceLabel,
+      helperLabel,
+      menuBarHelper,
+    }),
+    steps: [
+      serviceStep(["launchctl", "bootout", target], { optional: true }),
+      serviceStep(["launchctl", "bootstrap", domain, serviceFile], { optional: true }),
+      serviceStep(["launchctl", "kickstart", "-k", target], { optional: true }),
+    ],
   };
 }
 
@@ -324,6 +360,50 @@ ${Object.entries(runtime.env).map(([key, value]) =>
 `;
 }
 
+function launchdMenuBarHelperPlist({ runtime, serviceLabel, helperLabel, menuBarHelper }) {
+  const env = {
+    BUTLER_DATA: runtime.butlerData,
+    BUTLER_APP_AGENT_SERVICE_LABEL: serviceLabel,
+    BUTLER_APP_BUNDLE_PATH: menuBarHelper.appBundlePath ?? "",
+    BUTLER_APP_MAIN_EXECUTABLE: menuBarHelper.mainExecutablePath ?? "",
+    BUTLER_APP_MENU_BAR_HELPER: "1",
+    BUTLER_APP_MENU_BAR_HELPER_PID_FILE: join(
+      runtime.butlerData,
+      "app",
+      "runtime",
+      "menu-bar-helper.pid",
+    ),
+    BUTLER_APP_SERVER_PORT: String(runtime.port),
+    BUTLER_APP_SERVER_URL: `http://127.0.0.1:${runtime.port}/`,
+  };
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${xml(helperLabel)}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${xml(menuBarHelper.executablePath)}</string>
+    <string>--butler-menu-bar-helper</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+${Object.entries(env).map(([key, value]) =>
+    `    <key>${xml(key)}</key>\n    <string>${xml(value)}</string>`,
+  ).join("\n")}
+  </dict>
+  <key>WorkingDirectory</key>
+  <string>${xml(dirname(menuBarHelper.executablePath))}</string>
+  <key>LimitLoadToSessionType</key>
+  <string>Aqua</string>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
+`;
+}
+
 function systemdUnitBody(runtime) {
   return `[Unit]
 Description=Butler Agent service
@@ -350,6 +430,9 @@ async function applyPlan(plan, { runCommand, writeFile = defaultWriteFile }) {
     if (plan.body) {
       writeFile(plan.serviceFile, plan.body);
     }
+    for (const file of plan.files ?? []) {
+      writeFile(file.path, file.body);
+    }
     for (const step of plan.steps) {
       const result = await runCommand(step.argv);
       if ((result?.exitCode ?? 1) !== 0 && !step.optional) {
@@ -372,6 +455,24 @@ function normalizeLaunchdLabel(value) {
     throw new Error("invalid App Agent service label");
   }
   return label;
+}
+
+function normalizeMenuBarHelper(value, serviceLabel) {
+  if (!value) return null;
+  const executablePath = safeString(value.executablePath);
+  if (!executablePath) {
+    throw new Error("invalid menu bar helper executable path");
+  }
+  const mainExecutablePath = safeString(value.mainExecutablePath);
+  if (mainExecutablePath && executablePath === mainExecutablePath) {
+    throw new Error("menu bar helper executable must be distinct from the main App executable");
+  }
+  return {
+    executablePath,
+    appBundlePath: safeString(value.appBundlePath),
+    mainExecutablePath,
+    label: normalizeLaunchdLabel(value.label || `${serviceLabel}.menubar-helper`),
+  };
 }
 
 function normalizeSystemdUnit(value) {

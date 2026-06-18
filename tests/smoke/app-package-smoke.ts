@@ -508,6 +508,41 @@ try {
       plistValue(appBundle, "CFBundleIdentifier") === "com.hexpy.butler",
       "packaged app bundle id is not Butler",
     );
+    const helperBundle = join(
+      appBundle,
+      "Contents",
+      "Library",
+      "LoginItems",
+      "Butler Menu Bar Helper.app",
+    );
+    const helperExecutable = join(
+      helperBundle,
+      "Contents",
+      "MacOS",
+      "Butler Menu Bar Helper",
+    );
+    const helperIcon = join(helperBundle, "Contents", "Resources", "butler.icns");
+    const helperMenuBarIcon = join(
+      helperBundle,
+      "Contents",
+      "Resources",
+      "butler-mark-flat.png",
+    );
+    assert(existsSync(helperBundle), "mac menu bar helper app was not created");
+    assert(existsSync(helperExecutable), "mac menu bar helper executable was not created");
+    assert(existsSync(helperIcon), "mac menu bar helper icon was not created");
+    assert(
+      existsSync(helperMenuBarIcon),
+      "mac menu bar helper menu-bar icon was not created",
+    );
+    assert(
+      plistValue(helperBundle, "LSUIElement") === "true",
+      "mac menu bar helper is not LSUIElement background-only",
+    );
+    assert(
+      plistValue(helperBundle, "CFBundleIdentifier") === "com.hexpy.butler.menubar-helper",
+      "mac menu bar helper bundle id is not distinct from the main app",
+    );
     const signResult = spawnSync("node", [macSignScript, appBundle], {
       cwd: root,
       encoding: "utf8",
@@ -622,6 +657,7 @@ try {
         "workspace-entered",
         "minimal-path-first-launch",
         "host-tool-blockers-unused",
+        "background-menu-bar-helper-bundled",
         "packaged-resource-source",
         "standalone-home-unchanged",
       ],

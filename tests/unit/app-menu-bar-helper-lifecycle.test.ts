@@ -14,15 +14,73 @@ import {
   mainProcessOwnsTray,
   navigationRequestFromArgs,
   persistentMenuBarHelperSupported,
+  resolvePersistentMenuBarHelperLaunch,
   shouldLaunchPersistentMenuBarHelper,
 } from "../../packages/butler-app/client/electron/menu-bar-helper-lifecycle.mjs";
 
-test("packaged macOS App uses a persistent menu bar helper by default", () => {
+test("packaged macOS App only enables persistent helper for background helper executables", () => {
   expect(persistentMenuBarHelperSupported({
     platform: "darwin",
     isPackaged: true,
     env: {},
+    helperExecutablePath:
+      "/Applications/Butler.app/Contents/Library/LoginItems/Butler Menu Bar Helper.app/Contents/MacOS/Butler Menu Bar Helper",
+    helperExecutableExists: true,
+    mainExecutablePath: "/Applications/Butler.app/Contents/MacOS/Butler",
   })).toBe(true);
+  expect(resolvePersistentMenuBarHelperLaunch({
+    platform: "darwin",
+    isPackaged: true,
+    env: {},
+    helperExecutablePath:
+      "/Applications/Butler.app/Contents/Library/LoginItems/Butler Menu Bar Helper.app/Contents/MacOS/Butler Menu Bar Helper",
+    helperExecutableExists: true,
+    mainExecutablePath: "/Applications/Butler.app/Contents/MacOS/Butler",
+  })).toMatchObject({
+    supported: true,
+    executable:
+      "/Applications/Butler.app/Contents/Library/LoginItems/Butler Menu Bar Helper.app/Contents/MacOS/Butler Menu Bar Helper",
+  });
+  expect(persistentMenuBarHelperSupported({
+    platform: "darwin",
+    isPackaged: true,
+    env: {},
+    helperExecutablePath:
+      "/Applications/Butler.app/Contents/Library/LoginItems/Butler Menu Bar Helper.app/Contents/MacOS/Butler Menu Bar Helper",
+    helperExecutableExists: false,
+    mainExecutablePath: "/Applications/Butler.app/Contents/MacOS/Butler",
+  })).toBe(false);
+  expect(resolvePersistentMenuBarHelperLaunch({
+    platform: "darwin",
+    isPackaged: true,
+    env: {},
+  })).toMatchObject({
+    supported: false,
+    reason: "missing_background_helper_executable",
+  });
+  expect(persistentMenuBarHelperSupported({
+    platform: "darwin",
+    isPackaged: true,
+    env: {
+      BUTLER_APP_MENU_BAR_HELPER_EXECUTABLE:
+        "/Applications/Butler.app/Contents/Library/LoginItems/Butler Menu Bar Helper.app/Contents/MacOS/Butler Menu Bar Helper",
+    },
+    helperExecutableExists: true,
+    mainExecutablePath: "/Applications/Butler.app/Contents/MacOS/Butler",
+  })).toBe(true);
+  expect(resolvePersistentMenuBarHelperLaunch({
+    platform: "darwin",
+    isPackaged: true,
+    env: {
+      BUTLER_APP_MENU_BAR_HELPER_EXECUTABLE:
+        "/Applications/Butler.app/Contents/MacOS/Butler",
+    },
+    helperExecutableExists: true,
+    mainExecutablePath: "/Applications/Butler.app/Contents/MacOS/Butler",
+  })).toMatchObject({
+    supported: false,
+    reason: "unsafe_dock_app_executable",
+  });
   expect(persistentMenuBarHelperSupported({
     platform: "linux",
     isPackaged: true,
@@ -37,7 +95,7 @@ test("packaged macOS App uses a persistent menu bar helper by default", () => {
     platform: "linux",
     isPackaged: false,
     env: { BUTLER_APP_FORCE_PERSISTENT_MENU_BAR_HELPER: "1" },
-  })).toBe(true);
+  })).toBe(false);
 });
 
 test("main process and helper process have distinct tray ownership", () => {
@@ -74,6 +132,12 @@ test("persistent helper launch policy does not trust stale pid files", () => {
   })).toBe(false);
   expect(shouldLaunchPersistentMenuBarHelper({
     trayEnabled: true,
+    persistentHelperSupported: true,
+    launchAttempted: false,
+    helperRunning: true,
+  })).toBe(false);
+  expect(shouldLaunchPersistentMenuBarHelper({
+    trayEnabled: true,
     persistentHelperSupported: false,
     launchAttempted: false,
   })).toBe(false);
@@ -84,7 +148,7 @@ test("persistent helper launch policy does not trust stale pid files", () => {
   })).toBe(false);
 });
 
-test("helper lifecycle actions keep UI helper and Agent stop separate", () => {
+test("helper lifecycle actions treat helper exit as Agent stop", () => {
   expect(helperLifecycleAction("close-window")).toEqual({
     quitsMainUi: false,
     quitsHelper: false,
@@ -98,7 +162,7 @@ test("helper lifecycle actions keep UI helper and Agent stop separate", () => {
   expect(helperLifecycleAction("quit-helper")).toEqual({
     quitsMainUi: false,
     quitsHelper: true,
-    stopsAgent: false,
+    stopsAgent: true,
   });
   expect(helperLifecycleAction("stop-agent")).toEqual({
     quitsMainUi: false,

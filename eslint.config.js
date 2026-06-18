@@ -10,6 +10,7 @@ export default tseslint.config(
       "node_modules/**",
       "src/**/node_modules/**",
       "packages/butler-app/client/ui/dist/**",
+      "packages/butler-app/client/electron/dist/**",
       "bun.lock",
       "*.lockb",
     ],

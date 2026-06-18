@@ -112,6 +112,110 @@ test("App Agent native service bridge can isolate launchd service label for test
   }
 });
 
+test("App Agent native service bridge starts macOS menu bar helper with Agent service", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-helper-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    writeAppManagedRuntime(butlerData, "9.9.9");
+    const writes: Array<{ path: string; body: string }> = [];
+    const commands: string[] = [];
+    const bridge = createAppAgentNativeServiceBridge({
+      butlerData,
+      platform: "darwin",
+      homeDir: "/Users/alice",
+      serviceLabel: "com.hexpy.butler.test.local",
+      getPort: () => 19125,
+      prepareLocalAuth: () => ({
+        filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
+      }),
+      menuBarHelper: {
+        appBundlePath: "/Applications/Butler.app",
+        executablePath:
+          "/Applications/Butler.app/Contents/Library/LoginItems/Butler Menu Bar Helper.app/Contents/MacOS/Butler Menu Bar Helper",
+        mainExecutablePath: "/Applications/Butler.app/Contents/MacOS/Butler",
+      },
+      writeFile: (path, body) => writes.push({ path, body }),
+      runCommand: (argv) => {
+        commands.push(argv.join(" "));
+        return { exitCode: argv[1] === "bootout" ? 1 : 0 };
+      },
+    });
+
+    await bridge.registration.install();
+
+    expect(writes).toHaveLength(2);
+    expect(writes[0]?.path).toBe(
+      "/Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist",
+    );
+    expect(writes[1]?.path).toBe(
+      "/Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.menubar-helper.plist",
+    );
+    expect(writes[1]?.body).toContain(
+      "<string>com.hexpy.butler.test.local.menubar-helper</string>",
+    );
+    expect(writes[1]?.body).toContain("Butler Menu Bar Helper");
+    expect(writes[1]?.body).toContain("<key>BUTLER_APP_AGENT_SERVICE_LABEL</key>");
+    expect(writes[1]?.body).toContain("<string>com.hexpy.butler.test.local</string>");
+    expect(writes[1]?.body).toContain("<key>BUTLER_APP_MENU_BAR_HELPER_PID_FILE</key>");
+    expect(writes[1]?.body).toContain("/app/runtime/menu-bar-helper.pid");
+    expect(writes[1]?.body).toContain("<key>BUTLER_APP_SERVER_URL</key>");
+    expect(writes[1]?.body).toContain("<string>http://127.0.0.1:19125/</string>");
+    expect(writes[1]?.body).not.toContain("<key>KeepAlive</key>");
+    expect(commands).toEqual([
+      "launchctl bootout gui/501/com.hexpy.butler.test.local",
+      "launchctl bootstrap gui/501 /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.plist",
+      "launchctl kickstart -k gui/501/com.hexpy.butler.test.local",
+      "launchctl bootout gui/501/com.hexpy.butler.test.local.menubar-helper",
+      "launchctl bootstrap gui/501 /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.menubar-helper.plist",
+      "launchctl kickstart -k gui/501/com.hexpy.butler.test.local.menubar-helper",
+    ]);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("App Agent native service bridge does not fail Agent start when menu bar helper bootstrap fails", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-helper-optional-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    writeAppManagedRuntime(butlerData, "9.9.9");
+    const commands: string[] = [];
+    const bridge = createAppAgentNativeServiceBridge({
+      butlerData,
+      platform: "darwin",
+      homeDir: "/Users/alice",
+      serviceLabel: "com.hexpy.butler.test.local",
+      getPort: () => 19125,
+      prepareLocalAuth: () => ({
+        filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
+      }),
+      menuBarHelper: {
+        appBundlePath: "/Applications/Butler.app",
+        executablePath:
+          "/Applications/Butler.app/Contents/Library/LoginItems/Butler Menu Bar Helper.app/Contents/MacOS/Butler Menu Bar Helper",
+        mainExecutablePath: "/Applications/Butler.app/Contents/MacOS/Butler",
+      },
+      writeFile: () => {},
+      runCommand: (argv) => {
+        const command = argv.join(" ");
+        commands.push(command);
+        if (command.includes("menubar-helper.plist")) return { exitCode: 5 };
+        return { exitCode: argv[1] === "bootout" ? 1 : 0 };
+      },
+    });
+
+    await expect(bridge.nativeServices.start()).resolves.toBeUndefined();
+    expect(commands).toContain(
+      "launchctl kickstart -k gui/501/com.hexpy.butler.test.local",
+    );
+    expect(commands).toContain(
+      "launchctl bootstrap gui/501 /Users/alice/Library/LaunchAgents/com.hexpy.butler.test.local.menubar-helper.plist",
+    );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("App Agent native service bridge ensures App-managed runtime before registration", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-ensure-"));
   try {

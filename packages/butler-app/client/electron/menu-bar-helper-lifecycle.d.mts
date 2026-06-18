@@ -13,6 +13,15 @@ export interface PersistentMenuBarHelperInput {
   platform?: string;
   isPackaged?: boolean;
   env?: Record<string, string | undefined>;
+  mainExecutablePath?: string;
+  helperExecutablePath?: string | null;
+  helperExecutableExists?: boolean;
+}
+
+export interface PersistentMenuBarHelperResolvedLaunch {
+  supported: boolean;
+  executable: string | null;
+  reason: string | null;
 }
 
 export interface TrayOwnershipInput {
@@ -25,6 +34,7 @@ export interface PersistentMenuBarHelperLaunchInput {
   trayEnabled?: boolean;
   persistentHelperSupported?: boolean;
   launchAttempted?: boolean;
+  helperRunning?: boolean;
 }
 
 export type HelperLifecycleAction =
@@ -50,6 +60,9 @@ export declare function isQuitMenuBarHelperSignalMode(input?: ProcessModeInput):
 export declare function persistentMenuBarHelperSupported(
   input?: PersistentMenuBarHelperInput,
 ): boolean;
+export declare function resolvePersistentMenuBarHelperLaunch(
+  input?: PersistentMenuBarHelperInput,
+): PersistentMenuBarHelperResolvedLaunch;
 export declare function shouldLaunchPersistentMenuBarHelper(
   input?: PersistentMenuBarHelperLaunchInput,
 ): boolean;

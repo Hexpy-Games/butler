@@ -26,10 +26,12 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createBundledAgentSupervisor } from "./app-agent-supervisor.mjs";
+import { reconcileAgentServiceOnAppLaunch } from "./app-agent-launch-reconciler.mjs";
 import { createAppAgentNativeServiceBridge } from "./app-agent-native-service-bridge.mjs";
 import { createAppAgentServiceAdapter } from "./app-agent-service-adapter.mjs";
 import {
   appManagedAgentPointerPath,
+  resolveBundledAgentResourceRoot,
   resolveAppManagedGatewayCommand,
 } from "./app-managed-runtime.mjs";
 import { resolveOpenAIOAuthLoginHelper } from "./openai-oauth-login-helper.mjs";
@@ -37,10 +39,7 @@ import { createAgentServiceControl } from "./service-control.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
 import {
   MENU_BAR_HELPER_ARG,
-  QUIT_MAIN_UI_ARG,
-  QUIT_MENU_BAR_HELPER_ARG,
   argsForNavigationRequest,
-  helperLifecycleAction,
   helperProcessOwnsTray,
   isMenuBarHelperMode,
   isQuitMainUiSignalMode,
@@ -48,6 +47,7 @@ import {
   mainProcessOwnsTray,
   navigationRequestFromArgs,
   persistentMenuBarHelperSupported,
+  resolvePersistentMenuBarHelperLaunch,
   shouldLaunchPersistentMenuBarHelper,
 } from "./menu-bar-helper-lifecycle.mjs";
 import { createTrayAgentMenuModel } from "./tray-agent-menu.mjs";
@@ -157,6 +157,7 @@ const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
       getPort: () => port,
       getAppVersion: () => appInfoView().version,
       ensureRuntimePointer: ensureAppManagedAgentRuntimePointer,
+      menuBarHelper: appManagedMenuBarHelperRegistration(),
     })
   : null;
 const appAgentServiceAdapter = appAgentNativeServiceBridge
@@ -877,11 +878,58 @@ function updateTrayIcon() {
   tray.setImage(trayIconForMenuBar());
 }
 
+function packagedAppBundlePath() {
+  if (!app.isPackaged || process.platform !== "darwin") return null;
+  return dirname(dirname(dirname(process.execPath)));
+}
+
+function defaultMenuBarHelperExecutablePath() {
+  const appBundlePath = packagedAppBundlePath();
+  if (!appBundlePath) return null;
+  return join(
+    appBundlePath,
+    "Contents",
+    "Library",
+    "LoginItems",
+    "Butler Menu Bar Helper.app",
+    "Contents",
+    "MacOS",
+    "Butler Menu Bar Helper",
+  );
+}
+
+function appManagedMenuBarHelperRegistration() {
+  if (process.platform !== "darwin" || !app.isPackaged) return null;
+  const executablePath = defaultMenuBarHelperExecutablePath();
+  if (!executablePath || !existsSync(executablePath)) return null;
+  return {
+    appBundlePath: packagedAppBundlePath(),
+    executablePath,
+    mainExecutablePath: process.execPath,
+  };
+}
+
 function isPersistentMenuBarHelperSupported() {
+  const helperExecutablePath = defaultMenuBarHelperExecutablePath();
   return persistentMenuBarHelperSupported({
     platform: process.platform,
     isPackaged: app.isPackaged,
     env: process.env,
+    mainExecutablePath: process.execPath,
+    helperExecutablePath,
+    helperExecutableExists: Boolean(helperExecutablePath && existsSync(helperExecutablePath)),
+  });
+}
+
+function persistentMenuBarHelperLaunch() {
+  const helperExecutablePath = defaultMenuBarHelperExecutablePath();
+  return resolvePersistentMenuBarHelperLaunch({
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    env: process.env,
+    mainExecutablePath: process.execPath,
+    helperExecutablePath,
+    helperExecutableExists: Boolean(helperExecutablePath && existsSync(helperExecutablePath)),
   });
 }
 
@@ -906,6 +954,16 @@ function readPidFile(path) {
   }
 }
 
+function processIsRunning(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function appLaunchArgs(extraArgs = []) {
   if (app.isPackaged) return extraArgs;
   return [app.getAppPath(), ...extraArgs];
@@ -915,9 +973,14 @@ function appLaunchCwd() {
   return app.isPackaged ? dirname(process.execPath) : __dirname;
 }
 
-function spawnDetachedApp(args = [], env = {}, label = "Butler helper process") {
+function spawnDetachedProcess(
+  executable,
+  args = [],
+  env = {},
+  label = "Butler helper process",
+) {
   try {
-    const child = spawn(process.execPath, appLaunchArgs(args), {
+    const child = spawn(executable, args, {
       cwd: appLaunchCwd(),
       detached: true,
       env: {
@@ -947,6 +1010,10 @@ function spawnDetachedApp(args = [], env = {}, label = "Butler helper process") 
   }
 }
 
+function spawnDetachedApp(args = [], env = {}, label = "Butler helper process") {
+  return spawnDetachedProcess(process.execPath, appLaunchArgs(args), env, label);
+}
+
 function scheduleMenuBarHelperLaunchCheck() {
   const timer = setTimeout(() => {
     const helperPid = readPidFile(menuBarHelperPidFile);
@@ -974,18 +1041,35 @@ function scheduleSignalProcessHardExit() {
 }
 
 function ensurePersistentMenuBarHelper() {
+  const launch = persistentMenuBarHelperLaunch();
+  const helperPid = readPidFile(menuBarHelperPidFile);
+  const helperRunning = processIsRunning(helperPid);
   if (!shouldLaunchPersistentMenuBarHelper({
     trayEnabled: nativeShellPreferences.trayEnabled,
-    persistentHelperSupported: isPersistentMenuBarHelperSupported(),
+    persistentHelperSupported: launch.supported,
     launchAttempted: menuBarHelperLaunchAttempted,
+    helperRunning,
   })) {
+    if (helperRunning) menuBarHelperLaunchAttempted = true;
     return;
   }
   menuBarHelperLaunchAttempted = true;
   mkdirSync(dirname(menuBarHelperPidFile), { recursive: true, mode: 0o700 });
-  const pid = spawnDetachedApp([MENU_BAR_HELPER_ARG], {
-    BUTLER_APP_MENU_BAR_HELPER: "1",
-  }, "Butler menu bar helper");
+  const pid = spawnDetachedProcess(
+    launch.executable,
+    [MENU_BAR_HELPER_ARG],
+    {
+      BUTLER_APP_AGENT_SERVICE_LABEL: appAgentServiceLabel(),
+      BUTLER_APP_BUNDLE_PATH: packagedAppBundlePath() || "",
+      BUTLER_APP_MAIN_EXECUTABLE: process.execPath,
+      BUTLER_APP_MENU_BAR_HELPER: "1",
+      BUTLER_APP_MENU_BAR_HELPER_PID_FILE: menuBarHelperPidFile,
+      BUTLER_APP_SERVER_PORT: String(port),
+      BUTLER_APP_SERVER_URL: serverUrl,
+      BUTLER_DATA: butlerDataRoot,
+    },
+    "Butler menu bar helper",
+  );
   if (!pid) menuBarHelperLaunchAttempted = false;
   else scheduleMenuBarHelperLaunchCheck();
 }
@@ -993,12 +1077,15 @@ function ensurePersistentMenuBarHelper() {
 function signalPersistentMenuBarHelperToQuit() {
   if (!isPersistentMenuBarHelperSupported()) return;
   menuBarHelperLaunchAttempted = false;
-  const pid = spawnDetachedApp(
-    [QUIT_MENU_BAR_HELPER_ARG],
-    {},
-    "Butler menu bar helper quit signal",
-  );
-  if (pid) scheduleMenuBarHelperQuitCheck();
+  const helperPid = readPidFile(menuBarHelperPidFile);
+  if (!helperPid) return;
+  try {
+    process.kill(helperPid, "SIGTERM");
+    scheduleMenuBarHelperQuitCheck();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Butler menu bar helper quit signal failed: ${message}`);
+  }
 }
 
 function writeMenuBarHelperPid() {
@@ -1063,13 +1150,50 @@ async function trayAgentServiceStatus() {
 }
 
 async function runTrayAgentServiceAction(action) {
+  if (action === "stop" && !(await confirmStopButlerAgentFromTray())) {
+    return;
+  }
   const actions = {
     start: () => agentServiceControl.startAgentService({ source: trayActionSource() }),
     stop: () => agentServiceControl.stopAgentService({ source: trayActionSource() }),
     restart: () => agentServiceControl.restartAgentService({ source: trayActionSource() }),
   };
   await actions[action]?.();
+  if (action === "stop") {
+    if (tray) {
+      tray.destroy();
+      tray = null;
+    }
+    if (isMenuBarHelperProcess) {
+      isQuitting = true;
+      app.quit();
+    }
+    return;
+  }
   await refreshTrayMenu();
+}
+
+async function confirmStopButlerAgentFromTray() {
+  if (readNativeSettings().suppressStopButlerAgentWarning) return true;
+  const result = await dialog.showMessageBox({
+    type: "warning",
+    buttons: ["Stop Butler Agent", "Cancel"],
+    cancelId: 1,
+    defaultId: 1,
+    checkboxLabel: "Do not show this warning again",
+    checkboxChecked: false,
+    message: "Stop Butler Agent?",
+    detail:
+      "Stopping Butler Agent will stop automations and any background sessions currently running.",
+  });
+  if (result.response !== 0) return false;
+  if (result.checkboxChecked === true) {
+    await writeNativeSettings({
+      ...readNativeSettings(),
+      suppressStopButlerAgentWarning: true,
+    });
+  }
+  return true;
 }
 
 function trayActionSource() {
@@ -1084,24 +1208,6 @@ function openButlerFromTray(args = []) {
   void showMainWindow()
     .then(() => flushPendingNativeNavigation())
     .catch(handleFatalStartupError);
-}
-
-function quitButlerUiFromTray() {
-  const action = helperLifecycleAction("quit-main-ui");
-  if (action.stopsAgent) return;
-  if (isMenuBarHelperProcess) {
-    launchMainUi([QUIT_MAIN_UI_ARG]);
-    return;
-  }
-  isQuitting = true;
-  app.quit();
-}
-
-function quitMenuBarHelperFromTray() {
-  const action = helperLifecycleAction("quit-helper");
-  if (action.stopsAgent) return;
-  isQuitting = true;
-  app.quit();
 }
 
 async function refreshTrayMenu() {
@@ -1174,23 +1280,6 @@ async function refreshTrayMenu() {
         label: "Recent Conversations",
         submenu: recentMenu,
       },
-      { type: "separator" },
-      {
-        label: "Quit Butler UI",
-        click: () => {
-          quitButlerUiFromTray();
-        },
-      },
-      ...(isMenuBarHelperProcess
-        ? [
-            {
-              label: "Quit Menu Bar Helper",
-              click: () => {
-                quitMenuBarHelperFromTray();
-              },
-            },
-          ]
-        : []),
     ]),
   );
 }
@@ -1410,9 +1499,14 @@ function readNativeSettings() {
     const parsed = JSON.parse(readFileSync(nativeSettingsPath(), "utf8"));
     nativeSettingsCache = {
       developerModeEnabled: parsed?.developer_mode_enabled === true,
+      suppressStopButlerAgentWarning:
+        parsed?.suppress_stop_butler_agent_warning === true,
     };
   } catch {
-    nativeSettingsCache = { developerModeEnabled: false };
+    nativeSettingsCache = {
+      developerModeEnabled: false,
+      suppressStopButlerAgentWarning: false,
+    };
   }
   return nativeSettingsCache;
 }
@@ -1420,6 +1514,8 @@ function readNativeSettings() {
 async function writeNativeSettings(settings) {
   nativeSettingsCache = {
     developerModeEnabled: settings.developerModeEnabled === true,
+    suppressStopButlerAgentWarning:
+      settings.suppressStopButlerAgentWarning === true,
   };
   const path = nativeSettingsPath();
   await mkdir(dirname(path), { recursive: true });
@@ -1429,6 +1525,8 @@ async function writeNativeSettings(settings) {
       {
         schema: nativeSettingsSchema,
         developer_mode_enabled: nativeSettingsCache.developerModeEnabled,
+        suppress_stop_butler_agent_warning:
+          nativeSettingsCache.suppressStopButlerAgentWarning,
       },
       null,
       2,
@@ -1442,7 +1540,10 @@ function developerModeEnabled() {
 }
 
 async function setDeveloperMode(enabled) {
-  await writeNativeSettings({ developerModeEnabled: enabled });
+  await writeNativeSettings({
+    ...readNativeSettings(),
+    developerModeEnabled: enabled,
+  });
   if (enabled) {
     await installDevtools();
   }
@@ -1477,6 +1578,10 @@ function safeString(value) {
 
 async function createWindow() {
   if (rendererUrl === serverUrl && !shouldUseAppAgentNativeServiceBridge()) {
+    await ensureServer();
+  }
+  await reconcileAppAgentServiceForLaunch();
+  if (rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {
     await ensureServer();
   }
   await loadInitialNativeShellPreferences();
@@ -1548,6 +1653,69 @@ async function createWindow() {
   await win.loadURL(rendererUrl);
   applyDeveloperModeToWindows();
   return win;
+}
+
+async function reconcileAppAgentServiceForLaunch() {
+  if (!appAgentNativeServiceBridge || isMenuBarHelperProcess) return;
+  const result = await reconcileAgentServiceOnAppLaunch({
+    serviceControl: agentServiceControl,
+    enabled: true,
+    runtimeCurrent: appManagedAgentRuntimeCurrent,
+    source: "app-launch",
+  });
+  if (result.attempted || result.reason === "already_ready") {
+    nativeServiceGatewayReady = result.finalStatus?.status === "ready";
+    nativeServiceGatewayLastErrorCode = result.actionResult?.error_code ?? null;
+  }
+}
+
+function appManagedAgentRuntimeCurrent() {
+  const expectedVersion = currentBundledAgentVersion();
+  if (!expectedVersion) {
+    return {
+      current: false,
+      reason: "bundled_agent_version_unavailable",
+    };
+  }
+  try {
+    const pointer = JSON.parse(readFileSync(appManagedAgentPointerPath(butlerDataRoot), "utf8"));
+    const activeVersion = safeString(pointer?.bundled_agent_version) ||
+      safeString(pointer?.version);
+    return {
+      current: pointer?.product === "butler-app" &&
+        pointer?.gateway_profile === "electron" &&
+        activeVersion === expectedVersion,
+      expectedVersion,
+      activeVersion: activeVersion ?? "missing",
+    };
+  } catch (error) {
+    return {
+      current: false,
+      expectedVersion,
+      reason: error?.code === "ENOENT" ? "runtime_pointer_missing" : "runtime_pointer_unreadable",
+    };
+  }
+}
+
+function currentBundledAgentVersion() {
+  const resourceRoot = resolveBundledAgentResourceRoot({
+    env: process.env,
+    resourcesPath: process.resourcesPath,
+  });
+  if (!resourceRoot) return null;
+  try {
+    const manifest = JSON.parse(
+      readFileSync(join(resourceRoot, "agent-release-manifest.json"), "utf8"),
+    );
+    const artifact = Array.isArray(manifest?.artifacts)
+      ? manifest.artifacts.find((item) =>
+          item?.product === "butler-agent" && typeof item?.version === "string",
+        ) ?? manifest.artifacts.find((item) => typeof item?.version === "string")
+      : null;
+    return safeString(artifact?.version);
+  } catch {
+    return null;
+  }
 }
 
 ipcMain.handle("butler:get-app-info", () => appInfoView());

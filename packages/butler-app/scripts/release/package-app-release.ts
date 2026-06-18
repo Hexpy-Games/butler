@@ -995,6 +995,11 @@ function createMacPkg(input: {
     }
     copyFileSync(postinstall, join(scriptsDir, "postinstall"));
     chmodSync(join(scriptsDir, "postinstall"), 0o755);
+    const componentPlist = join(workDir, "components.plist");
+    writeMacPkgComponentPlist({
+      path: componentPlist,
+      rootRelativeBundlePath: join("Applications", "Butler.app"),
+    });
 
     rmSync(input.artifactPath, { force: true });
     const unsignedPkg = process.env.BUTLER_APP_PKG_SIGN_IDENTITY
@@ -1003,6 +1008,7 @@ function createMacPkg(input: {
     runPkgbuild({
       root: pkgRoot,
       scripts: scriptsDir,
+      componentPlist,
       version: input.version,
       artifactPath: unsignedPkg,
     });
@@ -1022,6 +1028,7 @@ function createMacPkg(input: {
 function runPkgbuild(input: {
   root: string;
   scripts: string;
+  componentPlist: string;
   version: string;
   artifactPath: string;
 }): void {
@@ -1031,6 +1038,8 @@ function runPkgbuild(input: {
     input.root,
     "--scripts",
     input.scripts,
+    "--component-plist",
+    input.componentPlist,
     "--identifier",
     MAC_APP_BUNDLE_IDENTIFIER,
     "--version",
@@ -1048,6 +1057,34 @@ function runPkgbuild(input: {
       }`,
     );
   }
+}
+
+function writeMacPkgComponentPlist(input: {
+  path: string;
+  rootRelativeBundlePath: string;
+}): void {
+  writeFileSync(
+    input.path,
+    `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+  <dict>
+    <key>BundleHasStrictIdentifier</key>
+    <true/>
+    <key>BundleIsRelocatable</key>
+    <false/>
+    <key>BundleIsVersionChecked</key>
+    <true/>
+    <key>BundleOverwriteAction</key>
+    <string>upgrade</string>
+    <key>RootRelativeBundlePath</key>
+    <string>${input.rootRelativeBundlePath}</string>
+  </dict>
+</array>
+</plist>
+`,
+  );
 }
 
 function runProductbuild(input: {

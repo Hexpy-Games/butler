@@ -299,14 +299,15 @@ Tasks:
    - Restart Butler Agent
    - Stop Butler Agent
    - Start Butler Agent
-   - Quit Butler UI
-   - Quit Menu Bar Helper
-5. Ensure Quit UI does not stop the service or terminate the helper by default.
-6. Ensure Quit Menu Bar Helper does not stop the service by default.
+5. Ensure the helper menu does not expose **Quit Butler UI** or helper-only quit
+   actions.
+6. Ensure **Stop Butler Agent** warns that automations and background sessions
+   will stop, supports a "do not show again" choice, then stops the service and
+   removes the helper icon.
 7. Keep standalone Agent installs headless by default; design any standalone tray
    companion as an explicit opt-in package or command.
-8. Add tests around UI quit, helper quit, helper action handlers, service calls,
-   and standalone headless install defaults.
+8. Add tests around UI quit, helper service action handlers, service calls, and
+   standalone headless install defaults.
 
 Primary files:
 
@@ -515,11 +516,10 @@ Tasks:
 1. E2E: first-run installs service and reaches workspace.
 2. E2E: close window, service remains online.
 3. E2E: quit UI, service and menu bar helper remain online.
-4. E2E: quit menu bar helper, service remains online.
-5. E2E: Stop Agent terminates process group.
-6. E2E: standalone Agent install remains headless by default.
-7. E2E: update Agent runtime restarts process group.
-8. E2E: failed update rolls back.
+4. E2E: Stop Agent terminates the process group and removes the helper icon.
+5. E2E: standalone Agent install remains headless by default.
+6. E2E: update Agent runtime restarts process group.
+7. E2E: failed update rolls back.
 
 Acceptance:
 
