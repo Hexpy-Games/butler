@@ -10,6 +10,12 @@ export function createAppAgentNativeServiceBridge(options?: {
     rollbackActivation?: (error?: Error) => void;
   } | void;
   prepareLocalAuth?: () => { filePath: string };
+  menuBarHelper?: {
+    appBundlePath?: string | null;
+    executablePath: string;
+    mainExecutablePath?: string | null;
+    label?: string;
+  } | null;
   isPidRunning?: (pid: number) => boolean;
   runCommand?: (argv: string[]) => { exitCode: number } | Promise<{ exitCode: number }>;
   writeFile?: (path: string, body: string) => void;

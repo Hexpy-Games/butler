@@ -6,6 +6,7 @@ import {
   mkdirSync,
   realpathSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
@@ -477,12 +478,19 @@ function createMacPkg(input: {
       force: true,
       recursive: true,
     });
+    const componentPlist = join(workDir, "components.plist");
+    writeMacPkgComponentPlist({
+      path: componentPlist,
+      rootRelativeBundlePath: `${input.appName}.app`,
+    });
     rmSync(input.outPath, { force: true });
     runRequired(
       "pkgbuild",
       [
         "--root",
         pkgRoot,
+        "--component-plist",
+        componentPlist,
         "--identifier",
         input.identifier,
         "--version",
@@ -496,6 +504,34 @@ function createMacPkg(input: {
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
+}
+
+function writeMacPkgComponentPlist(input: {
+  path: string;
+  rootRelativeBundlePath: string;
+}): void {
+  writeFileSync(
+    input.path,
+    `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+  <dict>
+    <key>BundleHasStrictIdentifier</key>
+    <true/>
+    <key>BundleIsRelocatable</key>
+    <false/>
+    <key>BundleIsVersionChecked</key>
+    <true/>
+    <key>BundleOverwriteAction</key>
+    <string>upgrade</string>
+    <key>RootRelativeBundlePath</key>
+    <string>${input.rootRelativeBundlePath}</string>
+  </dict>
+</array>
+</plist>
+`,
+  );
 }
 
 function stopChild(child: ChildProcess): void {

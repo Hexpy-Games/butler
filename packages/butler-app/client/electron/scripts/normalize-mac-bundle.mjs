@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const appPath = resolve(process.argv[2] ?? "dist/Butler-darwin-arm64/Butler.app");
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const iconPath = resolve(scriptDir, "..", "assets", "butler.icns");
+const helperBuildScript = resolve(scriptDir, "build-mac-menu-bar-helper.mjs");
 const plistPath = resolve(appPath, "Contents", "Info.plist");
 const targetIconPath = resolve(appPath, "Contents", "Resources", "butler.icns");
 
@@ -62,6 +63,7 @@ setPlistString("CFBundleName", "Butler");
 setPlistString("CFBundleIdentifier", "com.hexpy.butler");
 setPlistString("CFBundleIconFile", "butler.icns");
 setPlistString("CFBundleIconName", "butler");
+run("node", [helperBuildScript, appPath]);
 run("touch", [appPath]);
 
 process.stdout.write(`macOS bundle metadata normalized: ${appPath}\n`);

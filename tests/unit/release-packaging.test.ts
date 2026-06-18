@@ -209,7 +209,7 @@ test("app release manifest exposes app package files only", () => {
       schema: "butler.app-desktop-helper.v1",
       product: "butler-app",
       owner: "butler-app",
-      helperMode: "same-app-menu-bar-helper",
+      helperMode: "background-helper-executable",
       defaultEnabledPlatforms: ["darwin"],
       survivesMainUiQuitPlatforms: ["darwin"],
       stopsAgentOnHelperQuit: false,
@@ -277,7 +277,7 @@ test("app release manifest exposes app package files only", () => {
       ],
     },
     desktopHelper: {
-      helperMode: "same-app-menu-bar-helper",
+      helperMode: "background-helper-executable",
       defaultEnabledPlatforms: ["darwin"],
       survivesMainUiQuitPlatforms: ["darwin"],
       stopsAgentOnHelperQuit: false,
@@ -335,7 +335,7 @@ test("app release manifest exposes app package files only", () => {
       ],
     },
     desktopHelper: {
-      helperMode: "same-app-menu-bar-helper",
+      helperMode: "background-helper-executable",
       platforms: ["darwin"],
       defaultEnabledPlatforms: ["darwin"],
       survivesMainUiQuitPlatforms: ["darwin"],
@@ -371,7 +371,7 @@ test("app release manifest exposes app package files only", () => {
     manifest.artifacts.find((artifact) => artifact.platform === "linux-x64"),
   ).toMatchObject({
     desktopHelper: {
-      helperMode: "same-app-menu-bar-helper",
+      helperMode: "background-helper-executable",
       platforms: ["linux"],
       defaultEnabledPlatforms: [],
       survivesMainUiQuitPlatforms: [],
@@ -1265,7 +1265,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       },
       desktopHelper: {
         schema: "butler.app-desktop-helper.v1",
-        helperMode: "same-app-menu-bar-helper",
+        helperMode: "background-helper-executable",
         defaultEnabledPlatforms: [],
         survivesMainUiQuitPlatforms: [],
         stopsAgentOnHelperQuit: false,
@@ -1906,6 +1906,57 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(electronPackage.scripts["package:mac"]).toContain(
     "normalize-mac-bundle.mjs",
   );
+  const macBundleNormalizer = readText(
+    join(
+      root,
+      "packages",
+      "butler-app",
+      "client",
+      "electron",
+      "scripts",
+      "normalize-mac-bundle.mjs",
+    ),
+  );
+  const macHelperBuilder = readText(
+    join(
+      root,
+      "packages",
+      "butler-app",
+      "client",
+      "electron",
+      "scripts",
+      "build-mac-menu-bar-helper.mjs",
+    ),
+  );
+  const macHelperSource = readText(
+    join(
+      root,
+      "packages",
+      "butler-app",
+      "client",
+      "electron",
+      "native",
+      "menu-bar-helper.swift",
+    ),
+  );
+  expect(macBundleNormalizer).toContain("build-mac-menu-bar-helper.mjs");
+  expect(macHelperBuilder).toContain("LoginItems");
+  expect(macHelperBuilder).toContain("<key>LSUIElement</key>");
+  expect(macHelperBuilder).toContain("menu-bar-helper.swift");
+  expect(macHelperBuilder).toContain("butler-mark-flat.png");
+  expect(macHelperBuilder).toContain("swiftc");
+  expect(macHelperSource).toContain("NSStatusBar.system.statusItem");
+  expect(macHelperSource).toContain("setActivationPolicy(.accessory)");
+  expect(macHelperSource).toContain("butler-mark-flat");
+  expect(macHelperSource).toContain("menu-bar-helper.lock");
+  expect(macHelperSource).toContain("flock");
+  expect(macHelperSource).toContain("runningApplications");
+  expect(macHelperSource).toContain("forceTerminate");
+  expect(macHelperSource).toContain("--butler-new-chat");
+  expect(macHelperSource).toContain("Stop Butler Agent?");
+  expect(macHelperSource).toContain("Do not show this warning again");
+  expect(macHelperSource).not.toContain("Quit Butler UI");
+  expect(macHelperSource).not.toContain("Quit Menu Bar Helper");
   expect(electronPackage.scripts["package:mac"]).toContain(
     "--app-bundle-id=com.hexpy.butler",
   );
@@ -1984,6 +2035,9 @@ test("dedicated client package smoke and metadata are available", () => {
   const appReleasePackager = readText(
     join(root, "packages", "butler-app", "scripts", "release", "package-app-release.ts"),
   );
+  const appInstallTestEnv = readText(
+    join(root, "packages", "butler-app", "scripts", "app-install-test-env.ts"),
+  );
   expect(appReleasePackager).toContain("butler.update-manifest.v1");
   expect(appReleasePackager).toContain("app-release-manifest.json");
   expect(appReleasePackager).toContain("app-update-manifest.json");
@@ -2006,8 +2060,15 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(appReleasePackager).toContain("copyFileSync(iconPath, packagerIconPath)");
   expect(appReleasePackager).toContain("CFBundleIconName");
   expect(appReleasePackager).toContain("--app-bundle-id=");
+  expect(appReleasePackager).toContain("--component-plist");
+  expect(appReleasePackager).toContain("BundleIsRelocatable");
+  expect(appReleasePackager).toContain("<false/>");
+  expect(appReleasePackager).toContain('join("Applications", "Butler.app")');
   expect(appReleasePackager).toContain("packaged mac app icon does not match Butler icon");
   expect(appReleasePackager).toContain("--ignore=^/dist($|/)");
+  expect(appInstallTestEnv).toContain("--component-plist");
+  expect(appInstallTestEnv).toContain("BundleIsRelocatable");
+  expect(appInstallTestEnv).toContain("<false/>");
   expect(appReleaseIconPath(root)).toBe(
     join(root, "packages", "butler-app", "client", "electron", "assets", "butler.icns"),
   );

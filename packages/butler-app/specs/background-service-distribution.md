@@ -70,16 +70,26 @@ leave the helper and Agent service online.
 - **Open Butler**: shows the App UI and connects to the service-owned app
   gateway. If the App UI is already running, this action focuses the existing
   window instead of starting a duplicate UI process.
+- **Launch Butler App**: reconciles the App-managed Agent service before the UI
+  is considered usable. This is not only a first-run responsibility; on every
+  packaged App launch, if the App-managed service registration exists but is not
+  loaded/running, or if the service projections are offline/stale, the App must
+  repair/start the service using the native service bridge.
+- A running service is only launch-ready when its App-managed runtime pointer
+  matches the bundled Agent version inside the currently launched App. If the
+  service is online but still points at an older App-managed runtime, launch
+  reconciliation must activate the bundled runtime and restart the service
+  before treating the gateway as current.
 - **Status icon click**: opens the OS menu only. A plain status icon click must
   not reopen the App UI; reopening is reserved for the explicit **Open Butler**
   menu action.
 - **Close window**: hides the UI. The Agent service continues.
-- **Quit Butler UI**: quits or hides the main App UI only. The Agent service and
-  menu bar/tray helper continue unless the user chooses an explicit stop or quit
-  helper action.
-- **Quit Menu Bar Helper**: removes the status icon and helper process only. The
-  Agent service continues unless the user chooses **Stop Butler Agent**.
-- **Stop Butler Agent**: explicitly stops the service process group.
+- **Quit main App UI**: quits or hides the main App UI only. The Agent service
+  and menu bar/tray helper continue unless the user chooses an explicit service
+  stop.
+- **Stop Butler Agent**: explicitly stops the service process group, removes the
+  menu bar/tray icon, and warns that automations and background sessions will
+  stop. The warning includes a "do not show again" choice.
 - **Restart Butler Agent**: drains and restarts the service process group.
 - **Uninstall Butler**: unregisters the service and removes App-managed runtime
   files according to the uninstall policy.
@@ -90,19 +100,43 @@ The App distribution must provide a persistent desktop controller similar to
 Docker Desktop on macOS:
 
 - The helper owns the menu bar/tray icon and survives main App UI quit.
+- The helper must run under a background-only helper identity. On macOS, the
+  helper launch path must not execute the Dock-visible
+  `Butler.app/Contents/MacOS/Butler` binary as a second visible App process.
+- Packaged macOS App artifacts must include
+  `Butler.app/Contents/Library/LoginItems/Butler Menu Bar Helper.app` with an
+  `LSUIElement` Info.plist, its own executable, and the Butler status icon
+  resource. The helper executable is the persistent menu bar launch target.
+  The helper status icon must be a menu-bar-appropriate PNG/template resource
+  bundled inside the helper, not only the Dock/App `.icns` resource, so macOS
+  can render the icon correctly in light and dark menu bar appearances.
 - The helper starts at login or after first-run registration whenever the App
   background service is enabled.
+- The helper must enforce single-instance ownership inside the helper process
+  itself, using App-managed runtime state under `BUTLER_DATA`. Main App pid-file
+  checks are an optimization only; a direct helper launch, stale App process, or
+  race during `Open Butler` must not create multiple simultaneous menu bar
+  helper instances.
+- The macOS App-managed Agent service registration/start flow must also render
+  and bootstrap a user LaunchAgent for the menu bar helper. If the Agent service
+  is running because App first-run, service repair, or login startup started it,
+  the menu bar helper must also be started for that user session.
 - The helper is the default entry point for quick Agent status and service
   actions in the App distribution.
 - The helper can open or relaunch the main App UI.
 - The helper must not host Agent runtime internals. It talks to the service
   control bridge and service-owned app gateway through the same local auth and
   protocol checks used by the App UI.
-- Helper quit is separate from Agent stop. Copy and actions must not imply that
-  removing the icon stops background work.
+- The normal helper menu must not expose a helper-only quit action or a
+  **Quit Butler UI** action. The menu bar icon is the Agent service controller;
+  destructive exit is presented as **Stop Butler Agent** or
+  **Stop Butler Service** and stops the Agent service after confirmation.
 - On unsupported desktop environments, the App may degrade to service-only
   operation with diagnostics, but macOS App releases must treat helper
   registration as part of the normal product contract.
+- If a packaged macOS build does not include a launchable background-only helper
+  executable, the App must fail closed to single-process tray ownership instead
+  of spawning a second Dock-visible Butler process.
 - Release metadata must not imply that every packaged App artifact has a
   default persistent helper. It must list all desktop platforms covered by the
   helper schema separately from platforms where the helper is default-enabled
@@ -283,6 +317,11 @@ Required changes:
   `.app` bundles so service registration payloads can travel through the
   installer path. Production release signing and notarization are configured by
   release credentials.
+- macOS App `.pkg` installers must mark the `Butler.app` bundle as
+  non-relocatable and install it at `/Applications/Butler.app`. A same-bundle-id
+  development build under the repository or another user-selected path must not
+  cause Installer to relocate the production App payload away from
+  `/Applications`.
 - Linux App release packaging must publish installable `.deb` artifacts for
   supported Linux architectures. The package installs the Electron App, bundled
   Agent payload, desktop launcher, and App launcher command.
@@ -316,8 +355,22 @@ Required changes:
   menu bar/tray helper.
 - The tray/menu bar can display service status without opening the main window
   and without keeping the main UI process alive.
-- Quitting the menu bar/tray helper removes only the icon/helper unless the user
-  explicitly chooses **Stop Butler Agent**.
+- Opening the packaged macOS App must leave only one Dock-visible Butler App
+  process. A menu bar helper process, when present, must be background-only and
+  must not appear as a second Dock icon.
+- Opening a newly installed or upgraded packaged App on Linux must not continue
+  using an older App-managed Agent runtime just because the existing
+  `systemd --user` service is already online.
+- Packaged macOS normalization must build and sign a launchable
+  `Contents/Library/LoginItems/Butler Menu Bar Helper.app`; the main App must
+  discover that bundled helper path by default and fail closed if it is missing.
+- App-managed macOS Agent install/start must register and bootstrap the helper
+  LaunchAgent in the same user launchd domain as the Agent service, so an online
+  Agent is not left without the expected menu bar controller.
+- The menu bar/tray menu must not expose **Quit Butler UI** or
+  **Quit Menu Bar Helper**. The destructive exit path is **Stop Butler Agent** or
+  **Stop Butler Service**, guarded by a warning with a "do not show again"
+  checkbox.
 - Standalone Agent install stays headless by default, with any tray companion
   exposed only as an opt-in desktop add-on.
 - `butler-main`, `app-gateway`, consolidation, scheduler, sync, watchdog, and
@@ -352,6 +405,9 @@ Required changes:
 - Unit tests for tray/menu service actions.
 - Unit tests for helper lifecycle semantics: close UI, quit UI, quit helper, and
   stop Agent are distinct actions.
+- Unit tests for helper launch safety: packaged macOS must not mark persistent
+  helper support available unless the helper executable is background-only and
+  distinct from the Dock-visible App executable.
 - Release manifest tests proving App artifacts declare service-install
   capability.
 - Release packaging tests proving Linux App service installer staging can be
