@@ -27,9 +27,12 @@ interface LinuxServiceInstallerPackageCliOptions
 
 export interface LinuxServiceInstallerPackageStagingResult {
   debRoot: string;
+  pacmanRoot: string;
   rpmRoot: string;
   debControlPath: string;
   debPostinstPath: string;
+  pacmanInstallPath: string;
+  pacmanPkgbuildPath: string;
   rpmSpecPath: string;
   rpmPostinstallPath: string;
   systemdUnitPath: string;
@@ -41,6 +44,9 @@ export interface LinuxServiceInstallerPackageBuildResult
   debPackagePath: string;
   debSha256: string;
   debSha256Path: string;
+  pacmanPackagePath: string;
+  pacmanSha256: string;
+  pacmanSha256Path: string;
   rpmPackagePath: string;
   rpmSha256: string;
   rpmSha256Path: string;
@@ -65,10 +71,13 @@ export function createLinuxServiceInstallerPackageStaging(
   if (!version) throw new Error("Linux service installer package version is required");
 
   const debRoot = join(outDir, "deb-root");
+  const pacmanRoot = join(outDir, "pacman-root");
   const rpmRoot = join(outDir, "rpm-root");
   rmSync(debRoot, { recursive: true, force: true });
+  rmSync(pacmanRoot, { recursive: true, force: true });
   rmSync(rpmRoot, { recursive: true, force: true });
   mkdirSync(debRoot, { recursive: true });
+  mkdirSync(pacmanRoot, { recursive: true });
   mkdirSync(rpmRoot, { recursive: true });
 
   const unitBody = linuxSystemdUserUnit();
@@ -92,6 +101,13 @@ export function createLinuxServiceInstallerPackageStaging(
     "linux",
     "rpm",
     "postinstall.sh",
+  );
+  const sourcePacmanPostInstall = join(
+    resourceDir,
+    "service-installer",
+    "linux",
+    "pacman",
+    "post_install",
   );
 
   const debUnitPath = join(debRoot, SERVICE_UNIT_TARGET);
@@ -121,11 +137,23 @@ export function createLinuxServiceInstallerPackageStaging(
     postinstallBody: readFileSync(sourceRpmPostinstall, "utf8"),
   }), 0o644);
 
+  const pacmanUnitPath = join(pacmanRoot, SERVICE_UNIT_TARGET);
+  const pacmanLauncherPath = join(pacmanRoot, SERVICE_LAUNCHER_TARGET);
+  writeText(pacmanUnitPath, unitBody, 0o644);
+  copyExecutable(sourceLauncher, pacmanLauncherPath);
+  const pacmanInstallPath = join(outDir, "pacman", `${LINUX_PACKAGE_NAME}.install`);
+  const pacmanPkgbuildPath = join(outDir, "pacman", "PKGBUILD");
+  writeText(pacmanInstallPath, pacmanInstall(readFileSync(sourcePacmanPostInstall, "utf8")), 0o644);
+  writeText(pacmanPkgbuildPath, pacmanPkgbuild({ version }), 0o644);
+
   return {
     debRoot,
+    pacmanRoot,
     rpmRoot,
     debControlPath,
     debPostinstPath,
+    pacmanInstallPath,
+    pacmanPkgbuildPath,
     rpmSpecPath,
     rpmPostinstallPath,
     systemdUnitPath: debUnitPath,
@@ -140,6 +168,7 @@ export function buildLinuxServiceInstallerPackages(
   const outDir = resolve(options.outDir);
   const version = options.version.trim();
   const debPackagePath = join(outDir, `${LINUX_PACKAGE_NAME}_${version}_amd64.deb`);
+  const pacmanPackagePath = join(outDir, `${LINUX_PACKAGE_NAME}-${version}-1-x86_64.pkg.tar.zst`);
   const rpmPackagePath = join(outDir, `${LINUX_PACKAGE_NAME}-${version}-1.x86_64.rpm`);
   runCommand(process.env.BUTLER_APP_DPKG_DEB || "dpkg-deb", [
     "--build",
@@ -147,6 +176,22 @@ export function buildLinuxServiceInstallerPackages(
     staging.debRoot,
     debPackagePath,
   ]);
+
+  const pacmanBuildDir = join(outDir, "pacman-build");
+  rmSync(pacmanBuildDir, { recursive: true, force: true });
+  mkdirSync(pacmanBuildDir, { recursive: true });
+  copyTree(staging.pacmanRoot, join(pacmanBuildDir, "pkgroot"));
+  copyFileSync(staging.pacmanInstallPath, join(pacmanBuildDir, `${LINUX_PACKAGE_NAME}.install`));
+  copyFileSync(staging.pacmanPkgbuildPath, join(pacmanBuildDir, "PKGBUILD"));
+  runCommand(process.env.BUTLER_APP_MAKEPKG || "makepkg", [
+    "--force",
+    "--nodeps",
+  ], pacmanBuildDir);
+  const builtPacmanPackage = join(pacmanBuildDir, basename(pacmanPackagePath));
+  if (!existsSync(builtPacmanPackage)) {
+    throw new Error(`makepkg output is missing: ${builtPacmanPackage}`);
+  }
+  copyFileSync(builtPacmanPackage, pacmanPackagePath);
 
   const rpmTopDir = join(outDir, "rpmbuild");
   const rpmSourcesDir = join(rpmTopDir, "SOURCES");
@@ -167,6 +212,7 @@ export function buildLinuxServiceInstallerPackages(
   const builtRpm = findBuiltRpm(join(rpmTopDir, "RPMS"));
   copyFileSync(builtRpm, rpmPackagePath);
   const debSha256 = writeSha256File(debPackagePath);
+  const pacmanSha256 = writeSha256File(pacmanPackagePath);
   const rpmSha256 = writeSha256File(rpmPackagePath);
 
   return {
@@ -174,6 +220,9 @@ export function buildLinuxServiceInstallerPackages(
     debPackagePath,
     debSha256,
     debSha256Path: `${debPackagePath}.sha256`,
+    pacmanPackagePath,
+    pacmanSha256,
+    pacmanSha256Path: `${pacmanPackagePath}.sha256`,
     rpmPackagePath,
     rpmSha256,
     rpmSha256Path: `${rpmPackagePath}.sha256`,
@@ -239,10 +288,68 @@ ${input.postinstallBody.trim()}
 `;
 }
 
+function pacmanPkgbuild(input: { version: string }): string {
+  return `pkgname=${LINUX_PACKAGE_NAME}
+pkgver=${input.version}
+pkgrel=1
+pkgdesc='Butler App background Agent service registration'
+arch=('x86_64')
+url='https://github.com/Hexpy-Games/butler'
+license=('MIT')
+install=${LINUX_PACKAGE_NAME}.install
+
+package() {
+  cp -a "$srcdir/../pkgroot/." "$pkgdir/"
+  chmod 755 "$pkgdir/usr/lib/butler/butler-app-managed-agent-service"
+}
+`;
+}
+
+function pacmanInstall(postInstallBody: string): string {
+  return `post_install() {
+${indentShellFunctionBody(postInstallBody)}
+}
+
+post_upgrade() {
+  post_install "$1"
+}
+`;
+}
+
+function indentShellFunctionBody(value: string): string {
+  return value
+    .trim()
+    .split(/\r?\n/u)
+    .filter((line) => !/^#!\//u.test(line))
+    .map((line) => `  ${line}`)
+    .join("\n");
+}
+
 function copyExecutable(source: string, target: string): void {
   mkdirSync(dirname(target), { recursive: true });
   copyFileSync(source, target);
   chmodSync(target, 0o755);
+}
+
+function copyTree(source: string, target: string): void {
+  rmSync(target, { recursive: true, force: true });
+  mkdirSync(dirname(target), { recursive: true });
+  copyRecursive(source, target);
+}
+
+function copyRecursive(source: string, target: string): void {
+  const entries = readdirSync(source, { withFileTypes: true });
+  mkdirSync(target, { recursive: true });
+  for (const entry of entries) {
+    const sourcePath = join(source, entry.name);
+    const targetPath = join(target, entry.name);
+    if (entry.isDirectory()) {
+      copyRecursive(sourcePath, targetPath);
+    } else {
+      copyFileSync(sourcePath, targetPath);
+      chmodSync(targetPath, entry.name === "butler-app-managed-agent-service" ? 0o755 : 0o644);
+    }
+  }
 }
 
 function writeText(path: string, value: string, mode: number): void {
@@ -251,8 +358,8 @@ function writeText(path: string, value: string, mode: number): void {
   chmodSync(path, mode);
 }
 
-function runCommand(command: string, args: string[]): void {
-  const result = spawnSync(command, args, { encoding: "utf8" });
+function runCommand(command: string, args: string[], cwd?: string): void {
+  const result = spawnSync(command, args, { cwd, encoding: "utf8" });
   if (result.status !== 0) {
     throw new Error(
       `${command} failed: ${
