@@ -11,6 +11,7 @@ export type ToolCapabilityCategory =
   | "search"
   | "data"
   | "command"
+  | "file"
   | "work"
   | "monitoring"
   | "automation"

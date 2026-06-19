@@ -31,6 +31,7 @@ import { createOrchestrationToolHandlers } from "./orchestration/index.ts";
 import { createPlannedTaskToolHandlers, dispatchBackgroundTask, type WorkerModelSelectionRule } from "./planned-task/index.ts";
 import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
 import { createRunCommandToolHandlers } from "./run-command/index.ts";
+import { createFileToolHandlers } from "./file-tools/index.ts";
 import { createSkillToolHandlers } from "./skills/index.ts";
 import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
@@ -207,6 +208,7 @@ export function createButlerToolExecutor(input: {
       butlerData: input.butlerData,
       workspacePath: input.workspacePath ?? input.butlerHome,
     }),
+    ...createFileToolHandlers({ workspacePath: input.workspacePath ?? input.butlerHome }),
     ...createWorkerToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
