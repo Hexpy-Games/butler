@@ -191,7 +191,6 @@ test("version tag release workflow publishes Arch app artifact", () => {
   expect(workflow).toContain("runs-on: ubuntu-latest");
   expect(workflow).toContain("sudo apt-get install -y fakeroot libarchive-tools pacman-package-manager zstd");
   expect(workflow).toContain("command -v makepkg");
-  expect(workflow).toContain("command -v pacman");
   expect(workflow).toContain("command -v bsdtar");
   expect(workflow).toContain('mkdir -p "$RUNNER_TEMP/bun-tmp"');
   expect(workflow).toContain('export BUN_TMPDIR="$RUNNER_TEMP/bun-tmp"');
@@ -199,9 +198,11 @@ test("version tag release workflow publishes Arch app artifact", () => {
   expect(workflow).toContain("--linux-package-format=pacman");
   expect(workflow).toContain("dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst");
   expect(workflow).toContain("dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst.sha256");
-  expect(workflow).toContain("pacman -Qip");
-  expect(workflow).toContain("/usr/bin/butler-app$");
-  expect(workflow).toContain("/usr/lib/systemd/user/butler.service$");
+  expect(workflow).toContain("zstd -t");
+  expect(workflow).toContain("bsdtar -tf");
+  expect(workflow).toContain("grep -qx '.PKGINFO'");
+  expect(workflow).toContain("grep -qx 'usr/bin/butler-app'");
+  expect(workflow).toContain("grep -qx 'usr/lib/systemd/user/butler.service'");
   expect(workflow).toContain("Expected 2 Arch app release files");
   expect(packageIndex).toBeGreaterThan(archJobIndex);
   expect(verifyIndex).toBeGreaterThan(packageIndex);
