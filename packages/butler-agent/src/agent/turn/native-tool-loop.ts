@@ -42,6 +42,7 @@ import { TodoListStore, type TodoItemInput } from "../work/todo-list.ts";
 import {
   completeReportingWorkStreamForSession,
   completeTurnLocalWorkStreamForSession,
+  type WorkStreamState,
   WorkStreamStore,
   workStreamTerminal,
 } from "../work/work-stream.ts";
@@ -619,9 +620,39 @@ interface OpenDirectWorkBlocker {
 interface DirectWorkProgressSnapshot {
   kind: "none" | "active";
   id?: string;
+  state?: WorkStreamState;
+  phase?: string | null;
   deliverable?: boolean;
   completedCount?: number;
   unfinishedCount?: number;
+}
+
+const DIRECT_WORK_FORWARD_STATE_RANK: Partial<Record<WorkStreamState, number>> = {
+  routing: 0,
+  conception: 1,
+  planning: 2,
+  executing: 3,
+  reviewing: 4,
+  consolidating: 5,
+  reporting: 6,
+};
+
+function directWorkFsmProgressAdvanced(
+  before: DirectWorkProgressSnapshot,
+  after: DirectWorkProgressSnapshot,
+): boolean {
+  if (before.kind !== "active" || after.kind !== "active") return false;
+  if (!before.state || !after.state || before.state === after.state) return false;
+  if (
+    (after.state === "waiting_user" || after.state === "paused" || after.state === "recoverable") &&
+    before.state !== after.state
+  ) {
+    return true;
+  }
+  if (before.state === "reviewing" && after.state === "executing") return true;
+  const beforeRank = DIRECT_WORK_FORWARD_STATE_RANK[before.state];
+  const afterRank = DIRECT_WORK_FORWARD_STATE_RANK[after.state];
+  return beforeRank !== undefined && afterRank !== undefined && afterRank > beforeRank;
 }
 
 function activeDirectWorkProgressSnapshot(input: {
@@ -657,6 +688,8 @@ function activeDirectWorkProgressSnapshot(input: {
   return {
     kind: "active",
     id: workStream.id,
+    state: workStream.state,
+    phase: workStream.current_phase,
     deliverable,
     completedCount,
     unfinishedCount,
@@ -675,12 +708,14 @@ function directWorkSemanticProgressAdvanced(
     return (
       (after.completedCount ?? 0) > (before.completedCount ?? 0) ||
       (after.unfinishedCount ?? 0) < (before.unfinishedCount ?? 0) ||
+      directWorkFsmProgressAdvanced(before, after) ||
       (after.deliverable === true && before.deliverable !== true)
     );
   }
   if (after.deliverable === true && before.deliverable !== true) return true;
   if ((after.completedCount ?? 0) > (before.completedCount ?? 0)) return true;
   if ((after.unfinishedCount ?? 0) < (before.unfinishedCount ?? 0)) return true;
+  if (directWorkFsmProgressAdvanced(before, after)) return true;
   return false;
 }
 

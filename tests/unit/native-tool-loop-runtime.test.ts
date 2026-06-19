@@ -5722,6 +5722,157 @@ test("native runtime stops direct work continuation when tools do not make seman
   }
 });
 
+test("native runtime accepts WorkStream FSM transitions as direct work semantic progress", async () => {
+  const originalLimit = process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
+  process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = "3";
+  let promptCalls = 0;
+  try {
+    const runtime = new NativeToolLoopRuntime({
+      disableAutomaticRecall: true,
+      messageLanguage: "ko",
+      butlerData: tempDir,
+      butlerHome: tempDir,
+      runFunctionToolPromptText: async (input) => {
+        promptCalls += 1;
+        if (promptCalls === 1) {
+          await input.executeTool({
+            name: "update_todo_list",
+            args: {
+              title: "FSM direct work",
+              todos: [{
+                id: "execute",
+                content: "구현 근거 확인",
+                active_form: "구현 근거 확인 중",
+                status: "in_progress",
+                phase: "execution",
+              }],
+            },
+            rawArguments: JSON.stringify({
+              title: "FSM direct work",
+              todos: [{
+                id: "execute",
+                content: "구현 근거 확인",
+                active_form: "구현 근거 확인 중",
+                status: "in_progress",
+                phase: "execution",
+              }],
+            }),
+          });
+          return "구현 근거 확인이 아직 진행 중입니다.";
+        }
+        if (promptCalls === 2) {
+          expect(input.prompt).toContain("Direct Work Continuation");
+          await input.executeTool({
+            name: "update_work_stream_state",
+            args: {
+              state: "reviewing",
+              active_step_id: "review",
+              status_note: "Execution evidence is ready for review.",
+            },
+            rawArguments: JSON.stringify({
+              state: "reviewing",
+              active_step_id: "review",
+              status_note: "Execution evidence is ready for review.",
+            }),
+          });
+          return "검토 단계로 전환했습니다. 보고 단계가 아직 남아 있습니다.";
+        }
+        expect(input.prompt).toContain("Direct Work Continuation");
+        await input.executeTool({
+          name: "update_todo_list",
+          args: {
+            title: "FSM direct work",
+            todos: [
+              {
+                id: "execute",
+                content: "구현 근거 확인",
+                active_form: "구현 근거 확인 중",
+                status: "completed",
+                phase: "execution",
+              },
+              {
+                id: "review",
+                content: "검토 완료",
+                active_form: "검토 완료 중",
+                status: "completed",
+                phase: "review",
+              },
+              {
+                id: "report",
+                content: "결과 보고",
+                active_form: "결과 보고 중",
+                status: "completed",
+                phase: "reporting",
+              },
+            ],
+          },
+          rawArguments: JSON.stringify({
+            title: "FSM direct work",
+            todos: [
+              {
+                id: "execute",
+                content: "구현 근거 확인",
+                active_form: "구현 근거 확인 중",
+                status: "completed",
+                phase: "execution",
+              },
+              {
+                id: "review",
+                content: "검토 완료",
+                active_form: "검토 완료 중",
+                status: "completed",
+                phase: "review",
+              },
+              {
+                id: "report",
+                content: "결과 보고",
+                active_form: "결과 보고 중",
+                status: "completed",
+                phase: "reporting",
+              },
+            ],
+          }),
+        });
+        return "FSM 전진과 보고까지 완료했습니다.";
+      },
+    });
+    const handle = await runtime.createSession({
+      sessionId: "butler/main/open-direct-work-fsm-progress",
+      role: "butler",
+      workspacePath: tempDir,
+      systemPrompt: "You are Butler.",
+    });
+
+    const result = await runtime.runTurn({
+      handle,
+      provider: fakeProvider,
+      model: "local/gemma-test",
+      input: { text: "구현 근거를 확인하고 WorkStream 검토까지 직접 진행해줘." },
+      metadata: { runtimePolicy: { completionReview: "disabled" } },
+    });
+
+    expect(result.text).toContain("FSM 전진");
+    expect(promptCalls).toBe(3);
+    const toolCalls = readTranscript("butler/main/open-direct-work-fsm-progress")
+      .filter((event) => event.kind === "tool_call")
+      .map((event) => event.payload.name);
+    expect(toolCalls).toEqual([
+      "update_todo_list",
+      "update_work_stream_state",
+      "update_todo_list",
+    ]);
+    const streams = new WorkStreamStore(tempDir).list({
+      sessionId: "butler/main/open-direct-work-fsm-progress",
+      includeTerminal: true,
+    });
+    expect(streams).toHaveLength(1);
+    expect(streams[0].state).toBe("complete");
+  } finally {
+    if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
+    else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;
+  }
+});
+
 test("native runtime returns recoverable tool errors to the model instead of aborting the turn", async () => {
   let observedToolError: unknown;
   const runtime = new NativeToolLoopRuntime({
