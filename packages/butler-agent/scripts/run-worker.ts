@@ -5,6 +5,7 @@ import { WorkStreamStore } from "../src/agent/work/work-stream.ts";
 import type { ModelProviderAdapter, ModelRef } from "../src/test-support/harness/contracts.ts";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { runWorkerDependencyPreflight } from "./worker-dependency-preflight.ts";
 
 const [, , taskDir, projectPath, model = ""] = process.argv;
 
@@ -231,10 +232,18 @@ function workerSystemPrompt(): string {
 }
 
 function workerPrompt(requestText: string): string {
+  const preflight = loadFileIfExists(join(taskDir, "worker-preflight.md"));
   return [
     `Task ID: ${taskIdFromDir() ?? "unknown"}`,
     `Project path: ${projectPath}`,
     "",
+    ...(preflight
+      ? [
+        "Workspace dependency preflight:",
+        preflight,
+        "",
+      ]
+      : []),
     "Task:",
     requestText,
   ].join("\n");
@@ -468,8 +477,15 @@ function workerFailureStatusLine(message: string): string {
 }
 
 try {
+  const dependencyPreflight = runWorkerDependencyPreflight({ taskDir, projectPath });
   const requestPath = join(taskDir, "request.md");
   const requestText = existsSync(requestPath) ? readFileSync(requestPath, "utf8") : "";
+  writeTrace("worker.dependency_preflight", {
+    status: dependencyPreflight.status,
+    package_manager: dependencyPreflight.package_manager,
+    install_command: dependencyPreflight.install_command,
+    findings: dependencyPreflight.findings,
+  });
   writeTrace("worker.start", {
     task_id: taskIdFromDir(),
     project_path: projectPath,
