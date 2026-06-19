@@ -4396,8 +4396,8 @@ test("session worker activity synthesizes planned parent for orphan work orchest
           id: "tool-transcript-1",
           name: "run_command",
           arguments: {
-            command: "cd /Users/yeonwoo/butler && bun test tests/unit/app-server.test.ts",
-            cwd: "/Users/yeonwoo/butler",
+            command: "cd /Users/example/butler && bun test tests/unit/app-server.test.ts",
+            cwd: "/Users/example/butler",
           },
           raw_payload: "unsafe provider payload sentinel",
         },
@@ -4410,8 +4410,8 @@ test("session worker activity synthesizes planned parent for orphan work orchest
           tool_call_id: "tool-transcript-1",
           name: "run_command",
           result: {
-            command: "cd /Users/yeonwoo/butler && bun test tests/unit/app-server.test.ts",
-            cwd: "/Users/yeonwoo/butler",
+            command: "cd /Users/example/butler && bun test tests/unit/app-server.test.ts",
+            cwd: "/Users/example/butler",
             exit_code: 0,
             stdout: "unsafe full raw log sentinel",
           },

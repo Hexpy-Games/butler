@@ -616,7 +616,7 @@ test("task store projects worker transcript command details instead of generic d
           name: "run_command",
           arguments: {
             command: "rg -n worker_activity packages/butler-agent/src",
-            cwd: "/Users/yeonwoo/butler",
+            cwd: "/Users/example/butler",
           },
         },
       },
@@ -629,7 +629,7 @@ test("task store projects worker transcript command details instead of generic d
           name: "run_command",
           result: {
             command: "rg -n worker_activity packages/butler-agent/src",
-            cwd: "/Users/yeonwoo/butler",
+            cwd: "/Users/example/butler",
             exit_code: 0,
           },
         },
