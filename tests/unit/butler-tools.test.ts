@@ -56,6 +56,9 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "web_read",
     "transform_public_data_table",
     "run_command",
+    "read_file",
+    "write_file",
+    "grep_files",
     "get_work_dashboard",
     "inspect_project_status",
     "query_project_work",
@@ -162,6 +165,7 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
   const expectedGroups = [
     "automation",
     "data-table",
+    "file-tools",
     "mcp",
     "memory",
     "monitoring",
@@ -178,6 +182,7 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
   const groupedToolNames = groupNames.flatMap((groupName) => (
     readdirSync(join(toolsRoot, groupName))
       .filter((name) => statSync(join(toolsRoot, groupName, name)).isDirectory())
+      .filter((name) => existsSync(join(toolsRoot, groupName, name, "index.ts")))
       .map((name) => `${groupName}/${name}`)
   )).sort();
   const toolNames = BUTLER_TOOLS.map((tool) => tool.name).sort();
@@ -314,10 +319,13 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   })).toEqual(expect.arrayContaining(["startup", "project", "workspace"]));
   expect(names).toContain("inspect_project_status");
   expect(names).toContain("run_command");
+  expect(names).toContain("read_file");
+  expect(names).toContain("write_file");
+  expect(names).toContain("grep_files");
   expect(names).toContain("read_tool_output_artifact");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  expect(toolContractJsonChars(tools)).toBeLessThan(12_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(13_000);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -355,7 +363,7 @@ test("workspace wording alone does not expose command execution without structur
   expect(names).not.toContain("read_tool_output_artifact");
 });
 
-test("explicit required native tool profiles expose command execution without prompt regex matching", () => {
+test("explicit required native tool profiles expose workspace file tools without prompt regex matching", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "이 작업을 처리해줘.",
@@ -369,7 +377,24 @@ test("explicit required native tool profiles expose command execution without pr
     turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
   })).toEqual(["startup", "workspace"]);
   expect(names).toContain("run_command");
+  expect(names).toContain("read_file");
+  expect(names).toContain("write_file");
+  expect(names).toContain("grep_files");
   expect(names).toContain("read_tool_output_artifact");
+});
+
+test("native file tool wording exposes workspace file tools", () => {
+  const text = "Read source.txt, write created.txt, then grep for needle-marker using native file tools.";
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text,
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({ role: "butler", text })).toEqual(expect.arrayContaining(["startup", "workspace"]));
+  expect(names).toContain("read_file");
+  expect(names).toContain("write_file");
+  expect(names).toContain("grep_files");
 });
 
 test("session-level required native tools expose command execution consistently", () => {
@@ -489,6 +514,7 @@ test("worker tool profile keeps execution tools and blocks recursive orchestrati
 
   expect(names).toEqual(expect.arrayContaining([
     "run_command",
+    "grep_files",
     "read_tool_output_artifact",
     "update_todo_list",
     "list_todo_list",
