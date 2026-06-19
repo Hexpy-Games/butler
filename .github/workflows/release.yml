@@ -308,8 +308,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/butler-bun-tmp
-          chown -R builder:builder /tmp/butler-bun-tmp
+          mkdir -p /home/builder/.bun
+          chown -R builder:builder /tmp/butler-bun-tmp /home/builder/.bun
           runuser -u builder --preserve-environment -- bash -lc '
+            export HOME=/home/builder
+            export BUN_INSTALL=/home/builder/.bun
             export BUN_TMPDIR=/tmp/butler-bun-tmp
             export TMPDIR=/tmp/butler-bun-tmp
             cd "$GITHUB_WORKSPACE"

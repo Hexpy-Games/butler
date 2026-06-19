@@ -1765,6 +1765,7 @@ printf 'fake deb\\n' > "$out"
 `);
     writeExecutableScript(fakeMakepkg, `#!/bin/sh
 set -eu
+printf 'PKGEXT=%s\\n' "\${PKGEXT:-}" > "${workDir}/makepkg-env.log"
 version="$(sed -n 's/^pkgver=//p' PKGBUILD)"
 printf 'fake pacman\\n' > "butler-app-service-\${version}-1-x86_64.pkg.tar.zst"
 `);
@@ -1809,6 +1810,7 @@ printf 'fake rpm\\n' > "$topdir/RPMS/x86_64/butler-app-service-${currentVersion}
     expect(readText(result.pacmanSha256Path)).toBe(
       `${result.pacmanSha256}  butler-app-service-${currentVersion}-1-x86_64.pkg.tar.zst\n`,
     );
+    expect(readText(join(workDir, "makepkg-env.log"))).toBe("PKGEXT=.pkg.tar.zst\n");
     expect(readText(join(dirname(result.pacmanPkgbuildPath), "PKGBUILD"))).toContain(
       "pkgname=butler-app-service",
     );

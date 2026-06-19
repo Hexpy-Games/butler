@@ -186,7 +186,7 @@ export function buildLinuxServiceInstallerPackages(
   runCommand(process.env.BUTLER_APP_MAKEPKG || "makepkg", [
     "--force",
     "--nodeps",
-  ], pacmanBuildDir);
+  ], pacmanBuildDir, { PKGEXT: ".pkg.tar.zst" });
   const builtPacmanPackage = join(pacmanBuildDir, basename(pacmanPackagePath));
   if (!existsSync(builtPacmanPackage)) {
     throw new Error(`makepkg output is missing: ${builtPacmanPackage}`);
@@ -358,8 +358,17 @@ function writeText(path: string, value: string, mode: number): void {
   chmodSync(path, mode);
 }
 
-function runCommand(command: string, args: string[], cwd?: string): void {
-  const result = spawnSync(command, args, { cwd, encoding: "utf8" });
+function runCommand(
+  command: string,
+  args: string[],
+  cwd?: string,
+  env?: Record<string, string>,
+): void {
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: "utf8",
+    env: env ? { ...process.env, ...env } : process.env,
+  });
   if (result.status !== 0) {
     throw new Error(
       `${command} failed: ${
