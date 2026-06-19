@@ -7,7 +7,12 @@ import { butlerToolProcessEnvironment } from "./executor-support.ts";
 import { buildTaskOriginContext } from "../work/task-origin.ts";
 import { TaskStore, workSafetyForTask } from "../work/task-store.ts";
 import { WorkStreamStore } from "../work/work-stream.ts";
-import { WorkOrchestrationStore, orchestrationWorkerPrompt, type WorkStreamInput } from "../work/work-orchestration.ts";
+import {
+  WorkOrchestrationStore,
+  orchestrationWorkerPrompt,
+  type WorkStreamInput,
+  type WorkStreamKind,
+} from "../work/work-orchestration.ts";
 import {
   createPlannedTaskId,
   missingReviewCriteria,
@@ -138,11 +143,25 @@ function workStreamInputs(value: unknown): WorkStreamInput[] {
     .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
     .map((item) => ({
       id: typeof item.id === "string" && item.id.trim() ? item.id.trim() : undefined,
+      kind: workStreamKindInput(item.kind),
       role: typeof item.role === "string" ? item.role : "",
       objective: typeof item.objective === "string" ? item.objective : "",
       acceptance_criteria: stringArray(item.acceptance_criteria),
       depends_on: stringArray(item.depends_on),
     }));
+}
+
+function workStreamKindInput(value: unknown): WorkStreamKind | undefined {
+  if (
+    value === "implementation" ||
+    value === "setup" ||
+    value === "planning" ||
+    value === "investigation" ||
+    value === "review"
+  ) {
+    return value;
+  }
+  return undefined;
 }
 
 function decisionReplyMarkup(decision: PlannedDecisionRequest): {

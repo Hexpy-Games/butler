@@ -46,6 +46,7 @@ test("work orchestrations persist role-aware streams under Butler data", () => {
       completion_claim_allowed: false,
     });
     expect(store.read("orch-1")?.streams.map((stream) => stream.role)).toEqual(["researcher", "builder"]);
+    expect(store.read("orch-1")?.streams.map((stream) => stream.kind)).toEqual(["implementation", "implementation"]);
     expect(store.readyStreams("orch-1").map((stream) => stream.id)).toEqual(["research"]);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
@@ -128,6 +129,7 @@ test("ready-stream dispatch and sync follow durable worker task state", () => {
       stream: store.readyStreams("orch-sync")[0]!,
     });
     expect(prompt).toContain("Role: builder");
+    expect(prompt).toContain("Stream kind: implementation");
     expect(prompt).toContain("Turn Cognition Cycle");
     expect(prompt).toContain("구상, 계획, 실행, 검토, 취합 및 정리, 보고");
     expect(prompt).toContain("Do not report to the user directly");
@@ -284,6 +286,7 @@ test("work orchestration can complete setup planning streams without code edits"
       goal: "Prepare project-session worktree metadata implementation",
       streams: [{
         id: "setup-plan",
+        kind: "setup",
         role: "coordinator",
         objective: "Create a dedicated git worktree and branch, inspect project session metadata, and produce an execution plan.",
         acceptance_criteria: [
@@ -341,6 +344,54 @@ test("work orchestration can complete setup planning streams without code edits"
   }
 });
 
+test("work orchestration does not complete streams from planning keywords alone", () => {
+  const butlerData = tempRoot();
+  const store = new WorkOrchestrationStore(butlerData);
+
+  try {
+    store.create({
+      id: "orch-keyword-false-complete",
+      goal: "Coordinate a stream whose wording looks like planning",
+      streams: [{
+        id: "metadata-review",
+        role: "builder",
+        objective: "Review metadata, verify the branch, and plan implementation.",
+        acceptance_criteria: ["Metadata is reviewed", "Implementation plan is verified"],
+      }],
+    });
+    store.markDispatched("orch-keyword-false-complete", [{ stream_id: "metadata-review", worker_task_id: "worker-keyword-plan" }]);
+    const workerDir = join(butlerData, "tasks", "worker-keyword-plan");
+    mkdirSync(workerDir, { recursive: true });
+    writeFileSync(join(workerDir, "request.md"), "Review metadata, verify the branch, and plan implementation.\n", "utf8");
+    writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
+    writeFileSync(join(workerDir, "result.md"), "Reviewed metadata and produced an implementation plan.\n", "utf8");
+    writeFileSync(join(workerDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-keyword-report",
+      created_at: "2026-04-27T00:00:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "reporting",
+      action_kind: "report",
+      status_line: "Reporting: metadata review and implementation plan complete.",
+    })}\n`, "utf8");
+
+    expect(store.syncFromTasks("orch-keyword-false-complete")).toMatchObject({
+      status: "failed",
+      counts: { failed: 1 },
+      safe_to_report: true,
+      completion_claim_allowed: false,
+    });
+    expect(store.read("orch-keyword-false-complete")?.streams[0]).toMatchObject({
+      kind: "implementation",
+      status: "failed",
+      result_summary: expect.stringContaining("no implementation evidence"),
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("work orchestration can complete review streams that mention implementation evidence", () => {
   const butlerData = tempRoot();
   const store = new WorkOrchestrationStore(butlerData);
@@ -351,6 +402,7 @@ test("work orchestration can complete review streams that mention implementation
       goal: "Review implementation output",
       streams: [{
         id: "review",
+        kind: "review",
         role: "reviewer",
         objective: "Review implementation evidence and report whether the acceptance criteria are covered.",
         acceptance_criteria: ["Implementation evidence is reviewed"],
@@ -393,6 +445,7 @@ test("work orchestration keeps setup planning streams failed on final blockers",
       goal: "Prepare blocked setup work",
       streams: [{
         id: "setup-plan",
+        kind: "setup",
         role: "coordinator",
         objective: "Create a dedicated git worktree and branch, inspect metadata, and produce an execution plan.",
         acceptance_criteria: ["Worktree setup blocker is reported"],

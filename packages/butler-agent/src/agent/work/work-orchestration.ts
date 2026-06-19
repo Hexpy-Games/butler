@@ -12,9 +12,11 @@ export type WorkOrchestrationStatus =
   | "cancelled";
 
 export type WorkStreamStatus = "pending" | "running" | "done" | "failed" | "skipped" | "cancelled";
+export type WorkStreamKind = "implementation" | "setup" | "planning" | "investigation" | "review";
 
 export interface WorkStreamInput {
   id?: string;
+  kind?: WorkStreamKind;
   role: string;
   objective: string;
   acceptance_criteria: string[];
@@ -23,6 +25,7 @@ export interface WorkStreamInput {
 
 export interface WorkStreamRecord {
   id: string;
+  kind?: WorkStreamKind;
   role: string;
   objective: string;
   acceptance_criteria: string[];
@@ -69,6 +72,22 @@ function compact(value: string, limit = 600): string {
   return normalized.length > limit ? `${normalized.slice(0, limit - 3)}...` : normalized;
 }
 
+function normalizeStreamKind(value: unknown): WorkStreamKind {
+  if (
+    value === "setup" ||
+    value === "planning" ||
+    value === "investigation" ||
+    value === "review"
+  ) {
+    return value;
+  }
+  return "implementation";
+}
+
+function streamKind(stream: WorkStreamRecord): WorkStreamKind {
+  return normalizeStreamKind(stream.kind);
+}
+
 function atomicWriteJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
@@ -94,6 +113,7 @@ function normalizeStream(input: WorkStreamInput, index: number, nowIso: string):
   if (acceptanceCriteria.length === 0) throw new Error(`work stream ${id} requires acceptance criteria`);
   return {
     id,
+    kind: normalizeStreamKind(input.kind),
     role,
     objective,
     acceptance_criteria: acceptanceCriteria,
@@ -135,28 +155,12 @@ function terminal(stream: WorkStreamRecord): boolean {
   return stream.status === "done" || stream.status === "failed" || stream.status === "skipped" || stream.status === "cancelled";
 }
 
-function streamContractText(stream: WorkStreamRecord): string {
-  return [
-    stream.id,
-    stream.role,
-    stream.objective,
-    ...stream.acceptance_criteria,
-  ].join("\n").toLocaleLowerCase("en-US");
-}
-
-function isSetupOrPlanningStream(stream: WorkStreamRecord): boolean {
-  const text = streamContractText(stream);
-  if (/\b(?:implement|fix|modify|patch|edit|refactor)\b|code change|source change|apply patch|고쳐|수정|변경|패치|리팩터/iu.test(text)) {
-    return false;
-  }
-  return /(worktree|workspace|branch|metadata|ledger|plan|planning|inspect|investigate|diagnos|review|read|identify|confirm|verify|워크트리|브랜치|메타데이터|계획|검토|조사|확인|파악|읽)/iu.test(text);
-}
-
-function canCompleteSetupOrPlanningStream(stream: WorkStreamRecord, task: TaskRecord): boolean {
-  if (!isSetupOrPlanningStream(stream)) return false;
+function canCompleteNonImplementationStream(stream: WorkStreamRecord, task: TaskRecord): boolean {
+  if (streamKind(stream) === "implementation") return false;
   const evidence = task.completionEvidence;
   if (evidence.has_final_blocker || evidence.has_environment_blocker) return false;
-  return evidence.has_report_evidence || task.hasResult || Boolean(task.observedResult?.trim() || task.result?.trim());
+  if (!evidence.has_report_evidence) return false;
+  return Boolean(task.observedResult?.trim() || task.result?.trim());
 }
 
 function summarize(record: WorkOrchestrationRecord): WorkOrchestrationSummary {
@@ -340,11 +344,11 @@ export class WorkOrchestrationStore {
         if (task.status === "DONE" || task.status === "REVIEWED") {
           const safety = workSafetyForTask(task);
           if (!safety.safe_to_report || !safety.completion_claim_allowed) {
-            if (canCompleteSetupOrPlanningStream(stream, task)) {
+            if (canCompleteNonImplementationStream(stream, task)) {
               return {
                 ...stream,
                 status: "done",
-                result_summary: compact(task.observedResult ?? task.result ?? "Worker completed setup/planning stream."),
+                result_summary: compact(task.observedResult ?? task.result ?? "Worker completed non-implementation stream."),
                 updated_at: nowIso,
               };
             }
@@ -439,6 +443,7 @@ export function orchestrationWorkerPrompt(input: {
     `Orchestration: ${input.orchestration.title}`,
     `Goal: ${input.orchestration.goal}`,
     `Stream: ${input.stream.id}`,
+    `Stream kind: ${streamKind(input.stream)}`,
     `Role: ${input.stream.role}`,
     "",
     "Objective:",
