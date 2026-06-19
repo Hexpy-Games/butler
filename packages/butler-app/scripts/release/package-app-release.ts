@@ -33,6 +33,7 @@ export interface AppReleasePackageOptions {
   outDir: string;
   artifactBaseUrl?: string | null;
   platforms?: AppReleasePlatform[];
+  linuxPackageFormat?: LinuxAppPackageFormat;
 }
 
 export interface AppReleasePackageArtifact {
@@ -66,6 +67,8 @@ export interface BundledAgentPackage {
   sha256: string;
   version: string;
 }
+
+type LinuxAppPackageFormat = "deb" | "pacman";
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
 const APP_RENDERER_DIST = join("packages", "butler-app", "client", "ui", "dist");
@@ -125,6 +128,7 @@ export function createAppReleasePackage(
         workDir,
         platform,
         manifest,
+        linuxPackageFormat: options.linuxPackageFormat ?? "deb",
         bundledAgentResourceDir: mustGetBundledAgentResource(bundledAgents, platform).resourceDir,
       }),
     );
@@ -157,6 +161,7 @@ function packagePlatform(input: {
   workDir: string;
   platform: AppReleasePlatform;
   manifest: AppReleaseManifest;
+  linuxPackageFormat: LinuxAppPackageFormat;
   bundledAgentResourceDir: string;
 }): AppReleasePackageArtifact {
   if (input.platform === "darwin-arm64" && process.platform !== "darwin") {
@@ -180,7 +185,13 @@ function packagePlatform(input: {
     throw new Error(`electron package directory was not created: ${packagedDir}`);
   }
 
-  const artifactPath = join(input.outDir, artifact.artifactName);
+  const artifactName = appPackageArtifactName({
+    defaultArtifactName: artifact.artifactName,
+    platform: input.platform,
+    version: input.manifest.version,
+    linuxPackageFormat: input.linuxPackageFormat,
+  });
+  const artifactPath = join(input.outDir, artifactName);
   if (input.platform === "darwin-arm64") {
     const appBundle = join(packagedDir, "Butler.app");
     if (!existsSync(appBundle)) throw new Error(`mac app bundle not found: ${appBundle}`);
@@ -193,8 +204,16 @@ function packagePlatform(input: {
       bundledAgentResourceDir: input.bundledAgentResourceDir,
       version: input.manifest.version,
     });
-  } else {
+  } else if (input.linuxPackageFormat === "deb") {
     createLinuxAppDeb({
+      artifactPath,
+      root: input.root,
+      packagedDir,
+      platform: input.platform,
+      version: input.manifest.version,
+    });
+  } else {
+    createLinuxAppPacman({
       artifactPath,
       root: input.root,
       packagedDir,
@@ -208,11 +227,26 @@ function packagePlatform(input: {
   writeFileSync(sha256Path, `${sha256}  ${basename(artifactPath)}\n`, "utf8");
   return {
     platform: input.platform,
-    artifactName: artifact.artifactName,
+    artifactName,
     artifactPath,
     sha256Path,
     sha256,
   };
+}
+
+function appPackageArtifactName(input: {
+  defaultArtifactName: string;
+  platform: AppReleasePlatform;
+  version: string;
+  linuxPackageFormat: LinuxAppPackageFormat;
+}): string {
+  if (!input.platform.startsWith("linux-") || input.linuxPackageFormat === "deb") {
+    return input.defaultArtifactName;
+  }
+  if (input.platform !== "linux-x64") {
+    throw new Error("pacman App packages currently support linux-x64 only");
+  }
+  return `butler-app-${input.version}-1-x86_64.pkg.tar.zst`;
 }
 
 function runElectronPackager(
@@ -432,6 +466,10 @@ function writeAppServiceInstallerPayloads(input: {
       linuxRpmPostinstallScript(),
     );
     writeExecutableText(
+      join(input.resourceDir, "service-installer", "linux", "pacman", "post_install"),
+      linuxPacmanPostInstallScript(),
+    );
+    writeExecutableText(
       join(
         input.resourceDir,
         "service-installer",
@@ -454,6 +492,15 @@ function writeAppServiceInstallerPayloads(input: {
           renderContractPath: "service-installer/linux/systemd/render-contract.json",
           launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
           postInstallPath: "service-installer/linux/deb/postinst",
+        },
+        {
+          packageFormat: "pacman",
+          selectedV1Path: "linux-pacman-owned-user-unit",
+          serviceManager: "systemd-user",
+          serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
+          renderContractPath: "service-installer/linux/systemd/render-contract.json",
+          launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
+          postInstallPath: "service-installer/linux/pacman/post_install",
         },
         {
           packageFormat: "rpm",
@@ -553,6 +600,14 @@ exit 0
 `;
 }
 
+function linuxPacmanPostInstallScript(): string {
+  return `#!/bin/sh
+set -eu
+echo "Butler App systemd user service payload installed. First-run will render user paths and enable the service."
+exit 0
+`;
+}
+
 function linuxAppManagedAgentServiceLauncher(version: string): string {
   return `#!/usr/bin/env bash
 set -euo pipefail
@@ -645,6 +700,7 @@ function packageInstallerTargets(servicePlatform: string): Array<Record<string, 
   if (servicePlatform === "linux") {
     return [
       { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
+      { packageFormat: "pacman", selectedV1Path: "linux-pacman-owned-user-unit" },
       { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
     ];
   }
@@ -1146,6 +1202,55 @@ function notarizeMacPkgIfConfigured(artifactPath: string): void {
   }
 }
 
+function stageLinuxAppPackageRoot(input: {
+  packageRoot: string;
+  root: string;
+  packagedDir: string;
+  platform: AppReleasePlatform;
+}): { finalInstallDir: string; installDir: string } {
+  const finalInstallDir = join("/opt", "butler", packageDirectoryName(input.platform));
+  const installDir = join(input.packageRoot, finalInstallDir.slice(1));
+  const binDir = join(input.packageRoot, "usr", "bin");
+  const serviceUnitDir = join(input.packageRoot, "usr", "lib", "systemd", "user");
+  const serviceLauncherDir = join(input.packageRoot, "usr", "lib", "butler");
+  const appDir = join(input.packageRoot, "usr", "share", "applications");
+  const iconDir = join(input.packageRoot, "usr", "share", "icons", "hicolor", "512x512", "apps");
+  const licenseDir = join(input.packageRoot, "usr", "share", "licenses", "butler-app");
+  mkdirSync(dirname(installDir), { recursive: true });
+  mkdirSync(binDir, { recursive: true });
+  mkdirSync(serviceUnitDir, { recursive: true });
+  mkdirSync(serviceLauncherDir, { recursive: true });
+  mkdirSync(appDir, { recursive: true });
+  mkdirSync(iconDir, { recursive: true });
+  mkdirSync(licenseDir, { recursive: true });
+  cpSync(input.packagedDir, installDir, {
+    dereference: false,
+    errorOnExist: false,
+    force: true,
+    recursive: true,
+  });
+  chmodPackageDirectories(installDir);
+  writeExecutableText(join(binDir, "butler-app"), linuxAppLauncher(finalInstallDir));
+  writeFileSync(join(serviceUnitDir, "butler.service"), linuxSystemdUserUnit(), "utf8");
+  copyFileSync(
+    join(
+      input.packagedDir,
+      "resources",
+      "bundled-agent",
+      "service-installer",
+      "linux",
+      "launcher",
+      "butler-app-managed-agent-service",
+    ),
+    join(serviceLauncherDir, "butler-app-managed-agent-service"),
+  );
+  chmodSync(join(serviceLauncherDir, "butler-app-managed-agent-service"), 0o755);
+  copyFileSync(join(input.root, ELECTRON_ROOT, "assets", "icon.png"), join(iconDir, "butler.png"));
+  copyFileSync(join(input.root, "LICENSE"), join(licenseDir, "LICENSE"));
+  writeFileSync(join(appDir, "butler.desktop"), linuxDesktopEntry(), "utf8");
+  return { finalInstallDir, installDir };
+}
+
 function createLinuxAppDeb(input: {
   artifactPath: string;
   root: string;
@@ -1157,45 +1262,14 @@ function createLinuxAppDeb(input: {
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-deb-"));
   try {
     const debRoot = join(workDir, "root");
-    const finalInstallDir = join("/opt", "butler", packageDirectoryName(input.platform));
-    const installDir = join(debRoot, finalInstallDir.slice(1));
-    const binDir = join(debRoot, "usr", "bin");
-    const serviceUnitDir = join(debRoot, "usr", "lib", "systemd", "user");
-    const serviceLauncherDir = join(debRoot, "usr", "lib", "butler");
-    const appDir = join(debRoot, "usr", "share", "applications");
-    const iconDir = join(debRoot, "usr", "share", "icons", "hicolor", "512x512", "apps");
     const controlDir = join(debRoot, "DEBIAN");
-    mkdirSync(dirname(installDir), { recursive: true });
-    mkdirSync(binDir, { recursive: true });
-    mkdirSync(serviceUnitDir, { recursive: true });
-    mkdirSync(serviceLauncherDir, { recursive: true });
-    mkdirSync(appDir, { recursive: true });
-    mkdirSync(iconDir, { recursive: true });
     mkdirSync(controlDir, { recursive: true });
-    cpSync(input.packagedDir, installDir, {
-      dereference: false,
-      errorOnExist: false,
-      force: true,
-      recursive: true,
+    const { finalInstallDir } = stageLinuxAppPackageRoot({
+      packageRoot: debRoot,
+      root: input.root,
+      packagedDir: input.packagedDir,
+      platform: input.platform,
     });
-    chmodPackageDirectories(installDir);
-    writeExecutableText(join(binDir, "butler-app"), linuxAppLauncher(finalInstallDir));
-    writeFileSync(join(serviceUnitDir, "butler.service"), linuxSystemdUserUnit(), "utf8");
-    copyFileSync(
-      join(
-        input.packagedDir,
-        "resources",
-        "bundled-agent",
-        "service-installer",
-        "linux",
-        "launcher",
-        "butler-app-managed-agent-service",
-      ),
-      join(serviceLauncherDir, "butler-app-managed-agent-service"),
-    );
-    chmodSync(join(serviceLauncherDir, "butler-app-managed-agent-service"), 0o755);
-    copyFileSync(join(input.root, ELECTRON_ROOT, "assets", "icon.png"), join(iconDir, "butler.png"));
-    writeFileSync(join(appDir, "butler.desktop"), linuxDesktopEntry(), "utf8");
     writeFileSync(
       join(controlDir, "control"),
       linuxDebControl({ architecture, version: input.version }),
@@ -1218,6 +1292,60 @@ function createLinuxAppDeb(input: {
         }`,
       );
     }
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+function createLinuxAppPacman(input: {
+  artifactPath: string;
+  root: string;
+  packagedDir: string;
+  platform: AppReleasePlatform;
+  version: string;
+}): void {
+  if (input.platform !== "linux-x64") {
+    throw new Error("pacman App packages currently support linux-x64 only");
+  }
+  const workDir = mkdtempSync(join(tmpdir(), "butler-app-pacman-"));
+  try {
+    const buildDir = join(workDir, "build");
+    const packageRoot = join(buildDir, "pkgroot");
+    mkdirSync(buildDir, { recursive: true });
+    const { finalInstallDir } = stageLinuxAppPackageRoot({
+      packageRoot,
+      root: input.root,
+      packagedDir: input.packagedDir,
+      platform: input.platform,
+    });
+    writeFileSync(
+      join(buildDir, "PKGBUILD"),
+      linuxPacmanPkgbuild({
+        version: input.version,
+        installDir: finalInstallDir,
+      }),
+      "utf8",
+    );
+    rmSync(input.artifactPath, { force: true });
+    const result = spawnSync(process.env.BUTLER_APP_MAKEPKG || "makepkg", [
+      "--force",
+      "--nodeps",
+    ], {
+      cwd: buildDir,
+      encoding: "utf8",
+    });
+    if (result.status !== 0) {
+      throw new Error(
+        `linux app pacman package failed: ${
+          result.stderr.trim() || result.stdout.trim() || result.error?.message || "unknown error"
+        }`,
+      );
+    }
+    const builtPackage = join(buildDir, `butler-app-${input.version}-1-x86_64.pkg.tar.zst`);
+    if (!existsSync(builtPackage)) {
+      throw new Error(`linux app pacman package was not created: ${builtPackage}`);
+    }
+    copyFileSync(builtPackage, input.artifactPath);
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
@@ -1291,6 +1419,32 @@ Description: Butler App
 `;
 }
 
+function linuxPacmanPkgbuild(input: { version: string; installDir: string }): string {
+  return `pkgname=butler-app
+pkgver=${input.version}
+pkgrel=1
+pkgdesc='Butler desktop app with bundled Butler Agent runtime'
+arch=('x86_64')
+url='https://github.com/Hexpy-Games/butler'
+license=('MIT')
+depends=('gtk3' 'nss' 'libxss' 'alsa-lib' 'libgbm')
+options=('!strip' '!debug')
+
+package() {
+  cp -a "$srcdir/../pkgroot/." "$pkgdir/"
+  find "$pkgdir${input.installDir}" -type d -exec chmod 755 {} +
+  chmod 755 "$pkgdir/usr/bin/butler-app"
+  chmod 755 "$pkgdir/usr/lib/butler/butler-app-managed-agent-service"
+  if [ -f "$pkgdir${input.installDir}/Butler" ] && [ ! -L "$pkgdir${input.installDir}/Butler" ]; then
+    chmod 755 "$pkgdir${input.installDir}/Butler" 2>/dev/null || true
+  fi
+  if [ -f "$pkgdir${input.installDir}/chrome-sandbox" ] && [ ! -L "$pkgdir${input.installDir}/chrome-sandbox" ]; then
+    chmod 4755 "$pkgdir${input.installDir}/chrome-sandbox" 2>/dev/null || true
+  fi
+}
+`;
+}
+
 function linuxAppDebPostinst(installDir: string): string {
   return `#!/bin/sh
 set -eu
@@ -1319,13 +1473,15 @@ function withArtifactMetadata(
   artifactBaseUrl?: string | null,
 ): AppReleaseManifest {
   const byName = new Map(artifacts.map((artifact) => [artifact.artifactName, artifact]));
+  const byPlatform = new Map(artifacts.map((artifact) => [artifact.platform, artifact]));
   return {
     ...manifest,
     artifacts: manifest.artifacts.map((artifact) => {
-      const packaged = byName.get(artifact.artifactName);
+      const packaged = byName.get(artifact.artifactName) ?? byPlatform.get(artifact.platform);
       if (!packaged) return artifact;
       return {
         ...artifact,
+        artifactName: packaged.artifactName,
         downloadUrl: artifactDownloadUrl(
           artifactBaseUrl,
           packaged.artifactPath,
@@ -1465,11 +1621,13 @@ function parseCliArgs(args: string[]): {
   outDir: string;
   artifactBaseUrl?: string | null;
   platforms?: AppReleasePlatform[];
+  linuxPackageFormat?: LinuxAppPackageFormat;
   json: boolean;
 } {
   let outDir = join(process.cwd(), "dist", "release", "app");
   let artifactBaseUrl: string | null | undefined;
   let platforms: AppReleasePlatform[] | undefined;
+  let linuxPackageFormat: LinuxAppPackageFormat | undefined;
   let json = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -1504,10 +1662,19 @@ function parseCliArgs(args: string[]): {
       platforms = [...(platforms ?? []), parsePlatform(arg.slice("--platform=".length))];
       continue;
     }
+    if (arg === "--linux-package-format") {
+      linuxPackageFormat = parseLinuxPackageFormat(args[index + 1] ?? "");
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--linux-package-format=")) {
+      linuxPackageFormat = parseLinuxPackageFormat(arg.slice("--linux-package-format=".length));
+      continue;
+    }
     throw new Error(`unknown option: ${arg}`);
   }
   if (!outDir.trim()) throw new Error("--out requires a path");
-  return { outDir, artifactBaseUrl, platforms, json };
+  return { outDir, artifactBaseUrl, platforms, linuxPackageFormat, json };
 }
 
 function parsePlatform(value: string): AppReleasePlatform {
@@ -1515,6 +1682,11 @@ function parsePlatform(value: string): AppReleasePlatform {
     return value as AppReleasePlatform;
   }
   throw new Error(`unsupported app release platform: ${value}`);
+}
+
+function parseLinuxPackageFormat(value: string): LinuxAppPackageFormat {
+  if (value === "deb" || value === "pacman") return value;
+  throw new Error(`unsupported Linux package format: ${value}`);
 }
 
 if (import.meta.main) {
@@ -1525,6 +1697,7 @@ if (import.meta.main) {
       outDir: args.outDir,
       artifactBaseUrl: args.artifactBaseUrl,
       platforms: args.platforms,
+      linuxPackageFormat: args.linuxPackageFormat,
     });
     if (args.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
