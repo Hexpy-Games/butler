@@ -32,15 +32,15 @@ describe("read_file", () => {
     await writeFile(join(root, "lines.txt"), "one\ntwo\nthree\nfour");
     const lineRes = await executeReadFileTool(call({ workspace_root: root, path: "lines.txt", start_line: 2, limit_lines: 2 })) as any;
     expect(lineRes.content).toBe("two\nthree"); expect(lineRes.start_line).toBe(2); expect(lineRes.end_line).toBe(3); expect(lineRes.truncated).toBe(true);
-    await writeFile(join(root, "bin.dat"), Buffer.from([1,0,2]));
+    await writeFile(join(root, "bin.dat"), Buffer.from([1, 0, 2]));
     expect(((await executeReadFileTool(call({ workspace_root: root, path: "bin.dat" }))) as any).error).toBe("binary_file_not_supported");
   });
 });
 
 describe("write_file", () => {
   test("creates, overwrites with expected_sha256, rejects stale guard", async () => {
-    const created = await executeWriteFileTool(call({ workspace_root: root, path: "dir/a.txt", content: "one" })) as any;
-    expect(created.ok).toBe(true); expect(created.created).toBe(true); expect(await readFile(join(root,"dir/a.txt"),"utf8")).toBe("one");
+    const created = await executeWriteFileTool(call({ workspace_root: root, path: "dir/a.txt", content: "one", create_parents: true })) as any;
+    expect(created.ok).toBe(true); expect(created.created).toBe(true); expect(await readFile(join(root, "dir/a.txt"), "utf8")).toBe("one");
     const stale = await executeWriteFileTool(call({ workspace_root: root, path: "dir/a.txt", content: "two", overwrite: true, expected_sha256: "bad" })) as any;
     expect(stale.error).toBe("expected_sha256_mismatch");
     const good = await executeWriteFileTool(call({ workspace_root: root, path: "dir/a.txt", content: "two", overwrite: true, expected_sha256: sha256Hex("one") })) as any;
@@ -50,7 +50,7 @@ describe("write_file", () => {
 
 describe("grep_files", () => {
   test("supports include, exclude, context, truncation, and receipts", async () => {
-    await mkdir(join(root,"src")); await writeFile(join(root,"src/a.ts"), "before\nneedle\nafter\n"); await writeFile(join(root,"src/a.md"), "needle\n");
+    await mkdir(join(root, "src")); await writeFile(join(root, "src/a.ts"), "before\nneedle\nafter\n"); await writeFile(join(root, "src/a.md"), "needle\n");
     const res = await executeGrepFilesTool(call({ workspace_root: root, query: "NEEDLE", case_sensitive: false, include_globs:["src/*.ts"], exclude_globs:["**/*.md"], context_lines:1, max_matches:1 })) as any;
     expect(res.ok).toBe(true); expect(res.matches).toHaveLength(1); expect(res.matches[0].context).toHaveLength(3); expect(res.truncated).toBe(true); expect(res.evidence_receipts[0].producer.name).toBe("grep_files");
   });
