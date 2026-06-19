@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
-import { TaskStore, workSafetyForTask } from "./task-store.ts";
+import { TaskStore, workSafetyForTask, type TaskRecord } from "./task-store.ts";
 
 export type WorkOrchestrationStatus =
   | "draft"
@@ -133,6 +133,30 @@ function validateStreams(streams: WorkStreamRecord[]): void {
 
 function terminal(stream: WorkStreamRecord): boolean {
   return stream.status === "done" || stream.status === "failed" || stream.status === "skipped" || stream.status === "cancelled";
+}
+
+function streamContractText(stream: WorkStreamRecord): string {
+  return [
+    stream.id,
+    stream.role,
+    stream.objective,
+    ...stream.acceptance_criteria,
+  ].join("\n").toLocaleLowerCase("en-US");
+}
+
+function isSetupOrPlanningStream(stream: WorkStreamRecord): boolean {
+  const text = streamContractText(stream);
+  if (/(implement|fix|modify|patch|edit|refactor|code change|source change|apply patch|구현|고쳐|수정|변경|패치|리팩터)/iu.test(text)) {
+    return false;
+  }
+  return /(worktree|workspace|branch|metadata|ledger|plan|planning|inspect|investigate|diagnos|review|read|identify|confirm|verify|워크트리|브랜치|메타데이터|계획|검토|조사|확인|파악|읽)/iu.test(text);
+}
+
+function canCompleteSetupOrPlanningStream(stream: WorkStreamRecord, task: TaskRecord): boolean {
+  if (!isSetupOrPlanningStream(stream)) return false;
+  const evidence = task.completionEvidence;
+  if (evidence.has_final_blocker || evidence.has_environment_blocker) return false;
+  return evidence.has_report_evidence || task.hasResult || Boolean(task.observedResult?.trim() || task.result?.trim());
 }
 
 function summarize(record: WorkOrchestrationRecord): WorkOrchestrationSummary {
@@ -316,6 +340,14 @@ export class WorkOrchestrationStore {
         if (task.status === "DONE" || task.status === "REVIEWED") {
           const safety = workSafetyForTask(task);
           if (!safety.safe_to_report || !safety.completion_claim_allowed) {
+            if (canCompleteSetupOrPlanningStream(stream, task)) {
+              return {
+                ...stream,
+                status: "done",
+                result_summary: compact(task.observedResult ?? task.result ?? "Worker completed setup/planning stream."),
+                updated_at: nowIso,
+              };
+            }
             return {
               ...stream,
               status: "failed",

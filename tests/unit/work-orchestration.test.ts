@@ -273,3 +273,117 @@ test("work orchestration does not mark planning-only implementation streams done
     rmSync(butlerData, { recursive: true, force: true });
   }
 });
+
+test("work orchestration can complete setup planning streams without code edits", () => {
+  const butlerData = tempRoot();
+  const store = new WorkOrchestrationStore(butlerData);
+
+  try {
+    store.create({
+      id: "orch-setup-planning",
+      goal: "Prepare project-session worktree metadata implementation",
+      streams: [{
+        id: "setup-plan",
+        role: "coordinator",
+        objective: "Create a dedicated git worktree and branch, inspect project session metadata, and produce an execution plan.",
+        acceptance_criteria: [
+          "Dedicated worktree and branch are confirmed",
+          "Relevant metadata files are identified",
+          "Execution plan is summarized",
+        ],
+      }],
+    });
+    store.markDispatched("orch-setup-planning", [{ stream_id: "setup-plan", worker_task_id: "worker-setup" }]);
+    const workerDir = join(butlerData, "tasks", "worker-setup");
+    mkdirSync(workerDir, { recursive: true });
+    writeFileSync(join(workerDir, "request.md"), "Create a dedicated git worktree and branch, then inspect metadata files.\n", "utf8");
+    writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
+    writeFileSync(join(workerDir, "result.md"), [
+      "Created worktree /tmp/butler-session-metadata and branch codex/session-metadata.",
+      "Inspected project session metadata paths and produced the execution plan.",
+    ].join("\n"), "utf8");
+    writeFileSync(join(workerDir, "worker_activity_events.jsonl"), [
+      JSON.stringify({
+        schema: "butler.worker-activity-event.v1",
+        event_id: "ev-blocked",
+        created_at: "2026-04-27T00:00:00.000Z",
+        actor: "worker",
+        event: "activity_updated",
+        semantic_phase: "blocked",
+        action_kind: "run_command",
+        status_line: "Blocked temporarily while checking git worktree metadata.",
+      }),
+      JSON.stringify({
+        schema: "butler.worker-activity-event.v1",
+        event_id: "ev-report",
+        created_at: "2026-04-27T00:00:10.000Z",
+        actor: "worker",
+        event: "activity_updated",
+        semantic_phase: "reporting",
+        action_kind: "report",
+        status_line: "Reporting: worktree, branch, metadata paths, and execution plan are ready.",
+        evidence_refs: ["worktree:/tmp/butler-session-metadata", "branch:codex/session-metadata"],
+      }),
+    ].join("\n"), "utf8");
+
+    expect(store.syncFromTasks("orch-setup-planning")).toMatchObject({
+      status: "ready_for_report",
+      counts: { done: 1 },
+      safe_to_report: true,
+      completion_claim_allowed: true,
+    });
+    expect(store.read("orch-setup-planning")?.streams[0]).toMatchObject({
+      status: "done",
+      result_summary: expect.stringContaining("Created worktree"),
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("work orchestration keeps setup planning streams failed on final blockers", () => {
+  const butlerData = tempRoot();
+  const store = new WorkOrchestrationStore(butlerData);
+
+  try {
+    store.create({
+      id: "orch-setup-blocked",
+      goal: "Prepare blocked setup work",
+      streams: [{
+        id: "setup-plan",
+        role: "coordinator",
+        objective: "Create a dedicated git worktree and branch, inspect metadata, and produce an execution plan.",
+        acceptance_criteria: ["Worktree setup blocker is reported"],
+      }],
+    });
+    store.markDispatched("orch-setup-blocked", [{ stream_id: "setup-plan", worker_task_id: "worker-setup-blocked" }]);
+    const workerDir = join(butlerData, "tasks", "worker-setup-blocked");
+    mkdirSync(workerDir, { recursive: true });
+    writeFileSync(join(workerDir, "request.md"), "Create a dedicated git worktree and branch, then inspect metadata files.\n", "utf8");
+    writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
+    writeFileSync(join(workerDir, "result.md"), "Blocked: cannot create the worktree because the target path already exists.\n", "utf8");
+    writeFileSync(join(workerDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-final-blocked",
+      created_at: "2026-04-27T00:00:00.000Z",
+      actor: "worker",
+      event: "worker_finished",
+      semantic_phase: "blocked",
+      action_kind: "report",
+      status_line: "Blocked: cannot create the worktree because the target path already exists.",
+    })}\n`, "utf8");
+
+    expect(store.syncFromTasks("orch-setup-blocked")).toMatchObject({
+      status: "failed",
+      counts: { failed: 1 },
+      safe_to_report: true,
+      completion_claim_allowed: false,
+    });
+    expect(store.read("orch-setup-blocked")?.streams[0]).toMatchObject({
+      status: "failed",
+      result_summary: expect.stringContaining("final blocker"),
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
