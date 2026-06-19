@@ -35,6 +35,7 @@ const WORKSPACE_TOOL_NAMES = [
   "run_command",
   "read_file",
   "write_file",
+  "grep_files",
   "read_tool_output_artifact",
 ] as const;
 
@@ -123,6 +124,7 @@ const WORKER_DEFAULT_TOOL_NAMES = [
   "run_command",
   "read_file",
   "write_file",
+  "grep_files",
   "read_tool_output_artifact",
   "inspect_project_status",
   "query_project_work",
@@ -265,6 +267,11 @@ function profilesFromText(text: string): ButlerToolProfile[] {
     /검색|출처|최신|현재|뉴스|인용|공개|웹/u.test(value)) {
     addProfile(profiles, "public-web");
   }
+  if (/\b(read_file|write_file|grep_files|native file tools?|file tools?|read\s+(?:a\s+)?file|write\s+(?:a\s+)?file|grep|workspace file|workspace files)\b/u.test(value) ||
+    /네이티브\s*파일\s*도구|파일\s*도구|파일\s*읽기|파일\s*쓰기|워크스페이스\s*파일/u.test(value)) {
+    addProfile(profiles, "workspace");
+  }
+
   if (/\b(memory|remember|recall|previous|earlier|conversation|transcript)\b/u.test(value) ||
     /기억|이전|앞서|대화|위에서|방금|지난/u.test(value)) {
     addProfile(profiles, "memory-read");
