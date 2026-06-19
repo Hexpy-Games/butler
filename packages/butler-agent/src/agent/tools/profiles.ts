@@ -33,6 +33,8 @@ const PROJECT_TOOL_NAMES = [
 
 const WORKSPACE_TOOL_NAMES = [
   "run_command",
+  "read_file",
+  "write_file",
   "read_tool_output_artifact",
 ] as const;
 
@@ -119,6 +121,8 @@ const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
 
 const WORKER_DEFAULT_TOOL_NAMES = [
   "run_command",
+  "read_file",
+  "write_file",
   "read_tool_output_artifact",
   "inspect_project_status",
   "query_project_work",
