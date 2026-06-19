@@ -4,6 +4,13 @@ export function sha256Hex(data: string | Uint8Array): string {
   return createHash("sha256").update(data).digest("hex");
 }
 
+function operationCover(toolName: string): string {
+  if (toolName === "read_file") return "workspace_file_read";
+  if (toolName === "write_file") return "workspace_file_written";
+  if (toolName === "grep_files") return "workspace_search_result";
+  return "workspace_file_operation";
+}
+
 export function fileToolEvidenceReceipt(input: {
   toolName: string;
   summary: string;
@@ -16,7 +23,7 @@ export function fileToolEvidenceReceipt(input: {
     producer: { kind: "tool", name: input.toolName },
     receiptType: "execution",
     verified: true,
-    covers: ["execution_result", "workspace_file"],
+    covers: ["execution_result", operationCover(input.toolName)],
     summary: input.summary,
     references: input.references ? [input.references] : [],
     satisfies: input.satisfies ?? ["source_verified"],
