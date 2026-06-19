@@ -451,12 +451,25 @@ function mergeWorkerActivityForActiveSummary(
   const incomingById = new Set(
     incomingWorkers.map((worker) => worker.worker_id),
   );
+  const incomingParentKeys = new Set(
+    incomingWorkers
+      .filter((worker) => worker.activity_kind === "planned")
+      .map((worker) => worker.task_id ?? worker.orchestration_id)
+      .filter((key): key is string => Boolean(key)),
+  );
   const incomingState =
     incoming.latest_progress?.state ?? incoming.turn_state ?? "";
   const shouldPreserveActiveWorkers = isNonTerminalTurnState(incomingState);
   if (!shouldPreserveActiveWorkers) return incoming;
   const preserved = currentWorkers.filter(
-    (worker) => !worker.terminal && !incomingById.has(worker.worker_id),
+    (worker) =>
+      !worker.terminal &&
+      !incomingById.has(worker.worker_id) &&
+      !(
+        worker.activity_kind === "worker" &&
+        worker.orchestration_id &&
+        incomingParentKeys.has(worker.orchestration_id)
+      ),
   );
   if (preserved.length === 0) return incoming;
   return {

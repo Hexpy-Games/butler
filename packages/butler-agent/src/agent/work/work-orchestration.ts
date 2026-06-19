@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
-import { TaskStore, workSafetyForTask } from "./task-store.ts";
+import { TaskStore, workSafetyForTask, type TaskRecord } from "./task-store.ts";
 
 export type WorkOrchestrationStatus =
   | "draft"
@@ -12,9 +12,11 @@ export type WorkOrchestrationStatus =
   | "cancelled";
 
 export type WorkStreamStatus = "pending" | "running" | "done" | "failed" | "skipped" | "cancelled";
+export type WorkStreamKind = "implementation" | "setup" | "planning" | "investigation" | "review";
 
 export interface WorkStreamInput {
   id?: string;
+  kind?: WorkStreamKind;
   role: string;
   objective: string;
   acceptance_criteria: string[];
@@ -23,6 +25,7 @@ export interface WorkStreamInput {
 
 export interface WorkStreamRecord {
   id: string;
+  kind?: WorkStreamKind;
   role: string;
   objective: string;
   acceptance_criteria: string[];
@@ -69,6 +72,22 @@ function compact(value: string, limit = 600): string {
   return normalized.length > limit ? `${normalized.slice(0, limit - 3)}...` : normalized;
 }
 
+function normalizeStreamKind(value: unknown): WorkStreamKind {
+  if (
+    value === "setup" ||
+    value === "planning" ||
+    value === "investigation" ||
+    value === "review"
+  ) {
+    return value;
+  }
+  return "implementation";
+}
+
+function streamKind(stream: WorkStreamRecord): WorkStreamKind {
+  return normalizeStreamKind(stream.kind);
+}
+
 function atomicWriteJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
@@ -94,6 +113,7 @@ function normalizeStream(input: WorkStreamInput, index: number, nowIso: string):
   if (acceptanceCriteria.length === 0) throw new Error(`work stream ${id} requires acceptance criteria`);
   return {
     id,
+    kind: normalizeStreamKind(input.kind),
     role,
     objective,
     acceptance_criteria: acceptanceCriteria,
@@ -133,6 +153,14 @@ function validateStreams(streams: WorkStreamRecord[]): void {
 
 function terminal(stream: WorkStreamRecord): boolean {
   return stream.status === "done" || stream.status === "failed" || stream.status === "skipped" || stream.status === "cancelled";
+}
+
+function canCompleteNonImplementationStream(stream: WorkStreamRecord, task: TaskRecord): boolean {
+  if (streamKind(stream) === "implementation") return false;
+  const evidence = task.completionEvidence;
+  if (evidence.has_final_blocker || evidence.has_environment_blocker) return false;
+  if (!evidence.has_report_evidence) return false;
+  return Boolean(task.observedResult?.trim() || task.result?.trim());
 }
 
 function summarize(record: WorkOrchestrationRecord): WorkOrchestrationSummary {
@@ -316,6 +344,14 @@ export class WorkOrchestrationStore {
         if (task.status === "DONE" || task.status === "REVIEWED") {
           const safety = workSafetyForTask(task);
           if (!safety.safe_to_report || !safety.completion_claim_allowed) {
+            if (canCompleteNonImplementationStream(stream, task)) {
+              return {
+                ...stream,
+                status: "done",
+                result_summary: compact(task.observedResult ?? task.result ?? "Worker completed non-implementation stream."),
+                updated_at: nowIso,
+              };
+            }
             return {
               ...stream,
               status: "failed",
@@ -407,6 +443,7 @@ export function orchestrationWorkerPrompt(input: {
     `Orchestration: ${input.orchestration.title}`,
     `Goal: ${input.orchestration.goal}`,
     `Stream: ${input.stream.id}`,
+    `Stream kind: ${streamKind(input.stream)}`,
     `Role: ${input.stream.role}`,
     "",
     "Objective:",

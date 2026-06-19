@@ -647,60 +647,159 @@ function workerActivityRowsFromTranscript(taskDir: string): WorkerActivityProgre
   if (!sessionId) return [];
   const butlerData = join(taskDir, "..", "..");
   const transcriptPath = join(butlerData, "transcripts", `${sanitizeWorkerTranscriptId(`worker/${sessionId}`)}.jsonl`);
-  return readJsonlRecords(transcriptPath)
-    .map((event, index) => rowFromWorkerTranscriptEvent(event, index))
-    .filter((row): row is WorkerActivityProgressRow => Boolean(row))
-    .slice(-40);
+  const rows: WorkerActivityProgressRow[] = [];
+  const toolDecisions = new Map<string, Record<string, unknown>>();
+  let lastDecision: Record<string, unknown> | null = null;
+  for (const [index, event] of readJsonlRecords(transcriptPath).entries()) {
+    const row = rowFromWorkerTranscriptEvent(event, index, lastDecision, toolDecisions);
+    if (!row) continue;
+    rows.push(row);
+    if (row.kind === "decision") {
+      const payload = event.payload && typeof event.payload === "object" ? event.payload as Record<string, unknown> : {};
+      lastDecision = transcriptDecisionFromPayload(payload) ?? payload;
+      continue;
+    }
+    const toolCallId = row.tool_call_id;
+    if (toolCallId && lastDecision && event.kind === "tool_call") toolDecisions.set(toolCallId, lastDecision);
+  }
+  return rows.slice(-40);
 }
 
 function rowFromWorkerTranscriptEvent(
   event: Record<string, unknown>,
   index: number,
+  previousDecision: Record<string, unknown> | null = null,
+  toolDecisions: Map<string, Record<string, unknown>> = new Map(),
 ): WorkerActivityProgressRow | null {
   const kind = typeof event.kind === "string" ? event.kind : "";
   const payload = event.payload && typeof event.payload === "object" ? event.payload as Record<string, unknown> : {};
   if (kind === "system" && payload.category === "public_work_decision") {
-    const decision = payload.public_work_decision && typeof payload.public_work_decision === "object"
-      ? payload.public_work_decision as Record<string, unknown>
-      : payload;
-    const title = safeTimelineText(decision.decisionSummary ?? decision.summary, 180) ?? "Recorded worker decision.";
-    const createdAt = typeof event.created_at === "string" ? event.created_at : new Date(0).toISOString();
+    const decision = transcriptDecisionFromPayload(payload) ?? payload;
+    const decisionFields = workerDecisionFieldsFromRecord(decision);
+    const titleCandidate =
+      safeTimelineText(decision.decisionSummary ?? decision.summary, 180) ??
+      decisionFields.work_decision_next_step ??
+      decisionFields.work_decision_rationale ??
+      null;
+    if (!titleCandidate && Object.keys(decisionFields).length === 0) return null;
+    const title = titleCandidate ?? "Worker decision";
+    const createdAt = transcriptEventCreatedAt(event);
+    const decisionId = safeActivityToken(decision.decisionId) ?? `worker-transcript-decision-${index + 1}`;
     return {
-      id: safeActivityToken(event.id) ?? `worker-transcript-decision-${index + 1}`,
+      id: safeActivityToken(event.id ?? event.eventId) ?? `worker-transcript-decision-${index + 1}`,
       kind: "decision",
       safe_label: title,
       state: "delivered",
       safe_tool_name: "Decision",
-      work_block_id: `worker-transcript-decision-${index + 1}`,
+      work_block_id: `worker-transcript-decision-${decisionId}`,
       work_block_label: title,
-      ...workerDecisionFieldsFromRecord(decision),
+      ...decisionFields,
       created_at: createdAt,
     };
   }
   if (kind !== "tool_call" && kind !== "tool_result") return null;
   const name = safeTimelineText(payload.name, 80) ?? "tool";
-  const toolCallId = safeActivityText(payload.tool_call_id ?? payload.id, 120) ?? `transcript-tool-${index + 1}`;
-  const label = kind === "tool_call" ? `Started ${name}.` : `Completed ${name}.`;
+  const toolCallId = safeActivityToken(payload.tool_call_id ?? payload.id) ?? `transcript-tool-${index + 1}`;
+  const decision = transcriptDecisionFromPayload(payload) ?? toolDecisions.get(toolCallId) ?? previousDecision;
+  const decisionFields = decision ? workerDecisionFieldsFromRecord(decision) : {};
+  const decisionSummary = decisionFields.work_decision_summary;
+  const workBlockId = decision
+    ? `worker-transcript-decision-${safeActivityToken(decision.decisionId) ?? toolCallId}`
+    : toolCallId;
+  const toolName = transcriptToolDisplayName(name);
+  const label = transcriptToolLabel(name, kind);
   const command = transcriptCommandLabel(payload);
-  const createdAt = typeof event.created_at === "string" ? event.created_at : new Date(0).toISOString();
+  const createdAt = transcriptEventCreatedAt(event);
+  const detailRows = transcriptToolDetailRows(payload, command);
   return {
-    id: safeActivityToken(event.id) ?? `${toolCallId}-${kind}`,
-    kind: kind === "tool_call" ? "used_tool" : "tool_result",
+    id: safeActivityToken(event.id ?? event.eventId) ?? `${toolCallId}-${kind}`,
+    kind: name === "run_command" ? "ran_command" : kind === "tool_call" ? "used_tool" : "tool_result",
     safe_label: label,
     state: kind === "tool_result" ? "delivered" : "running",
-    safe_tool_name: name,
+    safe_tool_name: toolName,
     ...(command ? { safe_input_label: command } : {}),
+    ...(detailRows.length > 0 ? { safe_detail_rows: detailRows } : {}),
     tool_call_id: toolCallId,
-    work_block_id: toolCallId,
-    work_block_label: label,
+    work_block_id: workBlockId,
+    work_block_label: decisionSummary ?? command ?? label,
+    ...decisionFields,
     created_at: createdAt,
   };
+}
+
+function transcriptDecisionFromPayload(payload: Record<string, unknown>): Record<string, unknown> | null {
+  if (payload.decision && typeof payload.decision === "object") return payload.decision as Record<string, unknown>;
+  if (payload.publicDecision && typeof payload.publicDecision === "object") return payload.publicDecision as Record<string, unknown>;
+  if (payload.public_work_decision && typeof payload.public_work_decision === "object") return payload.public_work_decision as Record<string, unknown>;
+  return null;
+}
+
+function transcriptEventCreatedAt(event: Record<string, unknown>): string {
+  return typeof event.created_at === "string"
+    ? event.created_at
+    : typeof event.timestamp === "string"
+      ? event.timestamp
+      : new Date(0).toISOString();
+}
+
+function transcriptToolDisplayName(name: string): string {
+  return name === "run_command" ? "Bash" : name;
+}
+
+function transcriptToolLabel(name: string, kind: string): string {
+  if (name === "run_command") return "Bash";
+  return kind === "tool_call" ? `Started ${name}.` : `Completed ${name}.`;
 }
 
 function transcriptCommandLabel(payload: Record<string, unknown>): string | null {
   const args = payload.arguments && typeof payload.arguments === "object" ? payload.arguments as Record<string, unknown> : {};
   const result = payload.result && typeof payload.result === "object" ? payload.result as Record<string, unknown> : {};
-  return safeTimelineText(args.command, 220) ?? safeTimelineText(result.command, 220);
+  return safeTimelineCommandText(args.command, 220) ?? safeTimelineCommandText(result.command, 220);
+}
+
+function transcriptToolDetailRows(
+  payload: Record<string, unknown>,
+  command: string | null,
+): WorkerActivityProgressDetailRow[] {
+  const args = payload.arguments && typeof payload.arguments === "object" ? payload.arguments as Record<string, unknown> : {};
+  const result = payload.result && typeof payload.result === "object" ? payload.result as Record<string, unknown> : {};
+  const rows: WorkerActivityProgressDetailRow[] = [];
+  if (command) {
+    rows.push({
+      id: "command",
+      safe_label: "Command",
+      safe_value: command,
+    });
+  }
+  const cwd = safeTimelineCommandText(args.cwd ?? result.cwd, 180);
+  if (cwd) {
+    rows.push({
+      id: "cwd",
+      safe_label: "CWD",
+      safe_value: cwd,
+    });
+  }
+  const exitCode = typeof result.exit_code === "number" ? String(result.exit_code) : null;
+  if (exitCode) {
+    rows.push({
+      id: "exit-code",
+      safe_label: "Exit",
+      safe_value: exitCode,
+    });
+  }
+  return rows.slice(0, 4);
+}
+
+function safeTimelineCommandText(value: unknown, limit: number): string | null {
+  const text = safeActivityText(value, limit);
+  if (!text) return null;
+  const normalized = text
+    .replace(/\/Users\/[^/\s"'`]+/gu, "~")
+    .replace(/\/home\/[^/\s"'`]+/gu, "~")
+    .replace(/\/private\/var\/folders\/[^\s"'`]+/gu, "$TMPDIR")
+    .replace(/\/var\/folders\/[^\s"'`]+/gu, "$TMPDIR");
+  if (looksUnsafeTimelineText(normalized)) return null;
+  return normalized;
 }
 
 function workerDecisionFieldsFromRecord(
