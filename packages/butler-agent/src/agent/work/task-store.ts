@@ -675,7 +675,14 @@ function rowFromWorkerTranscriptEvent(
   const payload = event.payload && typeof event.payload === "object" ? event.payload as Record<string, unknown> : {};
   if (kind === "system" && payload.category === "public_work_decision") {
     const decision = transcriptDecisionFromPayload(payload) ?? payload;
-    const title = safeTimelineText(decision.decisionSummary ?? decision.summary, 180) ?? "Recorded worker decision.";
+    const decisionFields = workerDecisionFieldsFromRecord(decision);
+    const titleCandidate =
+      safeTimelineText(decision.decisionSummary ?? decision.summary, 180) ??
+      decisionFields.work_decision_next_step ??
+      decisionFields.work_decision_rationale ??
+      null;
+    if (!titleCandidate && Object.keys(decisionFields).length === 0) return null;
+    const title = titleCandidate ?? "Worker decision";
     const createdAt = transcriptEventCreatedAt(event);
     const decisionId = safeActivityToken(decision.decisionId) ?? `worker-transcript-decision-${index + 1}`;
     return {
@@ -686,7 +693,7 @@ function rowFromWorkerTranscriptEvent(
       safe_tool_name: "Decision",
       work_block_id: `worker-transcript-decision-${decisionId}`,
       work_block_label: title,
-      ...workerDecisionFieldsFromRecord(decision),
+      ...decisionFields,
       created_at: createdAt,
     };
   }
@@ -714,7 +721,7 @@ function rowFromWorkerTranscriptEvent(
     ...(detailRows.length > 0 ? { safe_detail_rows: detailRows } : {}),
     tool_call_id: toolCallId,
     work_block_id: workBlockId,
-    work_block_label: decisionSummary ?? label,
+    work_block_label: decisionSummary ?? command ?? label,
     ...decisionFields,
     created_at: createdAt,
   };

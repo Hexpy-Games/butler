@@ -588,6 +588,74 @@ test("task store leaves live running workers alone and fails unrecoverable empty
   expect(store.read("task-empty-running")?.status).toBe("FAILED");
 });
 
+test("task store projects worker transcript command details instead of generic decision rows", () => {
+  const taskDir = join(tempDir, "tasks", "task-worker-transcript-details");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "RUNNING\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "Inspect worker projection details.\n", "utf8");
+  writeFileSync(join(taskDir, "session_id"), "worker-projection-session\n", "utf8");
+  const transcriptDir = join(tempDir, "transcripts");
+  mkdirSync(transcriptDir, { recursive: true });
+  writeFileSync(
+    join(transcriptDir, "worker_worker-projection-session.jsonl"),
+    [
+      {
+        kind: "system",
+        timestamp: "2026-05-16T00:02:01.000Z",
+        payload: {
+          category: "public_work_decision",
+          decision: { decisionId: "decision-empty" },
+        },
+      },
+      {
+        eventId: "tool-call",
+        kind: "tool_call",
+        timestamp: "2026-05-16T00:02:02.000Z",
+        payload: {
+          id: "tool-1",
+          name: "run_command",
+          arguments: {
+            command: "rg -n worker_activity packages/butler-agent/src",
+            cwd: "/Users/yeonwoo/butler",
+          },
+        },
+      },
+      {
+        eventId: "tool-result",
+        kind: "tool_result",
+        timestamp: "2026-05-16T00:02:03.000Z",
+        payload: {
+          tool_call_id: "tool-1",
+          name: "run_command",
+          result: {
+            command: "rg -n worker_activity packages/butler-agent/src",
+            cwd: "/Users/yeonwoo/butler",
+            exit_code: 0,
+          },
+        },
+      },
+    ].map((event) => JSON.stringify(event)).join("\n") + "\n",
+    "utf8",
+  );
+
+  const summary = new TaskStore(tempDir).summaries(1)[0]!;
+  const serialized = JSON.stringify(summary.activity_work_blocks);
+
+  expect(serialized).not.toContain("Recorded worker decision");
+  expect(serialized).not.toContain("Started run_command");
+  expect(summary.activity_work_blocks).toEqual([
+    expect.objectContaining({
+      label: "rg -n worker_activity packages/butler-agent/src",
+      rows: expect.arrayContaining([
+        expect.objectContaining({
+          safe_tool_name: "Bash",
+          safe_input_label: "rg -n worker_activity packages/butler-agent/src",
+        }),
+      ]),
+    }),
+  ]);
+});
+
 test("task store resolves task origin from transcript and hot memory references", () => {
   process.env.BUTLER_DATA = tempDir;
   appendTranscriptEvent(createTranscriptEvent({
