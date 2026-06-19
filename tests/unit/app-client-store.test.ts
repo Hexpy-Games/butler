@@ -1228,6 +1228,68 @@ test("session view hydration drops preserved worker activity once the incoming t
   expect(useButlerStore.getState().summary?.worker_activity).toEqual([]);
 });
 
+test("session view hydration drops preserved child worker when its plan parent is refreshed", () => {
+  useButlerStore.setState({
+    activeChatId: "session-a",
+    summary: {
+      session_id: "session-a",
+      turn_state: "running",
+      latest_progress: {
+        turn_id: "turn-a",
+        state: "running",
+        safe_progress_rows: [],
+      },
+      worker_activity: [
+        {
+          worker_id: "worker-stale-rina",
+          activity_kind: "worker",
+          worker_label: "Worker 1",
+          worker_display_name: "Rina",
+          objective: "이전 워커",
+          phase: "executing",
+          status_line: "Executing",
+          terminal: false,
+          orchestration_id: "orch-a",
+          updated_at: "2026-05-16T00:00:02.000Z",
+          supported_controls: ["cancel"],
+        },
+      ],
+    },
+  });
+
+  const refreshedPlan = {
+    worker_id: "planned-orch-a",
+    activity_kind: "planned" as const,
+    worker_label: "Plan",
+    worker_display_name: "Plan",
+    objective: "새 계획 상태",
+    phase: "executing" as const,
+    status_line: "Planning",
+    terminal: false,
+    task_id: "orch-a",
+    orchestration_id: "orch-a",
+    updated_at: "2026-05-16T00:00:03.000Z",
+    supported_controls: [],
+  };
+
+  useButlerStore.getState().setSessionView(
+    sessionView("session-a", {
+      messages: [],
+      turnState: "running",
+      latestProgress: {
+        turn_id: "turn-a",
+        state: "running",
+        safe_progress_rows: [],
+      },
+      workers: [refreshedPlan],
+    }),
+  );
+
+  expect(useButlerStore.getState().summary?.worker_activity).toEqual([
+    refreshedPlan,
+  ]);
+});
+
 test("message list hydration preserves existing turn progress when server delta is partial", () => {
   const turnProgress: Record<string, TurnProgressSnapshot> = {
     "turn-a": {
