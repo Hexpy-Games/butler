@@ -534,6 +534,26 @@ export interface SessionControlsView {
   controls: SessionControlState;
 }
 
+
+export interface GitWorkspaceView {
+  available: boolean;
+  workspaceMode: "none" | "folder" | "git-repository" | "git-worktree" | "git-subdirectory" | "unknown";
+  workspacePath: string;
+  repoRoot?: string;
+  worktreePath?: string;
+  commonDir?: string;
+  gitDir?: string;
+  branch?: string;
+  headSha?: string;
+  detached?: boolean;
+  dirty?: boolean;
+  upstream?: string;
+  isMainWorktree?: boolean;
+  isLinkedWorktree?: boolean;
+  capturedAt: string;
+  error?: { code: string; message: string };
+}
+
 export interface SessionSummary {
   id: string;
   kind: ChatKind;
@@ -547,6 +567,7 @@ export interface SessionSummary {
   active_turn_state?: string;
   pinned: boolean;
   archived: boolean;
+  gitWorkspace?: GitWorkspaceView;
 }
 
 export interface CreateSessionResult {
@@ -560,6 +581,7 @@ export interface ProjectSummary {
   pinned: boolean;
   archived: boolean;
   sessions?: SessionSummary[];
+  gitWorkspace?: GitWorkspaceView;
 }
 
 export interface NavigationView {

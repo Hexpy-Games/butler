@@ -10,9 +10,9 @@ export interface ListRowProps {
   /** Row title */
   title: string;
   /** Optional description */
-  description?: string;
+  description?: ReactNode;
   /** Optional metadata (date, size, etc.) */
-  meta?: string;
+  meta?: ReactNode;
   /** Additional CSS class */
   className?: string;
 }

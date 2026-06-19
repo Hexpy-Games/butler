@@ -1,5 +1,6 @@
 import { MessageSquarePlus } from "@/butler-ds";
 import { EmptyPanelLine } from "@/components/common/Display.tsx";
+import { GitWorkspaceInlineMeta } from "@/components/layout/GitWorkspaceIndicator.tsx";
 import { Section, SessionRow, Stack } from "@/butler-ds";
 import { relativeAge } from "@/app/utils.ts";
 import type { SessionSummary } from "@/app/types.ts";
@@ -25,7 +26,11 @@ export function ProjectSessionsPanel({
               dataTestClass="project-chat-card"
               key={session.id}
               title={session.title}
-              meta={relativeAge(session.last_activity_at)}
+              meta={(
+                <GitWorkspaceInlineMeta gitWorkspace={session.gitWorkspace}>
+                  {relativeAge(session.last_activity_at)}
+                </GitWorkspaceInlineMeta>
+              )}
               showIcon={false}
               onSelect={() => onOpenSession(session.id)}
             />

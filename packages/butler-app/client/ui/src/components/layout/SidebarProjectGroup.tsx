@@ -1,5 +1,6 @@
 import { Folder, FolderOpen, CollapsibleNavGroup } from "@/butler-ds";
 import { SidebarProjectActions } from "@/components/layout/SidebarProjectActions.tsx";
+import { GitWorkspaceIndicator } from "@/components/layout/GitWorkspaceIndicator.tsx";
 import { SidebarProjectSessionItem } from "@/components/layout/SidebarProjectSessionItem.tsx";
 import type { ProjectSummary } from "@/app/types.ts";
 
@@ -23,6 +24,7 @@ export function SidebarProjectGroup({
     <CollapsibleNavGroup
       icon={effectiveCollapsed ? <Folder /> : <FolderOpen />}
       label={project.display_name}
+      badge={<GitWorkspaceIndicator gitWorkspace={project.gitWorkspace} />}
       expanded={!effectiveCollapsed}
       onToggle={onToggleCollapse}
       actions={<SidebarProjectActions project={project} />}
