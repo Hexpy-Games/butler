@@ -56,6 +56,9 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "web_read",
     "transform_public_data_table",
     "run_command",
+    "read_file",
+    "write_file",
+    "grep_files",
     "get_work_dashboard",
     "inspect_project_status",
     "query_project_work",
@@ -162,6 +165,7 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
   const expectedGroups = [
     "automation",
     "data-table",
+    "file-tools",
     "mcp",
     "memory",
     "monitoring",
@@ -178,6 +182,7 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
   const groupedToolNames = groupNames.flatMap((groupName) => (
     readdirSync(join(toolsRoot, groupName))
       .filter((name) => statSync(join(toolsRoot, groupName, name)).isDirectory())
+      .filter((name) => existsSync(join(toolsRoot, groupName, name, "index.ts")))
       .map((name) => `${groupName}/${name}`)
   )).sort();
   const toolNames = BUTLER_TOOLS.map((tool) => tool.name).sort();
