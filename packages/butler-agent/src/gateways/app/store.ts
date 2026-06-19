@@ -8398,6 +8398,7 @@ function orchestrationActivityPhase(
   if (orchestration.status === "reported") return "complete";
   if (orchestration.status === "ready_for_report") return "reporting";
   if (orchestration.streams.some((stream) => stream.status === "running")) return "executing";
+  if (orchestration.streams.some((stream) => stream.status === "failed")) return "blocked";
   if (orchestration.streams.some((stream) => stream.status !== "pending")) return "executing";
   return "planning";
 }
@@ -8407,10 +8408,12 @@ function orchestrationStatusLine(
   phase: WorkerActivityPhase,
 ): string {
   const running = orchestration.streams.filter((stream) => stream.status === "running").length;
+  const failed = orchestration.streams.filter((stream) => stream.status === "failed").length;
   const done = orchestration.streams.filter((stream) => stream.status === "done" || stream.status === "skipped").length;
   const total = orchestration.streams.length;
   if (phase === "cancelled") return "Cancelled: coordinated worker plan stopped.";
   if (phase === "failed") return "Failed: one or more worker streams need review.";
+  if (phase === "blocked") return `Blocked: ${failed} of ${total} worker streams failed; remaining streams are waiting.`;
   if (phase === "complete") return "Complete: coordinated worker plan reported.";
   if (phase === "reporting") return "Reporting: worker streams are ready for review.";
   if (running > 0) return `Executing: ${running} of ${total} worker streams running.`;
