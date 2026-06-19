@@ -2740,7 +2740,7 @@ test("active turn fallback copy matches the turn state", () => {
   );
 
   expect(copy).toContain("pendingStateLabels");
-  expect(copy).toContain('thinking: "생각 중입니다."');
+  expect(copy).toContain('thinking: "답변을 준비하고 있습니다."');
   expect(copy).toContain('streaming: "응답을 작성하고 있습니다."');
   expect(panel).toContain("turnActivityPendingLabel(state)");
   expect(panel).toContain('data-turn-state={state ?? "unknown"}');
