@@ -476,6 +476,38 @@ function workerFailureStatusLine(message: string): string {
   return "Failed: worker stopped before completion.";
 }
 
+function stopForDependencyPreflight(input: {
+  findings: string[];
+  guidance: string[];
+}): never {
+  const message = [
+    "Blocked: dependency setup required before worker validation.",
+    "",
+    "Findings:",
+    ...input.findings.map((finding) => `- ${finding}`),
+    "",
+    "Validation guidance:",
+    ...input.guidance.map((item) => `- ${item}`),
+  ].join("\n");
+  writeFileSync(join(taskDir, "result.md"), `${message}\n`, "utf8");
+  writeActivityEvent({
+    event: "worker_failed",
+    semantic_phase: "blocked",
+    action_kind: "dependency_preflight",
+    status_line: "Blocked: dependency setup required before worker validation.",
+    current_title: "워커 의존성 준비가 필요합니다.",
+    decision_summary: "Stop worker before model execution because dependency preflight failed.",
+    decision_rationale: "Validation would be unreliable until local project dependencies are installed.",
+    decision_next_step: "Run the preflight install command, then retry the worker.",
+    evidence_refs: ["worker-preflight.md", "worker-preflight.json"],
+    completion_obligations: ["blocker_evidence"],
+    completion_review: "blocked",
+  });
+  writeActivity("failed", "Blocked: dependency setup required before worker validation.");
+  log("Dependency preflight failed; stopping before model execution.");
+  process.exit(1);
+}
+
 try {
   const dependencyPreflight = runWorkerDependencyPreflight({ taskDir, projectPath });
   const requestPath = join(taskDir, "request.md");
@@ -486,6 +518,12 @@ try {
     install_command: dependencyPreflight.install_command,
     findings: dependencyPreflight.findings,
   });
+  if (dependencyPreflight.status === "needs_dependency_setup") {
+    stopForDependencyPreflight({
+      findings: dependencyPreflight.findings,
+      guidance: dependencyPreflight.validation_guidance,
+    });
+  }
   writeTrace("worker.start", {
     task_id: taskIdFromDir(),
     project_path: projectPath,

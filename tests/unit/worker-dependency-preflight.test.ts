@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { spawnSync } from "child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -42,6 +43,52 @@ test("worker dependency preflight flags missing worktree dependencies before val
     expect(result.validation_guidance.join("\n")).toContain("before typecheck, lint, test");
     expect(existsSync(join(taskDir, "worker-preflight.json"))).toBe(true);
     expect(readFileSync(join(taskDir, "worker-preflight.md"), "utf8")).toContain("Status: needs_dependency_setup");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("worker runner stops before model execution when dependency preflight fails", () => {
+  const root = tempRoot();
+  const projectPath = join(root, "butler-worktree");
+  const taskDir = join(root, "tasks", "worker-hard-gate");
+  mkdirSync(taskDir, { recursive: true });
+  mkdirSync(projectPath, { recursive: true });
+  writeFileSync(join(taskDir, "request.md"), "Run typecheck after making the requested change.\n", "utf8");
+  writeFileSync(join(projectPath, "package.json"), JSON.stringify({
+    packageManager: "bun@1.3.11",
+    devDependencies: {
+      typescript: "^5.0.0",
+    },
+    scripts: {
+      typecheck: "tsc -p tsconfig.json --noEmit",
+    },
+  }, null, 2), "utf8");
+  writeFileSync(join(projectPath, "bun.lock"), "", "utf8");
+
+  try {
+    const result = spawnSync(process.execPath, [
+      "run",
+      "packages/butler-agent/scripts/run-worker.ts",
+      taskDir,
+      projectPath,
+      "openai/test-model",
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        BUTLER_HOME: process.cwd(),
+        BUTLER_DATA: root,
+      },
+    });
+
+    expect(result.status).toBe(1);
+    expect(readFileSync(join(taskDir, "result.md"), "utf8")).toContain("dependency setup required");
+    expect(readFileSync(join(taskDir, "worker_activity_events.jsonl"), "utf8")).toContain("dependency_preflight");
+    expect(readFileSync(join(taskDir, "worker_observability.jsonl"), "utf8")).toContain("worker.dependency_preflight");
+    expect(readFileSync(join(taskDir, "worker_observability.jsonl"), "utf8")).not.toContain("worker.start");
+    expect(existsSync(join(root, "transcripts"))).toBe(false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

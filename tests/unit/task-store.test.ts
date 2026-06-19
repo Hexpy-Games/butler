@@ -340,6 +340,85 @@ test("intermediate blocker does not veto recovered implementation completion", (
   });
 });
 
+test("recovered environment dependency blocker does not veto verified completion", () => {
+  const taskDir = join(tempDir, "tasks", "task-recovered-environment-blocker");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "Implement the dependency recovery fixture.\n", "utf8");
+  writeFileSync(join(taskDir, "log.txt"), [
+    "===== COMMAND: bun run typecheck",
+    "tsc: command not found because node_modules is missing",
+    "===== COMMAND: bun install",
+    "installed dependencies",
+    "===== COMMAND: bun run typecheck",
+    "typecheck passed",
+  ].join("\n"), "utf8");
+  writeFileSync(join(taskDir, "result.md"), "Implemented dependency recovery fixture and verified typecheck after installing dependencies.\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), [
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-env-blocked",
+      created_at: "2026-04-24T00:00:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "blocked",
+      action_kind: "test",
+      status_line: "Blocked: tsc command not found because node_modules is missing.",
+      evidence_refs: ["typecheck:missing-dependencies"],
+      completion_contract: { has_blocker_evidence: true },
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-edit",
+      created_at: "2026-04-24T00:00:10.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "executing",
+      action_kind: "edit_file",
+      status_line: "Executing: wrote dependency recovery fixture.",
+      evidence_refs: ["fixture.ts"],
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-test",
+      created_at: "2026-04-24T00:00:20.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "verifying",
+      action_kind: "test",
+      status_line: "Verifying: bun run typecheck passed.",
+      evidence_refs: ["typecheck:passed"],
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-finished",
+      created_at: "2026-04-24T00:00:30.000Z",
+      actor: "worker",
+      event: "worker_finished",
+      semantic_phase: "reporting",
+      action_kind: "report",
+      status_line: "Worker task finished.",
+      evidence_refs: ["result.md"],
+    },
+  ].map((event) => JSON.stringify(event)).join("\n") + "\n", "utf8");
+
+  const summary = new TaskStore(tempDir).summaries(1)[0]!;
+
+  expect(summary).toMatchObject({
+    task_id: "task-recovered-environment-blocker",
+    work_mode: "complete",
+    safe_to_report: true,
+    completion_claim_allowed: true,
+    guard_reason: null,
+  });
+  expect(summary.completion_evidence).toMatchObject({
+    has_blocker: false,
+    has_intermediate_blocker: true,
+    has_final_blocker: false,
+    has_environment_blocker: false,
+  });
+});
+
 test("final explicit blocker still blocks completion after implementation evidence", () => {
   const taskDir = join(tempDir, "tasks", "task-final-blocker");
   mkdirSync(taskDir, { recursive: true });
@@ -381,6 +460,51 @@ test("final explicit blocker still blocks completion after implementation eviden
     has_blocker: true,
     has_intermediate_blocker: false,
     has_final_blocker: true,
+  });
+});
+
+test("final environment dependency blocker still blocks completion after implementation evidence", () => {
+  const taskDir = join(tempDir, "tasks", "task-final-environment-blocker");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "Implement the fixture change.\n", "utf8");
+  writeFileSync(join(taskDir, "result.md"), "Blocked: tsc command not found because node_modules is missing.\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), [
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-edit",
+      created_at: "2026-04-24T00:00:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "executing",
+      action_kind: "edit_file",
+      status_line: "Executing: wrote fixture change.",
+      evidence_refs: ["fixture.ts"],
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-env-blocked",
+      created_at: "2026-04-24T00:00:20.000Z",
+      actor: "worker",
+      event: "worker_finished",
+      semantic_phase: "blocked",
+      action_kind: "report",
+      status_line: "Blocked: tsc command not found because node_modules is missing.",
+      evidence_refs: ["result.md"],
+      completion_review: "blocked",
+    },
+  ].map((event) => JSON.stringify(event)).join("\n") + "\n", "utf8");
+
+  const summary = new TaskStore(tempDir).summaries(1)[0]!;
+
+  expect(summary.safe_to_report).toBe(true);
+  expect(summary.completion_claim_allowed).toBe(false);
+  expect(summary.guard_reason).toContain("environment blocker");
+  expect(summary.completion_evidence).toMatchObject({
+    has_blocker: true,
+    has_intermediate_blocker: false,
+    has_final_blocker: true,
+    has_environment_blocker: true,
   });
 });
 
