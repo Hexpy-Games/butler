@@ -5812,6 +5812,9 @@ test("app transport progress projection recovers queued work blocks after app-se
         work_block_label: "오늘 브리핑 근거를 찾는 중입니다.",
       }),
     );
+    expect(
+      JSON.stringify(messages.data.turn_progress[turnId].safe_progress_rows),
+    ).not.toContain("turn-preparation");
     const summary = await getJson(
       `${server.url}session-summary?session_id=general`,
     );
@@ -5822,6 +5825,9 @@ test("app transport progress projection recovers queued work blocks after app-se
         safe_input_label: "충주 뉴스",
       }),
     );
+    expect(
+      JSON.stringify(summary.data.latest_progress.safe_progress_rows),
+    ).not.toContain("turn-preparation");
     const sessionView = await getJson(
       `${server.url}session-view?session_id=general`,
     );
@@ -5835,6 +5841,9 @@ test("app transport progress projection recovers queued work blocks after app-se
         work_block_label: "오늘 브리핑 근거를 찾는 중입니다.",
       }),
     );
+    expect(
+      JSON.stringify(sessionView.data.latest_turn.progress.safe_progress_rows),
+    ).not.toContain("turn-preparation");
   } finally {
     server.stop();
   }
