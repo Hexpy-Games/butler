@@ -19,6 +19,9 @@ export interface WorkerCompletionEvidenceSummary {
   has_test_added_or_updated: boolean;
   has_commit_created: boolean;
   has_blocker: boolean;
+  has_intermediate_blocker: boolean;
+  has_final_blocker: boolean;
+  has_environment_blocker: boolean;
   has_execution_evidence: boolean;
   has_verification_evidence: boolean;
   has_report_evidence: boolean;
@@ -120,6 +123,9 @@ function evidenceFromActivity(taskDir: string): Partial<WorkerCompletionEvidence
   let hasCommit = false;
   let hasFileModified = false;
   let hasFileCreated = false;
+  let hasIntermediateBlocker = false;
+  let hasFinalBlocker = false;
+  let hasEnvironmentBlocker = false;
 
   for (const event of events) {
     if (Array.isArray(event.evidence_refs)) {
@@ -138,8 +144,22 @@ function evidenceFromActivity(taskDir: string): Partial<WorkerCompletionEvidence
     if (semantic === "executing") hasExecution = true;
     if (semantic === "verifying") hasVerification = true;
     if (semantic === "reporting") hasReport = true;
-    if (semantic === "blocked" || event.completion_review === "blocked") hasBlocker = true;
-    if (contract.has_blocker_evidence === true) hasBlocker = true;
+    const blockedLike =
+      semantic === "blocked" ||
+      event.completion_review === "blocked" ||
+      contract.has_blocker_evidence === true;
+    const terminalBlocker =
+      blockedLike &&
+      (
+        event.event === "worker_failed" ||
+        event.event === "worker_finished" ||
+        event.completion_review === "blocked"
+      );
+    const environmentBlocker = blockedLike && isEnvironmentBlockerText(text);
+    if (blockedLike) hasBlocker = true;
+    if (terminalBlocker) hasFinalBlocker = true;
+    else if (blockedLike) hasIntermediateBlocker = true;
+    if (environmentBlocker) hasEnvironmentBlocker = true;
     if (contract.has_execution_evidence === true) hasExecution = true;
     if (contract.has_verification_evidence === true) hasVerification = true;
     if (contract.has_commit_evidence === true) hasCommit = true;
@@ -163,6 +183,9 @@ function evidenceFromActivity(taskDir: string): Partial<WorkerCompletionEvidence
     has_commit_created: hasCommit,
     has_file_modified: hasFileModified,
     has_file_created: hasFileCreated,
+    has_intermediate_blocker: hasIntermediateBlocker,
+    has_final_blocker: hasFinalBlocker,
+    has_environment_blocker: hasEnvironmentBlocker,
     evidence_refs: refs,
   };
 }
@@ -171,6 +194,8 @@ function evidenceFromLog(taskDir: string): Partial<WorkerCompletionEvidenceSumma
   const log = readText(join(taskDir, "log.txt"));
   const result = readText(join(taskDir, "result.md"));
   const text = `${log}\n${result}`;
+  const resultHasBlocker = /\b(blocked|blocker|cannot safely|unable to proceed|TIMEOUT|deadlock|auth|credential)\b/iu.test(result);
+  const environmentBlocker = isEnvironmentBlockerText(text);
   const commandLines = text
     .split(/\r?\n/u)
     .filter((line) => /run_shell|run_command|===== COMMAND:/u.test(line))
@@ -184,7 +209,10 @@ function evidenceFromLog(taskDir: string): Partial<WorkerCompletionEvidenceSumma
     has_file_created: /\b(touch|mkdir\s+-p|cat\s+>|printf\s+.*>|tee\s+)\b/iu.test(text),
     has_execution_evidence: /run_shell|run_command|===== COMMAND:/u.test(text),
     has_verification_evidence: /\b(bun test|bun run check|npm test|pnpm test|yarn test|vitest|jest|playwright|typecheck|lint|tsc)\b/iu.test(text),
-    has_blocker: /\b(blocked|blocker|cannot safely|unable to proceed|TIMEOUT|deadlock|auth|credential)\b/iu.test(text),
+    has_blocker: resultHasBlocker || environmentBlocker,
+    has_intermediate_blocker: !resultHasBlocker && /\b(blocked|blocker|cannot safely|unable to proceed)\b/iu.test(log),
+    has_final_blocker: resultHasBlocker,
+    has_environment_blocker: environmentBlocker,
     evidence_refs: commandLines.slice(-8),
   };
 }
@@ -250,6 +278,9 @@ function evidenceFromWorkerTranscript(taskDir: string): Partial<WorkerCompletion
   let hasTest = false;
   let hasCommit = false;
   let hasBlocker = false;
+  let hasIntermediateBlocker = false;
+  const hasFinalBlocker = false;
+  let hasEnvironmentBlocker = false;
 
   for (const event of events) {
     if (event.kind !== "tool_result" && event.kind !== "tool_call") continue;
@@ -274,7 +305,14 @@ function evidenceFromWorkerTranscript(taskDir: string): Partial<WorkerCompletion
       hasVerification = true;
     }
     if (/\bgit\s+commit\b|committed/iu.test(text)) hasCommit = true;
-    if (/\b(blocked|blocker|cannot safely|unable to proceed)\b/iu.test(text)) hasBlocker = true;
+    if (/\b(blocked|blocker|cannot safely|unable to proceed)\b/iu.test(text)) {
+      hasBlocker = true;
+      hasIntermediateBlocker = true;
+    }
+    if (isEnvironmentBlockerText(text)) {
+      hasBlocker = true;
+      hasEnvironmentBlocker = true;
+    }
     if (event.kind === "tool_result") refs.push(`transcript:${compact(name || "tool", 40)}:${compact(command || JSON.stringify(result), 180)}`);
   }
 
@@ -288,8 +326,16 @@ function evidenceFromWorkerTranscript(taskDir: string): Partial<WorkerCompletion
     has_test_added_or_updated: hasTest,
     has_commit_created: hasCommit,
     has_blocker: hasBlocker,
+    has_intermediate_blocker: hasIntermediateBlocker,
+    has_final_blocker: hasFinalBlocker,
+    has_environment_blocker: hasEnvironmentBlocker,
     evidence_refs: refs,
   };
+}
+
+function isEnvironmentBlockerText(value: string): boolean {
+  return /\b(?:tsc|typescript|bun|npm|pnpm|yarn|node_modules|dependency|dependencies)\b[\s\S]{0,120}\b(?:command not found|not found|missing|not installed)\b/iu.test(value) ||
+    /\b(?:command not found|not found|missing|not installed)\b[\s\S]{0,120}\b(?:tsc|typescript|bun|npm|pnpm|yarn|node_modules|dependency|dependencies)\b/iu.test(value);
 }
 
 function mergeEvidence(
@@ -306,6 +352,9 @@ function mergeEvidence(
     has_test_added_or_updated: false,
     has_commit_created: false,
     has_blocker: classification === "explicit-blocker",
+    has_intermediate_blocker: false,
+    has_final_blocker: classification === "explicit-blocker",
+    has_environment_blocker: false,
     has_execution_evidence: false,
     has_verification_evidence: false,
     has_report_evidence: false,
@@ -323,6 +372,9 @@ function mergeEvidence(
       "has_test_added_or_updated",
       "has_commit_created",
       "has_blocker",
+      "has_intermediate_blocker",
+      "has_final_blocker",
+      "has_environment_blocker",
       "has_execution_evidence",
       "has_verification_evidence",
       "has_report_evidence",
@@ -341,10 +393,19 @@ function mergeEvidence(
     merged.has_test_added_or_updated ||
     merged.has_commit_created;
 
-  if (merged.has_blocker) {
+  merged.has_blocker = merged.has_final_blocker || merged.has_environment_blocker;
+
+  if (merged.has_environment_blocker) {
     merged.safe_to_report = true;
     merged.completion_claim_allowed = false;
-    merged.guard_reason = "Worker recorded an explicit blocker; report the blocker, not completion.";
+    merged.guard_reason = "Worker recorded an environment blocker; resolve dependencies or setup before claiming completion.";
+    return merged;
+  }
+
+  if (merged.has_final_blocker) {
+    merged.safe_to_report = true;
+    merged.completion_claim_allowed = false;
+    merged.guard_reason = "Worker recorded a final blocker; report the blocker, not completion.";
     return merged;
   }
 
