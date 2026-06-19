@@ -341,6 +341,48 @@ test("work orchestration can complete setup planning streams without code edits"
   }
 });
 
+test("work orchestration can complete review streams that mention implementation evidence", () => {
+  const butlerData = tempRoot();
+  const store = new WorkOrchestrationStore(butlerData);
+
+  try {
+    store.create({
+      id: "orch-review-implementation",
+      goal: "Review implementation output",
+      streams: [{
+        id: "review",
+        role: "reviewer",
+        objective: "Review implementation evidence and report whether the acceptance criteria are covered.",
+        acceptance_criteria: ["Implementation evidence is reviewed"],
+      }],
+    });
+    store.markDispatched("orch-review-implementation", [{ stream_id: "review", worker_task_id: "worker-review-implementation" }]);
+    const workerDir = join(butlerData, "tasks", "worker-review-implementation");
+    mkdirSync(workerDir, { recursive: true });
+    writeFileSync(join(workerDir, "request.md"), "Review implementation evidence and report findings.\n", "utf8");
+    writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
+    writeFileSync(join(workerDir, "result.md"), "Reviewed the implementation evidence and found the criteria covered.\n", "utf8");
+    writeFileSync(join(workerDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-review-implementation",
+      created_at: "2026-04-27T00:00:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "reporting",
+      action_kind: "report",
+      status_line: "Reporting: implementation evidence review complete.",
+    })}\n`, "utf8");
+
+    expect(store.syncFromTasks("orch-review-implementation")).toMatchObject({
+      status: "ready_for_report",
+      counts: { done: 1 },
+      completion_claim_allowed: true,
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("work orchestration keeps setup planning streams failed on final blockers", () => {
   const butlerData = tempRoot();
   const store = new WorkOrchestrationStore(butlerData);
