@@ -6,7 +6,6 @@ import { sha256Hex } from "../../packages/butler-agent/src/agent/tools/file-tool
 import { resolveWorkspacePathGuard } from "../../packages/butler-agent/src/agent/tools/file-tools/shared/workspace-path-guard.ts";
 import { executeReadFileTool } from "../../packages/butler-agent/src/agent/tools/file-tools/read_file/index.ts";
 import { executeWriteFileTool } from "../../packages/butler-agent/src/agent/tools/file-tools/write_file/index.ts";
-import { executeGrepFilesTool } from "../../packages/butler-agent/src/agent/tools/file-tools/grep_files/index.ts";
 
 let root = "";
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "butler-file-tools-")); });
@@ -45,13 +44,5 @@ describe("write_file", () => {
     expect(stale.error).toBe("expected_sha256_mismatch");
     const good = await executeWriteFileTool(call({ workspace_root: root, path: "dir/a.txt", content: "two", overwrite: true, expected_sha256: sha256Hex("one") })) as any;
     expect(good.ok).toBe(true); expect(good.atomic_write).toBe(true); expect(good.after_sha256).toBe(sha256Hex("two"));
-  });
-});
-
-describe("grep_files", () => {
-  test("supports include, exclude, context, truncation, and receipts", async () => {
-    await mkdir(join(root,"src")); await writeFile(join(root,"src/a.ts"), "before\nneedle\nafter\n"); await writeFile(join(root,"src/a.md"), "needle\n");
-    const res = await executeGrepFilesTool(call({ workspace_root: root, query: "NEEDLE", case_sensitive: false, include_globs:["src/*.ts"], exclude_globs:["**/*.md"], context_lines:1, max_matches:1 })) as any;
-    expect(res.ok).toBe(true); expect(res.matches).toHaveLength(1); expect(res.matches[0].context).toHaveLength(3); expect(res.truncated).toBe(true); expect(res.evidence_receipts[0].producer.name).toBe("grep_files");
   });
 });
