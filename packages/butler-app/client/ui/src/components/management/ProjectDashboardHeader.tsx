@@ -1,6 +1,7 @@
 import { MessageSquarePlus } from "@/butler-ds";
 import { Button } from "@/butler-ds";
 import { DashboardHeader } from "@/butler-ds";
+import { GitWorkspaceInlineMeta } from "@/components/layout/GitWorkspaceIndicator.tsx";
 import type {
   ProjectDashboardView as ProjectDashboardData,
   ProjectSummary,
@@ -20,7 +21,11 @@ export function ProjectDashboardHeader({
   return (
     <DashboardHeader
       title={dashboard?.project.display_name ?? project?.display_name ?? "Project"}
-      description={`${sessionsCount} project chats`}
+      description={(
+        <GitWorkspaceInlineMeta gitWorkspace={dashboard?.project.gitWorkspace ?? project?.gitWorkspace}>
+          {`${sessionsCount} project chats`}
+        </GitWorkspaceInlineMeta>
+      )}
       action={project ? (
         <Button
           type="button"

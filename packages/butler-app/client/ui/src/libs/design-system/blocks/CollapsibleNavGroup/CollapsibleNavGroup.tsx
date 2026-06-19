@@ -14,6 +14,8 @@ export interface CollapsibleNavGroupProps {
   onToggle: () => void;
   /** Child navigation items */
   children: ReactNode;
+  /** Optional badge to display on the group header */
+  badge?: ReactNode;
   /** Actions to display on the group header */
   actions?: ReactNode;
   /** Additional CSS class */
@@ -30,6 +32,7 @@ export function CollapsibleNavGroup({
   expanded,
   onToggle,
   children,
+  badge,
   actions,
   className,
   dataTestClass,
@@ -40,6 +43,7 @@ export function CollapsibleNavGroup({
       <NavRow
         icon={icon}
         label={label}
+        badge={badge}
         actions={actions}
         actionsVisibility="hover"
         onClick={onToggle}

@@ -8,8 +8,8 @@ import styles from "./SessionRow.module.css";
 
 export interface SessionRowProps {
   title: string;
-  description?: string;
-  meta?: string;
+  description?: ReactNode;
+  meta?: ReactNode;
   active?: boolean;
   actions?: ReactNode;
   card?: boolean;

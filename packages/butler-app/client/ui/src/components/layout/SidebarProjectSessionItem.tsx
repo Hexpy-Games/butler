@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { SidebarItem } from "@/components/layout/SidebarItem.tsx";
 import { SidebarSessionActions } from "@/components/layout/SidebarSessionActions.tsx";
+import { GitWorkspaceInlineMeta } from "@/components/layout/GitWorkspaceIndicator.tsx";
 import { relativeAge } from "@/app/utils.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SessionSummary } from "@/app/types.ts";
@@ -22,7 +23,11 @@ export function SidebarProjectSessionItem({
   return (
     <SidebarItem
       active={active}
-      badge={<time>{relativeAge(session.last_activity_at)}</time>}
+      badge={(
+        <GitWorkspaceInlineMeta gitWorkspace={session.gitWorkspace}>
+          <time>{relativeAge(session.last_activity_at)}</time>
+        </GitWorkspaceInlineMeta>
+      )}
       className="project-session-row"
       dataTestClass="project-session-row"
       right={
