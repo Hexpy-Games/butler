@@ -1501,9 +1501,24 @@ test("work orchestration tool schemas expose role-aware stream contracts", () =>
   const runReady = BUTLER_TOOLS.find((item) => item.name === "run_ready_work_streams");
   const sync = BUTLER_TOOLS.find((item) => item.name === "sync_work_orchestration");
   const report = BUTLER_TOOLS.find((item) => item.name === "write_work_orchestration_report");
+  const createParameters = create?.parameters as {
+    required?: string[];
+    properties?: Record<string, unknown>;
+  } | undefined;
 
-  expect(create?.parameters.required).toEqual(["goal", "streams"]);
-  expect(Object.keys(create?.parameters.properties ?? {})).toEqual(["id", "title", "goal", "streams"]);
+  expect(createParameters?.required).toEqual(["goal", "streams"]);
+  expect(Object.keys(createParameters?.properties ?? {})).toEqual(["id", "title", "goal", "streams"]);
+  const streams = createParameters?.properties?.streams as
+    | { items?: { properties?: Record<string, unknown> } }
+    | undefined;
+  const streamKind = streams?.items?.properties?.kind as { enum?: string[] } | undefined;
+  expect(streamKind?.enum).toEqual([
+    "implementation",
+    "setup",
+    "planning",
+    "investigation",
+    "review",
+  ]);
   expect(runReady?.parameters.required).toEqual(["orchestration_id"]);
   expect(Object.keys(runReady?.parameters.properties ?? {})).toEqual(["orchestration_id", "max_streams"]);
   expect(sync?.parameters.required).toEqual(["orchestration_id"]);
