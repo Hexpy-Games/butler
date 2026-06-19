@@ -616,6 +616,86 @@ interface OpenDirectWorkBlocker {
   activeItems: Array<{ id: string; label: string; status: string; phase: string | null }>;
 }
 
+interface DirectWorkProgressSnapshot {
+  kind: "none" | "active";
+  id?: string;
+  deliverable?: boolean;
+  completedCount?: number;
+  unfinishedCount?: number;
+}
+
+function activeDirectWorkProgressSnapshot(input: {
+  butlerData: string;
+  sessionId: string;
+}): DirectWorkProgressSnapshot {
+  const workStream = new WorkStreamStore(input.butlerData).activeForSession(input.sessionId);
+  if (!workStream) return { kind: "none" };
+  if (
+    workStream.linked_planned_task_ids.length > 0 ||
+    workStream.linked_orchestration_ids.length > 0 ||
+    workStream.linked_worker_task_ids.length > 0
+  ) {
+    return { kind: "none" };
+  }
+  if (workStream.todo_list_id === RUNTIME_SEMANTIC_TODO_LIST_ID) return { kind: "none" };
+
+  const view = workStream.todo_list_id
+    ? new TodoListStore(input.butlerData).view(workStream.todo_list_id, { includeCompleted: true })
+    : null;
+  const items = view?.list.items ?? [];
+  const completedCount = items.filter((item) => item.status === "completed").length;
+  const unfinishedCount = items.filter((item) =>
+    item.status === "pending" || item.status === "in_progress",
+  ).length;
+  const deliverable =
+    workStream.state === "reporting" ||
+    workStream.state === "waiting_user" ||
+    workStream.state === "paused" ||
+    workStream.state === "recoverable" ||
+    (view !== null && unfinishedCount === 0);
+
+  return {
+    kind: "active",
+    id: workStream.id,
+    deliverable,
+    completedCount,
+    unfinishedCount,
+  };
+}
+
+function directWorkSemanticProgressAdvanced(
+  before: DirectWorkProgressSnapshot,
+  after: DirectWorkProgressSnapshot,
+): boolean {
+  if (before.kind === "none" && after.kind === "none") return false;
+  if (before.kind === "none" && after.kind === "active") return true;
+  if (before.kind === "active" && after.kind === "none") return true;
+  if (before.kind !== "active" || after.kind !== "active") return false;
+  if (before.id !== after.id) {
+    return (
+      (after.completedCount ?? 0) > (before.completedCount ?? 0) ||
+      (after.unfinishedCount ?? 0) < (before.unfinishedCount ?? 0) ||
+      (after.deliverable === true && before.deliverable !== true)
+    );
+  }
+  if (after.deliverable === true && before.deliverable !== true) return true;
+  if ((after.completedCount ?? 0) > (before.completedCount ?? 0)) return true;
+  if ((after.unfinishedCount ?? 0) < (before.unfinishedCount ?? 0)) return true;
+  return false;
+}
+
+function turnAdvancedDuringToolPrompt(input: {
+  beforeWork: DirectWorkProgressSnapshot;
+  afterWork: DirectWorkProgressSnapshot;
+  successfulToolsBefore: number;
+  successfulToolsAfter: number;
+}): boolean {
+  if (input.beforeWork.kind === "active" || input.afterWork.kind === "active") {
+    return directWorkSemanticProgressAdvanced(input.beforeWork, input.afterWork);
+  }
+  return input.successfulToolsAfter > input.successfulToolsBefore;
+}
+
 function finalDeliveryBlockerForOpenDirectWork(input: {
   butlerData: string;
   sessionId: string;
@@ -705,6 +785,7 @@ function openDirectWorkContinuationPrompt(input: {
     "Next action:",
     "- Use the structured tool-call channel to execute the remaining direct work or to move the WorkStream to a legitimate deliverable state.",
     "- Update `update_todo_list` as evidence is gathered and steps complete.",
+    "- Do not treat repeated status inspection, diff review, or replanning as progress unless the remaining WorkStream steps actually move toward completion.",
     "- Keep the response focused on the remaining work and evidence, without meta-narrating runtime control flow.",
     "- Do not answer with a promise, plan, or 'I will start now' message.",
     "- Final delivery is allowed only after the direct WorkStream has no unfinished active items, reaches reporting/waiting_user/paused/recoverable with evidence, or is linked to an async worker/planned/orchestration stream.",
@@ -2068,15 +2149,31 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         const maxContinuationAttempts = goalCompletionContinuationAttempts();
         for (let continuationAttempt = 0;; continuationAttempt += 1) {
           const successfulToolsBeforeReview = successfulToolAuditCount();
+          const workBeforeReview = activeDirectWorkProgressSnapshot({
+            butlerData: this.butlerData,
+            sessionId: input.handle.sessionId,
+          });
           const reviewText = await runToolPrompt(nextReviewPromptText, maxToolRounds, "goal_completion_review");
           const incompleteReason = completionReviewIncompleteReason(reviewText);
-          const reviewAdvancedTheTurn = successfulToolAuditCount() > successfulToolsBeforeReview;
+          const reviewAdvancedTheTurn = turnAdvancedDuringToolPrompt({
+            beforeWork: workBeforeReview,
+            afterWork: activeDirectWorkProgressSnapshot({
+              butlerData: this.butlerData,
+              sessionId: input.handle.sessionId,
+            }),
+            successfulToolsBefore: successfulToolsBeforeReview,
+            successfulToolsAfter: successfulToolAuditCount(),
+          });
           if (!incompleteReason) return reviewAdvancedTheTurn ? reviewText : candidateFinalText;
           if (continuationAttempt >= maxContinuationAttempts) {
             throw goalCompletionIncompleteError(incompleteReason);
           }
 
           const successfulToolsBeforeContinuation = successfulToolAuditCount();
+          const workBeforeContinuation = activeDirectWorkProgressSnapshot({
+            butlerData: this.butlerData,
+            sessionId: input.handle.sessionId,
+          });
           const continuationText = await runToolPrompt(goalCompletionIncompleteContinuationPrompt({
             prompt,
             previousAnswer: reviewText,
@@ -2084,8 +2181,15 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             audit,
             decisions: publicDecisionContext,
           }), 8, "goal_completion_continuation");
-          const continuationAdvancedTheTurn =
-            successfulToolAuditCount() > successfulToolsBeforeContinuation;
+          const continuationAdvancedTheTurn = turnAdvancedDuringToolPrompt({
+            beforeWork: workBeforeContinuation,
+            afterWork: activeDirectWorkProgressSnapshot({
+              butlerData: this.butlerData,
+              sessionId: input.handle.sessionId,
+            }),
+            successfulToolsBefore: successfulToolsBeforeContinuation,
+            successfulToolsAfter: successfulToolAuditCount(),
+          });
           const continuationIncompleteReason =
             completionReviewIncompleteReason(continuationText);
           if (continuationIncompleteReason && !continuationAdvancedTheTurn) {
@@ -2240,7 +2344,10 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             sessionId: input.handle.sessionId,
           });
           if (!blocker) break;
-          const successfulToolsBeforeContinuation = successfulToolAuditCount();
+          const workBeforeContinuation = activeDirectWorkProgressSnapshot({
+            butlerData: this.butlerData,
+            sessionId: input.handle.sessionId,
+          });
           finalText = await runToolPrompt(openDirectWorkContinuationPrompt({
             objective: userText,
             personaContext: promptContextSection(
@@ -2250,7 +2357,11 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             audit,
             blocker,
           }), 8, "direct_work_continuation");
-          if (successfulToolAuditCount() <= successfulToolsBeforeContinuation) break;
+          const workAfterContinuation = activeDirectWorkProgressSnapshot({
+            butlerData: this.butlerData,
+            sessionId: input.handle.sessionId,
+          });
+          if (!directWorkSemanticProgressAdvanced(workBeforeContinuation, workAfterContinuation)) break;
         }
         const remainingBlocker = finalDeliveryBlockerForOpenDirectWork({
           butlerData: this.butlerData,
