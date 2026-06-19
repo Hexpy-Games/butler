@@ -29,6 +29,17 @@ export const createWorkOrchestrationToolDefinition = {
             id: {
               type: "string",
             },
+            kind: {
+              type: "string",
+              enum: [
+                "implementation",
+                "setup",
+                "planning",
+                "investigation",
+                "review",
+              ],
+              description: "Explicit stream output kind. Use implementation for code/artifact changes; use setup, planning, investigation, or review only for non-code output streams.",
+            },
             role: {
               type: "string",
             },
