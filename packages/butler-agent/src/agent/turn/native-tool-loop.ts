@@ -1991,35 +1991,35 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         }
       };
       let recallContext = "";
+      const autoCompactionStartedAt = Date.now();
       try {
-        const stageStartedAt = Date.now();
         await maybeAutoCompactSession({
           butlerData: this.butlerData,
           sessionId: input.handle.sessionId,
           modelRef: input.model,
           budgetOverrides: this.contextBudgetOverrides,
         });
-        markPreparationStage("auto_compaction", stageStartedAt);
+        markPreparationStage("auto_compaction", autoCompactionStartedAt);
       } catch {
-        markPreparationStage("auto_compaction_failed", null);
+        markPreparationStage("auto_compaction_failed", autoCompactionStartedAt);
         // Compaction is a safety optimization; it must not block the active turn.
       }
 
       if (this.automaticRecallEnabled && shouldAttemptAutomaticRecall(input, userText)) {
+        const recallStartedAt = Date.now();
         try {
-          const stageStartedAt = Date.now();
           recallContext = renderRecallContext(await this.runAutomaticRecall({
             butlerData: this.butlerData,
             cue: userText,
             projectId: typeof session.init.metadata?.projectId === "string" ? session.init.metadata.projectId : undefined,
             limit: 4,
           }));
-          markPreparationStage("automatic_recall", stageStartedAt, {
+          markPreparationStage("automatic_recall", recallStartedAt, {
             recallContextChars: recallContext.length,
           });
         } catch {
           recallContext = "";
-          markPreparationStage("automatic_recall_failed", null);
+          markPreparationStage("automatic_recall_failed", recallStartedAt);
         }
       } else {
         markPreparationStage("automatic_recall_skipped", null);

@@ -17,7 +17,11 @@ import {
   recentConversationBudgetForTurn,
 } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
-import { readContextMonitor } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
+import {
+  readContextMetrics,
+  readContextMonitor,
+  type RuntimeTurnPreparationStageMetric,
+} from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
 import {
   operationalMetricsPath,
   readOperationalMetricEvents,
@@ -3895,6 +3899,46 @@ test("native runtime records safe context monitor telemetry for each turn", asyn
     inboundMessageChars: "오늘 결정 기억해?".length,
   });
   expect(summary.latestTurn?.recallContextChars).toBeGreaterThan(0);
+  expect(readFileSync(join(tempDir, "metrics", "context-monitor.jsonl"), "utf8"))
+    .not.toContain("오늘 결정 기억해?");
+});
+
+test("native runtime records failed preparation stage durations", async () => {
+  const runtime = new NativeToolLoopRuntime({
+    recallMemory: () => {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 5) {
+        // Keep the failure duration observable without depending on timers.
+      }
+      throw new Error("recall unavailable");
+    },
+    runFunctionToolPromptText: async () => "기억 없이 계속 진행합니다.",
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "오늘 결정 기억해?" },
+  });
+
+  const failedStage = readContextMetrics({
+    butlerData: tempDir,
+    sessionId: "butler/main",
+  }).find((event): event is RuntimeTurnPreparationStageMetric =>
+    event.kind === "runtime_preparation_stage" &&
+    event.stage === "automatic_recall_failed",
+  );
+
+  expect(failedStage).toBeDefined();
+  expect(failedStage?.durationMs).not.toBeNull();
+  expect(failedStage?.durationMs).toBeGreaterThanOrEqual(0);
   expect(readFileSync(join(tempDir, "metrics", "context-monitor.jsonl"), "utf8"))
     .not.toContain("오늘 결정 기억해?");
 });

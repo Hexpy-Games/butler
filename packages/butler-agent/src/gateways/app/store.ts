@@ -9419,9 +9419,10 @@ function progressRowsForTurnState(
   rows: ProgressSummaryRow[],
   turnState?: string,
 ): ProgressSummaryRow[] {
-  if (!turnState || !isTerminalProgressState(turnState)) return rows;
-  const terminalRows = rows.filter((row) =>
-    !(row.kind === "work_block" && row.work_block_id === "turn-preparation"),
+  const activeRows = filterSupersededInitialPreparationRows(rows);
+  if (!turnState || !isTerminalProgressState(turnState)) return activeRows;
+  const terminalRows = activeRows.filter((row) =>
+    !isInitialPreparationProgressRow(row),
   );
   const rowState = progressRowStateForTerminalTurn(turnState);
   return terminalRows.map((row) => {
@@ -9436,6 +9437,34 @@ function progressRowsForTurnState(
     if (!safeDetailRows) return nextRow;
     return { ...nextRow, safe_detail_rows: safeDetailRows };
   });
+}
+
+function filterSupersededInitialPreparationRows(
+  rows: ProgressSummaryRow[],
+): ProgressSummaryRow[] {
+  if (!rows.some(isInitialPreparationProgressRow)) return rows;
+  if (!rows.some(isSpecificPublicProgressRow)) return rows;
+  return rows.filter((row) => !isInitialPreparationProgressRow(row));
+}
+
+function isInitialPreparationProgressRow(row: ProgressSummaryRow): boolean {
+  return row.kind === "work_block" && row.work_block_id === "turn-preparation";
+}
+
+function isSpecificPublicProgressRow(row: ProgressSummaryRow): boolean {
+  if (isInitialPreparationProgressRow(row)) return false;
+  if (row.kind === "turn" || row.kind === "thinking") return false;
+  if (row.kind === "model" && !row.safe_input_label && !row.safe_detail_rows?.length)
+    return false;
+  return Boolean(
+    row.kind === "work_block" ||
+      row.kind === "todo" ||
+      row.tool_call_id ||
+      row.safe_tool_name ||
+      row.safe_input_label ||
+      row.safe_detail_rows?.length ||
+      (row.work_block_id && row.work_block_label),
+  );
 }
 
 function progressRowStateForTerminalTurn(turnState: string): string {

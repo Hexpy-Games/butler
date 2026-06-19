@@ -592,7 +592,7 @@ const koKrCopy: AppCopy = {
       pendingStateLabels: {
         accepted: "요청을 접수했습니다.",
         queued: "대기 중입니다.",
-        thinking: "답변을 준비하고 있습니다.",
+        thinking: "생각 중입니다.",
         streaming: "응답을 작성하고 있습니다.",
         waiting_for_form: "입력을 기다리고 있습니다.",
         waiting_for_tool: "도구 응답을 기다리고 있습니다.",
@@ -1275,7 +1275,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       pendingStateLabels: {
         accepted: "Request accepted.",
         queued: "Queued.",
-        thinking: "Preparing the response.",
+        thinking: "Thinking.",
         streaming: "Writing the response.",
         waiting_for_form: "Waiting for input.",
         waiting_for_tool: "Waiting for tool response.",

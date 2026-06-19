@@ -46,6 +46,7 @@ const LIFECYCLE_ACTIVITY_LABELS = new Set([
   "delivered",
 ]);
 const WORK_BLOCK_MARKER_KIND = "work_block";
+const INITIAL_PREPARATION_WORK_BLOCK_ID = "turn-preparation";
 const INTERNAL_PROGRESS_TOOL_NAMES = new Set([
   "Update Todo List",
   "List Todo List",
@@ -755,11 +756,15 @@ export function completedTurnActivityRows(rows: ProgressRow[]): ProgressRow[] {
 export function workBlocksFromProgressRows(
   rows: ProgressRow[],
 ): WorkBlockView[] {
-  return buildWorkBlocks(rows, { completedOnly: false });
+  return buildWorkBlocks(filterSupersededInitialPreparationRows(rows), {
+    completedOnly: false,
+  });
 }
 
 export function completedTurnWorkBlocks(rows: ProgressRow[]): WorkBlockView[] {
-  return buildWorkBlocks(rows, { completedOnly: true });
+  return buildWorkBlocks(filterSupersededInitialPreparationRows(rows), {
+    completedOnly: true,
+  });
 }
 
 export function freezeMessageWorkBlocks(
@@ -1160,7 +1165,9 @@ function isInternalProgressToolName(value?: string): boolean {
 }
 
 export function semanticProgressRows(rows: ProgressRow[]): ProgressRow[] {
-  const visible = rows.filter((row) => !isInternalProgressRow(row));
+  const visible = filterSupersededInitialPreparationRows(
+    rows.filter((row) => !isInternalProgressRow(row)),
+  );
   const todoRows = sortProgressRowsForDisplay(
     dedupeProgressForDisplay(visible.filter((row) => row.kind === "todo")),
   );
@@ -1191,6 +1198,42 @@ export function semanticProgressRows(rows: ProgressRow[]): ProgressRow[] {
         !COLLAPSED_WORK_ACTIVITY_KINDS.has(row.kind ?? ""),
     ),
   ).slice(-8);
+}
+
+function filterSupersededInitialPreparationRows(
+  rows: ProgressRow[],
+): ProgressRow[] {
+  if (!rows.some(isInitialPreparationProgressRow)) return rows;
+  if (!rows.some(isSpecificPublicProgressRow)) return rows;
+  return rows.filter((row) => !isInitialPreparationProgressRow(row));
+}
+
+function isInitialPreparationProgressRow(row: ProgressRow): boolean {
+  return (
+    row.kind === WORK_BLOCK_MARKER_KIND &&
+    row.work_block_id === INITIAL_PREPARATION_WORK_BLOCK_ID
+  );
+}
+
+function isSpecificPublicProgressRow(row: ProgressRow): boolean {
+  if (isInitialPreparationProgressRow(row)) return false;
+  if (row.kind === "turn" || row.kind === "thinking") return false;
+  if (
+    row.kind === "model" &&
+    !row.safe_input_label &&
+    !row.safe_detail_rows?.length
+  ) {
+    return false;
+  }
+  return Boolean(
+    row.kind === WORK_BLOCK_MARKER_KIND ||
+      row.kind === "todo" ||
+      row.tool_call_id ||
+      row.safe_tool_name ||
+      row.safe_input_label ||
+      row.safe_detail_rows?.length ||
+      (row.work_block_id && row.work_block_label),
+  );
 }
 
 function dedupeProgressForDisplay(rows: ProgressRow[]): ProgressRow[] {
