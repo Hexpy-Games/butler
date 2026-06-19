@@ -3,6 +3,7 @@ import { webSearchToolDefinition, webSearchToolMetadata } from "./web-search/web
 import { webReadToolDefinition, webReadToolMetadata } from "./web-read/web_read/index.ts";
 import { transformPublicDataTableToolDefinition, transformPublicDataTableToolMetadata } from "./data-table/transform_public_data_table/index.ts";
 import { runCommandToolDefinition, runCommandToolMetadata } from "./run-command/run_command/index.ts";
+import { grepFilesToolDefinition, grepFilesToolMetadata, readFileToolDefinition, readFileToolMetadata, writeFileToolDefinition, writeFileToolMetadata } from "./file-tools/index.ts";
 import { getWorkDashboardToolDefinition, getWorkDashboardToolMetadata } from "./project-ledger/get_work_dashboard/index.ts";
 import { inspectProjectStatusToolDefinition, inspectProjectStatusToolMetadata } from "./project-ledger/inspect_project_status/index.ts";
 import { queryProjectWorkToolDefinition, queryProjectWorkToolMetadata } from "./project-ledger/query_project_work/index.ts";
@@ -53,6 +54,9 @@ export const CORE_BUTLER_TOOLS = [
   webReadToolDefinition,
   transformPublicDataTableToolDefinition,
   runCommandToolDefinition,
+  readFileToolDefinition,
+  writeFileToolDefinition,
+  grepFilesToolDefinition,
   getWorkDashboardToolDefinition,
   inspectProjectStatusToolDefinition,
   queryProjectWorkToolDefinition,
@@ -106,6 +110,8 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [webReadToolDefinition.name]: webReadToolMetadata,
   [transformPublicDataTableToolDefinition.name]: transformPublicDataTableToolMetadata,
   [runCommandToolDefinition.name]: runCommandToolMetadata,
+  [readFileToolDefinition.name]: readFileToolMetadata,
+  [writeFileToolDefinition.name]: writeFileToolMetadata,
   [getWorkDashboardToolDefinition.name]: getWorkDashboardToolMetadata,
   [inspectProjectStatusToolDefinition.name]: inspectProjectStatusToolMetadata,
   [queryProjectWorkToolDefinition.name]: queryProjectWorkToolMetadata,
