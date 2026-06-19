@@ -266,7 +266,246 @@ test("explicit blocker evidence can report a blocked outcome without claiming co
 
   expect(summary.safe_to_report).toBe(true);
   expect(summary.completion_claim_allowed).toBe(false);
-  expect(summary.guard_reason).toContain("explicit blocker");
+  expect(summary.guard_reason).toContain("final blocker");
+});
+
+test("intermediate blocker does not veto recovered implementation completion", () => {
+  const taskDir = join(tempDir, "tasks", "task-recovered-blocker");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "Implement the recovered fixture change.\n", "utf8");
+  writeFileSync(join(taskDir, "result.md"), "Implemented recovered fixture change and verified it with a targeted test.\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), [
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-blocked",
+      created_at: "2026-04-24T00:00:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "blocked",
+      action_kind: "unknown",
+      status_line: "Blocked: initial cwd was outside the active workspace.",
+      evidence_refs: ["tool.failed"],
+      completion_contract: { has_blocker_evidence: true },
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-edit",
+      created_at: "2026-04-24T00:00:10.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "executing",
+      action_kind: "edit_file",
+      status_line: "Executing: wrote recovered fixture change.",
+      evidence_refs: ["fixture.ts"],
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-test",
+      created_at: "2026-04-24T00:00:20.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "verifying",
+      action_kind: "test",
+      status_line: "Verifying: bun test tests/unit/recovered-fixture.test.ts passed.",
+      evidence_refs: ["targeted-test"],
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-finished",
+      created_at: "2026-04-24T00:00:30.000Z",
+      actor: "worker",
+      event: "worker_finished",
+      semantic_phase: "reporting",
+      action_kind: "report",
+      status_line: "Worker task finished.",
+      evidence_refs: ["result.md"],
+    },
+  ].map((event) => JSON.stringify(event)).join("\n") + "\n", "utf8");
+
+  const summary = new TaskStore(tempDir).summaries(1)[0]!;
+
+  expect(summary).toMatchObject({
+    task_id: "task-recovered-blocker",
+    work_mode: "complete",
+    safe_to_report: true,
+    completion_claim_allowed: true,
+    guard_reason: null,
+  });
+  expect(summary.completion_evidence).toMatchObject({
+    has_blocker: false,
+    has_intermediate_blocker: true,
+    has_final_blocker: false,
+    has_environment_blocker: false,
+  });
+});
+
+test("recovered environment dependency blocker does not veto verified completion", () => {
+  const taskDir = join(tempDir, "tasks", "task-recovered-environment-blocker");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "Implement the dependency recovery fixture.\n", "utf8");
+  writeFileSync(join(taskDir, "log.txt"), [
+    "===== COMMAND: bun run typecheck",
+    "tsc: command not found because node_modules is missing",
+    "===== COMMAND: bun install",
+    "installed dependencies",
+    "===== COMMAND: bun run typecheck",
+    "typecheck passed",
+  ].join("\n"), "utf8");
+  writeFileSync(join(taskDir, "result.md"), "Implemented dependency recovery fixture and verified typecheck after installing dependencies.\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), [
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-env-blocked",
+      created_at: "2026-04-24T00:00:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "blocked",
+      action_kind: "test",
+      status_line: "Blocked: tsc command not found because node_modules is missing.",
+      evidence_refs: ["typecheck:missing-dependencies"],
+      completion_contract: { has_blocker_evidence: true },
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-edit",
+      created_at: "2026-04-24T00:00:10.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "executing",
+      action_kind: "edit_file",
+      status_line: "Executing: wrote dependency recovery fixture.",
+      evidence_refs: ["fixture.ts"],
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-test",
+      created_at: "2026-04-24T00:00:20.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "verifying",
+      action_kind: "test",
+      status_line: "Verifying: bun run typecheck passed.",
+      evidence_refs: ["typecheck:passed"],
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-finished",
+      created_at: "2026-04-24T00:00:30.000Z",
+      actor: "worker",
+      event: "worker_finished",
+      semantic_phase: "reporting",
+      action_kind: "report",
+      status_line: "Worker task finished.",
+      evidence_refs: ["result.md"],
+    },
+  ].map((event) => JSON.stringify(event)).join("\n") + "\n", "utf8");
+
+  const summary = new TaskStore(tempDir).summaries(1)[0]!;
+
+  expect(summary).toMatchObject({
+    task_id: "task-recovered-environment-blocker",
+    work_mode: "complete",
+    safe_to_report: true,
+    completion_claim_allowed: true,
+    guard_reason: null,
+  });
+  expect(summary.completion_evidence).toMatchObject({
+    has_blocker: false,
+    has_intermediate_blocker: true,
+    has_final_blocker: false,
+    has_environment_blocker: false,
+  });
+});
+
+test("final explicit blocker still blocks completion after implementation evidence", () => {
+  const taskDir = join(tempDir, "tasks", "task-final-blocker");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "Implement the fixture change.\n", "utf8");
+  writeFileSync(join(taskDir, "result.md"), "Blocked: final verification requires credentials that are not available.\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), [
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-edit",
+      created_at: "2026-04-24T00:00:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "executing",
+      action_kind: "edit_file",
+      status_line: "Executing: wrote fixture change.",
+      evidence_refs: ["fixture.ts"],
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-blocked",
+      created_at: "2026-04-24T00:00:20.000Z",
+      actor: "worker",
+      event: "worker_finished",
+      semantic_phase: "blocked",
+      action_kind: "report",
+      status_line: "Blocked: final verification requires credentials.",
+      evidence_refs: ["result.md"],
+      completion_review: "blocked",
+    },
+  ].map((event) => JSON.stringify(event)).join("\n") + "\n", "utf8");
+
+  const summary = new TaskStore(tempDir).summaries(1)[0]!;
+
+  expect(summary.safe_to_report).toBe(true);
+  expect(summary.completion_claim_allowed).toBe(false);
+  expect(summary.guard_reason).toContain("final blocker");
+  expect(summary.completion_evidence).toMatchObject({
+    has_blocker: true,
+    has_intermediate_blocker: false,
+    has_final_blocker: true,
+  });
+});
+
+test("final environment dependency blocker still blocks completion after implementation evidence", () => {
+  const taskDir = join(tempDir, "tasks", "task-final-environment-blocker");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "Implement the fixture change.\n", "utf8");
+  writeFileSync(join(taskDir, "result.md"), "Blocked: tsc command not found because node_modules is missing.\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), [
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-edit",
+      created_at: "2026-04-24T00:00:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "executing",
+      action_kind: "edit_file",
+      status_line: "Executing: wrote fixture change.",
+      evidence_refs: ["fixture.ts"],
+    },
+    {
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-env-blocked",
+      created_at: "2026-04-24T00:00:20.000Z",
+      actor: "worker",
+      event: "worker_finished",
+      semantic_phase: "blocked",
+      action_kind: "report",
+      status_line: "Blocked: tsc command not found because node_modules is missing.",
+      evidence_refs: ["result.md"],
+      completion_review: "blocked",
+    },
+  ].map((event) => JSON.stringify(event)).join("\n") + "\n", "utf8");
+
+  const summary = new TaskStore(tempDir).summaries(1)[0]!;
+
+  expect(summary.safe_to_report).toBe(true);
+  expect(summary.completion_claim_allowed).toBe(false);
+  expect(summary.guard_reason).toContain("environment blocker");
+  expect(summary.completion_evidence).toMatchObject({
+    has_blocker: true,
+    has_intermediate_blocker: false,
+    has_final_blocker: true,
+    has_environment_blocker: true,
+  });
 });
 
 test("task store summarizes useful worker log when result file is empty", () => {
@@ -471,6 +710,74 @@ test("task store leaves live running workers alone and fails unrecoverable empty
   }]);
   expect(store.read("task-live-running")?.status).toBe("RUNNING");
   expect(store.read("task-empty-running")?.status).toBe("FAILED");
+});
+
+test("task store projects worker transcript command details instead of generic decision rows", () => {
+  const taskDir = join(tempDir, "tasks", "task-worker-transcript-details");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "RUNNING\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "Inspect worker projection details.\n", "utf8");
+  writeFileSync(join(taskDir, "session_id"), "worker-projection-session\n", "utf8");
+  const transcriptDir = join(tempDir, "transcripts");
+  mkdirSync(transcriptDir, { recursive: true });
+  writeFileSync(
+    join(transcriptDir, "worker_worker-projection-session.jsonl"),
+    [
+      {
+        kind: "system",
+        timestamp: "2026-05-16T00:02:01.000Z",
+        payload: {
+          category: "public_work_decision",
+          decision: { decisionId: "decision-empty" },
+        },
+      },
+      {
+        eventId: "tool-call",
+        kind: "tool_call",
+        timestamp: "2026-05-16T00:02:02.000Z",
+        payload: {
+          id: "tool-1",
+          name: "run_command",
+          arguments: {
+            command: "rg -n worker_activity packages/butler-agent/src",
+            cwd: "/Users/example/butler",
+          },
+        },
+      },
+      {
+        eventId: "tool-result",
+        kind: "tool_result",
+        timestamp: "2026-05-16T00:02:03.000Z",
+        payload: {
+          tool_call_id: "tool-1",
+          name: "run_command",
+          result: {
+            command: "rg -n worker_activity packages/butler-agent/src",
+            cwd: "/Users/example/butler",
+            exit_code: 0,
+          },
+        },
+      },
+    ].map((event) => JSON.stringify(event)).join("\n") + "\n",
+    "utf8",
+  );
+
+  const summary = new TaskStore(tempDir).summaries(1)[0]!;
+  const serialized = JSON.stringify(summary.activity_work_blocks);
+
+  expect(serialized).not.toContain("Recorded worker decision");
+  expect(serialized).not.toContain("Started run_command");
+  expect(summary.activity_work_blocks).toEqual([
+    expect.objectContaining({
+      label: "rg -n worker_activity packages/butler-agent/src",
+      rows: expect.arrayContaining([
+        expect.objectContaining({
+          safe_tool_name: "Bash",
+          safe_input_label: "rg -n worker_activity packages/butler-agent/src",
+        }),
+      ]),
+    }),
+  ]);
 });
 
 test("task store resolves task origin from transcript and hot memory references", () => {

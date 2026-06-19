@@ -4374,12 +4374,13 @@ test("session worker activity synthesizes planned parent for orphan work orchest
     join(transcriptDir, "worker_worker-btcc-session.jsonl"),
     [
       {
-        id: "tr-decision",
+        eventId: "tr-decision",
         kind: "system",
-        created_at: "2026-05-16T00:02:03.000Z",
+        timestamp: "2026-05-16T00:02:03.000Z",
         payload: {
           category: "public_work_decision",
-          public_work_decision: {
+          decision: {
+            decisionId: "decision-run-focused-test",
             decisionSummary: "Run a focused app-server projection test.",
             decisionRationale: "A route-level fixture proves SessionView receives safe worker details.",
             decisionNextStep: "Assert the worker block and no unsafe fields leak.",
@@ -4388,26 +4389,38 @@ test("session worker activity synthesizes planned parent for orphan work orchest
         },
       },
       {
-        id: "tr-tool-call",
+        eventId: "tr-tool-call",
         kind: "tool_call",
-        created_at: "2026-05-16T00:02:04.000Z",
+        timestamp: "2026-05-16T00:02:04.000Z",
         payload: {
           id: "tool-transcript-1",
           name: "run_command",
-          arguments: { command: "bun test tests/unit/app-server.test.ts" },
+          arguments: {
+            command: "cd /Users/example/butler && bun test tests/unit/app-server.test.ts",
+            cwd: "/Users/example/butler",
+          },
           raw_payload: "unsafe provider payload sentinel",
         },
       },
       {
-        id: "tr-tool-result",
+        eventId: "tr-tool-result",
         kind: "tool_result",
-        created_at: "2026-05-16T00:02:05.000Z",
+        timestamp: "2026-05-16T00:02:05.000Z",
         payload: {
           tool_call_id: "tool-transcript-1",
           name: "run_command",
           result: {
-            command: "bun test tests/unit/app-server.test.ts",
+            command: "cd /Users/example/butler && bun test tests/unit/app-server.test.ts",
+            cwd: "/Users/example/butler",
+            exit_code: 0,
             stdout: "unsafe full raw log sentinel",
+          },
+          publicDecision: {
+            decisionId: "decision-run-focused-test",
+            decisionSummary: "Run a focused app-server projection test.",
+            decisionRationale: "A route-level fixture proves SessionView receives safe worker details.",
+            decisionNextStep: "Assert the worker block and no unsafe fields leak.",
+            decisionEvidenceRefs: ["app-server worker activity test"],
           },
         },
       },
@@ -4473,22 +4486,40 @@ test("session worker activity synthesizes planned parent for orphan work orchest
       decision_rationale: "A route-level fixture proves SessionView receives safe worker details.",
       decision_next_step: "Assert the worker block and no unsafe fields leak.",
     });
-    const transcriptToolBlock = summary.data.worker_activity[1].work_blocks.find(
-      (block: { id: string }) => block.id === "tool-transcript-1",
-    );
-    expect(transcriptToolBlock).toMatchObject({
-      rows: [
-        {
-          safe_tool_name: "run_command",
-          safe_input_label: "bun test tests/unit/app-server.test.ts",
-        },
-        {
-          safe_tool_name: "run_command",
-          safe_input_label: "bun test tests/unit/app-server.test.ts",
-        },
-      ],
+    expect(transcriptDecisionBlock).toMatchObject({
+      id: "worker-transcript-decision-decision-run-focused-test",
+      rows: expect.arrayContaining([
+        expect.objectContaining({
+          kind: "ran_command",
+          safe_label: "Bash",
+          safe_tool_name: "Bash",
+          safe_input_label: "cd ~/butler && bun test tests/unit/app-server.test.ts",
+          safe_detail_rows: expect.arrayContaining([
+            expect.objectContaining({
+              safe_label: "Command",
+              safe_value: "cd ~/butler && bun test tests/unit/app-server.test.ts",
+            }),
+          ]),
+          created_at: "2026-05-16T00:02:04.000Z",
+        }),
+        expect.objectContaining({
+          kind: "ran_command",
+          safe_label: "Bash",
+          safe_tool_name: "Bash",
+          safe_input_label: "cd ~/butler && bun test tests/unit/app-server.test.ts",
+          safe_detail_rows: expect.arrayContaining([
+            expect.objectContaining({
+              safe_label: "Exit",
+              safe_value: "0",
+            }),
+          ]),
+          created_at: "2026-05-16T00:02:05.000Z",
+        }),
+      ]),
     });
     const serialized = JSON.stringify(summary);
+    expect(serialized).not.toContain("Recorded worker decision.");
+    expect(serialized).not.toContain("Started run_command.");
     expect(serialized).not.toContain("private raw worker request sentinel");
     expect(serialized).not.toContain("unsafe raw prompt sentinel");
     expect(serialized).not.toContain("hidden reasoning sentinel");
@@ -4497,6 +4528,165 @@ test("session worker activity synthesizes planned parent for orphan work orchest
     expect(serialized).not.toContain("sessionId unsafe internal sentinel");
     expect(serialized).not.toContain("unsafe provider payload sentinel");
     expect(serialized).not.toContain("unsafe full raw log sentinel");
+  } finally {
+    server.stop();
+  }
+});
+
+test("session worker activity disambiguates duplicate worker display names", async () => {
+  const taskStore = new TaskStore(tempDir);
+  for (const [taskId, taskSummary] of [
+    ["worker-task-9", "First colliding worker"],
+    ["worker-task-23", "Second colliding worker"],
+  ] as const) {
+    const workerDir = join(tempDir, "tasks", taskId);
+    mkdirSync(workerDir, { recursive: true });
+    writeFileSync(join(workerDir, "status"), "RUNNING\n", "utf8");
+    writeFileSync(join(workerDir, "request.md"), `${taskSummary}\n`, "utf8");
+    writeFileSync(
+      join(workerDir, "worker_activity.json"),
+      JSON.stringify({
+        phase: "executing",
+        status_line: `Executing: ${taskSummary}.`,
+        updated_at: "2026-05-16T00:02:00.000Z",
+      }),
+      "utf8",
+    );
+    taskStore.writeOrigin(taskId, buildTaskOriginContext({
+      sessionId: "display-collision-panel",
+      taskSummary,
+      project: "project-btcc",
+    }));
+  }
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    server.store.createSession({
+      kind: "chat",
+      title: "Display collision panel",
+      session_hint: "display-collision-panel",
+    });
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=display-collision-panel`,
+    );
+    const displayNames = summary.data.worker_activity.map(
+      (worker: { worker_display_name: string }) => worker.worker_display_name,
+    );
+
+    expect(displayNames).toContain("Rina");
+    expect(displayNames).not.toContain("Rina (Worker 2)");
+    expect(displayNames.every((name: string) => !/\(Worker \d+\)$/u.test(name))).toBe(true);
+    expect(new Set(displayNames).size).toBe(displayNames.length);
+  } finally {
+    server.stop();
+  }
+});
+
+test("session worker activity shows blocked plan parent when a stream failed with pending dependents", async () => {
+  const origin = buildTaskOriginContext({
+    sessionId: "blocked-plan-panel",
+    taskSummary: "Prepare blocked orchestration evidence",
+    project: "project-btcc",
+  });
+  const orchestrationStore = new WorkOrchestrationStore(tempDir);
+  orchestrationStore.create({
+    id: "orch-blocked-plan",
+    title: "Blocked plan",
+    goal: "Show a blocked plan state when a worker stream fails before dependents run",
+    originSessionId: "blocked-plan-panel",
+    streams: [
+      {
+        id: "setup",
+        role: "builder",
+        objective: "Prepare setup evidence.",
+        acceptance_criteria: ["Implementation evidence exists"],
+      },
+      {
+        id: "implementation",
+        role: "builder",
+        objective: "Implement after setup.",
+        acceptance_criteria: ["Implementation is complete"],
+        depends_on: ["setup"],
+      },
+    ],
+    now: new Date("2026-05-16T00:00:00.000Z"),
+  });
+  orchestrationStore.markDispatched(
+    "orch-blocked-plan",
+    [{ stream_id: "setup", worker_task_id: "worker-blocked-plan" }],
+    new Date("2026-05-16T00:01:00.000Z"),
+  );
+  const orchestrationPath = join(tempDir, "orchestrations", "orch-blocked-plan.json");
+  const orchestrationRecord = JSON.parse(readFileSync(orchestrationPath, "utf8")) as {
+    status: string;
+    streams: Array<{ id: string; status: string; result_summary?: string | null }>;
+  };
+  orchestrationRecord.status = "running";
+  orchestrationRecord.streams = orchestrationRecord.streams.map((stream) =>
+    stream.id === "setup"
+      ? {
+          ...stream,
+          status: "failed",
+          result_summary: "Worker recorded an explicit blocker; report the blocker, not completion.",
+        }
+      : stream,
+  );
+  writeFileSync(orchestrationPath, JSON.stringify(orchestrationRecord, null, 2), "utf8");
+
+  const workerDir = join(tempDir, "tasks", "worker-blocked-plan");
+  mkdirSync(workerDir, { recursive: true });
+  writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(workerDir, "request.md"), "Plan the setup work.\n", "utf8");
+  writeFileSync(join(workerDir, "result.md"), "I planned the setup work.\n", "utf8");
+  writeFileSync(
+    join(workerDir, "worker_activity_events.jsonl"),
+    `${JSON.stringify({
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-blocked-plan",
+      created_at: "2026-05-16T00:02:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "planning",
+      action_kind: "plan",
+      status_line: "Planning: identified setup work.",
+    })}\n`,
+    "utf8",
+  );
+  new TaskStore(tempDir).writeOrigin("worker-blocked-plan", origin);
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    server.store.createSession({
+      kind: "chat",
+      title: "Blocked plan panel",
+      session_hint: "blocked-plan-panel",
+    });
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=blocked-plan-panel`,
+    );
+    expect(summary.data.worker_activity[0]).toMatchObject({
+      activity_kind: "planned",
+      task_id: "orch-blocked-plan",
+      orchestration_id: "orch-blocked-plan",
+      phase: "blocked",
+      terminal: false,
+      status_line: "Blocked: 1 of 2 worker streams failed; remaining streams are waiting.",
+    });
+    expect(orchestrationStore.read("orch-blocked-plan")).toMatchObject({
+      status: "running",
+      streams: [
+        expect.objectContaining({ id: "setup", status: "failed" }),
+        expect.objectContaining({ id: "implementation", status: "pending" }),
+      ],
+    });
   } finally {
     server.stop();
   }

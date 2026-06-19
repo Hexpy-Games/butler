@@ -59,6 +59,7 @@
     "e2e:evidence-gate": "${BUTLER_BUN:-bun} run tests/e2e/butler-e2e-evidence-gate.ts",
     "e2e:memory-quality-ab": "${BUTLER_BUN:-bun} run tests/e2e/butler-memory-quality-ab.ts",
     "live:decision-context:medium": "${BUTLER_BUN:-bun} run tests/live/decision-context-medium-task.ts",
+    "live:direct-work:semantic-progress": "${BUTLER_BUN:-bun} run tests/live/direct-work-semantic-progress.ts",
     "app:package:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-package-smoke.ts",
     "app:layout:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-layout-smoke.ts",
     "app:design-system:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-design-system-smoke.ts",

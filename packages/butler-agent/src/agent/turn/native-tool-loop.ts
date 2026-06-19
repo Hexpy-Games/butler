@@ -42,6 +42,7 @@ import { TodoListStore, type TodoItemInput } from "../work/todo-list.ts";
 import {
   completeReportingWorkStreamForSession,
   completeTurnLocalWorkStreamForSession,
+  type WorkStreamState,
   WorkStreamStore,
   workStreamTerminal,
 } from "../work/work-stream.ts";
@@ -616,6 +617,120 @@ interface OpenDirectWorkBlocker {
   activeItems: Array<{ id: string; label: string; status: string; phase: string | null }>;
 }
 
+interface DirectWorkProgressSnapshot {
+  kind: "none" | "active";
+  id?: string;
+  state?: WorkStreamState;
+  phase?: string | null;
+  deliverable?: boolean;
+  completedCount?: number;
+  unfinishedCount?: number;
+}
+
+const DIRECT_WORK_FORWARD_STATE_RANK: Partial<Record<WorkStreamState, number>> = {
+  routing: 0,
+  conception: 1,
+  planning: 2,
+  executing: 3,
+  reviewing: 4,
+  consolidating: 5,
+  reporting: 6,
+};
+
+function directWorkFsmProgressAdvanced(
+  before: DirectWorkProgressSnapshot,
+  after: DirectWorkProgressSnapshot,
+): boolean {
+  if (before.kind !== "active" || after.kind !== "active") return false;
+  if (!before.state || !after.state || before.state === after.state) return false;
+  if (
+    (after.state === "waiting_user" || after.state === "paused" || after.state === "recoverable") &&
+    before.state !== after.state
+  ) {
+    return true;
+  }
+  if (before.state === "reviewing" && after.state === "executing") return true;
+  const beforeRank = DIRECT_WORK_FORWARD_STATE_RANK[before.state];
+  const afterRank = DIRECT_WORK_FORWARD_STATE_RANK[after.state];
+  return beforeRank !== undefined && afterRank !== undefined && afterRank > beforeRank;
+}
+
+function activeDirectWorkProgressSnapshot(input: {
+  butlerData: string;
+  sessionId: string;
+}): DirectWorkProgressSnapshot {
+  const workStream = new WorkStreamStore(input.butlerData).activeForSession(input.sessionId);
+  if (!workStream) return { kind: "none" };
+  if (
+    workStream.linked_planned_task_ids.length > 0 ||
+    workStream.linked_orchestration_ids.length > 0 ||
+    workStream.linked_worker_task_ids.length > 0
+  ) {
+    return { kind: "none" };
+  }
+  if (workStream.todo_list_id === RUNTIME_SEMANTIC_TODO_LIST_ID) return { kind: "none" };
+
+  const view = workStream.todo_list_id
+    ? new TodoListStore(input.butlerData).view(workStream.todo_list_id, { includeCompleted: true })
+    : null;
+  const items = view?.list.items ?? [];
+  const completedCount = items.filter((item) => item.status === "completed").length;
+  const unfinishedCount = items.filter((item) =>
+    item.status === "pending" || item.status === "in_progress",
+  ).length;
+  const deliverable =
+    workStream.state === "reporting" ||
+    workStream.state === "waiting_user" ||
+    workStream.state === "paused" ||
+    workStream.state === "recoverable" ||
+    (view !== null && unfinishedCount === 0);
+
+  return {
+    kind: "active",
+    id: workStream.id,
+    state: workStream.state,
+    phase: workStream.current_phase,
+    deliverable,
+    completedCount,
+    unfinishedCount,
+  };
+}
+
+function directWorkSemanticProgressAdvanced(
+  before: DirectWorkProgressSnapshot,
+  after: DirectWorkProgressSnapshot,
+): boolean {
+  if (before.kind === "none" && after.kind === "none") return false;
+  if (before.kind === "none" && after.kind === "active") return true;
+  if (before.kind === "active" && after.kind === "none") return true;
+  if (before.kind !== "active" || after.kind !== "active") return false;
+  if (before.id !== after.id) {
+    return (
+      (after.completedCount ?? 0) > (before.completedCount ?? 0) ||
+      (after.unfinishedCount ?? 0) < (before.unfinishedCount ?? 0) ||
+      directWorkFsmProgressAdvanced(before, after) ||
+      (after.deliverable === true && before.deliverable !== true)
+    );
+  }
+  if (after.deliverable === true && before.deliverable !== true) return true;
+  if ((after.completedCount ?? 0) > (before.completedCount ?? 0)) return true;
+  if ((after.unfinishedCount ?? 0) < (before.unfinishedCount ?? 0)) return true;
+  if (directWorkFsmProgressAdvanced(before, after)) return true;
+  return false;
+}
+
+function turnAdvancedDuringToolPrompt(input: {
+  beforeWork: DirectWorkProgressSnapshot;
+  afterWork: DirectWorkProgressSnapshot;
+  successfulToolsBefore: number;
+  successfulToolsAfter: number;
+}): boolean {
+  if (input.beforeWork.kind === "active" || input.afterWork.kind === "active") {
+    return directWorkSemanticProgressAdvanced(input.beforeWork, input.afterWork);
+  }
+  return input.successfulToolsAfter > input.successfulToolsBefore;
+}
+
 function finalDeliveryBlockerForOpenDirectWork(input: {
   butlerData: string;
   sessionId: string;
@@ -705,6 +820,7 @@ function openDirectWorkContinuationPrompt(input: {
     "Next action:",
     "- Use the structured tool-call channel to execute the remaining direct work or to move the WorkStream to a legitimate deliverable state.",
     "- Update `update_todo_list` as evidence is gathered and steps complete.",
+    "- Do not treat repeated status inspection, diff review, or replanning as progress unless the remaining WorkStream steps actually move toward completion.",
     "- Keep the response focused on the remaining work and evidence, without meta-narrating runtime control flow.",
     "- Do not answer with a promise, plan, or 'I will start now' message.",
     "- Final delivery is allowed only after the direct WorkStream has no unfinished active items, reaches reporting/waiting_user/paused/recoverable with evidence, or is linked to an async worker/planned/orchestration stream.",
@@ -2068,15 +2184,31 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         const maxContinuationAttempts = goalCompletionContinuationAttempts();
         for (let continuationAttempt = 0;; continuationAttempt += 1) {
           const successfulToolsBeforeReview = successfulToolAuditCount();
+          const workBeforeReview = activeDirectWorkProgressSnapshot({
+            butlerData: this.butlerData,
+            sessionId: input.handle.sessionId,
+          });
           const reviewText = await runToolPrompt(nextReviewPromptText, maxToolRounds, "goal_completion_review");
           const incompleteReason = completionReviewIncompleteReason(reviewText);
-          const reviewAdvancedTheTurn = successfulToolAuditCount() > successfulToolsBeforeReview;
+          const reviewAdvancedTheTurn = turnAdvancedDuringToolPrompt({
+            beforeWork: workBeforeReview,
+            afterWork: activeDirectWorkProgressSnapshot({
+              butlerData: this.butlerData,
+              sessionId: input.handle.sessionId,
+            }),
+            successfulToolsBefore: successfulToolsBeforeReview,
+            successfulToolsAfter: successfulToolAuditCount(),
+          });
           if (!incompleteReason) return reviewAdvancedTheTurn ? reviewText : candidateFinalText;
           if (continuationAttempt >= maxContinuationAttempts) {
             throw goalCompletionIncompleteError(incompleteReason);
           }
 
           const successfulToolsBeforeContinuation = successfulToolAuditCount();
+          const workBeforeContinuation = activeDirectWorkProgressSnapshot({
+            butlerData: this.butlerData,
+            sessionId: input.handle.sessionId,
+          });
           const continuationText = await runToolPrompt(goalCompletionIncompleteContinuationPrompt({
             prompt,
             previousAnswer: reviewText,
@@ -2084,8 +2216,15 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             audit,
             decisions: publicDecisionContext,
           }), 8, "goal_completion_continuation");
-          const continuationAdvancedTheTurn =
-            successfulToolAuditCount() > successfulToolsBeforeContinuation;
+          const continuationAdvancedTheTurn = turnAdvancedDuringToolPrompt({
+            beforeWork: workBeforeContinuation,
+            afterWork: activeDirectWorkProgressSnapshot({
+              butlerData: this.butlerData,
+              sessionId: input.handle.sessionId,
+            }),
+            successfulToolsBefore: successfulToolsBeforeContinuation,
+            successfulToolsAfter: successfulToolAuditCount(),
+          });
           const continuationIncompleteReason =
             completionReviewIncompleteReason(continuationText);
           if (continuationIncompleteReason && !continuationAdvancedTheTurn) {
@@ -2240,7 +2379,10 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             sessionId: input.handle.sessionId,
           });
           if (!blocker) break;
-          const successfulToolsBeforeContinuation = successfulToolAuditCount();
+          const workBeforeContinuation = activeDirectWorkProgressSnapshot({
+            butlerData: this.butlerData,
+            sessionId: input.handle.sessionId,
+          });
           finalText = await runToolPrompt(openDirectWorkContinuationPrompt({
             objective: userText,
             personaContext: promptContextSection(
@@ -2250,7 +2392,11 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             audit,
             blocker,
           }), 8, "direct_work_continuation");
-          if (successfulToolAuditCount() <= successfulToolsBeforeContinuation) break;
+          const workAfterContinuation = activeDirectWorkProgressSnapshot({
+            butlerData: this.butlerData,
+            sessionId: input.handle.sessionId,
+          });
+          if (!directWorkSemanticProgressAdvanced(workBeforeContinuation, workAfterContinuation)) break;
         }
         const remainingBlocker = finalDeliveryBlockerForOpenDirectWork({
           butlerData: this.butlerData,
@@ -3198,7 +3344,7 @@ function appendButlerToolInstructions(systemPrompt?: string): string {
     "- Do not use `background task`, `background worker`, `백그라운드 작업`, or `백그라운드 워커` as a generic progress phrase. Reserve those words for successful `dispatch_worker`, `resume_worker`, `run_planned_task`, or durable worker activity evidence. For normal turn-local tool work, say `작업` or `진행 중인 턴` and keep the inspectable toolchain in the public work blocks.",
     "- You can call `create_planned_task` to create a durable planned dispatch before worker execution. Use planned dispatch for coding, research, migrations, risky changes, multi-step investigations, or tasks that need acceptance criteria and review.",
     "- After `create_planned_task` succeeds, call `run_planned_task` to start the planned worker attempt unless a critical decision pause is required.",
-    "- You can call `create_work_orchestration` for complex work that benefits from multiple role-aware streams. Then call `run_ready_work_streams`, `sync_work_orchestration`, and `write_work_orchestration_report`; do not report until all streams are terminal.",
+    "- You can call `create_work_orchestration` for complex work that benefits from multiple role-aware streams. Set each stream `kind` explicitly: `implementation` for code/artifact changes, or `setup`, `planning`, `investigation`, or `review` only for non-code output streams. Then call `run_ready_work_streams`, `sync_work_orchestration`, and `write_work_orchestration_report`; do not report until all streams are terminal.",
     "- When a planned worker attempt completes, call `review_planned_task` with per-criterion evidence plus `goal_review` evidence for the internal GOAL before writing any public completion report.",
     "- A `system:planned-review:*` turn is scoped to exactly the planned task in that event. In that turn, never call `create_planned_task`, `run_planned_task`, `dispatch_worker`, `resume_worker`, `create_work_orchestration`, or `run_ready_work_streams` to create sibling work.",
     "- Treat work-mode safety fields as binding: if a task is not `safe_to_report`, do not report it as finished; if `completion_claim_allowed` is false, do not claim completion.",
