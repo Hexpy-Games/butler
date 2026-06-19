@@ -36,6 +36,7 @@ import { resolveMarkdownImageSource } from "../../packages/butler-app/client/ui/
 import type {
   MessageFileRef,
   MessageRecord,
+  ProgressRow,
   SessionSummaryView,
   TimelineEvent,
   TurnProgressSnapshot,
@@ -1199,6 +1200,53 @@ test("runtime model preparation progress is not promoted into visible work block
 
   expect(workBlocksFromProgressRows(snapshot.safe_progress_rows)).toEqual([]);
   expect(frozen?.work_blocks).toBeUndefined();
+});
+
+test("initial response preparation block is replaced by specific work blocks", () => {
+  const preparationRow = {
+    id: "turn-preparation",
+    kind: "work_block",
+    state: "running",
+    safe_label: "답변을 준비하고 있습니다.",
+    work_block_id: "turn-preparation",
+    work_block_label: "답변을 준비하고 있습니다.",
+  } satisfies ProgressRow;
+  expect(workBlocksFromProgressRows([preparationRow])).toEqual([
+    expect.objectContaining({
+      id: "turn-preparation",
+      label: "답변을 준비하고 있습니다.",
+      state: "running",
+    }),
+  ]);
+
+  const blocks = workBlocksFromProgressRows([
+    preparationRow,
+    {
+      id: "work-start",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Checking local Project Ledger status",
+      work_block_id: "work-status",
+      work_block_label: "Checking local Project Ledger status",
+    },
+    {
+      id: "tool-start",
+      kind: "read",
+      state: "running",
+      safe_label: "Checking local Project Ledger status",
+      safe_tool_name: "Project Ledger",
+      safe_input_label: "status",
+      tool_call_id: "tool-status",
+      work_block_id: "work-status",
+      work_block_label: "Checking local Project Ledger status",
+    },
+  ]);
+
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toMatchObject({
+    id: "work-status",
+    label: "Checking local Project Ledger status",
+  });
 });
 
 test("semantic progress rows merge running and delivered todo updates", () => {

@@ -5130,6 +5130,16 @@ test("posted messages persist and replay after restart", async () => {
   expect(result.data.reply).toBeUndefined();
   expect(result.data.turn.state).toBe("thinking");
   expect(result.data.turn.cancellable).toBe(true);
+  const summary = await getJson(
+    `${url}session-summary?session_id=general`,
+  );
+  expect(summary.data.latest_progress.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      kind: "work_block",
+      safe_label: "Preparing the response.",
+      state: "running",
+    }),
+  );
   const pending = readdirSync(
     join(tempDir, "runtime", "inbound-events", "pending"),
   );
@@ -5803,6 +5813,9 @@ test("app transport progress projection recovers queued work blocks after app-se
         work_block_label: "오늘 브리핑 근거를 찾는 중입니다.",
       }),
     );
+    expect(
+      JSON.stringify(messages.data.turn_progress[turnId].safe_progress_rows),
+    ).not.toContain("turn-preparation");
     const summary = await getJson(
       `${server.url}session-summary?session_id=general`,
     );
@@ -5813,6 +5826,9 @@ test("app transport progress projection recovers queued work blocks after app-se
         safe_input_label: "충주 뉴스",
       }),
     );
+    expect(
+      JSON.stringify(summary.data.latest_progress.safe_progress_rows),
+    ).not.toContain("turn-preparation");
     const sessionView = await getJson(
       `${server.url}session-view?session_id=general`,
     );
@@ -5826,6 +5842,9 @@ test("app transport progress projection recovers queued work blocks after app-se
         work_block_label: "오늘 브리핑 근거를 찾는 중입니다.",
       }),
     );
+    expect(
+      JSON.stringify(sessionView.data.latest_turn.progress.safe_progress_rows),
+    ).not.toContain("turn-preparation");
   } finally {
     server.stop();
   }
@@ -5935,15 +5954,16 @@ test("app transport sync skips unchanged transcript snapshots", async () => {
     expect(server.store.syncAllAppTransportEvents()).toBe(1);
     expect(server.store.syncAllAppTransportEvents()).toBe(0);
     const row = server.store.db
-      .query<{ count: number }, [string]>(
+      .query<{ count: number }, [string, string]>(
         `
       SELECT COUNT(*) AS count
       FROM events
       WHERE type = 'progress.summary'
         AND payload_json LIKE ? ESCAPE '\\'
+        AND payload_json LIKE ? ESCAPE '\\'
     `,
       )
-      .get(`%"turn_id":"${turnId}"%`);
+      .get(`%"turn_id":"${turnId}"%`, "%snapshot-progress%");
     expect(row?.count).toBe(1);
   } finally {
     server.stop();

@@ -39,7 +39,22 @@ export interface RuntimeTurnContextMetric {
   inboundMessageChars: number;
 }
 
-export type ContextMetricEvent = PromptAssemblyContextMetric | RuntimeTurnContextMetric;
+export interface RuntimeTurnPreparationStageMetric {
+  kind: "runtime_preparation_stage";
+  ts: number;
+  sessionId: string;
+  turnId: string | null;
+  model: string | null;
+  stage: string;
+  elapsedMs: number;
+  durationMs: number | null;
+  counters: Record<string, number | boolean>;
+}
+
+export type ContextMetricEvent =
+  | PromptAssemblyContextMetric
+  | RuntimeTurnContextMetric
+  | RuntimeTurnPreparationStageMetric;
 
 export interface ContextMonitorSummary {
   sessionId: string;
@@ -150,6 +165,30 @@ export function appendRuntimeTurnContextMetric(input: {
   });
 }
 
+export function appendRuntimeTurnPreparationStageMetric(input: {
+  butlerData: string;
+  sessionId: string;
+  turnId?: string | null;
+  model?: string | null;
+  stage: string;
+  elapsedMs: number;
+  durationMs?: number | null;
+  counters?: Record<string, unknown>;
+  now?: number;
+}): void {
+  appendContextMetric(input.butlerData, {
+    kind: "runtime_preparation_stage",
+    ts: input.now ?? Date.now(),
+    sessionId: input.sessionId,
+    turnId: input.turnId ?? null,
+    model: input.model ?? null,
+    stage: safeMetricLabel(input.stage, "unknown"),
+    elapsedMs: safeNonNegativeNumber(input.elapsedMs),
+    durationMs: input.durationMs == null ? null : safeNonNegativeNumber(input.durationMs),
+    counters: safeMetricCounters(input.counters ?? {}),
+  });
+}
+
 export function readContextMetrics(input: {
   butlerData: string;
   sessionId?: string;
@@ -186,6 +225,33 @@ function readContextMetricsWithDiagnostics(input: {
     events: events.sort((a, b) => a.ts - b.ts),
     parseErrors,
   };
+}
+
+function safeMetricLabel(value: unknown, fallback: string): string {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return fallback;
+  return text.replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 80) || fallback;
+}
+
+function safeNonNegativeNumber(value: unknown): number {
+  const number = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(number) || number < 0) return 0;
+  return Math.round(number);
+}
+
+function safeMetricCounters(input: Record<string, unknown>): Record<string, number | boolean> {
+  const counters: Record<string, number | boolean> = {};
+  for (const [key, value] of Object.entries(input)) {
+    const safeKey = safeMetricLabel(key, "");
+    if (!safeKey) continue;
+    if (typeof value === "boolean") {
+      counters[safeKey] = value;
+      continue;
+    }
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    counters[safeKey] = Math.round(value);
+  }
+  return counters;
 }
 
 function readTranscriptStats(butlerData: string, sessionId: string): ContextMonitorSummary["transcript"] {
