@@ -191,7 +191,10 @@ test("version tag release workflow publishes Arch app artifact", () => {
   expect(workflow).toContain("image: archlinux:base-devel");
   expect(workflow).toContain("pacman -S --needed --noconfirm bun curl file git github-cli nodejs npm openssh zstd");
   expect(workflow).toContain("mkdir -p /tmp/butler-bun-tmp");
-  expect(workflow).toContain("chown -R builder:builder /tmp/butler-bun-tmp");
+  expect(workflow).toContain("mkdir -p /home/builder/.bun");
+  expect(workflow).toContain("chown -R builder:builder /tmp/butler-bun-tmp /home/builder/.bun");
+  expect(workflow).toContain("export HOME=/home/builder");
+  expect(workflow).toContain("export BUN_INSTALL=/home/builder/.bun");
   expect(workflow).toContain("export BUN_TMPDIR=/tmp/butler-bun-tmp");
   expect(workflow).toContain("export TMPDIR=/tmp/butler-bun-tmp");
   expect(workflow).toContain("--linux-package-format=pacman");
