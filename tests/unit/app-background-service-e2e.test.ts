@@ -162,7 +162,7 @@ test("App launch updates an already ready Agent service when bundled runtime cha
       serviceControl,
       runtimeCurrent: () => ({
         current: runtimeCurrent,
-        expectedVersion: "0.0.12",
+        expectedVersion: "0.0.13",
         activeVersion: "0.0.8",
       }),
     }),
@@ -171,7 +171,7 @@ test("App launch updates an already ready Agent service when bundled runtime cha
     reason: "runtime_updated",
     runtimeStatus: {
       current: false,
-      expectedVersion: "0.0.12",
+      expectedVersion: "0.0.13",
       activeVersion: "0.0.8",
     },
     finalStatus: { status: "ready" },

@@ -147,8 +147,11 @@ test("version tag release workflow publishes Linux app service installer package
   expect(workflow).toContain("Build and publish Linux app service installers");
   expect(workflow).toContain("runs-on: ubuntu-latest");
   expect(workflow).toContain("needs: app-artifact");
-  expect(workflow).toContain("sudo apt-get install -y rpm");
+  expect(workflow).toContain(
+    "sudo apt-get install -y fakeroot pacman-package-manager rpm zstd",
+  );
   expect(workflow).toContain("command -v dpkg-deb");
+  expect(workflow).toContain("command -v makepkg");
   expect(workflow).toContain("command -v rpmbuild");
   expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.deb'");
   expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.deb.sha256'");
@@ -162,9 +165,38 @@ test("version tag release workflow publishes Linux app service installer package
   expect(publishIndex).toBeGreaterThan(buildIndex);
   expect(workflow).toContain("dist/release/app/butler-app-service_*_amd64.deb");
   expect(workflow).toContain("dist/release/app/butler-app-service_*_amd64.deb.sha256");
+  expect(workflow).toContain("dist/release/app/butler-app-service-*-1-x86_64.pkg.tar.zst");
+  expect(workflow).toContain("dist/release/app/butler-app-service-*-1-x86_64.pkg.tar.zst.sha256");
   expect(workflow).toContain("dist/release/app/butler-app-service-*-1.x86_64.rpm");
   expect(workflow).toContain("dist/release/app/butler-app-service-*-1.x86_64.rpm.sha256");
-  expect(workflow).toContain("Expected 4 Linux app service installer files");
+  expect(workflow).toContain("Expected 6 Linux app service installer files");
+});
+
+test("version tag release workflow publishes Arch app artifact", () => {
+  const workflowPath = join(root, ".github", "workflows", "release.yml");
+  expect(existsSync(workflowPath)).toBe(true);
+  const workflow = readFileSync(workflowPath, "utf8");
+
+  const agentJobIndex = workflow.indexOf("agent-artifact:");
+  const archJobIndex = workflow.indexOf("app-arch-artifact:");
+  const packageIndex = workflow.indexOf("Package Arch app release");
+  const verifyIndex = workflow.indexOf("Verify Arch app artifact");
+  const publishIndex = workflow.indexOf("Publish Arch app artifact");
+
+  expect(archJobIndex).toBeGreaterThan(agentJobIndex);
+  expect(workflow).toContain("Build and publish Arch app artifact");
+  expect(workflow).toContain("image: archlinux:base-devel");
+  expect(workflow).toContain("pacman -S --needed --noconfirm bun curl file git github-cli nodejs npm openssh zstd");
+  expect(workflow).toContain("--linux-package-format=pacman");
+  expect(workflow).toContain("dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst");
+  expect(workflow).toContain("dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst.sha256");
+  expect(workflow).toContain("pacman -Qip");
+  expect(workflow).toContain("/usr/bin/butler-app$");
+  expect(workflow).toContain("/usr/lib/systemd/user/butler.service$");
+  expect(workflow).toContain("Expected 2 Arch app release files");
+  expect(packageIndex).toBeGreaterThan(archJobIndex);
+  expect(verifyIndex).toBeGreaterThan(packageIndex);
+  expect(publishIndex).toBeGreaterThan(verifyIndex);
 });
 
 test("README directs default installs to Butler App and advanced installs to Agent artifacts", () => {
@@ -188,6 +220,7 @@ test("README directs default installs to Butler App and advanced installs to Age
   expect(quickStart).toContain(`butler-app-${currentVersion}-darwin-arm64.pkg`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-linux-x64.deb`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-linux-arm64.deb`);
+  expect(quickStart).toContain(`butler-app-${currentVersion}-1-x86_64.pkg.tar.zst`);
   expect(normalizedQuickStart).toContain("Butler Agent is included in the app");
   expect(quickStart).toContain("Butler Agent를 준비합니다");
   expect(quickStart).not.toContain("butler-agent-*-all.tar.gz");
@@ -331,9 +364,12 @@ test("current release notes describe the GitHub release changelog", () => {
 
   expect(notes).toContain(`# Butler ${currentReleaseTag}`);
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("packaged Butler App update status");
-  expect(notes).toContain("Electron-provided App version");
-  expect(notes).toContain("BUTLER_APP_VERSION");
-  expect(notes).toContain("launchd/systemd");
-  expect(notes).toContain("divergent App and bundled");
+  expect(notes).toContain("native file tool path");
+  expect(notes).toContain("worker orchestration completion and diagnostics");
+  expect(notes).toContain("orchestration regression coverage");
+  expect(notes).toContain("pacman packaging support");
+  expect(notes).toContain("(#30)");
+  expect(notes).toContain("(#31)");
+  expect(notes).toContain("(#35)");
+  expect(notes).toContain("(#29)");
 });
