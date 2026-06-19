@@ -146,7 +146,7 @@ function streamContractText(stream: WorkStreamRecord): string {
 
 function isSetupOrPlanningStream(stream: WorkStreamRecord): boolean {
   const text = streamContractText(stream);
-  if (/(implement|fix|modify|patch|edit|refactor|code change|source change|apply patch|구현|고쳐|수정|변경|패치|리팩터)/iu.test(text)) {
+  if (/\b(?:implement|fix|modify|patch|edit|refactor)\b|code change|source change|apply patch|고쳐|수정|변경|패치|리팩터/iu.test(text)) {
     return false;
   }
   return /(worktree|workspace|branch|metadata|ledger|plan|planning|inspect|investigate|diagnos|review|read|identify|confirm|verify|워크트리|브랜치|메타데이터|계획|검토|조사|확인|파악|읽)/iu.test(text);
