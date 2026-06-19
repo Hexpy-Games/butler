@@ -4578,7 +4578,8 @@ test("session worker activity disambiguates duplicate worker display names", asy
     );
 
     expect(displayNames).toContain("Rina");
-    expect(displayNames).toContain("Rina (Worker 2)");
+    expect(displayNames).not.toContain("Rina (Worker 2)");
+    expect(displayNames.every((name: string) => !/\(Worker \d+\)$/u.test(name))).toBe(true);
     expect(new Set(displayNames).size).toBe(displayNames.length);
   } finally {
     server.stop();

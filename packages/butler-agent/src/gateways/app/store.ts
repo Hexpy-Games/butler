@@ -8233,7 +8233,7 @@ function relabelWorkerActivities(
   ).length;
   let planIndex = 0;
   let workerIndex = 0;
-  const displayNameCounts = new Map<string, number>();
+  const usedDisplayNames = new Set<string>();
   return workers.map((worker) => {
     if (worker.activity_kind === "planned") {
       planIndex += 1;
@@ -8246,12 +8246,7 @@ function relabelWorkerActivities(
     }
     workerIndex += 1;
     const ordinalLabel = `Worker ${workerIndex}`;
-    const baseDisplayName = workerDisplayNameFor(worker.worker_id);
-    const displayNameCount = displayNameCounts.get(baseDisplayName) ?? 0;
-    displayNameCounts.set(baseDisplayName, displayNameCount + 1);
-    const displayName = displayNameCount === 0
-      ? baseDisplayName
-      : `${baseDisplayName} (${ordinalLabel})`;
+    const displayName = uniqueWorkerDisplayNameFor(worker.worker_id, usedDisplayNames);
     return {
       ...worker,
       worker_label: ordinalLabel,
@@ -8276,9 +8271,17 @@ const WORKER_DISPLAY_NAMES = [
   "Yuna",
 ] as const;
 
-function workerDisplayNameFor(workerId: string): string {
+function uniqueWorkerDisplayNameFor(workerId: string, usedNames: Set<string>): string {
   const seed = stableNameSeed(workerId);
-  return WORKER_DISPLAY_NAMES[seed % WORKER_DISPLAY_NAMES.length] ?? "Ari";
+  for (let cycle = 0; ; cycle += 1) {
+    for (let offset = 0; offset < WORKER_DISPLAY_NAMES.length; offset += 1) {
+      const baseName = WORKER_DISPLAY_NAMES[(seed + offset) % WORKER_DISPLAY_NAMES.length] ?? "Ari";
+      const candidate = cycle === 0 ? baseName : `${baseName} ${cycle + 1}`;
+      if (usedNames.has(candidate)) continue;
+      usedNames.add(candidate);
+      return candidate;
+    }
+  }
 }
 
 function stableNameSeed(value: string): number {
