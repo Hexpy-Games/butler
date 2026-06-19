@@ -43,11 +43,16 @@ const provider: ModelProviderAdapter = {
   },
 };
 
+interface ObservedToolCall {
+  phase: string;
+  name: string;
+}
+
 interface ScenarioObservation {
   liveModelCalls: number;
   prompts: string[];
   phases: string[];
-  toolCalls: string[];
+  toolCalls: ObservedToolCall[];
 }
 
 try {
@@ -133,7 +138,10 @@ async function runNoSemanticProgressScenario(): Promise<Record<string, unknown>>
   }
 
   assert(observation.liveModelCalls >= 2, `negative scenario did not call the real model enough times: ${observation.liveModelCalls}`);
-  assert(observation.toolCalls.includes("update_todo_list"), "negative scenario did not create a direct WorkStream");
+  assert(
+    observation.toolCalls.some((call) => call.name === "update_todo_list"),
+    "negative scenario did not create a direct WorkStream",
+  );
   assert(
     /active direct work stream is not deliverable|INCOMPLETE|unfinished|todo remains unfinished/i.test(errorMessage),
     `negative scenario failed for an unexpected reason: ${errorMessage}`,
@@ -146,6 +154,13 @@ async function runNoSemanticProgressScenario(): Promise<Record<string, unknown>>
     prompt.includes("Direct Work Continuation") || prompt.includes("Goal Completion Continuation"),
   );
   assert(continuationPromptObserved, "negative scenario did not reach a real continuation/review prompt");
+  const statusOnlyContinuationToolCallObserved = observation.toolCalls.some((call) =>
+    call.phase === "direct_work_continuation" && call.name === "run_command",
+  );
+  assert(
+    statusOnlyContinuationToolCallObserved,
+    "negative scenario did not execute the status-only tool call inside direct_work_continuation",
+  );
   const stream = activeOrLatestStream(sessionId);
   assert(stream?.state !== "complete", `status-only scenario incorrectly completed WorkStream: ${JSON.stringify(stream)}`);
   const todos = stream?.todo_list_id ? todoItems(stream.todo_list_id) : [];
@@ -158,7 +173,7 @@ async function runNoSemanticProgressScenario(): Promise<Record<string, unknown>>
     phases: observation.phases,
     toolCalls: observation.toolCalls,
     continuationPromptObserved,
-    statusOnlyToolCallObserved: observation.toolCalls.includes("run_command"),
+    statusOnlyContinuationToolCallObserved,
     workStream: publicStream(stream),
     todos: publicTodos(todos),
   };
@@ -200,8 +215,14 @@ async function runSemanticProgressScenario(): Promise<Record<string, unknown>> {
   });
 
   assert(observation.liveModelCalls >= 1, "positive scenario did not call the real model");
-  assert(observation.toolCalls.includes("update_todo_list"), "positive scenario did not update todo list");
-  assert(observation.toolCalls.includes("run_command"), "positive scenario did not execute the validation command");
+  assert(
+    observation.toolCalls.some((call) => call.name === "update_todo_list"),
+    "positive scenario did not update todo list",
+  );
+  assert(
+    observation.toolCalls.some((call) => call.name === "run_command"),
+    "positive scenario did not execute the validation command",
+  );
   assert(result.text.includes(positiveToken), "positive scenario final answer did not include the validation token");
   const stream = activeOrLatestStream(sessionId, true);
   assert(stream?.state === "complete", `positive scenario did not complete WorkStream: ${JSON.stringify(stream)}`);
@@ -229,11 +250,12 @@ function createRuntime(observation: ScenarioObservation): NativeToolLoopRuntime 
     runFunctionToolPromptText: async (input: FunctionToolPromptOptions) => {
       observation.liveModelCalls += 1;
       observation.prompts.push(input.prompt);
-      observation.phases.push(input.usageAttribution?.phase ?? "unknown");
+      const phase = input.usageAttribution?.phase ?? "unknown";
+      observation.phases.push(phase);
       return await runFunctionToolPromptText({
         ...input,
         executeTool: async (call) => {
-          observation.toolCalls.push(call.name);
+          observation.toolCalls.push({ phase, name: call.name });
           return await input.executeTool(call);
         },
       });
