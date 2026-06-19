@@ -1333,6 +1333,7 @@ function createLinuxAppPacman(input: {
     ], {
       cwd: buildDir,
       encoding: "utf8",
+      env: { ...process.env, PKGEXT: ".pkg.tar.zst" },
     });
     if (result.status !== 0) {
       throw new Error(
