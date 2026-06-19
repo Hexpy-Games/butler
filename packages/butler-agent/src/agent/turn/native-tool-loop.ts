@@ -46,7 +46,10 @@ import {
   WorkStreamStore,
   workStreamTerminal,
 } from "../work/work-stream.ts";
-import { appendRuntimeTurnContextMetric } from "../../operations/metrics/context-monitor.ts";
+import {
+  appendRuntimeTurnContextMetric,
+  appendRuntimeTurnPreparationStageMetric,
+} from "../../operations/metrics/context-monitor.ts";
 import {
   resolveRuntimeMessageLanguage,
   type RuntimeMessageLanguage,
@@ -1965,7 +1968,30 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       };
       const userText = currentUserText(input);
       const plannedReview = plannedReviewTurnContext(input);
+      const turnId = currentRuntimeTurnId(input) ?? `turn-${randomUUID().slice(0, 12)}`;
+      const markPreparationStage = (
+        stage: string,
+        stageStartedAt: number | null,
+        counters: Record<string, unknown> = {},
+      ) => {
+        try {
+          const now = Date.now();
+          appendRuntimeTurnPreparationStageMetric({
+            butlerData: this.butlerData,
+            sessionId: input.handle.sessionId,
+            turnId,
+            model: input.model,
+            stage,
+            elapsedMs: now - startedAt,
+            durationMs: stageStartedAt == null ? null : now - stageStartedAt,
+            counters,
+          });
+        } catch {
+          // Preparation telemetry must never block the active turn.
+        }
+      };
       let recallContext = "";
+      const autoCompactionStartedAt = Date.now();
       try {
         await maybeAutoCompactSession({
           butlerData: this.butlerData,
@@ -1973,11 +1999,14 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           modelRef: input.model,
           budgetOverrides: this.contextBudgetOverrides,
         });
+        markPreparationStage("auto_compaction", autoCompactionStartedAt);
       } catch {
+        markPreparationStage("auto_compaction_failed", autoCompactionStartedAt);
         // Compaction is a safety optimization; it must not block the active turn.
       }
 
       if (this.automaticRecallEnabled && shouldAttemptAutomaticRecall(input, userText)) {
+        const recallStartedAt = Date.now();
         try {
           recallContext = renderRecallContext(await this.runAutomaticRecall({
             butlerData: this.butlerData,
@@ -1985,31 +2014,53 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             projectId: typeof session.init.metadata?.projectId === "string" ? session.init.metadata.projectId : undefined,
             limit: 4,
           }));
+          markPreparationStage("automatic_recall", recallStartedAt, {
+            recallContextChars: recallContext.length,
+          });
         } catch {
           recallContext = "";
+          markPreparationStage("automatic_recall_failed", recallStartedAt);
         }
+      } else {
+        markPreparationStage("automatic_recall_skipped", null);
       }
+      const compactionReadStartedAt = Date.now();
       const compactionContext = renderCompactionContext(readLatestCompactionSnapshot({
         butlerData: this.butlerData,
         sessionId: input.handle.sessionId,
       }));
-      const turnId = currentRuntimeTurnId(input) ?? `turn-${randomUUID().slice(0, 12)}`;
+      markPreparationStage("compaction_context_read", compactionReadStartedAt, {
+        compactionContextChars: compactionContext.length,
+      });
       const turnBudget = createDirectTurnBudget(turnId);
+      const feedbackStartedAt = Date.now();
       const feedbackBufferContext = promptContextIncludesSection(input, "Active Feedback Buffer")
         ? ""
         : renderFeedbackBufferContext({
           butlerData: this.butlerData,
           sessionId: input.handle.sessionId,
         });
+      markPreparationStage("feedback_buffer_context", feedbackStartedAt, {
+        feedbackBufferContextChars: feedbackBufferContext.length,
+      });
+      const workingMemoryStartedAt = Date.now();
       const workingMemoryContext = renderWorkingMemoryContext(refreshWorkingMemoryFromTranscript({
         butlerData: this.butlerData,
         sessionId: input.handle.sessionId,
         excludeEventId: currentInboundEventId(input),
       }));
+      markPreparationStage("working_memory_context", workingMemoryStartedAt, {
+        workingMemoryContextChars: workingMemoryContext.length,
+      });
+      const policyStartedAt = Date.now();
       const runtimePolicyContext = renderSessionContextPolicyContext({
         catalog: loadSessionContextPolicyCatalog(this.butlerHome),
         session: session.init,
       });
+      markPreparationStage("runtime_policy_context", policyStartedAt, {
+        runtimePolicyContextChars: runtimePolicyContext.length,
+      });
+      const promptStartedAt = Date.now();
       const normalizedPrompt = normalizeTurnPrompt(input, {
         recallContext,
         compactionContext,
@@ -2021,6 +2072,16 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           compactionContext,
         }),
         butlerData: this.butlerData,
+      });
+      markPreparationStage("prompt_normalized", promptStartedAt, {
+        totalPromptChars: normalizedPrompt.prompt.length,
+        promptContextChars: normalizedPrompt.promptContextChars,
+        compactionContextChars: normalizedPrompt.compactionContextChars,
+        feedbackBufferContextChars: normalizedPrompt.feedbackBufferContextChars,
+        workingMemoryContextChars: normalizedPrompt.workingMemoryContextChars,
+        recentConversationChars: normalizedPrompt.recentConversationChars,
+        recallContextChars: normalizedPrompt.recallContextChars,
+        inboundMessageChars: normalizedPrompt.inboundMessageChars,
       });
       const promptSections = promptUsageSectionsFromPrompt(normalizedPrompt);
       await emitTurnEventBestEffort(input, {
@@ -2035,12 +2096,18 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       });
       const prompt = normalizedPrompt.prompt;
       const attachments = inboundAttachments(input);
+      const attachmentStartedAt = Date.now();
       const currentAttachmentContext = renderAttachmentContext(attachments, {
         butlerData: this.butlerData,
         title: "Inbound Attachments",
         maxAttachmentTextChars: 18_000,
         maxTotalTextChars: 36_000,
       });
+      markPreparationStage("attachment_context", attachmentStartedAt, {
+        attachmentCount: attachments.length,
+        attachmentContextChars: currentAttachmentContext.length,
+      });
+      const progressStartedAt = Date.now();
       await emitRuntimePreparationProgressBestEffort({
         turnInput: input,
         progress: runtimePreparationProgressSummary({
@@ -2052,6 +2119,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           useTools,
         }),
       });
+      markPreparationStage("runtime_preparation_progress_emitted", progressStartedAt);
       let currentProviderToolNames: readonly string[] = [];
       const executor = createAuditedButlerToolExecutor({
         sessionId: input.handle.sessionId,
@@ -2128,6 +2196,11 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           promptSections,
         };
         try {
+          markPreparationStage("model_request_start", null, {
+            selectedToolCount: selectedTools.length,
+            maxToolRounds: grantedToolRounds,
+            promptChars: promptText.length,
+          });
           return await this.toolPromptRunner({
             prompt: promptText,
             model: input.model,

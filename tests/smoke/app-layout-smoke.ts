@@ -3052,7 +3052,7 @@ try {
     .waitFor({ state: "visible", timeout: 1200 });
   const turnActivityText = await timelineActivity.innerText();
   assert(
-    turnActivityText.includes("생각 중입니다.") ||
+    turnActivityText.includes("답변을 준비하고 있습니다.") ||
       turnActivityText.includes("Bash"),
     `turn-activity-during-send failed: ${turnActivityText}`,
   );
