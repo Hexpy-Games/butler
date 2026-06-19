@@ -303,7 +303,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fakeroot libarchive-tools pacman-package-manager zstd
           command -v makepkg
-          command -v pacman
           command -v bsdtar
 
       - name: Install app client dependencies
@@ -337,9 +336,11 @@ jobs:
             exit 1
           fi
           (cd dist/release/app-arch && sha256sum -c "$(basename "${checksums[0]}")")
-          pacman -Qip "${files[0]}"
-          pacman -Qlp "${files[0]}" | grep -q '/usr/bin/butler-app$'
-          pacman -Qlp "${files[0]}" | grep -q '/usr/lib/systemd/user/butler.service$'
+          zstd -t "${files[0]}"
+          bsdtar -tf "${files[0]}" | tee dist/release/app-arch/package-contents.txt
+          grep -qx '.PKGINFO' dist/release/app-arch/package-contents.txt
+          grep -qx 'usr/bin/butler-app' dist/release/app-arch/package-contents.txt
+          grep -qx 'usr/lib/systemd/user/butler.service' dist/release/app-arch/package-contents.txt
 
       - name: Publish Arch app artifact
         env:
