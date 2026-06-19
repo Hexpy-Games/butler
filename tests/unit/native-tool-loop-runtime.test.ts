@@ -5650,6 +5650,78 @@ test("native runtime keeps extending direct work while continuations make tool p
   expect(streams[0].state).toBe("complete");
 });
 
+test("native runtime stops direct work continuation when tools do not make semantic progress", async () => {
+  const originalLimit = process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
+  process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = "3";
+  let promptCalls = 0;
+  const executedCommands: string[] = [];
+  try {
+    const runtime = new NativeToolLoopRuntime({
+      disableAutomaticRecall: true,
+      messageLanguage: "ko",
+      butlerData: tempDir,
+      butlerHome: tempDir,
+      runFunctionToolPromptText: async (input) => {
+        promptCalls += 1;
+        if (promptCalls === 1) {
+          await input.executeTool({
+            name: "update_todo_list",
+            args: {
+              title: "Issue #2 direct work",
+              todos: [{
+                id: "commit-write",
+                content: "write_file 구현 검증 후 커밋",
+                active_form: "write_file 구현 검증 후 커밋하는 중",
+                status: "in_progress",
+                phase: "execution",
+              }],
+            },
+            rawArguments: JSON.stringify({
+              title: "Issue #2 direct work",
+              todos: [{
+                id: "commit-write",
+                content: "write_file 구현 검증 후 커밋",
+                active_form: "write_file 구현 검증 후 커밋하는 중",
+                status: "in_progress",
+                phase: "execution",
+              }],
+            }),
+          });
+          return "write_file 커밋이 아직 남아 있습니다.";
+        }
+        expect(input.prompt).toContain("Direct Work Continuation");
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "git status --short" },
+          rawArguments: JSON.stringify({ command: "git status --short" }),
+        });
+        executedCommands.push("git status --short");
+        return "상태만 다시 확인했고 write_file 커밋은 아직 남아 있습니다.";
+      },
+    });
+    const handle = await runtime.createSession({
+      sessionId: "butler/main/open-direct-work-no-semantic-progress",
+      role: "butler",
+      workspacePath: tempDir,
+      systemPrompt: "You are Butler.",
+    });
+
+    await expect(runtime.runTurn({
+      handle,
+      provider: fakeProvider,
+      model: "local/gemma-test",
+      input: { text: "Issue #2 작업을 직접 완료하고 task마다 커밋해줘." },
+      metadata: { runtimePolicy: { completionReview: "disabled" } },
+    })).rejects.toThrow("active direct work stream is not deliverable");
+
+    expect(promptCalls).toBe(2);
+    expect(executedCommands).toEqual(["git status --short"]);
+  } finally {
+    if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
+    else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;
+  }
+});
+
 test("native runtime returns recoverable tool errors to the model instead of aborting the turn", async () => {
   let observedToolError: unknown;
   const runtime = new NativeToolLoopRuntime({
