@@ -8233,6 +8233,7 @@ function relabelWorkerActivities(
   ).length;
   let planIndex = 0;
   let workerIndex = 0;
+  const displayNameCounts = new Map<string, number>();
   return workers.map((worker) => {
     if (worker.activity_kind === "planned") {
       planIndex += 1;
@@ -8245,7 +8246,12 @@ function relabelWorkerActivities(
     }
     workerIndex += 1;
     const ordinalLabel = `Worker ${workerIndex}`;
-    const displayName = workerDisplayNameFor(worker.worker_id);
+    const baseDisplayName = workerDisplayNameFor(worker.worker_id);
+    const displayNameCount = displayNameCounts.get(baseDisplayName) ?? 0;
+    displayNameCounts.set(baseDisplayName, displayNameCount + 1);
+    const displayName = displayNameCount === 0
+      ? baseDisplayName
+      : `${baseDisplayName} (${ordinalLabel})`;
     return {
       ...worker,
       worker_label: ordinalLabel,

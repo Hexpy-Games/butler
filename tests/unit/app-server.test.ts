@@ -4533,6 +4533,58 @@ test("session worker activity synthesizes planned parent for orphan work orchest
   }
 });
 
+test("session worker activity disambiguates duplicate worker display names", async () => {
+  const taskStore = new TaskStore(tempDir);
+  for (const [taskId, taskSummary] of [
+    ["worker-task-9", "First colliding worker"],
+    ["worker-task-23", "Second colliding worker"],
+  ] as const) {
+    const workerDir = join(tempDir, "tasks", taskId);
+    mkdirSync(workerDir, { recursive: true });
+    writeFileSync(join(workerDir, "status"), "RUNNING\n", "utf8");
+    writeFileSync(join(workerDir, "request.md"), `${taskSummary}\n`, "utf8");
+    writeFileSync(
+      join(workerDir, "worker_activity.json"),
+      JSON.stringify({
+        phase: "executing",
+        status_line: `Executing: ${taskSummary}.`,
+        updated_at: "2026-05-16T00:02:00.000Z",
+      }),
+      "utf8",
+    );
+    taskStore.writeOrigin(taskId, buildTaskOriginContext({
+      sessionId: "display-collision-panel",
+      taskSummary,
+      project: "project-btcc",
+    }));
+  }
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    server.store.createSession({
+      kind: "chat",
+      title: "Display collision panel",
+      session_hint: "display-collision-panel",
+    });
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=display-collision-panel`,
+    );
+    const displayNames = summary.data.worker_activity.map(
+      (worker: { worker_display_name: string }) => worker.worker_display_name,
+    );
+
+    expect(displayNames).toContain("Rina");
+    expect(displayNames).toContain("Rina (Worker 2)");
+    expect(new Set(displayNames).size).toBe(displayNames.length);
+  } finally {
+    server.stop();
+  }
+});
+
 test("session worker activity shows blocked plan parent when a stream failed with pending dependents", async () => {
   const origin = buildTaskOriginContext({
     sessionId: "blocked-plan-panel",
