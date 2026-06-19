@@ -148,11 +148,14 @@ test("version tag release workflow publishes Linux app service installer package
   expect(workflow).toContain("runs-on: ubuntu-latest");
   expect(workflow).toContain("needs: app-artifact");
   expect(workflow).toContain(
-    "sudo apt-get install -y fakeroot pacman-package-manager rpm zstd",
+    "sudo apt-get install -y fakeroot libarchive-tools pacman-package-manager rpm zstd",
   );
+  expect(workflow).toContain("sudo mkdir -p /var/lib/pacman/local");
+  expect(workflow).toContain("sudo chmod -R a+rwx /var/lib/pacman");
   expect(workflow).toContain("command -v dpkg-deb");
   expect(workflow).toContain("command -v makepkg");
   expect(workflow).toContain("command -v rpmbuild");
+  expect(workflow).toContain("command -v bsdtar");
   expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.deb'");
   expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.deb.sha256'");
   expect(workflow).toContain("sha256sum -c");
@@ -187,6 +190,10 @@ test("version tag release workflow publishes Arch app artifact", () => {
   expect(workflow).toContain("Build and publish Arch app artifact");
   expect(workflow).toContain("image: archlinux:base-devel");
   expect(workflow).toContain("pacman -S --needed --noconfirm bun curl file git github-cli nodejs npm openssh zstd");
+  expect(workflow).toContain("mkdir -p /tmp/butler-bun-tmp");
+  expect(workflow).toContain("chown -R builder:builder /tmp/butler-bun-tmp");
+  expect(workflow).toContain("export BUN_TMPDIR=/tmp/butler-bun-tmp");
+  expect(workflow).toContain("export TMPDIR=/tmp/butler-bun-tmp");
   expect(workflow).toContain("--linux-package-format=pacman");
   expect(workflow).toContain("dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst");
   expect(workflow).toContain("dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst.sha256");

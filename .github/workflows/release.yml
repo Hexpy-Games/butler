@@ -209,10 +209,13 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y fakeroot pacman-package-manager rpm zstd
+          sudo apt-get install -y fakeroot libarchive-tools pacman-package-manager rpm zstd
+          sudo mkdir -p /var/lib/pacman/local
+          sudo chmod -R a+rwx /var/lib/pacman
           command -v dpkg-deb
           command -v makepkg
           command -v rpmbuild
+          command -v bsdtar
 
       - name: Build Linux app service installer packages
         env:
@@ -303,7 +306,12 @@ jobs:
 
       - name: Package Arch app release
         run: |
+          set -euo pipefail
+          mkdir -p /tmp/butler-bun-tmp
+          chown -R builder:builder /tmp/butler-bun-tmp
           runuser -u builder --preserve-environment -- bash -lc '
+            export BUN_TMPDIR=/tmp/butler-bun-tmp
+            export TMPDIR=/tmp/butler-bun-tmp
             cd "$GITHUB_WORKSPACE"
             bun run release:app:package \
               --platform=linux-x64 \
