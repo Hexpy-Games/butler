@@ -159,7 +159,8 @@ function evidenceFromActivity(taskDir: string): Partial<WorkerCompletionEvidence
     if (blockedLike) hasBlocker = true;
     if (terminalBlocker) hasFinalBlocker = true;
     else if (blockedLike) hasIntermediateBlocker = true;
-    if (environmentBlocker) hasEnvironmentBlocker = true;
+    if (environmentBlocker && terminalBlocker) hasEnvironmentBlocker = true;
+    else if (environmentBlocker) hasIntermediateBlocker = true;
     if (contract.has_execution_evidence === true) hasExecution = true;
     if (contract.has_verification_evidence === true) hasVerification = true;
     if (contract.has_commit_evidence === true) hasCommit = true;
@@ -195,7 +196,8 @@ function evidenceFromLog(taskDir: string): Partial<WorkerCompletionEvidenceSumma
   const result = readText(join(taskDir, "result.md"));
   const text = `${log}\n${result}`;
   const resultHasBlocker = /\b(blocked|blocker|cannot safely|unable to proceed|TIMEOUT|deadlock|auth|credential)\b/iu.test(result);
-  const environmentBlocker = isEnvironmentBlockerText(text);
+  const resultEnvironmentBlocker = isEnvironmentBlockerText(result);
+  const intermediateEnvironmentBlocker = !resultEnvironmentBlocker && isEnvironmentBlockerText(log);
   const commandLines = text
     .split(/\r?\n/u)
     .filter((line) => /run_shell|run_command|===== COMMAND:/u.test(line))
@@ -209,10 +211,11 @@ function evidenceFromLog(taskDir: string): Partial<WorkerCompletionEvidenceSumma
     has_file_created: /\b(touch|mkdir\s+-p|cat\s+>|printf\s+.*>|tee\s+)\b/iu.test(text),
     has_execution_evidence: /run_shell|run_command|===== COMMAND:/u.test(text),
     has_verification_evidence: /\b(bun test|bun run check|npm test|pnpm test|yarn test|vitest|jest|playwright|typecheck|lint|tsc)\b/iu.test(text),
-    has_blocker: resultHasBlocker || environmentBlocker,
-    has_intermediate_blocker: !resultHasBlocker && /\b(blocked|blocker|cannot safely|unable to proceed)\b/iu.test(log),
+    has_blocker: resultHasBlocker || resultEnvironmentBlocker || intermediateEnvironmentBlocker,
+    has_intermediate_blocker: (!resultHasBlocker && /\b(blocked|blocker|cannot safely|unable to proceed)\b/iu.test(log)) ||
+      intermediateEnvironmentBlocker,
     has_final_blocker: resultHasBlocker,
-    has_environment_blocker: environmentBlocker,
+    has_environment_blocker: resultEnvironmentBlocker,
     evidence_refs: commandLines.slice(-8),
   };
 }
@@ -280,7 +283,6 @@ function evidenceFromWorkerTranscript(taskDir: string): Partial<WorkerCompletion
   let hasBlocker = false;
   let hasIntermediateBlocker = false;
   const hasFinalBlocker = false;
-  let hasEnvironmentBlocker = false;
 
   for (const event of events) {
     if (event.kind !== "tool_result" && event.kind !== "tool_call") continue;
@@ -311,7 +313,7 @@ function evidenceFromWorkerTranscript(taskDir: string): Partial<WorkerCompletion
     }
     if (isEnvironmentBlockerText(text)) {
       hasBlocker = true;
-      hasEnvironmentBlocker = true;
+      hasIntermediateBlocker = true;
     }
     if (event.kind === "tool_result") refs.push(`transcript:${compact(name || "tool", 40)}:${compact(command || JSON.stringify(result), 180)}`);
   }
@@ -328,7 +330,7 @@ function evidenceFromWorkerTranscript(taskDir: string): Partial<WorkerCompletion
     has_blocker: hasBlocker,
     has_intermediate_blocker: hasIntermediateBlocker,
     has_final_blocker: hasFinalBlocker,
-    has_environment_blocker: hasEnvironmentBlocker,
+    has_environment_blocker: false,
     evidence_refs: refs,
   };
 }
