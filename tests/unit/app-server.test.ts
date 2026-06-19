@@ -4586,6 +4586,57 @@ test("session worker activity disambiguates duplicate worker display names", asy
   }
 });
 
+test("session worker activity keeps display names unique beyond the base name pool", async () => {
+  const taskStore = new TaskStore(tempDir);
+  const workerCount = 15;
+  for (let index = 0; index < workerCount; index += 1) {
+    const taskId = `worker-roster-${String(index).padStart(2, "0")}`;
+    const workerDir = join(tempDir, "tasks", taskId);
+    mkdirSync(workerDir, { recursive: true });
+    writeFileSync(join(workerDir, "status"), "RUNNING\n", "utf8");
+    writeFileSync(join(workerDir, "request.md"), `Roster worker ${index}\n`, "utf8");
+    writeFileSync(
+      join(workerDir, "worker_activity.json"),
+      JSON.stringify({
+        phase: "executing",
+        status_line: `Executing: roster worker ${index}.`,
+        updated_at: `2026-05-16T00:03:${String(index).padStart(2, "0")}.000Z`,
+      }),
+      "utf8",
+    );
+    taskStore.writeOrigin(taskId, buildTaskOriginContext({
+      sessionId: "large-worker-roster-panel",
+      taskSummary: `Roster worker ${index}`,
+      project: "project-btcc",
+    }));
+  }
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    server.store.createSession({
+      kind: "chat",
+      title: "Large worker roster panel",
+      session_hint: "large-worker-roster-panel",
+    });
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=large-worker-roster-panel`,
+    );
+    const displayNames = summary.data.worker_activity.map(
+      (worker: { worker_display_name: string }) => worker.worker_display_name,
+    );
+
+    expect(displayNames).toHaveLength(workerCount);
+    expect(new Set(displayNames).size).toBe(displayNames.length);
+    expect(displayNames.every((name: string) => !/\(Worker \d+\)$/u.test(name))).toBe(true);
+  } finally {
+    server.stop();
+  }
+});
+
 test("session worker activity shows blocked plan parent when a stream failed with pending dependents", async () => {
   const origin = buildTaskOriginContext({
     sessionId: "blocked-plan-panel",

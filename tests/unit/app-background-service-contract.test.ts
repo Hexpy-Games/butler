@@ -119,6 +119,7 @@ test("Phase 0 platform capability matrix gates implementation by platform", () =
   expect(linux.allowedV1Paths).toEqual([
     "linux-systemd-user-service",
     "linux-deb-owned-user-unit",
+    "linux-pacman-owned-user-unit",
     "linux-rpm-owned-user-unit",
   ]);
   expect(linux.allowedMechanisms).toContain("deb-owned-user-unit");
