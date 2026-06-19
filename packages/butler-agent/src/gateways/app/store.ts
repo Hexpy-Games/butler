@@ -3964,6 +3964,22 @@ export class AppServerStore {
     return row;
   }
 
+  private appendInitialPreparationProgress(
+    sessionId: string,
+    turnId: string,
+  ): ProgressSummaryRow {
+    const ko = this.getSettings().language === "ko";
+    const label = ko ? "답변을 준비하고 있습니다." : "Preparing the response.";
+    return this.appendProgressSummaryEvent(sessionId, turnId, {
+      id: "turn-preparation",
+      kind: "work_block",
+      safe_label: label,
+      state: "running",
+      work_block_id: "turn-preparation",
+      work_block_label: label,
+    });
+  }
+
   private listProgressRowsForTurn(turnId: string): ProgressSummaryRow[] {
     const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
     const rows = this.db
@@ -4334,6 +4350,7 @@ export class AppServerStore {
       kind: "turn.started",
       payload: { safeLabel: "Started" },
     });
+    this.appendInitialPreparationProgress(chatId, turn.id);
 
     if (!responder) {
       this.enqueueAppTransportTurn({
@@ -4577,6 +4594,7 @@ export class AppServerStore {
       kind: "turn.started",
       payload: { safeLabel: "Started" },
     });
+    this.appendInitialPreparationProgress(chatId, turn.id);
 
     try {
       const appendProgress = (row: ProgressSummaryInput) =>
@@ -4805,6 +4823,7 @@ export class AppServerStore {
       kind: "turn.started",
       payload: { safeLabel: "Started" },
     });
+    this.appendInitialPreparationProgress(row.chat_id, turnId);
 
     if (!responder) {
       this.enqueueAppTransportTurn({
@@ -9386,7 +9405,7 @@ function findProgressRowKeys(
 }
 
 function isSessionSummaryProgressRow(row: ProgressSummaryRow): boolean {
-  if (row.kind === "work_block") return false;
+  if (row.kind === "work_block") return true;
   if (row.kind === "turn" || row.kind === "thinking") return false;
   if (row.kind === "message" || row.kind === "system") {
     return !STATUS_ONLY_PROGRESS_LABELS.has(
@@ -9401,8 +9420,11 @@ function progressRowsForTurnState(
   turnState?: string,
 ): ProgressSummaryRow[] {
   if (!turnState || !isTerminalProgressState(turnState)) return rows;
+  const terminalRows = rows.filter((row) =>
+    !(row.kind === "work_block" && row.work_block_id === "turn-preparation"),
+  );
   const rowState = progressRowStateForTerminalTurn(turnState);
-  return rows.map((row) => {
+  return terminalRows.map((row) => {
     const safeDetailRows = row.safe_detail_rows?.map((detail) =>
       detail.state && !isTerminalProgressState(detail.state)
         ? { ...detail, state: rowState }

@@ -5129,6 +5129,16 @@ test("posted messages persist and replay after restart", async () => {
   expect(result.data.reply).toBeUndefined();
   expect(result.data.turn.state).toBe("thinking");
   expect(result.data.turn.cancellable).toBe(true);
+  const summary = await getJson(
+    `${url}session-summary?session_id=general`,
+  );
+  expect(summary.data.latest_progress.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      kind: "work_block",
+      safe_label: "Preparing the response.",
+      state: "running",
+    }),
+  );
   const pending = readdirSync(
     join(tempDir, "runtime", "inbound-events", "pending"),
   );
@@ -5934,15 +5944,16 @@ test("app transport sync skips unchanged transcript snapshots", async () => {
     expect(server.store.syncAllAppTransportEvents()).toBe(1);
     expect(server.store.syncAllAppTransportEvents()).toBe(0);
     const row = server.store.db
-      .query<{ count: number }, [string]>(
+      .query<{ count: number }, [string, string]>(
         `
       SELECT COUNT(*) AS count
       FROM events
       WHERE type = 'progress.summary'
         AND payload_json LIKE ? ESCAPE '\\'
+        AND payload_json LIKE ? ESCAPE '\\'
     `,
       )
-      .get(`%"turn_id":"${turnId}"%`);
+      .get(`%"turn_id":"${turnId}"%`, "%snapshot-progress%");
     expect(row?.count).toBe(1);
   } finally {
     server.stop();

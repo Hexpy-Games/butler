@@ -5,6 +5,7 @@ import { join } from "path";
 import { PromptAssembler } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import type { StoredSessionBinding } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import {
+  appendRuntimeTurnPreparationStageMetric,
   appendRuntimeTurnContextMetric,
   contextMetricsPath,
   readContextMonitor,
@@ -119,6 +120,50 @@ test("context monitor summarizes runtime turn sizes and transcript growth safely
       latestTimestamp: "2026-04-27T00:00:01.000Z",
     });
     expect(summary.pressure.level).toBe("low");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("context monitor records runtime preparation stage timings without raw text", () => {
+  const root = tempRoot();
+  const butlerData = join(root, "data");
+
+  try {
+    appendRuntimeTurnPreparationStageMetric({
+      butlerData,
+      sessionId: "butler/main",
+      turnId: "turn-1",
+      model: "openai/auto:codex-latest",
+      stage: "automatic_recall",
+      elapsedMs: 42,
+      durationMs: 31,
+      counters: {
+        promptContextChars: 1234,
+        secretText: "SECRET_RECALL_TEXT",
+        attachmentCount: 2,
+      },
+      now: 10,
+    });
+    const metrics = readFileSync(contextMetricsPath(butlerData), "utf8");
+    const rows = metrics.trim().split("\n").map((line) => JSON.parse(line));
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: "runtime_preparation_stage",
+      ts: 10,
+      sessionId: "butler/main",
+      turnId: "turn-1",
+      model: "openai/auto:codex-latest",
+      stage: "automatic_recall",
+      elapsedMs: 42,
+      durationMs: 31,
+      counters: {
+        promptContextChars: 1234,
+        attachmentCount: 2,
+      },
+    });
+    expect(metrics).not.toContain("SECRET_RECALL_TEXT");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
