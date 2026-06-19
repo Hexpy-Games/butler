@@ -450,6 +450,7 @@ export interface AppServerStoreOptions {
   butlerData?: string;
   butlerHome?: string;
   appVersion?: string;
+  appUpdateManifest?: string;
   serverUrl?: string;
   bridgeMode?: SettingsView["bridge_mode"];
   serviceClient?: ButlerServiceClient;
@@ -538,6 +539,9 @@ interface TranscriptSyncSnapshot {
 }
 
 export class AppServerStore {
+  private static readonly DEFAULT_APP_UPDATE_MANIFEST =
+    "https://github.com/Hexpy-Games/butler/releases/latest/download/app-update-manifest.json";
+
   readonly db: Database;
   private closed = false;
   private projectWorkspaceRoot: string;
@@ -545,6 +549,7 @@ export class AppServerStore {
   private readonly butlerData: string;
   private readonly butlerHome: string;
   private readonly appVersion?: string;
+  private readonly appUpdateManifest: string;
   private readonly serverUrl: string;
   private readonly bridgeMode: SettingsView["bridge_mode"];
   private readonly serviceClient: ButlerServiceClient;
@@ -575,6 +580,11 @@ export class AppServerStore {
       options.butlerHome ?? process.env.BUTLER_HOME ?? process.cwd(),
     );
     this.appVersion = safeString(options.appVersion);
+    this.appUpdateManifest =
+      safeString(options.appUpdateManifest) ??
+      safeString(process.env.BUTLER_APP_UPDATE_MANIFEST) ??
+      safeString(process.env.BUTLER_UPDATE_MANIFEST) ??
+      AppServerStore.DEFAULT_APP_UPDATE_MANIFEST;
     this.serverUrl = options.serverUrl ?? "http://127.0.0.1:18765";
     this.bridgeMode = options.bridgeMode ?? "local";
     this.serviceClient =
@@ -612,6 +622,7 @@ export class AppServerStore {
       root: this.butlerHome,
       butlerData: this.butlerData,
       appVersion: this.appVersion,
+      manifestPath: this.appUpdateManifest,
       components: ["app"],
     });
   }
@@ -626,6 +637,7 @@ export class AppServerStore {
       root: this.butlerHome,
       butlerData: this.butlerData,
       appVersion: this.appVersion,
+      manifestPath: this.appUpdateManifest,
       components,
       channel: request.channel,
     });
@@ -637,6 +649,7 @@ export class AppServerStore {
       butlerData: this.butlerData,
       appVersion: this.appVersion,
       component: request.component,
+      manifestPath: this.appUpdateManifest,
       channel: request.channel,
       dryRun: request.dry_run,
     });
