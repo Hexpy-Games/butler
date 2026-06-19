@@ -435,6 +435,7 @@ export function summarizeWorkerCompletionEvidence(taskDir: string): WorkerComple
   if (hasRecentFile(taskDir, "result.md")) metadataRefs.push("result.md");
   if (existsSync(join(taskDir, "worker_activity_events.jsonl"))) metadataRefs.push("worker_activity_events.jsonl");
   if (existsSync(join(taskDir, "worker_activity.json"))) metadataRefs.push("worker_activity.json");
+  if (existsSync(join(taskDir, "worker-preflight.md"))) metadataRefs.push("worker-preflight.md");
   try {
     const entries = readdirSync(taskDir);
     for (const entry of entries) {
