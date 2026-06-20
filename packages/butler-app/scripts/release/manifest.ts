@@ -417,7 +417,11 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
         compatibleProtocol: "butler.app.v1",
         gatewayProfile: "electron",
         bundledAgentVersion: versions.bundledAgent,
-        bundledAgentPayload,
+        bundledAgentPayload: createBundledAgentPayloadMetadata(
+          versions.bundledAgent,
+          null,
+          platform,
+        ),
         backgroundServiceCapability: createAppBackgroundServiceReleaseCapability([platform]),
         serviceInstallerBundle: createAppServiceInstallerBundleMetadata([
           platform,
@@ -641,8 +645,9 @@ function serviceInstallerPackageArtifactsForPlatform(
 function createBundledAgentPayloadMetadata(
   version: string,
   digest: string | null = null,
+  platform: AppReleasePlatform | "all" = "all",
 ): AppBundledAgentPayload {
-  const artifactName = `butler-agent-${version}-all.tar.gz`;
+  const artifactName = `butler-agent-${version}-${platform}.tar.gz`;
   return {
     product: "butler-agent",
     profile: "agent-standalone",
@@ -1176,6 +1181,7 @@ function validateArtifacts(
       artifact.bundledAgentPayload,
       manifest.bundledAgentVersion,
       issues,
+      artifact.platform,
     );
     validateAppBackgroundServiceReleaseCapability(
       `artifact ${artifact.component} background service capability`,
@@ -1233,6 +1239,7 @@ function validateBundledAgentPayload(
   payload: AppBundledAgentPayload | undefined,
   expectedVersion: string,
   issues: string[],
+  expectedPlatform: AppReleasePlatform | "all" = "all",
 ): void {
   if (!payload) {
     issues.push(`${label} metadata is required`);
@@ -1247,7 +1254,7 @@ function validateBundledAgentPayload(
   if (payload.version !== expectedVersion) {
     issues.push(`${label} version mismatch`);
   }
-  if (payload.artifactName !== `butler-agent-${expectedVersion}-all.tar.gz`) {
+  if (payload.artifactName !== `butler-agent-${expectedVersion}-${expectedPlatform}.tar.gz`) {
     issues.push(`${label} artifact name mismatch`);
   }
   if (payload.resourcePath !== `bundled-agent/${payload.artifactName}`) {

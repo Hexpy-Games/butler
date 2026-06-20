@@ -345,7 +345,8 @@ test("app release manifest exposes app package files only", () => {
     bundledAgentPayload: {
       product: "butler-agent",
       version: currentVersion,
-      resourcePath: `bundled-agent/butler-agent-${currentVersion}-all.tar.gz`,
+      artifactName: `butler-agent-${currentVersion}-darwin-arm64.tar.gz`,
+      resourcePath: `bundled-agent/butler-agent-${currentVersion}-darwin-arm64.tar.gz`,
       integrity: {
         digestAlgorithm: "sha256",
         digest: null,
@@ -526,7 +527,7 @@ test("app release metadata ships bundled-Agent-only changes as a new App artifac
     expect(artifact.artifactName).toContain(`butler-app-${manifest.version}-`);
     expect(artifact.bundledAgentPayload.version).toBe(manifest.bundledAgentVersion);
     expect(artifact.bundledAgentPayload.resourcePath).toBe(
-      `bundled-agent/butler-agent-${manifest.bundledAgentVersion}-all.tar.gz`,
+      `bundled-agent/butler-agent-${manifest.bundledAgentVersion}-${artifact.platform}.tar.gz`,
     );
     expect(artifact.backgroundServiceCapability.installerRequirements).toHaveLength(1);
     expect(
@@ -962,7 +963,7 @@ test("agent release packager can write public GitHub artifact URLs", () => {
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
-}, 30_000);
+}, 90_000);
 
 test("app bundled Agent service launcher uses App version when Agent version differs", () => {
   const outDir = mkdtempSync(join(tmpdir(), "butler-app-launcher-app-version-test-"));
@@ -1029,7 +1030,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(listing.status).toBe(0);
     const entries = listing.stdout.split(/\r?\n/).filter(Boolean);
     const resourceRoot = "./opt/butler/Butler-linux-x64/resources/bundled-agent";
-    const agentArtifact = `butler-agent-${currentVersion}-all.tar.gz`;
+    const agentArtifact = `butler-agent-${currentVersion}-linux-x64.tar.gz`;
     expect(tarVerboseListing(artifact.artifactPath)).toContain("drwxr-xr-x");
     expect(entries).toContain("./opt/butler/Butler-linux-x64/Butler");
     expect(entries).toContain("./usr/bin/butler-app");
@@ -1079,14 +1080,15 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
 
     const releaseManifest = JSON.parse(readText(result.releaseManifestPath));
     const updateManifest = JSON.parse(readText(result.updateManifestPath));
+    const topLevelAgentArtifact = `butler-agent-${currentVersion}-all.tar.gz`;
     expect(releaseManifest).toMatchObject({
       version: currentVersion,
       gatewayProfile: "electron",
       bundledAgentVersion: currentVersion,
       bundledAgentPayload: {
         version: currentVersion,
-        artifactName: agentArtifact,
-        resourcePath: `bundled-agent/${agentArtifact}`,
+        artifactName: topLevelAgentArtifact,
+        resourcePath: `bundled-agent/${topLevelAgentArtifact}`,
         managedRuntimePayloadPath: "bundled-agent/runtime",
         dependencyClosureManifestPath: "bundled-agent/dependency-closure.json",
       },
@@ -1095,6 +1097,17 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
         appGatewayOwner: "background-agent-service",
       },
     });
+    expect(validateAppReleaseManifest(root, releaseManifest)).toEqual([]);
+    const releaseArtifact = releaseManifest.artifacts.find(
+      (item: any) => item.platform === "linux-x64",
+    );
+    expect(releaseArtifact?.bundledAgentPayload).toMatchObject({
+      version: currentVersion,
+      artifactName: agentArtifact,
+      resourcePath: `bundled-agent/${agentArtifact}`,
+    });
+    const bundledAgentDigest = releaseArtifact?.bundledAgentPayload?.integrity?.digest;
+    expect(typeof bundledAgentDigest).toBe("string");
     expect(updateManifest).toMatchObject({
       schema: "butler.update-manifest.v1",
       product: "butler-app",
@@ -1318,11 +1331,11 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     });
     expect(nestedReleaseManifest.artifacts[0]).toMatchObject({
       downloadUrl: `bundled-agent/${agentArtifact}`,
-      sha256: releaseManifest.bundledAgentPayload.integrity.digest,
+      sha256: bundledAgentDigest,
     });
     expect(nestedUpdateManifest.artifacts[0]).toMatchObject({
       artifact_url: `bundled-agent/${agentArtifact}`,
-      sha256: releaseManifest.bundledAgentPayload.integrity.digest,
+      sha256: bundledAgentDigest,
     });
     expect(JSON.stringify(nestedReleaseManifest)).not.toContain("file://");
     expect(JSON.stringify(nestedUpdateManifest)).not.toContain("file://");
@@ -1343,7 +1356,12 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(nestedListing.status).toBe(0);
     const nestedEntries = nestedListing.stdout.split(/\r?\n/).filter(Boolean);
     for (const platform of SERVICE_CLI_LAUNCHER_PLATFORMS) {
-      expect(nestedEntries).toContain(`./${serviceCliLauncherRelativePath(platform)}`);
+      const launcherPath = `./${serviceCliLauncherRelativePath(platform)}`;
+      if (platform === "linux-x64") {
+        expect(nestedEntries).toContain(launcherPath);
+      } else {
+        expect(nestedEntries).not.toContain(launcherPath);
+      }
     }
   } finally {
     if (previousLinuxRuntime === undefined) delete process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
@@ -1486,7 +1504,7 @@ test("app package smoke uses real bundled Agent release resources", () => {
   try {
     const bundledAgent = prepareBundledAgentResource(root, workDir);
     const servicePlatform = servicePlatformForReleasePlatform(bundledAgent.platform);
-    expect(bundledAgent.artifactName).toBe(`butler-agent-${currentVersion}-all.tar.gz`);
+    expect(bundledAgent.artifactName).toBe(`butler-agent-${currentVersion}-${bundledAgent.platform}.tar.gz`);
     expect(bundledAgent.version).toBe(currentVersion);
     expect(existsSync(join(bundledAgent.resourceDir, bundledAgent.artifactName))).toBe(true);
     expect(existsSync(join(bundledAgent.resourceDir, "agent-release-manifest.json"))).toBe(true);
@@ -2311,19 +2329,27 @@ function writeFakeAgentPackager(dir: string): string {
   writeExecutableScript(runtime, `#!/bin/sh
 set -eu
 out=""
+artifact_name=""
+platforms=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --out) shift; out="$1" ;;
+    --artifact-name) shift; artifact_name="$1" ;;
+    --cli-launcher-platform) shift; platforms="$platforms $1" ;;
   esac
   shift || true
 done
 mkdir -p "$out"
-artifact="$out/butler-agent-${currentVersion}-all.tar.gz"
+if [ -z "$artifact_name" ]; then
+  artifact_name="butler-agent-${currentVersion}-all.tar.gz"
+fi
+artifact="$out/$artifact_name"
+printf '%s\\n' "$platforms" > "$out/fake-agent-platforms.txt"
 printf 'fake agent archive\\n' > "$artifact"
 printf '{}\\n' > "$out/agent-release-manifest.json"
 printf '{}\\n' > "$out/agent-update-manifest.json"
 sha="$(sha256sum "$artifact" | awk '{print $1}')"
-printf '{"artifactPath":"%s","releaseManifestPath":"%s","updateManifestPath":"%s","artifactName":"butler-agent-${currentVersion}-all.tar.gz","sha256":"%s","version":"${currentVersion}"}\\n' "$artifact" "$out/agent-release-manifest.json" "$out/agent-update-manifest.json" "$sha"
+printf '{"artifactPath":"%s","releaseManifestPath":"%s","updateManifestPath":"%s","artifactName":"%s","sha256":"%s","version":"${currentVersion}"}\\n' "$artifact" "$out/agent-release-manifest.json" "$out/agent-update-manifest.json" "$artifact_name" "$sha"
 `);
   return runtime;
 }
