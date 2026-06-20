@@ -374,12 +374,9 @@ test("current release notes describe the GitHub release changelog", () => {
 
   expect(notes).toContain(`# Butler ${currentReleaseTag}`);
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("native file tool path");
-  expect(notes).toContain("worker orchestration completion and diagnostics");
-  expect(notes).toContain("orchestration regression coverage");
-  expect(notes).toContain("pacman packaging support");
-  expect(notes).toContain("(#30)");
-  expect(notes).toContain("(#31)");
-  expect(notes).toContain("(#35)");
-  expect(notes).toContain("(#29)");
+  expect(notes).toContain("public App release");
+  expect(notes).toContain("App update button");
+  expect(notes).toContain("installer handoff");
+  expect(notes).toContain("menu bar helper");
+  expect(notes).toContain("(#36)");
 });
