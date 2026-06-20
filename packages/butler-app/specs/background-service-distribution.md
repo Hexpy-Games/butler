@@ -117,10 +117,16 @@ Docker Desktop on macOS:
   checks are an optimization only; a direct helper launch, stale App process, or
   race during `Open Butler` must not create multiple simultaneous menu bar
   helper instances.
-- The macOS App-managed Agent service registration/start flow must also render
-  and bootstrap a user LaunchAgent for the menu bar helper. If the Agent service
-  is running because App first-run, service repair, or login startup started it,
-  the menu bar helper must also be started for that user session.
+- The macOS App-managed Agent service registration flow must render and
+  bootstrap a user LaunchAgent for the menu bar helper. Service repair may
+  rewrite the helper LaunchAgent definition, but normal **Start Butler Agent**
+  and **Restart Butler Agent** actions must not boot out or kickstart the helper
+  when a helper already owns the menu bar icon.
+- If the Agent service is running because App first-run, service repair, or
+  login startup started it, the menu bar helper must also be available for that
+  user session. The App may satisfy this by the installed helper LaunchAgent or
+  by an already-running helper, but must not create multiple simultaneous menu
+  bar helper icons.
 - The helper is the default entry point for quick Agent status and service
   actions in the App distribution.
 - The helper can open or relaunch the main App UI.
@@ -364,9 +370,10 @@ Required changes:
 - Packaged macOS normalization must build and sign a launchable
   `Contents/Library/LoginItems/Butler Menu Bar Helper.app`; the main App must
   discover that bundled helper path by default and fail closed if it is missing.
-- App-managed macOS Agent install/start must register and bootstrap the helper
-  LaunchAgent in the same user launchd domain as the Agent service, so an online
-  Agent is not left without the expected menu bar controller.
+- App-managed macOS Agent install must register and bootstrap the helper
+  LaunchAgent in the same user launchd domain as the Agent service. Later
+  service start/restart actions may repair the helper plist definition but must
+  not restart helper ownership of the menu bar icon as a side effect.
 - The menu bar/tray menu must not expose **Quit Butler UI** or
   **Quit Menu Bar Helper**. The destructive exit path is **Stop Butler Agent** or
   **Stop Butler Service**, guarded by a warning with a "do not show again"
