@@ -997,12 +997,13 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("createAppAgentServiceAdapter");
   expect(electronMain).toContain("reconcileAgentServiceOnAppLaunch");
   expect(electronMain).toContain("reconcileAppAgentServiceForLaunch");
+  expect(electronMain).toContain("let appAgentLaunchReconcilePromise = null");
   expect(electronMain).toContain("appManagedAgentRuntimeCurrent");
   expect(electronMain).toContain("currentBundledAgentVersion");
   expect(electronMain).toContain('source: "app-launch"');
   expect(electronMain).toContain("bundled_agent_version");
   expect(electronMain).toContain(
-    "await reconcileAppAgentServiceForLaunch();\n  if (rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {\n    await ensureServer();\n  }",
+    "const launchReconcile = reconcileAppAgentServiceForLaunch();\n  if (rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {\n    await launchReconcile;\n    await ensureServer();\n  }",
   );
   expect(electronMain).toContain("adapter: appAgentServiceAdapter");
   expect(electronMain).toContain("MENU_BAR_HELPER_ARG");
