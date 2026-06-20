@@ -302,7 +302,7 @@ function runElectronPackager(
   if (result.status !== 0) {
     throw new Error(
       `electron package failed for ${platform}: ${
-        result.stderr.trim() || result.stdout.trim() || "unknown error"
+        result.stderr.trim() || result.stdout.trim() || result.error?.message || "unknown error"
       }`,
     );
   }
@@ -319,6 +319,7 @@ export function prepareBundledAgentResource(
     root,
     outDir: agentOutDir,
     artifactBaseUrl: "bundled-agent",
+    dependencyTarget: dependencyTargetForAppPlatforms([platform]),
   });
   return prepareBundledAgentResourceFromPackage(root, workDir, platform, agent, manifest.version);
 }
@@ -1428,7 +1429,7 @@ pkgdesc='Butler desktop app with bundled Butler Agent runtime'
 arch=('x86_64')
 url='https://github.com/Hexpy-Games/butler'
 license=('MIT')
-depends=('gtk3' 'nss' 'libxss' 'alsa-lib' 'libgbm')
+depends=('gtk3' 'nss' 'libxss' 'alsa-lib' 'mesa')
 options=('!strip' '!debug')
 
 package() {
