@@ -239,8 +239,11 @@ test("composer shows only active workers", () => {
   expect(isWorkerVisibleInComposer(worker("complete", true, "2026-05-15T12:49:00.000Z"), now)).toBe(false);
   expect(isWorkerVisibleInComposer(worker("failed", true, "2026-05-15T12:47:00.000Z"), now)).toBe(false);
   expect(isWorkerVisibleInComposer(worker("failed", true, "2026-05-15T12:30:00.000Z"), now)).toBe(false);
+  expect(isWorkerVisibleInComposer(worker("blocked", false, "2026-05-15T12:49:00.000Z"), now)).toBe(false);
+  expect(isWorkerVisibleInComposer(worker("recoverable", false, "2026-05-15T12:49:00.000Z"), now)).toBe(false);
   expect(isWorkerVisibleInComposer(worker("planning", false, "2026-05-15T12:30:00.000Z"), now)).toBe(true);
   expect(hasFollowableWorkerActivity([worker("failed", true, "2026-05-15T12:47:00.000Z")], now)).toBe(false);
+  expect(hasFollowableWorkerActivity([worker("blocked", false, "2026-05-15T12:47:00.000Z")], now)).toBe(false);
   expect(hasFollowableWorkerActivity([worker("failed", true, "2026-05-15T12:30:00.000Z")], now)).toBe(false);
 });
 
