@@ -57,6 +57,13 @@ const INTERNAL_PROGRESS_RAW_TOOL_NAMES = new Set([
   "list_todo_list",
   "model_preparation",
 ]);
+const INACTIVE_COMPOSER_WORKER_PHASES = new Set([
+  "blocked",
+  "complete",
+  "failed",
+  "cancelled",
+  "recoverable",
+]);
 export function clientTurnIdFromMessageId(messageId: string): string {
   return `${CLIENT_TURN_PREFIX}${messageId}`;
 }
@@ -2354,7 +2361,8 @@ export function isWorkerVisibleInComposer(
   worker: WorkerActivitySummary,
   _now = Date.now(),
 ): boolean {
-  return !worker.terminal;
+  const phase = worker.semantic_phase ?? worker.phase;
+  return !worker.terminal && !INACTIVE_COMPOSER_WORKER_PHASES.has(phase);
 }
 
 export function shouldShowTurnActivity(input: {
