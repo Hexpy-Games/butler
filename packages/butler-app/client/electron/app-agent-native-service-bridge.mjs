@@ -7,6 +7,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { appManagedAgentPointerPath } from "./app-managed-runtime.mjs";
 import { prepareAppLocalAuth } from "./app-agent-supervisor.mjs";
 
@@ -35,6 +36,8 @@ export function createAppAgentNativeServiceBridge({
   prepareLocalAuth = () => prepareAppLocalAuth({ butlerData }),
   menuBarHelper = null,
   isPidRunning = defaultIsPidRunning,
+  isProcessGroupRunning = defaultIsProcessGroupRunning,
+  isPortAvailable = defaultIsPortAvailable,
   killPid = defaultKillPid,
   sleepMs = defaultSleepMs,
   runCommand = defaultRunCommand,
@@ -64,7 +67,15 @@ export function createAppAgentNativeServiceBridge({
           menuBarHelper: resolvedMenuBarHelper,
           isPidRunning,
         });
-        await applyPlan(plan, { runCommand, writeFile, isPidRunning, killPid, sleepMs });
+        await applyPlan(plan, {
+          runCommand,
+          writeFile,
+          isPidRunning,
+          isProcessGroupRunning,
+          isPortAvailable,
+          killPid,
+          sleepMs,
+        });
       },
       stop: async () => {
         const plan = createRegistrationPlan({
@@ -81,7 +92,15 @@ export function createAppAgentNativeServiceBridge({
           menuBarHelper: resolvedMenuBarHelper,
           isPidRunning,
         });
-        await applyPlan(plan, { runCommand, writeFile, isPidRunning, killPid, sleepMs });
+        await applyPlan(plan, {
+          runCommand,
+          writeFile,
+          isPidRunning,
+          isProcessGroupRunning,
+          isPortAvailable,
+          killPid,
+          sleepMs,
+        });
       },
     },
     registration: {
@@ -100,7 +119,15 @@ export function createAppAgentNativeServiceBridge({
           menuBarHelper: resolvedMenuBarHelper,
           isPidRunning,
         });
-        await applyPlan(plan, { runCommand, writeFile, isPidRunning, killPid, sleepMs });
+        await applyPlan(plan, {
+          runCommand,
+          writeFile,
+          isPidRunning,
+          isProcessGroupRunning,
+          isPortAvailable,
+          killPid,
+          sleepMs,
+        });
       },
     },
   };
@@ -289,6 +316,7 @@ function launchdPlan({
         serviceStep(["launchctl", "bootout", target], { optional: true }),
         terminateNativeServiceChildrenStep(),
         waitForNativeServiceChildrenExitStep(),
+        waitForAppGatewayPortReleaseStep(),
         serviceStep(["launchctl", "bootstrap", domain, serviceFile]),
         serviceStep(["launchctl", "kickstart", "-k", target]),
         ...(helperPlan?.steps ?? []),
@@ -310,6 +338,7 @@ function launchdPlan({
         serviceStep(["launchctl", "bootout", target], { optional: true }),
         terminateNativeServiceChildrenStep(),
         waitForNativeServiceChildrenExitStep(),
+        waitForAppGatewayPortReleaseStep(),
         serviceStep(["launchctl", "bootstrap", domain, serviceFile]),
         serviceStep(["launchctl", "kickstart", "-k", target]),
         ...helperEnsureSteps,
@@ -325,6 +354,7 @@ function launchdPlan({
       serviceStep(["launchctl", "bootout", target], { optional: true }),
       terminateNativeServiceChildrenStep(),
       waitForNativeServiceChildrenExitStep({ optional: true }),
+      waitForAppGatewayPortReleaseStep({ optional: true }),
     ],
   };
 }
@@ -484,6 +514,8 @@ async function applyPlan(
     runCommand,
     writeFile = defaultWriteFile,
     isPidRunning = defaultIsPidRunning,
+    isProcessGroupRunning = defaultIsProcessGroupRunning,
+    isPortAvailable = defaultIsPortAvailable,
     killPid = defaultKillPid,
     sleepMs = defaultSleepMs,
   },
@@ -499,6 +531,7 @@ async function applyPlan(
       if (step.kind === "terminate-native-service-children") {
         terminateNativeServiceChildren(plan.runtime?.butlerData ?? plan.butlerData, {
           isPidRunning,
+          isProcessGroupRunning,
           killPid,
         });
         continue;
@@ -508,12 +541,24 @@ async function applyPlan(
           plan.runtime?.butlerData ?? plan.butlerData,
           {
             isPidRunning,
+            isProcessGroupRunning,
             sleepMs,
             timeoutMs: step.timeoutMs,
           },
         );
         if (!exited && !step.optional) {
           throw new Error("App Agent service children did not exit after launchd bootout");
+        }
+        continue;
+      }
+      if (step.kind === "wait-app-gateway-port-release") {
+        const released = await waitForAppGatewayPortRelease(plan.runtime, {
+          isPortAvailable,
+          sleepMs,
+          timeoutMs: step.timeoutMs,
+        });
+        if (!released && !step.optional) {
+          throw new Error("App Agent service gateway port did not release after launchd bootout");
         }
         continue;
       }
@@ -543,13 +588,34 @@ function waitForNativeServiceChildrenExitStep({
   return { kind: "wait-native-service-children-exit", optional, timeoutMs };
 }
 
-function terminateNativeServiceChildren(butlerData, { isPidRunning, killPid }) {
+function waitForAppGatewayPortReleaseStep({
+  optional = false,
+  timeoutMs = 8_000,
+} = {}) {
+  return { kind: "wait-app-gateway-port-release", optional, timeoutMs };
+}
+
+function terminateNativeServiceChildren(
+  butlerData,
+  { isPidRunning, isProcessGroupRunning, killPid },
+) {
   if (!butlerData) return;
   for (const state of readNativeServiceStates(butlerData).reverse()) {
-    const pid = Number(state.processGroupId || state.pid);
-    if (!Number.isInteger(pid) || pid <= 0 || !isPidRunning(pid)) continue;
+    const processGroupId = Number(state.processGroupId || state.pid);
+    const pid = Number(state.pid);
+    if (
+      (!Number.isInteger(processGroupId) || processGroupId <= 0) &&
+      (!Number.isInteger(pid) || pid <= 0)
+    ) {
+      continue;
+    }
+    const groupRunning = Number.isInteger(processGroupId) &&
+      processGroupId > 0 &&
+      isProcessGroupRunning(processGroupId);
+    const pidRunning = Number.isInteger(pid) && pid > 0 && isPidRunning(pid);
+    if (!groupRunning && !pidRunning) continue;
     try {
-      killPid(-pid, "SIGTERM");
+      killPid(-processGroupId, "SIGTERM");
     } catch {
       try {
         killPid(pid, "SIGTERM");
@@ -560,19 +626,43 @@ function terminateNativeServiceChildren(butlerData, { isPidRunning, killPid }) {
 
 async function waitForNativeServiceChildrenExit(
   butlerData,
-  { isPidRunning, sleepMs, timeoutMs },
+  { isPidRunning, isProcessGroupRunning, sleepMs, timeoutMs },
 ) {
   if (!butlerData) return true;
   const startedAt = Date.now();
   while (Date.now() - startedAt <= timeoutMs) {
     const online = readNativeServiceStates(butlerData).some((state) => {
       const pid = Number(state.pid);
-      return Number.isInteger(pid) && pid > 0 && isPidRunning(pid);
+      const processGroupId = Number(state.processGroupId || state.pid);
+      return (
+        Number.isInteger(processGroupId) &&
+        processGroupId > 0 &&
+        isProcessGroupRunning(processGroupId)
+      ) || (
+        Number.isInteger(pid) &&
+        pid > 0 &&
+        isPidRunning(pid)
+      );
     });
     if (!online) return true;
     await sleepMs(100);
   }
   return false;
+}
+
+async function waitForAppGatewayPortRelease(
+  runtime,
+  { isPortAvailable, sleepMs, timeoutMs },
+) {
+  const port = Number(runtime?.port);
+  if (!Number.isInteger(port) || port <= 0 || port > 65_535) return true;
+  const host = runtime?.env?.BUTLER_APP_SERVER_HOST || "127.0.0.1";
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= timeoutMs) {
+    if (await isPortAvailable(port, host)) return true;
+    await sleepMs(100);
+  }
+  return await isPortAvailable(port, host);
 }
 
 function readNativeServiceStates(butlerData) {
@@ -643,6 +733,36 @@ function defaultWriteFile(path, body) {
 
 function defaultKillPid(pid, signal) {
   process.kill(pid, signal);
+}
+
+function defaultIsProcessGroupRunning(processGroupId) {
+  if (!Number.isInteger(processGroupId) || processGroupId <= 0) return false;
+  try {
+    process.kill(-processGroupId, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function defaultIsPortAvailable(port, host = "127.0.0.1") {
+  return new Promise((resolve) => {
+    const server = createServer();
+    let settled = false;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      server.removeAllListeners();
+      if (server.listening) {
+        server.close(() => resolve(value));
+      } else {
+        resolve(value);
+      }
+    };
+    server.once("error", () => settle(false));
+    server.once("listening", () => settle(true));
+    server.listen(port, host);
+  });
 }
 
 function defaultSleepMs(ms) {

@@ -360,6 +360,57 @@ test("App Agent native service bridge clears previous Agent children before rela
   }
 });
 
+test("App Agent native service bridge waits for process groups and gateway port before relaunch", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-port-release-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    writeAppManagedRuntime(butlerData, "9.9.9");
+    writeServiceState(butlerData, "app-gateway", 52_002);
+    const processGroups = new Set([52_002]);
+    let portChecks = 0;
+    const events: string[] = [];
+    const bridge = createAppAgentNativeServiceBridge({
+      butlerData,
+      platform: "darwin",
+      homeDir: "/Users/alice",
+      getPort: () => 19125,
+      prepareLocalAuth: () => ({
+        filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
+      }),
+      isPidRunning: () => false,
+      isProcessGroupRunning: (pid) => processGroups.has(pid),
+      isPortAvailable: async (port) => {
+        events.push(`port:${port}:${portChecks}`);
+        portChecks += 1;
+        return portChecks > 1;
+      },
+      killPid: (pid) => {
+        events.push(`kill:${pid}`);
+        processGroups.delete(Math.abs(pid));
+      },
+      sleepMs: async () => undefined,
+      writeFile: () => {},
+      runCommand: (argv) => {
+        events.push(argv.join(" "));
+        return { exitCode: argv[1] === "bootout" ? 1 : 0 };
+      },
+    });
+
+    await bridge.nativeServices.start();
+
+    expect(events).toEqual([
+      "launchctl bootout gui/501/com.hexpy.butler",
+      "kill:-52002",
+      "port:19125:0",
+      "port:19125:1",
+      "launchctl bootstrap gui/501 /Users/alice/Library/LaunchAgents/com.hexpy.butler.plist",
+      "launchctl kickstart -k gui/501/com.hexpy.butler",
+    ]);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("App Agent native service bridge ensures App-managed runtime before registration", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-ensure-"));
   try {
