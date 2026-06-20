@@ -35,6 +35,8 @@ export function createAppAgentNativeServiceBridge({
   prepareLocalAuth = () => prepareAppLocalAuth({ butlerData }),
   menuBarHelper = null,
   isPidRunning = defaultIsPidRunning,
+  killPid = defaultKillPid,
+  sleepMs = defaultSleepMs,
   runCommand = defaultRunCommand,
   writeFile = defaultWriteFile,
 } = {}) {
@@ -62,7 +64,7 @@ export function createAppAgentNativeServiceBridge({
           menuBarHelper: resolvedMenuBarHelper,
           isPidRunning,
         });
-        await applyPlan(plan, { runCommand, writeFile });
+        await applyPlan(plan, { runCommand, writeFile, isPidRunning, killPid, sleepMs });
       },
       stop: async () => {
         const plan = createRegistrationPlan({
@@ -79,7 +81,7 @@ export function createAppAgentNativeServiceBridge({
           menuBarHelper: resolvedMenuBarHelper,
           isPidRunning,
         });
-        await applyPlan(plan, { runCommand, writeFile });
+        await applyPlan(plan, { runCommand, writeFile, isPidRunning, killPid, sleepMs });
       },
     },
     registration: {
@@ -98,7 +100,7 @@ export function createAppAgentNativeServiceBridge({
           menuBarHelper: resolvedMenuBarHelper,
           isPidRunning,
         });
-        await applyPlan(plan, { runCommand, writeFile });
+        await applyPlan(plan, { runCommand, writeFile, isPidRunning, killPid, sleepMs });
       },
     },
   };
@@ -151,7 +153,7 @@ function createRegistrationPlan({
   }
   if (action === "stop") {
     return platform === "darwin"
-      ? launchdPlan({ action, homeDir, runtime: null, serviceLabel })
+      ? launchdPlan({ action, homeDir, runtime: null, serviceLabel, butlerData })
       : systemdPlan({ action, homeDir, runtime: null, systemdUnit });
   }
   const activation = ensureRuntimePointer();
@@ -169,6 +171,7 @@ function createRegistrationPlan({
           homeDir,
           runtime,
           serviceLabel,
+          butlerData,
           menuBarHelper,
           helperRunning: isMenuBarHelperPidRunning({ butlerData, isPidRunning }),
         }),
@@ -264,6 +267,7 @@ function launchdPlan({
   homeDir,
   runtime,
   serviceLabel,
+  butlerData = runtime?.butlerData,
   menuBarHelper = null,
   helperRunning = false,
 }) {
@@ -277,10 +281,14 @@ function launchdPlan({
     return {
       action,
       serviceFile,
+      runtime,
+      butlerData,
       body: launchdPlist(runtime, serviceLabel),
       files: helperPlan ? [{ path: helperPlan.serviceFile, body: helperPlan.body }] : [],
       steps: [
         serviceStep(["launchctl", "bootout", target], { optional: true }),
+        terminateNativeServiceChildrenStep(),
+        waitForNativeServiceChildrenExitStep(),
         serviceStep(["launchctl", "bootstrap", domain, serviceFile]),
         serviceStep(["launchctl", "kickstart", "-k", target]),
         ...(helperPlan?.steps ?? []),
@@ -294,10 +302,14 @@ function launchdPlan({
     return {
       action,
       serviceFile,
+      runtime,
+      butlerData,
       body: launchdPlist(runtime, serviceLabel),
       files: helperPlan ? [{ path: helperPlan.serviceFile, body: helperPlan.body }] : [],
       steps: [
         serviceStep(["launchctl", "bootout", target], { optional: true }),
+        terminateNativeServiceChildrenStep(),
+        waitForNativeServiceChildrenExitStep(),
         serviceStep(["launchctl", "bootstrap", domain, serviceFile]),
         serviceStep(["launchctl", "kickstart", "-k", target]),
         ...helperEnsureSteps,
@@ -307,7 +319,13 @@ function launchdPlan({
   return {
     action,
     serviceFile,
-    steps: [serviceStep(["launchctl", "bootout", target], { optional: true })],
+    runtime,
+    butlerData,
+    steps: [
+      serviceStep(["launchctl", "bootout", target], { optional: true }),
+      terminateNativeServiceChildrenStep(),
+      waitForNativeServiceChildrenExitStep({ optional: true }),
+    ],
   };
 }
 
@@ -460,7 +478,16 @@ WantedBy=default.target
 `;
 }
 
-async function applyPlan(plan, { runCommand, writeFile = defaultWriteFile }) {
+async function applyPlan(
+  plan,
+  {
+    runCommand,
+    writeFile = defaultWriteFile,
+    isPidRunning = defaultIsPidRunning,
+    killPid = defaultKillPid,
+    sleepMs = defaultSleepMs,
+  },
+) {
   try {
     if (plan.body) {
       writeFile(plan.serviceFile, plan.body);
@@ -469,6 +496,27 @@ async function applyPlan(plan, { runCommand, writeFile = defaultWriteFile }) {
       writeFile(file.path, file.body);
     }
     for (const step of plan.steps) {
+      if (step.kind === "terminate-native-service-children") {
+        terminateNativeServiceChildren(plan.runtime?.butlerData ?? plan.butlerData, {
+          isPidRunning,
+          killPid,
+        });
+        continue;
+      }
+      if (step.kind === "wait-native-service-children-exit") {
+        const exited = await waitForNativeServiceChildrenExit(
+          plan.runtime?.butlerData ?? plan.butlerData,
+          {
+            isPidRunning,
+            sleepMs,
+            timeoutMs: step.timeoutMs,
+          },
+        );
+        if (!exited && !step.optional) {
+          throw new Error("App Agent service children did not exit after launchd bootout");
+        }
+        continue;
+      }
       const result = await runCommand(step.argv);
       if ((result?.exitCode ?? 1) !== 0 && !step.optional) {
         throw new Error(`App Agent service command failed: ${step.argv.join(" ")}`);
@@ -481,7 +529,56 @@ async function applyPlan(plan, { runCommand, writeFile = defaultWriteFile }) {
 }
 
 function serviceStep(argv, { optional = false } = {}) {
-  return { argv, optional };
+  return { kind: "command", argv, optional };
+}
+
+function terminateNativeServiceChildrenStep() {
+  return { kind: "terminate-native-service-children" };
+}
+
+function waitForNativeServiceChildrenExitStep({
+  optional = false,
+  timeoutMs = 8_000,
+} = {}) {
+  return { kind: "wait-native-service-children-exit", optional, timeoutMs };
+}
+
+function terminateNativeServiceChildren(butlerData, { isPidRunning, killPid }) {
+  if (!butlerData) return;
+  for (const state of readNativeServiceStates(butlerData).reverse()) {
+    const pid = Number(state.processGroupId || state.pid);
+    if (!Number.isInteger(pid) || pid <= 0 || !isPidRunning(pid)) continue;
+    try {
+      killPid(-pid, "SIGTERM");
+    } catch {
+      try {
+        killPid(pid, "SIGTERM");
+      } catch {}
+    }
+  }
+}
+
+async function waitForNativeServiceChildrenExit(
+  butlerData,
+  { isPidRunning, sleepMs, timeoutMs },
+) {
+  if (!butlerData) return true;
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= timeoutMs) {
+    const online = readNativeServiceStates(butlerData).some((state) => {
+      const pid = Number(state.pid);
+      return Number.isInteger(pid) && pid > 0 && isPidRunning(pid);
+    });
+    if (!online) return true;
+    await sleepMs(100);
+  }
+  return false;
+}
+
+function readNativeServiceStates(butlerData) {
+  return APP_AGENT_SERVICE_IDS
+    .map((serviceId) => readJson(serviceStatePath(butlerData, serviceId)))
+    .filter(Boolean);
 }
 
 function normalizeLaunchdLabel(value) {
@@ -542,6 +639,14 @@ function readPositiveInteger(path) {
 function defaultWriteFile(path, body) {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   writeFileSync(path, body, { mode: 0o644 });
+}
+
+function defaultKillPid(pid, signal) {
+  process.kill(pid, signal);
+}
+
+function defaultSleepMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function defaultRunCommand(argv) {

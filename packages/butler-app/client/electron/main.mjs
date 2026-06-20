@@ -120,6 +120,7 @@ let tray = null;
 let isQuitting = false;
 let pendingNativeNavigation = navigationRequestFromArgs(process.argv);
 let menuBarHelperLaunchAttempted = false;
+let appAgentLaunchReconcilePromise = null;
 let nativeServiceGatewayReady = false;
 let nativeServiceGatewayLastErrorCode = null;
 const nativeShellPreferences = {
@@ -1580,8 +1581,9 @@ async function createWindow() {
   if (rendererUrl === serverUrl && !shouldUseAppAgentNativeServiceBridge()) {
     await ensureServer();
   }
-  await reconcileAppAgentServiceForLaunch();
+  const launchReconcile = reconcileAppAgentServiceForLaunch();
   if (rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {
+    await launchReconcile;
     await ensureServer();
   }
   await loadInitialNativeShellPreferences();
@@ -1656,17 +1658,33 @@ async function createWindow() {
 }
 
 async function reconcileAppAgentServiceForLaunch() {
-  if (!appAgentNativeServiceBridge || isMenuBarHelperProcess) return;
-  const result = await reconcileAgentServiceOnAppLaunch({
-    serviceControl: agentServiceControl,
-    enabled: true,
-    runtimeCurrent: appManagedAgentRuntimeCurrent,
-    source: "app-launch",
+  if (!appAgentNativeServiceBridge || isMenuBarHelperProcess) return null;
+  if (appAgentLaunchReconcilePromise) return appAgentLaunchReconcilePromise;
+  appAgentLaunchReconcilePromise = (async () => {
+    const result = await reconcileAgentServiceOnAppLaunch({
+      serviceControl: agentServiceControl,
+      enabled: true,
+      runtimeCurrent: appManagedAgentRuntimeCurrent,
+      source: "app-launch",
+    });
+    if (result.attempted || result.reason === "already_ready") {
+      nativeServiceGatewayReady = result.finalStatus?.status === "ready";
+      nativeServiceGatewayLastErrorCode = result.actionResult?.error_code ?? null;
+    }
+    return result;
+  })().catch((error) => {
+    nativeServiceGatewayReady = false;
+    nativeServiceGatewayLastErrorCode = error?.code ?? "service_reconcile_failed";
+    console.warn(
+      `Butler Agent service launch reconciliation failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return null;
+  }).finally(() => {
+    appAgentLaunchReconcilePromise = null;
   });
-  if (result.attempted || result.reason === "already_ready") {
-    nativeServiceGatewayReady = result.finalStatus?.status === "ready";
-    nativeServiceGatewayLastErrorCode = result.actionResult?.error_code ?? null;
-  }
+  return appAgentLaunchReconcilePromise;
 }
 
 function appManagedAgentRuntimeCurrent() {

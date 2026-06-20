@@ -318,6 +318,48 @@ test("App Agent native service bridge does not fail Agent install when menu bar 
   }
 });
 
+test("App Agent native service bridge clears previous Agent children before relaunch", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-relaunch-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    writeAppManagedRuntime(butlerData, "9.9.9");
+    writeServiceState(butlerData, "embed-server", 51_001);
+    writeServiceState(butlerData, "app-gateway", 51_002);
+    const online = new Set([51_001, 51_002]);
+    const killed: number[] = [];
+    const commands: string[] = [];
+    const bridge = createAppAgentNativeServiceBridge({
+      butlerData,
+      platform: "darwin",
+      homeDir: "/Users/alice",
+      getPort: () => 19125,
+      prepareLocalAuth: () => ({
+        filePath: join(butlerData, "app", "runtime", "auth", "local-agent-auth.json"),
+      }),
+      isPidRunning: (pid) => online.has(pid),
+      killPid: (pid) => {
+        killed.push(pid);
+        online.delete(Math.abs(pid));
+      },
+      sleepMs: async () => undefined,
+      writeFile: () => {},
+      runCommand: (argv) => {
+        commands.push(argv.join(" "));
+        return { exitCode: argv[1] === "bootout" ? 1 : 0 };
+      },
+    });
+
+    await bridge.nativeServices.start();
+
+    expect(commands[0]).toContain("launchctl bootout gui/");
+    expect(killed).toEqual([-51_002, -51_001]);
+    expect(commands[1]).toContain("launchctl bootstrap gui/");
+    expect(commands[2]).toContain("launchctl kickstart -k gui/");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("App Agent native service bridge ensures App-managed runtime before registration", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-ensure-"));
   try {
