@@ -4691,7 +4691,7 @@ test("session worker activity keeps display names unique beyond the base name po
   }
 });
 
-test("session worker activity shows blocked plan parent when a stream failed with pending dependents", async () => {
+test("session worker history keeps blocked plan parent while active summary excludes it", async () => {
   const origin = buildTaskOriginContext({
     sessionId: "blocked-plan-panel",
     taskSummary: "Prepare blocked orchestration evidence",
@@ -4774,10 +4774,14 @@ test("session worker activity shows blocked plan parent when a stream failed wit
       title: "Blocked plan panel",
       session_hint: "blocked-plan-panel",
     });
-    const summary = await getJson(
-      `${server.url}session-summary?session_id=blocked-plan-panel`,
+    const history = await getJson(
+      `${server.url}sessions/blocked-plan-panel/worker-activity/history`,
     );
-    expect(summary.data.worker_activity[0]).toMatchObject({
+    const blockedPlan = history.data.workers.find(
+      (worker: { task_id: string }) =>
+        worker.task_id === "orch-blocked-plan",
+    );
+    expect(blockedPlan).toMatchObject({
       activity_kind: "planned",
       task_id: "orch-blocked-plan",
       orchestration_id: "orch-blocked-plan",
@@ -4785,12 +4789,188 @@ test("session worker activity shows blocked plan parent when a stream failed wit
       terminal: false,
       status_line: "Blocked: 1 of 2 worker streams failed; remaining streams are waiting.",
     });
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=blocked-plan-panel`,
+    );
+    expect(summary.data.worker_activity).toEqual([]);
+    const view = await getJson(
+      `${server.url}session-view?session_id=blocked-plan-panel`,
+    );
+    expect(view.data.workers).toEqual([]);
     expect(orchestrationStore.read("orch-blocked-plan")).toMatchObject({
       status: "running",
       streams: [
         expect.objectContaining({ id: "setup", status: "failed" }),
         expect.objectContaining({ id: "implementation", status: "pending" }),
       ],
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("session worker history keeps worker-failed planned task while active summary excludes it", async () => {
+  const taskId = "planned-worker-failed-active-scope";
+  const sessionId = "planned-worker-failed-panel";
+  const planned = new PlannedTaskStore(tempDir);
+  planned.create({
+    task_id: taskId,
+    type: "planned",
+    goal: "Investigate a stale recoverable task without showing it as active.",
+    project: tempDir,
+    created_at: "2026-05-16T00:00:00.000Z",
+    origin_session_id: sessionId,
+    decision_policy: "autonomous",
+    acceptance_criteria: ["The stale task remains inspectable only as history"],
+    verification_commands: [],
+    review_policy: "review all criteria",
+    repair_policy: { max_attempts: 1, allow_autonomous_repair: true },
+    public_report_policy: "brief reviewed report",
+  });
+  planned.transition(taskId, "PLANNED_RUNNING");
+  planned.transition(taskId, "WORKER_FAILED");
+  new TaskStore(tempDir).writeOrigin(
+    taskId,
+    buildTaskOriginContext({
+      sessionId,
+      taskSummary: "Stale recoverable planned task",
+      project: null,
+      createdAt: "2026-05-16T00:00:00.000Z",
+    }),
+  );
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    server.store.createSession({
+      kind: "chat",
+      title: "Planned worker failed panel",
+      session_hint: sessionId,
+    });
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=${sessionId}`,
+    );
+    expect(summary.data.worker_activity).toEqual([]);
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=${sessionId}`,
+    );
+    expect(
+      view.data.workers.find((worker: { task_id: string }) =>
+        worker.task_id === taskId,
+      ),
+    ).toBeUndefined();
+
+    const activeWorkers = await getJson(`${server.url}worker-activity`);
+    expect(
+      activeWorkers.data.workers.map(
+        (worker: { task_id: string }) => worker.task_id,
+      ),
+    ).not.toContain(taskId);
+
+    const history = await getJson(
+      `${server.url}worker-activity?include_history=true`,
+    );
+    expect(
+      history.data.workers.find((worker: { task_id: string }) =>
+        worker.task_id === taskId,
+      ),
+    ).toMatchObject({
+      phase: "recoverable",
+      terminal: false,
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("session worker history keeps stale executing orchestration while active session view excludes it", async () => {
+  const sessionId = "stale-executing-panel";
+  const orchestrationStore = new WorkOrchestrationStore(tempDir);
+  orchestrationStore.create({
+    id: "orch-stale-executing",
+    title: "Stale executing plan",
+    goal: "Keep stale executing worker history inspectable without showing it as active",
+    originSessionId: sessionId,
+    streams: [
+      {
+        id: "implementation",
+        role: "builder",
+        objective: "Implement stale work.",
+        acceptance_criteria: ["Implementation eventually completes"],
+      },
+    ],
+    now: new Date("2026-05-16T00:00:00.000Z"),
+  });
+  orchestrationStore.markDispatched(
+    "orch-stale-executing",
+    [{ stream_id: "implementation", worker_task_id: "worker-stale-executing" }],
+    new Date("2026-05-16T00:01:00.000Z"),
+  );
+  const workerDir = join(tempDir, "tasks", "worker-stale-executing");
+  mkdirSync(workerDir, { recursive: true });
+  writeFileSync(join(workerDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(workerDir, "request.md"), "Implement stale work.\n", "utf8");
+  writeFileSync(join(workerDir, "result.md"), "Partial result from an old worker.\n", "utf8");
+  writeFileSync(
+    join(workerDir, "worker_activity_events.jsonl"),
+    `${JSON.stringify({
+      schema: "butler.worker-activity-event.v1",
+      event_id: "ev-stale-executing",
+      created_at: "2026-05-16T00:02:00.000Z",
+      actor: "worker",
+      event: "activity_updated",
+      semantic_phase: "executing",
+      action_kind: "edit",
+      status_line: "Executing: stale work was once running.",
+    })}\n`,
+    "utf8",
+  );
+  new TaskStore(tempDir).writeOrigin(
+    "worker-stale-executing",
+    buildTaskOriginContext({
+      sessionId,
+      taskSummary: "Stale executing worker",
+      project: null,
+      createdAt: "2026-05-16T00:00:00.000Z",
+    }),
+  );
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    server.store.createSession({
+      kind: "chat",
+      title: "Stale executing panel",
+      session_hint: sessionId,
+    });
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=${sessionId}`,
+    );
+    expect(view.data.workers).toEqual([]);
+
+    const activeWorkers = await getJson(
+      `${server.url}sessions/${sessionId}/worker-activity`,
+    );
+    expect(activeWorkers.data.workers).toEqual([]);
+
+    const history = await getJson(
+      `${server.url}sessions/${sessionId}/worker-activity/history`,
+    );
+    expect(
+      history.data.workers.find((worker: { task_id: string }) =>
+        worker.task_id === "orch-stale-executing",
+      ),
+    ).toMatchObject({
+      phase: "executing",
+      terminal: false,
     });
   } finally {
     server.stop();
