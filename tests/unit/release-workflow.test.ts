@@ -218,6 +218,7 @@ test("version tag release workflow publishes one consolidated checksum asset", (
   expect(workflow).toContain("app-artifact");
   expect(workflow).toContain("app-linux-service-installers");
   expect(workflow).toContain("app-arch-artifact");
+  expect(workflow).toContain("GH_REPO: ${{ github.repository }}");
   expect(workflow).toContain('checksum_file="dist/release/checksums/butler-${version}-SHA256SUMS"');
   expect(workflow).toContain("Expected 12 checksummed release files");
   expect(workflow).toContain("find . -type f ! -name '*SHA256SUMS'");
