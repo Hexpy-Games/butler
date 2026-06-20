@@ -66,6 +66,46 @@ function currentAppUpdatePlatformForTest(): string {
   return `${os}-${arch}`;
 }
 
+function writeAppUpdateManifest(path: string, version: string): void {
+  writeFileSync(path, JSON.stringify({
+    schema: "butler.update-manifest.v1",
+    product: "butler-app",
+    app_version: version,
+    bundled_agent_version: version,
+    artifacts: [{
+      component: "app",
+      app_version: version,
+      version,
+      channel: "stable",
+      platform: currentAppUpdatePlatformForTest(),
+      artifact_url: null,
+      sha256: null,
+      signature: null,
+      bundled_components: ["app"],
+      product: "butler-app",
+      gateway_profile: "electron",
+      bundled_agent_version: version,
+      protocol_compatibility: {
+        protocol: "butler.app.v1",
+        minimumAppProtocol: "butler.app.v1",
+        maximumAppProtocol: "butler.app.v1",
+      },
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: null,
+        signature: null,
+      },
+      update_policy: "app-user-action",
+      restart_policy: "restart-app",
+      updater_owner: "butler-app",
+      payload_format: "platform-app-package",
+      staging_policy: "platform-updater-cache",
+      activation_policy: "platform-app-update-then-versioned-app-runtime",
+      rollback_policy: "preserve-previous-app-managed-runtime",
+    }],
+  }), "utf8");
+}
+
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "butler-app-server-"));
   originalFetch = globalThis.fetch;
@@ -433,10 +473,13 @@ test("app settings enforce and repair the Electron gateway profile", async () =>
 });
 
 test("app server exposes separate update status check and apply endpoints", async () => {
+  const updateManifestPath = join(tempDir, "app-update-manifest.json");
+  writeAppUpdateManifest(updateManifestPath, packageVersion);
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     butlerData: tempDir,
     butlerHome: process.cwd(),
+    appUpdateManifest: updateManifestPath,
     port: 0,
   });
   try {
@@ -521,43 +564,7 @@ test("packaged app update endpoints use the Electron-provided app version", asyn
   );
   writeFileSync(join(runtimeRoot, "VERSION"), `${packageVersion}\n`, "utf8");
   const updateManifestPath = join(tempDir, "app-update-manifest.json");
-  writeFileSync(updateManifestPath, JSON.stringify({
-    schema: "butler.update-manifest.v1",
-    product: "butler-app",
-    app_version: packageVersion,
-    bundled_agent_version: packageVersion,
-    artifacts: [{
-      component: "app",
-      app_version: packageVersion,
-      version: packageVersion,
-      channel: "stable",
-      platform: currentAppUpdatePlatformForTest(),
-      artifact_url: null,
-      sha256: null,
-      signature: null,
-      bundled_components: ["app"],
-      product: "butler-app",
-      gateway_profile: "electron",
-      bundled_agent_version: packageVersion,
-      protocol_compatibility: {
-        protocol: "butler.app.v1",
-        minimumAppProtocol: "butler.app.v1",
-        maximumAppProtocol: "butler.app.v1",
-      },
-      integrity: {
-        digestAlgorithm: "sha256",
-        digest: null,
-        signature: null,
-      },
-      update_policy: "app-user-action",
-      restart_policy: "restart-app",
-      updater_owner: "butler-app",
-      payload_format: "platform-app-package",
-      staging_policy: "platform-updater-cache",
-      activation_policy: "platform-app-update-then-versioned-app-runtime",
-      rollback_policy: "preserve-previous-app-managed-runtime",
-    }],
-  }), "utf8");
+  writeAppUpdateManifest(updateManifestPath, packageVersion);
 
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
