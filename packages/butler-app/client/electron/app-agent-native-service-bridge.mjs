@@ -60,6 +60,7 @@ export function createAppAgentNativeServiceBridge({
           ensureRuntimePointer,
           prepareLocalAuth,
           menuBarHelper: resolvedMenuBarHelper,
+          isPidRunning,
         });
         await applyPlan(plan, { runCommand, writeFile });
       },
@@ -76,6 +77,7 @@ export function createAppAgentNativeServiceBridge({
           ensureRuntimePointer,
           prepareLocalAuth,
           menuBarHelper: resolvedMenuBarHelper,
+          isPidRunning,
         });
         await applyPlan(plan, { runCommand, writeFile });
       },
@@ -94,6 +96,7 @@ export function createAppAgentNativeServiceBridge({
           ensureRuntimePointer,
           prepareLocalAuth,
           menuBarHelper: resolvedMenuBarHelper,
+          isPidRunning,
         });
         await applyPlan(plan, { runCommand, writeFile });
       },
@@ -119,6 +122,16 @@ export function listNativeServiceProjections({
   });
 }
 
+function isMenuBarHelperPidRunning({
+  butlerData,
+  isPidRunning = defaultIsPidRunning,
+}) {
+  const pid = readPositiveInteger(
+    join(butlerData, "app", "runtime", "menu-bar-helper.pid"),
+  );
+  return Number.isInteger(pid) && isPidRunning(pid);
+}
+
 function createRegistrationPlan({
   action,
   butlerData,
@@ -131,6 +144,7 @@ function createRegistrationPlan({
   ensureRuntimePointer,
   prepareLocalAuth,
   menuBarHelper,
+  isPidRunning,
 }) {
   if (platform !== "darwin" && platform !== "linux") {
     throw new Error(`unsupported App Agent service platform: ${platform}`);
@@ -150,7 +164,14 @@ function createRegistrationPlan({
     });
     if (platform === "darwin") {
       return {
-        ...launchdPlan({ action, homeDir, runtime, serviceLabel, menuBarHelper }),
+        ...launchdPlan({
+          action,
+          homeDir,
+          runtime,
+          serviceLabel,
+          menuBarHelper,
+          helperRunning: isMenuBarHelperPidRunning({ butlerData, isPidRunning }),
+        }),
         activation,
       };
     }
@@ -238,7 +259,14 @@ function safeString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function launchdPlan({ action, homeDir, runtime, serviceLabel, menuBarHelper = null }) {
+function launchdPlan({
+  action,
+  homeDir,
+  runtime,
+  serviceLabel,
+  menuBarHelper = null,
+  helperRunning = false,
+}) {
   const serviceFile = join(homeDir, "Library", "LaunchAgents", `${serviceLabel}.plist`);
   const domain = `gui/${typeof process.getuid === "function" ? process.getuid() : "$UID"}`;
   const target = `${domain}/${serviceLabel}`;
@@ -260,6 +288,9 @@ function launchdPlan({ action, homeDir, runtime, serviceLabel, menuBarHelper = n
     };
   }
   if (action === "start") {
+    const helperEnsureSteps = helperPlan && !helperRunning
+      ? helperPlan.ensureSteps
+      : [];
     return {
       action,
       serviceFile,
@@ -269,7 +300,7 @@ function launchdPlan({ action, homeDir, runtime, serviceLabel, menuBarHelper = n
         serviceStep(["launchctl", "bootout", target], { optional: true }),
         serviceStep(["launchctl", "bootstrap", domain, serviceFile]),
         serviceStep(["launchctl", "kickstart", "-k", target]),
-        ...(helperPlan?.steps ?? []),
+        ...helperEnsureSteps,
       ],
     };
   }
@@ -296,6 +327,10 @@ function launchdMenuBarHelperPlan({ homeDir, runtime, serviceLabel, domain, menu
       serviceStep(["launchctl", "bootout", target], { optional: true }),
       serviceStep(["launchctl", "bootstrap", domain, serviceFile], { optional: true }),
       serviceStep(["launchctl", "kickstart", "-k", target], { optional: true }),
+    ],
+    ensureSteps: [
+      serviceStep(["launchctl", "bootstrap", domain, serviceFile], { optional: true }),
+      serviceStep(["launchctl", "kickstart", target], { optional: true }),
     ],
   };
 }
@@ -490,6 +525,15 @@ function serviceStatePath(butlerData, serviceId) {
 function readJson(path) {
   try {
     return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function readPositiveInteger(path) {
+  try {
+    const value = Number.parseInt(readFileSync(path, "utf8").trim(), 10);
+    return Number.isInteger(value) && value > 0 ? value : null;
   } catch {
     return null;
   }

@@ -1125,6 +1125,15 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(packageJson.scripts).toHaveProperty("package:linux");
 });
 
+test("mac menu bar helper does not report installed service plist as missing Agent", () => {
+  const helperSource = read("packages/butler-app/client/electron/native/menu-bar-helper.swift");
+
+  expect(helperSource).toContain("FileManager.default.fileExists(atPath: launchAgentPlistPath)");
+  expect(helperSource).toContain('label: "Butler Agent: Stopped"');
+  expect(helperSource).toContain('label: "Butler Agent: Not Installed"');
+  expect(helperSource).toContain("canStart: false");
+});
+
 test("navigation UI is backed by app-server data rather than sidebar fixtures", () => {
   const renderer = readUiSources();
 

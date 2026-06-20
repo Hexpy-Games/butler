@@ -145,9 +145,17 @@ final class MenuBarHelperApp: NSObject, NSApplicationDelegate {
     private func agentMenuState() -> AgentMenuState {
         let result = runLaunchctl(["print", "gui/\(getuid())/\(serviceLabel)"])
         if result.exitCode != 0 {
+            if FileManager.default.fileExists(atPath: launchAgentPlistPath) {
+                return AgentMenuState(
+                    label: "Butler Agent: Stopped",
+                    canStart: true,
+                    canStop: false,
+                    canRestart: false
+                )
+            }
             return AgentMenuState(
                 label: "Butler Agent: Not Installed",
-                canStart: FileManager.default.fileExists(atPath: launchAgentPlistPath),
+                canStart: false,
                 canStop: false,
                 canRestart: false
             )
