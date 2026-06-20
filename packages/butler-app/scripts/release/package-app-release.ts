@@ -69,6 +69,10 @@ export interface BundledAgentPackage {
 }
 
 type LinuxAppPackageFormat = "deb" | "pacman";
+type AppEmbeddedAgentCliLauncherPlatform =
+  | "darwin-arm64"
+  | "linux-arm64"
+  | "linux-x64";
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
 const APP_RENDERER_DIST = join("packages", "butler-app", "client", "ui", "dist");
@@ -105,19 +109,19 @@ export function createAppReleasePackage(
 
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-release-"));
   try {
-    const bundledAgentPackage = createAgentReleasePackage({
-      root,
-      outDir: join(workDir, "agent-release"),
-      artifactBaseUrl: "bundled-agent",
-      dependencyTarget: dependencyTargetForAppPlatforms(platforms),
-    });
     const bundledAgents = new Map(platforms.map((platform) => [
       platform,
       prepareBundledAgentResourceFromPackage(
         root,
         workDir,
         platform,
-        bundledAgentPackage,
+        createAppEmbeddedAgentReleasePackage({
+          root,
+          outDir: join(workDir, "agent-release", platform),
+          artifactBaseUrl: "bundled-agent",
+          platform,
+          appVersion: manifest.version,
+        }),
         manifest.version,
       ),
     ]));
@@ -132,9 +136,8 @@ export function createAppReleasePackage(
         bundledAgentResourceDir: mustGetBundledAgentResource(bundledAgents, platform).resourceDir,
       }),
     );
-    const bundledAgent = mustGetBundledAgentResource(bundledAgents, platforms[0]);
     const releaseManifest = withArtifactMetadata(
-      withBundledAgentMetadata(manifest, bundledAgent),
+      withBundledAgentMetadata(manifest, bundledAgents),
       artifacts,
       options.artifactBaseUrl,
     );
@@ -314,12 +317,12 @@ export function prepareBundledAgentResource(
   platform: AppReleasePlatform = currentHostAppReleasePlatform(),
 ): BundledAgentResource {
   const manifest = createAppReleaseManifest(root);
-  const agentOutDir = join(workDir, "agent-release");
-  const agent = createAgentReleasePackage({
+  const agent = createAppEmbeddedAgentReleasePackage({
     root,
-    outDir: agentOutDir,
+    outDir: join(workDir, "agent-release", platform),
     artifactBaseUrl: "bundled-agent",
-    dependencyTarget: dependencyTargetForAppPlatforms([platform]),
+    platform,
+    appVersion: manifest.version,
   });
   return prepareBundledAgentResourceFromPackage(root, workDir, platform, agent, manifest.version);
 }
@@ -845,6 +848,8 @@ function createAgentReleasePackage(input: {
   root: string;
   outDir: string;
   artifactBaseUrl: string;
+  artifactName?: string;
+  cliLauncherPlatforms?: AppEmbeddedAgentCliLauncherPlatform[];
   dependencyTarget?: { os?: string; cpu?: string } | null;
 }): BundledAgentPackage {
   const bun = process.env.BUTLER_BUN || "bun";
@@ -866,6 +871,11 @@ function createAgentReleasePackage(input: {
     input.outDir,
     "--artifact-base-url",
     input.artifactBaseUrl,
+    ...(input.artifactName ? ["--artifact-name", input.artifactName] : []),
+    ...(input.cliLauncherPlatforms ?? []).flatMap((platform) => [
+      "--cli-launcher-platform",
+      platform,
+    ]),
   ], {
     cwd: input.root,
     encoding: "utf8",
@@ -896,6 +906,35 @@ function createAgentReleasePackage(input: {
   throw new Error("bundled Agent package did not return a valid JSON manifest");
 }
 
+function createAppEmbeddedAgentReleasePackage(input: {
+  root: string;
+  outDir: string;
+  artifactBaseUrl: string;
+  platform: AppReleasePlatform;
+  appVersion: string;
+}): BundledAgentPackage {
+  return createAgentReleasePackage({
+    root: input.root,
+    outDir: input.outDir,
+    artifactBaseUrl: input.artifactBaseUrl,
+    artifactName: appEmbeddedAgentArtifactName(input.appVersion, input.platform),
+    cliLauncherPlatforms: serviceCliLauncherPlatformsForAppPlatform(input.platform),
+    dependencyTarget: dependencyTargetForAppPlatforms([input.platform]),
+  });
+}
+
+function appEmbeddedAgentArtifactName(version: string, platform: AppReleasePlatform): string {
+  return `butler-agent-${version}-${platform}.tar.gz`;
+}
+
+function serviceCliLauncherPlatformsForAppPlatform(
+  platform: AppReleasePlatform,
+): AppEmbeddedAgentCliLauncherPlatform[] {
+  if (platform === "darwin-arm64") return ["darwin-arm64"];
+  if (platform === "linux-arm64") return ["linux-arm64"];
+  return ["linux-x64"];
+}
+
 function dependencyTargetForAppPlatforms(
   platforms: AppReleasePlatform[],
 ): { os?: string; cpu?: string } | null {
@@ -924,9 +963,9 @@ function mustGetBundledAgentResource(
 
 function withBundledAgentMetadata(
   manifest: AppReleaseManifest,
-  bundledAgent: BundledAgentResource,
+  bundledAgents: Map<AppReleasePlatform, BundledAgentResource>,
 ): AppReleaseManifest {
-  const payload = {
+  const payloadFor = (bundledAgent: BundledAgentResource) => ({
     ...manifest.bundledAgentPayload,
     version: bundledAgent.version,
     artifactName: bundledAgent.artifactName,
@@ -935,21 +974,20 @@ function withBundledAgentMetadata(
       ...manifest.bundledAgentPayload.integrity,
       digest: bundledAgent.sha256,
     },
-  };
+  });
   return {
     ...manifest,
-    bundledAgentVersion: bundledAgent.version,
-    bundledAgentPayload: payload,
-    components: manifest.components.map((component) => ({
-      ...component,
-      bundledAgentVersion: bundledAgent.version,
-      bundledAgentPayload: payload,
-    })),
-    artifacts: manifest.artifacts.map((artifact) => ({
-      ...artifact,
-      bundledAgentVersion: bundledAgent.version,
-      bundledAgentPayload: payload,
-    })),
+    artifacts: manifest.artifacts.map((artifact) => {
+      const bundledAgent = bundledAgents.get(artifact.platform);
+      if (!bundledAgent) {
+        return artifact;
+      }
+      return {
+        ...artifact,
+        bundledAgentVersion: bundledAgent.version,
+        bundledAgentPayload: payloadFor(bundledAgent),
+      };
+    }),
   };
 }
 
