@@ -197,10 +197,23 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify(request ?? {}),
   }),
-  applyUpdate: (request = {}) => requestJson("/updates/apply", {
-    method: "POST",
-    body: JSON.stringify(request ?? {}),
-  }),
+  applyUpdate: async (request = {}) => {
+    const result = await requestJson("/updates/apply", {
+      method: "POST",
+      body: JSON.stringify(request ?? {}),
+    });
+    if (
+      result?.component === "app" &&
+      result?.stage_status === "staged" &&
+      typeof result?.artifact_path === "string" &&
+      result.artifact_path.trim()
+    ) {
+      await ipcRenderer.invoke("butler:open-update-artifact", {
+        artifactPath: result.artifact_path,
+      });
+    }
+    return result;
+  },
   listProjects: ({ includeSessions = false } = {}) => {
     const params = new URLSearchParams({
       include_sessions: includeSessions ? "true" : "false",

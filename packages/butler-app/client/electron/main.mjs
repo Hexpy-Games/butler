@@ -1928,6 +1928,35 @@ ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {
   return { saved: true };
 });
 
+ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
+  const artifactPath = safeUpdateArtifactPath(input?.artifactPath);
+  const error = await shell.openPath(artifactPath);
+  if (error) throw new Error(error);
+  return { opened: true };
+});
+
+function safeUpdateArtifactPath(value) {
+  const requestedPath = typeof value === "string" ? value.trim() : "";
+  if (!requestedPath) throw new Error("Update artifact path is required.");
+  if (isAbsolute(requestedPath)) {
+    throw new Error("Update artifact path must be relative to Butler data.");
+  }
+  const artifactsRoot = resolve(butlerDataRoot, "updates", "artifacts");
+  const artifactPath = resolve(butlerDataRoot, requestedPath);
+  const relativePath = relative(artifactsRoot, artifactPath);
+  if (
+    relativePath === "" ||
+    relativePath.startsWith("..") ||
+    isAbsolute(relativePath)
+  ) {
+    throw new Error("Update artifact path is outside Butler update artifacts.");
+  }
+  if (!existsSync(artifactPath)) {
+    throw new Error("Update artifact is missing.");
+  }
+  return artifactPath;
+}
+
 function normalizeAppearanceThemeSource(value) {
   return appearanceThemeSources.has(value) ? value : "system";
 }

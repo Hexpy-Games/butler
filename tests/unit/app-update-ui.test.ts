@@ -58,3 +58,27 @@ test("Settings update panel surfaces update load, check, and apply failures", ()
   expect(source).toContain("copy.errors.checkUpdates");
   expect(source).toContain("copy.errors.applyUpdate");
 });
+
+test("Electron App update apply opens a staged App artifact", () => {
+  const preload = readFileSync(
+    join(
+      import.meta.dir,
+      "../../packages/butler-app/client/electron/preload.cjs",
+    ),
+    "utf8",
+  );
+  const main = readFileSync(
+    join(
+      import.meta.dir,
+      "../../packages/butler-app/client/electron/main.mjs",
+    ),
+    "utf8",
+  );
+
+  expect(preload).toContain('ipcRenderer.invoke("butler:open-update-artifact"');
+  expect(preload).toContain('result?.stage_status === "staged"');
+  expect(preload).toContain("result?.artifact_path");
+  expect(main).toContain('ipcMain.handle("butler:open-update-artifact"');
+  expect(main).toContain("shell.openPath(artifactPath)");
+  expect(main).toContain('resolve(butlerDataRoot, "updates", "artifacts")');
+});
