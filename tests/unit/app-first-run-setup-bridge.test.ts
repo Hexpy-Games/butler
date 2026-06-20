@@ -57,6 +57,9 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(main).toContain(
     "if (rendererUrl === serverUrl && !shouldUseAppAgentNativeServiceBridge())",
   );
+  expect(main).toContain("let appAgentLaunchReconcilePromise = null");
+  expect(main).toContain("const launchReconcile = reconcileAppAgentServiceForLaunch();");
+  expect(main).toContain("await launchReconcile;");
   expect(main).toContain("function defaultRendererUrl()");
   expect(main).toContain('join(process.resourcesPath, "app-client")');
   expect(main).toContain("app.requestSingleInstanceLock()");

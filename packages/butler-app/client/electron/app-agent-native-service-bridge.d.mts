@@ -17,6 +17,8 @@ export function createAppAgentNativeServiceBridge(options?: {
     label?: string;
   } | null;
   isPidRunning?: (pid: number) => boolean;
+  killPid?: (pid: number, signal: string) => void;
+  sleepMs?: (ms: number) => Promise<void>;
   runCommand?: (argv: string[]) => { exitCode: number } | Promise<{ exitCode: number }>;
   writeFile?: (path: string, body: string) => void;
 }): {
