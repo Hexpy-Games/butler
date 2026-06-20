@@ -60,12 +60,11 @@ jobs:
           shopt -s nullglob
           files=(
             dist/release/agent/butler-agent-*-all.tar.gz
-            dist/release/agent/butler-agent-*-all.tar.gz.sha256
             dist/release/agent/agent-release-manifest.json
             dist/release/agent/agent-update-manifest.json
           )
-          if [ "${#files[@]}" -ne 4 ]; then
-            printf 'Expected 4 Butler Agent release files, got %s\n' "${#files[@]}" >&2
+          if [ "${#files[@]}" -ne 3 ]; then
+            printf 'Expected 3 Butler Agent release files, got %s\n' "${#files[@]}" >&2
             printf '%s\n' "${files[@]}" >&2
             exit 1
           fi
@@ -177,16 +176,13 @@ jobs:
           shopt -s nullglob
           files=(
             dist/release/app/butler-app-*-darwin-arm64.pkg
-            dist/release/app/butler-app-*-darwin-arm64.pkg.sha256
             dist/release/app/butler-app-*-linux-x64.deb
-            dist/release/app/butler-app-*-linux-x64.deb.sha256
             dist/release/app/butler-app-*-linux-arm64.deb
-            dist/release/app/butler-app-*-linux-arm64.deb.sha256
             dist/release/app/app-release-manifest.json
             dist/release/app/app-update-manifest.json
           )
-          if [ "${#files[@]}" -ne 8 ]; then
-            printf 'Expected 8 app release files, got %s\n' "${#files[@]}" >&2
+          if [ "${#files[@]}" -ne 5 ]; then
+            printf 'Expected 5 app release files, got %s\n' "${#files[@]}" >&2
             printf '%s\n' "${files[@]}" >&2
             exit 1
           fi
@@ -230,19 +226,29 @@ jobs:
             --dir dist/release/app \
             --clobber
           gh release download "$tag" \
-            --pattern 'butler-app-*-linux-x64.deb.sha256' \
+            --pattern app-release-manifest.json \
             --dir dist/release/app \
             --clobber
           shopt -s nullglob
           linux_debs=(dist/release/app/butler-app-*-linux-x64.deb)
-          linux_deb_checksums=(dist/release/app/butler-app-*-linux-x64.deb.sha256)
-          if [ "${#linux_debs[@]}" -ne 1 ] || [ "${#linux_deb_checksums[@]}" -ne 1 ]; then
-            printf 'Expected one Linux App deb and checksum, got %s and %s\n' "${#linux_debs[@]}" "${#linux_deb_checksums[@]}" >&2
+          if [ "${#linux_debs[@]}" -ne 1 ]; then
+            printf 'Expected one Linux App deb, got %s\n' "${#linux_debs[@]}" >&2
             printf '%s\n' "${linux_debs[@]}" >&2
-            printf '%s\n' "${linux_deb_checksums[@]}" >&2
             exit 1
           fi
-          (cd dist/release/app && sha256sum -c "$(basename "${linux_deb_checksums[0]}")")
+          expected_sha="$(
+            MANIFEST=dist/release/app/app-release-manifest.json bun -e '
+              const manifest = JSON.parse(await Bun.file(process.env.MANIFEST).text());
+              const artifact = manifest.artifacts.find((item) => item.platform === "linux-x64");
+              if (!artifact?.sha256) throw new Error("missing linux-x64 App sha256");
+              console.log(artifact.sha256);
+            '
+          )"
+          actual_sha="$(sha256sum "${linux_debs[0]}" | awk '{print $1}')"
+          if [ "$actual_sha" != "$expected_sha" ]; then
+            printf 'Linux App deb checksum mismatch: expected %s, got %s\n' "$expected_sha" "$actual_sha" >&2
+            exit 1
+          fi
           dpkg-deb -x "${linux_debs[0]}" dist/release/linux-service
           resource_dir="dist/release/linux-service/opt/butler/Butler-linux-x64/resources/bundled-agent"
           test -f "$resource_dir/service-installer/installer-manifest.json"
@@ -264,14 +270,11 @@ jobs:
           shopt -s nullglob
           files=(
             dist/release/app/butler-app-service_*_amd64.deb
-            dist/release/app/butler-app-service_*_amd64.deb.sha256
             dist/release/app/butler-app-service-*-1-x86_64.pkg.tar.zst
-            dist/release/app/butler-app-service-*-1-x86_64.pkg.tar.zst.sha256
             dist/release/app/butler-app-service-*-1.x86_64.rpm
-            dist/release/app/butler-app-service-*-1.x86_64.rpm.sha256
           )
-          if [ "${#files[@]}" -ne 6 ]; then
-            printf 'Expected 6 Linux app service installer files, got %s\n' "${#files[@]}" >&2
+          if [ "${#files[@]}" -ne 3 ]; then
+            printf 'Expected 3 Linux app service installer files, got %s\n' "${#files[@]}" >&2
             printf '%s\n' "${files[@]}" >&2
             exit 1
           fi
@@ -351,11 +354,45 @@ jobs:
           shopt -s nullglob
           files=(
             dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst
-            dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst.sha256
           )
-          if [ "${#files[@]}" -ne 2 ]; then
-            printf 'Expected 2 Arch app release files, got %s\n' "${#files[@]}" >&2
+          if [ "${#files[@]}" -ne 1 ]; then
+            printf 'Expected 1 Arch app release file, got %s\n' "${#files[@]}" >&2
             printf '%s\n' "${files[@]}" >&2
             exit 1
           fi
           gh release upload "$tag" "${files[@]}" --clobber
+
+  release-checksums:
+    name: Publish consolidated release checksums
+    runs-on: ubuntu-latest
+    needs:
+      - agent-artifact
+      - app-artifact
+      - app-linux-service-installers
+      - app-arch-artifact
+    steps:
+      - name: Build consolidated checksum asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          mkdir -p dist/release/checksums/assets
+          gh release download "$tag" \
+            --dir dist/release/checksums/assets \
+            --clobber
+          checksum_file="dist/release/checksums/butler-${version}-SHA256SUMS"
+          (
+            cd dist/release/checksums/assets
+            find . -type f ! -name '*SHA256SUMS' -print | sort | while IFS= read -r file; do
+              sha256sum "$file" | sed 's#  \./#  #'
+            done
+          ) > "$checksum_file"
+          checksum_count="$(wc -l < "$checksum_file" | tr -d ' ')"
+          if [ "$checksum_count" -ne 12 ]; then
+            printf 'Expected 12 checksummed release files, got %s\n' "$checksum_count" >&2
+            cat "$checksum_file" >&2
+            exit 1
+          fi
+          gh release upload "$tag" "$checksum_file" --clobber

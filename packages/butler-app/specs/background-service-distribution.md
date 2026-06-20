@@ -307,6 +307,10 @@ Required changes:
   metadata for the installer/helper path. This metadata is not a substitute for
   signed `.pkg`, `.deb`, or `.rpm` artifacts; it is the packaged contract those
   installers consume.
+- App bundle resources must include only the bundled Agent archive and CLI
+  launcher payload for that App artifact platform. A macOS App package must not
+  carry Linux launcher payloads, and a Linux App package must not carry macOS
+  launcher payloads.
 - App bundle resources must include service installer render contracts for
   LaunchAgent and `systemd --user` definitions, plus executable package
   post-install hook inputs. Render contracts must require XML/systemd escaping
@@ -419,6 +423,8 @@ Required changes:
   capability.
 - Release packaging tests proving Linux App service installer staging can be
   built through `.deb` and `.rpm` package toolchains.
+- Release packaging tests proving the nested bundled Agent archive is
+  platform-specific and omits CLI launchers for other App artifact platforms.
 - Smoke test for isolated first-run service setup.
 - Smoke/manual test for isolated macOS `.pkg` installation followed by the
   installed App first-run service setup.
