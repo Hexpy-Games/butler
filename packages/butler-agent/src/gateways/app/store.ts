@@ -2491,7 +2491,7 @@ export class AppServerStore {
       context_details: view.context ?? this.getContextDetails(sessionId),
       safe_errors: view.errors,
       automation_targets: view.automations,
-      worker_activity: view.workers.filter((worker) => !worker.terminal),
+      worker_activity: view.workers.filter(isActiveWorkerActivity),
       work_streams: view.work_streams,
       staleness: {
         state: "fresh",
@@ -2569,7 +2569,7 @@ export class AppServerStore {
     const automations = this.listAutomationTargets(sessionId);
     const workers = this.listWorkerActivity({
       sessionId,
-      includeHistory: true,
+      includeHistory: false,
     }).workers;
     const errors = messages
       .filter((message) => message.safe_error_code)
@@ -2986,7 +2986,7 @@ export class AppServerStore {
         }
         return worker;
       })
-      .filter((worker) => options.includeHistory || !worker.terminal)
+      .filter((worker) => options.includeHistory || isActiveWorkerActivity(worker))
       // Session-scoped UI prefers exact origin sessions and only recovers
       // originless workers when an explicit work-stream link exists.
       .filter(
@@ -2995,7 +2995,7 @@ export class AppServerStore {
           worker.session_id === options.sessionId ||
           (worker.task_id && linkedWorkerTaskIds.has(worker.task_id)),
       );
-    const workers = relabelWorkerActivities(orderWorkerActivities(
+    const projectedWorkers = relabelWorkerActivities(orderWorkerActivities(
       synthesizeOrchestrationParentActivities({
         workers: rawWorkers,
         orchestrationStore,
@@ -3003,6 +3003,9 @@ export class AppServerStore {
         includeHistory: options.includeHistory ?? false,
       }),
     ));
+    const workers = options.includeHistory
+      ? projectedWorkers
+      : projectedWorkers.filter(isActiveWorkerActivity);
     return { workers };
   }
 
@@ -8236,6 +8239,18 @@ function taskStatusIsTerminalForWorkerActivity(status: TaskSummary["status"]): b
     status === "FAILED" ||
     status === "KILLED"
   );
+}
+
+const INACTIVE_WORKER_ACTIVITY_PHASES = new Set<WorkerActivityPhase>([
+  "blocked",
+  "complete",
+  "failed",
+  "cancelled",
+  "recoverable",
+]);
+
+function isActiveWorkerActivity(worker: WorkerActivitySummary): boolean {
+  return !worker.terminal && !INACTIVE_WORKER_ACTIVITY_PHASES.has(worker.phase);
 }
 
 function relabelWorkerActivities(

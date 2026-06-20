@@ -1184,6 +1184,60 @@ test("session view hydration preserves active worker activity from stale snapsho
   );
 });
 
+test("session view hydration does not preserve blocked or recoverable worker activity as active", () => {
+  useButlerStore.setState({
+    activeChatId: "session-a",
+    summary: {
+      session_id: "session-a",
+      turn_state: "running",
+      latest_progress: {
+        turn_id: "turn-a",
+        state: "running",
+        safe_progress_rows: [],
+      },
+      worker_activity: [
+        {
+          worker_id: "worker-blocked",
+          activity_kind: "planned",
+          worker_label: "Plan",
+          objective: "blocked stale work",
+          phase: "blocked",
+          status_line: "Blocked",
+          terminal: false,
+          updated_at: "2026-05-16T00:00:02.000Z",
+          supported_controls: ["cancel"],
+        },
+        {
+          worker_id: "worker-recoverable",
+          activity_kind: "planned",
+          worker_label: "Plan",
+          objective: "recoverable stale work",
+          phase: "recoverable",
+          status_line: "Recoverable",
+          terminal: false,
+          updated_at: "2026-05-16T00:00:01.000Z",
+          supported_controls: ["cancel"],
+        },
+      ],
+    },
+  });
+
+  useButlerStore.getState().setSessionView(
+    sessionView("session-a", {
+      messages: [],
+      turnState: "running",
+      latestProgress: {
+        turn_id: "turn-a",
+        state: "running",
+        safe_progress_rows: [],
+      },
+      workers: [],
+    }),
+  );
+
+  expect(useButlerStore.getState().summary?.worker_activity).toEqual([]);
+});
+
 test("session view hydration drops preserved worker activity once the incoming turn is terminal", () => {
   useButlerStore.setState({
     activeChatId: "session-a",

@@ -463,7 +463,7 @@ function mergeWorkerActivityForActiveSummary(
   if (!shouldPreserveActiveWorkers) return incoming;
   const preserved = currentWorkers.filter(
     (worker) =>
-      !worker.terminal &&
+      isWorkerVisibleInComposer(worker) &&
       !incomingById.has(worker.worker_id) &&
       !(
         worker.activity_kind === "worker" &&
