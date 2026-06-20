@@ -32,8 +32,10 @@ For the Agent group, the tag workflow must run the Agent release gate, package
 the Agent release into the `dist/release/agent` directory, verify the tarball
 contains `packages/butler-agent/resources/app-client/dist/index.html` and
 bundled asset files, then publish the `butler-agent-*-all.tar.gz` tarball,
-SHA256 file, `agent-release-manifest.json`, and `agent-update-manifest.json` to
-the GitHub Release for the same tag.
+`agent-release-manifest.json`, and `agent-update-manifest.json` to the GitHub
+Release for the same tag. The release workflow publishes one consolidated
+`butler-<version>-SHA256SUMS` asset for package and Agent archive checksums
+instead of uploading per-file checksum assets.
 
 When `.github/releases/<tag>.md` exists, the tag workflow must use that file as
 the GitHub Release body. Existing releases must be edited with the same notes

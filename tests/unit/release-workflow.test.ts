@@ -35,7 +35,7 @@ test("version tag release workflow publishes Butler Agent artifact with packaged
   expect(workflow).toContain("Run Butler Agent release gate");
   expect(workflow).toContain("Package Butler Agent release");
   expect(workflow).toContain('notes_args=(--notes "Butler Agent release $tag")');
-  expect(workflow).toContain("Expected 4 Butler Agent release files");
+  expect(workflow).toContain("Expected 3 Butler Agent release files");
   expect(workflow).toContain("bun install --frozen-lockfile");
   expect(workflow).toContain("npm --prefix packages/butler-app/client/ui ci");
   expect(gateIndex).toBeGreaterThan(-1);
@@ -58,9 +58,6 @@ test("version tag release workflow publishes Butler Agent artifact with packaged
     "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}",
   );
   expect(workflow).toContain(
-    "dist/release/agent/butler-agent-*-all.tar.gz.sha256",
-  );
-  expect(workflow).toContain(
     "dist/release/agent/agent-release-manifest.json",
   );
   expect(workflow).toContain("dist/release/agent/agent-update-manifest.json");
@@ -73,6 +70,9 @@ test("version tag release workflow publishes Butler Agent artifact with packaged
     'gh release upload "$tag" "${files[@]}" --clobber',
   );
   expect(workflow).toContain('gh release create "$tag" "${files[@]}"');
+  expect(workflow).not.toContain(
+    "dist/release/agent/butler-agent-*-all.tar.gz.sha256",
+  );
   expect(workflow).not.toContain("./install.sh");
   expect(workflow).not.toContain("packages/butler-app/client/ui/dist");
 });
@@ -120,14 +120,11 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).not.toContain("codesign --verify --deep --strict --verbose=4");
   expect(workflow).not.toContain('grep -F "Butler-linux-x64/Butler"');
   expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.pkg");
-  expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.pkg.sha256");
   expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.deb");
-  expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.deb.sha256");
   expect(workflow).toContain("dist/release/app/butler-app-*-linux-arm64.deb");
-  expect(workflow).toContain("dist/release/app/butler-app-*-linux-arm64.deb.sha256");
   expect(workflow).toContain("dist/release/app/app-release-manifest.json");
   expect(workflow).toContain("dist/release/app/app-update-manifest.json");
-  expect(workflow).toContain("Expected 8 app release files");
+  expect(workflow).toContain("Expected 5 app release files");
   expect(publishIndex).toBeGreaterThan(verifyIndex);
   expect(workflow).toContain('gh release upload "$tag" "${files[@]}" --clobber');
 });
@@ -157,9 +154,10 @@ test("version tag release workflow publishes Linux app service installer package
   expect(workflow).toContain("command -v rpmbuild");
   expect(workflow).toContain("command -v bsdtar");
   expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.deb'");
-  expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.deb.sha256'");
-  expect(workflow).toContain("sha256sum -c");
-  expect(workflow).toContain("Expected one Linux App deb and checksum");
+  expect(workflow).toContain("--pattern app-release-manifest.json");
+  expect(workflow).toContain("missing linux-x64 App sha256");
+  expect(workflow).toContain("Linux App deb checksum mismatch");
+  expect(workflow).toContain("Expected one Linux App deb");
   expect(workflow).toContain("dpkg-deb -x");
   expect(workflow).toContain("opt/butler/Butler-linux-x64/resources/bundled-agent");
   expect(workflow).toContain("--build");
@@ -167,12 +165,9 @@ test("version tag release workflow publishes Linux app service installer package
   expect(buildIndex).toBeGreaterThan(downloadIndex);
   expect(publishIndex).toBeGreaterThan(buildIndex);
   expect(workflow).toContain("dist/release/app/butler-app-service_*_amd64.deb");
-  expect(workflow).toContain("dist/release/app/butler-app-service_*_amd64.deb.sha256");
   expect(workflow).toContain("dist/release/app/butler-app-service-*-1-x86_64.pkg.tar.zst");
-  expect(workflow).toContain("dist/release/app/butler-app-service-*-1-x86_64.pkg.tar.zst.sha256");
   expect(workflow).toContain("dist/release/app/butler-app-service-*-1.x86_64.rpm");
-  expect(workflow).toContain("dist/release/app/butler-app-service-*-1.x86_64.rpm.sha256");
-  expect(workflow).toContain("Expected 6 Linux app service installer files");
+  expect(workflow).toContain("Expected 3 Linux app service installer files");
 });
 
 test("version tag release workflow publishes Arch app artifact", () => {
@@ -197,16 +192,36 @@ test("version tag release workflow publishes Arch app artifact", () => {
   expect(workflow).toContain('export TMPDIR="$RUNNER_TEMP/bun-tmp"');
   expect(workflow).toContain("--linux-package-format=pacman");
   expect(workflow).toContain("dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst");
-  expect(workflow).toContain("dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst.sha256");
   expect(workflow).toContain("zstd -t");
   expect(workflow).toContain("bsdtar -tf");
   expect(workflow).toContain("grep -qx '.PKGINFO'");
   expect(workflow).toContain("grep -qx 'usr/bin/butler-app'");
   expect(workflow).toContain("grep -qx 'usr/lib/systemd/user/butler.service'");
-  expect(workflow).toContain("Expected 2 Arch app release files");
+  expect(workflow).toContain("Expected 1 Arch app release file");
   expect(packageIndex).toBeGreaterThan(archJobIndex);
   expect(verifyIndex).toBeGreaterThan(packageIndex);
   expect(publishIndex).toBeGreaterThan(verifyIndex);
+});
+
+test("version tag release workflow publishes one consolidated checksum asset", () => {
+  const workflowPath = join(root, ".github", "workflows", "release.yml");
+  expect(existsSync(workflowPath)).toBe(true);
+  const workflow = readFileSync(workflowPath, "utf8");
+
+  const checksumsJobIndex = workflow.indexOf("release-checksums:");
+  const archJobIndex = workflow.indexOf("app-arch-artifact:");
+  const uploadIndex = workflow.indexOf('gh release upload "$tag" "$checksum_file" --clobber');
+
+  expect(checksumsJobIndex).toBeGreaterThan(archJobIndex);
+  expect(workflow).toContain("Publish consolidated release checksums");
+  expect(workflow).toContain("agent-artifact");
+  expect(workflow).toContain("app-artifact");
+  expect(workflow).toContain("app-linux-service-installers");
+  expect(workflow).toContain("app-arch-artifact");
+  expect(workflow).toContain('checksum_file="dist/release/checksums/butler-${version}-SHA256SUMS"');
+  expect(workflow).toContain("Expected 12 checksummed release files");
+  expect(workflow).toContain("find . -type f ! -name '*SHA256SUMS'");
+  expect(uploadIndex).toBeGreaterThan(checksumsJobIndex);
 });
 
 test("README directs default installs to Butler App and advanced installs to Agent artifacts", () => {

@@ -36,6 +36,7 @@ export interface ServiceReleasePackageOptions {
   root: string;
   outDir: string;
   artifactBaseUrl?: string | null;
+  artifactName?: string;
   cliLauncherPlatforms?: ServiceCliLauncherPlatform[];
 }
 
@@ -112,9 +113,12 @@ export function createServiceReleasePackage(
       cliLauncherPlatforms,
     );
     stripMacExtendedAttributes(stageRoot);
-    const artifactName = manifest.artifacts.find((artifact) =>
+    const defaultArtifactName = manifest.artifacts.find((artifact) =>
       artifact.component === "service",
     )?.artifactName ?? `butler-agent-${manifest.version}-all.tar.gz`;
+    const artifactName = validateServiceArtifactName(
+      options.artifactName ?? defaultArtifactName,
+    );
     const artifactPath = join(outDir, artifactName);
     createTarball(stageRoot, artifactPath);
 
@@ -380,18 +384,17 @@ function withArtifactMetadata(
   return {
     ...manifest,
     artifacts: manifest.artifacts.map((artifact) =>
-      artifact.artifactName === artifactName
-        ? {
-            ...artifact,
-            downloadUrl,
-            sha256,
-            integrity: {
-              ...artifact.integrity,
-              digest: sha256,
-              signature: artifact.signature,
-            },
-          }
-        : artifact,
+      ({
+        ...artifact,
+        artifactName,
+        downloadUrl,
+        sha256,
+        integrity: {
+          ...artifact.integrity,
+          digest: sha256,
+          signature: artifact.signature,
+        },
+      }),
     ),
   };
 }
@@ -465,10 +468,14 @@ function toPosix(path: string): string {
 function parseCliArgs(args: string[]): {
   outDir: string;
   artifactBaseUrl?: string | null;
+  artifactName?: string;
+  cliLauncherPlatforms?: ServiceCliLauncherPlatform[];
   json: boolean;
 } {
   let outDir = join(process.cwd(), "dist", "release", "service");
   let artifactBaseUrl: string | null | undefined;
+  let artifactName: string | undefined;
+  let cliLauncherPlatforms: ServiceCliLauncherPlatform[] | undefined;
   let json = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -494,10 +501,51 @@ function parseCliArgs(args: string[]): {
       artifactBaseUrl = arg.slice("--artifact-base-url=".length);
       continue;
     }
+    if (arg === "--artifact-name") {
+      artifactName = args[index + 1] ?? "";
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--artifact-name=")) {
+      artifactName = arg.slice("--artifact-name=".length);
+      continue;
+    }
+    if (arg === "--cli-launcher-platform") {
+      cliLauncherPlatforms = [
+        ...(cliLauncherPlatforms ?? []),
+        parseServiceCliLauncherPlatform(args[index + 1] ?? ""),
+      ];
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--cli-launcher-platform=")) {
+      cliLauncherPlatforms = [
+        ...(cliLauncherPlatforms ?? []),
+        parseServiceCliLauncherPlatform(arg.slice("--cli-launcher-platform=".length)),
+      ];
+      continue;
+    }
     throw new Error(`unknown option: ${arg}`);
   }
   if (!outDir.trim()) throw new Error("--out requires a path");
-  return { outDir, artifactBaseUrl, json };
+  if (artifactName !== undefined && !artifactName.trim()) {
+    throw new Error("--artifact-name requires a file name");
+  }
+  return { outDir, artifactBaseUrl, artifactName, cliLauncherPlatforms, json };
+}
+
+function validateServiceArtifactName(value: string): string {
+  if (basename(value) !== value || value.includes("/") || value.includes("\\")) {
+    throw new Error(`release artifact name must be a file name: ${value}`);
+  }
+  return value;
+}
+
+function parseServiceCliLauncherPlatform(value: string): ServiceCliLauncherPlatform {
+  if (SERVICE_CLI_LAUNCHER_PLATFORMS.includes(value as ServiceCliLauncherPlatform)) {
+    return value as ServiceCliLauncherPlatform;
+  }
+  throw new Error(`unsupported service CLI launcher platform: ${value}`);
 }
 
 if (import.meta.main) {
@@ -507,6 +555,8 @@ if (import.meta.main) {
       root: process.cwd(),
       outDir: args.outDir,
       artifactBaseUrl: args.artifactBaseUrl,
+      artifactName: args.artifactName,
+      cliLauncherPlatforms: args.cliLauncherPlatforms,
     });
     if (args.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
