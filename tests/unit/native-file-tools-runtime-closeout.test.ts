@@ -72,7 +72,12 @@ test("NativeToolLoopRuntime executes read_file, write_file, and grep_files throu
       provider: fakeProvider,
       model: "test/native-file-tools-closeout",
       input: { text: "Read source.txt, write created.txt, then grep for needle-marker using native file tools." },
-      metadata: { runtimePolicy: { completionReview: "disabled" } },
+      metadata: {
+        runtimePolicy: {
+          completionReview: "disabled",
+          requiredNativeToolProfiles: ["workspace"],
+        },
+      },
     });
 
     expect(result.text).toContain("Native file tools closeout smoke complete");

@@ -4482,6 +4482,7 @@ test("native runtime does not force broad project investigations into planned di
     },
     runFunctionToolPromptText: async (input) => {
       prompts.push(input.prompt);
+      expect(input.tools.map((tool) => tool.name)).toContain("run_command");
       await input.executeTool({
         name: "run_command",
         args: { command: "find . -maxdepth 2 -type f" },
@@ -4505,7 +4506,12 @@ test("native runtime does not force broad project investigations into planned di
     input: {
       text: "이 프로젝트에 대해서 자세히 조사해보고 어떤 프로젝트인지, 특징이 무엇인지, 어디까지 구현되었는지, 강점과 약점을 정리해줘.",
     },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    metadata: {
+      runtimePolicy: {
+        completionReview: "disabled",
+        requiredNativeTools: ["run_command"],
+      },
+    },
   });
 
   expect(prompts[0]).not.toContain("Runtime Routing Policy");
@@ -4664,6 +4670,9 @@ test("model-selected public evidence toolchain still receives structural citatio
     },
     runFunctionToolPromptText: async (input) => {
       expect(input.prompt).not.toContain("Freshness evidence required");
+      const toolNames = input.tools.map((tool) => tool.name);
+      expect(toolNames).toContain("web_search");
+      expect(toolNames).toContain("web_read");
       await input.executeTool({
         name: "web_search",
         args: { query: "오늘 샘플 뉴스" },
@@ -4689,7 +4698,12 @@ test("model-selected public evidence toolchain still receives structural citatio
     provider: fakeProvider,
     model: "openai/auto:codex-latest",
     input: { text: "오늘 샘플 뉴스 기사 내용 핵심 알려줘" },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    metadata: {
+      runtimePolicy: {
+        completionReview: "disabled",
+        requiredNativeTools: ["web_search", "web_read"],
+      },
+    },
   });
 
   expect(executedTools).toEqual(["web_search", "web_read"]);

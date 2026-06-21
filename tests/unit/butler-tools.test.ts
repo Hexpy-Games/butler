@@ -323,8 +323,8 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   expect(names).toContain("write_file");
   expect(names).toContain("grep_files");
   expect(names).toContain("read_tool_output_artifact");
-  expect(names).toContain("web_search");
-  expect(names).toContain("web_read");
+  expect(names).not.toContain("web_search");
+  expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
   expect(toolContractJsonChars(tools)).toBeLessThan(15_000);
@@ -383,11 +383,11 @@ test("explicit required native tool profiles expose workspace file tools without
   expect(names).toContain("write_file");
   expect(names).toContain("grep_files");
   expect(names).toContain("read_tool_output_artifact");
-  expect(names).toContain("web_search");
-  expect(names).toContain("web_read");
+  expect(names).not.toContain("web_search");
+  expect(names).not.toContain("web_read");
 });
 
-test("current Korean research prompts expose web search alongside workspace tools", () => {
+test("current Korean research text does not expose public web without structured profile", () => {
   const text = "요새 계란 한판이 만원은기본이고 만삼천원 하는데도 어렵지 않게 찾을 수 있는데 지금 한국의 계란 가격이 왜 이모양인지 심층 리서치좀 해줘";
   const tools = selectButlerToolsForTurn({
     role: "butler",
@@ -400,13 +400,13 @@ test("current Korean research prompts expose web search alongside workspace tool
     role: "butler",
     text,
     turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
-  })).toEqual(expect.arrayContaining(["startup", "public-web", "workspace"]));
+  })).toEqual(["startup", "workspace"]);
   expect(names).toContain("run_command");
-  expect(names).toContain("web_search");
-  expect(names).toContain("web_read");
+  expect(names).not.toContain("web_search");
+  expect(names).not.toContain("web_read");
 });
 
-test("native file tool wording exposes workspace file tools", () => {
+test("native file tool wording alone does not expose workspace file tools", () => {
   const text = "Read source.txt, write created.txt, then grep for needle-marker using native file tools.";
   const tools = selectButlerToolsForTurn({
     role: "butler",
@@ -414,13 +414,13 @@ test("native file tool wording exposes workspace file tools", () => {
   });
   const names = tools.map((tool) => tool.name);
 
-  expect(selectButlerToolProfiles({ role: "butler", text })).toEqual(expect.arrayContaining(["startup", "workspace"]));
-  expect(names).toContain("read_file");
-  expect(names).toContain("write_file");
-  expect(names).toContain("grep_files");
+  expect(selectButlerToolProfiles({ role: "butler", text })).toEqual(["startup"]);
+  expect(names).not.toContain("read_file");
+  expect(names).not.toContain("write_file");
+  expect(names).not.toContain("grep_files");
 });
 
-test("session-level required native tools expose command execution consistently", () => {
+test("session-level required native tools expose exact tool names only", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "이 작업을 처리해줘.",
@@ -432,8 +432,13 @@ test("session-level required native tools expose command execution consistently"
     role: "butler",
     text: "이 작업을 처리해줘.",
     sessionMetadata: { runtimePolicy: { requiredNativeTools: ["run_command"] } },
-  })).toEqual(["startup", "workspace"]);
+  })).toEqual(["startup"]);
   expect(names).toContain("run_command");
+  expect(names).not.toContain("read_file");
+  expect(names).not.toContain("write_file");
+  expect(names).not.toContain("grep_files");
+  expect(names).not.toContain("web_search");
+  expect(names).not.toContain("web_read");
 });
 
 test("invalid required native tool profiles are diagnosable", () => {
@@ -445,29 +450,22 @@ test("invalid required native tool profiles are diagnosable", () => {
   });
 });
 
-test("free-form GitHub issue linkage text alone does not expand tools without project policy or metadata", () => {
+test("free-form GitHub issue linkage text alone does not expose project or workspace tools", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "GitHub issue를 열어서 Project Ledger task랑 연결해줘.",
   });
   const names = tools.map((tool) => tool.name);
 
-  expect(names).toContain("inspect_project_status");
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "GitHub issue를 열어서 Project Ledger task랑 연결해줘.",
+  })).toEqual(["startup"]);
+  expect(names).not.toContain("inspect_project_status");
   expect(names).not.toContain("run_command");
 });
 
-test("project write bridge selection does not depend on free-form write-intent regexes", () => {
-  const source = readFileSync(
-    join(root, "packages", "butler-agent", "src", "agent", "tools", "profiles.ts"),
-    "utf8",
-  );
-
-  expect(source).not.toContain("hasProjectManagementWriteIntent");
-  expect(source).not.toContain("ProjectManagementWriteIntent");
-  expect(source).not.toContain("등록|생성|작성|연결|링크");
-});
-
-test("Project Ledger requests without project metadata still expose project tools", () => {
+test("Project Ledger requests without project metadata do not expose project tools", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "Project Ledger 상태와 next action을 확인하고 dashboard를 갱신해줘.",
@@ -477,10 +475,10 @@ test("Project Ledger requests without project metadata still expose project tool
   expect(selectButlerToolProfiles({
     role: "butler",
     text: "Project Ledger 상태와 next action을 확인하고 dashboard를 갱신해줘.",
-  })).toContain("project");
-  expect(names).toContain("inspect_project_status");
-  expect(names).toContain("query_project_work");
-  expect(names).toContain("render_project_dashboard");
+  })).toEqual(["startup"]);
+  expect(names).not.toContain("inspect_project_status");
+  expect(names).not.toContain("query_project_work");
+  expect(names).not.toContain("render_project_dashboard");
   expect(names).not.toContain("get_weather_with_knowhow");
   expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
 });
@@ -499,7 +497,7 @@ test("Project Ledger completion requests expose complete_project_work", () => {
   expect(names).toContain("complete_project_work");
 });
 
-test("explicit required tools can extend a profile while removed tool names are ignored", () => {
+test("explicit required tools add exact tool names while removed tool names are ignored", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "반드시 표 artifact를 만들어줘.",
@@ -513,8 +511,21 @@ test("explicit required tools can extend a profile while removed tool names are 
   });
   const names = tools.map((tool) => tool.name);
 
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "반드시 표 artifact를 만들어줘.",
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata: {
+      requiredNativeTools: [
+        "transform_public_data_table",
+        "get_weather_with_knowhow",
+      ],
+    },
+  })).toEqual(["startup", "project"]);
   expect(names).toContain("transform_public_data_table");
   expect(names).not.toContain("get_weather_with_knowhow");
+  expect(names).not.toContain("web_search");
+  expect(names).not.toContain("web_read");
 });
 
 test("worker tool profile keeps execution tools and blocks recursive orchestration tools", () => {
