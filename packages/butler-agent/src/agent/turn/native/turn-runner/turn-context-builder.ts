@@ -51,11 +51,22 @@ import {
   recordTurnContextBestEffortFailure,
 } from "./context-metrics.ts";
 import type { NativeTurnRunnerDeps, NativeStoredSessionConfig } from "./turn-runner-types.ts";
+import {
+  recordFirstVisibleLatencyMetric,
+  type TurnPreparationStep,
+} from "../../../../operations/metrics/first-visible-latency.ts";
+import {
+  measureTurnPreparationStep,
+  measureTurnPreparationStepSync,
+  recordTurnPreparationStepSkipped,
+  type TurnPreparationMetricContext,
+} from "../../preparation-metrics.ts";
 
 export async function prepareNativeTurnContext(input: {
   turnInput: RuntimeTurnInput;
   session: NativeStoredSessionConfig;
   deps: NativeTurnRunnerDeps;
+  startedAt: number;
   useTools: boolean;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
@@ -65,35 +76,56 @@ export async function prepareNativeTurnContext(input: {
   const plannedReview = plannedReviewTurnContext(input.turnInput);
   await maybeCompact(input);
   const recallContext = await maybeRecall(input, userText);
-  const compactionContext = renderCompactionContext(readLatestCompactionSnapshot({
-    butlerData: input.deps.butlerData,
-    sessionId: input.turnInput.handle.sessionId,
-  }));
+  const compactionContext = measureTurnPreparationStepSync(
+    preparationMetricInput(input, "compaction_context"),
+    () => renderCompactionContext(readLatestCompactionSnapshot({
+      butlerData: input.deps.butlerData,
+      sessionId: input.turnInput.handle.sessionId,
+    })),
+  );
   const turnId = currentRuntimeTurnId(input.turnInput) ?? `turn-${randomUUID().slice(0, 12)}`;
   const turnBudget = createDirectTurnBudget(turnId);
-  const normalizedPrompt = normalizeTurnPrompt(input.turnInput, {
-    recallContext,
-    compactionContext,
-    feedbackBufferContext: feedbackBufferContext(input, compactionContext),
-    workingMemoryContext: workingMemoryContext(input),
-    runtimePolicyContext: renderSessionContextPolicyContext({
+  const feedbackContext = measureTurnPreparationStepSync(
+    preparationMetricInput(input, "feedback_buffer"),
+    () => feedbackBufferContext(input, compactionContext),
+  );
+  const memoryContext = measureTurnPreparationStepSync(
+    preparationMetricInput(input, "working_memory"),
+    () => workingMemoryContext(input),
+  );
+  const runtimePolicyContext = measureTurnPreparationStepSync(
+    preparationMetricInput(input, "runtime_policy"),
+    () => renderSessionContextPolicyContext({
       catalog: loadSessionContextPolicyCatalog(input.deps.butlerHome),
       session: input.session.init,
     }),
-    recentConversationTokenBudget: recentConversationBudgetForTurn({
-      configuredBudget: input.deps.recentConversationTokenBudget ??
-        defaultRecentConversationTokenBudget(input.turnInput.model),
+  );
+  const normalizedPrompt = measureTurnPreparationStepSync(
+    preparationMetricInput(input, "prompt_normalization"),
+    () => normalizeTurnPrompt(input.turnInput, {
+      recallContext,
       compactionContext,
+      feedbackBufferContext: feedbackContext,
+      workingMemoryContext: memoryContext,
+      runtimePolicyContext,
+      recentConversationTokenBudget: recentConversationBudgetForTurn({
+        configuredBudget: input.deps.recentConversationTokenBudget ??
+          defaultRecentConversationTokenBudget(input.turnInput.model),
+        compactionContext,
+      }),
+      butlerData: input.deps.butlerData,
     }),
-    butlerData: input.deps.butlerData,
-  });
+  );
   const attachments = inboundAttachments(input.turnInput);
-  const currentAttachmentContext = renderAttachmentContext(attachments, {
-    butlerData: input.deps.butlerData,
-    title: "Inbound Attachments",
-    maxAttachmentTextChars: 18_000,
-    maxTotalTextChars: 36_000,
-  });
+  const currentAttachmentContext = measureTurnPreparationStepSync(
+    preparationMetricInput(input, "attachment_context"),
+    () => renderAttachmentContext(attachments, {
+      butlerData: input.deps.butlerData,
+      title: "Inbound Attachments",
+      maxAttachmentTextChars: 18_000,
+      maxTotalTextChars: 36_000,
+    }),
+  );
   const toolSurfaceController = new ToolSurfacePromptController({
     role: input.session.init.role,
     sessionMetadata: input.session.init.metadata,
@@ -140,6 +172,7 @@ export async function prepareNativeTurnContext(input: {
     ...input,
     turnId,
     turnBudget,
+    startedAt: input.startedAt,
     normalizedPrompt,
     currentAttachmentContext,
   });
@@ -173,15 +206,21 @@ function semanticProgressSafetyNetFor(language: NativeTurnRunnerDeps["messageLan
 
 async function maybeCompact(input: {
   turnInput: RuntimeTurnInput;
+  session: NativeStoredSessionConfig;
   deps: NativeTurnRunnerDeps;
 }): Promise<void> {
   try {
-    await maybeAutoCompactSession({
-      butlerData: input.deps.butlerData,
-      sessionId: input.turnInput.handle.sessionId,
-      modelRef: input.turnInput.model,
-      budgetOverrides: input.deps.contextBudgetOverrides,
-    });
+    await measureTurnPreparationStep(
+      preparationMetricInput(input, "context_compaction"),
+      async () => {
+        await maybeAutoCompactSession({
+          butlerData: input.deps.butlerData,
+          sessionId: input.turnInput.handle.sessionId,
+          modelRef: input.turnInput.model,
+          budgetOverrides: input.deps.contextBudgetOverrides,
+        });
+      },
+    );
   } catch (error) {
     recordTurnContextBestEffortFailure(input, "turn_context_compaction_failed", error);
   }
@@ -198,15 +237,23 @@ async function maybeRecall(
   const automaticRecallEnabled = input.deps.automaticRecallEnabled;
   const shouldAttemptRecall = shouldAttemptAutomaticRecall(input.turnInput, userText);
   if (!automaticRecallEnabled || !shouldAttemptRecall) {
+    recordTurnPreparationStepSkipped({
+      ...preparationMetricInput(input, "automatic_recall"),
+      skippedReason: automaticRecallEnabled ? "not_required" : "disabled",
+    });
     return "";
   }
   try {
-    return renderRecallContext(await input.deps.runAutomaticRecall({
-      butlerData: input.deps.butlerData,
-      cue: userText,
-      projectId: projectId(input.session),
-      limit: 4,
-    }));
+    const recall = await measureTurnPreparationStep(
+      preparationMetricInput(input, "automatic_recall"),
+      async () => await input.deps.runAutomaticRecall({
+        butlerData: input.deps.butlerData,
+        cue: userText,
+        projectId: projectId(input.session),
+        limit: 4,
+      }),
+    );
+    return renderRecallContext(recall);
   } catch (error) {
     recordTurnContextBestEffortFailure(input, "turn_context_recall_failed", error);
     return "";
@@ -243,6 +290,7 @@ async function emitStartedAndPreparation(input: {
   useTools: boolean;
   turnId: string;
   turnBudget: ReturnType<typeof createDirectTurnBudget>;
+  startedAt: number;
   normalizedPrompt: ReturnType<typeof normalizeTurnPrompt>;
   currentAttachmentContext: string;
 }): Promise<void> {
@@ -256,17 +304,48 @@ async function emitStartedAndPreparation(input: {
       budget: directTurnBudgetState(input.turnBudget),
     },
   });
-  await emitRuntimePreparationProgressBestEffort({
-    turnInput: input.turnInput,
-    progress: runtimePreparationProgressSummary({
-      prompt: input.normalizedPrompt,
-      attachmentContextChars: input.currentAttachmentContext.length,
-      attachmentCount: inboundAttachments(input.turnInput).length,
-      model: input.turnInput.model,
-      language: input.deps.messageLanguage,
-      useTools: input.useTools,
-    }),
+  await measureTurnPreparationStep(
+    preparationMetricInput(input, "runtime_preparation_progress"),
+    async () => {
+      await emitRuntimePreparationProgressBestEffort({
+        turnInput: input.turnInput,
+        progress: runtimePreparationProgressSummary({
+          prompt: input.normalizedPrompt,
+          attachmentContextChars: input.currentAttachmentContext.length,
+          attachmentCount: inboundAttachments(input.turnInput).length,
+          model: input.turnInput.model,
+          language: input.deps.messageLanguage,
+          useTools: input.useTools,
+        }),
+      });
+    },
+  );
+  recordFirstVisibleLatencyMetric({
+    butlerData: input.deps.butlerData,
+    durationMs: Date.now() - input.startedAt,
+    signal: "runtime_preparation",
+    role: input.turnInput.handle.role,
+    runtime: input.deps.runtimeId,
+    model: input.turnInput.model,
+    source: "native-turn-runner",
   });
+}
+
+function preparationMetricInput(
+  input: {
+    turnInput: RuntimeTurnInput;
+    session: NativeStoredSessionConfig;
+    deps: NativeTurnRunnerDeps;
+  },
+  step: TurnPreparationStep,
+): TurnPreparationMetricContext & { step: TurnPreparationStep } {
+  return {
+    butlerData: input.deps.butlerData,
+    step,
+    role: input.session.init.role,
+    runtime: input.deps.runtimeId,
+    model: input.turnInput.model,
+  };
 }
 
 function projectId(session: NativeStoredSessionConfig): string | undefined {
