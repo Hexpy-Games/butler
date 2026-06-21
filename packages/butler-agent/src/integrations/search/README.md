@@ -21,3 +21,5 @@ private queries and raw page dumps.
 
 - `SPEC-WEB-SEARCH-TOOL` - Web Search Tool
 - `SPEC-LIGHTWEIGHT-PAGE-READER` - Lightweight Page Reader
+- `SPEC-TOOL-RUNTIME-PROGRESSIVE-SURFACE` - Progressive Tool Surface
+- `SPEC-TOOL-RUNTIME-EVIDENCE-CAPABILITY-LEDGER` - Evidence Capability Ledger
