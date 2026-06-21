@@ -156,6 +156,7 @@ test("App Agent native service bridge starts macOS menu bar helper with Agent se
     expect(writes[1]?.body).toContain("Butler Menu Bar Helper");
     expect(writes[1]?.body).toContain("<key>BUTLER_APP_AGENT_SERVICE_LABEL</key>");
     expect(writes[1]?.body).toContain("<string>com.hexpy.butler.test.local</string>");
+    expect(writes[1]?.body).not.toContain("<key>BUTLER_APP_MENU_BAR_HELPER</key>");
     expect(writes[1]?.body).toContain("<key>BUTLER_APP_MENU_BAR_HELPER_PID_FILE</key>");
     expect(writes[1]?.body).toContain("/app/runtime/menu-bar-helper.pid");
     expect(writes[1]?.body).toContain("<key>BUTLER_APP_SERVER_URL</key>");

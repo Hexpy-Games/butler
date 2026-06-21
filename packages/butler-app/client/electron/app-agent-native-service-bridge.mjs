@@ -449,7 +449,6 @@ function launchdMenuBarHelperPlist({ runtime, serviceLabel, helperLabel, menuBar
     BUTLER_APP_AGENT_SERVICE_LABEL: serviceLabel,
     BUTLER_APP_BUNDLE_PATH: menuBarHelper.appBundlePath ?? "",
     BUTLER_APP_MAIN_EXECUTABLE: menuBarHelper.mainExecutablePath ?? "",
-    BUTLER_APP_MENU_BAR_HELPER: "1",
     BUTLER_APP_MENU_BAR_HELPER_PID_FILE: join(
       runtime.butlerData,
       "app",

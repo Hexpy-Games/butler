@@ -70,6 +70,11 @@ leave the helper and Agent service online.
 - **Open Butler**: shows the App UI and connects to the service-owned app
   gateway. If the App UI is already running, this action focuses the existing
   window instead of starting a duplicate UI process.
+- When **Open Butler** is invoked from the persistent menu bar helper, the main
+  App must launch with helper-only environment removed. The Dock-visible App
+  process must not inherit `BUTLER_APP_MENU_BAR_HELPER=1`, must not write the
+  menu-bar-helper pid file, and must show/focus the App UI rather than becoming
+  another helper/status icon.
 - **Launch Butler App**: reconciles the App-managed Agent service before the UI
   is considered usable. This is not only a first-run responsibility; on every
   packaged App launch, if the App-managed service registration exists but is not
@@ -112,11 +117,19 @@ Docker Desktop on macOS:
   can render the icon correctly in light and dark menu bar appearances.
 - The helper starts at login or after first-run registration whenever the App
   background service is enabled.
+- Helper launch uses the explicit `--butler-menu-bar-helper` argument for helper
+  mode. The helper LaunchAgent and direct helper spawn environment must not set
+  `BUTLER_APP_MENU_BAR_HELPER=1`, because that flag can leak into the main App
+  when the helper opens Butler.
 - The helper must enforce single-instance ownership inside the helper process
   itself, using App-managed runtime state under `BUTLER_DATA`. Main App pid-file
   checks are an optimization only; a direct helper launch, stale App process, or
   race during `Open Butler` must not create multiple simultaneous menu bar
   helper instances.
+- The helper pid file only proves ownership when the pid still belongs to the
+  helper bundle identity. A stale or corrupted pid file that points at the main
+  Butler App must not prevent the real helper from claiming the status icon and
+  rewriting the pid file.
 - The macOS App-managed Agent service registration flow must render and
   bootstrap a user LaunchAgent for the menu bar helper. Service repair may
   rewrite the helper LaunchAgent definition, but normal **Start Butler Agent**
