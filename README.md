@@ -38,7 +38,7 @@ Download Butler App from the
 | macOS Apple Silicon | `butler-app-0.0.15-darwin-arm64.pkg` |
 | Linux x64 | `butler-app-0.0.15-linux-x64.deb` |
 | Linux ARM64 | `butler-app-0.0.15-linux-arm64.deb` |
-| Arch Linux x64 | `butler-app-0.0.15-1-x86_64.pkg.tar.zst` |
+| Arch Linux x64 | `butler-app-0.0.15-archlinux-x64.pkg.tar.zst` |
 
 Butler Agent is included in the app. On first launch, setup runs inside the
 Butler App in this order:

@@ -330,8 +330,8 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          files=(dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst)
-          checksums=(dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst.sha256)
+          files=(dist/release/app-arch/butler-app-*-archlinux-x64.pkg.tar.zst)
+          checksums=(dist/release/app-arch/butler-app-*-archlinux-x64.pkg.tar.zst.sha256)
           if [ "${#files[@]}" -ne 1 ] || [ "${#checksums[@]}" -ne 1 ]; then
             printf 'Expected one Arch App package and checksum, got %s and %s\n' "${#files[@]}" "${#checksums[@]}" >&2
             printf '%s\n' "${files[@]}" >&2
@@ -353,7 +353,7 @@ jobs:
           tag="${GITHUB_REF_NAME}"
           shopt -s nullglob
           files=(
-            dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst
+            dist/release/app-arch/butler-app-*-archlinux-x64.pkg.tar.zst
           )
           if [ "${#files[@]}" -ne 1 ]; then
             printf 'Expected 1 Arch app release file, got %s\n' "${#files[@]}" >&2

@@ -1454,7 +1454,7 @@ test("app release packager can create Linux x64 pacman package staging", () => {
       linuxPackageFormat: "pacman",
     });
     const artifact = result.artifacts[0];
-    expect(artifact?.artifactName).toBe(`butler-app-${currentVersion}-1-x86_64.pkg.tar.zst`);
+    expect(artifact?.artifactName).toBe(`butler-app-${currentVersion}-archlinux-x64.pkg.tar.zst`);
     expect(existsSync(artifact.artifactPath)).toBe(true);
 
     const listing = spawnSync("tar", ["-tzf", artifact.artifactPath], {
@@ -1475,7 +1475,7 @@ test("app release packager can create Linux x64 pacman package staging", () => {
     const releaseManifest = JSON.parse(readText(result.releaseManifestPath));
     const updateManifest = JSON.parse(readText(result.updateManifestPath));
     expect(releaseManifest.artifacts.find((item: any) => item.platform === "linux-x64")).toMatchObject({
-      artifactName: `butler-app-${currentVersion}-1-x86_64.pkg.tar.zst`,
+      artifactName: `butler-app-${currentVersion}-archlinux-x64.pkg.tar.zst`,
       sha256: artifact.sha256,
     });
     expect(updateManifest.artifacts.find((item: any) => item.platform === "linux-x64")).toMatchObject({

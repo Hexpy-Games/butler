@@ -191,7 +191,8 @@ test("version tag release workflow publishes Arch app artifact", () => {
   expect(workflow).toContain('export BUN_TMPDIR="$RUNNER_TEMP/bun-tmp"');
   expect(workflow).toContain('export TMPDIR="$RUNNER_TEMP/bun-tmp"');
   expect(workflow).toContain("--linux-package-format=pacman");
-  expect(workflow).toContain("dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst");
+  expect(workflow).toContain("dist/release/app-arch/butler-app-*-archlinux-x64.pkg.tar.zst");
+  expect(workflow).not.toContain("dist/release/app-arch/butler-app-*-1-x86_64.pkg.tar.zst");
   expect(workflow).toContain("zstd -t");
   expect(workflow).toContain("bsdtar -tf");
   expect(workflow).toContain("grep -qx '.PKGINFO'");
@@ -246,7 +247,7 @@ test("README directs default installs to Butler App and advanced installs to Age
   expect(quickStart).toContain(`butler-app-${currentVersion}-darwin-arm64.pkg`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-linux-x64.deb`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-linux-arm64.deb`);
-  expect(quickStart).toContain(`butler-app-${currentVersion}-1-x86_64.pkg.tar.zst`);
+  expect(quickStart).toContain(`butler-app-${currentVersion}-archlinux-x64.pkg.tar.zst`);
   expect(normalizedQuickStart).toContain("Butler Agent is included in the app");
   expect(quickStart).toContain("Butler Agent를 준비합니다");
   expect(quickStart).not.toContain("butler-agent-*-all.tar.gz");
