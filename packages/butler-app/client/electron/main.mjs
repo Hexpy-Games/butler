@@ -1063,7 +1063,6 @@ function ensurePersistentMenuBarHelper() {
       BUTLER_APP_AGENT_SERVICE_LABEL: appAgentServiceLabel(),
       BUTLER_APP_BUNDLE_PATH: packagedAppBundlePath() || "",
       BUTLER_APP_MAIN_EXECUTABLE: process.execPath,
-      BUTLER_APP_MENU_BAR_HELPER: "1",
       BUTLER_APP_MENU_BAR_HELPER_PID_FILE: menuBarHelperPidFile,
       BUTLER_APP_SERVER_PORT: String(port),
       BUTLER_APP_SERVER_URL: serverUrl,

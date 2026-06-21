@@ -233,6 +233,7 @@ final class MenuBarHelperApp: NSObject, NSApplicationDelegate {
             return
         }
         let configuration = NSWorkspace.OpenConfiguration()
+        configuration.environment = mainAppEnvironment()
         NSWorkspace.shared.openApplication(
             at: URL(fileURLWithPath: bundlePath),
             configuration: configuration
@@ -247,12 +248,19 @@ final class MenuBarHelperApp: NSObject, NSApplicationDelegate {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
-        process.environment = environment.merging(["BUTLER_APP_MENU_BAR_HELPER": ""]) { _, new in new }
+        process.environment = mainAppEnvironment()
         do {
             try process.run()
         } catch {
             openMainAppBundle()
         }
+    }
+
+    private func mainAppEnvironment() -> [String: String] {
+        var env = environment
+        env["BUTLER_APP_MENU_BAR_HELPER"] = ""
+        env["BUTLER_APP_MENU_BAR_HELPER_PID_FILE"] = ""
+        return env
     }
 
     private func runLaunchctl(_ arguments: [String]) -> (exitCode: Int32, output: String) {
@@ -307,7 +315,18 @@ final class MenuBarHelperApp: NSObject, NSApplicationDelegate {
         else {
             return false
         }
-        return processIsRunning(pid)
+        return processIsRunning(pid) && processLooksLikeCurrentHelper(pid)
+    }
+
+    private func processLooksLikeCurrentHelper(_ pid: Int32) -> Bool {
+        guard
+            let expectedBundleIdentifier = Bundle.main.bundleIdentifier,
+            let application = NSRunningApplication(processIdentifier: pid),
+            let bundleIdentifier = application.bundleIdentifier
+        else {
+            return false
+        }
+        return bundleIdentifier == expectedBundleIdentifier
     }
 
     private func processIsRunning(_ pid: Int32) -> Bool {
