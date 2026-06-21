@@ -50,3 +50,6 @@ durable execution evidence, validation evidence, or an explicit blocker.
 - `SPEC-AUTONOMOUS-PLANNED-DISPATCH` - Autonomous Planned Dispatch
 - `SPEC-WORKER-BTCC-RUNTIME-NORMALIZATION` - Worker BTCC Runtime Normalization
 - `SPEC-BUTLER-EXPERIENCE-POLISH` - Butler Experience Polish
+- `SPEC-TOOL-RUNTIME-PROGRESSIVE-SURFACE` - Progressive Tool Surface
+- `SPEC-TOOL-RUNTIME-EVIDENCE-CAPABILITY-LEDGER` - Evidence Capability Ledger
+- `SPEC-TOOL-RUNTIME-RECOVERABLE-DELIVERY-STATE` - Recoverable Delivery State
