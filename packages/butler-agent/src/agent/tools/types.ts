@@ -29,3 +29,21 @@ export interface ToolCapabilityMetadata {
   safetyNotes: string[];
   satisfiesCompletionObligations?: PublicWorkObligationKind[];
 }
+
+export type ToolCatalogProvider = "native" | "mcp" | "plugin";
+
+export type ToolCatalogRiskLevel = "low" | "medium" | "high";
+
+export interface ToolCatalogEntry {
+  id: string;
+  name: string;
+  namespace: string | null;
+  provider: ToolCatalogProvider;
+  category: ToolCapabilityCategory;
+  summary: string;
+  tags: string[];
+  riskLevel: ToolCatalogRiskLevel;
+  enabled: boolean;
+  disabledReason: string | null;
+  schemaDigest: string;
+}
