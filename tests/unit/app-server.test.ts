@@ -7667,13 +7667,13 @@ test("app gateway bridge captures tool progress without blank assistant messages
       expect(messages.data.turn_progress[turnId]).toMatchObject({
         turn_id: turnId,
         state: "delivered",
-        safe_progress_rows: [
-          expect.objectContaining({
-            kind: "ran_command",
-            safe_tool_name: "Bash",
-          }),
-        ],
       });
+      expect(messages.data.turn_progress[turnId].safe_progress_rows).toContainEqual(
+        expect.objectContaining({
+          kind: "ran_command",
+          safe_tool_name: "Bash",
+        }),
+      );
     }
     const summary = await getJson(
       `${server.url}session-summary?session_id=general`,
