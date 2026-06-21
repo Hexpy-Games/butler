@@ -61,6 +61,44 @@ const removedWeatherToolNames = [
   "record_weather_source_feedback",
   "run_weather_knowhow_consolidation",
 ] as const;
+const promptOnlySurfaceFixtures = [
+  {
+    name: "Korean implicit current-information need about prices",
+    text: "요즘 계란 가격이 왜 이렇게 불안한지 원인과 전망을 정리해줘.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
+  {
+    name: "Korean implicit current-information need about policy",
+    text: "지금 전세 대출 분위기가 실수요자에게 어떤 의미인지 판단해줘.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
+  {
+    name: "English implicit external-evidence need about a claim",
+    text: "Before I answer the customer, check whether this claim is actually supported and give me the confidence level.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
+  {
+    name: "English implicit external-evidence need about vendor numbers",
+    text: "I need a source-backed answer on whether this vendor's adoption numbers are credible.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
+  {
+    name: "No-keyword planning prompt",
+    text: "Turn this rough idea into three crisp action items for the next team sync.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
+  {
+    name: "No-keyword explanation prompt",
+    text: "Explain the tradeoff between speed and reliability for a small release checklist.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
+] as const;
 
 beforeEach(() => {
   tempDir = join(tmpdir(), `butler-tools-${Date.now()}-${Math.random()}`);
@@ -405,47 +443,62 @@ test("explicit required native tool profiles expose workspace file tools without
   expect(names).not.toContain("web_read");
 });
 
-test("current Korean research text does not expose public web without structured profile", () => {
-  const text = "요새 계란 한판이 만원은기본이고 만삼천원 하는데도 어렵지 않게 찾을 수 있는데 지금 한국의 계란 가격이 왜 이모양인지 심층 리서치좀 해줘";
-  const tools = selectButlerToolsForTurn({
-    role: "butler",
-    text,
-    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
-  });
-  const names = tools.map((tool) => tool.name);
+for (const fixture of promptOnlySurfaceFixtures) {
+  test(`prompt text alone keeps startup-only tool surface: ${fixture.name}`, () => {
+    const profiles = selectButlerToolProfiles({
+      role: "butler",
+      text: fixture.text,
+    });
+    const tools = selectButlerToolsForTurn({
+      role: "butler",
+      text: fixture.text,
+    });
+    const names = tools.map((tool) => tool.name);
 
-  expect(selectButlerToolProfiles({
-    role: "butler",
-    text,
-    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
-  })).toEqual(["startup", "workspace"]);
-  expect(names).toEqual([
-    "run_command",
-    "read_file",
-    "write_file",
-    "grep_files",
-    "get_context_monitor",
-    "read_tool_output_artifact",
-    "list_tool_capabilities",
-    "update_todo_list",
-    "list_todo_list",
-    "read_conversation_context",
-  ]);
-  expect(names).not.toContain("web_search");
-  expect(names).not.toContain("web_read");
+    expect(profiles).toEqual([...fixture.expectedProfiles]);
+    expect(names).toEqual([...fixture.expectedToolNames]);
+    expect(profiles).not.toContain("public-web");
+    expect(profiles).not.toContain("workspace");
+    expect(profiles).not.toContain("project");
+    expect(profiles).not.toContain("planned-work");
+    expect(names).not.toContain("web_search");
+    expect(names).not.toContain("web_read");
+    expect(names).not.toContain("run_command");
+    expect(names).not.toContain("read_file");
+    expect(names).not.toContain("write_file");
+    expect(names).not.toContain("grep_files");
+    expect(names).not.toContain("inspect_project_status");
+    expect(names).not.toContain("query_project_work");
+    expect(names).not.toContain("render_project_dashboard");
+    expect(names).not.toContain("complete_project_work");
+    expect(names).not.toContain("create_planned_task");
+    expect(names).not.toContain("dispatch_worker");
+  });
+}
+
+test("tool profile selector does not contain legacy prompt keyword activation tables", () => {
+  const source = readFileSync(
+    join(root, "packages", "butler-agent", "src", "agent", "tools", "profiles.ts"),
+    "utf8",
+  );
+
+  expect(source).not.toContain("profilesFromText");
+  expect(source).not.toMatch(/\b(?:PUBLIC_WEB|WEB|RESEARCH|CURRENT|FRESHNESS|WORKSPACE|PROJECT)_?(?:KEYWORDS|TERMS|PATTERNS)\b/u);
+  expect(source).not.toMatch(/\[\s*(?:"검색"|"리서치"|"최신"|"최근"|"요즘")/u);
+  expect(source).not.toMatch(/\/[^/\n]*(?:latest|current|fresh|research|search)[^/\n]*\/[a-z]*/u);
 });
 
 test("structured public web profile exposes web tools without widening workspace", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
-    text: "이 문장은 surface activation에 영향을 주면 안 됩니다.",
+    text: promptOnlySurfaceFixtures[0].text,
     turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["public-web"] } },
   });
   const names = tools.map((tool) => tool.name);
 
   expect(selectButlerToolProfiles({
     role: "butler",
-    text: "이 문장은 surface activation에 영향을 주면 안 됩니다.",
+    text: promptOnlySurfaceFixtures[0].text,
     turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["public-web"] } },
   })).toEqual(["startup", "public-web"]);
   expect(names).toEqual([
