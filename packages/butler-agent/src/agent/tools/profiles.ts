@@ -263,8 +263,8 @@ function profilesFromText(text: string): ButlerToolProfile[] {
     /프로젝트\s*원장|프로젝트\s*상태|프로젝트\s*작업|다음\s*작업/u.test(value)) {
     addProfile(profiles, "project");
   }
-  if (/\b(search|web|source|citation|cite|news|latest|current|url|http|public)\b/u.test(value) ||
-    /검색|출처|최신|현재|뉴스|인용|공개|웹/u.test(value)) {
+  if (/\b(search|web|source|citation|cite|news|latest|current|now|today|recent|research|investigate|url|http|public)\b/u.test(value) ||
+    /검색|출처|최신|현재|지금|요새|최근|뉴스|인용|공개|웹|리서치|조사|자료|근거|통계/u.test(value)) {
     addProfile(profiles, "public-web");
   }
   if (/\b(read_file|write_file|grep_files|native file tools?|file tools?|read\s+(?:a\s+)?file|write\s+(?:a\s+)?file|grep|workspace file|workspace files)\b/u.test(value) ||
@@ -348,6 +348,9 @@ export function selectButlerToolsForTurn(input: {
     for (const profile of selectButlerToolProfiles(input)) {
       for (const name of PROFILE_TOOL_NAMES[profile]) allowedNames.add(name);
     }
+  }
+  if (allowedNames.has("run_command")) {
+    for (const name of PUBLIC_WEB_TOOL_NAMES) allowedNames.add(name);
   }
   for (const name of requiredToolNamesForTurn(input)) {
     if (input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(name)) continue;

@@ -323,9 +323,11 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   expect(names).toContain("write_file");
   expect(names).toContain("grep_files");
   expect(names).toContain("read_tool_output_artifact");
+  expect(names).toContain("web_search");
+  expect(names).toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  expect(toolContractJsonChars(tools)).toBeLessThan(13_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(15_000);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -381,6 +383,27 @@ test("explicit required native tool profiles expose workspace file tools without
   expect(names).toContain("write_file");
   expect(names).toContain("grep_files");
   expect(names).toContain("read_tool_output_artifact");
+  expect(names).toContain("web_search");
+  expect(names).toContain("web_read");
+});
+
+test("current Korean research prompts expose web search alongside workspace tools", () => {
+  const text = "요새 계란 한판이 만원은기본이고 만삼천원 하는데도 어렵지 않게 찾을 수 있는데 지금 한국의 계란 가격이 왜 이모양인지 심층 리서치좀 해줘";
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text,
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text,
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+  })).toEqual(expect.arrayContaining(["startup", "public-web", "workspace"]));
+  expect(names).toContain("run_command");
+  expect(names).toContain("web_search");
+  expect(names).toContain("web_read");
 });
 
 test("native file tool wording exposes workspace file tools", () => {
