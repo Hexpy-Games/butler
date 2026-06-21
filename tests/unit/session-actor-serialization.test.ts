@@ -18,6 +18,7 @@ import { DeliveryGuard } from "../../packages/butler-agent/src/interfaces/transp
 import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/mock/adapter.ts";
 import { APP_TRANSPORT } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
 import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
+import { readFirstVisibleLatencySummary } from "../../packages/butler-agent/src/operations/metrics/first-visible-latency.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -584,6 +585,21 @@ test("app session actor emits first visible progress before context preparation"
   expect(order.indexOf(`turnEvent:${FIRST_VISIBLE_PROGRESS_EVENT_KIND}`)).toBeLessThan(
     order.indexOf("buildTurnContext"),
   );
+  const summary = readFirstVisibleLatencySummary({ butlerData: tempDir });
+  expect(summary).toMatchObject({
+    events: 1,
+    bySignal: {
+      first_progress: 1,
+    },
+    privacy: {
+      rawTextStored: false,
+    },
+  });
+  expect(summary.latest?.dimensions).toMatchObject({
+    transport: APP_TRANSPORT,
+    role: "butler",
+    source: "gateway-actor",
+  });
   store.close();
 });
 
@@ -619,6 +635,7 @@ test("non-app session actor does not emit app first visible progress", async () 
   });
 
   expect(turnEvents).not.toContain(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  expect(readFirstVisibleLatencySummary({ butlerData: tempDir }).events).toBe(0);
   store.close();
 });
 

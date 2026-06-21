@@ -25,6 +25,7 @@ import {
   recordSessionLifecycle,
   recordSystemEvent,
 } from "../../test-support/harness/durable-session-transcript.ts";
+import { recordFirstVisibleLatencyMetric } from "../../operations/metrics/first-visible-latency.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import {
   diagnosticDetails,
@@ -139,6 +140,10 @@ function stewardTimelineRoot(sessionId: string): string {
     process.env.BUTLER_DATA ||
     join(process.env.HOME || process.cwd(), ".butler");
   return join(dataRoot, "steward-activity", safeSessionPathSegment(sessionId));
+}
+
+function gatewayMetricsButlerData(): string {
+  return process.env.BUTLER_DATA || join(process.env.HOME || process.cwd(), ".butler");
 }
 
 function stewardEventId(
@@ -371,6 +376,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     envelope: InboundEnvelope,
     route?: GatewayRoute,
   ): Promise<GatewayActorTurnResult> {
+    const acceptedAtMs = Date.now();
     const turnId = turnIdFromEnvelope(envelope);
     if (this.role === "steward") {
       appendStewardActivityTimelineEvent({
@@ -414,6 +420,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         envelope,
         route,
         timestamp,
+        acceptedAtMs,
       });
       const promptContext = this.options.buildTurnContext?.({
         binding,
@@ -596,6 +603,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     envelope: InboundEnvelope;
     route?: GatewayRoute;
     timestamp: string;
+    acceptedAtMs: number;
   }): Promise<void> {
     if (input.envelope.transport !== APP_TRANSPORT) return;
     if (!this.options.deliverTurnEvent) return;
@@ -611,6 +619,14 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           source: FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE,
         }),
       },
+    });
+    recordFirstVisibleLatencyMetric({
+      butlerData: gatewayMetricsButlerData(),
+      durationMs: Date.now() - input.acceptedAtMs,
+      signal: "first_progress",
+      transport: input.envelope.transport,
+      role: input.binding.role,
+      source: "gateway-actor",
     });
   }
 
