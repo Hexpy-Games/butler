@@ -335,6 +335,11 @@ Required changes:
 - Linux App release packaging must publish installable `.deb` artifacts for
   supported Linux architectures. The package installs the Electron App, bundled
   Agent payload, desktop launcher, and App launcher command.
+- Arch Linux App release packaging must publish a user-facing GitHub Release
+  asset name that identifies the distribution and CPU target, for example
+  `butler-app-<version>-archlinux-x64.pkg.tar.zst`. The internal pacman package
+  metadata may keep the standard `pkgver-pkgrel-arch` convention, but the public
+  App asset name must not rely on `-1-x86_64` as its only platform signal.
 - Linux App service installer packaging must be able to turn the bundled
   service-installer resources into `.deb` and `.rpm` artifacts with
   package-owned user units, without adding host dependency prompts to the App
@@ -425,6 +430,8 @@ Required changes:
   built through `.deb` and `.rpm` package toolchains.
 - Release packaging tests proving the nested bundled Agent archive is
   platform-specific and omits CLI launchers for other App artifact platforms.
+- Release packaging and workflow tests proving the public Arch Linux App asset
+  name includes `archlinux-x64`.
 - Smoke test for isolated first-run service setup.
 - Smoke/manual test for isolated macOS `.pkg` installation followed by the
   installed App first-run service setup.

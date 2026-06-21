@@ -249,7 +249,7 @@ function appPackageArtifactName(input: {
   if (input.platform !== "linux-x64") {
     throw new Error("pacman App packages currently support linux-x64 only");
   }
-  return `butler-app-${input.version}-1-x86_64.pkg.tar.zst`;
+  return `butler-app-${input.version}-archlinux-x64.pkg.tar.zst`;
 }
 
 function runElectronPackager(
