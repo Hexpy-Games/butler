@@ -43,6 +43,8 @@ import {
   upsertLocalModelConfig,
 } from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
+import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
+import { firstVisibleProgressPayload } from "../../packages/butler-agent/src/agent/events/first-visible-progress.ts";
 import type {
   AgentRuntimeAdapter,
   ArtifactRef,
@@ -796,6 +798,58 @@ test("app server live events stream matches replay for turn events", async () =>
     );
   } finally {
     await reader?.cancel().catch(() => undefined);
+    server.stop();
+  }
+});
+
+test("app server persists and replays first visible progress before later turn events", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+  });
+  try {
+    const firstProgress = server.store.appendTurnEvent("general", "turn-first-progress", {
+      kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+      payload: firstVisibleProgressPayload({
+        note: "필요한 맥락을 확인하겠습니다.",
+      }),
+    });
+    const started = server.store.appendTurnEvent("general", "turn-first-progress", {
+      kind: "turn.started",
+      payload: { safeLabel: "Started" },
+    });
+
+    expect(firstProgress.turnSequence).toBeLessThan(started.turnSequence);
+    const replay = await getJson(`${server.url}events?cursor=0`);
+    const events = replay.data.events as Array<{
+      type: string;
+      payload?: {
+        turn_id?: string;
+        event?: { kind?: string; turnSequence?: number };
+        row?: { safe_label?: string; tool_call_id?: string };
+      };
+    }>;
+    const turnEvent = events.find(
+      (event) =>
+        event.type === "agent.turn_event" &&
+        event.payload?.turn_id === "turn-first-progress" &&
+        event.payload.event?.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+    );
+    const progressEvent = events.find(
+      (event) =>
+        event.type === "agent.turn_event.progress" &&
+        event.payload?.turn_id === "turn-first-progress",
+    );
+
+    expect(turnEvent?.payload?.event).toMatchObject({
+      kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+      turnSequence: firstProgress.turnSequence,
+    });
+    expect(progressEvent?.payload?.row).toMatchObject({
+      safe_label: "필요한 맥락을 확인하겠습니다.",
+    });
+    expect(progressEvent?.payload?.row?.tool_call_id).toBeUndefined();
+  } finally {
     server.stop();
   }
 });
