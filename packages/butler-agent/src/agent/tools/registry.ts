@@ -112,6 +112,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [runCommandToolDefinition.name]: runCommandToolMetadata,
   [readFileToolDefinition.name]: readFileToolMetadata,
   [writeFileToolDefinition.name]: writeFileToolMetadata,
+  [grepFilesToolDefinition.name]: grepFilesToolMetadata,
   [getWorkDashboardToolDefinition.name]: getWorkDashboardToolMetadata,
   [inspectProjectStatusToolDefinition.name]: inspectProjectStatusToolMetadata,
   [queryProjectWorkToolDefinition.name]: queryProjectWorkToolMetadata,
