@@ -26,6 +26,36 @@ import { indexTranscriptLinesForQuery } from "../../packages/butler-agent/src/ag
 let tempDir = "";
 const root = process.cwd();
 const projectLedgerCli = join(root, "packages", "project-ledger", "bin", "project-ledger");
+const startupOnlyToolNames: string[] = [
+  "get_context_monitor",
+  "list_tool_capabilities",
+  "update_todo_list",
+  "list_todo_list",
+  "read_conversation_context",
+];
+const projectMetadataToolNames: string[] = [
+  "inspect_project_status",
+  "query_project_work",
+  "render_project_dashboard",
+  "complete_project_work",
+  ...startupOnlyToolNames,
+];
+const projectWorkspaceToolNames: string[] = [
+  "run_command",
+  "read_file",
+  "write_file",
+  "grep_files",
+  "inspect_project_status",
+  "query_project_work",
+  "render_project_dashboard",
+  "complete_project_work",
+  "get_context_monitor",
+  "read_tool_output_artifact",
+  "list_tool_capabilities",
+  "update_todo_list",
+  "list_todo_list",
+  "read_conversation_context",
+];
 const removedWeatherToolNames = [
   "get_weather_with_knowhow",
   "record_weather_source_feedback",
@@ -280,19 +310,11 @@ test("project sessions expose bounded project tools without workspace escalation
     text: "Project Ledger 기준으로 상태를 확인해줘.",
     sessionMetadata: { projectId: "butler" },
   })).toEqual(["startup", "project"]);
-  expect(names).toEqual([
-    "inspect_project_status",
-    "query_project_work",
-    "render_project_dashboard",
-    "complete_project_work",
-    "get_context_monitor",
-    "list_tool_capabilities",
-    "update_todo_list",
-    "list_todo_list",
-    "read_conversation_context",
-  ]);
+  expect(names).toEqual(projectMetadataToolNames);
   expect(names).not.toContain("run_command");
   expect(names).not.toContain("read_tool_output_artifact");
+  expect(names).not.toContain("web_search");
+  expect(names).not.toContain("web_read");
   expect(names).not.toContain("get_weather_with_knowhow");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
@@ -316,13 +338,8 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
     text,
     sessionMetadata: { projectId: "butler" },
     turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
-  })).toEqual(expect.arrayContaining(["startup", "project", "workspace"]));
-  expect(names).toContain("inspect_project_status");
-  expect(names).toContain("run_command");
-  expect(names).toContain("read_file");
-  expect(names).toContain("write_file");
-  expect(names).toContain("grep_files");
-  expect(names).toContain("read_tool_output_artifact");
+  })).toEqual(["startup", "project", "workspace"]);
+  expect(names).toEqual(projectWorkspaceToolNames);
   expect(names).not.toContain("web_search");
   expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
@@ -361,6 +378,7 @@ test("workspace wording alone does not expose command execution without structur
     role: "butler",
     text,
   })).toEqual(["startup"]);
+  expect(names).toEqual(startupOnlyToolNames);
   expect(names).not.toContain("run_command");
   expect(names).not.toContain("read_tool_output_artifact");
 });
@@ -401,9 +419,42 @@ test("current Korean research text does not expose public web without structured
     text,
     turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
   })).toEqual(["startup", "workspace"]);
-  expect(names).toContain("run_command");
+  expect(names).toEqual([
+    "run_command",
+    "read_file",
+    "write_file",
+    "grep_files",
+    "get_context_monitor",
+    "read_tool_output_artifact",
+    "list_tool_capabilities",
+    "update_todo_list",
+    "list_todo_list",
+    "read_conversation_context",
+  ]);
   expect(names).not.toContain("web_search");
   expect(names).not.toContain("web_read");
+});
+
+test("structured public web profile exposes web tools without widening workspace", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "이 문장은 surface activation에 영향을 주면 안 됩니다.",
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["public-web"] } },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "이 문장은 surface activation에 영향을 주면 안 됩니다.",
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["public-web"] } },
+  })).toEqual(["startup", "public-web"]);
+  expect(names).toEqual([
+    "web_search",
+    "web_read",
+    ...startupOnlyToolNames,
+  ]);
+  expect(names).not.toContain("run_command");
+  expect(names).not.toContain("read_file");
 });
 
 test("native file tool wording alone does not expose workspace file tools", () => {
@@ -476,6 +527,7 @@ test("Project Ledger requests without project metadata do not expose project too
     role: "butler",
     text: "Project Ledger 상태와 next action을 확인하고 dashboard를 갱신해줘.",
   })).toEqual(["startup"]);
+  expect(names).toEqual(startupOnlyToolNames);
   expect(names).not.toContain("inspect_project_status");
   expect(names).not.toContain("query_project_work");
   expect(names).not.toContain("render_project_dashboard");
@@ -1399,6 +1451,7 @@ test("tool capability discovery does not mark disabled selected tools callable",
     capabilities: Array<{
       name: string;
       enabled: boolean;
+      disabled_reason: string | null;
       current_turn_selected: boolean | null;
       current_turn_callable: boolean | null;
       omitted_by_profile: boolean | null;
@@ -1410,6 +1463,7 @@ test("tool capability discovery does not mark disabled selected tools callable",
   expect(result.capabilities).toContainEqual(expect.objectContaining({
     name: "web_search",
     enabled: false,
+    disabled_reason: "web search provider is disabled by configuration",
     current_turn_selected: true,
     current_turn_callable: false,
     omitted_by_profile: false,
