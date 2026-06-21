@@ -16,6 +16,8 @@ import { SessionLifecycleService } from "../../packages/butler-agent/src/interfa
 import type { PromptAssembler } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import { DeliveryGuard } from "../../packages/butler-agent/src/interfaces/transport/delivery-guard.ts";
 import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/mock/adapter.ts";
+import { APP_TRANSPORT } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
+import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -78,6 +80,28 @@ class BlockingRuntime implements AgentRuntimeAdapter {
   async closeSession() {}
 }
 
+class FailingRuntime implements AgentRuntimeAdapter {
+  readonly id = "failing-runtime";
+  readonly capabilities = {
+    supportsSessionResume: false,
+    supportsCompaction: false,
+    supportsToolStreaming: false,
+    supportsParallelToolCalls: false,
+  } as const;
+
+  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
+    return {
+      sessionId: input.sessionId,
+      role: input.role,
+      runtimeAdapterId: this.id,
+    };
+  }
+
+  async runTurn(): Promise<never> {
+    throw new Error("provider unavailable");
+  }
+}
+
 const fakeProvider: ModelProviderAdapter = {
   id: "fake-provider",
   capabilities: {
@@ -105,6 +129,18 @@ function inbound(id: string, text: string): InboundEnvelope {
       id,
       text,
       timestamp: new Date().toISOString(),
+    },
+  };
+}
+
+function appInbound(id: string, text: string): InboundEnvelope {
+  return {
+    ...inbound(id, text),
+    eventId: `app:${id}`,
+    transport: APP_TRANSPORT,
+    routingHints: {
+      sessionId: "butler/main",
+      turnId: `turn-${id}`,
     },
   };
 }
@@ -498,6 +534,130 @@ test("session actor persists runtime final text and forwards turn events", async
     }),
   }));
   expect(turnEvents).toContain("turn.completed");
+  store.close();
+});
+
+test("app session actor emits first visible progress before context preparation", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime();
+  runtime.firstTurnRelease.resolve();
+  const order: string[] = [];
+  const turnEvents: string[] = [];
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: APP_TRANSPORT,
+      accountId: "local",
+      peerId: "butler/main",
+    }],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    promptAssembler: {
+      buildSystemPrompt: () => ({ systemPrompt: "You are Butler." }),
+      buildTurnContext: () => {
+        order.push("buildTurnContext");
+        return "context";
+      },
+    } as unknown as PromptAssembler,
+    deliverTurnEvent: async ({ event }) => {
+      order.push(`turnEvent:${event.kind}`);
+      turnEvents.push(event.kind);
+    },
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(appInbound("first-progress", "hello"))).resolves.toMatchObject({
+    text: "reply-1",
+  });
+
+  expect(turnEvents[0]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  expect(order.indexOf(`turnEvent:${FIRST_VISIBLE_PROGRESS_EVENT_KIND}`)).toBeLessThan(
+    order.indexOf("buildTurnContext"),
+  );
+  store.close();
+});
+
+test("non-app session actor does not emit app first visible progress", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime();
+  runtime.firstTurnRelease.resolve();
+  const turnEvents: string[] = [];
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler.",
+    deliverTurnEvent: async ({ event }) => {
+      turnEvents.push(event.kind);
+    },
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(inbound("mock-progress", "hello"))).resolves.toMatchObject({
+    text: "reply-1",
+  });
+
+  expect(turnEvents).not.toContain(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  store.close();
+});
+
+test("app session actor keeps first visible progress when runtime fails", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new FailingRuntime();
+  const turnEvents: string[] = [];
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: APP_TRANSPORT,
+      accountId: "local",
+      peerId: "butler/main",
+    }],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler.",
+    deliverTurnEvent: async ({ event }) => {
+      turnEvents.push(event.kind);
+    },
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(appInbound("runtime-fails", "hello"))).rejects.toThrow(
+    "provider unavailable",
+  );
+
+  expect(turnEvents[0]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  expect(store.getBySessionId("butler/main")?.lifecycleState).toBe("crashed");
   store.close();
 });
 
