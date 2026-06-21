@@ -607,27 +607,31 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
   }): Promise<void> {
     if (input.envelope.transport !== APP_TRANSPORT) return;
     if (!this.options.deliverTurnEvent) return;
-    await this.options.deliverTurnEvent({
-      binding: input.binding,
-      envelope: input.envelope,
-      route: input.route,
-      event: {
-        kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-        createdAt: input.timestamp,
-        payload: firstVisibleProgressPayload({
-          note: FIRST_PROGRESS_VISIBLE_CONTEXT_NOTE,
-          source: FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE,
-        }),
-      },
-    });
-    recordFirstVisibleLatencyMetric({
-      butlerData: gatewayMetricsButlerData(),
-      durationMs: Date.now() - input.acceptedAtMs,
-      signal: "first_progress",
-      transport: input.envelope.transport,
-      role: input.binding.role,
-      source: "gateway-actor",
-    });
+    try {
+      await this.options.deliverTurnEvent({
+        binding: input.binding,
+        envelope: input.envelope,
+        route: input.route,
+        event: {
+          kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+          createdAt: input.timestamp,
+          payload: firstVisibleProgressPayload({
+            note: FIRST_PROGRESS_VISIBLE_CONTEXT_NOTE,
+            source: FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE,
+          }),
+        },
+      });
+      recordFirstVisibleLatencyMetric({
+        butlerData: gatewayMetricsButlerData(),
+        durationMs: Date.now() - input.acceptedAtMs,
+        signal: "first_progress",
+        transport: input.envelope.transport,
+        role: input.binding.role,
+        source: "gateway-actor",
+      });
+    } catch {
+      // First visible progress is latency UX, not the authoritative turn path.
+    }
   }
 
   private async generateSessionTitleBestEffort(

@@ -678,6 +678,50 @@ test("app session actor keeps first visible progress when runtime fails", async 
   store.close();
 });
 
+test("app session actor treats first visible progress delivery as best effort", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime();
+  runtime.firstTurnRelease.resolve();
+  const turnEvents: string[] = [];
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: APP_TRANSPORT,
+      accountId: "local",
+      peerId: "butler/main",
+    }],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler.",
+    deliverTurnEvent: async ({ event }) => {
+      turnEvents.push(event.kind);
+      if (event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
+        throw new Error("event store unavailable");
+      }
+    },
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(appInbound("first-progress-delivery-fails", "hello"))).resolves.toMatchObject({
+    text: "reply-1",
+  });
+
+  expect(turnEvents[0]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  expect(turnEvents).toContain("turn.completed");
+  expect(readFirstVisibleLatencySummary({ butlerData: tempDir }).events).toBe(0);
+  store.close();
+});
+
 test("session actor persists empty runtime final markers for durable turn continuity", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const runtime = new BlockingRuntime(() => "   ");
