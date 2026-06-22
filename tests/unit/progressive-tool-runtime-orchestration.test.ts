@@ -27,6 +27,14 @@ const fakeProvider: ModelProviderAdapter = {
   },
 };
 
+const promotionProvider: ModelProviderAdapter = {
+  ...fakeProvider,
+  capabilities: {
+    ...fakeProvider.capabilities,
+    supportsSameTurnToolSchemaPromotion: true,
+  },
+};
+
 const fakeWebSearchProvider: WebSearchProvider = {
   id: "fixture-search",
   async search(input) {
@@ -172,4 +180,61 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
     .filter((id): id is string => typeof id === "string" && id.length > 0));
   expect(startedIds.length).toBeGreaterThanOrEqual(3);
   expect(startedIds.every((id) => completedIds.has(id))).toBe(true);
+});
+
+test("native runtime exposes promoted dynamic schemas only for capable providers", async () => {
+  let initialToolNames: string[] = [];
+  let toolsBeforeDescribe: string[] = [];
+  let toolsAfterDescribe: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    webSearchProvider: fakeWebSearchProvider,
+    runFunctionToolPromptText: async (input) => {
+      initialToolNames = input.tools.map((tool) => tool.name);
+      toolsBeforeDescribe = input.dynamicTools?.().map((tool) => tool.name) ?? [];
+      await input.executeTool({
+        name: "tool_search",
+        args: { provider: "native", query: "web search", limit: 5 },
+        rawArguments: JSON.stringify({ provider: "native", query: "web search", limit: 5 }),
+      });
+      await input.executeTool({
+        name: "tool_describe",
+        args: { ids: ["native:web_search"] },
+        rawArguments: JSON.stringify({ ids: ["native:web_search"] }),
+      });
+      toolsAfterDescribe = input.dynamicTools?.().map((tool) => tool.name) ?? [];
+      const result = await input.executeTool({
+        name: "web_search",
+        args: { query: "butler release", max_results: 1 },
+        rawArguments: JSON.stringify({ query: "butler release", max_results: 1 }),
+      }) as { ok?: boolean; provider?: string };
+      expect(result).toEqual(expect.objectContaining({ ok: true, provider: "fixture-search" }));
+      return "웹 검색 도구를 provider-native schema promotion으로 호출했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-promotion",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: promotionProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "현재 공개 정보를 확인해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(initialToolNames).toEqual(expect.arrayContaining(["tool_search", "tool_describe", "tool_call"]));
+  expect(initialToolNames).not.toContain("web_search");
+  expect(toolsBeforeDescribe).not.toContain("web_search");
+  expect(toolsAfterDescribe).toEqual(expect.arrayContaining(["tool_search", "tool_describe", "tool_call", "web_search"]));
+
+  const transcript = readTranscript("butler/main/progressive-promotion");
+  expect(transcript.some((event) => event.kind === "tool_call" && event.payload.name === "web_search")).toBe(true);
+  expect(transcript.some((event) => event.kind === "tool_call" && event.payload.name === "tool_call")).toBe(false);
 });

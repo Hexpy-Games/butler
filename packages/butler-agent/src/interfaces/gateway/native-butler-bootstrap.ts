@@ -100,16 +100,18 @@ function defaultProvider(config: ButlerConfig = {}): ModelProviderAdapter {
   const providerId = configuredModel.includes("/")
     ? configuredModel.split("/", 1)[0] || "openai"
     : "openai";
+  const supportsOpenAIFunctionTools = providerId === "openai";
   return {
     id: providerId,
     capabilities: {
       supportsStreaming: false,
-      supportsToolCalls: false,
+      supportsToolCalls: supportsOpenAIFunctionTools,
       supportsImages: false,
       supportsAudio: false,
       supportsServerThreads: false,
       supportsReasoningConfig: true,
       supportsPromptCaching: true,
+      supportsSameTurnToolSchemaPromotion: supportsOpenAIFunctionTools,
     },
     async invoke(input) {
       const prompt = input.messages

@@ -24,6 +24,7 @@ import {
   runFunctionToolPromptText,
   runPromptText,
   type FunctionToolPromptOptions,
+  type FunctionToolDefinition,
   type PromptUsageAttribution,
   type PromptUsageBudgetState,
   type PromptUsageSectionAttribution,
@@ -2061,8 +2062,17 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           useTools,
         }),
       });
-      let currentProviderToolNames: readonly string[] = [];
+      let currentProviderTools: readonly FunctionToolDefinition[] = [];
       const describedToolIds = new Set<string>();
+      const promotedNativeToolNames = new Set<string>();
+      const providerSupportsSchemaPromotion =
+        input.provider.capabilities.supportsSameTurnToolSchemaPromotion === true;
+      const currentDynamicProviderTools = (): FunctionToolDefinition[] =>
+        providerSupportsSchemaPromotion
+          ? mergeFunctionToolDefinitions(currentProviderTools, promotedNativeToolDefinitions(promotedNativeToolNames))
+          : [...currentProviderTools];
+      const currentProviderToolNames = (): readonly string[] =>
+        currentDynamicProviderTools().map((tool) => tool.name);
       const executor = createAuditedButlerToolExecutor({
         sessionId: input.handle.sessionId,
         audit,
@@ -2074,6 +2084,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         plannedReview,
         semanticProgressSafetyNet,
         describedToolIds,
+        promotedNativeToolNames,
         executor: this.butlerToolExecutor ?? createButlerToolExecutor({
           butlerHome: this.butlerHome,
           butlerData: this.butlerData,
@@ -2088,7 +2099,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           searchPlannerOriginalRequest: userText,
           workerModelRules: workerModelRulesFromMetadata(input.metadata?.workerModelRules ?? session.init.metadata?.workerModelRules),
           turnContext: [prompt, currentAttachmentContext].filter(Boolean).join("\n\n"),
-          currentToolNames: () => currentProviderToolNames,
+          currentToolNames: currentProviderToolNames,
           describedToolIds: () => [...describedToolIds],
         }),
       });
@@ -2124,8 +2135,8 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           tools: BUTLER_TOOLS,
         });
         const selectedTools = selectedSurface.tools;
-        const previousProviderToolNames = currentProviderToolNames;
-        currentProviderToolNames = selectedTools.map((tool) => tool.name);
+        const previousProviderTools = currentProviderTools;
+        currentProviderTools = selectedTools;
         const usageAttribution: PromptUsageAttribution = {
           turnId,
           phase,
@@ -2150,6 +2161,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             signal: input.signal,
             attachments,
             tools: selectedTools,
+            dynamicTools: providerSupportsSchemaPromotion ? currentDynamicProviderTools : undefined,
             maxToolRounds: grantedToolRounds,
             butlerData: this.butlerData,
             usageAttribution,
@@ -2184,7 +2196,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             },
           });
         } finally {
-          currentProviderToolNames = previousProviderToolNames;
+          currentProviderTools = previousProviderTools;
         }
       };
       const successfulToolAuditCount = () => audit.filter((entry) => entry.ok).length;
@@ -2603,6 +2615,7 @@ function createAuditedButlerToolExecutor(input: {
   plannedReview: PlannedReviewTurnContext | null;
   semanticProgressSafetyNet: RuntimeSemanticProgressSafetyNet;
   describedToolIds?: Set<string>;
+  promotedNativeToolNames?: Set<string>;
   executor: FunctionToolPromptOptions["executeTool"];
 }): FunctionToolPromptOptions["executeTool"] {
   let semanticProgressEstablished = false;
@@ -3131,6 +3144,7 @@ function createAuditedButlerToolExecutor(input: {
       const result = await executeWithTurnFreshnessCache(effectiveCall);
       if (call.name === "tool_describe") {
         recordDescribedToolIds(input.describedToolIds, result);
+        recordPromotedNativeToolNames(input.promotedNativeToolNames, result);
       }
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       if (isStateMutatingToolCall(call.name, cleanArgs)) {
@@ -3382,6 +3396,31 @@ function recordDescribedToolIds(target: Set<string> | undefined, result: unknown
     const id = item.id.trim();
     if (id) target.add(id);
   }
+}
+
+function recordPromotedNativeToolNames(target: Set<string> | undefined, result: unknown): void {
+  if (!target || !isRecord(result) || !Array.isArray(result.descriptions)) return;
+  for (const item of result.descriptions) {
+    if (!isRecord(item)) continue;
+    const affordance = isRecord(item.call_affordance) ? item.call_affordance : {};
+    const toolName = typeof affordance.tool_name === "string" ? affordance.tool_name.trim() : "";
+    if (affordance.type === "native_tool" && toolName) target.add(toolName);
+  }
+}
+
+function promotedNativeToolDefinitions(toolNames: ReadonlySet<string>): FunctionToolDefinition[] {
+  if (toolNames.size === 0) return [];
+  return BUTLER_TOOLS.filter((tool) => toolNames.has(tool.name));
+}
+
+function mergeFunctionToolDefinitions(
+  baseTools: readonly FunctionToolDefinition[],
+  extraTools: readonly FunctionToolDefinition[],
+): FunctionToolDefinition[] {
+  const merged = new Map<string, FunctionToolDefinition>();
+  for (const tool of baseTools) merged.set(tool.name, tool);
+  for (const tool of extraTools) merged.set(tool.name, tool);
+  return [...merged.values()];
 }
 
 function withBridgeInvocationForAudit(

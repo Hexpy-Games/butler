@@ -2978,6 +2978,118 @@ test("OpenAI function tool prompts send compact tool schemas to the model", asyn
   expect(JSON.stringify(seenBody.tools)).not.toContain("Nested parameter prose");
 });
 
+test("OpenAI function tool prompt refreshes promoted dynamic schemas between tool rounds", async () => {
+  process.env.OPENAI_API_KEY = "sk-test";
+  process.env.OPENAI_BASE_URL = "https://api.openai.example/v1";
+
+  let promoteLookup = false;
+  const seenBodies: Array<Record<string, any>> = [];
+  const executedToolNames: string[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    seenBodies.push(body);
+    if (seenBodies.length === 1) {
+      return Response.json({
+        id: "resp_1",
+        output: [{
+          type: "function_call",
+          call_id: "call_1",
+          name: "tool_describe",
+          arguments: JSON.stringify({ ids: ["native:lookup"] }),
+        }],
+      });
+    }
+    if (seenBodies.length === 2) {
+      return Response.json({
+        id: "resp_2",
+        output: [{
+          type: "function_call",
+          call_id: "call_2",
+          name: "lookup",
+          arguments: JSON.stringify({ query: "status" }),
+        }],
+      });
+    }
+    return Response.json({
+      id: "resp_3",
+      output: [{
+        type: "message",
+        content: [{ type: "output_text", text: "done" }],
+      }],
+    });
+  }) as unknown as typeof fetch;
+
+  const result = await runFunctionToolPromptText({
+    model: "gpt-5.5",
+    prompt: "check promoted tool",
+    maxToolRounds: 3,
+    tools: [{
+      type: "function",
+      name: "tool_describe",
+      description: "Describe a tool before promotion.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          ids: { type: "array", items: { type: "string" } },
+        },
+        required: ["ids"],
+      },
+    }],
+    dynamicTools: () => {
+      const base = [{
+        type: "function" as const,
+        name: "tool_describe",
+        description: "Describe a tool before promotion.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            ids: { type: "array", items: { type: "string" } },
+          },
+          required: ["ids"],
+        },
+      }];
+      if (!promoteLookup) return base;
+      return [...base, {
+        type: "function" as const,
+        name: "lookup",
+        description: "Promoted lookup tool.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            query: { type: "string" },
+          },
+          required: ["query"],
+        },
+      }];
+    },
+    executeTool: async (call) => {
+      executedToolNames.push(call.name);
+      if (call.name === "tool_describe") {
+        promoteLookup = true;
+        return { ok: true, described: call.args.ids };
+      }
+      return { ok: true, name: call.name, query: call.args.query };
+    },
+  });
+
+  expect(result).toBe("done");
+  expect(seenBodies).toHaveLength(3);
+  expect(executedToolNames).toEqual(["tool_describe", "lookup"]);
+  expect(seenBodies[0]!.tools.map((tool: { name: string }) => tool.name)).toEqual(["tool_describe"]);
+  expect(seenBodies[1]!.tools.map((tool: { name: string }) => tool.name)).toEqual(["tool_describe", "lookup"]);
+  expect(seenBodies[1]!.input).toEqual([{
+    type: "function_call_output",
+    call_id: "call_1",
+    output: JSON.stringify({
+      ok: true,
+      output: { ok: true, described: ["native:lookup"] },
+    }),
+  }]);
+});
+
 test("function tool prompt normalizes model tool names before dispatch", async () => {
   process.env.OPENAI_API_KEY = "sk-test";
 

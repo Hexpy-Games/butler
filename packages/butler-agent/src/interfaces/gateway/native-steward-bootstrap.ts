@@ -86,12 +86,13 @@ function defaultProvider(): ModelProviderAdapter {
     id: "openai",
     capabilities: {
       supportsStreaming: false,
-      supportsToolCalls: false,
+      supportsToolCalls: true,
       supportsImages: false,
       supportsAudio: false,
       supportsServerThreads: false,
       supportsReasoningConfig: true,
       supportsPromptCaching: true,
+      supportsSameTurnToolSchemaPromotion: true,
     },
     async invoke() {
       throw new Error("Native steward bootstrap does not call provider.invoke directly");
