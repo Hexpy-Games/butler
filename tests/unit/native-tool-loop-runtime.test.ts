@@ -40,6 +40,10 @@ import {
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { publicWorkDecisionsFromAssistantText } from "../../packages/butler-agent/src/agent/output/public-work-decisions.ts";
 import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence-capability-ledger.ts";
+import {
+  evidenceTranscriptToolCallArgumentsProjection,
+  evidenceTranscriptToolResultProjection,
+} from "../../packages/butler-agent/src/agent/output/evidence-transcript-result.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 let tempDir = "";
@@ -3399,6 +3403,249 @@ test("native runtime skips completion review when evidence receipts satisfy the 
   expect(result.text).toContain("https://example.test/population");
 });
 
+test("tool result transcript projection keeps replayable evidence and drops private raw payloads", () => {
+  const projection = evidenceTranscriptToolResultProjection({
+    ok: true,
+    raw_output: "raw payload strings SECRET_TOKEN raw prompt text <think>hidden</think> /Users/private/file",
+    prompt: "raw prompt text",
+    evidence_capability_receipts: [{
+      receipt_id: "ecr-safe-source",
+      schema_version: "evidence-capability.v1",
+      producer: { kind: "tool", name: "web_read", call_id: "call-safe" },
+      capability: "source_verified",
+      evidence_kind: "source_page",
+      maturity: "verified",
+      confidence: 0.9,
+      verified: true,
+      summary: "Public source was read.",
+      scope: {
+        prompt: "raw prompt text",
+        path: "/Users/private/project",
+      },
+      references: [{ url: "https://example.test/source", label: "Source page" }],
+      satisfies: ["source_verified"],
+      limitations: ["Only a bounded public excerpt was used."],
+      created_at: "2026-06-22T08:08:00.000Z",
+    }],
+    evidence_receipts: [{
+      schema: "butler.evidence-receipt.v1",
+      id: "legacy-source",
+      producer: { kind: "tool", name: "web_read" },
+      receiptType: "source",
+      verified: true,
+      covers: ["source_verified"],
+      summary: "Legacy public source receipt.",
+      references: [{ kind: "url", ref: "https://example.test/source" }],
+      artifacts: [{ id: "artifact-safe", path: "/Users/private/artifact.txt", label: "Saved artifact" }],
+      satisfies: ["source_verified"],
+    }],
+  });
+
+  expect(projection.schema_version).toBe("butler.tool-result-evidence-transcript.v1");
+  expect(projection.evidence_capability_receipts).toHaveLength(2);
+  expect(projection.evidence_capability_receipts).toContainEqual(expect.objectContaining({
+    receipt_id: "ecr-safe-source",
+    schema_version: "evidence-capability.v1",
+    capability: "source_verified",
+    satisfies: ["source_verified"],
+  }));
+  expect(projection.evidence_capability_receipts.find((receipt) =>
+    receipt.receipt_id === "ecr-safe-source")).not.toHaveProperty("scope");
+  expect(projection.evidence_receipts).toHaveLength(1);
+  expect(projection.evidence_receipts[0].artifacts?.[0]).toEqual({
+    id: "artifact-safe",
+    label: "Saved artifact",
+  });
+  expect(projection.evidence_limitations).toEqual(["Only a bounded public excerpt was used."]);
+  expect(projection.completion_obligation_evidence.limitations).toEqual(["Only a bounded public excerpt was used."]);
+
+  const serialized = JSON.stringify(projection);
+  expect(serialized).toContain("evidence-capability.v1");
+  expect(serialized).toContain("butler.evidence-receipt.v1");
+  expect(serialized).not.toContain("SECRET_TOKEN");
+  expect(serialized).not.toContain("raw prompt text");
+  expect(serialized).not.toContain("<think>");
+  expect(serialized).not.toContain("/Users/private");
+  expect(serialized).not.toContain("raw payload strings");
+});
+
+test("tool call transcript projection preserves safe arguments without raw private payloads", () => {
+  const projection = evidenceTranscriptToolCallArgumentsProjection({
+    command: "bun test tests/unit/native-tool-loop-runtime.test.ts",
+    token: "abc123opaque",
+    api_key: "sk_live_abc123",
+    password: "hunter2",
+    nested: {
+      authorization: "abc.def.ghi",
+      path: "/Users/private/project/.env",
+      safe: "public label",
+    },
+  });
+
+  expect(projection).toMatchObject({
+    schema_version: "butler.tool-call-arguments-transcript.v1",
+    argument_keys: ["command", "token", "api_key", "password", "nested"],
+    safe_arguments: {
+      command: "bun test tests/unit/native-tool-loop-runtime.test.ts",
+      token: "[redacted]",
+      api_key: "[redacted]",
+      password: "[redacted]",
+      nested: {
+        authorization: "[redacted]",
+        path: "[redacted]",
+        safe: "public label",
+      },
+    },
+  });
+  const serialized = JSON.stringify(projection);
+  expect(serialized).not.toContain("SECRET_TOKEN");
+  expect(serialized).not.toContain("abc123opaque");
+  expect(serialized).not.toContain("sk_live_abc123");
+  expect(serialized).not.toContain("hunter2");
+  expect(serialized).not.toContain("/Users/private");
+  expect(serialized).not.toContain("abc.def.ghi");
+});
+
+test("native runtime stores privacy-safe replayable evidence receipts for tool results", async () => {
+  let modelVisibleToolResult: unknown;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    executeButlerTool: async () => ({
+      ok: true,
+      raw_output: "raw payload strings SECRET_TOKEN raw prompt text <think>hidden</think> /Users/private/file",
+      evidence_capability_receipts: [{
+        receipt_id: "ecr-runtime-source",
+        schema_version: "evidence-capability.v1",
+        producer: { kind: "tool", name: "web_read" },
+        capability: "source_verified",
+        evidence_kind: "source_page",
+        maturity: "verified",
+        confidence: 0.9,
+        verified: true,
+        summary: "A public source page was read.",
+        references: [{ url: "https://example.test/runtime-source" }],
+        satisfies: ["source_verified"],
+        limitations: ["Only a bounded public excerpt was available."],
+        created_at: "2026-06-22T08:08:00.000Z",
+      }],
+    }),
+    runFunctionToolPromptText: async (input) => {
+      modelVisibleToolResult = await input.executeTool({
+        name: "web_read",
+        args: { url: "https://example.test/runtime-source" },
+        rawArguments: JSON.stringify({ url: "https://example.test/runtime-source" }),
+      });
+      return "출처를 확인했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/evidence-transcript-privacy",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "출처를 확인해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(JSON.stringify(modelVisibleToolResult)).toContain("raw payload strings");
+  const toolResult = readTranscript("butler/main/evidence-transcript-privacy")
+    .find((event) => event.kind === "tool_result" && event.payload.name === "web_read");
+  const toolCall = readTranscript("butler/main/evidence-transcript-privacy")
+    .find((event) => event.kind === "tool_call" && event.payload.name === "web_read");
+  expect(toolCall?.payload.arguments).toMatchObject({
+    schema_version: "butler.tool-call-arguments-transcript.v1",
+    safe_arguments: {
+      url: "https://example.test/runtime-source",
+    },
+  });
+  expect(toolResult?.payload).toMatchObject({
+    name: "web_read",
+    ok: true,
+  });
+  expect(toolResult?.payload.result).toMatchObject({
+    schema_version: "butler.tool-result-evidence-transcript.v1",
+    evidence_capability_receipts: [expect.objectContaining({
+      receipt_id: "ecr-runtime-source",
+      schema_version: "evidence-capability.v1",
+      satisfies: ["source_verified"],
+    })],
+    evidence_limitations: ["Only a bounded public excerpt was available."],
+    completion_obligation_evidence: expect.objectContaining({
+      limitations: ["Only a bounded public excerpt was available."],
+    }),
+  });
+
+  const serialized = JSON.stringify(toolResult);
+  expect(serialized).not.toContain("SECRET_TOKEN");
+  expect(serialized).not.toContain("raw prompt text");
+  expect(serialized).not.toContain("<think>");
+  expect(serialized).not.toContain("/Users/private");
+  expect(serialized).not.toContain("raw payload strings");
+});
+
+test("native runtime redacts raw tool failure errors in durable transcripts", async () => {
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    executeButlerTool: async () => {
+      throw new Error("failed with token=abc123opaque api_key=sk_live_abc123 raw prompt text <think>hidden</think> /Users/private/file");
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "web_read",
+        args: {
+          url: "https://example.test/private-error",
+          token: "abc123opaque",
+        },
+        rawArguments: JSON.stringify({ url: "https://example.test/private-error", token: "abc123opaque" }),
+      });
+      return "오류를 복구 가능한 결과로 받았습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/evidence-transcript-error-privacy",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "오류 redaction을 확인해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  const transcript = readTranscript("butler/main/evidence-transcript-error-privacy");
+  const toolCall = transcript.find((event) => event.kind === "tool_call" && event.payload.name === "web_read");
+  const toolResult = transcript.find((event) => event.kind === "tool_result" && event.payload.name === "web_read");
+  expect(toolCall?.payload.arguments).toMatchObject({
+    schema_version: "butler.tool-call-arguments-transcript.v1",
+    safe_arguments: {
+      url: "https://example.test/private-error",
+      token: "[redacted]",
+    },
+  });
+  expect(toolResult?.payload).toMatchObject({
+    ok: false,
+    error: "Tool execution failed.",
+  });
+  const serialized = JSON.stringify(transcript);
+  expect(serialized).not.toContain("abc123opaque");
+  expect(serialized).not.toContain("sk_live_abc123");
+  expect(serialized).not.toContain("raw prompt text");
+  expect(serialized).not.toContain("<think>");
+  expect(serialized).not.toContain("/Users/private");
+});
+
 test("native runtime satisfies source verification from tool capability audit contracts", async () => {
   const prompts: string[] = [];
   const executedTools: string[] = [];
@@ -5260,6 +5507,17 @@ test("native runtime records bridge audit metadata for tool_call resolution fail
     },
   }));
   expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN_123");
+  expect(JSON.stringify(transcript)).not.toContain("SECRET_TOKEN_123");
+  const call = transcript.find((event) => event.kind === "tool_call" && event.payload.name === "tool_call");
+  expect(call?.payload.arguments).toMatchObject({
+    schema_version: "butler.tool-call-arguments-transcript.v1",
+    safe_arguments: {
+      id: "native:missing_tool",
+      arguments: {
+        token: "[redacted]",
+      },
+    },
+  });
 });
 
 test("native runtime closes bridge progress rows when tool_call resolution throws", async () => {

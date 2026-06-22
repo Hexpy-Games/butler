@@ -115,6 +115,11 @@ import {
   summarizeToolProgress,
 } from "../output/tool-progress.ts";
 import {
+  evidenceTranscriptErrorMessage,
+  evidenceTranscriptToolCallArgumentsProjection,
+  evidenceTranscriptToolResultProjection,
+} from "../output/evidence-transcript-result.ts";
+import {
   annotateToolResultWithDecisionContext,
   publicWorkDecisionPayload,
   publicWorkDecisionsFromAssistantText,
@@ -2686,7 +2691,7 @@ function createAuditedButlerToolExecutor(input: {
       kind: "tool_call",
       payload: {
         name: call.name,
-        arguments: cleanArgs,
+        arguments: evidenceTranscriptToolCallArgumentsProjection(cleanArgs),
       },
       metadata: {
         source: source === "runtime"
@@ -2738,7 +2743,7 @@ function createAuditedButlerToolExecutor(input: {
         payload: {
           name: call.name,
           ok: true,
-          result,
+          result: evidenceTranscriptToolResultProjection(result),
         },
         metadata: {
           source: source === "runtime"
@@ -2772,7 +2777,7 @@ function createAuditedButlerToolExecutor(input: {
         payload: {
           name: call.name,
           ok: false,
-          error: message,
+          error: evidenceTranscriptErrorMessage(message),
         },
         metadata: {
           source: source === "runtime"
@@ -2892,7 +2897,7 @@ function createAuditedButlerToolExecutor(input: {
       kind: "tool_call",
       payload: {
         name: call.name,
-        arguments: cleanArgs,
+        arguments: evidenceTranscriptToolCallArgumentsProjection(cleanArgs),
       },
       metadata: {
         source: "runtime/native-tool-loop.ts#bridge-tool-progress",
@@ -2930,7 +2935,7 @@ function createAuditedButlerToolExecutor(input: {
         payload: {
           name: call.name,
           ok,
-          result: redactedBridgeToolAuditResult("tool_call", result),
+          result: evidenceTranscriptToolResultProjection(redactedBridgeToolAuditResult("tool_call", result)),
         },
         metadata: {
           source: "runtime/native-tool-loop.ts#bridge-tool-progress",
@@ -3071,7 +3076,7 @@ function createAuditedButlerToolExecutor(input: {
           payload: {
             name: call.name,
             ok: false,
-            error,
+            error: evidenceTranscriptErrorMessage(error),
             planned_review_task_id: reviewTaskId,
           },
           metadata: {
@@ -3107,7 +3112,7 @@ function createAuditedButlerToolExecutor(input: {
           kind: "tool_call",
           payload: {
             name: call.name,
-            arguments: cleanArgs,
+            arguments: evidenceTranscriptToolCallArgumentsProjection(cleanArgs),
           },
           metadata: {
             source: "runtime/native-tool-loop.ts#repeated-tool-family-guard",
@@ -3120,7 +3125,7 @@ function createAuditedButlerToolExecutor(input: {
           payload: {
             name: call.name,
             ok: false,
-            result,
+            result: evidenceTranscriptToolResultProjection(result),
           },
           metadata: {
             source: "runtime/native-tool-loop.ts#repeated-tool-family-guard",
@@ -3266,7 +3271,7 @@ function createAuditedButlerToolExecutor(input: {
       kind: "tool_call",
       payload: {
         name: call.name,
-        arguments: cleanArgs,
+        arguments: evidenceTranscriptToolCallArgumentsProjection(cleanArgs),
       },
       metadata: {
         source: "runtime/native-tool-loop.ts",
@@ -3406,7 +3411,7 @@ function createAuditedButlerToolExecutor(input: {
         payload: {
           name: call.name,
           ok: true,
-          result,
+          result: evidenceTranscriptToolResultProjection(result),
           publicDecision: publicWorkDecisionPayload(decision),
         },
         metadata: {
@@ -3492,7 +3497,7 @@ function createAuditedButlerToolExecutor(input: {
         payload: {
           name: call.name,
           ok: false,
-          error: message,
+          error: evidenceTranscriptErrorMessage(message),
           publicDecision: publicWorkDecisionPayload(decision),
         },
         metadata: {
