@@ -720,6 +720,7 @@ test("native runtime sends a profiled tool surface for basic project turns", asy
     "get_context_monitor",
     "list_tool_capabilities",
     "tool_search",
+    "tool_describe",
     "update_todo_list",
     "list_todo_list",
     "read_conversation_context",

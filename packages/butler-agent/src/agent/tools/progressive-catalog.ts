@@ -104,6 +104,27 @@ export function stableToolCatalogId(input: {
   return [input.provider, namespace, name].filter(Boolean).join(":");
 }
 
+export function parseToolCatalogId(id: string): {
+  provider: ToolCatalogProvider;
+  namespace: string | null;
+  name: string;
+} | null {
+  const parts = id.split(":");
+  const provider = parts[0] as ToolCatalogProvider | undefined;
+  if (provider !== "native" && provider !== "mcp" && provider !== "plugin") return null;
+  if (provider === "native" && parts.length === 2) {
+    return { provider, namespace: null, name: decodeCatalogIdSegment(parts[1]) };
+  }
+  if ((provider === "mcp" || provider === "plugin") && parts.length === 3) {
+    return {
+      provider,
+      namespace: decodeCatalogIdSegment(parts[1]),
+      name: decodeCatalogIdSegment(parts[2]),
+    };
+  }
+  return null;
+}
+
 export function schemaDigest(schema: unknown): string {
   return `sha256:${createHash("sha256").update(stableJson(schema)).digest("hex")}`;
 }
@@ -229,6 +250,15 @@ function requireCatalogIdSegment(value: string, field: string): string {
   const trimmed = field === "name" ? normalizeToolName(value) : value.trim();
   if (!trimmed) throw new Error(`Tool catalog ${field} must not be empty`);
   return encodeURIComponent(trimmed);
+}
+
+function decodeCatalogIdSegment(value: string | undefined): string {
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return "";
+  }
 }
 
 function compareStableStrings(a: string, b: string): number {

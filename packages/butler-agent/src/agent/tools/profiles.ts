@@ -19,6 +19,7 @@ export type ButlerToolProfile =
 const STARTUP_TOOL_NAMES = [
   "list_tool_capabilities",
   "tool_search",
+  "tool_describe",
   "get_context_monitor",
   "read_conversation_context",
   "update_todo_list",
@@ -98,9 +99,7 @@ const ORCHESTRATION_TOOL_NAMES = [
   "write_work_orchestration_report",
 ] as const;
 
-const ARTIFACT_DATA_TOOL_NAMES = [
-  "transform_public_data_table",
-] as const;
+const ARTIFACT_DATA_TOOL_NAMES = ["transform_public_data_table"] as const;
 
 const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
   startup: STARTUP_TOOL_NAMES,
@@ -120,6 +119,7 @@ const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
 
 const WORKER_DEFAULT_TOOL_NAMES = [
   "tool_search",
+  "tool_describe",
   "run_command",
   "read_file",
   "write_file",
