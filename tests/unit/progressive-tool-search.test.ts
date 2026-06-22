@@ -133,6 +133,33 @@ test("tool_search native provider does not wait on configured MCP probes", async
   expect(Date.now() - started).toBeLessThan(900);
 });
 
+test("tool_search does not load MCP catalogs outside the current MCP tool profile", async () => {
+  upsertMcpServer(tempDir, {
+    id: "slow-fixture",
+    display_name: "Slow Fixture MCP",
+    enabled: true,
+    transport: "stdio",
+    command: process.execPath,
+    args: ["--eval", "setTimeout(() => {}, 60_000);"],
+    cwd: root,
+  });
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+  });
+
+  const started = Date.now();
+  const result = await execute({
+    name: "tool_search",
+    args: { provider: "mcp", category: "mcp", query: "issue" },
+    rawArguments: "{}",
+  }) as { ok: boolean; results: Array<{ provider: string }> };
+
+  expect(result.ok).toBe(true);
+  expect(result.results).toEqual([]);
+  expect(Date.now() - started).toBeLessThan(900);
+});
+
 test("tool_search finds real configured MCP tools and redacts schemas", async () => {
   upsertMcpServer(tempDir, {
     id: "fixture",
@@ -147,6 +174,7 @@ test("tool_search finds real configured MCP tools and redacts schemas", async ()
   const execute = createButlerToolExecutor({
     butlerHome: root,
     butlerData: tempDir,
+    currentToolNames: ["tool_search", "call_mcp_tool"],
   });
   const result = await execute({
     name: "tool_search",
@@ -186,12 +214,14 @@ test("tool_search supports plugin catalog input without completing source obliga
     name: "tool_search",
     args: { provider: "PLUGIN", query: "calendar" },
     rawArguments: "{}",
-  }) as { ok: boolean; results: Array<{ id: string; provider: string }> };
+  }) as { ok: boolean; results: Array<{ id: string; provider: string; enabled: boolean; disabled_reason: string | null }> };
 
   expect(result.ok).toBe(true);
   expect(result.results).toContainEqual(expect.objectContaining({
     id: "plugin:calendar:create_event",
     provider: "plugin",
+    enabled: false,
+    disabled_reason: "Plugin invocation requires a registered guarded plugin dispatcher",
   }));
   expect(satisfiedCompletionObligationsForToolResult("tool_search", result)).toEqual([]);
 });

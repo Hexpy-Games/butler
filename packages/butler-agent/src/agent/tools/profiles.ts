@@ -20,6 +20,7 @@ const STARTUP_TOOL_NAMES = [
   "list_tool_capabilities",
   "tool_search",
   "tool_describe",
+  "tool_call",
   "get_context_monitor",
   "read_conversation_context",
   "update_todo_list",
@@ -43,11 +44,7 @@ const WORKSPACE_TOOL_NAMES = [
 
 const PUBLIC_WEB_TOOL_NAMES = ["web_search", "web_read"] as const;
 
-const MEMORY_READ_TOOL_NAMES = [
-  "recall_memory",
-  "query_memory",
-  "read_conversation_context",
-] as const;
+const MEMORY_READ_TOOL_NAMES = ["recall_memory", "query_memory", "read_conversation_context"] as const;
 
 const MEMORY_WRITE_TOOL_NAMES = [
   "update_explicit_memory",
@@ -120,6 +117,7 @@ const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
 const WORKER_DEFAULT_TOOL_NAMES = [
   "tool_search",
   "tool_describe",
+  "tool_call",
   "run_command",
   "read_file",
   "write_file",

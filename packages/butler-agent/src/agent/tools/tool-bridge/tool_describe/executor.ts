@@ -7,6 +7,7 @@ import {
 } from "../../progressive-catalog.ts";
 import { BUTLER_TOOLS, TOOL_CAPABILITY_METADATA } from "../../registry.ts";
 import { nativeToolAvailability } from "../../tool-availability.ts";
+import { canBridgeMcpTool, canBridgeNativeTool, scopedOutDisabledReason } from "../scope.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type PluginToolCatalog =
@@ -24,6 +25,7 @@ export function createToolDescribeToolHandler(input: {
   mcpTimeoutMs?: number;
   pluginCatalog?: PluginToolCatalog;
   pluginToolDescriber?: PluginToolDescriber;
+  currentToolNames?: readonly string[] | (() => readonly string[]);
 }) {
   return async (call: ToolCall) => {
     const ids = parseIds(call.args.ids);
@@ -54,6 +56,7 @@ async function describeToolId(
     mcpTimeoutMs?: number;
     pluginCatalog?: PluginToolCatalog;
     pluginToolDescriber?: PluginToolDescriber;
+    currentToolNames?: readonly string[] | (() => readonly string[]);
   },
 ) {
   const parsed = parseToolCatalogId(id);
@@ -74,13 +77,17 @@ function describeNativeTool(
   input: {
     butlerData: string;
     webSearchProvider?: WebSearchProvider;
+    currentToolNames?: readonly string[] | (() => readonly string[]);
   },
 ) {
   const tool = BUTLER_TOOLS.find((candidate) => candidate.name === name);
   if (!tool) return null;
   const metadata = TOOL_CAPABILITY_METADATA[tool.name];
   if (!metadata) return null;
-  const availability = nativeToolAvailability(tool, input);
+  const scoped = canBridgeNativeTool({ toolName: tool.name, metadata, currentToolNames: input.currentToolNames });
+  const availability = scoped
+    ? nativeToolAvailability(tool, input)
+    : { enabled: false, disabledReason: scopedOutDisabledReason("native") };
   const schema = sanitizeSchemaForModel(tool.parameters);
   return {
     id,
@@ -103,8 +110,27 @@ async function describeMcpTool(
   id: string,
   serverId: string,
   toolName: string,
-  input: { butlerData: string; mcpTimeoutMs?: number },
+  input: {
+    butlerData: string;
+    mcpTimeoutMs?: number;
+    currentToolNames?: readonly string[] | (() => readonly string[]);
+  },
 ) {
+  if (!canBridgeMcpTool(input)) {
+    return {
+      id,
+      name: toolName,
+      namespace: serverId,
+      provider: "mcp",
+      category: "mcp",
+      enabled: false,
+      disabled_reason: scopedOutDisabledReason("mcp"),
+      safety_notes: ["MCP tools require explicit current-session MCP capability."],
+      schema: {},
+      schema_digest: schemaDigest({}),
+      call_affordance: { type: "disabled", reason: scopedOutDisabledReason("mcp") },
+    };
+  }
   const tool = await describeMcpToolSchema({
     butlerData: input.butlerData,
     serverId,
@@ -158,21 +184,19 @@ async function describePluginTool(
   const schema = sanitizeSchemaForModel(tool.schema ?? {});
   const disabledReason = typeof tool.disabledReason === "string" && tool.disabledReason.trim()
     ? tool.disabledReason.trim()
-    : null;
+    : scopedOutDisabledReason("plugin");
   return {
     id,
     name: tool.name.trim(),
     namespace,
     provider: "plugin",
     category: tool.category,
-    enabled: disabledReason === null,
+    enabled: false,
     disabled_reason: disabledReason,
     safety_notes: ["Plugin tools are external extensions; inspect schema and user intent first."],
     schema,
     schema_digest: schemaDigest(schema),
-    call_affordance: disabledReason === null
-      ? { type: "plugin_tool", namespace, tool_name: tool.name.trim() }
-      : { type: "disabled", reason: disabledReason },
+    call_affordance: { type: "disabled", reason: disabledReason },
   };
 }
 

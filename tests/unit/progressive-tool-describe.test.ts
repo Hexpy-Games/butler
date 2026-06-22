@@ -74,6 +74,7 @@ test("tool_describe returns recoverable unknown id results", async () => {
   const execute = createButlerToolExecutor({
     butlerHome: root,
     butlerData: tempDir,
+    currentToolNames: ["tool_describe", "call_mcp_tool"],
   });
 
   const result = await execute({
@@ -91,6 +92,7 @@ test("tool_describe returns recoverable unknown MCP id results", async () => {
   const execute = createButlerToolExecutor({
     butlerHome: root,
     butlerData: tempDir,
+    currentToolNames: ["tool_describe", "call_mcp_tool"],
   });
 
   const result = await execute({
@@ -193,13 +195,21 @@ test("tool_describe plugin ids use the selected-id describer without loading ful
     name: "tool_describe",
     args: { ids: ["plugin:calendar:create_event"] },
     rawArguments: "{}",
-  }) as { ok: boolean; descriptions: Array<{ provider: string; call_affordance: Record<string, unknown> }> };
+  }) as {
+    ok: boolean;
+    descriptions: Array<{ provider: string; enabled: boolean; disabled_reason: string | null; call_affordance: Record<string, unknown> }>;
+  };
 
   expect(result.ok).toBe(true);
   expect(requested).toEqual([{ id: "plugin:calendar:create_event", namespace: "calendar", name: "create_event" }]);
   expect(result.descriptions[0]).toEqual(expect.objectContaining({
     provider: "plugin",
-    call_affordance: { type: "plugin_tool", namespace: "calendar", tool_name: "create_event" },
+    enabled: false,
+    disabled_reason: "Plugin invocation requires a registered guarded plugin dispatcher",
+    call_affordance: {
+      type: "disabled",
+      reason: "Plugin invocation requires a registered guarded plugin dispatcher",
+    },
   }));
 });
 
@@ -216,6 +226,7 @@ test("tool_describe returns full MCP and plugin schemas for explicit ids only", 
   const execute = createButlerToolExecutor({
     butlerHome: root,
     butlerData: tempDir,
+    currentToolNames: ["tool_describe", "call_mcp_tool"],
     pluginToolCatalog: [{
       provider: "plugin",
       namespace: "calendar",
@@ -261,8 +272,12 @@ test("tool_describe returns full MCP and plugin schemas for explicit ids only", 
   expect(result.descriptions.find((item) => item.id === "plugin:calendar:create_event")).toEqual(
     expect.objectContaining({
       provider: "plugin",
-      enabled: true,
-      call_affordance: { type: "plugin_tool", namespace: "calendar", tool_name: "create_event" },
+      enabled: false,
+      disabled_reason: "Plugin invocation requires a registered guarded plugin dispatcher",
+      call_affordance: {
+        type: "disabled",
+        reason: "Plugin invocation requires a registered guarded plugin dispatcher",
+      },
     }),
   );
   expect(JSON.stringify(result.descriptions.find((item) => item.id === "plugin:calendar:create_event")!.schema))
