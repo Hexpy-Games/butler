@@ -533,7 +533,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     } catch (error) {
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
-      const failureState = safeFailure.code === "goal_completion_incomplete"
+      const failureState = safeFailure.code === "internal_recovery_required"
         ? "active"
         : "crashed";
       this.options.store.updateLifecycleState(binding.sessionId, failureState, timestamp);

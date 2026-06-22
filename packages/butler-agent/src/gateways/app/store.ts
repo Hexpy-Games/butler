@@ -212,7 +212,10 @@ import {
   APP_SENDER_ID,
   APP_TRANSPORT,
 } from "../core/app-transport.ts";
-import { safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
+import {
+  appLimitedDeliveryForError,
+  appSafeResponderError,
+} from "./failure-ux-contract.ts";
 import {
   applyComponentUpdate,
   checkComponentUpdates,
@@ -4443,7 +4446,20 @@ export class AppServerStore {
           next_cursor: accepted.cursor,
         };
       }
-      const safeError = safeResponderError(error);
+      const limitedDelivery = appLimitedDeliveryForError(error);
+      if (limitedDelivery) {
+        const delivered = this.finalizeResponderLimitedDelivery(chatId, turn.id, limitedDelivery.text);
+        this.touchChat(chatId);
+        await this.drainQueuedSessionMessages(chatId, responder, options);
+        return {
+          accepted,
+          reply: delivered.reply,
+          replies: delivered.replies,
+          turn: delivered.turn,
+          next_cursor: delivered.reply.cursor,
+        };
+      }
+      const safeError = appSafeResponderError(error);
       this.upsertAssistantTurnFailure(chatId, turn.id, safeError);
       this.appendTurnEvent(chatId, turn.id, {
         kind: "turn.failed",
@@ -4723,7 +4739,36 @@ export class AppServerStore {
           next_cursor: accepted.cursor,
         };
       }
-      const safeError = safeResponderError(error);
+      const limitedDelivery = appLimitedDeliveryForError(error);
+      if (limitedDelivery) {
+        const delivered = this.finalizeResponderLimitedDelivery(chatId, turn.id, limitedDelivery.text);
+        const existingMessage = this.getMessageRow(messageId);
+        const accepted = existingMessage
+          ? messageFromRow(
+              existingMessage,
+              this.listMessageAttachments(messageId),
+            )
+          : ({
+              id: messageId,
+              chat_id: chatId,
+              role: "system_event",
+              text: "",
+              status: "delivered",
+              retryable: false,
+              cursor: delivered.turn.cursor,
+              created_at: delivered.turn.updated_at,
+              updated_at: delivered.turn.updated_at,
+            } satisfies MessageRecord);
+        this.touchChat(chatId);
+        return {
+          accepted,
+          reply: delivered.reply,
+          replies: delivered.replies,
+          turn: delivered.turn,
+          next_cursor: delivered.reply.cursor,
+        };
+      }
+      const safeError = appSafeResponderError(error);
       this.upsertAssistantTurnFailure(chatId, turn.id, safeError);
       this.appendTurnEvent(chatId, turn.id, {
         kind: "turn.failed",
@@ -4767,7 +4812,7 @@ export class AppServerStore {
         input.onSuccess?.();
       })
       .catch((error) => {
-        const safeError = safeResponderError(error);
+        const safeError = appSafeResponderError(error);
         this.appendEvent("worker.app_responder_turn_failed", {
           key: input.key,
           chat_id: input.chatId,
@@ -4917,7 +4962,19 @@ export class AppServerStore {
           next_cursor: cancelledTurn.cursor,
         };
       }
-      const safeError = safeResponderError(error);
+      const limitedDelivery = appLimitedDeliveryForError(error);
+      if (limitedDelivery) {
+        const delivered = this.finalizeResponderLimitedDelivery(row.chat_id, turnId, limitedDelivery.text);
+        this.touchChat(row.chat_id);
+        await this.drainQueuedSessionMessages(row.chat_id, responder, options);
+        return {
+          turn: delivered.turn,
+          reply: delivered.reply,
+          replies: delivered.replies,
+          next_cursor: delivered.reply.cursor,
+        };
+      }
+      const safeError = appSafeResponderError(error);
       this.upsertAssistantTurnFailure(row.chat_id, turnId, safeError);
       this.appendTurnEvent(row.chat_id, turnId, {
         kind: "turn.failed",
@@ -6101,6 +6158,51 @@ export class AppServerStore {
       updated,
       ...this.insertAssistantReplies(chatId, turnId, remainingReplies, files),
     ];
+  }
+
+  private finalizeResponderLimitedDelivery(
+    chatId: string,
+    turnId: string,
+    text: string,
+  ): { reply: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
+    if (!this.hasTurnEventKind(turnId, "message.final.started")) {
+      this.appendTurnEvent(chatId, turnId, {
+        kind: "message.final.started",
+        payload: { safeLabel: "Preparing final answer" },
+      });
+    }
+    const replies = this.insertOrReplaceAssistantReplies(chatId, turnId, [text]);
+    if (!this.hasTurnEventKind(turnId, "message.final.completed")) {
+      this.appendTurnEvent(chatId, turnId, {
+        kind: "message.final.completed",
+        payload: {
+          safeLabel: "Final answer ready with limitations",
+          textChars: text.length,
+          deliveryState: "delivered_with_limitations",
+        },
+      });
+    }
+    const deliveredTurn = this.updateTurnState(turnId, "delivered", {
+      safeStatusLabel: "Delivered with limitations",
+      retryable: false,
+      cancellable: false,
+      safeErrorCode: null,
+    });
+    this.appendEvent("turn.state_changed", { turn: deliveredTurn });
+    if (!this.hasTurnEventKind(turnId, "turn.completed")) {
+      this.appendTurnEvent(chatId, turnId, {
+        kind: "turn.completed",
+        payload: {
+          safeLabel: "Completed with limitations",
+          deliveryState: "delivered_with_limitations",
+        },
+      });
+    }
+    return {
+      reply: replies.at(-1)!,
+      replies,
+      turn: deliveredTurn,
+    };
   }
 
   private upsertAssistantTurnFailure(
@@ -10071,44 +10173,6 @@ function timestampBefore(candidate: string, reference: string): boolean {
     candidateMs < referenceMs;
 }
 
-function safeResponderError(error: unknown): { code: string; message: string } {
-  if (error instanceof AppResponderTimeoutError) {
-    return {
-      code: error.code,
-      message: error.message,
-    };
-  }
-  if (isLocalModelEmptyResponseError(error)) {
-    return {
-      code: "provider_empty_response",
-      message:
-        "The selected model returned no visible answer. Retry the turn or switch models.",
-    };
-  }
-  if (isGoalCompletionIncompleteError(error)) {
-    return {
-      code: "goal_completion_incomplete",
-      message:
-        safeGoalCompletionIncompleteMessage(error.message) ??
-        "Butler could not verify that the requested goal was completed.",
-    };
-  }
-  const runtimeFailure = safeRuntimeFailure(error);
-  if (
-    runtimeFailure.code !== "gateway_failed" ||
-    runtimeFailure.message !== "Butler could not complete this turn."
-  ) {
-    return {
-      code: runtimeFailure.code,
-      message: runtimeFailure.message,
-    };
-  }
-  return {
-    code: "gateway_failed",
-    message: "Butler could not complete this turn.",
-  };
-}
-
 function isResponderCancelError(error: unknown): boolean {
   if (error instanceof AppResponderCancelledError) return true;
   if (!error || typeof error !== "object") return false;
@@ -10123,28 +10187,4 @@ function isResponderCancelError(error: unknown): boolean {
     candidate.code === "turn_cancelled" ||
     candidate.message === "Butler turn was cancelled."
   );
-}
-
-function isLocalModelEmptyResponseError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return /Local model API returned no (?:visible )?(?:final )?text output/iu.test(
-    error.message,
-  );
-}
-
-function isGoalCompletionIncompleteError(error: unknown): error is Error {
-  return (
-    error instanceof Error && error.name === "GoalCompletionIncompleteError"
-  );
-}
-
-function safeGoalCompletionIncompleteMessage(message: string): string | null {
-  if (isCompletionObligationProtocolMessage(message)) {
-    return "요청한 결과를 완료했는지 확인하지 못했습니다. 작업을 다시 시도할 수 있습니다.";
-  }
-  return safeOptionalShortText(message) ?? null;
-}
-
-function isCompletionObligationProtocolMessage(message: string): boolean {
-  return /(?:unsatisfied|missing|unresolved) public completion obligation/iu.test(message);
 }

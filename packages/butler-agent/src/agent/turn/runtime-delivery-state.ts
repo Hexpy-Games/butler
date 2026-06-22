@@ -251,9 +251,10 @@ function safeCode(value: string): string {
     .slice(0, 80) || "runtime_failure";
 }
 
-function safeLimitationText(value: unknown, fallback: string): string {
+export function safeLimitationText(value: unknown, fallback: string): string {
   const text = typeof value === "string" ? value : "";
   const normalized = text
+    .replace(/^(?:INCOMPLETE|미완료)\s*[:：]\s*/iu, "")
     .replace(/<think\b[^>]*>[\s\S]*?<\/think>/giu, "")
     .replace(/\b(?:api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+/giu, "[redacted]")
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gu, "Bearer [redacted]")

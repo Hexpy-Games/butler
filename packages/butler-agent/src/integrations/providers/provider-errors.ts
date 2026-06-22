@@ -133,7 +133,7 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
   const message = errorMessage(error);
   if (isGoalCompletionIncompleteError(error)) {
     return {
-      code: "goal_completion_incomplete",
+      code: "internal_recovery_required",
       message: safeGoalCompletionIncompleteMessage(message),
       retryable: true,
       cause: safeErrorText(message),
@@ -181,7 +181,7 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
   }
   if (/goal completion|could not verify that the requested goal was completed/iu.test(message)) {
     return {
-      code: "goal_completion_incomplete",
+      code: "internal_recovery_required",
       message: "Butler could not verify that the requested goal was completed.",
       retryable: true,
       cause: safeErrorText(message),
