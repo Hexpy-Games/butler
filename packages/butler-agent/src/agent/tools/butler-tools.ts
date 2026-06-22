@@ -19,6 +19,11 @@ import type { AgentLoopToolDefinition } from "../turn/agent-loop.ts";
 import type { FunctionToolPromptOptions } from "../../integrations/providers/provider.ts";
 import type { PublicWorkObligationKind } from "../turn/native-tool-types.ts";
 import {
+  completionObligationEvidenceReceiptsFromResult,
+  hasEvidenceCapabilityReceiptField,
+  readCompletionObligationEvidence,
+} from "../output/completion-obligation-evidence.ts";
+import {
   evidenceReceiptsFromResult,
   satisfiedCompletionObligationsFromEvidenceReceipts,
 } from "../output/evidence-receipts.ts";
@@ -38,13 +43,7 @@ import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
 import { createWorkerToolHandlers } from "./worker/index.ts";
-import {
-  BUTLER_TOOLS,
-  TOOL_CAPABILITY_METADATA,
-} from "./registry.ts";
-import type {
-  ToolCapabilityMetadata,
-} from "./types.ts";
+import { BUTLER_TOOLS } from "./registry.ts";
 import type { ExternalToolCatalogInput } from "./progressive-catalog.ts";
 export {
   BUTLER_TOOLS,
@@ -74,12 +73,6 @@ async function executeRegisteredButlerTool(
   return await execute(call);
 }
 
-const DEFAULT_TOOL_CAPABILITY: ToolCapabilityMetadata = {
-  category: "control",
-  tags: [],
-  safetyNotes: ["Use only when the tool schema matches the user's intent."],
-};
-
 export function butlerToolsForAgentLoop(): AgentLoopToolDefinition[] {
   return BUTLER_TOOLS.map((tool) => ({
     name: tool.name,
@@ -94,17 +87,25 @@ export function satisfiedCompletionObligationsForToolResult(
   result: unknown,
 ): PublicWorkObligationKind[] {
   if (!toolResultSucceeded(result)) return [];
+  if (hasEvidenceCapabilityReceiptField(result)) {
+    return readCompletionObligationEvidence({
+      receipts: completionObligationEvidenceReceiptsFromResult(result),
+    }).satisfied;
+  }
   const receiptSatisfied = satisfiedCompletionObligationsFromEvidenceReceipts(
     evidenceReceiptsFromResult(result),
   );
-  if (receiptSatisfied.length > 0) return receiptSatisfied;
-  const metadata = TOOL_CAPABILITY_METADATA[toolName] ?? DEFAULT_TOOL_CAPABILITY;
-  return [...new Set(metadata.satisfiesCompletionObligations ?? [])];
+  return receiptSatisfied;
 }
 
 function toolResultSucceeded(result: unknown): boolean {
   if (!result || typeof result !== "object" || Array.isArray(result)) return true;
   const record = result as Record<string, unknown>;
+  if (hasEvidenceCapabilityReceiptField(result)) {
+    return readCompletionObligationEvidence({
+      receipts: completionObligationEvidenceReceiptsFromResult(result),
+    }).satisfied.length > 0;
+  }
   const receiptSatisfied = satisfiedCompletionObligationsFromEvidenceReceipts(
     evidenceReceiptsFromResult(result),
   );

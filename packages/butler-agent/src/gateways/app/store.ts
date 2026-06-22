@@ -10139,8 +10139,12 @@ function isGoalCompletionIncompleteError(error: unknown): error is Error {
 }
 
 function safeGoalCompletionIncompleteMessage(message: string): string | null {
-  if (/unsatisfied public completion obligation/iu.test(message)) {
+  if (isCompletionObligationProtocolMessage(message)) {
     return "요청한 결과를 완료했는지 확인하지 못했습니다. 작업을 다시 시도할 수 있습니다.";
   }
   return safeOptionalShortText(message) ?? null;
+}
+
+function isCompletionObligationProtocolMessage(message: string): boolean {
+  return /(?:unsatisfied|missing|unresolved) public completion obligation/iu.test(message);
 }

@@ -249,10 +249,14 @@ function isGoalCompletionIncompleteError(error: unknown): error is Error {
 }
 
 function safeGoalCompletionIncompleteMessage(message: string): string {
-  if (/unsatisfied public completion obligation/iu.test(message)) {
+  if (isCompletionObligationProtocolMessage(message)) {
     return "Butler could not verify that the requested goal was completed.";
   }
   return safeErrorText(message) ?? "Butler could not verify that the requested goal was completed.";
+}
+
+function isCompletionObligationProtocolMessage(message: string): boolean {
+  return /(?:unsatisfied|missing|unresolved) public completion obligation/iu.test(message);
 }
 
 function safeErrorText(value: unknown): string | undefined {

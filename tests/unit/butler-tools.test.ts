@@ -8,6 +8,7 @@ import {
   butlerToolsForAgentLoop,
   createButlerToolExecutor,
   createButlerToolExecutorRegistry,
+  satisfiedCompletionObligationsForToolResult,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import {
   diagnoseButlerToolPolicy,
@@ -2635,6 +2636,14 @@ test("work dashboard and control tools expose canonical task state", async () =>
   });
   expect(dashboard.recoverable[0].raw_id).toBeUndefined();
   expect(dashboard.recoverable[0].actions.find((action: any) => action.action === "resume").enabled).toBe(true);
+  expect(dashboard.evidence_capability_receipts).toEqual([
+    expect.objectContaining({
+      capability: "source_verified",
+      evidence_kind: "project_state",
+      satisfies: ["source_verified"],
+    }),
+  ]);
+  expect(satisfiedCompletionObligationsForToolResult("get_work_dashboard", dashboard)).toContain("source_verified");
 
   const control = await execute({
     name: "control_work",
@@ -2690,6 +2699,14 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
   }) as Record<string, any>;
   expect(status.ok).toBe(true);
   expect(status.data.counts.work).toBe(1);
+  expect(status.evidence_capability_receipts).toEqual([
+    expect.objectContaining({
+      capability: "source_verified",
+      evidence_kind: "project_state",
+      satisfies: ["source_verified"],
+    }),
+  ]);
+  expect(satisfiedCompletionObligationsForToolResult("inspect_project_status", status)).toContain("source_verified");
 
   const query = await execute({
     name: "query_project_work",
@@ -2698,6 +2715,14 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
   }) as Record<string, any>;
   expect(query.ok).toBe(true);
   expect(query.data.results[0].id).toBe("W-TOOL");
+  expect(query.evidence_capability_receipts).toEqual([
+    expect.objectContaining({
+      capability: "source_verified",
+      evidence_kind: "project_state",
+      satisfies: ["source_verified"],
+    }),
+  ]);
+  expect(satisfiedCompletionObligationsForToolResult("query_project_work", query)).toContain("source_verified");
 
   const rendered = await execute({
     name: "render_project_dashboard",
@@ -2720,6 +2745,24 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
     path: "project-ledger/projects/ledger-demo/views/dashboard.md",
     artifact_kind: "markdown_file",
   });
+});
+
+test("Project Ledger tools do not verify source evidence when the CLI did not return state", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+  });
+
+  const status = await execute({
+    name: "inspect_project_status",
+    args: { project_path: tempDir },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+
+  expect(status.ok).toBe(false);
+  expect(status.command).toBeUndefined();
+  expect(status.evidence_capability_receipts).toBeUndefined();
+  expect(satisfiedCompletionObligationsForToolResult("inspect_project_status", status)).toEqual([]);
 });
 
 test("Project Ledger tools prefer Butler data project roots over repo-local ledgers", async () => {
