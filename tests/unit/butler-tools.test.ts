@@ -29,6 +29,7 @@ const projectLedgerCli = join(root, "packages", "project-ledger", "bin", "projec
 const startupOnlyToolNames: string[] = [
   "get_context_monitor",
   "list_tool_capabilities",
+  "tool_search",
   "update_todo_list",
   "list_todo_list",
   "read_conversation_context",
@@ -52,6 +53,7 @@ const projectWorkspaceToolNames: string[] = [
   "get_context_monitor",
   "read_tool_output_artifact",
   "list_tool_capabilities",
+  "tool_search",
   "update_todo_list",
   "list_todo_list",
   "read_conversation_context",
@@ -136,6 +138,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "read_tool_output_artifact",
     "get_usage_monitor",
     "list_tool_capabilities",
+    "tool_search",
     "list_mcp_capabilities",
     "call_mcp_tool",
     "read_mcp_resource",
@@ -185,6 +188,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   expect(BUTLER_TOOLS.find((tool) => tool.name === "read_tool_output_artifact")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "get_usage_monitor")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "list_tool_capabilities")?.concurrencySafe).toBe(true);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "tool_search")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "list_mcp_capabilities")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "call_mcp_tool")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "read_mcp_resource")?.concurrencySafe).toBe(true);
@@ -242,6 +246,7 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
     "project-ledger",
     "run-command",
     "skills",
+    "tool-bridge",
     "web-read",
     "web-search",
     "work-tracking",
@@ -1412,6 +1417,20 @@ test("tool capability schema exposes discovery without deterministic selection",
   expect(list?.parameters.required).toEqual([]);
   expect(Object.keys(list?.parameters.properties ?? {})).toEqual(["category", "include_disabled"]);
   expect(BUTLER_TOOLS.find((item) => item.name === "select_tool_capability")).toBeUndefined();
+});
+
+test("tool_search schema exposes compact model-selected catalog search", () => {
+  const search = BUTLER_TOOLS.find((item) => item.name === "tool_search");
+
+  expect(search?.parameters.required).toEqual([]);
+  expect(Object.keys(search?.parameters.properties ?? {})).toEqual([
+    "query",
+    "capability",
+    "category",
+    "provider",
+    "include_disabled",
+    "limit",
+  ]);
 });
 
 test("tool capability discovery exposes run_command as enabled command capability", async () => {

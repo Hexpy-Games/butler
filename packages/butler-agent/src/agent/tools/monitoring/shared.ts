@@ -1,9 +1,10 @@
-import { createConfiguredWebSearchProvider, type WebSearchProvider } from "../../../integrations/search/provider.ts";
+import type { WebSearchProvider } from "../../../integrations/search/provider.ts";
 import { readContextMonitor } from "../../../operations/metrics/context-monitor.ts";
 import { readUsageMonitor } from "../../../operations/metrics/usage-monitor.ts";
 import { readMemoryHealth } from "../../cognition/memory/quality.ts";
 import { readToolOutputArtifactSlice } from "../../context/tool-output-budgeter.ts";
 import { BUTLER_TOOLS, TOOL_CAPABILITY_METADATA } from "../registry.ts";
+import { nativeToolAvailability } from "../tool-availability.ts";
 import type { ButlerToolDefinition, ToolCapabilityCategory, ToolCapabilityMetadata } from "../types.ts";
 
 type ToolCall = { args: Record<string, unknown> };
@@ -155,18 +156,11 @@ function capabilityAvailability(tool: ButlerToolDefinition, input: {
   butlerData: string;
   webSearchProvider?: WebSearchProvider;
 }): { enabled: boolean; disabled_reason: string | null } {
-  if (tool.name !== "web_search") return { enabled: true, disabled_reason: null };
-  const provider = createConfiguredWebSearchProvider({
-    butlerData: input.butlerData,
-    provider: input.webSearchProvider,
-  });
-  if (provider.id === "disabled") {
-    return {
-      enabled: false,
-      disabled_reason: "web search provider is disabled by configuration",
-    };
-  }
-  return { enabled: true, disabled_reason: null };
+  const availability = nativeToolAvailability(tool, input);
+  return {
+    enabled: availability.enabled,
+    disabled_reason: availability.disabledReason,
+  };
 }
 
 function listToolCapabilities(input: {

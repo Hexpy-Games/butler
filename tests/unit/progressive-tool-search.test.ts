@@ -1,0 +1,231 @@
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import {
+  createButlerToolExecutor,
+  satisfiedCompletionObligationsForToolResult,
+} from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
+import { searchToolCatalog } from "../../packages/butler-agent/src/agent/tools/progressive-search.ts";
+import { buildExternalToolCatalog } from "../../packages/butler-agent/src/agent/tools/progressive-catalog.ts";
+import { DisabledWebSearchProvider } from "../../packages/butler-agent/src/integrations/search/provider.ts";
+import { upsertMcpServer } from "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";
+
+const root = process.cwd();
+let tempDir = "";
+
+beforeEach(() => {
+  tempDir = mkdtempSync(`${tmpdir()}/butler-tool-search-`);
+  mkdirSync(tempDir, { recursive: true });
+});
+
+afterEach(() => {
+  rmSync(tempDir, { recursive: true, force: true });
+});
+
+function fixtureServerEval(): string {
+  return `
+    import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+    import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+    import { z } from "zod";
+
+    const server = new McpServer({ name: "tool-search-fixture", version: "1.0.0" });
+    server.tool("find_issue", "Find issue records", { query: z.string() }, async ({ query }) => ({
+      content: [{ type: "text", text: "issue:" + query }],
+    }));
+    server.resource("fixture", "butler://fixture", async (uri) => ({
+      contents: [{ uri: uri.href, mimeType: "text/plain", text: "fixture" }],
+    }));
+    await server.connect(new StdioServerTransport());
+  `;
+}
+
+test("tool_search returns compact native catalog results without raw schemas", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    webSearchProvider: new DisabledWebSearchProvider("disabled for test"),
+  });
+
+  const result = await execute({
+    name: "tool_search",
+    args: { category: "search", provider: "native", query: "current citations" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    results: Array<{
+      id: string;
+      name: string;
+      provider: string;
+      category: string;
+      summary: string;
+      tags: string[];
+      enabled: boolean;
+      disabled_reason: string | null;
+      schema_digest: string;
+    }>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.results.map((entry) => entry.name)).toContain("web_search");
+  const webSearch = result.results.find((entry) => entry.name === "web_search");
+  expect(webSearch).toEqual(expect.objectContaining({
+    id: "native:web_search",
+    provider: "native",
+    category: "search",
+    enabled: false,
+    disabled_reason: "web search provider is disabled by configuration",
+  }));
+  expect(webSearch?.schema_digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  expect(JSON.stringify(result)).not.toContain("\"parameters\"");
+  expect(JSON.stringify(result)).not.toContain("\"properties\"");
+  expect(JSON.stringify(result)).not.toContain("\"required\"");
+});
+
+test("tool_search can exclude disabled tools and reject invalid filters", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    webSearchProvider: new DisabledWebSearchProvider("disabled for test"),
+  });
+
+  const hiddenDisabled = await execute({
+    name: "tool_search",
+    args: { category: "search", include_disabled: false },
+    rawArguments: "{}",
+  }) as { ok: boolean; results: Array<{ name: string }> };
+  expect(hiddenDisabled.ok).toBe(true);
+  expect(hiddenDisabled.results.some((entry) => entry.name === "web_search")).toBe(false);
+
+  const invalid = await execute({
+    name: "tool_search",
+    args: { provider: "private-provider" },
+    rawArguments: "{}",
+  }) as { ok: boolean; error: { code: string }; results: unknown[] };
+  expect(invalid.ok).toBe(false);
+  expect(invalid.error.code).toBe("invalid_tool_provider");
+  expect(invalid.results).toEqual([]);
+});
+
+test("tool_search native provider does not wait on configured MCP probes", async () => {
+  upsertMcpServer(tempDir, {
+    id: "slow-fixture",
+    display_name: "Slow Fixture MCP",
+    enabled: true,
+    transport: "stdio",
+    command: process.execPath,
+    args: ["--eval", "setTimeout(() => {}, 60_000);"],
+    cwd: root,
+  });
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+  });
+
+  const started = Date.now();
+  const result = await execute({
+    name: "tool_search",
+    args: { provider: "native", query: "web search" },
+    rawArguments: "{}",
+  }) as { ok: boolean; results: Array<{ provider: string }> };
+
+  expect(result.ok).toBe(true);
+  expect(result.results.every((entry) => entry.provider === "native")).toBe(true);
+  expect(Date.now() - started).toBeLessThan(900);
+});
+
+test("tool_search finds real configured MCP tools and redacts schemas", async () => {
+  upsertMcpServer(tempDir, {
+    id: "fixture",
+    display_name: "Fixture MCP",
+    enabled: true,
+    transport: "stdio",
+    command: process.execPath,
+    args: ["--eval", fixtureServerEval()],
+    cwd: root,
+  });
+
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+  });
+  const result = await execute({
+    name: "tool_search",
+    args: { provider: "MCP", category: "MCP", capability: "issue" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    results: Array<{ id: string; name: string; provider: string; namespace: string | null }>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.results).toContainEqual(expect.objectContaining({
+    id: "mcp:fixture:find_issue",
+    name: "find_issue",
+    provider: "mcp",
+    namespace: "fixture",
+  }));
+  expect(JSON.stringify(result)).not.toContain("\"input_schema\"");
+  expect(JSON.stringify(result)).not.toContain("\"properties\"");
+});
+
+test("tool_search supports plugin catalog input without completing source obligations", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    pluginToolCatalog: [{
+      provider: "plugin",
+      namespace: "calendar",
+      name: "create_event",
+      category: "automation",
+      description: "Create calendar events.",
+      tags: ["calendar", "event"],
+    }],
+  });
+
+  const result = await execute({
+    name: "tool_search",
+    args: { provider: "PLUGIN", query: "calendar" },
+    rawArguments: "{}",
+  }) as { ok: boolean; results: Array<{ id: string; provider: string }> };
+
+  expect(result.ok).toBe(true);
+  expect(result.results).toContainEqual(expect.objectContaining({
+    id: "plugin:calendar:create_event",
+    provider: "plugin",
+  }));
+  expect(satisfiedCompletionObligationsForToolResult("tool_search", result)).toEqual([]);
+});
+
+test("catalog search supports provider, category, capability, and query ranking deterministically", () => {
+  const catalog = buildExternalToolCatalog([
+    {
+      provider: "plugin",
+      namespace: "calendar",
+      name: "create_event",
+      category: "automation",
+      description: "Create calendar events.",
+      tags: ["calendar", "event"],
+    },
+    {
+      provider: "mcp",
+      namespace: "github",
+      name: "search_issues",
+      category: "mcp",
+      description: "Search GitHub issues.",
+      tags: ["github", "issues", "search"],
+    },
+  ]);
+
+  expect(searchToolCatalog({
+    catalog: [...catalog].reverse(),
+    provider: "mcp",
+    capability: "issues",
+    query: "search",
+  }).map((entry) => entry.id)).toEqual(["mcp:github:search_issues"]);
+
+  expect(searchToolCatalog({
+    catalog: [...catalog].reverse(),
+    category: "automation",
+    query: "calendar",
+  }).map((entry) => entry.id)).toEqual(["plugin:calendar:create_event"]);
+});
