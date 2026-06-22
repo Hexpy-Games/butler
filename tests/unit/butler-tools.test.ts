@@ -30,6 +30,7 @@ const startupOnlyToolNames: string[] = [
   "get_context_monitor",
   "list_tool_capabilities",
   "tool_search",
+  "tool_describe",
   "update_todo_list",
   "list_todo_list",
   "read_conversation_context",
@@ -54,6 +55,7 @@ const projectWorkspaceToolNames: string[] = [
   "read_tool_output_artifact",
   "list_tool_capabilities",
   "tool_search",
+  "tool_describe",
   "update_todo_list",
   "list_todo_list",
   "read_conversation_context",
@@ -139,6 +141,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "get_usage_monitor",
     "list_tool_capabilities",
     "tool_search",
+    "tool_describe",
     "list_mcp_capabilities",
     "call_mcp_tool",
     "read_mcp_resource",
@@ -189,6 +192,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   expect(BUTLER_TOOLS.find((tool) => tool.name === "get_usage_monitor")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "list_tool_capabilities")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "tool_search")?.concurrencySafe).toBe(true);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "tool_describe")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "list_mcp_capabilities")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "call_mcp_tool")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "read_mcp_resource")?.concurrencySafe).toBe(true);
@@ -1431,6 +1435,13 @@ test("tool_search schema exposes compact model-selected catalog search", () => {
     "include_disabled",
     "limit",
   ]);
+});
+
+test("tool_describe schema exposes explicit catalog id description", () => {
+  const describe = BUTLER_TOOLS.find((item) => item.name === "tool_describe");
+
+  expect(describe?.parameters.required).toEqual(["ids"]);
+  expect(Object.keys(describe?.parameters.properties ?? {})).toEqual(["ids"]);
 });
 
 test("tool capability discovery exposes run_command as enabled command capability", async () => {

@@ -137,6 +137,11 @@ export function createButlerToolExecutor(input: {
   pageReader?: typeof readPageConfigured;
   currentToolNames?: readonly string[] | (() => readonly string[]);
   pluginToolCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
+  pluginToolDescriber?: (input: {
+    id: string;
+    namespace: string;
+    name: string;
+  }) => Promise<ExternalToolCatalogInput | null | undefined>;
 }): ButlerToolExecutor {
   const taskStore = new TaskStore(input.butlerData);
   const plannedTaskStore = new PlannedTaskStore(input.butlerData);
@@ -161,6 +166,7 @@ export function createButlerToolExecutor(input: {
       butlerData: input.butlerData,
       webSearchProvider: input.webSearchProvider,
       pluginCatalog: input.pluginToolCatalog,
+      pluginToolDescriber: input.pluginToolDescriber,
     }),
     ...createMcpToolHandlers({
       butlerData: input.butlerData,
