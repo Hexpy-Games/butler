@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { createButlerToolExecutor } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
+import { bridgeToolAuditEvent } from "../../packages/butler-agent/src/agent/tools/tool-bridge/audit.ts";
 import { validateJsonObjectSchema } from "../../packages/butler-agent/src/agent/tools/tool-bridge/schema-validation.ts";
 import { DisabledWebSearchProvider } from "../../packages/butler-agent/src/integrations/search/provider.ts";
 import type { PageReadResult } from "../../packages/butler-agent/src/integrations/search/page-reader.ts";
@@ -92,6 +93,46 @@ test("tool_call invokes native tools through the guarded Butler dispatcher", asy
   expect(pageReads).toBe(1);
 });
 
+test("tool_call returns underlying native dispatch failures as operational failures", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    pageReader: async () => {
+      throw new Error("reader transport unavailable");
+    },
+  });
+
+  const result = await execute({
+    name: "tool_call",
+    args: { id: "native:web_read", arguments: { url: "https://example.com/source" } },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    error: {
+      code: string;
+      message: string;
+      recoverable: boolean;
+      next_action: string;
+    };
+  };
+  const audit = bridgeToolAuditEvent("tool_call", {
+    id: "native:web_read",
+    arguments: { token: "SECRET_TOKEN_123" },
+  }, result);
+
+  expect(result.ok).toBe(false);
+  expect(result.error.code).toBe("underlying_tool_error");
+  expect(result.error.message).toContain("reader transport unavailable");
+  expect(result.error.recoverable).toBe(false);
+  expect(result.error.next_action).toContain("operational tool failure");
+  expect(audit?.error).toEqual({
+    code: "underlying_tool_error",
+    recoverable: false,
+    operational_failure: true,
+  });
+  expect(JSON.stringify(audit)).not.toContain("SECRET_TOKEN_123");
+});
+
 test("tool_call returns recoverable schema validation results before dispatch", async () => {
   let pageReads = 0;
   const execute = createButlerToolExecutor({
@@ -127,12 +168,24 @@ test("tool_call returns disabled tools as recoverable model-visible results", as
     name: "tool_call",
     args: { id: "native:web_search", arguments: { query: "butler" } },
     rawArguments: "{}",
-  }) as { ok: boolean; error: { code: string; message: string; recoverable: boolean } };
+  }) as {
+    ok: boolean;
+    error: {
+      code: string;
+      message: string;
+      recoverable: boolean;
+      alternatives: string[];
+      next_action: string;
+    };
+  };
 
   expect(result.ok).toBe(false);
   expect(result.error.code).toBe("disabled_tool");
   expect(result.error.message).toContain("web search provider is disabled");
   expect(result.error.recoverable).toBe(true);
+  expect(result.error.alternatives).toContain("tool_search");
+  expect(result.error.alternatives).toContain("web_read");
+  expect(result.error.next_action).toContain("recoverable tool-selection result");
 });
 
 test("tool_call invokes MCP tools through call_mcp_tool", async () => {
@@ -271,4 +324,104 @@ test("tool_call schema validation rejects unknown properties when no properties 
     message: "Unexpected argument: unexpected",
     path: "$.unexpected",
   });
+});
+
+test("bridge audit metadata redacts raw tool_call arguments", () => {
+  const event = bridgeToolAuditEvent(
+    "tool_call",
+    {
+      id: "native:run_command",
+      arguments: { command: "echo SECRET_TOKEN_123" },
+    },
+    {
+      ok: false,
+      error: {
+        code: "disabled_tool",
+        recoverable: true,
+        id: "native:run_command",
+      },
+    },
+  );
+
+  expect(event).toEqual(expect.objectContaining({
+    action: "invoke",
+    outcome: "disabled",
+    request: {
+      id: "native:run_command",
+      arguments: "[redacted]",
+    },
+  }));
+  expect(JSON.stringify(event)).not.toContain("SECRET_TOKEN_123");
+});
+
+test("bridge audit metadata summarizes describe and denied outcomes without schemas", () => {
+  const describeEvent = bridgeToolAuditEvent(
+    "tool_describe",
+    { ids: ["native:web_search"] },
+    {
+      ok: true,
+      descriptions: [{
+        id: "native:web_search",
+        schema: { properties: { token: { default: "SECRET_TOKEN_123" } } },
+        enabled: false,
+      }],
+      missing: [],
+    },
+  );
+  const deniedEvent = bridgeToolAuditEvent(
+    "tool_call",
+    { id: "native:tool_call", arguments: { token: "SECRET_TOKEN_123" } },
+    {
+      ok: false,
+      error: {
+        code: "forbidden_bridge_target",
+        recoverable: true,
+        id: "native:tool_call",
+      },
+    },
+  );
+
+  expect(describeEvent).toEqual(expect.objectContaining({
+    action: "describe",
+    outcome: "ok",
+    result: {
+      ok: true,
+      described_count: 1,
+      disabled_count: 1,
+      missing_count: 0,
+    },
+  }));
+  expect(deniedEvent).toEqual(expect.objectContaining({
+    action: "invoke",
+    outcome: "denied",
+    target: expect.objectContaining({ id: "native:tool_call" }),
+  }));
+  expect(JSON.stringify({ describeEvent, deniedEvent })).not.toContain("SECRET_TOKEN_123");
+  expect(JSON.stringify(describeEvent)).not.toContain("properties");
+});
+
+test("bridge audit metadata keeps operational failures structurally visible", () => {
+  const event = bridgeToolAuditEvent(
+    "tool_call",
+    { id: "native:web_search", arguments: { query: "SECRET_TOKEN_123" } },
+    {
+      ok: false,
+      error: {
+        code: "underlying_tool_error",
+        recoverable: false,
+        id: "native:web_search",
+      },
+    },
+  );
+
+  expect(event).toEqual(expect.objectContaining({
+    outcome: "error",
+    error: {
+      code: "underlying_tool_error",
+      recoverable: false,
+      operational_failure: true,
+    },
+    target: expect.objectContaining({ id: "native:web_search" }),
+  }));
+  expect(JSON.stringify(event)).not.toContain("SECRET_TOKEN_123");
 });

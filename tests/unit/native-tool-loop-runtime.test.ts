@@ -4847,6 +4847,150 @@ test("native runtime unwraps tool_call through audited target dispatch", async (
   expect(events.find((event) => event.kind === "tool.started")?.payload?.toolName).toBe("Get Context Monitor");
 });
 
+test("native runtime records bridge audit metadata for bridged target failures", async () => {
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:web_search", arguments: { query: "x" } },
+        rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "x" } }),
+      });
+      return "검색 도구 실패를 복구 가능한 결과로 받았습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-target-failure",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "짧은 검색 쿼리로 실패 경로를 확인해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  const transcript = readTranscript("butler/main/progressive-tool-call-target-failure");
+  const result = transcript.find((event) => event.kind === "tool_result" && event.payload.name === "web_search");
+  expect(result?.metadata?.bridge_audit).toEqual(expect.objectContaining({
+    schema: "butler.bridge-tool-audit.v1",
+    action: "invoke",
+    tool_name: "tool_call",
+    outcome: "error",
+    target: expect.objectContaining({
+      id: "native:web_search",
+      provider: "native",
+      affordance: "native_tool",
+    }),
+    result: { ok: false, code: "underlying_tool_error" },
+    error: {
+      code: "underlying_tool_error",
+      recoverable: false,
+      operational_failure: true,
+    },
+  }));
+});
+
+test("native runtime records bridge audit metadata for tool_call resolution failures", async () => {
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:missing_tool", arguments: { token: "SECRET_TOKEN_123" } },
+        rawArguments: JSON.stringify({ id: "native:missing_tool", arguments: { token: "SECRET_TOKEN_123" } }),
+      });
+      return "없는 도구 선택을 복구 가능한 결과로 받았습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-resolution-failure",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "없는 도구를 호출했을 때 audit을 남겨줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  const transcript = readTranscript("butler/main/progressive-tool-call-resolution-failure");
+  const result = transcript.find((event) => event.kind === "tool_result" && event.payload.name === "tool_call");
+  expect(result?.metadata?.bridge_audit).toEqual(expect.objectContaining({
+    schema: "butler.bridge-tool-audit.v1",
+    action: "invoke",
+    tool_name: "tool_call",
+    outcome: "unknown",
+    request: {
+      id: "native:missing_tool",
+      arguments: "[redacted]",
+    },
+    result: { ok: false, code: "unknown_tool_catalog_id" },
+    error: {
+      code: "unknown_tool_catalog_id",
+      recoverable: true,
+      operational_failure: false,
+    },
+  }));
+  expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN_123");
+});
+
+test("native runtime records bridge audit metadata without raw search arguments", async () => {
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "tool_search",
+        args: { provider: "native", query: "SECRET_TOKEN_123 web search" },
+        rawArguments: JSON.stringify({ provider: "native", query: "SECRET_TOKEN_123 web search" }),
+      });
+      return "도구 목록을 확인했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-search-audit",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "필요한 도구를 찾아줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  const transcript = readTranscript("butler/main/progressive-tool-search-audit");
+  const result = transcript.find((event) => event.kind === "tool_result" && event.payload.name === "tool_search");
+  expect(result?.metadata?.bridge_audit).toEqual(expect.objectContaining({
+    schema: "butler.bridge-tool-audit.v1",
+    action: "search",
+    tool_name: "tool_search",
+    outcome: "ok",
+    request: expect.objectContaining({
+      provider: "native",
+      query_present: true,
+    }),
+  }));
+  expect(JSON.stringify(result?.metadata?.bridge_audit)).not.toContain("SECRET_TOKEN_123");
+});
+
 test("native runtime dispatches workers only through model-selected tool calls", async () => {
   const executed: Array<{ name: string; args: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({

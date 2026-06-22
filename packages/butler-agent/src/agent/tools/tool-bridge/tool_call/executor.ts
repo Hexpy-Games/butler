@@ -1,6 +1,7 @@
 import type { WebSearchProvider } from "../../../../integrations/search/provider.ts";
 import type { ButlerToolCall, ButlerToolHandler } from "../../butler-tools.ts";
 import type { ExternalToolCatalogInput } from "../../progressive-catalog.ts";
+import { disabledToolRecovery } from "../audit.ts";
 import { validateJsonObjectSchema } from "../schema-validation.ts";
 import { createToolDescribeToolHandler } from "../tool_describe/executor.ts";
 
@@ -26,7 +27,10 @@ export type ToolCallResolveResult =
 
 type ToolDescription = {
   id: string;
+  name: string;
+  namespace: string | null;
   provider: string;
+  category: string;
   enabled: boolean;
   disabled_reason: string | null;
   schema: unknown;
@@ -58,7 +62,8 @@ export function createToolCallToolHandler(input: {
     } catch (error) {
       return bridgeError("underlying_tool_error", errorMessage(error), {
         id: resolved.bridgeInvocation.id,
-        recoverable: true,
+        recoverable: false,
+        next_action: "Treat this as an operational tool failure, not an app failure. Choose another enabled tool, adjust the request if applicable, or continue with available evidence.",
       });
     }
   };
@@ -85,7 +90,22 @@ export async function resolveToolCallTarget(
     return { ok: false, result: bridgeError("unknown_tool_catalog_id", `Unknown tool catalog id: ${id}`, { id }) };
   }
   if (!description.enabled) {
-    return { ok: false, result: bridgeError("disabled_tool", description.disabled_reason ?? "Tool is disabled.", { id }) };
+    const recovery = disabledToolRecovery({
+      id,
+      provider: description.provider,
+      category: description.category,
+      reason: description.disabled_reason,
+    });
+    return {
+      ok: false,
+      result: bridgeError("disabled_tool", recovery.reason, {
+        id,
+        reason: recovery.reason,
+        alternatives: recovery.alternatives,
+        next_action: recovery.next_action,
+        recovery,
+      }),
+    };
   }
 
   const validation = validateJsonObjectSchema(args, description.schema);
@@ -184,6 +204,7 @@ function bridgeError(
       code,
       message,
       recoverable: true,
+      next_action: "Treat this bridge result as recoverable model feedback. Choose another enabled tool or adjust arguments before retrying.",
       ...extra,
     },
   };
