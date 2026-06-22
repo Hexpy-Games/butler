@@ -18,6 +18,7 @@ export type ButlerToolProfile =
 
 const STARTUP_TOOL_NAMES = [
   "list_tool_capabilities",
+  "tool_search",
   "get_context_monitor",
   "read_conversation_context",
   "update_todo_list",
@@ -39,10 +40,7 @@ const WORKSPACE_TOOL_NAMES = [
   "read_tool_output_artifact",
 ] as const;
 
-const PUBLIC_WEB_TOOL_NAMES = [
-  "web_search",
-  "web_read",
-] as const;
+const PUBLIC_WEB_TOOL_NAMES = ["web_search", "web_read"] as const;
 
 const MEMORY_READ_TOOL_NAMES = [
   "recall_memory",
@@ -121,6 +119,7 @@ const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
 };
 
 const WORKER_DEFAULT_TOOL_NAMES = [
+  "tool_search",
   "run_command",
   "read_file",
   "write_file",

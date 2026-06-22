@@ -27,6 +27,7 @@ import { createDataTableToolHandlers } from "./data-table/index.ts";
 import { createMcpToolHandlers } from "./mcp/index.ts";
 import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
+import { createToolBridgeToolHandlers } from "./tool-bridge/index.ts";
 import { createOrchestrationToolHandlers } from "./orchestration/index.ts";
 import { createPlannedTaskToolHandlers, dispatchBackgroundTask, type WorkerModelSelectionRule } from "./planned-task/index.ts";
 import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
@@ -44,6 +45,7 @@ import {
 import type {
   ToolCapabilityMetadata,
 } from "./types.ts";
+import type { ExternalToolCatalogInput } from "./progressive-catalog.ts";
 export {
   BUTLER_TOOLS,
   CORE_BUTLER_TOOLS,
@@ -134,6 +136,7 @@ export function createButlerToolExecutor(input: {
   searchPlanner?: (input: SmartSearchPlanningInput) => Promise<SmartSearchPlanningResult>;
   pageReader?: typeof readPageConfigured;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  pluginToolCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
 }): ButlerToolExecutor {
   const taskStore = new TaskStore(input.butlerData);
   const plannedTaskStore = new PlannedTaskStore(input.butlerData);
@@ -153,6 +156,11 @@ export function createButlerToolExecutor(input: {
       sessionId: input.sessionId,
       webSearchProvider: input.webSearchProvider,
       currentToolNames: input.currentToolNames,
+    }),
+    ...createToolBridgeToolHandlers({
+      butlerData: input.butlerData,
+      webSearchProvider: input.webSearchProvider,
+      pluginCatalog: input.pluginToolCatalog,
     }),
     ...createMcpToolHandlers({
       butlerData: input.butlerData,
