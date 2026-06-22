@@ -120,6 +120,9 @@ import {
   evidenceTranscriptToolResultProjection,
 } from "../output/evidence-transcript-result.ts";
 import {
+  CompletionReviewOrchestrator,
+} from "./completion-review-orchestrator.ts";
+import {
   annotateToolResultWithDecisionContext,
   publicWorkDecisionPayload,
   publicWorkDecisionsFromAssistantText,
@@ -2213,65 +2216,46 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         reviewPromptText: string,
         maxToolRounds: number,
       ): Promise<string> => {
-        let candidateFinalText = currentFinalText;
-        let nextReviewPromptText = reviewPromptText;
-        const maxContinuationAttempts = goalCompletionContinuationAttempts();
-        for (let continuationAttempt = 0;; continuationAttempt += 1) {
-          const successfulToolsBeforeReview = successfulToolAuditCount();
-          const workBeforeReview = activeDirectWorkProgressSnapshot({
-            butlerData: this.butlerData,
-            sessionId: input.handle.sessionId,
-          });
-          const reviewText = await runToolPrompt(nextReviewPromptText, maxToolRounds, "goal_completion_review");
-          const incompleteReason = completionReviewIncompleteReason(reviewText);
-          const reviewAdvancedTheTurn = turnAdvancedDuringToolPrompt({
-            beforeWork: workBeforeReview,
-            afterWork: activeDirectWorkProgressSnapshot({
-              butlerData: this.butlerData,
-              sessionId: input.handle.sessionId,
+        const outcome = await new CompletionReviewOrchestrator<DirectWorkProgressSnapshot>().run({
+          currentFinalText,
+          initialReviewPromptText: reviewPromptText,
+          reviewMaxToolRounds: maxToolRounds,
+          continuationMaxToolRounds: 8,
+          maxContinuationAttempts: goalCompletionContinuationAttempts(),
+          runToolPrompt,
+          incompleteReason: completionReviewIncompleteReason,
+          buildContinuationPrompt: ({ previousAnswer, incompleteReason }) =>
+            goalCompletionIncompleteContinuationPrompt({
+              prompt,
+              previousAnswer,
+              incompleteReason,
+              audit,
+              decisions: publicDecisionContext,
             }),
-            successfulToolsBefore: successfulToolsBeforeReview,
-            successfulToolsAfter: successfulToolAuditCount(),
-          });
-          if (!incompleteReason) return reviewAdvancedTheTurn ? reviewText : candidateFinalText;
-          if (continuationAttempt >= maxContinuationAttempts) {
-            throw goalCompletionIncompleteError(incompleteReason);
-          }
-
-          const successfulToolsBeforeContinuation = successfulToolAuditCount();
-          const workBeforeContinuation = activeDirectWorkProgressSnapshot({
-            butlerData: this.butlerData,
-            sessionId: input.handle.sessionId,
-          });
-          const continuationText = await runToolPrompt(goalCompletionIncompleteContinuationPrompt({
-            prompt,
-            previousAnswer: reviewText,
-            incompleteReason,
-            audit,
-            decisions: publicDecisionContext,
-          }), 8, "goal_completion_continuation");
-          const continuationAdvancedTheTurn = turnAdvancedDuringToolPrompt({
-            beforeWork: workBeforeContinuation,
-            afterWork: activeDirectWorkProgressSnapshot({
-              butlerData: this.butlerData,
-              sessionId: input.handle.sessionId,
-            }),
-            successfulToolsBefore: successfulToolsBeforeContinuation,
-            successfulToolsAfter: successfulToolAuditCount(),
-          });
-          const continuationIncompleteReason =
-            completionReviewIncompleteReason(continuationText);
-          if (continuationIncompleteReason && !continuationAdvancedTheTurn) {
-            throw goalCompletionIncompleteError(continuationIncompleteReason);
-          }
-          candidateFinalText = continuationText;
-          nextReviewPromptText = goalCompletionReviewPrompt({
+          buildReviewPrompt: ({ candidateFinalText }) => goalCompletionReviewPrompt({
             prompt,
             previousAnswer: candidateFinalText,
             audit,
             decisions: publicDecisionContext,
-          });
+          }),
+          captureProgress: () => ({
+            progress: activeDirectWorkProgressSnapshot({
+              butlerData: this.butlerData,
+              sessionId: input.handle.sessionId,
+            }),
+            successfulToolCount: successfulToolAuditCount(),
+          }),
+          didProgressAdvance: (before, after) => turnAdvancedDuringToolPrompt({
+            beforeWork: before.progress,
+            afterWork: after.progress,
+            successfulToolsBefore: before.successfulToolCount,
+            successfulToolsAfter: after.successfulToolCount,
+          }),
+        });
+        if (outcome.kind === "deliverable") {
+          return outcome.text;
         }
+        throw goalCompletionIncompleteError(outcome.reason);
       };
       let text = "";
       if (useTools) {
