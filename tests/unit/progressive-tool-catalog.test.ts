@@ -35,6 +35,7 @@ test("native progressive catalog exposes compact stable metadata without raw sch
     riskLevel: "medium",
     enabled: false,
     disabledReason: "web search provider is disabled by configuration",
+    recoveryHint: "Use tool_search or tool_describe to choose another currently enabled tool.",
   }));
   expect(webSearch?.schemaDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
   expect(webSearch?.tags).toEqual([...webSearch!.tags].sort());
@@ -48,6 +49,7 @@ test("native progressive catalog exposes compact stable metadata without raw sch
       "name",
       "namespace",
       "provider",
+      "recoveryHint",
       "riskLevel",
       "schemaDigest",
       "summary",
@@ -97,6 +99,7 @@ test("native progressive catalog gives disabled tools a recoverable reason", () 
   expect(catalog.find((entry) => entry.name === "web_search")).toEqual(expect.objectContaining({
     enabled: false,
     disabledReason: "tool is disabled by runtime availability policy",
+    recoveryHint: "Use tool_search or tool_describe to choose another currently enabled tool.",
   }));
 });
 
@@ -130,6 +133,7 @@ test("external catalog entries support mcp, plugin, disabled reasons, and schema
     namespace: "github",
     enabled: false,
     disabledReason: "server is disabled",
+    recoveryHint: "Use tool_search or tool_describe to choose another currently enabled tool.",
     riskLevel: "high",
   }));
   expect(catalog[1]).toEqual(expect.objectContaining({
@@ -137,6 +141,7 @@ test("external catalog entries support mcp, plugin, disabled reasons, and schema
     namespace: "calendar",
     enabled: true,
     disabledReason: null,
+    recoveryHint: null,
     riskLevel: "high",
   }));
 });

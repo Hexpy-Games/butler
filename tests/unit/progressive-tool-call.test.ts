@@ -260,6 +260,37 @@ test("tool_call returns plugin tools as disabled until a guarded dispatcher exis
   expect(result.error.recoverable).toBe(true);
 });
 
+test("tool_call treats plugin schema loading failures as recoverable disabled targets", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    pluginToolDescriber: async () => {
+      throw new Error("SECRET_TOKEN_123");
+    },
+  });
+
+  const result = await execute({
+    name: "tool_call",
+    args: { id: "plugin:calendar:create_event", arguments: { title: "Review" } },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    error: {
+      code: string;
+      message: string;
+      recoverable: boolean;
+      next_action: string;
+    };
+  };
+
+  expect(result.ok).toBe(false);
+  expect(result.error.code).toBe("disabled_tool");
+  expect(result.error.message).toBe("Plugin schema unavailable.");
+  expect(result.error.recoverable).toBe(true);
+  expect(result.error.next_action).toContain("recoverable tool-selection result");
+  expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN_123");
+});
+
 test("tool_call returns unknown ids as recoverable results", async () => {
   const execute = createButlerToolExecutor({
     butlerHome: root,

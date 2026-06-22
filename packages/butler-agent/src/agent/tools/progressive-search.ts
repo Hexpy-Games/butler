@@ -25,6 +25,7 @@ export interface ToolSearchResult {
   risk_level: ToolCatalogEntry["riskLevel"];
   enabled: boolean;
   disabled_reason: string | null;
+  recovery_hint: string | null;
   schema_digest: string;
 }
 
@@ -61,6 +62,7 @@ function compactToolSearchResult(entry: ToolCatalogEntry): ToolSearchResult {
     risk_level: entry.riskLevel,
     enabled: entry.enabled,
     disabled_reason: entry.disabledReason,
+    recovery_hint: entry.recoveryHint,
     schema_digest: entry.schemaDigest,
   };
 }
