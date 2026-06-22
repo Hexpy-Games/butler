@@ -186,7 +186,7 @@ test("receipt references reject private absolute paths", () => {
     confidence: 0.8,
     verified: true,
     summary: "A command produced a file.",
-    references: [{ label: "private output", path: "/Users/yeonwoo/private/output.csv" }],
+    references: [{ label: "private output", path: "/private/butler/output.csv" }],
     satisfies: ["durable_artifact"],
     limitations: [],
     created_at: "2026-06-22T08:00:00.000Z",
@@ -208,7 +208,7 @@ test("receipt references reject unsafe URLs and private labels", () => {
     verified: true,
     summary: "Unsafe references should not parse.",
     references: [
-      { label: "/Users/yeonwoo/private/source", url: "file:///Users/yeonwoo/private/source.html" },
+      { label: "/private/butler/source", url: "file:///private/butler/source.html" },
     ],
     satisfies: ["source_verified"],
     limitations: [],
