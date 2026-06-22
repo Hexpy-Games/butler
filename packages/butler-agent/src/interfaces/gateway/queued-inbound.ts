@@ -3,6 +3,7 @@ import type { ClaimedInboundEvent, NativeInboundQueue, QueuedInboundEvent } from
 import type { ArtifactRef, DeliveryResult, InboundEnvelope, OutboundAction, SessionTransportBinding } from "../../test-support/harness/contracts.ts";
 import type { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import { safeRuntimeFailure, type RuntimeFailureDiagnostic } from "../../integrations/providers/provider-errors.ts";
+import { recoverableLimitedDeliveryForError } from "../../agent/turn/recoverable-delivery.ts";
 import type { DeliveryGuard } from "../transport/delivery-guard.ts";
 
 export interface QueuedInboundServer {
@@ -119,6 +120,34 @@ function failureActionForOriginalInbound(input: {
       dispatchStatus: safeFailure.cause?.startsWith("dispatch_status=")
         ? safeFailure.cause.slice("dispatch_status=".length).split(" ", 1)[0]
         : undefined,
+    },
+  };
+}
+
+function limitedDeliveryActionForOriginalInbound(input: {
+  item: ClaimedInboundEvent;
+  text: string;
+}): OutboundAction | null {
+  const turnId = input.item.envelope.routingHints?.turnId?.trim();
+  const sessionId = input.item.envelope.routingHints?.sessionId?.trim();
+  if (!turnId || !sessionId) return null;
+  return {
+    actionId: `queued-inbound-limited:${input.item.queueId}:${input.item.envelope.transport}:${turnId}`,
+    transport: input.item.envelope.transport,
+    accountId: input.item.envelope.accountId,
+    peer: input.item.envelope.peer,
+    message: {
+      text: input.text,
+      replyToMessageId: input.item.envelope.message.id,
+    },
+    metadata: {
+      source: "gateway/queued-inbound.ts",
+      kind: "final_result",
+      queueId: input.item.queueId,
+      originalTransport: input.item.envelope.transport,
+      sessionId,
+      turnId,
+      deliveryState: "delivered_with_limitations",
     },
   };
 }
@@ -366,6 +395,27 @@ async function processClaimedQueuedInboundItem(input: {
       handled: result.status === "handled",
     }, options.now?.());
   } catch (error) {
+    const limitedDelivery = recoverableLimitedDeliveryForError(error);
+    const sessionId = item.envelope.routingHints?.sessionId?.trim();
+    if (limitedDelivery && sessionId) {
+      summary.handled += 1;
+      const action = limitedDeliveryActionForOriginalInbound({
+        item,
+        text: limitedDelivery.text,
+      });
+      if (action) {
+        const delivery = await deliverAction(sessionId, action, {
+          source: "gateway/queued-inbound.ts#limited-delivery",
+          queueId: item.queueId,
+        });
+        if (delivery.ok) summary.delivered += 1;
+      }
+      options.queue.complete(item, {
+        dispatchStatus: "handled",
+        handled: true,
+      }, options.now?.());
+      return summary;
+    }
     summary.failed += 1;
     const safeFailure = safeRuntimeFailure(error);
     const delivered = await deliverFailureForOriginalInbound({

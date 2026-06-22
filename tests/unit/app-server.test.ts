@@ -8247,7 +8247,7 @@ test("provider failures persist actionable safe API status", async () => {
   }
 });
 
-test("goal completion incomplete failures persist the safe incomplete reason", async () => {
+test("goal completion incomplete gaps deliver safe limitation text instead of app failures", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -8260,7 +8260,7 @@ test("goal completion incomplete failures persist the safe incomplete reason", a
     },
   });
   try {
-    const failedResponse = await fetch(`${server.url}messages`, {
+    const response = await fetch(`${server.url}messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -8268,15 +8268,15 @@ test("goal completion incomplete failures persist the safe incomplete reason", a
         text: "complete this only with verified evidence",
       }),
     });
-    expect(failedResponse.status).toBe(500);
+    expect(response.status).toBe(202);
 
     const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
-    const failedTurn = turns.data.turns[0];
-    expect(failedTurn).toMatchObject({
-      state: "failed",
-      safe_error_code: "goal_completion_incomplete",
-      retryable: true,
+    const deliveredTurn = turns.data.turns[0];
+    expect(deliveredTurn).toMatchObject({
+      state: "delivered",
+      retryable: false,
     });
+    expect(deliveredTurn.safe_error_code ?? null).toBeNull();
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
@@ -8285,10 +8285,10 @@ test("goal completion incomplete failures persist the safe incomplete reason", a
       (message: { role: string }) => message.role === "assistant",
     );
     expect(firstAssistant).toMatchObject({
-      status: "failed",
-      safe_error_code: "goal_completion_incomplete",
-      retryable: true,
+      status: "delivered",
+      retryable: false,
     });
+    expect(firstAssistant.safe_error_code ?? null).toBeNull();
     expect(firstAssistant.text).toContain("확인 가능한 공개 출처");
     expect(firstAssistant.text).not.toContain("token=secret");
   } finally {
@@ -8296,7 +8296,7 @@ test("goal completion incomplete failures persist the safe incomplete reason", a
   }
 });
 
-test("goal completion obligation protocol failures render as clean retryable failures", async () => {
+test("goal completion obligation protocol gaps render as clean limited delivery", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -8309,7 +8309,7 @@ test("goal completion obligation protocol failures render as clean retryable fai
     },
   });
   try {
-    const failedResponse = await fetch(`${server.url}messages`, {
+    const response = await fetch(`${server.url}messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -8317,7 +8317,7 @@ test("goal completion obligation protocol failures render as clean retryable fai
         text: "create a csv and report",
       }),
     });
-    expect(failedResponse.status).toBe(500);
+    expect(response.status).toBe(202);
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
@@ -8326,12 +8326,12 @@ test("goal completion obligation protocol failures render as clean retryable fai
       (message: { role: string }) => message.role === "assistant",
     );
     expect(firstAssistant).toMatchObject({
-      status: "failed",
-      safe_error_code: "goal_completion_incomplete",
-      retryable: true,
+      status: "delivered",
+      retryable: false,
     });
+    expect(firstAssistant.safe_error_code ?? null).toBeNull();
     expect(firstAssistant.text).toContain(
-      "요청한 결과를 완료했는지 확인하지 못했습니다",
+      "Butler could not verify that the requested goal was completed",
     );
     expect(firstAssistant.text).not.toContain(
       "unsatisfied public completion obligation",

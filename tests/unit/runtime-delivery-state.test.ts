@@ -7,6 +7,7 @@ import {
   recoveringInternalDeliveryState,
   waitingUserDeliveryState,
 } from "../../packages/butler-agent/src/agent/turn/runtime-delivery-state.ts";
+import { recoverableLimitedDeliveryForError } from "../../packages/butler-agent/src/agent/turn/recoverable-delivery.ts";
 
 test("runtime delivery taxonomy maps normal and limited delivery as assistant output", () => {
   expect(deliveredDeliveryState()).toMatchObject({
@@ -130,23 +131,45 @@ test("runtime delivery taxonomy preserves cancellation as terminal cancellation"
 
 test("runtime delivery taxonomy redacts unsafe limitation text", () => {
   const limited = deliveredWithLimitationsState({
-    limitations: ["raw prompt text token=abc123 <think>hidden</think> /Users/yeonwoo/.butler/file"],
+    limitations: ["raw prompt text token=abc123 <think>hidden</think> /Users/example/.butler/file"],
   });
   expect(JSON.stringify(limited)).not.toContain("abc123");
   expect(JSON.stringify(limited)).not.toContain("<think>");
-  expect(JSON.stringify(limited)).not.toContain("/Users/yeonwoo");
+  expect(JSON.stringify(limited)).not.toContain("/Users/example");
   expect(limited.limitations).toEqual(["A runtime limitation remained."]);
 
   const quoted = deliveredWithLimitationsState({
     limitations: [
-      'Could not inspect path:"/Users/yeonwoo/.butler/private.json".',
-      "Could not inspect (C:\\Users\\yeonwoo\\.butler\\private.json).",
+      'Could not inspect path:"/Users/example/.butler/private.json".',
+      "Could not inspect (C:\\Users\\example\\.butler\\private.json).",
     ],
   });
-  expect(JSON.stringify(quoted)).not.toContain("/Users/yeonwoo");
-  expect(JSON.stringify(quoted)).not.toContain("C:\\Users\\yeonwoo");
+  expect(JSON.stringify(quoted)).not.toContain("/Users/example");
+  expect(JSON.stringify(quoted)).not.toContain("C:\\Users\\example");
   expect(quoted.limitations).toEqual([
     "A runtime limitation remained.",
     "A runtime limitation remained.",
   ]);
+});
+
+test("recoverable delivery redacts unsafe goal completion text", () => {
+  const error = new Error(
+    "INCOMPLETE: raw prompt text token=abc123 /Users/example/.butler/private.json",
+  );
+  error.name = "GoalCompletionIncompleteError";
+
+  const recovered = recoverableLimitedDeliveryForError(error);
+
+  expect(recovered).toMatchObject({
+    text:
+      "Butler could not verify that the requested goal was completed with the available evidence.",
+    delivery: {
+      delivery_state: "delivered_with_limitations",
+      visibility: "assistant_output",
+      failure_notice: false,
+    },
+  });
+  expect(JSON.stringify(recovered)).not.toContain("INCOMPLETE");
+  expect(JSON.stringify(recovered)).not.toContain("abc123");
+  expect(JSON.stringify(recovered)).not.toContain("/Users/example");
 });
