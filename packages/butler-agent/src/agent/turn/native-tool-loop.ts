@@ -36,6 +36,11 @@ import {
 import {
   selectButlerToolsForTurn,
 } from "../tools/profiles.ts";
+import {
+  bridgeToolAuditEvent,
+  redactedBridgeToolAuditArgs,
+  redactedBridgeToolAuditResult,
+} from "../tools/tool-bridge/audit.ts";
 import { buildTaskOriginContext } from "../work/task-origin.ts";
 import { TaskStore } from "../work/task-store.ts";
 import { TodoListStore, type TodoItemInput } from "../work/todo-list.ts";
@@ -2794,7 +2799,14 @@ function createAuditedButlerToolExecutor(input: {
       rawArguments: JSON.stringify(args),
     }, "runtime");
   };
-  const executeAudited: FunctionToolPromptOptions["executeTool"] = async (call) => {
+  type BridgedToolCallAuditContext = {
+    args: Record<string, unknown>;
+    invocation: Record<string, unknown>;
+  };
+  const executeAuditedWithBridge = async (
+    call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
+    bridgedFrom?: BridgedToolCallAuditContext,
+  ): Promise<unknown> => {
     throwIfRuntimeTurnAborted(input.turnInput.signal);
     if (call.name === "tool_call" && call.args.__bridge_resolve_only !== true) {
       const resolved = await input.executor({
@@ -2807,19 +2819,52 @@ function createAuditedButlerToolExecutor(input: {
         targetCall?: Parameters<FunctionToolPromptOptions["executeTool"]>[0];
         bridgeInvocation?: Record<string, unknown>;
       };
-      if (resolved.ok !== true || !resolved.targetCall) return resolved.result ?? resolved;
-      const result = await executeAudited(resolved.targetCall);
-      if (result && typeof result === "object" && !Array.isArray(result)) {
-        return {
+      if (resolved.ok !== true || !resolved.targetCall) {
+        const result = resolved.result ?? resolved;
+        const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, result);
+        appendTranscriptEvent(createTranscriptEvent({
+          sessionId: input.sessionId,
+          kind: "tool_result",
+          payload: {
+            name: "tool_call",
+            ok: false,
+            result: redactedBridgeToolAuditResult("tool_call", result),
+          },
+          metadata: {
+            source: "runtime/native-tool-loop.ts",
+            bridge_audit: bridgeAudit ?? undefined,
+          },
+        }));
+        input.audit.push({
+          name: "tool_call",
+          args: redactedBridgeToolAuditArgs("tool_call", call.args),
+          ok: false,
+          result: redactedBridgeToolAuditResult("tool_call", result),
+          error: bridgeAudit?.error?.code ?? "tool_call_bridge_resolution_failed",
+          bridgeAudit: bridgeAudit ?? undefined,
+        });
+        return result;
+      }
+      const auditStartIndex = input.audit.length;
+      const result = await executeAuditedWithBridge(resolved.targetCall, {
+        args: call.args,
+        invocation: resolved.bridgeInvocation ?? {},
+      });
+      const bridgedResult = result && typeof result === "object" && !Array.isArray(result)
+        ? {
           ...result as Record<string, unknown>,
           bridge_invocation: resolved.bridgeInvocation,
+        }
+        : {
+          ok: true,
+          result,
+          bridge_invocation: resolved.bridgeInvocation,
         };
-      }
-      return {
-        ok: true,
-        result,
-        bridge_invocation: resolved.bridgeInvocation,
-      };
+      const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, bridgedResult);
+      const targetAudit = [...input.audit.slice(auditStartIndex)].reverse()
+        .find((entry) => entry.name === resolved.targetCall?.name);
+      if (targetAudit && bridgeAudit) targetAudit.bridgeAudit = bridgeAudit;
+      return bridgedResult;
     }
     const startedAt = Date.now();
     const cleanArgs = { ...call.args };
@@ -3101,14 +3146,21 @@ function createAuditedButlerToolExecutor(input: {
           }));
         }
       }
+      const bridgeAuditName = bridgedFrom ? "tool_call" : call.name;
+      const bridgeAuditArgs = bridgedFrom?.args ?? cleanArgs;
+      const bridgeAuditResult = bridgedFrom
+        ? withBridgeInvocationForAudit(result, bridgedFrom.invocation)
+        : result;
+      const bridgeAudit = bridgeToolAuditEvent(bridgeAuditName, bridgeAuditArgs, bridgeAuditResult);
       input.audit.push({
         name: call.name,
-        args: cleanArgs,
+        args: bridgeAudit && !bridgedFrom ? redactedBridgeToolAuditArgs(call.name, cleanArgs) : cleanArgs,
         ok: true,
-        result,
+        result: bridgeAudit && !bridgedFrom ? redactedBridgeToolAuditResult(call.name, result) : result,
         publicDecision: decision,
         satisfiedCompletionObligations: satisfiedCompletionObligationsForToolResult(call.name, result),
         evidenceReceipts: evidenceReceiptsFromResult(result),
+        bridgeAudit: bridgeAudit ?? undefined,
       });
       const completedProgress = completedToolProgressSummary(progress, result);
       await emitTurnEventBestEffort(input.turnInput, {
@@ -3200,6 +3252,7 @@ function createAuditedButlerToolExecutor(input: {
         },
         metadata: {
           source: "runtime/native-tool-loop.ts",
+          bridge_audit: bridgeAudit ?? undefined,
         },
       }));
       return modelVisibleResult;
@@ -3217,12 +3270,29 @@ function createAuditedButlerToolExecutor(input: {
           errorName: error instanceof Error ? error.name : "UnknownError",
         },
       }, { butlerData: input.butlerData });
+      const bridgeAudit = bridgedFrom
+        ? bridgeToolAuditEvent("tool_call", bridgedFrom.args, {
+          ok: false,
+          error: {
+            code: "underlying_tool_error",
+            recoverable: false,
+          },
+          bridge_invocation: bridgedFrom.invocation,
+        })
+        : bridgeToolAuditEvent(call.name, cleanArgs, {
+          ok: false,
+          error: {
+            code: "underlying_tool_error",
+            recoverable: false,
+          },
+        });
       input.audit.push({
         name: call.name,
-        args: cleanArgs,
+        args: bridgeAudit && !bridgedFrom ? redactedBridgeToolAuditArgs(call.name, cleanArgs) : cleanArgs,
         ok: false,
         error: message,
         publicDecision: decision,
+        bridgeAudit: bridgeAudit ?? undefined,
       });
       await emitTurnEventBestEffort(input.turnInput, {
         kind: "tool.failed",
@@ -3268,6 +3338,7 @@ function createAuditedButlerToolExecutor(input: {
         },
         metadata: {
           source: "runtime/native-tool-loop.ts",
+          bridge_audit: bridgeAudit ?? undefined,
         },
       }));
       if (
@@ -3286,7 +3357,27 @@ function createAuditedButlerToolExecutor(input: {
       });
     }
   };
+  const executeAudited: FunctionToolPromptOptions["executeTool"] = async (call) => {
+    return await executeAuditedWithBridge(call);
+  };
   return executeAudited;
+}
+
+function withBridgeInvocationForAudit(
+  result: unknown,
+  bridgeInvocation: Record<string, unknown>,
+): Record<string, unknown> {
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    return {
+      ...result as Record<string, unknown>,
+      bridge_invocation: bridgeInvocation,
+    };
+  }
+  return {
+    ok: true,
+    result,
+    bridge_invocation: bridgeInvocation,
+  };
 }
 
 function appendButlerToolInstructions(systemPrompt?: string): string {

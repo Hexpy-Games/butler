@@ -1,3 +1,5 @@
+import type { BridgeToolAuditEvent } from "../tools/tool-bridge/audit.ts";
+
 export type PublicWorkObligationKind =
   | "source_verified"
   | "command_executed"
@@ -117,6 +119,7 @@ export interface ToolAuditEntry {
   publicDecision?: PublicWorkDecision;
   satisfiedCompletionObligations?: PublicWorkObligationKind[];
   evidenceReceipts?: EvidenceReceipt[];
+  bridgeAudit?: BridgeToolAuditEvent;
 }
 
 export interface ToolProgressSummary {
