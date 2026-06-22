@@ -34,8 +34,8 @@ import {
   satisfiedCompletionObligationsForToolResult,
 } from "../tools/butler-tools.ts";
 import {
-  selectButlerToolsForTurn,
-} from "../tools/profiles.ts";
+  selectInitialToolsFromSurfaceController,
+} from "../tools/tool-surface-selection.ts";
 import {
   bridgeToolAuditEvent,
   redactedBridgeToolAuditArgs,
@@ -2108,13 +2108,14 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       ): Promise<string> => {
         throwIfRuntimeTurnAborted(input.signal);
         const grantedToolRounds = directToolRoundLimit(maxToolRounds);
-        const selectedTools = selectButlerToolsForTurn({
+        const selectedSurface = selectInitialToolsFromSurfaceController({
           role: session.init.role,
-          text: userText,
           sessionMetadata: session.init.metadata,
           turnMetadata: input.metadata,
+          providerCapabilities: input.provider.capabilities,
           tools: BUTLER_TOOLS,
         });
+        const selectedTools = selectedSurface.tools;
         const previousProviderToolNames = currentProviderToolNames;
         currentProviderToolNames = selectedTools.map((tool) => tool.name);
         const usageAttribution: PromptUsageAttribution = {
@@ -2278,13 +2279,12 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       if (useTools) {
         const explicitTools = requiredExplicitToolNames(
           [session.init.metadata, input.metadata],
-          selectButlerToolsForTurn({
+          selectInitialToolsFromSurfaceController({
             role: session.init.role,
-            text: userText,
             sessionMetadata: session.init.metadata,
             turnMetadata: input.metadata,
             tools: BUTLER_TOOLS,
-          }).map((tool) => tool.name),
+          }).toolNames,
         );
         for (let repairAttempt = 0; repairAttempt < 2; repairAttempt += 1) {
           const missingExplicitTools = explicitTools
