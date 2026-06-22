@@ -6,9 +6,8 @@ import type {
 } from "../turn/native-tool-types.ts";
 import { sourceUrlsFromWebSearchAudit } from "../policy/runtime-policy.ts";
 import {
-  evidenceReceiptsFromResult,
-  satisfiedCompletionObligationsFromEvidenceReceipts,
-} from "./evidence-receipts.ts";
+  readCompletionObligationEvidenceFromAudit,
+} from "./completion-obligation-evidence.ts";
 
 export function finalResultContractRepairPrompt(input: {
   prompt: string;
@@ -256,107 +255,39 @@ export function completionObligationIncompleteReason(input: {
   audit: ToolAuditEntry[];
   decisions?: PublicWorkDecision[];
 }): string | null {
-  const missing = unsatisfiedCompletionObligations(input.audit, input.decisions ?? []);
-  if (missing.length === 0) return null;
-  return `The turn still has unsatisfied public completion obligation(s): ${missing.join(", ")}.`;
+  const obligations = requiredCompletionObligations(input.decisions ?? []);
+  if (obligations.length === 0) return null;
+  const read = readCompletionObligationEvidenceFromAudit({
+    audit: input.audit,
+    required: obligations,
+  });
+  if (read.outcome === "satisfied" || read.outcome === "limitation") return null;
+  const missing = read.missingCritical.join(", ");
+  if (read.outcome === "explicit_blocker") {
+    return `The turn is blocked by unresolved public completion obligation(s): ${missing}.`;
+  }
+  return `The turn still needs repair for missing public completion obligation(s): ${missing}.`;
 }
 
 export function unsatisfiedCompletionObligations(
   audit: ToolAuditEntry[],
   decisions: PublicWorkDecision[],
 ): PublicWorkObligationKind[] {
+  const required = requiredCompletionObligations(decisions);
+  if (required.length === 0) return [];
+  const read = readCompletionObligationEvidenceFromAudit({
+    audit,
+    required,
+  });
+  return [...read.missingCritical, ...read.missingNonCritical];
+}
+
+function requiredCompletionObligations(decisions: PublicWorkDecision[]): PublicWorkObligationKind[] {
   const required = new Set<PublicWorkObligationKind>();
   for (const decision of decisions) {
-    for (const obligation of effectiveCompletionObligations(decision)) required.add(obligation);
+    for (const obligation of decision.completionObligations ?? []) required.add(obligation);
   }
-  if (required.size === 0) return [];
-  const satisfied = satisfiedCompletionObligations(audit);
-  return Array.from(required).filter((obligation) => !satisfied.has(obligation));
-}
-
-function effectiveCompletionObligations(decision: PublicWorkDecision): PublicWorkObligationKind[] {
-  const obligations = decision.completionObligations ?? [];
-  if (!obligations.includes("durable_artifact")) return obligations;
-  if (!isInspectionOnlyDurableArtifactDecision(decision)) return obligations;
-  return obligations.filter((obligation) => obligation !== "durable_artifact");
-}
-
-function isInspectionOnlyDurableArtifactDecision(decision: PublicWorkDecision): boolean {
-  const actionText = [
-    decision.summary ?? "",
-    decision.nextStep ?? "",
-  ].join("\n");
-  const fullText = [
-    actionText,
-    decision.rationale ?? "",
-  ].join("\n");
-  if (
-    !/(?:verify|verification|check|checking|confirm|read|review|inspect|list|find|grep|exists|existence|presence|absence|query|status|확인|검증|조회|읽|목록|찾|존재|부재|상태|본문|경로)/iu.test(fullText)
-  ) {
-    return false;
-  }
-  return !hasActiveDurableArtifactCreation(actionText);
-}
-
-function hasActiveDurableArtifactCreation(text: string): boolean {
-  if (/\b(?:create|write|generate|render|attach|save|patch|update|edit|produce)\b/iu.test(text)) {
-    return true;
-  }
-  return /(?:작성|생성|렌더|저장|첨부|수정|갱신|패치|만들).{0,16}(?:합니다|하겠다|해야|한 뒤|하고|해서|한다|할 것|할게)/iu.test(text);
-}
-
-function satisfiedCompletionObligations(audit: ToolAuditEntry[]): Set<PublicWorkObligationKind> {
-  const satisfied = new Set<PublicWorkObligationKind>();
-  for (const entry of audit) {
-    if (!entry.ok) continue;
-    for (const obligation of satisfiedCompletionObligationsFromEvidenceReceipts([
-      ...(entry.evidenceReceipts ?? []),
-      ...evidenceReceiptsFromResult(entry.result),
-    ])) {
-      satisfied.add(obligation);
-    }
-    for (const obligation of entry.satisfiedCompletionObligations ?? []) {
-      satisfied.add(obligation);
-    }
-    const result = entry.result && typeof entry.result === "object" && !Array.isArray(entry.result)
-      ? entry.result as Record<string, unknown>
-      : undefined;
-    if (hasVerifiedSourceEvidence(entry, result)) {
-      satisfied.add("source_verified");
-    }
-    if (entry.name === "run_command" && commandSucceeded(result)) {
-      satisfied.add("command_executed");
-      if (commandRenderedChart(result)) satisfied.add("chart_rendered");
-    }
-    if (entry.name === "transform_public_data_table" || commandCreatedDataTable(result)) {
-      satisfied.add("data_table_created");
-    }
-    if (hasDurableArtifactEvidence(result)) {
-      satisfied.add("durable_artifact");
-      if (result?.artifact_kind === "csv_file") satisfied.add("data_table_created");
-    }
-  }
-  return satisfied;
-}
-
-function durableStateInspectionCompleted(toolName: string): boolean {
-  if (
-    toolName !== "get_work_dashboard" &&
-    toolName !== "inspect_project_status" &&
-    toolName !== "query_project_work" &&
-    toolName !== "list_tasks" &&
-    toolName !== "get_task_result" &&
-    toolName !== "list_work_streams"
-  ) {
-    return false;
-  }
-  return true;
-}
-
-function hasVerifiedSourceEvidence(entry: ToolAuditEntry, _result: Record<string, unknown> | undefined): boolean {
-  if (entry.name === "web_read") return sourceUrlsFromToolEvidence([entry]).length > 0;
-  if (durableStateInspectionCompleted(entry.name)) return true;
-  return false;
+  return [...required];
 }
 
 function sourceUrlsFromToolEvidence(audit: ToolAuditEntry[]): string[] {
@@ -385,36 +316,6 @@ function sourceUrlsFromToolEvidence(audit: ToolAuditEntry[]): string[] {
     }
   }
   return [...new Set(urls)];
-}
-
-function commandSucceeded(result: Record<string, unknown> | undefined): boolean {
-  if (!result) return true;
-  if (result.ok === false) return false;
-  if (result.timed_out === true) return false;
-  return result.exit_code === undefined || result.exit_code === 0;
-}
-
-function hasDurableArtifactEvidence(result: Record<string, unknown> | undefined): boolean {
-  return Boolean(result?.durable_artifact_created) || safeArtifactReferences(result).length > 0;
-}
-
-function commandCreatedDataTable(result: Record<string, unknown> | undefined): boolean {
-  if (!result) return false;
-  if (result.data_table_created === true) return true;
-  return artifactKinds(result).some((kind) => kind === "csv_file" || kind === "table_file");
-}
-
-function commandRenderedChart(result: Record<string, unknown> | undefined): boolean {
-  if (!result) return false;
-  if (result.chart_rendered === true) return true;
-  return artifactKinds(result).includes("chart_file");
-}
-
-function artifactKinds(result: Record<string, unknown>): string[] {
-  const values = [result.artifact_kind, result.artifact_kinds];
-  return values
-    .flatMap((value) => Array.isArray(value) ? value : [value])
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
 }
 
 export function stripLeadingPublicWorkDecisionBlock(value: string): string {

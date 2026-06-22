@@ -3,6 +3,7 @@ import {
   projectLedgerRenderedViewEvidence,
   runProjectLedgerTool,
 } from "../../../integrations/project-ledger/client.ts";
+import { createEvidenceCapabilityReceipt } from "../../output/evidence-capability-ledger.ts";
 import { createWorkDashboard } from "../../work/work-dashboard.ts";
 
 type ToolCall = { args: Record<string, unknown> };
@@ -22,26 +23,41 @@ export function createProjectLedgerToolHandlers(input: ProjectLedgerExecutorInpu
         debug: call.args.debug === true,
         limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
       }),
+      evidence_capability_receipts: projectLedgerSourceCapabilityReceipts({
+        toolName: "get_work_dashboard",
+        summary: "Canonical Butler work dashboard state was inspected.",
+        reference: { task_id: "work-dashboard" },
+      }),
     }),
     "inspect_project_status": async (call: ToolCall) => {
       const projectPath = projectLedgerProjectPath(input, call.args);
-      return runProjectLedgerTool(input, [
+      const result = runProjectLedgerTool(input, [
         "status",
         "--project",
         projectPath,
       ]);
+      return withProjectLedgerSourceEvidence(result, {
+        toolName: "inspect_project_status",
+        summary: "Canonical Project Ledger status was inspected.",
+        reference: { task_id: "project-ledger-status" },
+      });
     },
     "query_project_work": async (call: ToolCall) => {
       const kind = typeof call.args.kind === "string" ? call.args.kind.trim() : "";
       if (!kind) throw new Error("query_project_work requires kind");
       const projectPath = projectLedgerProjectPath(input, call.args);
-      return runProjectLedgerTool(input, [
+      const result = runProjectLedgerTool(input, [
         "query",
         "--project",
         projectPath,
         "--kind",
         kind,
       ]);
+      return withProjectLedgerSourceEvidence(result, {
+        toolName: "query_project_work",
+        summary: `Canonical Project Ledger ${kind} query results were inspected.`,
+        reference: { task_id: `project-ledger-query:${kind}` },
+      });
     },
     "render_project_dashboard": async (call: ToolCall) => {
       const view = typeof call.args.view === "string" ? call.args.view.trim() : "";
@@ -90,4 +106,41 @@ export function createProjectLedgerToolHandlers(input: ProjectLedgerExecutorInpu
       ]);
     },
   };
+}
+
+function withProjectLedgerSourceEvidence(
+  result: Record<string, unknown>,
+  input: Parameters<typeof projectLedgerSourceCapabilityReceipts>[0],
+): Record<string, unknown> {
+  if (!isProjectLedgerCliEnvelope(result)) return result;
+  return {
+    ...result,
+    evidence_capability_receipts: projectLedgerSourceCapabilityReceipts(input),
+  };
+}
+
+function isProjectLedgerCliEnvelope(result: Record<string, unknown>): boolean {
+  return typeof result.command === "string" &&
+    result.privacy !== null &&
+    typeof result.privacy === "object" &&
+    !Array.isArray(result.privacy);
+}
+
+function projectLedgerSourceCapabilityReceipts(input: {
+  toolName: string;
+  summary: string;
+  reference: { task_id: string };
+}) {
+  return [createEvidenceCapabilityReceipt({
+    producer: { kind: "tool", name: input.toolName },
+    capability: "source_verified",
+    evidence_kind: "project_state",
+    maturity: "verified",
+    verified: true,
+    confidence: 0.9,
+    summary: input.summary,
+    references: [input.reference],
+    satisfies: ["source_verified"],
+    limitations: [],
+  })];
 }

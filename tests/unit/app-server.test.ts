@@ -8302,7 +8302,7 @@ test("goal completion obligation protocol failures render as clean retryable fai
     port: 0,
     responder() {
       const error = new Error(
-        "The turn still has unsatisfied public completion obligation(s): durable_artifact, data_table_created.",
+        "The turn still needs repair for missing public completion obligation(s): durable_artifact, data_table_created.",
       );
       error.name = "GoalCompletionIncompleteError";
       throw error;
@@ -8335,6 +8335,9 @@ test("goal completion obligation protocol failures render as clean retryable fai
     );
     expect(firstAssistant.text).not.toContain(
       "unsatisfied public completion obligation",
+    );
+    expect(firstAssistant.text).not.toContain(
+      "missing public completion obligation",
     );
     expect(firstAssistant.text).not.toContain("durable_artifact");
     expect(firstAssistant.text).not.toContain("data_table_created");

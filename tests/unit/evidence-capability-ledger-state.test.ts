@@ -5,6 +5,7 @@ import {
   EVIDENCE_CAPABILITY_SCHEMA_VERSION,
   missingCompletionObligationsFromLedger,
 } from "../../packages/butler-agent/src/agent/output/evidence-capability-ledger.ts";
+import { readCompletionObligationEvidence } from "../../packages/butler-agent/src/agent/output/completion-obligation-evidence.ts";
 
 test("ledger keeps malformed receipts as rejected evidence", () => {
   const ledger = buildEvidenceCapabilityLedger({
@@ -150,4 +151,102 @@ test("legacy search and artifact receipts cannot fake missing structure", () => 
     "legacy-search-fake",
     "legacy-artifact-fake",
   ]));
+});
+
+test("completion obligation reader reports critical missing and limitation metadata", () => {
+  const limitation = createEvidenceCapabilityReceipt({
+    producer: { kind: "tool", name: "web_read" },
+    capability: "limitation_recorded",
+    evidence_kind: "limitation",
+    maturity: "verified",
+    verified: true,
+    confidence: 0.7,
+    summary: "Source evidence was bounded.",
+    references: [{ url: "https://example.com/source" }],
+    limitations: ["Only a bounded excerpt was available."],
+    created_at: "2026-06-22T08:02:00.000Z",
+  });
+
+  const read = readCompletionObligationEvidence({
+    required: ["source_verified"],
+    receipts: [limitation],
+  });
+
+  expect(read.authoritative).toBe(true);
+  expect(read.outcome).toBe("repair_request");
+  expect(read.satisfied).toEqual([]);
+  expect(read.missingCritical).toEqual(["source_verified"]);
+  expect(read.limitations).toEqual(["Only a bounded excerpt was available."]);
+
+  const nonCritical = readCompletionObligationEvidence({
+    required: ["source_verified"],
+    critical: [],
+    receipts: [limitation],
+  });
+  expect(nonCritical.outcome).toBe("limitation");
+  expect(nonCritical.missingCritical).toEqual([]);
+  expect(nonCritical.missingNonCritical).toEqual(["source_verified"]);
+  expect(nonCritical.limitations).toEqual([
+    "Only a bounded excerpt was available.",
+    "Non-critical evidence is missing: source_verified.",
+  ]);
+
+  const blocker = createEvidenceCapabilityReceipt({
+    producer: { kind: "worker", name: "review_worker" },
+    capability: "explicit_blocker",
+    evidence_kind: "blocker",
+    summary: "Required evidence is blocked.",
+    references: [{ task_id: "task-1" }],
+    limitations: ["The upstream source was unavailable."],
+    created_at: "2026-06-22T08:04:00.000Z",
+  });
+  const blocked = readCompletionObligationEvidence({
+    required: ["source_verified"],
+    receipts: [blocker],
+  });
+  expect(blocked.outcome).toBe("explicit_blocker");
+  expect(blocked.missingCritical).toEqual(["source_verified"]);
+});
+
+test("completion obligation reader distinguishes limitation and explicit blocker outcomes", () => {
+  const source = createEvidenceCapabilityReceipt({
+    producer: { kind: "tool", name: "web_read" },
+    capability: "source_verified",
+    evidence_kind: "source_page",
+    verified: true,
+    confidence: 0.9,
+    summary: "A source page was verified.",
+    references: [{ url: "https://example.com/source" }],
+    satisfies: ["source_verified"],
+    created_at: "2026-06-22T08:03:00.000Z",
+  });
+  const blocker = createEvidenceCapabilityReceipt({
+    producer: { kind: "runtime", name: "completion_guard" },
+    capability: "explicit_blocker",
+    evidence_kind: "blocker",
+    verified: true,
+    confidence: 1,
+    summary: "A required credential is unavailable.",
+    limitations: ["User-owned credential is required."],
+    created_at: "2026-06-22T08:04:00.000Z",
+  });
+
+  const nonCritical = readCompletionObligationEvidence({
+    required: ["source_verified", "chart_rendered"],
+    critical: ["source_verified"],
+    receipts: [source],
+  });
+  expect(nonCritical.outcome).toBe("limitation");
+  expect(nonCritical.missingCritical).toEqual([]);
+  expect(nonCritical.missingNonCritical).toEqual(["chart_rendered"]);
+  expect(nonCritical.limitations).toContain("Non-critical evidence is missing: chart_rendered.");
+
+  const blocked = readCompletionObligationEvidence({
+    required: ["source_verified", "command_executed"],
+    critical: ["source_verified", "command_executed"],
+    receipts: [source, blocker],
+  });
+  expect(blocked.outcome).toBe("explicit_blocker");
+  expect(blocked.missingCritical).toEqual(["command_executed"]);
+  expect(blocked.limitations).toContain("User-owned credential is required.");
 });

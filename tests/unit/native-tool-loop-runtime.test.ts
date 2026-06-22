@@ -39,10 +39,36 @@ import {
   satisfiedCompletionObligationsForToolResult,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { publicWorkDecisionsFromAssistantText } from "../../packages/butler-agent/src/agent/output/public-work-decisions.ts";
+import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence-capability-ledger.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
+
+function capabilityReceipt(input: {
+  id: string;
+  producerName: string;
+  capability: "source_verified" | "command_executed" | "durable_artifact" | "data_table_created" | "chart_rendered";
+  evidenceKind: "source_page" | "project_state" | "execution_result" | "artifact" | "data_table" | "chart";
+  satisfies: Array<"source_verified" | "command_executed" | "durable_artifact" | "data_table_created" | "chart_rendered">;
+  reference?: Record<string, string>;
+}) {
+  return {
+    receipt_id: input.id,
+    schema_version: "evidence-capability.v1",
+    producer: { kind: "tool", name: input.producerName },
+    capability: input.capability,
+    evidence_kind: input.evidenceKind,
+    maturity: "verified",
+    confidence: 0.9,
+    verified: true,
+    summary: "Structured capability evidence was verified.",
+    references: input.reference ? [input.reference] : [],
+    satisfies: input.satisfies,
+    limitations: [],
+    created_at: "2026-06-22T08:09:00.000Z",
+  };
+}
 
 const fakeProvider: ModelProviderAdapter = {
   id: "fake-openai",
@@ -2709,6 +2735,14 @@ test("completion review pushes chart requests toward executable artifacts", asyn
           source_url: "https://example.test/population",
           title: "인구 통계",
           text: "서울 9300000 부산 3300000 인천 3000000",
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "ecr-chart-web-read-source",
+            producerName: "web_read",
+            capability: "source_verified",
+            evidenceKind: "source_page",
+            satisfies: ["source_verified"],
+            reference: { url: "https://example.test/population" },
+          })],
         };
       }
       if (call.name === "run_command") {
@@ -2717,6 +2751,13 @@ test("completion review pushes chart requests toward executable artifacts", asyn
           exit_code: 0,
           artifact_label: "population-chart.png",
           stdout_preview: "wrote population-chart.png",
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "ecr-chart-command",
+            producerName: "run_command",
+            capability: "command_executed",
+            evidenceKind: "execution_result",
+            satisfies: ["command_executed"],
+          })],
         };
       }
       return { ok: true };
@@ -2892,7 +2933,17 @@ test("completion obligation guard detects unsatisfied command execution", () => 
       name: "web_read",
       args: { url: "https://example.test/population" },
       ok: true,
-      result: { source_url: "https://example.test/population" },
+      result: {
+        source_url: "https://example.test/population",
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "ecr-web-read-source",
+          producerName: "web_read",
+          capability: "source_verified",
+          evidenceKind: "source_page",
+          satisfies: ["source_verified"],
+          reference: { url: "https://example.test/population" },
+        })],
+      },
     }],
     decisions: [{
       decisionId: "decision-1",
@@ -2911,7 +2962,17 @@ test("completion obligation guard detects unsatisfied command execution", () => 
       name: "run_command",
       args: { command: "python3 chart.py" },
       ok: true,
-      result: { ok: true, exit_code: 0 },
+      result: {
+        ok: true,
+        exit_code: 0,
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "ecr-command-executed",
+          producerName: "run_command",
+          capability: "command_executed",
+          evidenceKind: "execution_result",
+          satisfies: ["command_executed"],
+        })],
+      },
     }],
     decisions: [{
       decisionId: "decision-1",
@@ -2937,6 +2998,14 @@ test("completion obligation guard accepts durable worker status inspection as so
           status: "FAILED",
           activity_status_line: "Failed: worker result needs review.",
         }],
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "ecr-work-dashboard-source",
+          producerName: "get_work_dashboard",
+          capability: "source_verified",
+          evidenceKind: "project_state",
+          satisfies: ["source_verified"],
+          reference: { task_id: "task-worker-1" },
+        })],
       },
     }],
     decisions: [{
@@ -2957,6 +3026,14 @@ test("completion obligation guard accepts durable worker status inspection as so
         ok: false,
         task_id: "missing-worker",
         error: "task not found",
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "ecr-task-result-source",
+          producerName: "get_task_result",
+          capability: "source_verified",
+          evidenceKind: "project_state",
+          satisfies: ["source_verified"],
+          reference: { task_id: "missing-worker" },
+        })],
       },
     }],
     decisions: [{
@@ -2974,7 +3051,7 @@ test("completion obligation guard accepts structured source evidence contracts",
     ok: true,
     capabilities: [{ name: "run_command" }],
   });
-  expect(capabilityEvidence).toContain("source_verified");
+  expect(capabilityEvidence).toEqual([]);
   expect(satisfiedCompletionObligationsForToolResult("create_automation", { ok: true })).not.toContain(
     "source_verified",
   );
@@ -3001,8 +3078,22 @@ test("completion obligation guard accepts structured source evidence contracts",
       result: {
         ok: true,
         capabilities: [{ name: "run_command" }],
+        evidence_capability_receipts: [{
+          receipt_id: "ecr-tool-catalog-source",
+          schema_version: "evidence-capability.v1",
+          producer: { kind: "tool", name: "list_tool_capabilities" },
+          capability: "source_verified",
+          evidence_kind: "project_state",
+          maturity: "verified",
+          confidence: 0.9,
+          verified: true,
+          summary: "The native tool catalog was inspected.",
+          references: [{ task_id: "tool-catalog" }],
+          satisfies: ["source_verified"],
+          limitations: [],
+          created_at: "2026-06-22T08:07:00.000Z",
+        }],
       },
-      satisfiedCompletionObligations: capabilityEvidence,
     }],
     decisions: [{
       decisionId: "decision-tool-catalog",
@@ -3031,6 +3122,113 @@ test("completion obligation guard accepts structured source evidence contracts",
   expect(unsupportedActionReason).toContain("source_verified");
 });
 
+test("completion obligation guard treats capability receipts as authoritative over tool names", () => {
+  const candidateOnly = createEvidenceCapabilityReceipt({
+    producer: { kind: "tool", name: "web_read" },
+    capability: "source_candidate",
+    evidence_kind: "source_candidate",
+    maturity: "candidate",
+    verified: false,
+    confidence: 0.4,
+    summary: "A source candidate was discovered but not verified.",
+    references: [{ url: "https://example.test/population" }],
+    limitations: ["Source page was not read."],
+    created_at: "2026-06-22T08:03:00.000Z",
+  });
+
+  expect(satisfiedCompletionObligationsForToolResult("list_tool_capabilities", {
+    ok: true,
+    capabilities: [{ name: "run_command" }],
+    evidence_capability_receipts: [candidateOnly],
+  })).toEqual([]);
+
+  const reason = completionObligationIncompleteReason({
+    audit: [{
+      name: "web_read",
+      args: { url: "https://example.test/population" },
+      ok: true,
+      result: {
+        ok: true,
+        source_url: "https://example.test/population",
+        evidence_capability_receipts: [candidateOnly],
+      },
+    }],
+    decisions: [{
+      decisionId: "decision-capability-authority",
+      summary: "공개 출처 본문을 확인합니다.",
+      completionObligations: ["source_verified"],
+      evidenceRefs: [],
+      source: "assistant-authored",
+    }],
+  });
+
+  expect(reason).toBe("The turn still needs repair for missing public completion obligation(s): source_verified.");
+
+  const verifiedProjectState = createEvidenceCapabilityReceipt({
+    producer: { kind: "tool", name: "create_automation" },
+    capability: "source_verified",
+    evidence_kind: "project_state",
+    verified: true,
+    confidence: 0.9,
+    summary: "Durable project state was inspected.",
+    references: [{ task_id: "automation:auto_1" }],
+    satisfies: ["source_verified"],
+    created_at: "2026-06-22T08:04:00.000Z",
+  });
+
+  expect(completionObligationIncompleteReason({
+    audit: [{
+      name: "create_automation",
+      args: { prompt: "ping" },
+      ok: true,
+      result: {
+        ok: true,
+        evidence_capability_receipts: [verifiedProjectState],
+      },
+    }],
+    decisions: [{
+      decisionId: "decision-capability-positive",
+      summary: "자동화 상태를 확인합니다.",
+      completionObligations: ["source_verified"],
+      evidenceRefs: [],
+      source: "assistant-authored",
+    }],
+  })).toBeNull();
+});
+
+test("completion obligation guard returns explicit blocker outcome from capability receipts", () => {
+  const blocker = createEvidenceCapabilityReceipt({
+    producer: { kind: "runtime", name: "completion_guard" },
+    capability: "explicit_blocker",
+    evidence_kind: "blocker",
+    maturity: "verified",
+    verified: true,
+    confidence: 1,
+    summary: "Required source credential is unavailable.",
+    limitations: ["A user-owned credential is required."],
+    created_at: "2026-06-22T08:05:00.000Z",
+  });
+
+  expect(completionObligationIncompleteReason({
+    audit: [{
+      name: "web_read",
+      args: { url: "https://example.test/private" },
+      ok: true,
+      result: {
+        ok: true,
+        evidence_capability_receipts: [blocker],
+      },
+    }],
+    decisions: [{
+      decisionId: "decision-explicit-blocker",
+      summary: "비공개 출처를 확인합니다.",
+      completionObligations: ["source_verified"],
+      evidenceRefs: [],
+      source: "assistant-authored",
+    }],
+  })).toBe("The turn is blocked by unresolved public completion obligation(s): source_verified.");
+});
+
 test("completion obligation guard accepts Project Ledger state inspection as source evidence", () => {
   expect(completionObligationIncompleteReason({
     audit: [{
@@ -3043,6 +3241,14 @@ test("completion obligation guard accepts Project Ledger state inspection as sou
           code: "not_initialized",
           message: "Project Ledger not initialized at /tmp/sandy-bot",
         },
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "ecr-project-status-source-missing",
+          producerName: "inspect_project_status",
+          capability: "source_verified",
+          evidenceKind: "project_state",
+          satisfies: ["source_verified"],
+          reference: { task_id: "project-ledger-status" },
+        })],
       },
     }],
     decisions: [{
@@ -3067,6 +3273,21 @@ test("native runtime skips completion review when capability evidence satisfies 
         ok: true,
         project: { id: "butler" },
         counts: { work: 0 },
+        evidence_capability_receipts: [{
+          receipt_id: "ecr-project-status-source",
+          schema_version: "evidence-capability.v1",
+          producer: { kind: "tool", name: "inspect_project_status" },
+          capability: "source_verified",
+          evidence_kind: "project_state",
+          maturity: "verified",
+          confidence: 0.9,
+          verified: true,
+          summary: "Project Ledger state was inspected.",
+          references: [{ task_id: "project-ledger-status" }],
+          satisfies: ["source_verified"],
+          limitations: [],
+          created_at: "2026-06-22T08:08:00.000Z",
+        }],
       };
     },
     runFunctionToolPromptText: async (input) => {
@@ -3190,6 +3411,14 @@ test("native runtime satisfies source verification from tool capability audit co
         return {
           ok: true,
           capabilities: [{ name: "run_command", category: "command" }],
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "ecr-tool-capability-catalog",
+            producerName: "list_tool_capabilities",
+            capability: "source_verified",
+            evidenceKind: "project_state",
+            satisfies: ["source_verified"],
+            reference: { task_id: "tool-catalog" },
+          })],
         };
       }
       return { ok: true };
@@ -3255,6 +3484,39 @@ test("completion obligation guard accepts command-created CSV and chart artifact
           { path: "chart.png", artifact_kind: "chart_file" },
         ],
         artifact_kinds: ["csv_file", "chart_file"],
+        evidence_capability_receipts: [
+          capabilityReceipt({
+            id: "ecr-report-command",
+            producerName: "run_command",
+            capability: "command_executed",
+            evidenceKind: "execution_result",
+            satisfies: ["command_executed"],
+          }),
+          capabilityReceipt({
+            id: "ecr-report-artifact",
+            producerName: "run_command",
+            capability: "durable_artifact",
+            evidenceKind: "artifact",
+            satisfies: ["durable_artifact"],
+            reference: { path: "report.csv" },
+          }),
+          capabilityReceipt({
+            id: "ecr-report-table",
+            producerName: "run_command",
+            capability: "data_table_created",
+            evidenceKind: "data_table",
+            satisfies: ["data_table_created"],
+            reference: { path: "report.csv" },
+          }),
+          capabilityReceipt({
+            id: "ecr-report-chart",
+            producerName: "run_command",
+            capability: "chart_rendered",
+            evidenceKind: "chart",
+            satisfies: ["chart_rendered"],
+            reference: { path: "chart.png" },
+          }),
+        ],
       },
     }],
     decisions: [{
@@ -3272,7 +3534,7 @@ test("completion obligation guard accepts command-created CSV and chart artifact
   })).toBeNull();
 });
 
-test("completion obligation guard ignores inspection-only durable artifact obligations", () => {
+test("completion obligation guard requires durable evidence even for inspection wording", () => {
   expect(completionObligationIncompleteReason({
     audit: [{
       name: "run_command",
@@ -3287,7 +3549,7 @@ test("completion obligation guard ignores inspection-only durable artifact oblig
           schema: "butler.evidence-receipt.v1",
           id: "receipt-ledger-check",
           producer: { kind: "tool", name: "run_command" },
-          receiptType: "command_execution",
+          receiptType: "execution",
           verified: true,
           covers: ["command_execution"],
           summary: "Canonical Project Ledger files exist and repo-local ledger absence was verified.",
@@ -3305,10 +3567,10 @@ test("completion obligation guard ignores inspection-only durable artifact oblig
       evidenceRefs: [],
       source: "assistant-authored",
     }],
-  })).toBeNull();
+  })).toBe("The turn still needs repair for missing public completion obligation(s): durable_artifact.");
 });
 
-test("completion obligation guard treats passive written-document checks as inspections", () => {
+test("completion obligation guard keeps accepted durable obligations for passive document checks", () => {
   expect(completionObligationIncompleteReason({
     audit: [{
       name: "run_command",
@@ -3319,6 +3581,17 @@ test("completion obligation guard treats passive written-document checks as insp
       result: {
         ok: true,
         exit_code: 0,
+        evidence_receipts: [{
+          schema: "butler.evidence-receipt.v1",
+          id: "receipt-written-doc-check",
+          producer: { kind: "tool", name: "run_command" },
+          receiptType: "execution",
+          verified: true,
+          covers: ["execution_result"],
+          summary: "Written specs were inspected.",
+          references: [],
+          satisfies: ["command_executed"],
+        }],
       },
     }],
     decisions: [{
@@ -3330,10 +3603,10 @@ test("completion obligation guard treats passive written-document checks as insp
       evidenceRefs: [],
       source: "assistant-authored",
     }],
-  })).toBeNull();
+  })).toBe("The turn still needs repair for missing public completion obligation(s): durable_artifact.");
 });
 
-test("completion obligation guard does not treat writing-scope review as artifact creation", () => {
+test("completion obligation guard keeps accepted durable obligations for writing-scope review", () => {
   expect(completionObligationIncompleteReason({
     audit: [{
       name: "run_command",
@@ -3344,6 +3617,17 @@ test("completion obligation guard does not treat writing-scope review as artifac
       result: {
         ok: true,
         exit_code: 0,
+        evidence_receipts: [{
+          schema: "butler.evidence-receipt.v1",
+          id: "receipt-writing-scope-check",
+          producer: { kind: "tool", name: "run_command" },
+          receiptType: "execution",
+          verified: true,
+          covers: ["execution_result"],
+          summary: "Ledger scope was checked.",
+          references: [],
+          satisfies: ["command_executed"],
+        }],
       },
     }],
     decisions: [{
@@ -3355,7 +3639,7 @@ test("completion obligation guard does not treat writing-scope review as artifac
       evidenceRefs: [],
       source: "assistant-authored",
     }],
-  })).toBeNull();
+  })).toBe("The turn still needs repair for missing public completion obligation(s): durable_artifact.");
 });
 
 test("completion obligation guard still requires durable evidence for creation decisions", () => {
@@ -3369,6 +3653,17 @@ test("completion obligation guard still requires durable evidence for creation d
       result: {
         ok: true,
         exit_code: 0,
+        evidence_receipts: [{
+          schema: "butler.evidence-receipt.v1",
+          id: "receipt-report-command",
+          producer: { kind: "tool", name: "run_command" },
+          receiptType: "execution",
+          verified: true,
+          covers: ["execution_result"],
+          summary: "Report generation command executed.",
+          references: [],
+          satisfies: ["command_executed"],
+        }],
       },
     }],
     decisions: [{
@@ -3380,7 +3675,7 @@ test("completion obligation guard still requires durable evidence for creation d
       evidenceRefs: [],
       source: "assistant-authored",
     }],
-  })).toBe("The turn still has unsatisfied public completion obligation(s): durable_artifact.");
+  })).toBe("The turn still needs repair for missing public completion obligation(s): durable_artifact.");
 });
 
 test("completion obligation guard accepts generic evidence receipts for non-CSV deliverables", () => {
