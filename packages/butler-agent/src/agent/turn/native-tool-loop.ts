@@ -28,6 +28,7 @@ import {
   type PromptUsageBudgetState,
   type PromptUsageSectionAttribution,
 } from "../../integrations/providers/provider.ts";
+import type { WebSearchProvider } from "../../integrations/search/provider.ts";
 import {
   BUTLER_TOOLS,
   createButlerToolExecutor,
@@ -140,6 +141,7 @@ export interface NativeToolLoopRuntimeOptions {
   butlerData?: string;
   appMessageDbPath?: string;
   messageLanguage?: RuntimeMessageLanguage;
+  webSearchProvider?: WebSearchProvider;
   recallMemory?: typeof recallMemory;
   recallMemoryWithVector?: typeof recallMemoryWithVector;
   disableAutomaticRecall?: boolean;
@@ -1884,6 +1886,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
   private readonly butlerData: string;
   private readonly appMessageDbPath?: string;
   private readonly messageLanguage: RuntimeMessageLanguage;
+  private readonly webSearchProvider?: WebSearchProvider;
   private readonly recallRunner?: typeof recallMemory;
   private readonly vectorRecallRunner: typeof recallMemoryWithVector;
   private readonly automaticRecallEnabled: boolean;
@@ -1900,6 +1903,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
     this.messageLanguage = options.messageLanguage ?? resolveRuntimeMessageLanguage({
       butlerData: this.butlerData,
     });
+    this.webSearchProvider = options.webSearchProvider;
     this.recallRunner = options.recallMemory;
     this.vectorRecallRunner = options.recallMemoryWithVector ?? recallMemoryWithVector;
     this.automaticRecallEnabled = options.disableAutomaticRecall !== true;
@@ -2058,6 +2062,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         }),
       });
       let currentProviderToolNames: readonly string[] = [];
+      const describedToolIds = new Set<string>();
       const executor = createAuditedButlerToolExecutor({
         sessionId: input.handle.sessionId,
         audit,
@@ -2068,6 +2073,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         messageLanguage: this.messageLanguage,
         plannedReview,
         semanticProgressSafetyNet,
+        describedToolIds,
         executor: this.butlerToolExecutor ?? createButlerToolExecutor({
           butlerHome: this.butlerHome,
           butlerData: this.butlerData,
@@ -2077,11 +2083,13 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           projectId: typeof session.init.metadata?.projectId === "string" ? session.init.metadata.projectId : undefined,
           turnId: currentRuntimeTurnId(input) ?? undefined,
           workerModel: input.model,
+          webSearchProvider: this.webSearchProvider,
           searchPlannerModel: input.model,
           searchPlannerOriginalRequest: userText,
           workerModelRules: workerModelRulesFromMetadata(input.metadata?.workerModelRules ?? session.init.metadata?.workerModelRules),
           turnContext: [prompt, currentAttachmentContext].filter(Boolean).join("\n\n"),
           currentToolNames: () => currentProviderToolNames,
+          describedToolIds: () => [...describedToolIds],
         }),
       });
       try {
@@ -2594,6 +2602,7 @@ function createAuditedButlerToolExecutor(input: {
   messageLanguage: RuntimeMessageLanguage;
   plannedReview: PlannedReviewTurnContext | null;
   semanticProgressSafetyNet: RuntimeSemanticProgressSafetyNet;
+  describedToolIds?: Set<string>;
   executor: FunctionToolPromptOptions["executeTool"];
 }): FunctionToolPromptOptions["executeTool"] {
   let semanticProgressEstablished = false;
@@ -3120,6 +3129,9 @@ function createAuditedButlerToolExecutor(input: {
     try {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       const result = await executeWithTurnFreshnessCache(effectiveCall);
+      if (call.name === "tool_describe") {
+        recordDescribedToolIds(input.describedToolIds, result);
+      }
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       if (isStateMutatingToolCall(call.name, cleanArgs)) {
         repeatedToolFamilyCounts.clear();
@@ -3361,6 +3373,15 @@ function createAuditedButlerToolExecutor(input: {
     return await executeAuditedWithBridge(call);
   };
   return executeAudited;
+}
+
+function recordDescribedToolIds(target: Set<string> | undefined, result: unknown): void {
+  if (!target || !isRecord(result) || !Array.isArray(result.descriptions)) return;
+  for (const item of result.descriptions) {
+    if (!isRecord(item) || typeof item.id !== "string") continue;
+    const id = item.id.trim();
+    if (id) target.add(id);
+  }
 }
 
 function withBridgeInvocationForAudit(

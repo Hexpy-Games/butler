@@ -136,6 +136,7 @@ export function createButlerToolExecutor(input: {
   searchPlanner?: (input: SmartSearchPlanningInput) => Promise<SmartSearchPlanningResult>;
   pageReader?: typeof readPageConfigured;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  describedToolIds?: readonly string[] | (() => readonly string[]);
   pluginToolCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
   pluginToolDescriber?: (input: { id: string; namespace: string; name: string }) => Promise<ExternalToolCatalogInput | null | undefined>;
 }): ButlerToolExecutor {
@@ -169,6 +170,7 @@ export function createButlerToolExecutor(input: {
       pluginCatalog: input.pluginToolCatalog,
       pluginToolDescriber: input.pluginToolDescriber,
       currentToolNames: input.currentToolNames,
+      describedToolIds: input.describedToolIds,
       dispatchTool,
     }),
     ...createMcpToolHandlers({
