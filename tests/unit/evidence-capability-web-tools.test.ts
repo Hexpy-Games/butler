@@ -228,3 +228,34 @@ test("web_read falls back to requested URL when reader returns unsafe final URL"
   expect(ledger.receipts[0].references).toEqual([{ url: "https://example.com/source" }]);
   expect(ledger.satisfied).toEqual(["source_verified"]);
 });
+
+test("web_read emits browser observation receipts for browser-backed reads", async () => {
+  const handler = createWebReadHandler({
+    butlerData: tempDir,
+    pageReader: async (): Promise<PageReadResult> => ({
+      reader: "lightpanda",
+      requestedUrl: "https://example.com/source",
+      finalUrl: "https://example.com/source",
+      ok: true,
+      status: 200,
+      title: "Fixture Source",
+      text: "Verified source text ".repeat(60),
+      markdown: "Verified source markdown ".repeat(60),
+      document: "Verified source document",
+      chunks: [],
+      method: "raw-html",
+      durationMs: 3,
+      warnings: ["viewport clipped"],
+      renderRecommended: false,
+    }),
+  });
+  const result = await handler({ args: { url: "https://example.com/source" } });
+  const receipts = result.evidence_capability_receipts as Array<Record<string, unknown>>;
+
+  expect(receipts.some((receipt) =>
+    receipt.capability === "browser_observed" &&
+    receipt.evidence_kind === "browser_observation" &&
+    receipt.verified === true,
+  )).toBe(true);
+  expect(JSON.stringify(receipts)).toContain("viewport clipped");
+});

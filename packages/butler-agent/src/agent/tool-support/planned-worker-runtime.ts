@@ -4,6 +4,10 @@ import { existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { butlerAgentScriptPath } from "../../runtime/paths.ts";
 import { butlerToolProcessEnvironment } from "./executor-support.ts";
+import {
+  plannedReviewCapabilityReceipts,
+  stalePlannedReviewCapabilityReceipts,
+} from "./planned-review-evidence.ts";
 import { buildTaskOriginContext } from "../work/task-origin.ts";
 import { TaskStore, workSafetyForTask } from "../work/task-store.ts";
 import { WorkStreamStore } from "../work/work-stream.ts";
@@ -444,6 +448,10 @@ function stalePlannedReviewResult(input: {
     review_event_id: input.reviewEventId || null,
     message: "This review event is stale and did not change planned task state.",
     reason: input.reason,
+    evidence_capability_receipts: stalePlannedReviewCapabilityReceipts({
+      taskId: input.taskId,
+      reason: input.reason,
+    }),
   };
 }
 
@@ -852,6 +860,12 @@ export function createPlannedWorkerToolHandlers(input: {
         criteria: reviews,
         missing_evidence: updated.review?.missing_evidence ?? [],
         repair_recommendation: updated.review?.repair_recommendation ?? null,
+        evidence_capability_receipts: plannedReviewCapabilityReceipts({
+          taskId,
+          verdict,
+          missingEvidence: updated.review?.missing_evidence ?? [],
+          repairRecommendation: updated.review?.repair_recommendation ?? null,
+        }),
       };
     },
     "repair_planned_task": async (call: ToolCall) => {

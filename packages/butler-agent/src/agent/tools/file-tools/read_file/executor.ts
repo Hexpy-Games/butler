@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { resolveWorkspacePathGuard } from "../shared/workspace-path-guard.ts";
-import { fileToolEvidenceReceipt, sha256Hex } from "../shared/evidence.ts";
+import { fileToolCapabilityReceipt, fileToolEvidenceReceipt, sha256Hex } from "../shared/evidence.ts";
 import { getWorkspaceRoot, tryParseToolArgs } from "../shared/args.ts";
 
 export interface FileToolExecutionContext { workspacePath?: string; }
@@ -26,7 +26,7 @@ function truncateUtf8Safe(text: string, maxBytes: number): string {
 
 export async function executeReadFileTool(call: { arguments?: unknown; input?: unknown; args?: unknown }, context: FileToolExecutionContext = {}) {
   const parsed = tryParseToolArgs(call);
-  if (!parsed.ok) return { ok: false, error: parsed.error, detail: parsed.detail };
+  if (!parsed.ok) return { ok: false, error: parsed.error, detail: parsed.detail, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, error: parsed.error }) };
   const a = parsed.args;
   const workspaceRoot = getWorkspaceRoot(a, context.workspacePath);
   const path = String(a.path ?? "");
@@ -34,12 +34,12 @@ export async function executeReadFileTool(call: { arguments?: unknown; input?: u
   const startLineRaw = a.start_line === undefined ? undefined : Math.max(1, Number(a.start_line));
   const limitLinesRaw = a.limit_lines === undefined ? undefined : Math.max(1, Math.min(Number(a.limit_lines), 10000));
   const guard = await resolveWorkspacePathGuard({ workspaceRoot, relativePath: path });
-  if (!guard.ok) return { ok: false, error: guard.reason, path, guard };
+  if (!guard.ok) return { ok: false, error: guard.reason, path, guard, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, path, error: guard.reason }) };
   const filePath = guard.realPath ?? guard.absolutePath!;
   const st = await stat(filePath);
-  if (!st.isFile()) return { ok: false, error: "not_a_file", path };
+  if (!st.isFile()) return { ok: false, error: "not_a_file", path, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, path, error: "not_a_file" }) };
   const data = await readFile(filePath);
-  if (isBinary(data)) return { ok: false, error: "binary_file_not_supported", path, bytes: st.size };
+  if (isBinary(data)) return { ok: false, error: "binary_file_not_supported", path, bytes: st.size, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, path, error: "binary_file_not_supported", bytes: st.size }) };
   let text = data.toString("utf8");
   let startLine = 1;
   let endLine = text.split(/\r?\n/).length;
@@ -58,5 +58,5 @@ export async function executeReadFileTool(call: { arguments?: unknown; input?: u
   if (byteTruncated) text = truncateUtf8Safe(text, maxBytes);
   const truncated = lineTruncated || byteTruncated;
   const sha256 = sha256Hex(data);
-  return { ok: true, path, bytes: data.length, sha256, truncated, byte_truncated: byteTruncated, start_line: startLine, end_line: endLine, content: text, evidence_receipts: fileToolEvidenceReceipt({ toolName: "read_file", summary: `Read ${truncated ? "truncated " : ""}workspace file ${path}`, references: { path, bytes: data.length, sha256, truncated, byte_truncated: byteTruncated, start_line: startLine, end_line: endLine }, satisfies: ["source_verified"] }) };
+  return { ok: true, path, bytes: data.length, sha256, truncated, byte_truncated: byteTruncated, start_line: startLine, end_line: endLine, content: text, evidence_receipts: fileToolEvidenceReceipt({ toolName: "read_file", summary: `Read ${truncated ? "truncated " : ""}workspace file ${path}`, references: { path, bytes: data.length, sha256, truncated, byte_truncated: byteTruncated, start_line: startLine, end_line: endLine }, satisfies: ["source_verified"] }), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: true, path, bytes: data.length, truncated }) };
 }
