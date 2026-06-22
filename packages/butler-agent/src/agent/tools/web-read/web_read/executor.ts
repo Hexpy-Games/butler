@@ -1,5 +1,8 @@
 import { readPageConfigured, type PageReaderBackendId, type PageReadResult } from "../../../../integrations/search/page-reader.ts";
-import { createEvidenceCapabilityReceipt } from "../../../output/evidence-capability-ledger.ts";
+import {
+  browserObservationCapabilityReceipt,
+  createEvidenceCapabilityReceipt,
+} from "../../../output/evidence-capability-ledger.ts";
 import { evidenceReceipt, urlReferences } from "../../../tool-support/executor-support.ts";
 
 type WebReadToolCall = { args: Record<string, unknown> };
@@ -62,7 +65,13 @@ export function createWebReadHandler(input: {
         evidenceQuality: typeof bounded.evidence_quality === "string" ? bounded.evidence_quality : "limited",
         truncated: bounded.truncated === true,
         error: typeof bounded.error === "string" ? bounded.error : undefined,
-      }),
+      }).concat(webReadBrowserObservationCapabilityReceipts({
+        reader: typeof bounded.reader === "string" ? bounded.reader : "",
+        ok: bounded.ok !== false,
+        sourceUrl: capabilitySourceUrl,
+        truncated: bounded.truncated === true,
+        warnings: Array.isArray(bounded.warnings) ? bounded.warnings.filter((item): item is string => typeof item === "string") : [],
+      })),
       evidence_receipts: [
         evidenceReceipt({
           producerName: "web_read",
@@ -86,6 +95,28 @@ function isHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function webReadBrowserObservationCapabilityReceipts(input: {
+  reader: string;
+  ok: boolean;
+  sourceUrl: string;
+  truncated: boolean;
+  warnings: string[];
+}) {
+  if (input.reader !== "lightpanda") return [];
+  return [browserObservationCapabilityReceipt({
+    producer: { kind: "tool", name: "web_read" },
+    result: input.ok ? "observed" : "failed",
+    observation: input.ok
+      ? "A browser-backed page reader observed the requested page."
+      : "A browser-backed page reader did not complete the requested page observation.",
+    references: [{ url: input.sourceUrl }],
+    limitations: [
+      input.truncated ? "Browser observation was truncated to fit runtime bounds." : "",
+      ...input.warnings,
+    ].filter(Boolean),
+  })];
 }
 
 function webReadEvidenceCapabilityReceipts(input: {

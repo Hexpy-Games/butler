@@ -2,8 +2,13 @@ import { spawn } from "child_process";
 import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from "fs";
 import { extname, isAbsolute, join, relative, resolve } from "path";
 import { budgetToolOutput, type ShellCommandResult } from "../../../context/tool-output-budgeter.ts";
-import type { EvidenceReceipt, PublicWorkObligationKind } from "../../../turn/native-tool-types.ts";
-import { butlerToolProcessEnvironment, evidenceReceipt } from "../../../tool-support/executor-support.ts";
+import { butlerToolProcessEnvironment } from "../../../tool-support/executor-support.ts";
+import {
+  commandEvidenceCapabilityReceipts,
+  commandEvidenceReceipts,
+  type CommandArtifactEvidence,
+  type CommandValidationEvidence,
+} from "./evidence.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 
@@ -83,13 +88,6 @@ function isPathInsideWorkspace(input: {
 }
 
 type CommandArtifactKind = "csv_file" | "table_file" | "chart_file" | "file";
-
-interface CommandArtifactEvidence {
-  path: string;
-  artifact_kind: CommandArtifactKind;
-  size_bytes: number;
-  modified_at: string;
-}
 
 const COMMAND_ARTIFACT_SCAN_IGNORES = new Set([
   ".git",
@@ -329,6 +327,68 @@ function structuredStdoutCommandArtifacts(input: {
   });
 }
 
+function structuredStdoutValidationEvidence(stdout: string): CommandValidationEvidence[] {
+  const validations: CommandValidationEvidence[] = [];
+  for (const value of jsonValuesFromCommandStdout(stdout)) {
+    collectStructuredValidationEvidence(value, validations);
+  }
+  return validations.slice(0, 8);
+}
+
+function collectStructuredValidationEvidence(
+  value: unknown,
+  validations: CommandValidationEvidence[],
+): void {
+  if (validations.length >= 8 || !value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectStructuredValidationEvidence(item, validations);
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  for (const candidate of [record.validation_result, record.validation]) {
+    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+      const validation = parseStructuredValidation(candidate as Record<string, unknown>);
+      if (validation) validations.push(validation);
+    }
+    if (validations.length >= 8) return;
+  }
+  if (Array.isArray(record.validation_results)) {
+    for (const item of record.validation_results) {
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        const validation = parseStructuredValidation(item as Record<string, unknown>);
+        if (validation) validations.push(validation);
+      }
+      if (validations.length >= 8) return;
+    }
+  }
+}
+
+function parseStructuredValidation(record: Record<string, unknown>): CommandValidationEvidence | null {
+  const suite = typeof record.suite === "string"
+    ? record.suite.replace(/\s+/gu, " ").trim().slice(0, 120)
+    : "";
+  const result = validationResult(record.result);
+  if (!suite || !result) return null;
+  const failureSummary = typeof record.failure_summary === "string"
+    ? record.failure_summary.replace(/\s+/gu, " ").trim().slice(0, 180)
+    : typeof record.failureSummary === "string"
+      ? record.failureSummary.replace(/\s+/gu, " ").trim().slice(0, 180)
+      : undefined;
+  return {
+    suite,
+    result,
+    ...(failureSummary ? { failure_summary: failureSummary } : {}),
+  };
+}
+
+function validationResult(value: unknown): CommandValidationEvidence["result"] | null {
+  if (value === "passed" || value === "pass" || value === "success") return "passed";
+  if (value === "failed" || value === "fail" || value === "failure") return "failed";
+  if (value === "partial" || value === "incomplete") return "partial";
+  if (value === "skipped" || value === "skip") return "skipped";
+  return null;
+}
+
 function recentCommandArtifacts(input: {
   cwd: string;
   workspace: string;
@@ -398,70 +458,6 @@ function commandArtifactEvidenceFields(artifacts: CommandArtifactEvidence[]): Re
     ...(dataTableCreated ? { data_table_created: true } : {}),
     ...(chartRendered ? { chart_rendered: true } : {}),
   };
-}
-
-function commandArtifactMediaType(artifact: CommandArtifactEvidence): string {
-  const ext = extname(artifact.path).toLocaleLowerCase("en-US");
-  if (artifact.artifact_kind === "csv_file") return "text/csv";
-  if (artifact.artifact_kind === "table_file") return "text/tab-separated-values";
-  if (ext === ".png") return "image/png";
-  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-  if (ext === ".webp") return "image/webp";
-  if (ext === ".svg") return "image/svg+xml";
-  if (ext === ".pdf") return "application/pdf";
-  return "application/octet-stream";
-}
-
-function commandArtifactRole(artifact: CommandArtifactEvidence): string {
-  if (artifact.artifact_kind === "csv_file" || artifact.artifact_kind === "table_file") return "table";
-  if (artifact.artifact_kind === "chart_file") return "chart";
-  return "file";
-}
-
-function commandEvidenceReceipts(input: {
-  success: boolean;
-  artifacts: CommandArtifactEvidence[];
-}): EvidenceReceipt[] {
-  const receipts: EvidenceReceipt[] = [
-    evidenceReceipt({
-      producerName: "run_command",
-      receiptType: "execution",
-      summary: input.success
-        ? "A local command executed successfully."
-        : "A local command was executed but did not complete successfully.",
-      covers: ["execution_result"],
-      verified: input.success,
-      satisfies: input.success ? ["command_executed"] : [],
-    }),
-  ];
-  if (input.artifacts.length > 0) {
-    const satisfies = new Set<PublicWorkObligationKind>(["durable_artifact"]);
-    if (input.artifacts.some((artifact) =>
-      artifact.artifact_kind === "csv_file" || artifact.artifact_kind === "table_file",
-    )) {
-      satisfies.add("data_table_created");
-    }
-    if (input.artifacts.some((artifact) => artifact.artifact_kind === "chart_file")) {
-      satisfies.add("chart_rendered");
-    }
-    receipts.push(evidenceReceipt({
-      producerName: "run_command",
-      receiptType: "deliverable",
-      summary: "The command produced verified durable output file evidence.",
-      covers: ["durable_deliverable"],
-      artifacts: input.artifacts.map((artifact) => ({
-        label: artifact.path,
-        path: artifact.path,
-        mediaType: commandArtifactMediaType(artifact),
-        role: commandArtifactRole(artifact),
-      })),
-      satisfies: [...satisfies],
-      metrics: {
-        artifact_count: input.artifacts.length,
-      },
-    }));
-  }
-  return receipts;
 }
 
 function appendCapturedText(current: string, chunk: Buffer | string): {
@@ -681,6 +677,14 @@ export async function runCommandTool(input: {
     evidence_receipts: commandEvidenceReceipts({
       success: budgeted.exit_code === 0 && budgeted.timed_out === false,
       artifacts,
+    }),
+    evidence_capability_receipts: commandEvidenceCapabilityReceipts({
+      exitCode: budgeted.exit_code,
+      timedOut: budgeted.timed_out,
+      outputSuppressed: shouldSuppressOutput,
+      outputBudgeted: Boolean(budgeted.butler_tool_artifact),
+      artifacts,
+      validations: structuredStdoutValidationEvidence(raw.stdout),
     }),
   };
 }

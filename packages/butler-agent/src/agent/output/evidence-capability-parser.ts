@@ -66,7 +66,7 @@ export function createEvidenceCapabilityReceipt(
     ...(recordValue(input.scope) ? { scope: recordValue(input.scope)! } : {}),
     references: input.references ?? [],
     ...(input.satisfies && input.satisfies.length > 0 ? { satisfies: [...new Set(input.satisfies)] } : {}),
-    limitations: [...new Set((input.limitations ?? []).map((item) => item.trim()).filter(Boolean))].slice(0, 8),
+    limitations: safeLimitations(input.limitations),
     created_at: input.created_at ?? new Date().toISOString(),
   };
   const parsed = parseEvidenceCapabilityReceipt(receipt);
@@ -112,7 +112,7 @@ export function parseEvidenceCapabilityReceipt(value: unknown): EvidenceCapabili
   const scope = recordValue(record.scope);
   const references = parseReferences(record.references, issues);
   const satisfies = parseObligations(record.satisfies, issues);
-  const limitations = stringArray(record.limitations).slice(0, 8);
+  const limitations = safeLimitations(record.limitations);
   const createdAt = stringValue(record.created_at);
   if (!createdAt || Number.isNaN(Date.parse(createdAt))) {
     issues.push(issue("created_at", "invalid_created_at", "Created timestamp must be an ISO-compatible date."));
@@ -234,6 +234,13 @@ function stringValue(value: unknown): string | null {
 function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((item) => stringValue(item)).filter((item): item is string => Boolean(item));
+}
+
+function safeLimitations(value: unknown): string[] {
+  return [...new Set(stringArray(value)
+    .map((item) => sanitizePublicText(item, "Evidence limitation was recorded.").trim())
+    .filter(Boolean))]
+    .slice(0, 8);
 }
 
 function issue(field: string, code: string, message: string): EvidenceCapabilityReceiptIssue {

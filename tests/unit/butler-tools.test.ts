@@ -3709,7 +3709,7 @@ test("review_planned_task passes only when every criterion passes", async () => 
   store.writeAttemptResult(created.task_id, 1, "tests pass and docs updated");
   store.transition(created.task_id, "WORKER_DONE");
 
-  expect(await execute({
+  const reviewed = await execute({
     name: "review_planned_task",
     args: {
       task_id: created.task_id,
@@ -3720,11 +3720,21 @@ test("review_planned_task passes only when every criterion passes", async () => 
       goal_review: { verdict: "PASS", evidence: "tests pass and docs updated" },
     },
     rawArguments: "{}",
-  })).toMatchObject({
+  });
+
+  expect(reviewed).toMatchObject({
     ok: true,
     verdict: "PASS",
     status: "REVIEW_PASSED",
   });
+  expect((reviewed as Record<string, unknown>).evidence_capability_receipts).toEqual([
+    expect.objectContaining({
+      capability: "review_completed",
+      evidence_kind: "review_result",
+      verified: true,
+      scope: expect.objectContaining({ result: "completed" }),
+    }),
+  ]);
 });
 
 test("review_planned_task cannot pass without internal GOAL review evidence", async () => {
@@ -3813,6 +3823,15 @@ test("review_planned_task records failed and inconclusive evidence", async () =>
     missing_evidence: ["regression suite"],
     repair_recommendation: "Fix failing tests and rerun regression suite.",
   });
+  expect((failed as Record<string, unknown>).evidence_capability_receipts).toEqual([
+    expect.objectContaining({
+      capability: "review_completed",
+      evidence_kind: "review_result",
+      verified: false,
+      scope: expect.objectContaining({ result: "changes_requested" }),
+      limitations: ["regression suite"],
+    }),
+  ]);
 });
 
 test("review_planned_task cannot pass with missing acceptance-criterion evidence", async () => {
