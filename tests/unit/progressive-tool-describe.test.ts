@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { createButlerToolExecutor } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
+import { createToolDescribeToolHandler } from "../../packages/butler-agent/src/agent/tools/tool-bridge/tool_describe/executor.ts";
 import { DisabledWebSearchProvider } from "../../packages/butler-agent/src/integrations/search/provider.ts";
 import { upsertMcpServer } from "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";
 
@@ -104,6 +105,90 @@ test("tool_describe returns recoverable unknown MCP id results", async () => {
   expect(result.ok).toBe(false);
   expect(result.descriptions).toEqual([]);
   expect(result.missing).toEqual([{ id: "mcp:no-such:find_issue", error: "unknown_tool_catalog_id" }]);
+});
+
+test("tool_describe returns disabled MCP descriptions with recovery hints", async () => {
+  upsertMcpServer(tempDir, {
+    id: "disabled-fixture",
+    display_name: "Disabled Fixture MCP",
+    enabled: false,
+    transport: "stdio",
+    command: process.execPath,
+    args: ["--eval", fixtureServerEval()],
+    cwd: root,
+  });
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    currentToolNames: ["tool_describe", "call_mcp_tool"],
+  });
+
+  const result = await execute({
+    name: "tool_describe",
+    args: { ids: ["mcp:disabled-fixture:find_issue"] },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    descriptions: Array<{
+      id: string;
+      enabled: boolean;
+      disabled_reason: string | null;
+      recovery_hint: string | null;
+      call_affordance: Record<string, unknown>;
+    }>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.descriptions[0]).toEqual(expect.objectContaining({
+    id: "mcp:disabled-fixture:find_issue",
+    enabled: false,
+    disabled_reason: "MCP server is disabled: disabled-fixture",
+    recovery_hint: "Retry tool_describe later, choose another MCP server/tool, or continue with enabled native tools.",
+    call_affordance: {
+      type: "disabled",
+      reason: "MCP server is disabled: disabled-fixture",
+    },
+  }));
+});
+
+test("tool_describe redacts MCP server unavailable details from disabled descriptions", async () => {
+  upsertMcpServer(tempDir, {
+    id: "unavailable-fixture",
+    display_name: "Unavailable Fixture MCP",
+    enabled: true,
+    transport: "stdio",
+    command: `${tempDir}/SECRET_TOKEN_123-missing-command`,
+    args: ["--secret=SECRET_TOKEN_123"],
+    cwd: root,
+  });
+  const describe = createToolDescribeToolHandler({
+    butlerData: tempDir,
+    currentToolNames: ["tool_describe", "call_mcp_tool"],
+  });
+
+  const result = await describe({
+    args: { ids: ["mcp:unavailable-fixture:find_issue"] },
+  }) as {
+    ok: boolean;
+    descriptions: Array<{
+      enabled: boolean;
+      disabled_reason: string | null;
+      recovery_hint: string | null;
+      call_affordance: Record<string, unknown>;
+    }>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.descriptions[0]).toEqual(expect.objectContaining({
+    enabled: false,
+    disabled_reason: "MCP server unavailable.",
+    recovery_hint: "Retry tool_describe later, choose another MCP server/tool, or continue with enabled native tools.",
+    call_affordance: {
+      type: "disabled",
+      reason: "MCP server unavailable.",
+    },
+  }));
+  expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN_123");
 });
 
 test("tool_describe rejects missing catalog ids with model-recoverable feedback", async () => {
@@ -211,6 +296,50 @@ test("tool_describe plugin ids use the selected-id describer without loading ful
       reason: "Plugin invocation requires a registered guarded plugin dispatcher",
     },
   }));
+});
+
+test("tool_describe converts plugin schema loading failures to recoverable disabled descriptions", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    pluginToolDescriber: async () => {
+      throw new Error("SECRET_TOKEN_123");
+    },
+  });
+
+  const result = await execute({
+    name: "tool_describe",
+    args: { ids: ["plugin:calendar:create_event"] },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    descriptions: Array<{
+      id: string;
+      provider: string;
+      enabled: boolean;
+      disabled_reason: string | null;
+      recovery_hint: string | null;
+      schema: unknown;
+      call_affordance: Record<string, unknown>;
+    }>;
+    missing: unknown[];
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.missing).toEqual([]);
+  expect(result.descriptions[0]).toEqual(expect.objectContaining({
+    id: "plugin:calendar:create_event",
+    provider: "plugin",
+    enabled: false,
+    disabled_reason: "Plugin schema unavailable.",
+    recovery_hint: "Retry tool_describe later, choose another catalog result, or continue with enabled native/MCP tools.",
+    schema: {},
+    call_affordance: {
+      type: "disabled",
+      reason: "Plugin schema unavailable.",
+    },
+  }));
+  expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN_123");
 });
 
 test("tool_describe returns full MCP and plugin schemas for explicit ids only", async () => {

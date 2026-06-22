@@ -11,6 +11,7 @@ import type {
 export interface ToolAvailability {
   enabled: boolean;
   disabledReason: string | null;
+  recoveryHint?: string | null;
 }
 
 export interface NativeToolCatalogInput {
@@ -29,9 +30,11 @@ export interface ExternalToolCatalogInput {
   namespace?: string;
   schema?: unknown;
   disabledReason?: string | null;
+  recoveryHint?: string | null;
 }
 
 const DEFAULT_DISABLED_REASON = "tool is disabled by runtime availability policy";
+const DEFAULT_RECOVERY_HINT = "Use tool_search or tool_describe to choose another currently enabled tool.";
 
 export function buildNativeToolCatalog(input: NativeToolCatalogInput): ToolCatalogEntry[] {
   return input.tools
@@ -52,6 +55,7 @@ export function buildNativeToolCatalog(input: NativeToolCatalogInput): ToolCatal
         riskLevel: riskLevelForNativeTool(tool, metadata),
         enabled: availability.enabled,
         disabledReason: availability.disabledReason,
+        recoveryHint: availability.recoveryHint ?? recoveryHintForDisabled(availability.disabledReason),
         schema: tool.parameters,
       });
     })
@@ -63,6 +67,7 @@ export function buildExternalToolCatalog(inputs: readonly ExternalToolCatalogInp
     .map((input) => {
       const name = normalizeToolName(input.name);
       const disabledReason = normalizeDisabledReason(input.disabledReason);
+      const recoveryHint = normalizeRecoveryHint(input.recoveryHint) ?? recoveryHintForDisabled(disabledReason);
       const namespace = normalizeNamespace(input.namespace);
       return catalogEntry({
         id: stableToolCatalogId({
@@ -79,6 +84,7 @@ export function buildExternalToolCatalog(inputs: readonly ExternalToolCatalogInp
         riskLevel: input.riskLevel ?? defaultRiskLevelForCategory(input.category),
         enabled: disabledReason === null,
         disabledReason,
+        recoveryHint,
         schema: input.schema ?? {},
       });
     })
@@ -140,6 +146,7 @@ function catalogEntry(input: {
   riskLevel: ToolCatalogRiskLevel;
   enabled: boolean;
   disabledReason: string | null;
+  recoveryHint: string | null;
   schema: unknown;
 }): ToolCatalogEntry {
   return {
@@ -153,6 +160,7 @@ function catalogEntry(input: {
     riskLevel: input.riskLevel,
     enabled: input.enabled,
     disabledReason: input.disabledReason,
+    recoveryHint: input.recoveryHint,
     schemaDigest: schemaDigest(input.schema),
   };
 }
@@ -207,15 +215,18 @@ function stableJson(value: unknown): string {
 function normalizeAvailability(value: ToolAvailability | null | undefined): ToolAvailability | null {
   if (!value) return null;
   const disabledReason = normalizeDisabledReason(value.disabledReason);
+  const recoveryHint = normalizeRecoveryHint(value.recoveryHint);
   if (!value.enabled) {
     return {
       enabled: false,
       disabledReason: disabledReason ?? DEFAULT_DISABLED_REASON,
+      recoveryHint: recoveryHint ?? DEFAULT_RECOVERY_HINT,
     };
   }
   return {
     enabled: disabledReason === null,
     disabledReason,
+    recoveryHint: recoveryHint ?? recoveryHintForDisabled(disabledReason),
   };
 }
 
@@ -223,6 +234,16 @@ function normalizeDisabledReason(value: string | null | undefined): string | nul
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function normalizeRecoveryHint(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function recoveryHintForDisabled(disabledReason: string | null): string | null {
+  return disabledReason ? DEFAULT_RECOVERY_HINT : null;
 }
 
 function normalizeNamespace(value: string | null | undefined): string | null {

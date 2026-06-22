@@ -125,6 +125,7 @@ function disablePluginCatalog(catalog: readonly ExternalToolCatalogInput[]): Ext
   return catalog.map((tool) => ({
     ...tool,
     disabledReason: tool.disabledReason ?? scopedOutDisabledReason("plugin"),
+    recoveryHint: tool.recoveryHint ?? "Use tool_describe to inspect the plugin schema, then choose an enabled Butler or MCP tool if plugin invocation is unavailable.",
   }));
 }
 

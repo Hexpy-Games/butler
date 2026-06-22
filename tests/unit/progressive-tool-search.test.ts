@@ -214,7 +214,16 @@ test("tool_search supports plugin catalog input without completing source obliga
     name: "tool_search",
     args: { provider: "PLUGIN", query: "calendar" },
     rawArguments: "{}",
-  }) as { ok: boolean; results: Array<{ id: string; provider: string; enabled: boolean; disabled_reason: string | null }> };
+  }) as {
+    ok: boolean;
+    results: Array<{
+      id: string;
+      provider: string;
+      enabled: boolean;
+      disabled_reason: string | null;
+      recovery_hint: string | null;
+    }>;
+  };
 
   expect(result.ok).toBe(true);
   expect(result.results).toContainEqual(expect.objectContaining({
@@ -222,6 +231,7 @@ test("tool_search supports plugin catalog input without completing source obliga
     provider: "plugin",
     enabled: false,
     disabled_reason: "Plugin invocation requires a registered guarded plugin dispatcher",
+    recovery_hint: "Use tool_describe to inspect the plugin schema, then choose an enabled Butler or MCP tool if plugin invocation is unavailable.",
   }));
   expect(satisfiedCompletionObligationsForToolResult("tool_search", result)).toEqual([]);
 });

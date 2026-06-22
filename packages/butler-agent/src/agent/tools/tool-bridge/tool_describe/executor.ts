@@ -7,6 +7,7 @@ import {
 } from "../../progressive-catalog.ts";
 import { BUTLER_TOOLS, TOOL_CAPABILITY_METADATA } from "../../registry.ts";
 import { nativeToolAvailability } from "../../tool-availability.ts";
+import { disabledExternalToolDescription } from "../external-description.ts";
 import { canBridgeMcpTool, canBridgeNativeTool, scopedOutDisabledReason } from "../scope.ts";
 
 type ToolCall = { args: Record<string, unknown> };
@@ -125,6 +126,7 @@ async function describeMcpTool(
       category: "mcp",
       enabled: false,
       disabled_reason: scopedOutDisabledReason("mcp"),
+      recovery_hint: "Use a session with the MCP tool profile or choose an enabled native tool from tool_search.",
       safety_notes: ["MCP tools require explicit current-session MCP capability."],
       schema: {},
       schema_digest: schemaDigest({}),
@@ -140,6 +142,7 @@ async function describeMcpTool(
   if (!tool.ok && tool.reason === "tool_not_found") return null;
   if (!tool.ok && tool.reason === "server_not_found") return null;
   if (!tool.ok) {
+    const disabledReason = mcpDescribeDisabledReason(tool);
     return {
       id,
       name: toolName,
@@ -147,11 +150,12 @@ async function describeMcpTool(
       provider: "mcp",
       category: "mcp",
       enabled: false,
-      disabled_reason: tool.error,
+      disabled_reason: disabledReason,
+      recovery_hint: "Retry tool_describe later, choose another MCP server/tool, or continue with enabled native tools.",
       safety_notes: ["Inspect the MCP schema and user intent before invoking external tools."],
       schema: {},
       schema_digest: schemaDigest({}),
-      call_affordance: { type: "disabled", reason: tool.error },
+      call_affordance: { type: "disabled", reason: disabledReason },
     };
   }
   const schema = sanitizeSchemaForModel(tool.input_schema);
@@ -179,7 +183,22 @@ async function describePluginTool(
     pluginToolDescriber?: PluginToolDescriber;
   },
 ) {
-  const tool = await resolvePluginTool(id, namespace, name, input);
+  let tool: ExternalToolCatalogInput | null | undefined;
+  try {
+    tool = await resolvePluginTool(id, namespace, name, input);
+  } catch {
+    const reason = "Plugin schema unavailable.";
+    return disabledExternalToolDescription({
+      id,
+      name,
+      namespace,
+      provider: "plugin",
+      category: "automation",
+      disabledReason: reason,
+      safetyNotes: ["Plugin schema loading failed; treat this as recoverable model feedback, not an app failure."],
+      recoveryHint: "Retry tool_describe later, choose another catalog result, or continue with enabled native/MCP tools.",
+    });
+  }
   if (!tool) return null;
   const schema = sanitizeSchemaForModel(tool.schema ?? {});
   const disabledReason = typeof tool.disabledReason === "string" && tool.disabledReason.trim()
@@ -193,11 +212,18 @@ async function describePluginTool(
     category: tool.category,
     enabled: false,
     disabled_reason: disabledReason,
+    recovery_hint: tool.recoveryHint?.trim() ||
+      "Choose an enabled native/MCP tool, or retry after a guarded plugin dispatcher is available.",
     safety_notes: ["Plugin tools are external extensions; inspect schema and user intent first."],
     schema,
     schema_digest: schemaDigest(schema),
     call_affordance: { type: "disabled", reason: disabledReason },
   };
+}
+
+function mcpDescribeDisabledReason(tool: { reason: string; error: string }): string {
+  if (tool.reason === "server_unavailable") return "MCP server unavailable.";
+  return tool.error;
 }
 
 function resolvePluginTool(

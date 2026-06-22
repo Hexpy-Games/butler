@@ -45,5 +45,6 @@ export interface ToolCatalogEntry {
   riskLevel: ToolCatalogRiskLevel;
   enabled: boolean;
   disabledReason: string | null;
+  recoveryHint: string | null;
   schemaDigest: string;
 }
