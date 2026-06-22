@@ -70,6 +70,7 @@ export interface ProgressRowLike {
   safe_order?: number;
   safe_path_labels?: string[];
   tool_call_id?: string;
+  bridge_phase?: string;
   work_block_id?: string;
   work_block_label?: string;
   work_decision_summary?: string;
@@ -229,6 +230,7 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       safe_tool_name: toolName,
       safe_input_label: inputLabel,
       tool_call_id: optionalPublicText(payload.toolCallId),
+      bridge_phase: optionalPublicText(payload.bridgePhase),
       work_block_id: optionalPublicText(payload.workBlockId),
       work_block_label: optionalPublicText(payload.workBlockLabel) ?? safeLabel,
       ...publicDecisionFields(payload),

@@ -685,6 +685,7 @@ export interface ProgressRow {
   safe_tool_name?: string;
   safe_input_label?: string;
   tool_call_id?: string;
+  bridge_phase?: string;
   work_block_id?: string;
   work_block_label?: string;
   work_decision_summary?: string;

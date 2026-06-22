@@ -84,6 +84,7 @@ test("turn event progress projection preserves safe tool activity", () => {
       toolName: "Bash",
       inputLabel: "bun test",
       safeLabel: "Bash: bun test",
+      bridgePhase: "invoke",
     },
   });
 
@@ -94,6 +95,7 @@ test("turn event progress projection preserves safe tool activity", () => {
     safe_tool_name: "Bash",
     safe_input_label: "bun test",
     tool_call_id: "tool-1",
+    bridge_phase: "invoke",
     work_block_id: "work-tool-1",
     work_block_label: "Checking local Project Ledger status",
   });

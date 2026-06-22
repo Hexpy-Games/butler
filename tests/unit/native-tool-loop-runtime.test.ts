@@ -4843,8 +4843,23 @@ test("native runtime unwraps tool_call through audited target dispatch", async (
   const transcript = readTranscript("butler/main/progressive-tool-call-audit");
   expect(transcript.some((event) => event.kind === "tool_call" && event.payload.name === "get_context_monitor")).toBe(true);
   expect(transcript.some((event) => event.kind === "tool_result" && event.payload.name === "get_context_monitor")).toBe(true);
-  expect(transcript.some((event) => event.kind === "tool_call" && event.payload.name === "tool_call")).toBe(false);
-  expect(events.find((event) => event.kind === "tool.started")?.payload?.toolName).toBe("Get Context Monitor");
+  expect(transcript.some((event) =>
+    event.kind === "tool_call" &&
+    event.payload.name === "tool_call" &&
+    event.metadata?.tool_surface_transition === "invoke",
+  )).toBe(true);
+  expect(transcript.some((event) =>
+    event.kind === "tool_result" &&
+    event.payload.name === "tool_call" &&
+    event.metadata?.tool_surface_transition === "invoked",
+  )).toBe(true);
+  const toolStarts = events.filter((event) => event.kind === "tool.started");
+  expect(toolStarts.map((event) => event.payload?.toolName)).toEqual(
+    expect.arrayContaining(["Tool Call", "Get Context Monitor"]),
+  );
+  expect(toolStarts.findIndex((event) => event.payload?.toolName === "Tool Call")).toBeLessThan(
+    toolStarts.findIndex((event) => event.payload?.toolName === "Get Context Monitor"),
+  );
 });
 
 test("native runtime records bridge audit metadata for bridged target failures", async () => {
@@ -4950,6 +4965,68 @@ test("native runtime records bridge audit metadata for tool_call resolution fail
     },
   }));
   expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN_123");
+});
+
+test("native runtime closes bridge progress rows when tool_call resolution throws", async () => {
+  const turnEvents: RuntimeTurnEventInput[] = [];
+  let caughtMessage = "";
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    executeButlerTool: async (call) => {
+      if (call.name === "tool_call" && call.args.__bridge_resolve_only === true) {
+        throw new Error("resolve exploded");
+      }
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      try {
+        await input.executeTool({
+          name: "tool_call",
+          args: { id: "native:web_search", arguments: { query: "butler" } },
+          rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler" } }),
+        });
+      } catch (error) {
+        caughtMessage = error instanceof Error ? error.message : String(error);
+      }
+      return "도구 호출 예외를 복구했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-throwing-resolution",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "도구 호출 예외 진행 상태를 확인해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      turnEvents.push(event);
+    },
+  });
+
+  expect(caughtMessage).toBe("resolve exploded");
+  const bridgeStarted = turnEvents.find((event) =>
+    event.kind === "tool.started" && event.payload?.toolName === "Tool Call",
+  );
+  const bridgeFailed = turnEvents.find((event) =>
+    event.kind === "tool.failed" && event.payload?.toolName === "Tool Call",
+  );
+  expect(bridgeStarted?.payload?.bridgePhase).toBe("invoke");
+  expect(bridgeFailed?.payload?.bridgePhase).toBe("denied");
+  const transcript = readTranscript("butler/main/progressive-tool-call-throwing-resolution");
+  expect(transcript.some((event) =>
+    event.kind === "tool_result" &&
+    event.payload.name === "tool_call" &&
+    event.payload.ok === false &&
+    event.metadata?.tool_surface_transition === "denied",
+  )).toBe(true);
 });
 
 test("native runtime records bridge audit metadata without raw search arguments", async () => {

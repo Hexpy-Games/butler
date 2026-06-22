@@ -1080,6 +1080,7 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
       safe_tool_name: toolName,
       safe_input_label: inputLabel,
       tool_call_id: safeOptionalPublicText(payload.toolCallId),
+      bridge_phase: safeOptionalPublicText(payload.bridgePhase),
       work_block_id: safeOptionalPublicText(payload.workBlockId),
       work_block_label:
         safeOptionalPublicText(payload.workBlockLabel) ?? safeLabel,

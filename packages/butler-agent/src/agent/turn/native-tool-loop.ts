@@ -283,6 +283,9 @@ function createDirectTurnBudget(turnId: string): DirectTurnBudget {
 }
 
 function budgetStatus(budget: DirectTurnBudget): PromptUsageBudgetState["status"] {
+  if (budget.modelRequestsUsed >= budget.maxModelCalls) {
+    return "exhausted";
+  }
   if (
     budget.modelRequestsUsed >= Math.floor(budget.maxModelCalls * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
     budget.promptTokens >= Math.floor(budget.maxPromptTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
@@ -2825,68 +2828,198 @@ function createAuditedButlerToolExecutor(input: {
     args: Record<string, unknown>;
     invocation: Record<string, unknown>;
   };
+  const startBridgeToolCallProgress = async (
+    call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
+  ) => {
+    const startedAt = Date.now();
+    const toolCallId = `tool-${randomUUID().slice(0, 8)}`;
+    const workBlockId = `work-${toolCallId}`;
+    const cleanArgs = { ...call.args };
+    const progress = summarizeToolProgress(call.name, cleanArgs, input.messageLanguage);
+    const workBlockLabel = progress.workBlockLabel || progress.safeLabel;
+    const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
+    await emitTurnEventBestEffort(input.turnInput, {
+      kind: "work.block.started",
+      payload: {
+        workBlockId,
+        label: workBlockLabel,
+        activityKind: progress.kind,
+      },
+    });
+    await emitTurnEventBestEffort(input.turnInput, {
+      kind: "tool.started",
+      payload: {
+        toolCallId,
+        workBlockId,
+        workBlockLabel,
+        bridgePhase: "invoke",
+        activityKind: progress.kind,
+        toolName: progress.toolName,
+        inputLabel: progress.inputLabel,
+        safeLabel: progress.safeLabel,
+        detailRows: progress.detailRows,
+      },
+    });
+    if (inboundEnvelope && input.turnInput.emitIntermediateDelivery) {
+      await emitIntermediateBestEffort(
+        input.turnInput,
+        buildIntermediateAction({
+          envelope: inboundEnvelope,
+          suffix: `${call.name}-${randomUUID().slice(0, 8)}-bridge-progress`,
+          text: "",
+          metadata: {
+            kind: "tool_progress",
+            activityKind: progress.kind,
+            toolCallId,
+            toolName: progress.toolName,
+            safeLabel: progress.safeLabel,
+            inputLabel: progress.inputLabel,
+            bridgePhase: "invoke",
+            workBlockId,
+            workBlockLabel,
+            detailRows: progress.detailRows,
+          },
+        }),
+        {
+          source: "runtime/native-tool-loop.ts#bridge-tool-progress",
+          kind: "tool_progress",
+          tool: call.name,
+        },
+      );
+    }
+    appendTranscriptEvent(createTranscriptEvent({
+      sessionId: input.sessionId,
+      kind: "tool_call",
+      payload: {
+        name: call.name,
+        arguments: cleanArgs,
+      },
+      metadata: {
+        source: "runtime/native-tool-loop.ts#bridge-tool-progress",
+        tool_surface_transition: "invoke",
+      },
+    }));
+    return async (result: unknown, bridgeAudit: ReturnType<typeof bridgeToolAuditEvent>, ok: boolean) => {
+      await emitTurnEventBestEffort(input.turnInput, {
+        kind: ok ? "tool.completed" : "tool.failed",
+        payload: {
+          toolCallId,
+          workBlockId,
+          workBlockLabel,
+          bridgePhase: ok ? "invoked" : "denied",
+          activityKind: progress.kind,
+          toolName: progress.toolName,
+          inputLabel: progress.inputLabel,
+          safeLabel: progress.safeLabel,
+          detailRows: progress.detailRows,
+          durationMs: Date.now() - startedAt,
+        },
+      });
+      await emitTurnEventBestEffort(input.turnInput, {
+        kind: "work.block.completed",
+        payload: {
+          workBlockId,
+          label: workBlockLabel,
+          status: ok ? "completed" : "failed",
+          durationMs: Date.now() - startedAt,
+        },
+      });
+      appendTranscriptEvent(createTranscriptEvent({
+        sessionId: input.sessionId,
+        kind: "tool_result",
+        payload: {
+          name: call.name,
+          ok,
+          result: redactedBridgeToolAuditResult("tool_call", result),
+        },
+        metadata: {
+          source: "runtime/native-tool-loop.ts#bridge-tool-progress",
+          bridge_audit: bridgeAudit ?? undefined,
+          tool_surface_transition: ok ? "invoked" : "denied",
+        },
+      }));
+    };
+  };
   const executeAuditedWithBridge = async (
     call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
     bridgedFrom?: BridgedToolCallAuditContext,
   ): Promise<unknown> => {
     throwIfRuntimeTurnAborted(input.turnInput.signal);
     if (call.name === "tool_call" && call.args.__bridge_resolve_only !== true) {
-      const resolved = await input.executor({
-        ...call,
-        args: { ...call.args, __bridge_resolve_only: true },
-        rawArguments: JSON.stringify({ ...call.args, __bridge_resolve_only: true }),
-      }) as {
-        ok?: boolean;
-        result?: unknown;
-        targetCall?: Parameters<FunctionToolPromptOptions["executeTool"]>[0];
-        bridgeInvocation?: Record<string, unknown>;
-      };
-      if (resolved.ok !== true || !resolved.targetCall) {
-        const result = resolved.result ?? resolved;
-        const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, result);
-        appendTranscriptEvent(createTranscriptEvent({
-          sessionId: input.sessionId,
-          kind: "tool_result",
-          payload: {
+      const finishBridgeProgress = await startBridgeToolCallProgress(call);
+      try {
+        const resolved = await input.executor({
+          ...call,
+          args: { ...call.args, __bridge_resolve_only: true },
+          rawArguments: JSON.stringify({ ...call.args, __bridge_resolve_only: true }),
+        }) as {
+          ok?: boolean;
+          result?: unknown;
+          targetCall?: Parameters<FunctionToolPromptOptions["executeTool"]>[0];
+          bridgeInvocation?: Record<string, unknown>;
+        };
+        if (resolved.ok !== true || !resolved.targetCall) {
+          const result = resolved.result ?? resolved;
+          const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, result);
+          input.audit.push({
             name: "tool_call",
+            args: redactedBridgeToolAuditArgs("tool_call", call.args),
             ok: false,
             result: redactedBridgeToolAuditResult("tool_call", result),
+            error: bridgeAudit?.error?.code ?? "tool_call_bridge_resolution_failed",
+            bridgeAudit: bridgeAudit ?? undefined,
+          });
+          await finishBridgeProgress(result, bridgeAudit, false);
+          return result;
+        }
+        const auditStartIndex = input.audit.length;
+        const result = await executeAuditedWithBridge(resolved.targetCall, {
+          args: call.args,
+          invocation: resolved.bridgeInvocation ?? {},
+        });
+        const bridgedResult = result && typeof result === "object" && !Array.isArray(result)
+          ? {
+            ...result as Record<string, unknown>,
+            bridge_invocation: resolved.bridgeInvocation,
+          }
+          : {
+            ok: true,
+            result,
+            bridge_invocation: resolved.bridgeInvocation,
+          };
+        const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, bridgedResult);
+        const targetAudit = [...input.audit.slice(auditStartIndex)].reverse()
+          .find((entry) => entry.name === resolved.targetCall?.name);
+        if (targetAudit && bridgeAudit) targetAudit.bridgeAudit = bridgeAudit;
+        input.audit.push({
+          name: "tool_call",
+          args: redactedBridgeToolAuditArgs("tool_call", call.args),
+          ok: true,
+          result: redactedBridgeToolAuditResult("tool_call", bridgedResult),
+          bridgeAudit: bridgeAudit ?? undefined,
+        });
+        await finishBridgeProgress(bridgedResult, bridgeAudit, true);
+        return bridgedResult;
+      } catch (error) {
+        const failureResult = {
+          ok: false,
+          error: {
+            code: "underlying_tool_error",
+            recoverable: false,
           },
-          metadata: {
-            source: "runtime/native-tool-loop.ts",
-            bridge_audit: bridgeAudit ?? undefined,
-          },
-        }));
+        };
+        const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, failureResult);
         input.audit.push({
           name: "tool_call",
           args: redactedBridgeToolAuditArgs("tool_call", call.args),
           ok: false,
-          result: redactedBridgeToolAuditResult("tool_call", result),
-          error: bridgeAudit?.error?.code ?? "tool_call_bridge_resolution_failed",
+          result: redactedBridgeToolAuditResult("tool_call", failureResult),
+          error: bridgeAudit?.error?.code ?? "tool_call_bridge_exception",
           bridgeAudit: bridgeAudit ?? undefined,
         });
-        return result;
+        await finishBridgeProgress(failureResult, bridgeAudit, false);
+        throw error;
       }
-      const auditStartIndex = input.audit.length;
-      const result = await executeAuditedWithBridge(resolved.targetCall, {
-        args: call.args,
-        invocation: resolved.bridgeInvocation ?? {},
-      });
-      const bridgedResult = result && typeof result === "object" && !Array.isArray(result)
-        ? {
-          ...result as Record<string, unknown>,
-          bridge_invocation: resolved.bridgeInvocation,
-        }
-        : {
-          ok: true,
-          result,
-          bridge_invocation: resolved.bridgeInvocation,
-        };
-      const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, bridgedResult);
-      const targetAudit = [...input.audit.slice(auditStartIndex)].reverse()
-        .find((entry) => entry.name === resolved.targetCall?.name);
-      if (targetAudit && bridgeAudit) targetAudit.bridgeAudit = bridgeAudit;
-      return bridgedResult;
     }
     const startedAt = Date.now();
     const cleanArgs = { ...call.args };

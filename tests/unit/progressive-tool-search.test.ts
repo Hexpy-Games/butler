@@ -7,6 +7,7 @@ import {
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { searchToolCatalog } from "../../packages/butler-agent/src/agent/tools/progressive-search.ts";
 import { buildExternalToolCatalog } from "../../packages/butler-agent/src/agent/tools/progressive-catalog.ts";
+import { createToolSearchToolHandler } from "../../packages/butler-agent/src/agent/tools/tool-bridge/tool_search/executor.ts";
 import { DisabledWebSearchProvider } from "../../packages/butler-agent/src/integrations/search/provider.ts";
 import { upsertMcpServer } from "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";
 
@@ -131,6 +132,26 @@ test("tool_search native provider does not wait on configured MCP probes", async
   expect(result.ok).toBe(true);
   expect(result.results.every((entry) => entry.provider === "native")).toBe(true);
   expect(Date.now() - started).toBeLessThan(900);
+});
+
+test("tool_search native provider does not resolve plugin catalogs", async () => {
+  let pluginCatalogLoaded = false;
+  const execute = createToolSearchToolHandler({
+    butlerData: tempDir,
+    pluginCatalog: async () => {
+      pluginCatalogLoaded = true;
+      throw new Error("plugin catalog should not load for native-only search");
+    },
+  });
+
+  const result = await execute({
+    args: { provider: "native", query: "web search" },
+  }) as { ok: boolean; results: Array<{ provider: string }> };
+
+  expect(result.ok).toBe(true);
+  expect(pluginCatalogLoaded).toBe(false);
+  expect(result.results.length).toBeGreaterThan(0);
+  expect(result.results.every((entry) => entry.provider === "native")).toBe(true);
 });
 
 test("tool_search does not load MCP catalogs outside the current MCP tool profile", async () => {
