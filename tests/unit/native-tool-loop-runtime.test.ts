@@ -7,6 +7,7 @@ import {
   createTranscriptEvent,
   readTranscript,
 } from "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
+import type { RuntimeTurnEventInput } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import {
   applyCorrectionChallengeGuard,
   applyShortCueRhythmGuard,
@@ -721,6 +722,7 @@ test("native runtime sends a profiled tool surface for basic project turns", asy
     "list_tool_capabilities",
     "tool_search",
     "tool_describe",
+    "tool_call",
     "update_todo_list",
     "list_todo_list",
     "read_conversation_context",
@@ -4803,6 +4805,46 @@ test("native runtime records Butler tool call and result in transcript", async (
   const transcript = readTranscript("butler/main");
   expect(transcript.some((event) => event.kind === "tool_call" && event.payload.name === "list_tasks")).toBe(true);
   expect(transcript.some((event) => event.kind === "tool_result" && event.payload.name === "list_tasks")).toBe(true);
+});
+
+test("native runtime unwraps tool_call through audited target dispatch", async () => {
+  const events: RuntimeTurnEventInput[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:get_context_monitor", arguments: {} },
+        rawArguments: JSON.stringify({ id: "native:get_context_monitor", arguments: {} }),
+      });
+      return "컨텍스트 상태를 확인했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-audit",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "컨텍스트 상태 확인해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      events.push(event);
+    },
+  });
+
+  const transcript = readTranscript("butler/main/progressive-tool-call-audit");
+  expect(transcript.some((event) => event.kind === "tool_call" && event.payload.name === "get_context_monitor")).toBe(true);
+  expect(transcript.some((event) => event.kind === "tool_result" && event.payload.name === "get_context_monitor")).toBe(true);
+  expect(transcript.some((event) => event.kind === "tool_call" && event.payload.name === "tool_call")).toBe(false);
+  expect(events.find((event) => event.kind === "tool.started")?.payload?.toolName).toBe("Get Context Monitor");
 });
 
 test("native runtime dispatches workers only through model-selected tool calls", async () => {

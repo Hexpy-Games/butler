@@ -2794,8 +2794,33 @@ function createAuditedButlerToolExecutor(input: {
       rawArguments: JSON.stringify(args),
     }, "runtime");
   };
-  return async (call) => {
+  const executeAudited: FunctionToolPromptOptions["executeTool"] = async (call) => {
     throwIfRuntimeTurnAborted(input.turnInput.signal);
+    if (call.name === "tool_call" && call.args.__bridge_resolve_only !== true) {
+      const resolved = await input.executor({
+        ...call,
+        args: { ...call.args, __bridge_resolve_only: true },
+        rawArguments: JSON.stringify({ ...call.args, __bridge_resolve_only: true }),
+      }) as {
+        ok?: boolean;
+        result?: unknown;
+        targetCall?: Parameters<FunctionToolPromptOptions["executeTool"]>[0];
+        bridgeInvocation?: Record<string, unknown>;
+      };
+      if (resolved.ok !== true || !resolved.targetCall) return resolved.result ?? resolved;
+      const result = await executeAudited(resolved.targetCall);
+      if (result && typeof result === "object" && !Array.isArray(result)) {
+        return {
+          ...result as Record<string, unknown>,
+          bridge_invocation: resolved.bridgeInvocation,
+        };
+      }
+      return {
+        ok: true,
+        result,
+        bridge_invocation: resolved.bridgeInvocation,
+      };
+    }
     const startedAt = Date.now();
     const cleanArgs = { ...call.args };
     const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
@@ -3261,6 +3286,7 @@ function createAuditedButlerToolExecutor(input: {
       });
     }
   };
+  return executeAudited;
 }
 
 function appendButlerToolInstructions(systemPrompt?: string): string {

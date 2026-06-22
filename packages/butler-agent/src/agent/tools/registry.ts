@@ -15,6 +15,7 @@ import { getUsageMonitorToolDefinition, getUsageMonitorToolMetadata } from "./mo
 import { listToolCapabilitiesToolDefinition, listToolCapabilitiesToolMetadata } from "./monitoring/list_tool_capabilities/index.ts";
 import { toolSearchToolDefinition, toolSearchToolMetadata } from "./tool-bridge/tool_search/index.ts";
 import { toolDescribeToolDefinition, toolDescribeToolMetadata } from "./tool-bridge/tool_describe/index.ts";
+import { toolCallToolDefinition, toolCallToolMetadata } from "./tool-bridge/tool_call/index.ts";
 import { listMcpCapabilitiesToolDefinition, listMcpCapabilitiesToolMetadata } from "./mcp/list_mcp_capabilities/index.ts";
 import { callMcpToolToolDefinition, callMcpToolToolMetadata } from "./mcp/call_mcp_tool/index.ts";
 import { readMcpResourceToolDefinition, readMcpResourceToolMetadata } from "./mcp/read_mcp_resource/index.ts";
@@ -70,6 +71,7 @@ export const CORE_BUTLER_TOOLS = [
   listToolCapabilitiesToolDefinition,
   toolSearchToolDefinition,
   toolDescribeToolDefinition,
+  toolCallToolDefinition,
   listMcpCapabilitiesToolDefinition,
   callMcpToolToolDefinition,
   readMcpResourceToolDefinition,
@@ -128,6 +130,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [listToolCapabilitiesToolDefinition.name]: listToolCapabilitiesToolMetadata,
   [toolSearchToolDefinition.name]: toolSearchToolMetadata,
   [toolDescribeToolDefinition.name]: toolDescribeToolMetadata,
+  [toolCallToolDefinition.name]: toolCallToolMetadata,
   [listMcpCapabilitiesToolDefinition.name]: listMcpCapabilitiesToolMetadata,
   [callMcpToolToolDefinition.name]: callMcpToolToolMetadata,
   [readMcpResourceToolDefinition.name]: readMcpResourceToolMetadata,

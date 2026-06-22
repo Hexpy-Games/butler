@@ -137,11 +137,7 @@ export function createButlerToolExecutor(input: {
   pageReader?: typeof readPageConfigured;
   currentToolNames?: readonly string[] | (() => readonly string[]);
   pluginToolCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
-  pluginToolDescriber?: (input: {
-    id: string;
-    namespace: string;
-    name: string;
-  }) => Promise<ExternalToolCatalogInput | null | undefined>;
+  pluginToolDescriber?: (input: { id: string; namespace: string; name: string }) => Promise<ExternalToolCatalogInput | null | undefined>;
 }): ButlerToolExecutor {
   const taskStore = new TaskStore(input.butlerData);
   const plannedTaskStore = new PlannedTaskStore(input.butlerData);
@@ -149,6 +145,11 @@ export function createButlerToolExecutor(input: {
   const workStreamStore = new WorkStreamStore(input.butlerData);
   const automationStore = new AutomationStore(input.butlerData);
   const orchestrationStore = new WorkOrchestrationStore(input.butlerData);
+  const toolExecutorRef: { current?: ButlerToolExecutorRegistry } = {};
+  const dispatchTool: ButlerToolHandler = async (call) => {
+    if (!toolExecutorRef.current) throw new Error("Butler tool registry is not initialized");
+    return await executeRegisteredButlerTool(toolExecutorRef.current, call);
+  };
   const toolExecutors = createButlerToolExecutorRegistry({
     ...createProjectLedgerToolHandlers({
       butlerHome: input.butlerHome,
@@ -167,6 +168,8 @@ export function createButlerToolExecutor(input: {
       webSearchProvider: input.webSearchProvider,
       pluginCatalog: input.pluginToolCatalog,
       pluginToolDescriber: input.pluginToolDescriber,
+      currentToolNames: input.currentToolNames,
+      dispatchTool,
     }),
     ...createMcpToolHandlers({
       butlerData: input.butlerData,
@@ -266,6 +269,7 @@ export function createButlerToolExecutor(input: {
       dispatchTask: input.dispatchTask,
     }),
   });
+  toolExecutorRef.current = toolExecutors;
 
   return async (call) => executeRegisteredButlerTool(toolExecutors, call);
 }
