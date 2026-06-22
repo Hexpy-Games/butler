@@ -246,6 +246,7 @@ export interface FunctionToolPromptOptions {
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
   tools: FunctionToolDefinition[];
+  dynamicTools?: () => readonly FunctionToolDefinition[];
   maxToolRounds?: number;
   log?: (line: string) => void;
   onAssistantTextBeforeTools?: (input: {
@@ -1360,6 +1361,16 @@ function modelFacingFunctionTools(tools: readonly FunctionToolDefinition[]): Fun
     ...tool,
     parameters: stripNestedDescriptions(tool.parameters) as Record<string, unknown>,
   }));
+}
+
+function activeFunctionTools(options: FunctionToolPromptOptions): FunctionToolDefinition[] {
+  const dynamicTools = options.dynamicTools?.();
+  return modelFacingFunctionTools(dynamicTools && dynamicTools.length > 0 ? dynamicTools : options.tools);
+}
+
+function withoutDynamicTools(options: FunctionToolPromptOptions): FunctionToolPromptOptions {
+  const { dynamicTools: _dynamicTools, ...rest } = options;
+  return rest;
 }
 
 function newToolMessages(
@@ -2653,7 +2664,6 @@ async function runLocalPromptText(options: PromptOptions): Promise<string> {
 async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions): Promise<string> {
   const config = resolveLocalModelConfig(options.model);
   const log = options.log ?? (() => {});
-  const allowedNames = new Set(options.tools.map((tool) => tool.name));
   const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
   const messages: LocalChatMessage[] = [{ role: "system", content: localFunctionToolInstructions(options.instructions) }];
   messages.push({ role: "user", content: localUserContentWithAttachments(options.prompt, options.attachments) });
@@ -2662,9 +2672,11 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
   let requiredToolRepairNames: Set<string> | null = null;
 
   for (let round = 0; round < maxRounds; round += 1) {
+    const activeTools = activeFunctionTools(options);
+    const allowedNames = new Set(activeTools.map((tool) => tool.name));
     let response;
     try {
-      const requestTools = localToolsForRequiredRepair(options.tools, requiredToolRepairNames);
+      const requestTools = localToolsForRequiredRepair(activeTools, requiredToolRepairNames);
       response = await createLocalChatCompletion(config, {
         model: config.model_id,
         messages,
@@ -2680,12 +2692,12 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
         throwIfAborted(options.signal);
         break;
       }
-      const compactTools = localCompactEvidenceTools(options.tools);
-      if (compactTools.length > 0 && compactTools.length < options.tools.length) {
+      const compactTools = localCompactEvidenceTools(activeTools);
+      if (compactTools.length > 0 && compactTools.length < activeTools.length) {
         log("local model tool prompt exceeded context window; retrying with compact evidence tool schemas");
         throwIfAborted(options.signal);
         return await runLocalFunctionToolPromptText({
-          ...options,
+          ...withoutDynamicTools(options),
           tools: compactTools,
         });
       }
@@ -3097,7 +3109,6 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
   options: FunctionToolPromptOptions,
 ): Promise<string> {
   const log = options.log ?? (() => {});
-  const allowedNames = new Set(options.tools.map((tool) => tool.name));
   const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
   const messages: HostedChatMessage[] = [];
   if (options.instructions?.trim()) {
@@ -3106,9 +3117,11 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
   messages.push({ role: "user", content: promptTextForHosted(options) });
 
   for (let round = 0; round < maxRounds; round += 1) {
+    const activeTools = activeFunctionTools(options);
+    const allowedNames = new Set(activeTools.map((tool) => tool.name));
     const response = await createHostedChatCompletion(config, {
       messages,
-      tools: hostedChatTools(options.tools),
+      tools: hostedChatTools(activeTools),
       tool_choice: "auto",
       stream: false,
     }, options.signal);
@@ -3794,8 +3807,6 @@ async function runOpenAIFunctionToolPromptText(
   const reasoning = buildReasoningConfig(resolution);
   const log = options.log ?? (() => {});
   const promptCache = resolveOpenAIPromptCacheConfig(options.cacheScope ?? "function-tool-prompt");
-  const allowedNames = new Set(options.tools.map((tool) => tool.name));
-  const modelTools = modelFacingFunctionTools(options.tools);
   const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
   let previousResponseId: string | null = null;
   let sentToolMessages = 0;
@@ -3803,12 +3814,16 @@ async function runOpenAIFunctionToolPromptText(
   const promptForAgentLoop = promptWithAttachmentContext(options.prompt, options.attachments);
   const codexStatelessInput = toCodexStatelessInput(initialPromptInput);
   let modelCallRound = 0;
+  const agentLoopTools = activeFunctionTools(options).map(functionToolToAgentTool);
 
   const result = await runAgentLoop({
     messages: [{ role: "user", content: promptForAgentLoop }],
-    tools: options.tools.map(functionToolToAgentTool),
+    tools: agentLoopTools,
     maxIterations: maxRounds,
     callModel: async ({ messages }) => {
+      const activeTools = activeFunctionTools(options);
+      const allowedNames = new Set(activeTools.map((tool) => tool.name));
+      agentLoopTools.splice(0, agentLoopTools.length, ...activeTools.map(functionToolToAgentTool));
       const input = previousResponseId
         ? newToolMessages(messages, sentToolMessages)
         : { items: initialPromptInput, sentCount: sentToolMessages };
@@ -3826,7 +3841,7 @@ async function runOpenAIFunctionToolPromptText(
         store: true,
         ...promptCache,
         instructions: options.instructions,
-        tools: modelTools,
+        tools: activeTools,
         reasoning,
         ...(previousResponseId
           ? {
