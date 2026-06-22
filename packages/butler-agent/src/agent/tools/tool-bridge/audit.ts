@@ -221,7 +221,7 @@ function callSummary(record: Record<string, unknown> | null): ReturnType<typeof 
 function outcomeFromErrorCode(code: string): BridgeToolOutcome {
   if (code === "disabled_tool") return "disabled";
   if (code === "unknown_tool_catalog_id") return "unknown";
-  if (code === "invalid_tool_catalog_id" || code === "invalid_tool_arguments") return "invalid";
+  if (code === "invalid_tool_catalog_id" || code === "invalid_tool_arguments" || code === "tool_not_described") return "invalid";
   if (DENIED_ERROR_CODES.has(code)) return "denied";
   return "error";
 }

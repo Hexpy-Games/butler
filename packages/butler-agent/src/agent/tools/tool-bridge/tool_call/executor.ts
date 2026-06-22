@@ -3,6 +3,7 @@ import type { ButlerToolCall, ButlerToolHandler } from "../../butler-tools.ts";
 import type { ExternalToolCatalogInput } from "../../progressive-catalog.ts";
 import { disabledToolRecovery } from "../audit.ts";
 import { validateJsonObjectSchema } from "../schema-validation.ts";
+import { currentToolNamesFromInput } from "../scope.ts";
 import { createToolDescribeToolHandler } from "../tool_describe/executor.ts";
 
 type ToolCall = { args: Record<string, unknown>; rawArguments?: string };
@@ -47,6 +48,7 @@ export function createToolCallToolHandler(input: {
   pluginToolDescriber?: PluginToolDescriber;
   dispatchTool: ButlerToolHandler;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  describedToolIds?: readonly string[] | (() => readonly string[]);
 }) {
   return async (call: ToolCall) => {
     const resolved = await resolveToolCallTarget(call, input);
@@ -78,6 +80,7 @@ export async function resolveToolCallTarget(
     pluginCatalog?: PluginToolCatalog;
     pluginToolDescriber?: PluginToolDescriber;
     currentToolNames?: readonly string[] | (() => readonly string[]);
+    describedToolIds?: readonly string[] | (() => readonly string[]);
   },
 ): Promise<ToolCallResolveResult> {
   const id = stringArg(call.args.id);
@@ -107,6 +110,15 @@ export async function resolveToolCallTarget(
       }),
     };
   }
+  if (!isToolCallAllowedByTurnDescription(description, input)) {
+    return {
+      ok: false,
+      result: bridgeError("tool_not_described", `Tool must be described before invocation: ${id}`, {
+        id,
+        next_action: "Call tool_describe for this exact catalog id, inspect the schema, then retry tool_call with schema-valid arguments.",
+      }),
+    };
+  }
 
   const validation = validateJsonObjectSchema(args, description.schema);
   if (!validation.ok) {
@@ -120,6 +132,20 @@ export async function resolveToolCallTarget(
     targetCall: targetCall.call,
     bridgeInvocation: bridgeInvocationMetadata(description),
   };
+}
+
+function isToolCallAllowedByTurnDescription(
+  description: ToolDescription,
+  input: {
+    currentToolNames?: readonly string[] | (() => readonly string[]);
+    describedToolIds?: readonly string[] | (() => readonly string[]);
+  },
+): boolean {
+  const visibleToolNames = new Set(currentToolNamesFromInput(input.currentToolNames));
+  if (visibleToolNames.has(description.name)) return true;
+  if (input.describedToolIds === undefined) return true;
+  const describedToolIds = new Set(currentToolNamesFromInput(input.describedToolIds));
+  return describedToolIds.has(description.id);
 }
 
 async function describeOneTool(

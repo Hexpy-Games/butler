@@ -4854,6 +4854,11 @@ test("native runtime records bridge audit metadata for bridged target failures",
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
       await input.executeTool({
+        name: "tool_describe",
+        args: { ids: ["native:web_search"] },
+        rawArguments: JSON.stringify({ ids: ["native:web_search"] }),
+      });
+      await input.executeTool({
         name: "tool_call",
         args: { id: "native:web_search", arguments: { query: "x" } },
         rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "x" } }),
