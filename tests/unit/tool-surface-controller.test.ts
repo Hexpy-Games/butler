@@ -9,6 +9,7 @@ import {
   type ToolSurfaceControllerInput,
   type ToolSurfaceControllerState,
 } from "../../packages/butler-agent/src/agent/tools/tool-surface-controller.ts";
+import { selectInitialToolsFromSurfaceController } from "../../packages/butler-agent/src/agent/tools/tool-surface-selection.ts";
 
 function createStructuredInitialState(): ToolSurfaceControllerState {
   return createInitialToolSurfaceControllerState({
@@ -76,6 +77,64 @@ test("controller accepts only structured tool-surface inputs", () => {
   expect(Object.keys(state.context)).not.toContain("text");
   expect(Object.keys(state.context)).not.toContain("prompt");
   expect(Object.keys(state.context)).not.toContain("message");
+});
+
+test("initial surface selection uses structured controller state without prompt text", () => {
+  const providerCapabilities = {
+    supportsToolCalls: true,
+    supportsStreaming: false,
+    supportsPromptCaching: true,
+  };
+  const selection = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    sessionMetadata: {
+      projectId: "butler",
+      promptContext: "please inspect the repository",
+      currentUserText: "please inspect the repository",
+      text: "please inspect the repository",
+    },
+    turnMetadata: {
+      runtimePolicy: {
+        requiredNativeToolProfiles: ["workspace"],
+        promptText: "please inspect the repository",
+      },
+      message: "please inspect the repository",
+    },
+    providerCapabilities,
+  });
+
+  expect(selection.state.status).toBe("initial");
+  expect(selection.state.context.role).toBe("butler");
+  expect(selection.state.context.sessionMode).toBe("interactive");
+  expect(selection.state.context.sessionMetadata).toEqual({ projectId: "butler" });
+  expect(selection.state.context.turnMetadata).toEqual({
+    runtimePolicy: { requiredNativeToolProfiles: ["workspace"] },
+  });
+  expect(selection.state.context.providerCapabilities).toEqual({
+    supportsToolCalls: true,
+    supportsStreaming: false,
+  });
+  expect(Object.keys(selection.state.context)).not.toContain("text");
+  expect(Object.keys(selection.state.context)).not.toContain("prompt");
+  expect(selection.toolNames).toEqual([
+    "run_command",
+    "read_file",
+    "write_file",
+    "grep_files",
+    "inspect_project_status",
+    "query_project_work",
+    "render_project_dashboard",
+    "complete_project_work",
+    "get_context_monitor",
+    "read_tool_output_artifact",
+    "list_tool_capabilities",
+    "tool_search",
+    "tool_describe",
+    "tool_call",
+    "update_todo_list",
+    "list_todo_list",
+    "read_conversation_context",
+  ]);
 });
 
 test("controller advances through discovered, described, promoted, and invoked states", () => {
