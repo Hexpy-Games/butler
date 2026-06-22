@@ -2741,7 +2741,7 @@ test("Codex subscription tool continuation is sent as stateless input without pr
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("encrypted_content");
 });
 
-test("OpenAI function tool prompt records provider requests beyond warning threshold without aborting", async () => {
+test("OpenAI function tool prompt reserves budget for final synthesis instead of exceeding request budget", async () => {
   const token = fakeJwt({
     "https://api.openai.com/auth": {
       chatgpt_account_id: "chatgpt-account",
@@ -2757,19 +2757,33 @@ test("OpenAI function tool prompt records provider requests beyond warning thres
   });
   process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
 
+  const seenBodies: Array<Record<string, any>> = [];
   let fetchCalls = 0;
   let requestCount = 0;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    seenBodies.push(body);
     fetchCalls += 1;
-    if (fetchCalls === 34) {
+    if (fetchCalls === 32) {
       return codexSseResponse({
-        id: "resp_34",
+        id: "resp_32",
         item: {
           type: "message",
-          content: [{ type: "output_text", text: "done after high usage" }],
+          content: [{ type: "output_text", text: "done at budget" }],
         },
-        inputTokens: 34,
+        inputTokens: 32,
         totalTokens: 55,
+      });
+    }
+    if (fetchCalls > 32) {
+      return codexSseResponse({
+        id: `resp_${fetchCalls}`,
+        item: {
+          type: "message",
+          content: [{ type: "output_text", text: "should not exceed budget" }],
+        },
+        inputTokens: fetchCalls,
+        totalTokens: fetchCalls,
       });
     }
     return codexSseResponse({
@@ -2809,7 +2823,7 @@ test("OpenAI function tool prompt records provider requests beyond warning thres
         requestCount += 1;
       },
       getBudgetState: () => ({
-        status: requestCount >= 32 ? "warning" : "ok",
+        status: requestCount >= 32 ? "exhausted" : requestCount >= 30 ? "warning" : "ok",
         requestCount,
         maxRequests: 32,
       }),
@@ -2817,20 +2831,24 @@ test("OpenAI function tool prompt records provider requests beyond warning thres
     executeTool: async () => ({ ok: true }),
   });
 
-  expect(result).toBe("done after high usage");
-  expect(fetchCalls).toBe(34);
-  expect(requestCount).toBe(34);
+  expect(result).toBe("done at budget");
+  expect(fetchCalls).toBe(32);
+  expect(requestCount).toBe(32);
+  expect(seenBodies).toHaveLength(32);
+  expect(seenBodies.slice(0, 31).every((body) => Array.isArray(body.tools))).toBe(true);
+  expect(seenBodies[31]!.tools).toBeUndefined();
+  expect(seenBodies[31]!.instructions).toContain("Do not call any more tools");
   const events = readPromptCacheMetrics({ butlerData: tempDir })
     .filter((event) => event.turnId === "turn-high-model-calls");
-  expect(events).toHaveLength(34);
-  expect(events.at(31)?.budgetState).toMatchObject({
+  expect(events).toHaveLength(32);
+  expect(events.at(29)?.budgetState).toMatchObject({
     status: "warning",
-    requestCount: 32,
+    requestCount: 30,
     maxRequests: 32,
   });
   expect(events.at(-1)?.budgetState).toMatchObject({
-    status: "warning",
-    requestCount: 34,
+    status: "exhausted",
+    requestCount: 32,
     maxRequests: 32,
   });
 });

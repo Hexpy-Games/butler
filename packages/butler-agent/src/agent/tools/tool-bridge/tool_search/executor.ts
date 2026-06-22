@@ -53,7 +53,10 @@ export function createToolSearchToolHandler(input: {
         category: category.value,
         includeDisabled: call.args.include_disabled === true,
       }),
-      ...buildExternalToolCatalog(disablePluginCatalog(await resolvePluginCatalog(input.pluginCatalog))),
+      ...buildExternalToolCatalog(disablePluginCatalog(await maybeResolvePluginCatalog({
+        pluginCatalog: input.pluginCatalog,
+        provider: provider.value,
+      }))),
     ];
     return {
       ok: true,
@@ -99,6 +102,14 @@ async function resolvePluginCatalog(
 ): Promise<readonly ExternalToolCatalogInput[]> {
   if (!value) return [];
   return typeof value === "function" ? await value() : value;
+}
+
+async function maybeResolvePluginCatalog(input: {
+  pluginCatalog: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>) | undefined;
+  provider?: ToolCatalogProvider;
+}): Promise<readonly ExternalToolCatalogInput[]> {
+  if (input.provider && input.provider !== "plugin") return [];
+  return await resolvePluginCatalog(input.pluginCatalog);
 }
 
 async function maybeBuildMcpToolCatalog(input: {

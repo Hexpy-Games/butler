@@ -9308,6 +9308,8 @@ function normalizeProgressSummaryRow(
   if (inputLabel) row.safe_input_label = inputLabel;
   const toolCallId = safeOptionalShortToken(input.tool_call_id);
   if (toolCallId) row.tool_call_id = toolCallId;
+  const bridgePhase = safeOptionalShortToken(input.bridge_phase);
+  if (bridgePhase) row.bridge_phase = bridgePhase;
   const workBlockId = safeOptionalShortToken(input.work_block_id);
   if (workBlockId) row.work_block_id = workBlockId;
   const workBlockLabel = safeOptionalShortText(input.work_block_label);
@@ -9605,6 +9607,8 @@ function mergeProgressRow(
       incoming.safe_path_labels,
     tool_call_id:
       base.tool_call_id ?? current.tool_call_id ?? incoming.tool_call_id,
+    bridge_phase:
+      base.bridge_phase ?? current.bridge_phase ?? incoming.bridge_phase,
     work_block_id:
       base.work_block_id ?? current.work_block_id ?? incoming.work_block_id,
     work_block_label:

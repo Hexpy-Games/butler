@@ -1226,10 +1226,31 @@ function beforeAttributedModelRequest(input: {
   attribution?: PromptUsageAttribution;
   roundIndex: number;
 }): void {
+  const budget = input.attribution?.getBudgetState?.() ?? input.attribution?.budgetState;
+  if (budget && (
+    budget.status === "exhausted" ||
+    budget.requestCount >= budget.maxRequests
+  )) {
+    throw new Error("Prompt usage model-call budget exhausted before provider request");
+  }
   input.attribution?.beforeModelRequest?.({
     roundIndex: input.roundIndex,
     phase: input.attribution.phase,
   });
+}
+
+function modelIterationLimitWithinUsageBudget(
+  requestedRounds: number,
+  attribution?: PromptUsageAttribution,
+): number {
+  const requested = Math.max(1, Math.min(requestedRounds, MAX_TOOL_ROUNDS));
+  const budget = attribution?.getBudgetState?.() ?? attribution?.budgetState;
+  if (!budget || !Number.isFinite(budget.requestCount) || !Number.isFinite(budget.maxRequests)) {
+    return requested;
+  }
+  const remainingRequests = Math.max(0, budget.maxRequests - budget.requestCount);
+  if (remainingRequests <= 1) return 1;
+  return Math.max(1, Math.min(requested, remainingRequests - 1));
 }
 
 function afterAttributedModelResponse(input: {
@@ -2664,7 +2685,10 @@ async function runLocalPromptText(options: PromptOptions): Promise<string> {
 async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions): Promise<string> {
   const config = resolveLocalModelConfig(options.model);
   const log = options.log ?? (() => {});
-  const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
+  const maxRounds = modelIterationLimitWithinUsageBudget(
+    options.maxToolRounds ?? 8,
+    options.usageAttribution,
+  );
   const messages: LocalChatMessage[] = [{ role: "system", content: localFunctionToolInstructions(options.instructions) }];
   messages.push({ role: "user", content: localUserContentWithAttachments(options.prompt, options.attachments) });
   let executedToolCalls = 0;
@@ -3109,7 +3133,10 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
   options: FunctionToolPromptOptions,
 ): Promise<string> {
   const log = options.log ?? (() => {});
-  const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
+  const maxRounds = modelIterationLimitWithinUsageBudget(
+    options.maxToolRounds ?? 8,
+    options.usageAttribution,
+  );
   const messages: HostedChatMessage[] = [];
   if (options.instructions?.trim()) {
     messages.push({ role: "system", content: options.instructions.trim() });
@@ -3299,7 +3326,10 @@ async function runAnthropicFunctionToolPromptText(
 ): Promise<string> {
   const log = options.log ?? (() => {});
   const allowedNames = new Set(options.tools.map((tool) => tool.name));
-  const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
+  const maxRounds = modelIterationLimitWithinUsageBudget(
+    options.maxToolRounds ?? 8,
+    options.usageAttribution,
+  );
   const messages: Array<Record<string, unknown>> = [
     { role: "user", content: promptTextForHosted(options) },
   ];
@@ -3473,7 +3503,10 @@ async function runGeminiFunctionToolPromptText(
 ): Promise<string> {
   const log = options.log ?? (() => {});
   const allowedNames = new Set(options.tools.map((tool) => tool.name));
-  const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
+  const maxRounds = modelIterationLimitWithinUsageBudget(
+    options.maxToolRounds ?? 8,
+    options.usageAttribution,
+  );
   const contents: Array<Record<string, unknown>> = [
     { role: "user", parts: [{ text: promptTextForHosted(options) }] },
   ];
@@ -3807,7 +3840,10 @@ async function runOpenAIFunctionToolPromptText(
   const reasoning = buildReasoningConfig(resolution);
   const log = options.log ?? (() => {});
   const promptCache = resolveOpenAIPromptCacheConfig(options.cacheScope ?? "function-tool-prompt");
-  const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
+  const maxRounds = modelIterationLimitWithinUsageBudget(
+    options.maxToolRounds ?? 8,
+    options.usageAttribution,
+  );
   let previousResponseId: string | null = null;
   let sentToolMessages = 0;
   const initialPromptInput = openAIInputWithAttachments(options.prompt, options.attachments);

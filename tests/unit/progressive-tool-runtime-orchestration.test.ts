@@ -69,6 +69,11 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
   const events: RuntimeTurnEventInput[] = [];
   const observedToolResults: Record<string, unknown> = {};
   let initialToolNames: string[] = [];
+  let initialToolSchemaJson = "";
+  let grantedToolRounds: number | undefined;
+  let budgetAtPromptStart: { status: string; requestCount: number; maxRequests: number } | undefined;
+  let budgetAfterModelRequest: { status: string; requestCount: number; maxRequests: number } | undefined;
+  let budgetAfterBridgeCalls: { status: string; requestCount: number; maxRequests: number } | undefined;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     butlerHome: tempDir,
@@ -76,6 +81,11 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
     webSearchProvider: fakeWebSearchProvider,
     runFunctionToolPromptText: async (input) => {
       initialToolNames = input.tools.map((tool) => tool.name);
+      initialToolSchemaJson = JSON.stringify(input.tools);
+      grantedToolRounds = input.maxToolRounds;
+      budgetAtPromptStart = input.usageAttribution?.getBudgetState?.();
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      budgetAfterModelRequest = input.usageAttribution?.getBudgetState?.();
       observedToolResults.search = await input.executeTool({
         name: "tool_search",
         args: { provider: "native", query: "web search", limit: 5 },
@@ -104,6 +114,7 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
           arguments: { id: "native:web_search", arguments: { query: "butler release" } },
         }),
       });
+      budgetAfterBridgeCalls = input.usageAttribution?.getBudgetState?.();
       return "웹 검색 도구를 같은 턴에서 찾아 설명하고 호출했습니다.";
     },
   });
@@ -127,6 +138,12 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
 
   expect(initialToolNames).toEqual(expect.arrayContaining(["tool_search", "tool_describe", "tool_call"]));
   expect(initialToolNames).not.toContain("web_search");
+  expect(initialToolSchemaJson).not.toContain("\"web_search\"");
+  expect(initialToolSchemaJson).not.toContain("Fixture source");
+  expect(grantedToolRounds).toBe(60);
+  expect(budgetAtPromptStart).toMatchObject({ status: "ok", requestCount: 0, maxRequests: 32 });
+  expect(budgetAfterModelRequest).toMatchObject({ status: "ok", requestCount: 1, maxRequests: 32 });
+  expect(budgetAfterBridgeCalls).toMatchObject({ status: "ok", requestCount: 1, maxRequests: 32 });
   expect(observedToolResults.search).toEqual(expect.objectContaining({
     ok: true,
     results: expect.arrayContaining([expect.objectContaining({ id: "native:web_search" })]),
@@ -169,6 +186,23 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
       event.payload.name === "tool_call" &&
       bridgeAudit?.error?.code === "disabled_tool";
   })).toBe(true);
+  expect(transcript.some((event) =>
+    event.kind === "tool_call" &&
+    event.payload.name === "tool_call" &&
+    event.metadata?.tool_surface_transition === "invoke",
+  )).toBe(true);
+  expect(transcript.some((event) =>
+    event.kind === "tool_result" &&
+    event.payload.name === "tool_call" &&
+    event.payload.ok === true &&
+    event.metadata?.tool_surface_transition === "invoked",
+  )).toBe(true);
+  expect(transcript.some((event) =>
+    event.kind === "tool_result" &&
+    event.payload.name === "tool_call" &&
+    event.payload.ok === false &&
+    event.metadata?.tool_surface_transition === "denied",
+  )).toBe(true);
 
   const startedIds = events
     .filter((event) => event.kind === "tool.started")
@@ -180,12 +214,27 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
     .filter((id): id is string => typeof id === "string" && id.length > 0));
   expect(startedIds.length).toBeGreaterThanOrEqual(3);
   expect(startedIds.every((id) => completedIds.has(id))).toBe(true);
+  expect(events.findIndex((event) => event.kind === "tool.started")).toBeGreaterThanOrEqual(0);
+  expect(events.findIndex((event) => event.kind === "tool.started")).toBeLessThan(
+    events.findIndex((event) => event.kind === "message.final.started"),
+  );
+  const bridgeStarts = events.filter((event) =>
+    event.kind === "tool.started" && event.payload?.toolName === "Tool Call",
+  );
+  const bridgeFinishes = events.filter((event) =>
+    (event.kind === "tool.completed" || event.kind === "tool.failed") &&
+    event.payload?.toolName === "Tool Call",
+  );
+  expect(bridgeStarts.length).toBeGreaterThanOrEqual(3);
+  expect(bridgeFinishes.length).toBe(bridgeStarts.length);
 });
 
 test("native runtime exposes promoted dynamic schemas only for capable providers", async () => {
   let initialToolNames: string[] = [];
   let toolsBeforeDescribe: string[] = [];
   let toolsAfterDescribe: string[] = [];
+  let initialDynamicToolSchemaJson = "";
+  let promotedDynamicToolSchemaJson = "";
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     butlerHome: tempDir,
@@ -193,7 +242,9 @@ test("native runtime exposes promoted dynamic schemas only for capable providers
     webSearchProvider: fakeWebSearchProvider,
     runFunctionToolPromptText: async (input) => {
       initialToolNames = input.tools.map((tool) => tool.name);
-      toolsBeforeDescribe = input.dynamicTools?.().map((tool) => tool.name) ?? [];
+      const dynamicBeforeDescribe = input.dynamicTools?.() ?? [];
+      toolsBeforeDescribe = dynamicBeforeDescribe.map((tool) => tool.name);
+      initialDynamicToolSchemaJson = JSON.stringify(dynamicBeforeDescribe);
       await input.executeTool({
         name: "tool_search",
         args: { provider: "native", query: "web search", limit: 5 },
@@ -204,7 +255,9 @@ test("native runtime exposes promoted dynamic schemas only for capable providers
         args: { ids: ["native:web_search"] },
         rawArguments: JSON.stringify({ ids: ["native:web_search"] }),
       });
-      toolsAfterDescribe = input.dynamicTools?.().map((tool) => tool.name) ?? [];
+      const dynamicAfterDescribe = input.dynamicTools?.() ?? [];
+      toolsAfterDescribe = dynamicAfterDescribe.map((tool) => tool.name);
+      promotedDynamicToolSchemaJson = JSON.stringify(dynamicAfterDescribe);
       const result = await input.executeTool({
         name: "web_search",
         args: { query: "butler release", max_results: 1 },
@@ -232,7 +285,10 @@ test("native runtime exposes promoted dynamic schemas only for capable providers
   expect(initialToolNames).toEqual(expect.arrayContaining(["tool_search", "tool_describe", "tool_call"]));
   expect(initialToolNames).not.toContain("web_search");
   expect(toolsBeforeDescribe).not.toContain("web_search");
+  expect(initialDynamicToolSchemaJson).not.toContain("\"web_search\"");
+  expect(initialDynamicToolSchemaJson).not.toContain("Fixture source");
   expect(toolsAfterDescribe).toEqual(expect.arrayContaining(["tool_search", "tool_describe", "tool_call", "web_search"]));
+  expect(promotedDynamicToolSchemaJson).toContain("\"web_search\"");
 
   const transcript = readTranscript("butler/main/progressive-promotion");
   expect(transcript.some((event) => event.kind === "tool_call" && event.payload.name === "web_search")).toBe(true);
