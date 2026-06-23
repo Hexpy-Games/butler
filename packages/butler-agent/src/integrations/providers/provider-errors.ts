@@ -1,3 +1,5 @@
+import { safeOperationalRuntimeFailure } from "./operational-errors.ts";
+
 export interface RuntimeFailureDiagnostic {
   code: string;
   message: string;
@@ -131,6 +133,7 @@ export function providerEmptyResponseError(input: {
 export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
   if (error instanceof ModelProviderRequestError) return error.diagnostic();
   const message = errorMessage(error);
+  const code = errorCode(error);
   if (isGoalCompletionIncompleteError(error)) {
     return {
       code: "internal_recovery_required",
@@ -139,6 +142,8 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
       cause: safeErrorText(message),
     };
   }
+  const operationalFailure = safeOperationalRuntimeFailure({ code, message });
+  if (operationalFailure) return operationalFailure;
   const status = statusCodeFromMessage(message);
   if (/Local model API returned no (?:visible )?(?:final )?(?:text output|answer envelope)/iu.test(message)) {
     return providerEmptyResponseError({
@@ -170,7 +175,7 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
     }).diagnostic();
   }
   if (
-    /Unable to connect|fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED|network|connection termination|disconnect\/reset/iu
+    /Unable to connect|fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED|network|connection termination|connection reset|remote connection reset|disconnect\/reset/iu
       .test(message)
   ) {
     return providerNetworkError({
@@ -242,6 +247,12 @@ function isContextLimitDetail(detail: string | undefined): boolean {
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return typeof error === "string" ? error : "Unknown runtime error";
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const code = (error as Record<string, unknown>).code;
+  return typeof code === "string" ? code : undefined;
 }
 
 function isGoalCompletionIncompleteError(error: unknown): error is Error {

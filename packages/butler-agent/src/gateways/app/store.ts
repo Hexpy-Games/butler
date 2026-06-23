@@ -200,6 +200,7 @@ import {
   type AgentTurnEvent,
   type RuntimeTurnEventInput,
 } from "../../agent/events/turn-events.ts";
+import { isRuntimeCancellationFailure } from "../../agent/turn/runtime-cancellation.ts";
 import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import type { SessionTransportBinding } from "../../test-support/harness/contracts.ts";
@@ -10322,15 +10323,5 @@ function timestampBefore(candidate: string, reference: string): boolean {
 function isResponderCancelError(error: unknown): boolean {
   if (error instanceof AppResponderCancelledError) return true;
   if (!error || typeof error !== "object") return false;
-  const candidate = error as {
-    name?: unknown;
-    code?: unknown;
-    message?: unknown;
-  };
-  return (
-    candidate.name === "AbortError" ||
-    candidate.code === "ABORT_ERR" ||
-    candidate.code === "turn_cancelled" ||
-    candidate.message === "Butler turn was cancelled."
-  );
+  return isRuntimeCancellationFailure(error);
 }

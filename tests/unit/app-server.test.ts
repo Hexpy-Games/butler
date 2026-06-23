@@ -8273,6 +8273,54 @@ test("provider failures persist actionable safe API status", async () => {
   }
 });
 
+test("raw provider aborts remain failed app turns instead of cancellation", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder() {
+      const error = new Error("Provider request aborted by remote connection reset.");
+      error.name = "AbortError";
+      (error as Error & { code?: string }).code = "ABORT_ERR";
+      throw error;
+    },
+  });
+  try {
+    const failedResponse = await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: "general",
+        text: "please keep provider abort visible",
+      }),
+    });
+    expect(failedResponse.status).toBe(500);
+
+    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
+    expect(turns.data.turns[0]).toMatchObject({
+      state: "failed",
+      safe_error_code: "provider_network_error",
+      retryable: true,
+      cancellable: false,
+    });
+
+    const messages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    const assistant = messages.data.messages.find(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistant).toMatchObject({
+      status: "failed",
+      safe_error_code: "provider_network_error",
+      retryable: true,
+    });
+    expect(messages.data.messages.map((message: { status: string }) => message.status))
+      .toEqual(["sent", "failed"]);
+  } finally {
+    server.stop();
+  }
+});
+
 test("goal completion incomplete gaps deliver safe limitation text instead of app failures", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),

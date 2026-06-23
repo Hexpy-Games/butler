@@ -1,3 +1,6 @@
+import { isRuntimeCancellationFailure } from "./runtime-cancellation.ts";
+import { isOperationalFailure, operationalSafeErrorCode } from "./operational-failure.ts";
+
 export type RuntimeDeliveryState =
   | "running"
   | "recovering_internal"
@@ -123,18 +126,25 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
       limitationCodes: [safeCode(failure.code ?? "internal_recovery_required")],
     });
   }
+  if (isOperationalFailure(failure)) {
+    return systemFailureDeliveryState(failure);
+  }
   if (isUserActionBlocker(failure)) {
     return waitingUserDeliveryState({
       safeErrorCode: safeCode(failure.code ?? "user_action_required"),
       limitations: [safeLimitationText(failure.message, "User action is required before Butler can continue.")],
     });
   }
+  return systemFailureDeliveryState(failure);
+}
+
+function systemFailureDeliveryState(failure: RuntimeDeliveryFailureInput): RuntimeDeliveryClassification {
   return classification({
     deliveryState: "failed_system",
     terminal: true,
     issueKind: "system_failure",
     visibility: "failure_notice",
-    safeErrorCode: safeCode(failure.code ?? "gateway_failed"),
+    safeErrorCode: safeCode(operationalSafeErrorCode(failure)),
   });
 }
 
@@ -170,9 +180,17 @@ function classification(input: {
 
 function normalizeFailureInput(input: RuntimeDeliveryFailureInput | unknown): RuntimeDeliveryFailureInput {
   if (input instanceof Error) {
+    const record = input as Error & {
+      code?: unknown;
+      statusCode?: unknown;
+      retryable?: unknown;
+    };
     return {
+      code: typeof record.code === "string" ? record.code : undefined,
       name: input.name,
       message: input.message,
+      statusCode: typeof record.statusCode === "number" ? record.statusCode : undefined,
+      retryable: typeof record.retryable === "boolean" ? record.retryable : undefined,
     };
   }
   if (input && typeof input === "object") {
@@ -191,12 +209,7 @@ function normalizeFailureInput(input: RuntimeDeliveryFailureInput | unknown): Ru
 }
 
 function isCancelFailure(failure: RuntimeDeliveryFailureInput): boolean {
-  return (
-    failure.name === "AbortError" ||
-    failure.code === "turn_cancelled" ||
-    failure.code === "ABORT_ERR" ||
-    /cancelled|canceled|aborted/iu.test(failure.message ?? "")
-  );
+  return isRuntimeCancellationFailure(failure);
 }
 
 function isInternalRecoveryFailure(failure: RuntimeDeliveryFailureInput): boolean {
