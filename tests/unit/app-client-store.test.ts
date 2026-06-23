@@ -11,6 +11,7 @@ import {
   activeTurnProgressSnapshot,
   applyTimelineEvents,
   freezeMessageWorkBlocks,
+  mergeTurnProgressFromSummary,
 } from "../../packages/butler-app/client/ui/src/app/utils.ts";
 import {
   editablePersonaText,
@@ -2283,6 +2284,59 @@ test("setTurnProgress ignores structurally identical snapshots", () => {
   expect(useButlerStore.getState().turnProgress["turn-a"]).toBe(snapshot);
 });
 
+test("setTurnProgress updates delivered limitation metadata", () => {
+  const snapshot: TurnProgressSnapshot = {
+    turn_id: "turn-limited",
+    state: "delivered",
+    safe_progress_rows: [],
+  };
+  useButlerStore.setState({ turnProgress: { "turn-limited": snapshot } });
+
+  useButlerStore.getState().setTurnProgress({
+    "turn-limited": {
+      ...snapshot,
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["source_verified_missing"],
+      limitations: ["Source verification remained unavailable."],
+    },
+  });
+
+  expect(useButlerStore.getState().turnProgress["turn-limited"]).toMatchObject({
+    delivery_state: "delivered_with_limitations",
+    limitation_codes: ["source_verified_missing"],
+    limitations: ["Source verification remained unavailable."],
+  });
+});
+
+test("summary progress merge updates delivered limitation metadata", () => {
+  const snapshot: TurnProgressSnapshot = {
+    turn_id: "turn-limited",
+    state: "delivered",
+    safe_progress_rows: [],
+  };
+
+  const merged = mergeTurnProgressFromSummary(
+    { "turn-limited": snapshot },
+    {
+      session_id: "session-limited",
+      turn_state: "delivered",
+      latest_progress: {
+        ...snapshot,
+        delivery_state: "delivered_with_limitations",
+        limitation_codes: ["source_verified_missing"],
+        limitations: ["Source verification remained unavailable."],
+      },
+    } as SessionSummaryView,
+  );
+
+  expect(merged["turn-limited"]).toMatchObject({
+    delivery_state: "delivered_with_limitations",
+    limitation_codes: ["source_verified_missing"],
+    limitations: ["Source verification remained unavailable."],
+  });
+  expect(merged["turn-limited"]).not.toBe(snapshot);
+});
+
 test("completed message work blocks stay frozen across identical progress writes", () => {
   const snapshot: TurnProgressSnapshot = {
     turn_id: "turn-a",
@@ -3049,6 +3103,112 @@ test("sendMessage reloads messages when app transport returns no immediate reply
     useButlerStore.getState().messages.map((message) => message.role),
   ).toEqual(["user", "assistant"]);
   expect(useButlerStore.getState().messages.at(-1)?.text).toBe("visible final");
+});
+
+test("session-view stores delivered_with_limitations as delivered content metadata", () => {
+  const assistant = {
+    ...messageRecord(
+      "assistant-limited",
+      "session-limited",
+      "assistant",
+      "Visible final with a limitation.",
+      2,
+      "turn-limited",
+    ),
+    delivery_state: "delivered_with_limitations" as const,
+    limitation_codes: ["source_verified_missing"],
+    limitations: ["Source verification remained unavailable."],
+  };
+  const view = sessionView("session-limited", {
+    messages: [
+      messageRecord(
+        "user-limited",
+        "session-limited",
+        "user",
+        "finish the task",
+        1,
+        "turn-limited",
+      ),
+      assistant,
+    ],
+    turnState: "delivered",
+    latestProgress: {
+      turn_id: "turn-limited",
+      state: "delivered",
+      safe_progress_rows: [],
+    },
+  });
+  view.latest_turn = view.latest_turn
+    ? {
+        ...view.latest_turn,
+        safe_status_label: "Delivered with limitations",
+        delivery_state: "delivered_with_limitations",
+        limitation_codes: ["source_verified_missing"],
+        limitations: ["Source verification remained unavailable."],
+      }
+    : null;
+
+  useButlerStore.setState({
+    activeChatId: "session-limited",
+    messages: [],
+    sessionView: null,
+    summary: null,
+  });
+  useButlerStore.getState().setSessionView(view);
+
+  const state = useButlerStore.getState();
+  expect(state.messages.at(-1)).toMatchObject({
+    role: "assistant",
+    status: "delivered",
+    delivery_state: "delivered_with_limitations",
+    limitation_codes: ["source_verified_missing"],
+    limitations: ["Source verification remained unavailable."],
+  });
+  expect(state.summary?.turn_state).toBe("delivered");
+  expect(state.summary?.latest_progress?.state).toBe("delivered");
+  expect(state.summary?.latest_progress?.safe_progress_rows).toEqual([]);
+});
+
+test("session-view hydration updates existing message limitation metadata", () => {
+  const plainAssistant = messageRecord(
+    "assistant-limited",
+    "session-limited",
+    "assistant",
+    "Visible final with a limitation.",
+    2,
+    "turn-limited",
+  );
+  const limitedAssistant: MessageRecord = {
+    ...plainAssistant,
+    delivery_state: "delivered_with_limitations",
+    limitation_codes: ["source_verified_missing"],
+    limitations: ["Source verification remained unavailable."],
+  };
+
+  useButlerStore.setState({
+    activeChatId: "session-limited",
+    messages: [plainAssistant],
+    sessionView: null,
+    summary: null,
+  });
+  useButlerStore.getState().setSessionView(
+    sessionView("session-limited", {
+      messages: [limitedAssistant],
+      turnState: "delivered",
+      latestProgress: {
+        turn_id: "turn-limited",
+        state: "delivered",
+        safe_progress_rows: [],
+      },
+    }),
+  );
+
+  expect(useButlerStore.getState().messages[0]).toMatchObject({
+    delivery_state: "delivered_with_limitations",
+    limitation_codes: ["source_verified_missing"],
+    limitations: ["Source verification remained unavailable."],
+  });
+  expect(useButlerStore.getState().messages[0]).not.toBe(plainAssistant);
 });
 
 function jsonResponse<T>(data: T): Response {

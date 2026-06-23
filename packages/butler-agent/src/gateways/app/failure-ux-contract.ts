@@ -10,6 +10,8 @@ export interface AppResponderSafeError {
   message: string;
 }
 
+export type AppLimitedDelivery = RecoverableLimitedDelivery;
+
 export function appLimitedDeliveryForError(error: unknown): RecoverableLimitedDelivery | null {
   return recoverableLimitedDeliveryForError(error);
 }

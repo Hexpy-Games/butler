@@ -1753,6 +1753,9 @@ function messageRecordEqual(
     left.role === right.role &&
     left.text === right.text &&
     left.status === right.status &&
+    left.delivery_state === right.delivery_state &&
+    stringArrayEqual(left.limitation_codes ?? [], right.limitation_codes ?? []) &&
+    stringArrayEqual(left.limitations ?? [], right.limitations ?? []) &&
     left.retryable === right.retryable &&
     left.cursor === right.cursor &&
     left.created_at === right.created_at &&
@@ -1784,6 +1787,9 @@ function turnProgressSnapshotEqual(
     left.summary === right.summary &&
     left.updated_at === right.updated_at &&
     left.state === right.state &&
+    left.delivery_state === right.delivery_state &&
+    stringArrayEqual(left.limitation_codes ?? [], right.limitation_codes ?? []) &&
+    stringArrayEqual(left.limitations ?? [], right.limitations ?? []) &&
     progressRowArrayEqual(
       left.safe_progress_rows ?? [],
       right.safe_progress_rows ?? [],
@@ -1795,6 +1801,13 @@ function progressRowArrayReferencesEqual(
   left: ProgressRow[],
   right: ProgressRow[],
 ): boolean {
+  return (
+    left.length === right.length &&
+    left.every((item, index) => item === right[index])
+  );
+}
+
+function stringArrayEqual(left: string[], right: string[]): boolean {
   return (
     left.length === right.length &&
     left.every((item, index) => item === right[index])

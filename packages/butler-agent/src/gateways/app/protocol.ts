@@ -33,7 +33,6 @@ export type TurnState =
   | "delivered"
   | "failed"
   | "retrying";
-
 export interface ApiEnvelope<T> {
   protocol_version: typeof APP_PROTOCOL_VERSION;
   data: T;
@@ -1085,6 +1084,9 @@ export interface TurnProgressSnapshotView {
   updated_at?: string;
   turn_id?: string;
   state?: TurnState | "idle";
+  delivery_state?: SessionViewTurnDeliveryState;
+  limitations?: string[];
+  limitation_codes?: string[];
   safe_progress_rows: ProgressSummaryRow[];
 }
 
@@ -1098,6 +1100,9 @@ export type SessionViewStatus =
 export interface SessionViewTurn {
   id: string;
   state: TurnState;
+  delivery_state: SessionViewTurnDeliveryState;
+  limitations: string[];
+  limitation_codes: string[];
   safe_status_label: string;
   cancellable: boolean;
   retryable: boolean;
@@ -1105,6 +1110,19 @@ export interface SessionViewTurn {
   created_at: string;
   updated_at: string;
 }
+
+export type SessionViewTurnDeliveryState =
+  | "running"
+  | "recovering_internal"
+  | "needs_tool_surface"
+  | "needs_evidence"
+  | "needs_argument_repair"
+  | "waiting_user"
+  | "system_error"
+  | "cancelled"
+  | "delivered"
+  | "delivered_with_limitations"
+  | "failed_system";
 
 export interface SessionViewMessageWindow {
   next_cursor: number;
@@ -1334,6 +1352,9 @@ export interface MessageRecord {
   created_at: string;
   updated_at: string;
   safe_error_code?: string;
+  delivery_state?: SessionViewTurnDeliveryState;
+  limitation_codes?: string[];
+  limitations?: string[];
   retryable: boolean;
   cursor: number;
   attachments?: MessageFileRef[];

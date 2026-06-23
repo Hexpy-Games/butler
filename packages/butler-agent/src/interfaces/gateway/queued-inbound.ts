@@ -127,6 +127,7 @@ function failureActionForOriginalInbound(input: {
 function limitedDeliveryActionForOriginalInbound(input: {
   item: ClaimedInboundEvent;
   text: string;
+  delivery: NonNullable<ReturnType<typeof recoverableLimitedDeliveryForError>>["delivery"];
 }): OutboundAction | null {
   const turnId = input.item.envelope.routingHints?.turnId?.trim();
   const sessionId = input.item.envelope.routingHints?.sessionId?.trim();
@@ -147,7 +148,9 @@ function limitedDeliveryActionForOriginalInbound(input: {
       originalTransport: input.item.envelope.transport,
       sessionId,
       turnId,
-      deliveryState: "delivered_with_limitations",
+      deliveryState: input.delivery.delivery_state,
+      limitationCodes: input.delivery.limitation_codes,
+      limitations: input.delivery.limitations,
     },
   };
 }
@@ -402,6 +405,7 @@ async function processClaimedQueuedInboundItem(input: {
       const action = limitedDeliveryActionForOriginalInbound({
         item,
         text: limitedDelivery.text,
+        delivery: limitedDelivery.delivery,
       });
       if (action) {
         const delivery = await deliverAction(sessionId, action, {
