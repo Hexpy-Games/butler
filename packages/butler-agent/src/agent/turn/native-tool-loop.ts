@@ -24,7 +24,6 @@ import {
   runFunctionToolPromptText,
   runPromptText,
   type FunctionToolPromptOptions,
-  type FunctionToolDefinition,
   type PromptUsageAttribution,
   type PromptUsageBudgetState,
   type PromptUsageSectionAttribution,
@@ -36,8 +35,18 @@ import {
   satisfiedCompletionObligationsForToolResult,
 } from "../tools/butler-tools.ts";
 import {
-  selectInitialToolsFromSurfaceController,
-} from "../tools/tool-surface-selection.ts";
+  DIRECT_TOOL_CHAIN_MAX_ROUNDS,
+  RepeatedToolFamilyGuard,
+  directToolRoundLimit,
+} from "./tool-loop-guards.ts";
+import {
+  createAuditedBridgeToolExecutor,
+  type BridgedToolCallAuditContext,
+  withBridgeInvocationForAudit,
+} from "./bridge-tool-executor.ts";
+import {
+  ToolSurfacePromptController,
+} from "./tool-surface-prompt-controller.ts";
 import {
   bridgeToolAuditEvent,
   redactedBridgeToolAuditArgs,
@@ -160,7 +169,6 @@ export interface NativeToolLoopRuntimeOptions {
 
 // Keep automatic recall within the same latency envelope as vector.ts' default search budget.
 const AUTOMATIC_RECALL_VECTOR_TIMEOUT_MS = 1_500;
-const DIRECT_TOOL_CHAIN_MAX_ROUNDS = 60;
 const GOAL_COMPLETION_REVIEW_SKIP_TOOLS = new Set([
   "dispatch_worker",
   "resume_worker",
@@ -205,7 +213,6 @@ const DIRECT_TURN_OUTPUT_TOKEN_BUDGET = 80_000;
 const DIRECT_TURN_TOTAL_TOKEN_BUDGET = 300_000;
 const DIRECT_TURN_BUDGET_WARNING_RATIO = 0.8;
 const COMPACT_RECENT_CONVERSATION_TOKEN_BUDGET = 2_000;
-const REPEATED_TOOL_FAMILY_LIMIT = 3;
 
 interface StoredSessionConfig {
   init: RuntimeSessionInit;
@@ -320,10 +327,6 @@ function directTurnBudgetState(budget: DirectTurnBudget): PromptUsageBudgetState
   };
 }
 
-function directToolRoundLimit(requestedRounds: number): number {
-  return Math.max(1, Math.min(requestedRounds, DIRECT_TOOL_CHAIN_MAX_ROUNDS));
-}
-
 function beforeDirectTurnModelRequest(budget: DirectTurnBudget): void {
   budget.modelRequestsUsed += 1;
 }
@@ -378,72 +381,6 @@ export function recentConversationBudgetForTurn(input: {
     return Math.min(input.configuredBudget, COMPACT_RECENT_CONVERSATION_TOKEN_BUDGET);
   }
   return input.configuredBudget;
-}
-
-function repeatedToolFamilyKey(name: string, args: Record<string, unknown>): string | null {
-  if (name === "inspect_project_status") return "project-ledger:status";
-  if (name === "query_project_work") {
-    const kind = typeof args.kind === "string" && args.kind.trim() ? args.kind.trim() : "query";
-    return `project-ledger:query:${kind}`;
-  }
-  if (name === "render_project_dashboard") {
-    const view = typeof args.view === "string" && args.view.trim() ? args.view.trim() : "dashboard";
-    return `project-ledger:render:${view}`;
-  }
-  if (name !== "run_command") return null;
-  const command = typeof args.command === "string" ? args.command.trim() : "";
-  if (!command) return null;
-  if (/\bproject-ledger\s+status\b/u.test(command)) return "project-ledger:status";
-  if (/\bproject-ledger\s+check\b/u.test(command)) return "project-ledger:check";
-  const ledgerQuery = command.match(/\bproject-ledger\s+query\b[\s\S]*?\s--kind\s+([A-Za-z0-9._-]+)/u)?.[1];
-  if (ledgerQuery) return `project-ledger:query:${ledgerQuery}`;
-  if (/^bun\s+test\b/u.test(command)) return "command:test";
-  if (/^bun\s+run\s+typecheck\b/u.test(command)) return "command:typecheck";
-  if (/^bun\s+run\s+check\b/u.test(command)) return "command:check";
-  if (/^git\s+status\b/u.test(command)) return "command:git-status";
-  if (/^git\s+diff\b/u.test(command)) return "command:git-diff";
-  return null;
-}
-
-function isStateMutatingToolCall(name: string, args: Record<string, unknown>): boolean {
-  if (name !== "run_command") {
-    return ![
-      "inspect_project_status",
-      "query_project_work",
-      "render_project_dashboard",
-      "web_search",
-      "web_read",
-      "read_tool_output_artifact",
-      "list_todo_list",
-    ].includes(name);
-  }
-  const command = typeof args.command === "string" ? args.command.trim() : "";
-  if (!command) return false;
-  if (/\b(?:apply_patch|git\s+(?:add|commit|merge|rebase|cherry-pick|rm|mv|tag)|npm\s+(?:install|update)|bun\s+(?:install|add|remove))\b/u.test(command)) {
-    return true;
-  }
-  if (/\b(?:touch|mkdir|rm|mv|cp)\b/u.test(command)) return true;
-  if (/\b(?:sed|perl)\s+-i\b/u.test(command)) return true;
-  if (/(?:^|[\s;&|])(?:cat|printf|echo)\b[\s\S]*(?:>|>>|\|\s*tee\b)/u.test(command)) return true;
-  if (/(?:^|[\s;&|])project-ledger\s+(?:work|task|attempt)\s+(?:create|update|complete|start|succeed|fail)\b/u.test(command)) return true;
-  if (/(?:^|[\s;&|])project-ledger\s+render\b[\s\S]*\s--write\b/u.test(command)) return true;
-  return false;
-}
-
-function repeatedToolFamilyPolicyResult(input: {
-  family: string;
-  count: number;
-  limit: number;
-}): Record<string, unknown> {
-  return {
-    ok: false,
-    budget_policy: "repeated_tool_family_blocked",
-    repeat_family: input.family,
-    repeat_count: input.count,
-    repeat_limit: input.limit,
-    message:
-      "This turn has already repeated this tool family enough times. Reuse the latest evidence, summarize it, or ask for an explicit continuation instead of re-running the same status/test/git command loop.",
-  };
 }
 
 function throwIfRuntimeTurnAborted(signal?: AbortSignal): void {
@@ -2073,17 +2010,15 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           useTools,
         }),
       });
-      let currentProviderTools: readonly FunctionToolDefinition[] = [];
-      const describedToolIds = new Set<string>();
-      const promotedNativeToolNames = new Set<string>();
-      const providerSupportsSchemaPromotion =
-        input.provider.capabilities.supportsSameTurnToolSchemaPromotion === true;
-      const currentDynamicProviderTools = (): FunctionToolDefinition[] =>
-        providerSupportsSchemaPromotion
-          ? mergeFunctionToolDefinitions(currentProviderTools, promotedNativeToolDefinitions(promotedNativeToolNames))
-          : [...currentProviderTools];
-      const currentProviderToolNames = (): readonly string[] =>
-        currentDynamicProviderTools().map((tool) => tool.name);
+      const toolSurfaceController = new ToolSurfacePromptController({
+        role: session.init.role,
+        sessionMetadata: session.init.metadata,
+        turnMetadata: input.metadata,
+        providerCapabilities: input.provider.capabilities,
+        tools: BUTLER_TOOLS,
+        providerSupportsSchemaPromotion:
+          input.provider.capabilities.supportsSameTurnToolSchemaPromotion === true,
+      });
       const executor = createAuditedButlerToolExecutor({
         sessionId: input.handle.sessionId,
         audit,
@@ -2094,8 +2029,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
         messageLanguage: this.messageLanguage,
         plannedReview,
         semanticProgressSafetyNet,
-        describedToolIds,
-        promotedNativeToolNames,
+        toolSurfaceController,
         executor: this.butlerToolExecutor ?? createButlerToolExecutor({
           butlerHome: this.butlerHome,
           butlerData: this.butlerData,
@@ -2110,8 +2044,8 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           searchPlannerOriginalRequest: userText,
           workerModelRules: workerModelRulesFromMetadata(input.metadata?.workerModelRules ?? session.init.metadata?.workerModelRules),
           turnContext: [prompt, currentAttachmentContext].filter(Boolean).join("\n\n"),
-          currentToolNames: currentProviderToolNames,
-          describedToolIds: () => [...describedToolIds],
+          currentToolNames: () => toolSurfaceController.currentToolNames(),
+          describedToolIds: () => toolSurfaceController.describedToolIdList(),
         }),
       });
       try {
@@ -2138,16 +2072,6 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       ): Promise<string> => {
         throwIfRuntimeTurnAborted(input.signal);
         const grantedToolRounds = directToolRoundLimit(maxToolRounds);
-        const selectedSurface = selectInitialToolsFromSurfaceController({
-          role: session.init.role,
-          sessionMetadata: session.init.metadata,
-          turnMetadata: input.metadata,
-          providerCapabilities: input.provider.capabilities,
-          tools: BUTLER_TOOLS,
-        });
-        const selectedTools = selectedSurface.tools;
-        const previousProviderTools = currentProviderTools;
-        currentProviderTools = selectedTools;
         const usageAttribution: PromptUsageAttribution = {
           turnId,
           phase,
@@ -2163,7 +2087,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
           }),
           promptSections,
         };
-        try {
+        return await toolSurfaceController.runWithSelectedSurface(async (toolSurface) => {
           return await this.toolPromptRunner({
             prompt: promptText,
             model: input.model,
@@ -2171,8 +2095,8 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
             cacheScope: "session-turn",
             signal: input.signal,
             attachments,
-            tools: selectedTools,
-            dynamicTools: providerSupportsSchemaPromotion ? currentDynamicProviderTools : undefined,
+            tools: toolSurface.tools,
+            dynamicTools: toolSurface.dynamicTools,
             maxToolRounds: grantedToolRounds,
             butlerData: this.butlerData,
             usageAttribution,
@@ -2206,9 +2130,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
               });
             },
           });
-        } finally {
-          currentProviderTools = previousProviderTools;
-        }
+        });
       };
       const successfulToolAuditCount = () => audit.filter((entry) => entry.ok).length;
       const runGoalCompletionReviewGate = async (
@@ -2291,12 +2213,7 @@ export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
       if (useTools) {
         const explicitTools = requiredExplicitToolNames(
           [session.init.metadata, input.metadata],
-          selectInitialToolsFromSurfaceController({
-            role: session.init.role,
-            sessionMetadata: session.init.metadata,
-            turnMetadata: input.metadata,
-            tools: BUTLER_TOOLS,
-          }).toolNames,
+          toolSurfaceController.initialToolNames(),
         );
         for (let repairAttempt = 0; repairAttempt < 2; repairAttempt += 1) {
           const missingExplicitTools = explicitTools
@@ -2606,8 +2523,7 @@ function createAuditedButlerToolExecutor(input: {
   messageLanguage: RuntimeMessageLanguage;
   plannedReview: PlannedReviewTurnContext | null;
   semanticProgressSafetyNet: RuntimeSemanticProgressSafetyNet;
-  describedToolIds?: Set<string>;
-  promotedNativeToolNames?: Set<string>;
+  toolSurfaceController?: ToolSurfacePromptController;
   executor: FunctionToolPromptOptions["executeTool"];
 }): FunctionToolPromptOptions["executeTool"] {
   let semanticProgressEstablished = false;
@@ -2661,7 +2577,7 @@ function createAuditedButlerToolExecutor(input: {
     }
     return result;
   };
-  const repeatedToolFamilyCounts = new Map<string, number>();
+  const repeatedToolFamilyGuard = new RepeatedToolFamilyGuard();
   const runInternalProgressTool = async (
     call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
     source: "model" | "runtime",
@@ -2813,203 +2729,10 @@ function createAuditedButlerToolExecutor(input: {
       rawArguments: JSON.stringify(args),
     }, "runtime");
   };
-  type BridgedToolCallAuditContext = {
-    args: Record<string, unknown>;
-    invocation: Record<string, unknown>;
-  };
-  const startBridgeToolCallProgress = async (
-    call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
-  ) => {
-    const startedAt = Date.now();
-    const toolCallId = `tool-${randomUUID().slice(0, 8)}`;
-    const workBlockId = `work-${toolCallId}`;
-    const cleanArgs = { ...call.args };
-    const progress = summarizeToolProgress(call.name, cleanArgs, input.messageLanguage);
-    const workBlockLabel = progress.workBlockLabel || progress.safeLabel;
-    const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
-    await emitTurnEventBestEffort(input.turnInput, {
-      kind: "work.block.started",
-      payload: {
-        workBlockId,
-        label: workBlockLabel,
-        activityKind: progress.kind,
-      },
-    });
-    await emitTurnEventBestEffort(input.turnInput, {
-      kind: "tool.started",
-      payload: {
-        toolCallId,
-        workBlockId,
-        workBlockLabel,
-        bridgePhase: "invoke",
-        activityKind: progress.kind,
-        toolName: progress.toolName,
-        inputLabel: progress.inputLabel,
-        safeLabel: progress.safeLabel,
-        detailRows: progress.detailRows,
-      },
-    });
-    if (inboundEnvelope && input.turnInput.emitIntermediateDelivery) {
-      await emitIntermediateBestEffort(
-        input.turnInput,
-        buildIntermediateAction({
-          envelope: inboundEnvelope,
-          suffix: `${call.name}-${randomUUID().slice(0, 8)}-bridge-progress`,
-          text: "",
-          metadata: {
-            kind: "tool_progress",
-            activityKind: progress.kind,
-            toolCallId,
-            toolName: progress.toolName,
-            safeLabel: progress.safeLabel,
-            inputLabel: progress.inputLabel,
-            bridgePhase: "invoke",
-            workBlockId,
-            workBlockLabel,
-            detailRows: progress.detailRows,
-          },
-        }),
-        {
-          source: "runtime/native-tool-loop.ts#bridge-tool-progress",
-          kind: "tool_progress",
-          tool: call.name,
-        },
-      );
-    }
-    appendTranscriptEvent(createTranscriptEvent({
-      sessionId: input.sessionId,
-      kind: "tool_call",
-      payload: {
-        name: call.name,
-        arguments: evidenceTranscriptToolCallArgumentsProjection(cleanArgs),
-      },
-      metadata: {
-        source: "runtime/native-tool-loop.ts#bridge-tool-progress",
-        tool_surface_transition: "invoke",
-      },
-    }));
-    return async (result: unknown, bridgeAudit: ReturnType<typeof bridgeToolAuditEvent>, ok: boolean) => {
-      await emitTurnEventBestEffort(input.turnInput, {
-        kind: ok ? "tool.completed" : "tool.failed",
-        payload: {
-          toolCallId,
-          workBlockId,
-          workBlockLabel,
-          bridgePhase: ok ? "invoked" : "denied",
-          activityKind: progress.kind,
-          toolName: progress.toolName,
-          inputLabel: progress.inputLabel,
-          safeLabel: progress.safeLabel,
-          detailRows: progress.detailRows,
-          durationMs: Date.now() - startedAt,
-        },
-      });
-      await emitTurnEventBestEffort(input.turnInput, {
-        kind: "work.block.completed",
-        payload: {
-          workBlockId,
-          label: workBlockLabel,
-          status: ok ? "completed" : "failed",
-          durationMs: Date.now() - startedAt,
-        },
-      });
-      appendTranscriptEvent(createTranscriptEvent({
-        sessionId: input.sessionId,
-        kind: "tool_result",
-        payload: {
-          name: call.name,
-          ok,
-          result: evidenceTranscriptToolResultProjection(redactedBridgeToolAuditResult("tool_call", result)),
-        },
-        metadata: {
-          source: "runtime/native-tool-loop.ts#bridge-tool-progress",
-          bridge_audit: bridgeAudit ?? undefined,
-          tool_surface_transition: ok ? "invoked" : "denied",
-        },
-      }));
-    };
-  };
-  const executeAuditedWithBridge = async (
+  const executeAuditedTarget = async (
     call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
     bridgedFrom?: BridgedToolCallAuditContext,
   ): Promise<unknown> => {
-    throwIfRuntimeTurnAborted(input.turnInput.signal);
-    if (call.name === "tool_call" && call.args.__bridge_resolve_only !== true) {
-      const finishBridgeProgress = await startBridgeToolCallProgress(call);
-      try {
-        const resolved = await input.executor({
-          ...call,
-          args: { ...call.args, __bridge_resolve_only: true },
-          rawArguments: JSON.stringify({ ...call.args, __bridge_resolve_only: true }),
-        }) as {
-          ok?: boolean;
-          result?: unknown;
-          targetCall?: Parameters<FunctionToolPromptOptions["executeTool"]>[0];
-          bridgeInvocation?: Record<string, unknown>;
-        };
-        if (resolved.ok !== true || !resolved.targetCall) {
-          const result = resolved.result ?? resolved;
-          const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, result);
-          input.audit.push({
-            name: "tool_call",
-            args: redactedBridgeToolAuditArgs("tool_call", call.args),
-            ok: false,
-            result: redactedBridgeToolAuditResult("tool_call", result),
-            error: bridgeAudit?.error?.code ?? "tool_call_bridge_resolution_failed",
-            bridgeAudit: bridgeAudit ?? undefined,
-          });
-          await finishBridgeProgress(result, bridgeAudit, false);
-          return result;
-        }
-        const auditStartIndex = input.audit.length;
-        const result = await executeAuditedWithBridge(resolved.targetCall, {
-          args: call.args,
-          invocation: resolved.bridgeInvocation ?? {},
-        });
-        const bridgedResult = result && typeof result === "object" && !Array.isArray(result)
-          ? {
-            ...result as Record<string, unknown>,
-            bridge_invocation: resolved.bridgeInvocation,
-          }
-          : {
-            ok: true,
-            result,
-            bridge_invocation: resolved.bridgeInvocation,
-          };
-        const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, bridgedResult);
-        const targetAudit = [...input.audit.slice(auditStartIndex)].reverse()
-          .find((entry) => entry.name === resolved.targetCall?.name);
-        if (targetAudit && bridgeAudit) targetAudit.bridgeAudit = bridgeAudit;
-        input.audit.push({
-          name: "tool_call",
-          args: redactedBridgeToolAuditArgs("tool_call", call.args),
-          ok: true,
-          result: redactedBridgeToolAuditResult("tool_call", bridgedResult),
-          bridgeAudit: bridgeAudit ?? undefined,
-        });
-        await finishBridgeProgress(bridgedResult, bridgeAudit, true);
-        return bridgedResult;
-      } catch (error) {
-        const failureResult = {
-          ok: false,
-          error: {
-            code: "underlying_tool_error",
-            recoverable: false,
-          },
-        };
-        const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, failureResult);
-        input.audit.push({
-          name: "tool_call",
-          args: redactedBridgeToolAuditArgs("tool_call", call.args),
-          ok: false,
-          result: redactedBridgeToolAuditResult("tool_call", failureResult),
-          error: bridgeAudit?.error?.code ?? "tool_call_bridge_exception",
-          bridgeAudit: bridgeAudit ?? undefined,
-        });
-        await finishBridgeProgress(failureResult, bridgeAudit, false);
-        throw error;
-      }
-    }
     const startedAt = Date.now();
     const cleanArgs = { ...call.args };
     const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
@@ -3081,61 +2804,53 @@ function createAuditedButlerToolExecutor(input: {
         };
       }
     }
-    const repeatFamily = repeatedToolFamilyKey(call.name, cleanArgs);
-    if (repeatFamily) {
-      const count = (repeatedToolFamilyCounts.get(repeatFamily) ?? 0) + 1;
-      repeatedToolFamilyCounts.set(repeatFamily, count);
-      if (count > REPEATED_TOOL_FAMILY_LIMIT) {
-        const result = repeatedToolFamilyPolicyResult({
-          family: repeatFamily,
-          count,
-          limit: REPEATED_TOOL_FAMILY_LIMIT,
-        });
-        appendTranscriptEvent(createTranscriptEvent({
-          sessionId: input.sessionId,
-          kind: "tool_call",
-          payload: {
-            name: call.name,
-            arguments: evidenceTranscriptToolCallArgumentsProjection(cleanArgs),
-          },
-          metadata: {
-            source: "runtime/native-tool-loop.ts#repeated-tool-family-guard",
-            repeat_family: repeatFamily,
-          },
-        }));
-        appendTranscriptEvent(createTranscriptEvent({
-          sessionId: input.sessionId,
-          kind: "tool_result",
-          payload: {
-            name: call.name,
-            ok: false,
-            result: evidenceTranscriptToolResultProjection(result),
-          },
-          metadata: {
-            source: "runtime/native-tool-loop.ts#repeated-tool-family-guard",
-            repeat_family: repeatFamily,
-          },
-        }));
-        recordOperationalMetric({
-          category: "runtime",
-          name: "repeated_tool_family_guard",
-          status: "ok",
-          durationMs: Date.now() - startedAt,
-          dimensions: {
-            sessionRole: input.turnInput.handle.role,
-            toolName: call.name,
-            repeatFamily,
-            repeatCount: String(count),
-          },
-        }, { butlerData: input.butlerData });
-        input.audit.push({
+    const repeatDecision = repeatedToolFamilyGuard.record(call.name, cleanArgs);
+    if (repeatDecision?.blocked) {
+      const result = repeatDecision.result;
+      appendTranscriptEvent(createTranscriptEvent({
+        sessionId: input.sessionId,
+        kind: "tool_call",
+        payload: {
           name: call.name,
-          args: cleanArgs,
+          arguments: evidenceTranscriptToolCallArgumentsProjection(cleanArgs),
+        },
+        metadata: {
+          source: "runtime/native-tool-loop.ts#repeated-tool-family-guard",
+          repeat_family: repeatDecision.family,
+        },
+      }));
+      appendTranscriptEvent(createTranscriptEvent({
+        sessionId: input.sessionId,
+        kind: "tool_result",
+        payload: {
+          name: call.name,
           ok: false,
-          error: String(result.message),
-        });
-        return result;
-      }
+          result: evidenceTranscriptToolResultProjection(result),
+        },
+        metadata: {
+          source: "runtime/native-tool-loop.ts#repeated-tool-family-guard",
+          repeat_family: repeatDecision.family,
+        },
+      }));
+      recordOperationalMetric({
+        category: "runtime",
+        name: "repeated_tool_family_guard",
+        status: "ok",
+        durationMs: Date.now() - startedAt,
+        dimensions: {
+          sessionRole: input.turnInput.handle.role,
+          toolName: call.name,
+          repeatFamily: repeatDecision.family,
+          repeatCount: String(repeatDecision.count),
+        },
+      }, { butlerData: input.butlerData });
+      input.audit.push({
+        name: call.name,
+        args: cleanArgs,
+        ok: false,
+        error: String(result.message),
+      });
+      return result;
     }
     const isWorkerStartTool = WORKER_ORCHESTRATION_START_TOOL_SET.has(call.name);
     const effectiveCall = { ...call, args: cleanArgs };
@@ -3265,13 +2980,10 @@ function createAuditedButlerToolExecutor(input: {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       const result = await executeWithTurnFreshnessCache(effectiveCall);
       if (call.name === "tool_describe") {
-        recordDescribedToolIds(input.describedToolIds, result);
-        recordPromotedNativeToolNames(input.promotedNativeToolNames, result);
+        input.toolSurfaceController?.recordToolDescriptionResult(result);
       }
       throwIfRuntimeTurnAborted(input.turnInput.signal);
-      if (isStateMutatingToolCall(call.name, cleanArgs)) {
-        repeatedToolFamilyCounts.clear();
-      }
+      repeatedToolFamilyGuard.resetAfterStateMutation(call.name, cleanArgs);
       recordOperationalMetric({
         category: "tool",
         name: call.name,
@@ -3505,61 +3217,22 @@ function createAuditedButlerToolExecutor(input: {
       });
     }
   };
+  const executeAuditedWithBridge = createAuditedBridgeToolExecutor({
+    sessionId: input.sessionId,
+    audit: input.audit,
+    turnInput: input.turnInput,
+    messageLanguage: input.messageLanguage,
+    executor: input.executor,
+    buildIntermediateAction,
+    emitIntermediateBestEffort,
+    emitTurnEventBestEffort,
+    throwIfAborted: () => throwIfRuntimeTurnAborted(input.turnInput.signal),
+    executeTarget: executeAuditedTarget,
+  });
   const executeAudited: FunctionToolPromptOptions["executeTool"] = async (call) => {
     return await executeAuditedWithBridge(call);
   };
   return executeAudited;
-}
-
-function recordDescribedToolIds(target: Set<string> | undefined, result: unknown): void {
-  if (!target || !isRecord(result) || !Array.isArray(result.descriptions)) return;
-  for (const item of result.descriptions) {
-    if (!isRecord(item) || typeof item.id !== "string") continue;
-    const id = item.id.trim();
-    if (id) target.add(id);
-  }
-}
-
-function recordPromotedNativeToolNames(target: Set<string> | undefined, result: unknown): void {
-  if (!target || !isRecord(result) || !Array.isArray(result.descriptions)) return;
-  for (const item of result.descriptions) {
-    if (!isRecord(item)) continue;
-    const affordance = isRecord(item.call_affordance) ? item.call_affordance : {};
-    const toolName = typeof affordance.tool_name === "string" ? affordance.tool_name.trim() : "";
-    if (affordance.type === "native_tool" && toolName) target.add(toolName);
-  }
-}
-
-function promotedNativeToolDefinitions(toolNames: ReadonlySet<string>): FunctionToolDefinition[] {
-  if (toolNames.size === 0) return [];
-  return BUTLER_TOOLS.filter((tool) => toolNames.has(tool.name));
-}
-
-function mergeFunctionToolDefinitions(
-  baseTools: readonly FunctionToolDefinition[],
-  extraTools: readonly FunctionToolDefinition[],
-): FunctionToolDefinition[] {
-  const merged = new Map<string, FunctionToolDefinition>();
-  for (const tool of baseTools) merged.set(tool.name, tool);
-  for (const tool of extraTools) merged.set(tool.name, tool);
-  return [...merged.values()];
-}
-
-function withBridgeInvocationForAudit(
-  result: unknown,
-  bridgeInvocation: Record<string, unknown>,
-): Record<string, unknown> {
-  if (result && typeof result === "object" && !Array.isArray(result)) {
-    return {
-      ...result as Record<string, unknown>,
-      bridge_invocation: bridgeInvocation,
-    };
-  }
-  return {
-    ok: true,
-    result,
-    bridge_invocation: bridgeInvocation,
-  };
 }
 
 function appendButlerToolInstructions(systemPrompt?: string): string {
