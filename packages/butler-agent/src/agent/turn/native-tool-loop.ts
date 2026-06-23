@@ -1,13 +1,6 @@
 import { randomUUID } from "crypto";
-import { existsSync, statSync } from "fs";
-import { homedir } from "os";
-import { basename, extname, isAbsolute, join, relative, resolve } from "path";
 import type {
   AgentRuntimeAdapter,
-  ArtifactRef,
-  AttachmentRef,
-  InboundEnvelope,
-  OutboundAction,
   RuntimeSessionHandle,
   RuntimeSessionInit,
   RuntimeTurnInput,
@@ -17,16 +10,12 @@ import type {
 import {
   appendTranscriptEvent,
   createTranscriptEvent,
-  readTranscript,
-  type TranscriptEvent,
 } from "../../test-support/harness/transcripts.ts";
 import {
   runFunctionToolPromptText,
   runPromptText,
   type FunctionToolPromptOptions,
   type PromptUsageAttribution,
-  type PromptUsageBudgetState,
-  type PromptUsageSectionAttribution,
 } from "../../integrations/providers/provider.ts";
 import type { WebSearchProvider } from "../../integrations/search/provider.ts";
 import {
@@ -39,6 +28,9 @@ import {
   RepeatedToolFamilyGuard,
   directToolRoundLimit,
 } from "./tool-loop-guards.ts";
+import { completedToolProgressSummary } from "./native-completed-tool-progress.ts";
+import { createProjectLedgerFreshnessCache } from "./native-project-ledger-freshness-cache.ts";
+import { applyPlannedReviewToolPolicy } from "./native-planned-review-tool-policy.ts";
 import {
   createAuditedBridgeToolExecutor,
   type BridgedToolCallAuditContext,
@@ -52,17 +44,76 @@ import {
   appendRoleToolPolicyInstructions,
 } from "./native-tool-instructions.ts";
 import {
+  addDirectTurnUsage,
+  beforeDirectTurnModelRequest,
+  createDirectTurnBudget,
+  directTurnBudgetState,
+  promptUsageSectionsFromPrompt,
+  recentConversationBudgetForTurn,
+} from "./direct-turn-budget.ts";
+import {
+  activeDirectWorkProgressSnapshot,
+  directWorkSemanticProgressAdvanced,
+  finalDeliveryBlockerForOpenDirectWork,
+  openDirectWorkContinuationPrompt,
+  RUNTIME_SEMANTIC_TODO_LIST_ID,
+  turnAdvancedDuringToolPrompt,
+  type DirectWorkProgressSnapshot,
+} from "./direct-work-continuation.ts";
+import { runtimeArtifactsFromAudit } from "./native-runtime-artifacts.ts";
+import {
+  plannedReviewTurnContext,
+  type PlannedReviewTurnContext,
+} from "./native-planned-review-context.ts";
+import {
+  renderRecallContext,
+  shouldAttemptAutomaticRecall,
+} from "./native-recall-context.ts";
+import {
+  getButlerData,
+  getButlerHome,
+} from "./native-runtime-paths.ts";
+import {
+  currentInboundEventId,
+  currentRuntimeTurnId,
+  currentUserText,
+  inboundAttachments,
+  normalizeTurnPrompt,
+  promptContextIncludesSection,
+  promptContextSection,
+  type NormalizedTurnPrompt,
+} from "./native-turn-prompt.ts";
+import {
+  activeTodoWorkBlockFromArgs,
+  isInternalProgressTool,
+  runtimeSemanticTodoItems,
+  shouldSynthesizeRuntimeSemanticProgress,
+  WORKER_ORCHESTRATION_START_TOOL_SET,
+} from "./native-runtime-semantic-progress.ts";
+import {
+  buildIntermediateAction,
+  emitDecisionProgressBestEffort,
+  emitIntermediateBestEffort,
+  emitRuntimePreparationProgressBestEffort,
+  emitTodoProgressBestEffort,
+  emitTurnEventBestEffort,
+} from "./native-turn-delivery-events.ts";
+import {
+  plannedReviewTerminalToolText,
+  publicReportFromToolOutput,
+  taskIdFromToolResult,
+} from "./native-tool-result-text.ts";
+import {
   bridgeToolAuditEvent,
   redactedBridgeToolAuditArgs,
   redactedBridgeToolAuditResult,
 } from "../tools/tool-bridge/audit.ts";
 import { buildTaskOriginContext } from "../work/task-origin.ts";
 import { TaskStore } from "../work/task-store.ts";
-import { TodoListStore, type TodoItemInput } from "../work/todo-list.ts";
+import { TodoListStore } from "../work/todo-list.ts";
 import {
   completeReportingWorkStreamForSession,
   completeTurnLocalWorkStreamForSession,
-  type WorkStreamState,
   WorkStreamStore,
   workStreamTerminal,
 } from "../work/work-stream.ts";
@@ -79,8 +130,6 @@ import {
 import { renderFeedbackBufferContext } from "../cognition/feedback/buffer.ts";
 import {
   defaultRecentConversationTokenBudget,
-  estimateContextTokens,
-  takeLinesFromEndWithinBudget,
   type ContextBudgetOverrides,
 } from "../context/budget.ts";
 import { renderAttachmentContext } from "../context/attachment-context.ts";
@@ -94,10 +143,7 @@ import {
   renderWorkingMemoryContext,
 } from "../context/working-memory.ts";
 import { recordOperationalMetric } from "../../operations/metrics/operational-metrics.ts";
-import {
-  sanitizePublicText,
-  type RuntimeTurnEventInput,
-} from "../events/turn-events.ts";
+import { sanitizePublicText } from "../events/turn-events.ts";
 import type {
   PublicWorkDecision,
   ToolAuditEntry,
@@ -154,6 +200,7 @@ export {
   applyWebSearchCitationGuard,
   enforceGroundedActionClaims,
 } from "../policy/runtime-policy.ts";
+export { recentConversationBudgetForTurn } from "./direct-turn-budget.ts";
 
 export interface NativeToolLoopRuntimeOptions {
   runPromptText?: typeof runPromptText;
@@ -182,62 +229,11 @@ const GOAL_COMPLETION_REVIEW_SKIP_TOOLS = new Set([
   "write_planned_public_report",
   "write_work_orchestration_report",
 ]);
-const INTERNAL_PROGRESS_TOOLS = new Set([
-  "update_todo_list",
-  "list_todo_list",
-]);
-const WORKER_ORCHESTRATION_START_TOOLS = [
-  "dispatch_worker",
-  "resume_worker",
-  "run_planned_task",
-  "repair_planned_task",
-  "run_ready_work_streams",
-] as const;
-const WORKER_ORCHESTRATION_START_TOOL_SET = new Set<string>(WORKER_ORCHESTRATION_START_TOOLS);
-const PLANNED_REVIEW_FORBIDDEN_START_TOOLS = new Set<string>([
-  "create_planned_task",
-  "run_planned_task",
-  "dispatch_worker",
-  "resume_worker",
-  "create_work_orchestration",
-  "run_ready_work_streams",
-]);
-const PLANNED_REVIEW_SCOPED_TOOLS = new Set<string>([
-  "review_planned_task",
-  "repair_planned_task",
-  "request_principal_decision",
-  "write_planned_public_report",
-]);
-const RUNTIME_SEMANTIC_TODO_LIST_ID = "runtime-semantic";
 const DEFAULT_GOAL_COMPLETION_CONTINUATION_ATTEMPTS = 8;
 const DEFAULT_DIRECT_WORK_CONTINUATION_ATTEMPTS = 100;
-const DIRECT_TURN_MODEL_CALL_BUDGET = 32;
-const DIRECT_TURN_PROMPT_TOKEN_BUDGET = 220_000;
-const DIRECT_TURN_OUTPUT_TOKEN_BUDGET = 80_000;
-const DIRECT_TURN_TOTAL_TOKEN_BUDGET = 300_000;
-const DIRECT_TURN_BUDGET_WARNING_RATIO = 0.8;
-const COMPACT_RECENT_CONVERSATION_TOKEN_BUDGET = 2_000;
 
 interface StoredSessionConfig {
   init: RuntimeSessionInit;
-}
-
-interface PlannedReviewTurnContext {
-  taskId: string;
-  attempt: number | null;
-  workerTaskId: string | null;
-  reviewEventId: string | null;
-}
-
-interface NormalizedTurnPrompt {
-  prompt: string;
-  promptContextChars: number;
-  compactionContextChars: number;
-  feedbackBufferContextChars: number;
-  workingMemoryContextChars: number;
-  recentConversationChars: number;
-  recallContextChars: number;
-  inboundMessageChars: number;
 }
 
 interface RuntimeSemanticProgressSafetyNet {
@@ -273,216 +269,8 @@ function directWorkContinuationAttempts(): number {
   return Math.max(0, Math.min(parsed, 1_000));
 }
 
-interface DirectTurnBudget {
-  turnId: string;
-  modelRequestsUsed: number;
-  promptTokens: number;
-  cachedTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  maxModelCalls: number;
-  maxPromptTokens: number;
-  maxOutputTokens: number;
-  maxTotalTokens: number;
-}
-
-function createDirectTurnBudget(turnId: string): DirectTurnBudget {
-  return {
-    turnId,
-    modelRequestsUsed: 0,
-    promptTokens: 0,
-    cachedTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
-    maxModelCalls: DIRECT_TURN_MODEL_CALL_BUDGET,
-    maxPromptTokens: DIRECT_TURN_PROMPT_TOKEN_BUDGET,
-    maxOutputTokens: DIRECT_TURN_OUTPUT_TOKEN_BUDGET,
-    maxTotalTokens: DIRECT_TURN_TOTAL_TOKEN_BUDGET,
-  };
-}
-
-function budgetStatus(budget: DirectTurnBudget): PromptUsageBudgetState["status"] {
-  if (budget.modelRequestsUsed >= budget.maxModelCalls) {
-    return "exhausted";
-  }
-  if (
-    budget.modelRequestsUsed >= Math.floor(budget.maxModelCalls * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
-    budget.promptTokens >= Math.floor(budget.maxPromptTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
-    budget.outputTokens >= Math.floor(budget.maxOutputTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
-    budget.totalTokens >= Math.floor(budget.maxTotalTokens * DIRECT_TURN_BUDGET_WARNING_RATIO)
-  ) {
-    return "warning";
-  }
-  return "ok";
-}
-
-function directTurnBudgetState(budget: DirectTurnBudget): PromptUsageBudgetState {
-  return {
-    status: budgetStatus(budget),
-    requestCount: budget.modelRequestsUsed,
-    maxRequests: budget.maxModelCalls,
-    promptTokens: budget.promptTokens,
-    cachedTokens: budget.cachedTokens,
-    outputTokens: budget.outputTokens,
-    totalTokens: budget.totalTokens,
-    maxPromptTokens: budget.maxPromptTokens,
-    maxOutputTokens: budget.maxOutputTokens,
-    maxTotalTokens: budget.maxTotalTokens,
-  };
-}
-
-function beforeDirectTurnModelRequest(budget: DirectTurnBudget): void {
-  budget.modelRequestsUsed += 1;
-}
-
-function addDirectTurnUsage(input: {
-  budget: DirectTurnBudget;
-  promptTokens: number | null;
-  cachedTokens: number;
-  outputTokens: number;
-  totalTokens: number | null;
-}): void {
-  const promptTokens = typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)
-    ? Math.max(0, input.promptTokens)
-    : 0;
-  const cachedTokens = Number.isFinite(input.cachedTokens)
-    ? Math.max(0, Math.min(input.cachedTokens, promptTokens))
-    : 0;
-  const outputTokens = Number.isFinite(input.outputTokens) ? Math.max(0, input.outputTokens) : 0;
-  const totalTokens = typeof input.totalTokens === "number" && Number.isFinite(input.totalTokens)
-    ? Math.max(0, input.totalTokens)
-    : promptTokens + outputTokens;
-  input.budget.promptTokens += promptTokens;
-  input.budget.cachedTokens += cachedTokens;
-  input.budget.outputTokens += outputTokens;
-  input.budget.totalTokens += totalTokens;
-}
-
-function promptUsageSectionsFromPrompt(input: NormalizedTurnPrompt): PromptUsageSectionAttribution[] {
-  const sections = [
-    ["prompt_context", input.promptContextChars],
-    ["compaction_context", input.compactionContextChars],
-    ["feedback_buffer", input.feedbackBufferContextChars],
-    ["working_memory", input.workingMemoryContextChars],
-    ["recent_conversation", input.recentConversationChars],
-    ["recall_context", input.recallContextChars],
-    ["inbound_message", input.inboundMessageChars],
-  ] as const;
-  return sections
-    .filter(([, chars]) => chars > 0)
-    .map(([id, chars]) => ({
-      id,
-      chars,
-      estimatedTokens: estimateContextTokens("x".repeat(Math.min(chars, 200_000))),
-    }));
-}
-
-export function recentConversationBudgetForTurn(input: {
-  configuredBudget: number;
-  compactionContext: string;
-}): number {
-  if (input.compactionContext.trim()) {
-    return Math.min(input.configuredBudget, COMPACT_RECENT_CONVERSATION_TOKEN_BUDGET);
-  }
-  return input.configuredBudget;
-}
-
 function throwIfRuntimeTurnAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw runtimeTurnAbortError();
-}
-
-function getButlerHome(explicit?: string): string {
-  return explicit || process.env.BUTLER_HOME || process.cwd();
-}
-
-function getButlerData(explicit?: string): string {
-  return explicit || process.env.BUTLER_DATA || join(homedir(), ".butler");
-}
-
-function transcriptLines(event: TranscriptEvent, butlerData: string): string[] {
-  const payload = event.payload as Record<string, any>;
-  const message = payload.message as Record<string, any> | undefined;
-  const attachments = Array.isArray(message?.attachments) ? message.attachments : [];
-  const attachmentContext = renderAttachmentContext(attachments, {
-    butlerData,
-    title: event.kind === "inbound" ? "User Attachments" : "Butler Attachments",
-    includeTextContent: false,
-  });
-  if (event.kind === "inbound") {
-    const text = message?.text;
-    return [
-      typeof text === "string" && text.trim() ? `user: ${text.trim()}` : "",
-      attachmentContext,
-    ].filter((line) => line.trim());
-  }
-  if (event.kind === "outbound") {
-    const text = message?.text;
-    return [
-      typeof text === "string" && text.trim() ? `butler: ${text.trim()}` : "",
-      attachmentContext,
-    ].filter((line) => line.trim());
-  }
-  return [];
-}
-
-function currentInboundEventId(input: RuntimeTurnInput): string | null {
-  if ("text" in input.input) return null;
-  return input.input.eventId;
-}
-
-function currentRuntimeTurnId(input: RuntimeTurnInput): string | null {
-  const metadata = input.metadata && typeof input.metadata === "object"
-    ? input.metadata as Record<string, unknown>
-    : {};
-  return typeof metadata.turnId === "string" && metadata.turnId.trim()
-    ? metadata.turnId.trim()
-    : currentInboundEventId(input);
-}
-
-function plannedReviewTaskIdFromText(text: string): string | null {
-  const fromReviewId = text.match(/planned-review:(planned-[A-Za-z0-9._-]+)/u)?.[1];
-  if (fromReviewId) return fromReviewId;
-  return text.match(/Planned task ID:\s*(planned-[A-Za-z0-9._-]+)/iu)?.[1] ?? null;
-}
-
-function plannedReviewAttemptFromText(text: string): number | null {
-  const fromEvent = text.match(/system:planned-review:[^:\s]+:attempt-(\d+)/u)?.[1];
-  const fromLine = fromEvent ?? text.match(/Attempt:\s*(\d+)/iu)?.[1];
-  if (!fromLine) return null;
-  const parsed = Number.parseInt(fromLine, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function plannedReviewWorkerTaskIdFromText(text: string): string | null {
-  return text.match(/Worker task ID:\s*([A-Za-z0-9._:-]+)/iu)?.[1] ?? null;
-}
-
-function plannedReviewEventIdFromText(text: string): string | null {
-  const fromEvent = text.match(/system:planned-review:[^:\s]+:attempt-\d+:([A-Za-z0-9._:-]+)/u)?.[1];
-  return fromEvent ?? text.match(/Review event ID:\s*([A-Za-z0-9._:-]+)/iu)?.[1] ?? null;
-}
-
-function plannedReviewTurnContext(input: RuntimeTurnInput): PlannedReviewTurnContext | null {
-  if ("text" in input.input) return null;
-  const envelope = input.input;
-  const candidates = [
-    envelope.eventId,
-    envelope.message.id,
-    envelope.message.text ?? "",
-  ];
-  for (const candidate of candidates) {
-    const taskId = plannedReviewTaskIdFromText(candidate);
-    if (taskId) {
-      const joined = candidates.join("\n");
-      return {
-        taskId,
-        attempt: plannedReviewAttemptFromText(joined),
-        workerTaskId: plannedReviewWorkerTaskIdFromText(joined),
-        reviewEventId: plannedReviewEventIdFromText(joined),
-      };
-    }
-  }
-  return null;
 }
 
 function metadataRuntimePolicy(metadata: unknown): Record<string, unknown> {
@@ -569,272 +357,6 @@ function finalContractFallbackText(language: RuntimeMessageLanguage): string {
     : "I could not verify the result because no completed tool evidence was available.";
 }
 
-interface OpenDirectWorkBlocker {
-  title: string;
-  state: string;
-  phase: string | null;
-  listId: string | null;
-  activeItems: Array<{ id: string; label: string; status: string; phase: string | null }>;
-}
-
-interface DirectWorkProgressSnapshot {
-  kind: "none" | "active";
-  id?: string;
-  state?: WorkStreamState;
-  phase?: string | null;
-  deliverable?: boolean;
-  completedCount?: number;
-  unfinishedCount?: number;
-}
-
-const DIRECT_WORK_FORWARD_STATE_RANK: Partial<Record<WorkStreamState, number>> = {
-  routing: 0,
-  conception: 1,
-  planning: 2,
-  executing: 3,
-  reviewing: 4,
-  consolidating: 5,
-  reporting: 6,
-};
-
-function directWorkFsmProgressAdvanced(
-  before: DirectWorkProgressSnapshot,
-  after: DirectWorkProgressSnapshot,
-): boolean {
-  if (before.kind !== "active" || after.kind !== "active") return false;
-  if (!before.state || !after.state || before.state === after.state) return false;
-  if (
-    (after.state === "waiting_user" || after.state === "paused" || after.state === "recoverable") &&
-    before.state !== after.state
-  ) {
-    return true;
-  }
-  if (before.state === "reviewing" && after.state === "executing") return true;
-  const beforeRank = DIRECT_WORK_FORWARD_STATE_RANK[before.state];
-  const afterRank = DIRECT_WORK_FORWARD_STATE_RANK[after.state];
-  return beforeRank !== undefined && afterRank !== undefined && afterRank > beforeRank;
-}
-
-function activeDirectWorkProgressSnapshot(input: {
-  butlerData: string;
-  sessionId: string;
-}): DirectWorkProgressSnapshot {
-  const workStream = new WorkStreamStore(input.butlerData).activeForSession(input.sessionId);
-  if (!workStream) return { kind: "none" };
-  if (
-    workStream.linked_planned_task_ids.length > 0 ||
-    workStream.linked_orchestration_ids.length > 0 ||
-    workStream.linked_worker_task_ids.length > 0
-  ) {
-    return { kind: "none" };
-  }
-  if (workStream.todo_list_id === RUNTIME_SEMANTIC_TODO_LIST_ID) return { kind: "none" };
-
-  const view = workStream.todo_list_id
-    ? new TodoListStore(input.butlerData).view(workStream.todo_list_id, { includeCompleted: true })
-    : null;
-  const items = view?.list.items ?? [];
-  const completedCount = items.filter((item) => item.status === "completed").length;
-  const unfinishedCount = items.filter((item) =>
-    item.status === "pending" || item.status === "in_progress",
-  ).length;
-  const deliverable =
-    workStream.state === "reporting" ||
-    workStream.state === "waiting_user" ||
-    workStream.state === "paused" ||
-    workStream.state === "recoverable" ||
-    (view !== null && unfinishedCount === 0);
-
-  return {
-    kind: "active",
-    id: workStream.id,
-    state: workStream.state,
-    phase: workStream.current_phase,
-    deliverable,
-    completedCount,
-    unfinishedCount,
-  };
-}
-
-function directWorkSemanticProgressAdvanced(
-  before: DirectWorkProgressSnapshot,
-  after: DirectWorkProgressSnapshot,
-): boolean {
-  if (before.kind === "none" && after.kind === "none") return false;
-  if (before.kind === "none" && after.kind === "active") return true;
-  if (before.kind === "active" && after.kind === "none") return true;
-  if (before.kind !== "active" || after.kind !== "active") return false;
-  if (before.id !== after.id) {
-    return (
-      (after.completedCount ?? 0) > (before.completedCount ?? 0) ||
-      (after.unfinishedCount ?? 0) < (before.unfinishedCount ?? 0) ||
-      directWorkFsmProgressAdvanced(before, after) ||
-      (after.deliverable === true && before.deliverable !== true)
-    );
-  }
-  if (after.deliverable === true && before.deliverable !== true) return true;
-  if ((after.completedCount ?? 0) > (before.completedCount ?? 0)) return true;
-  if ((after.unfinishedCount ?? 0) < (before.unfinishedCount ?? 0)) return true;
-  if (directWorkFsmProgressAdvanced(before, after)) return true;
-  return false;
-}
-
-function turnAdvancedDuringToolPrompt(input: {
-  beforeWork: DirectWorkProgressSnapshot;
-  afterWork: DirectWorkProgressSnapshot;
-  successfulToolsBefore: number;
-  successfulToolsAfter: number;
-}): boolean {
-  if (input.beforeWork.kind === "active" || input.afterWork.kind === "active") {
-    return directWorkSemanticProgressAdvanced(input.beforeWork, input.afterWork);
-  }
-  return input.successfulToolsAfter > input.successfulToolsBefore;
-}
-
-function finalDeliveryBlockerForOpenDirectWork(input: {
-  butlerData: string;
-  sessionId: string;
-}): OpenDirectWorkBlocker | null {
-  const workStream = new WorkStreamStore(input.butlerData).activeForSession(input.sessionId);
-  if (!workStream) return null;
-  if (
-    workStream.linked_planned_task_ids.length > 0 ||
-    workStream.linked_orchestration_ids.length > 0 ||
-    workStream.linked_worker_task_ids.length > 0
-  ) {
-    return null;
-  }
-  if (
-    workStream.state === "reporting" ||
-    workStream.state === "waiting_user" ||
-    workStream.state === "paused" ||
-    workStream.state === "recoverable"
-  ) {
-    return null;
-  }
-  if (workStream.todo_list_id === RUNTIME_SEMANTIC_TODO_LIST_ID) {
-    return null;
-  }
-
-  const view = workStream.todo_list_id
-    ? new TodoListStore(input.butlerData).view(workStream.todo_list_id, { includeCompleted: true })
-    : null;
-  const activeItems = view?.list.items
-    .filter((item) => item.status === "pending" || item.status === "in_progress")
-    .map((item) => ({
-      id: item.id,
-      label: item.status === "in_progress" ? item.active_form : item.content,
-      status: item.status,
-      phase: item.phase,
-    })) ?? [];
-
-  if (view && activeItems.length === 0) return null;
-
-  return {
-    title: workStream.title,
-    state: workStream.state,
-    phase: workStream.current_phase,
-    listId: workStream.todo_list_id,
-    activeItems: activeItems.slice(0, 8),
-  };
-}
-
-function openDirectWorkContinuationPrompt(input: {
-  objective: string;
-  personaContext?: string;
-  audit: ToolAuditEntry[];
-  blocker: OpenDirectWorkBlocker;
-}): string {
-  const activeItems = input.blocker.activeItems.length > 0
-    ? input.blocker.activeItems
-      .map((item, index) =>
-        `${index + 1}. [${item.status}${item.phase ? `/${item.phase}` : ""}] ${item.label}`)
-      .join("\n")
-    : "- Active direct work stream has not reached a deliverable state.";
-  const evidence = compactContinuationEvidence(input.audit);
-  const personaContext = compactContinuationPersonaContext(input.personaContext);
-  return [
-    "## Direct Work Continuation",
-    "Continue the same logical Butler WorkStream as ordinary same-turn progress.",
-    "",
-    ...(personaContext
-      ? [
-        "Persona continuation:",
-        personaContext,
-        "",
-      ]
-      : []),
-    "Current WorkStream:",
-    `- title: ${input.blocker.title}`,
-    `- state: ${input.blocker.state}`,
-    `- phase: ${input.blocker.phase ?? "unknown"}`,
-    `- todo_list_id: ${input.blocker.listId ?? "none"}`,
-    "",
-    "Remaining direct steps:",
-    activeItems,
-    "",
-    "Continuity note:",
-    `- objective: ${compactObjectiveText(input.objective, 500)}`,
-    ...evidence.map((line) => `- ${line}`),
-    "",
-    "Next action:",
-    "- Use the structured tool-call channel to execute the remaining direct work or to move the WorkStream to a legitimate deliverable state.",
-    "- Update `update_todo_list` as evidence is gathered and steps complete.",
-    "- Do not treat repeated status inspection, diff review, or replanning as progress unless the remaining WorkStream steps actually move toward completion.",
-    "- Keep the response focused on the remaining work and evidence, without meta-narrating runtime control flow.",
-    "- Do not answer with a promise, plan, or 'I will start now' message.",
-    "- Final delivery is allowed only after the direct WorkStream has no unfinished active items, reaches reporting/waiting_user/paused/recoverable with evidence, or is linked to an async worker/planned/orchestration stream.",
-  ].join("\n");
-}
-
-function promptContextSection(prompt: string, title: string): string {
-  const trimmed = prompt.trim();
-  if (!trimmed) return "";
-  const section = new RegExp(`(?:^|\\n)(## ${escapeRegExp(title)}\\n[\\s\\S]*?)(?=\\n## |\\n---\\n|$)`, "u")
-    .exec(trimmed)?.[1];
-  return section?.trim() ?? "";
-}
-
-function compactContinuationPersonaContext(value?: string): string {
-  const section = value?.trim() ?? "";
-  if (!section) return "";
-  return compactContinuationText(section, 1_500);
-}
-
-function compactContinuationText(value: string, maxChars: number, fallback = ""): string {
-  const normalized = sanitizePublicText(value, "").replace(/\s+/g, " ").trim();
-  if (!normalized) return fallback;
-  if (normalized.length <= maxChars) return normalized;
-  return `${normalized.slice(0, maxChars - 1).trimEnd()}...`;
-}
-
-function compactObjectiveText(value: string, maxChars: number): string {
-  return compactContinuationText(value, maxChars, "same user request");
-}
-
-function compactContinuationEvidence(audit: ToolAuditEntry[]): string[] {
-  const recent = audit
-    .filter((entry) => entry.ok)
-    .slice(-6);
-  if (recent.length === 0) return ["recent evidence: none yet"];
-  return recent.map((entry, index) => {
-    const receipts = (entry.evidenceReceipts ?? [])
-      .map((receipt) =>
-        compactContinuationText(receipt.summary, 120) ||
-        compactContinuationText(receipt.receiptType, 120))
-      .filter(Boolean)
-      .slice(0, 2);
-    const receiptText = receipts.length > 0 ? `; receipts: ${receipts.join(" | ")}` : "";
-    return `evidence ${index + 1}: ${entry.name}${receiptText}`;
-  });
-}
-
-function stableJsonForCache(value: Record<string, unknown>): string {
-  return JSON.stringify(Object.fromEntries(
-    Object.entries(value).sort(([a], [b]) => a.localeCompare(b)),
-  ));
-}
-
 function hasGoalCompletionReviewSkipTool(audit: ToolAuditEntry[]): boolean {
   return audit.some((entry) => entry.ok && GOAL_COMPLETION_REVIEW_SKIP_TOOLS.has(entry.name));
 }
@@ -919,166 +441,6 @@ function safeTextForStatusNote(value: string | undefined): string | null {
   return normalized.length > 240 ? `${normalized.slice(0, 237)}...` : normalized;
 }
 
-function buildRecentConversation(input: RuntimeTurnInput, maxTokens: number, butlerData: string): string {
-  const currentEventId = currentInboundEventId(input);
-  const lines = readTranscript(input.handle.sessionId)
-    .filter((event) => event.eventId !== currentEventId && (event.payload as Record<string, any>)?.eventId !== currentEventId)
-    .flatMap((event) => transcriptLines(event, butlerData))
-    .filter((line) => line.trim());
-
-  const selected = takeLinesFromEndWithinBudget(lines, maxTokens);
-  if (selected.length === 0) return "";
-  return ["## Recent Conversation", ...selected].join("\n");
-}
-
-function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
-  recallContext?: string;
-  compactionContext?: string;
-  feedbackBufferContext?: string;
-  workingMemoryContext?: string;
-  runtimePolicyContext?: string;
-  recentConversationTokenBudget: number;
-  butlerData: string;
-}): NormalizedTurnPrompt {
-  const parts: string[] = [];
-  const rawPromptContext =
-    typeof input.metadata?.promptContext === "string" ? input.metadata.promptContext.trim() : "";
-  const structuredCurrentText = metadataCurrentUserText(input);
-  const promptContext = structuredCurrentText
-    ? removePromptContextSection(rawPromptContext, "Current User Input")
-    : rawPromptContext;
-  if (promptContext) {
-    parts.push(promptContext);
-  }
-
-  const compactionContext = options.compactionContext?.trim() ?? "";
-  if (compactionContext) {
-    parts.push(compactionContext);
-  }
-
-  const feedbackBufferContext = options.feedbackBufferContext?.trim() ?? "";
-  if (feedbackBufferContext) {
-    parts.push(feedbackBufferContext);
-  }
-
-  const workingMemoryContext = options.workingMemoryContext?.trim() ?? "";
-  if (workingMemoryContext) {
-    parts.push(workingMemoryContext);
-  }
-
-  const recentConversation = buildRecentConversation(input, options.recentConversationTokenBudget, options.butlerData);
-  if (recentConversation) {
-    parts.push(recentConversation);
-  }
-
-  const recallContext = options.recallContext?.trim() ?? "";
-  if (recallContext) {
-    parts.push(recallContext);
-  }
-
-  const runtimePolicyContext = options.runtimePolicyContext?.trim() ?? "";
-  if (runtimePolicyContext) {
-    parts.push(runtimePolicyContext);
-  }
-
-  let inboundMessageChars: number;
-  const promptContextHasCurrentInput = promptContextIncludesSection(input, "Current User Input");
-  if ("text" in input.input) {
-    const text = structuredCurrentText || input.input.text?.trim() || "";
-    inboundMessageChars = text.length;
-    if (structuredCurrentText || !promptContextHasCurrentInput) {
-      parts.push("## Inbound Message");
-      parts.push(`Message Text: ${text}`);
-    }
-  } else {
-    const envelope = input.input as InboundEnvelope;
-    const text = structuredCurrentText || envelope.message.text?.trim() || "";
-    inboundMessageChars = text.length;
-    if (structuredCurrentText || !promptContextHasCurrentInput) {
-      parts.push("## Inbound Message");
-      parts.push(`Transport: ${envelope.transport}`);
-      parts.push(`Sender ID: ${envelope.sender.id}`);
-      if (envelope.sender.displayName) {
-        parts.push(`Sender Name: ${envelope.sender.displayName}`);
-      }
-      parts.push(`Message ID: ${envelope.message.id}`);
-      parts.push(`Message Timestamp: ${envelope.message.timestamp}`);
-      parts.push(`Message Text: ${text}`);
-    }
-  }
-
-  const prompt = parts.filter(Boolean).join("\n");
-  return {
-    prompt,
-    promptContextChars: promptContext.length,
-    compactionContextChars: compactionContext.length,
-    feedbackBufferContextChars: feedbackBufferContext.length,
-    workingMemoryContextChars: workingMemoryContext.length,
-    recentConversationChars: recentConversation.length,
-    recallContextChars: recallContext.length,
-    inboundMessageChars,
-  };
-}
-
-function removePromptContextSection(promptContext: string, title: string): string {
-  if (!promptContext.trim()) return "";
-  const section = new RegExp(`(?:^|\\n)## ${escapeRegExp(title)}\\n[\\s\\S]*?(?=\\n## |$)`, "u");
-  return promptContext.replace(section, "").trim();
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function inboundText(input: RuntimeTurnInput): string {
-  if ("text" in input.input) return input.input.text?.trim() || "";
-  return input.input.message.text?.trim() || "";
-}
-
-function metadataCurrentUserText(input: RuntimeTurnInput): string {
-  return typeof input.metadata?.currentUserText === "string"
-    ? input.metadata.currentUserText.trim()
-    : "";
-}
-
-function currentUserText(input: RuntimeTurnInput): string {
-  return metadataCurrentUserText(input) || inboundText(input);
-}
-
-function inboundAttachments(input: RuntimeTurnInput): AttachmentRef[] {
-  if ("text" in input.input) return [];
-  return Array.isArray(input.input.message.attachments)
-    ? input.input.message.attachments
-    : [];
-}
-
-function promptContextIncludesSection(input: RuntimeTurnInput, title: string): boolean {
-  const promptContext =
-    typeof input.metadata?.promptContext === "string" ? input.metadata.promptContext : "";
-  return promptContext.includes(`## ${title}`);
-}
-
-function shouldAttemptAutomaticRecall(input: RuntimeTurnInput, text: string): boolean {
-  if (!text.trim()) return false;
-  if (input.metadata?.automaticRecall === false) return false;
-  if (input.metadata?.transport === "system" || input.metadata?.eventKind === "system") return false;
-  if (!("text" in input.input) && input.input.transport === "system") return false;
-  return text.trim().length >= 4;
-}
-
-function renderRecallContext(result: AssociativeRecallResult): string {
-  if (result.abstained || result.items.length === 0) return "";
-  const lines = [
-    "## Associative Recall Context",
-    "Use this compact memory only when it helps answer the current message. Do not expose scores unless asked.",
-  ];
-  for (const item of result.items.slice(0, 4)) {
-    const provenance = item.provenance.slice(0, 2).join(", ");
-    lines.push(`- ${item.summary} (confidence=${item.confidence.toFixed(2)}, source=${item.source}, provenance=${provenance})`);
-  }
-  return lines.join("\n");
-}
-
 function recordIntentGuardMetric(input: {
   butlerData: string;
   role: string;
@@ -1099,43 +461,6 @@ function recordIntentGuardMetric(input: {
       detail: input.detail,
     },
   }, { butlerData: input.butlerData });
-}
-
-function peerForOutbound(envelope: InboundEnvelope): OutboundAction["peer"] {
-  if (envelope.peer.kind === "thread") {
-    return {
-      kind: "thread",
-      id: envelope.peer.parentId ?? envelope.peer.id,
-      threadId: envelope.peer.id,
-    };
-  }
-  return {
-    kind: envelope.peer.kind,
-    id: envelope.peer.id,
-  };
-}
-
-function buildIntermediateAction(input: {
-  envelope: InboundEnvelope;
-  suffix: string;
-  text: string;
-  metadata?: Record<string, unknown>;
-}): OutboundAction {
-  return {
-    actionId: `runtime-intermediate:${input.envelope.eventId}:${input.suffix}`,
-    transport: input.envelope.transport,
-    accountId: input.envelope.accountId,
-    peer: peerForOutbound(input.envelope),
-    message: {
-      text: input.text,
-      replyToMessageId: input.envelope.message.id,
-    },
-    metadata: {
-      source: "runtime/native-tool-loop.ts",
-      kind: "intermediate",
-      ...input.metadata,
-    },
-  };
 }
 
 function runtimePreparationProgressSummary(input: {
@@ -1160,305 +485,12 @@ function runtimePreparationProgressSummary(input: {
   };
 }
 
-async function emitRuntimePreparationProgressBestEffort(input: {
-  turnInput: RuntimeTurnInput;
-  progress: ToolProgressSummary;
-}): Promise<void> {
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: "tool.progress",
-    payload: {
-      activityKind: input.progress.kind,
-      toolName: input.progress.toolName,
-      inputLabel: input.progress.inputLabel,
-      safeLabel: input.progress.safeLabel,
-      detailRows: input.progress.detailRows,
-    },
-  });
-  const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
-  if (!inboundEnvelope || !input.turnInput.emitIntermediateDelivery) return;
-  await emitIntermediateBestEffort(
-    input.turnInput,
-    buildIntermediateAction({
-      envelope: inboundEnvelope,
-      suffix: `runtime-preparation-${randomUUID().slice(0, 8)}`,
-      text: "",
-      metadata: {
-        kind: "tool_progress",
-        activityKind: input.progress.kind,
-        toolName: input.progress.toolName,
-        safeLabel: input.progress.safeLabel,
-        inputLabel: input.progress.inputLabel,
-        detailRows: input.progress.detailRows,
-      },
-    }),
-    {
-      source: "runtime/native-tool-loop.ts#runtime-preparation-progress",
-      kind: "tool_progress",
-      tool: "runtime_preparation",
-    },
-  );
-}
-
-function taskIdFromToolResult(result: unknown): string | null {
-  const output = result && typeof result === "object" ? result as Record<string, unknown> : {};
-  return typeof output.task_id === "string"
-    ? output.task_id
-    : typeof output.taskId === "string"
-      ? output.taskId
-      : null;
-}
-
-function publicReportFromToolOutput(output: unknown): string | null {
-  if (!output || typeof output !== "object" || Array.isArray(output)) return null;
-  const report = (output as Record<string, unknown>).report;
-  return typeof report === "string" && report.trim() ? report.trim() : null;
-}
-
-function plannedReviewTerminalToolText(input: {
-  name: string;
-  output: unknown;
-  language: RuntimeMessageLanguage;
-}): string | null {
-  if (!input.output || typeof input.output !== "object" || Array.isArray(input.output)) return null;
-  const output = input.output as Record<string, unknown>;
-  if (input.name === "repair_planned_task") {
-    if (output.ok === false && output.status === "FAILED_PUBLIC_REPORT_READY") {
-      return input.language === "ko"
-        ? "계획 작업은 더 진행할 수 없어 실패 보고가 준비되었습니다."
-        : "The planned task cannot continue, so a failure report is ready.";
-    }
-    if (output.ok !== false && typeof output.worker_task_id === "string" && output.worker_task_id.trim()) {
-      return input.language === "ko"
-        ? "수리 작업을 시작했습니다. 완료되면 다시 검토 후 보고하겠습니다."
-        : "I started the repair attempt. I will review it again before reporting.";
-    }
-  }
-  if (input.name === "request_principal_decision" && output.status === "BLOCKED_WAITING_PRINCIPAL") {
-    return input.language === "ko"
-      ? "결정이 필요한 지점에서 작업을 멈추고 사용자 결정을 기다립니다."
-      : "The work is paused at a required principal decision.";
-  }
-  return null;
-}
-
-function isInternalProgressTool(name: string): boolean {
-  return INTERNAL_PROGRESS_TOOLS.has(name);
-}
-
 function discardPendingPublicDecisionForTool(
   pending: PublicWorkDecision[],
   toolName: string,
 ): void {
   const index = pending.findIndex((decision) => decision.toolName === toolName);
   if (index >= 0) pending.splice(index, 1);
-}
-
-function todoProgressItemsFromArgs(args: Record<string, unknown>): Array<{
-  id: string;
-  label: string;
-  state: string;
-  phase: string | null;
-  order: number;
-}> {
-  const todos = Array.isArray(args.todos) ? args.todos : [];
-  return todos
-    .filter((todo): todo is Record<string, unknown> =>
-      Boolean(todo && typeof todo === "object" && !Array.isArray(todo)))
-    .map((todo, index) => {
-      const rawStatus = typeof todo.status === "string" ? todo.status : "pending";
-      const status = rawStatus === "in_progress" ||
-        rawStatus === "completed" ||
-        rawStatus === "cancelled"
-        ? rawStatus
-        : "pending";
-      const preferredLabel = status === "in_progress"
-        ? todo.active_form ?? todo.content
-        : todo.content ?? todo.active_form;
-      const label = sanitizePublicText(preferredLabel, "").trim();
-      const rawId = typeof todo.id === "string" && todo.id.trim()
-        ? todo.id.trim()
-        : `todo-${index + 1}`;
-      return {
-        id: sanitizePublicText(rawId, `todo-${index + 1}`).replace(/[^a-zA-Z0-9_-]/gu, "-").slice(0, 64) || `todo-${index + 1}`,
-        label,
-        state: todoProgressState(status),
-        phase: todoProgressPhase(todo.phase),
-        order: index + 1,
-      };
-    })
-    .filter((item) => item.label)
-    .slice(0, 8);
-}
-
-function todoProgressPhase(value: unknown): string | null {
-  if (
-    value === "conception" ||
-    value === "planning" ||
-    value === "execution" ||
-    value === "review" ||
-    value === "consolidation" ||
-    value === "reporting"
-  ) {
-    return value;
-  }
-  return null;
-}
-
-function todoProgressState(status: string): string {
-  if (status === "in_progress") return "running";
-  if (status === "completed") return "delivered";
-  if (status === "cancelled") return "cancelled";
-  return "accepted";
-}
-
-function runtimeSemanticTodoItems(input: {
-  language: RuntimeMessageLanguage;
-  executionLabel: string;
-  state: "execution" | "review" | "complete";
-}): TodoItemInput[] {
-  const ko = input.language === "ko";
-  const executionLabel =
-    sanitizePublicText(
-      input.executionLabel,
-      ko ? "필요한 도구 작업을 실행합니다." : "Run the needed tool work.",
-    ).slice(0, 180) || (ko ? "필요한 도구 작업을 실행합니다." : "Run the needed tool work.");
-  const status = (phase: TodoItemInput["phase"]): TodoItemInput["status"] => {
-    if (input.state === "complete") return "completed";
-    if (phase === "execution") return input.state === "execution" ? "in_progress" : "completed";
-    if (phase === "review") return input.state === "review" ? "in_progress" : "pending";
-    if (phase === "conception" || phase === "planning") return "completed";
-    return "pending";
-  };
-  return [
-    {
-      id: "orient",
-      content: ko ? "요청 의도 확인" : "Understand the request",
-      active_form: ko ? "요청 의도를 확인합니다." : "Understanding the request.",
-      status: status("conception"),
-      phase: "conception",
-    },
-    {
-      id: "plan",
-      content: ko ? "확인 경로 준비" : "Prepare the evidence path",
-      active_form: ko ? "확인 경로를 준비합니다." : "Preparing the evidence path.",
-      status: status("planning"),
-      phase: "planning",
-    },
-    {
-      id: "execute",
-      content: executionLabel,
-      active_form: executionLabel,
-      status: status("execution"),
-      phase: "execution",
-    },
-    {
-      id: "review",
-      content: ko ? "도구 결과 검토" : "Review tool evidence",
-      active_form: ko ? "도구 결과를 검토합니다." : "Reviewing tool evidence.",
-      status: status("review"),
-      phase: "review",
-    },
-    {
-      id: "consolidate",
-      content: ko ? "핵심 결과 정리" : "Consolidate the result",
-      active_form: ko ? "핵심 결과를 정리합니다." : "Consolidating the result.",
-      status: input.state === "complete" ? "completed" : "pending",
-      phase: "consolidation",
-    },
-    {
-      id: "report",
-      content: ko ? "사용자에게 보고" : "Report to the user",
-      active_form: ko ? "사용자에게 보고합니다." : "Reporting to the user.",
-      status: input.state === "complete" ? "completed" : "pending",
-      phase: "reporting",
-    },
-  ];
-}
-
-function activeTodoWorkBlockFromArgs(args: Record<string, unknown>): { id: string; label: string } | null {
-  const active = todoProgressItemsFromArgs(args).find((item) => item.state === "running");
-  if (!active) return null;
-  return {
-    id: `work-todo-${active.id}`,
-    label: active.label,
-  };
-}
-
-async function emitTodoProgressBestEffort(input: {
-  turnInput: RuntimeTurnInput;
-  args: Record<string, unknown>;
-}): Promise<void> {
-  const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
-  if (!inboundEnvelope || !input.turnInput.emitIntermediateDelivery) return;
-  const items = todoProgressItemsFromArgs(input.args);
-  for (const item of items) {
-    await emitIntermediateBestEffort(
-      input.turnInput,
-      buildIntermediateAction({
-        envelope: inboundEnvelope,
-        suffix: `todo-progress-${item.id}-${randomUUID().slice(0, 8)}`,
-        text: "",
-        metadata: {
-          kind: "todo_progress",
-          todoId: item.id,
-          safeLabel: item.label,
-          state: item.state,
-          safeOrder: item.order,
-          ...(item.phase ? { phase: item.phase } : {}),
-        },
-      }),
-      {
-        source: "runtime/native-tool-loop.ts#todo-progress",
-        kind: "todo_progress",
-        todoId: item.id,
-        safeLabel: item.label,
-        state: item.state,
-        safeOrder: item.order,
-        ...(item.phase ? { phase: item.phase } : {}),
-      },
-    );
-  }
-}
-
-async function emitDecisionProgressBestEffort(input: {
-  turnInput: RuntimeTurnInput;
-  decision: PublicWorkDecision;
-  state: string;
-}): Promise<void> {
-  const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
-  if (!inboundEnvelope || !input.turnInput.emitIntermediateDelivery) return;
-  await emitIntermediateBestEffort(
-    input.turnInput,
-    buildIntermediateAction({
-      envelope: inboundEnvelope,
-      suffix: `decision-progress-${input.decision.decisionId}-${input.state}`,
-      text: "",
-      metadata: {
-        kind: "todo_progress",
-        todoId: input.decision.decisionId,
-        safeLabel: input.decision.summary,
-        state: input.state,
-      },
-    }),
-    {
-      source: "runtime/native-tool-loop.ts#decision-progress",
-      kind: "todo_progress",
-      todoId: input.decision.decisionId,
-      safeLabel: input.decision.summary,
-      state: input.state,
-    },
-  );
-}
-
-function shouldSynthesizeRuntimeSemanticProgress(input: {
-  callName: string;
-  args: Record<string, unknown>;
-}): boolean {
-  if (isInternalProgressTool(input.callName)) return false;
-  if (WORKER_ORCHESTRATION_START_TOOL_SET.has(input.callName)) return false;
-  if (input.callName !== "run_command") return false;
-  const command = typeof input.args.command === "string" ? input.args.command : "";
-  return /[;&|]|\n/u.test(command);
 }
 
 function compactForComparison(text: string): string {
@@ -1521,304 +553,6 @@ async function emitAssistantTextBeforeTools(input: {
       tool: workerStartCalls.map((call) => call.name).join(","),
     },
   );
-}
-
-async function emitIntermediateBestEffort(
-  input: RuntimeTurnInput,
-  action: OutboundAction,
-  metadata: Record<string, unknown>,
-): Promise<void> {
-  try {
-    await input.emitIntermediateDelivery?.(action, metadata);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    appendTranscriptEvent(createTranscriptEvent({
-      sessionId: input.handle.sessionId,
-      kind: "system",
-      payload: {
-        category: "intermediate_delivery_error",
-        message,
-        actionId: action.actionId,
-      },
-      metadata: {
-        source: "runtime/native-tool-loop.ts",
-      },
-    }));
-  }
-}
-
-async function emitTurnEventBestEffort(
-  input: RuntimeTurnInput,
-  event: RuntimeTurnEventInput,
-): Promise<void> {
-  try {
-    await input.emitTurnEvent?.(event);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    appendTranscriptEvent(createTranscriptEvent({
-      sessionId: input.handle.sessionId,
-      kind: "system",
-      payload: {
-        category: "turn_event_delivery_error",
-        message,
-        kind: (event as { kind?: unknown }).kind ?? null,
-      },
-      metadata: {
-        source: "runtime/native-tool-loop.ts",
-      },
-    }));
-  }
-}
-
-const MAX_RUNTIME_ARTIFACT_REFS = 12;
-
-function runtimeArtifactsFromAudit(input: {
-  audit: ToolAuditEntry[];
-  butlerData: string;
-  workspacePath: string;
-}): ArtifactRef[] {
-  const artifacts: ArtifactRef[] = [];
-  const seen = new Set<string>();
-  for (const entry of input.audit) {
-    if (!entry.ok || !isRecord(entry.result)) continue;
-    collectVerifiedOutputArtifacts({
-      artifacts,
-      seen,
-      result: entry.result,
-      butlerData: input.butlerData,
-      workspacePath: input.workspacePath,
-    });
-    collectPublicDataArtifacts({
-      artifacts,
-      seen,
-      result: entry.result,
-      butlerData: input.butlerData,
-    });
-    if (artifacts.length >= MAX_RUNTIME_ARTIFACT_REFS) break;
-  }
-  return artifacts.slice(0, MAX_RUNTIME_ARTIFACT_REFS);
-}
-
-function collectVerifiedOutputArtifacts(input: {
-  artifacts: ArtifactRef[];
-  seen: Set<string>;
-  result: Record<string, unknown>;
-  butlerData: string;
-  workspacePath: string;
-}): void {
-  const verified = Array.isArray(input.result.verified_output_files)
-    ? input.result.verified_output_files
-    : [];
-  const cwd = typeof input.result.cwd === "string" && input.result.cwd.trim()
-    ? input.result.cwd.trim()
-    : input.workspacePath;
-  for (const [index, item] of verified.entries()) {
-    if (input.artifacts.length >= MAX_RUNTIME_ARTIFACT_REFS) return;
-    if (!isRecord(item) || typeof item.path !== "string" || !item.path.trim()) continue;
-    const safePathLabel = item.path.trim();
-    const localPath = resolveVerifiedArtifactPath({
-      cwd,
-      butlerData: input.butlerData,
-      workspacePath: input.workspacePath,
-      safePathLabel,
-    });
-    if (!localPath) continue;
-    appendRuntimeArtifact(input.artifacts, input.seen, {
-      id: `artifact-${safeIdentifier(safePathLabel)}-${index + 1}`,
-      kind: artifactKindFromValue(item.artifact_kind, localPath),
-      title: basename(safePathLabel) || "Artifact",
-      safePathLabel,
-      localPath,
-      mimeType: mimeTypeForPath(localPath),
-      sizeBytes: numberValue(item.size_bytes) ?? fileSize(localPath),
-      createdAt: typeof item.modified_at === "string" ? item.modified_at : undefined,
-    });
-  }
-}
-
-function collectPublicDataArtifacts(input: {
-  artifacts: ArtifactRef[];
-  seen: Set<string>;
-  result: Record<string, unknown>;
-  butlerData: string;
-}): void {
-  const labels = stringList(input.result.artifact_labels ?? input.result.artifact_label);
-  if (labels.length === 0) return;
-  const kinds = stringList(input.result.artifact_kinds ?? input.result.artifact_kind);
-  const artifactId = typeof input.result.artifact_id === "string" && input.result.artifact_id.trim()
-    ? input.result.artifact_id.trim()
-    : null;
-  const publicDataRoot = join(input.butlerData, "artifacts", "public-data");
-  for (const [index, label] of labels.entries()) {
-    if (input.artifacts.length >= MAX_RUNTIME_ARTIFACT_REFS) return;
-    const localPath = resolveUnderRoot(publicDataRoot, label);
-    if (!localPath || !existsSync(localPath)) continue;
-    const title = typeof input.result.title === "string" && input.result.title.trim()
-      ? input.result.title.trim()
-      : basename(label);
-    appendRuntimeArtifact(input.artifacts, input.seen, {
-      id: labels.length === 1 && artifactId
-        ? artifactId
-        : `artifact-${artifactId ?? safeIdentifier(label)}-${index + 1}`,
-      kind: artifactKindFromValue(kinds[index] ?? kinds[0], localPath),
-      title,
-      safePathLabel: label,
-      localPath,
-      mimeType: mimeTypeForPath(localPath),
-      sizeBytes: fileSize(localPath),
-    });
-  }
-}
-
-function appendRuntimeArtifact(
-  artifacts: ArtifactRef[],
-  seen: Set<string>,
-  artifact: ArtifactRef,
-): void {
-  const key = artifact.localPath
-    ? `path:${resolve(artifact.localPath)}`
-    : `id:${artifact.id}:${artifact.safePathLabel ?? ""}`;
-  if (seen.has(key)) return;
-  seen.add(key);
-  artifacts.push(artifact);
-}
-
-function resolveVerifiedArtifactPath(input: {
-  cwd: string;
-  butlerData: string;
-  workspacePath: string;
-  safePathLabel: string;
-}): string | null {
-  const cwd = resolve(input.cwd);
-  const workspace = resolve(input.workspacePath);
-  const candidate = resolve(cwd, input.safePathLabel);
-  if (isPathInsideRoot(candidate, workspace) && existsSync(candidate)) {
-    return candidate;
-  }
-  if (!input.safePathLabel.startsWith("artifacts/")) return null;
-  const dataCandidate = resolveUnderRoot(input.butlerData, input.safePathLabel);
-  return dataCandidate && existsSync(dataCandidate) ? dataCandidate : null;
-}
-
-function resolveUnderRoot(root: string, child: string): string | null {
-  const resolvedRoot = resolve(root);
-  const candidate = resolve(resolvedRoot, child);
-  return isPathInsideRoot(candidate, resolvedRoot) ? candidate : null;
-}
-
-function isPathInsideRoot(path: string, root: string): boolean {
-  const rel = relative(resolve(root), resolve(path));
-  return rel === "" || (rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel));
-}
-
-function artifactKindFromValue(value: unknown, localPath?: string): ArtifactRef["kind"] {
-  if (
-    value === "csv_file" ||
-    value === "table_file" ||
-    value === "chart_file" ||
-    value === "image" ||
-    value === "document" ||
-    value === "code" ||
-    value === "report" ||
-    value === "file"
-  ) {
-    return value;
-  }
-  const ext = localPath ? extname(localPath).toLocaleLowerCase("en-US") : "";
-  if (ext === ".csv") return "csv_file";
-  if (ext === ".tsv") return "table_file";
-  if ([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"].includes(ext)) return "image";
-  if (ext === ".pdf") return "report";
-  if ([".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java", ".kt"].includes(ext)) return "code";
-  if ([".md", ".txt", ".json", ".html"].includes(ext)) return "document";
-  return "file";
-}
-
-function mimeTypeForPath(path: string): string {
-  const ext = extname(path).toLocaleLowerCase("en-US");
-  if (ext === ".csv") return "text/csv";
-  if (ext === ".tsv") return "text/tab-separated-values";
-  if (ext === ".png") return "image/png";
-  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-  if (ext === ".webp") return "image/webp";
-  if (ext === ".gif") return "image/gif";
-  if (ext === ".svg") return "image/svg+xml";
-  if (ext === ".pdf") return "application/pdf";
-  if (ext === ".json") return "application/json";
-  if (ext === ".html") return "text/html";
-  if (ext === ".md" || ext === ".txt") return "text/plain";
-  return "application/octet-stream";
-}
-
-function fileSize(path: string): number | undefined {
-  try {
-    const stat = statSync(path);
-    return stat.isFile() ? stat.size : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function stringList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .filter((item): item is string => typeof item === "string")
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-  return typeof value === "string" && value.trim() ? [value.trim()] : [];
-}
-
-function numberValue(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function safeIdentifier(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]/gu, "-").replace(/-+/gu, "-").slice(0, 48) || "artifact";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-function completedToolProgressSummary(
-  progress: ToolProgressSummary,
-  result: unknown,
-): ToolProgressSummary {
-  if (progress.toolName !== "Web search") return progress;
-  const plannedQueries = smartSearchPlannedQueries(result);
-  if (plannedQueries.length === 0) return progress;
-  const count = plannedQueries.length;
-  const countLabel = `${count} planned ${count === 1 ? "query" : "queries"}`;
-  return {
-    ...progress,
-    safeLabel: `Smart web search: ${countLabel}`,
-    inputLabel: countLabel,
-    detailRows: plannedQueries.map((query, index) => ({
-      id: `web-search-planned-query-${index + 1}`,
-      kind: "query",
-      safe_label: `Planned query ${index + 1}`,
-      safe_value: query,
-      state: "delivered",
-    })),
-  };
-}
-
-function smartSearchPlannedQueries(result: unknown): string[] {
-  if (!isRecord(result)) return [];
-  const plan = result.search_plan;
-  if (!isRecord(plan) || plan.mode !== "smart") return [];
-  const queries = plan.queries;
-  if (!Array.isArray(queries)) return [];
-  return queries
-    .map((item) => {
-      if (!isRecord(item)) return "";
-      return typeof item.query === "string"
-        ? sanitizePublicText(item.query, "planned query").slice(0, 220)
-        : "";
-    })
-    .filter((query) => query && query !== "planned query")
-    .slice(0, 8);
 }
 
 export class NativeToolLoopRuntime implements AgentRuntimeAdapter {
@@ -2532,55 +1266,7 @@ function createAuditedButlerToolExecutor(input: {
 }): FunctionToolPromptOptions["executeTool"] {
   let semanticProgressEstablished = false;
   let currentSemanticWorkBlock: { id: string; label: string } | null = null;
-  const projectLedgerFreshnessCache = new Map<string, unknown>();
-  const projectLedgerFreshnessCacheKey = (call: {
-    name: string;
-    args: Record<string, unknown>;
-  }): string | null => {
-    if (call.name === "inspect_project_status") {
-      return `inspect_project_status:${stableJsonForCache({
-        project_path: typeof call.args.project_path === "string" ? call.args.project_path.trim() : "",
-      })}`;
-    }
-    if (call.name === "query_project_work") {
-      return `query_project_work:${stableJsonForCache({
-        project_path: typeof call.args.project_path === "string" ? call.args.project_path.trim() : "",
-        kind: typeof call.args.kind === "string" ? call.args.kind.trim() : "",
-      })}`;
-    }
-    return null;
-  };
-  const invalidateProjectLedgerFreshnessAfterTool = (call: {
-    name: string;
-    args: Record<string, unknown>;
-  }): void => {
-    if (call.name === "run_command") {
-      projectLedgerFreshnessCache.clear();
-      return;
-    }
-    if (call.name === "complete_project_work") {
-      projectLedgerFreshnessCache.clear();
-      return;
-    }
-    if (call.name === "render_project_dashboard" && call.args.write === true) {
-      projectLedgerFreshnessCache.clear();
-    }
-  };
-  const executeWithTurnFreshnessCache = async (
-    call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
-  ): Promise<unknown> => {
-    const cacheKey = projectLedgerFreshnessCacheKey(call);
-    if (cacheKey && projectLedgerFreshnessCache.has(cacheKey)) {
-      return projectLedgerFreshnessCache.get(cacheKey);
-    }
-    const result = await input.executor(call);
-    if (cacheKey) {
-      projectLedgerFreshnessCache.set(cacheKey, result);
-    } else {
-      invalidateProjectLedgerFreshnessAfterTool(call);
-    }
-    return result;
-  };
+  const projectLedgerFreshnessCache = createProjectLedgerFreshnessCache(input.executor);
   const repeatedToolFamilyGuard = new RepeatedToolFamilyGuard();
   const runInternalProgressTool = async (
     call: Parameters<FunctionToolPromptOptions["executeTool"]>[0],
@@ -2743,70 +1429,32 @@ function createAuditedButlerToolExecutor(input: {
     if (isInternalProgressTool(call.name)) {
       return await runInternalProgressTool(call, "model");
     }
-    if (input.plannedReview) {
-      const reviewTaskId = input.plannedReview.taskId;
-      if (PLANNED_REVIEW_SCOPED_TOOLS.has(call.name)) {
-        if (typeof cleanArgs.task_id !== "string" || !cleanArgs.task_id.trim()) {
-          cleanArgs.task_id = reviewTaskId;
-        }
-        if (input.plannedReview.attempt && typeof cleanArgs.attempt !== "number") {
-          cleanArgs.attempt = input.plannedReview.attempt;
-        }
-        if (
-          input.plannedReview.workerTaskId &&
-          (typeof cleanArgs.worker_task_id !== "string" || !cleanArgs.worker_task_id.trim())
-        ) {
-          cleanArgs.worker_task_id = input.plannedReview.workerTaskId;
-        }
-        if (
-          input.plannedReview.reviewEventId &&
-          (typeof cleanArgs.review_event_id !== "string" || !cleanArgs.review_event_id.trim())
-        ) {
-          cleanArgs.review_event_id = input.plannedReview.reviewEventId;
-        }
-      }
-      const requestedTaskId = typeof cleanArgs.task_id === "string" ? cleanArgs.task_id.trim() : "";
-      const blocksSiblingStart = PLANNED_REVIEW_FORBIDDEN_START_TOOLS.has(call.name);
-      const targetsDifferentPlannedTask =
-        PLANNED_REVIEW_SCOPED_TOOLS.has(call.name) &&
-        Boolean(requestedTaskId) &&
-        requestedTaskId !== reviewTaskId;
-      if (blocksSiblingStart || targetsDifferentPlannedTask) {
-        const error = blocksSiblingStart
-          ? `planned-review turns cannot start sibling work with ${call.name}; use review_planned_task, repair_planned_task, request_principal_decision, or write_planned_public_report for ${reviewTaskId}`
-          : `planned-review turn for ${reviewTaskId} cannot operate on ${requestedTaskId}`;
-        input.audit.push({
+    const plannedReviewBlock = applyPlannedReviewToolPolicy({
+      plannedReview: input.plannedReview,
+      toolName: call.name,
+      args: cleanArgs,
+    });
+    if (plannedReviewBlock) {
+      input.audit.push({
+        name: call.name,
+        args: cleanArgs,
+        ok: false,
+        error: plannedReviewBlock.error,
+      });
+      appendTranscriptEvent(createTranscriptEvent({
+        sessionId: input.sessionId,
+        kind: "tool_result",
+        payload: {
           name: call.name,
-          args: cleanArgs,
           ok: false,
-          error,
-        });
-        appendTranscriptEvent(createTranscriptEvent({
-          sessionId: input.sessionId,
-          kind: "tool_result",
-          payload: {
-            name: call.name,
-            ok: false,
-            error: evidenceTranscriptErrorMessage(error),
-            planned_review_task_id: reviewTaskId,
-          },
-          metadata: {
-            source: "runtime/native-tool-loop.ts#planned-review-policy",
-          },
-        }));
-        return {
-          ok: false,
-          error,
-          planned_review_task_id: reviewTaskId,
-          blocked_tool: call.name,
-          allowed_next_tools: [
-            "review_planned_task",
-            "repair_planned_task",
-            "request_principal_decision",
-            "write_planned_public_report",
-          ],
-        };
-      }
+          error: evidenceTranscriptErrorMessage(plannedReviewBlock.error),
+          planned_review_task_id: plannedReviewBlock.reviewTaskId,
+        },
+        metadata: {
+          source: "runtime/native-tool-loop.ts#planned-review-policy",
+        },
+      }));
+      return plannedReviewBlock.result;
     }
     const repeatDecision = repeatedToolFamilyGuard.record(call.name, cleanArgs);
     if (repeatDecision?.blocked) {
@@ -2982,7 +1630,7 @@ function createAuditedButlerToolExecutor(input: {
     }));
     try {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
-      const result = await executeWithTurnFreshnessCache(effectiveCall);
+      const result = await projectLedgerFreshnessCache.execute(effectiveCall);
       if (call.name === "tool_describe") {
         input.toolSurfaceController?.recordToolDescriptionResult(result);
       }
@@ -3122,7 +1770,7 @@ function createAuditedButlerToolExecutor(input: {
       return modelVisibleResult;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      invalidateProjectLedgerFreshnessAfterTool(effectiveCall);
+      projectLedgerFreshnessCache.invalidateAfterTool(effectiveCall);
       recordOperationalMetric({
         category: "tool",
         name: call.name,
