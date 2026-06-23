@@ -6,7 +6,7 @@ import type {
   EvidenceReceipt,
   EvidenceReference,
   PublicWorkObligationKind,
-} from "../turn/native-tool-types.ts";
+} from "../turn/native/output/tool-types.ts";
 
 const TOOL_PROCESS_ENV_ALLOWLIST = [
   "PATH",

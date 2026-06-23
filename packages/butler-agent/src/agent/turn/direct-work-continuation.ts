@@ -4,7 +4,7 @@ import {
   type WorkStreamState,
   WorkStreamStore,
 } from "../work/work-stream.ts";
-import type { ToolAuditEntry } from "./native-tool-types.ts";
+import type { ToolAuditEntry } from "./native/output/tool-types.ts";
 
 export const RUNTIME_SEMANTIC_TODO_LIST_ID = "runtime-semantic";
 

@@ -20,7 +20,7 @@ import {
   evidenceTranscriptToolResultProjection,
 } from "../output/evidence-transcript-result.ts";
 import type { RuntimeMessageLanguage } from "../output/messages.ts";
-import type { ToolAuditEntry } from "./native-tool-types.ts";
+import type { ToolAuditEntry } from "./native/output/tool-types.ts";
 
 export type BridgeToolCall = Parameters<FunctionToolPromptOptions["executeTool"]>[0];
 

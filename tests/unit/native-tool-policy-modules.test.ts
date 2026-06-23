@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
-import { completedToolProgressSummary } from "../../packages/butler-agent/src/agent/turn/native-completed-tool-progress.ts";
-import { createProjectLedgerFreshnessCache } from "../../packages/butler-agent/src/agent/turn/native-project-ledger-freshness-cache.ts";
-import { applyPlannedReviewToolPolicy } from "../../packages/butler-agent/src/agent/turn/native-planned-review-tool-policy.ts";
+import { completedToolProgressSummary } from "../../packages/butler-agent/src/agent/turn/native/tool-execution/completed-tool-progress.ts";
+import { createProjectLedgerFreshnessCache } from "../../packages/butler-agent/src/agent/turn/native/tool-execution/project-ledger-freshness-cache.ts";
+import { applyPlannedReviewToolPolicy } from "../../packages/butler-agent/src/agent/turn/native/policy/planned-review-tool-policy.ts";
 import {
   activeTodoWorkBlockFromArgs,
   runtimeSemanticTodoItems,
   shouldSynthesizeRuntimeSemanticProgress,
-} from "../../packages/butler-agent/src/agent/turn/native-runtime-semantic-progress.ts";
+} from "../../packages/butler-agent/src/agent/turn/native/progress/runtime-semantic-progress.ts";
 
 test("planned review policy injects scoped ownership and blocks sibling starts", () => {
   const repairArgs: Record<string, unknown> = {};

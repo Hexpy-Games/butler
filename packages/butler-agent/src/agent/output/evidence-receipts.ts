@@ -3,7 +3,7 @@ import type {
   EvidenceReceipt,
   EvidenceReference,
   PublicWorkObligationKind,
-} from "../turn/native-tool-types.ts";
+} from "../turn/native/output/tool-types.ts";
 
 const RECEIPT_SCHEMA = "butler.evidence-receipt.v1";
 

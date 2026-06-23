@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
 import { tmpdir } from "os";
-import { runtimeArtifactsFromAudit } from "../../packages/butler-agent/src/agent/turn/native-runtime-artifacts.ts";
-import type { ToolAuditEntry } from "../../packages/butler-agent/src/agent/turn/native-tool-types.ts";
+import { runtimeArtifactsFromAudit } from "../../packages/butler-agent/src/agent/turn/native/output/runtime-artifacts.ts";
+import type { ToolAuditEntry } from "../../packages/butler-agent/src/agent/turn/native/output/tool-types.ts";
 
 test("runtime artifact projection resolves verified output files under workspace", () => {
   const workspacePath = mkdtempSync(join(tmpdir(), "butler-runtime-artifact-workspace-"));

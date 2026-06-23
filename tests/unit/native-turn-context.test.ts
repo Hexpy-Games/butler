@@ -17,14 +17,14 @@ import {
   normalizeTurnPrompt,
   promptContextSection,
   stableJsonForCache,
-} from "../../packages/butler-agent/src/agent/turn/native-turn-prompt.ts";
+} from "../../packages/butler-agent/src/agent/turn/native/context/turn-prompt.ts";
 import {
   plannedReviewTurnContext,
-} from "../../packages/butler-agent/src/agent/turn/native-planned-review-context.ts";
+} from "../../packages/butler-agent/src/agent/turn/native/context/planned-review-context.ts";
 import {
   renderRecallContext,
   shouldAttemptAutomaticRecall,
-} from "../../packages/butler-agent/src/agent/turn/native-recall-context.ts";
+} from "../../packages/butler-agent/src/agent/turn/native/context/recall-context.ts";
 
 test("native turn context normalizes prompt sections and structured current input", () => {
   const previousButlerData = process.env.BUTLER_DATA;

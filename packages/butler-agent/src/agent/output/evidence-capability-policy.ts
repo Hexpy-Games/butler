@@ -1,5 +1,5 @@
 import { sanitizePublicText } from "../events/turn-events.ts";
-import type { PublicWorkObligationKind } from "../turn/native-tool-types.ts";
+import type { PublicWorkObligationKind } from "../turn/native/output/tool-types.ts";
 import type {
   EvidenceCapabilityReceipt,
   EvidenceCapabilityReceiptIssue,

@@ -1,5 +1,5 @@
 import type { FunctionToolDefinition } from "../../integrations/providers/provider.ts";
-import type { PublicWorkObligationKind } from "../turn/native-tool-types.ts";
+import type { PublicWorkObligationKind } from "../turn/native/output/tool-types.ts";
 
 export interface ButlerToolDefinition extends FunctionToolDefinition {
   concurrencySafe: boolean;
