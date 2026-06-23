@@ -5681,7 +5681,12 @@ test("native runtime dispatches workers only through model-selected tool calls",
 });
 
 test("native runtime emits a user-facing execution plan before background dispatch", async () => {
-  const deliveries: Array<{ text: string; actionId: string; replyToMessageId?: string }> = [];
+  const deliveries: Array<{
+    text: string;
+    actionId: string;
+    replyToMessageId?: string;
+    metadata: Record<string, unknown>;
+  }> = [];
   const runtime = new NativeToolLoopRuntime({
     messageLanguage: "ko",
     executeButlerTool: async (call) => {
@@ -5748,6 +5753,7 @@ test("native runtime emits a user-facing execution plan before background dispat
         text,
         actionId: action.actionId,
         replyToMessageId: action.message.replyToMessageId,
+        metadata: action.metadata ?? {},
       });
     },
   });
@@ -5763,6 +5769,9 @@ test("native runtime emits a user-facing execution plan before background dispat
   expect(deliveries[0]!.text).not.toContain("six numbered sections");
   expect(deliveries[0]!.text).not.toContain("워커");
   expect(deliveries[0]!.text).not.toContain("디스패치");
+  expect(deliveries[0]!.metadata.tool).toBe("dispatch_worker");
+  expect(deliveries[0]!.metadata.phase).toBe("before_tool_execution");
+  expect(deliveries[0]!.metadata.kind).toBe("intermediate");
 });
 
 test("native runtime tolerates tool progress when no intermediate callback exists", async () => {
