@@ -28,13 +28,14 @@ const inventory: InventoryEntry[] = [
   entry("packages/butler-agent/src/agent/tools/run-command/run_command/executor.ts", 691, 6, ["./evidence.ts"], "run_command executor", "legacy exception; command evidence is delegated to evidence.ts", true),
   entry("packages/butler-agent/src/interfaces/gateway/queued-inbound.ts", 580, 7, ["../../agent/turn/recoverable-delivery.ts", "../../integrations/providers/provider-errors.ts"], "queued inbound gateway", "split limited-delivery and failure-action projection helpers", true),
   entry("packages/butler-agent/src/agent/events/turn-events.ts", 477, 2, ["node:buffer", "node:crypto"], "turn event persistence", "legacy exception; keep privacy-safe transcript helpers delegated", true),
-  entry("packages/butler-agent/src/agent/output/final-output-contract.ts", 399, 4, ["./completion-obligation-evidence.ts"], "final answer contract", "split evidence review semantics from final-answer leak repair", true),
+  entry("packages/butler-agent/src/agent/output/final-output-contract.ts", 206, 3, ["./completion-obligation-review.ts"], "final answer contract", "keep final-answer prompt and leak repair separate from evidence proof review"),
   entry("packages/butler-agent/src/agent/tools/profiles.ts", 297, 2, ["../../integrations/providers/provider.ts", "./butler-tools.ts"], "tool profile policy", "keep under 300 lines and delegate surface selection to focused helpers"),
   entry("packages/butler-agent/src/agent/tools/tool-surface-controller.ts", 253, 2, ["./tool-surface-types.ts", "./tool-surface-validation.ts"], "tool surface state", "keep under 300 lines and split bridge orchestration into tool-bridge modules"),
   entry("packages/butler-agent/src/agent/turn/bridge-tool-executor.ts", 278, 9, ["../tools/tool-bridge/audit.ts", "../output/tool-progress.ts", "../output/evidence-transcript-result.ts"], "bridge tool execution", "keep bridge resolution, progress, audit, and transcript orchestration outside native runtime loop"),
   entry("packages/butler-agent/src/agent/turn/tool-loop-guards.ts", 125, 0, [], "native tool loop policy guards", "keep repeated-family and round-limit policy outside the native runtime loop"),
   entry("packages/butler-agent/src/agent/turn/tool-surface-prompt-controller.ts", 125, 2, ["../../integrations/providers/provider.ts", "../tools/tool-surface-selection.ts"], "tool surface prompt state", "keep selected provider-tool state and same-turn promotion outside native runtime loop"),
   entry("packages/butler-agent/src/agent/turn/native-tool-instructions.ts", 129, 1, ["../../test-support/harness/contracts.ts"], "native tool instructions", "keep static Butler tool and role policy prompt assembly outside native runtime loop"),
+  entry("packages/butler-agent/src/agent/output/completion-obligation-review.ts", 286, 4, ["../policy/runtime-policy.ts", "./completion-obligation-evidence.ts"], "completion obligation review", "own typed evidence-proof review, proof prompt guidance, and limitation summaries outside final-answer formatting"),
   entry("packages/butler-agent/src/integrations/providers/provider-errors.ts", 282, 1, ["./operational-errors.ts"], "provider diagnostics", "keep under 300 lines with operational-errors owning service/storage/policy taxonomy"),
   entry("packages/butler-agent/src/agent/turn/runtime-delivery-state.ts", 287, 2, ["./runtime-cancellation.ts", "./operational-failure.ts"], "runtime delivery taxonomy", "keep under 300 lines with focused operational/cancellation helpers"),
   entry("packages/butler-agent/src/agent/output/evidence-capability-ledger-state.ts", 237, 3, ["./evidence-capability-parser.ts", "./evidence-capability-types.ts"], "evidence capability ledger", "keep evidence proof semantics under 300 lines outside final-output formatting"),
@@ -73,7 +74,6 @@ test("tool runtime refactor inventory maps every oversized changed implementatio
     "packages/butler-agent/src/agent/tools/run-command/run_command/executor.ts",
     "packages/butler-agent/src/interfaces/gateway/queued-inbound.ts",
     "packages/butler-agent/src/agent/events/turn-events.ts",
-    "packages/butler-agent/src/agent/output/final-output-contract.ts",
   ]);
 });
 
