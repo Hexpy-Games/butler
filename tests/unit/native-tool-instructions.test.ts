@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import {
   appendButlerToolInstructions,
   appendRoleToolPolicyInstructions,
-} from "../../packages/butler-agent/src/agent/turn/native-tool-instructions.ts";
+} from "../../packages/butler-agent/src/agent/turn/native/output/tool-instructions.ts";
 
 test("native tool instructions preserve capability-selection and recovery guidance", () => {
   const instructions = appendButlerToolInstructions("Base system prompt.");

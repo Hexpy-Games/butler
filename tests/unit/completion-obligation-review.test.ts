@@ -10,7 +10,7 @@ import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src
 import type {
   PublicWorkDecision,
   ToolAuditEntry,
-} from "../../packages/butler-agent/src/agent/turn/native-tool-types.ts";
+} from "../../packages/butler-agent/src/agent/turn/native/output/tool-types.ts";
 
 test("completion obligation review collects unique obligations from public decisions", () => {
   expect(requiredCompletionObligations([

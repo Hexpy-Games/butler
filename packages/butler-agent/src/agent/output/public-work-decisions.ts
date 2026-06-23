@@ -5,7 +5,7 @@ import type {
   PublicWorkObligationKind,
   PublicWorkDecision,
   ToolProgressSummary,
-} from "../turn/native-tool-types.ts";
+} from "../turn/native/output/tool-types.ts";
 import {
   activityKindForTool,
   displayToolName,

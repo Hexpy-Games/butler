@@ -1,7 +1,7 @@
 import { homedir } from "os";
 import { basename } from "path";
 import type { RuntimeMessageLanguage } from "./messages.ts";
-import type { ToolProgressSummary } from "../turn/native-tool-types.ts";
+import type { ToolProgressSummary } from "../turn/native/output/tool-types.ts";
 
 export function summarizeToolProgress(
   name: string,

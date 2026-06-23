@@ -17,7 +17,7 @@ import {
 import type { VectorEpisodeBackend } from "../cognition/memory/recall/vector.ts";
 import type { AgentLoopToolDefinition } from "../turn/agent-loop.ts";
 import type { FunctionToolPromptOptions } from "../../integrations/providers/provider.ts";
-import type { PublicWorkObligationKind } from "../turn/native-tool-types.ts";
+import type { PublicWorkObligationKind } from "../turn/native/output/tool-types.ts";
 import {
   completionObligationEvidenceReceiptsFromResult,
   hasEvidenceCapabilityReceiptField,

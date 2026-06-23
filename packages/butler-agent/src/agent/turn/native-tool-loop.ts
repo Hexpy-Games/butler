@@ -15,7 +15,7 @@ import type { WebSearchProvider } from "../../integrations/search/provider.ts";
 import {
   getButlerData,
   getButlerHome,
-} from "./native-runtime-paths.ts";
+} from "./native/context/runtime-paths.ts";
 import {
   resolveRuntimeMessageLanguage,
   type RuntimeMessageLanguage,
@@ -31,8 +31,8 @@ import {
 import { recordOperationalMetric } from "../../operations/metrics/operational-metrics.ts";
 import {
   throwIfRuntimeTurnAborted,
-} from "./native-turn-errors.ts";
-import { runNativeToolTurn } from "./native-turn-runner.ts";
+} from "./native/policy/turn-errors.ts";
+import { runNativeToolTurn } from "./native/turn-runner/turn-runner.ts";
 
 export {
   applyCorrectionChallengeGuard,
