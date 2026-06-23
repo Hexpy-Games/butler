@@ -19,6 +19,18 @@ export type SettingsSectionId =
   | "archives"
   | "about";
 export type MessageFileKind = "text" | "image" | "generic";
+export type RuntimeDeliveryState =
+  | "running"
+  | "recovering_internal"
+  | "needs_tool_surface"
+  | "needs_evidence"
+  | "needs_argument_repair"
+  | "waiting_user"
+  | "system_error"
+  | "cancelled"
+  | "delivered"
+  | "delivered_with_limitations"
+  | "failed_system";
 
 export interface StatusPill {
   label: string;
@@ -608,6 +620,9 @@ export interface MessageRecord {
   artifacts?: SessionArtifactSummary[];
   work_blocks?: WorkBlockView[];
   status?: string;
+  delivery_state?: RuntimeDeliveryState;
+  limitation_codes?: string[];
+  limitations?: string[];
   retryable?: boolean;
   cursor?: number;
   created_at?: string;
@@ -704,6 +719,9 @@ export interface TurnProgressSnapshot {
   summary?: string;
   updated_at?: string;
   state?: string;
+  delivery_state?: RuntimeDeliveryState;
+  limitation_codes?: string[];
+  limitations?: string[];
   safe_progress_rows: ProgressRow[];
 }
 
@@ -720,6 +738,9 @@ export interface SessionViewTurn {
   safe_status_label: string;
   cancellable: boolean;
   retryable: boolean;
+  delivery_state?: RuntimeDeliveryState;
+  limitation_codes?: string[];
+  limitations?: string[];
   progress: TurnProgressSnapshot;
   created_at: string;
   updated_at: string;

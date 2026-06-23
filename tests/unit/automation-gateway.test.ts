@@ -827,6 +827,10 @@ test("queued inbound goal completion incomplete delivers safe limited result", a
       kind: "final_result",
       turnId: "turn-goal-incomplete",
       deliveryState: "delivered_with_limitations",
+      limitationCodes: ["internal_recovery_required"],
+      limitations: [
+        "확인된 완료 증거가 아직 부족합니다. [redacted]",
+      ],
     },
   });
   expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");

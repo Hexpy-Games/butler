@@ -5560,6 +5560,12 @@ test("app transport final result projection delivers queued turns after app-serv
           kind: "final_result",
           turnId,
           source: "test",
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["source_verified_missing"],
+          limitations: [
+            "Source verification remained unavailable.",
+            "raw prompt text token=secret /Users/example/private",
+          ],
           generatedSessionTitle: "Durable App 제목",
           loadedSkillNames: ["project-ledger"],
         },
@@ -5597,6 +5603,7 @@ test("app transport final result projection delivers queued turns after app-serv
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
       state: "delivered",
+      safe_status_label: "Delivered with limitations",
       cancellable: false,
       retryable: false,
     });
@@ -5617,6 +5624,13 @@ test("app transport final result projection delivers queued turns after app-serv
     expect(sessionView.data.latest_turn).toMatchObject({
       id: turnId,
       state: "delivered",
+      safe_status_label: "Delivered with limitations",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["source_verified_missing"],
+      limitations: [
+        "Source verification remained unavailable.",
+        "A runtime limitation remained.",
+      ],
       cancellable: false,
       retryable: false,
     });
@@ -5631,6 +5645,18 @@ test("app transport final result projection delivers queued turns after app-serv
     const sessionAssistant = sessionView.data.messages.find(
       (message: { role: string }) => message.role === "assistant",
     );
+    expect(sessionAssistant).toMatchObject({
+      status: "delivered",
+      retryable: false,
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["source_verified_missing"],
+      limitations: [
+        "Source verification remained unavailable.",
+        "A runtime limitation remained.",
+      ],
+    });
+    expect(JSON.stringify(sessionView)).not.toContain("token=secret");
+    expect(JSON.stringify(sessionView)).not.toContain("/Users/example");
     expect(sessionAssistant.attachments).toHaveLength(1);
     expect(sessionView.data.artifacts).toContainEqual(
       expect.objectContaining({ title: "queued-result.md" }),
@@ -8269,6 +8295,20 @@ test("goal completion incomplete gaps deliver safe limitation text instead of ap
       }),
     });
     expect(response.status).toBe(202);
+    const body = await response.json() as {
+      data: {
+        reply?: {
+          delivery_state?: string;
+          limitation_codes?: string[];
+          limitations?: string[];
+        };
+      };
+    };
+    expect(body.data.reply).toMatchObject({
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+      limitations: ["확인 가능한 공개 출처를 읽지 못했습니다. [redacted]"],
+    });
 
     const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
     const deliveredTurn = turns.data.turns[0];

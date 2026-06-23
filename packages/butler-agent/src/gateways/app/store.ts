@@ -154,6 +154,7 @@ import {
   type SessionView,
   type SessionViewStatus,
   type SessionViewTurn,
+  type SessionViewTurnDeliveryState,
   type SettingsView,
   type SkillImportResult,
   type SkillSettingsView,
@@ -199,6 +200,7 @@ import {
   type AgentTurnEvent,
   type RuntimeTurnEventInput,
 } from "../../agent/events/turn-events.ts";
+import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import type { SessionTransportBinding } from "../../test-support/harness/contracts.ts";
 import type { TranscriptEvent } from "../../test-support/harness/transcripts.ts";
@@ -215,6 +217,7 @@ import {
 import {
   appLimitedDeliveryForError,
   appSafeResponderError,
+  type AppLimitedDelivery,
 } from "./failure-ux-contract.ts";
 import {
   applyComponentUpdate,
@@ -386,6 +389,12 @@ interface TurnRow {
   attempt: number;
   created_at: string;
   updated_at: string;
+}
+
+interface DeliveryLimitationMetadata {
+  delivery_state: SessionViewTurnDeliveryState;
+  limitation_codes: string[];
+  limitations: string[];
 }
 
 interface SettingRow {
@@ -3452,6 +3461,7 @@ export class AppServerStore {
         summary: turn.safe_status_label,
         updated_at: turn.updated_at,
         state: turn.state,
+        ...this.deliveryMetadataForTurnRecord(turnFromRow(turn)),
         safe_progress_rows: progressRowsForTurnState(
           this.listProgressRowsForTurn(turnId),
           turn.state,
@@ -3465,9 +3475,13 @@ export class AppServerStore {
     turn: TurnRecord,
     options: { suppressProgressRows?: boolean } = {},
   ): SessionViewTurn {
+    const delivery = this.deliveryMetadataForTurnRecord(turn);
     return {
       id: turn.id,
       state: turn.state,
+      delivery_state: delivery.delivery_state,
+      limitations: delivery.limitations,
+      limitation_codes: delivery.limitation_codes,
       safe_status_label: turn.safe_status_label,
       cancellable: turn.cancellable,
       retryable: turn.retryable,
@@ -3476,6 +3490,9 @@ export class AppServerStore {
         summary: turn.safe_status_label,
         updated_at: turn.updated_at,
         state: turn.state,
+        delivery_state: delivery.delivery_state,
+        limitations: delivery.limitations,
+        limitation_codes: delivery.limitation_codes,
         safe_progress_rows: options.suppressProgressRows
           ? []
           : progressRowsForTurnState(
@@ -3493,15 +3510,55 @@ export class AppServerStore {
       if (message.role !== "assistant" || !message.turn_id) return message;
       const turn = this.getTurnRow(message.turn_id);
       if (!turn || !isTerminalProgressState(turn.state)) return message;
+      const delivery = this.deliveryLimitationMetadataForTurn(message.turn_id);
       const workBlocks = workBlocksFromTerminalProgressRows(
         progressRowsForTurnState(
           this.listProgressRowsForTurn(message.turn_id),
           turn.state,
         ),
       );
-      if (workBlocks.length === 0) return message;
-      return { ...message, work_blocks: workBlocks };
+      if (workBlocks.length === 0 && !delivery) return message;
+      return {
+        ...message,
+        ...(delivery ?? {}),
+        ...(workBlocks.length > 0 ? { work_blocks: workBlocks } : {}),
+      };
     });
+  }
+
+  private deliveryLimitationMetadataForTurn(
+    turnId: string,
+  ): DeliveryLimitationMetadata | null {
+    const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
+    const rows = this.db
+      .query<EventRow, [string]>(
+        `
+      SELECT id, type, payload_json, created_at
+      FROM events
+      WHERE type = 'agent.turn_event'
+        AND payload_json LIKE ? ESCAPE '\\'
+      ORDER BY id DESC
+      LIMIT 500
+    `,
+      )
+      .all(turnPayloadPattern);
+    for (const row of rows) {
+      const payload = safeParseRecord(row.payload_json);
+      if (payload.turn_id !== turnId) continue;
+      const event = isRecord(payload.event) ? payload.event : {};
+      const eventPayload = isRecord(event.payload) ? event.payload : {};
+      const metadata = deliveryLimitationMetadataFromRecord(eventPayload);
+      if (metadata) return metadata;
+    }
+    return null;
+  }
+
+  private deliveryMetadataForTurnRecord(turn: TurnRecord): DeliveryLimitationMetadata {
+    return this.deliveryLimitationMetadataForTurn(turn.id) ?? {
+      delivery_state: deliveryStateForTurnState(turn.state),
+      limitation_codes: [],
+      limitations: [],
+    };
   }
 
   syncAllAppTransportEvents(): number {
@@ -3609,6 +3666,8 @@ export class AppServerStore {
     const text = sanitizeAppTransportFinalText(message.text);
     const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
     if (!text && artifacts.length === 0) return false;
+    const delivery = deliveryLimitationMetadataFromRecord(metadata);
+    const limitedDelivery = delivery?.delivery_state === "delivered_with_limitations";
 
     const existing = this.getLatestAssistantMessageForTurn(turnId);
     const artifactFiles = this.artifactFilesFromOutbound(
@@ -3647,13 +3706,16 @@ export class AppServerStore {
       this.appendTurnEvent(chatId, turnId, {
         kind: "message.final.completed",
         payload: {
-          safeLabel: "Final answer ready",
+          safeLabel: limitedDelivery
+            ? "Final answer ready with limitations"
+            : "Final answer ready",
           textChars: text.length,
+          ...(delivery ?? {}),
         },
       });
     }
     const deliveredTurn = this.updateTurnState(turnId, "delivered", {
-      safeStatusLabel: "Delivered",
+      safeStatusLabel: limitedDelivery ? "Delivered with limitations" : "Delivered",
       retryable: false,
       cancellable: false,
       safeErrorCode: null,
@@ -3662,7 +3724,10 @@ export class AppServerStore {
     if (!this.hasTurnEventKind(turnId, "turn.completed")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "turn.completed",
-        payload: { safeLabel: "Completed" },
+        payload: {
+          safeLabel: limitedDelivery ? "Completed with limitations" : "Completed",
+          ...(delivery ?? {}),
+        },
       });
     }
     this.touchChat(chatId);
@@ -4448,7 +4513,7 @@ export class AppServerStore {
       }
       const limitedDelivery = appLimitedDeliveryForError(error);
       if (limitedDelivery) {
-        const delivered = this.finalizeResponderLimitedDelivery(chatId, turn.id, limitedDelivery.text);
+        const delivered = this.finalizeResponderLimitedDelivery(chatId, turn.id, limitedDelivery);
         this.touchChat(chatId);
         await this.drainQueuedSessionMessages(chatId, responder, options);
         return {
@@ -4741,7 +4806,7 @@ export class AppServerStore {
       }
       const limitedDelivery = appLimitedDeliveryForError(error);
       if (limitedDelivery) {
-        const delivered = this.finalizeResponderLimitedDelivery(chatId, turn.id, limitedDelivery.text);
+        const delivered = this.finalizeResponderLimitedDelivery(chatId, turn.id, limitedDelivery);
         const existingMessage = this.getMessageRow(messageId);
         const accepted = existingMessage
           ? messageFromRow(
@@ -4964,7 +5029,7 @@ export class AppServerStore {
       }
       const limitedDelivery = appLimitedDeliveryForError(error);
       if (limitedDelivery) {
-        const delivered = this.finalizeResponderLimitedDelivery(row.chat_id, turnId, limitedDelivery.text);
+        const delivered = this.finalizeResponderLimitedDelivery(row.chat_id, turnId, limitedDelivery);
         this.touchChat(row.chat_id);
         await this.drainQueuedSessionMessages(row.chat_id, responder, options);
         return {
@@ -6163,8 +6228,12 @@ export class AppServerStore {
   private finalizeResponderLimitedDelivery(
     chatId: string,
     turnId: string,
-    text: string,
+    limitedDelivery: AppLimitedDelivery,
   ): { reply: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
+    const text = limitedDelivery.text;
+    const deliveryState = limitedDelivery.delivery.delivery_state;
+    const limitations = limitedDelivery.delivery.limitations;
+    const limitationCodes = limitedDelivery.delivery.limitation_codes;
     if (!this.hasTurnEventKind(turnId, "message.final.started")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "message.final.started",
@@ -6178,7 +6247,11 @@ export class AppServerStore {
         payload: {
           safeLabel: "Final answer ready with limitations",
           textChars: text.length,
-          deliveryState: "delivered_with_limitations",
+          deliveryState,
+          delivery_state: deliveryState,
+          limitations,
+          limitationCodes,
+          limitation_codes: limitationCodes,
         },
       });
     }
@@ -6194,13 +6267,23 @@ export class AppServerStore {
         kind: "turn.completed",
         payload: {
           safeLabel: "Completed with limitations",
-          deliveryState: "delivered_with_limitations",
+          deliveryState,
+          delivery_state: deliveryState,
+          limitations,
+          limitationCodes,
+          limitation_codes: limitationCodes,
         },
       });
     }
+    const projectedReplies = replies.map((reply) => ({
+      ...reply,
+      delivery_state: deliveryState,
+      limitations,
+      limitation_codes: limitationCodes,
+    }));
     return {
-      reply: replies.at(-1)!,
-      replies,
+      reply: projectedReplies.at(-1)!,
+      replies: projectedReplies,
       turn: deliveredTurn,
     };
   }
@@ -9843,6 +9926,69 @@ function loadedSkillNamesFromTranscriptEvent(
     safeOptionalShortToken(metadata.turnId);
   if (turnId && eventTurnId !== turnId) return null;
   return safeSkillNameList(details.skillNames);
+}
+
+function deliveryLimitationMetadataFromRecord(
+  record: Record<string, unknown>,
+): DeliveryLimitationMetadata | null {
+  const deliveryState = safeDeliveryState(
+    record.delivery_state ?? record.deliveryState,
+  );
+  if (deliveryState !== "delivered_with_limitations") return null;
+  return {
+    delivery_state: deliveryState,
+    limitation_codes: safeShortTokenList(
+      record.limitation_codes ?? record.limitationCodes,
+    ),
+    limitations: safeShortTextList(record.limitations),
+  };
+}
+
+function safeDeliveryState(value: unknown): SessionViewTurnDeliveryState | null {
+  if (typeof value !== "string") return null;
+  if (
+    value === "running" ||
+    value === "recovering_internal" ||
+    value === "needs_tool_surface" ||
+    value === "needs_evidence" ||
+    value === "needs_argument_repair" ||
+    value === "waiting_user" ||
+    value === "system_error" ||
+    value === "cancelled" ||
+    value === "delivered" ||
+    value === "delivered_with_limitations" ||
+    value === "failed_system"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function deliveryStateForTurnState(state: TurnState): SessionViewTurnDeliveryState {
+  if (state === "delivered") return "delivered";
+  if (state === "failed") return "failed_system";
+  if (state === "cancelled") return "cancelled";
+  if (state === "waiting_for_form") return "waiting_user";
+  if (state === "waiting_for_tool" || state === "retrying") {
+    return "recovering_internal";
+  }
+  return "running";
+}
+
+function safeShortTokenList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => safeOptionalShortToken(item))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 8);
+}
+
+function safeShortTextList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => safeLimitationText(item, "A runtime limitation remained."))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 8);
 }
 
 function safeShortText(value: unknown, fallback: string): string {
