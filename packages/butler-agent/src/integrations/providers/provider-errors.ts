@@ -1,4 +1,9 @@
 import { safeOperationalRuntimeFailure } from "./operational-errors.ts";
+import {
+  INTERNAL_RECOVERY_REQUIRED_CODE,
+  isInternalRecoveryFailure,
+  safeInternalRecoveryMessage,
+} from "../../runtime/internal-recovery-failure.ts";
 
 export interface RuntimeFailureDiagnostic {
   code: string;
@@ -134,12 +139,13 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
   if (error instanceof ModelProviderRequestError) return error.diagnostic();
   const message = errorMessage(error);
   const code = errorCode(error);
-  if (isGoalCompletionIncompleteError(error)) {
+  if (isInternalRecoveryFailure(error)) {
+    const safeMessage = safeInternalRecoveryMessage(message);
     return {
-      code: "internal_recovery_required",
-      message: safeGoalCompletionIncompleteMessage(message),
+      code: INTERNAL_RECOVERY_REQUIRED_CODE,
+      message: safeMessage,
       retryable: true,
-      cause: safeErrorText(message),
+      cause: safeMessage,
     };
   }
   const operationalFailure = safeOperationalRuntimeFailure({ code, message });
@@ -183,14 +189,6 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
       api: "model-api",
       error: message,
     }).diagnostic();
-  }
-  if (/goal completion|could not verify that the requested goal was completed/iu.test(message)) {
-    return {
-      code: "internal_recovery_required",
-      message: "Butler could not verify that the requested goal was completed.",
-      retryable: true,
-      cause: safeErrorText(message),
-    };
   }
   return {
     code: "gateway_failed",
@@ -246,6 +244,10 @@ function isContextLimitDetail(detail: string | undefined): boolean {
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const message = (error as Record<string, unknown>).message;
+    return typeof message === "string" ? message : "Unknown runtime error";
+  }
   return typeof error === "string" ? error : "Unknown runtime error";
 }
 
@@ -253,21 +255,6 @@ function errorCode(error: unknown): string | undefined {
   if (!error || typeof error !== "object") return undefined;
   const code = (error as Record<string, unknown>).code;
   return typeof code === "string" ? code : undefined;
-}
-
-function isGoalCompletionIncompleteError(error: unknown): error is Error {
-  return error instanceof Error && error.name === "GoalCompletionIncompleteError";
-}
-
-function safeGoalCompletionIncompleteMessage(message: string): string {
-  if (isCompletionObligationProtocolMessage(message)) {
-    return "Butler could not verify that the requested goal was completed.";
-  }
-  return safeErrorText(message) ?? "Butler could not verify that the requested goal was completed.";
-}
-
-function isCompletionObligationProtocolMessage(message: string): boolean {
-  return /(?:unsatisfied|missing|unresolved) public completion obligation/iu.test(message);
 }
 
 function safeErrorText(value: unknown): string | undefined {

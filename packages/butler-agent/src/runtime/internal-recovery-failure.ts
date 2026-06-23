@@ -1,0 +1,113 @@
+export const INTERNAL_RECOVERY_REQUIRED_CODE = "internal_recovery_required";
+
+export type InternalRecoveryState =
+  | "recovering_internal"
+  | "needs_tool_surface"
+  | "needs_evidence"
+  | "needs_argument_repair";
+
+export interface InternalRecoveryFailureInput {
+  code?: string;
+  name?: string;
+  message?: string;
+}
+
+export function isGoalCompletionIncompleteFailure(error: unknown): boolean {
+  if (error instanceof Error && error.name === "GoalCompletionIncompleteError") return true;
+  const failure = normalizeInternalRecoveryInput(error);
+  return failure.code === "goal_completion_incomplete" ||
+    isGoalCompletionIncompleteMessage(failure.message ?? "");
+}
+
+export function isInternalRecoveryFailure(input: InternalRecoveryFailureInput | unknown): boolean {
+  const failure = normalizeInternalRecoveryInput(input);
+  const message = failure.message ?? "";
+  return (
+    failure.code === "goal_completion_incomplete" ||
+    failure.code === "internal_uncertainty" ||
+    failure.name === "GoalCompletionIncompleteError" ||
+    isCompletionObligationProtocolMessage(message) ||
+    isGoalCompletionIncompleteMessage(message) ||
+    /uncertain (?:whether|if) the requested goal was completed/iu.test(message) ||
+    /internal uncertainty/iu.test(message) ||
+    /completion review .*incomplete/iu.test(message) ||
+    /unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message) ||
+    /invalid tool arguments|tool arguments failed validation/iu.test(message) ||
+    /missing evidence|candidate-only evidence|evidence receipt/iu.test(message)
+  );
+}
+
+export function internalRecoveryStateForFailure(
+  input: InternalRecoveryFailureInput | unknown,
+): InternalRecoveryState {
+  const failure = normalizeInternalRecoveryInput(input);
+  const message = failure.message ?? "";
+  if (/unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message)) {
+    return "needs_tool_surface";
+  }
+  if (/invalid tool arguments|tool arguments failed validation/iu.test(message)) {
+    return "needs_argument_repair";
+  }
+  if (/missing evidence|candidate-only evidence|evidence receipt|completion obligation|could not verify/iu.test(message)) {
+    return "needs_evidence";
+  }
+  return "recovering_internal";
+}
+
+export function safeInternalRecoveryMessage(
+  message: string,
+  fallback = "Butler could not verify that the requested goal was completed.",
+): string {
+  if (isCompletionObligationProtocolMessage(message)) return fallback;
+  return safeRecoveryText(message) ?? fallback;
+}
+
+export function isCompletionObligationProtocolMessage(message: string): boolean {
+  return /(?:unsatisfied|missing|unresolved) public completion obligation/iu.test(message);
+}
+
+function isGoalCompletionIncompleteMessage(message: string): boolean {
+  return /goal completion|could not verify that the requested goal was completed/iu.test(message);
+}
+
+function normalizeInternalRecoveryInput(input: InternalRecoveryFailureInput | unknown): InternalRecoveryFailureInput {
+  if (input instanceof Error) {
+    const record = input as Error & { code?: unknown };
+    return {
+      code: typeof record.code === "string" ? record.code : undefined,
+      name: input.name,
+      message: input.message,
+    };
+  }
+  if (input && typeof input === "object") {
+    const record = input as Record<string, unknown>;
+    return {
+      code: typeof record.code === "string" ? record.code : undefined,
+      name: typeof record.name === "string" ? record.name : undefined,
+      message: typeof record.message === "string" ? record.message : undefined,
+    };
+  }
+  return {
+    message: typeof input === "string" ? input : "",
+  };
+}
+
+function safeRecoveryText(value: unknown): string | undefined {
+  const text = typeof value === "string" ? value : "";
+  const normalized = text
+    .replace(/\b(?:api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+/giu, "[redacted]")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gu, "Bearer [redacted]")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (!normalized || containsPrivatePath(normalized) || /raw prompt text/iu.test(normalized)) {
+    return undefined;
+  }
+  return normalized.slice(0, 500);
+}
+
+function containsPrivatePath(value: string): boolean {
+  return (
+    /(?:\/Users\/[^/\s]+|\/home\/[^/\s]+|\/private\/[^/\s]+|~\/|\$HOME\/|[A-Za-z]:\\Users\\[^\\\s]+)/u
+      .test(value)
+  );
+}

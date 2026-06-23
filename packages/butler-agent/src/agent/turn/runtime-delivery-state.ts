@@ -1,5 +1,10 @@
 import { isRuntimeCancellationFailure } from "./runtime-cancellation.ts";
 import { isOperationalFailure, operationalSafeErrorCode } from "./operational-failure.ts";
+import {
+  INTERNAL_RECOVERY_REQUIRED_CODE,
+  isInternalRecoveryFailure as isSharedInternalRecoveryFailure,
+  internalRecoveryStateForFailure,
+} from "../../runtime/internal-recovery-failure.ts";
 
 export type RuntimeDeliveryState =
   | "running"
@@ -123,7 +128,7 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
       terminal: false,
       issueKind: "internal_recovery",
       visibility: "recovery_progress",
-      limitationCodes: [safeCode(failure.code ?? "internal_recovery_required")],
+      limitationCodes: [safeCode(failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE)],
     });
   }
   if (isOperationalFailure(failure)) {
@@ -213,36 +218,13 @@ function isCancelFailure(failure: RuntimeDeliveryFailureInput): boolean {
 }
 
 function isInternalRecoveryFailure(failure: RuntimeDeliveryFailureInput): boolean {
-  const message = failure.message ?? "";
-  return (
-    failure.code === "goal_completion_incomplete" ||
-    failure.code === "internal_uncertainty" ||
-    failure.name === "GoalCompletionIncompleteError" ||
-    /(?:unsatisfied|missing|unresolved) public completion obligation/iu.test(message) ||
-    /could not verify that the requested goal was completed/iu.test(message) ||
-    /uncertain (?:whether|if) the requested goal was completed/iu.test(message) ||
-    /internal uncertainty/iu.test(message) ||
-    /completion review .*incomplete/iu.test(message) ||
-    /unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message) ||
-    /invalid tool arguments|tool arguments failed validation/iu.test(message) ||
-    /missing evidence|candidate-only evidence|evidence receipt/iu.test(message)
-  );
+  return isSharedInternalRecoveryFailure(failure);
 }
 
 function recoveryStateForInternalFailure(
   failure: RuntimeDeliveryFailureInput,
 ): Extract<RuntimeDeliveryState, "recovering_internal" | "needs_tool_surface" | "needs_evidence" | "needs_argument_repair"> {
-  const message = failure.message ?? "";
-  if (/unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message)) {
-    return "needs_tool_surface";
-  }
-  if (/invalid tool arguments|tool arguments failed validation/iu.test(message)) {
-    return "needs_argument_repair";
-  }
-  if (/missing evidence|candidate-only evidence|evidence receipt|completion obligation|could not verify/iu.test(message)) {
-    return "needs_evidence";
-  }
-  return "recovering_internal";
+  return internalRecoveryStateForFailure(failure);
 }
 
 function isUserActionBlocker(failure: RuntimeDeliveryFailureInput): boolean {

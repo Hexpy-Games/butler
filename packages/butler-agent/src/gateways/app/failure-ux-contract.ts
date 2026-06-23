@@ -4,6 +4,11 @@ import {
 } from "../../agent/turn/recoverable-delivery.ts";
 import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
 import { safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
+import {
+  INTERNAL_RECOVERY_REQUIRED_CODE,
+  isCompletionObligationProtocolMessage,
+  isInternalRecoveryFailure,
+} from "../../runtime/internal-recovery-failure.ts";
 
 export interface AppResponderSafeError {
   code: string;
@@ -26,11 +31,12 @@ export function appSafeResponderError(error: unknown): AppResponderSafeError {
         "The selected model returned no visible answer. Retry the turn or switch models.",
     };
   }
-  if (isGoalCompletionIncompleteError(error)) {
+  if (isInternalRecoveryFailure(error)) {
+    const message = appErrorMessage(error);
     return {
-      code: "internal_recovery_required",
+      code: INTERNAL_RECOVERY_REQUIRED_CODE,
       message:
-        safeGoalCompletionIncompleteMessage(error.message) ??
+        safeGoalCompletionIncompleteMessage(message) ??
         "Butler could not verify that the requested goal was completed.",
     };
   }
@@ -71,12 +77,6 @@ function isLocalModelEmptyResponseError(error: unknown): boolean {
   );
 }
 
-function isGoalCompletionIncompleteError(error: unknown): error is Error {
-  return (
-    error instanceof Error && error.name === "GoalCompletionIncompleteError"
-  );
-}
-
 function safeGoalCompletionIncompleteMessage(message: string): string | null {
   if (isCompletionObligationProtocolMessage(message)) {
     return "요청한 결과를 완료했는지 확인하지 못했습니다. 작업을 다시 시도할 수 있습니다.";
@@ -85,7 +85,11 @@ function safeGoalCompletionIncompleteMessage(message: string): string | null {
   return safe || null;
 }
 
-function isCompletionObligationProtocolMessage(message: string): boolean {
-  return /(?:unsatisfied|missing|unresolved) public completion obligation/iu
-    .test(message);
+function appErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const message = (error as Record<string, unknown>).message;
+    return typeof message === "string" ? message : "";
+  }
+  return typeof error === "string" ? error : "";
 }

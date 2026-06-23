@@ -22,6 +22,7 @@ import {
   diagnosticDetails,
   safeRuntimeFailure,
 } from "../../integrations/providers/provider-errors.ts";
+import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
 import type {
   GatewayActorTurnResult,
   GatewayDurableRole,
@@ -533,7 +534,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     } catch (error) {
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
-      const failureState = safeFailure.code === "internal_recovery_required"
+      const failureState = safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE
         ? "active"
         : "crashed";
       this.options.store.updateLifecycleState(binding.sessionId, failureState, timestamp);
