@@ -190,6 +190,11 @@ import {
 } from "./protocol.ts";
 import { buildNewChatBriefing } from "./new-chat-briefing.ts";
 import {
+  orchestrationActivityPhase,
+  orchestrationStatusLine,
+  shouldKeepInactiveLinkedReportingWorker,
+} from "./worker-activity-projection.ts";
+import {
   readPrivateEnv,
   upsertPrivateEnvValue,
 } from "../../interfaces/cli/private-env.ts";
@@ -2976,6 +2981,16 @@ export class AppServerStore {
       : new Set<string>();
     const plannedStore = new PlannedTaskStore(this.butlerData);
     const orchestrationStore = new WorkOrchestrationStore(this.butlerData);
+    const keepInactiveLinkedReportingWorker = (worker: WorkerActivitySummary): boolean => {
+      return shouldKeepInactiveLinkedReportingWorker({
+        worker,
+        sessionId: options.sessionId,
+        linkedWorkerTaskIds,
+        orchestration: worker.orchestration_id
+          ? orchestrationStore.read(worker.orchestration_id)
+          : null,
+      });
+    };
     const rawWorkers = new TaskStore(this.butlerData)
       .summaries(200)
       .map((task) => {
@@ -2999,7 +3014,11 @@ export class AppServerStore {
         }
         return worker;
       })
-      .filter((worker) => options.includeHistory || isActiveWorkerActivity(worker))
+      .filter((worker) =>
+        options.includeHistory ||
+        isActiveWorkerActivity(worker) ||
+        keepInactiveLinkedReportingWorker(worker),
+      )
       // Session-scoped UI prefers exact origin sessions and only recovers
       // originless workers when an explicit work-stream link exists.
       .filter(
@@ -3018,7 +3037,10 @@ export class AppServerStore {
     ));
     const workers = options.includeHistory
       ? projectedWorkers
-      : projectedWorkers.filter(isActiveWorkerActivity);
+      : projectedWorkers.filter((worker) =>
+          isActiveWorkerActivity(worker) ||
+          keepInactiveLinkedReportingWorker(worker),
+        );
     return { workers };
   }
 
@@ -8611,37 +8633,6 @@ function workerActivityFromOrchestration(
     updated_at: orchestration.updated_at || latestChild?.updated_at || new Date().toISOString(),
     supported_controls: terminal ? [] : ["cancel"],
   };
-}
-
-function orchestrationActivityPhase(
-  orchestration: WorkOrchestrationRecord,
-): WorkerActivityPhase {
-  if (orchestration.status === "cancelled") return "cancelled";
-  if (orchestration.status === "failed") return "failed";
-  if (orchestration.status === "reported") return "complete";
-  if (orchestration.status === "ready_for_report") return "reporting";
-  if (orchestration.streams.some((stream) => stream.status === "running")) return "executing";
-  if (orchestration.streams.some((stream) => stream.status === "failed")) return "blocked";
-  if (orchestration.streams.some((stream) => stream.status !== "pending")) return "executing";
-  return "planning";
-}
-
-function orchestrationStatusLine(
-  orchestration: WorkOrchestrationRecord,
-  phase: WorkerActivityPhase,
-): string {
-  const running = orchestration.streams.filter((stream) => stream.status === "running").length;
-  const failed = orchestration.streams.filter((stream) => stream.status === "failed").length;
-  const done = orchestration.streams.filter((stream) => stream.status === "done" || stream.status === "skipped").length;
-  const total = orchestration.streams.length;
-  if (phase === "cancelled") return "Cancelled: coordinated worker plan stopped.";
-  if (phase === "failed") return "Failed: one or more worker streams need review.";
-  if (phase === "blocked") return `Blocked: ${failed} of ${total} worker streams failed; remaining streams are waiting.`;
-  if (phase === "complete") return "Complete: coordinated worker plan reported.";
-  if (phase === "reporting") return "Reporting: worker streams are ready for review.";
-  if (running > 0) return `Executing: ${running} of ${total} worker streams running.`;
-  if (done > 0) return `Executing: ${done} of ${total} worker streams complete.`;
-  return "Planning: coordinated worker streams are queued.";
 }
 
 function safeWorkerObjective(task: TaskSummary): string {
