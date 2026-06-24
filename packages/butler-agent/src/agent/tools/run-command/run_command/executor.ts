@@ -9,6 +9,7 @@ import {
   type CommandArtifactEvidence,
   type CommandValidationEvidence,
 } from "./evidence.ts";
+import { isValidationCommand } from "./validation-command.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 
@@ -527,25 +528,6 @@ async function executeBashCommand(input: {
       });
     });
   });
-}
-
-function isValidationCommand(command: string): boolean {
-  const trimmed = command
-    .trim()
-    .replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*/u, "");
-  const validationPatterns = [
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+check(?::run|:verbose)?\b/,
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+test:unit(?::run)?\b/,
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+test\b/,
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+ops\/scripts\/validate\.ts\s+(?:check:run|test:unit:run)\b/,
-    /^bun\s+test\b/,
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+lint\b/,
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+typecheck\b/,
-    /^npm\s+--prefix\s+\S+\s+run(?:\s+--silent)?\s+(?:lint|typecheck|test)\b/,
-    /^(?:project-ledger|packages\/project-ledger\/bin\/project-ledger|resources\/skills\/project-ledger\/bin\/project-ledger)\s+check\b/,
-    /^git\s+diff\b.*\s--check\b/,
-  ];
-  return validationPatterns.some((pattern) => pattern.test(trimmed));
 }
 
 function sliceLastCharacters(value: string, maxChars: number): string {
