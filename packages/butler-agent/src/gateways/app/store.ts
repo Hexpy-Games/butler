@@ -3677,6 +3677,7 @@ export class AppServerStore {
       if (projected)
         this.appendProgressSummaryEvent(chatId, turnId, progressRow);
       this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      this.touchChat(chatId);
       return projected;
     }
 
