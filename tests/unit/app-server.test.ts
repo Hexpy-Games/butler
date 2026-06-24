@@ -6119,6 +6119,11 @@ test("app transport progress projection recovers queued work blocks after app-se
   const turnId = result.data.turn.id;
   const userMessageId = result.data.accepted.id;
   expect(result.data.turn.state).toBe("thinking");
+  const beforeSessions = await getJson(`${server.url}sessions`);
+  const beforeSession = beforeSessions.data.sessions.find(
+    (session: { id: string }) => session.id === "general",
+  );
+  expect(beforeSession).toBeTruthy();
   server.stop();
 
   appendTranscriptEvent(
@@ -6209,6 +6214,12 @@ test("app transport progress projection recovers queued work blocks after app-se
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
     const messages = await getJson(`${server.url}messages?chat_id=general`);
+    const afterSessions = await getJson(`${server.url}sessions`);
+    const afterSession = afterSessions.data.sessions.find(
+      (session: { id: string }) => session.id === "general",
+    );
+    expect(afterSession.updated_at).not.toBe(beforeSession.updated_at);
+    expect(afterSession.last_activity_at).toBe(afterSession.updated_at);
     expect(
       messages.data.turn_progress[turnId].safe_progress_rows,
     ).toContainEqual(
