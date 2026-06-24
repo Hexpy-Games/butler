@@ -2,8 +2,13 @@ import { spawn } from "child_process";
 import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from "fs";
 import { extname, isAbsolute, join, relative, resolve } from "path";
 import { budgetToolOutput, type ShellCommandResult } from "../../../context/tool-output-budgeter.ts";
-import type { EvidenceReceipt, PublicWorkObligationKind } from "../../../turn/native-tool-types.ts";
-import { butlerToolProcessEnvironment, evidenceReceipt } from "../../../tool-support/executor-support.ts";
+import { butlerToolProcessEnvironment } from "../../../tool-support/executor-support.ts";
+import {
+  commandEvidenceCapabilityReceipts,
+  commandEvidenceReceipts,
+  type CommandArtifactEvidence,
+  type CommandValidationEvidence,
+} from "./evidence.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 
@@ -83,13 +88,6 @@ function isPathInsideWorkspace(input: {
 }
 
 type CommandArtifactKind = "csv_file" | "table_file" | "chart_file" | "file";
-
-interface CommandArtifactEvidence {
-  path: string;
-  artifact_kind: CommandArtifactKind;
-  size_bytes: number;
-  modified_at: string;
-}
 
 const COMMAND_ARTIFACT_SCAN_IGNORES = new Set([
   ".git",
@@ -329,6 +327,68 @@ function structuredStdoutCommandArtifacts(input: {
   });
 }
 
+function structuredStdoutValidationEvidence(stdout: string): CommandValidationEvidence[] {
+  const validations: CommandValidationEvidence[] = [];
+  for (const value of jsonValuesFromCommandStdout(stdout)) {
+    collectStructuredValidationEvidence(value, validations);
+  }
+  return validations.slice(0, 8);
+}
+
+function collectStructuredValidationEvidence(
+  value: unknown,
+  validations: CommandValidationEvidence[],
+): void {
+  if (validations.length >= 8 || !value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectStructuredValidationEvidence(item, validations);
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  for (const candidate of [record.validation_result, record.validation]) {
+    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+      const validation = parseStructuredValidation(candidate as Record<string, unknown>);
+      if (validation) validations.push(validation);
+    }
+    if (validations.length >= 8) return;
+  }
+  if (Array.isArray(record.validation_results)) {
+    for (const item of record.validation_results) {
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        const validation = parseStructuredValidation(item as Record<string, unknown>);
+        if (validation) validations.push(validation);
+      }
+      if (validations.length >= 8) return;
+    }
+  }
+}
+
+function parseStructuredValidation(record: Record<string, unknown>): CommandValidationEvidence | null {
+  const suite = typeof record.suite === "string"
+    ? record.suite.replace(/\s+/gu, " ").trim().slice(0, 120)
+    : "";
+  const result = validationResult(record.result);
+  if (!suite || !result) return null;
+  const failureSummary = typeof record.failure_summary === "string"
+    ? record.failure_summary.replace(/\s+/gu, " ").trim().slice(0, 180)
+    : typeof record.failureSummary === "string"
+      ? record.failureSummary.replace(/\s+/gu, " ").trim().slice(0, 180)
+      : undefined;
+  return {
+    suite,
+    result,
+    ...(failureSummary ? { failure_summary: failureSummary } : {}),
+  };
+}
+
+function validationResult(value: unknown): CommandValidationEvidence["result"] | null {
+  if (value === "passed" || value === "pass" || value === "success") return "passed";
+  if (value === "failed" || value === "fail" || value === "failure") return "failed";
+  if (value === "partial" || value === "incomplete") return "partial";
+  if (value === "skipped" || value === "skip") return "skipped";
+  return null;
+}
+
 function recentCommandArtifacts(input: {
   cwd: string;
   workspace: string;
@@ -400,70 +460,6 @@ function commandArtifactEvidenceFields(artifacts: CommandArtifactEvidence[]): Re
   };
 }
 
-function commandArtifactMediaType(artifact: CommandArtifactEvidence): string {
-  const ext = extname(artifact.path).toLocaleLowerCase("en-US");
-  if (artifact.artifact_kind === "csv_file") return "text/csv";
-  if (artifact.artifact_kind === "table_file") return "text/tab-separated-values";
-  if (ext === ".png") return "image/png";
-  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-  if (ext === ".webp") return "image/webp";
-  if (ext === ".svg") return "image/svg+xml";
-  if (ext === ".pdf") return "application/pdf";
-  return "application/octet-stream";
-}
-
-function commandArtifactRole(artifact: CommandArtifactEvidence): string {
-  if (artifact.artifact_kind === "csv_file" || artifact.artifact_kind === "table_file") return "table";
-  if (artifact.artifact_kind === "chart_file") return "chart";
-  return "file";
-}
-
-function commandEvidenceReceipts(input: {
-  success: boolean;
-  artifacts: CommandArtifactEvidence[];
-}): EvidenceReceipt[] {
-  const receipts: EvidenceReceipt[] = [
-    evidenceReceipt({
-      producerName: "run_command",
-      receiptType: "execution",
-      summary: input.success
-        ? "A local command executed successfully."
-        : "A local command was executed but did not complete successfully.",
-      covers: ["execution_result"],
-      verified: input.success,
-      satisfies: input.success ? ["command_executed"] : [],
-    }),
-  ];
-  if (input.artifacts.length > 0) {
-    const satisfies = new Set<PublicWorkObligationKind>(["durable_artifact"]);
-    if (input.artifacts.some((artifact) =>
-      artifact.artifact_kind === "csv_file" || artifact.artifact_kind === "table_file",
-    )) {
-      satisfies.add("data_table_created");
-    }
-    if (input.artifacts.some((artifact) => artifact.artifact_kind === "chart_file")) {
-      satisfies.add("chart_rendered");
-    }
-    receipts.push(evidenceReceipt({
-      producerName: "run_command",
-      receiptType: "deliverable",
-      summary: "The command produced verified durable output file evidence.",
-      covers: ["durable_deliverable"],
-      artifacts: input.artifacts.map((artifact) => ({
-        label: artifact.path,
-        path: artifact.path,
-        mediaType: commandArtifactMediaType(artifact),
-        role: commandArtifactRole(artifact),
-      })),
-      satisfies: [...satisfies],
-      metrics: {
-        artifact_count: input.artifacts.length,
-      },
-    }));
-  }
-  return receipts;
-}
-
 function appendCapturedText(current: string, chunk: Buffer | string): {
   text: string;
   truncated: boolean;
@@ -533,25 +529,6 @@ async function executeBashCommand(input: {
   });
 }
 
-function isValidationCommand(command: string): boolean {
-  const trimmed = command
-    .trim()
-    .replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S+)\s+)*/u, "");
-  const validationPatterns = [
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+check(?::run|:verbose)?\b/,
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+test:unit(?::run)?\b/,
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+test\b/,
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+ops\/scripts\/validate\.ts\s+(?:check:run|test:unit:run)\b/,
-    /^bun\s+test\b/,
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+lint\b/,
-    /^(?:bun|\$\{BUTLER_BUN:-bun\})(?:\s+--silent)?\s+run(?:\s+--silent)?\s+typecheck\b/,
-    /^npm\s+--prefix\s+\S+\s+run(?:\s+--silent)?\s+(?:lint|typecheck|test)\b/,
-    /^(?:project-ledger|packages\/project-ledger\/bin\/project-ledger|resources\/skills\/project-ledger\/bin\/project-ledger)\s+check\b/,
-    /^git\s+diff\b.*\s--check\b/,
-  ];
-  return validationPatterns.some((pattern) => pattern.test(trimmed));
-}
-
 function sliceLastCharacters(value: string, maxChars: number): string {
   const chars = Array.from(value);
   if (chars.length <= maxChars) return value;
@@ -615,7 +592,7 @@ export async function runCommandTool(input: {
   const success = raw.exit_code === 0 && raw.timed_out === false;
   const shouldSuppressOutput = success && (
     outputMode === "silent_on_success" ||
-    (outputMode === "auto" && isValidationCommand(command))
+    (outputMode === "auto" && Boolean(validationSuiteFromArgs(input.args)))
   );
 
   let processedResult = raw;
@@ -682,5 +659,49 @@ export async function runCommandTool(input: {
       success: budgeted.exit_code === 0 && budgeted.timed_out === false,
       artifacts,
     }),
+    evidence_capability_receipts: commandEvidenceCapabilityReceipts({
+      exitCode: budgeted.exit_code,
+      timedOut: budgeted.timed_out,
+      outputSuppressed: shouldSuppressOutput,
+      outputBudgeted: Boolean(budgeted.butler_tool_artifact),
+      artifacts,
+      validations: commandValidationEvidence(input.args, raw),
+    }),
   };
+}
+
+function commandValidationEvidence(
+  args: Record<string, unknown>,
+  result: ShellCommandResult,
+): CommandValidationEvidence[] {
+  const structured = structuredStdoutValidationEvidence(result.stdout);
+  const declared = declaredValidationEvidence(args, result, structured);
+  return [...structured, ...declared].slice(0, 8);
+}
+
+function declaredValidationEvidence(
+  args: Record<string, unknown>,
+  result: ShellCommandResult,
+  existing: CommandValidationEvidence[],
+): CommandValidationEvidence[] {
+  const suite = validationSuiteFromArgs(args);
+  if (!suite) return [];
+  if (existing.some((validation) => validation.suite === suite)) return [];
+  const passed = result.exit_code === 0 && result.timed_out === false;
+  return [{
+    suite,
+    result: passed ? "passed" : "failed",
+    ...(passed ? {} : { failure_summary: validationFailureSummary(result) }),
+  }];
+}
+
+function validationSuiteFromArgs(args: Record<string, unknown>): string | null {
+  return typeof args.validation_suite === "string" && args.validation_suite.trim()
+    ? args.validation_suite.trim()
+    : null;
+}
+
+function validationFailureSummary(result: ShellCommandResult): string {
+  if (result.timed_out) return "Validation command timed out.";
+  return `Validation command exited with status ${result.exit_code ?? "unknown"}.`;
 }

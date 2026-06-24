@@ -15,10 +15,32 @@ export function createWorkTrackingToolHandlers(input: {
   return {
     "update_todo_list": async (call: ToolCall) => {
       const listId = scopedTodoListId(call.args.list_id, input.turnId);
+      const items = todoInputs(call.args.todos);
+      const completedReplay = completedSameTurnWorkStreamForList({
+        workStreamStore: input.workStreamStore,
+        sessionId: input.sessionId,
+        projectId: input.projectId,
+        listId,
+        turnId: input.turnId,
+        items,
+      });
+      if (completedReplay) {
+        const view = input.todoListStore.view(listId, { includeCompleted: true });
+        return {
+          ok: true,
+          list_id: view.list.list_id,
+          title: view.list.title,
+          items: view.items,
+          progress: view.progress,
+          work_stream: completedReplay,
+          ignored: true,
+          reason: "completed_work_stream_reopen_ignored",
+        };
+      }
       const view = input.todoListStore.update({
         listId,
         title: typeof call.args.title === "string" ? call.args.title : undefined,
-        items: todoInputs(call.args.todos),
+        items,
       });
       const workStream = input.workStreamStore.updateFromTodoList({
         ownerSessionId: input.sessionId ?? null,
@@ -26,6 +48,7 @@ export function createWorkTrackingToolHandlers(input: {
         listId,
         title: view.list.title ?? undefined,
         items: view.list.items,
+        lastUserTurnId: input.turnId,
       });
       return {
         ok: true,
@@ -101,6 +124,32 @@ export function createWorkTrackingToolHandlers(input: {
       });
     },
   };
+}
+
+function completedSameTurnWorkStreamForList(input: {
+  workStreamStore: WorkStreamStore;
+  sessionId?: string;
+  projectId?: string;
+  listId: string;
+  turnId?: string;
+  items: TodoItemInput[];
+}) {
+  const turnId = input.turnId?.trim();
+  if (!turnId || !hasUnfinishedTodo(input.items)) return null;
+  for (const summary of input.workStreamStore.list({
+    sessionId: input.sessionId,
+    projectId: input.projectId,
+    includeTerminal: true,
+  })) {
+    if (summary.todo_list_id !== input.listId || summary.state !== "complete") continue;
+    const record = input.workStreamStore.read(summary.id);
+    if (record?.last_user_turn_id === turnId) return record;
+  }
+  return null;
+}
+
+function hasUnfinishedTodo(items: TodoItemInput[]): boolean {
+  return items.some((item) => item.status === "pending" || item.status === "in_progress");
 }
 
 function stringArray(value: unknown): string[] {

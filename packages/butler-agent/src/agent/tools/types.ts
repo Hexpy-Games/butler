@@ -1,5 +1,5 @@
 import type { FunctionToolDefinition } from "../../integrations/providers/provider.ts";
-import type { PublicWorkObligationKind } from "../turn/native-tool-types.ts";
+import type { PublicWorkObligationKind } from "../turn/native/output/tool-types.ts";
 
 export interface ButlerToolDefinition extends FunctionToolDefinition {
   concurrencySafe: boolean;
@@ -28,4 +28,23 @@ export interface ToolCapabilityMetadata {
   tags: string[];
   safetyNotes: string[];
   satisfiesCompletionObligations?: PublicWorkObligationKind[];
+}
+
+export type ToolCatalogProvider = "native" | "mcp" | "plugin";
+
+export type ToolCatalogRiskLevel = "low" | "medium" | "high";
+
+export interface ToolCatalogEntry {
+  id: string;
+  name: string;
+  namespace: string | null;
+  provider: ToolCatalogProvider;
+  category: ToolCapabilityCategory;
+  summary: string;
+  tags: string[];
+  riskLevel: ToolCatalogRiskLevel;
+  enabled: boolean;
+  disabledReason: string | null;
+  recoveryHint: string | null;
+  schemaDigest: string;
 }

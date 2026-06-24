@@ -37,6 +37,7 @@ import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-l
 import { WorkOrchestrationStore } from "../../packages/butler-agent/src/agent/work/work-orchestration.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { deliveredWithLimitationsState } from "../../packages/butler-agent/src/agent/turn/runtime-delivery-state.ts";
 import {
   discoverLocalModels,
   upsertLocalModelConfig,
@@ -56,6 +57,7 @@ let originalFetch: typeof fetch;
 let originalButlerData: string | undefined;
 let originalButlerHome: string | undefined;
 let originalOpenAiApiKey: string | undefined;
+let originalButlerUpdateManifest: string | undefined;
 const packageVersion = JSON.parse(
   readFileSync(join(process.cwd(), "package.json"), "utf8"),
 ).version as string;
@@ -106,12 +108,53 @@ function writeAppUpdateManifest(path: string, version: string): void {
   }), "utf8");
 }
 
+function writeServiceUpdateManifest(path: string, version: string): void {
+  writeFileSync(path, JSON.stringify({
+    schema: "butler.update-manifest.v1",
+    product: "butler-agent",
+    app_version: version,
+    bundled_agent_version: version,
+    artifacts: [{
+      component: "service",
+      app_version: version,
+      version,
+      channel: "stable",
+      platform: "all",
+      artifact_url: null,
+      sha256: null,
+      signature: null,
+      bundled_components: ["service"],
+      product: "butler-agent",
+      gateway_profile: "agent-standalone",
+      bundled_agent_version: version,
+      protocol_compatibility: {
+        protocol: "butler.agent.v1",
+        minimumAgentProtocol: "butler.agent.v1",
+        maximumAgentProtocol: "butler.agent.v1",
+      },
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: null,
+        signature: null,
+      },
+      update_policy: "explicit",
+      restart_policy: "restart-service",
+      updater_owner: "butler-agent",
+      payload_format: "agent-archive",
+      staging_policy: "butler-data-updates",
+      activation_policy: "versioned-standalone-runtime",
+      rollback_policy: "preserve-previous-standalone-runtime",
+    }],
+  }), "utf8");
+}
+
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "butler-app-server-"));
   originalFetch = globalThis.fetch;
   originalButlerData = process.env.BUTLER_DATA;
   originalButlerHome = process.env.BUTLER_HOME;
   originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+  originalButlerUpdateManifest = process.env.BUTLER_UPDATE_MANIFEST;
   process.env.BUTLER_DATA = tempDir;
   process.env.BUTLER_HOME = process.cwd();
 });
@@ -124,6 +167,9 @@ afterEach(() => {
   else process.env.BUTLER_HOME = originalButlerHome;
   if (originalOpenAiApiKey === undefined) delete process.env.OPENAI_API_KEY;
   else process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+  if (originalButlerUpdateManifest === undefined)
+    delete process.env.BUTLER_UPDATE_MANIFEST;
+  else process.env.BUTLER_UPDATE_MANIFEST = originalButlerUpdateManifest;
   rmSync(tempDir, { recursive: true, force: true });
 });
 
@@ -1520,6 +1566,71 @@ test("project session gateway routing uses the app session hint and project id",
         id: "project-topic-routing",
       },
     });
+  } finally {
+    server.stop();
+    bridge.close();
+  }
+});
+
+test("app gateway bridge preserves runtime limited delivery through app projection", async () => {
+  const runtime = new ScriptedRuntime(
+    "검증 실패가 남아 있어 완료로 보고하지 않고 복구 가능한 결과로 남겼습니다.",
+    undefined,
+    undefined,
+    deliveredWithLimitationsState({
+      limitationCodes: ["validation_failed"],
+      limitations: ["Validation suite failed without a later passing receipt: npm test"],
+    }),
+  );
+  const bridge = new AppGatewayBridge({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runtime,
+    provider: fakeProvider,
+    sessionTitleGenerator: false,
+  });
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder: bridge.responder,
+  });
+  try {
+    const response = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "검증 실패가 있으면 완료로 닫지 말고 보고해줘.",
+    });
+    expect(response.data.turn.state).toBe("thinking");
+
+    const assistant = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.status === "delivered",
+    );
+    expect(assistant).toMatchObject({
+      status: "delivered",
+      retryable: false,
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["validation_failed"],
+      limitations: ["Validation suite failed without a later passing receipt: npm test"],
+    });
+    expect(assistant.safe_error_code ?? null).toBeNull();
+
+    const deliveredTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "delivered",
+    );
+    expect(deliveredTurn).toMatchObject({
+      state: "delivered",
+      safe_status_label: "Delivered with limitations",
+      retryable: false,
+    });
+    expect(deliveredTurn.safe_error_code ?? null).toBeNull();
+
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(JSON.stringify(events)).not.toContain("turn.failed");
+    expect(JSON.stringify(events)).not.toContain("gateway_failed");
   } finally {
     server.stop();
     bridge.close();
@@ -3220,7 +3331,13 @@ test("registered local models cannot be deleted while an active turn uses them",
 
     releaseResponder();
     const sent = await sendPromise;
-    expect(sent.data.reply.text).toBe("done");
+    expect(sent.data.turn.state).toBe("thinking");
+    const assistant = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "done",
+    );
+    expect(assistant.text).toBe("done");
   } finally {
     releaseResponder();
     server.stop();
@@ -5560,6 +5677,12 @@ test("app transport final result projection delivers queued turns after app-serv
           kind: "final_result",
           turnId,
           source: "test",
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["source_verified_missing"],
+          limitations: [
+            "Source verification remained unavailable.",
+            "raw prompt text token=secret /Users/example/private",
+          ],
           generatedSessionTitle: "Durable App 제목",
           loadedSkillNames: ["project-ledger"],
         },
@@ -5597,6 +5720,7 @@ test("app transport final result projection delivers queued turns after app-serv
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
       state: "delivered",
+      safe_status_label: "Delivered with limitations",
       cancellable: false,
       retryable: false,
     });
@@ -5617,6 +5741,13 @@ test("app transport final result projection delivers queued turns after app-serv
     expect(sessionView.data.latest_turn).toMatchObject({
       id: turnId,
       state: "delivered",
+      safe_status_label: "Delivered with limitations",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["source_verified_missing"],
+      limitations: [
+        "Source verification remained unavailable.",
+        "A runtime limitation remained.",
+      ],
       cancellable: false,
       retryable: false,
     });
@@ -5631,6 +5762,18 @@ test("app transport final result projection delivers queued turns after app-serv
     const sessionAssistant = sessionView.data.messages.find(
       (message: { role: string }) => message.role === "assistant",
     );
+    expect(sessionAssistant).toMatchObject({
+      status: "delivered",
+      retryable: false,
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["source_verified_missing"],
+      limitations: [
+        "Source verification remained unavailable.",
+        "A runtime limitation remained.",
+      ],
+    });
+    expect(JSON.stringify(sessionView)).not.toContain("token=secret");
+    expect(JSON.stringify(sessionView)).not.toContain("/Users/example");
     expect(sessionAssistant.attachments).toHaveLength(1);
     expect(sessionView.data.artifacts).toContainEqual(
       expect.objectContaining({ title: "queued-result.md" }),
@@ -5976,6 +6119,11 @@ test("app transport progress projection recovers queued work blocks after app-se
   const turnId = result.data.turn.id;
   const userMessageId = result.data.accepted.id;
   expect(result.data.turn.state).toBe("thinking");
+  const beforeSessions = await getJson(`${server.url}sessions`);
+  const beforeSession = beforeSessions.data.sessions.find(
+    (session: { id: string }) => session.id === "general",
+  );
+  expect(beforeSession).toBeTruthy();
   server.stop();
 
   appendTranscriptEvent(
@@ -6066,6 +6214,12 @@ test("app transport progress projection recovers queued work blocks after app-se
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
     const messages = await getJson(`${server.url}messages?chat_id=general`);
+    const afterSessions = await getJson(`${server.url}sessions`);
+    const afterSession = afterSessions.data.sessions.find(
+      (session: { id: string }) => session.id === "general",
+    );
+    expect(afterSession.updated_at).not.toBe(beforeSession.updated_at);
+    expect(afterSession.last_activity_at).toBe(afterSession.updated_at);
     expect(
       messages.data.turn_progress[turnId].safe_progress_rows,
     ).toContainEqual(
@@ -6375,6 +6529,7 @@ test("app transport failure projection fails queued turns after app-server resta
           kind: "turn_failed",
           turnId,
           safeErrorCode: "gateway_failed",
+          safeErrorCause: "provider socket token=secret",
           source: "test",
           privateDetail: "provider socket private stack",
         },
@@ -6400,6 +6555,7 @@ test("app transport failure projection fails queued turns after app-server resta
       retryable: true,
     });
     expect(JSON.stringify(messages)).not.toContain("private stack");
+    expect(JSON.stringify(messages)).not.toContain("token=secret");
 
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns).toHaveLength(1);
@@ -6410,6 +6566,25 @@ test("app transport failure projection fails queued turns after app-server resta
       cancellable: false,
       retryable: true,
     });
+    const events = await getJson(`${server.url}events?cursor=0`);
+    const failedEvent = events.data.events.find(
+      (
+        event: {
+          type: string;
+          payload?: { event?: { kind?: string; payload?: unknown } };
+        },
+      ) =>
+        event.type === "agent.turn_event" &&
+        event.payload?.event?.kind === "turn.failed",
+    );
+    expect(failedEvent?.payload?.event?.payload).toMatchObject({
+      safeErrorCode: "gateway_failed",
+    });
+    expect(JSON.stringify(failedEvent?.payload?.event?.payload)).not.toContain(
+      "safeCause",
+    );
+    expect(JSON.stringify(events)).not.toContain("token=secret");
+    expect(JSON.stringify(events)).not.toContain("private stack");
   } finally {
     server.stop();
   }
@@ -6433,10 +6608,13 @@ test("retry without injected responder requeues the app turn instead of answerin
       text: "retry through core",
     }),
   });
-  expect(first.status).toBe(500);
-  const failedTurns = await getJson(`${server.url}turns?chat_id=general`);
-  const turnId = failedTurns.data.turns[0].id;
-  expect(failedTurns.data.turns[0].state).toBe("failed");
+  expect(first.status).toBe(202);
+  const failedTurn = await waitForLatestTurnMatching(
+    server.url,
+    "general",
+    (turn) => turn.state === "failed",
+  );
+  const turnId = failedTurn.id as string;
   server.stop();
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
@@ -6479,10 +6657,13 @@ test("retry ignores stale app transport failure projection from earlier attempts
       text: "retry with stale failure transcript",
     }),
   });
-  expect(first.status).toBe(500);
-  const failedTurns = await getJson(`${server.url}turns?chat_id=general`);
-  const turnId = failedTurns.data.turns[0].id;
-  expect(failedTurns.data.turns[0].state).toBe("failed");
+  expect(first.status).toBe(202);
+  const failedTurn = await waitForLatestTurnMatching(
+    server.url,
+    "general",
+    (turn) => turn.state === "failed",
+  );
+  const turnId = failedTurn.id as string;
   server.stop();
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
@@ -6682,19 +6863,26 @@ test("message files are uploaded, served safely, and attached by file id only", 
     });
     expect(sent.data.accepted.attachments).toEqual([uploaded.data.file]);
     expect(responderInputs[0]?.attachments).toEqual([uploaded.data.file]);
-    expect(sent.data.reply.attachments[0]).toMatchObject({
+    const reply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "attachment received",
+    );
+    const replyAttachments = reply.attachments as Array<Record<string, unknown>>;
+    expect(replyAttachments[0]).toMatchObject({
       kind: "text",
       mime_type: "text/plain",
       safe_name: "result.txt",
     });
-    expect(sent.data.reply.artifacts[0]).toMatchObject({
-      file_id: sent.data.reply.attachments[0].file_id,
-      message_id: sent.data.reply.id,
-      turn_id: sent.data.reply.turn_id,
+    const replyArtifacts = reply.artifacts as Array<Record<string, unknown>>;
+    expect(replyArtifacts[0]).toMatchObject({
+      file_id: replyAttachments[0]?.file_id,
+      message_id: reply.id,
+      turn_id: reply.turn_id,
       title: "result.txt",
       kind: "document",
       open_action: "route",
-      url: sent.data.reply.attachments[0].url,
+      url: replyAttachments[0]?.url,
     });
 
     const messages = await getJson(
@@ -6717,8 +6905,8 @@ test("message files are uploaded, served safely, and attached by file id only", 
     );
     expect(artifacts.data.artifacts).toEqual([
       expect.objectContaining({
-        file_id: sent.data.reply.attachments[0].file_id,
-        message_id: sent.data.reply.id,
+        file_id: replyAttachments[0]?.file_id,
+        message_id: reply.id,
         title: "result.txt",
         open_action: "route",
       }),
@@ -6835,6 +7023,9 @@ test("message file refs reject unknown, cross-session, and reused file ids", asy
 });
 
 test("app slash update command uses the service updater without routing to the model", async () => {
+  const updateManifestPath = join(tempDir, "service-update-manifest.json");
+  writeServiceUpdateManifest(updateManifestPath, packageVersion);
+  process.env.BUTLER_UPDATE_MANIFEST = updateManifestPath;
   const runtime = new ScriptedRuntime("unexpected model reply");
   const bridge = new AppGatewayBridge({
     butlerHome: process.cwd(),
@@ -6854,7 +7045,14 @@ test("app slash update command uses the service updater without routing to the m
       chat_id: "general",
       text: "/update",
     });
-    expect(check.data.reply.text).toBe(
+    expect(check.data.turn.state).toBe("thinking");
+    const checkReply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) =>
+        message.text === `Butler Agent is up to date (${packageVersion}).`,
+    );
+    expect(checkReply.text).toBe(
       `Butler Agent is up to date (${packageVersion}).`,
     );
     expect(runtime.turns).toHaveLength(0);
@@ -6863,8 +7061,18 @@ test("app slash update command uses the service updater without routing to the m
       chat_id: "general",
       text: "/update apply",
     });
-    expect(apply.data.reply.text).toBe(
+    expect(apply.data.turn.state).toBe("thinking");
+    const applyReply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) =>
+        message.text === `Butler Agent is up to date (${packageVersion}).`,
+    );
+    expect(applyReply.text).toBe(
       `Butler Agent is up to date (${packageVersion}).`,
+    );
+    await waitForCondition(() =>
+      existsSync(join(tempDir, "updates", "staged", "service.json")),
     );
     expect(existsSync(join(tempDir, "updates", "staged", "service.json"))).toBe(
       true,
@@ -6922,19 +7130,26 @@ test("app server can route messages through Butler gateway bridge", async () => 
       text: "route this",
       attachments: [{ file_id: uploaded.data.file.file_id }],
     });
-    expect(result.data.reply.text).toBe("gateway bridge reply");
-    expect(result.data.reply.attachments[0]).toMatchObject({
+    expect(result.data.turn.state).toBe("thinking");
+    const reply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "gateway bridge reply",
+    );
+    const replyAttachments = reply.attachments as Array<Record<string, unknown>>;
+    const replyArtifacts = reply.artifacts as Array<Record<string, unknown>>;
+    expect(replyAttachments[0]).toMatchObject({
       kind: "text",
       mime_type: "text/csv",
       safe_name: "runtime-result.csv",
     });
-    expect(result.data.reply.artifacts[0]).toMatchObject({
-      file_id: result.data.reply.attachments[0].file_id,
+    expect(replyArtifacts[0]).toMatchObject({
+      file_id: replyAttachments[0]?.file_id,
       title: "runtime-result.csv",
       kind: "csv_file",
       open_action: "route",
     });
-    expect(JSON.stringify(result)).not.toContain(runtimeArtifactPath);
+    expect(JSON.stringify(reply)).not.toContain(runtimeArtifactPath);
     expect(JSON.stringify(readTranscript("butler/app-general"))).not.toContain(
       runtimeArtifactPath,
     );
@@ -6993,15 +7208,22 @@ test("app server preserves Korean artifact filenames in gateway replies", async 
       chat_id: "general",
       text: "route korean artifact",
     });
-    expect(result.data.reply.text).toBe("gateway bridge reply");
-    expect(result.data.reply.attachments[0]).toMatchObject({
+    expect(result.data.turn.state).toBe("thinking");
+    const reply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "gateway bridge reply",
+    );
+    const replyAttachments = reply.attachments as Array<Record<string, unknown>>;
+    const replyArtifacts = reply.artifacts as Array<Record<string, unknown>>;
+    expect(replyAttachments[0]).toMatchObject({
       kind: "text",
       mime_type: "text/csv",
       safe_name: artifactName,
     });
-    expect(result.data.reply.attachments[0].safe_name).not.toContain("_");
-    expect(result.data.reply.artifacts[0]).toMatchObject({
-      file_id: result.data.reply.attachments[0].file_id,
+    expect(replyAttachments[0]?.safe_name).not.toContain("_");
+    expect(replyArtifacts[0]).toMatchObject({
+      file_id: replyAttachments[0]?.file_id,
       title: artifactName,
       kind: "csv_file",
       open_action: "route",
@@ -7047,21 +7269,29 @@ test("app server opens Korean generated artifact labels through message files", 
       chat_id: "general",
       text: "route korean generated artifact",
     });
-    expect(result.data.reply.attachments[0]).toMatchObject({
+    expect(result.data.turn.state).toBe("thinking");
+    const reply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "gateway bridge reply",
+    );
+    const replyAttachments = reply.attachments as Array<Record<string, unknown>>;
+    const replyArtifacts = reply.artifacts as Array<Record<string, unknown>>;
+    expect(replyAttachments[0]).toMatchObject({
       kind: "text",
       mime_type: "text/csv",
       safe_name: artifactName,
     });
-    expect(result.data.reply.artifacts[0]).toMatchObject({
-      file_id: result.data.reply.attachments[0].file_id,
+    expect(replyArtifacts[0]).toMatchObject({
+      file_id: replyAttachments[0]?.file_id,
       title: artifactName,
       kind: "csv_file",
       open_action: "route",
-      url: `/message-files/${result.data.reply.attachments[0].file_id}`,
+      url: `/message-files/${replyAttachments[0]?.file_id}`,
     });
 
     const download = await fetch(
-      new URL(result.data.reply.artifacts[0].url, server.url),
+      new URL(String(replyArtifacts[0]?.url), server.url),
     );
     expect(download.ok).toBe(true);
     expect(await download.text()).toContain("중원문화제");
@@ -7192,13 +7422,25 @@ test("app gateway bridge persists final runtime text before the next app turn", 
       chat_id: "general",
       text: "first app turn",
     });
-    expect(first.data.reply.text).toBe(firstFinal);
+    expect(first.data.turn.state).toBe("thinking");
+    const firstReply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === firstFinal,
+    );
+    expect(firstReply.text).toBe(firstFinal);
 
     const second = await postJson(`${server.url}messages`, {
       chat_id: "general",
       text: "second app turn",
     });
-    expect(second.data.reply.text).toBe("SECOND_APP_GATEWAY_SAW_FIRST");
+    expect(second.data.turn.state).toBe("thinking");
+    const secondReply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "SECOND_APP_GATEWAY_SAW_FIRST",
+    );
+    expect(secondReply.text).toBe("SECOND_APP_GATEWAY_SAW_FIRST");
     expect(runtime.turns[1]?.input).toMatchObject({
       routingHints: {
         turnId: second.data.turn.id,
@@ -7251,7 +7493,13 @@ for (const staleState of ["closed", "crashed"] as const) {
         model: "local/gemma-route",
         reasoning_effort: "none",
       });
-      expect(result.data.reply.text).toBe("local bridge reply");
+      expect(result.data.turn.state).toBe("thinking");
+      const reply = await waitForAssistantMessageMatching(
+        server.url,
+        "general",
+        (message) => message.text === "local bridge reply",
+      );
+      expect(reply.text).toBe("local bridge reply");
       expect(runtime.turns[0]?.model).toBe("local/gemma-route");
       expect(runtime.turns[0]?.input).toMatchObject({
         routingHints: {
@@ -7326,16 +7574,25 @@ test("app gateway bridge captures tool progress without blank assistant messages
       chat_id: "general",
       text: "route this with progress",
     });
-    expect(result.data.reply.text).toBe(
-      "gateway bridge reply: route this with progress",
+    expect(result.data.turn.state).toBe("thinking");
+    const firstReply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) =>
+        message.text === "gateway bridge reply: route this with progress",
     );
+    expect(firstReply.text).toBe("gateway bridge reply: route this with progress");
     const second = await postJson(`${server.url}messages`, {
       chat_id: "general",
       text: "route this again",
     });
-    expect(second.data.reply.text).toBe(
-      "gateway bridge reply: route this again",
+    expect(second.data.turn.state).toBe("thinking");
+    const secondReply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "gateway bridge reply: route this again",
     );
+    expect(secondReply.text).toBe("gateway bridge reply: route this again");
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
@@ -7941,13 +8198,18 @@ test("session summary keeps repeated identical tool calls separate", async () =>
   }
 });
 
-test("hung responders return a bounded timeout error and receive abort signal", async () => {
+test("hung responders stay admitted without gateway timeout cancellation", async () => {
   let aborted = false;
+  let markStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
     responderTimeoutMs: 25,
     responder(input) {
+      markStarted?.();
       input.signal?.addEventListener("abort", () => {
         aborted = true;
       });
@@ -7966,10 +8228,16 @@ test("hung responders return a bounded timeout error and receive abort signal", 
     });
     const body = await response.json();
     expect(Date.now() - startedAt).toBeLessThan(1000);
-    expect(response.status).toBe(504);
+    await started;
+    expect(response.status).toBe(202);
     expect(body.protocol_version).toBe("butler.app.v1");
-    expect(body.error.code).toBe("gateway_timeout");
-    expect(aborted).toBe(true);
+    expect(body.data.turn).toMatchObject({
+      state: "thinking",
+      cancellable: true,
+      retryable: false,
+    });
+    expect(body.data.replies).toEqual([]);
+    expect(aborted).toBe(false);
     expect(JSON.stringify(body)).not.toContain(tempDir);
     expect(JSON.stringify(body)).not.toContain("sqlite");
 
@@ -7982,19 +8250,15 @@ test("hung responders return a bounded timeout error and receive abort signal", 
     const failed = messages.data.messages.find(
       (message: { status: string }) => message.status === "failed",
     );
-    expect(failed).toMatchObject({
-      role: "assistant",
-      safe_error_code: "gateway_timeout",
-      retryable: true,
-    });
+    expect(failed).toBeUndefined();
 
     const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
     expect(turns.data.turns[0]).toMatchObject({
-      state: "failed",
-      safe_error_code: "gateway_timeout",
-      retryable: true,
-      cancellable: false,
+      state: "thinking",
+      retryable: false,
+      cancellable: true,
     });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
   } finally {
     server.stop();
   }
@@ -8041,12 +8305,21 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
     const body = await response.json();
     expect(response.status).toBe(202);
     expect(body.data.turn).toMatchObject({
+      state: "thinking",
+      retryable: false,
+      cancellable: true,
+    });
+    expect(body.data.replies).toEqual([]);
+    expect(aborted).toBe(true);
+
+    const finalTurns = await getJson(
+      `${server.url}turns?chat_id=general&cursor=0`,
+    );
+    expect(finalTurns.data.turns[0]).toMatchObject({
       state: "cancelled",
       retryable: false,
       cancellable: false,
     });
-    expect(body.data.replies).toEqual([]);
-    expect(aborted).toBe(true);
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
@@ -8080,12 +8353,15 @@ test("failed app turns persist as retryable and can be retried", async () => {
       body: JSON.stringify({ chat_id: "general", text: "please retry this" }),
     });
     const failedBody = await failedResponse.json();
-    expect(failedResponse.status).toBe(500);
-    expect(failedBody.error.code).toBe("internal_error");
+    expect(failedResponse.status).toBe(202);
+    expect(failedBody.data.turn.state).toBe("thinking");
     expect(JSON.stringify(failedBody)).not.toContain("private provider stack");
 
-    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
-    const failedTurn = turns.data.turns[0];
+    const failedTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "failed",
+    );
     expect(failedTurn).toMatchObject({
       state: "failed",
       safe_error_code: "gateway_failed",
@@ -8093,17 +8369,23 @@ test("failed app turns persist as retryable and can be retried", async () => {
       attempt: 1,
     });
 
+    const failedTurnId = failedTurn.id as string;
     const retry = await postJson(
-      `${server.url}turns/${encodeURIComponent(failedTurn.id)}/retry`,
+      `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
       {},
     );
     expect(retry.data.turn).toMatchObject({
-      state: "delivered",
+      state: "retrying",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
       attempt: 2,
     });
-    expect(retry.data.reply.text).toBe("recovered reply");
+    const reply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "recovered reply",
+    );
+    expect(reply.text).toBe("recovered reply");
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
@@ -8140,10 +8422,13 @@ test("retry failures update the same assistant failure with a safe provider reas
         text: "please retry local model",
       }),
     });
-    expect(failedResponse.status).toBe(500);
+    expect(failedResponse.status).toBe(202);
 
-    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
-    const failedTurn = turns.data.turns[0];
+    const failedTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "failed",
+    );
     expect(failedTurn).toMatchObject({
       state: "failed",
       safe_error_code: "provider_empty_response",
@@ -8164,15 +8449,24 @@ test("retry failures update the same assistant failure with a safe provider reas
     expect(firstAssistant.text).toContain("no visible answer");
     expect(firstAssistant.text).not.toContain("Local model API");
 
+    const failedTurnId = failedTurn.id as string;
     const retryResponse = await fetch(
-      `${server.url}turns/${encodeURIComponent(failedTurn.id)}/retry`,
+      `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({}),
       },
     );
-    expect(retryResponse.status).toBe(500);
+    expect(retryResponse.status).toBe(202);
+    await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) =>
+        turn.state === "failed" &&
+        turn.attempt === 2 &&
+        turn.safe_error_code === "provider_empty_response",
+    );
 
     messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
     const assistantMessages = messages.data.messages.filter(
@@ -8218,10 +8512,14 @@ test("provider failures persist actionable safe API status", async () => {
         text: "please surface provider status",
       }),
     });
-    expect(failedResponse.status).toBe(500);
+    expect(failedResponse.status).toBe(202);
 
-    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
-    expect(turns.data.turns[0]).toMatchObject({
+    const failedTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "failed",
+    );
+    expect(failedTurn).toMatchObject({
       state: "failed",
       safe_error_code: "provider_api_error",
       retryable: true,
@@ -8242,12 +8540,81 @@ test("provider failures persist actionable safe API status", async () => {
     expect(assistant.text).toContain("HTTP 500");
     expect(JSON.stringify(messages)).not.toContain("token=secret");
     expect(JSON.stringify(messages)).not.toContain("private upstream stack");
+
+    const events = await getJson(`${server.url}events?cursor=0`);
+    const failedEvent = events.data.events.find(
+      (
+        event: {
+          type: string;
+          payload?: { event?: { kind?: string; payload?: unknown } };
+        },
+      ) =>
+        event.type === "agent.turn_event" &&
+        event.payload?.event?.kind === "turn.failed",
+    );
+    expect(failedEvent?.payload?.event?.payload).toMatchObject({
+      safeErrorCode: "provider_api_error",
+      safeCause: "private upstream stack [redacted]",
+    });
+    expect(JSON.stringify(events)).not.toContain("token=secret");
   } finally {
     server.stop();
   }
 });
 
-test("goal completion incomplete failures persist the safe incomplete reason", async () => {
+test("raw provider aborts remain failed app turns instead of cancellation", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder() {
+      const error = new Error("Provider request aborted by remote connection reset.");
+      error.name = "AbortError";
+      (error as Error & { code?: string }).code = "ABORT_ERR";
+      throw error;
+    },
+  });
+  try {
+    const failedResponse = await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: "general",
+        text: "please keep provider abort visible",
+      }),
+    });
+    expect(failedResponse.status).toBe(202);
+
+    const failedTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "failed",
+    );
+    expect(failedTurn).toMatchObject({
+      state: "failed",
+      safe_error_code: "provider_network_error",
+      retryable: true,
+      cancellable: false,
+    });
+
+    const messages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    const assistant = messages.data.messages.find(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistant).toMatchObject({
+      status: "failed",
+      safe_error_code: "provider_network_error",
+      retryable: true,
+    });
+    expect(messages.data.messages.map((message: { status: string }) => message.status))
+      .toEqual(["sent", "failed"]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("goal completion incomplete gaps deliver safe limitation text instead of app failures", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -8260,7 +8627,7 @@ test("goal completion incomplete failures persist the safe incomplete reason", a
     },
   });
   try {
-    const failedResponse = await fetch(`${server.url}messages`, {
+    const response = await fetch(`${server.url}messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -8268,48 +8635,53 @@ test("goal completion incomplete failures persist the safe incomplete reason", a
         text: "complete this only with verified evidence",
       }),
     });
-    expect(failedResponse.status).toBe(500);
+    expect(response.status).toBe(202);
 
-    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
-    const failedTurn = turns.data.turns[0];
-    expect(failedTurn).toMatchObject({
-      state: "failed",
-      safe_error_code: "goal_completion_incomplete",
-      retryable: true,
-    });
-
-    const messages = await getJson(
-      `${server.url}messages?chat_id=general&cursor=0`,
+    const deliveredTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "delivered",
     );
-    const firstAssistant = messages.data.messages.find(
-      (message: { role: string }) => message.role === "assistant",
+    expect(deliveredTurn).toMatchObject({
+      state: "delivered",
+      retryable: false,
+    });
+    expect(deliveredTurn.safe_error_code ?? null).toBeNull();
+
+    const firstAssistant = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.status === "delivered",
     );
     expect(firstAssistant).toMatchObject({
-      status: "failed",
-      safe_error_code: "goal_completion_incomplete",
-      retryable: true,
+      status: "delivered",
+      retryable: false,
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+      limitations: ["확인 가능한 공개 출처를 읽지 못했습니다. [redacted]"],
     });
-    expect(firstAssistant.text).toContain("확인 가능한 공개 출처");
-    expect(firstAssistant.text).not.toContain("token=secret");
+    expect(firstAssistant.safe_error_code ?? null).toBeNull();
+    expect(firstAssistant.text as string).toContain("확인 가능한 공개 출처");
+    expect(firstAssistant.text as string).not.toContain("token=secret");
   } finally {
     server.stop();
   }
 });
 
-test("goal completion obligation protocol failures render as clean retryable failures", async () => {
+test("goal completion obligation protocol gaps render as clean limited delivery", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
     responder() {
       const error = new Error(
-        "The turn still has unsatisfied public completion obligation(s): durable_artifact, data_table_created.",
+        "The turn still needs repair for missing public completion obligation(s): durable_artifact, data_table_created.",
       );
       error.name = "GoalCompletionIncompleteError";
       throw error;
     },
   });
   try {
-    const failedResponse = await fetch(`${server.url}messages`, {
+    const response = await fetch(`${server.url}messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -8317,27 +8689,29 @@ test("goal completion obligation protocol failures render as clean retryable fai
         text: "create a csv and report",
       }),
     });
-    expect(failedResponse.status).toBe(500);
+    expect(response.status).toBe(202);
 
-    const messages = await getJson(
-      `${server.url}messages?chat_id=general&cursor=0`,
-    );
-    const firstAssistant = messages.data.messages.find(
-      (message: { role: string }) => message.role === "assistant",
+    const firstAssistant = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.status === "delivered",
     );
     expect(firstAssistant).toMatchObject({
-      status: "failed",
-      safe_error_code: "goal_completion_incomplete",
-      retryable: true,
+      status: "delivered",
+      retryable: false,
     });
-    expect(firstAssistant.text).toContain(
-      "요청한 결과를 완료했는지 확인하지 못했습니다",
+    expect(firstAssistant.safe_error_code ?? null).toBeNull();
+    expect(firstAssistant.text as string).toContain(
+      "Butler could not verify that the requested goal was completed",
     );
-    expect(firstAssistant.text).not.toContain(
+    expect(firstAssistant.text as string).not.toContain(
       "unsatisfied public completion obligation",
     );
-    expect(firstAssistant.text).not.toContain("durable_artifact");
-    expect(firstAssistant.text).not.toContain("data_table_created");
+    expect(firstAssistant.text as string).not.toContain(
+      "missing public completion obligation",
+    );
+    expect(firstAssistant.text as string).not.toContain("durable_artifact");
+    expect(firstAssistant.text as string).not.toContain("data_table_created");
   } finally {
     server.stop();
   }
@@ -8361,8 +8735,12 @@ test("concurrent retry claims only one failed turn attempt", async () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ chat_id: "general", text: "retry once only" }),
     });
-    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
-    const turnId = turns.data.turns[0].id;
+    const failedTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "failed",
+    );
+    const turnId = failedTurn.id as string;
 
     const [first, second] = await Promise.all([
       fetch(`${server.url}turns/${encodeURIComponent(turnId)}/retry`, {
@@ -8379,10 +8757,12 @@ test("concurrent retry claims only one failed turn attempt", async () => {
     const statuses = [first.status, second.status].sort();
     expect(statuses).toEqual([202, 409]);
 
-    const finalTurns = await getJson(
-      `${server.url}turns?chat_id=general&cursor=0`,
+    const finalTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "delivered",
     );
-    expect(finalTurns.data.turns[0]).toMatchObject({
+    expect(finalTurn).toMatchObject({
       state: "delivered",
       attempt: 2,
     });
@@ -8480,7 +8860,7 @@ test("event replay is idempotent and includes message, turn, and progress events
   }
 });
 
-test("gateway bridge propagates timeout abort signal to runtime turns", async () => {
+test("gateway bridge keeps runtime turns alive past request timeout budgets", async () => {
   const runtime = new HangingRuntime();
   const bridge = new AppGatewayBridge({
     butlerHome: tempDir,
@@ -8504,10 +8884,13 @@ test("gateway bridge propagates timeout abort signal to runtime turns", async ()
       }),
     });
     const body = await response.json();
-    expect(response.status).toBe(504);
-    expect(body.error.code).toBe("gateway_timeout");
+    expect(response.status).toBe(202);
+    expect(body.data.turn).toMatchObject({
+      state: "thinking",
+      cancellable: true,
+    });
     expect(runtime.sawSignal).toBe(true);
-    expect(runtime.aborted).toBe(true);
+    expect(runtime.aborted).toBe(false);
   } finally {
     server.stop();
     bridge.close();
@@ -8904,6 +9287,40 @@ async function waitForTurnState(url: string, chatId: string, state: string) {
   throw new Error(`Turn state did not appear: ${state}`);
 }
 
+async function waitForLatestTurnMatching(
+  url: string,
+  chatId: string,
+  predicate: (turn: Record<string, unknown>) => boolean,
+) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const turns = await getJson(
+      `${url}turns?chat_id=${encodeURIComponent(chatId)}&cursor=0`,
+    );
+    const turn = turns.data.turns[0] as Record<string, unknown> | undefined;
+    if (turn && predicate(turn)) return turn;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error("Expected turn projection did not appear.");
+}
+
+async function waitForAssistantMessageMatching(
+  url: string,
+  chatId: string,
+  predicate: (message: Record<string, unknown>) => boolean,
+) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const messages = await getJson(
+      `${url}messages?chat_id=${encodeURIComponent(chatId)}&cursor=0`,
+    );
+    const assistant = (
+      messages.data.messages as Array<Record<string, unknown>>
+    ).find((message) => message.role === "assistant" && predicate(message));
+    if (assistant) return assistant;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error("Expected assistant message projection did not appear.");
+}
+
 class ScriptedRuntime implements AgentRuntimeAdapter {
   readonly id = "app-test-runtime";
   readonly turns: RuntimeTurnInput[] = [];
@@ -8920,6 +9337,7 @@ class ScriptedRuntime implements AgentRuntimeAdapter {
     private readonly artifacts?:
       | ArtifactRef[]
       | ((input: RuntimeTurnInput) => ArtifactRef[]),
+    private readonly delivery?: ReturnType<typeof deliveredWithLimitationsState>,
   ) {}
 
   async createSession(
@@ -8945,6 +9363,7 @@ class ScriptedRuntime implements AgentRuntimeAdapter {
       text,
       runtimeSessionRef: input.handle.runtimeSessionRef,
       artifacts,
+      delivery: this.delivery,
     };
   }
 }

@@ -74,7 +74,7 @@ try {
     checks: [
       "real-model-called",
       "real-runtime-session-created",
-      "no-semantic-progress-continuation-rejected",
+      "no-semantic-progress-delivered-recoverable",
       "semantic-progress-continuation-allowed",
       "durable-workstream-state-verified",
     ],
@@ -110,32 +110,25 @@ async function runNoSemanticProgressScenario(): Promise<Record<string, unknown>>
     ].join("\n"),
   });
 
-  let errorMessage: string;
-  try {
-    await runtime.runTurn({
-      handle,
-      provider,
-      model,
-      input: {
-        text: [
-          "Live E2E negative case.",
-          "Create a direct WorkStream by calling update_todo_list with exactly one in_progress execution todo.",
-          "The todo content should be: verify status-only continuation rejection.",
-          "Do not complete the todo and do not call run_command in the initial tool loop.",
-          "If the runtime asks you to continue or review completion, call run_command with `git status --short` exactly once, then leave the todo unfinished.",
-          "Then answer briefly that the todo remains unfinished.",
-        ].join("\n"),
-      },
-      metadata: {
-        runtimePolicy: { completionReview: "enabled" },
-        requiredNativeTools: ["update_todo_list", "run_command"],
-      },
-    });
-    throw new Error("status-only direct work scenario unexpectedly completed");
-  } catch (error) {
-    errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage === "status-only direct work scenario unexpectedly completed") throw error;
-  }
+  const result = await runtime.runTurn({
+    handle,
+    provider,
+    model,
+    input: {
+      text: [
+        "Live E2E negative case.",
+        "Create a direct WorkStream by calling update_todo_list with exactly one in_progress execution todo.",
+        "The todo content should be: verify status-only continuation rejection.",
+        "Do not complete the todo and do not call run_command in the initial tool loop.",
+        "If the runtime asks you to continue or review completion, call run_command with `git status --short` exactly once, then leave the todo unfinished.",
+        "Then answer briefly that the todo remains unfinished.",
+      ].join("\n"),
+    },
+    metadata: {
+      runtimePolicy: { completionReview: "enabled" },
+      requiredNativeTools: ["update_todo_list", "run_command"],
+    },
+  });
 
   assert(observation.liveModelCalls >= 2, `negative scenario did not call the real model enough times: ${observation.liveModelCalls}`);
   assert(
@@ -143,8 +136,8 @@ async function runNoSemanticProgressScenario(): Promise<Record<string, unknown>>
     "negative scenario did not create a direct WorkStream",
   );
   assert(
-    /active direct work stream is not deliverable|INCOMPLETE|unfinished|todo remains unfinished/i.test(errorMessage),
-    `negative scenario failed for an unexpected reason: ${errorMessage}`,
+    /not complete|완료라고 보고할 수|unfinished|todo remains unfinished/i.test(result.text),
+    `negative scenario produced an unexpected limited delivery: ${result.text}`,
   );
   const continuationPromptObserved = observation.phases.some((phase) =>
     phase === "direct_work_continuation" ||
@@ -162,13 +155,13 @@ async function runNoSemanticProgressScenario(): Promise<Record<string, unknown>>
     "negative scenario did not execute the status-only tool call inside direct_work_continuation",
   );
   const stream = activeOrLatestStream(sessionId);
-  assert(stream?.state !== "complete", `status-only scenario incorrectly completed WorkStream: ${JSON.stringify(stream)}`);
+  assert(stream?.state === "recoverable", `status-only scenario did not leave WorkStream recoverable: ${JSON.stringify(stream)}`);
   const todos = stream?.todo_list_id ? todoItems(stream.todo_list_id) : [];
   assert(todos.some((item) => item.status === "in_progress" || item.status === "pending"), "negative scenario has no unfinished todo evidence");
 
   return {
-    rejected: true,
-    errorPreview: errorMessage.slice(0, 240),
+    deliveredWithRecoverableWork: true,
+    textPreview: result.text.slice(0, 240),
     liveModelCalls: observation.liveModelCalls,
     phases: observation.phases,
     toolCalls: observation.toolCalls,

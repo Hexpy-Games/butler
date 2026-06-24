@@ -1387,8 +1387,8 @@ test("registered local function tool prompts repair standalone pseudo tool calls
             message: {
               role: "assistant",
               content: [
-                "작업: 공개 정보를 검색하겠습니다.",
-                "이유: 최신 정보를 확인해야 합니다.",
+                "summary: 공개 정보를 검색하겠습니다.",
+                "rationale: 최신 정보를 확인해야 합니다.",
                 "",
                 "`web_search(query=\"status source\")`",
               ].join("\n"),
@@ -2741,7 +2741,7 @@ test("Codex subscription tool continuation is sent as stateless input without pr
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("encrypted_content");
 });
 
-test("OpenAI function tool prompt records provider requests beyond warning threshold without aborting", async () => {
+test("OpenAI function tool prompt reserves budget for final synthesis instead of exceeding request budget", async () => {
   const token = fakeJwt({
     "https://api.openai.com/auth": {
       chatgpt_account_id: "chatgpt-account",
@@ -2757,19 +2757,33 @@ test("OpenAI function tool prompt records provider requests beyond warning thres
   });
   process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
 
+  const seenBodies: Array<Record<string, any>> = [];
   let fetchCalls = 0;
   let requestCount = 0;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    seenBodies.push(body);
     fetchCalls += 1;
-    if (fetchCalls === 34) {
+    if (fetchCalls === 32) {
       return codexSseResponse({
-        id: "resp_34",
+        id: "resp_32",
         item: {
           type: "message",
-          content: [{ type: "output_text", text: "done after high usage" }],
+          content: [{ type: "output_text", text: "done at budget" }],
         },
-        inputTokens: 34,
+        inputTokens: 32,
         totalTokens: 55,
+      });
+    }
+    if (fetchCalls > 32) {
+      return codexSseResponse({
+        id: `resp_${fetchCalls}`,
+        item: {
+          type: "message",
+          content: [{ type: "output_text", text: "should not exceed budget" }],
+        },
+        inputTokens: fetchCalls,
+        totalTokens: fetchCalls,
       });
     }
     return codexSseResponse({
@@ -2809,7 +2823,7 @@ test("OpenAI function tool prompt records provider requests beyond warning thres
         requestCount += 1;
       },
       getBudgetState: () => ({
-        status: requestCount >= 32 ? "warning" : "ok",
+        status: requestCount >= 32 ? "exhausted" : requestCount >= 30 ? "warning" : "ok",
         requestCount,
         maxRequests: 32,
       }),
@@ -2817,20 +2831,24 @@ test("OpenAI function tool prompt records provider requests beyond warning thres
     executeTool: async () => ({ ok: true }),
   });
 
-  expect(result).toBe("done after high usage");
-  expect(fetchCalls).toBe(34);
-  expect(requestCount).toBe(34);
+  expect(result).toBe("done at budget");
+  expect(fetchCalls).toBe(32);
+  expect(requestCount).toBe(32);
+  expect(seenBodies).toHaveLength(32);
+  expect(seenBodies.slice(0, 31).every((body) => Array.isArray(body.tools))).toBe(true);
+  expect(seenBodies[31]!.tools).toBeUndefined();
+  expect(seenBodies[31]!.instructions).toContain("Do not call any more tools");
   const events = readPromptCacheMetrics({ butlerData: tempDir })
     .filter((event) => event.turnId === "turn-high-model-calls");
-  expect(events).toHaveLength(34);
-  expect(events.at(31)?.budgetState).toMatchObject({
+  expect(events).toHaveLength(32);
+  expect(events.at(29)?.budgetState).toMatchObject({
     status: "warning",
-    requestCount: 32,
+    requestCount: 30,
     maxRequests: 32,
   });
   expect(events.at(-1)?.budgetState).toMatchObject({
-    status: "warning",
-    requestCount: 34,
+    status: "exhausted",
+    requestCount: 32,
     maxRequests: 32,
   });
 });
@@ -2976,6 +2994,118 @@ test("OpenAI function tool prompts send compact tool schemas to the model", asyn
     },
   }]);
   expect(JSON.stringify(seenBody.tools)).not.toContain("Nested parameter prose");
+});
+
+test("OpenAI function tool prompt refreshes promoted dynamic schemas between tool rounds", async () => {
+  process.env.OPENAI_API_KEY = "sk-test";
+  process.env.OPENAI_BASE_URL = "https://api.openai.example/v1";
+
+  let promoteLookup = false;
+  const seenBodies: Array<Record<string, any>> = [];
+  const executedToolNames: string[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    seenBodies.push(body);
+    if (seenBodies.length === 1) {
+      return Response.json({
+        id: "resp_1",
+        output: [{
+          type: "function_call",
+          call_id: "call_1",
+          name: "tool_describe",
+          arguments: JSON.stringify({ ids: ["native:lookup"] }),
+        }],
+      });
+    }
+    if (seenBodies.length === 2) {
+      return Response.json({
+        id: "resp_2",
+        output: [{
+          type: "function_call",
+          call_id: "call_2",
+          name: "lookup",
+          arguments: JSON.stringify({ query: "status" }),
+        }],
+      });
+    }
+    return Response.json({
+      id: "resp_3",
+      output: [{
+        type: "message",
+        content: [{ type: "output_text", text: "done" }],
+      }],
+    });
+  }) as unknown as typeof fetch;
+
+  const result = await runFunctionToolPromptText({
+    model: "gpt-5.5",
+    prompt: "check promoted tool",
+    maxToolRounds: 3,
+    tools: [{
+      type: "function",
+      name: "tool_describe",
+      description: "Describe a tool before promotion.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          ids: { type: "array", items: { type: "string" } },
+        },
+        required: ["ids"],
+      },
+    }],
+    dynamicTools: () => {
+      const base = [{
+        type: "function" as const,
+        name: "tool_describe",
+        description: "Describe a tool before promotion.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            ids: { type: "array", items: { type: "string" } },
+          },
+          required: ["ids"],
+        },
+      }];
+      if (!promoteLookup) return base;
+      return [...base, {
+        type: "function" as const,
+        name: "lookup",
+        description: "Promoted lookup tool.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            query: { type: "string" },
+          },
+          required: ["query"],
+        },
+      }];
+    },
+    executeTool: async (call) => {
+      executedToolNames.push(call.name);
+      if (call.name === "tool_describe") {
+        promoteLookup = true;
+        return { ok: true, described: call.args.ids };
+      }
+      return { ok: true, name: call.name, query: call.args.query };
+    },
+  });
+
+  expect(result).toBe("done");
+  expect(seenBodies).toHaveLength(3);
+  expect(executedToolNames).toEqual(["tool_describe", "lookup"]);
+  expect(seenBodies[0]!.tools.map((tool: { name: string }) => tool.name)).toEqual(["tool_describe"]);
+  expect(seenBodies[1]!.tools.map((tool: { name: string }) => tool.name)).toEqual(["tool_describe", "lookup"]);
+  expect(seenBodies[1]!.input).toEqual([{
+    type: "function_call_output",
+    call_id: "call_1",
+    output: JSON.stringify({
+      ok: true,
+      output: { ok: true, described: ["native:lookup"] },
+    }),
+  }]);
 });
 
 test("function tool prompt normalizes model tool names before dispatch", async () => {

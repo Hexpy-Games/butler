@@ -1,3 +1,10 @@
+import { safeOperationalRuntimeFailure } from "./operational-errors.ts";
+import {
+  INTERNAL_RECOVERY_REQUIRED_CODE,
+  isInternalRecoveryFailure,
+  safeInternalRecoveryMessage,
+} from "../../runtime/internal-recovery-failure.ts";
+
 export interface RuntimeFailureDiagnostic {
   code: string;
   message: string;
@@ -131,14 +138,18 @@ export function providerEmptyResponseError(input: {
 export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
   if (error instanceof ModelProviderRequestError) return error.diagnostic();
   const message = errorMessage(error);
-  if (isGoalCompletionIncompleteError(error)) {
+  const code = errorCode(error);
+  if (isInternalRecoveryFailure(error)) {
+    const safeMessage = safeInternalRecoveryMessage(message);
     return {
-      code: "goal_completion_incomplete",
-      message: safeGoalCompletionIncompleteMessage(message),
+      code: INTERNAL_RECOVERY_REQUIRED_CODE,
+      message: safeMessage,
       retryable: true,
-      cause: safeErrorText(message),
+      cause: safeMessage,
     };
   }
+  const operationalFailure = safeOperationalRuntimeFailure({ code, message });
+  if (operationalFailure) return operationalFailure;
   const status = statusCodeFromMessage(message);
   if (/Local model API returned no (?:visible )?(?:final )?(?:text output|answer envelope)/iu.test(message)) {
     return providerEmptyResponseError({
@@ -170,7 +181,7 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
     }).diagnostic();
   }
   if (
-    /Unable to connect|fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED|network|connection termination|disconnect\/reset/iu
+    /Unable to connect|fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED|network|connection termination|connection reset|remote connection reset|disconnect\/reset/iu
       .test(message)
   ) {
     return providerNetworkError({
@@ -178,14 +189,6 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
       api: "model-api",
       error: message,
     }).diagnostic();
-  }
-  if (/goal completion|could not verify that the requested goal was completed/iu.test(message)) {
-    return {
-      code: "goal_completion_incomplete",
-      message: "Butler could not verify that the requested goal was completed.",
-      retryable: true,
-      cause: safeErrorText(message),
-    };
   }
   return {
     code: "gateway_failed",
@@ -241,18 +244,17 @@ function isContextLimitDetail(detail: string | undefined): boolean {
 
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const message = (error as Record<string, unknown>).message;
+    return typeof message === "string" ? message : "Unknown runtime error";
+  }
   return typeof error === "string" ? error : "Unknown runtime error";
 }
 
-function isGoalCompletionIncompleteError(error: unknown): error is Error {
-  return error instanceof Error && error.name === "GoalCompletionIncompleteError";
-}
-
-function safeGoalCompletionIncompleteMessage(message: string): string {
-  if (/unsatisfied public completion obligation/iu.test(message)) {
-    return "Butler could not verify that the requested goal was completed.";
-  }
-  return safeErrorText(message) ?? "Butler could not verify that the requested goal was completed.";
+function errorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const code = (error as Record<string, unknown>).code;
+  return typeof code === "string" ? code : undefined;
 }
 
 function safeErrorText(value: unknown): string | undefined {

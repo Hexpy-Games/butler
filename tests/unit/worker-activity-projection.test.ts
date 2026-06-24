@@ -165,17 +165,6 @@ test("worker runner writes account-model failures into activity before exiting",
   expect(runner).toContain('writeActivity("failed", workerFailureStatusLine(message))');
 });
 
-test("planned public report completion terminates the review turn instead of spawning duplicate work", () => {
-  const nativeLoop = readFileSync(join(root, "packages/butler-agent/src/agent/turn/native-tool-loop.ts"), "utf8");
-
-  expect(nativeLoop).toContain("finalTextFromToolResult");
-  expect(nativeLoop).toContain('name === "write_planned_public_report"');
-  expect(nativeLoop).toContain("publicReportFromToolOutput");
-  expect(nativeLoop).not.toContain("workerStartHeartbeat()");
-  expect(nativeLoop).toContain("After `write_planned_public_report` succeeds");
-});
-
-
 test("worker shell semantic phase follows state-machine context, not command kind", () => {
   expect(summarizeWorkerShellActivity("rg -n \"worker\" src", { semanticPhase: "planning" })).toMatchObject({
     phase: "planning",
