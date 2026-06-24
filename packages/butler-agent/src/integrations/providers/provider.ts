@@ -1231,12 +1231,21 @@ function beforeAttributedModelRequest(input: {
     budget.status === "exhausted" ||
     budget.requestCount >= budget.maxRequests
   )) {
-    throw new Error("Prompt usage model-call budget exhausted before provider request");
+    throw promptUsageModelCallBudgetExhaustedError();
   }
   input.attribution?.beforeModelRequest?.({
     roundIndex: input.roundIndex,
     phase: input.attribution.phase,
   });
+}
+
+function promptUsageModelCallBudgetExhaustedError(): Error & { code: string } {
+  const error = Object.assign(
+    new Error("Prompt usage model-call budget exhausted before provider request"),
+    { code: "prompt_usage_model_call_budget_exhausted" },
+  );
+  error.name = "PromptUsageModelCallBudgetExhaustedError";
+  return error;
 }
 
 function modelIterationLimitWithinUsageBudget(

@@ -7,26 +7,48 @@ export interface UnresolvedValidationFailure {
   summary: string;
 }
 
-export function unresolvedValidationFailureFromAudit(
+export interface ValidationSuiteAuditState {
+  suite: string;
+  result: string;
+  passed: boolean;
+  summary: string;
+}
+
+export function latestValidationSuiteStatesFromAudit(
   audit: ToolAuditEntry[],
-): UnresolvedValidationFailure | null {
-  const latestBySuite = new Map<string, UnresolvedValidationFailure | null>();
+): ValidationSuiteAuditState[] {
+  const latestBySuite = new Map<string, ValidationSuiteAuditState>();
   const orderedSuites: string[] = [];
   for (const entry of audit) {
     for (const receipt of entry.evidenceCapabilityReceipts ?? []) {
       const validation = validationReceiptState(receipt);
       if (!validation) continue;
       if (!latestBySuite.has(validation.suite)) orderedSuites.push(validation.suite);
-      latestBySuite.set(validation.suite, validation.passed ? null : {
+      latestBySuite.set(validation.suite, {
         suite: validation.suite,
         result: validation.result,
+        passed: validation.passed,
         summary: receipt.summary,
       });
     }
   }
-  for (const key of orderedSuites.reverse()) {
-    const failure = latestBySuite.get(key);
-    if (failure) return failure;
+  return orderedSuites
+    .map((suite) => latestBySuite.get(suite))
+    .filter((state): state is ValidationSuiteAuditState => Boolean(state));
+}
+
+export function unresolvedValidationFailureFromAudit(
+  audit: ToolAuditEntry[],
+): UnresolvedValidationFailure | null {
+  const states = latestValidationSuiteStatesFromAudit(audit);
+  for (const state of states.reverse()) {
+    if (!state.passed) {
+      return {
+        suite: state.suite,
+        result: state.result,
+        summary: state.summary,
+      };
+    }
   }
   return null;
 }

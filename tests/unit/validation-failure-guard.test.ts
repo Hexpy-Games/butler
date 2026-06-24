@@ -133,6 +133,69 @@ test("reporting finalizer does not complete active work with unresolved validati
   }
 });
 
+test("reporting finalizer closes stale validation continuation after same suite passes", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-validation-finalizer-"));
+  try {
+    const sessionId = "session";
+    const listId = "validation-continuation-sandy-targeted-tests-log";
+    const todoView = new TodoListStore(butlerData).update({
+      listId,
+      title: "Recover failed sandy-targeted-tests-log validation",
+      items: [{
+        id: "inspect-failed-validation",
+        content: "Inspect failed validation evidence",
+        active_form: "Inspecting failed validation evidence",
+        status: "completed",
+        phase: "execution",
+      }, {
+        id: "patch-workspace-cause",
+        content: "Patch the workspace cause if the failure is inside the codebase",
+        active_form: "Comparing code against requested context history behavior",
+        status: "in_progress",
+        phase: "execution",
+      }, {
+        id: "rerun-validation",
+        content: "Re-run the same validation suite and obtain a passing receipt",
+        active_form: "Waiting to re-run same validation suite",
+        status: "pending",
+        phase: "review",
+      }, {
+        id: "report",
+        content: "Report after same-suite validation passes",
+        active_form: "Reporting validation result",
+        status: "pending",
+        phase: "reporting",
+      }],
+    });
+    const created = new WorkStreamStore(butlerData).updateFromTodoList({
+      ownerSessionId: sessionId,
+      projectId: "project",
+      listId,
+      title: "Recover failed sandy-targeted-tests-log validation",
+      items: todoView.list.items,
+    });
+    expect(created.state).toBe("executing");
+
+    completeReportingWorkStreamBestEffort({
+      butlerData,
+      sessionId,
+      audit: [
+        validationAudit("sandy-targeted-tests-log", "failed"),
+        validationAudit("sandy-targeted-tests-log", "passed"),
+      ],
+    });
+
+    const stream = new WorkStreamStore(butlerData).read(created.id);
+    expect(stream).toMatchObject({
+      state: "complete",
+      active_step_id: null,
+    });
+    expect(new WorkStreamStore(butlerData).activeForSession(sessionId)).toBeNull();
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 function commandAudit(command: string, exitCode: number): ToolAuditEntry {
   return {
     name: "run_command",

@@ -9,7 +9,12 @@ import type { RuntimeMessageLanguage } from "../../../output/messages.ts";
 import { runtimeSemanticTodoItems } from "../progress/runtime-semantic-progress.ts";
 import type { RuntimeSemanticProgressSafetyNet } from "../tool-execution/audited-executor-types.ts";
 import type { ToolAuditEntry } from "../output/tool-types.ts";
-import { unresolvedValidationFailureFromAudit } from "./validation-failure-guard.ts";
+import {
+  latestValidationSuiteStatesFromAudit,
+  unresolvedValidationFailureFromAudit,
+} from "./validation-failure-guard.ts";
+
+const VALIDATION_CONTINUATION_LIST_PREFIX = "validation-continuation-";
 
 export function completeReportingWorkStreamBestEffort(input: {
   butlerData: string;
@@ -26,6 +31,7 @@ export function completeReportingWorkStreamBestEffort(input: {
       });
       return;
     }
+    completeResolvedValidationContinuationStreamsBestEffort(input);
     const completed = completeTurnLocalWorkStreamForSession({
       butlerData: input.butlerData,
       sessionId: input.sessionId,
@@ -40,6 +46,60 @@ export function completeReportingWorkStreamBestEffort(input: {
     }
   } catch {
     // Final WorkStream bookkeeping must not block final answer delivery.
+  }
+}
+
+function completeResolvedValidationContinuationStreamsBestEffort(input: {
+  butlerData: string;
+  sessionId: string;
+  audit: ToolAuditEntry[];
+}): void {
+  const passedSuites = new Set(
+    latestValidationSuiteStatesFromAudit(input.audit)
+      .filter((state) => state.passed)
+      .map((state) => state.suite),
+  );
+  if (passedSuites.size === 0) return;
+  const streamStore = new WorkStreamStore(input.butlerData);
+  const todoStore = new TodoListStore(input.butlerData);
+  for (const summary of streamStore.list({ sessionId: input.sessionId })) {
+    const record = streamStore.read(summary.id);
+    const listId = record?.todo_list_id ?? "";
+    if (!record || !listId.startsWith(VALIDATION_CONTINUATION_LIST_PREFIX)) continue;
+    const suite = listId.slice(VALIDATION_CONTINUATION_LIST_PREFIX.length);
+    if (!passedSuites.has(suite)) continue;
+    const todoRecord = todoStore.read(listId);
+    if (!todoRecord) {
+      streamStore.transition({
+        id: record.id,
+        state: "recoverable",
+        statusNote: `Validation suite now has a later passing receipt: ${suite}`,
+      });
+      continue;
+    }
+    const completedTodos = todoRecord.items.map((item) => ({
+      id: item.id,
+      content: item.content,
+      active_form: item.active_form,
+      status: "completed" as const,
+      phase: item.phase ?? undefined,
+      priority: item.priority,
+      blocked_by: item.blocked_by,
+      note: item.note ?? `Validation suite passed later: ${suite}`,
+    }));
+    const todoView = todoStore.update({
+      listId,
+      title: todoRecord.title,
+      items: completedTodos,
+    });
+    streamStore.updateFromTodoList({
+      id: record.id,
+      ownerSessionId: record.owner_session_id,
+      projectId: record.project_id,
+      listId,
+      title: record.title,
+      items: todoView.list.items,
+    });
   }
 }
 

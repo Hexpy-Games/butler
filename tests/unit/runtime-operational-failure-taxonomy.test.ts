@@ -128,6 +128,15 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
       state: "needs_evidence",
       code: "missing_evidence",
     },
+    {
+      label: "prompt usage model-call budget",
+      error: {
+        code: "prompt_usage_model_call_budget_exhausted",
+        message: "Prompt usage model-call budget exhausted before provider request",
+      },
+      state: "recovering_internal",
+      code: "prompt_usage_model_call_budget_exhausted",
+    },
   ];
 
   for (const item of cases) {
