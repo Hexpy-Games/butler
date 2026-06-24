@@ -22,11 +22,11 @@ import {
   completionObligationEvidenceReceiptsFromResult,
   hasEvidenceCapabilityReceiptField,
   readCompletionObligationEvidence,
-} from "../output/completion-obligation-evidence.ts";
+} from "../output/completion/obligation-evidence.ts";
 import {
   evidenceReceiptsFromResult,
   satisfiedCompletionObligationsFromEvidenceReceipts,
-} from "../output/evidence-receipts.ts";
+} from "../output/evidence/receipts.ts";
 import { createAutomationToolHandlers } from "./automation/index.ts";
 import { createDataTableToolHandlers } from "./data-table/index.ts";
 import { createMcpToolHandlers } from "./mcp/index.ts";

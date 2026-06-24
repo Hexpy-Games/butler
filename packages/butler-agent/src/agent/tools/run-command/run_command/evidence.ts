@@ -2,10 +2,10 @@ import { extname } from "path";
 import {
   createEvidenceCapabilityReceipt,
   validationCapabilityReceipt,
-} from "../../../output/evidence-capability-ledger.ts";
+} from "../../../output/evidence/ledger.ts";
 import { evidenceReceipt } from "../../../tool-support/executor-support.ts";
 import type { EvidenceReceipt, PublicWorkObligationKind } from "../../../turn/native/output/tool-types.ts";
-import type { EvidenceCapabilityReceipt } from "../../../output/evidence-capability-ledger.ts";
+import type { EvidenceCapabilityReceipt } from "../../../output/evidence/ledger.ts";
 
 type CommandExecutionStatus = "succeeded" | "failed" | "timed_out";
 type CommandArtifactKind = "csv_file" | "table_file" | "chart_file" | "file";

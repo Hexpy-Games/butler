@@ -1,4 +1,4 @@
-import { reviewCapabilityReceipt } from "../output/evidence-capability-ledger.ts";
+import { reviewCapabilityReceipt } from "../output/evidence/ledger.ts";
 import type { PlannedReviewVerdict } from "../work/planned-task.ts";
 
 export function stalePlannedReviewCapabilityReceipts(input: {

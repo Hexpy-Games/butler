@@ -4,7 +4,7 @@ import {
   EVIDENCE_CAPABILITY_SCHEMA_VERSION,
   EVIDENCE_CAPABILITY_TAXONOMY,
   parseEvidenceCapabilityReceipt,
-} from "../../packages/butler-agent/src/agent/output/evidence-capability-ledger.ts";
+} from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
 
 test("evidence capability taxonomy covers D01 proof families", () => {
   expect(EVIDENCE_CAPABILITY_TAXONOMY).toMatchObject({

@@ -5,8 +5,8 @@ import {
   requiredCompletionObligations,
   reviewCompletionObligations,
   unsatisfiedCompletionObligations,
-} from "../../packages/butler-agent/src/agent/output/completion-obligation-review.ts";
-import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence-capability-ledger.ts";
+} from "../../packages/butler-agent/src/agent/output/completion/obligation-review.ts";
+import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
 import type {
   PublicWorkDecision,
   ToolAuditEntry,

@@ -27,13 +27,13 @@ import {
   emitStartedProgress,
   taskSummaryForTool,
 } from "./tool-call-start.ts";
-import { summarizeToolProgress } from "../../../output/tool-progress.ts";
+import { summarizeToolProgress } from "../../../output/progress/tool-progress.ts";
 import {
   evidenceTranscriptErrorMessage,
-} from "../../../output/evidence-transcript-result.ts";
+} from "../../../output/evidence/transcript-result.ts";
 import {
   takePublicWorkDecisionForTool,
-} from "../../../output/public-work-decisions.ts";
+} from "../../../output/public-work/decisions.ts";
 import type {
   NativeAuditedToolExecutorInput,
   NativeToolCall,

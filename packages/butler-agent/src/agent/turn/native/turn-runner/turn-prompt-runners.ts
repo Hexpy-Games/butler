@@ -17,7 +17,7 @@ import {
   plannedReviewTerminalToolText,
   publicReportFromToolOutput,
 } from "../output/tool-result-text.ts";
-import { publicWorkDecisionsFromAssistantText } from "../../../output/public-work-decisions.ts";
+import { publicWorkDecisionsFromAssistantText } from "../../../output/public-work/decisions.ts";
 import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
 import { emitAssistantTextBeforeTools } from "./assistant-pretool-progress.ts";
 import type { ToolSurfacePromptController } from "../../tool-surface-prompt-controller.ts";

@@ -1,5 +1,5 @@
 import type { RuntimeMessageLanguage } from "../../../output/messages.ts";
-import { evidenceReceiptsFromResult } from "../../../output/evidence-receipts.ts";
+import { evidenceReceiptsFromResult } from "../../../output/evidence/receipts.ts";
 import type { ToolAuditEntry } from "../output/tool-types.ts";
 
 const GOAL_COMPLETION_REVIEW_SKIP_TOOLS = new Set([

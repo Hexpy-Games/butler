@@ -11,7 +11,7 @@ import {
   finalResultContractRepairPrompt,
   stripLeadingPublicWorkDecisionBlock,
   stripToolImplementationLeakLines,
-} from "../../../output/final-output-contract.ts";
+} from "../../../output/completion/final-output-contract.ts";
 import { finalContractFallbackText } from "../policy/turn-evidence-gates.ts";
 import { recordIntentGuardMetric } from "./intent-guard-metrics.ts";
 import type { NativeStoredSessionConfig, NativeTurnRunnerDeps } from "./turn-runner-types.ts";

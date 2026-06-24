@@ -7,7 +7,7 @@ import type { RepeatedToolFamilyGuard } from "../../tool-loop-guards.ts";
 import {
   evidenceTranscriptToolCallArgumentsProjection,
   evidenceTranscriptToolResultProjection,
-} from "../../../output/evidence-transcript-result.ts";
+} from "../../../output/evidence/transcript-result.ts";
 import type {
   NativeAuditedToolExecutorInput,
   NativeToolCall,

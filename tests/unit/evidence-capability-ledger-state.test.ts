@@ -4,8 +4,8 @@ import {
   createEvidenceCapabilityReceipt,
   EVIDENCE_CAPABILITY_SCHEMA_VERSION,
   missingCompletionObligationsFromLedger,
-} from "../../packages/butler-agent/src/agent/output/evidence-capability-ledger.ts";
-import { readCompletionObligationEvidence } from "../../packages/butler-agent/src/agent/output/completion-obligation-evidence.ts";
+} from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
+import { readCompletionObligationEvidence } from "../../packages/butler-agent/src/agent/output/completion/obligation-evidence.ts";
 
 test("ledger keeps malformed receipts as rejected evidence", () => {
   const ledger = buildEvidenceCapabilityLedger({

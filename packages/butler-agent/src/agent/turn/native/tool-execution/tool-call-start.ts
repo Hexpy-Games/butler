@@ -5,10 +5,10 @@ import {
 } from "../../../../test-support/harness/transcripts.ts";
 import {
   publicWorkDecisionPayload,
-} from "../../../output/public-work-decisions.ts";
+} from "../../../output/public-work/decisions.ts";
 import {
   evidenceTranscriptToolCallArgumentsProjection,
-} from "../../../output/evidence-transcript-result.ts";
+} from "../../../output/evidence/transcript-result.ts";
 import {
   buildIntermediateAction,
   emitDecisionProgressBestEffort,

@@ -3,7 +3,7 @@ import {
   projectLedgerRenderedViewEvidence,
   runProjectLedgerTool,
 } from "../../../integrations/project-ledger/client.ts";
-import { createEvidenceCapabilityReceipt } from "../../output/evidence-capability-ledger.ts";
+import { createEvidenceCapabilityReceipt } from "../../output/evidence/ledger.ts";
 import { createWorkDashboard } from "../../work/work-dashboard.ts";
 
 type ToolCall = { args: Record<string, unknown> };

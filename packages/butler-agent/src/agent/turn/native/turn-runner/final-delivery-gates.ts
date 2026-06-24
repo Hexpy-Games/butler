@@ -19,7 +19,7 @@ import {
   completionReviewIncompleteReason,
   goalCompletionIncompleteContinuationPrompt,
   goalCompletionReviewPrompt,
-} from "../../../output/final-output-contract.ts";
+} from "../../../output/completion/final-output-contract.ts";
 import {
   goalCompletionContinuationAttempts,
   goalCompletionIncompleteError,

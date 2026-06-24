@@ -15,11 +15,11 @@ import {
 } from "../../../tools/tool-bridge/audit.ts";
 import { buildTaskOriginContext } from "../../../work/task-origin.ts";
 import { TaskStore } from "../../../work/task-store.ts";
-import { annotateToolResultWithDecisionContext, publicWorkDecisionPayload } from "../../../output/public-work-decisions.ts";
-import { evidenceReceiptsFromResult } from "../../../output/evidence-receipts.ts";
+import { annotateToolResultWithDecisionContext, publicWorkDecisionPayload } from "../../../output/public-work/decisions.ts";
+import { evidenceReceiptsFromResult } from "../../../output/evidence/receipts.ts";
 import {
   evidenceTranscriptToolResultProjection,
-} from "../../../output/evidence-transcript-result.ts";
+} from "../../../output/evidence/transcript-result.ts";
 import {
   buildIntermediateAction,
   emitDecisionProgressBestEffort,
