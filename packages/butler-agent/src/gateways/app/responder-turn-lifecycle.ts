@@ -73,11 +73,14 @@ export interface CompleteResponderTurnContext<FileRecord> {
     onTurnEvent: (event: RuntimeTurnEventInput) => void,
   ): Promise<AppMessageResponderResult>;
   touchChat(chatId: string): void;
-  updateTurnDelivered(turnId: string): TurnRecord;
+  updateTurnDelivered(
+    turnId: string,
+    delivery?: AppMessageResponderResult["delivery"] | null,
+  ): TurnRecord;
   updateTurnFailed(
     chatId: string,
     turnId: string,
-    safeError: { code: string; message: string },
+    safeError: { code: string; message: string; cause?: string },
   ): TurnRecord;
 }
 
@@ -101,6 +104,9 @@ export async function completeResponderTurn<FileRecord>(
       input.chatId,
       response.files ?? [],
     );
+    const limitedDelivery = response.delivery?.delivery_state === "delivered_with_limitations"
+      ? response.delivery
+      : null;
     if (!context.hasTurnEventKind(input.turnId, "message.final.started")) {
       context.appendTurnEvent({
         kind: "message.final.started",
@@ -117,16 +123,22 @@ export async function completeResponderTurn<FileRecord>(
       context.appendTurnEvent({
         kind: "message.final.completed",
         payload: {
-          safeLabel: "Final answer ready",
+          safeLabel: limitedDelivery
+            ? "Final answer ready with limitations"
+            : "Final answer ready",
           textChars: response.texts.join("\n\n").length,
+          ...(limitedDelivery ?? {}),
         },
       });
     }
-    const deliveredTurn = context.updateTurnDelivered(input.turnId);
+    const deliveredTurn = context.updateTurnDelivered(input.turnId, limitedDelivery);
     if (!context.hasTurnEventKind(input.turnId, "turn.completed")) {
       context.appendTurnEvent({
         kind: "turn.completed",
-        payload: { safeLabel: "Completed" },
+        payload: {
+          safeLabel: limitedDelivery ? "Completed with limitations" : "Completed",
+          ...(limitedDelivery ?? {}),
+        },
       });
     }
     context.touchChat(input.chatId);
@@ -136,10 +148,13 @@ export async function completeResponderTurn<FileRecord>(
       input.options,
     );
 
-    const reply = replies.at(-1)!;
+    const projectedReplies = limitedDelivery
+      ? replies.map((reply) => ({ ...reply, ...limitedDelivery }))
+      : replies;
+    const reply = projectedReplies.at(-1)!;
     return {
       reply,
-      replies,
+      replies: projectedReplies,
       turn: deliveredTurn,
       next_cursor: reply.cursor,
     };

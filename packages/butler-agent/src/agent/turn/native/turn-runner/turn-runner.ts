@@ -2,6 +2,8 @@ import { recordOperationalMetric } from "../../../../operations/metrics/operatio
 import type { RuntimeTurnResult } from "../../../../test-support/harness/contracts.ts";
 import { runtimeArtifactsFromAudit } from "../output/runtime-artifacts.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
+import { recoverableLimitedDeliveryForError } from "../../recoverable-delivery.ts";
+import { deliveredWithLimitationsState } from "../../runtime-delivery-state.ts";
 import {
   completeReportingWorkStreamBestEffort,
   completeRuntimeSemanticWorkStreamBestEffort,
@@ -11,6 +13,7 @@ import { produceFinalDeliveryText } from "./final-delivery-gates.ts";
 import { prepareNativeTurnContext } from "./turn-context-builder.ts";
 import { createNativeTurnPromptRunners } from "./turn-prompt-runners.ts";
 import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
+import { unresolvedValidationFailureFromAudit } from "./validation-failure-guard.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
 import type { NativeTurnRunnerInput } from "./turn-runner-types.ts";
 
@@ -81,7 +84,8 @@ export async function runNativeToolTurn({
         audit,
       });
     }
-    await emitFinalEvents(input, decisionCheckedText);
+    const delivery = deliveryForFinalAudit(audit);
+    await emitFinalEvents(input, decisionCheckedText, delivery);
     recordTurnMetric({
       status: "ok",
       input,
@@ -99,6 +103,7 @@ export async function runNativeToolTurn({
     return {
       text: decisionCheckedText,
       runtimeSessionRef: input.handle.runtimeSessionRef,
+      delivery,
       artifacts: runtimeArtifactsFromAudit({
         audit,
         butlerData: deps.butlerData,
@@ -106,6 +111,7 @@ export async function runNativeToolTurn({
       }),
     };
   } catch (error) {
+    const limitedDelivery = recoverableLimitedDeliveryForError(error);
     if (useTools && !input.signal?.aborted) {
       markActiveWorkStreamRecoverableBestEffort({
         butlerData: deps.butlerData,
@@ -113,10 +119,12 @@ export async function runNativeToolTurn({
         reason: error instanceof Error ? error.message : String(error),
       });
     }
-    await emitTurnEventBestEffort(input, {
-      kind: input.signal?.aborted ? "turn.cancelled" : "turn.failed",
-      payload: { safeLabel: input.signal?.aborted ? "Cancelled" : "Failed" },
-    });
+    if (!limitedDelivery) {
+      await emitTurnEventBestEffort(input, {
+        kind: input.signal?.aborted ? "turn.cancelled" : "turn.failed",
+        payload: { safeLabel: input.signal?.aborted ? "Cancelled" : "Failed" },
+      });
+    }
     recordTurnMetric({
       status: "error",
       input,
@@ -130,7 +138,22 @@ export async function runNativeToolTurn({
   }
 }
 
-async function emitFinalEvents(input: NativeTurnRunnerInput["input"], text: string): Promise<void> {
+function deliveryForFinalAudit(audit: ToolAuditEntry[]): RuntimeTurnResult["delivery"] {
+  const validationFailure = unresolvedValidationFailureFromAudit(audit);
+  if (!validationFailure) return undefined;
+  const limitation = `Validation suite failed without a later passing receipt: ${validationFailure.suite}`;
+  return deliveredWithLimitationsState({
+    limitationCodes: ["validation_failed"],
+    limitations: [limitation],
+  });
+}
+
+async function emitFinalEvents(
+  input: NativeTurnRunnerInput["input"],
+  text: string,
+  delivery?: RuntimeTurnResult["delivery"],
+): Promise<void> {
+  const limitedDelivery = delivery?.delivery_state === "delivered_with_limitations";
   await emitTurnEventBestEffort(input, {
     kind: "message.final.started",
     payload: { safeLabel: "Preparing final answer" },
@@ -138,13 +161,17 @@ async function emitFinalEvents(input: NativeTurnRunnerInput["input"], text: stri
   await emitTurnEventBestEffort(input, {
     kind: "message.final.completed",
     payload: {
-      safeLabel: "Final answer ready",
+      safeLabel: limitedDelivery ? "Final answer ready with limitations" : "Final answer ready",
       textChars: text.length,
+      ...(delivery ?? {}),
     },
   });
   await emitTurnEventBestEffort(input, {
     kind: "turn.completed",
-    payload: { safeLabel: "Completed" },
+    payload: {
+      safeLabel: limitedDelivery ? "Completed with limitations" : "Completed",
+      ...(delivery ?? {}),
+    },
   });
 }
 

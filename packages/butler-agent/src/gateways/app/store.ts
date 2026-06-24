@@ -229,6 +229,10 @@ import {
   isResponderCancelError,
 } from "./responder-turn-lifecycle.ts";
 import {
+  projectSafeTurnFailure,
+  safeTurnFailureEventPayload,
+} from "./turn-failure-projection.ts";
+import {
   applyComponentUpdate,
   checkComponentUpdates,
 } from "../../operations/update/component-updater.ts";
@@ -400,7 +404,7 @@ interface TurnRow {
   updated_at: string;
 }
 
-interface DeliveryLimitationMetadata {
+export interface DeliveryLimitationMetadata {
   delivery_state: SessionViewTurnDeliveryState;
   limitation_codes: string[];
   limitations: string[];
@@ -507,6 +511,7 @@ export interface AppMessageResponderResult {
   texts: string[];
   files?: AppMessageResponderFile[];
   progress?: ProgressSummaryInput[];
+  delivery?: DeliveryLimitationMetadata;
 }
 
 type ProgressSummaryInput = Omit<ProgressSummaryRow, "created_at"> & {
@@ -3842,12 +3847,7 @@ export class AppServerStore {
     if (turn.state === "retrying" && timestampBefore(eventTimestamp, turn.updated_at)) {
       return false;
     }
-    const safeError = {
-      code: safeOptionalShortToken(metadata.safeErrorCode) ?? "gateway_failed",
-      message:
-        safeOptionalShortText(message.text) ??
-        "Butler could not complete this turn.",
-    };
+    const safeError = projectSafeTurnFailure({ message, metadata });
     const existing = this.getLatestAssistantMessageForTurn(turnId);
     if (
       turn.state === "failed" &&
@@ -3863,10 +3863,7 @@ export class AppServerStore {
     if (!this.hasTurnEventKind(turnId, "turn.failed")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "turn.failed",
-        payload: {
-          safeLabel: safeError.message,
-          safeErrorCode: safeError.code,
-        },
+        payload: safeTurnFailureEventPayload(safeError),
       });
     }
     const failedTurn = this.updateTurnState(turnId, "failed", {
@@ -4559,9 +4556,10 @@ export class AppServerStore {
           onTurnEvent,
         ),
       touchChat: (chatId) => this.touchChat(chatId),
-      updateTurnDelivered: (turnId) => {
+      updateTurnDelivered: (turnId, delivery) => {
+        const limitedDelivery = delivery?.delivery_state === "delivered_with_limitations";
         const deliveredTurn = this.updateTurnState(turnId, "delivered", {
-          safeStatusLabel: "Delivered",
+          safeStatusLabel: limitedDelivery ? "Delivered with limitations" : "Delivered",
           retryable: false,
           cancellable: false,
           safeErrorCode: null,
@@ -4573,10 +4571,7 @@ export class AppServerStore {
         this.upsertAssistantTurnFailure(chatId, turnId, safeError);
         this.appendTurnEvent(chatId, turnId, {
           kind: "turn.failed",
-          payload: {
-            safeLabel: safeError.message,
-            safeErrorCode: safeError.code,
-          },
+          payload: safeTurnFailureEventPayload(safeError),
         });
         const failedTurn = this.updateTurnState(turnId, "failed", {
           safeStatusLabel: "Failed",
@@ -4739,15 +4734,24 @@ export class AppServerStore {
           payload: { safeLabel: "Preparing final answer" },
         });
       }
+      const limitedDelivery = response.delivery?.delivery_state === "delivered_with_limitations"
+        ? response.delivery
+        : null;
       if (options.suppressAssistantReplies) {
         if (!this.hasTurnEventKind(turn.id, "message.final.completed")) {
           appendTurnEvent({
             kind: "message.final.completed",
-            payload: { safeLabel: "Final answer ready", textChars: 0 },
+            payload: {
+              safeLabel: limitedDelivery
+                ? "Final answer ready with limitations"
+                : "Final answer ready",
+              textChars: 0,
+              ...(limitedDelivery ?? {}),
+            },
           });
         }
         const deliveredTurn = this.updateTurnState(turn.id, "delivered", {
-          safeStatusLabel: "Delivered",
+          safeStatusLabel: limitedDelivery ? "Delivered with limitations" : "Delivered",
           retryable: false,
           cancellable: false,
           safeErrorCode: null,
@@ -4756,7 +4760,10 @@ export class AppServerStore {
         if (!this.hasTurnEventKind(turn.id, "turn.completed")) {
           appendTurnEvent({
             kind: "turn.completed",
-            payload: { safeLabel: "Completed" },
+            payload: {
+              safeLabel: limitedDelivery ? "Completed with limitations" : "Completed",
+              ...(limitedDelivery ?? {}),
+            },
           });
         }
         this.touchChat(chatId);
@@ -4792,13 +4799,16 @@ export class AppServerStore {
         appendTurnEvent({
           kind: "message.final.completed",
           payload: {
-            safeLabel: "Final answer ready",
+            safeLabel: limitedDelivery
+              ? "Final answer ready with limitations"
+              : "Final answer ready",
             textChars: response.texts.join("\n\n").length,
+            ...(limitedDelivery ?? {}),
           },
         });
       }
       const deliveredTurn = this.updateTurnState(turn.id, "delivered", {
-        safeStatusLabel: "Delivered",
+        safeStatusLabel: limitedDelivery ? "Delivered with limitations" : "Delivered",
         retryable: false,
         cancellable: false,
         safeErrorCode: null,
@@ -4807,15 +4817,21 @@ export class AppServerStore {
       if (!this.hasTurnEventKind(turn.id, "turn.completed")) {
         appendTurnEvent({
           kind: "turn.completed",
-          payload: { safeLabel: "Completed" },
+          payload: {
+            safeLabel: limitedDelivery ? "Completed with limitations" : "Completed",
+            ...(limitedDelivery ?? {}),
+          },
         });
       }
       this.touchChat(chatId);
-      const reply = replies.at(-1)!;
+      const projectedReplies = limitedDelivery
+        ? replies.map((reply) => ({ ...reply, ...limitedDelivery }))
+        : replies;
+      const reply = projectedReplies.at(-1)!;
       return {
         accepted: reply,
         reply,
-        replies,
+        replies: projectedReplies,
         turn: deliveredTurn,
         next_cursor: reply.cursor,
       };
