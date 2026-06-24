@@ -34,8 +34,13 @@ test("transport E2E does not regex-capture feedback through app-server gateway t
       text: "앞으로 말투는 간결하게만 써라.",
       client_message_id: "client-feedback-1",
     });
-    expect(first.data.turn.state).toBe("delivered");
-    expect(first.data.reply.text).toBe("feedback-missing");
+    expect(first.data.turn.state).toBe("thinking");
+    const firstReply = await waitForAssistantMessage(
+      server.url,
+      "general",
+      "feedback-missing",
+    );
+    expect(firstReply.text).toBe("feedback-missing");
 
     const feedback = listFeedbackEntries(butlerData);
     expect(feedback).toHaveLength(0);
@@ -45,7 +50,14 @@ test("transport E2E does not regex-capture feedback through app-server gateway t
       text: "내 답변 방식 기억하지?",
       client_message_id: "client-feedback-2",
     });
-    expect(second.data.reply.text).toBe("feedback-missing");
+    expect(second.data.turn.state).toBe("thinking");
+    const secondReply = await waitForAssistantMessage(
+      server.url,
+      "general",
+      "feedback-missing",
+      2,
+    );
+    expect(secondReply.text).toBe("feedback-missing");
 
     const messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
     expect(messages.data.messages.map((message: { role: string }) => message.role)).toEqual([
@@ -118,6 +130,25 @@ async function getJson(url: string) {
   const response = await fetch(url);
   expect(response.ok).toBe(true);
   return await response.json();
+}
+
+async function waitForAssistantMessage(
+  url: string,
+  chatId: string,
+  text: string,
+  count = 1,
+) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const messages = await getJson(
+      `${url}messages?chat_id=${encodeURIComponent(chatId)}&cursor=0`,
+    );
+    const matches = (
+      messages.data.messages as Array<Record<string, unknown>>
+    ).filter((message) => message.role === "assistant" && message.text === text);
+    if (matches.length >= count) return matches.at(-1)!;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Assistant message did not appear: ${text}`);
 }
 
 async function postJson(url: string, body: unknown) {
