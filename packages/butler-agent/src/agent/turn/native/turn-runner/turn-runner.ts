@@ -73,10 +73,12 @@ export async function runNativeToolTurn({
         projectId: projectId(session),
         tracker: context.semanticProgressSafetyNet,
         language: deps.messageLanguage,
+        audit,
       });
       completeReportingWorkStreamBestEffort({
         butlerData: deps.butlerData,
         sessionId: input.handle.sessionId,
+        audit,
       });
     }
     await emitFinalEvents(input, decisionCheckedText);

@@ -39,6 +39,10 @@ import {
   repairFinalContract,
 } from "./public-output-gates.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
+import {
+  unresolvedValidationFailureFromAudit,
+  validationFailureContinuationPrompt,
+} from "./validation-failure-guard.ts";
 
 const EXPLICIT_TOOL_REPAIR_ATTEMPTS = 2;
 const EXPLICIT_TOOL_REPAIR_BASE_ROUNDS = 2;
@@ -62,7 +66,8 @@ export async function produceFinalDeliveryText(input: {
   const textAfterExplicitTools = await repairExplicitToolRequirements(input);
   const groundedText = applyGroundingIfNeeded(input, textAfterExplicitTools);
   const reviewedText = await runGoalCompletionReviews({ ...input, initialText: groundedText });
-  const directWorkClosedText = await closeDirectWork({ ...input, finalText: reviewedText });
+  const validationClosedText = await closeUnresolvedValidationWork({ ...input, finalText: reviewedText });
+  const directWorkClosedText = await closeDirectWork({ ...input, finalText: validationClosedText });
   const contractRepairedText = await repairFinalContract({ ...input, finalText: directWorkClosedText });
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "guard.started",
@@ -74,6 +79,25 @@ export async function produceFinalDeliveryText(input: {
     payload: { guard: "public_output", status: "approved" },
   });
   return checkedText;
+}
+
+async function closeUnresolvedValidationWork(input: {
+  prompt: string;
+  finalText: string;
+  audit: ToolAuditEntry[];
+  runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
+}): Promise<string> {
+  let finalText = input.finalText;
+  for (let attempt = 0; attempt < goalCompletionContinuationAttempts(); attempt += 1) {
+    const failure = unresolvedValidationFailureFromAudit(input.audit);
+    if (!failure) return finalText;
+    finalText = await input.runToolPrompt(validationFailureContinuationPrompt({
+      objective: input.prompt,
+      previousAnswer: finalText,
+      failure,
+    }), DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS, "validation_failure_continuation");
+  }
+  return finalText;
 }
 
 function applyGroundingIfNeeded(

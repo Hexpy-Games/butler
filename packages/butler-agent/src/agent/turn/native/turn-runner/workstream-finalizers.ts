@@ -8,12 +8,24 @@ import {
 import type { RuntimeMessageLanguage } from "../../../output/messages.ts";
 import { runtimeSemanticTodoItems } from "../progress/runtime-semantic-progress.ts";
 import type { RuntimeSemanticProgressSafetyNet } from "../tool-execution/audited-executor-types.ts";
+import type { ToolAuditEntry } from "../output/tool-types.ts";
+import { unresolvedValidationFailureFromAudit } from "./validation-failure-guard.ts";
 
 export function completeReportingWorkStreamBestEffort(input: {
   butlerData: string;
   sessionId: string;
+  audit: ToolAuditEntry[];
 }): void {
   try {
+    const validationFailure = unresolvedValidationFailureFromAudit(input.audit);
+    if (validationFailure) {
+      markActiveWorkStreamRecoverableBestEffort({
+        butlerData: input.butlerData,
+        sessionId: input.sessionId,
+        reason: `Validation command failed without a later passing run: ${validationFailure.command}`,
+      });
+      return;
+    }
     const completed = completeTurnLocalWorkStreamForSession({
       butlerData: input.butlerData,
       sessionId: input.sessionId,
@@ -37,9 +49,35 @@ export function completeRuntimeSemanticWorkStreamBestEffort(input: {
   projectId?: string;
   tracker: RuntimeSemanticProgressSafetyNet;
   language: RuntimeMessageLanguage;
+  audit: ToolAuditEntry[];
 }): void {
   if (input.tracker.source !== "runtime") return;
   try {
+    const validationFailure = unresolvedValidationFailureFromAudit(input.audit);
+    if (validationFailure) {
+      const todoView = new TodoListStore(input.butlerData).update({
+        listId: input.tracker.listId,
+        title: input.tracker.title,
+        items: runtimeSemanticTodoItems({
+          language: input.language,
+          executionLabel: input.tracker.lastExecutionLabel,
+          state: "review",
+        }),
+      });
+      const record = new WorkStreamStore(input.butlerData).updateFromTodoList({
+        ownerSessionId: input.sessionId,
+        projectId: input.projectId,
+        listId: input.tracker.listId,
+        title: todoView.list.title ?? input.tracker.title,
+        items: todoView.list.items,
+      });
+      new WorkStreamStore(input.butlerData).transition({
+        id: record.id,
+        state: "recoverable",
+        statusNote: `Validation command failed without a later passing run: ${validationFailure.command}`,
+      });
+      return;
+    }
     const todoView = new TodoListStore(input.butlerData).update({
       listId: input.tracker.listId,
       title: input.tracker.title,
