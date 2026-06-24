@@ -22,7 +22,7 @@ export function completeReportingWorkStreamBestEffort(input: {
       markActiveWorkStreamRecoverableBestEffort({
         butlerData: input.butlerData,
         sessionId: input.sessionId,
-        reason: `Validation command failed without a later passing run: ${validationFailure.command}`,
+        reason: `Validation suite failed without a later passing receipt: ${validationFailure.suite}`,
       });
       return;
     }
@@ -74,7 +74,7 @@ export function completeRuntimeSemanticWorkStreamBestEffort(input: {
       new WorkStreamStore(input.butlerData).transition({
         id: record.id,
         state: "recoverable",
-        statusNote: `Validation command failed without a later passing run: ${validationFailure.command}`,
+        statusNote: `Validation suite failed without a later passing receipt: ${validationFailure.suite}`,
       });
       return;
     }

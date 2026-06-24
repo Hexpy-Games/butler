@@ -9,7 +9,6 @@ import {
   type CommandArtifactEvidence,
   type CommandValidationEvidence,
 } from "./evidence.ts";
-import { isValidationCommand } from "./validation-command.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 
@@ -593,7 +592,7 @@ export async function runCommandTool(input: {
   const success = raw.exit_code === 0 && raw.timed_out === false;
   const shouldSuppressOutput = success && (
     outputMode === "silent_on_success" ||
-    (outputMode === "auto" && isValidationCommand(command))
+    (outputMode === "auto" && Boolean(validationSuiteFromArgs(input.args)))
   );
 
   let processedResult = raw;
@@ -666,7 +665,43 @@ export async function runCommandTool(input: {
       outputSuppressed: shouldSuppressOutput,
       outputBudgeted: Boolean(budgeted.butler_tool_artifact),
       artifacts,
-      validations: structuredStdoutValidationEvidence(raw.stdout),
+      validations: commandValidationEvidence(input.args, raw),
     }),
   };
+}
+
+function commandValidationEvidence(
+  args: Record<string, unknown>,
+  result: ShellCommandResult,
+): CommandValidationEvidence[] {
+  const structured = structuredStdoutValidationEvidence(result.stdout);
+  const declared = declaredValidationEvidence(args, result, structured);
+  return [...structured, ...declared].slice(0, 8);
+}
+
+function declaredValidationEvidence(
+  args: Record<string, unknown>,
+  result: ShellCommandResult,
+  existing: CommandValidationEvidence[],
+): CommandValidationEvidence[] {
+  const suite = validationSuiteFromArgs(args);
+  if (!suite) return [];
+  if (existing.some((validation) => validation.suite === suite)) return [];
+  const passed = result.exit_code === 0 && result.timed_out === false;
+  return [{
+    suite,
+    result: passed ? "passed" : "failed",
+    ...(passed ? {} : { failure_summary: validationFailureSummary(result) }),
+  }];
+}
+
+function validationSuiteFromArgs(args: Record<string, unknown>): string | null {
+  return typeof args.validation_suite === "string" && args.validation_suite.trim()
+    ? args.validation_suite.trim()
+    : null;
+}
+
+function validationFailureSummary(result: ShellCommandResult): string {
+  if (result.timed_out) return "Validation command timed out.";
+  return `Validation command exited with status ${result.exit_code ?? "unknown"}.`;
 }

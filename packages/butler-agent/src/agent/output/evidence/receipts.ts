@@ -4,6 +4,8 @@ import type {
   EvidenceReference,
   PublicWorkObligationKind,
 } from "../../turn/native/output/tool-types.ts";
+import { parseEvidenceCapabilityReceipt } from "./parser.ts";
+import type { EvidenceCapabilityReceipt } from "./types.ts";
 
 const RECEIPT_SCHEMA = "butler.evidence-receipt.v1";
 
@@ -145,6 +147,15 @@ export function evidenceReceiptsFromResult(result: unknown): EvidenceReceipt[] {
   return record.evidence_receipts
     .map(evidenceReceipt)
     .filter((receipt): receipt is EvidenceReceipt => Boolean(receipt));
+}
+
+export function evidenceCapabilityReceiptsFromResult(result: unknown): EvidenceCapabilityReceipt[] {
+  const record = recordValue(result);
+  if (!record || !Array.isArray(record.evidence_capability_receipts)) return [];
+  return record.evidence_capability_receipts
+    .map((receipt) => parseEvidenceCapabilityReceipt(receipt))
+    .filter((parsed) => parsed.ok)
+    .map((parsed) => parsed.receipt);
 }
 
 export function satisfiedCompletionObligationsFromEvidenceReceipts(

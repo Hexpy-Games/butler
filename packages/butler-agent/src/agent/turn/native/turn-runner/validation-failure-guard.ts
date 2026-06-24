@@ -1,39 +1,31 @@
-import {
-  isValidationCommand,
-  validationCommandKey,
-} from "../../../tools/run-command/run_command/validation-command.ts";
 import type { ToolAuditEntry } from "../output/tool-types.ts";
+import type { EvidenceCapabilityReceipt } from "../../../output/evidence/types.ts";
 
 export interface UnresolvedValidationFailure {
-  command: string;
-  exitCode: number | null;
-  timedOut: boolean;
-}
-
-interface CommandResult {
-  command: string;
-  exitCode: number | null;
-  timedOut: boolean;
+  suite: string;
+  result: string;
+  summary: string;
 }
 
 export function unresolvedValidationFailureFromAudit(
   audit: ToolAuditEntry[],
 ): UnresolvedValidationFailure | null {
-  const latestByCommand = new Map<string, UnresolvedValidationFailure | null>();
-  const orderedKeys: string[] = [];
+  const latestBySuite = new Map<string, UnresolvedValidationFailure | null>();
+  const orderedSuites: string[] = [];
   for (const entry of audit) {
-    const result = commandResultFromAuditEntry(entry);
-    if (!result || !isValidationCommand(result.command)) continue;
-    const key = validationCommandKey(result.command);
-    if (!latestByCommand.has(key)) orderedKeys.push(key);
-    latestByCommand.set(key, commandSucceeded(result) ? null : {
-      command: result.command,
-      exitCode: result.exitCode,
-      timedOut: result.timedOut,
-    });
+    for (const receipt of entry.evidenceCapabilityReceipts ?? []) {
+      const validation = validationReceiptState(receipt);
+      if (!validation) continue;
+      if (!latestBySuite.has(validation.suite)) orderedSuites.push(validation.suite);
+      latestBySuite.set(validation.suite, validation.passed ? null : {
+        suite: validation.suite,
+        result: validation.result,
+        summary: receipt.summary,
+      });
+    }
   }
-  for (const key of orderedKeys.reverse()) {
-    const failure = latestByCommand.get(key);
+  for (const key of orderedSuites.reverse()) {
+    const failure = latestBySuite.get(key);
     if (failure) return failure;
   }
   return null;
@@ -46,12 +38,12 @@ export function validationFailureContinuationPrompt(input: {
 }): string {
   return [
     "## Validation Failure Continuation",
-    "A validation command failed and there is no later passing run for the same validation command.",
+    "A validation receipt reports failure and there is no later passing receipt for the same validation suite.",
     "",
     "Failed validation:",
-    `- command: ${input.failure.command}`,
-    `- exit_code: ${input.failure.exitCode ?? "unknown"}`,
-    `- timed_out: ${input.failure.timedOut ? "yes" : "no"}`,
+    `- suite: ${input.failure.suite}`,
+    `- result: ${input.failure.result}`,
+    `- summary: ${input.failure.summary}`,
     "",
     "Objective:",
     compact(input.objective, 600),
@@ -63,29 +55,30 @@ export function validationFailureContinuationPrompt(input: {
     "- Do not deliver a final completion report yet.",
     "- Inspect the failed validation evidence using existing artifacts or a small targeted command.",
     "- Fix the cause when it is inside the workspace.",
-    "- Re-run the same validation command or an equivalent stricter validation command.",
+    "- Re-run the validation and produce a passing validation receipt for the same suite.",
     "- If the blocker is external or cannot be fixed in this turn, leave the WorkStream recoverable and report the exact remaining validation failure.",
   ].join("\n");
 }
 
-function commandSucceeded(result: CommandResult): boolean {
-  return result.exitCode === 0 && !result.timedOut;
-}
-
-function commandResultFromAuditEntry(entry: ToolAuditEntry): CommandResult | null {
-  if (entry.name !== "run_command" || !entry.result || typeof entry.result !== "object") return null;
-  const record = entry.result as Record<string, unknown>;
-  const command = typeof record.command === "string"
-    ? record.command
-    : typeof entry.args.command === "string"
-    ? entry.args.command
+function validationReceiptState(receipt: EvidenceCapabilityReceipt): {
+  suite: string;
+  result: string;
+  passed: boolean;
+} | null {
+  if (receipt.capability !== "validation_passed") return null;
+  const scope = receipt.scope ?? {};
+  const suite = typeof scope.suite === "string" && scope.suite.trim()
+    ? scope.suite.trim()
     : "";
-  if (!command.trim()) return null;
-  const exitCode = typeof record.exit_code === "number" || record.exit_code === null
-    ? record.exit_code
-    : null;
-  const timedOut = record.timed_out === true;
-  return { command, exitCode, timedOut };
+  const result = typeof scope.result === "string" && scope.result.trim()
+    ? scope.result.trim()
+    : receipt.verified ? "passed" : "failed";
+  if (!suite) return null;
+  return {
+    suite,
+    result,
+    passed: receipt.verified === true && result === "passed",
+  };
 }
 
 function compact(value: string, maxChars: number): string {

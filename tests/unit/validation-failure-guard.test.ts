@@ -6,6 +6,8 @@ import { join } from "path";
 import {
   unresolvedValidationFailureFromAudit,
 } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/validation-failure-guard.ts";
+import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
+import { evidenceCapabilityReceiptsFromResult } from "../../packages/butler-agent/src/agent/output/evidence/receipts.ts";
 import {
   completeReportingWorkStreamBestEffort,
   completeRuntimeSemanticWorkStreamBestEffort,
@@ -15,41 +17,48 @@ import { RUNTIME_SEMANTIC_TODO_LIST_ID } from "../../packages/butler-agent/src/a
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 
-test("validation guard keeps failed validation unresolved until the same command passes", () => {
-  const failedTypecheck = commandAudit("npm run typecheck", 2);
+test("validation guard keeps failed validation unresolved until the same suite passes", () => {
+  const failedTypecheck = validationAudit("typecheck", "failed");
   expect(unresolvedValidationFailureFromAudit([failedTypecheck])).toMatchObject({
-    command: "npm run typecheck",
-    exitCode: 2,
+    suite: "typecheck",
+    result: "failed",
   });
 
   expect(unresolvedValidationFailureFromAudit([
     failedTypecheck,
-    commandAudit("node -e 'console.log(1)'", 0),
+    validationAudit("lint", "passed"),
   ])).toMatchObject({
-    command: "npm run typecheck",
-    exitCode: 2,
+    suite: "typecheck",
+    result: "failed",
   });
 
   expect(unresolvedValidationFailureFromAudit([
     failedTypecheck,
-    commandAudit("npm run typecheck", 0),
+    validationAudit("typecheck", "passed"),
   ])).toBeNull();
 });
 
-test("validation guard recognizes direct npm test commands", () => {
+test("validation guard ignores command failures without validation receipts", () => {
   expect(unresolvedValidationFailureFromAudit([
-    commandAudit("npm test -- tests/runtime-context-history-regression.test.ts", 1),
-  ])).toMatchObject({
-    command: "npm test -- tests/runtime-context-history-regression.test.ts",
-    exitCode: 1,
-  });
+    commandAudit("npm run typecheck", 2),
+  ])).toBeNull();
 });
 
-test("validation guard clears failed npm test with later node test success", () => {
-  expect(unresolvedValidationFailureFromAudit([
-    commandAudit("npm test -- tests/runtime-context-history-regression.test.ts", 1),
-    commandAudit("node --test --import tsx tests/runtime-context-history-regression.test.ts", 0),
-  ])).toBeNull();
+test("validation guard resolves later passing receipts parsed from tool results", () => {
+  const result = {
+    evidence_capability_receipts: [
+      validationReceipt("unit-tests", "failed"),
+      validationReceipt("unit-tests", "passed"),
+    ],
+  };
+
+  expect(unresolvedValidationFailureFromAudit([{
+    name: "run_command",
+    args: { command: "test", validation_suite: "unit-tests" },
+    ok: true,
+    result,
+    evidenceCapabilityReceipts: evidenceCapabilityReceiptsFromResult(result),
+  }])).toBeNull();
 });
 
 test("runtime semantic finalizer leaves unresolved validation failures recoverable", () => {
@@ -64,9 +73,9 @@ test("runtime semantic finalizer leaves unresolved validation failures recoverab
         source: "runtime",
         listId: RUNTIME_SEMANTIC_TODO_LIST_ID,
         title: "Run validation",
-        lastExecutionLabel: "npm run typecheck",
+        lastExecutionLabel: "typecheck",
       },
-      audit: [commandAudit("npm run typecheck", 2)],
+      audit: [validationAudit("typecheck", "failed")],
     });
 
     const stream = new WorkStreamStore(butlerData).list({
@@ -108,7 +117,7 @@ test("reporting finalizer does not complete active work with unresolved validati
     completeReportingWorkStreamBestEffort({
       butlerData,
       sessionId: "session",
-      audit: [commandAudit("npm run typecheck", 2)],
+      audit: [validationAudit("typecheck", "failed")],
     });
 
     const stream = new WorkStreamStore(butlerData).list({
@@ -139,4 +148,43 @@ function commandAudit(command: string, exitCode: number): ToolAuditEntry {
       stderr: "",
     },
   };
+}
+
+function validationAudit(
+  suite: string,
+  result: "passed" | "failed",
+): ToolAuditEntry {
+  return {
+    name: "run_command",
+    args: {
+      command: suite,
+      validation_suite: suite,
+    },
+    ok: result === "passed",
+    result: {
+      ok: result === "passed",
+      command: suite,
+      cwd: "/workspace",
+      exit_code: result === "passed" ? 0 : 1,
+      timed_out: false,
+      stdout: "",
+      stderr: "",
+    },
+    evidenceCapabilityReceipts: [validationReceipt(suite, result)],
+  };
+}
+
+function validationReceipt(suite: string, result: "passed" | "failed") {
+  return createEvidenceCapabilityReceipt({
+    producer: { kind: "tool", name: "run_command" },
+    capability: "validation_passed",
+    evidence_kind: "execution_result",
+    maturity: result === "passed" ? "verified" : "rejected",
+    verified: result === "passed",
+    confidence: result === "passed" ? 0.95 : 0.25,
+    summary: result === "passed"
+      ? "A validation suite completed successfully."
+      : "A validation suite did not complete successfully.",
+    scope: { suite, result },
+  });
 }

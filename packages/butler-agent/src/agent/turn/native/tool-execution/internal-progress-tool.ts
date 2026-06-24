@@ -8,7 +8,10 @@ import {
 } from "../../../tools/butler-tools.ts";
 import { sanitizePublicText } from "../../../events/turn-events.ts";
 import type { PublicWorkDecision, ToolProgressSummary } from "../output/tool-types.ts";
-import { evidenceReceiptsFromResult } from "../../../output/evidence/receipts.ts";
+import {
+  evidenceCapabilityReceiptsFromResult,
+  evidenceReceiptsFromResult,
+} from "../../../output/evidence/receipts.ts";
 import {
   evidenceTranscriptErrorMessage,
   evidenceTranscriptToolCallArgumentsProjection,
@@ -59,6 +62,7 @@ export function createInternalProgressToolRunner(input: {
         result,
         satisfiedCompletionObligations: satisfiedCompletionObligationsForToolResult(call.name, result),
         evidenceReceipts: evidenceReceiptsFromResult(result),
+        evidenceCapabilityReceipts: evidenceCapabilityReceiptsFromResult(result),
       });
       if (call.name === "update_todo_list") {
         semanticProgressEstablished = true;
