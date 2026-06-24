@@ -264,7 +264,8 @@ test("final delivery completes only unlinked turn-local work streams", () => {
     ownerSessionId: "butler/app-chat",
     listId: "main",
     items: [
-      todo({ id: "check-info", phase: "planning", status: "in_progress" }),
+      todo({ id: "check-info", phase: "planning", status: "completed" }),
+      todo({ id: "report", phase: "reporting", status: "in_progress" }),
     ],
   });
   const completed = completeTurnLocalWorkStreamForSession({
@@ -280,6 +281,25 @@ test("final delivery completes only unlinked turn-local work streams", () => {
     current_phase: null,
     active_step_id: null,
     status_note: "Final answer delivered.",
+  });
+
+  const unfinished = store.updateFromTodoList({
+    ownerSessionId: "butler/app-chat-unfinished",
+    listId: "main",
+    items: [
+      todo({ id: "implement", phase: "execution", status: "in_progress" }),
+    ],
+  });
+  const notCompleted = completeTurnLocalWorkStreamForSession({
+    butlerData: tempDir,
+    sessionId: "butler/app-chat-unfinished",
+    statusNote: "Final answer delivered.",
+  });
+
+  expect(notCompleted).toMatchObject({
+    id: unfinished.id,
+    state: "executing",
+    active_step_id: "implement",
   });
 
   const linked = store.updateFromTodoList({

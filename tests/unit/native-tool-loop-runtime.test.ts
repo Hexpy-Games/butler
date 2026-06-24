@@ -697,13 +697,15 @@ test("native runtime advances durable WorkStreams for Steward non-trivial work",
     metadata: { projectId: "butler" },
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "openai/auto:codex-latest",
     input: { text: "프로젝트 custody 상태를 검토해줘" },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
-  })).rejects.toThrow("active direct work stream is not deliverable");
+  });
+
+  expect(result.text).toContain("아직 완료라고 보고할 수 있는 상태까지는 도달하지 못했습니다.");
 
   const streams = new WorkStreamStore(tempDir).list({
     sessionId: "steward/workstream-custody",
@@ -715,7 +717,7 @@ test("native runtime advances durable WorkStreams for Steward non-trivial work",
     title: "Steward custody review",
     current_phase: "review",
   });
-  expect(["reviewing", "reporting", "complete", "recoverable"]).toContain(streams[0]!.state);
+  expect(streams[0]!.state).toBe("recoverable");
 });
 
 test("native runtime sends a profiled tool surface for basic project turns", async () => {
@@ -6559,16 +6561,22 @@ test("native runtime stops direct work continuation when tools do not make seman
       systemPrompt: "You are Butler.",
     });
 
-    await expect(runtime.runTurn({
+    const result = await runtime.runTurn({
       handle,
       provider: fakeProvider,
       model: "local/gemma-test",
       input: { text: "Issue #2 작업을 직접 완료하고 task마다 커밋해줘." },
       metadata: { runtimePolicy: { completionReview: "disabled" } },
-    })).rejects.toThrow("active direct work stream is not deliverable");
+    });
 
+    expect(result.text).toContain("아직 완료라고 보고할 수 있는 상태까지는 도달하지 못했습니다.");
     expect(promptCalls).toBe(2);
     expect(executedCommands).toEqual(["git status --short"]);
+    const streams = new WorkStreamStore(tempDir).list({
+      sessionId: "butler/main/open-direct-work-no-semantic-progress",
+      includeTerminal: true,
+    });
+    expect(streams[0]!.state).toBe("recoverable");
   } finally {
     if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
     else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;

@@ -7,6 +7,7 @@ export default tseslint.config(
   {
     ignores: [
       "data/**",
+      ".tmp/**",
       "node_modules/**",
       "src/**/node_modules/**",
       "packages/butler-app/client/ui/dist/**",
