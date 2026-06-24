@@ -787,6 +787,7 @@ test("run_command schema exposes bounded non-interactive bash execution", () => 
     "timeout_ms",
     "max_output_tokens",
     "output_paths",
+    "validation_suite",
     "output_mode",
   ]);
   expect(tool?.description).toContain("non-interactive bash command");
@@ -797,6 +798,9 @@ test("run_command schema exposes bounded non-interactive bash execution", () => 
   expect(properties?.output_mode).toMatchObject({
     type: "string",
     enum: ["auto", "silent_on_success", "full"],
+  });
+  expect(properties?.validation_suite).toMatchObject({
+    type: "string",
   });
 });
 
@@ -1220,7 +1224,7 @@ test("run_command with output_mode=silent_on_success shows bounded output on fai
   expect(result.stderr).toContain("error message");
 });
 
-test("run_command with output_mode=auto suppresses validation command output on success", async () => {
+test("run_command with output_mode=auto suppresses declared validation output on success", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });
   writeFileSync(join(workspace, "test.spec.ts"), "import { test, expect } from 'bun:test'; test('pass', () => { expect(true).toBe(true); });", "utf8");
@@ -1234,18 +1238,27 @@ test("run_command with output_mode=auto suppresses validation command output on 
     name: "run_command",
     args: {
       command: "bun test test.spec.ts",
+      validation_suite: "unit-tests",
       output_mode: "auto",
     },
     rawArguments: "{}",
-  }) as { ok: boolean; stdout: string; stderr: string; exit_code: number };
+  }) as { ok: boolean; stdout: string; stderr: string; exit_code: number; evidence_capability_receipts: Array<Record<string, unknown>> };
 
   expect(result.ok).toBe(true);
   expect(result.exit_code).toBe(0);
   expect(result.stdout).toBe("");
   expect(result.stderr).toBe("");
+  expect(result.evidence_capability_receipts).toContainEqual(expect.objectContaining({
+    capability: "validation_passed",
+    verified: true,
+    scope: expect.objectContaining({
+      suite: "unit-tests",
+      result: "passed",
+    }),
+  }));
 });
 
-test("run_command defaults output_mode to auto for validation command success", async () => {
+test("run_command defaults output_mode to auto for declared validation success", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });
   writeFileSync(join(workspace, "test.spec.ts"), "import { test, expect } from 'bun:test'; test('pass', () => { expect(true).toBe(true); });", "utf8");
@@ -1259,6 +1272,7 @@ test("run_command defaults output_mode to auto for validation command success", 
     name: "run_command",
     args: {
       command: "bun test test.spec.ts",
+      validation_suite: "unit-tests",
     },
     rawArguments: "{}",
   }) as { ok: boolean; stdout: string; stderr: string; exit_code: number };
@@ -1269,7 +1283,63 @@ test("run_command defaults output_mode to auto for validation command success", 
   expect(result.stderr).toBe("");
 });
 
-test("run_command auto recognizes bun run --silent validation scripts", async () => {
+test("run_command keeps structured validation failure stronger than declared command success", async () => {
+  const workspace = join(tempDir, "workspace");
+  mkdirSync(workspace, { recursive: true });
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: "printf '%s\\n' '{\"validation_result\":{\"suite\":\"unit-tests\",\"result\":\"failed\",\"failure_summary\":\"assertion failed\"}}'",
+      validation_suite: "unit-tests",
+      output_mode: "auto",
+    },
+    rawArguments: "{}",
+  }) as { evidence_capability_receipts: Array<Record<string, unknown>> };
+
+  expect(result.evidence_capability_receipts).toContainEqual(expect.objectContaining({
+    capability: "validation_passed",
+    verified: false,
+    scope: expect.objectContaining({
+      suite: "unit-tests",
+      result: "failed",
+    }),
+  }));
+});
+
+test("run_command preserves ordered structured validation receipts for the same suite", async () => {
+  const workspace = join(tempDir, "workspace");
+  mkdirSync(workspace, { recursive: true });
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: "printf '%s\\n' '{\"validation_results\":[{\"suite\":\"unit-tests\",\"result\":\"failed\"},{\"suite\":\"unit-tests\",\"result\":\"passed\"}]}'",
+      validation_suite: "unit-tests",
+      output_mode: "auto",
+    },
+    rawArguments: "{}",
+  }) as { evidence_capability_receipts: Array<Record<string, unknown>> };
+
+  const validationReceipts = result.evidence_capability_receipts.filter((receipt) =>
+    receipt.capability === "validation_passed",
+  );
+  expect(validationReceipts.map((receipt) =>
+    (receipt.scope as Record<string, unknown>).result,
+  )).toEqual(["failed", "passed"]);
+});
+
+test("run_command auto does not infer validation from command text", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });
   writeFileSync(join(workspace, "package.json"), JSON.stringify({
@@ -1293,7 +1363,7 @@ test("run_command auto recognizes bun run --silent validation scripts", async ()
 
   expect(result.ok).toBe(true);
   expect(result.exit_code).toBe(0);
-  expect(result.stdout).toBe("");
+  expect(result.stdout).toContain("noisy check output");
 });
 
 test("run_command with output_mode=auto preserves non-validation command output", async () => {
@@ -1319,7 +1389,7 @@ test("run_command with output_mode=auto preserves non-validation command output"
   expect(result.stdout).toContain("regular command output");
 });
 
-test("run_command with output_mode=auto shows bounded output for failed validation commands", async () => {
+test("run_command with output_mode=auto shows bounded output for failed commands", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });
   const executor = createButlerToolExecutor({

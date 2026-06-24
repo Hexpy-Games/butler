@@ -16,7 +16,10 @@ import {
 import { buildTaskOriginContext } from "../../../work/task-origin.ts";
 import { TaskStore } from "../../../work/task-store.ts";
 import { annotateToolResultWithDecisionContext, publicWorkDecisionPayload } from "../../../output/public-work/decisions.ts";
-import { evidenceReceiptsFromResult } from "../../../output/evidence/receipts.ts";
+import {
+  evidenceCapabilityReceiptsFromResult,
+  evidenceReceiptsFromResult,
+} from "../../../output/evidence/receipts.ts";
 import {
   evidenceTranscriptToolResultProjection,
 } from "../../../output/evidence/transcript-result.ts";
@@ -74,6 +77,7 @@ export async function handleAuditedToolSuccess(input: {
     publicDecision: input.decision,
     satisfiedCompletionObligations: satisfiedCompletionObligationsForToolResult(input.call.name, input.result),
     evidenceReceipts: evidenceReceiptsFromResult(input.result),
+    evidenceCapabilityReceipts: evidenceCapabilityReceiptsFromResult(input.result),
     bridgeAudit: bridgeAudit ?? undefined,
   });
 
