@@ -95,6 +95,7 @@ export function evidenceTranscriptErrorMessage(value: unknown): string {
 }
 
 function safeCapabilityReceipt(receipt: EvidenceCapabilityReceipt): EvidenceCapabilityReceipt {
+  const scope = safeCapabilityScope(receipt);
   return {
     receipt_id: safeIdentifier(receipt.receipt_id, "redacted-receipt"),
     schema_version: receipt.schema_version,
@@ -109,11 +110,75 @@ function safeCapabilityReceipt(receipt: EvidenceCapabilityReceipt): EvidenceCapa
     confidence: receipt.confidence,
     verified: receipt.verified,
     summary: safePublicText(receipt.summary, "Evidence capability was produced."),
+    ...(scope ? { scope } : {}),
     references: receipt.references.map(safeCapabilityReference).filter(isPresent),
     ...(receipt.satisfies && receipt.satisfies.length > 0 ? { satisfies: receipt.satisfies } : {}),
     limitations: safePublicTextArray(receipt.limitations),
     created_at: receipt.created_at,
   };
+}
+
+function safeCapabilityScope(receipt: EvidenceCapabilityReceipt): Record<string, unknown> | null {
+  const scope = receipt.scope;
+  if (!scope) return null;
+  if (receipt.capability === "validation_passed") {
+    return compactScope({
+      suite: safeOptionalPublicText(scope.suite),
+      result: safeIdentifier(scope.result, "unknown"),
+      failure_summary: safeOptionalPublicText(scope.failure_summary),
+    });
+  }
+  if (receipt.capability === "command_executed") {
+    return compactScope({
+      status: safeIdentifier(scope.status, "unknown"),
+      exit_code: safeFiniteNumber(scope.exit_code),
+      timed_out: safeBoolean(scope.timed_out),
+      output_suppressed: safeBoolean(scope.output_suppressed),
+      output_budgeted: safeBoolean(scope.output_budgeted),
+    });
+  }
+  if (
+    receipt.capability === "durable_artifact" ||
+    receipt.capability === "data_table_created" ||
+    receipt.capability === "chart_rendered"
+  ) {
+    return compactScope({
+      artifact_kind: safeIdentifier(scope.artifact_kind, "file"),
+      size_bytes: safeFiniteNumber(scope.size_bytes),
+      modified_at: safeOptionalPublicText(scope.modified_at),
+    });
+  }
+  if (receipt.capability === "review_completed") {
+    return compactScope({
+      result: safeIdentifier(scope.result, "unknown"),
+      outcome: safeOptionalPublicText(scope.outcome),
+    });
+  }
+  if (receipt.capability === "browser_observed") {
+    return compactScope({
+      result: safeIdentifier(scope.result, "unknown"),
+      observation: safeOptionalPublicText(scope.observation),
+    });
+  }
+  return null;
+}
+
+function compactScope(scope: Record<string, unknown>): Record<string, unknown> | null {
+  const compact: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(scope)) {
+    if (value !== null && value !== undefined && value !== "") {
+      compact[key] = value;
+    }
+  }
+  return Object.keys(compact).length > 0 ? compact : null;
+}
+
+function safeFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function safeBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
 }
 
 function safeCapabilityReference(reference: EvidenceCapabilityReference): EvidenceCapabilityReference | null {
