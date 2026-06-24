@@ -589,7 +589,7 @@ export class WorkStreamStore {
       created_at: activePrior?.created_at ?? now,
       updated_at: now,
       last_user_turn_id: input.lastUserTurnId?.trim() || activePrior?.last_user_turn_id || prior?.last_user_turn_id || null,
-      status_note: activePrior?.status_note ?? null,
+      status_note: target.state === "complete" ? null : activePrior?.status_note ?? null,
     };
     writeJsonAtomic(this.pathFor(id), record);
     return record;

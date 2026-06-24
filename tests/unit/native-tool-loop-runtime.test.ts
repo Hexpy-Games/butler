@@ -3460,6 +3460,24 @@ test("tool result transcript projection keeps replayable evidence and drops priv
       satisfies: ["source_verified"],
       limitations: ["Only a bounded public excerpt was used."],
       created_at: "2026-06-22T08:08:00.000Z",
+    }, {
+      receipt_id: "ecr-validation",
+      schema_version: "evidence-capability.v1",
+      producer: { kind: "tool", name: "run_command" },
+      capability: "validation_passed",
+      evidence_kind: "execution_result",
+      maturity: "verified",
+      confidence: 0.95,
+      verified: true,
+      summary: "A validation suite completed successfully.",
+      scope: {
+        suite: "sandy-typecheck",
+        result: "passed",
+        path: "/Users/private/project",
+      },
+      references: [],
+      limitations: [],
+      created_at: "2026-06-22T08:09:00.000Z",
     }],
     evidence_receipts: [{
       schema: "butler.evidence-receipt.v1",
@@ -3476,7 +3494,7 @@ test("tool result transcript projection keeps replayable evidence and drops priv
   });
 
   expect(projection.schema_version).toBe("butler.tool-result-evidence-transcript.v1");
-  expect(projection.evidence_capability_receipts).toHaveLength(2);
+  expect(projection.evidence_capability_receipts).toHaveLength(3);
   expect(projection.evidence_capability_receipts).toContainEqual(expect.objectContaining({
     receipt_id: "ecr-safe-source",
     schema_version: "evidence-capability.v1",
@@ -3485,6 +3503,14 @@ test("tool result transcript projection keeps replayable evidence and drops priv
   }));
   expect(projection.evidence_capability_receipts.find((receipt) =>
     receipt.receipt_id === "ecr-safe-source")).not.toHaveProperty("scope");
+  expect(projection.evidence_capability_receipts.find((receipt) =>
+    receipt.receipt_id === "ecr-validation")).toMatchObject({
+      capability: "validation_passed",
+      scope: {
+        suite: "sandy-typecheck",
+        result: "passed",
+      },
+    });
   expect(projection.evidence_receipts).toHaveLength(1);
   expect(projection.evidence_receipts[0].artifacts?.[0]).toEqual({
     id: "artifact-safe",

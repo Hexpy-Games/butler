@@ -194,6 +194,41 @@ test("resumed todo progress preserves terminal streams and opens an active revis
     .sort()).toEqual(["complete", "executing"]);
 });
 
+test("todo completion clears stale recoverable status notes", () => {
+  const store = new WorkStreamStore(tempDir);
+  const active = store.updateFromTodoList({
+    ownerSessionId: "butler/app-project-butler",
+    projectId: "butler",
+    listId: "recoverable-turn",
+    title: "Recoverable turn",
+    items: [
+      todo({ id: "inspect", phase: "execution", status: "in_progress" }),
+      todo({ id: "report", phase: "reporting", status: "pending" }),
+    ],
+  });
+  store.transition({
+    id: active.id,
+    state: "recoverable",
+    statusNote: "Turn interrupted before final delivery.",
+  });
+
+  const completed = store.updateFromTodoList({
+    ownerSessionId: "butler/app-project-butler",
+    projectId: "butler",
+    listId: "recoverable-turn",
+    title: "Recoverable turn",
+    items: [
+      todo({ id: "inspect", phase: "execution", status: "completed" }),
+      todo({ id: "report", phase: "reporting", status: "completed" }),
+    ],
+  });
+
+  expect(completed).toMatchObject({
+    state: "complete",
+    status_note: null,
+  });
+});
+
 test("work streams link planned tasks orchestrations and worker tasks to the active stream", () => {
   const store = new WorkStreamStore(tempDir);
   const stream = store.updateFromTodoList({
