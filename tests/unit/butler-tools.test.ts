@@ -490,16 +490,22 @@ for (const fixture of promptOnlySurfaceFixtures) {
   });
 }
 
-test("tool profile selector does not contain legacy prompt keyword activation tables", () => {
-  const source = readFileSync(
-    join(root, "packages", "butler-agent", "src", "agent", "tools", "profiles.ts"),
-    "utf8",
-  );
+test("tool profile selector keeps multilingual prompt wording out of routing decisions", () => {
+  const promptTexts = [
+    "요즘 공개 자료를 확인해서 알려줘.",
+    "Please research the current release state.",
+    "Veuillez rechercher les informations recentes.",
+    "最近の公開情報を調べてください。",
+  ];
 
-  expect(source).not.toContain("profilesFromText");
-  expect(source).not.toMatch(/\b(?:PUBLIC_WEB|WEB|RESEARCH|CURRENT|FRESHNESS|WORKSPACE|PROJECT)_?(?:KEYWORDS|TERMS|PATTERNS)\b/u);
-  expect(source).not.toMatch(/\[\s*(?:"검색"|"리서치"|"최신"|"최근"|"요즘")/u);
-  expect(source).not.toMatch(/\/[^/\n]*(?:latest|current|fresh|research|search)[^/\n]*\/[a-z]*/u);
+  for (const text of promptTexts) {
+    const profiles = selectButlerToolProfiles({ role: "butler", text });
+    const tools = selectButlerToolsForTurn({ role: "butler", text });
+    const names = tools.map((tool) => tool.name);
+
+    expect(profiles).toEqual(["startup"]);
+    expect(names).toEqual(startupOnlyToolNames);
+  }
 });
 
 test("structured public web profile exposes web tools without widening workspace", () => {

@@ -40,6 +40,12 @@ import {
 } from "./public-output-gates.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
 
+const EXPLICIT_TOOL_REPAIR_ATTEMPTS = 2;
+const EXPLICIT_TOOL_REPAIR_BASE_ROUNDS = 2;
+const EXPLICIT_TOOL_REPAIR_MAX_ROUNDS = 4;
+const GOAL_REVIEW_MAX_TOOL_ROUNDS = 4;
+const DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS = 8;
+
 export async function produceFinalDeliveryText(input: {
   turnInput: RuntimeTurnInput;
   session: NativeStoredSessionConfig;
@@ -54,27 +60,42 @@ export async function produceFinalDeliveryText(input: {
   runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
 }): Promise<string> {
   const textAfterExplicitTools = await repairExplicitToolRequirements(input);
-  const groundedText = input.useTools && shouldEnforceGrounding(input.turnInput)
-    ? enforceGroundedActionClaims({
-        userText: input.userText,
-        responseText: textAfterExplicitTools,
-        audit: input.audit,
-        language: input.deps.messageLanguage,
-      })
-    : textAfterExplicitTools;
-  let finalText = await runGoalCompletionReviews({ ...input, initialText: groundedText });
-  finalText = await closeDirectWork({ ...input, finalText });
-  finalText = await repairFinalContract({ ...input, finalText });
+  const groundedText = applyGroundingIfNeeded(input, textAfterExplicitTools);
+  const reviewedText = await runGoalCompletionReviews({ ...input, initialText: groundedText });
+  const directWorkClosedText = await closeDirectWork({ ...input, finalText: reviewedText });
+  const contractRepairedText = await repairFinalContract({ ...input, finalText: directWorkClosedText });
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "guard.started",
     payload: { guard: "public_output" },
   });
-  const checkedText = applyPublicOutputGuards({ ...input, finalText });
+  const checkedText = applyPublicOutputGuards({ ...input, finalText: contractRepairedText });
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "guard.completed",
     payload: { guard: "public_output", status: "approved" },
   });
   return checkedText;
+}
+
+function applyGroundingIfNeeded(
+  input: {
+    turnInput: RuntimeTurnInput;
+    deps: NativeTurnRunnerDeps;
+    useTools: boolean;
+    userText: string;
+    audit: ToolAuditEntry[];
+  },
+  text: string,
+): string {
+  const shouldApplyGrounding = input.useTools && shouldEnforceGrounding(input.turnInput);
+  if (!shouldApplyGrounding) {
+    return text;
+  }
+  return enforceGroundedActionClaims({
+    userText: input.userText,
+    responseText: text,
+    audit: input.audit,
+    language: input.deps.messageLanguage,
+  });
 }
 
 async function repairExplicitToolRequirements(input: {
@@ -88,20 +109,28 @@ async function repairExplicitToolRequirements(input: {
   runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
 }): Promise<string> {
   let text = input.initialText;
-  if (!input.useTools) return text;
+  if (!input.useTools) {
+    return text;
+  }
   const explicitTools = requiredExplicitToolNames(
     [input.session.init.metadata, input.turnInput.metadata],
     input.toolSurfaceController.initialToolNames(),
   );
-  for (let repairAttempt = 0; repairAttempt < 2; repairAttempt += 1) {
+  for (let repairAttempt = 0; repairAttempt < EXPLICIT_TOOL_REPAIR_ATTEMPTS; repairAttempt += 1) {
     const missingExplicitTools = explicitTools.filter((toolName) =>
       !hasSuccessfulTool(input.audit, [toolName]));
-    if (missingExplicitTools.length === 0) break;
+    if (missingExplicitTools.length === 0) {
+      break;
+    }
+    const repairMaxToolRounds = Math.min(
+      EXPLICIT_TOOL_REPAIR_MAX_ROUNDS,
+      missingExplicitTools.length + EXPLICIT_TOOL_REPAIR_BASE_ROUNDS,
+    );
     text = await input.runToolPrompt(explicitToolRequirementRepairPrompt({
       prompt: input.prompt,
       previousAnswer: text,
       missingTools: missingExplicitTools,
-    }), Math.min(4, missingExplicitTools.length + 2), "explicit_tool_repair");
+    }), repairMaxToolRounds, "explicit_tool_repair");
   }
   return text;
 }
@@ -118,20 +147,22 @@ async function runGoalCompletionReviews(input: {
   runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
 }): Promise<string> {
   let finalText = input.initialText;
-  if (
-    input.useTools &&
+  const hasSuccessfulToolAudit = input.audit.some((entry) => entry.ok);
+  const shouldRepairDecisionLeakBeforeReview = input.useTools &&
     shouldEnforceGrounding(input.turnInput) &&
     containsFinalPublicWorkDecisionLeak(finalText) &&
-    !input.audit.some((entry) => entry.ok)
-  ) {
+    !hasSuccessfulToolAudit;
+  if (shouldRepairDecisionLeakBeforeReview) {
     finalText = await runGoalCompletionReviewGate(input, finalText, goalCompletionReviewPrompt({
       prompt: input.prompt,
       previousAnswer: finalText,
       audit: input.audit,
       decisions: input.publicDecisionContext,
-    }), 4);
+    }), GOAL_REVIEW_MAX_TOOL_ROUNDS);
   }
-  if (!shouldRunModelReview(input)) return finalText;
+  if (!shouldRunModelReview(input)) {
+    return finalText;
+  }
   finalText = await maybeRunEvidenceReview(input, finalText);
   return await repairCompletionObligations(input, finalText);
 }
@@ -142,11 +173,15 @@ function shouldRunModelReview(input: {
   useTools: boolean;
   audit: ToolAuditEntry[];
 }): boolean {
+  const shouldEnforceRuntimeGrounding = shouldEnforceGrounding(input.turnInput);
+  const roleRequiresReview = shouldRunGoalCompletionReview(input.turnInput.metadata, input.session.init.role);
+  const hasReviewSkipTool = hasGoalCompletionReviewSkipTool(input.audit);
+  const hasSuccessfulToolAudit = input.audit.some((entry) => entry.ok);
   return input.useTools &&
-    shouldEnforceGrounding(input.turnInput) &&
-    shouldRunGoalCompletionReview(input.turnInput.metadata, input.session.init.role) &&
-    !hasGoalCompletionReviewSkipTool(input.audit) &&
-    input.audit.some((entry) => entry.ok);
+    shouldEnforceRuntimeGrounding &&
+    roleRequiresReview &&
+    !hasReviewSkipTool &&
+    hasSuccessfulToolAudit;
 }
 
 async function maybeRunEvidenceReview(
@@ -166,13 +201,15 @@ async function maybeRunEvidenceReview(
     hasPendingReadRequirement(input.audit) ||
     Boolean(preReviewObligationIncompleteReason) ||
     preReviewNeedsContractRepair;
-  if (!shouldRunModelCompletionReview) return finalText;
+  if (!shouldRunModelCompletionReview) {
+    return finalText;
+  }
   return await runGoalCompletionReviewGate(input, finalText, goalCompletionReviewPrompt({
     prompt: input.prompt,
     previousAnswer: finalText,
     audit: input.audit,
     decisions: input.publicDecisionContext,
-  }), 4);
+  }), GOAL_REVIEW_MAX_TOOL_ROUNDS);
 }
 
 async function repairCompletionObligations(
@@ -183,19 +220,21 @@ async function repairCompletionObligations(
     audit: input.audit,
     decisions: input.publicDecisionContext,
   });
-  if (!obligationIncompleteReason) return finalText;
+  if (!obligationIncompleteReason) {
+    return finalText;
+  }
   const repairedText = await runGoalCompletionReviewGate(input, finalText, goalCompletionReviewPrompt({
     prompt: input.prompt,
     previousAnswer: [`INCOMPLETE: ${obligationIncompleteReason}`, "", "Previous draft:", finalText].join("\n"),
     audit: input.audit,
     decisions: input.publicDecisionContext,
-  }), 4);
+  }), GOAL_REVIEW_MAX_TOOL_ROUNDS);
   const secondObligationIncompleteReason = completionObligationIncompleteReason({
     audit: input.audit,
     decisions: input.publicDecisionContext,
   });
   if (secondObligationIncompleteReason) {
-    throw goalCompletionIncompleteError(secondObligationIncompleteReason ?? obligationIncompleteReason);
+    throw goalCompletionIncompleteError(secondObligationIncompleteReason);
   }
   return repairedText;
 }
@@ -218,7 +257,7 @@ async function runGoalCompletionReviewGate(
     currentFinalText,
     initialReviewPromptText: reviewPromptText,
     reviewMaxToolRounds: maxToolRounds,
-    continuationMaxToolRounds: 8,
+    continuationMaxToolRounds: DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS,
     maxContinuationAttempts: goalCompletionContinuationAttempts(),
     runToolPrompt: input.runToolPrompt,
     incompleteReason: completionReviewIncompleteReason,
@@ -250,6 +289,8 @@ async function runGoalCompletionReviewGate(
       successfulToolsAfter: after.successfulToolCount,
     }),
   });
-  if (outcome.kind === "deliverable") return outcome.text;
+  if (outcome.kind === "deliverable") {
+    return outcome.text;
+  }
   throw goalCompletionIncompleteError(outcome.reason);
 }

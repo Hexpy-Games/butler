@@ -20,7 +20,10 @@ import {
 import { publicWorkDecisionsFromAssistantText } from "../../../output/public-work/decisions.ts";
 import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
 import { emitAssistantTextBeforeTools } from "./assistant-pretool-progress.ts";
-import type { ToolSurfacePromptController } from "../../tool-surface-prompt-controller.ts";
+import type {
+  SelectedToolSurfacePromptState,
+  ToolSurfacePromptController,
+} from "../../tool-surface-prompt-controller.ts";
 import type { PlannedReviewTurnContext } from "../context/planned-review-context.ts";
 import type { NativeTurnRunnerDeps, NativeStoredSessionConfig } from "./turn-runner-types.ts";
 import type { PublicWorkDecision } from "../output/tool-types.ts";
@@ -69,7 +72,7 @@ export function createNativeTurnPromptRunners(input: {
     ): Promise<string> => {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       const grantedToolRounds = directToolRoundLimit(maxToolRounds);
-      return await input.toolSurfaceController.runWithSelectedSurface(async (toolSurface) => {
+      async function runPromptWithSelectedSurface(toolSurface: SelectedToolSurfacePromptState): Promise<string> {
         return await input.deps.toolPromptRunner({
           prompt: promptText,
           model: input.turnInput.model,
@@ -115,7 +118,8 @@ export function createNativeTurnPromptRunners(input: {
             });
           },
         });
-      });
+      }
+      return await input.toolSurfaceController.runWithSelectedSurface(runPromptWithSelectedSurface);
     },
     runTextPrompt: async (promptText: string): Promise<string> => {
       return await input.deps.promptRunner({

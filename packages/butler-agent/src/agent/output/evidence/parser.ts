@@ -48,21 +48,28 @@ const PUBLIC_WORK_OBLIGATIONS = new Set<string>([
   "data_table_created",
   "chart_rendered",
 ]);
+const RECEIPT_ID_RANDOM_SUFFIX_LENGTH = 12;
+const EVIDENCE_SUMMARY_MAX_CHARS = 320;
+const MAX_EVIDENCE_REFERENCES = 12;
+const MAX_EVIDENCE_LIMITATIONS = 8;
+const VERIFIED_CONFIDENCE = 1;
+const CANDIDATE_CONFIDENCE = 0.5;
 
 export function createEvidenceCapabilityReceipt(
   input: EvidenceCapabilityReceiptInput,
 ): EvidenceCapabilityReceipt {
   const maturity = input.maturity ?? (input.verified === false ? "candidate" : "verified");
+  const confidence = input.confidence ?? (maturity === "verified" ? VERIFIED_CONFIDENCE : CANDIDATE_CONFIDENCE);
   const receipt: EvidenceCapabilityReceipt = {
-    receipt_id: `ecr-${randomUUID().slice(0, 12)}`,
+    receipt_id: `ecr-${randomUUID().slice(0, RECEIPT_ID_RANDOM_SUFFIX_LENGTH)}`,
     schema_version: EVIDENCE_CAPABILITY_SCHEMA_VERSION,
     producer: input.producer,
     capability: input.capability,
     evidence_kind: input.evidence_kind,
     maturity,
-    confidence: input.confidence ?? (maturity === "verified" ? 1 : 0.5),
+    confidence,
     verified: input.verified ?? maturity === "verified",
-    summary: sanitizePublicText(input.summary, "Evidence capability was produced.").slice(0, 320),
+    summary: sanitizePublicText(input.summary, "Evidence capability was produced.").slice(0, EVIDENCE_SUMMARY_MAX_CHARS),
     ...(recordValue(input.scope) ? { scope: recordValue(input.scope)! } : {}),
     references: input.references ?? [],
     ...(input.satisfies && input.satisfies.length > 0 ? { satisfies: [...new Set(input.satisfies)] } : {}),
@@ -87,7 +94,9 @@ export function parseEvidenceCapabilityReceipt(value: unknown): EvidenceCapabili
     issues.push(issue("schema_version", "invalid_schema_version", "Receipt schema version is not supported."));
   }
   const receiptId = stringValue(record.receipt_id);
-  if (!receiptId) issues.push(issue("receipt_id", "missing_receipt_id", "Receipt id is required."));
+  if (!receiptId) {
+    issues.push(issue("receipt_id", "missing_receipt_id", "Receipt id is required."));
+  }
 
   const producer = parseProducer(record.producer, issues);
   const capability = parseKnownString(record.capability, KNOWN_CAPABILITIES, "capability", "unknown_capability", issues);
@@ -100,7 +109,9 @@ export function parseEvidenceCapabilityReceipt(value: unknown): EvidenceCapabili
   );
   const maturity = parseKnownString(record.maturity, KNOWN_MATURITIES, "maturity", "unknown_maturity", issues);
   const verified = typeof record.verified === "boolean" ? record.verified : null;
-  if (verified === null) issues.push(issue("verified", "missing_verified", "Verified flag is required."));
+  if (verified === null) {
+    issues.push(issue("verified", "missing_verified", "Verified flag is required."));
+  }
   const confidence = typeof record.confidence === "number" && Number.isFinite(record.confidence)
     ? record.confidence
     : null;
@@ -108,7 +119,9 @@ export function parseEvidenceCapabilityReceipt(value: unknown): EvidenceCapabili
     issues.push(issue("confidence", "invalid_confidence", "Confidence must be a number between 0 and 1."));
   }
   const summary = stringValue(record.summary);
-  if (!summary) issues.push(issue("summary", "missing_summary", "Safe redacted summary is required."));
+  if (!summary) {
+    issues.push(issue("summary", "missing_summary", "Safe redacted summary is required."));
+  }
   const scope = recordValue(record.scope);
   const references = parseReferences(record.references, issues);
   const satisfies = parseObligations(record.satisfies, issues);
@@ -129,7 +142,9 @@ export function parseEvidenceCapabilityReceipt(value: unknown): EvidenceCapabili
     references,
     satisfies,
   }));
-  if (issues.length > 0) return { ok: false, receipt: null, issues };
+  if (issues.length > 0) {
+    return { ok: false, receipt: null, issues };
+  }
   return {
     ok: true,
     receipt: {
@@ -141,7 +156,7 @@ export function parseEvidenceCapabilityReceipt(value: unknown): EvidenceCapabili
       maturity: maturity as EvidenceCapabilityMaturity,
       confidence: confidence!,
       verified: verified!,
-      summary: sanitizePublicText(summary!, "Evidence capability was produced.").slice(0, 320),
+      summary: sanitizePublicText(summary!, "Evidence capability was produced.").slice(0, EVIDENCE_SUMMARY_MAX_CHARS),
       ...(scope ? { scope } : {}),
       references,
       ...(satisfies.length > 0 ? { satisfies } : {}),
@@ -160,9 +175,13 @@ function parseProducer(value: unknown, issues: EvidenceCapabilityReceiptIssue[])
   }
   const kind = parseKnownString(record.kind, KNOWN_PRODUCER_KINDS, "producer.kind", "unknown_producer_kind", issues);
   const name = stringValue(record.name);
-  if (!name) issues.push(issue("producer.name", "missing_producer_name", "Producer name is required."));
+  if (!name) {
+    issues.push(issue("producer.name", "missing_producer_name", "Producer name is required."));
+  }
   const callId = stringValue(record.call_id);
-  if (!kind || !name) return null;
+  if (!kind || !name) {
+    return null;
+  }
   return {
     kind: kind as EvidenceCapabilityProducerKind,
     name,
@@ -171,7 +190,9 @@ function parseProducer(value: unknown, issues: EvidenceCapabilityReceiptIssue[])
 }
 
 function parseReferences(value: unknown, issues: EvidenceCapabilityReceiptIssue[]): EvidenceCapabilityReference[] {
-  if (value === undefined) return [];
+  if (value === undefined) {
+    return [];
+  }
   if (!Array.isArray(value)) {
     issues.push(issue("references", "invalid_references", "References must be an array."));
     return [];
@@ -185,13 +206,17 @@ function parseReferences(value: unknown, issues: EvidenceCapabilityReceiptIssue[
     }
     const safe = safeEvidenceReference({ index, record });
     issues.push(...safe.issues);
-    if (safe.reference) references.push(safe.reference);
+    if (safe.reference) {
+      references.push(safe.reference);
+    }
   }
-  return references.slice(0, 12);
+  return references.slice(0, MAX_EVIDENCE_REFERENCES);
 }
 
 function parseObligations(value: unknown, issues: EvidenceCapabilityReceiptIssue[]): PublicWorkObligationKind[] {
-  if (value === undefined) return [];
+  if (value === undefined) {
+    return [];
+  }
   if (!Array.isArray(value)) {
     issues.push(issue("satisfies", "invalid_satisfies", "Satisfies must be an array."));
     return [];
@@ -224,15 +249,27 @@ function parseKnownString(
 }
 
 function recordValue(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
 }
 
 function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed;
 }
 
 function stringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
   return value.map((item) => stringValue(item)).filter((item): item is string => Boolean(item));
 }
 
@@ -240,7 +277,7 @@ function safeLimitations(value: unknown): string[] {
   return [...new Set(stringArray(value)
     .map((item) => sanitizePublicText(item, "Evidence limitation was recorded.").trim())
     .filter(Boolean))]
-    .slice(0, 8);
+    .slice(0, MAX_EVIDENCE_LIMITATIONS);
 }
 
 function issue(field: string, code: string, message: string): EvidenceCapabilityReceiptIssue {

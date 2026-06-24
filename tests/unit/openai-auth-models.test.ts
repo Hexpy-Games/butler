@@ -1387,8 +1387,8 @@ test("registered local function tool prompts repair standalone pseudo tool calls
             message: {
               role: "assistant",
               content: [
-                "작업: 공개 정보를 검색하겠습니다.",
-                "이유: 최신 정보를 확인해야 합니다.",
+                "summary: 공개 정보를 검색하겠습니다.",
+                "rationale: 최신 정보를 확인해야 합니다.",
                 "",
                 "`web_search(query=\"status source\")`",
               ].join("\n"),
