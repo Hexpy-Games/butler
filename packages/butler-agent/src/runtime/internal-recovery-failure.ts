@@ -25,11 +25,14 @@ export function isInternalRecoveryFailure(input: InternalRecoveryFailureInput | 
   return (
     failure.code === "goal_completion_incomplete" ||
     failure.code === "internal_uncertainty" ||
+    failure.code === "prompt_usage_model_call_budget_exhausted" ||
+    failure.name === "PromptUsageModelCallBudgetExhaustedError" ||
     failure.name === "GoalCompletionIncompleteError" ||
     isCompletionObligationProtocolMessage(message) ||
     isGoalCompletionIncompleteMessage(message) ||
     /uncertain (?:whether|if) the requested goal was completed/iu.test(message) ||
     /internal uncertainty/iu.test(message) ||
+    /prompt usage model-call budget exhausted/iu.test(message) ||
     /completion review .*incomplete/iu.test(message) ||
     /unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message) ||
     /invalid tool arguments|tool arguments failed validation/iu.test(message) ||
@@ -59,6 +62,9 @@ export function safeInternalRecoveryMessage(
   fallback = "Butler could not verify that the requested goal was completed.",
 ): string {
   if (isCompletionObligationProtocolMessage(message)) return fallback;
+  if (/prompt usage model-call budget exhausted/iu.test(message)) {
+    return "Butler reached its internal model-call budget while trying to continue the turn. Progress was saved and the turn can be retried.";
+  }
   return safeRecoveryText(message) ?? fallback;
 }
 

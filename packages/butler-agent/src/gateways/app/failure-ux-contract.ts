@@ -34,10 +34,11 @@ export function appSafeResponderError(error: unknown): AppResponderSafeError {
   }
   if (isInternalRecoveryFailure(error)) {
     const message = appErrorMessage(error);
+    const runtimeFailure = safeRuntimeFailure(error);
     return {
       code: INTERNAL_RECOVERY_REQUIRED_CODE,
       message:
-        safeGoalCompletionIncompleteMessage(message) ??
+        internalRecoveryMessage(message, runtimeFailure.message) ??
         "Butler could not verify that the requested goal was completed.",
     };
   }
@@ -85,6 +86,20 @@ function safeGoalCompletionIncompleteMessage(message: string): string | null {
   }
   const safe = safeLimitationText(message, "");
   return safe || null;
+}
+
+function internalRecoveryMessage(rawMessage: string, safeRuntimeMessage: string): string | null {
+  if (isCompletionObligationProtocolMessage(rawMessage)) {
+    return safeGoalCompletionIncompleteMessage(rawMessage);
+  }
+  if (
+    safeRuntimeMessage &&
+    safeRuntimeMessage !== "Butler could not verify that the requested goal was completed." &&
+    safeRuntimeMessage !== rawMessage
+  ) {
+    return safeRuntimeMessage;
+  }
+  return safeGoalCompletionIncompleteMessage(rawMessage);
 }
 
 function appErrorMessage(error: unknown): string {

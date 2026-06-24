@@ -49,6 +49,11 @@ test("internal recovery classifier separates recovery sub-states", () => {
     code: "missing_evidence",
     message: "missing evidence receipt for source_verified",
   })).toBe("needs_evidence");
+
+  expect(internalRecoveryStateForFailure({
+    code: "prompt_usage_model_call_budget_exhausted",
+    message: "Prompt usage model-call budget exhausted before provider request",
+  })).toBe("recovering_internal");
 });
 
 test("provider and app projections use the full shared internal recovery classifier", () => {
@@ -89,6 +94,22 @@ test("provider and app projections use the full shared internal recovery classif
   expect(appSafeResponderError(missingEvidence)).toEqual({
     code: INTERNAL_RECOVERY_REQUIRED_CODE,
     message: missingEvidence.message,
+  });
+
+  const promptBudget = {
+    code: "prompt_usage_model_call_budget_exhausted",
+    message: "Prompt usage model-call budget exhausted before provider request",
+  };
+  expect(safeRuntimeFailure(promptBudget)).toMatchObject({
+    code: INTERNAL_RECOVERY_REQUIRED_CODE,
+    message:
+      "Butler reached its internal model-call budget while trying to continue the turn. Progress was saved and the turn can be retried.",
+    retryable: true,
+  });
+  expect(appSafeResponderError(promptBudget)).toEqual({
+    code: INTERNAL_RECOVERY_REQUIRED_CODE,
+    message:
+      "Butler reached its internal model-call budget while trying to continue the turn. Progress was saved and the turn can be retried.",
   });
 });
 
