@@ -12,7 +12,11 @@ import {
   type SmartSearchPlanningResult,
 } from "../../../../integrations/search/planning.ts";
 import { evidenceReceipt, urlReferences } from "../../../tool-support/executor-support.ts";
-
+import {
+  coverageBudgetForSearchOutput,
+  readRequirementForSearchOutput,
+  webSearchEvidenceCapabilityReceipts,
+} from "./evidence.ts";
 type WebSearchToolCall = { args: Record<string, unknown> };
 
 export function createWebSearchHandler(input: {
@@ -83,6 +87,7 @@ export function createWebSearchHandler(input: {
       return {
         ok: true,
         ...output,
+        evidence_capability_receipts: webSearchEvidenceCapabilityReceipts(output),
         evidence_receipts: [
           evidenceReceipt({
             producerName: "web_search",
@@ -270,40 +275,6 @@ function compactSearchPlan(
       priority: query.priority,
       expected_source_type: query.expectedSourceType ?? null,
     })),
-  };
-}
-
-function readRequirementForSearchOutput(output: WebSearchOutput & {
-  search_plan?: Record<string, unknown>;
-}): Record<string, unknown> {
-  const plan = output.search_plan;
-  const depth = typeof plan?.depth === "string" ? plan.depth : "";
-  const verificationRequired = plan?.verification_required === true;
-  const readRequired = verificationRequired || depth === "deep" || depth === "verification";
-  if (!readRequired) return {};
-  return {
-    read_required: true,
-    read_reason: "The search plan requires page evidence before making confident source-backed claims.",
-    recommended_read_urls: output.results
-      .map((result) => result.url)
-      .filter((url) => typeof url === "string" && url.trim().length > 0)
-      .slice(0, 4),
-  };
-}
-
-function coverageBudgetForSearchOutput(output: WebSearchOutput & {
-  search_plan?: Record<string, unknown>;
-}, requestedLimit: number): Record<string, unknown> {
-  return {
-    mode: "coverage_based",
-    result_count: output.results.length,
-    stop_reason: output.results.length === 0
-      ? "no_source_candidates"
-      : output.results.length >= requestedLimit
-        ? "candidate_limit_reached"
-        : "provider_results_exhausted",
-    next_search_guidance:
-      "Run another search only for a specific missing outcome field, category, source type, or verification gap.",
   };
 }
 

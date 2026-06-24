@@ -228,6 +228,9 @@ export function createLifecycleGatewayHandlers(lifecycle: SessionLifecycleServic
   ) => ({
     text: result.text,
     artifacts: result.artifacts ?? [],
+    delivery_state: result.delivery?.delivery_state,
+    limitation_codes: result.delivery?.limitation_codes,
+    limitations: result.delivery?.limitations,
     deliveryCount: result.deliveries?.length ?? 0,
     runtimeSessionRef: result.runtimeSessionRef ?? null,
     providerThreadRef: result.providerThreadRef ?? null,

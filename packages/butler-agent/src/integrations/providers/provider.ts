@@ -246,6 +246,7 @@ export interface FunctionToolPromptOptions {
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
   tools: FunctionToolDefinition[];
+  dynamicTools?: () => readonly FunctionToolDefinition[];
   maxToolRounds?: number;
   log?: (line: string) => void;
   onAssistantTextBeforeTools?: (input: {
@@ -1225,10 +1226,40 @@ function beforeAttributedModelRequest(input: {
   attribution?: PromptUsageAttribution;
   roundIndex: number;
 }): void {
+  const budget = input.attribution?.getBudgetState?.() ?? input.attribution?.budgetState;
+  if (budget && (
+    budget.status === "exhausted" ||
+    budget.requestCount >= budget.maxRequests
+  )) {
+    throw promptUsageModelCallBudgetExhaustedError();
+  }
   input.attribution?.beforeModelRequest?.({
     roundIndex: input.roundIndex,
     phase: input.attribution.phase,
   });
+}
+
+function promptUsageModelCallBudgetExhaustedError(): Error & { code: string } {
+  const error = Object.assign(
+    new Error("Prompt usage model-call budget exhausted before provider request"),
+    { code: "prompt_usage_model_call_budget_exhausted" },
+  );
+  error.name = "PromptUsageModelCallBudgetExhaustedError";
+  return error;
+}
+
+function modelIterationLimitWithinUsageBudget(
+  requestedRounds: number,
+  attribution?: PromptUsageAttribution,
+): number {
+  const requested = Math.max(1, Math.min(requestedRounds, MAX_TOOL_ROUNDS));
+  const budget = attribution?.getBudgetState?.() ?? attribution?.budgetState;
+  if (!budget || !Number.isFinite(budget.requestCount) || !Number.isFinite(budget.maxRequests)) {
+    return requested;
+  }
+  const remainingRequests = Math.max(0, budget.maxRequests - budget.requestCount);
+  if (remainingRequests <= 1) return 1;
+  return Math.max(1, Math.min(requested, remainingRequests - 1));
 }
 
 function afterAttributedModelResponse(input: {
@@ -1360,6 +1391,16 @@ function modelFacingFunctionTools(tools: readonly FunctionToolDefinition[]): Fun
     ...tool,
     parameters: stripNestedDescriptions(tool.parameters) as Record<string, unknown>,
   }));
+}
+
+function activeFunctionTools(options: FunctionToolPromptOptions): FunctionToolDefinition[] {
+  const dynamicTools = options.dynamicTools?.();
+  return modelFacingFunctionTools(dynamicTools && dynamicTools.length > 0 ? dynamicTools : options.tools);
+}
+
+function withoutDynamicTools(options: FunctionToolPromptOptions): FunctionToolPromptOptions {
+  const { dynamicTools: _dynamicTools, ...rest } = options;
+  return rest;
 }
 
 function newToolMessages(
@@ -2653,8 +2694,10 @@ async function runLocalPromptText(options: PromptOptions): Promise<string> {
 async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions): Promise<string> {
   const config = resolveLocalModelConfig(options.model);
   const log = options.log ?? (() => {});
-  const allowedNames = new Set(options.tools.map((tool) => tool.name));
-  const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
+  const maxRounds = modelIterationLimitWithinUsageBudget(
+    options.maxToolRounds ?? 8,
+    options.usageAttribution,
+  );
   const messages: LocalChatMessage[] = [{ role: "system", content: localFunctionToolInstructions(options.instructions) }];
   messages.push({ role: "user", content: localUserContentWithAttachments(options.prompt, options.attachments) });
   let executedToolCalls = 0;
@@ -2662,9 +2705,11 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
   let requiredToolRepairNames: Set<string> | null = null;
 
   for (let round = 0; round < maxRounds; round += 1) {
+    const activeTools = activeFunctionTools(options);
+    const allowedNames = new Set(activeTools.map((tool) => tool.name));
     let response;
     try {
-      const requestTools = localToolsForRequiredRepair(options.tools, requiredToolRepairNames);
+      const requestTools = localToolsForRequiredRepair(activeTools, requiredToolRepairNames);
       response = await createLocalChatCompletion(config, {
         model: config.model_id,
         messages,
@@ -2680,12 +2725,12 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
         throwIfAborted(options.signal);
         break;
       }
-      const compactTools = localCompactEvidenceTools(options.tools);
-      if (compactTools.length > 0 && compactTools.length < options.tools.length) {
+      const compactTools = localCompactEvidenceTools(activeTools);
+      if (compactTools.length > 0 && compactTools.length < activeTools.length) {
         log("local model tool prompt exceeded context window; retrying with compact evidence tool schemas");
         throwIfAborted(options.signal);
         return await runLocalFunctionToolPromptText({
-          ...options,
+          ...withoutDynamicTools(options),
           tools: compactTools,
         });
       }
@@ -3097,8 +3142,10 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
   options: FunctionToolPromptOptions,
 ): Promise<string> {
   const log = options.log ?? (() => {});
-  const allowedNames = new Set(options.tools.map((tool) => tool.name));
-  const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
+  const maxRounds = modelIterationLimitWithinUsageBudget(
+    options.maxToolRounds ?? 8,
+    options.usageAttribution,
+  );
   const messages: HostedChatMessage[] = [];
   if (options.instructions?.trim()) {
     messages.push({ role: "system", content: options.instructions.trim() });
@@ -3106,9 +3153,11 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
   messages.push({ role: "user", content: promptTextForHosted(options) });
 
   for (let round = 0; round < maxRounds; round += 1) {
+    const activeTools = activeFunctionTools(options);
+    const allowedNames = new Set(activeTools.map((tool) => tool.name));
     const response = await createHostedChatCompletion(config, {
       messages,
-      tools: hostedChatTools(options.tools),
+      tools: hostedChatTools(activeTools),
       tool_choice: "auto",
       stream: false,
     }, options.signal);
@@ -3286,7 +3335,10 @@ async function runAnthropicFunctionToolPromptText(
 ): Promise<string> {
   const log = options.log ?? (() => {});
   const allowedNames = new Set(options.tools.map((tool) => tool.name));
-  const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
+  const maxRounds = modelIterationLimitWithinUsageBudget(
+    options.maxToolRounds ?? 8,
+    options.usageAttribution,
+  );
   const messages: Array<Record<string, unknown>> = [
     { role: "user", content: promptTextForHosted(options) },
   ];
@@ -3460,7 +3512,10 @@ async function runGeminiFunctionToolPromptText(
 ): Promise<string> {
   const log = options.log ?? (() => {});
   const allowedNames = new Set(options.tools.map((tool) => tool.name));
-  const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
+  const maxRounds = modelIterationLimitWithinUsageBudget(
+    options.maxToolRounds ?? 8,
+    options.usageAttribution,
+  );
   const contents: Array<Record<string, unknown>> = [
     { role: "user", parts: [{ text: promptTextForHosted(options) }] },
   ];
@@ -3794,21 +3849,26 @@ async function runOpenAIFunctionToolPromptText(
   const reasoning = buildReasoningConfig(resolution);
   const log = options.log ?? (() => {});
   const promptCache = resolveOpenAIPromptCacheConfig(options.cacheScope ?? "function-tool-prompt");
-  const allowedNames = new Set(options.tools.map((tool) => tool.name));
-  const modelTools = modelFacingFunctionTools(options.tools);
-  const maxRounds = Math.max(1, Math.min(options.maxToolRounds ?? 8, MAX_TOOL_ROUNDS));
+  const maxRounds = modelIterationLimitWithinUsageBudget(
+    options.maxToolRounds ?? 8,
+    options.usageAttribution,
+  );
   let previousResponseId: string | null = null;
   let sentToolMessages = 0;
   const initialPromptInput = openAIInputWithAttachments(options.prompt, options.attachments);
   const promptForAgentLoop = promptWithAttachmentContext(options.prompt, options.attachments);
   const codexStatelessInput = toCodexStatelessInput(initialPromptInput);
   let modelCallRound = 0;
+  const agentLoopTools = activeFunctionTools(options).map(functionToolToAgentTool);
 
   const result = await runAgentLoop({
     messages: [{ role: "user", content: promptForAgentLoop }],
-    tools: options.tools.map(functionToolToAgentTool),
+    tools: agentLoopTools,
     maxIterations: maxRounds,
     callModel: async ({ messages }) => {
+      const activeTools = activeFunctionTools(options);
+      const allowedNames = new Set(activeTools.map((tool) => tool.name));
+      agentLoopTools.splice(0, agentLoopTools.length, ...activeTools.map(functionToolToAgentTool));
       const input = previousResponseId
         ? newToolMessages(messages, sentToolMessages)
         : { items: initialPromptInput, sentCount: sentToolMessages };
@@ -3826,7 +3886,7 @@ async function runOpenAIFunctionToolPromptText(
         store: true,
         ...promptCache,
         instructions: options.instructions,
-        tools: modelTools,
+        tools: activeTools,
         reasoning,
         ...(previousResponseId
           ? {

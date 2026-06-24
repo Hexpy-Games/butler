@@ -1073,7 +1073,10 @@ async function routeRequest(input: {
         await input.store.retryTurn(
           decodeURIComponent(turnRetryMatch[1]!),
           input.responder,
-          { responderTimeoutMs: input.responderTimeoutMs },
+          {
+            responderTimeoutMs: input.responderTimeoutMs,
+            deferResponderTurns: true,
+          },
         ),
       ),
       202,
@@ -1154,6 +1157,7 @@ async function routeRequest(input: {
       apiEnvelope(
         await input.store.sendMessage(body, input.responder, {
           responderTimeoutMs: input.responderTimeoutMs,
+          deferResponderTurns: true,
         }),
       ),
       202,

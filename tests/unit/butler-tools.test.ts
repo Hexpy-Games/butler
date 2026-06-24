@@ -8,6 +8,7 @@ import {
   butlerToolsForAgentLoop,
   createButlerToolExecutor,
   createButlerToolExecutorRegistry,
+  satisfiedCompletionObligationsForToolResult,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import {
   diagnoseButlerToolPolicy,
@@ -26,10 +27,84 @@ import { indexTranscriptLinesForQuery } from "../../packages/butler-agent/src/ag
 let tempDir = "";
 const root = process.cwd();
 const projectLedgerCli = join(root, "packages", "project-ledger", "bin", "project-ledger");
+const startupOnlyToolNames: string[] = [
+  "get_context_monitor",
+  "list_tool_capabilities",
+  "tool_search",
+  "tool_describe",
+  "tool_call",
+  "update_todo_list",
+  "list_todo_list",
+  "read_conversation_context",
+];
+const projectMetadataToolNames: string[] = [
+  "inspect_project_status",
+  "query_project_work",
+  "render_project_dashboard",
+  "complete_project_work",
+  ...startupOnlyToolNames,
+];
+const projectWorkspaceToolNames: string[] = [
+  "run_command",
+  "read_file",
+  "write_file",
+  "grep_files",
+  "inspect_project_status",
+  "query_project_work",
+  "render_project_dashboard",
+  "complete_project_work",
+  "get_context_monitor",
+  "read_tool_output_artifact",
+  "list_tool_capabilities",
+  "tool_search",
+  "tool_describe",
+  "tool_call",
+  "update_todo_list",
+  "list_todo_list",
+  "read_conversation_context",
+];
 const removedWeatherToolNames = [
   "get_weather_with_knowhow",
   "record_weather_source_feedback",
   "run_weather_knowhow_consolidation",
+] as const;
+const promptOnlySurfaceFixtures = [
+  {
+    name: "Korean implicit current-information need about prices",
+    text: "요즘 계란 가격이 왜 이렇게 불안한지 원인과 전망을 정리해줘.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
+  {
+    name: "Korean implicit current-information need about policy",
+    text: "지금 전세 대출 분위기가 실수요자에게 어떤 의미인지 판단해줘.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
+  {
+    name: "English implicit external-evidence need about a claim",
+    text: "Before I answer the customer, check whether this claim is actually supported and give me the confidence level.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
+  {
+    name: "English implicit external-evidence need about vendor numbers",
+    text: "I need a source-backed answer on whether this vendor's adoption numbers are credible.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
+  {
+    name: "No-keyword planning prompt",
+    text: "Turn this rough idea into three crisp action items for the next team sync.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
+  {
+    name: "No-keyword explanation prompt",
+    text: "Explain the tradeoff between speed and reliability for a small release checklist.",
+    expectedProfiles: ["startup"],
+    expectedToolNames: startupOnlyToolNames,
+  },
 ] as const;
 
 beforeEach(() => {
@@ -68,6 +143,9 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "read_tool_output_artifact",
     "get_usage_monitor",
     "list_tool_capabilities",
+    "tool_search",
+    "tool_describe",
+    "tool_call",
     "list_mcp_capabilities",
     "call_mcp_tool",
     "read_mcp_resource",
@@ -117,6 +195,9 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   expect(BUTLER_TOOLS.find((tool) => tool.name === "read_tool_output_artifact")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "get_usage_monitor")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "list_tool_capabilities")?.concurrencySafe).toBe(true);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "tool_search")?.concurrencySafe).toBe(true);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "tool_describe")?.concurrencySafe).toBe(true);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "tool_call")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "list_mcp_capabilities")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "call_mcp_tool")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "read_mcp_resource")?.concurrencySafe).toBe(true);
@@ -174,6 +255,7 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
     "project-ledger",
     "run-command",
     "skills",
+    "tool-bridge",
     "web-read",
     "web-search",
     "work-tracking",
@@ -280,19 +362,11 @@ test("project sessions expose bounded project tools without workspace escalation
     text: "Project Ledger 기준으로 상태를 확인해줘.",
     sessionMetadata: { projectId: "butler" },
   })).toEqual(["startup", "project"]);
-  expect(names).toEqual([
-    "inspect_project_status",
-    "query_project_work",
-    "render_project_dashboard",
-    "complete_project_work",
-    "get_context_monitor",
-    "list_tool_capabilities",
-    "update_todo_list",
-    "list_todo_list",
-    "read_conversation_context",
-  ]);
+  expect(names).toEqual(projectMetadataToolNames);
   expect(names).not.toContain("run_command");
   expect(names).not.toContain("read_tool_output_artifact");
+  expect(names).not.toContain("web_search");
+  expect(names).not.toContain("web_read");
   expect(names).not.toContain("get_weather_with_knowhow");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
@@ -316,16 +390,13 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
     text,
     sessionMetadata: { projectId: "butler" },
     turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
-  })).toEqual(expect.arrayContaining(["startup", "project", "workspace"]));
-  expect(names).toContain("inspect_project_status");
-  expect(names).toContain("run_command");
-  expect(names).toContain("read_file");
-  expect(names).toContain("write_file");
-  expect(names).toContain("grep_files");
-  expect(names).toContain("read_tool_output_artifact");
+  })).toEqual(["startup", "project", "workspace"]);
+  expect(names).toEqual(projectWorkspaceToolNames);
+  expect(names).not.toContain("web_search");
+  expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  expect(toolContractJsonChars(tools)).toBeLessThan(13_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(15_000);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -359,6 +430,7 @@ test("workspace wording alone does not expose command execution without structur
     role: "butler",
     text,
   })).toEqual(["startup"]);
+  expect(names).toEqual(startupOnlyToolNames);
   expect(names).not.toContain("run_command");
   expect(names).not.toContain("read_tool_output_artifact");
 });
@@ -381,9 +453,84 @@ test("explicit required native tool profiles expose workspace file tools without
   expect(names).toContain("write_file");
   expect(names).toContain("grep_files");
   expect(names).toContain("read_tool_output_artifact");
+  expect(names).not.toContain("web_search");
+  expect(names).not.toContain("web_read");
 });
 
-test("native file tool wording exposes workspace file tools", () => {
+for (const fixture of promptOnlySurfaceFixtures) {
+  test(`prompt text alone keeps startup-only tool surface: ${fixture.name}`, () => {
+    const profiles = selectButlerToolProfiles({
+      role: "butler",
+      text: fixture.text,
+    });
+    const tools = selectButlerToolsForTurn({
+      role: "butler",
+      text: fixture.text,
+    });
+    const names = tools.map((tool) => tool.name);
+
+    expect(profiles).toEqual([...fixture.expectedProfiles]);
+    expect(names).toEqual([...fixture.expectedToolNames]);
+    expect(profiles).not.toContain("public-web");
+    expect(profiles).not.toContain("workspace");
+    expect(profiles).not.toContain("project");
+    expect(profiles).not.toContain("planned-work");
+    expect(names).not.toContain("web_search");
+    expect(names).not.toContain("web_read");
+    expect(names).not.toContain("run_command");
+    expect(names).not.toContain("read_file");
+    expect(names).not.toContain("write_file");
+    expect(names).not.toContain("grep_files");
+    expect(names).not.toContain("inspect_project_status");
+    expect(names).not.toContain("query_project_work");
+    expect(names).not.toContain("render_project_dashboard");
+    expect(names).not.toContain("complete_project_work");
+    expect(names).not.toContain("create_planned_task");
+    expect(names).not.toContain("dispatch_worker");
+  });
+}
+
+test("tool profile selector keeps multilingual prompt wording out of routing decisions", () => {
+  const promptTexts = [
+    "요즘 공개 자료를 확인해서 알려줘.",
+    "Please research the current release state.",
+    "Veuillez rechercher les informations recentes.",
+    "最近の公開情報を調べてください。",
+  ];
+
+  for (const text of promptTexts) {
+    const profiles = selectButlerToolProfiles({ role: "butler", text });
+    const tools = selectButlerToolsForTurn({ role: "butler", text });
+    const names = tools.map((tool) => tool.name);
+
+    expect(profiles).toEqual(["startup"]);
+    expect(names).toEqual(startupOnlyToolNames);
+  }
+});
+
+test("structured public web profile exposes web tools without widening workspace", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: promptOnlySurfaceFixtures[0].text,
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["public-web"] } },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: promptOnlySurfaceFixtures[0].text,
+    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["public-web"] } },
+  })).toEqual(["startup", "public-web"]);
+  expect(names).toEqual([
+    "web_search",
+    "web_read",
+    ...startupOnlyToolNames,
+  ]);
+  expect(names).not.toContain("run_command");
+  expect(names).not.toContain("read_file");
+});
+
+test("native file tool wording alone does not expose workspace file tools", () => {
   const text = "Read source.txt, write created.txt, then grep for needle-marker using native file tools.";
   const tools = selectButlerToolsForTurn({
     role: "butler",
@@ -391,13 +538,13 @@ test("native file tool wording exposes workspace file tools", () => {
   });
   const names = tools.map((tool) => tool.name);
 
-  expect(selectButlerToolProfiles({ role: "butler", text })).toEqual(expect.arrayContaining(["startup", "workspace"]));
-  expect(names).toContain("read_file");
-  expect(names).toContain("write_file");
-  expect(names).toContain("grep_files");
+  expect(selectButlerToolProfiles({ role: "butler", text })).toEqual(["startup"]);
+  expect(names).not.toContain("read_file");
+  expect(names).not.toContain("write_file");
+  expect(names).not.toContain("grep_files");
 });
 
-test("session-level required native tools expose command execution consistently", () => {
+test("session-level required native tools expose exact tool names only", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "이 작업을 처리해줘.",
@@ -409,8 +556,13 @@ test("session-level required native tools expose command execution consistently"
     role: "butler",
     text: "이 작업을 처리해줘.",
     sessionMetadata: { runtimePolicy: { requiredNativeTools: ["run_command"] } },
-  })).toEqual(["startup", "workspace"]);
+  })).toEqual(["startup"]);
   expect(names).toContain("run_command");
+  expect(names).not.toContain("read_file");
+  expect(names).not.toContain("write_file");
+  expect(names).not.toContain("grep_files");
+  expect(names).not.toContain("web_search");
+  expect(names).not.toContain("web_read");
 });
 
 test("invalid required native tool profiles are diagnosable", () => {
@@ -422,29 +574,22 @@ test("invalid required native tool profiles are diagnosable", () => {
   });
 });
 
-test("free-form GitHub issue linkage text alone does not expand tools without project policy or metadata", () => {
+test("free-form GitHub issue linkage text alone does not expose project or workspace tools", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "GitHub issue를 열어서 Project Ledger task랑 연결해줘.",
   });
   const names = tools.map((tool) => tool.name);
 
-  expect(names).toContain("inspect_project_status");
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "GitHub issue를 열어서 Project Ledger task랑 연결해줘.",
+  })).toEqual(["startup"]);
+  expect(names).not.toContain("inspect_project_status");
   expect(names).not.toContain("run_command");
 });
 
-test("project write bridge selection does not depend on free-form write-intent regexes", () => {
-  const source = readFileSync(
-    join(root, "packages", "butler-agent", "src", "agent", "tools", "profiles.ts"),
-    "utf8",
-  );
-
-  expect(source).not.toContain("hasProjectManagementWriteIntent");
-  expect(source).not.toContain("ProjectManagementWriteIntent");
-  expect(source).not.toContain("등록|생성|작성|연결|링크");
-});
-
-test("Project Ledger requests without project metadata still expose project tools", () => {
+test("Project Ledger requests without project metadata do not expose project tools", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "Project Ledger 상태와 next action을 확인하고 dashboard를 갱신해줘.",
@@ -454,10 +599,11 @@ test("Project Ledger requests without project metadata still expose project tool
   expect(selectButlerToolProfiles({
     role: "butler",
     text: "Project Ledger 상태와 next action을 확인하고 dashboard를 갱신해줘.",
-  })).toContain("project");
-  expect(names).toContain("inspect_project_status");
-  expect(names).toContain("query_project_work");
-  expect(names).toContain("render_project_dashboard");
+  })).toEqual(["startup"]);
+  expect(names).toEqual(startupOnlyToolNames);
+  expect(names).not.toContain("inspect_project_status");
+  expect(names).not.toContain("query_project_work");
+  expect(names).not.toContain("render_project_dashboard");
   expect(names).not.toContain("get_weather_with_knowhow");
   expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
 });
@@ -476,7 +622,7 @@ test("Project Ledger completion requests expose complete_project_work", () => {
   expect(names).toContain("complete_project_work");
 });
 
-test("explicit required tools can extend a profile while removed tool names are ignored", () => {
+test("explicit required tools add exact tool names while removed tool names are ignored", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "반드시 표 artifact를 만들어줘.",
@@ -490,8 +636,21 @@ test("explicit required tools can extend a profile while removed tool names are 
   });
   const names = tools.map((tool) => tool.name);
 
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "반드시 표 artifact를 만들어줘.",
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata: {
+      requiredNativeTools: [
+        "transform_public_data_table",
+        "get_weather_with_knowhow",
+      ],
+    },
+  })).toEqual(["startup", "project"]);
   expect(names).toContain("transform_public_data_table");
   expect(names).not.toContain("get_weather_with_knowhow");
+  expect(names).not.toContain("web_search");
+  expect(names).not.toContain("web_read");
 });
 
 test("worker tool profile keeps execution tools and blocks recursive orchestration tools", () => {
@@ -628,6 +787,7 @@ test("run_command schema exposes bounded non-interactive bash execution", () => 
     "timeout_ms",
     "max_output_tokens",
     "output_paths",
+    "validation_suite",
     "output_mode",
   ]);
   expect(tool?.description).toContain("non-interactive bash command");
@@ -638,6 +798,9 @@ test("run_command schema exposes bounded non-interactive bash execution", () => 
   expect(properties?.output_mode).toMatchObject({
     type: "string",
     enum: ["auto", "silent_on_success", "full"],
+  });
+  expect(properties?.validation_suite).toMatchObject({
+    type: "string",
   });
 });
 
@@ -1061,7 +1224,7 @@ test("run_command with output_mode=silent_on_success shows bounded output on fai
   expect(result.stderr).toContain("error message");
 });
 
-test("run_command with output_mode=auto suppresses validation command output on success", async () => {
+test("run_command with output_mode=auto suppresses declared validation output on success", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });
   writeFileSync(join(workspace, "test.spec.ts"), "import { test, expect } from 'bun:test'; test('pass', () => { expect(true).toBe(true); });", "utf8");
@@ -1075,18 +1238,27 @@ test("run_command with output_mode=auto suppresses validation command output on 
     name: "run_command",
     args: {
       command: "bun test test.spec.ts",
+      validation_suite: "unit-tests",
       output_mode: "auto",
     },
     rawArguments: "{}",
-  }) as { ok: boolean; stdout: string; stderr: string; exit_code: number };
+  }) as { ok: boolean; stdout: string; stderr: string; exit_code: number; evidence_capability_receipts: Array<Record<string, unknown>> };
 
   expect(result.ok).toBe(true);
   expect(result.exit_code).toBe(0);
   expect(result.stdout).toBe("");
   expect(result.stderr).toBe("");
+  expect(result.evidence_capability_receipts).toContainEqual(expect.objectContaining({
+    capability: "validation_passed",
+    verified: true,
+    scope: expect.objectContaining({
+      suite: "unit-tests",
+      result: "passed",
+    }),
+  }));
 });
 
-test("run_command defaults output_mode to auto for validation command success", async () => {
+test("run_command defaults output_mode to auto for declared validation success", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });
   writeFileSync(join(workspace, "test.spec.ts"), "import { test, expect } from 'bun:test'; test('pass', () => { expect(true).toBe(true); });", "utf8");
@@ -1100,6 +1272,7 @@ test("run_command defaults output_mode to auto for validation command success", 
     name: "run_command",
     args: {
       command: "bun test test.spec.ts",
+      validation_suite: "unit-tests",
     },
     rawArguments: "{}",
   }) as { ok: boolean; stdout: string; stderr: string; exit_code: number };
@@ -1110,7 +1283,63 @@ test("run_command defaults output_mode to auto for validation command success", 
   expect(result.stderr).toBe("");
 });
 
-test("run_command auto recognizes bun run --silent validation scripts", async () => {
+test("run_command keeps structured validation failure stronger than declared command success", async () => {
+  const workspace = join(tempDir, "workspace");
+  mkdirSync(workspace, { recursive: true });
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: "printf '%s\\n' '{\"validation_result\":{\"suite\":\"unit-tests\",\"result\":\"failed\",\"failure_summary\":\"assertion failed\"}}'",
+      validation_suite: "unit-tests",
+      output_mode: "auto",
+    },
+    rawArguments: "{}",
+  }) as { evidence_capability_receipts: Array<Record<string, unknown>> };
+
+  expect(result.evidence_capability_receipts).toContainEqual(expect.objectContaining({
+    capability: "validation_passed",
+    verified: false,
+    scope: expect.objectContaining({
+      suite: "unit-tests",
+      result: "failed",
+    }),
+  }));
+});
+
+test("run_command preserves ordered structured validation receipts for the same suite", async () => {
+  const workspace = join(tempDir, "workspace");
+  mkdirSync(workspace, { recursive: true });
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: "printf '%s\\n' '{\"validation_results\":[{\"suite\":\"unit-tests\",\"result\":\"failed\"},{\"suite\":\"unit-tests\",\"result\":\"passed\"}]}'",
+      validation_suite: "unit-tests",
+      output_mode: "auto",
+    },
+    rawArguments: "{}",
+  }) as { evidence_capability_receipts: Array<Record<string, unknown>> };
+
+  const validationReceipts = result.evidence_capability_receipts.filter((receipt) =>
+    receipt.capability === "validation_passed",
+  );
+  expect(validationReceipts.map((receipt) =>
+    (receipt.scope as Record<string, unknown>).result,
+  )).toEqual(["failed", "passed"]);
+});
+
+test("run_command auto does not infer validation from command text", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });
   writeFileSync(join(workspace, "package.json"), JSON.stringify({
@@ -1134,7 +1363,7 @@ test("run_command auto recognizes bun run --silent validation scripts", async ()
 
   expect(result.ok).toBe(true);
   expect(result.exit_code).toBe(0);
-  expect(result.stdout).toBe("");
+  expect(result.stdout).toContain("noisy check output");
 });
 
 test("run_command with output_mode=auto preserves non-validation command output", async () => {
@@ -1160,7 +1389,7 @@ test("run_command with output_mode=auto preserves non-validation command output"
   expect(result.stdout).toContain("regular command output");
 });
 
-test("run_command with output_mode=auto shows bounded output for failed validation commands", async () => {
+test("run_command with output_mode=auto shows bounded output for failed commands", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });
   const executor = createButlerToolExecutor({
@@ -1275,6 +1504,34 @@ test("tool capability schema exposes discovery without deterministic selection",
   expect(BUTLER_TOOLS.find((item) => item.name === "select_tool_capability")).toBeUndefined();
 });
 
+test("tool_search schema exposes compact model-selected catalog search", () => {
+  const search = BUTLER_TOOLS.find((item) => item.name === "tool_search");
+
+  expect(search?.parameters.required).toEqual([]);
+  expect(Object.keys(search?.parameters.properties ?? {})).toEqual([
+    "query",
+    "capability",
+    "category",
+    "provider",
+    "include_disabled",
+    "limit",
+  ]);
+});
+
+test("tool_describe schema exposes explicit catalog id description", () => {
+  const describe = BUTLER_TOOLS.find((item) => item.name === "tool_describe");
+
+  expect(describe?.parameters.required).toEqual(["ids"]);
+  expect(Object.keys(describe?.parameters.properties ?? {})).toEqual(["ids"]);
+});
+
+test("tool_call schema exposes guarded catalog invocation", () => {
+  const call = BUTLER_TOOLS.find((item) => item.name === "tool_call");
+
+  expect(call?.parameters.required).toEqual(["id", "arguments"]);
+  expect(Object.keys(call?.parameters.properties ?? {})).toEqual(["id", "arguments"]);
+});
+
 test("tool capability discovery exposes run_command as enabled command capability", async () => {
   const execute = createButlerToolExecutor({
     butlerHome: root,
@@ -1365,6 +1622,7 @@ test("tool capability discovery does not mark disabled selected tools callable",
     capabilities: Array<{
       name: string;
       enabled: boolean;
+      disabled_reason: string | null;
       current_turn_selected: boolean | null;
       current_turn_callable: boolean | null;
       omitted_by_profile: boolean | null;
@@ -1376,6 +1634,7 @@ test("tool capability discovery does not mark disabled selected tools callable",
   expect(result.capabilities).toContainEqual(expect.objectContaining({
     name: "web_search",
     enabled: false,
+    disabled_reason: "web search provider is disabled by configuration",
     current_turn_selected: true,
     current_turn_callable: false,
     omitted_by_profile: false,
@@ -2453,6 +2712,14 @@ test("work dashboard and control tools expose canonical task state", async () =>
   });
   expect(dashboard.recoverable[0].raw_id).toBeUndefined();
   expect(dashboard.recoverable[0].actions.find((action: any) => action.action === "resume").enabled).toBe(true);
+  expect(dashboard.evidence_capability_receipts).toEqual([
+    expect.objectContaining({
+      capability: "source_verified",
+      evidence_kind: "project_state",
+      satisfies: ["source_verified"],
+    }),
+  ]);
+  expect(satisfiedCompletionObligationsForToolResult("get_work_dashboard", dashboard)).toContain("source_verified");
 
   const control = await execute({
     name: "control_work",
@@ -2508,6 +2775,14 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
   }) as Record<string, any>;
   expect(status.ok).toBe(true);
   expect(status.data.counts.work).toBe(1);
+  expect(status.evidence_capability_receipts).toEqual([
+    expect.objectContaining({
+      capability: "source_verified",
+      evidence_kind: "project_state",
+      satisfies: ["source_verified"],
+    }),
+  ]);
+  expect(satisfiedCompletionObligationsForToolResult("inspect_project_status", status)).toContain("source_verified");
 
   const query = await execute({
     name: "query_project_work",
@@ -2516,6 +2791,14 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
   }) as Record<string, any>;
   expect(query.ok).toBe(true);
   expect(query.data.results[0].id).toBe("W-TOOL");
+  expect(query.evidence_capability_receipts).toEqual([
+    expect.objectContaining({
+      capability: "source_verified",
+      evidence_kind: "project_state",
+      satisfies: ["source_verified"],
+    }),
+  ]);
+  expect(satisfiedCompletionObligationsForToolResult("query_project_work", query)).toContain("source_verified");
 
   const rendered = await execute({
     name: "render_project_dashboard",
@@ -2538,6 +2821,24 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
     path: "project-ledger/projects/ledger-demo/views/dashboard.md",
     artifact_kind: "markdown_file",
   });
+});
+
+test("Project Ledger tools do not verify source evidence when the CLI did not return state", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+  });
+
+  const status = await execute({
+    name: "inspect_project_status",
+    args: { project_path: tempDir },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+
+  expect(status.ok).toBe(false);
+  expect(status.command).toBeUndefined();
+  expect(status.evidence_capability_receipts).toBeUndefined();
+  expect(satisfiedCompletionObligationsForToolResult("inspect_project_status", status)).toEqual([]);
 });
 
 test("Project Ledger tools prefer Butler data project roots over repo-local ledgers", async () => {
@@ -3527,7 +3828,7 @@ test("review_planned_task passes only when every criterion passes", async () => 
   store.writeAttemptResult(created.task_id, 1, "tests pass and docs updated");
   store.transition(created.task_id, "WORKER_DONE");
 
-  expect(await execute({
+  const reviewed = await execute({
     name: "review_planned_task",
     args: {
       task_id: created.task_id,
@@ -3538,11 +3839,21 @@ test("review_planned_task passes only when every criterion passes", async () => 
       goal_review: { verdict: "PASS", evidence: "tests pass and docs updated" },
     },
     rawArguments: "{}",
-  })).toMatchObject({
+  });
+
+  expect(reviewed).toMatchObject({
     ok: true,
     verdict: "PASS",
     status: "REVIEW_PASSED",
   });
+  expect((reviewed as Record<string, unknown>).evidence_capability_receipts).toEqual([
+    expect.objectContaining({
+      capability: "review_completed",
+      evidence_kind: "review_result",
+      verified: true,
+      scope: expect.objectContaining({ result: "completed" }),
+    }),
+  ]);
 });
 
 test("review_planned_task cannot pass without internal GOAL review evidence", async () => {
@@ -3631,6 +3942,15 @@ test("review_planned_task records failed and inconclusive evidence", async () =>
     missing_evidence: ["regression suite"],
     repair_recommendation: "Fix failing tests and rerun regression suite.",
   });
+  expect((failed as Record<string, unknown>).evidence_capability_receipts).toEqual([
+    expect.objectContaining({
+      capability: "review_completed",
+      evidence_kind: "review_result",
+      verified: false,
+      scope: expect.objectContaining({ result: "changes_requested" }),
+      limitations: ["regression suite"],
+    }),
+  ]);
 });
 
 test("review_planned_task cannot pass with missing acceptance-criterion evidence", async () => {

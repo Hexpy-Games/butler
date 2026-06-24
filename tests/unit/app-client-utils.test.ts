@@ -873,6 +873,7 @@ test("timeline applies public turn events as progress rows", () => {
               toolName: "Bash",
               inputLabel: "bun test",
               safeLabel: "Bash: bun test",
+              bridgePhase: "invoke",
             },
           },
         },
@@ -894,6 +895,7 @@ test("timeline applies public turn events as progress rows", () => {
       kind: "ran_command",
       safe_tool_name: "Bash",
       safe_input_label: "bun test",
+      bridge_phase: "invoke",
     }),
   );
   expect(messages).toEqual([]);

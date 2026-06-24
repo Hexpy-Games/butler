@@ -3,7 +3,7 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const runCommandToolDefinition = {
   type: "function",
   name: "run_command",
-  description: "Run a single non-interactive bash command in the active Butler or Steward session workspace and return structured stdout, stderr, exit status, timeout state, and compacted output artifact references when needed. For generated artifacts that are not intentional project/workspace files, write under $BUTLER_ARTIFACTS_DIR instead of creating a workspace-root artifacts/ directory. Butler auto-verifies generated artifacts only under $BUTLER_ARTIFACTS_DIR; workspace files are durable evidence only when listed in output_paths. Prefer focused output over broad dumps: use structured extraction or case-insensitive search for manifest/config/script/log questions, and do not infer absence from one exact case-sensitive match. Keep the command argument JSON-safe: prefer one-line commands, avoid literal newlines inside the command string, and split long scripts into small commands when needed.",
+  description: "Run one non-interactive bash command in the active Butler or Steward workspace and return structured stdout, stderr, exit status, timeout state, and compacted artifact references when needed. For validation such as typecheck, lint, test, or project checks, set validation_suite to a stable suite name so the runtime records a structured validation receipt. Write generated artifacts under $BUTLER_ARTIFACTS_DIR unless they are intentional workspace files listed in output_paths. Prefer focused output over broad dumps, and keep command JSON-safe with no literal newlines.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -31,6 +31,10 @@ export const runCommandToolDefinition = {
           type: "string",
         },
       },
+      validation_suite: {
+        type: "string",
+        description: "Optional stable validation suite id for verification commands. When set, emits a structured validation receipt; failed receipts must be cleared by a later passing receipt for the same suite before completion.",
+      },
       output_mode: {
         type: "string",
         enum: [
@@ -38,7 +42,7 @@ export const runCommandToolDefinition = {
           "silent_on_success",
           "full",
         ],
-        description: "Optional output behavior: 'auto' suppresses validation command output on success and bounds failures (default), 'silent_on_success' suppresses all successful output, 'full' preserves all output.",
+        description: "Optional output behavior: 'auto' suppresses successful output only for commands with an explicit validation_suite and bounds failures (default), 'silent_on_success' suppresses all successful output, 'full' preserves all output.",
       },
     },
     required: [

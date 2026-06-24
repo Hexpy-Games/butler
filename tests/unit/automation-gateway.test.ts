@@ -775,7 +775,7 @@ test("queued inbound provider failure preserves safe API diagnostics for app pro
   expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
 });
 
-test("queued inbound goal completion incomplete preserves safe retryable reason", async () => {
+test("queued inbound goal completion incomplete delivers safe limited result", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -814,9 +814,9 @@ test("queued inbound goal completion incomplete preserves safe retryable reason"
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 0,
+    handled: 1,
     delivered: 1,
-    failed: 1,
+    failed: 0,
   });
   expect(app.sentActions[0]).toMatchObject({
     message: {
@@ -824,10 +824,13 @@ test("queued inbound goal completion incomplete preserves safe retryable reason"
       replyToMessageId: "message-goal-incomplete",
     },
     metadata: {
-      kind: "turn_failed",
+      kind: "final_result",
       turnId: "turn-goal-incomplete",
-      safeErrorCode: "goal_completion_incomplete",
-      retryable: true,
+      deliveryState: "delivered_with_limitations",
+      limitationCodes: ["internal_recovery_required"],
+      limitations: [
+        "확인된 완료 증거가 아직 부족합니다. [redacted]",
+      ],
     },
   });
   expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");

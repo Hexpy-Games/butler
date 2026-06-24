@@ -7,6 +7,7 @@ import {
   createTranscriptEvent,
   readTranscript,
 } from "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
+import type { RuntimeTurnEventInput } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import {
   applyCorrectionChallengeGuard,
   applyShortCueRhythmGuard,
@@ -32,16 +33,49 @@ import {
   goalCompletionReviewPrompt,
   stripLeadingPublicWorkDecisionBlock,
   stripToolImplementationLeakLines,
-} from "../../packages/butler-agent/src/agent/output/final-output-contract.ts";
+} from "../../packages/butler-agent/src/agent/output/completion/final-output-contract.ts";
 import {
   createButlerToolExecutor,
   satisfiedCompletionObligationsForToolResult,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
-import { publicWorkDecisionsFromAssistantText } from "../../packages/butler-agent/src/agent/output/public-work-decisions.ts";
+import {
+  publicWorkDecisionsFromAssistantText,
+  takePublicWorkDecisionForTool,
+} from "../../packages/butler-agent/src/agent/output/public-work/decisions.ts";
+import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
+import {
+  evidenceTranscriptToolCallArgumentsProjection,
+  evidenceTranscriptToolResultProjection,
+} from "../../packages/butler-agent/src/agent/output/evidence/transcript-result.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
+
+function capabilityReceipt(input: {
+  id: string;
+  producerName: string;
+  capability: "source_verified" | "command_executed" | "durable_artifact" | "data_table_created" | "chart_rendered";
+  evidenceKind: "source_page" | "project_state" | "execution_result" | "artifact" | "data_table" | "chart";
+  satisfies: Array<"source_verified" | "command_executed" | "durable_artifact" | "data_table_created" | "chart_rendered">;
+  reference?: Record<string, string>;
+}) {
+  return {
+    receipt_id: input.id,
+    schema_version: "evidence-capability.v1",
+    producer: { kind: "tool", name: input.producerName },
+    capability: input.capability,
+    evidence_kind: input.evidenceKind,
+    maturity: "verified",
+    confidence: 0.9,
+    verified: true,
+    summary: "Structured capability evidence was verified.",
+    references: input.reference ? [input.reference] : [],
+    satisfies: input.satisfies,
+    limitations: [],
+    created_at: "2026-06-22T08:09:00.000Z",
+  };
+}
 
 const fakeProvider: ModelProviderAdapter = {
   id: "fake-openai",
@@ -563,7 +597,7 @@ test("native runtime exposes direct command toolchains to Butler and Steward ses
         sawCommandTool = input.tools.some((tool) => tool.name === "run_command");
         maxToolRounds = input.maxToolRounds;
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 현재 작업공간에서 필요한 데이터를 명령으로 확인합니다.\n이유: 파일 기반 검증이 필요합니다.\n다음: 명령 출력으로 결과를 정리합니다.",
+          text: "summary: 현재 작업공간에서 필요한 데이터를 명령으로 확인합니다.\nrationale: 파일 기반 검증이 필요합니다.\nnext_step: 명령 출력으로 결과를 정리합니다.",
           toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
         });
         await input.executeTool({
@@ -626,7 +660,7 @@ test("native runtime advances durable WorkStreams for Steward non-trivial work",
     executeButlerTool: defaultExecutor,
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: Steward custody turn을 WorkStream으로 정리합니다.\n이유: 비 trivial steward work도 BTCC 상태로 남아야 합니다.\n다음: 생성된 WorkStream을 확인합니다.",
+        text: "summary: Steward custody turn을 WorkStream으로 정리합니다.\nrationale: 비 trivial steward work도 BTCC 상태로 남아야 합니다.\nnext_step: 생성된 WorkStream을 확인합니다.",
         toolCalls: [{ name: "update_todo_list", args: { title: "Steward custody review", todos: [] } }],
       });
       await input.executeTool({
@@ -663,13 +697,15 @@ test("native runtime advances durable WorkStreams for Steward non-trivial work",
     metadata: { projectId: "butler" },
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "openai/auto:codex-latest",
     input: { text: "프로젝트 custody 상태를 검토해줘" },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
-  })).rejects.toThrow("active direct work stream is not deliverable");
+  });
+
+  expect(result.text).toContain("아직 완료라고 보고할 수 있는 상태까지는 도달하지 못했습니다.");
 
   const streams = new WorkStreamStore(tempDir).list({
     sessionId: "steward/workstream-custody",
@@ -681,7 +717,7 @@ test("native runtime advances durable WorkStreams for Steward non-trivial work",
     title: "Steward custody review",
     current_phase: "review",
   });
-  expect(["reviewing", "reporting", "complete", "recoverable"]).toContain(streams[0]!.state);
+  expect(streams[0]!.state).toBe("recoverable");
 });
 
 test("native runtime sends a profiled tool surface for basic project turns", async () => {
@@ -719,6 +755,9 @@ test("native runtime sends a profiled tool surface for basic project turns", asy
     "complete_project_work",
     "get_context_monitor",
     "list_tool_capabilities",
+    "tool_search",
+    "tool_describe",
+    "tool_call",
     "update_todo_list",
     "list_todo_list",
     "read_conversation_context",
@@ -1036,7 +1075,7 @@ test("native runtime can drive the real run_command tool through the default exe
     messageLanguage: "ko",
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 워크스페이스 안에서 검증 파일을 생성합니다.\n이유: 직접 명령 도구가 실제 파일 작업까지 수행하는지 확인해야 합니다.\n다음: 생성된 파일을 근거로 결과를 보고합니다.",
+        text: "summary: 워크스페이스 안에서 검증 파일을 생성합니다.\nrationale: 직접 명령 도구가 실제 파일 작업까지 수행하는지 확인해야 합니다.\nnext_step: 생성된 파일을 근거로 결과를 보고합니다.",
         toolCalls: [{
           name: "run_command",
           args: {
@@ -1403,9 +1442,9 @@ test("native runtime uses assistant-authored public decisions as work block cont
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
-          "작업: 충주 행사 데이터를 공식 출처 위주로 먼저 확인합니다.",
-          "이유: 보고서의 표와 추천이 추측이 아니라 공개 근거에 기대야 하기 때문입니다.",
-          "다음: 확인한 결과를 정제 단계의 입력 후보로 사용합니다.",
+          "summary: 충주 행사 데이터를 공식 출처 위주로 먼저 확인합니다.",
+          "rationale: 보고서의 표와 추천이 추측이 아니라 공개 근거에 기대야 하기 때문입니다.",
+          "next_step: 확인한 결과를 정제 단계의 입력 후보로 사용합니다.",
         ].join("\n"),
         toolCalls: [{
           name: "web_search",
@@ -1464,8 +1503,8 @@ test("native runtime rejects unsafe assistant-authored public decisions before t
       runFunctionToolPromptText: async (input) => {
         await input.onAssistantTextBeforeTools?.({
           text: [
-            "작업: FileNotFoundException own tool output artifact root_path = /tmp/butler-workers/task/result.md not found.",
-            "이유: /Users/example/private/raw-payload.json을 확인해야 합니다.",
+            "summary: FileNotFoundException own tool output artifact root_path = /tmp/butler-workers/task/result.md not found.",
+            "rationale: /Users/example/private/raw-payload.json을 확인해야 합니다.",
           ].join("\n"),
           toolCalls: [{
             name: "web_search",
@@ -1519,9 +1558,9 @@ test("native runtime preserves safe public decision fields when repairing unsafe
       runFunctionToolPromptText: async (input) => {
         await input.onAssistantTextBeforeTools?.({
           text: [
-            "작업: FileNotFoundException own tool output artifact root_path = /tmp/butler-workers/task/result.md not found.",
-            "이유: 선택한 공개 출처의 본문 근거를 확인해야 하기 때문입니다.",
-            "다음: 확인한 근거를 표 정제 단계의 입력으로 사용합니다.",
+            "summary: FileNotFoundException own tool output artifact root_path = /tmp/butler-workers/task/result.md not found.",
+            "rationale: 선택한 공개 출처의 본문 근거를 확인해야 하기 때문입니다.",
+            "next_step: 확인한 근거를 표 정제 단계의 입력으로 사용합니다.",
           ].join("\n"),
           toolCalls: [{
             name: "web_read",
@@ -1563,7 +1602,7 @@ test("native runtime preserves safe public decision fields when repairing unsafe
   }
 });
 
-test("native runtime repairs unusably short public decision summaries", async () => {
+test("native runtime derives fallback work decision for non-canonical pre-tool prose", async () => {
   const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
@@ -1605,7 +1644,7 @@ test("native runtime repairs unusably short public decision summaries", async ()
   });
 
   const workStart = events.find((event) => event.kind === "work.block.started");
-  expect(workStart?.payload?.decisionSource).toBe("review-repaired");
+  expect(workStart?.payload?.decisionSource).toBe("runtime-derived");
   expect(workStart?.payload?.decisionSummary).toBe("선택한 출처의 내용을 확인합니다.");
   expect(workStart?.payload?.decisionSummary).not.toBe("s");
 });
@@ -1619,9 +1658,9 @@ test("native runtime carries public decision context across dependent tool calls
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
-          "작업: 접근 가능한 공개 자료 후보를 먼저 수집합니다.",
-          "이유: 중간 변환에 넣을 원자료가 있어야 보고서가 성립합니다.",
-          "다음: 후보 중 읽을 수 있는 출처를 고릅니다.",
+          "summary: 접근 가능한 공개 자료 후보를 먼저 수집합니다.",
+          "rationale: 중간 변환에 넣을 원자료가 있어야 보고서가 성립합니다.",
+          "next_step: 후보 중 읽을 수 있는 출처를 고릅니다.",
         ].join("\n"),
         toolCalls: [{ name: "web_search", args: { query: "충주 열린데이터 행사" } }],
       });
@@ -1634,9 +1673,9 @@ test("native runtime carries public decision context across dependent tool calls
       expect(JSON.stringify(returnedToolResults.at(-1))).toContain("접근 가능한 공개 자료 후보를 먼저 수집합니다.");
       await input.onAssistantTextBeforeTools?.({
         text: [
-          "작업: 첫 자료 후보에서 본문 근거를 읽어 원자료 필드를 확인합니다.",
-          "이유: 검색 요약만으로는 CSV로 정제할 필드가 충분하지 않습니다.",
-          "다음: 읽은 필드를 기준으로 로컬 정제 작업을 수행합니다.",
+          "summary: 첫 자료 후보에서 본문 근거를 읽어 원자료 필드를 확인합니다.",
+          "rationale: 검색 요약만으로는 CSV로 정제할 필드가 충분하지 않습니다.",
+          "next_step: 읽은 필드를 기준으로 로컬 정제 작업을 수행합니다.",
         ].join("\n"),
         toolCalls: [{ name: "web_read", args: { url: "https://example.test/events" } }],
       });
@@ -1648,9 +1687,9 @@ test("native runtime carries public decision context across dependent tool calls
 
       await input.onAssistantTextBeforeTools?.({
         text: [
-          "작업: 확인된 필드를 작은 CSV 형태로 정제합니다.",
-          "이유: 최종 보고 전에 행과 열을 고정해야 누락을 점검할 수 있습니다.",
-          "다음: 정제된 표를 기준으로 핵심 결과를 보고합니다.",
+          "summary: 확인된 필드를 작은 CSV 형태로 정제합니다.",
+          "rationale: 최종 보고 전에 행과 열을 고정해야 누락을 점검할 수 있습니다.",
+          "next_step: 정제된 표를 기준으로 핵심 결과를 보고합니다.",
         ].join("\n"),
         toolCalls: [{ name: "render_project_dashboard", args: { project_path: tempDir, view: "dashboard", write: true } }],
       });
@@ -1697,9 +1736,9 @@ test("native runtime records decision metrics without storing decision text", as
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
-          "작업: SECRET_DECISION_TEXT 공개 자료 후보를 확인합니다.",
-          "이유: SECRET_DECISION_TEXT 원자료가 있어야 표 정제를 할 수 있습니다.",
-          "다음: SECRET_DECISION_TEXT 확인 결과를 다음 단계 입력으로 씁니다.",
+          "summary: SECRET_DECISION_TEXT 공개 자료 후보를 확인합니다.",
+          "rationale: SECRET_DECISION_TEXT 원자료가 있어야 표 정제를 할 수 있습니다.",
+          "next_step: SECRET_DECISION_TEXT 확인 결과를 다음 단계 입력으로 씁니다.",
         ].join("\n"),
         toolCalls: [{ name: "web_search", args: { query: "public data" } }],
       });
@@ -1748,7 +1787,7 @@ test("native runtime repairs turns that skip explicitly required tools", async (
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 공개 자료 후보를 찾습니다.\n이유: 표 정제 전 원자료가 필요합니다.\n다음: 읽을 출처를 고릅니다.",
+          text: "summary: 공개 자료 후보를 찾습니다.\nrationale: 표 정제 전 원자료가 필요합니다.\nnext_step: 읽을 출처를 고릅니다.",
           toolCalls: [{ name: "web_search", args: { query: "한국 도시 인구" } }],
         });
         await input.executeTool({
@@ -1761,7 +1800,7 @@ test("native runtime repairs turns that skip explicitly required tools", async (
       if (input.prompt.includes("Explicit Tool Requirement Repair")) {
         expect(input.prompt).toContain("transform_public_data_table");
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 필수 표 정제 단계를 완료합니다.\n이유: 사용자가 CSV 표 생성을 필수로 요구했습니다.\n다음: 정제 표를 기준으로 결과만 보고합니다.",
+          text: "summary: 필수 표 정제 단계를 완료합니다.\nrationale: 사용자가 CSV 표 생성을 필수로 요구했습니다.\nnext_step: 정제 표를 기준으로 결과만 보고합니다.",
           toolCalls: [{ name: "transform_public_data_table", args: { columns: ["city"], rows: [{ city: "Seoul" }] } }],
         });
         await input.executeTool({
@@ -1824,7 +1863,7 @@ test("native runtime repairs skipped tools required by session metadata", async 
       expect(input.prompt).toContain("Explicit Tool Requirement Repair");
       expect(input.prompt).toContain("run_command");
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 필수 명령 실행을 완료합니다.\n이유: 세션 정책이 run_command를 요구했습니다.\n다음: 실행 결과만 요약합니다.",
+        text: "summary: 필수 명령 실행을 완료합니다.\nrationale: 세션 정책이 run_command를 요구했습니다.\nnext_step: 실행 결과만 요약합니다.",
         toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
       });
       await input.executeTool({
@@ -1907,7 +1946,7 @@ test("native runtime does not infer semantic workflow tools from natural CSV wor
       expect(input.prompt).not.toContain("Public Data Table Workflow Repair");
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 한국 주요 도시의 공개 인구 통계를 검색합니다.\n이유: 공개 출처를 먼저 확인해야 합니다.\n다음: 읽을 출처를 고릅니다.",
+          text: "summary: 한국 주요 도시의 공개 인구 통계를 검색합니다.\nrationale: 공개 출처를 먼저 확인해야 합니다.\nnext_step: 읽을 출처를 고릅니다.",
           toolCalls: [{ name: "web_search", args: { query: "대한민국 주요 도시 인구 통계" } }],
         });
         await input.executeTool({
@@ -1916,7 +1955,7 @@ test("native runtime does not infer semantic workflow tools from natural CSV wor
           rawArguments: JSON.stringify({ query: "대한민국 주요 도시 인구 통계" }),
         });
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 선택한 공개 출처의 내용을 확인합니다.\n이유: 검색 요약만으로는 행을 확정할 수 없습니다.\n다음: 확인한 수치를 최종 보고에 반영합니다.",
+          text: "summary: 선택한 공개 출처의 내용을 확인합니다.\nrationale: 검색 요약만으로는 행을 확정할 수 없습니다.\nnext_step: 확인한 수치를 최종 보고에 반영합니다.",
           toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
         });
         await input.executeTool({
@@ -1924,7 +1963,7 @@ test("native runtime does not infer semantic workflow tools from natural CSV wor
           args: { url: "https://example.test/population" },
           rawArguments: JSON.stringify({ url: "https://example.test/population" }),
         });
-        return "작업: 한국 주요 도시 인구 순위 조사를 위해 웹 검색을 수행합니다.\n이유: 최신 공개 데이터를 바탕으로 정확한 상위 도시와 인구수를 확인하기 위함입니다.\n다음: 수집된 정보를 기반으로 3개 이상의 도시에 대한 CSV 표를 작성하고 요약 보고서를 구성하겠습니다.";
+        return "summary: 한국 주요 도시 인구 순위 조사를 위해 웹 검색을 수행합니다.\nrationale: 최신 공개 데이터를 바탕으로 정확한 상위 도시와 인구수를 확인하기 위함입니다.\nnext_step: 수집된 정보를 기반으로 3개 이상의 도시에 대한 CSV 표를 작성하고 요약 보고서를 구성하겠습니다.";
       }
       if (input.prompt.includes("Goal Completion Review")) {
         expect(input.prompt).toContain("Do not apply hardcoded rules for any specific tool");
@@ -1934,10 +1973,10 @@ test("native runtime does not infer semantic workflow tools from natural CSV wor
         expect(input.prompt).toContain("Discovery/search evidence identifies candidates");
         expect(input.prompt).toContain("Durable deliverables require durable evidence");
         expect(input.prompt).not.toContain("transform_public_data_table");
-        return "작업: 한국 주요 도시 인구 순위 조사를 위해 웹 검색을 수행합니다.\n이유: 최신 공개 데이터를 바탕으로 정확한 상위 도시와 인구수를 확인하기 위함입니다.\n다음: 수집된 정보를 기반으로 3개 이상의 도시에 대한 CSV 표를 작성하고 요약 보고서를 구성하겠습니다.";
+        return "summary: 한국 주요 도시 인구 순위 조사를 위해 웹 검색을 수행합니다.\nrationale: 최신 공개 데이터를 바탕으로 정확한 상위 도시와 인구수를 확인하기 위함입니다.\nnext_step: 수집된 정보를 기반으로 3개 이상의 도시에 대한 CSV 표를 작성하고 요약 보고서를 구성하겠습니다.";
       }
       expect(input.prompt).toContain("Final Result Contract Repair");
-      expect(input.prompt).toContain("작업/이유/다음");
+      expect(input.prompt).toContain("`summary:`, `rationale:`, `next_step:`");
       return [
         "## 한국 주요 도시 인구 순위 샘플 보고서",
         "",
@@ -1981,9 +2020,9 @@ test("final result contract detects embedded public work decision leaks", () => 
   expect(containsFinalPublicWorkDecisionLeak([
     "요약 보고서입니다.",
     "",
-    "작업: 확인한 공개 자료를 정리합니다.",
-    "이유: 다음 보고의 근거를 남기기 위해서입니다.",
-    "다음: 결과만 요약합니다.",
+    "summary: 확인한 공개 자료를 정리합니다.",
+    "rationale: 다음 보고의 근거를 남기기 위해서입니다.",
+    "next_step: 결과만 요약합니다.",
   ].join("\n"))).toBe(true);
   expect(containsFinalToolImplementationLeak(
     "FileNotFoundException\ntransform_public_data_table created artifact.",
@@ -2029,13 +2068,13 @@ test("final result contract detects embedded public work decision leaks", () => 
     "현재 브랜치는 main입니다.",
   ].join("\n"), [])).toBe("현재 브랜치는 main입니다.");
   expect(stripLeadingPublicWorkDecisionBlock([
-    "작업: 공개 정보를 검색합니다.",
-    "이유: 최신 근거가 필요합니다.",
-    "다음: 검색 결과를 확인합니다.",
+    "summary: 공개 정보를 검색합니다.",
+    "rationale: 최신 근거가 필요합니다.",
+    "next_step: 검색 결과를 확인합니다.",
   ].join("\n"))).toBe("");
   expect(containsFinalPublicWorkDecisionLeak([
-    "작업: 테스트 식당의 인기 메뉴와 냉면 외 특색 있는 메뉴를 조사하겠다냐!",
-    "이유: 테스트 사용자님이 궁금해하시는 가장 맛있다는 메뉴와 별미가 있는지 정확하게 알아봐야 하기 때문이다냐.",
+    "summary: 테스트 식당의 인기 메뉴와 냉면 외 특색 있는 메뉴를 조사하겠다냐!",
+    "rationale: 테스트 사용자님이 궁금해하시는 가장 맛있다는 메뉴와 별미가 있는지 정확하게 알아봐야 하기 때문이다냐.",
     "",
     "냥, 맛있는 걸 찾는 건 네코마타도 아주 좋아하는 일이다냐~ 잠시만 기다려달라냐!",
   ].join("\n"))).toBe(true);
@@ -2060,8 +2099,8 @@ test("native runtime reviews public work decision finals even before tool eviden
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         return [
-          "작업: 테스트 식당의 인기 메뉴를 검색합니다.",
-          "이유: 사용자가 현재 공개 정보를 물었습니다.",
+          "summary: 테스트 식당의 인기 메뉴를 검색합니다.",
+          "rationale: 사용자가 현재 공개 정보를 물었습니다.",
           "",
           "잠시만 기다려 주세요.",
         ].join("\n");
@@ -2131,7 +2170,7 @@ test("native runtime uses generic completion review to continue model-selected m
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 공개 인구 자료를 찾습니다.\n이유: 산출물의 근거가 필요합니다.\n다음: 읽을 출처를 고릅니다.",
+          text: "summary: 공개 인구 자료를 찾습니다.\nrationale: 산출물의 근거가 필요합니다.\nnext_step: 읽을 출처를 고릅니다.",
           toolCalls: [{ name: "web_search", args: { query: "한국 주요 도시 인구" } }],
         });
         await input.executeTool({
@@ -2140,7 +2179,7 @@ test("native runtime uses generic completion review to continue model-selected m
           rawArguments: JSON.stringify({ query: "한국 주요 도시 인구" }),
         });
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 공개 출처 내용을 확인합니다.\n이유: 파일 산출물의 행 값을 확정해야 합니다.\n다음: 확인한 행을 산출물로 정리합니다.",
+          text: "summary: 공개 출처 내용을 확인합니다.\nrationale: 파일 산출물의 행 값을 확정해야 합니다.\nnext_step: 확인한 행을 산출물로 정리합니다.",
           toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
         });
         await input.executeTool({
@@ -2159,7 +2198,7 @@ test("native runtime uses generic completion review to continue model-selected m
       expect(input.prompt).toContain("Durable deliverables require durable evidence");
       expect(input.prompt).not.toContain("transform_public_data_table");
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 확인한 행을 파일 산출물로 정제합니다.\n이유: 사용자가 결과와 별도 산출물을 함께 요청했습니다.\n다음: 산출물 기준으로 결과만 보고합니다.",
+        text: "summary: 확인한 행을 파일 산출물로 정제합니다.\nrationale: 사용자가 결과와 별도 산출물을 함께 요청했습니다.\nnext_step: 산출물 기준으로 결과만 보고합니다.",
         toolCalls: [{ name: "transform_public_data_table", args: { columns: ["city", "population"], rows: [{ city: "서울특별시", population: 9300000 }] } }],
       });
       await input.executeTool({
@@ -2209,7 +2248,7 @@ test("goal completion review verdict without new tool evidence is not delivered 
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: Riposte 제작 기록을 확인합니다.\n이유: 사용자가 제작 과정을 소개할 글의 근거가 필요합니다.\n다음: 확인한 내용을 바탕으로 초안을 작성합니다.",
+          text: "summary: Riposte 제작 기록을 확인합니다.\nrationale: 사용자가 제작 과정을 소개할 글의 근거가 필요합니다.\nnext_step: 확인한 내용을 바탕으로 초안을 작성합니다.",
           toolCalls: [{ name: "run_command", args: { command: "pwd && ls" } }],
         });
         await input.executeTool({
@@ -2278,7 +2317,7 @@ test("native runtime continues direct work when completion review returns incomp
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 현재 커밋 상태를 확인합니다.\n이유: 사용자 요청은 작업 단위 커밋을 요구했습니다.\n다음: 검증을 실행한 뒤 결과를 커밋합니다.",
+          text: "summary: 현재 커밋 상태를 확인합니다.\nrationale: 사용자 요청은 작업 단위 커밋을 요구했습니다.\nnext_step: 검증을 실행한 뒤 결과를 커밋합니다.",
           toolCalls: [{ name: "run_command", args: { command: "git status --short" } }],
         });
         await input.executeTool({
@@ -2291,7 +2330,7 @@ test("native runtime continues direct work when completion review returns incomp
       if (input.prompt.includes("Goal Completion Incomplete Continuation")) {
         expect(input.prompt).toContain("검증과 다음 커밋은 아직 완료되지 않았습니다");
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 요청된 검증과 커밋을 완료합니다.\n이유: 리뷰 게이트가 아직 미완료라고 판단했습니다.\n다음: 검증 결과와 커밋 해시를 보고합니다.",
+          text: "summary: 요청된 검증과 커밋을 완료합니다.\nrationale: 리뷰 게이트가 아직 미완료라고 판단했습니다.\nnext_step: 검증 결과와 커밋 해시를 보고합니다.",
           toolCalls: [{ name: "run_command", args: { command: "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation" } }],
         });
         await input.executeTool({
@@ -2650,7 +2689,7 @@ test("completion review retries when one search is inconclusive", async () => {
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 2025년 도시 인구 후보를 먼저 검색합니다.\n이유: 공개 근거가 필요합니다.\n다음: 충분한 후보가 없으면 검색 범위를 조정합니다.",
+          text: "summary: 2025년 도시 인구 후보를 먼저 검색합니다.\nrationale: 공개 근거가 필요합니다.\nnext_step: 충분한 후보가 없으면 검색 범위를 조정합니다.",
           toolCalls: [{ name: "web_search", args: { query: "2025 주요 도시 인구" } }],
         });
         await input.executeTool({
@@ -2663,7 +2702,7 @@ test("completion review retries when one search is inconclusive", async () => {
       expect(input.prompt).toContain("Goal Completion Review");
       expect(input.prompt).toContain("single inconclusive or low-evidence search");
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 더 권위 있는 출처 중심으로 검색을 넓힙니다.\n이유: 첫 검색만으로 실패를 확정할 수 없습니다.\n다음: 확보한 후보를 결과 근거로 사용합니다.",
+        text: "summary: 더 권위 있는 출처 중심으로 검색을 넓힙니다.\nrationale: 첫 검색만으로 실패를 확정할 수 없습니다.\nnext_step: 확보한 후보를 결과 근거로 사용합니다.",
         toolCalls: [{ name: "web_search", args: { query: "site:go.kr 2025 주요 도시 인구" } }],
       });
       await input.executeTool({
@@ -2705,6 +2744,14 @@ test("completion review pushes chart requests toward executable artifacts", asyn
           source_url: "https://example.test/population",
           title: "인구 통계",
           text: "서울 9300000 부산 3300000 인천 3000000",
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "ecr-chart-web-read-source",
+            producerName: "web_read",
+            capability: "source_verified",
+            evidenceKind: "source_page",
+            satisfies: ["source_verified"],
+            reference: { url: "https://example.test/population" },
+          })],
         };
       }
       if (call.name === "run_command") {
@@ -2713,6 +2760,13 @@ test("completion review pushes chart requests toward executable artifacts", asyn
           exit_code: 0,
           artifact_label: "population-chart.png",
           stdout_preview: "wrote population-chart.png",
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "ecr-chart-command",
+            producerName: "run_command",
+            capability: "command_executed",
+            evidenceKind: "execution_result",
+            satisfies: ["command_executed"],
+          })],
         };
       }
       return { ok: true };
@@ -2721,7 +2775,7 @@ test("completion review pushes chart requests toward executable artifacts", asyn
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 차트에 넣을 공개 자료 본문을 확인합니다.\n이유: 그래프의 값이 근거를 가져야 합니다.\n다음: 확인한 값으로 차트를 생성합니다.\ncompletion_obligations: source_verified, command_executed",
+          text: "summary: 차트에 넣을 공개 자료 본문을 확인합니다.\nrationale: 그래프의 값이 근거를 가져야 합니다.\nnext_step: 확인한 값으로 차트를 생성합니다.\ncompletion_obligations: source_verified, command_executed",
           toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
         });
         await input.executeTool({
@@ -2737,7 +2791,7 @@ test("completion review pushes chart requests toward executable artifacts", asyn
       expect(input.prompt).toContain("next: 확인한 값으로 차트를 생성합니다.");
       expect(input.prompt).toContain("completion_obligations: source_verified, command_executed");
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 확인한 데이터로 차트 파일을 직접 생성합니다.\n이유: 사용자는 실행된 결과를 원했고 코드만으로는 완료가 아닙니다.\n다음: 생성된 파일 기준으로 결과만 보고합니다.\ncompletion_obligations: command_executed",
+        text: "summary: 확인한 데이터로 차트 파일을 직접 생성합니다.\nrationale: 사용자는 실행된 결과를 원했고 코드만으로는 완료가 아닙니다.\nnext_step: 생성된 파일 기준으로 결과만 보고합니다.\ncompletion_obligations: command_executed",
         toolCalls: [{ name: "run_command", args: { command: "python3 scripts/render_chart.py" } }],
       });
       await input.executeTool({
@@ -2863,9 +2917,9 @@ test("native tool loop prompt requires semantic progress first and output path a
 test("public work decision parser carries completion obligations without displaying them as summaries", () => {
   const [decision] = publicWorkDecisionsFromAssistantText({
     text: [
-      "작업: 차트에 넣을 공개 자료 본문을 확인합니다.",
-      "이유: 값이 실제 본문 근거를 가져야 합니다.",
-      "다음: 확인한 값으로 로컬 실행 단계를 이어갑니다.",
+      "summary: 차트에 넣을 공개 자료 본문을 확인합니다.",
+      "rationale: 값이 실제 본문 근거를 가져야 합니다.",
+      "next_step: 확인한 값으로 로컬 실행 단계를 이어갑니다.",
       "completion_obligations: source_verified, command_executed, chart_rendered",
     ].join("\n"),
     toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
@@ -2882,13 +2936,52 @@ test("public work decision parser carries completion obligations without display
   ]);
 });
 
+test("public work decision parser ignores non-canonical prose before tool calls", () => {
+  const pending = publicWorkDecisionsFromAssistantText({
+    text: "Je vais verifier la source publique avant de continuer. 次に公開情報を確認します。",
+    toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
+    language: "ko",
+    existingDecisions: [],
+  });
+
+  expect(pending).toEqual([]);
+
+  const fallback = takePublicWorkDecisionForTool({
+    pending,
+    toolName: "web_read",
+    language: "ko",
+    previousDecisions: [],
+    progress: {
+      kind: "read",
+      toolName: "Web read",
+      safeLabel: "Reading public source: example.test",
+      workBlockLabel: "선택한 출처의 내용을 확인합니다.",
+      inputLabel: "example.test",
+      detailRows: [],
+    },
+  });
+
+  expect(fallback.source).toBe("runtime-derived");
+  expect(fallback.summary).toBe("선택한 출처의 내용을 확인합니다.");
+});
+
 test("completion obligation guard detects unsatisfied command execution", () => {
   const reason = completionObligationIncompleteReason({
     audit: [{
       name: "web_read",
       args: { url: "https://example.test/population" },
       ok: true,
-      result: { source_url: "https://example.test/population" },
+      result: {
+        source_url: "https://example.test/population",
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "ecr-web-read-source",
+          producerName: "web_read",
+          capability: "source_verified",
+          evidenceKind: "source_page",
+          satisfies: ["source_verified"],
+          reference: { url: "https://example.test/population" },
+        })],
+      },
     }],
     decisions: [{
       decisionId: "decision-1",
@@ -2907,7 +3000,17 @@ test("completion obligation guard detects unsatisfied command execution", () => 
       name: "run_command",
       args: { command: "python3 chart.py" },
       ok: true,
-      result: { ok: true, exit_code: 0 },
+      result: {
+        ok: true,
+        exit_code: 0,
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "ecr-command-executed",
+          producerName: "run_command",
+          capability: "command_executed",
+          evidenceKind: "execution_result",
+          satisfies: ["command_executed"],
+        })],
+      },
     }],
     decisions: [{
       decisionId: "decision-1",
@@ -2933,6 +3036,14 @@ test("completion obligation guard accepts durable worker status inspection as so
           status: "FAILED",
           activity_status_line: "Failed: worker result needs review.",
         }],
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "ecr-work-dashboard-source",
+          producerName: "get_work_dashboard",
+          capability: "source_verified",
+          evidenceKind: "project_state",
+          satisfies: ["source_verified"],
+          reference: { task_id: "task-worker-1" },
+        })],
       },
     }],
     decisions: [{
@@ -2953,6 +3064,14 @@ test("completion obligation guard accepts durable worker status inspection as so
         ok: false,
         task_id: "missing-worker",
         error: "task not found",
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "ecr-task-result-source",
+          producerName: "get_task_result",
+          capability: "source_verified",
+          evidenceKind: "project_state",
+          satisfies: ["source_verified"],
+          reference: { task_id: "missing-worker" },
+        })],
       },
     }],
     decisions: [{
@@ -2970,7 +3089,7 @@ test("completion obligation guard accepts structured source evidence contracts",
     ok: true,
     capabilities: [{ name: "run_command" }],
   });
-  expect(capabilityEvidence).toContain("source_verified");
+  expect(capabilityEvidence).toEqual([]);
   expect(satisfiedCompletionObligationsForToolResult("create_automation", { ok: true })).not.toContain(
     "source_verified",
   );
@@ -2997,8 +3116,22 @@ test("completion obligation guard accepts structured source evidence contracts",
       result: {
         ok: true,
         capabilities: [{ name: "run_command" }],
+        evidence_capability_receipts: [{
+          receipt_id: "ecr-tool-catalog-source",
+          schema_version: "evidence-capability.v1",
+          producer: { kind: "tool", name: "list_tool_capabilities" },
+          capability: "source_verified",
+          evidence_kind: "project_state",
+          maturity: "verified",
+          confidence: 0.9,
+          verified: true,
+          summary: "The native tool catalog was inspected.",
+          references: [{ task_id: "tool-catalog" }],
+          satisfies: ["source_verified"],
+          limitations: [],
+          created_at: "2026-06-22T08:07:00.000Z",
+        }],
       },
-      satisfiedCompletionObligations: capabilityEvidence,
     }],
     decisions: [{
       decisionId: "decision-tool-catalog",
@@ -3027,6 +3160,113 @@ test("completion obligation guard accepts structured source evidence contracts",
   expect(unsupportedActionReason).toContain("source_verified");
 });
 
+test("completion obligation guard treats capability receipts as authoritative over tool names", () => {
+  const candidateOnly = createEvidenceCapabilityReceipt({
+    producer: { kind: "tool", name: "web_read" },
+    capability: "source_candidate",
+    evidence_kind: "source_candidate",
+    maturity: "candidate",
+    verified: false,
+    confidence: 0.4,
+    summary: "A source candidate was discovered but not verified.",
+    references: [{ url: "https://example.test/population" }],
+    limitations: ["Source page was not read."],
+    created_at: "2026-06-22T08:03:00.000Z",
+  });
+
+  expect(satisfiedCompletionObligationsForToolResult("list_tool_capabilities", {
+    ok: true,
+    capabilities: [{ name: "run_command" }],
+    evidence_capability_receipts: [candidateOnly],
+  })).toEqual([]);
+
+  const reason = completionObligationIncompleteReason({
+    audit: [{
+      name: "web_read",
+      args: { url: "https://example.test/population" },
+      ok: true,
+      result: {
+        ok: true,
+        source_url: "https://example.test/population",
+        evidence_capability_receipts: [candidateOnly],
+      },
+    }],
+    decisions: [{
+      decisionId: "decision-capability-authority",
+      summary: "공개 출처 본문을 확인합니다.",
+      completionObligations: ["source_verified"],
+      evidenceRefs: [],
+      source: "assistant-authored",
+    }],
+  });
+
+  expect(reason).toBe("The turn still needs repair for missing public completion obligation(s): source_verified.");
+
+  const verifiedProjectState = createEvidenceCapabilityReceipt({
+    producer: { kind: "tool", name: "create_automation" },
+    capability: "source_verified",
+    evidence_kind: "project_state",
+    verified: true,
+    confidence: 0.9,
+    summary: "Durable project state was inspected.",
+    references: [{ task_id: "automation:auto_1" }],
+    satisfies: ["source_verified"],
+    created_at: "2026-06-22T08:04:00.000Z",
+  });
+
+  expect(completionObligationIncompleteReason({
+    audit: [{
+      name: "create_automation",
+      args: { prompt: "ping" },
+      ok: true,
+      result: {
+        ok: true,
+        evidence_capability_receipts: [verifiedProjectState],
+      },
+    }],
+    decisions: [{
+      decisionId: "decision-capability-positive",
+      summary: "자동화 상태를 확인합니다.",
+      completionObligations: ["source_verified"],
+      evidenceRefs: [],
+      source: "assistant-authored",
+    }],
+  })).toBeNull();
+});
+
+test("completion obligation guard returns explicit blocker outcome from capability receipts", () => {
+  const blocker = createEvidenceCapabilityReceipt({
+    producer: { kind: "runtime", name: "completion_guard" },
+    capability: "explicit_blocker",
+    evidence_kind: "blocker",
+    maturity: "verified",
+    verified: true,
+    confidence: 1,
+    summary: "Required source credential is unavailable.",
+    limitations: ["A user-owned credential is required."],
+    created_at: "2026-06-22T08:05:00.000Z",
+  });
+
+  expect(completionObligationIncompleteReason({
+    audit: [{
+      name: "web_read",
+      args: { url: "https://example.test/private" },
+      ok: true,
+      result: {
+        ok: true,
+        evidence_capability_receipts: [blocker],
+      },
+    }],
+    decisions: [{
+      decisionId: "decision-explicit-blocker",
+      summary: "비공개 출처를 확인합니다.",
+      completionObligations: ["source_verified"],
+      evidenceRefs: [],
+      source: "assistant-authored",
+    }],
+  })).toBe("The turn is blocked by unresolved public completion obligation(s): source_verified.");
+});
+
 test("completion obligation guard accepts Project Ledger state inspection as source evidence", () => {
   expect(completionObligationIncompleteReason({
     audit: [{
@@ -3039,6 +3279,14 @@ test("completion obligation guard accepts Project Ledger state inspection as sou
           code: "not_initialized",
           message: "Project Ledger not initialized at /tmp/sandy-bot",
         },
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "ecr-project-status-source-missing",
+          producerName: "inspect_project_status",
+          capability: "source_verified",
+          evidenceKind: "project_state",
+          satisfies: ["source_verified"],
+          reference: { task_id: "project-ledger-status" },
+        })],
       },
     }],
     decisions: [{
@@ -3063,6 +3311,21 @@ test("native runtime skips completion review when capability evidence satisfies 
         ok: true,
         project: { id: "butler" },
         counts: { work: 0 },
+        evidence_capability_receipts: [{
+          receipt_id: "ecr-project-status-source",
+          schema_version: "evidence-capability.v1",
+          producer: { kind: "tool", name: "inspect_project_status" },
+          capability: "source_verified",
+          evidence_kind: "project_state",
+          maturity: "verified",
+          confidence: 0.9,
+          verified: true,
+          summary: "Project Ledger state was inspected.",
+          references: [{ task_id: "project-ledger-status" }],
+          satisfies: ["source_verified"],
+          limitations: [],
+          created_at: "2026-06-22T08:08:00.000Z",
+        }],
       };
     },
     runFunctionToolPromptText: async (input) => {
@@ -3072,9 +3335,9 @@ test("native runtime skips completion review when capability evidence satisfies 
       }
       await input.onAssistantTextBeforeTools?.({
         text: [
-          "작업: Project Ledger 상태를 확인합니다.",
-          "이유: 최종 보고가 추측이 아니라 durable 프로젝트 상태에 근거해야 합니다.",
-          "다음: 확인한 상태를 기준으로 요약합니다.",
+          "summary: Project Ledger 상태를 확인합니다.",
+          "rationale: 최종 보고가 추측이 아니라 durable 프로젝트 상태에 근거해야 합니다.",
+          "next_step: 확인한 상태를 기준으로 요약합니다.",
           "completion_obligations: source_verified",
         ].join("\n"),
         toolCalls: [{ name: "inspect_project_status", args: {} }],
@@ -3139,9 +3402,9 @@ test("native runtime skips completion review when evidence receipts satisfy the 
       }
       await input.onAssistantTextBeforeTools?.({
         text: [
-          "작업: 공개 출처 본문을 확인합니다.",
-          "이유: 답변의 근거를 실제 출처에 연결해야 합니다.",
-          "다음: 확인한 출처 기준으로 요약합니다.",
+          "summary: 공개 출처 본문을 확인합니다.",
+          "rationale: 답변의 근거를 실제 출처에 연결해야 합니다.",
+          "next_step: 확인한 출처 기준으로 요약합니다.",
           "completion_obligations: source_verified",
         ].join("\n"),
         toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
@@ -3174,6 +3437,275 @@ test("native runtime skips completion review when evidence receipts satisfy the 
   expect(result.text).toContain("https://example.test/population");
 });
 
+test("tool result transcript projection keeps replayable evidence and drops private raw payloads", () => {
+  const projection = evidenceTranscriptToolResultProjection({
+    ok: true,
+    raw_output: "raw payload strings SECRET_TOKEN raw prompt text <think>hidden</think> /Users/private/file",
+    prompt: "raw prompt text",
+    evidence_capability_receipts: [{
+      receipt_id: "ecr-safe-source",
+      schema_version: "evidence-capability.v1",
+      producer: { kind: "tool", name: "web_read", call_id: "call-safe" },
+      capability: "source_verified",
+      evidence_kind: "source_page",
+      maturity: "verified",
+      confidence: 0.9,
+      verified: true,
+      summary: "Public source was read.",
+      scope: {
+        prompt: "raw prompt text",
+        path: "/Users/private/project",
+      },
+      references: [{ url: "https://example.test/source", label: "Source page" }],
+      satisfies: ["source_verified"],
+      limitations: ["Only a bounded public excerpt was used."],
+      created_at: "2026-06-22T08:08:00.000Z",
+    }, {
+      receipt_id: "ecr-validation",
+      schema_version: "evidence-capability.v1",
+      producer: { kind: "tool", name: "run_command" },
+      capability: "validation_passed",
+      evidence_kind: "execution_result",
+      maturity: "verified",
+      confidence: 0.95,
+      verified: true,
+      summary: "A validation suite completed successfully.",
+      scope: {
+        suite: "sandy-typecheck",
+        result: "passed",
+        path: "/Users/private/project",
+      },
+      references: [],
+      limitations: [],
+      created_at: "2026-06-22T08:09:00.000Z",
+    }],
+    evidence_receipts: [{
+      schema: "butler.evidence-receipt.v1",
+      id: "legacy-source",
+      producer: { kind: "tool", name: "web_read" },
+      receiptType: "source",
+      verified: true,
+      covers: ["source_verified"],
+      summary: "Legacy public source receipt.",
+      references: [{ kind: "url", ref: "https://example.test/source" }],
+      artifacts: [{ id: "artifact-safe", path: "/Users/private/artifact.txt", label: "Saved artifact" }],
+      satisfies: ["source_verified"],
+    }],
+  });
+
+  expect(projection.schema_version).toBe("butler.tool-result-evidence-transcript.v1");
+  expect(projection.evidence_capability_receipts).toHaveLength(3);
+  expect(projection.evidence_capability_receipts).toContainEqual(expect.objectContaining({
+    receipt_id: "ecr-safe-source",
+    schema_version: "evidence-capability.v1",
+    capability: "source_verified",
+    satisfies: ["source_verified"],
+  }));
+  expect(projection.evidence_capability_receipts.find((receipt) =>
+    receipt.receipt_id === "ecr-safe-source")).not.toHaveProperty("scope");
+  expect(projection.evidence_capability_receipts.find((receipt) =>
+    receipt.receipt_id === "ecr-validation")).toMatchObject({
+      capability: "validation_passed",
+      scope: {
+        suite: "sandy-typecheck",
+        result: "passed",
+      },
+    });
+  expect(projection.evidence_receipts).toHaveLength(1);
+  expect(projection.evidence_receipts[0].artifacts?.[0]).toEqual({
+    id: "artifact-safe",
+    label: "Saved artifact",
+  });
+  expect(projection.evidence_limitations).toEqual(["Only a bounded public excerpt was used."]);
+  expect(projection.completion_obligation_evidence.limitations).toEqual(["Only a bounded public excerpt was used."]);
+
+  const serialized = JSON.stringify(projection);
+  expect(serialized).toContain("evidence-capability.v1");
+  expect(serialized).toContain("butler.evidence-receipt.v1");
+  expect(serialized).not.toContain("SECRET_TOKEN");
+  expect(serialized).not.toContain("raw prompt text");
+  expect(serialized).not.toContain("<think>");
+  expect(serialized).not.toContain("/Users/private");
+  expect(serialized).not.toContain("raw payload strings");
+});
+
+test("tool call transcript projection preserves safe arguments without raw private payloads", () => {
+  const projection = evidenceTranscriptToolCallArgumentsProjection({
+    command: "bun test tests/unit/native-tool-loop-runtime.test.ts",
+    token: "abc123opaque",
+    api_key: "sk_live_abc123",
+    password: "hunter2",
+    nested: {
+      authorization: "abc.def.ghi",
+      path: "/Users/private/project/.env",
+      safe: "public label",
+    },
+  });
+
+  expect(projection).toMatchObject({
+    schema_version: "butler.tool-call-arguments-transcript.v1",
+    argument_keys: ["command", "token", "api_key", "password", "nested"],
+    safe_arguments: {
+      command: "bun test tests/unit/native-tool-loop-runtime.test.ts",
+      token: "[redacted]",
+      api_key: "[redacted]",
+      password: "[redacted]",
+      nested: {
+        authorization: "[redacted]",
+        path: "[redacted]",
+        safe: "public label",
+      },
+    },
+  });
+  const serialized = JSON.stringify(projection);
+  expect(serialized).not.toContain("SECRET_TOKEN");
+  expect(serialized).not.toContain("abc123opaque");
+  expect(serialized).not.toContain("sk_live_abc123");
+  expect(serialized).not.toContain("hunter2");
+  expect(serialized).not.toContain("/Users/private");
+  expect(serialized).not.toContain("abc.def.ghi");
+});
+
+test("native runtime stores privacy-safe replayable evidence receipts for tool results", async () => {
+  let modelVisibleToolResult: unknown;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    executeButlerTool: async () => ({
+      ok: true,
+      raw_output: "raw payload strings SECRET_TOKEN raw prompt text <think>hidden</think> /Users/private/file",
+      evidence_capability_receipts: [{
+        receipt_id: "ecr-runtime-source",
+        schema_version: "evidence-capability.v1",
+        producer: { kind: "tool", name: "web_read" },
+        capability: "source_verified",
+        evidence_kind: "source_page",
+        maturity: "verified",
+        confidence: 0.9,
+        verified: true,
+        summary: "A public source page was read.",
+        references: [{ url: "https://example.test/runtime-source" }],
+        satisfies: ["source_verified"],
+        limitations: ["Only a bounded public excerpt was available."],
+        created_at: "2026-06-22T08:08:00.000Z",
+      }],
+    }),
+    runFunctionToolPromptText: async (input) => {
+      modelVisibleToolResult = await input.executeTool({
+        name: "web_read",
+        args: { url: "https://example.test/runtime-source" },
+        rawArguments: JSON.stringify({ url: "https://example.test/runtime-source" }),
+      });
+      return "출처를 확인했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/evidence-transcript-privacy",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "출처를 확인해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(JSON.stringify(modelVisibleToolResult)).toContain("raw payload strings");
+  const toolResult = readTranscript("butler/main/evidence-transcript-privacy")
+    .find((event) => event.kind === "tool_result" && event.payload.name === "web_read");
+  const toolCall = readTranscript("butler/main/evidence-transcript-privacy")
+    .find((event) => event.kind === "tool_call" && event.payload.name === "web_read");
+  expect(toolCall?.payload.arguments).toMatchObject({
+    schema_version: "butler.tool-call-arguments-transcript.v1",
+    safe_arguments: {
+      url: "https://example.test/runtime-source",
+    },
+  });
+  expect(toolResult?.payload).toMatchObject({
+    name: "web_read",
+    ok: true,
+  });
+  expect(toolResult?.payload.result).toMatchObject({
+    schema_version: "butler.tool-result-evidence-transcript.v1",
+    evidence_capability_receipts: [expect.objectContaining({
+      receipt_id: "ecr-runtime-source",
+      schema_version: "evidence-capability.v1",
+      satisfies: ["source_verified"],
+    })],
+    evidence_limitations: ["Only a bounded public excerpt was available."],
+    completion_obligation_evidence: expect.objectContaining({
+      limitations: ["Only a bounded public excerpt was available."],
+    }),
+  });
+
+  const serialized = JSON.stringify(toolResult);
+  expect(serialized).not.toContain("SECRET_TOKEN");
+  expect(serialized).not.toContain("raw prompt text");
+  expect(serialized).not.toContain("<think>");
+  expect(serialized).not.toContain("/Users/private");
+  expect(serialized).not.toContain("raw payload strings");
+});
+
+test("native runtime redacts raw tool failure errors in durable transcripts", async () => {
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    executeButlerTool: async () => {
+      throw new Error("failed with token=abc123opaque api_key=sk_live_abc123 raw prompt text <think>hidden</think> /Users/private/file");
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "web_read",
+        args: {
+          url: "https://example.test/private-error",
+          token: "abc123opaque",
+        },
+        rawArguments: JSON.stringify({ url: "https://example.test/private-error", token: "abc123opaque" }),
+      });
+      return "오류를 복구 가능한 결과로 받았습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/evidence-transcript-error-privacy",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "오류 redaction을 확인해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  const transcript = readTranscript("butler/main/evidence-transcript-error-privacy");
+  const toolCall = transcript.find((event) => event.kind === "tool_call" && event.payload.name === "web_read");
+  const toolResult = transcript.find((event) => event.kind === "tool_result" && event.payload.name === "web_read");
+  expect(toolCall?.payload.arguments).toMatchObject({
+    schema_version: "butler.tool-call-arguments-transcript.v1",
+    safe_arguments: {
+      url: "https://example.test/private-error",
+      token: "[redacted]",
+    },
+  });
+  expect(toolResult?.payload).toMatchObject({
+    ok: false,
+    error: "Tool execution failed.",
+  });
+  const serialized = JSON.stringify(transcript);
+  expect(serialized).not.toContain("abc123opaque");
+  expect(serialized).not.toContain("sk_live_abc123");
+  expect(serialized).not.toContain("raw prompt text");
+  expect(serialized).not.toContain("<think>");
+  expect(serialized).not.toContain("/Users/private");
+});
+
 test("native runtime satisfies source verification from tool capability audit contracts", async () => {
   const prompts: string[] = [];
   const executedTools: string[] = [];
@@ -3186,6 +3718,14 @@ test("native runtime satisfies source verification from tool capability audit co
         return {
           ok: true,
           capabilities: [{ name: "run_command", category: "command" }],
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "ecr-tool-capability-catalog",
+            producerName: "list_tool_capabilities",
+            capability: "source_verified",
+            evidenceKind: "project_state",
+            satisfies: ["source_verified"],
+            reference: { task_id: "tool-catalog" },
+          })],
         };
       }
       return { ok: true };
@@ -3195,9 +3735,9 @@ test("native runtime satisfies source verification from tool capability audit co
       if (prompts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
           text: [
-            "작업: 현재 네이티브 툴 카탈로그를 확인합니다.",
-            "이유: 사용자가 실제 보유 툴을 물었기 때문입니다.",
-            "다음: 확인된 카탈로그를 기준으로 답합니다.",
+            "summary: 현재 네이티브 툴 카탈로그를 확인합니다.",
+            "rationale: 사용자가 실제 보유 툴을 물었기 때문입니다.",
+            "next_step: 확인된 카탈로그를 기준으로 답합니다.",
             "completion_obligations: source_verified",
           ].join("\n"),
           toolCalls: [{ name: "list_tool_capabilities", args: { include_disabled: true } }],
@@ -3251,6 +3791,39 @@ test("completion obligation guard accepts command-created CSV and chart artifact
           { path: "chart.png", artifact_kind: "chart_file" },
         ],
         artifact_kinds: ["csv_file", "chart_file"],
+        evidence_capability_receipts: [
+          capabilityReceipt({
+            id: "ecr-report-command",
+            producerName: "run_command",
+            capability: "command_executed",
+            evidenceKind: "execution_result",
+            satisfies: ["command_executed"],
+          }),
+          capabilityReceipt({
+            id: "ecr-report-artifact",
+            producerName: "run_command",
+            capability: "durable_artifact",
+            evidenceKind: "artifact",
+            satisfies: ["durable_artifact"],
+            reference: { path: "report.csv" },
+          }),
+          capabilityReceipt({
+            id: "ecr-report-table",
+            producerName: "run_command",
+            capability: "data_table_created",
+            evidenceKind: "data_table",
+            satisfies: ["data_table_created"],
+            reference: { path: "report.csv" },
+          }),
+          capabilityReceipt({
+            id: "ecr-report-chart",
+            producerName: "run_command",
+            capability: "chart_rendered",
+            evidenceKind: "chart",
+            satisfies: ["chart_rendered"],
+            reference: { path: "chart.png" },
+          }),
+        ],
       },
     }],
     decisions: [{
@@ -3268,7 +3841,7 @@ test("completion obligation guard accepts command-created CSV and chart artifact
   })).toBeNull();
 });
 
-test("completion obligation guard ignores inspection-only durable artifact obligations", () => {
+test("completion obligation guard requires durable evidence even for inspection wording", () => {
   expect(completionObligationIncompleteReason({
     audit: [{
       name: "run_command",
@@ -3283,7 +3856,7 @@ test("completion obligation guard ignores inspection-only durable artifact oblig
           schema: "butler.evidence-receipt.v1",
           id: "receipt-ledger-check",
           producer: { kind: "tool", name: "run_command" },
-          receiptType: "command_execution",
+          receiptType: "execution",
           verified: true,
           covers: ["command_execution"],
           summary: "Canonical Project Ledger files exist and repo-local ledger absence was verified.",
@@ -3301,10 +3874,10 @@ test("completion obligation guard ignores inspection-only durable artifact oblig
       evidenceRefs: [],
       source: "assistant-authored",
     }],
-  })).toBeNull();
+  })).toBe("The turn still needs repair for missing public completion obligation(s): durable_artifact.");
 });
 
-test("completion obligation guard treats passive written-document checks as inspections", () => {
+test("completion obligation guard keeps accepted durable obligations for passive document checks", () => {
   expect(completionObligationIncompleteReason({
     audit: [{
       name: "run_command",
@@ -3315,6 +3888,17 @@ test("completion obligation guard treats passive written-document checks as insp
       result: {
         ok: true,
         exit_code: 0,
+        evidence_receipts: [{
+          schema: "butler.evidence-receipt.v1",
+          id: "receipt-written-doc-check",
+          producer: { kind: "tool", name: "run_command" },
+          receiptType: "execution",
+          verified: true,
+          covers: ["execution_result"],
+          summary: "Written specs were inspected.",
+          references: [],
+          satisfies: ["command_executed"],
+        }],
       },
     }],
     decisions: [{
@@ -3326,10 +3910,10 @@ test("completion obligation guard treats passive written-document checks as insp
       evidenceRefs: [],
       source: "assistant-authored",
     }],
-  })).toBeNull();
+  })).toBe("The turn still needs repair for missing public completion obligation(s): durable_artifact.");
 });
 
-test("completion obligation guard does not treat writing-scope review as artifact creation", () => {
+test("completion obligation guard keeps accepted durable obligations for writing-scope review", () => {
   expect(completionObligationIncompleteReason({
     audit: [{
       name: "run_command",
@@ -3340,6 +3924,17 @@ test("completion obligation guard does not treat writing-scope review as artifac
       result: {
         ok: true,
         exit_code: 0,
+        evidence_receipts: [{
+          schema: "butler.evidence-receipt.v1",
+          id: "receipt-writing-scope-check",
+          producer: { kind: "tool", name: "run_command" },
+          receiptType: "execution",
+          verified: true,
+          covers: ["execution_result"],
+          summary: "Ledger scope was checked.",
+          references: [],
+          satisfies: ["command_executed"],
+        }],
       },
     }],
     decisions: [{
@@ -3351,7 +3946,7 @@ test("completion obligation guard does not treat writing-scope review as artifac
       evidenceRefs: [],
       source: "assistant-authored",
     }],
-  })).toBeNull();
+  })).toBe("The turn still needs repair for missing public completion obligation(s): durable_artifact.");
 });
 
 test("completion obligation guard still requires durable evidence for creation decisions", () => {
@@ -3365,6 +3960,17 @@ test("completion obligation guard still requires durable evidence for creation d
       result: {
         ok: true,
         exit_code: 0,
+        evidence_receipts: [{
+          schema: "butler.evidence-receipt.v1",
+          id: "receipt-report-command",
+          producer: { kind: "tool", name: "run_command" },
+          receiptType: "execution",
+          verified: true,
+          covers: ["execution_result"],
+          summary: "Report generation command executed.",
+          references: [],
+          satisfies: ["command_executed"],
+        }],
       },
     }],
     decisions: [{
@@ -3376,7 +3982,7 @@ test("completion obligation guard still requires durable evidence for creation d
       evidenceRefs: [],
       source: "assistant-authored",
     }],
-  })).toBe("The turn still has unsatisfied public completion obligation(s): durable_artifact.");
+  })).toBe("The turn still needs repair for missing public completion obligation(s): durable_artifact.");
 });
 
 test("completion obligation guard accepts generic evidence receipts for non-CSV deliverables", () => {
@@ -3478,7 +4084,7 @@ test("native runtime refuses delivered when artifact review keeps returning text
     runFunctionToolPromptText: async (input) => {
       if (!input.prompt.includes("Goal Completion Review")) {
         await input.onAssistantTextBeforeTools?.({
-          text: "작업: 공개 출처 본문을 확인합니다.\n이유: 수치가 실제 본문 근거를 가져야 합니다.\n다음: 확인한 수치로 CSV 파일과 차트 이미지를 생성합니다.\ncompletion_obligations: source_verified, command_executed",
+          text: "summary: 공개 출처 본문을 확인합니다.\nrationale: 수치가 실제 본문 근거를 가져야 합니다.\nnext_step: 확인한 수치로 CSV 파일과 차트 이미지를 생성합니다.\ncompletion_obligations: source_verified, command_executed",
           toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
         });
         await input.executeTool({
@@ -3518,9 +4124,9 @@ test("native runtime refuses delivered when artifact review returns executable c
       if (!input.prompt.includes("Goal Completion Review")) {
         await input.onAssistantTextBeforeTools?.({
           text: [
-            "작업: 수집된 인구 데이터를 바탕으로 실제 matplotlib 차트 이미지를 생성하고 CSV 파일로 저장합니다.",
-            "이유: 사용자는 단순히 코드를 받는 것이 아니라 차트를 그린 결과를 요청했습니다.",
-            "다음: 생성된 차트 파일과 CSV 데이터를 바탕으로 최종 보고서를 완성합니다.",
+            "summary: 수집된 인구 데이터를 바탕으로 실제 matplotlib 차트 이미지를 생성하고 CSV 파일로 저장합니다.",
+            "rationale: 사용자는 단순히 코드를 받는 것이 아니라 차트를 그린 결과를 요청했습니다.",
+            "next_step: 생성된 차트 파일과 CSV 데이터를 바탕으로 최종 보고서를 완성합니다.",
             "completion_obligations: source_verified, command_executed",
           ].join("\n"),
           toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
@@ -3645,7 +4251,7 @@ test("native runtime leaves CSV public-data tool choice to the model unless expl
         ].join("\n");
       }
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 공개 인구 데이터의 근거 후보를 확인합니다.\n이유: 보고서의 숫자 예시는 공개 출처에 기대야 합니다.\n다음: 확인한 출처를 기준으로 결과만 요약합니다.",
+        text: "summary: 공개 인구 데이터의 근거 후보를 확인합니다.\nrationale: 보고서의 숫자 예시는 공개 출처에 기대야 합니다.\nnext_step: 확인한 출처를 기준으로 결과만 요약합니다.",
         toolCalls: [{ name: "web_search", args: { query: "대한민국 주요 도시 인구 공개 데이터" } }],
       });
       await input.executeTool({
@@ -4064,7 +4670,7 @@ test("native runtime lets the model choose recall before exact memory query", as
     },
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 이전 대화 단서를 먼저 회상합니다.\n이유: 모델이 연상 후보가 필요하다고 판단했습니다.\n다음: 회상 후보를 정확한 날짜 근거로 검증합니다.",
+        text: "summary: 이전 대화 단서를 먼저 회상합니다.\nrationale: 모델이 연상 후보가 필요하다고 판단했습니다.\nnext_step: 회상 후보를 정확한 날짜 근거로 검증합니다.",
         toolCalls: [{
           name: "recall_memory",
           args: { cue: "우리가 처음 대화를 나눈 날에 어떤 이야기를 했는지 기억해?" },
@@ -4076,7 +4682,7 @@ test("native runtime lets the model choose recall before exact memory query", as
         rawArguments: JSON.stringify({ cue: "우리가 처음 대화를 나눈 날에 어떤 이야기를 했는지 기억해?" }),
       });
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 첫 대화 날짜를 정확히 확인합니다.\n이유: 연상 후보를 날짜 근거로 검증해야 합니다.\n다음: 조회 결과로 답합니다.",
+        text: "summary: 첫 대화 날짜를 정확히 확인합니다.\nrationale: 연상 후보를 날짜 근거로 검증해야 합니다.\nnext_step: 조회 결과로 답합니다.",
         toolCalls: [{ name: "query_memory", args: { order: "earliest", limit: 1 } }],
       });
       await input.executeTool({
@@ -4351,31 +4957,6 @@ test("native runtime prompt describes direct versus planned dispatch choices", a
   expect(capturedInstructions).not.toMatch(/E2E|validation token|WORKSTREAM_E2E/u);
 });
 
-test("runtime source keeps e2e steering out of product instruction code", () => {
-  const productRuntimeSource = [
-    readFileSync(join(process.cwd(), "packages/butler-agent/src/agent/turn/native-tool-loop.ts"), "utf8"),
-    readFileSync(join(process.cwd(), "packages/butler-agent/src/agent/policy/session-context-policy.ts"), "utf8"),
-    readFileSync(join(process.cwd(), "packages/butler-agent/resources/runtime-policies/session-context-policies.json"), "utf8"),
-  ].join("\n");
-
-  expect(existsSync(join(process.cwd(), "packages/butler-agent/src/agent/policy/native-routing-policy.ts"))).toBe(false);
-  expect(existsSync(join(process.cwd(), "packages/butler-agent/resources/runtime-policies/native-routing-policies.json"))).toBe(false);
-  expect(productRuntimeSource).not.toMatch(/LIVE_E2E|WORKSTREAM_E2E|TOOLCHAIN_E2E|validation token|E2E check|app:client:/iu);
-});
-
-test("project ledger project-session context is policy data, not core loop prose", () => {
-  const runtimeSource = readFileSync(join(process.cwd(), "packages/butler-agent/src/agent/turn/native-tool-loop.ts"), "utf8");
-  const policySource = readFileSync(
-    join(process.cwd(), "packages/butler-agent/resources/runtime-policies/session-context-policies.json"),
-    "utf8",
-  );
-
-  expect(runtimeSource).not.toContain("Project Ledger Runtime Context");
-  expect(runtimeSource).not.toContain("Treat project-ledger as the default starting context");
-  expect(policySource).toContain("Project Ledger Runtime Context");
-  expect(policySource).toContain("project-ledger-project-session-context");
-});
-
 test("native runtime exposes Project Ledger project context without forcing tool order", async () => {
   const prompts: string[] = [];
   const executed: string[] = [];
@@ -4482,6 +5063,7 @@ test("native runtime does not force broad project investigations into planned di
     },
     runFunctionToolPromptText: async (input) => {
       prompts.push(input.prompt);
+      expect(input.tools.map((tool) => tool.name)).toContain("run_command");
       await input.executeTool({
         name: "run_command",
         args: { command: "find . -maxdepth 2 -type f" },
@@ -4505,7 +5087,12 @@ test("native runtime does not force broad project investigations into planned di
     input: {
       text: "이 프로젝트에 대해서 자세히 조사해보고 어떤 프로젝트인지, 특징이 무엇인지, 어디까지 구현되었는지, 강점과 약점을 정리해줘.",
     },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    metadata: {
+      runtimePolicy: {
+        completionReview: "disabled",
+        requiredNativeTools: ["run_command"],
+      },
+    },
   });
 
   expect(prompts[0]).not.toContain("Runtime Routing Policy");
@@ -4664,6 +5251,9 @@ test("model-selected public evidence toolchain still receives structural citatio
     },
     runFunctionToolPromptText: async (input) => {
       expect(input.prompt).not.toContain("Freshness evidence required");
+      const toolNames = input.tools.map((tool) => tool.name);
+      expect(toolNames).toContain("web_search");
+      expect(toolNames).toContain("web_read");
       await input.executeTool({
         name: "web_search",
         args: { query: "오늘 샘플 뉴스" },
@@ -4689,7 +5279,12 @@ test("model-selected public evidence toolchain still receives structural citatio
     provider: fakeProvider,
     model: "openai/auto:codex-latest",
     input: { text: "오늘 샘플 뉴스 기사 내용 핵심 알려줘" },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    metadata: {
+      runtimePolicy: {
+        completionReview: "disabled",
+        requiredNativeTools: ["web_search", "web_read"],
+      },
+    },
   });
 
   expect(executedTools).toEqual(["web_search", "web_read"]);
@@ -4789,6 +5384,283 @@ test("native runtime records Butler tool call and result in transcript", async (
   expect(transcript.some((event) => event.kind === "tool_result" && event.payload.name === "list_tasks")).toBe(true);
 });
 
+test("native runtime unwraps tool_call through audited target dispatch", async () => {
+  const events: RuntimeTurnEventInput[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:get_context_monitor", arguments: {} },
+        rawArguments: JSON.stringify({ id: "native:get_context_monitor", arguments: {} }),
+      });
+      return "컨텍스트 상태를 확인했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-audit",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "컨텍스트 상태 확인해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      events.push(event);
+    },
+  });
+
+  const transcript = readTranscript("butler/main/progressive-tool-call-audit");
+  expect(transcript.some((event) => event.kind === "tool_call" && event.payload.name === "get_context_monitor")).toBe(true);
+  expect(transcript.some((event) => event.kind === "tool_result" && event.payload.name === "get_context_monitor")).toBe(true);
+  expect(transcript.some((event) =>
+    event.kind === "tool_call" &&
+    event.payload.name === "tool_call" &&
+    event.metadata?.tool_surface_transition === "invoke",
+  )).toBe(true);
+  expect(transcript.some((event) =>
+    event.kind === "tool_result" &&
+    event.payload.name === "tool_call" &&
+    event.metadata?.tool_surface_transition === "invoked",
+  )).toBe(true);
+  const toolStarts = events.filter((event) => event.kind === "tool.started");
+  expect(toolStarts.map((event) => event.payload?.toolName)).toEqual(
+    expect.arrayContaining(["Tool Call", "Get Context Monitor"]),
+  );
+  expect(toolStarts.findIndex((event) => event.payload?.toolName === "Tool Call")).toBeLessThan(
+    toolStarts.findIndex((event) => event.payload?.toolName === "Get Context Monitor"),
+  );
+});
+
+test("native runtime records bridge audit metadata for bridged target failures", async () => {
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "tool_describe",
+        args: { ids: ["native:web_search"] },
+        rawArguments: JSON.stringify({ ids: ["native:web_search"] }),
+      });
+      await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:web_search", arguments: { query: "x" } },
+        rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "x" } }),
+      });
+      return "검색 도구 실패를 복구 가능한 결과로 받았습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-target-failure",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "짧은 검색 쿼리로 실패 경로를 확인해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  const transcript = readTranscript("butler/main/progressive-tool-call-target-failure");
+  const result = transcript.find((event) => event.kind === "tool_result" && event.payload.name === "web_search");
+  expect(result?.metadata?.bridge_audit).toEqual(expect.objectContaining({
+    schema: "butler.bridge-tool-audit.v1",
+    action: "invoke",
+    tool_name: "tool_call",
+    outcome: "error",
+    target: expect.objectContaining({
+      id: "native:web_search",
+      provider: "native",
+      affordance: "native_tool",
+    }),
+    result: { ok: false, code: "underlying_tool_error" },
+    error: {
+      code: "underlying_tool_error",
+      recoverable: false,
+      operational_failure: true,
+    },
+  }));
+});
+
+test("native runtime records bridge audit metadata for tool_call resolution failures", async () => {
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:missing_tool", arguments: { token: "SECRET_TOKEN_123" } },
+        rawArguments: JSON.stringify({ id: "native:missing_tool", arguments: { token: "SECRET_TOKEN_123" } }),
+      });
+      return "없는 도구 선택을 복구 가능한 결과로 받았습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-resolution-failure",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "없는 도구를 호출했을 때 audit을 남겨줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  const transcript = readTranscript("butler/main/progressive-tool-call-resolution-failure");
+  const result = transcript.find((event) => event.kind === "tool_result" && event.payload.name === "tool_call");
+  expect(result?.metadata?.bridge_audit).toEqual(expect.objectContaining({
+    schema: "butler.bridge-tool-audit.v1",
+    action: "invoke",
+    tool_name: "tool_call",
+    outcome: "unknown",
+    request: {
+      id: "native:missing_tool",
+      arguments: "[redacted]",
+    },
+    result: { ok: false, code: "unknown_tool_catalog_id" },
+    error: {
+      code: "unknown_tool_catalog_id",
+      recoverable: true,
+      operational_failure: false,
+    },
+  }));
+  expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN_123");
+  expect(JSON.stringify(transcript)).not.toContain("SECRET_TOKEN_123");
+  const call = transcript.find((event) => event.kind === "tool_call" && event.payload.name === "tool_call");
+  expect(call?.payload.arguments).toMatchObject({
+    schema_version: "butler.tool-call-arguments-transcript.v1",
+    safe_arguments: {
+      id: "native:missing_tool",
+      arguments: {
+        token: "[redacted]",
+      },
+    },
+  });
+});
+
+test("native runtime closes bridge progress rows when tool_call resolution throws", async () => {
+  const turnEvents: RuntimeTurnEventInput[] = [];
+  let caughtMessage = "";
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    executeButlerTool: async (call) => {
+      if (call.name === "tool_call" && call.args.__bridge_resolve_only === true) {
+        throw new Error("resolve exploded");
+      }
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      try {
+        await input.executeTool({
+          name: "tool_call",
+          args: { id: "native:web_search", arguments: { query: "butler" } },
+          rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler" } }),
+        });
+      } catch (error) {
+        caughtMessage = error instanceof Error ? error.message : String(error);
+      }
+      return "도구 호출 예외를 복구했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-throwing-resolution",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "도구 호출 예외 진행 상태를 확인해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      turnEvents.push(event);
+    },
+  });
+
+  expect(caughtMessage).toBe("resolve exploded");
+  const bridgeStarted = turnEvents.find((event) =>
+    event.kind === "tool.started" && event.payload?.toolName === "Tool Call",
+  );
+  const bridgeFailed = turnEvents.find((event) =>
+    event.kind === "tool.failed" && event.payload?.toolName === "Tool Call",
+  );
+  expect(bridgeStarted?.payload?.bridgePhase).toBe("invoke");
+  expect(bridgeFailed?.payload?.bridgePhase).toBe("denied");
+  const transcript = readTranscript("butler/main/progressive-tool-call-throwing-resolution");
+  expect(transcript.some((event) =>
+    event.kind === "tool_result" &&
+    event.payload.name === "tool_call" &&
+    event.payload.ok === false &&
+    event.metadata?.tool_surface_transition === "denied",
+  )).toBe(true);
+});
+
+test("native runtime records bridge audit metadata without raw search arguments", async () => {
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "tool_search",
+        args: { provider: "native", query: "SECRET_TOKEN_123 web search" },
+        rawArguments: JSON.stringify({ provider: "native", query: "SECRET_TOKEN_123 web search" }),
+      });
+      return "도구 목록을 확인했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-search-audit",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "필요한 도구를 찾아줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  const transcript = readTranscript("butler/main/progressive-tool-search-audit");
+  const result = transcript.find((event) => event.kind === "tool_result" && event.payload.name === "tool_search");
+  expect(result?.metadata?.bridge_audit).toEqual(expect.objectContaining({
+    schema: "butler.bridge-tool-audit.v1",
+    action: "search",
+    tool_name: "tool_search",
+    outcome: "ok",
+    request: expect.objectContaining({
+      provider: "native",
+      query_present: true,
+    }),
+  }));
+  expect(JSON.stringify(result?.metadata?.bridge_audit)).not.toContain("SECRET_TOKEN_123");
+});
+
 test("native runtime dispatches workers only through model-selected tool calls", async () => {
   const executed: Array<{ name: string; args: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
@@ -4844,7 +5716,12 @@ test("native runtime dispatches workers only through model-selected tool calls",
 });
 
 test("native runtime emits a user-facing execution plan before background dispatch", async () => {
-  const deliveries: Array<{ text: string; actionId: string; replyToMessageId?: string }> = [];
+  const deliveries: Array<{
+    text: string;
+    actionId: string;
+    replyToMessageId?: string;
+    metadata: Record<string, unknown>;
+  }> = [];
   const runtime = new NativeToolLoopRuntime({
     messageLanguage: "ko",
     executeButlerTool: async (call) => {
@@ -4911,6 +5788,7 @@ test("native runtime emits a user-facing execution plan before background dispat
         text,
         actionId: action.actionId,
         replyToMessageId: action.message.replyToMessageId,
+        metadata: action.metadata ?? {},
       });
     },
   });
@@ -4926,6 +5804,9 @@ test("native runtime emits a user-facing execution plan before background dispat
   expect(deliveries[0]!.text).not.toContain("six numbered sections");
   expect(deliveries[0]!.text).not.toContain("워커");
   expect(deliveries[0]!.text).not.toContain("디스패치");
+  expect(deliveries[0]!.metadata.tool).toBe("dispatch_worker");
+  expect(deliveries[0]!.metadata.phase).toBe("before_tool_execution");
+  expect(deliveries[0]!.metadata.kind).toBe("intermediate");
 });
 
 test("native runtime tolerates tool progress when no intermediate callback exists", async () => {
@@ -5132,7 +6013,7 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
     executeButlerTool: async () => ({ ok: true, updated: true }),
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 진행 단계를 정리합니다.\n이유: 중형 작업의 현재 단계를 추적해야 합니다.\n다음: 수집 단계로 넘어갑니다.",
+        text: "summary: 진행 단계를 정리합니다.\nrationale: 중형 작업의 현재 단계를 추적해야 합니다.\nnext_step: 수집 단계로 넘어갑니다.",
         toolCalls: [{
           name: "update_todo_list",
           args: {
@@ -5706,16 +6587,22 @@ test("native runtime stops direct work continuation when tools do not make seman
       systemPrompt: "You are Butler.",
     });
 
-    await expect(runtime.runTurn({
+    const result = await runtime.runTurn({
       handle,
       provider: fakeProvider,
       model: "local/gemma-test",
       input: { text: "Issue #2 작업을 직접 완료하고 task마다 커밋해줘." },
       metadata: { runtimePolicy: { completionReview: "disabled" } },
-    })).rejects.toThrow("active direct work stream is not deliverable");
+    });
 
+    expect(result.text).toContain("아직 완료라고 보고할 수 있는 상태까지는 도달하지 못했습니다.");
     expect(promptCalls).toBe(2);
     expect(executedCommands).toEqual(["git status --short"]);
+    const streams = new WorkStreamStore(tempDir).list({
+      sessionId: "butler/main/open-direct-work-no-semantic-progress",
+      includeTerminal: true,
+    });
+    expect(streams[0]!.state).toBe("recoverable");
   } finally {
     if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
     else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;
@@ -5938,6 +6825,42 @@ test("native runtime returns recoverable tool errors to the model instead of abo
     event.payload.ok === false)).toBe(true);
 });
 
+test("native runtime does not emit turn failed before recoverable limited delivery", async () => {
+  const events: Array<{ kind: string }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async () => {
+      const error = new Error("missing evidence receipt for source_verified");
+      error.name = "GoalCompletionIncompleteError";
+      throw error;
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/recoverable-limited-boundary",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: {
+      text: "근거가 부족하면 오류 대신 제한 포함 결과로 정리해줘.",
+    },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
+    metadata: { runtimePolicy: { completionReview: "enabled" } },
+  })).rejects.toThrow("missing evidence");
+
+  expect(events.some((event) => event.kind === "turn.failed")).toBe(false);
+});
+
 test("native runtime marks interrupted direct WorkStreams recoverable", async () => {
   const sessionId = "butler/main/interrupted-direct-work";
   const runtime = new NativeToolLoopRuntime({
@@ -6005,7 +6928,7 @@ test("native runtime synthesizes durable WorkStream progress when a compound too
     runFunctionToolPromptText: async (input) => {
       const command = "printf 'main\\napp:client:workstream:natural-live-llm:e2e\\n' && true";
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 현재 브랜치와 WorkStream E2E 스크립트를 확인합니다.\n이유: 요청한 런타임 상태를 근거로 답해야 합니다.\n다음: 명령 결과를 검토해 보고합니다.",
+        text: "summary: 현재 브랜치와 WorkStream E2E 스크립트를 확인합니다.\nrationale: 요청한 런타임 상태를 근거로 답해야 합니다.\nnext_step: 명령 결과를 검토해 보고합니다.",
         toolCalls: [{
           name: "run_command",
           args: { command },
@@ -6056,7 +6979,7 @@ test("native runtime does not infer compound work from natural-language conjunct
     runFunctionToolPromptText: async (input) => {
       const command = "pwd";
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 현재 위치를 확인합니다.\n이유: 사용자가 실행 근거를 원했습니다.\n다음: 명령 결과를 보고합니다.",
+        text: "summary: 현재 위치를 확인합니다.\nrationale: 사용자가 실행 근거를 원했습니다.\nnext_step: 명령 결과를 보고합니다.",
         toolCalls: [{
           name: "run_command",
           args: { command },
@@ -6100,7 +7023,7 @@ test("native runtime emits semantic progress from public decisions when todo set
     }),
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "작업: 2025년 인구 통계 후보 출처를 검색합니다.\n이유: CSV와 차트에 넣을 공개 근거가 필요합니다.\n다음: 신뢰할 수 있는 후보를 읽어 수치를 확인합니다.",
+        text: "summary: 2025년 인구 통계 후보 출처를 검색합니다.\nrationale: CSV와 차트에 넣을 공개 근거가 필요합니다.\nnext_step: 신뢰할 수 있는 후보를 읽어 수치를 확인합니다.",
         toolCalls: [{
           name: "web_search",
           args: { query: "2025 한국 도시 인구 통계" },

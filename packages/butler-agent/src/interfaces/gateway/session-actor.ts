@@ -11,6 +11,7 @@ import type {
   OutboundAction,
   ArtifactRef,
 } from "../../test-support/harness/contracts.ts";
+import type { RuntimeDeliveryClassification } from "../../agent/turn/runtime-delivery-state.ts";
 import {
   recordDurableInbound,
   recordDurableOutbound,
@@ -22,6 +23,7 @@ import {
   diagnosticDetails,
   safeRuntimeFailure,
 } from "../../integrations/providers/provider-errors.ts";
+import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
 import type {
   GatewayActorTurnResult,
   GatewayDurableRole,
@@ -281,6 +283,7 @@ function finalResultAction(input: {
   envelope: InboundEnvelope;
   text: string;
   artifacts?: ArtifactRef[];
+  delivery?: RuntimeDeliveryClassification;
   generatedSessionTitle?: string | null;
   loadedSkillNames?: string[];
 }): OutboundAction {
@@ -312,6 +315,9 @@ function finalResultAction(input: {
       turnId: turnIdFromEnvelope(input.envelope),
       sessionId: input.binding.sessionId,
       emptyFinal: !input.text.trim(),
+      delivery_state: input.delivery?.delivery_state,
+      limitation_codes: input.delivery?.limitation_codes,
+      limitations: input.delivery?.limitations,
       generatedSessionTitle: input.generatedSessionTitle ?? undefined,
       loadedSkillNames: input.loadedSkillNames ?? [],
     },
@@ -510,6 +516,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           envelope,
           text: result.text,
           artifacts: result.artifacts,
+          delivery: result.delivery,
           generatedSessionTitle,
           loadedSkillNames,
         }),
@@ -524,6 +531,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         text: result.text,
         deliveries: result.deliveries,
         artifacts: result.artifacts,
+        delivery: result.delivery,
         generatedSessionTitle,
         loadedSkillNames,
         providerThreadRef: result.providerThreadRef,
@@ -533,7 +541,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     } catch (error) {
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
-      const failureState = safeFailure.code === "goal_completion_incomplete"
+      const failureState = safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE
         ? "active"
         : "crashed";
       this.options.store.updateLifecycleState(binding.sessionId, failureState, timestamp);

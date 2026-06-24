@@ -18,6 +18,9 @@ export type ButlerToolProfile =
 
 const STARTUP_TOOL_NAMES = [
   "list_tool_capabilities",
+  "tool_search",
+  "tool_describe",
+  "tool_call",
   "get_context_monitor",
   "read_conversation_context",
   "update_todo_list",
@@ -39,16 +42,9 @@ const WORKSPACE_TOOL_NAMES = [
   "read_tool_output_artifact",
 ] as const;
 
-const PUBLIC_WEB_TOOL_NAMES = [
-  "web_search",
-  "web_read",
-] as const;
+const PUBLIC_WEB_TOOL_NAMES = ["web_search", "web_read"] as const;
 
-const MEMORY_READ_TOOL_NAMES = [
-  "recall_memory",
-  "query_memory",
-  "read_conversation_context",
-] as const;
+const MEMORY_READ_TOOL_NAMES = ["recall_memory", "query_memory", "read_conversation_context"] as const;
 
 const MEMORY_WRITE_TOOL_NAMES = [
   "update_explicit_memory",
@@ -100,9 +96,7 @@ const ORCHESTRATION_TOOL_NAMES = [
   "write_work_orchestration_report",
 ] as const;
 
-const ARTIFACT_DATA_TOOL_NAMES = [
-  "transform_public_data_table",
-] as const;
+const ARTIFACT_DATA_TOOL_NAMES = ["transform_public_data_table"] as const;
 
 const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
   startup: STARTUP_TOOL_NAMES,
@@ -121,6 +115,9 @@ const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
 };
 
 const WORKER_DEFAULT_TOOL_NAMES = [
+  "tool_search",
+  "tool_describe",
+  "tool_call",
   "run_command",
   "read_file",
   "write_file",
@@ -246,67 +243,8 @@ function requiredToolNamesForTurn(input: {
   ]);
 }
 
-function normalizedText(value: unknown): string {
-  return typeof value === "string" ? value.toLocaleLowerCase("en-US") : "";
-}
-
 function addProfile(profiles: Set<ButlerToolProfile>, profile: ButlerToolProfile): void {
   profiles.add(profile);
-}
-
-function profilesFromText(text: string): ButlerToolProfile[] {
-  const profiles = new Set<ButlerToolProfile>();
-  const value = normalizedText(text);
-  if (!value) return [];
-
-  if (/\b(project ledger|ledger|project status|project work|next actions?)\b/u.test(value) ||
-    /프로젝트\s*원장|프로젝트\s*상태|프로젝트\s*작업|다음\s*작업/u.test(value)) {
-    addProfile(profiles, "project");
-  }
-  if (/\b(search|web|source|citation|cite|news|latest|current|url|http|public)\b/u.test(value) ||
-    /검색|출처|최신|현재|뉴스|인용|공개|웹/u.test(value)) {
-    addProfile(profiles, "public-web");
-  }
-  if (/\b(read_file|write_file|grep_files|native file tools?|file tools?|read\s+(?:a\s+)?file|write\s+(?:a\s+)?file|grep|workspace file|workspace files)\b/u.test(value) ||
-    /네이티브\s*파일\s*도구|파일\s*도구|파일\s*읽기|파일\s*쓰기|워크스페이스\s*파일/u.test(value)) {
-    addProfile(profiles, "workspace");
-  }
-
-  if (/\b(memory|remember|recall|previous|earlier|conversation|transcript)\b/u.test(value) ||
-    /기억|이전|앞서|대화|위에서|방금|지난/u.test(value)) {
-    addProfile(profiles, "memory-read");
-  }
-  if (/\b(save|remember this|preference|rule|profile|onboarding)\b/u.test(value) ||
-    /저장|기억해|규칙|선호|프로필|온보딩/u.test(value)) {
-    addProfile(profiles, "memory-write");
-  }
-  if (/\b(usage|tokens|context|dashboard|status|health|cost)\b/u.test(value) ||
-    /사용량|토큰|컨텍스트|대시보드|헬스|비용/u.test(value)) {
-    addProfile(profiles, "monitoring");
-  }
-  if (/\b(automation|schedule|reminder|recurring|cron)\b/u.test(value) ||
-    /자동화|예약|알림|반복/u.test(value)) {
-    addProfile(profiles, "automation");
-  }
-  if (/\b(mcp|connector|resource)\b/u.test(value) || /커넥터|리소스/u.test(value)) {
-    addProfile(profiles, "mcp");
-  }
-  if (/\b(background|worker|async|delegate|resume)\b/u.test(value) ||
-    /백그라운드|워커|비동기|위임|재개/u.test(value)) {
-    addProfile(profiles, "delegation");
-  }
-  if (/\b(plan|planned|review|repair|migration|risky|acceptance)\b/u.test(value) ||
-    /계획|검토|수리|마이그레이션|위험|인수조건/u.test(value)) {
-    addProfile(profiles, "planned-work");
-  }
-  if (/\b(orchestration|multi-worker|parallel streams)\b/u.test(value) ||
-    /오케스트레이션|병렬|스트림/u.test(value)) {
-    addProfile(profiles, "orchestration");
-  }
-  if (/\b(csv|table|artifact|chart|data)\b/u.test(value) || /csv|표|아티팩트|차트|데이터/u.test(value)) {
-    addProfile(profiles, "artifact-data");
-  }
-  return [...profiles];
 }
 
 export function selectButlerToolProfiles(input: {
@@ -322,14 +260,8 @@ export function selectButlerToolProfiles(input: {
   if (hasProjectContext(input)) {
     addProfile(profiles, "project");
   }
-  for (const profile of profilesFromText(input.text ?? "")) addProfile(profiles, profile);
   for (const profile of requiredToolProfiles(input.sessionMetadata)) addProfile(profiles, profile);
   for (const profile of requiredToolProfiles(input.turnMetadata)) addProfile(profiles, profile);
-  for (const name of requiredToolNamesForTurn(input)) {
-    for (const [profile, names] of Object.entries(PROFILE_TOOL_NAMES) as Array<[ButlerToolProfile, readonly string[]]>) {
-      if (names.includes(name)) addProfile(profiles, profile);
-    }
-  }
   return [...profiles];
 }
 

@@ -489,6 +489,9 @@ export class WorkStreamStore {
   }): WorkStreamRecord | null {
     const record = this.activeForSession(input.sessionId);
     if (!record || workStreamTerminal(record.state)) return record;
+    if (record.state === "waiting_user" || record.state === "paused" || record.state === "recoverable") {
+      return record;
+    }
     if (
       record.linked_planned_task_ids.length > 0 ||
       record.linked_orchestration_ids.length > 0 ||
@@ -496,6 +499,19 @@ export class WorkStreamStore {
     ) {
       return record;
     }
+    const todoRecord = record.todo_list_id
+      ? new TodoListStore(this.butlerData).read(record.todo_list_id)
+      : null;
+    if (!todoRecord && record.state !== "reporting") return record;
+    const unfinishedCount = todoRecord?.items.filter((item) =>
+      item.status === "pending" || item.status === "in_progress",
+    ).length ?? 0;
+    const onlyReportingRemains = todoRecord?.items.every((item) =>
+      item.status === "completed" ||
+      item.status === "cancelled" ||
+      (item.status === "in_progress" && item.phase === "reporting"),
+    ) ?? record.state === "reporting";
+    if (unfinishedCount > 0 && !onlyReportingRemains) return record;
     if (!transitionPath(record.state, "complete")) return record;
     completeReportingTodoStep({
       butlerData: this.butlerData,
@@ -573,7 +589,7 @@ export class WorkStreamStore {
       created_at: activePrior?.created_at ?? now,
       updated_at: now,
       last_user_turn_id: input.lastUserTurnId?.trim() || activePrior?.last_user_turn_id || prior?.last_user_turn_id || null,
-      status_note: activePrior?.status_note ?? null,
+      status_note: target.state === "complete" ? null : activePrior?.status_note ?? null,
     };
     writeJsonAtomic(this.pathFor(id), record);
     return record;
