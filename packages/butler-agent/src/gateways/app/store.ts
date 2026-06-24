@@ -205,7 +205,6 @@ import {
   type AgentTurnEvent,
   type RuntimeTurnEventInput,
 } from "../../agent/events/turn-events.ts";
-import { isRuntimeCancellationFailure } from "../../agent/turn/runtime-cancellation.ts";
 import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import type { SessionTransportBinding } from "../../test-support/harness/contracts.ts";
@@ -225,6 +224,10 @@ import {
   appSafeResponderError,
   type AppLimitedDelivery,
 } from "./failure-ux-contract.ts";
+import {
+  completeResponderTurn as completeResponderTurnLifecycle,
+  isResponderCancelError,
+} from "./responder-turn-lifecycle.ts";
 import {
   applyComponentUpdate,
   checkComponentUpdates,
@@ -4458,117 +4461,133 @@ export class AppServerStore {
       };
     }
 
-    try {
-      const appendProgress = (row: ProgressSummaryInput) =>
-        this.appendProgressSummaryEvent(chatId, turn.id, row);
-      const appendTurnEvent = (event: RuntimeTurnEventInput) =>
-        this.appendTurnEvent(chatId, turn.id, event);
-      const response = await this.runResponder(
+    const responderOptions = { ...options, controls };
+    if (options.deferResponderTurns) {
+      this.dispatchDeferredResponderTurn({
         chatId,
-        turn.id,
-        accepted.id,
+        turnId: turn.id,
+        messageId: accepted.id,
         text,
         responder,
-        { ...options, controls },
-        appendProgress,
-        appendTurnEvent,
-      );
-      for (const row of response.progress ?? []) appendProgress(row);
-      const responderFiles = this.createResponderMessageFiles(
-        chatId,
-        response.files ?? [],
-      );
-      if (!this.hasTurnEventKind(turn.id, "message.final.started")) {
-        appendTurnEvent({
-          kind: "message.final.started",
-          payload: { safeLabel: "Preparing final answer" },
-        });
-      }
-      const replies = this.insertOrReplaceAssistantReplies(
-        chatId,
-        turn.id,
-        response.texts,
-        responderFiles,
-      );
-      if (!this.hasTurnEventKind(turn.id, "message.final.completed")) {
-        appendTurnEvent({
-          kind: "message.final.completed",
-          payload: {
-            safeLabel: "Final answer ready",
-            textChars: response.texts.join("\n\n").length,
-          },
-        });
-      }
-      const deliveredTurn = this.updateTurnState(turn.id, "delivered", {
-        safeStatusLabel: "Delivered",
-        retryable: false,
-        cancellable: false,
-        safeErrorCode: null,
+        options: responderOptions,
       });
-      this.appendEvent("turn.state_changed", { turn: deliveredTurn });
-      if (!this.hasTurnEventKind(turn.id, "turn.completed")) {
-        appendTurnEvent({
-          kind: "turn.completed",
-          payload: { safeLabel: "Completed" },
-        });
-      }
-      this.touchChat(chatId);
-      await this.drainQueuedSessionMessages(chatId, responder, options);
-
-      const reply = replies.at(-1)!;
       return {
         accepted,
-        reply,
-        replies,
-        turn: deliveredTurn,
-        next_cursor: reply.cursor,
+        replies: [],
+        turn: thinkingTurn,
+        next_cursor: accepted.cursor,
       };
-    } catch (error) {
-      if (isResponderCancelError(error)) {
-        const cancelledTurn = this.finalizeCancelledTurn(chatId, turn.id);
-        await this.drainQueuedSessionMessages(chatId, responder, options);
-        return {
-          accepted,
-          replies: [],
-          turn: cancelledTurn,
-          next_cursor: accepted.cursor,
-        };
-      }
-      const limitedDelivery = appLimitedDeliveryForError(error);
-      if (limitedDelivery) {
-        const delivered = this.finalizeResponderLimitedDelivery(chatId, turn.id, limitedDelivery);
-        this.touchChat(chatId);
-        await this.drainQueuedSessionMessages(chatId, responder, options);
-        return {
-          accepted,
-          reply: delivered.reply,
-          replies: delivered.replies,
-          turn: delivered.turn,
-          next_cursor: delivered.reply.cursor,
-        };
-      }
-      const safeError = appSafeResponderError(error);
-      this.upsertAssistantTurnFailure(chatId, turn.id, safeError);
-      this.appendTurnEvent(chatId, turn.id, {
-        kind: "turn.failed",
-        payload: {
-          safeLabel: safeError.message,
-          safeErrorCode: safeError.code,
-        },
-      });
-      const failedTurn = this.updateTurnState(turn.id, "failed", {
-        safeStatusLabel: "Failed",
-        retryable: true,
-        cancellable: false,
-        safeErrorCode: safeError.code,
-      });
-      this.appendEvent("turn.state_changed", { turn: failedTurn });
-      this.touchChat(chatId);
-      await this.drainQueuedSessionMessages(chatId, responder, options);
-      throw error;
-    } finally {
-      this.cleanupTurnEventSequences(chatId, turn.id);
     }
+
+    const result = await this.completeResponderTurn({
+      chatId,
+      turnId: turn.id,
+      messageId: accepted.id,
+      text,
+      responder,
+      options: responderOptions,
+    });
+    return { accepted, ...result };
+  }
+
+  private dispatchDeferredResponderTurn(input: {
+    chatId: string;
+    turnId: string;
+    messageId: string;
+    text: string;
+    responder: AppMessageResponder;
+    options: SendMessageOptions;
+  }): void {
+    const options = {
+      ...input.options,
+      responderTimeoutMs: undefined,
+    };
+    void this.completeResponderTurn({ ...input, options }).catch(
+      () => undefined,
+    );
+  }
+
+  private async completeResponderTurn(input: {
+    chatId: string;
+    turnId: string;
+    messageId: string;
+    text: string;
+    responder: AppMessageResponder;
+    options: SendMessageOptions;
+  }): Promise<{
+    reply?: MessageRecord;
+    replies: MessageRecord[];
+    turn: TurnRecord;
+    next_cursor: number;
+  }> {
+    return await completeResponderTurnLifecycle(input, {
+      appendProgress: (row) =>
+        this.appendProgressSummaryEvent(input.chatId, input.turnId, row),
+      appendTurnEvent: (event) =>
+        this.appendTurnEvent(input.chatId, input.turnId, event),
+      cleanupTurnEventSequences: (chatId, turnId) =>
+        this.cleanupTurnEventSequences(chatId, turnId),
+      createResponderMessageFiles: (chatId, files) =>
+        this.createResponderMessageFiles(chatId, files ?? []),
+      drainQueuedSessionMessages: (chatId, responder, options) =>
+        this.drainQueuedSessionMessages(chatId, responder, options),
+      finalizeResponderLimitedDelivery: (chatId, turnId, limitedDelivery) =>
+        this.finalizeResponderLimitedDelivery(chatId, turnId, limitedDelivery),
+      finalizeCancelledTurn: (chatId, turnId) =>
+        this.finalizeCancelledTurn(chatId, turnId),
+      hasTurnEventKind: (turnId, kind) => this.hasTurnEventKind(turnId, kind),
+      insertOrReplaceAssistantReplies: (chatId, turnId, texts, files) =>
+        this.insertOrReplaceAssistantReplies(chatId, turnId, texts, files),
+      runResponder: (
+        chatId,
+        turnId,
+        messageId,
+        text,
+        responder,
+        options,
+        onProgress,
+        onTurnEvent,
+      ) =>
+        this.runResponder(
+          chatId,
+          turnId,
+          messageId,
+          text,
+          responder,
+          options,
+          onProgress,
+          onTurnEvent,
+        ),
+      touchChat: (chatId) => this.touchChat(chatId),
+      updateTurnDelivered: (turnId) => {
+        const deliveredTurn = this.updateTurnState(turnId, "delivered", {
+          safeStatusLabel: "Delivered",
+          retryable: false,
+          cancellable: false,
+          safeErrorCode: null,
+        });
+        this.appendEvent("turn.state_changed", { turn: deliveredTurn });
+        return deliveredTurn;
+      },
+      updateTurnFailed: (chatId, turnId, safeError) => {
+        this.upsertAssistantTurnFailure(chatId, turnId, safeError);
+        this.appendTurnEvent(chatId, turnId, {
+          kind: "turn.failed",
+          payload: {
+            safeLabel: safeError.message,
+            safeErrorCode: safeError.code,
+          },
+        });
+        const failedTurn = this.updateTurnState(turnId, "failed", {
+          safeStatusLabel: "Failed",
+          retryable: true,
+          cancellable: false,
+          safeErrorCode: safeError.code,
+        });
+        this.appendEvent("turn.state_changed", { turn: failedTurn });
+        return failedTurn;
+      },
+    });
   }
 
   private enqueueAppTransportTurn(input: {
@@ -4973,117 +4992,34 @@ export class AppServerStore {
       };
     }
 
-    try {
-      const appendProgress = (progressRow: ProgressSummaryInput) =>
-        this.appendProgressSummaryEvent(row.chat_id, turnId, progressRow);
-      const appendTurnEvent = (event: RuntimeTurnEventInput) =>
-        this.appendTurnEvent(row.chat_id, turnId, event);
-      const response = await this.runResponder(
-        row.chat_id,
+    const responderOptions = {
+      ...options,
+      controls: this.getSessionControls(row.chat_id),
+    };
+    if (options.deferResponderTurns) {
+      this.dispatchDeferredResponderTurn({
+        chatId: row.chat_id,
         turnId,
-        userMessage.id,
-        userMessage.text,
+        messageId: userMessage.id,
+        text: userMessage.text,
         responder,
-        {
-          ...options,
-          controls: this.getSessionControls(row.chat_id),
-        },
-        appendProgress,
-        appendTurnEvent,
-      );
-      for (const progressRow of response.progress ?? [])
-        appendProgress(progressRow);
-      const responderFiles = this.createResponderMessageFiles(
-        row.chat_id,
-        response.files ?? [],
-      );
-      if (!this.hasTurnEventKind(turnId, "message.final.started")) {
-        appendTurnEvent({
-          kind: "message.final.started",
-          payload: { safeLabel: "Preparing final answer" },
-        });
-      }
-      const replies = this.insertOrReplaceAssistantReplies(
-        row.chat_id,
-        turnId,
-        response.texts,
-        responderFiles,
-      );
-      if (!this.hasTurnEventKind(turnId, "message.final.completed")) {
-        appendTurnEvent({
-          kind: "message.final.completed",
-          payload: {
-            safeLabel: "Final answer ready",
-            textChars: response.texts.join("\n\n").length,
-          },
-        });
-      }
-      const deliveredTurn = this.updateTurnState(turnId, "delivered", {
-        safeStatusLabel: "Delivered",
-        retryable: false,
-        cancellable: false,
-        safeErrorCode: null,
+        options: responderOptions,
       });
-      this.appendEvent("turn.state_changed", { turn: deliveredTurn });
-      if (!this.hasTurnEventKind(turnId, "turn.completed")) {
-        appendTurnEvent({
-          kind: "turn.completed",
-          payload: { safeLabel: "Completed" },
-        });
-      }
-      this.touchChat(row.chat_id);
-      await this.drainQueuedSessionMessages(row.chat_id, responder, options);
-      const reply = replies.at(-1)!;
       return {
-        turn: deliveredTurn,
-        reply,
-        replies,
-        next_cursor: reply.cursor,
+        turn: retryingTurn,
+        replies: [],
+        next_cursor: retryingTurn.cursor,
       };
-    } catch (error) {
-      if (isResponderCancelError(error)) {
-        const cancelledTurn = this.finalizeCancelledTurn(row.chat_id, turnId);
-        await this.drainQueuedSessionMessages(row.chat_id, responder, options);
-        return {
-          turn: cancelledTurn,
-          replies: [],
-          next_cursor: cancelledTurn.cursor,
-        };
-      }
-      const limitedDelivery = appLimitedDeliveryForError(error);
-      if (limitedDelivery) {
-        const delivered = this.finalizeResponderLimitedDelivery(row.chat_id, turnId, limitedDelivery);
-        this.touchChat(row.chat_id);
-        await this.drainQueuedSessionMessages(row.chat_id, responder, options);
-        return {
-          turn: delivered.turn,
-          reply: delivered.reply,
-          replies: delivered.replies,
-          next_cursor: delivered.reply.cursor,
-        };
-      }
-      const safeError = appSafeResponderError(error);
-      this.upsertAssistantTurnFailure(row.chat_id, turnId, safeError);
-      this.appendTurnEvent(row.chat_id, turnId, {
-        kind: "turn.failed",
-        payload: {
-          safeLabel: safeError.message,
-          safeErrorCode: safeError.code,
-        },
-      });
-      const failedTurn = this.updateTurnState(turnId, "failed", {
-        safeStatusLabel: "Failed",
-        retryable: true,
-        cancellable: false,
-        safeErrorCode: safeError.code,
-      });
-      this.appendEvent("turn.state_changed", { turn: failedTurn });
-      this.touchChat(row.chat_id);
-      await this.drainQueuedSessionMessages(row.chat_id, responder, options);
-      throw error;
-    } finally {
-      this.cleanupTurnEventSequences(row.chat_id, turnId);
     }
+
+    return await this.completeResponderTurn({
+      chatId: row.chat_id,
+      turnId,
+      messageId: userMessage.id,
+      text: userMessage.text,
+      responder,
+      options: responderOptions,
+    });
   }
 
   private async drainQueuedSessionMessages(
@@ -10309,10 +10245,4 @@ function timestampBefore(candidate: string, reference: string): boolean {
   const referenceMs = Date.parse(reference);
   return Number.isFinite(candidateMs) && Number.isFinite(referenceMs) &&
     candidateMs < referenceMs;
-}
-
-function isResponderCancelError(error: unknown): boolean {
-  if (error instanceof AppResponderCancelledError) return true;
-  if (!error || typeof error !== "object") return false;
-  return isRuntimeCancellationFailure(error);
 }

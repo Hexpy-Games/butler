@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type {
@@ -24,6 +24,9 @@ let tempDir = "";
 let originalFetch: typeof fetch;
 let originalButlerData: string | undefined;
 let originalTelegramToken: string | undefined;
+const packageVersion = JSON.parse(
+  readFileSync(join(process.cwd(), "package.json"), "utf8"),
+).version as string;
 
 class FakeRuntime implements AgentRuntimeAdapter {
   readonly id = "fake-native-runtime";
@@ -74,6 +77,39 @@ const fakeProvider: ModelProviderAdapter = {
     return { text: "unused" };
   },
 };
+
+function writeServiceUpdateManifest(path: string, version: string): void {
+  writeFileSync(path, JSON.stringify({
+    artifacts: [{
+      component: "service",
+      version,
+      channel: "stable",
+      artifact_url: null,
+      sha256: null,
+      bundled_components: ["service"],
+      product: "butler-agent",
+      canonical_component: "agent",
+      profile: "agent-standalone",
+      protocol_compatibility: {
+        protocol: "butler.agent.v1",
+        minimumAgentProtocol: "butler.agent.v1",
+        maximumAgentProtocol: "butler.agent.v1",
+      },
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: null,
+        signature: null,
+      },
+      update_policy: "explicit",
+      restart_policy: "restart-service",
+      updater_owner: "butler-agent",
+      payload_format: "agent-archive",
+      staging_policy: "butler-data-updates",
+      activation_policy: "versioned-standalone-runtime",
+      rollback_policy: "preserve-previous-standalone-runtime",
+    }],
+  }), "utf8");
+}
 
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "butler-native-telegram-"));
@@ -215,6 +251,10 @@ test("native butler-main leaves Telegram idle when gateway is not enabled", asyn
 
 test("native Telegram /update command checks service updates without model routing", async () => {
   const deliveries: Array<{ chatId: string; text: string; threadId?: string }> = [];
+  const previousUpdateManifest = process.env.BUTLER_UPDATE_MANIFEST;
+  const updateManifestPath = join(tempDir, "service-update-manifest.json");
+  writeServiceUpdateManifest(updateManifestPath, packageVersion);
+  process.env.BUTLER_UPDATE_MANIFEST = updateManifestPath;
   const adapter = createTelegramTransportAdapter({
     sendTelegram: async (input) => {
       deliveries.push(input);
@@ -256,6 +296,9 @@ test("native Telegram /update command checks service updates without model routi
       "Butler Agent is up to date",
     );
   } finally {
+    if (previousUpdateManifest === undefined)
+      delete process.env.BUTLER_UPDATE_MANIFEST;
+    else process.env.BUTLER_UPDATE_MANIFEST = previousUpdateManifest;
     store.close();
   }
 });

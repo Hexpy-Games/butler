@@ -74,6 +74,39 @@ process.exit(0);
   }
 }
 
+function writeServiceUpdateManifest(path: string, version: string): void {
+  writeFileSync(path, JSON.stringify({
+    artifacts: [{
+      component: "service",
+      version,
+      channel: "stable",
+      artifact_url: null,
+      sha256: null,
+      bundled_components: ["service"],
+      product: "butler-agent",
+      canonical_component: "agent",
+      profile: "agent-standalone",
+      protocol_compatibility: {
+        protocol: "butler.agent.v1",
+        minimumAgentProtocol: "butler.agent.v1",
+        maximumAgentProtocol: "butler.agent.v1",
+      },
+      integrity: {
+        digestAlgorithm: "sha256",
+        digest: null,
+        signature: null,
+      },
+      update_policy: "explicit",
+      restart_policy: "restart-service",
+      updater_owner: "butler-agent",
+      payload_format: "agent-archive",
+      staging_policy: "butler-data-updates",
+      activation_policy: "versioned-standalone-runtime",
+      rollback_policy: "preserve-previous-standalone-runtime",
+    }],
+  }), "utf8");
+}
+
 function runCli(args: string[], butlerData: string, extraEnv: Record<string, string> = {}) {
   return Bun.spawnSync(["node", cli, ...args, "--data", butlerData], {
     cwd: root,
@@ -954,7 +987,14 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
   const butlerData = tempRoot();
   const updateVersion = "99.0.0";
   try {
-    const check = runCli(["update", "--component", "agent", "--check", "--json"], butlerData);
+    const currentManifestPath = join(butlerData, "current-update-manifest.json");
+    writeServiceUpdateManifest(currentManifestPath, packageVersion);
+    const currentManifestEnv = { BUTLER_UPDATE_MANIFEST: currentManifestPath };
+    const check = runCli(
+      ["update", "--component", "agent", "--check", "--json"],
+      butlerData,
+      currentManifestEnv,
+    );
     expect(check.exitCode).toBe(0);
     let parsed = JSON.parse(stdoutText(check));
     expect(parsed.data).toMatchObject({
@@ -964,7 +1004,11 @@ test("operator lifecycle commands require explicit confirmation for mutation", a
       update_available: false,
       dryRun: false,
     });
-    const legacyCheck = runCli(["update", "--component", "service", "--check", "--json"], butlerData);
+    const legacyCheck = runCli(
+      ["update", "--component", "service", "--check", "--json"],
+      butlerData,
+      currentManifestEnv,
+    );
     expect(legacyCheck.exitCode).toBe(0);
     expect(JSON.parse(stdoutText(legacyCheck)).data.component).toBe("service");
 
