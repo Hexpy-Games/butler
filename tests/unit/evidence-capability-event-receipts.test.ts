@@ -4,7 +4,7 @@ import {
   commandExecutionCapabilityReceipt,
   reviewCapabilityReceipt,
   validationCapabilityReceipt,
-} from "../../packages/butler-agent/src/agent/output/evidence-capability-ledger.ts";
+} from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
 
 test("command execution receipts record success failure partial and skipped outcomes", () => {
   const receipts = [

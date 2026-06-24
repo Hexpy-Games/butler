@@ -33,17 +33,17 @@ import {
   goalCompletionReviewPrompt,
   stripLeadingPublicWorkDecisionBlock,
   stripToolImplementationLeakLines,
-} from "../../packages/butler-agent/src/agent/output/final-output-contract.ts";
+} from "../../packages/butler-agent/src/agent/output/completion/final-output-contract.ts";
 import {
   createButlerToolExecutor,
   satisfiedCompletionObligationsForToolResult,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
-import { publicWorkDecisionsFromAssistantText } from "../../packages/butler-agent/src/agent/output/public-work-decisions.ts";
-import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence-capability-ledger.ts";
+import { publicWorkDecisionsFromAssistantText } from "../../packages/butler-agent/src/agent/output/public-work/decisions.ts";
+import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
 import {
   evidenceTranscriptToolCallArgumentsProjection,
   evidenceTranscriptToolResultProjection,
-} from "../../packages/butler-agent/src/agent/output/evidence-transcript-result.ts";
+} from "../../packages/butler-agent/src/agent/output/evidence/transcript-result.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 let tempDir = "";

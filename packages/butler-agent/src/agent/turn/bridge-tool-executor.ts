@@ -14,11 +14,11 @@ import {
   redactedBridgeToolAuditArgs,
   redactedBridgeToolAuditResult,
 } from "../tools/tool-bridge/audit.ts";
-import { summarizeToolProgress } from "../output/tool-progress.ts";
+import { summarizeToolProgress } from "../output/progress/tool-progress.ts";
 import {
   evidenceTranscriptToolCallArgumentsProjection,
   evidenceTranscriptToolResultProjection,
-} from "../output/evidence-transcript-result.ts";
+} from "../output/evidence/transcript-result.ts";
 import type { RuntimeMessageLanguage } from "../output/messages.ts";
 import type { ToolAuditEntry } from "./native/output/tool-types.ts";
 

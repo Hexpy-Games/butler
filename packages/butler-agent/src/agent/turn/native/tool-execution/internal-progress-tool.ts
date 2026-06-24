@@ -8,12 +8,12 @@ import {
 } from "../../../tools/butler-tools.ts";
 import { sanitizePublicText } from "../../../events/turn-events.ts";
 import type { PublicWorkDecision, ToolProgressSummary } from "../output/tool-types.ts";
-import { evidenceReceiptsFromResult } from "../../../output/evidence-receipts.ts";
+import { evidenceReceiptsFromResult } from "../../../output/evidence/receipts.ts";
 import {
   evidenceTranscriptErrorMessage,
   evidenceTranscriptToolCallArgumentsProjection,
   evidenceTranscriptToolResultProjection,
-} from "../../../output/evidence-transcript-result.ts";
+} from "../../../output/evidence/transcript-result.ts";
 import {
   activeTodoWorkBlockFromArgs,
   runtimeSemanticTodoItems,

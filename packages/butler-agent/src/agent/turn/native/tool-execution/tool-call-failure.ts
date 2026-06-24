@@ -7,10 +7,10 @@ import {
   bridgeToolAuditEvent,
   redactedBridgeToolAuditArgs,
 } from "../../../tools/tool-bridge/audit.ts";
-import { annotateToolResultWithDecisionContext, publicWorkDecisionPayload } from "../../../output/public-work-decisions.ts";
+import { annotateToolResultWithDecisionContext, publicWorkDecisionPayload } from "../../../output/public-work/decisions.ts";
 import {
   evidenceTranscriptErrorMessage,
-} from "../../../output/evidence-transcript-result.ts";
+} from "../../../output/evidence/transcript-result.ts";
 import {
   emitDecisionProgressBestEffort,
   emitTurnEventBestEffort,

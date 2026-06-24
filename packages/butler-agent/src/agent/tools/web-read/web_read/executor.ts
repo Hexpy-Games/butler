@@ -2,7 +2,7 @@ import { readPageConfigured, type PageReaderBackendId, type PageReadResult } fro
 import {
   browserObservationCapabilityReceipt,
   createEvidenceCapabilityReceipt,
-} from "../../../output/evidence-capability-ledger.ts";
+} from "../../../output/evidence/ledger.ts";
 import { evidenceReceipt, urlReferences } from "../../../tool-support/executor-support.ts";
 
 type WebReadToolCall = { args: Record<string, unknown> };

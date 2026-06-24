@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { buildEvidenceCapabilityLedger } from "../../packages/butler-agent/src/agent/output/evidence-capability-ledger.ts";
+import { buildEvidenceCapabilityLedger } from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
 import { createWebReadHandler } from "../../packages/butler-agent/src/agent/tools/web-read/index.ts";
 import { createWebSearchHandler } from "../../packages/butler-agent/src/agent/tools/web-search/index.ts";
 import type { WebSearchProvider } from "../../packages/butler-agent/src/integrations/search/provider.ts";

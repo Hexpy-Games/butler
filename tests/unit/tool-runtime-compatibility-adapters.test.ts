@@ -10,7 +10,7 @@ import {
   requiredCompletionObligations,
   reviewCompletionObligations,
   unsatisfiedCompletionObligations,
-} from "../../packages/butler-agent/src/agent/output/completion-obligation-review.ts";
+} from "../../packages/butler-agent/src/agent/output/completion/obligation-review.ts";
 import {
   appLimitedDeliveryForError,
   appSafeResponderError,

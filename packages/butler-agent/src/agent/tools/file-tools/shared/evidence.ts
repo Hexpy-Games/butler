@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createEvidenceCapabilityReceipt } from "../../../output/evidence-capability-ledger.ts";
+import { createEvidenceCapabilityReceipt } from "../../../output/evidence/ledger.ts";
 
 export function sha256Hex(data: string | Uint8Array): string {
   return createHash("sha256").update(data).digest("hex");
