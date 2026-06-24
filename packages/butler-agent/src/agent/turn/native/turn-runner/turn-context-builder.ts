@@ -170,6 +170,7 @@ export async function prepareNativeTurnContext(input: {
   });
   await emitStartedAndPreparation({
     ...input,
+    session: input.session,
     turnId,
     turnBudget,
     startedAt: input.startedAt,
@@ -286,6 +287,7 @@ function workingMemoryContext(input: {
 
 async function emitStartedAndPreparation(input: {
   turnInput: RuntimeTurnInput;
+  session: NativeStoredSessionConfig;
   deps: NativeTurnRunnerDeps;
   useTools: boolean;
   turnId: string;
