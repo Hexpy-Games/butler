@@ -1,4 +1,3 @@
-import { sanitizePublicText } from "../../events/turn-events.ts";
 import {
   completionObligationEvidenceReceiptsFromResult,
   readCompletionObligationEvidence,
@@ -14,6 +13,16 @@ import type {
 import {
   evidenceReceiptsFromResult,
 } from "./receipts.ts";
+import {
+  safeIdentifier,
+  safeOptionalPublicText,
+  safePublicText,
+  safePublicTextArray,
+  safeRelativePath,
+  safeToolArgumentKeys,
+  safeToolArgumentRecord,
+  safeUrl,
+} from "./transcript-sanitizers.ts";
 import type {
   EvidenceArtifactRef,
   EvidenceReceipt,
@@ -22,6 +31,7 @@ import type {
 
 export const TOOL_RESULT_EVIDENCE_TRANSCRIPT_SCHEMA =
   "butler.tool-result-evidence-transcript.v1" as const;
+const TOOL_CALL_ARGUMENTS_TRANSCRIPT_SCHEMA = "butler.tool-call-arguments-transcript.v1" as const;
 
 export interface EvidenceTranscriptToolResult {
   schema_version: typeof TOOL_RESULT_EVIDENCE_TRANSCRIPT_SCHEMA;
@@ -39,7 +49,7 @@ export interface EvidenceTranscriptToolResult {
 }
 
 export interface EvidenceTranscriptToolCallArguments {
-  schema_version: "butler.tool-call-arguments-transcript.v1";
+  schema_version: typeof TOOL_CALL_ARGUMENTS_TRANSCRIPT_SCHEMA;
   argument_keys: string[];
   safe_arguments: Record<string, unknown>;
 }
@@ -74,45 +84,14 @@ export function evidenceTranscriptToolResultProjection(result: unknown): Evidenc
 
 export function evidenceTranscriptToolCallArgumentsProjection(args: Record<string, unknown>): EvidenceTranscriptToolCallArguments {
   return {
-    schema_version: "butler.tool-call-arguments-transcript.v1",
-    argument_keys: Object.keys(args).map((key) => safeIdentifier(key, "argument")).slice(0, 24),
+    schema_version: TOOL_CALL_ARGUMENTS_TRANSCRIPT_SCHEMA,
+    argument_keys: safeToolArgumentKeys(args),
     safe_arguments: safeToolArgumentRecord(args),
   };
 }
 
-function safeToolArgumentRecord(args: Record<string, unknown>): Record<string, unknown> {
-  const safe: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(args).slice(0, 24)) {
-    safe[safeIdentifier(key, "argument")] = safeToolArgumentValue(key, value, 0);
-  }
-  return safe;
-}
-
-function safeToolArgumentValue(key: string, value: unknown, depth: number): unknown {
-  if (isSensitiveKey(key)) return "[redacted]";
-  if (depth > 2) return "[redacted]";
-  if (typeof value === "string") return safePublicText(value, "[redacted]");
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "boolean") return value;
-  if (Array.isArray(value)) return value.slice(0, 12).map((item) => safeToolArgumentValue(key, item, depth + 1));
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    const safe: Record<string, unknown> = {};
-    for (const [key, childValue] of Object.entries(record).slice(0, 16)) {
-      safe[safeIdentifier(key, "field")] = safeToolArgumentValue(key, childValue, depth + 1);
-    }
-    return safe;
-  }
-  return null;
-}
-
 export function evidenceTranscriptErrorMessage(value: unknown): string {
   return safePublicText(value, "Tool execution failed.");
-}
-
-function isSensitiveKey(key: string): boolean {
-  return /\b(?:api[_-]?key|token|secret|password|passphrase|authorization|auth|credential|credentials|access[_-]?token|refresh[_-]?token|private[_-]?key|session[_-]?key|cookie|set-cookie)\b/iu
-    .test(key);
 }
 
 function safeCapabilityReceipt(receipt: EvidenceCapabilityReceipt): EvidenceCapabilityReceipt {
@@ -145,12 +124,24 @@ function safeCapabilityReference(reference: EvidenceCapabilityReference): Eviden
   const artifactId = safeOptionalPublicText(reference.artifact_id);
   const toolCallId = safeOptionalPublicText(reference.tool_call_id);
   const taskId = safeOptionalPublicText(reference.task_id);
-  if (label) safe.label = label;
-  if (url) safe.url = url;
-  if (path) safe.path = path;
-  if (artifactId) safe.artifact_id = artifactId;
-  if (toolCallId) safe.tool_call_id = toolCallId;
-  if (taskId) safe.task_id = taskId;
+  if (label) {
+    safe.label = label;
+  }
+  if (url) {
+    safe.url = url;
+  }
+  if (path) {
+    safe.path = path;
+  }
+  if (artifactId) {
+    safe.artifact_id = artifactId;
+  }
+  if (toolCallId) {
+    safe.tool_call_id = toolCallId;
+  }
+  if (taskId) {
+    safe.task_id = taskId;
+  }
   return Object.keys(safe).length > 0 ? safe : null;
 }
 
@@ -179,7 +170,9 @@ function safeLegacyReference(reference: EvidenceReference): EvidenceReference | 
   const kind = reference.kind;
   const ref = kind === "url" ? safeUrl(reference.ref) : safeOptionalPublicText(reference.ref);
   const label = safeOptionalPublicText(reference.label);
-  if (!ref) return null;
+  if (!ref) {
+    return null;
+  }
   return {
     kind,
     ref,
@@ -213,71 +206,6 @@ function safeRejectedReceipt(receipt: RejectedEvidenceCapabilityReceipt): Reject
       message: safePublicText(issue.message, "Receipt was rejected."),
     })),
   };
-}
-
-function safePublicTextArray(values: string[]): string[] {
-  return values
-    .map((value) => safeOptionalPublicText(value))
-    .filter((value): value is string => Boolean(value))
-    .slice(0, 8);
-}
-
-function safePublicText(value: unknown, fallback: string): string {
-  const stripped = stripHiddenReasoning(typeof value === "string" ? value : "");
-  const sanitized = sanitizePublicText(stripped, fallback).trim();
-  if (!sanitized || hasPrivateOrSecretSentinel(sanitized)) return fallback;
-  return sanitized.slice(0, 320);
-}
-
-function safeOptionalPublicText(value: unknown): string | null {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const safe = safePublicText(value, "");
-  return safe ? safe.slice(0, 240) : null;
-}
-
-function safeIdentifier(value: unknown, fallback: string): string {
-  const safe = safeOptionalPublicText(value);
-  return safe?.replace(/\s+/gu, "-").slice(0, 120) || fallback;
-}
-
-function safeUrl(value: unknown): string | null {
-  if (typeof value !== "string" || !value.trim()) return null;
-  try {
-    const parsed = new URL(value.trim());
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-    return parsed.href;
-  } catch {
-    return null;
-  }
-}
-
-function safeRelativePath(value: unknown): string | null {
-  const text = safeOptionalPublicText(value);
-  if (!text) return null;
-  if (
-    text.startsWith("/") ||
-    text.startsWith("~") ||
-    /^[A-Za-z]:[\\/]/u.test(text) ||
-    text.split(/[\\/]+/u).includes("..")
-  ) {
-    return null;
-  }
-  return text;
-}
-
-function stripHiddenReasoning(value: string): string {
-  return value.replace(/<think\b[^>]*>[\s\S]*?<\/think>/giu, "")
-    .replace(/<\/?think\b[^>]*>/giu, "");
-}
-
-function hasPrivateOrSecretSentinel(value: string): boolean {
-  return (
-    /SECRET[_-]?TOKEN/iu.test(value) ||
-    /raw prompt text/iu.test(value) ||
-    /<think\b|<\/think>/iu.test(value) ||
-    /\/Users\/private\b/u.test(value) ||
-    /(?:api[_-]?key|secret|token|authorization|bearer)\s*[:=]/iu.test(value)
-  );
 }
 
 function isPresent<T>(value: T | null): value is T {

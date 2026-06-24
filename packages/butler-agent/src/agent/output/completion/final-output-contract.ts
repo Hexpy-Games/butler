@@ -8,6 +8,9 @@ import {
   goalCompletionEvidenceReviewInstructions,
   renderCompletionEvidenceForReview,
 } from "./obligation-review.ts";
+
+const FINAL_DECISION_LEAK_SAMPLE_CHARS = 1_200;
+const FINAL_TOOL_LEAK_SAMPLE_CHARS = 2_500;
 export {
   completionObligationIncompleteReason,
   requiredCompletionObligations,
@@ -25,7 +28,7 @@ export function finalResultContractRepairPrompt(input: {
     "## Final Result Contract Repair",
     "The previous final answer exposed public work decision fields as the result.",
     "Then rewrite the final answer as the user-facing outcome report only.",
-    "Do not include `작업/이유/다음`, `Work/Why/Next`, raw tool ids, tool-call order, public_work_decision_context, or raw tool logs.",
+    "Do not include public work decision protocol keys (`summary:`, `rationale:`, `next_step:`), legacy `작업/이유/다음` or `Work/Why/Next`, raw tool ids, tool-call order, public_work_decision_context, or raw tool logs.",
     "Preserve the active persona, user language, and any current-turn Active Persona Reminder while rewriting.",
     ...finalResultEvidenceRepairInstructions(),
     "",
@@ -50,7 +53,7 @@ export function goalCompletionReviewPrompt(input: {
     "Review the previous answer against the user's original request and the observed native tool evidence.",
     "This is a generic completion review for every native tool. Do not apply hardcoded rules for any specific tool.",
     "This review is an action gate, not an explanation gate: if the task can still be advanced with an available tool, call the tool instead of returning an incomplete final answer.",
-    "If the previous answer is only a work decision, process note, or `작업/이유/다음` block, it is not a final answer. Continue by calling an appropriate available tool when the tool catalog can advance the request.",
+    "If the previous answer is only a work decision, process note, or public work decision protocol block, it is not a final answer. Continue by calling an appropriate available tool when the tool catalog can advance the request.",
     "If the previous answer fully satisfies the user's requested outcome, return the final user-facing answer only.",
     "Preserve the active persona, user language, and any current-turn Active Persona Reminder in that final user-facing answer.",
     "Attached native tool schemas are the source of truth for available capabilities and required inputs. Do not claim that a tool or input format is unavailable before comparing the missing outcome with those schemas.",
@@ -98,16 +101,16 @@ export function goalCompletionIncompleteContinuationPrompt(input: {
 }
 
 export function containsFinalPublicWorkDecisionLeak(value: string): boolean {
-  const sample = value.trimStart().slice(0, 1_200);
-  const hasWork = /(?:^|\n)\s*(?:[-*]|\d+[.)])?\s*(?:작업|work)\s*[:：-]\s*\S/iu.test(sample);
+  const sample = value.trimStart().slice(0, FINAL_DECISION_LEAK_SAMPLE_CHARS);
+  const hasWork = /(?:^|\n)\s*(?:[-*]|\d+[.)])?\s*(?:작업|work|summary)\s*[:：-]\s*\S/iu.test(sample);
   const hasWhy = /(?:^|\n)\s*(?:[-*]|\d+[.)])?\s*(?:이유|근거|why|rationale)\s*[:：-]\s*\S/iu.test(sample);
-  const hasNext = /(?:^|\n)\s*(?:[-*]|\d+[.)])?\s*(?:다음|다음 단계|next)\s*[:：-]\s*\S/iu.test(sample);
-  const startsWithWork = /^\s*(?:[-*]|\d+[.)])?\s*(?:작업|work)\s*[:：-]\s*\S/iu.test(sample);
+  const hasNext = /(?:^|\n)\s*(?:[-*]|\d+[.)])?\s*(?:다음|다음 단계|next|next_step)\s*[:：-]\s*\S/iu.test(sample);
+  const startsWithWork = /^\s*(?:[-*]|\d+[.)])?\s*(?:작업|work|summary)\s*[:：-]\s*\S/iu.test(sample);
   return hasWork && hasWhy && (hasNext || startsWithWork);
 }
 
 export function containsFinalToolImplementationLeak(value: string, toolNames: string[]): boolean {
-  const sample = value.slice(0, 2_500);
+  const sample = value.slice(0, FINAL_TOOL_LEAK_SAMPLE_CHARS);
   if (
     /FileNotFoundException|stack trace|tool_call|raw tool|raw payload|public_work_decision|completion_obligations|previous turn|the system|\b(?:task|worker|planned)-[A-Za-z0-9][A-Za-z0-9._-]{1,}\b/iu.test(sample) ||
     containsFinalReviewProtocolLeak(sample)
@@ -120,7 +123,9 @@ export function containsFinalToolImplementationLeak(value: string, toolNames: st
 export function completionReviewIncompleteReason(value: string): string | null {
   const match = value.trim().match(/^(?:INCOMPLETE|미완료)\s*[:：]\s*(.+)$/isu);
   const reason = match?.[1]?.trim();
-  if (!reason) return null;
+  if (!reason) {
+    return null;
+  }
   const sanitized = sanitizePublicText(reason, "Butler could not complete this turn.");
   return sanitized || "Butler could not complete this turn.";
 }
@@ -136,7 +141,10 @@ export function stripLeadingPublicWorkDecisionBlock(value: string): string {
       if (sawField) continue;
       continue;
     }
-    if (/^(?:[-*]|\d+[.)])?\s*(?:작업|work|이유|근거|why|rationale|다음|다음 단계|next)\s*[:：-]/iu.test(line)) {
+    if (
+      /^(?:[-*]|\d+[.)])?\s*(?:작업|work|summary|이유|근거|why|rationale|다음|다음 단계|next|next_step)\s*[:：-]/iu
+        .test(line)
+    ) {
       sawField = true;
       index += 1;
       continue;
@@ -149,7 +157,9 @@ export function stripLeadingPublicWorkDecisionBlock(value: string): string {
 
 export function stripToolImplementationLeakLines(value: string, toolNames: string[]): string {
   const explicitFinal = finalAnswerSegmentFromProtocolLeak(value);
-  if (explicitFinal) return explicitFinal;
+  if (explicitFinal) {
+    return explicitFinal;
+  }
   const leaked = [
     "FileNotFoundException",
     "stack trace",

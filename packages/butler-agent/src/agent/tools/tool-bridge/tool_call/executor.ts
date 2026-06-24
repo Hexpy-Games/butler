@@ -52,7 +52,9 @@ export function createToolCallToolHandler(input: {
 }) {
   return async (call: ToolCall) => {
     const resolved = await resolveToolCallTarget(call, input);
-    if (!resolved.ok) return resolved.result;
+    if (!resolved.ok) {
+      return resolved.result;
+    }
     if (call.args.__bridge_resolve_only === true) {
       return resolved;
     }
@@ -85,8 +87,18 @@ export async function resolveToolCallTarget(
 ): Promise<ToolCallResolveResult> {
   const id = stringArg(call.args.id);
   const args = objectArg(call.args.arguments);
-  if (!id) return { ok: false, result: bridgeError("invalid_tool_catalog_id", "tool_call requires a non-empty catalog id.") };
-  if (!args) return { ok: false, result: bridgeError("invalid_tool_arguments", "tool_call arguments must be an object.") };
+  if (!id) {
+    return {
+      ok: false,
+      result: bridgeError("invalid_tool_catalog_id", "tool_call requires a non-empty catalog id."),
+    };
+  }
+  if (!args) {
+    return {
+      ok: false,
+      result: bridgeError("invalid_tool_arguments", "tool_call arguments must be an object."),
+    };
+  }
 
   const description = await describeOneTool(createToolDescribeToolHandler(input), id);
   if (!description) {
@@ -122,11 +134,16 @@ export async function resolveToolCallTarget(
 
   const validation = validateJsonObjectSchema(args, description.schema);
   if (!validation.ok) {
-    return { ok: false, result: bridgeError("invalid_tool_arguments", validation.message, { id, path: validation.path }) };
+    return {
+      ok: false,
+      result: bridgeError("invalid_tool_arguments", validation.message, { id, path: validation.path }),
+    };
   }
 
   const targetCall = describedToolCall(description, args);
-  if (!targetCall.ok) return { ok: false, result: targetCall.result };
+  if (!targetCall.ok) {
+    return { ok: false, result: targetCall.result };
+  }
   return {
     ok: true,
     targetCall: targetCall.call,
@@ -142,8 +159,12 @@ function isToolCallAllowedByTurnDescription(
   },
 ): boolean {
   const visibleToolNames = new Set(currentToolNamesFromInput(input.currentToolNames));
-  if (visibleToolNames.has(description.name)) return true;
-  if (input.describedToolIds === undefined) return true;
+  if (visibleToolNames.has(description.name)) {
+    return true;
+  }
+  if (input.describedToolIds === undefined) {
+    return true;
+  }
   const describedToolIds = new Set(currentToolNamesFromInput(input.describedToolIds));
   return describedToolIds.has(description.id);
 }

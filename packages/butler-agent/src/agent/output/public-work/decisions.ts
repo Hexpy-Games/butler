@@ -1,8 +1,5 @@
-import { randomUUID } from "crypto";
-import { sanitizePublicText } from "../../events/turn-events.ts";
 import type { RuntimeMessageLanguage } from "../messages.ts";
 import type {
-  PublicWorkObligationKind,
   PublicWorkDecision,
   ToolProgressSummary,
 } from "../../turn/native/output/tool-types.ts";
@@ -10,6 +7,15 @@ import {
   activityKindForTool,
   displayToolName,
 } from "../progress/tool-progress.ts";
+import {
+  isUsablePublicDecisionText,
+  publicDecisionId,
+  publicDecisionStructuredFields,
+  renderPublicDecisionContext,
+} from "./protocol.ts";
+
+const PUBLIC_DECISION_EVIDENCE_REF_LIMIT = 2;
+const PUBLIC_DECISION_FALLBACK_MIN_CHARS = 8;
 
 export function publicWorkDecisionPayload(decision: PublicWorkDecision): Record<string, unknown> {
   return {
@@ -30,30 +36,33 @@ export function publicWorkDecisionsFromAssistantText(input: {
   existingDecisions: PublicWorkDecision[];
 }): PublicWorkDecision[] {
   const structured = publicDecisionStructuredFields(input.text);
-  const safeText = publicDecisionText(input.text);
-  if (!safeText && structured.length === 0) return [];
-  const sentences = safeText ? publicDecisionSentences(safeText) : [];
-  return input.toolCalls.map((call, index) => ({
-    decisionId: `decision-${randomUUID().slice(0, 8)}`,
-    summary: structured[index]?.summary ??
-      structured[0]?.summary ??
-      sentences[index] ??
-      sentences[0] ??
-      fallbackDecisionForToolName(call.name, input.language).summary,
-    rationale: structured[index]?.rationale ??
-      structured[0]?.rationale ??
-      sentences[index + 1] ??
-      fallbackDecisionForToolName(call.name, input.language).rationale,
-    evidenceRefs: input.existingDecisions.slice(-2).map((decision) => decision.summary),
-    nextStep: structured[index]?.nextStep ??
-      structured[0]?.nextStep ??
-      fallbackDecisionForToolName(call.name, input.language).nextStep,
-    completionObligations: structured[index]?.completionObligations ??
-      structured[0]?.completionObligations ??
-      [],
-    source: structured[index]?.repaired || structured[0]?.repaired ? "review-repaired" : "assistant-authored",
-    toolName: call.name,
-  }));
+  if (structured.length === 0) {
+    return [];
+  }
+  return input.toolCalls.map((call, index) => {
+    const indexedDecision = structured[index];
+    const sharedDecision = structured[0];
+    const fallback = fallbackDecisionForToolName(call.name, input.language);
+    const decisionWasRepaired = indexedDecision?.repaired === true || sharedDecision?.repaired === true;
+    return {
+      decisionId: publicDecisionId(),
+      summary: indexedDecision?.summary ??
+        sharedDecision?.summary ??
+        fallback.summary,
+      rationale: indexedDecision?.rationale ??
+        sharedDecision?.rationale ??
+        fallback.rationale,
+      evidenceRefs: input.existingDecisions
+        .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
+        .map((decision) => decision.summary),
+      nextStep: indexedDecision?.nextStep ?? sharedDecision?.nextStep ?? fallback.nextStep,
+      completionObligations: indexedDecision?.completionObligations ??
+        sharedDecision?.completionObligations ??
+        [],
+      source: decisionWasRepaired ? "review-repaired" : "assistant-authored",
+      toolName: call.name,
+    };
+  });
 }
 
 export function takePublicWorkDecisionForTool(input: {
@@ -63,47 +72,63 @@ export function takePublicWorkDecisionForTool(input: {
   language: RuntimeMessageLanguage;
   previousDecisions: PublicWorkDecision[];
 }): PublicWorkDecision {
-  const matchingIndex = input.pending.findIndex((decision) => decision.toolName === input.toolName);
-  const pending = matchingIndex >= 0
-    ? input.pending.splice(matchingIndex, 1)[0]
-    : input.pending.shift();
+  const pending = takePendingDecision(input.pending, input.toolName);
   if (pending) {
     const fallback = fallbackDecisionForProgress(input.progress, input.language, input.previousDecisions);
     const summaryOk = isUsablePublicDecisionText(pending.summary);
+    const rationaleOk = isUsablePublicDecisionText(
+      pending.rationale ?? "",
+      { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS },
+    );
+    const nextStepOk = isUsablePublicDecisionText(
+      pending.nextStep ?? "",
+      { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS },
+    );
+    const hasEvidenceRefs = pending.evidenceRefs.length > 0;
+    const evidenceRefs = hasEvidenceRefs
+      ? pending.evidenceRefs
+      : input.previousDecisions
+        .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
+        .map((decision) => decision.summary);
     return {
       ...pending,
-      summary: summaryOk ? pending.summary : fallback.summary,
-      rationale: isUsablePublicDecisionText(pending.rationale ?? "", { minChars: 8 })
-        ? pending.rationale
-        : fallback.rationale,
-      nextStep: isUsablePublicDecisionText(pending.nextStep ?? "", { minChars: 8 })
-        ? pending.nextStep
-        : fallback.nextStep,
-      evidenceRefs: pending.evidenceRefs.length > 0
-        ? pending.evidenceRefs
-        : input.previousDecisions.slice(-2).map((decision) => decision.summary),
+      summary: decisionTextOrFallback(summaryOk, pending.summary, fallback.summary),
+      rationale: decisionTextOrFallback(rationaleOk, pending.rationale, fallback.rationale),
+      nextStep: decisionTextOrFallback(nextStepOk, pending.nextStep, fallback.nextStep),
+      evidenceRefs,
       source: summaryOk ? pending.source : "review-repaired",
     };
   }
   const fallback = fallbackDecisionForProgress(input.progress, input.language, input.previousDecisions);
   return {
-    decisionId: `decision-${randomUUID().slice(0, 8)}`,
+    decisionId: publicDecisionId(),
     ...fallback,
     source: "runtime-derived",
     toolName: input.toolName,
   };
 }
 
-function isUsablePublicDecisionText(
-  value: string,
-  options: { minChars?: number } = {},
-): boolean {
-  const text = sanitizePublicText(value, "").trim();
-  const minChars = options.minChars ?? 8;
-  if (text.length < minChars) return false;
-  const compact = text.replace(/\s+/gu, "");
-  if (new Set(Array.from(compact)).size < 3) return false;
-  return true;
+function takePendingDecision(
+  pending: PublicWorkDecision[],
+  toolName: string,
+): PublicWorkDecision | undefined {
+  const matchingIndex = pending.findIndex((decision) => decision.toolName === toolName);
+  const hasMatchingDecision = matchingIndex >= 0;
+  if (hasMatchingDecision) {
+    return pending.splice(matchingIndex, 1)[0];
+  }
+  return pending.shift();
+}
+
+function decisionTextOrFallback(
+  useCandidate: boolean,
+  candidate: string | undefined,
+  fallback: string | undefined,
+): string {
+  if (useCandidate && candidate) {
+    return candidate;
+  }
+  return fallback ?? "";
 }
 
 export function annotateToolResultWithDecisionContext(input: {
@@ -112,7 +137,9 @@ export function annotateToolResultWithDecisionContext(input: {
   decisions: PublicWorkDecision[];
 }): unknown {
   const context = renderPublicDecisionContext(input.decisions);
-  if (!context) return input.result;
+  if (!context) {
+    return input.result;
+  }
   const decision = publicWorkDecisionPayload(input.decision);
   if (input.result && typeof input.result === "object" && !Array.isArray(input.result)) {
     return {
@@ -155,133 +182,27 @@ function fallbackDecisionForProgress(
   language: RuntimeMessageLanguage,
   previousDecisions: PublicWorkDecision[],
 ): Pick<PublicWorkDecision, "summary" | "rationale" | "nextStep" | "evidenceRefs"> {
+  const evidenceRefs = previousDecisions
+    .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
+    .map((decision) => decision.summary);
   if (language === "ko") {
+    const hasPreviousDecisions = previousDecisions.length > 0;
     return {
       summary: progress.workBlockLabel,
-      rationale: previousDecisions.length > 0
+      rationale: hasPreviousDecisions
         ? "앞선 작업에서 확인한 내용을 이어받아 다음 근거를 보강합니다."
         : "요청을 추측으로 처리하지 않도록 먼저 확인 가능한 근거를 확보합니다.",
       nextStep: "확인된 결과를 다음 작업 선택과 최종 보고에 반영합니다.",
-      evidenceRefs: previousDecisions.slice(-2).map((decision) => decision.summary),
+      evidenceRefs,
     };
   }
+  const hasPreviousDecisions = previousDecisions.length > 0;
   return {
     summary: progress.workBlockLabel,
-    rationale: previousDecisions.length > 0
+    rationale: hasPreviousDecisions
       ? "This continues from earlier work decisions and strengthens the next piece of evidence."
       : "This gathers observable evidence before making a claim.",
     nextStep: "Use the result to guide the next tool choice and final report.",
-    evidenceRefs: previousDecisions.slice(-2).map((decision) => decision.summary),
+    evidenceRefs,
   };
-}
-
-function publicDecisionText(value: string): string {
-  // Public work notes are replayed and injected into later tool turns, so sanitize at the module boundary.
-  const sanitized = sanitizePublicText(value, "");
-  if (!sanitized) return "";
-  if (sanitized.length > 420) return sanitized.slice(0, 420);
-  return sanitized;
-}
-
-function publicDecisionSentences(value: string): string[] {
-  return value
-    .split(/(?:\n+|(?<=[.!?。！？])\s+)/u)
-    .map((line) => line
-      .replace(/^\s*(?:작업|계획|decision|rationale|next)\s*[:：-]\s*/iu, "")
-      .trim())
-    .filter(Boolean)
-    .slice(0, 4);
-}
-
-function publicDecisionStructuredFields(value: string): Array<{
-  summary?: string;
-  rationale?: string;
-  nextStep?: string;
-  completionObligations?: PublicWorkObligationKind[];
-  repaired?: boolean;
-}> {
-  const decisions: Array<{
-    summary?: string;
-    rationale?: string;
-    nextStep?: string;
-    completionObligations?: PublicWorkObligationKind[];
-    repaired?: boolean;
-  }> = [];
-  let current: {
-    summary?: string;
-    rationale?: string;
-    nextStep?: string;
-    completionObligations?: PublicWorkObligationKind[];
-    repaired?: boolean;
-  } = {};
-  for (const rawLine of value.split(/\n+/u)) {
-    const line = rawLine
-      .replace(/^\s*(?:[-*]|\d+[.)])\s*/u, "")
-      .trim();
-    if (!line) continue;
-    const obligationMatch = line.match(/^completion_obligations\s*[:：-]\s*(.+)$/iu);
-    if (obligationMatch) {
-      const obligations = publicDecisionCompletionObligations(obligationMatch[1] ?? "");
-      if (obligations.length > 0) current.completionObligations = obligations;
-      else current.repaired = true;
-      continue;
-    }
-    const match = line.match(/^(작업|결정|요약|summary|decision|work|why|이유|근거|rationale|next|다음|다음 단계)\s*[:：-]\s*(.+)$/iu);
-    if (!match) continue;
-    const key = match[1]?.toLocaleLowerCase("en-US") ?? "";
-    const text = publicDecisionText(match[2] ?? "");
-    if (/^(작업|결정|요약|summary|decision|work)$/iu.test(key)) {
-      if (current.summary || current.rationale || current.nextStep) {
-        decisions.push(current);
-        current = {};
-      }
-      if (text) current.summary = text;
-      else current.repaired = true;
-    } else if (/^(why|이유|근거|rationale)$/iu.test(key)) {
-      if (text) current.rationale = text;
-      else current.repaired = true;
-    } else if (/^(next|다음|다음 단계)$/iu.test(key)) {
-      if (text) current.nextStep = text;
-      else current.repaired = true;
-    }
-  }
-  if (current.summary || current.rationale || current.nextStep) decisions.push(current);
-  return decisions.slice(0, 6);
-}
-
-function publicDecisionCompletionObligations(value: string): PublicWorkObligationKind[] {
-  const allowed = new Set<PublicWorkObligationKind>([
-    "source_verified",
-    "command_executed",
-    "durable_artifact",
-    "data_table_created",
-    "chart_rendered",
-  ]);
-  const seen = new Set<PublicWorkObligationKind>();
-  for (const raw of value.split(/[, ]+/u)) {
-    const normalized = raw.trim().toLowerCase().replace(/[^a-z_]/gu, "");
-    if (!allowed.has(normalized as PublicWorkObligationKind)) continue;
-    seen.add(normalized as PublicWorkObligationKind);
-  }
-  return Array.from(seen).slice(0, 6);
-}
-
-function renderPublicDecisionContext(decisions: PublicWorkDecision[]): string {
-  const recent = decisions.slice(-6);
-  if (recent.length === 0) return "";
-  return [
-    "## Public Work Decisions",
-    ...recent.map((decision, index) => {
-      const parts = [
-        `${index + 1}. ${decision.summary}`,
-        decision.rationale ? `why: ${decision.rationale}` : "",
-        decision.nextStep ? `next: ${decision.nextStep}` : "",
-        decision.completionObligations && decision.completionObligations.length > 0
-          ? `completion_obligations: ${decision.completionObligations.join(", ")}`
-          : "",
-        decision.evidenceRefs.length > 0 ? `refs: ${decision.evidenceRefs.slice(0, 3).join("; ")}` : "",
-      ].filter(Boolean);
-      return parts.join(" | ");
-    }),
-  ].join("\n");
 }

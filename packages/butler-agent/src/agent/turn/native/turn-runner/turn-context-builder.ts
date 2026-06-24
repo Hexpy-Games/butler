@@ -25,7 +25,6 @@ import {
   emitRuntimePreparationProgressBestEffort,
   emitTurnEventBestEffort,
 } from "../progress/turn-delivery-events.ts";
-import { appendRuntimeTurnContextMetric } from "../../../../operations/metrics/context-monitor.ts";
 import { renderFeedbackBufferContext } from "../../../cognition/feedback/buffer.ts";
 import {
   defaultRecentConversationTokenBudget,
@@ -47,6 +46,10 @@ import {
 } from "../../../policy/session-context-policy.ts";
 import { workerModelRulesFromMetadata } from "../policy/turn-metadata-policy.ts";
 import { runtimePreparationProgressSummary } from "./runtime-preparation-progress.ts";
+import {
+  recordContextMetric,
+  recordTurnContextBestEffortFailure,
+} from "./context-metrics.ts";
 import type { NativeTurnRunnerDeps, NativeStoredSessionConfig } from "./turn-runner-types.ts";
 
 export async function prepareNativeTurnContext(input: {
@@ -179,8 +182,8 @@ async function maybeCompact(input: {
       modelRef: input.turnInput.model,
       budgetOverrides: input.deps.contextBudgetOverrides,
     });
-  } catch {
-    // Compaction is a safety optimization; it must not block the active turn.
+  } catch (error) {
+    recordTurnContextBestEffortFailure(input, "turn_context_compaction_failed", error);
   }
 }
 
@@ -192,7 +195,9 @@ async function maybeRecall(
   },
   userText: string,
 ): Promise<string> {
-  if (!input.deps.automaticRecallEnabled || !shouldAttemptAutomaticRecall(input.turnInput, userText)) {
+  const automaticRecallEnabled = input.deps.automaticRecallEnabled;
+  const shouldAttemptRecall = shouldAttemptAutomaticRecall(input.turnInput, userText);
+  if (!automaticRecallEnabled || !shouldAttemptRecall) {
     return "";
   }
   try {
@@ -202,7 +207,8 @@ async function maybeRecall(
       projectId: projectId(input.session),
       limit: 4,
     }));
-  } catch {
+  } catch (error) {
+    recordTurnContextBestEffortFailure(input, "turn_context_recall_failed", error);
     return "";
   }
 }
@@ -263,32 +269,10 @@ async function emitStartedAndPreparation(input: {
   });
 }
 
-function recordContextMetric(
-  input: { turnInput: RuntimeTurnInput; deps: NativeTurnRunnerDeps },
-  normalizedPrompt: ReturnType<typeof normalizeTurnPrompt>,
-  prompt: string,
-): void {
-  try {
-    appendRuntimeTurnContextMetric({
-      butlerData: input.deps.butlerData,
-      sessionId: input.turnInput.handle.sessionId,
-      model: input.turnInput.model,
-      totalPromptChars: prompt.length,
-      promptContextChars: normalizedPrompt.promptContextChars,
-      compactionContextChars: normalizedPrompt.compactionContextChars,
-      feedbackBufferContextChars: normalizedPrompt.feedbackBufferContextChars,
-      workingMemoryContextChars: normalizedPrompt.workingMemoryContextChars,
-      recentConversationChars: normalizedPrompt.recentConversationChars,
-      recallContextChars: normalizedPrompt.recallContextChars,
-      inboundMessageChars: normalizedPrompt.inboundMessageChars,
-    });
-  } catch {
-    // Context telemetry must never block user turns.
-  }
-}
-
 function projectId(session: NativeStoredSessionConfig): string | undefined {
-  return typeof session.init.metadata?.projectId === "string"
-    ? session.init.metadata.projectId
-    : undefined;
+  const metadataProjectId = session.init.metadata?.projectId;
+  if (typeof metadataProjectId !== "string") {
+    return undefined;
+  }
+  return metadataProjectId;
 }

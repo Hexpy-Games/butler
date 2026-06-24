@@ -3,6 +3,18 @@ import type { ToolProgressSummary } from "../../turn/native/output/tool-types.ts
 import { safeToolDetailRows, safeToolInputLabel } from "./arguments.ts";
 import { contextualToolProgressSummary } from "./contextual.ts";
 import { workBlockLabelForTool } from "./labels.ts";
+import { activityKindForTool } from "./tool-progress-metadata.ts";
+
+const TOOL_PROGRESS_DISPLAY_NAME_BY_TOOL_NAME: Record<string, string> = {
+  get_context_monitor: "Get Context Monitor",
+  get_memory_health: "Get Memory Health",
+  get_usage_monitor: "Get Usage Monitor",
+  list_tool_capabilities: "List Tool Capabilities",
+  read_tool_output_artifact: "Read Tool Output Artifact",
+  tool_call: "Tool Call",
+  tool_describe: "Tool Describe",
+  tool_search: "Tool Search",
+};
 
 export function summarizeToolProgress(
   name: string,
@@ -29,22 +41,28 @@ export function summarizeToolProgress(
   };
 }
 
-export function activityKindForTool(name: string): ToolProgressSummary["kind"] {
-  const normalized = name.toLocaleLowerCase("en-US");
-  if (/dispatch|resume_worker|orchestration|stream/u.test(normalized)) return "dispatch";
-  if (/edit|write|patch|modify|transform|csv|table/u.test(normalized)) return "edited";
-  if (/bash|shell|command|exec|run/u.test(normalized)) return "ran_command";
-  if (/search|query|web/u.test(normalized)) return "searched";
-  if (/read|open|cat|inspect/u.test(normalized)) return "read";
-  return "used_tool";
-}
+export { activityKindForTool } from "./tool-progress-metadata.ts";
 
 export function displayToolName(name: string, kind: ToolProgressSummary["kind"]): string {
-  if (kind === "ran_command") return "Bash";
-  if (kind === "edited") return "Edit";
-  if (kind === "searched") return name.includes("web") ? "Web search" : "Search";
-  if (kind === "read") return "Read";
-  if (kind === "dispatch") return "Dispatch";
+  const explicitDisplayName = TOOL_PROGRESS_DISPLAY_NAME_BY_TOOL_NAME[name];
+  if (explicitDisplayName) {
+    return explicitDisplayName;
+  }
+  if (kind === "ran_command") {
+    return "Bash";
+  }
+  if (kind === "edited") {
+    return "Edit";
+  }
+  if (kind === "searched") {
+    return name === "web_search" ? "Web search" : "Search";
+  }
+  if (kind === "read") {
+    return "Read";
+  }
+  if (kind === "dispatch") {
+    return "Dispatch";
+  }
   return name
     .split(/[_-]+/u)
     .filter(Boolean)
