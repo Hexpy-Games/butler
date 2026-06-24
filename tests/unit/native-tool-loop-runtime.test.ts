@@ -6825,6 +6825,42 @@ test("native runtime returns recoverable tool errors to the model instead of abo
     event.payload.ok === false)).toBe(true);
 });
 
+test("native runtime does not emit turn failed before recoverable limited delivery", async () => {
+  const events: Array<{ kind: string }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async () => {
+      const error = new Error("missing evidence receipt for source_verified");
+      error.name = "GoalCompletionIncompleteError";
+      throw error;
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/recoverable-limited-boundary",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: {
+      text: "근거가 부족하면 오류 대신 제한 포함 결과로 정리해줘.",
+    },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
+    metadata: { runtimePolicy: { completionReview: "enabled" } },
+  })).rejects.toThrow("missing evidence");
+
+  expect(events.some((event) => event.kind === "turn.failed")).toBe(false);
+});
+
 test("native runtime marks interrupted direct WorkStreams recoverable", async () => {
   const sessionId = "butler/main/interrupted-direct-work";
   const runtime = new NativeToolLoopRuntime({

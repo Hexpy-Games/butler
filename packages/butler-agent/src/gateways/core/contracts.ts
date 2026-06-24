@@ -192,10 +192,17 @@ export type GatewayDispatchResult =
   | GatewayMissingHandlerResult
   | GatewayUnroutableResult;
 
+export interface GatewayDeliveryMetadata {
+  delivery_state: string;
+  limitation_codes: string[];
+  limitations: string[];
+}
+
 export interface GatewayActorTurnResult {
   text: string;
   deliveries?: OutboundAction[];
   artifacts?: ArtifactRef[];
+  delivery?: GatewayDeliveryMetadata;
   generatedSessionTitle?: string | null;
   loadedSkillNames?: string[];
   providerThreadRef?: string;

@@ -13,6 +13,7 @@ import {
 export interface AppResponderSafeError {
   code: string;
   message: string;
+  cause?: string;
 }
 
 export type AppLimitedDelivery = RecoverableLimitedDelivery;
@@ -48,6 +49,7 @@ export function appSafeResponderError(error: unknown): AppResponderSafeError {
     return {
       code: runtimeFailure.code,
       message: runtimeFailure.message,
+      cause: safeResponderCause(runtimeFailure.cause),
     };
   }
   return {
@@ -92,4 +94,9 @@ function appErrorMessage(error: unknown): string {
     return typeof message === "string" ? message : "";
   }
   return typeof error === "string" ? error : "";
+}
+
+function safeResponderCause(value: unknown): string | undefined {
+  const safe = safeLimitationText(value, "");
+  return safe || undefined;
 }

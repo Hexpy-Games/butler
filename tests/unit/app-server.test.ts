@@ -37,6 +37,7 @@ import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-l
 import { WorkOrchestrationStore } from "../../packages/butler-agent/src/agent/work/work-orchestration.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { deliveredWithLimitationsState } from "../../packages/butler-agent/src/agent/turn/runtime-delivery-state.ts";
 import {
   discoverLocalModels,
   upsertLocalModelConfig,
@@ -1565,6 +1566,71 @@ test("project session gateway routing uses the app session hint and project id",
         id: "project-topic-routing",
       },
     });
+  } finally {
+    server.stop();
+    bridge.close();
+  }
+});
+
+test("app gateway bridge preserves runtime limited delivery through app projection", async () => {
+  const runtime = new ScriptedRuntime(
+    "검증 실패가 남아 있어 완료로 보고하지 않고 복구 가능한 결과로 남겼습니다.",
+    undefined,
+    undefined,
+    deliveredWithLimitationsState({
+      limitationCodes: ["validation_failed"],
+      limitations: ["Validation suite failed without a later passing receipt: npm test"],
+    }),
+  );
+  const bridge = new AppGatewayBridge({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runtime,
+    provider: fakeProvider,
+    sessionTitleGenerator: false,
+  });
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder: bridge.responder,
+  });
+  try {
+    const response = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "검증 실패가 있으면 완료로 닫지 말고 보고해줘.",
+    });
+    expect(response.data.turn.state).toBe("thinking");
+
+    const assistant = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.status === "delivered",
+    );
+    expect(assistant).toMatchObject({
+      status: "delivered",
+      retryable: false,
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["validation_failed"],
+      limitations: ["Validation suite failed without a later passing receipt: npm test"],
+    });
+    expect(assistant.safe_error_code ?? null).toBeNull();
+
+    const deliveredTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "delivered",
+    );
+    expect(deliveredTurn).toMatchObject({
+      state: "delivered",
+      safe_status_label: "Delivered with limitations",
+      retryable: false,
+    });
+    expect(deliveredTurn.safe_error_code ?? null).toBeNull();
+
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(JSON.stringify(events)).not.toContain("turn.failed");
+    expect(JSON.stringify(events)).not.toContain("gateway_failed");
   } finally {
     server.stop();
     bridge.close();
@@ -6452,6 +6518,7 @@ test("app transport failure projection fails queued turns after app-server resta
           kind: "turn_failed",
           turnId,
           safeErrorCode: "gateway_failed",
+          safeErrorCause: "provider socket token=secret",
           source: "test",
           privateDetail: "provider socket private stack",
         },
@@ -6477,6 +6544,7 @@ test("app transport failure projection fails queued turns after app-server resta
       retryable: true,
     });
     expect(JSON.stringify(messages)).not.toContain("private stack");
+    expect(JSON.stringify(messages)).not.toContain("token=secret");
 
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns).toHaveLength(1);
@@ -6487,6 +6555,25 @@ test("app transport failure projection fails queued turns after app-server resta
       cancellable: false,
       retryable: true,
     });
+    const events = await getJson(`${server.url}events?cursor=0`);
+    const failedEvent = events.data.events.find(
+      (
+        event: {
+          type: string;
+          payload?: { event?: { kind?: string; payload?: unknown } };
+        },
+      ) =>
+        event.type === "agent.turn_event" &&
+        event.payload?.event?.kind === "turn.failed",
+    );
+    expect(failedEvent?.payload?.event?.payload).toMatchObject({
+      safeErrorCode: "gateway_failed",
+    });
+    expect(JSON.stringify(failedEvent?.payload?.event?.payload)).not.toContain(
+      "safeCause",
+    );
+    expect(JSON.stringify(events)).not.toContain("token=secret");
+    expect(JSON.stringify(events)).not.toContain("private stack");
   } finally {
     server.stop();
   }
@@ -8442,6 +8529,23 @@ test("provider failures persist actionable safe API status", async () => {
     expect(assistant.text).toContain("HTTP 500");
     expect(JSON.stringify(messages)).not.toContain("token=secret");
     expect(JSON.stringify(messages)).not.toContain("private upstream stack");
+
+    const events = await getJson(`${server.url}events?cursor=0`);
+    const failedEvent = events.data.events.find(
+      (
+        event: {
+          type: string;
+          payload?: { event?: { kind?: string; payload?: unknown } };
+        },
+      ) =>
+        event.type === "agent.turn_event" &&
+        event.payload?.event?.kind === "turn.failed",
+    );
+    expect(failedEvent?.payload?.event?.payload).toMatchObject({
+      safeErrorCode: "provider_api_error",
+      safeCause: "private upstream stack [redacted]",
+    });
+    expect(JSON.stringify(events)).not.toContain("token=secret");
   } finally {
     server.stop();
   }
@@ -9222,6 +9326,7 @@ class ScriptedRuntime implements AgentRuntimeAdapter {
     private readonly artifacts?:
       | ArtifactRef[]
       | ((input: RuntimeTurnInput) => ArtifactRef[]),
+    private readonly delivery?: ReturnType<typeof deliveredWithLimitationsState>,
   ) {}
 
   async createSession(
@@ -9247,6 +9352,7 @@ class ScriptedRuntime implements AgentRuntimeAdapter {
       text,
       runtimeSessionRef: input.handle.runtimeSessionRef,
       artifacts,
+      delivery: this.delivery,
     };
   }
 }

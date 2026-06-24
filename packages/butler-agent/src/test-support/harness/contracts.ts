@@ -8,6 +8,7 @@ import type {
   PromptCacheRetention,
   SessionRole,
 } from "../../gateways/core/contracts.ts";
+import type { RuntimeDeliveryClassification } from "../../agent/turn/runtime-delivery-state.ts";
 export type {
   ArtifactRef,
   AttachmentRef,
@@ -139,6 +140,7 @@ export interface RuntimeTurnResult {
   text: string;
   providerThreadRef?: string;
   runtimeSessionRef?: string;
+  delivery?: RuntimeDeliveryClassification;
   deliveries?: OutboundAction[];
   artifacts?: ArtifactRef[];
   raw?: unknown;

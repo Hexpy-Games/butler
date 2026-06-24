@@ -4,6 +4,7 @@ import type { ArtifactRef, DeliveryResult, InboundEnvelope, OutboundAction, Sess
 import type { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import { safeRuntimeFailure, type RuntimeFailureDiagnostic } from "../../integrations/providers/provider-errors.ts";
 import { recoverableLimitedDeliveryForError } from "../../agent/turn/recoverable-delivery.ts";
+import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
 import type { DeliveryGuard } from "../transport/delivery-guard.ts";
 
 export interface QueuedInboundServer {
@@ -94,6 +95,9 @@ function failureActionForOriginalInbound(input: {
   const sessionId = input.item.envelope.routingHints?.sessionId?.trim();
   if (!turnId || !sessionId) return null;
   const safeFailure = input.failure ?? safeRuntimeFailure(input.error);
+  const safeErrorCause = safeFailure.code === "gateway_failed"
+    ? ""
+    : safeLimitationText(safeFailure.cause, "");
   return {
     actionId: `queued-inbound-failure:${input.item.queueId}:${input.item.envelope.transport}:${turnId}`,
     transport: input.item.envelope.transport,
@@ -111,6 +115,7 @@ function failureActionForOriginalInbound(input: {
       sessionId,
       turnId,
       safeErrorCode: safeFailure.code,
+      safeErrorCause: safeErrorCause || undefined,
       provider: safeFailure.provider,
       api: safeFailure.api,
       statusCode: safeFailure.statusCode,

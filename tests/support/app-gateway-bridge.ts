@@ -40,7 +40,13 @@ import {
   renderServiceUpdateResult,
 } from "../../packages/butler-agent/src/operations/update/component-updater.ts";
 import type { RuntimeTurnEventInput } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
-import type { AppMessageResponder, AppMessageResponderFile, AppMessageResponderInput, AppMessageResponderResult } from "../../packages/butler-agent/src/gateways/app/store.ts";
+import type {
+  AppMessageResponder,
+  AppMessageResponderFile,
+  AppMessageResponderInput,
+  AppMessageResponderResult,
+  DeliveryLimitationMetadata,
+} from "../../packages/butler-agent/src/gateways/app/store.ts";
 
 const APP_SESSION_ID = "butler/app-general";
 
@@ -136,6 +142,7 @@ export class AppGatewayBridge {
       const finalText = typeof result.handlerResult.metadata?.text === "string"
         ? result.handlerResult.metadata.text
         : "";
+      const delivery = deliveryLimitationMetadataFromRecord(result.handlerResult.metadata);
       if ([finalText, ...intermediate].some((text) => text.trim())) {
         this.completeReportingWorkStreamBestEffort(sessionIdForChat(input.chatId));
       }
@@ -146,6 +153,7 @@ export class AppGatewayBridge {
       return {
         texts: dedupeTexts([...intermediate, finalText]),
         files,
+        delivery,
       };
     } finally {
       input.signal?.removeEventListener("abort", abortListener);
@@ -303,6 +311,17 @@ export class AppGatewayBridge {
     }
     return files;
   }
+}
+
+function deliveryLimitationMetadataFromRecord(
+  record: Record<string, unknown> | undefined,
+): DeliveryLimitationMetadata | undefined {
+  if (!record || record.delivery_state !== "delivered_with_limitations") return undefined;
+  return {
+    delivery_state: "delivered_with_limitations",
+    limitation_codes: safeStringArray(record.limitation_codes)?.slice(0, 8) ?? [],
+    limitations: safeStringArray(record.limitations)?.slice(0, 8) ?? [],
+  };
 }
 
 export function createDefaultAppGatewayBridge(options: AppGatewayBridgeOptions = {}): AppGatewayBridge {
