@@ -1035,6 +1035,7 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(electronMain).toContain("process.exit(0)");
   expect(electronMain).not.toContain('tray.on("click"');
   expect(electronMain).not.toContain("openButlerFromTray();\n    });");
+  expect(electronMain).not.toContain('BUTLER_APP_MENU_BAR_HELPER: "1"');
   expect(electronMain).toContain("function activateButlerApp()");
   expect(electronMain).toContain("if (isMenuBarHelperProcess) {\n    openButlerFromTray();");
   expect(electronMain).toContain('app.on("activate", activateButlerApp)');
@@ -1133,6 +1134,19 @@ test("mac menu bar helper does not report installed service plist as missing Age
   expect(helperSource).toContain('label: "Butler Agent: Stopped"');
   expect(helperSource).toContain('label: "Butler Agent: Not Installed"');
   expect(helperSource).toContain("canStart: false");
+});
+
+test("mac menu bar helper opens main App without leaking helper mode", () => {
+  const helperSource = read("packages/butler-app/client/electron/native/menu-bar-helper.swift");
+
+  expect(helperSource).toContain("configuration.environment = mainAppEnvironment()");
+  expect(helperSource).toContain('env["BUTLER_APP_MENU_BAR_HELPER"] = ""');
+  expect(helperSource).toContain('env["BUTLER_APP_MENU_BAR_HELPER_PID_FILE"] = ""');
+  expect(helperSource).toContain("processLooksLikeCurrentHelper(pid)");
+  expect(helperSource).toContain(
+    "let expectedBundleIdentifier = Bundle.main.bundleIdentifier",
+  );
+  expect(helperSource).toContain("return bundleIdentifier == expectedBundleIdentifier");
 });
 
 test("navigation UI is backed by app-server data rather than sidebar fixtures", () => {
