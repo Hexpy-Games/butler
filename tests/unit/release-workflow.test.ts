@@ -385,14 +385,15 @@ test("current release notes describe the GitHub release changelog", () => {
 
   expect(notes).toContain(`# Butler ${currentReleaseTag}`);
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("active worker panels");
-  expect(notes).toContain("packaged App upgrade startup");
-  expect(notes).toContain("Arch Linux App packaging");
-  expect(notes).toContain("GitHub Release attachments");
-  expect(notes).toContain(`butler-${currentVersion}-SHA256SUMS`);
-  expect(notes).toContain("(#37)");
-  expect(notes).toContain("(#38)");
-  expect(notes).toContain("(#33)");
-  expect(notes).toContain("(#39)");
+  expect(notes).toContain("menu bar helper launches");
+  expect(notes).toContain("first visible progress");
+  expect(notes).toContain("progressive runtime tool execution");
+  expect(notes).toContain("Z.AI / GLM hosted provider support");
+  expect(notes).toContain("canonical Project Ledger specs");
+  expect(notes).toContain("(#40)");
+  expect(notes).toContain("(#41)");
+  expect(notes).toContain("(#42)");
+  expect(notes).toContain("(#43)");
+  expect(notes).toContain("(#44)");
   expect(notes).not.toContain("## Validation");
 });
