@@ -18,6 +18,7 @@ import { DeliveryGuard } from "../../packages/butler-agent/src/interfaces/transp
 import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/mock/adapter.ts";
 import { APP_TRANSPORT } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
 import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
+import { FIRST_VISIBLE_PROGRESS_ASSISTANT_SOURCE } from "../../packages/butler-agent/src/agent/events/first-visible-progress.ts";
 import { readFirstVisibleLatencySummary } from "../../packages/butler-agent/src/operations/metrics/first-visible-latency.ts";
 
 let tempDir = "";
@@ -544,6 +545,7 @@ test("app session actor emits first visible progress before context preparation"
   runtime.firstTurnRelease.resolve();
   const order: string[] = [];
   const turnEvents: string[] = [];
+  const firstProgressNotes: unknown[] = [];
   store.upsert({
     sessionId: "butler/main",
     role: "butler",
@@ -573,7 +575,13 @@ test("app session actor emits first visible progress before context preparation"
     deliverTurnEvent: async ({ event }) => {
       order.push(`turnEvent:${event.kind}`);
       turnEvents.push(event.kind);
+      if (event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
+        firstProgressNotes.push(event.payload?.note);
+        firstProgressNotes.push(event.payload?.source);
+      }
     },
+    firstVisibleProgressGenerator: async ({ text }) =>
+      `질문을 기준으로 ${text} 맥락을 먼저 정리하겠습니다.`,
   });
   const actor = await lifecycle.getOrCreate("butler/main", "butler");
 
@@ -582,6 +590,8 @@ test("app session actor emits first visible progress before context preparation"
   });
 
   expect(turnEvents[0]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  expect(firstProgressNotes).toContain("질문을 기준으로 hello 맥락을 먼저 정리하겠습니다.");
+  expect(firstProgressNotes).toContain(FIRST_VISIBLE_PROGRESS_ASSISTANT_SOURCE);
   expect(order.indexOf(`turnEvent:${FIRST_VISIBLE_PROGRESS_EVENT_KIND}`)).toBeLessThan(
     order.indexOf("buildTurnContext"),
   );
@@ -600,6 +610,48 @@ test("app session actor emits first visible progress before context preparation"
     role: "butler",
     source: "gateway-actor",
   });
+  store.close();
+});
+
+test("app session actor skips first visible progress when generation returns null", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime();
+  runtime.firstTurnRelease.resolve();
+  const turnEvents: string[] = [];
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: APP_TRANSPORT,
+      accountId: "local",
+      peerId: "butler/main",
+    }],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler.",
+    firstVisibleProgressGenerator: () => null,
+    deliverTurnEvent: async ({ event }) => {
+      turnEvents.push(event.kind);
+    },
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(appInbound("first-progress-null", "hello"))).resolves.toMatchObject({
+    text: "reply-1",
+  });
+
+  expect(turnEvents).not.toContain(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  expect(turnEvents).toContain("turn.completed");
+  expect(readFirstVisibleLatencySummary({ butlerData: tempDir }).events).toBe(0);
   store.close();
 });
 

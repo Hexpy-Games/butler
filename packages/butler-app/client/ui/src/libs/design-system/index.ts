@@ -18,6 +18,7 @@ export * from "./components/Popover";
 export * from "./components/PillButton";
 export * from "./components/Select";
 export * from "./components/Separator";
+export * from "./components/Skeleton";
 export * from "./components/Slider";
 export * from "./components/Switch";
 export * from "./components/Tag";

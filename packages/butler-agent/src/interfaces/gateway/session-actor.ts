@@ -13,7 +13,7 @@ import type {
 } from "../../test-support/harness/contracts.ts";
 import type { RuntimeDeliveryClassification } from "../../agent/turn/runtime-delivery-state.ts";
 import {
-  FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE,
+  FIRST_VISIBLE_PROGRESS_ASSISTANT_SOURCE,
   firstVisibleProgressPayload,
 } from "../../agent/events/first-visible-progress.ts";
 import {
@@ -71,6 +71,11 @@ interface SessionActorOptions {
     envelope: InboundEnvelope;
     route?: GatewayRoute;
   }) => Promise<string | null>;
+  generateFirstVisibleProgress?: (input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+    route?: GatewayRoute;
+  }) => Promise<string | null>;
   now?: () => string;
 }
 
@@ -85,8 +90,6 @@ function defaultNow(): string {
 
 const DEFAULT_TYPING_INTERVAL_MS = 4_000;
 const EMPTY_FINAL_DURABLE_TEXT = "[turn completed without public final text]";
-const FIRST_PROGRESS_VISIBLE_CONTEXT_NOTE =
-  "요청을 접수했고 필요한 맥락을 확인하겠습니다.";
 
 type StewardActivityTimelineEvent = {
   schema: "butler.steward-activity-event.v1";
@@ -608,6 +611,12 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     if (input.envelope.transport !== APP_TRANSPORT) return;
     if (!this.options.deliverTurnEvent) return;
     try {
+      const note = await this.generateFirstVisibleProgressBestEffort(
+        input.binding,
+        input.envelope,
+        input.route,
+      );
+      if (!note) return;
       await this.options.deliverTurnEvent({
         binding: input.binding,
         envelope: input.envelope,
@@ -616,8 +625,8 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
           createdAt: input.timestamp,
           payload: firstVisibleProgressPayload({
-            note: FIRST_PROGRESS_VISIBLE_CONTEXT_NOTE,
-            source: FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE,
+            note,
+            source: FIRST_VISIBLE_PROGRESS_ASSISTANT_SOURCE,
           }),
         },
       });
@@ -631,6 +640,24 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       });
     } catch {
       // First visible progress is latency UX, not the authoritative turn path.
+    }
+  }
+
+  private async generateFirstVisibleProgressBestEffort(
+    binding: StoredSessionBinding,
+    envelope: InboundEnvelope,
+    route?: GatewayRoute,
+  ): Promise<string | null> {
+    try {
+      return (
+        (await this.options.generateFirstVisibleProgress?.({
+          binding,
+          envelope,
+          route,
+        })) ?? null
+      );
+    } catch {
+      return null;
     }
   }
 

@@ -13,6 +13,10 @@ import type { PolicyApprovalMode, PolicyToolDefinition } from "../../agent/polic
 import { PolicyEngine } from "../../agent/policy/policy-engine.ts";
 import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
 import { normalizeModelRef, type SessionTitleGenerator } from "../../agent/output/session-title.ts";
+import {
+  generateFirstVisibleProgressWithProvider,
+  type FirstVisibleProgressGenerator,
+} from "../../agent/output/first-visible-progress.ts";
 import { StewardSessionActor } from "./steward-session.ts";
 import { recordSystemEvent } from "../../test-support/harness/durable-session-transcript.ts";
 
@@ -39,6 +43,7 @@ export interface SessionLifecycleServiceOptions {
     event: RuntimeTurnEventInput;
   }) => Promise<void>;
   sessionTitleGenerator?: SessionTitleGenerator | false;
+  firstVisibleProgressGenerator?: FirstVisibleProgressGenerator | false;
   now?: () => string;
 }
 
@@ -101,6 +106,15 @@ export class SessionLifecycleService {
 
   private createActor(binding: StoredSessionBinding): GatewaySessionActor {
     this.requestProjectCapsuleEnsure(binding);
+    const firstVisibleProgressGenerator: FirstVisibleProgressGenerator | null =
+      this.options.firstVisibleProgressGenerator === false
+        ? null
+        : this.options.firstVisibleProgressGenerator ??
+          ((progressInput) =>
+            generateFirstVisibleProgressWithProvider(
+              this.options.provider,
+              progressInput,
+            ));
 
     const shared = {
       sessionId: binding.sessionId,
@@ -148,6 +162,26 @@ export class SessionLifecycleService {
             }
           }
         : undefined,
+      generateFirstVisibleProgress:
+        firstVisibleProgressGenerator === null
+          ? undefined
+          : async ({ binding, envelope }: {
+              binding: StoredSessionBinding;
+              envelope: InboundEnvelope;
+              route?: GatewayRoute;
+            }) => {
+              const text = (envelope.message.text ?? "").trim();
+              if (!text) return null;
+              try {
+                return await firstVisibleProgressGenerator({
+                  text,
+                  model: normalizeModelRef(binding.modelRef),
+                  signal: envelope.signal,
+                }) ?? null;
+              } catch {
+                return null;
+              }
+            },
       now: this.options.now,
     };
 
