@@ -1978,6 +1978,21 @@ test("settings, command palette, automations, right panel, and worker UI are app
   ).toContain('triggerTestClass="hosted-auth-method-select"');
   expect(
     read(
+      "packages/butler-app/client/ui/src/components/settings/HostedCredentialFields.tsx",
+    ),
+  ).toContain("copy.apiBaseUrl");
+  expect(
+    read(
+      "packages/butler-app/client/ui/src/components/settings/useHostedModelForm.ts",
+    ),
+  ).toContain("api_base_url: apiBaseUrl.trim()");
+  expect(
+    read(
+      "packages/butler-app/client/ui/src/components/settings/useHostedModelForm.ts",
+    ),
+  ).toContain("apiBaseUrl.trim() !== defaultApiBaseUrl");
+  expect(
+    read(
       "packages/butler-app/client/ui/src/components/settings/ModelAddEditPage.tsx",
     ),
   ).toContain("showProviderSelect={false}");
@@ -2686,6 +2701,7 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(modelManagementE2e).toContain("xAI / Grok");
   expect(modelManagementE2e).toContain("Qwen Cloud");
   expect(modelManagementE2e).toContain("Moonshot / Kimi");
+  expect(modelManagementE2e).toContain("Z.AI / GLM");
   expect(electronMain).toContain("findAvailablePort");
   expect(electronMain).toContain("syncPreloadServerEnvironment");
   expect(electronMain).toContain("createBundledAgentSupervisor");

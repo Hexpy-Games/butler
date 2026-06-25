@@ -14,10 +14,13 @@ interface HostedCredentialFieldsProps {
   providerId: string;
   authMethod: ProviderAuthMethod;
   credentialId: string;
+  apiBaseUrl: string;
   apiKey: string;
   credentialLabel: string;
   oauthBusy?: boolean;
   oauthLogin?: OpenAIOAuthLoginResult | null;
+  showApiBaseUrl?: boolean;
+  onApiBaseUrlChange: (value: string) => void;
   onAuthMethodChange: (value: ProviderAuthMethod) => void;
   onCredentialIdChange: (value: string) => void;
   onOAuthCheck?: () => void;
@@ -34,10 +37,13 @@ export function HostedCredentialFields({
   providerId,
   authMethod,
   credentialId,
+  apiBaseUrl,
   apiKey,
   credentialLabel,
   oauthBusy = false,
   oauthLogin = null,
+  showApiBaseUrl = false,
+  onApiBaseUrlChange,
   onAuthMethodChange,
   onCredentialIdChange,
   onOAuthCheck,
@@ -67,6 +73,12 @@ export function HostedCredentialFields({
             value: method,
             label: method === "codex_oauth" ? copy.codexOauth : copy.apiKeyAuth,
           }))}
+        />
+      ) : null}
+      {showApiBaseUrl ? (
+        <SettingsField
+          label={copy.apiBaseUrl}
+          control={<Input value={apiBaseUrl} onChange={(event) => onApiBaseUrlChange(event.target.value)} />}
         />
       ) : null}
       {authMethod === "api_key" ? (

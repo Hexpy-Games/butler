@@ -83,6 +83,7 @@ beforeEach(() => {
   delete process.env.BUTLER_XAI_BASE_URL;
   delete process.env.BUTLER_ANTHROPIC_BASE_URL;
   delete process.env.BUTLER_GOOGLE_BASE_URL;
+  delete process.env.BUTLER_ZAI_BASE_URL;
 });
 
 afterEach(() => {
@@ -441,7 +442,7 @@ test("registered Anthropic and Gemini models use provider-native API keys", asyn
   expect(calls[1]!.headers.get("x-goog-api-key")).toBe("gemini-secret");
 });
 
-test("registered Qwen and Kimi models use their OpenAI-compatible endpoints", async () => {
+test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints", async () => {
   registerHostedModelConfig({
     providerId: "qwen",
     modelId: "qwen3.7-max",
@@ -453,6 +454,13 @@ test("registered Qwen and Kimi models use their OpenAI-compatible endpoints", as
     modelId: "kimi-k2.6",
     authType: "api_key",
     apiKey: "kimi-secret",
+  }, tempDir);
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret",
+    apiBaseUrl: "https://api.z.ai/api/coding/paas/v4/",
   }, tempDir);
 
   const calls: Array<{ url: string; authorization: string; body: Record<string, any> }> = [];
@@ -475,6 +483,10 @@ test("registered Qwen and Kimi models use their OpenAI-compatible endpoints", as
     model: "kimi/kimi-k2.6",
     prompt: "hi",
   })).resolves.toBe("ok");
+  await expect(runPromptText({
+    model: "zai/glm-5.2",
+    prompt: "hi",
+  })).resolves.toBe("ok");
 
   expect(calls[0]!).toMatchObject({
     url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
@@ -486,6 +498,11 @@ test("registered Qwen and Kimi models use their OpenAI-compatible endpoints", as
     authorization: "Bearer kimi-secret",
   });
   expect(calls[1]!.body.model).toBe("kimi-k2.6");
+  expect(calls[2]!).toMatchObject({
+    url: "https://api.z.ai/api/coding/paas/v4/chat/completions",
+    authorization: "Bearer zai-secret",
+  });
+  expect(calls[2]!.body.model).toBe("glm-5.2");
 });
 
 test("model API calls retry transient backend failures without caller rework", async () => {

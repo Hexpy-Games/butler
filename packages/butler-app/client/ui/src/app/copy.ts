@@ -535,6 +535,7 @@ export interface AppCopy {
       provider: string;
       model: string;
       authMethod: string;
+      apiBaseUrl: string;
       apiKey: string;
       credential: string;
       credentialLabel: string;
@@ -1191,6 +1192,7 @@ const koKrCopy: AppCopy = {
       provider: "제공자",
       model: "모델",
       authMethod: "인증 방식",
+      apiBaseUrl: "API base URL",
       apiKey: "API key",
       credential: "저장된 인증",
       credentialLabel: "인증 이름",
@@ -1854,6 +1856,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       provider: "Provider",
       model: "Model",
       authMethod: "Auth method",
+      apiBaseUrl: "API base URL",
       apiKey: "API key",
       credential: "Saved credential",
       credentialLabel: "Credential name",

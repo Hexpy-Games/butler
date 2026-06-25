@@ -1367,6 +1367,7 @@ export class AppServerStore {
           credentialId: input.credential_id,
           apiKey: input.api_key,
           credentialLabel: input.credential_label,
+          apiBaseUrl: input.api_base_url,
         },
         this.butlerData,
       );
