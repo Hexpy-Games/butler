@@ -6509,6 +6509,124 @@ test("app transport sync skips unchanged transcript snapshots", async () => {
   }
 });
 
+test("app transport sync projects appended progress and final events once", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "project appended progress and final",
+  });
+  const turnId = result.data.turn.id;
+  const userMessageId = result.data.accepted.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:06:00.000Z",
+      payload: {
+        actionId: `runtime-intermediate:app:${userMessageId}:initial-progress`,
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+          replyToMessageId: userMessageId,
+        },
+        metadata: {
+          kind: "tool_progress",
+          activityKind: "searched",
+          toolName: "Web search",
+          safeLabel: "Web search: initial row",
+          inputLabel: "initial row",
+          toolCallId: "tool-initial-progress",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    expect(server.store.syncAllAppTransportEvents()).toBe(1);
+
+    appendTranscriptEvent(
+      createTranscriptEvent({
+        sessionId: "butler/app-general",
+        kind: "outbound",
+        transport: "app",
+        timestamp: "2026-05-18T12:06:01.000Z",
+        payload: {
+          actionId: `runtime-intermediate:app:${userMessageId}:appended-progress`,
+          accountId: "local",
+          peer: { kind: "dm", id: "general" },
+          message: {
+            text: "",
+            replyToMessageId: userMessageId,
+          },
+          metadata: {
+            kind: "tool_progress",
+            activityKind: "read_file",
+            toolName: "Read",
+            safeLabel: "Read: appended row",
+            inputLabel: "appended row",
+            toolCallId: "tool-appended-progress",
+          },
+        },
+      }),
+    );
+    appendTranscriptEvent(
+      createTranscriptEvent({
+        sessionId: "butler/app-general",
+        kind: "outbound",
+        transport: "app",
+        timestamp: "2026-05-18T12:06:02.000Z",
+        payload: {
+          actionId: `runtime-final:app:${userMessageId}:appended-final`,
+          accountId: "local",
+          peer: { kind: "dm", id: "general" },
+          message: {
+            text: "Finished from appended final.",
+            replyToMessageId: userMessageId,
+          },
+          metadata: {
+            kind: "final_result",
+            turnId,
+            source: "test",
+          },
+        },
+      }),
+    );
+
+    expect(server.store.syncAllAppTransportEvents()).toBe(2);
+    expect(server.store.syncAllAppTransportEvents()).toBe(0);
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.turn_state).toBe("delivered");
+    expect(summary.data.latest_progress.state).toBe("delivered");
+    expect(summary.data.latest_progress.safe_progress_rows).toContainEqual(
+      expect.objectContaining({
+        kind: "read_file",
+        safe_tool_name: "Read",
+        safe_input_label: "appended row",
+      }),
+    );
+    const projected = server.store.db
+      .query<{ count: number }, [string]>(
+        `
+      SELECT COUNT(*) AS count
+      FROM projected_transport_events
+      WHERE action_id = ?
+    `,
+      )
+      .get(`runtime-final:app:${userMessageId}:appended-final`);
+    expect(projected?.count).toBe(1);
+  } finally {
+    server.stop();
+  }
+});
+
 test("terminal app transport snapshots do not expose stale running progress rows", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
