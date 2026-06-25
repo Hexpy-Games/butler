@@ -11,6 +11,7 @@ import {
   type OpenAIAuthMode,
 } from "./openai-auth.ts";
 import { DEFAULT_CODEX_MODEL, resolveDynamicOpenAIModel } from "./openai-models.ts";
+import { defaultHostedProviderApiBaseUrl } from "./model-catalog.ts";
 import {
   readRegisteredHostedModelConfigs,
   resolveProviderCredentialSecret,
@@ -279,6 +280,7 @@ interface HostedRuntimeConfig {
   modelRef: `${HostedModelProviderId}/${string}`;
   authType: "api_key" | "codex_oauth";
   apiKey?: string;
+  apiBaseUrl?: string;
 }
 
 interface OpenAIAuthOverride {
@@ -1873,7 +1875,8 @@ function hostedProviderId(value: string): HostedModelProviderId | null {
     value === "google" ||
     value === "xai" ||
     value === "qwen" ||
-    value === "kimi"
+    value === "kimi" ||
+    value === "zai"
   ) return value;
   return null;
 }
@@ -1903,6 +1906,7 @@ function resolveHostedRuntimeConfig(model?: string): HostedRuntimeConfig | null 
       modelId: registered.model_id,
       modelRef: registered.model_ref,
       authType: "codex_oauth",
+      apiBaseUrl: registered.api_base_url,
     };
   }
   const apiKey = resolveProviderCredentialSecret(
@@ -1919,6 +1923,7 @@ function resolveHostedRuntimeConfig(model?: string): HostedRuntimeConfig | null 
     modelRef: registered.model_ref,
     authType: "api_key",
     apiKey,
+    apiBaseUrl: registered.api_base_url,
   };
 }
 
@@ -2942,7 +2947,7 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
   return text;
 }
 
-type HostedOpenAICompatibleProviderId = "xai" | "qwen" | "kimi";
+type HostedOpenAICompatibleProviderId = "xai" | "qwen" | "kimi" | "zai";
 
 interface HostedChatToolCall {
   id: string;
@@ -2968,16 +2973,16 @@ function promptTextForHosted(options: Pick<PromptOptions, "prompt" | "attachment
 function isHostedOpenAICompatibleProvider(
   providerId: HostedModelProviderId,
 ): providerId is HostedOpenAICompatibleProviderId {
-  return providerId === "xai" || providerId === "qwen" || providerId === "kimi";
+  return providerId === "xai" || providerId === "qwen" || providerId === "kimi" || providerId === "zai";
 }
 
 function hostedProviderApiBase(config: HostedRuntimeConfig): string {
+  if (config.apiBaseUrl) return config.apiBaseUrl.replace(/\/+$/u, "");
   const envKey = `BUTLER_${config.providerId.toUpperCase()}_BASE_URL`;
   const fromEnv = process.env[envKey]?.trim();
   if (fromEnv) return fromEnv.replace(/\/+$/u, "");
-  if (config.providerId === "xai") return "https://api.x.ai/v1";
-  if (config.providerId === "qwen") return "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-  if (config.providerId === "kimi") return "https://api.moonshot.ai/v1";
+  const defaultBaseUrl = defaultHostedProviderApiBaseUrl(config.providerId);
+  if (defaultBaseUrl) return defaultBaseUrl;
   if (config.providerId === "anthropic") return "https://api.anthropic.com/v1";
   if (config.providerId === "google") return "https://generativelanguage.googleapis.com/v1beta";
   return "https://api.openai.com/v1";

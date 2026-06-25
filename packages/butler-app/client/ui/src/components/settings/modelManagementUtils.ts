@@ -72,6 +72,14 @@ export function providerCredentials(
   );
 }
 
+export function providerDefaultApiBaseUrl(
+  modelCatalog: ModelCatalogView,
+  providerId: string,
+): string {
+  return modelCatalog.providers.find((item) => item.provider_id === providerId)
+    ?.default_api_base_url ?? "";
+}
+
 export function providerModels(
   modelCatalog: ModelCatalogView,
   providerId: string,

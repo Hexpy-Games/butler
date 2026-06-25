@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   listModelMetadata,
+  defaultHostedProviderApiBaseUrl,
   type ModelProviderId,
   type ProviderAuthMethod,
   type ProviderModelMetadata,
@@ -39,6 +40,7 @@ export interface RegisteredHostedModelConfig {
   display_name: string;
   auth_type: ProviderAuthMethod;
   credential_id?: string;
+  api_base_url?: string;
   created_at: string;
   updated_at: string;
 }
@@ -51,6 +53,7 @@ export interface HostedModelRegistrationInput {
   credentialId?: string;
   apiKey?: string;
   credentialLabel?: string;
+  apiBaseUrl?: string;
 }
 
 interface ButlerConfig {
@@ -111,7 +114,8 @@ function hostedProviderId(value: unknown): HostedModelProviderId | null {
     value === "google" ||
     value === "xai" ||
     value === "qwen" ||
-    value === "kimi"
+    value === "kimi" ||
+    value === "zai"
   ) return value;
   return null;
 }
@@ -124,6 +128,18 @@ function safeLabel(value: unknown, fallback: string): string {
   const text = typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : "";
   if (!text) return fallback;
   return text.length > 80 ? text.slice(0, 79).trimEnd() : text;
+}
+
+function normalizeHostedApiBaseUrl(value: unknown): string | undefined {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return undefined;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    return text.replace(/\/+$/u, "");
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeCredential(value: unknown): ProviderCredentialRecord | null {
@@ -264,6 +280,7 @@ function normalizeRegisteredModel(value: unknown): RegisteredHostedModelConfig |
     ? input.credential_id.trim()
     : undefined;
   if (authType === "api_key" && !credentialId) return null;
+  const apiBaseUrl = normalizeHostedApiBaseUrl(input.api_base_url);
   const now = new Date().toISOString();
   return {
     provider_id: providerId,
@@ -273,6 +290,7 @@ function normalizeRegisteredModel(value: unknown): RegisteredHostedModelConfig |
     display_name: safeLabel(input.display_name, base.display_name),
     auth_type: authType,
     ...(credentialId ? { credential_id: credentialId } : {}),
+    ...(apiBaseUrl ? { api_base_url: apiBaseUrl } : {}),
     created_at: typeof input.created_at === "string" ? input.created_at : now,
     updated_at: typeof input.updated_at === "string" ? input.updated_at : now,
   };
@@ -331,6 +349,10 @@ export function registerHostedModelConfig(
     if (!secret) throw new Error("Provider API key credential is not registered.");
   }
   const now = new Date().toISOString();
+  const apiBaseUrl = normalizeHostedApiBaseUrl(input.apiBaseUrl);
+  if (input.apiBaseUrl?.trim() && !apiBaseUrl) {
+    throw new Error("Provider API base URL must be a valid http(s) URL.");
+  }
   const existing = readRegisteredHostedModelConfigs(butlerData);
   const previous = existing.find((model) => model.model_ref === base.model_ref);
   const next = existing.filter((model) => model.model_ref !== base.model_ref);
@@ -342,6 +364,7 @@ export function registerHostedModelConfig(
     display_name: safeLabel(input.displayName, base.display_name),
     auth_type: input.authType,
     ...(credentialId ? { credential_id: credentialId } : {}),
+    ...(apiBaseUrl ? { api_base_url: apiBaseUrl } : {}),
     created_at: previous?.created_at ?? now,
     updated_at: now,
   };
@@ -381,6 +404,7 @@ export function registeredHostedModelMetadata(
       credential_id: model.credential_id,
       credential_label: credential?.label,
       credential_masked_value: credential ? maskedCredentialValue(credential.secret) : undefined,
+      api_base_url: model.api_base_url ?? defaultHostedProviderApiBaseUrl(model.provider_id),
       runtime_supported: true,
       reasoning_efforts: [...base.reasoning_efforts],
     }];
