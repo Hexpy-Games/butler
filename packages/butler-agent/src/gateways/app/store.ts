@@ -1,11 +1,14 @@
 import { Database } from "bun:sqlite";
 import {
   accessSync,
+  closeSync,
   constants as fsConstants,
   copyFileSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   readdirSync,
   realpathSync,
   statSync,
@@ -562,6 +565,7 @@ interface TranscriptSyncSnapshot {
   path: string;
   size: number;
   mtimeMs: number;
+  trailing: string;
 }
 
 export class AppServerStore {
@@ -2499,30 +2503,48 @@ export class AppServerStore {
   }
 
   getSessionSummary(sessionId: string): SessionSummaryView {
-    const view = this.getSessionView(sessionId);
-    const latestProgress = view.latest_turn?.progress ?? {
-      summary: view.messages.at(-1)
-        ? "Latest message delivered"
-        : "No progress yet",
-      updated_at: view.updated_at,
-      state: "idle",
-      safe_progress_rows: [],
-    };
+    const session = this.getSession(sessionId);
+    const turns = this.listTurns(sessionId);
+    const latestTurn = turns.at(-1);
+    const messages = this.listMessages(sessionId);
+    const latestProgress = latestTurn
+      ? this.sessionViewTurn(latestTurn).progress
+      : {
+          summary: messages.at(-1)
+            ? "Latest message delivered"
+            : "No progress yet",
+          updated_at: session.updated_at,
+          state: "idle" as const,
+          safe_progress_rows: [],
+        };
+    const now = new Date().toISOString();
     return {
-      session_id: view.session_id,
+      session_id: session.id,
       latest_progress: latestProgress,
-      turn_state: view.latest_turn?.state ?? "idle",
-      branch_info: view.branch ?? this.branchInfoForSession(sessionId),
-      artifacts: view.artifacts,
-      skills_used: view.skills_used,
-      context_details: view.context ?? this.getContextDetails(sessionId),
-      safe_errors: view.errors,
-      automation_targets: view.automations,
-      worker_activity: view.workers.filter(isActiveWorkerActivity),
-      work_streams: view.work_streams,
+      turn_state: latestTurn?.state ?? "idle",
+      branch_info: this.branchInfoForSession(sessionId),
+      artifacts: messages
+        .flatMap((message) => message.artifacts ?? [])
+        .slice(-20),
+      skills_used: this.loadedSkillNamesForSession(sessionId, latestTurn?.id),
+      context_details: this.getContextDetails(sessionId),
+      safe_errors: messages
+        .filter((message) => message.safe_error_code)
+        .slice(-5)
+        .map((message) => ({
+          code: message.safe_error_code!,
+          message: "A safe app-visible error occurred.",
+          created_at: message.updated_at,
+        })),
+      automation_targets: this.listAutomationTargets(sessionId),
+      worker_activity: this.listWorkerActivity({
+        sessionId,
+        includeHistory: false,
+      }).workers.filter(isActiveWorkerActivity),
+      work_streams: this.listActiveWorkStreams(sessionId),
       staleness: {
         state: "fresh",
-        updated_at: view.generated_at,
+        updated_at: now,
         source: "app-server",
       },
     };
@@ -2558,33 +2580,7 @@ export class AppServerStore {
         : null;
     const runtimeSessionId = sessionHintForRow(sessionId);
     this.syncLinkedWorkOrchestrationsForSession(sessionId, runtimeSessionId);
-    const workStreamStore = new WorkStreamStore(this.butlerData);
-    const seenWorkStreams = new Set<string>();
-    const workStreams = [
-      ...workStreamStore.list({ sessionId, includeTerminal: false }),
-      ...workStreamStore.list({
-        sessionId: runtimeSessionId,
-        includeTerminal: false,
-      }),
-    ]
-      .filter((stream) => {
-        if (seenWorkStreams.has(stream.id)) return false;
-        seenWorkStreams.add(stream.id);
-        return true;
-      })
-      .slice(0, 10)
-      .map((stream) => ({
-        id: stream.id,
-        title: stream.title,
-        owner_session_id: stream.owner_session_id ?? undefined,
-        project_id: stream.project_id ?? undefined,
-        state: stream.state,
-        current_phase: stream.current_phase ?? undefined,
-        active_step_id: stream.active_step_id ?? undefined,
-        todo_list_id: stream.todo_list_id ?? undefined,
-        terminal: stream.terminal,
-        updated_at: stream.updated_at,
-      }));
+    const workStreams = this.listActiveWorkStreams(sessionId, runtimeSessionId);
     const now = new Date().toISOString();
     const artifacts = this.listArtifacts(sessionId);
     const context = this.getContextDetails(sessionId);
@@ -2638,6 +2634,39 @@ export class AppServerStore {
         latestMessage?.updated_at ??
         session.updated_at,
     };
+  }
+
+  private listActiveWorkStreams(
+    sessionId: string,
+    runtimeSessionId = sessionHintForRow(sessionId),
+  ): SessionView["work_streams"] {
+    const workStreamStore = new WorkStreamStore(this.butlerData);
+    const seenWorkStreams = new Set<string>();
+    return [
+      ...workStreamStore.list({ sessionId, includeTerminal: false }),
+      ...workStreamStore.list({
+        sessionId: runtimeSessionId,
+        includeTerminal: false,
+      }),
+    ]
+      .filter((stream) => {
+        if (seenWorkStreams.has(stream.id)) return false;
+        seenWorkStreams.add(stream.id);
+        return true;
+      })
+      .slice(0, 10)
+      .map((stream) => ({
+        id: stream.id,
+        title: stream.title,
+        owner_session_id: stream.owner_session_id ?? undefined,
+        project_id: stream.project_id ?? undefined,
+        state: stream.state,
+        current_phase: stream.current_phase ?? undefined,
+        active_step_id: stream.active_step_id ?? undefined,
+        todo_list_id: stream.todo_list_id ?? undefined,
+        terminal: stream.terminal,
+        updated_at: stream.updated_at,
+      }));
   }
 
   listArtifacts(sessionId: string): SessionArtifactSummary[] {
@@ -3628,9 +3657,22 @@ export class AppServerStore {
     ) {
       return 0;
     }
-    const events = readTranscriptFromPath(transcriptPath);
+    const incrementalStart =
+      previous?.path === transcriptPath &&
+      previous.size > 0 &&
+      previous.size < stats.size
+        ? previous.size
+        : 0;
+    const transcriptChunk =
+      incrementalStart > 0
+        ? readTranscriptTextRange(transcriptPath, incrementalStart, stats.size)
+        : readTranscriptTextRange(transcriptPath, 0, stats.size);
+    const text = incrementalStart > 0
+      ? `${previous?.trailing ?? ""}${transcriptChunk}`
+      : transcriptChunk;
+    const parsed = readTranscriptEventsFromText(text);
     let applied = 0;
-    for (const event of events) {
+    for (const event of parsed.events) {
       if (event.kind !== "outbound" || event.transport !== APP_TRANSPORT)
         continue;
       if (this.projectAppOutboundEvent(chatId, event)) applied += 1;
@@ -3639,6 +3681,7 @@ export class AppServerStore {
       path: transcriptPath,
       size: stats.size,
       mtimeMs: stats.mtimeMs,
+      trailing: parsed.trailing,
     });
     return applied;
   }
@@ -3651,6 +3694,7 @@ export class AppServerStore {
     const actionId = safeOptionalShortText(payload.actionId);
     const message = isRecord(payload.message) ? payload.message : {};
     const metadata = isRecord(payload.metadata) ? payload.metadata : {};
+    if (actionId && this.hasProjectedTransportEvent(actionId)) return false;
     if (isAppWorkerResultOutbound(metadata)) {
       return this.projectAppWorkerResult(chatId, event, actionId, message);
     }
@@ -3714,6 +3758,7 @@ export class AppServerStore {
       this.getTurn(turnId).state === "delivered" &&
       artifactFiles.length === 0
     ) {
+      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
       return false;
     }
 
@@ -3763,6 +3808,7 @@ export class AppServerStore {
         },
       });
     }
+    this.markProjectedTransportEvent(actionId, event.eventId, chatId);
     this.touchChat(chatId);
     void this.drainQueuedSessionMessages(chatId).catch(() => undefined);
     return true;
@@ -10049,12 +10095,45 @@ function transcriptPathFromDataHome(
 
 function readTranscriptFromPath(path: string): TranscriptEvent[] {
   if (!existsSync(path)) return [];
-  const text = readFileSync(path, "utf8");
-  if (!text.trim()) return [];
+  const text = readTranscriptTextFromPath(path);
+  return readTranscriptEventsFromText(text).events;
+}
+
+function readTranscriptTextFromPath(path: string): string {
+  return readFileSync(path, "utf8");
+}
+
+function readTranscriptTextRange(
+  path: string,
+  start: number,
+  end?: number,
+): string {
+  const length = Math.max(0, (end ?? statSync(path).size) - start);
+  if (length === 0) return "";
+  const fd = openSync(path, "r");
+  try {
+    const buffer = Buffer.allocUnsafe(length);
+    const bytesRead = readSync(fd, buffer, 0, length, start);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function readTranscriptEventsFromText(text: string): {
+  events: TranscriptEvent[];
+  trailing: string;
+} {
+  if (!text.trim()) return { events: [], trailing: "" };
+  const lines = text.split("\n");
+  let trailing = "";
+  if (!text.endsWith("\n")) {
+    trailing = lines.pop() ?? "";
+  }
   const events: TranscriptEvent[] = [];
-  for (const line of text.split("\n")) {
+  const parseLine = (line: string): boolean => {
     const trimmed = line.trim();
-    if (!trimmed) continue;
+    if (!trimmed) return true;
     try {
       const parsed = JSON.parse(trimmed) as TranscriptEvent;
       if (
@@ -10066,11 +10145,18 @@ function readTranscriptFromPath(path: string): TranscriptEvent[] {
       ) {
         events.push(parsed);
       }
+      return true;
     } catch {
-      continue;
+      return false;
     }
+  };
+  for (const line of lines) {
+    parseLine(line);
   }
-  return events;
+  if (trailing && parseLine(trailing)) {
+    trailing = "";
+  }
+  return { events, trailing };
 }
 
 function progressRowFromAppOutbound(
