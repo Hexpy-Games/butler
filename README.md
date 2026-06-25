@@ -31,14 +31,14 @@ workstreams.
 ## Quick Start
 
 Download Butler App from the
-[v0.0.16 GitHub Release](https://github.com/Hexpy-Games/butler/releases/tag/v0.0.16).
+[v0.0.17 GitHub Release](https://github.com/Hexpy-Games/butler/releases/tag/v0.0.17).
 
 | Platform | Installer |
 | --- | --- |
-| macOS Apple Silicon | `butler-app-0.0.16-darwin-arm64.pkg` |
-| Linux x64 | `butler-app-0.0.16-linux-x64.deb` |
-| Linux ARM64 | `butler-app-0.0.16-linux-arm64.deb` |
-| Arch Linux x64 | `butler-app-0.0.16-archlinux-x64.pkg.tar.zst` |
+| macOS Apple Silicon | `butler-app-0.0.17-darwin-arm64.pkg` |
+| Linux x64 | `butler-app-0.0.17-linux-x64.deb` |
+| Linux ARM64 | `butler-app-0.0.17-linux-arm64.deb` |
+| Arch Linux x64 | `butler-app-0.0.17-archlinux-x64.pkg.tar.zst` |
 
 Butler Agent is included in the app. On first launch, setup runs inside the
 Butler App in this order:
@@ -55,7 +55,7 @@ desktop app.
 
 ```bash
 cd ~
-wget https://github.com/Hexpy-Games/butler/releases/download/v0.0.16/butler-agent-0.0.16-all.tar.gz
+wget https://github.com/Hexpy-Games/butler/releases/download/v0.0.17/butler-agent-0.0.17-all.tar.gz
 mkdir -p ~/butler
 tar -xzf ~/butler-agent-*-all.tar.gz -C ~/butler
 cd ~/butler
@@ -195,7 +195,7 @@ commands.
 
 ## Status
 
-Butler is `v0.0.16` and pre-release. Expect breaking changes before `v1.0.0`.
+Butler is `v0.0.17` and pre-release. Expect breaking changes before `v1.0.0`.
 
 The intended deployment model is single-user and self-hosted on a machine you
 control. Butler can run tools, edit files, dispatch background workers, and
