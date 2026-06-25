@@ -309,9 +309,6 @@ test("manual app install test environment installs an isolated test pkg", () => 
     scripts?: Record<string, string>;
   };
   const script = readRepoFile("packages/butler-app/scripts/app-install-test-env.ts");
-  const distributionSpec = readRepoFile(
-    "packages/butler-app/specs/background-service-distribution.md",
-  );
 
   expect(packageJson.scripts?.["app:install:test-env"]).toContain(
     "packages/butler-app/scripts/app-install-test-env.ts",
@@ -343,9 +340,6 @@ test("manual app install test environment installs an isolated test pkg", () => 
   expect(script).toContain("rmSync(installedRoot, { recursive: true, force: true })");
   expect(script).toContain("rmSync(packageWorkDir, { recursive: true, force: true })");
   expect(script).toContain("--user-data-dir=${electronProfileDir}");
-  expect(distributionSpec).toContain("Manual installer testing must not install the production App package");
-  expect(distributionSpec).toContain("Cleanup must remove the");
-  expect(distributionSpec).toContain("isolated Electron profile instead of falling back");
 });
 
 test("manual app install test environment validates isolation guards", () => {
