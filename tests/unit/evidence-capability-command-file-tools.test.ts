@@ -119,6 +119,58 @@ describe("run_command evidence capability receipts", () => {
     expect(ledger.satisfied).toEqual(["command_executed", "durable_artifact", "data_table_created"]);
     expect(JSON.stringify(receipts)).not.toContain(workspace);
   });
+
+  test("records successful verified product-state side effects when output_paths are omitted", async () => {
+    await runCommandTool({
+      butlerData,
+      workspacePath: workspace,
+      args: { command: "git init >/dev/null" },
+    });
+
+    const result = await runCommandTool({
+      butlerData,
+      workspacePath: workspace,
+      args: {
+        command: "mkdir -p reports && printf 'a,b\\n1,2\\n' > reports/generated.csv",
+      },
+    });
+    const receipts = result.evidence_capability_receipts as unknown[];
+    const ledger = buildEvidenceCapabilityLedger({
+      required: ["durable_artifact", "data_table_created"],
+      receipts,
+    });
+
+    expect(ledger.satisfied).toEqual(["command_executed", "durable_artifact", "data_table_created"]);
+    expect(result).toMatchObject({
+      durable_artifact_created: true,
+      written_file: "reports/generated.csv",
+    });
+    expect(JSON.stringify(receipts)).not.toContain(workspace);
+  });
+
+  test("does not attribute pre-existing dirty workspace files to unrelated commands", async () => {
+    await runCommandTool({
+      butlerData,
+      workspacePath: workspace,
+      args: { command: "git init >/dev/null" },
+    });
+    await writeFile(join(workspace, "existing.txt"), "already dirty");
+
+    const result = await runCommandTool({
+      butlerData,
+      workspacePath: workspace,
+      args: { command: "printf 'checked\\n'" },
+    });
+    const receipts = result.evidence_capability_receipts as unknown[];
+    const ledger = buildEvidenceCapabilityLedger({
+      required: ["durable_artifact"],
+      receipts,
+    });
+
+    expect(ledger.satisfied).toEqual(["command_executed"]);
+    expect(ledger.missing).toEqual(["durable_artifact"]);
+    expect(result).not.toHaveProperty("durable_artifact_created");
+  });
 });
 
 describe("file tool evidence capability receipts", () => {

@@ -21,6 +21,9 @@ import {
   goalCompletionReviewPrompt,
 } from "../../../output/completion/final-output-contract.ts";
 import {
+  progressFinalizationText,
+} from "../../../output/completion/progress-finalization.ts";
+import {
   goalCompletionContinuationAttempts,
   goalCompletionIncompleteError,
 } from "../policy/turn-errors.ts";
@@ -258,7 +261,16 @@ async function repairCompletionObligations(
     decisions: input.publicDecisionContext,
   });
   if (secondObligationIncompleteReason) {
-    throw goalCompletionIncompleteError(secondObligationIncompleteReason);
+    throw goalCompletionIncompleteError(
+      secondObligationIncompleteReason,
+      progressFinalizationText({
+        language: input.deps.messageLanguage,
+        previousAnswer: repairedText,
+        audit: input.audit,
+        decisions: input.publicDecisionContext,
+        reason: secondObligationIncompleteReason,
+      }),
+    );
   }
   return repairedText;
 }
@@ -316,5 +328,14 @@ async function runGoalCompletionReviewGate(
   if (outcome.kind === "deliverable") {
     return outcome.text;
   }
-  throw goalCompletionIncompleteError(outcome.reason);
+  throw goalCompletionIncompleteError(
+    outcome.reason,
+    progressFinalizationText({
+      language: input.deps.messageLanguage,
+      previousAnswer: currentFinalText,
+      audit: input.audit,
+      decisions: input.publicDecisionContext,
+      reason: outcome.reason,
+    }),
+  );
 }
