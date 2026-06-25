@@ -52,9 +52,12 @@ export function HostedModelForm({
           authMethods={form.authMethods}
           oauthBusy={form.oauthBusy}
           oauthLogin={form.oauthLogin}
+          apiBaseUrl={form.apiBaseUrl}
+          showApiBaseUrl={form.showApiBaseUrl}
           onAuthMethodChange={form.setAuthMethod}
           onCredentialIdChange={form.setCredentialId}
           onApiKeyChange={form.setApiKey}
+          onApiBaseUrlChange={form.setApiBaseUrl}
           onCredentialLabelChange={form.setCredentialLabel}
           onOAuthCheck={() => void form.handleOAuthCheck()}
           onOAuthCopyUrl={() => {

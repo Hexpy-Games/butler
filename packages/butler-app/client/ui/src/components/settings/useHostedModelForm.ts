@@ -16,6 +16,7 @@ import {
   hostedModelProviders,
   providerAllowedAuthMethods,
   providerCredentials,
+  providerDefaultApiBaseUrl,
   providerModels,
 } from "./modelManagementUtils";
 import type { AppModelSummary, ProviderAuthMethod } from "@/app/types.ts";
@@ -47,7 +48,12 @@ export function useHostedModelForm({
     () => providerModels(modelCatalog, providerId),
     [modelCatalog, providerId],
   );
+  const defaultApiBaseUrl = providerDefaultApiBaseUrl(modelCatalog, providerId);
   const [modelRef, setModelRef] = useState(editingModel?.model_ref ?? "");
+  const [apiBaseUrl, setApiBaseUrl] = useState(
+    editingModel?.api_base_url ?? defaultApiBaseUrl,
+  );
+  const showApiBaseUrl = Boolean(defaultApiBaseUrl || editingModel?.api_base_url);
   const authMethods = providerAllowedAuthMethods(
     modelCatalog,
     providerId,
@@ -85,6 +91,10 @@ export function useHostedModelForm({
         : (credentials[0]?.id ?? NEW_CREDENTIAL_ID),
     );
   }, [providerId, providerModelOptions, authMethods, credentials]);
+
+  useEffect(() => {
+    setApiBaseUrl(editingModel?.api_base_url ?? defaultApiBaseUrl);
+  }, [defaultApiBaseUrl, editingModel?.api_base_url, providerId]);
 
   const selectedModel = providerModelOptions.find((model) => model.model_ref === modelRef);
   const oauthSaveBlocked = authMethod === "codex_oauth" &&
@@ -173,6 +183,9 @@ export function useHostedModelForm({
       ...(authMethod === "api_key" && credentialId === NEW_CREDENTIAL_ID
         ? { api_key: apiKey, credential_label: credentialLabel }
         : {}),
+      ...(apiBaseUrl.trim() && apiBaseUrl.trim() !== defaultApiBaseUrl
+        ? { api_base_url: apiBaseUrl.trim() }
+        : {}),
     });
     setModelCatalog(result.catalog);
     notifyStatus(copy.registeredStatus(modelDisplayName(result.model)), {
@@ -251,6 +264,7 @@ export function useHostedModelForm({
 
   return {
     apiKey,
+    apiBaseUrl,
     authMethod,
     authMethods,
     busy: busy || oauthRegistering,
@@ -265,7 +279,9 @@ export function useHostedModelForm({
     providerId,
     providerModelOptions,
     providers,
+    showApiBaseUrl,
     setApiKey,
+    setApiBaseUrl,
     setAuthMethod,
     setCredentialId,
     setCredentialLabel,

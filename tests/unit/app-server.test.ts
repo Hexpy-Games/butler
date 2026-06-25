@@ -2554,6 +2554,7 @@ test("settings, command palette, and project actions are route-backed and privac
       "xai",
       "qwen",
       "kimi",
+      "zai",
     ]) {
       expect(providerIds).toContain(providerId);
     }
@@ -2564,6 +2565,7 @@ test("settings, command palette, and project actions are route-backed and privac
       "xai",
       "qwen",
       "kimi",
+      "zai",
     ]) {
       const provider = catalog.data.providers.find(
         (item: { provider_id: string }) => item.provider_id === providerId,
@@ -2576,6 +2578,16 @@ test("settings, command palette, and project actions are route-backed and privac
     expect(modelRefs).toContain("xai/grok-4.3");
     expect(modelRefs).toContain("qwen/qwen3.7-max");
     expect(modelRefs).toContain("kimi/kimi-k2.6");
+    expect(modelRefs).toContain("zai/glm-5.2");
+    expect(
+      catalog.data.models.find(
+        (model: { model_ref: string }) => model.model_ref === "zai/glm-5.2",
+      ),
+    ).toMatchObject({
+      context_window_tokens: 1_000_000,
+      max_output_tokens: 128_000,
+      runtime_supported: true,
+    });
     expect(
       catalog.data.models.some(
         (model: { model_ref: string }) => model.model_ref === "openai/gpt-5.5",
@@ -3123,6 +3135,10 @@ test("hosted model registration uses masked credentials without pre-release migr
     expect(settings.data.reasoning_effort).toBe("high");
 
     const catalog = await getJson(`${server.url}model-catalog`);
+    const zaiProvider = catalog.data.providers.find(
+      (provider: { provider_id: string }) => provider.provider_id === "zai",
+    );
+    expect(zaiProvider?.default_api_base_url).toBe("https://api.z.ai/api/paas/v4");
     expect(
       catalog.data.registered_models.map(
         (model: { model_ref: string }) => model.model_ref,
@@ -3138,6 +3154,52 @@ test("hosted model registration uses masked credentials without pre-release migr
     expect(JSON.stringify(catalog)).not.toContain("sk-hosted-secret-z");
   } finally {
     delete process.env.OPENAI_API_KEY;
+    server.stop();
+  }
+});
+
+test("hosted model registration persists editable provider API base URLs", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const credential = await postJson(
+      `${server.url}model-catalog/provider-credentials`,
+      {
+        provider_id: "zai",
+        auth_type: "api_key",
+        label: "Z.AI Coding",
+        api_key: "zai-secret",
+      },
+    );
+    const registered = await postJson(
+      `${server.url}model-catalog/registered-models`,
+      {
+        provider_id: "zai",
+        model_id: "glm-5.2",
+        auth_type: "api_key",
+        credential_id: credential.data.credential.id,
+        api_base_url: "https://api.z.ai/api/coding/paas/v4/",
+      },
+    );
+    expect(registered.data.model).toMatchObject({
+      provider_id: "zai",
+      model_ref: "zai/glm-5.2",
+      api_base_url: "https://api.z.ai/api/coding/paas/v4",
+      credential_id: credential.data.credential.id,
+    });
+
+    const catalog = await getJson(`${server.url}model-catalog`);
+    expect(
+      catalog.data.registered_models.find(
+        (model: { model_ref: string }) => model.model_ref === "zai/glm-5.2",
+      ),
+    ).toMatchObject({
+      api_base_url: "https://api.z.ai/api/coding/paas/v4",
+    });
+  } finally {
     server.stop();
   }
 });
@@ -3176,6 +3238,10 @@ test("hosted model registration exposes provider auth capability gates", async (
     ).toEqual(["api_key"]);
     expect(
       providers.find((provider) => provider.provider_id === "kimi")
+        ?.auth_methods,
+    ).toEqual(["api_key"]);
+    expect(
+      providers.find((provider) => provider.provider_id === "zai")
         ?.auth_methods,
     ).toEqual(["api_key"]);
   } finally {
