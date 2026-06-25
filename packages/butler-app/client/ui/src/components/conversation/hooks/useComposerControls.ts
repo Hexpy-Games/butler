@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { EMPTY_MODEL_CATALOG } from "@/app/constants.ts";
-import { isDraftChatId, runtimeModels } from "@/app/utils.ts";
+import { isServerBackedSessionId } from "@/app/sessionIds.ts";
+import { runtimeModels } from "@/app/utils.ts";
 import type {
   AccessMode,
   ModelCatalogView,
@@ -77,8 +78,8 @@ export function useComposerControls(
       setPlanMode(Boolean(controls.plan_mode ?? settings.plan_mode_default));
     }
 
-    if (isDraftChatId(activeChatId)) {
-      const key = `draft:${activeChatId}`;
+    if (!isServerBackedSessionId(activeChatId)) {
+      const key = `local:${activeChatId}`;
       if (
         controlsLoadedForRef.current !== key ||
         !composerSelectionTouchedRef.current
@@ -120,7 +121,7 @@ export function useComposerControls(
   ]);
 
   const persistControls = useCallback((partial: ComposerControlPatch) => {
-    if (isDraftChatId(activeChatId)) return;
+    if (!isServerBackedSessionId(activeChatId)) return;
     void api<SessionControlsView>(
       `/sessions/${encodeURIComponent(activeChatId)}/controls`,
       {

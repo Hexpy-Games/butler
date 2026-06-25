@@ -14,6 +14,8 @@ especially from a new chat. This spec covers two visible surfaces:
 - App UI owns local optimistic state. It may show service-prepared status text,
   skeleton geometry, and the user's pending message before the server returns a
   durable session id.
+- App UI must keep renderer-local optimistic ids out of server-backed session
+  routes until the durable session id is known.
 - App gateway/store owns durable session ids, navigation summaries, accepted
   messages, replay, and session-view reconciliation.
 - Native runtime owns assistant-authored first public progress prose. The app
@@ -65,6 +67,12 @@ session id, preserve the pending user message, and continue through `/messages`
 submission. When later navigation or session-view snapshots arrive, canonical
 server data replaces the optimistic row and skeletons.
 
+While the optimistic id is active, the UI must not call server-backed session
+routes such as session-view loading, session event replay, session controls, or
+session-scoped attachment upload with that local id. Those routes may only use a
+durable server session id. This prevents transient "not found" failures from
+appearing while the UI is correctly showing the optimistic shell.
+
 If session creation or message submission fails, the optimistic row and pending
 message must be removed, the composer must remain usable, and a normal error
 notification must be shown.
@@ -100,6 +108,8 @@ shadcn/ui skeleton pattern. The primitive must:
 - Store tests prove draft-chat submission immediately creates an optimistic
   session shell before `/sessions` resolves, then reconciles it to the durable
   id.
+- Client tests prove draft and optimistic ids are not treated as server-backed
+  session ids.
 - UI/design tests prove the Skeleton primitive is exported through the design
   system and the conversation/sidebar surfaces render skeleton or pending state
   instead of a blank draft screen.

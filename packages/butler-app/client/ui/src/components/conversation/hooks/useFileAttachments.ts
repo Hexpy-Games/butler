@@ -3,7 +3,7 @@ import { uploadMessageFile } from "@/app/api.ts";
 import { browserRandomUUID } from "@/app/id.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { projectDocumentFileName } from "@/app/projectDocuments.ts";
-import { isDraftChatId } from "@/app/utils.ts";
+import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import type { MessageFileRef, ProjectDashboardDocument } from "@/app/types.ts";
 import { ATTACHMENT_MAX_BYTES, formatFileSize } from "../conversationUtils";
 
@@ -54,7 +54,7 @@ export function useFileAttachments(activeChatId: string) {
       try {
         const uploaded = await uploadMessageFile(
           file,
-          isDraftChatId(activeChatId) ? undefined : activeChatId,
+          isServerBackedSessionId(activeChatId) ? activeChatId : undefined,
         );
         accepted.push({
           id: `${file.name}-${file.size}-${browserRandomUUID()}`,
@@ -95,7 +95,7 @@ export function useFileAttachments(activeChatId: string) {
     try {
       const uploaded = await uploadMessageFile(
         file,
-        isDraftChatId(activeChatId) ? undefined : activeChatId,
+        isServerBackedSessionId(activeChatId) ? activeChatId : undefined,
       );
       if (!isMountedRef.current || uploadEpochRef.current !== uploadEpoch)
         return;

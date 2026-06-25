@@ -219,6 +219,30 @@ test("draft first send immediately opens an optimistic session shell", async () 
   });
 });
 
+test("optimistic session ids do not call server-backed session routes", async () => {
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    calls.push(String(input));
+    return jsonResponse({});
+  }) as unknown as typeof fetch;
+
+  useButlerStore.setState({
+    activeChatId: "optimistic:session:client-message-1",
+    view: { kind: "session" },
+    messageLoadPending: false,
+    rightOpen: true,
+  });
+
+  await useButlerStore.getState().refreshSessionView();
+  await useButlerStore.getState().reloadMessages();
+  await useButlerStore.getState().refreshSessionSummary();
+  await useButlerStore.getState().refreshSessionQueue();
+
+  expect(calls).toEqual([]);
+  expect(useButlerStore.getState().sessionQueue).toEqual([]);
+  expect(useButlerStore.getState().messageLoadPending).toBe(false);
+});
+
 test("sendMessage works when browser randomUUID is unavailable", async () => {
   Object.defineProperty(globalThis, "crypto", {
     configurable: true,
