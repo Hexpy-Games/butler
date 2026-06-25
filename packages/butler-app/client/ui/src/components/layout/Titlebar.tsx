@@ -18,12 +18,12 @@ import {
   TITLEBAR_MENU_SIDE_OFFSET_PX,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
+import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import { selectRightAvailable, useButlerStore } from "@/app/store.ts";
 import {
   activeChatFromNavigation,
   activeTitleForView,
   appThemeClasses,
-  isDraftChatId,
   sessionFromNavigation,
 } from "@/app/utils.ts";
 import type { ActiveChatView } from "@/app/types.ts";
@@ -54,7 +54,7 @@ export function Titlebar() {
     [storeActiveChatId, storeNavigation, storeView],
   );
   const activeSession =
-    storeView.kind === "session" && !isDraftChatId(storeActiveChatId)
+    storeView.kind === "session" && isServerBackedSessionId(storeActiveChatId)
       ? sessionFromNavigation(storeNavigation, storeActiveChatId)
       : null;
 

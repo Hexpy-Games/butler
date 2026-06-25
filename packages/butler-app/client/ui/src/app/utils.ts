@@ -46,6 +46,7 @@ const LIFECYCLE_ACTIVITY_LABELS = new Set([
   "delivered",
 ]);
 const WORK_BLOCK_MARKER_KIND = "work_block";
+const FIRST_VISIBLE_PROGRESS_EVENT_KIND = "turn.first_progress";
 const INTERNAL_PROGRESS_TOOL_NAMES = new Set([
   "Update Todo List",
   "List Todo List",
@@ -1003,7 +1004,10 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
   if (event.visibility === "internal") return null;
   const payload = safeRecordPayload(event.payload);
   const created_at = event.createdAt;
-  if (event.kind === "assistant.public_note") {
+  if (
+    event.kind === "assistant.public_note" ||
+    event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND
+  ) {
     const note = safePublicText(payload.note, "Working");
     const workBlockId = safeOptionalPublicText(payload.workBlockId);
     return {

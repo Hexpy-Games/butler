@@ -10,6 +10,7 @@ import {
   setOperationalMetricsEnabled,
   tailOperationalMetricEvents,
 } from "../src/operations/metrics/operational-metrics.ts";
+import { readFirstVisibleLatencySummary } from "../src/operations/metrics/first-visible-latency.ts";
 
 interface ParsedArgs {
   command: "status" | "tail" | "enable" | "disable";
@@ -70,6 +71,10 @@ export function buildMetricsStatus(input: {
       butlerData: input.butlerData,
       sinceTs: since,
     }),
+    firstVisibleLatency: readFirstVisibleLatencySummary({
+      butlerData: input.butlerData,
+      sinceTs: since,
+    }),
     usage: readUsageMonitor({
       butlerData: input.butlerData,
       sinceTs: since ?? null,
@@ -90,6 +95,7 @@ export function renderMetricsStatus(status: ReturnType<typeof buildMetricsStatus
   const runtimeBucket = operational.byCategory.runtime;
   const toolBucket = operational.byCategory.tool;
   const ingressBucket = operational.byCategory.ingress;
+  const firstVisible = status.firstVisibleLatency;
   return [
     "Butler metrics",
     `enabled: ${status.enabled}`,
@@ -99,6 +105,7 @@ export function renderMetricsStatus(status: ReturnType<typeof buildMetricsStatus
     `ingress: ${ingressBucket?.events ?? 0} events, ${ingressBucket?.errors ?? 0} errors`,
     `runtime: ${runtimeBucket?.events ?? 0} events, ${runtimeBucket?.errors ?? 0} errors`,
     `tools: ${toolBucket?.events ?? 0} events, ${toolBucket?.errors ?? 0} errors`,
+    `first visible latency: events=${firstVisible.events}, p50=${firstVisible.p50Ms ?? "none"}ms, p95=${firstVisible.p95Ms ?? "none"}ms`,
     `prompt cache: requests=${status.usage.model.requestCount}, cached=${status.usage.model.cachedTokens}, hitRatio=${status.usage.model.cacheHitRatio.toFixed(3)}`,
     `web search: requests=${status.usage.webSearch.requestCount}, provider=${status.usage.webSearch.lastProvider ?? "none"}, lastError=${status.usage.webSearch.lastError ?? "none"}`,
     `context pressure: ${status.context.pressure.thresholdState}, usedRatio=${(status.context.pressure.usedRatio * 100).toFixed(1)}%`,
