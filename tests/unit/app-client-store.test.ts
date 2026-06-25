@@ -44,6 +44,7 @@ afterEach(() => {
     navigation: EMPTY_NAVIGATION,
     messages: [],
     messageLoadPending: false,
+    optimisticSessionStart: null,
     sessionMessageViews: {},
     summary: null,
     sessionView: null,
@@ -97,6 +98,125 @@ afterEach(() => {
       writable: true,
     });
   }
+});
+
+test("draft first send immediately opens an optimistic session shell", async () => {
+  let releaseSession: () => void = () => undefined;
+  let sendMessageBody: Record<string, unknown> | null = null;
+  const sessionCreated = new Promise<void>((resolve) => {
+    releaseSession = resolve;
+  });
+  const userText = "새 채팅 낙관적 업데이트 확인";
+
+  globalThis.fetch = (async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    const path = String(input);
+    if (path === "/sessions" && init?.method === "POST") {
+      await sessionCreated;
+      return jsonResponse({
+        session: {
+          id: "session-optimistic",
+          kind: "chat",
+          title: "Optimistic chat",
+          last_activity_at: "2026-05-31T00:00:00.000Z",
+          pinned: false,
+          archived: false,
+        },
+      });
+    }
+    if (path === "/messages" && init?.method === "POST") {
+      sendMessageBody = JSON.parse(String(init.body ?? "{}")) as Record<
+        string,
+        unknown
+      >;
+      return jsonResponse({
+        accepted: messageRecord(
+          String(sendMessageBody.client_message_id),
+          "session-optimistic",
+          "user",
+          userText,
+          1,
+          "turn-optimistic",
+        ),
+        replies: [],
+      });
+    }
+    if (path === "/navigation") return jsonResponse(EMPTY_NAVIGATION);
+    if (path.startsWith("/session-view")) {
+      return jsonResponse(
+        sessionView("session-optimistic", {
+          messages: [
+            messageRecord(
+              String(sendMessageBody?.client_message_id ?? "client-message"),
+              "session-optimistic",
+              "user",
+              userText,
+              1,
+              "turn-optimistic",
+            ),
+          ],
+          turnState: "thinking",
+          latestProgress: {
+            turn_id: "turn-optimistic",
+            state: "thinking",
+            safe_progress_rows: [],
+          },
+        }),
+      );
+    }
+    if (path.startsWith("/session-queue")) {
+      return jsonResponse({
+        session_id: "session-optimistic",
+        queued_messages: [],
+      });
+    }
+    return jsonResponse({});
+  }) as unknown as typeof fetch;
+
+  useButlerStore.setState({
+    activeChatId: "draft:chat",
+    view: { kind: "session" },
+    navigation: EMPTY_NAVIGATION,
+    messages: [],
+    summary: null,
+  });
+
+  const pendingSend = useButlerStore.getState().sendMessage(userText);
+  await waitFor(() => Boolean(useButlerStore.getState().optimisticSessionStart));
+
+  const optimisticState = useButlerStore.getState();
+  expect(optimisticState.activeChatId).toMatch(/^optimistic:session:/u);
+  expect(optimisticState.navigation.chats[0]).toMatchObject({
+    id: optimisticState.activeChatId,
+    title: appCopy.sidebar.newSessionStarting,
+    active_turn_state: "session_starting",
+  });
+  expect(optimisticState.messages).toHaveLength(1);
+  expect(optimisticState.messages[0]).toMatchObject({
+    chat_id: optimisticState.activeChatId,
+    role: "user",
+    text: userText,
+    status: "pending",
+  });
+  expect(optimisticState.summary?.latest_progress?.state).toBe(
+    "session_starting",
+  );
+
+  releaseSession();
+  await pendingSend;
+
+  expect(sendMessageBody).toMatchObject({
+    chat_id: "session-optimistic",
+    text: userText,
+  });
+  expect(useButlerStore.getState().activeChatId).toBe("session-optimistic");
+  expect(useButlerStore.getState().optimisticSessionStart).toBeNull();
+  expect(useButlerStore.getState().navigation.chats[0]).toMatchObject({
+    id: "session-optimistic",
+    title: "Optimistic chat",
+  });
 });
 
 test("sendMessage works when browser randomUUID is unavailable", async () => {

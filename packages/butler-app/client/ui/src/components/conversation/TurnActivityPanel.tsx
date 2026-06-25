@@ -7,7 +7,12 @@ import {
   isTerminalActivityState,
   workActivityToolsForBlock,
 } from "./toolchainUtils";
-import { Stack, Typo, WorkActivityBlock } from "@/butler-ds";
+import { Skeleton, Stack, Typo, WorkActivityBlock } from "@/butler-ds";
+
+const SESSION_STARTING_STATE = "session_starting";
+const PENDING_SKELETON_WIDTH = "min(420px, 100%)";
+const PENDING_SKELETON_LINE_HEIGHT = "0.75rem";
+const PENDING_SKELETON_LINE_WIDTHS = ["86%", "68%", "46%"] as const;
 
 export function TurnActivityPanel({
   rows,
@@ -23,6 +28,39 @@ export function TurnActivityPanel({
   );
   if (activeBlocks.length === 0) {
     const pendingLabel = turnActivityPendingLabel(state);
+    if (state === SESSION_STARTING_STATE) {
+      return (
+        <Stack
+          gap="2"
+          data-test-class="turn-activity-pending-skeleton"
+          aria-live="polite"
+          aria-label={pendingLabel}
+          style={{ width: PENDING_SKELETON_WIDTH }}
+        >
+          <Typo.Body
+            as="p"
+            data-test-class="turn-activity-pending"
+            data-turn-state={state}
+            style={{
+              margin: 0,
+              color: "var(--text-secondary)",
+              fontWeight: "var(--font-weight-regular)",
+            }}
+          >
+            {pendingLabel}
+          </Typo.Body>
+          {PENDING_SKELETON_LINE_WIDTHS.map((width) => (
+            <Skeleton
+              key={width}
+              style={{
+                height: PENDING_SKELETON_LINE_HEIGHT,
+                width,
+              }}
+            />
+          ))}
+        </Stack>
+      );
+    }
     return (
       <Typo.Body
         as="p"

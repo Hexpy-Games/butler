@@ -63,6 +63,7 @@ export interface AppCopy {
   sidebar: {
     regionLabel: string;
     newChat: string;
+    newSessionStarting: string;
     search: string;
     automations: string;
     projects: string;
@@ -591,6 +592,7 @@ const koKrCopy: AppCopy = {
       pendingLabel: "요청을 처리하고 있습니다.",
       pendingStateLabels: {
         accepted: "요청을 접수했습니다.",
+        session_starting: "새 세션 시작중...",
         queued: "대기 중입니다.",
         thinking: "생각 중입니다.",
         streaming: "응답을 작성하고 있습니다.",
@@ -653,6 +655,7 @@ const koKrCopy: AppCopy = {
   sidebar: {
     regionLabel: "사이드바",
     newChat: "새 대화",
+    newSessionStarting: "새 세션 시작중...",
     search: "검색",
     automations: "자동화",
     projects: "프로젝트",
@@ -1274,6 +1277,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       pendingLabel: "Working on your request.",
       pendingStateLabels: {
         accepted: "Request accepted.",
+        session_starting: "Starting new session...",
         queued: "Queued.",
         thinking: "Thinking.",
         streaming: "Writing the response.",
@@ -1332,6 +1336,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
   sidebar: {
     regionLabel: "Sidebar",
     newChat: "New chat",
+    newSessionStarting: "Starting new session...",
     search: "Search",
     automations: "Automations",
     projects: "Projects",

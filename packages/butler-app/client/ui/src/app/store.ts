@@ -25,6 +25,18 @@ import {
   writeCachedSettings,
 } from "./settingsCache.ts";
 import { browserRandomId } from "./id.ts";
+import {
+  type OptimisticSessionStart,
+  findSessionSummary,
+  isOptimisticSessionId,
+  messagesWithChatId,
+  navigationReplacingOptimisticSession,
+  navigationWithSessionSummary,
+  navigationWithOptimisticSession,
+  navigationWithoutOptimisticSession,
+  optimisticSessionId,
+  summaryWithSessionId,
+} from "./optimisticSession.ts";
 import type { AppUiStateSnapshot } from "./appUiStateCache.ts";
 import {
   DEFAULT_LEFT_PANEL_WIDTH,
@@ -95,6 +107,7 @@ interface ButlerStore {
   messages: MessageRecord[];
   sessionView: SessionView | null;
   messageLoadPending: boolean;
+  optimisticSessionStart: OptimisticSessionStart | null;
   pendingProjectDocumentAttachment: {
     projectId: string;
     document: ProjectDashboardDocument;
@@ -594,6 +607,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   messages: [],
   sessionView: null,
   messageLoadPending: false,
+  optimisticSessionStart: null,
   pendingProjectDocumentAttachment: null,
   sessionMessageViews: {},
   summary: null,
@@ -670,9 +684,25 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   setActiveChatId: (activeChatId) =>
     set({ activeChatId, selectedArtifactId: null, selectedArtifact: null }),
   setNavigation: (navigation) =>
-    set((state) =>
-      structurallyEqual(state.navigation, navigation) ? state : { navigation },
-    ),
+    set((state) => {
+      const nextNavigation = navigationWithOptimisticSession(
+        navigation,
+        state.optimisticSessionStart,
+      );
+      const activeLocalSession = findSessionSummary(
+        state.navigation,
+        state.activeChatId,
+      );
+      const displayedNavigation =
+        state.isSending &&
+        activeLocalSession &&
+        !findSessionSummary(nextNavigation, state.activeChatId)
+          ? navigationWithSessionSummary(nextNavigation, activeLocalSession)
+          : nextNavigation;
+      return structurallyEqual(state.navigation, displayedNavigation)
+        ? state
+        : { navigation: displayedNavigation };
+    }),
   setMessages: (messages) =>
     set((state) => {
       const nextMessages = resolveUpdate(messages, state.messages);
@@ -819,7 +849,10 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           : [],
         turnProgress: completeCached ? turnProgress : {},
         sessionMessageViews: nextSessionMessageViews,
-        messageLoadPending: !isDraftChatId(chatId) && !completeCached,
+        messageLoadPending:
+          !isDraftChatId(chatId) &&
+          !isOptimisticSessionId(chatId) &&
+          !completeCached,
         status: state.status,
       };
     }),
@@ -842,14 +875,14 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   refreshNavigation: async () => {
     try {
       const data = await api<NavigationView>("/navigation");
-      set({ navigation: data });
+      get().setNavigation(data);
     } catch {
       // Navigation refresh is opportunistic; message delivery should remain visible.
     }
   },
 
   refreshSessionView: async (chatId = get().activeChatId) => {
-    if (isDraftChatId(chatId)) return;
+    if (isDraftChatId(chatId) || isOptimisticSessionId(chatId)) return;
     try {
       const data = await api<SessionView>(
         `/session-view?session_id=${encodeURIComponent(chatId)}`,
@@ -892,7 +925,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   refreshSessionSummary: async (chatId = get().activeChatId) => {
-    if (isDraftChatId(chatId)) return;
+    if (isDraftChatId(chatId) || isOptimisticSessionId(chatId)) return;
     try {
       const data = await api<SessionView>(
         `/session-view?session_id=${encodeURIComponent(chatId)}`,
@@ -907,7 +940,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   refreshSessionQueue: async (chatId = get().activeChatId) => {
-    if (isDraftChatId(chatId)) {
+    if (isDraftChatId(chatId) || isOptimisticSessionId(chatId)) {
       if (get().activeChatId === chatId) set({ sessionQueue: [] });
       return;
     }
@@ -1015,15 +1048,74 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     const startedAt = new Date().toISOString();
     const initialChatId = get().activeChatId;
     const sendOperationId = `send-${clientMessageId}`;
+    const initialDraft = isDraftChatId(initialChatId)
+      ? parseDraftChatId(initialChatId)
+      : null;
+    const optimisticStart: OptimisticSessionStart | null = initialDraft
+      ? {
+          id: optimisticSessionId(clientMessageId),
+          kind: initialDraft.kind ?? "chat",
+          projectId: initialDraft.projectId,
+          title: titleFromPrompt(messageTitle),
+          statusLabel: appCopy.sidebar.newSessionStarting,
+          startedAt,
+        }
+      : null;
     set((state) => ({
       isSending: true,
-      sendingChatId: initialChatId,
+      sendingChatId: optimisticStart?.id ?? initialChatId,
       sendingOperations: {
         ...state.sendingOperations,
-        [sendOperationId]: initialChatId,
+        [sendOperationId]: optimisticStart?.id ?? initialChatId,
       },
-      status: { label: "thinking", tone: "muted" },
-      summary: state.summary
+      status: {
+        label: optimisticStart?.statusLabel ?? "thinking",
+        tone: "muted",
+      },
+      activeChatId: optimisticStart?.id ?? state.activeChatId,
+      view: optimisticStart ? { kind: "session" } : state.view,
+      selectedArtifactId: optimisticStart ? null : state.selectedArtifactId,
+      selectedArtifact: optimisticStart ? null : state.selectedArtifact,
+      navigation: optimisticStart
+        ? navigationWithOptimisticSession(state.navigation, optimisticStart)
+        : state.navigation,
+      messages: optimisticStart
+        ? [
+            {
+              id: clientMessageId,
+              chat_id: optimisticStart.id,
+              role: "user",
+              text,
+              attachments,
+              status: "pending",
+              retryable: false,
+              cursor: 0.5,
+              created_at: startedAt,
+              updated_at: startedAt,
+            },
+          ]
+        : state.messages,
+      turnProgress: optimisticStart ? {} : state.turnProgress,
+      sessionView: optimisticStart ? null : state.sessionView,
+      messageLoadPending: optimisticStart ? false : state.messageLoadPending,
+      optimisticSessionStart: optimisticStart ?? state.optimisticSessionStart,
+      summary: optimisticStart
+        ? {
+            session_id: optimisticStart.id,
+            turn_state: "session_starting",
+            latest_progress: {
+              turn_id: clientTurnId,
+              summary: appCopy.sidebar.newSessionStarting,
+              state: "session_starting",
+              updated_at: startedAt,
+              safe_progress_rows: [],
+            },
+            artifacts: [],
+            skills_used: [],
+            worker_activity: [],
+            work_streams: [],
+          }
+        : state.summary
         ? {
             ...state.summary,
             turn_state: "thinking",
@@ -1045,55 +1137,81 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
           }
         : state.summary,
     }));
-    let targetChatId = get().activeChatId;
+    let targetChatId = optimisticStart?.id ?? get().activeChatId;
     try {
-      if (isDraftChatId(targetChatId)) {
-        const draft = parseDraftChatId(targetChatId);
-        const session = await api<{ session: { id: string } }>("/sessions", {
+      if (optimisticStart && initialDraft) {
+        const session = await api<{ session: SessionSummary }>("/sessions", {
           method: "POST",
           body: JSON.stringify({
-            kind: draft.kind,
-            project_id: draft.projectId,
+            kind: initialDraft.kind,
+            project_id: initialDraft.projectId,
             title: titleFromPrompt(messageTitle),
             initial_message: text,
           }),
         });
+        const previousChatId = targetChatId;
         targetChatId = session.session.id;
-        set({
-          activeChatId: targetChatId,
-          sendingChatId: targetChatId,
+        set((state) => ({
+          activeChatId:
+            state.activeChatId === previousChatId
+              ? targetChatId
+              : state.activeChatId,
+          sendingChatId:
+            state.sendingChatId === previousChatId
+              ? targetChatId
+              : state.sendingChatId,
           sendingOperations: {
-            ...get().sendingOperations,
+            ...state.sendingOperations,
             [sendOperationId]: targetChatId,
           },
           view: { kind: "session" },
           selectedArtifactId: null,
           selectedArtifact: null,
-          messages: [],
-        });
+          navigation: navigationReplacingOptimisticSession(
+            state.navigation,
+            previousChatId,
+            session.session,
+          ),
+          messages: messagesWithChatId(
+            state.messages,
+            previousChatId,
+            targetChatId,
+          ),
+          summary: summaryWithSessionId(
+            state.summary,
+            previousChatId,
+            targetChatId,
+          ),
+          optimisticSessionStart:
+            state.optimisticSessionStart?.id === previousChatId
+              ? null
+              : state.optimisticSessionStart,
+        }));
       }
-      const optimisticCursor =
-        Math.max(
-          0,
-          ...get().messages.map((message) => Number(message.cursor ?? 0)),
-        ) + 0.5;
-      const optimisticCreatedAt = new Date().toISOString();
-      set((state) => ({
-        messages: mergeMessages(state.messages, [
-          {
-            id: clientMessageId,
-            chat_id: targetChatId,
-            role: "user",
-            text,
-            attachments,
-            status: "pending",
-            retryable: false,
-            cursor: optimisticCursor,
-            created_at: optimisticCreatedAt,
-            updated_at: optimisticCreatedAt,
-          },
-        ]),
-      }));
+      if (!optimisticStart) {
+        const optimisticCursor =
+          Math.max(
+            0,
+            ...get().messages.map((message) => Number(message.cursor ?? 0)),
+          ) + 0.5;
+        const optimisticCreatedAt = new Date().toISOString();
+        set((state) => ({
+          messages: mergeMessages(state.messages, [
+            {
+              id: clientMessageId,
+              chat_id: targetChatId,
+              role: "user",
+              text,
+              attachments,
+              status: "pending",
+              retryable: false,
+              cursor: optimisticCursor,
+              created_at: optimisticCreatedAt,
+              updated_at: optimisticCreatedAt,
+            },
+          ]),
+        }));
+      }
       const result = await api<{
         accepted?: MessageRecord;
         queued?: QueuedMessageRecord;
@@ -1173,12 +1291,28 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       if (!hasImmediateAssistantReply) await get().reloadMessages(targetChatId);
       set({ status: { label: "ready", tone: "ok" } });
     } catch (error) {
-      if (!isDraftChatId(targetChatId))
+      if (!isDraftChatId(targetChatId) && !isOptimisticSessionId(targetChatId))
         await get().reloadMessages(targetChatId);
       set((state) => ({
+        activeChatId:
+          optimisticStart && state.activeChatId === optimisticStart.id
+            ? initialChatId
+            : state.activeChatId,
+        navigation: optimisticStart
+          ? navigationWithoutOptimisticSession(state.navigation, optimisticStart.id)
+          : state.navigation,
         messages: state.messages.filter(
           (message) => message.id !== clientMessageId,
         ),
+        summary:
+          optimisticStart && state.summary?.session_id === optimisticStart.id
+            ? null
+            : state.summary,
+        optimisticSessionStart:
+          optimisticStart &&
+          state.optimisticSessionStart?.id === optimisticStart.id
+            ? null
+            : state.optimisticSessionStart,
       }));
       notifyError(error, "Message send failed", {
         id: `send-message-${targetChatId}`,
