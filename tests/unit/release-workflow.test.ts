@@ -385,9 +385,9 @@ test("current release notes describe the GitHub release changelog", () => {
 
   expect(notes).toContain(`# Butler ${currentReleaseTag}`);
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("durable turn outcomes");
-  expect(notes).toContain("limited-delivery recovery");
-  expect(notes).toContain("Hardened evidence receipts");
-  expect(notes).toContain("(#45)");
+  expect(notes).toContain("active app turns observable");
+  expect(notes).toContain("transcript projection incremental");
+  expect(notes).toContain("final-result App transport events");
+  expect(notes).toContain("(#46)");
   expect(notes).not.toContain("## Validation");
 });
