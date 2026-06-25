@@ -3,6 +3,7 @@ import type { OpenAIOAuthLoginResult } from "./modelManagementApi";
 import type { ModelCatalogView, ProviderAuthMethod } from "@/app/types.ts";
 
 interface HostedCredentialSectionProps {
+  apiBaseUrl: string;
   apiKey: string;
   authMethod: ProviderAuthMethod;
   authMethods: ProviderAuthMethod[];
@@ -12,6 +13,8 @@ interface HostedCredentialSectionProps {
   oauthBusy?: boolean;
   oauthLogin?: OpenAIOAuthLoginResult | null;
   providerId: string;
+  showApiBaseUrl?: boolean;
+  onApiBaseUrlChange: (value: string) => void;
   onApiKeyChange: (value: string) => void;
   onAuthMethodChange: (value: ProviderAuthMethod) => void;
   onCredentialIdChange: (value: string) => void;
@@ -23,6 +26,7 @@ interface HostedCredentialSectionProps {
 }
 
 export function HostedCredentialSection({
+  apiBaseUrl,
   apiKey,
   authMethod,
   authMethods,
@@ -32,6 +36,8 @@ export function HostedCredentialSection({
   oauthBusy,
   oauthLogin,
   providerId,
+  showApiBaseUrl = false,
+  onApiBaseUrlChange,
   onApiKeyChange,
   onAuthMethodChange,
   onCredentialIdChange,
@@ -50,10 +56,13 @@ export function HostedCredentialSection({
       authMethod={authMethod}
       credentialId={credentialId}
       apiKey={apiKey}
+      apiBaseUrl={apiBaseUrl}
       credentialLabel={credentialLabel}
       oauthBusy={oauthBusy}
       oauthLogin={oauthLogin}
+      showApiBaseUrl={showApiBaseUrl}
       authMethods={authMethods}
+      onApiBaseUrlChange={onApiBaseUrlChange}
       onAuthMethodChange={onAuthMethodChange}
       onCredentialIdChange={onCredentialIdChange}
       onApiKeyChange={onApiKeyChange}

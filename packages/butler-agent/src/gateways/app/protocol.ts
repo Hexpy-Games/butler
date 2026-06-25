@@ -622,6 +622,7 @@ export interface AppModelSummary {
   token_estimator: string;
   source_url: string;
   runtime_supported: boolean;
+  api_base_url?: string;
   api_type?: "openai_compatible";
   platform?: "llama_cpp" | "ollama" | "lm_studio" | "custom";
   server_url?: string;
@@ -653,6 +654,7 @@ export interface ModelCatalogView {
     provider_label: string;
     latest_model_ref: string;
     auth_methods: ProviderAuthMethod[];
+    default_api_base_url?: string;
     models: AppModelSummary[];
   }>;
   models: AppModelSummary[];
@@ -722,6 +724,7 @@ export interface HostedModelRegistrationRequest {
   credential_id?: string;
   api_key?: string;
   credential_label?: string;
+  api_base_url?: string;
 }
 
 export interface HostedModelRegistrationResult {
@@ -2076,7 +2079,8 @@ function isHostedProviderId(
     value === "google" ||
     value === "xai" ||
     value === "qwen" ||
-    value === "kimi"
+    value === "kimi" ||
+    value === "zai"
   );
 }
 
@@ -2131,7 +2135,9 @@ export function isHostedModelRegistrationRequest(
       typeof input.credential_id === "string") &&
     (input.api_key === undefined || typeof input.api_key === "string") &&
     (input.credential_label === undefined ||
-      typeof input.credential_label === "string")
+      typeof input.credential_label === "string") &&
+    (input.api_base_url === undefined ||
+      typeof input.api_base_url === "string")
   );
 }
 

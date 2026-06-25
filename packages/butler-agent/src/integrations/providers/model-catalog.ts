@@ -9,6 +9,7 @@ export type ModelProviderId =
   | "xai"
   | "qwen"
   | "kimi"
+  | "zai"
   | "local";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 export type ProviderAuthMethod = "api_key" | "codex_oauth";
@@ -35,6 +36,7 @@ export interface ProviderModelMetadata {
   token_estimator: TokenEstimatorKind;
   source_url: string;
   runtime_supported: boolean;
+  api_base_url?: string;
   api_type?: LocalModelApiType;
   platform?: LocalModelPlatform;
   server_url?: string;
@@ -56,6 +58,7 @@ export interface ModelCatalogView {
     provider_label: string;
     latest_model_ref: `${ModelProviderId}/${string}`;
     auth_methods: ProviderAuthMethod[];
+    default_api_base_url?: string;
     models: ProviderModelMetadata[];
   }>;
   models: ProviderModelMetadata[];
@@ -100,6 +103,7 @@ const GEMINI_SOURCE = "https://ai.google.dev/gemini-api/docs/models";
 const XAI_SOURCE = "https://docs.x.ai/developers/models";
 const QWEN_SOURCE = "https://docs.qwencloud.com/developer-guides/getting-started/text-generation-models";
 const KIMI_SOURCE = "https://platform.kimi.ai/docs/models";
+const ZAI_SOURCE = "https://docs.z.ai/guides/overview/quick-start";
 
 export const DEFAULT_MODEL_REF = "openai/gpt-5.5" as const;
 export const DEFAULT_REASONING_EFFORT: ReasoningEffort = "xhigh";
@@ -363,6 +367,51 @@ const MODELS: ProviderModelMetadata[] = [
     source_url: KIMI_SOURCE,
     runtime_supported: true,
   },
+  {
+    provider_id: "zai",
+    provider_label: "Z.AI / GLM",
+    model_id: "glm-5.2",
+    model_ref: "zai/glm-5.2",
+    display_name: "GLM-5.2",
+    status: "latest",
+    context_window_tokens: 1_000_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "high",
+    reasoning_efforts: ["none", "low", "medium", "high", "xhigh"],
+    token_estimator: "character_estimate",
+    source_url: ZAI_SOURCE,
+    runtime_supported: true,
+  },
+  {
+    provider_id: "zai",
+    provider_label: "Z.AI / GLM",
+    model_id: "glm-5.1",
+    model_ref: "zai/glm-5.1",
+    display_name: "GLM-5.1",
+    status: "recommended",
+    context_window_tokens: 200_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "high",
+    reasoning_efforts: ["none", "low", "medium", "high"],
+    token_estimator: "character_estimate",
+    source_url: ZAI_SOURCE,
+    runtime_supported: true,
+  },
+  {
+    provider_id: "zai",
+    provider_label: "Z.AI / GLM",
+    model_id: "glm-4.7",
+    model_ref: "zai/glm-4.7",
+    display_name: "GLM-4.7",
+    status: "available",
+    context_window_tokens: 200_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "medium",
+    reasoning_efforts: ["none", "low", "medium", "high"],
+    token_estimator: "character_estimate",
+    source_url: ZAI_SOURCE,
+    runtime_supported: true,
+  },
 ];
 
 let openAIEncoding: Tiktoken | null = null;
@@ -429,6 +478,16 @@ export function providerAuthMethods(providerId: ModelProviderId): ProviderAuthMe
   if (providerId === "openai") return ["api_key", "codex_oauth"];
   if (providerId === "local") return [];
   return ["api_key"];
+}
+
+export function defaultHostedProviderApiBaseUrl(
+  providerId: ModelProviderId,
+): string | undefined {
+  if (providerId === "xai") return "https://api.x.ai/v1";
+  if (providerId === "qwen") return "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+  if (providerId === "kimi") return "https://api.moonshot.ai/v1";
+  if (providerId === "zai") return "https://api.z.ai/api/paas/v4";
+  return undefined;
 }
 
 function configuredLocalModelMetadata(): ProviderModelMetadata[] {
@@ -573,6 +632,7 @@ export function modelCatalogView(
       provider_label: latest.provider_label,
       latest_model_ref: latest.model_ref,
       auth_methods: providerAuthMethods(providerId),
+      default_api_base_url: defaultHostedProviderApiBaseUrl(providerId),
       models: providerModels,
     };
   });
