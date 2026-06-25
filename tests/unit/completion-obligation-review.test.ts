@@ -109,6 +109,53 @@ test("completion obligation review preserves limitation summaries from audit rec
   })).toBe("The turn still needs repair for missing public completion obligation(s): source_verified.");
 });
 
+test("completion obligation review reconstructs durable outcome evidence from safe result references", () => {
+  const audit: ToolAuditEntry[] = [{
+    name: "run_command",
+    args: {},
+    ok: true,
+    result: {
+      ok: true,
+      evidence_capability_receipts: [createEvidenceCapabilityReceipt({
+        producer: { kind: "tool", name: "run_command" },
+        capability: "command_executed",
+        evidence_kind: "execution_result",
+        summary: "Command execution succeeded.",
+        satisfies: ["command_executed"],
+        created_at: "2026-06-25T00:00:00.000Z",
+      })],
+      durable_artifact_created: true,
+      verified_output_files: [{
+        path: "reports/generated.csv",
+        artifact_kind: "csv_file",
+        size_bytes: 12,
+        modified_at: "2026-06-25T00:00:00.000Z",
+      }],
+      written_files: ["reports/generated.csv"],
+    },
+  }];
+  const decisions = [decision("make-report", ["command_executed", "durable_artifact", "data_table_created"])];
+
+  expect(completionObligationIncompleteReason({ audit, decisions })).toBeNull();
+});
+
+test("completion obligation review does not promote read-only references into created outcomes", () => {
+  const audit: ToolAuditEntry[] = [{
+    name: "read_file",
+    args: {},
+    ok: true,
+    result: {
+      ok: true,
+      file_label: "reports/existing.csv",
+    },
+  }];
+  const decisions = [decision("make-report", ["data_table_created"])];
+
+  expect(completionObligationIncompleteReason({ audit, decisions })).toBe(
+    "The turn still needs repair for missing public completion obligation(s): data_table_created.",
+  );
+});
+
 function decision(
   decisionId: string,
   completionObligations: PublicWorkDecision["completionObligations"],

@@ -7,9 +7,13 @@ export function runtimeTurnAbortError(): Error {
   return error;
 }
 
-export function goalCompletionIncompleteError(reason: string): Error {
+export function goalCompletionIncompleteError(reason: string, progressFinalizationText?: string): Error {
   const error = new Error(reason || "Butler could not complete this turn.");
   error.name = "GoalCompletionIncompleteError";
+  if (progressFinalizationText?.trim()) {
+    (error as Error & { progressFinalizationText?: string }).progressFinalizationText =
+      progressFinalizationText.trim();
+  }
   return error;
 }
 

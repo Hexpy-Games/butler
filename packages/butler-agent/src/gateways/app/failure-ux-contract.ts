@@ -82,7 +82,7 @@ function isLocalModelEmptyResponseError(error: unknown): boolean {
 
 function safeGoalCompletionIncompleteMessage(message: string): string | null {
   if (isCompletionObligationProtocolMessage(message)) {
-    return "요청한 결과를 완료했는지 확인하지 못했습니다. 작업을 다시 시도할 수 있습니다.";
+    return "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.";
   }
   const safe = safeLimitationText(message, "");
   return safe || null;

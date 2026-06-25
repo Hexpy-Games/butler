@@ -30,7 +30,7 @@ test("internal recovery classifier centralizes goal completion protocol gaps", (
   });
   expect(appSafeResponderError(error)).toEqual({
     code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: "요청한 결과를 완료했는지 확인하지 못했습니다. 작업을 다시 시도할 수 있습니다.",
+    message: "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.",
   });
 });
 
@@ -65,7 +65,7 @@ test("provider and app projections use the full shared internal recovery classif
   });
   expect(appSafeResponderError(protocolGap)).toEqual({
     code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: "요청한 결과를 완료했는지 확인하지 못했습니다. 작업을 다시 시도할 수 있습니다.",
+    message: "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.",
   });
 
   const disabledTool = {

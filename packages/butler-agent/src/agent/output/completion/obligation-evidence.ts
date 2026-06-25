@@ -9,6 +9,9 @@ import {
 import {
   evidenceReceiptsFromResult,
 } from "../evidence/receipts.ts";
+import {
+  reconstructDurableOutcomeReceiptsFromAuditEntry,
+} from "./outcome-reconstruction.ts";
 import type {
   EvidenceCapabilityLedger,
   EvidenceCapabilityReceipt,
@@ -87,12 +90,17 @@ export function readCompletionObligationEvidenceFromAudit(input: {
 }
 
 function completionObligationEvidenceReceiptsFromAuditEntry(entry: ToolAuditEntry): unknown[] {
+  const reconstructed = reconstructDurableOutcomeReceiptsFromAuditEntry(entry);
   if (hasEvidenceCapabilityReceiptField(entry.result)) {
-    return completionObligationEvidenceReceiptsFromResult(entry.result);
+    return [
+      ...completionObligationEvidenceReceiptsFromResult(entry.result),
+      ...reconstructed,
+    ];
   }
   return [
     ...(entry.evidenceReceipts ?? []),
     ...evidenceReceiptsFromResult(entry.result),
+    ...reconstructed,
   ];
 }
 

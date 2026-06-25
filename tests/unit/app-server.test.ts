@@ -8821,9 +8821,8 @@ test("goal completion obligation protocol gaps render as clean limited delivery"
       retryable: false,
     });
     expect(firstAssistant.safe_error_code ?? null).toBeNull();
-    expect(firstAssistant.text as string).toContain(
-      "Butler could not verify that the requested goal was completed",
-    );
+    expect(firstAssistant.text as string).toContain("진행한 내용은 보존했습니다");
+    expect(firstAssistant.text as string).not.toContain("could not verify");
     expect(firstAssistant.text as string).not.toContain(
       "unsatisfied public completion obligation",
     );

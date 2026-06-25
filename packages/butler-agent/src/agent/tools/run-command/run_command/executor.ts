@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from "fs";
 import { extname, isAbsolute, join, relative, resolve } from "path";
 import { budgetToolOutput, type ShellCommandResult } from "../../../context/tool-output-budgeter.ts";
@@ -101,6 +101,8 @@ const COMMAND_ARTIFACT_SCAN_IGNORES = new Set([
 
 const MAX_COMMAND_ARTIFACT_SCAN_FILES = 20_000;
 const MAX_COMMAND_ARTIFACT_EVIDENCE = 24;
+
+type GitWorkspaceStatusSnapshot = Map<string, string>;
 
 function artifactKindForPath(path: string): CommandArtifactKind {
   const ext = extname(path).toLocaleLowerCase("en-US");
@@ -219,6 +221,57 @@ function commandArtifactsFromPaths(input: {
       return null;
     })
     .filter((artifact): artifact is CommandArtifactEvidence => Boolean(artifact)));
+}
+
+function gitWorkspaceStatusSnapshot(workspace: string): GitWorkspaceStatusSnapshot | null {
+  const result = spawnSync("git", [
+    "-C",
+    workspace,
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+  ], {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+    windowsHide: true,
+  });
+  if (result.status !== 0) return null;
+  const snapshot: GitWorkspaceStatusSnapshot = new Map();
+  const records = result.stdout.split("\0").filter(Boolean);
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (record.length < 4) continue;
+    const status = record.slice(0, 2);
+    const path = record.slice(3);
+    if (!path || path.startsWith(".git/")) continue;
+    snapshot.set(path, status);
+    if ((status[0] === "R" || status[0] === "C") && index + 1 < records.length) {
+      index += 1;
+    }
+  }
+  return snapshot;
+}
+
+function gitWorkspaceDeltaArtifacts(input: {
+  before: GitWorkspaceStatusSnapshot | null;
+  workspace: string;
+  butlerData: string;
+  success: boolean;
+}): CommandArtifactEvidence[] {
+  if (!input.success || !input.before) return [];
+  const after = gitWorkspaceStatusSnapshot(input.workspace);
+  if (!after) return [];
+  const paths = [...after.entries()]
+    .filter(([path, status]) => input.before?.get(path) !== status)
+    .map(([path]) => path);
+  return commandArtifactsFromPaths({
+    paths,
+    cwd: input.workspace,
+    workspace: input.workspace,
+    butlerData: input.butlerData,
+    allowWorkspace: true,
+  });
 }
 
 function declaredCommandArtifacts(
@@ -580,6 +633,8 @@ export async function runCommandTool(input: {
     ? input.args.output_mode
     : "auto";
 
+  const workspace = resolve(input.workspacePath);
+  const gitStatusBeforeCommand = gitWorkspaceStatusSnapshot(workspace);
   const commandStartedAtMs = Date.now();
   mkdirSync(commandGeneratedArtifactRoot(input.butlerData), { recursive: true });
   const raw = await executeBashCommand({
@@ -619,7 +674,6 @@ export async function runCommandTool(input: {
     cwd,
     maxModelTokens,
   });
-  const workspace = resolve(input.workspacePath);
   const declaredArtifacts = declaredCommandArtifacts(input.args, cwd, workspace, input.butlerData);
   const stdoutArtifacts = declaredArtifacts.length > 0
     ? []
@@ -629,7 +683,7 @@ export async function runCommandTool(input: {
       workspace,
       butlerData: input.butlerData,
     });
-  const discoveredArtifacts = declaredArtifacts.length > 0 || stdoutArtifacts.length > 0
+  const discoveredGeneratedArtifacts = declaredArtifacts.length > 0 || stdoutArtifacts.length > 0
     ? []
     : recentCommandArtifacts({
       cwd,
@@ -637,10 +691,19 @@ export async function runCommandTool(input: {
       butlerData: input.butlerData,
       startedAtMs: commandStartedAtMs,
     });
+  const discoveredWorkspaceArtifacts = declaredArtifacts.length > 0 || stdoutArtifacts.length > 0
+    ? []
+    : gitWorkspaceDeltaArtifacts({
+      before: gitStatusBeforeCommand,
+      workspace,
+      butlerData: input.butlerData,
+      success,
+    });
   const artifacts = uniqueCommandArtifacts([
     ...declaredArtifacts,
     ...stdoutArtifacts,
-    ...discoveredArtifacts,
+    ...discoveredGeneratedArtifacts,
+    ...discoveredWorkspaceArtifacts,
   ]);
   const artifactEvidence = commandArtifactEvidenceFields(artifacts);
   return {

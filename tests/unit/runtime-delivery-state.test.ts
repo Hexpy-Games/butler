@@ -8,6 +8,7 @@ import {
   waitingUserDeliveryState,
 } from "../../packages/butler-agent/src/agent/turn/runtime-delivery-state.ts";
 import { recoverableLimitedDeliveryForError } from "../../packages/butler-agent/src/agent/turn/recoverable-delivery.ts";
+import { progressFinalizationText } from "../../packages/butler-agent/src/agent/output/completion/progress-finalization.ts";
 
 test("runtime delivery taxonomy maps normal and limited delivery as assistant output", () => {
   expect(deliveredDeliveryState()).toMatchObject({
@@ -152,24 +153,50 @@ test("runtime delivery taxonomy redacts unsafe limitation text", () => {
   ]);
 });
 
-test("recoverable delivery redacts unsafe goal completion text", () => {
+test("recoverable delivery uses progress finalization instead of generic verification failure", () => {
   const error = new Error(
     "INCOMPLETE: raw prompt text token=abc123 /Users/example/.butler/private.json",
   );
   error.name = "GoalCompletionIncompleteError";
+  Object.assign(error, {
+    progressFinalizationText:
+      "진행한 내용은 보존했습니다.\n\n확인된 진행사항:\n- 파일을 작성했습니다.\n\n남은 부분: 최종 보고 정리가 남아 있습니다.",
+  });
 
   const recovered = recoverableLimitedDeliveryForError(error);
 
   expect(recovered).toMatchObject({
-    text:
-      "Butler could not verify that the requested goal was completed with the available evidence.",
     delivery: {
       delivery_state: "delivered_with_limitations",
       visibility: "assistant_output",
       failure_notice: false,
     },
   });
+  expect(recovered?.text).toContain("\n\n확인된 진행사항:\n- 파일을 작성했습니다.");
+  expect(recovered?.text).not.toContain("could not verify");
   expect(JSON.stringify(recovered)).not.toContain("INCOMPLETE");
   expect(JSON.stringify(recovered)).not.toContain("abc123");
   expect(JSON.stringify(recovered)).not.toContain("/Users/example");
+});
+
+test("progress finalization renders public tool labels without protocol names", () => {
+  const text = progressFinalizationText({
+    language: "ko",
+    previousAnswer: "",
+    audit: [{
+      name: "run_command",
+      args: {},
+      ok: true,
+      result: {
+        ok: true,
+        written_file: "reports/generated.txt",
+      },
+    }],
+    decisions: [],
+    reason: "missing public completion obligation: durable_artifact",
+  });
+
+  expect(text).toContain("명령 실행 결과로 reports/generated.txt 상태를 확인했습니다.");
+  expect(text).not.toContain("run_command");
+  expect(text).not.toContain("durable_artifact");
 });
