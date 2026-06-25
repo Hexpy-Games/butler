@@ -2766,11 +2766,36 @@ test("active turn fallback copy matches the turn state", () => {
   );
 
   expect(copy).toContain("pendingStateLabels");
+  expect(copy).toContain('session_starting: "새 세션 시작중..."');
   expect(copy).toContain('thinking: "생각 중입니다."');
   expect(copy).toContain('streaming: "응답을 작성하고 있습니다."');
+  expect(panel).toContain('const SESSION_STARTING_STATE = "session_starting"');
+  expect(panel).toContain("<Skeleton");
   expect(panel).toContain("turnActivityPendingLabel(state)");
   expect(panel).toContain('data-turn-state={state ?? "unknown"}');
   expect(panel).not.toContain("{appCopy.conversation.work.pendingLabel}");
+});
+
+test("design system exposes a skeleton primitive for loading shells", () => {
+  const rootIndex = read(
+    "packages/butler-app/client/ui/src/libs/design-system/index.ts",
+  );
+  const registry = read(
+    "packages/butler-app/client/ui/src/libs/design-system/registry.tsx",
+  );
+  const skeleton = read(
+    "packages/butler-app/client/ui/src/libs/design-system/shadcn/ui/skeleton.tsx",
+  );
+  const skeletonCss = read(
+    "packages/butler-app/client/ui/src/libs/design-system/components/Skeleton/Skeleton.module.css",
+  );
+
+  expect(rootIndex).toContain('export * from "./components/Skeleton"');
+  expect(registry).toContain('name: "Skeleton"');
+  expect(skeleton).toContain('data-slot="skeleton"');
+  expect(skeleton).toContain('role={label ? "status" : undefined}');
+  expect(skeletonCss).toContain("@keyframes skeleton-shimmer");
+  expect(skeletonCss).toContain("var(--surface-raised)");
 });
 
 test("app client production component structure enforces boundary rules", () => {

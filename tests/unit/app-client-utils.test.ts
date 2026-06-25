@@ -1464,6 +1464,195 @@ test("work blocks group chained tools by semantic work block label", () => {
   expect(blocks[0]?.rows).toHaveLength(2);
 });
 
+test("timeline applies first visible progress turn events as public progress rows", () => {
+  let messages: MessageRecord[] = [];
+  let currentSummary: SessionSummaryView | null = {
+    session_id: "general",
+    turn_state: "thinking",
+    latest_progress: {
+      turn_id: "turn-1",
+      safe_progress_rows: [],
+    },
+  };
+
+  applyTimelineEvents(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-1",
+          event: {
+            id: "event-first-progress",
+            sessionId: "general",
+            turnId: "turn-1",
+            sessionSequence: 1,
+            turnSequence: 1,
+            kind: "turn.first_progress",
+            visibility: "public",
+            payload: {
+              note: "필요한 맥락을 확인하겠습니다.",
+              workBlockId: "first-progress-note",
+              workBlockLabel: "필요한 맥락을 확인하겠습니다.",
+            },
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    (update) => {
+      messages = update(messages);
+    },
+    (update) => {
+      currentSummary = update(currentSummary);
+      return currentSummary;
+    },
+  );
+
+  expect(currentSummary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "event-first-progress",
+      kind: "message",
+      safe_label: "필요한 맥락을 확인하겠습니다.",
+      work_block_id: "first-progress-note",
+      work_block_label: "필요한 맥락을 확인하겠습니다.",
+    }),
+  );
+  expect(messages).toEqual([]);
+});
+
+test("first visible progress rows become active work blocks", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "event-first-progress",
+      kind: "message",
+      state: "running",
+      safe_label: "필요한 맥락을 확인하겠습니다.",
+      work_block_id: "first-progress-note",
+      work_block_label: "필요한 맥락을 확인하겠습니다.",
+    },
+  ]);
+
+  expect(blocks).toEqual([
+    expect.objectContaining({
+      id: "first-progress-note",
+      label: "필요한 맥락을 확인하겠습니다.",
+      state: "running",
+      rows: [
+        expect.objectContaining({
+          id: "event-first-progress",
+          kind: "message",
+          safe_label: "필요한 맥락을 확인하겠습니다.",
+        }),
+      ],
+    }),
+  ]);
+});
+
+test("first visible progress stays scoped through failure and ignores other sessions", () => {
+  let messages: MessageRecord[] = [];
+  let currentSummary: SessionSummaryView | null = {
+    session_id: "general",
+    turn_state: "thinking",
+    latest_progress: {
+      turn_id: "turn-first",
+      safe_progress_rows: [],
+    },
+  };
+
+  applyTimelineEvents(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event.progress",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-first",
+          row: {
+            id: "row-first-progress",
+            kind: "message",
+            state: "running",
+            safe_label: "필요한 맥락을 확인하겠습니다.",
+            work_block_id: "first-progress-note",
+            work_block_label: "필요한 맥락을 확인하겠습니다.",
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "other-session",
+          turn_id: "turn-other",
+          event: {
+            id: "event-other-first-progress",
+            sessionId: "other-session",
+            turnId: "turn-other",
+            sessionSequence: 1,
+            turnSequence: 1,
+            kind: "turn.first_progress",
+            visibility: "public",
+            payload: {
+              note: "다른 세션 진행입니다.",
+              workBlockId: "other-work",
+              workBlockLabel: "다른 세션 진행입니다.",
+            },
+          },
+        },
+      },
+      {
+        id: 3,
+        type: "turn.state_changed",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-first",
+          state: "failed",
+          safe_status_label: "Failed",
+        },
+      },
+      {
+        id: 4,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-first",
+          event: {
+            id: "event-turn-failed",
+            sessionId: "general",
+            turnId: "turn-first",
+            sessionSequence: 2,
+            turnSequence: 2,
+            kind: "turn.failed",
+            visibility: "public",
+            payload: { safeLabel: "Provider unavailable" },
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    (update) => {
+      messages = update(messages);
+    },
+    (update) => {
+      currentSummary = update(currentSummary);
+      return currentSummary;
+    },
+  );
+
+  expect(currentSummary?.latest_progress?.turn_id).toBe("turn-first");
+  expect(currentSummary?.latest_progress?.state).toBe("failed");
+  expect(currentSummary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "row-first-progress",
+      safe_label: "필요한 맥락을 확인하겠습니다.",
+      work_block_id: "first-progress-note",
+    }),
+  );
+  expect(JSON.stringify(currentSummary)).not.toContain("다른 세션 진행입니다.");
+  expect(messages).toEqual([]);
+});
+
 test("timeline keeps todo compatibility progress as semantic todo rows", () => {
   let messages: MessageRecord[] = [];
   let currentSummary: SessionSummaryView | null = {

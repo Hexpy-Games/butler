@@ -2,12 +2,19 @@ import { expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
 import {
   TURN_EVENT_COMPATIBILITY_MAPPINGS,
+  FIRST_VISIBLE_PROGRESS_EVENT_KIND,
   TURN_EVENT_KINDS,
   createAgentTurnEvent,
   progressRowFromTurnEvent,
   sanitizePublicText,
   turnEventFromProgressRow,
 } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
+import {
+  FIRST_VISIBLE_PROGRESS_ACCEPTED_SAFETY_STATUS,
+  FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE,
+  FIRST_VISIBLE_PROGRESS_FALLBACK_NOTE,
+  firstVisibleProgressPayload,
+} from "../../packages/butler-agent/src/agent/events/first-visible-progress.ts";
 
 test("turn event contract accepts every public event kind with monotonic sequences", () => {
   for (const [index, kind] of TURN_EVENT_KINDS.entries()) {
@@ -99,6 +106,53 @@ test("turn event progress projection preserves safe tool activity", () => {
     work_block_id: "work-tool-1",
     work_block_label: "Checking local Project Ledger status",
   });
+});
+
+test("first visible progress event is public prose without tool or todo dependencies", () => {
+  const event = createAgentTurnEvent({
+    sessionId: "general",
+    turnId: "turn-1",
+    sessionSequence: 1,
+    turnSequence: 1,
+    kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+    payload: firstVisibleProgressPayload({
+      note: "관련 매핑을 확인하겠습니다.",
+      source: FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE,
+      safetyStatus: FIRST_VISIBLE_PROGRESS_ACCEPTED_SAFETY_STATUS,
+    }),
+  });
+
+  expect(event.kind).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  expect(event.payload).toMatchObject({
+    note: "관련 매핑을 확인하겠습니다.",
+    source: FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE,
+    safetyStatus: FIRST_VISIBLE_PROGRESS_ACCEPTED_SAFETY_STATUS,
+    workBlockLabel: "관련 매핑을 확인하겠습니다.",
+  });
+  expect(event.payload.toolCallId).toBeUndefined();
+  expect(event.payload.activityKind).toBeUndefined();
+
+  expect(progressRowFromTurnEvent(event)).toMatchObject({
+    kind: "message",
+    state: "running",
+    safe_label: "관련 매핑을 확인하겠습니다.",
+    work_block_label: "관련 매핑을 확인하겠습니다.",
+  });
+});
+
+test("first visible progress policy repairs unsafe or evidence-claiming notes", () => {
+  const unsafePrivate = firstVisibleProgressPayload({
+    note: "<think>private chain</think>",
+    source: FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE,
+  });
+  expect(unsafePrivate.note).toBe(FIRST_VISIBLE_PROGRESS_FALLBACK_NOTE);
+  expect(JSON.stringify(unsafePrivate)).not.toContain("private chain");
+
+  const unsupportedEvidenceClaim = firstVisibleProgressPayload({
+    note: "파일을 이미 확인했고 결과를 검증했습니다.",
+    source: FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE,
+  });
+  expect(unsupportedEvidenceClaim.note).toBe(FIRST_VISIBLE_PROGRESS_FALLBACK_NOTE);
 });
 
 test("work block events project safe process block metadata", () => {

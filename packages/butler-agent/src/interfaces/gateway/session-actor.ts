@@ -13,11 +13,19 @@ import type {
 } from "../../test-support/harness/contracts.ts";
 import type { RuntimeDeliveryClassification } from "../../agent/turn/runtime-delivery-state.ts";
 import {
+  FIRST_VISIBLE_PROGRESS_ASSISTANT_SOURCE,
+  firstVisibleProgressPayload,
+} from "../../agent/events/first-visible-progress.ts";
+import {
+  FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+} from "../../agent/events/turn-events.ts";
+import {
   recordDurableInbound,
   recordDurableOutbound,
   recordSessionLifecycle,
   recordSystemEvent,
 } from "../../test-support/harness/durable-session-transcript.ts";
+import { recordFirstVisibleLatencyMetric } from "../../operations/metrics/first-visible-latency.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import {
   diagnosticDetails,
@@ -30,6 +38,7 @@ import type {
   GatewayRoute,
   GatewaySessionActor,
 } from "../../gateways/core/contracts.ts";
+import { APP_TRANSPORT } from "../../gateways/core/app-transport.ts";
 
 interface SessionActorOptions {
   sessionId: string;
@@ -58,6 +67,11 @@ interface SessionActorOptions {
     event: RuntimeTurnEventInput;
   }) => Promise<void>;
   generateSessionTitle?: (input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+    route?: GatewayRoute;
+  }) => Promise<string | null>;
+  generateFirstVisibleProgress?: (input: {
     binding: StoredSessionBinding;
     envelope: InboundEnvelope;
     route?: GatewayRoute;
@@ -129,6 +143,10 @@ function stewardTimelineRoot(sessionId: string): string {
     process.env.BUTLER_DATA ||
     join(process.env.HOME || process.cwd(), ".butler");
   return join(dataRoot, "steward-activity", safeSessionPathSegment(sessionId));
+}
+
+function gatewayMetricsButlerData(): string {
+  return process.env.BUTLER_DATA || join(process.env.HOME || process.cwd(), ".butler");
 }
 
 function stewardEventId(
@@ -361,6 +379,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     envelope: InboundEnvelope,
     route?: GatewayRoute,
   ): Promise<GatewayActorTurnResult> {
+    const acceptedAtMs = Date.now();
     const turnId = turnIdFromEnvelope(envelope);
     if (this.role === "steward") {
       appendStewardActivityTimelineEvent({
@@ -399,6 +418,13 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     });
 
     try {
+      await this.emitFirstVisibleProgress({
+        binding,
+        envelope,
+        route,
+        timestamp,
+        acceptedAtMs,
+      });
       const promptContext = this.options.buildTurnContext?.({
         binding,
         envelope,
@@ -572,6 +598,66 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         timestamp,
       });
       throw err;
+    }
+  }
+
+  private async emitFirstVisibleProgress(input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+    route?: GatewayRoute;
+    timestamp: string;
+    acceptedAtMs: number;
+  }): Promise<void> {
+    if (input.envelope.transport !== APP_TRANSPORT) return;
+    if (!this.options.deliverTurnEvent) return;
+    try {
+      const note = await this.generateFirstVisibleProgressBestEffort(
+        input.binding,
+        input.envelope,
+        input.route,
+      );
+      if (!note) return;
+      await this.options.deliverTurnEvent({
+        binding: input.binding,
+        envelope: input.envelope,
+        route: input.route,
+        event: {
+          kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+          createdAt: input.timestamp,
+          payload: firstVisibleProgressPayload({
+            note,
+            source: FIRST_VISIBLE_PROGRESS_ASSISTANT_SOURCE,
+          }),
+        },
+      });
+      recordFirstVisibleLatencyMetric({
+        butlerData: gatewayMetricsButlerData(),
+        durationMs: Date.now() - input.acceptedAtMs,
+        signal: "first_progress",
+        transport: input.envelope.transport,
+        role: input.binding.role,
+        source: "gateway-actor",
+      });
+    } catch {
+      // First visible progress is latency UX, not the authoritative turn path.
+    }
+  }
+
+  private async generateFirstVisibleProgressBestEffort(
+    binding: StoredSessionBinding,
+    envelope: InboundEnvelope,
+    route?: GatewayRoute,
+  ): Promise<string | null> {
+    try {
+      return (
+        (await this.options.generateFirstVisibleProgress?.({
+          binding,
+          envelope,
+          route,
+        })) ?? null
+      );
+    } catch {
+      return null;
     }
   }
 

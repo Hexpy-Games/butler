@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 export const TURN_EVENT_KINDS = [
   "turn.accepted",
   "turn.started",
+  "turn.first_progress",
   "turn.iteration.started",
   "work.block.started",
   "work.block.updated",
@@ -89,6 +90,7 @@ export interface ProgressRowLike {
 
 const TURN_EVENT_KIND_SET = new Set<string>(TURN_EVENT_KINDS);
 const SAFE_TEXT_MAX = 240;
+export const FIRST_VISIBLE_PROGRESS_EVENT_KIND = "turn.first_progress";
 
 export function createAgentTurnEvent(input: AgentTurnEventInput): AgentTurnEvent {
   if (!input.sessionId.trim()) throw new Error("turn event sessionId is required");
@@ -176,7 +178,7 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
   if (event.visibility !== "public") return null;
   const payload = event.payload;
   const createdAt = event.createdAt;
-  if (event.kind === "assistant.public_note") {
+  if (event.kind === "assistant.public_note" || event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
     const workBlockId = optionalPublicText(payload.workBlockId);
     const note = sanitizePublicText(payload.note, "Working");
     return {

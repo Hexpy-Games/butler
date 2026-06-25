@@ -122,6 +122,7 @@ import { TabsFixture } from "./components/Tabs/Tabs.fixtures";
 import { SliderFixture } from "./components/Slider/Slider.fixtures";
 import { CardFixture } from "./components/Card/Card.fixtures";
 import { TintedGlassFixture } from "./components/TintedGlass/TintedGlass.fixtures";
+import { SkeletonFixture } from "./components/Skeleton/Skeleton.fixtures";
 
 export type DesignSystemComponentMeta = {
   name: string;
@@ -570,6 +571,12 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
     path: "components/TintedGlass",
     tags: ["surface", "glass", "overlay"],
     fixture: TintedGlassFixture,
+  },
+  {
+    name: "Skeleton",
+    path: "components/Skeleton",
+    tags: ["loading", "placeholder", "shimmer"],
+    fixture: SkeletonFixture,
   },
   {
     name: "IconButton",

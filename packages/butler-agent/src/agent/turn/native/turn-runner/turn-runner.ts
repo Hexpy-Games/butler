@@ -33,6 +33,7 @@ export async function runNativeToolTurn({
       turnInput: input,
       session,
       deps,
+      startedAt,
       useTools,
       audit,
       publicDecisionContext,
