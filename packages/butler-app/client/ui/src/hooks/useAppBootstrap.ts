@@ -19,6 +19,7 @@ import { readCachedSettings } from "@/app/settingsCache.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
 import { hasFollowableWorkerActivity, isDraftChatId } from "@/app/utils.ts";
+import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import {
   selectActiveSessionView,
   selectRightAvailable,
@@ -145,7 +146,7 @@ export function useAppBootstrap() {
       Object.values(sendingOperations).includes(activeChatId));
   const activeTurnVisible = ACTIVE_TURN_STATES.has(summaryTurnState);
   const shouldFollowSessionEvents =
-    Boolean(activeSessionView) && !isDraftChatId(activeChatId);
+    Boolean(activeSessionView) && isServerBackedSessionId(activeChatId);
 
   useEffect(() => {
     if (!rightAvailable) setRightOpen(false);
@@ -267,6 +268,7 @@ export function useAppBootstrap() {
         setStatus({ label: "ready", tone: "ok" });
         return;
       }
+      if (!isServerBackedSessionId(activeChatId)) return;
       let cached: MessageListView | null = null;
       try {
         try {
@@ -323,7 +325,7 @@ export function useAppBootstrap() {
   ]);
 
   useEffect(() => {
-    if (!activeSessionView || isDraftChatId(activeChatId)) return;
+    if (!activeSessionView || !isServerBackedSessionId(activeChatId)) return;
     const scheduleSave = () => {
       if (messageCacheTimerRef.current)
         clearTimeout(messageCacheTimerRef.current);
@@ -356,7 +358,7 @@ export function useAppBootstrap() {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function loadSessionSummary() {
-      if (!activeSessionView || isDraftChatId(activeChatId)) return;
+      if (!activeSessionView || !isServerBackedSessionId(activeChatId)) return;
       if (
         !activeSessionSending &&
         !activeTurnVisible &&
@@ -499,7 +501,6 @@ export function useAppBootstrap() {
     async function pollEvents() {
       if (
         !activeSessionView ||
-        isDraftChatId(activeChatId) ||
         !shouldFollowSessionEvents
       ) {
         return;
@@ -531,7 +532,6 @@ export function useAppBootstrap() {
     }
     if (
       activeSessionView &&
-      !isDraftChatId(activeChatId) &&
       shouldFollowSessionEvents &&
       typeof EventSource !== "undefined"
     ) {

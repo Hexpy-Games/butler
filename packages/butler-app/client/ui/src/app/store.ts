@@ -28,7 +28,6 @@ import { browserRandomId } from "./id.ts";
 import {
   type OptimisticSessionStart,
   findSessionSummary,
-  isOptimisticSessionId,
   messagesWithChatId,
   navigationReplacingOptimisticSession,
   navigationWithSessionSummary,
@@ -85,6 +84,7 @@ import {
   projectDraftId,
   titleFromPrompt,
 } from "./utils.ts";
+import { isServerBackedSessionId } from "./sessionIds.ts";
 
 type ProjectAction = "rename" | "pin" | "archive" | "delete";
 type SessionAction = "rename" | "archive";
@@ -850,9 +850,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         turnProgress: completeCached ? turnProgress : {},
         sessionMessageViews: nextSessionMessageViews,
         messageLoadPending:
-          !isDraftChatId(chatId) &&
-          !isOptimisticSessionId(chatId) &&
-          !completeCached,
+          isServerBackedSessionId(chatId) && !completeCached,
         status: state.status,
       };
     }),
@@ -882,7 +880,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   refreshSessionView: async (chatId = get().activeChatId) => {
-    if (isDraftChatId(chatId) || isOptimisticSessionId(chatId)) return;
+    if (!isServerBackedSessionId(chatId)) return;
     try {
       const data = await api<SessionView>(
         `/session-view?session_id=${encodeURIComponent(chatId)}`,
@@ -896,6 +894,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   reloadMessages: async (chatId = get().activeChatId) => {
+    if (!isServerBackedSessionId(chatId)) return;
     let cached: MessageListView | null = null;
     try {
       try {
@@ -925,7 +924,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   refreshSessionSummary: async (chatId = get().activeChatId) => {
-    if (isDraftChatId(chatId) || isOptimisticSessionId(chatId)) return;
+    if (!isServerBackedSessionId(chatId)) return;
     try {
       const data = await api<SessionView>(
         `/session-view?session_id=${encodeURIComponent(chatId)}`,
@@ -940,7 +939,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   refreshSessionQueue: async (chatId = get().activeChatId) => {
-    if (isDraftChatId(chatId) || isOptimisticSessionId(chatId)) {
+    if (!isServerBackedSessionId(chatId)) {
       if (get().activeChatId === chatId) set({ sessionQueue: [] });
       return;
     }
@@ -1291,8 +1290,9 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       if (!hasImmediateAssistantReply) await get().reloadMessages(targetChatId);
       set({ status: { label: "ready", tone: "ok" } });
     } catch (error) {
-      if (!isDraftChatId(targetChatId) && !isOptimisticSessionId(targetChatId))
+      if (isServerBackedSessionId(targetChatId)) {
         await get().reloadMessages(targetChatId);
+      }
       set((state) => ({
         activeChatId:
           optimisticStart && state.activeChatId === optimisticStart.id
@@ -1636,7 +1636,7 @@ export const selectActiveChat = (state: ButlerStore) =>
 export const selectActiveSessionView = (state: ButlerStore) =>
   state.view.kind === "session";
 export const selectRightAvailable = (state: ButlerStore) =>
-  selectActiveSessionView(state) && !isDraftChatId(state.activeChatId);
+  selectActiveSessionView(state) && isServerBackedSessionId(state.activeChatId);
 export const selectEffectiveRightOpen = (state: ButlerStore) =>
   state.rightOpen && selectRightAvailable(state);
 export const selectViewTitle = (state: ButlerStore) =>
