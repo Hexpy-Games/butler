@@ -11,13 +11,13 @@ const toolRuntimeSpecs = [
   {
     id: "SPEC-TOOL-RUNTIME-EVIDENCE-CAPABILITY-LEDGER",
     path: "project-ledger/projects/butler/specs/tool-runtime/evidence-capability-ledger.md",
-    criteria: ["ECL-SC01", "ECL-SC04", "ECL-SC10"],
-    requiredSections: ["## Evidence Contracts", "## Ledger State Machine", "## Satisfaction Rules"],
+    criteria: ["ECL-SC01", "ECL-SC04", "ECL-SC10", "ECL-SC12"],
+    requiredSections: ["## Terminology Boundary", "## Evidence Contracts", "## Ledger State Machine", "## Satisfaction Rules"],
   },
   {
     id: "SPEC-TOOL-RUNTIME-RECOVERABLE-DELIVERY-STATE",
     path: "project-ledger/projects/butler/specs/tool-runtime/recoverable-delivery-state.md",
-    criteria: ["RDS-SC01", "RDS-SC04", "RDS-SC07", "RDS-SC11"],
+    criteria: ["RDS-SC01", "RDS-SC04", "RDS-SC07", "RDS-SC11", "RDS-SC12", "RDS-SC13"],
     requiredSections: ["## Delivery States", "## Recovery Loop", "## Error Classification"],
   },
 ];
@@ -41,6 +41,15 @@ test("tool runtime specs exist as dedicated implementable feature specs", () => 
       expect(text).toContain(criterion);
     }
   }
+});
+
+test("tool runtime specs reserve Artifact for app-visible deliverables", () => {
+  const evidence = readRepoOrLedgerFile("project-ledger/projects/butler/specs/tool-runtime/evidence-capability-ledger.md");
+  expect(evidence).toContain("`Artifact` is reserved for app-visible user deliverables");
+  expect(evidence).toContain("`durable outcome`");
+  expect(evidence).toContain("`outcome reference`");
+  expect(evidence).toContain("`evidence receipt`");
+  expect(evidence).toContain("legacy internal schema names");
 });
 
 test("existing intent and search specs route tool activation through progressive disclosure", () => {
