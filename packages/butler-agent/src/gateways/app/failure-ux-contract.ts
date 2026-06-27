@@ -89,6 +89,9 @@ function safeGoalCompletionIncompleteMessage(message: string): string | null {
 }
 
 function internalRecoveryMessage(rawMessage: string, safeRuntimeMessage: string): string | null {
+  if (/prompt usage model-call budget exhausted/iu.test(rawMessage)) {
+    return "Butler could not verify that the requested goal was completed.";
+  }
   if (isCompletionObligationProtocolMessage(rawMessage)) {
     return safeGoalCompletionIncompleteMessage(rawMessage);
   }

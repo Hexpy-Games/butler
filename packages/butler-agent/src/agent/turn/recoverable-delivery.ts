@@ -19,6 +19,7 @@ export interface RecoverableLimitedDelivery {
 export function recoverableLimitedDeliveryForError(error: unknown): RecoverableLimitedDelivery | null {
   const classified = classifyRuntimeFailureDelivery(error);
   if (classified.issue_kind !== "internal_recovery") return null;
+  if (isPromptUsageModelCallBudget(error)) return null;
   const failure = safeRuntimeFailure(error);
   const progressText = progressFinalizationTextFromError(error);
   const reason = safeLimitationText(
@@ -34,6 +35,24 @@ export function recoverableLimitedDeliveryForError(error: unknown): RecoverableL
       limitations: [text],
     }),
   };
+}
+
+function isPromptUsageModelCallBudget(error: unknown): boolean {
+  if (error instanceof Error) {
+    const record = error as Error & { code?: unknown };
+    return record.code === "prompt_usage_model_call_budget_exhausted" ||
+      error.name === "PromptUsageModelCallBudgetExhaustedError" ||
+      /prompt usage model-call budget exhausted/iu.test(error.message);
+  }
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    return record.code === "prompt_usage_model_call_budget_exhausted" ||
+      record.name === "PromptUsageModelCallBudgetExhaustedError" ||
+      (typeof record.message === "string" &&
+        /prompt usage model-call budget exhausted/iu.test(record.message));
+  }
+  return typeof error === "string" &&
+    /prompt usage model-call budget exhausted/iu.test(error);
 }
 
 function progressFinalizationTextFromError(error: unknown): string | null {

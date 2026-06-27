@@ -1,5 +1,5 @@
 const DEFAULT_GOAL_COMPLETION_CONTINUATION_ATTEMPTS = 8;
-const DEFAULT_DIRECT_WORK_CONTINUATION_ATTEMPTS = 100;
+const DIRECT_WORK_FINALIZATION_REPAIR_ATTEMPTS = 1;
 
 export function runtimeTurnAbortError(): Error {
   const error = new Error("Runtime turn was cancelled.");
@@ -27,8 +27,8 @@ export function goalCompletionContinuationAttempts(): number {
 export function directWorkContinuationAttempts(): number {
   const raw = process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
   const parsed = raw ? Number.parseInt(raw, 10) : NaN;
-  if (!Number.isFinite(parsed)) return DEFAULT_DIRECT_WORK_CONTINUATION_ATTEMPTS;
-  return Math.max(0, Math.min(parsed, 1_000));
+  if (!Number.isFinite(parsed)) return DIRECT_WORK_FINALIZATION_REPAIR_ATTEMPTS;
+  return Math.max(0, Math.min(parsed, DIRECT_WORK_FINALIZATION_REPAIR_ATTEMPTS));
 }
 
 export function throwIfRuntimeTurnAborted(signal?: AbortSignal): void {

@@ -47,6 +47,7 @@ import {
   TURN_ACKNOWLEDGED_EVENT_KIND,
   createTurnAcknowledgedPayload,
 } from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
+import type { ButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
 import type {
   AgentRuntimeAdapter,
   ArtifactRef,
@@ -6198,6 +6199,14 @@ test("posted messages persist and replay after restart", async () => {
     join(tempDir, "runtime", "inbound-events", "pending"),
   );
   expect(pending).toHaveLength(1);
+  const replay = await getJson(`${url}events?cursor=0`);
+  const queuedEvent = replay.data.events.find(
+    (event: { type: string; payload?: { turn_id?: string } }) =>
+      event.type === "turn.queued" &&
+      event.payload?.turn_id === result.data.turn.id,
+  );
+  expect(queuedEvent?.payload?.queue_id).toBeString();
+  expect(pending).toEqual([`${queuedEvent.payload.queue_id}.json`]);
   server.stop();
 
   server = createAppServer({ dbPath, port: 0 });
@@ -6222,6 +6231,75 @@ test("posted messages persist and replay after restart", async () => {
       cancellable: true,
       attempt: 1,
     });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport send fails the turn instead of leaving thinking when queue handoff fails", async () => {
+  const serviceClient: ButlerServiceClient = {
+    enqueueAppTurn() {
+      throw new Error("simulated queue write failure");
+    },
+  };
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    serviceClient,
+  });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "this must not get stuck thinking",
+      client_message_id: "client-queue-failure",
+    });
+
+    expect(result.data.turn).toMatchObject({
+      state: "failed",
+      safe_status_label: "Failed",
+      safe_error_code: "app_turn_queue_failed",
+      retryable: true,
+      cancellable: false,
+    });
+    const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+    expect(existsSync(pendingDir) ? readdirSync(pendingDir) : []).toEqual([]);
+
+    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
+    expect(turns.data.turns[0]).toMatchObject({
+      state: "failed",
+      safe_error_code: "app_turn_queue_failed",
+      retryable: true,
+      cancellable: false,
+    });
+
+    const messages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    expect(messages.data.messages).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        status: "failed",
+        safe_error_code: "app_turn_queue_failed",
+        text: "Butler could not queue this request for execution. Retry the turn.",
+      }),
+    );
+
+    const replay = await getJson(`${server.url}events?cursor=0`);
+    expect(
+      replay.data.events.some(
+        (event: { type: string; payload?: { turn_id?: string } }) =>
+          event.type === "turn.queued" &&
+          event.payload?.turn_id === result.data.turn.id,
+      ),
+    ).toBe(false);
+    expect(
+      replay.data.events.some(
+        (event: { type: string; payload?: { safe_error_code?: string } }) =>
+          event.type === "turn.queue_failed" &&
+          event.payload?.safe_error_code === "app_turn_queue_failed",
+      ),
+    ).toBe(true);
   } finally {
     server.stop();
   }
@@ -6724,6 +6802,190 @@ test("app transport failure projection does not downgrade delivered turns", asyn
       retryable: false,
     });
     expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport final projection does not resurrect timed out failed turns", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const url = server.url;
+  const result = await postJson(`${url}messages`, {
+    chat_id: "general",
+    text: "this turn times out before a late final",
+  });
+  const turnId = result.data.turn.id;
+  expect(result.data.turn.state).toBe("thinking");
+  server.stop();
+
+  const failedQueueDir = join(tempDir, "runtime", "inbound-events", "failed");
+  mkdirSync(failedQueueDir, { recursive: true });
+  writeFileSync(
+    join(failedQueueDir, "queue-timeout.json"),
+    JSON.stringify({
+      queueId: "queue-timeout",
+      failedAt: "2026-05-18T12:00:00.000Z",
+      metadata: {
+        terminalClaimId: "claim-timeout",
+        failure: { code: "inbound_dispatch_timeout" },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "runtime-final:late-after-timeout",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Late final must not resurrect the timed out turn.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          queueId: "queue-timeout",
+          dispatchClaimId: "claim-late-stale",
+          source: "test",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:01.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:timeout-first",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          safeErrorCode: "inbound_dispatch_timeout",
+          queueId: "queue-timeout",
+          dispatchClaimId: "claim-timeout",
+          source: "test",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "this turn times out before a late final",
+      "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+    ]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "failed",
+      safe_error_code: "inbound_dispatch_timeout",
+      retryable: true,
+      cancellable: false,
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport queued final waits for matching processed terminal record", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const url = server.url;
+  const result = await postJson(`${url}messages`, {
+    chat_id: "general",
+    text: "this queued final must wait for queue completion",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "runtime-final:wait-for-processed-terminal",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Final after processed terminal.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          queueId: "queue-wait-terminal",
+          dispatchClaimId: "claim-wait-terminal",
+          source: "test",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "this queued final must wait for queue completion",
+    ]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "thinking",
+      retryable: false,
+      cancellable: true,
+    });
+  } finally {
+    server.stop();
+  }
+
+  const processedQueueDir = join(tempDir, "runtime", "inbound-events", "processed");
+  mkdirSync(processedQueueDir, { recursive: true });
+  writeFileSync(
+    join(processedQueueDir, "queue-wait-terminal.json"),
+    JSON.stringify({
+      queueId: "queue-wait-terminal",
+      processedAt: "2026-05-18T12:00:01.000Z",
+      metadata: {
+        terminalClaimId: "claim-wait-terminal",
+        dispatchStatus: "handled",
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "this queued final must wait for queue completion",
+      "Final after processed terminal.",
+    ]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "delivered",
+      retryable: false,
+      cancellable: false,
+    });
   } finally {
     server.stop();
   }

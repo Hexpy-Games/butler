@@ -102,14 +102,12 @@ test("provider and app projections use the full shared internal recovery classif
   };
   expect(safeRuntimeFailure(promptBudget)).toMatchObject({
     code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message:
-      "Butler reached its internal model-call budget while trying to continue the turn. Progress was saved and the turn can be retried.",
+    message: "Butler could not verify that the requested goal was completed.",
     retryable: true,
   });
   expect(appSafeResponderError(promptBudget)).toEqual({
     code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message:
-      "Butler reached its internal model-call budget while trying to continue the turn. Progress was saved and the turn can be retried.",
+    message: "Butler could not verify that the requested goal was completed.",
   });
 });
 

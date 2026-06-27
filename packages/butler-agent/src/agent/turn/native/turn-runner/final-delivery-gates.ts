@@ -46,6 +46,7 @@ import {
   unresolvedValidationFailureFromAudit,
   validationFailureContinuationPrompt,
 } from "./validation-failure-guard.ts";
+import type { createDirectTurnBudget } from "../../direct-turn-budget.ts";
 
 const EXPLICIT_TOOL_REPAIR_ATTEMPTS = 2;
 const EXPLICIT_TOOL_REPAIR_BASE_ROUNDS = 2;
@@ -59,6 +60,7 @@ export async function produceFinalDeliveryText(input: {
   deps: NativeTurnRunnerDeps;
   useTools: boolean;
   turnId?: string | null;
+  turnBudget: ReturnType<typeof createDirectTurnBudget>;
   prompt: string;
   userText: string;
   initialText: string;

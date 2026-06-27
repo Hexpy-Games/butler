@@ -128,15 +128,6 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
       state: "needs_evidence",
       code: "missing_evidence",
     },
-    {
-      label: "prompt usage model-call budget",
-      error: {
-        code: "prompt_usage_model_call_budget_exhausted",
-        message: "Prompt usage model-call budget exhausted before provider request",
-      },
-      state: "recovering_internal",
-      code: "prompt_usage_model_call_budget_exhausted",
-    },
   ];
 
   for (const item of cases) {
@@ -158,6 +149,20 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
       },
     });
   }
+
+  const promptBudget = {
+    code: "prompt_usage_model_call_budget_exhausted",
+    message: "Prompt usage model-call budget exhausted before provider request",
+  };
+  expect(classifyRuntimeFailureDelivery(promptBudget)).toMatchObject({
+    delivery_state: "recovering_internal",
+    terminal: false,
+    issue_kind: "internal_recovery",
+    visibility: "recovery_progress",
+    failure_notice: false,
+    limitation_codes: ["prompt_usage_model_call_budget_exhausted"],
+  });
+  expect(recoverableLimitedDeliveryForError(promptBudget)).toBeNull();
 });
 
 test("remote provider abort remains a provider failure, not user cancellation", () => {

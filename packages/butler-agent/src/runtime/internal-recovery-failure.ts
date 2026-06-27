@@ -63,7 +63,7 @@ export function safeInternalRecoveryMessage(
 ): string {
   if (isCompletionObligationProtocolMessage(message)) return fallback;
   if (/prompt usage model-call budget exhausted/iu.test(message)) {
-    return "Butler reached its internal model-call budget while trying to continue the turn. Progress was saved and the turn can be retried.";
+    return fallback;
   }
   return safeRecoveryText(message) ?? fallback;
 }
