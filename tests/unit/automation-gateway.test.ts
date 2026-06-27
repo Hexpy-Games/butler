@@ -1088,6 +1088,7 @@ test("queued app prompt-budget interruption resumes next turn from durable W3 to
       await input.executeTool({
         name: "update_todo_list",
         args: {
+          list_id: "main",
           title: "Sandy style guard validation",
           todos: [{
             id: "w3-style-guard",
@@ -1103,7 +1104,7 @@ test("queued app prompt-budget interruption resumes next turn from durable W3 to
             phase: "reporting",
           }],
         },
-        rawArguments: JSON.stringify({ title: "Sandy style guard validation" }),
+        rawArguments: JSON.stringify({ list_id: "main", title: "Sandy style guard validation" }),
       });
       return "W3 style guard validation evidence부터 이어서 처리했습니다.";
     },
@@ -1222,8 +1223,34 @@ test("queued app prompt-budget interruption resumes next turn from durable W3 to
   expect(resumePrompt).toContain(
     "w3-style-guard:pending:execution:Inspecting Sandy style guard validation evidence",
   );
+  expect(resumePrompt).toContain(
+    "Resume From Todo: w3-style-guard:pending:execution:Inspecting Sandy style guard validation evidence",
+  );
+  expect(resumePrompt).toContain("Continuation Contract:");
+  expect(resumePrompt).toContain(
+    "update this existing todo list instead of creating a new turn-scoped checklist",
+  );
   expect(resumePrompt).not.toContain("requested goal was completed");
   expect(resumePrompt).not.toContain("model-call budget");
+
+  const resumedStreams = streamStore.list({ sessionId, includeTerminal: true });
+  expect(resumedStreams).toHaveLength(1);
+  expect(resumedStreams[0]).toMatchObject({
+    state: "complete",
+    todo_list_id: stream!.todo_list_id,
+    terminal: true,
+  });
+  const resumedTodos = new TodoListStore(tempDir).view(stream!.todo_list_id!, { includeCompleted: true });
+  expect(resumedTodos.items).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      id: "w3-style-guard",
+      status: "completed",
+    }),
+    expect.objectContaining({
+      id: "w4-report",
+      status: "completed",
+    }),
+  ]));
   store.close();
 });
 

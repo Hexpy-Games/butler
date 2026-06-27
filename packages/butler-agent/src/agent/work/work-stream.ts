@@ -601,12 +601,14 @@ export class WorkStreamStore {
 
   latestResumableForSession(
     sessionId?: string | null,
-    options: { excludeTodoListIds?: string[] } = {},
+    options: { projectId?: string | null; excludeTodoListIds?: string[] } = {},
   ): WorkStreamRecord | null {
     if (!sessionId) return null;
+    const projectId = options.projectId?.trim();
     const excludedTodoListIds = new Set(options.excludeTodoListIds ?? []);
     const resumable = this.records()
       .filter((record) => record.owner_session_id === sessionId)
+      .filter((record) => !projectId || record.project_id === projectId)
       .filter((record) => workStreamResumable(record))
       .filter((record) => !record.todo_list_id || !excludedTodoListIds.has(record.todo_list_id))
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
