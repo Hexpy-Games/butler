@@ -961,13 +961,13 @@ test("queued inbound converts model-call budget exhaustion to recoverable limite
   expect(app.sentActions[0]).toMatchObject({
     transport: "app",
     message: {
-      text:
-        "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.\n\n남은 부분: 완료 보고에 필요한 마지막 결과 정리가 남아 있습니다.\n다음 진행에서는 이 지점부터 이어가면 됩니다.",
+      text: "",
       replyToMessageId: "message-budget-failure",
     },
     metadata: {
       kind: "final_result",
       turnId: "turn-budget-failure",
+      noVisibleReply: true,
       deliveryState: "delivered_with_limitations",
       limitationCodes: ["internal_recovery_required"],
     },
@@ -1024,13 +1024,13 @@ test("queued inbound converts normalized internal recovery failures to limited d
   expect(app.sentActions[0]).toMatchObject({
     transport: "app",
     message: {
-      text:
-        "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.\n\n남은 부분: 완료 보고에 필요한 마지막 결과 정리가 남아 있습니다.\n다음 진행에서는 이 지점부터 이어가면 됩니다.",
+      text: "",
       replyToMessageId: "message-normalized-internal-recovery",
     },
     metadata: {
       kind: "final_result",
       turnId: "turn-normalized-internal-recovery",
+      noVisibleReply: true,
       deliveryState: "delivered_with_limitations",
       limitationCodes: ["internal_recovery_required"],
     },

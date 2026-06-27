@@ -201,16 +201,36 @@ test("recoverable delivery converts normalized internal recovery failures", () =
   });
 
   expect(recovered).toMatchObject({
-    text:
+    text: null,
+    reason:
       "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.\n\n남은 부분: 완료 보고에 필요한 마지막 결과 정리가 남아 있습니다.\n다음 진행에서는 이 지점부터 이어가면 됩니다.",
     delivery: {
       delivery_state: "delivered_with_limitations",
       limitation_codes: ["internal_recovery_required"],
+      limitations: [],
       visibility: "assistant_output",
       failure_notice: false,
     },
   });
-  expect(JSON.stringify(recovered)).not.toContain("requested goal was completed");
+  expect(recovered?.text).toBeNull();
+});
+
+test("recoverable delivery never promotes default recovery fallback to public text", () => {
+  const recovered = recoverableLimitedDeliveryForError({
+    code: "internal_recovery_required",
+    message:
+      "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.",
+    retryable: true,
+  });
+
+  expect(recovered).toMatchObject({
+    text: null,
+    delivery: {
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+      limitations: [],
+    },
+  });
 });
 
 test("progress finalization renders public tool labels without protocol names", () => {

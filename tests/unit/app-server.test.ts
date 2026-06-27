@@ -6637,6 +6637,295 @@ test("app transport final result projection delivers queued turns after app-serv
   }
 });
 
+test("app transport no-visible limited final closes queued turns without assistant text", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue without generic recovery text",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:no-visible",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          noVisibleReply: true,
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["continue without generic recovery text"]);
+    expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "delivered",
+      safe_status_label: "Delivered with limitations",
+      retryable: false,
+    });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+      limitations: [],
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport no-visible final removes an earlier failure assistant for the same turn", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue after a recoverable dispatch failure",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+  const queueId = "queue-no-visible-cleanup";
+  const dispatchClaimId = "claim-no-visible-cleanup";
+  const failedQueueDir = join(tempDir, "runtime", "inbound-events", "failed");
+  mkdirSync(failedQueueDir, { recursive: true });
+  writeFileSync(
+    join(failedQueueDir, `${queueId}.json`),
+    JSON.stringify({
+      queueId,
+      failedAt: "2026-05-18T12:00:00.000Z",
+      metadata: {
+        terminalClaimId: dispatchClaimId,
+        failure: { code: "inbound_dispatch_timeout" },
+      },
+    }),
+  );
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:no-visible-cleanup",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          queueId,
+          dispatchClaimId,
+          safeErrorCode: "inbound_dispatch_timeout",
+          source: "test",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:01.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:no-visible-cleanup",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          queueId,
+          dispatchClaimId,
+          source: "test",
+          noVisibleReply: true,
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { role: string; text: string }) => [
+        message.role,
+        message.text,
+      ]),
+    ).toEqual([
+      ["user", "continue after a recoverable dispatch failure"],
+    ]);
+    expect(JSON.stringify(messages)).not.toContain("dispatch lease expired");
+    expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+      limitations: [],
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport no-visible final with missing delivery metadata does not create fallback text", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "close this without visible final text",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:no-visible-no-delivery",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          noVisibleReply: true,
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["close this without visible final text"]);
+    expect(JSON.stringify(messages)).not.toContain("Butler did not return a visible reply");
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+      limitations: [],
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport preserves marked public progress finalization text", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue with a public progress summary",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+  const progressText = [
+    "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.",
+    "",
+    "확인된 진행사항:",
+    "- 파일을 작성했습니다.",
+    "",
+    "남은 부분: 최종 보고 정리가 남아 있습니다.",
+    "다음 진행에서는 이 지점부터 이어가면 됩니다.",
+  ].join("\n");
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:visible-progress-finalization",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: progressText,
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          visibleLimitedReply: true,
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [progressText],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["continue with a public progress summary", progressText]);
+    const assistant = messages.data.messages.find(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistant).toMatchObject({
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+    });
+    expect(assistant.limitations[0]).toContain("확인된 진행사항");
+    expect(assistant.limitations[0]).toContain("파일을 작성했습니다.");
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport navigation sync skips zero-byte final artifacts", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
@@ -7125,18 +7414,13 @@ test("recoverable limited final can close a timeout failed app turn", async () =
       messages.data.messages.map((message: { text: string }) => message.text),
     ).toEqual([
       "continue a recoverable WorkStream",
-      "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
     ]);
-    const assistant = messages.data.messages.find(
-      (message: { role: string }) => message.role === "assistant",
-    );
-    expect(assistant).toMatchObject({
-      status: "delivered",
-      retryable: false,
-      delivery_state: "delivered_with_limitations",
-      limitation_codes: ["internal_recovery_required"],
-    });
-    expect(assistant.safe_error_code ?? null).toBeNull();
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
@@ -7145,7 +7429,12 @@ test("recoverable limited final can close a timeout failed app turn", async () =
     });
     expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
-    expect(summary.data.latest_progress.state).toBe("delivered");
+    expect(summary.data.latest_progress).toMatchObject({
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+      limitations: [],
+    });
     expect(
       summary.data.latest_progress.safe_progress_rows.some(
         (row: { kind: string; state: string }) =>
@@ -9010,6 +9299,10 @@ test("app gateway bridge captures tool progress without blank assistant messages
             toolName: "Bash",
             safeLabel: `Bash: ${turn.input.message.text}`,
             inputLabel: turn.input.message.text,
+            workBlockId: "work-progress",
+            workBlockLabel: "상태를 확인하는 중",
+            decisionSummary: "상태 확인을 위해 Bash를 실행합니다.",
+            decisionSource: "assistant-authored",
             detailRows: [
               {
                 id: "bridge-progress-command",
@@ -9091,6 +9384,24 @@ test("app gateway bridge captures tool progress without blank assistant messages
         }),
       );
     }
+    const secondAssistant = messages.data.messages.find(
+      (message: { role: string; text: string }) =>
+        message.role === "assistant" &&
+        message.text === "gateway bridge reply: route this again",
+    );
+    expect(secondAssistant?.work_blocks?.[0]).toMatchObject({
+      id: "work-progress",
+      label: "상태를 확인하는 중",
+      decision_summary: "상태 확인을 위해 Bash를 실행합니다.",
+    });
+    expect(secondAssistant?.work_blocks?.[0]?.rows[0]).toMatchObject({
+      safe_tool_name: "Bash",
+      safe_input_label: "route this again",
+    });
+    expect(secondAssistant?.work_blocks?.[0]?.rows[0].work_block_label)
+      .toBeUndefined();
+    expect(secondAssistant?.work_blocks?.[0]?.rows[0].work_decision_summary)
+      .toBeUndefined();
     const summary = await getJson(
       `${server.url}session-summary?session_id=general`,
     );
@@ -10183,7 +10494,7 @@ test("goal completion incomplete gaps deliver safe limitation text instead of ap
   }
 });
 
-test("goal completion obligation protocol gaps render as clean limited delivery", async () => {
+test("goal completion obligation protocol gaps close without generic assistant text", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -10206,26 +10517,26 @@ test("goal completion obligation protocol gaps render as clean limited delivery"
     });
     expect(response.status).toBe(202);
 
-    const firstAssistant = await waitForAssistantMessageMatching(
+    const deliveredTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (message) => message.status === "delivered",
+      (turn) => turn.state === "delivered",
     );
-    expect(firstAssistant).toMatchObject({
-      status: "delivered",
+    expect(deliveredTurn).toMatchObject({
+      state: "delivered",
       retryable: false,
     });
-    expect(firstAssistant.safe_error_code ?? null).toBeNull();
-    expect(firstAssistant.text as string).toContain("진행한 내용은 보존했습니다");
-    expect(firstAssistant.text as string).not.toContain("could not verify");
-    expect(firstAssistant.text as string).not.toContain(
-      "unsatisfied public completion obligation",
-    );
-    expect(firstAssistant.text as string).not.toContain(
-      "missing public completion obligation",
-    );
-    expect(firstAssistant.text as string).not.toContain("durable_artifact");
-    expect(firstAssistant.text as string).not.toContain("data_table_created");
+    expect(deliveredTurn.safe_error_code ?? null).toBeNull();
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+    expect(JSON.stringify(messages)).not.toContain("durable_artifact");
+    expect(JSON.stringify(messages)).not.toContain("data_table_created");
   } finally {
     server.stop();
   }

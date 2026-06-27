@@ -217,7 +217,11 @@ import {
   type AgentTurnEvent,
   type RuntimeTurnEventInput,
 } from "../../agent/events/turn-events.ts";
-import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
+import {
+  deliveredWithLimitationsState,
+  safeLimitationText,
+} from "../../agent/turn/runtime-delivery-state.ts";
+import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import type { SessionTransportBinding } from "../../test-support/harness/contracts.ts";
 import type { TranscriptEvent } from "../../test-support/harness/transcripts.ts";
@@ -3800,9 +3804,26 @@ export class AppServerStore {
     if (queuedFinalProjection === "defer") return false;
     const text = sanitizeAppTransportFinalText(message.text);
     const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
-    if (!text && artifacts.length === 0) return false;
     const delivery = deliveryLimitationMetadataFromRecord(metadata);
     const limitedDelivery = delivery?.delivery_state === "delivered_with_limitations";
+    const noVisibleReply = metadata.noVisibleReply === true ||
+      shouldTreatLimitedFinalAsNoVisible(text, artifacts, delivery, metadata);
+    if (!text && artifacts.length === 0 && !noVisibleReply) return false;
+    if (noVisibleReply) {
+      this.finalizeResponderLimitedDelivery(chatId, turnId, {
+        text: null,
+        reason: delivery?.limitations[0] ?? "Internal recovery required.",
+        delivery: deliveredWithLimitationsState({
+          limitationCodes: delivery?.limitation_codes.length
+            ? delivery.limitation_codes
+            : [INTERNAL_RECOVERY_REQUIRED_CODE],
+          limitations: [],
+        }),
+      });
+      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      this.touchChat(chatId);
+      return true;
+    }
 
     const existing = this.getLatestAssistantMessageForTurn(turnId);
     const artifactFiles = this.artifactFilesFromOutbound(
@@ -5106,7 +5127,7 @@ export class AppServerStore {
           reply: delivered.reply,
           replies: delivered.replies,
           turn: delivered.turn,
-          next_cursor: delivered.reply.cursor,
+          next_cursor: delivered.reply?.cursor ?? delivered.turn.cursor,
         };
       }
       const safeError = appSafeResponderError(error);
@@ -6422,8 +6443,9 @@ export class AppServerStore {
     chatId: string,
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
-  ): { reply: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
+  ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
     const text = limitedDelivery.text;
+    const noVisibleReply = text === null;
     const deliveryState = limitedDelivery.delivery.delivery_state;
     const limitations = limitedDelivery.delivery.limitations;
     const limitationCodes = limitedDelivery.delivery.limitation_codes;
@@ -6433,13 +6455,17 @@ export class AppServerStore {
         payload: { safeLabel: "Preparing final answer" },
       });
     }
-    const replies = this.insertOrReplaceAssistantReplies(chatId, turnId, [text]);
-    if (!this.hasTurnEventKind(turnId, "message.final.completed")) {
+    if (text === null) this.deleteAssistantMessagesForTurn(turnId);
+    const replies = text === null
+      ? []
+      : this.insertOrReplaceAssistantReplies(chatId, turnId, [text]);
+    if (noVisibleReply || !this.hasTurnEventKind(turnId, "message.final.completed")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "message.final.completed",
         payload: {
           safeLabel: "Final answer ready with limitations",
-          textChars: text.length,
+          textChars: text?.length ?? 0,
+          noVisibleReply,
           deliveryState,
           delivery_state: deliveryState,
           limitations,
@@ -6455,7 +6481,7 @@ export class AppServerStore {
       safeErrorCode: null,
     });
     this.appendTerminalTurnStateChanged(deliveredTurn);
-    if (!this.hasTurnEventKind(turnId, "turn.completed")) {
+    if (noVisibleReply || !this.hasTurnEventKind(turnId, "turn.completed")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "turn.completed",
         payload: {
@@ -6475,10 +6501,49 @@ export class AppServerStore {
       limitation_codes: limitationCodes,
     }));
     return {
-      reply: projectedReplies.at(-1)!,
+      reply: projectedReplies.at(-1),
       replies: projectedReplies,
       turn: deliveredTurn,
     };
+  }
+
+  private deleteAssistantMessagesForTurn(turnId: string): void {
+    const rows = this.db
+      .query<MessageRow, [string]>(
+        `
+      SELECT rowid, id, chat_id, turn_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+      FROM messages
+      WHERE turn_id = ? AND role = 'assistant'
+      ORDER BY rowid DESC
+    `,
+      )
+      .all(turnId);
+    for (const row of rows) {
+      this.db
+        .query(
+          `
+        UPDATE message_files
+        SET message_id = NULL
+        WHERE message_id = ?
+      `,
+        )
+        .run(row.id);
+      this.db
+        .query(
+          `
+        DELETE FROM message_attachments
+        WHERE message_id = ?
+      `,
+        )
+        .run(row.id);
+      this.db.query("DELETE FROM messages WHERE id = ?").run(row.id);
+      this.appendEvent("message.deleted", {
+        message_id: row.id,
+        chat_id: row.chat_id,
+        turn_id: row.turn_id,
+        role: row.role,
+      });
+    }
   }
 
   private upsertAssistantTurnFailure(
@@ -8992,8 +9057,9 @@ function workBlocksFromTerminalProgressRows(
       row.safe_label;
     const decision = publicDecisionFieldsFromProgressRow(row);
     const previous = blocks.get(id);
+    const blockRow = workBlockToolRow(row);
     if (previous) {
-      if (row.kind !== "work_block") previous.rows.push(row);
+      if (row.kind !== "work_block") previous.rows.push(blockRow);
       previous.state = progressMergeState(previous.state, row.state);
       continue;
     }
@@ -9001,7 +9067,7 @@ function workBlocksFromTerminalProgressRows(
       id,
       label,
       state: row.state,
-      rows: row.kind === "work_block" ? [] : [row],
+      rows: row.kind === "work_block" ? [] : [blockRow],
       decision_summary: decision.decision_summary,
       decision_rationale: decision.decision_rationale,
       decision_next_step: decision.decision_next_step,
@@ -9023,6 +9089,19 @@ function workBlocksFromTerminalProgressRows(
         )
       );
     });
+}
+
+function workBlockToolRow(row: ProgressSummaryRow): ProgressSummaryRow {
+  const {
+    work_block_label: _workBlockLabel,
+    work_decision_summary: _workDecisionSummary,
+    work_decision_rationale: _workDecisionRationale,
+    work_decision_next_step: _workDecisionNextStep,
+    work_decision_source: _workDecisionSource,
+    work_decision_evidence_refs: _workDecisionEvidenceRefs,
+    ...toolRow
+  } = row;
+  return toolRow;
 }
 
 function progressRowDisplayOrder(row?: ProgressSummaryRow): number {
@@ -10190,6 +10269,7 @@ function loadedSkillNamesFromTranscriptEvent(
 
 function deliveryLimitationMetadataFromRecord(
   record: Record<string, unknown>,
+  options: { noVisibleReply?: boolean } = {},
 ): DeliveryLimitationMetadata | null {
   const deliveryState = safeDeliveryState(
     record.delivery_state ?? record.deliveryState,
@@ -10200,8 +10280,35 @@ function deliveryLimitationMetadataFromRecord(
     limitation_codes: safeShortTokenList(
       record.limitation_codes ?? record.limitationCodes,
     ),
-    limitations: safeShortTextList(record.limitations),
+    limitations: options.noVisibleReply ? [] : safeShortTextList(record.limitations),
   };
+}
+
+function shouldTreatLimitedFinalAsNoVisible(
+  text: string,
+  artifacts: unknown[],
+  delivery: DeliveryLimitationMetadata | null,
+  metadata: Record<string, unknown>,
+): boolean {
+  if (metadata.visibleLimitedReply === true) return false;
+  if (!text || artifacts.length > 0 || !delivery) return false;
+  if (
+    !delivery.limitation_codes.some((code) =>
+      code === INTERNAL_RECOVERY_REQUIRED_CODE ||
+      code === "prompt_usage_model_call_budget_exhausted",
+    )
+  ) {
+    return false;
+  }
+  return isGenericInternalRecoveryFinalText(text) ||
+    delivery.limitations.some(isGenericInternalRecoveryFinalText);
+}
+
+function isGenericInternalRecoveryFinalText(value: string): boolean {
+  return /진행한 내용은 보존했습니다/u.test(value) ||
+    /Butler could not verify that the requested goal was completed/iu.test(value) ||
+    /Butler reached its internal model-call budget/iu.test(value) ||
+    /prompt usage model-call budget exhausted/iu.test(value);
 }
 
 function shouldProjectRecoverableLimitedFinalOverTerminalTurn(

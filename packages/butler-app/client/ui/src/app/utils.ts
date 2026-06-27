@@ -238,8 +238,13 @@ export function applyTimelineEvents(
       mergeTurnProgressBuckets(current, patch.progressByTurn),
     );
   }
-  if (patch.incoming.length > 0) {
-    setMessages((current) => mergeMessages(current, patch.incoming));
+  if (patch.incoming.length > 0 || patch.deletedMessageIds.size > 0) {
+    setMessages((current) =>
+      removeDeletedMessages(
+        mergeMessages(current, patch.incoming),
+        patch.deletedMessageIds,
+      ),
+    );
   }
 }
 
@@ -257,7 +262,11 @@ export function applyTimelineEventsToViewState(
   turnProgress: Record<string, TurnProgressSnapshot>;
 } {
   const patch = collectTimelineEventPatch(events, activeChatId);
-  if (patch.incoming.length === 0 && patch.progressByTurn.size === 0) {
+  if (
+    patch.incoming.length === 0 &&
+    patch.progressByTurn.size === 0 &&
+    patch.deletedMessageIds.size === 0
+  ) {
     return state;
   }
   const summary =
@@ -282,11 +291,15 @@ export function applyTimelineEventsToViewState(
     patch.incoming.length > 0
       ? mergeMessages(state.messages, patch.incoming)
       : state.messages;
+  const visibleMessages = removeDeletedMessages(
+    mergedMessages,
+    patch.deletedMessageIds,
+  );
   const prunedTurnProgress = pruneReplacedClientTurnProgress(
     turnProgress,
-    mergedMessages,
+    visibleMessages,
   );
-  const messages = freezeMessageWorkBlocks(mergedMessages, prunedTurnProgress);
+  const messages = freezeMessageWorkBlocks(visibleMessages, prunedTurnProgress);
   return {
     messages,
     summary,
@@ -392,6 +405,7 @@ interface TimelineProgressBucket {
 
 interface TimelineEventPatch {
   incoming: MessageRecord[];
+  deletedMessageIds: Set<string>;
   progressByTurn: Map<string, TimelineProgressBucket>;
   latestProgressTurnId?: string;
   unknownProgressTurn: string;
@@ -402,6 +416,7 @@ function collectTimelineEventPatch(
   activeChatId: string,
 ): TimelineEventPatch {
   const incoming: MessageRecord[] = [];
+  const deletedMessageIds = new Set<string>();
   const unknownProgressTurn = "__unknown__";
   const progressByTurn = new Map<string, TimelineProgressBucket>();
   let latestProgressTurnId: string | undefined;
@@ -467,6 +482,13 @@ function collectTimelineEventPatch(
       noteAssistantMessageTerminalState(message);
       continue;
     }
+    if (event.type === "message.deleted") {
+      const chatId = event.payload?.chat_id;
+      const messageId = event.payload?.message_id;
+      if (chatId !== activeChatId || !messageId) continue;
+      deletedMessageIds.add(messageId);
+      continue;
+    }
     if (event.type === "turn.state_changed") {
       const turn = event.payload?.turn;
       const sessionId = event.payload?.session_id ?? turn?.chat_id;
@@ -514,6 +536,7 @@ function collectTimelineEventPatch(
   }
   return {
     incoming,
+    deletedMessageIds,
     progressByTurn,
     latestProgressTurnId,
     unknownProgressTurn,
@@ -1111,7 +1134,7 @@ function buildWorkBlocks(
     const label =
       row.work_block_label ?? decisionLabelFromRow(row) ?? row.safe_label;
     const block = ensureBlock(blockId, label, row.state, row.created_at, row);
-    block.rowMap.set(progressRowMergeKey(row), row);
+    block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
     block.rows = [...block.rowMap.values()];
   }
 
@@ -1124,6 +1147,19 @@ function buildWorkBlocks(
           block.rows.some((row) => isTerminalProgressState(row.state))
         : true,
     );
+}
+
+function workBlockToolRow(row: ProgressRow): ProgressRow {
+  const {
+    work_block_label: _workBlockLabel,
+    work_decision_summary: _workDecisionSummary,
+    work_decision_rationale: _workDecisionRationale,
+    work_decision_next_step: _workDecisionNextStep,
+    work_decision_source: _workDecisionSource,
+    work_decision_evidence_refs: _workDecisionEvidenceRefs,
+    ...toolRow
+  } = row;
+  return toolRow;
 }
 
 function terminalState(current: string, next: string): string {
@@ -1627,6 +1663,15 @@ function systemEventMessageFromEvent(
     created_at: createdAt,
     updated_at: createdAt,
   };
+}
+
+function removeDeletedMessages(
+  messages: MessageRecord[],
+  deletedMessageIds: Set<string>,
+): MessageRecord[] {
+  if (deletedMessageIds.size === 0) return messages;
+  const filtered = messages.filter((message) => !deletedMessageIds.has(message.id));
+  return filtered.length === messages.length ? messages : filtered;
 }
 
 export function mergeMessages(

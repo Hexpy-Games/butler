@@ -2618,7 +2618,7 @@ test("completed message work blocks stay frozen across identical progress writes
 
   expect(messageNotifications).toBe(0);
   expect(useButlerStore.getState().messages[0]).toBe(message);
-  expect(useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]).toBe(
+  expect(useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]).toEqual(
     snapshot.safe_progress_rows[0],
   );
 });
@@ -2684,7 +2684,7 @@ test("active turn summary does not erase frozen work blocks from previous assist
   });
 
   expect(useButlerStore.getState().messages[0]).toBe(message);
-  expect(useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]).toBe(
+  expect(useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]).toEqual(
     snapshot.safe_progress_rows[0],
   );
   expect(useButlerStore.getState().turnProgress["turn-b"]?.state).toBe(

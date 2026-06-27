@@ -1445,6 +1445,7 @@ export interface AppEventEnvelope {
   id: number;
   type:
     | "message.created"
+    | "message.deleted"
     | "chat.created"
     | "server.status"
     | "turn.state_changed"

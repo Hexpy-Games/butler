@@ -152,7 +152,7 @@ function failureActionForOriginalInbound(input: {
 
 function limitedDeliveryActionForOriginalInbound(input: {
   item: ClaimedInboundEvent;
-  text: string;
+  text: string | null;
   delivery: NonNullable<ReturnType<typeof recoverableLimitedDeliveryForError>>["delivery"];
 }): OutboundAction | null {
   const turnId = input.item.envelope.routingHints?.turnId?.trim();
@@ -164,7 +164,7 @@ function limitedDeliveryActionForOriginalInbound(input: {
     accountId: input.item.envelope.accountId,
     peer: input.item.envelope.peer,
     message: {
-      text: input.text,
+      text: input.text ?? "",
       replyToMessageId: input.item.envelope.message.id,
     },
     metadata: {
@@ -175,6 +175,8 @@ function limitedDeliveryActionForOriginalInbound(input: {
       originalTransport: input.item.envelope.transport,
       sessionId,
       turnId,
+      noVisibleReply: input.text === null,
+      visibleLimitedReply: input.text !== null,
       deliveryState: input.delivery.delivery_state,
       limitationCodes: input.delivery.limitation_codes,
       limitations: input.delivery.limitations,
