@@ -83,6 +83,105 @@ async function localAuthHeaders() {
   }
 }
 
+function liveEventsPath(cursor = 0) {
+  const parsed = Number(cursor);
+  const safeCursor = Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
+    : 0;
+  return `/events/live?cursor=${safeCursor}`;
+}
+
+function parseSseRecord(record) {
+  const dataLines = [];
+  for (const rawLine of record.split(/\r\n|\n|\r/u)) {
+    if (!rawLine || rawLine.startsWith(":")) continue;
+    const separator = rawLine.indexOf(":");
+    const field = separator === -1 ? rawLine : rawLine.slice(0, separator);
+    if (field !== "data") continue;
+    const value = separator === -1 ? "" : rawLine.slice(separator + 1);
+    dataLines.push(value.startsWith(" ") ? value.slice(1) : value);
+  }
+  if (dataLines.length === 0) return null;
+  return JSON.parse(dataLines.join("\n"));
+}
+
+function drainSseRecords(buffer, onEvent) {
+  let remaining = buffer;
+  while (true) {
+    const match = /(?:\r\n\r\n|\n\n|\r\r)/u.exec(remaining);
+    if (!match) return remaining;
+    const record = remaining.slice(0, match.index);
+    remaining = remaining.slice(match.index + match[0].length);
+    if (!record.trim()) continue;
+    const event = parseSseRecord(record);
+    if (event) onEvent(event);
+  }
+}
+
+function liveEventErrorPayload(error) {
+  return {
+    message: error?.message || "Live event stream failed.",
+    code: error?.code || "live_events_failed",
+    status: Number.isFinite(Number(error?.status)) ? Number(error.status) : undefined,
+  };
+}
+
+function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
+  const onEvent = typeof handlers?.onEvent === "function"
+    ? handlers.onEvent
+    : () => {};
+  const onError = typeof handlers?.onError === "function"
+    ? handlers.onError
+    : () => {};
+  const abortController = new AbortController();
+  let closed = false;
+
+  async function run() {
+    try {
+      await ensureLocalServer();
+      const serverUrl = await currentServerUrl();
+      const authHeaders = await localAuthHeaders();
+      const response = await fetch(new URL(liveEventsPath(cursor), serverUrl), {
+        headers: {
+          accept: "text/event-stream",
+          ...authHeaders,
+        },
+        signal: abortController.signal,
+      });
+      if (!response.ok) {
+        const error = new Error(`Live event stream failed with status ${response.status}.`);
+        error.status = response.status;
+        throw error;
+      }
+      if (!response.body) {
+        throw new Error("Live event stream response did not include a body.");
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (!closed) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer = drainSseRecords(
+          buffer + decoder.decode(value, { stream: true }),
+          onEvent,
+        );
+      }
+      buffer = drainSseRecords(buffer + decoder.decode(), onEvent);
+    } catch (error) {
+      if (!closed && error?.name !== "AbortError") {
+        onError(liveEventErrorPayload(error));
+      }
+    }
+  }
+
+  void run();
+  return () => {
+    closed = true;
+    abortController.abort();
+  };
+}
+
 function messageCacheKey(chatId) {
   return `${messageCachePrefix}${encodeURIComponent(String(chatId || "general"))}`;
 }
@@ -307,6 +406,7 @@ const butlerApp = Object.freeze({
   writeCachedMessages: ({ chatId = "general", snapshot } = {}) => writeMessageCache(chatId, snapshot),
   readCachedAppUiState: () => readAppUiStateCache(),
   writeCachedAppUiState: ({ snapshot } = {}) => writeAppUiStateCache(snapshot),
+  subscribeLiveEvents,
   listTurns: ({ chatId = "general", cursor = 0 } = {}) => {
     const params = new URLSearchParams({
       chat_id: chatId,

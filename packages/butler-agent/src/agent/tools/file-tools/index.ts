@@ -1,7 +1,7 @@
 import type { ButlerToolExecutorRegistry } from "../butler-tools.ts";
-import { readFileToolDefinition, readFileToolMetadata, executeReadFileTool } from "./read_file/index.ts";
-import { writeFileToolDefinition, writeFileToolMetadata, executeWriteFileTool } from "./write_file/index.ts";
-import { grepFilesToolDefinition, grepFilesToolMetadata, executeGrepFilesTool } from "./grep_files/index.ts";
+import { executeReadFileTool } from "./read_file/index.ts";
+import { executeWriteFileTool } from "./write_file/index.ts";
+import { executeGrepFilesTool } from "./grep_files/index.ts";
 
 export { readFileToolDefinition, readFileToolMetadata } from "./read_file/index.ts";
 export { writeFileToolDefinition, writeFileToolMetadata } from "./write_file/index.ts";

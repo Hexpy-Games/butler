@@ -3,6 +3,7 @@ import type {
   MessageFileRef,
   SettingsView,
   SkillImportResult,
+  TimelineEvent,
 } from "./types.ts";
 
 declare global {
@@ -21,6 +22,13 @@ interface ButlerAppBridge {
   testDesktopNotification?: () => Promise<unknown>;
   openNativeNotificationSettings?: () => Promise<unknown>;
   setNativeShellPreferences?: (input?: unknown) => Promise<unknown>;
+  subscribeLiveEvents?: (
+    input?: { cursor?: number },
+    handlers?: {
+      onEvent?: (event: TimelineEvent) => void;
+      onError?: (error: unknown) => void;
+    },
+  ) => (() => void) | void;
   onNativeNavigation?: (
     handler: (request: unknown) => void,
   ) => (() => void) | Promise<() => void>;
@@ -89,6 +97,39 @@ export function liveEventsUrl(cursor = 0): string {
   const url = new URL("/events/live", baseUrl);
   url.searchParams.set("cursor", String(cursor));
   return url.toString();
+}
+
+export function subscribeLiveEvents(
+  cursor: number,
+  onEvent: (event: TimelineEvent) => void,
+  onError: (error: unknown) => void,
+): () => void {
+  const bridge = typeof window !== "undefined" ? window.butlerApp : undefined;
+  if (typeof bridge?.subscribeLiveEvents === "function") {
+    const unsubscribe = bridge.subscribeLiveEvents(
+      { cursor },
+      { onEvent, onError },
+    );
+    return typeof unsubscribe === "function" ? unsubscribe : () => {};
+  }
+  if (typeof EventSource === "undefined") {
+    onError(new Error("Live event stream is unavailable in this browser."));
+    return () => {};
+  }
+  const liveSource = new EventSource(liveEventsUrl(cursor));
+  liveSource.onmessage = (message) => {
+    try {
+      onEvent(JSON.parse(message.data) as TimelineEvent);
+    } catch (error) {
+      liveSource.close();
+      onError(error);
+    }
+  };
+  liveSource.onerror = () => {
+    liveSource.close();
+    onError(new Error("Live event stream failed."));
+  };
+  return () => liveSource.close();
 }
 
 export async function setNativeAppearanceTheme(

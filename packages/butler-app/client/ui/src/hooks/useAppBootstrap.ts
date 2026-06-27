@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { api, liveEventsUrl } from "@/app/api.ts";
+import { api, subscribeLiveEvents } from "@/app/api.ts";
 import {
   ACTIVE_TURN_STATES,
   EMPTY_MODEL_CATALOG,
@@ -416,7 +416,7 @@ export function useAppBootstrap() {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let sessionRefreshTimer: ReturnType<typeof setTimeout> | undefined;
-    let liveSource: EventSource | undefined;
+    let unsubscribeLiveEvents: (() => void) | undefined;
     let liveFailed = false;
     const scheduleSessionRefresh = (events: TimelineEvent[]) => {
       if (!events.some((event) => targetsActiveChat(event, activeChatId))) {
@@ -532,27 +532,21 @@ export function useAppBootstrap() {
     }
     if (
       activeSessionView &&
-      shouldFollowSessionEvents &&
-      typeof EventSource !== "undefined"
+      shouldFollowSessionEvents
     ) {
-      liveSource = new EventSource(liveEventsUrl(eventCursorRef.current));
-      liveSource.onmessage = (message) => {
-        if (cancelled) return;
-        try {
-          const event = JSON.parse(message.data) as TimelineEvent;
+      unsubscribeLiveEvents = subscribeLiveEvents(
+        eventCursorRef.current,
+        (event) => {
+          if (cancelled) return;
           applyEvents([event]);
-        } catch {
-          liveSource?.close();
+        },
+        () => {
+          if (cancelled || liveFailed) return;
           liveFailed = true;
+          unsubscribeLiveEvents?.();
           timer = setTimeout(pollEvents, EVENT_REPLAY_RETRY_MS);
-        }
-      };
-      liveSource.onerror = () => {
-        if (cancelled || liveFailed) return;
-        liveFailed = true;
-        liveSource?.close();
-        timer = setTimeout(pollEvents, EVENT_REPLAY_RETRY_MS);
-      };
+        },
+      );
     } else {
       if (shouldFollowSessionEvents) {
         timer = setTimeout(pollEvents, EVENT_REPLAY_RETRY_MS);
@@ -561,7 +555,7 @@ export function useAppBootstrap() {
     return () => {
       cancelled = true;
       eventPollingRef.current = false;
-      liveSource?.close();
+      unsubscribeLiveEvents?.();
       if (timer) clearTimeout(timer);
       if (sessionRefreshTimer) clearTimeout(sessionRefreshTimer);
     };

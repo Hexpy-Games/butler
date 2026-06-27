@@ -4,10 +4,14 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { createBundledAgentSupervisor } from "../../packages/butler-app/client/electron/app-agent-supervisor.mjs";
 import { createFirstRunSetupBridge } from "../../packages/butler-app/client/electron/setup-bridge.mjs";
-import { api } from "../../packages/butler-app/client/ui/src/app/api.ts";
+import {
+  api,
+  subscribeLiveEvents,
+} from "../../packages/butler-app/client/ui/src/app/api.ts";
 
 afterEach(() => {
   delete (globalThis as { window?: unknown }).window;
+  delete (globalThis as { EventSource?: unknown }).EventSource;
 });
 
 test("Electron first-run setup bridge exposes status start cancel and diagnostics", () => {
@@ -881,6 +885,57 @@ test("Electron bridge calls MCP and local model preflights only for selected end
         platform: "ollama",
         server_url: "http://127.0.0.1:11434",
       },
+    },
+  ]);
+});
+
+test("Electron bridge live events subscribe through preload instead of renderer EventSource", () => {
+  const calls: Array<unknown> = [];
+  let capturedHandlers:
+    | {
+        onEvent?: (event: unknown) => void;
+        onError?: (error: unknown) => void;
+      }
+    | undefined;
+  (globalThis as { window?: unknown }).window = {
+    location: { origin: "http://127.0.0.1:5173" },
+    butlerApp: {
+      subscribeLiveEvents: (input?: unknown, handlers?: unknown) => {
+        calls.push(input);
+        capturedHandlers = handlers as typeof capturedHandlers;
+        return () => calls.push({ unsubscribed: true });
+      },
+    },
+  };
+  (globalThis as { EventSource?: unknown }).EventSource = class {
+    constructor() {
+      throw new Error("renderer EventSource should not be constructed");
+    }
+  };
+  const events: unknown[] = [];
+
+  const unsubscribe = subscribeLiveEvents(
+    42,
+    (event) => events.push(event),
+    (error) => {
+      throw error;
+    },
+  );
+  capturedHandlers?.onEvent?.({
+    id: 43,
+    type: "turn.state_changed",
+    created_at: "2026-06-27T00:00:00.000Z",
+    payload: {},
+  });
+  unsubscribe();
+
+  expect(calls).toEqual([{ cursor: 42 }, { unsubscribed: true }]);
+  expect(events).toEqual([
+    {
+      id: 43,
+      type: "turn.state_changed",
+      created_at: "2026-06-27T00:00:00.000Z",
+      payload: {},
     },
   ]);
 });
