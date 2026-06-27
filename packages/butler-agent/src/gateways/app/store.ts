@@ -2175,9 +2175,11 @@ export class AppServerStore {
   getSessionControls(sessionId: string): SessionControlState {
     const settings = this.getSettings();
     const stored =
-      this.readSetting<Partial<SessionControlState>>(
-        sessionControlsKey(sessionId),
-      ) ?? {};
+      this.hasExplicitSessionControls(sessionId)
+        ? this.readSetting<Partial<SessionControlState>>(
+          sessionControlsKey(sessionId),
+        ) ?? {}
+        : {};
     const registeredModels = this.registeredModelMetadata();
     return normalizeSessionControls(
       {
@@ -2200,6 +2202,7 @@ export class AppServerStore {
       this.registeredModelMetadata(),
     );
     this.writeSetting(sessionControlsKey(sessionId), next);
+    this.writeSetting(sessionControlsExplicitKey(sessionId), true);
     this.appendEvent("session.controls_updated", {
       session_id: sessionId,
       model: next.model,
@@ -2208,6 +2211,21 @@ export class AppServerStore {
       plan_mode: next.plan_mode,
     });
     return next;
+  }
+
+  private controlsForMessageSend(
+    sessionId: string,
+    input: Partial<SessionControlState>,
+  ): SessionControlState {
+    return hasSessionControlInput(input)
+      ? this.updateSessionControls(sessionId, input)
+      : this.getSessionControls(sessionId);
+  }
+
+  private hasExplicitSessionControls(sessionId: string): boolean {
+    return (
+      this.readSetting<boolean>(sessionControlsExplicitKey(sessionId)) === true
+    );
   }
 
   getProjectDashboard(projectId: string): ProjectDashboardView {
@@ -4163,6 +4181,7 @@ export class AppServerStore {
   ): ProgressSummaryRow {
     const row = normalizeProgressSummaryRow(input);
     if (this.isTerminalTurn(turnId)) return row;
+    this.updateActiveTurnProgressSummary(turnId, row);
     const event = turnEventFromProgressRow({
       sessionId,
       turnId,
@@ -4181,6 +4200,25 @@ export class AppServerStore {
       row,
     });
     return row;
+  }
+
+  private updateActiveTurnProgressSummary(
+    turnId: string,
+    row: ProgressSummaryRow,
+  ): void {
+    if (isTerminalProgressState(row.state)) return;
+    const label = progressSummaryStatusLabel(row);
+    if (!label) return;
+    this.db
+      .query(
+        `
+      UPDATE turns
+      SET safe_status_label = ?, updated_at = ?
+      WHERE id = ?
+        AND state NOT IN ('delivered', 'failed', 'cancelled')
+    `,
+      )
+      .run(label, row.created_at ?? new Date().toISOString(), turnId);
   }
 
   private listProgressRowsForTurn(turnId: string): ProgressSummaryRow[] {
@@ -4355,16 +4393,7 @@ export class AppServerStore {
         "Queued message text is required.",
       );
     }
-    const controls = normalizeSessionControls(
-      {
-        ...this.getSessionControls(chatId),
-        model: input.model,
-        reasoning_effort: input.reasoning_effort,
-        access_mode: input.access_mode,
-        plan_mode: input.plan_mode,
-      },
-      this.registeredModelMetadata(),
-    );
+    const controls = this.controlsForMessageSend(chatId, input);
     const now = new Date().toISOString();
     const queuedId = `queued-${crypto.randomUUID()}`;
     this.db
@@ -4506,12 +4535,7 @@ export class AppServerStore {
       chatId,
       input.attachments ?? [],
     );
-    const controls = this.updateSessionControls(chatId, {
-      model: input.model,
-      reasoning_effort: input.reasoning_effort,
-      access_mode: input.access_mode,
-      plan_mode: input.plan_mode,
-    });
+    const controls = this.controlsForMessageSend(chatId, input);
     const turn = this.insertTurn(chatId, "accepted", "Accepted");
     const accepted = this.insertMessage(chatId, "user", text, "sent", {
       clientMessageId: input.client_message_id,
@@ -8292,6 +8316,10 @@ function sessionControlsKey(sessionId: string): string {
   return `session-controls:${safeLocalSessionId(sessionId)}`;
 }
 
+function sessionControlsExplicitKey(sessionId: string): string {
+  return `session-controls-explicit:${safeLocalSessionId(sessionId)}`;
+}
+
 function normalizeSessionControls(
   input: Partial<SessionControlState>,
   extraModels: ProviderModelMetadata[] = [],
@@ -8315,6 +8343,15 @@ function normalizeSessionControls(
         : "full_access",
     plan_mode: Boolean(input.plan_mode),
   };
+}
+
+function hasSessionControlInput(input: Partial<SessionControlState>): boolean {
+  return (
+    input.model !== undefined ||
+    input.reasoning_effort !== undefined ||
+    input.access_mode !== undefined ||
+    input.plan_mode !== undefined
+  );
 }
 
 function stringArray(value: unknown): string[] {
@@ -9774,6 +9811,13 @@ function isSessionSummaryProgressRow(row: ProgressSummaryRow): boolean {
     );
   }
   return true;
+}
+
+function progressSummaryStatusLabel(row: ProgressSummaryRow): string | null {
+  const label = (row.work_decision_summary ?? row.safe_label).trim();
+  if (!label) return null;
+  if (STATUS_ONLY_PROGRESS_LABELS.has(label.toLowerCase())) return null;
+  return label;
 }
 
 function progressRowsForTurnState(

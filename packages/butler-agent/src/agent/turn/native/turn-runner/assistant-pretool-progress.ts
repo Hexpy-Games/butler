@@ -4,6 +4,7 @@ import {
 } from "../progress/turn-delivery-events.ts";
 import type { RuntimeTurnInput } from "../../../../test-support/harness/contracts.ts";
 import type { RuntimeMessageLanguage } from "../../../output/messages.ts";
+import { publicWorkDecisionsFromAssistantText } from "../../../output/public-work/decisions.ts";
 
 function compactForComparison(text: string): string {
   return text.replace(/\s+/g, " ").trim().toLowerCase();
@@ -36,29 +37,52 @@ export async function emitAssistantTextBeforeTools(input: {
   const workerStartCalls = input.toolCalls.filter((call) =>
     call.name === "dispatch_worker" || call.name === "resume_worker",
   );
-  if (workerStartCalls.length === 0) return;
   const rawTasks = workerStartCalls.flatMap((call) => {
     const task = call.args.task;
     return typeof task === "string" && task.trim() ? [task.trim()] : [];
   });
-  if (rawTasks.length === 0) return;
   if (leaksInternalExecutionPlan({ text: input.text, rawTasks })) return;
-  const text = input.text.trim();
+  const text = visiblePreToolText(input);
   if (!text) return;
   await emitIntermediateBestEffort(
     input.turnInput,
     buildIntermediateAction({
       envelope: inboundEnvelope,
-      suffix: `${workerStartCalls.map((call) => call.name).join("-")}-start`,
+      suffix: `${input.toolCalls.map((call) => call.name).join("-")}-start`,
       text,
       metadata: {
-        tool: workerStartCalls.map((call) => call.name).join(","),
+        tool: input.toolCalls.map((call) => call.name).join(","),
         phase: "before_tool_execution",
       },
     }),
     {
       source: "runtime/native-tool-loop.ts#assistant-plan",
-      tool: workerStartCalls.map((call) => call.name).join(","),
+      tool: input.toolCalls.map((call) => call.name).join(","),
     },
   );
+}
+
+function visiblePreToolText(input: {
+  text: string;
+  toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
+  language: RuntimeMessageLanguage;
+}): string {
+  const decisions = publicWorkDecisionsFromAssistantText({
+    text: input.text,
+    toolCalls: input.toolCalls,
+    language: input.language,
+    existingDecisions: [],
+  });
+  const first = decisions[0];
+  if (first?.summary) {
+    return [first.summary, first.nextStep].filter(Boolean).join("\n");
+  }
+  if (
+    input.toolCalls.some((call) =>
+      call.name === "dispatch_worker" || call.name === "resume_worker",
+    )
+  ) {
+    return input.text.trim();
+  }
+  return "";
 }

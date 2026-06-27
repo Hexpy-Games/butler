@@ -43,6 +43,8 @@ import {
   publicWorkDecisionsFromAssistantText,
   takePublicWorkDecisionForTool,
 } from "../../packages/butler-agent/src/agent/output/public-work/decisions.ts";
+import { emitAssistantTextBeforeTools } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/assistant-pretool-progress.ts";
+import { createAuditedBridgeToolExecutor } from "../../packages/butler-agent/src/agent/turn/bridge-tool-executor.ts";
 import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
 import {
   evidenceTranscriptToolCallArgumentsProjection,
@@ -206,6 +208,77 @@ test("native runtime gives worker sessions the execution tool loop and role-limi
   expect(names).not.toContain("create_work_orchestration");
   expect(names).not.toContain("run_ready_work_streams");
   expect(names).not.toContain("write_planned_public_report");
+});
+
+test("native runtime emits model-authored orientation before slow tool prompt returns", async () => {
+  const intermediate: Array<{
+    message?: { text?: string };
+    metadata?: Record<string, unknown>;
+  }> = [];
+  let resolveOrientation: (() => void) | undefined;
+  const orientationSeen = new Promise<void>((resolve) => {
+    resolveOrientation = resolve;
+  });
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    runPromptText: async (input) => {
+      expect(input.prompt).toContain("사용자에게 즉시 보여줄 진행 업데이트");
+      return "최신 기상 근거를 확인한 뒤 원인을 짧게 정리하겠습니다.";
+    },
+    runFunctionToolPromptText: async () => {
+      await Promise.race([
+        orientationSeen,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("orientation progress was not emitted")), 1_000),
+        ),
+      ]);
+      return "최신 근거 확인을 마쳤습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/model-orientation-progress",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: {
+      eventId: "app:orientation-message-1",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "chat-orientation" },
+      sender: { id: "app-user", displayName: "Butler App" },
+      message: {
+        id: "orientation-message-1",
+        text: "요즘 한국 여름 날씨가 선선한 이유를 최신 근거로 짧게 확인해줘.",
+        timestamp: "2026-06-27T11:00:00.000Z",
+      },
+    },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitIntermediateDelivery: async (action) => {
+      const projected = action as {
+        message?: { text?: string };
+        metadata?: Record<string, unknown>;
+      };
+      intermediate.push(projected);
+      if (projected.metadata?.phase === "model_orientation") {
+        resolveOrientation?.();
+      }
+    },
+  });
+
+  expect(result.text).toBe("최신 근거 확인을 마쳤습니다.");
+  const orientation = intermediate.find((action) =>
+    action.metadata?.phase === "model_orientation",
+  );
+  expect(orientation?.message?.text).toBe("최신 기상 근거를 확인한 뒤 원인을 짧게 정리하겠습니다.");
+  expect(orientation?.metadata?.modelAuthored).toBe(true);
 });
 
 test("native runtime injects recent transcript context and excludes current inbound event", async () => {
@@ -626,18 +699,20 @@ test("native runtime emits dynamic preparation progress before the first model r
   const preparationProgress = progressActions.find((action) =>
     action.kind === "tool_progress" && action.activityKind === "model",
   );
-  expect(preparationProgress?.safeLabel).toBe("응답 준비 중");
+  expect(preparationProgress?.safeLabel).toContain("요청 확인:");
+  expect(preparationProgress?.safeLabel).toContain("내 비밀 경로");
+  expect(preparationProgress?.safeLabel).not.toContain("/Users/example/private");
   expect(preparationProgress?.inputLabel).toBe("");
   expect(preparationProgress?.detailRows).toEqual([]);
   expect(preparationProgress?.safeLabel).not.toBe("Working");
   expect(preparationProgress?.safeLabel).not.toBe("Thinking");
+  expect(preparationProgress?.safeLabel).not.toBe("응답 준비 중");
   const serialized = JSON.stringify(progressActions);
   expect(serialized).not.toContain("gpt-5.5");
   expect(serialized).not.toContain("도구 루프");
   expect(serialized).not.toContain("tool loop");
   expect(serialized).not.toContain("/Users/example/private");
   expect(serialized).not.toContain("Runtime visibility spec fixture");
-  expect(serialized).not.toContain("그대로 노출");
   expect(turnEvents.find((event) =>
     event.kind === "tool.progress" && event.payload?.activityKind === "model",
   )?.payload?.safeLabel).toBe(preparationProgress?.safeLabel);
@@ -3035,6 +3110,122 @@ test("public work decision parser ignores non-canonical prose before tool calls"
 
   expect(fallback.source).toBe("runtime-derived");
   expect(fallback.summary).toBe("선택한 출처의 내용을 확인합니다.");
+  expect(fallback.rationale).toBeUndefined();
+  expect(fallback.nextStep).toBeUndefined();
+  expect(JSON.stringify(fallback)).not.toContain("앞선 작업에서 확인한 내용을 이어받아");
+  expect(JSON.stringify(fallback)).not.toContain("확인된 결과를 다음 작업 선택");
+});
+
+test("assistant pre-tool progress emits structured decisions for ordinary tools", async () => {
+  const actions: Array<{ message?: { text?: string }; metadata?: Record<string, unknown> }> = [];
+  await emitAssistantTextBeforeTools({
+    language: "ko",
+    text: [
+      "summary: 최신 기상 근거를 먼저 검색합니다.",
+      "rationale: 현재 날씨 원인은 최신 자료 없이는 단정하면 안 됩니다.",
+      "next_step: 검색 결과에서 신뢰할 만한 출처를 읽고 답변합니다.",
+    ].join("\n"),
+    toolCalls: [{ name: "web_search", args: { query: "한국 선선한 여름 날씨 원인" } }],
+    turnInput: {
+      input: {
+        eventId: "event-1",
+        transport: "app",
+        accountId: "local",
+        peer: { kind: "dm", id: "chat-1" },
+        message: { id: "message-1", text: "왜 선선해?", timestamp: "2026-06-27T11:00:00.000Z" },
+      },
+      handle: { sessionId: "butler/app-chat-1" },
+      emitIntermediateDelivery: async (action: unknown) => {
+        actions.push(action as { message?: { text?: string }; metadata?: Record<string, unknown> });
+      },
+    } as unknown as Parameters<typeof emitAssistantTextBeforeTools>[0]["turnInput"],
+  });
+
+  expect(actions).toHaveLength(1);
+  expect(actions[0]!.message?.text).toContain("최신 기상 근거를 먼저 검색합니다.");
+  expect(actions[0]!.message?.text).toContain("검색 결과에서 신뢰할 만한 출처를 읽고 답변합니다.");
+  expect(actions[0]!.message?.text).not.toContain("summary:");
+  expect(actions[0]!.metadata?.phase).toBe("before_tool_execution");
+});
+
+test("assistant pre-tool progress hides non-canonical ordinary tool prose", async () => {
+  const actions: unknown[] = [];
+  await emitAssistantTextBeforeTools({
+    language: "ko",
+    text: "web_search로 바로 찾아보겠습니다. tool_call arguments는 곧 구성합니다.",
+    toolCalls: [{ name: "web_search", args: { query: "한국 선선한 여름 날씨 원인" } }],
+    turnInput: {
+      input: {
+        eventId: "event-raw-prose",
+        transport: "app",
+        accountId: "local",
+        peer: { kind: "dm", id: "chat-raw-prose" },
+        message: { id: "message-raw-prose", text: "왜 선선해?", timestamp: "2026-06-27T11:00:00.000Z" },
+      },
+      handle: { sessionId: "butler/app-chat-raw-prose" },
+      emitIntermediateDelivery: async (action: unknown) => {
+        actions.push(action);
+      },
+    } as unknown as Parameters<typeof emitAssistantTextBeforeTools>[0]["turnInput"],
+  });
+
+  expect(actions).toEqual([]);
+});
+
+test("bridge tool executor keeps wrapper progress out of visible turn events", async () => {
+  const turnEvents: unknown[] = [];
+  const intermediate: unknown[] = [];
+  const audit: unknown[] = [];
+  const executor = createAuditedBridgeToolExecutor({
+    sessionId: "butler/app-chat-1",
+    audit: audit as never,
+    messageLanguage: "ko",
+    turnInput: {
+      input: {
+        eventId: "event-1",
+        transport: "app",
+        accountId: "local",
+        peer: { kind: "dm", id: "chat-1" },
+        message: { id: "message-1", text: "검색해줘", timestamp: "2026-06-27T11:00:00.000Z" },
+      },
+      handle: { sessionId: "butler/app-chat-1" },
+    } as never,
+    buildIntermediateAction: (input) => ({
+      actionId: `runtime-intermediate:${input.suffix}`,
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "chat-1" },
+      message: { text: input.text },
+      metadata: input.metadata ?? {},
+    }),
+    emitIntermediateBestEffort: async (_turnInput, action) => {
+      intermediate.push(action);
+    },
+    emitTurnEventBestEffort: async (_turnInput, event) => {
+      turnEvents.push(event);
+    },
+    throwIfAborted: () => {},
+    executor: async () => ({
+      ok: true,
+      targetCall: {
+        name: "web_search",
+        args: { query: "한국 선선한 여름 날씨 원인" },
+        rawArguments: JSON.stringify({ query: "한국 선선한 여름 날씨 원인" }),
+      },
+      bridgeInvocation: { id: "native:web_search" },
+    }),
+    executeTarget: async () => ({ ok: true, results: [] }),
+  });
+
+  await executor({
+    name: "tool_call",
+    args: { id: "native:web_search", arguments: { query: "한국 선선한 여름 날씨 원인" } },
+    rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "한국 선선한 여름 날씨 원인" } }),
+  });
+
+  expect(turnEvents).toEqual([]);
+  expect(intermediate).toEqual([]);
+  expect(JSON.stringify(audit)).toContain("web_search");
 });
 
 test("completion obligation guard detects unsatisfied command execution", () => {
@@ -5503,12 +5694,7 @@ test("native runtime unwraps tool_call through audited target dispatch", async (
     event.metadata?.tool_surface_transition === "invoked",
   )).toBe(true);
   const toolStarts = events.filter((event) => event.kind === "tool.started");
-  expect(toolStarts.map((event) => event.payload?.toolName)).toEqual(
-    expect.arrayContaining(["Tool Call", "Get Context Monitor"]),
-  );
-  expect(toolStarts.findIndex((event) => event.payload?.toolName === "Tool Call")).toBeLessThan(
-    toolStarts.findIndex((event) => event.payload?.toolName === "Get Context Monitor"),
-  );
+  expect(toolStarts.map((event) => event.payload?.toolName)).toEqual(["Get Context Monitor"]);
 });
 
 test("native runtime records bridge audit metadata for bridged target failures", async () => {
@@ -5627,7 +5813,7 @@ test("native runtime records bridge audit metadata for tool_call resolution fail
   });
 });
 
-test("native runtime closes bridge progress rows when tool_call resolution throws", async () => {
+test("native runtime records bridge resolution failures without visible wrapper progress", async () => {
   const turnEvents: RuntimeTurnEventInput[] = [];
   let caughtMessage = "";
   const runtime = new NativeToolLoopRuntime({
@@ -5678,8 +5864,8 @@ test("native runtime closes bridge progress rows when tool_call resolution throw
   const bridgeFailed = turnEvents.find((event) =>
     event.kind === "tool.failed" && event.payload?.toolName === "Tool Call",
   );
-  expect(bridgeStarted?.payload?.bridgePhase).toBe("invoke");
-  expect(bridgeFailed?.payload?.bridgePhase).toBe("denied");
+  expect(bridgeStarted).toBeUndefined();
+  expect(bridgeFailed).toBeUndefined();
   const transcript = readTranscript("butler/main/progressive-tool-call-throwing-resolution");
   expect(transcript.some((event) =>
     event.kind === "tool_result" &&

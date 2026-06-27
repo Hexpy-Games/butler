@@ -225,8 +225,8 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
     (event.kind === "tool.completed" || event.kind === "tool.failed") &&
     event.payload?.toolName === "Tool Call",
   );
-  expect(bridgeStarts.length).toBeGreaterThanOrEqual(3);
-  expect(bridgeFinishes.length).toBe(bridgeStarts.length);
+  expect(bridgeStarts).toHaveLength(0);
+  expect(bridgeFinishes).toHaveLength(0);
 });
 
 test("native runtime exposes promoted dynamic schemas only for capable providers", async () => {

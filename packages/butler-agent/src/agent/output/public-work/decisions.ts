@@ -74,7 +74,7 @@ export function takePublicWorkDecisionForTool(input: {
 }): PublicWorkDecision {
   const pending = takePendingDecision(input.pending, input.toolName);
   if (pending) {
-    const fallback = fallbackDecisionForProgress(input.progress, input.language, input.previousDecisions);
+    const fallback = fallbackDecisionForProgress(input.progress, input.previousDecisions);
     const summaryOk = isUsablePublicDecisionText(pending.summary);
     const rationaleOk = isUsablePublicDecisionText(
       pending.rationale ?? "",
@@ -99,7 +99,7 @@ export function takePublicWorkDecisionForTool(input: {
       source: summaryOk ? pending.source : "review-repaired",
     };
   }
-  const fallback = fallbackDecisionForProgress(input.progress, input.language, input.previousDecisions);
+  const fallback = fallbackDecisionForProgress(input.progress, input.previousDecisions);
   return {
     decisionId: publicDecisionId(),
     ...fallback,
@@ -179,30 +179,13 @@ function fallbackDecisionForToolName(
 
 function fallbackDecisionForProgress(
   progress: ToolProgressSummary,
-  language: RuntimeMessageLanguage,
   previousDecisions: PublicWorkDecision[],
 ): Pick<PublicWorkDecision, "summary" | "rationale" | "nextStep" | "evidenceRefs"> {
   const evidenceRefs = previousDecisions
     .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
     .map((decision) => decision.summary);
-  if (language === "ko") {
-    const hasPreviousDecisions = previousDecisions.length > 0;
-    return {
-      summary: progress.workBlockLabel,
-      rationale: hasPreviousDecisions
-        ? "앞선 작업에서 확인한 내용을 이어받아 다음 근거를 보강합니다."
-        : "요청을 추측으로 처리하지 않도록 먼저 확인 가능한 근거를 확보합니다.",
-      nextStep: "확인된 결과를 다음 작업 선택과 최종 보고에 반영합니다.",
-      evidenceRefs,
-    };
-  }
-  const hasPreviousDecisions = previousDecisions.length > 0;
   return {
     summary: progress.workBlockLabel,
-    rationale: hasPreviousDecisions
-      ? "This continues from earlier work decisions and strengthens the next piece of evidence."
-      : "This gathers observable evidence before making a claim.",
-    nextStep: "Use the result to guide the next tool choice and final report.",
     evidenceRefs,
   };
 }
