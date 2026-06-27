@@ -19,7 +19,6 @@ export interface RecoverableLimitedDelivery {
 export function recoverableLimitedDeliveryForError(error: unknown): RecoverableLimitedDelivery | null {
   const classified = classifyRuntimeFailureDelivery(error);
   if (classified.issue_kind !== "internal_recovery") return null;
-  if (isPromptUsageModelCallBudget(error)) return null;
   const failure = safeRuntimeFailure(error);
   const progressText = progressFinalizationTextFromError(error);
   const reason = safeLimitationText(
@@ -27,11 +26,14 @@ export function recoverableLimitedDeliveryForError(error: unknown): RecoverableL
     DEFAULT_LIMITED_DELIVERY_REASON,
   );
   const text = progressText ?? (isGenericVerificationFailure(reason) ? DEFAULT_LIMITED_DELIVERY_REASON : reason);
+  const limitationCode = isPromptUsageModelCallBudget(error)
+    ? INTERNAL_RECOVERY_REQUIRED_CODE
+    : classified.limitation_codes[0] ?? failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE;
   return {
     text,
     reason: text,
     delivery: deliveredWithLimitationsState({
-      limitationCodes: [classified.limitation_codes[0] ?? failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE],
+      limitationCodes: [limitationCode],
       limitations: [text],
     }),
   };

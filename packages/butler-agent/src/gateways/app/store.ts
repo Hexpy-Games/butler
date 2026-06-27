@@ -3747,9 +3747,16 @@ export class AppServerStore {
     if (!actionId || !turnId) return false;
     const turn = this.getTurnRow(turnId);
     if (!turn) return false;
+    let terminalRecoverableCorrection = false;
     if (isTerminalTurnState(turn.state)) {
-      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
-      return false;
+      if (
+        !shouldProjectRecoverableLimitedFinalOverTerminalTurn(turn, metadata) ||
+        this.recoverableLimitedFinalForFailedQueueDisposition(metadata) !== "accept"
+      ) {
+        this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+        return false;
+      }
+      terminalRecoverableCorrection = true;
     }
 
     const progressRow = progressRowFromAppOutbound(
@@ -3831,7 +3838,10 @@ export class AppServerStore {
       text ? [text] : [],
       files,
     );
-    if (!this.hasTurnEventKind(turnId, "message.final.completed")) {
+    if (
+      terminalRecoverableCorrection ||
+      !this.hasTurnEventKind(turnId, "message.final.completed")
+    ) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "message.final.completed",
         payload: {
@@ -3850,7 +3860,10 @@ export class AppServerStore {
       safeErrorCode: null,
     });
     this.appendTerminalTurnStateChanged(deliveredTurn);
-    if (!this.hasTurnEventKind(turnId, "turn.completed")) {
+    if (
+      terminalRecoverableCorrection ||
+      !this.hasTurnEventKind(turnId, "turn.completed")
+    ) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "turn.completed",
         payload: {
@@ -3872,12 +3885,37 @@ export class AppServerStore {
     const dispatchClaimId = safeOptionalShortToken(metadata.dispatchClaimId);
     if (!queueId || !dispatchClaimId) return "accept";
     const failed = this.readInboundQueueTerminalRecord("failed", queueId);
-    if (failed) return "reject";
+    if (failed) {
+      return shouldAcceptRecoverableLimitedFinalForFailedQueue(
+        metadata,
+        failed,
+        dispatchClaimId,
+      )
+        ? "accept"
+        : "reject";
+    }
     const processed = this.readInboundQueueTerminalRecord("processed", queueId);
     const processedClaimId = terminalClaimId(processed);
     if (!processed) return "defer";
     if (!processedClaimId) return "defer";
     return processedClaimId === dispatchClaimId ? "accept" : "reject";
+  }
+
+  private recoverableLimitedFinalForFailedQueueDisposition(
+    metadata: Record<string, unknown>,
+  ): "accept" | "reject" {
+    const queueId = safeInboundQueueId(metadata.queueId);
+    const dispatchClaimId = safeOptionalShortToken(metadata.dispatchClaimId);
+    if (!queueId || !dispatchClaimId) return "reject";
+    const failed = this.readInboundQueueTerminalRecord("failed", queueId);
+    if (!failed) return "reject";
+    return shouldAcceptRecoverableLimitedFinalForFailedQueue(
+      metadata,
+      failed,
+      dispatchClaimId,
+    )
+      ? "accept"
+      : "reject";
   }
 
   private readInboundQueueTerminalRecord(
@@ -4243,7 +4281,10 @@ export class AppServerStore {
       if (!isRecord(row)) continue;
       progressRows.push(normalizeProgressSummaryRow(row));
     }
-    return dedupeProgressRows(progressRows).filter(isSessionSummaryProgressRow);
+    const turn = this.getTurnRow(turnId);
+    return dedupeProgressRows(progressRows)
+      .filter((row) => !terminalFailureProgressSupersededByTurn(row, turn))
+      .filter(isSessionSummaryProgressRow);
   }
 
   createMessageFile(input: {
@@ -10161,6 +10202,62 @@ function deliveryLimitationMetadataFromRecord(
     ),
     limitations: safeShortTextList(record.limitations),
   };
+}
+
+function shouldProjectRecoverableLimitedFinalOverTerminalTurn(
+  turn: TurnRow,
+  metadata: Record<string, unknown>,
+): boolean {
+  if (turn.state !== "failed") return false;
+  const kind = safeOptionalShortToken(metadata.kind);
+  if (kind !== "final_result") return false;
+  const delivery = deliveryLimitationMetadataFromRecord(metadata);
+  if (!delivery) return false;
+  const priorCode = safeOptionalShortToken(turn.safe_error_code);
+  if (
+    priorCode !== "inbound_dispatch_timeout" &&
+    priorCode !== "internal_recovery_required"
+  ) {
+    return false;
+  }
+  return delivery.limitation_codes.some((code) =>
+    code === "internal_recovery_required" ||
+    code === "prompt_usage_model_call_budget_exhausted",
+  );
+}
+
+function shouldAcceptRecoverableLimitedFinalForFailedQueue(
+  metadata: Record<string, unknown>,
+  failedRecord: Record<string, unknown>,
+  dispatchClaimId: string,
+): boolean {
+  const failedClaimId = terminalClaimId(failedRecord);
+  if (!failedClaimId || failedClaimId !== dispatchClaimId) return false;
+  const failure = isRecord(failedRecord.metadata)
+    ? failedRecord.metadata.failure
+    : null;
+  const failureCode = isRecord(failure)
+    ? safeOptionalShortToken(failure.code)
+    : undefined;
+  if (
+    failureCode !== "inbound_dispatch_timeout" &&
+    failureCode !== "internal_recovery_required"
+  ) {
+    return false;
+  }
+  const delivery = deliveryLimitationMetadataFromRecord(metadata);
+  return Boolean(delivery?.limitation_codes.some((code) =>
+    code === "internal_recovery_required" ||
+    code === "prompt_usage_model_call_budget_exhausted",
+  ));
+}
+
+function terminalFailureProgressSupersededByTurn(
+  row: ProgressSummaryRow,
+  turn: TurnRow | null,
+): boolean {
+  if (!turn || turn.state !== "delivered") return false;
+  return row.kind === "turn" && row.state === "failed";
 }
 
 function safeDeliveryState(value: unknown): SessionViewTurnDeliveryState | null {

@@ -162,7 +162,14 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
     failure_notice: false,
     limitation_codes: ["prompt_usage_model_call_budget_exhausted"],
   });
-  expect(recoverableLimitedDeliveryForError(promptBudget)).toBeNull();
+  expect(recoverableLimitedDeliveryForError(promptBudget)).toMatchObject({
+    delivery: {
+      delivery_state: "delivered_with_limitations",
+      visibility: "assistant_output",
+      failure_notice: false,
+      limitation_codes: ["internal_recovery_required"],
+    },
+  });
 });
 
 test("remote provider abort remains a provider failure, not user cancellation", () => {

@@ -1548,6 +1548,191 @@ test("timeline applies public turn events as progress rows", () => {
   expect(messages).toEqual([]);
 });
 
+test("delivered terminal progress supersedes same-turn failed terminal rows", () => {
+  let currentSummary: SessionSummaryView | null = {
+    session_id: "general",
+    turn_state: "thinking",
+    latest_progress: {
+      turn_id: "turn-recoverable",
+      state: "thinking",
+      safe_progress_rows: [],
+    },
+  };
+  let turnProgress: Record<string, TurnProgressSnapshot> = {};
+
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-recoverable",
+          event: {
+            id: "event-turn-failed",
+            sessionId: "general",
+            turnId: "turn-recoverable",
+            sessionSequence: 1,
+            turnSequence: 1,
+            kind: "turn.failed",
+            visibility: "public",
+            payload: {
+              safeLabel: "Failed",
+              safeErrorCode: "inbound_dispatch_timeout",
+            },
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-recoverable",
+          event: {
+            id: "event-tool-failed",
+            sessionId: "general",
+            turnId: "turn-recoverable",
+            sessionSequence: 1,
+            turnSequence: 2,
+            kind: "tool.failed",
+            visibility: "public",
+            payload: {
+              activityKind: "ran_command",
+              toolName: "Bash",
+              inputLabel: "bun test",
+              safeLabel: "Bash: bun test",
+            },
+          },
+        },
+      },
+      {
+        id: 3,
+        type: "message.updated",
+        payload: {
+          message: {
+            id: "assistant-recoverable",
+            chat_id: "general",
+            turn_id: "turn-recoverable",
+            role: "assistant",
+            text: "진행한 내용은 보존했습니다.",
+            status: "delivered",
+            retryable: false,
+            cursor: 2,
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: currentSummary,
+      turnProgress,
+    },
+  );
+
+  currentSummary = state.summary;
+  turnProgress = state.turnProgress;
+
+  expect(currentSummary?.latest_progress?.state).toBe("delivered");
+  expect(currentSummary?.latest_progress?.safe_progress_rows).not.toContainEqual(
+    expect.objectContaining({ kind: "turn", state: "failed" }),
+  );
+  expect(currentSummary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "event-tool-failed",
+      kind: "ran_command",
+      state: "failed",
+    }),
+  );
+  expect(turnProgress["turn-recoverable"]?.state).toBe("delivered");
+  expect(turnProgress["turn-recoverable"]?.safe_progress_rows).not.toContainEqual(
+    expect.objectContaining({ kind: "turn", state: "failed" }),
+  );
+  expect(turnProgress["turn-recoverable"]?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "event-tool-failed",
+      kind: "ran_command",
+      state: "failed",
+    }),
+  );
+});
+
+test("delivered terminal progress preserves same-turn cancelled terminal rows", () => {
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-cancelled-evidence",
+          event: {
+            id: "event-turn-cancelled",
+            sessionId: "general",
+            turnId: "turn-cancelled-evidence",
+            sessionSequence: 1,
+            turnSequence: 1,
+            kind: "turn.cancelled",
+            visibility: "public",
+            payload: {
+              safeLabel: "Cancelled",
+            },
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "message.updated",
+        payload: {
+          message: {
+            id: "assistant-delivered",
+            chat_id: "general",
+            turn_id: "turn-cancelled-evidence",
+            role: "assistant",
+            text: "진행한 내용은 보존했습니다.",
+            status: "delivered",
+            retryable: false,
+            cursor: 2,
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: "turn-cancelled-evidence",
+          state: "thinking",
+          safe_progress_rows: [],
+        },
+      },
+      turnProgress: {},
+    },
+  );
+
+  expect(state.summary?.latest_progress?.state).toBe("delivered");
+  expect(state.summary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "event-turn-cancelled",
+      kind: "turn",
+      state: "cancelled",
+    }),
+  );
+  expect(
+    state.turnProgress["turn-cancelled-evidence"]?.safe_progress_rows,
+  ).toContainEqual(
+    expect.objectContaining({
+      id: "event-turn-cancelled",
+      kind: "turn",
+      state: "cancelled",
+    }),
+  );
+});
+
 test("timeline keeps per-turn progress snapshots separate across live turns", () => {
   let messages: MessageRecord[] = [];
   let currentSummary: SessionSummaryView | null = {
