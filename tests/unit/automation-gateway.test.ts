@@ -977,6 +977,69 @@ test("queued inbound converts model-call budget exhaustion to recoverable limite
   store.close();
 });
 
+test("queued inbound converts normalized internal recovery failures to limited delivery", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue({
+    eventId: "app:message-normalized-internal-recovery",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-normalized-internal-recovery",
+      text: "continue after normalized internal recovery",
+      timestamp: "2026-05-18T12:04:45.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-normalized-internal-recovery",
+    },
+  }, { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        throw {
+          code: "internal_recovery_required",
+          message: "Butler could not verify that the requested goal was completed.",
+          retryable: true,
+        };
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    delivered: 1,
+    failed: 0,
+  });
+  expect(app.sentActions).toHaveLength(1);
+  expect(app.sentActions[0]).toMatchObject({
+    transport: "app",
+    message: {
+      text:
+        "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.\n\n남은 부분: 완료 보고에 필요한 마지막 결과 정리가 남아 있습니다.\n다음 진행에서는 이 지점부터 이어가면 됩니다.",
+      replyToMessageId: "message-normalized-internal-recovery",
+    },
+    metadata: {
+      kind: "final_result",
+      turnId: "turn-normalized-internal-recovery",
+      deliveryState: "delivered_with_limitations",
+      limitationCodes: ["internal_recovery_required"],
+    },
+  });
+  expect(JSON.stringify(app.sentActions[0])).not.toContain("turn_failed");
+  expect(JSON.stringify(app.sentActions[0])).not.toContain("requested goal was completed");
+  store.close();
+});
+
 test("queued app prompt-budget interruption resumes next turn from durable W3 todo context", async () => {
   const butlerHome = join(tempDir, "home");
   mkdirSync(join(butlerHome, "resources", "prompts"), { recursive: true });

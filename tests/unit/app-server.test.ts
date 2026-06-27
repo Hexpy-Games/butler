@@ -7531,6 +7531,97 @@ test("app transport progress projection recovers queued work blocks after app-se
   }
 });
 
+test("app transport progress projection ignores tool-start intermediate decisions", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "show queued tool progress",
+  });
+  const turnId = result.data.turn.id;
+  const userMessageId = result.data.accepted.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:30.000Z",
+      payload: {
+        actionId: `runtime-intermediate:app:${userMessageId}:grep_files-start`,
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐. 실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠다냐.",
+          replyToMessageId: userMessageId,
+        },
+        metadata: {
+          kind: "intermediate",
+          tool: "grep_files",
+          phase: "before_tool_execution",
+          turnId,
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:30.050Z",
+      payload: {
+        actionId: `runtime-intermediate:app:${userMessageId}:grep_files-progress`,
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+          replyToMessageId: userMessageId,
+        },
+        metadata: {
+          kind: "tool_progress",
+          activityKind: "searched",
+          toolName: "Search",
+          safeLabel: "Search: not ok|AssertionError",
+          inputLabel: "not ok|AssertionError",
+          toolCallId: "tool-grep-files",
+          workBlockId: "work-validate",
+          workBlockLabel: "실패 테스트명을 확인하는 중",
+          decisionSummary:
+            "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐.",
+          decisionSource: "assistant-authored",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    const rows = messages.data.turn_progress[turnId].safe_progress_rows;
+    expect(rows).not.toContainEqual(
+      expect.objectContaining({
+        id: `runtime-intermediate:app:${userMessageId}:grep_files-start`,
+      }),
+    );
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        id: `runtime-intermediate:app:${userMessageId}:grep_files-progress`,
+        kind: "searched",
+        safe_label: "Search: not ok|AssertionError",
+        safe_tool_name: "Search",
+        safe_input_label: "not ok|AssertionError",
+        work_block_label: "실패 테스트명을 확인하는 중",
+        work_decision_summary:
+          "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐.",
+      }),
+    );
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport progress projection stays idempotent after a large event backlog", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
