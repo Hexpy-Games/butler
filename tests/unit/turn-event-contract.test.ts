@@ -24,7 +24,7 @@ test("turn event contract accepts every public event kind with monotonic sequenc
       sessionSequence: index + 1,
       turnSequence: index + 1,
       kind,
-      payload: { safeLabel: "Working" },
+      payload: payloadForEventKind(kind),
     });
 
     expect(event.kind).toBe(kind);
@@ -33,6 +33,43 @@ test("turn event contract accepts every public event kind with monotonic sequenc
     expect(event.turnSequence).toBe(index + 1);
   }
 });
+
+function payloadForEventKind(kind: string): Record<string, unknown> {
+  if (kind === "turn.decision") {
+    return {
+      decisionId: "decision-1",
+      summary: "Checking the turn contract.",
+      source: "assistant-authored",
+    };
+  }
+  if (kind === "turn.completion_evidence") {
+    return {
+      evidenceKind: "not_required",
+      status: "ok",
+      summary: "No external completion evidence is required for this fixture.",
+    };
+  }
+  if (kind === "turn.outcome") {
+    return {
+      outcome: "completed",
+      completionEvidenceRefs: ["evidence-1"],
+      publicSummary: "Completed with evidence.",
+    };
+  }
+  if (kind === "recovery.recorded") {
+    return {
+      recoveryToken: "recovery-1",
+      reason: "Interrupted before completion.",
+    };
+  }
+  if (kind === "diagnostic.invariant_violation") {
+    return {
+      invariant: "fixture",
+      summary: "Fixture diagnostic.",
+    };
+  }
+  return { safeLabel: "Working" };
+}
 
 test("turn event privacy fixtures keep public labels and suppress private protocol text", () => {
   const positive = [
