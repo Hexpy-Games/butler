@@ -101,6 +101,7 @@ export function Titlebar() {
               <DropdownMenuContent
                 className={appThemeClasses(settings)}
                 align="end"
+                onInteractOutside={() => setSessionMenuOpen(false)}
                 sideOffset={TITLEBAR_MENU_SIDE_OFFSET_PX}
               >
                 <DropdownMenuGroup>

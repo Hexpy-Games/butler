@@ -32,7 +32,7 @@ export function TurnActivityPanel({
       return (
         <Stack
           gap="2"
-          data-test-class="turn-activity-pending-skeleton"
+          data-test-class="turn-activity-panel turn-activity-pending-skeleton"
           aria-live="polite"
           aria-label={pendingLabel}
           style={{ width: PENDING_SKELETON_WIDTH }}
@@ -64,7 +64,7 @@ export function TurnActivityPanel({
     return (
       <Typo.Body
         as="p"
-        data-test-class="turn-activity-pending"
+        data-test-class="turn-activity-panel turn-activity-pending"
         data-turn-state={state ?? "unknown"}
         aria-live="polite"
         style={{

@@ -48,6 +48,7 @@ const LIFECYCLE_ACTIVITY_LABELS = new Set([
 const WORK_BLOCK_MARKER_KIND = "work_block";
 const FIRST_VISIBLE_PROGRESS_EVENT_KIND = "turn.first_progress";
 const TURN_ACKNOWLEDGED_EVENT_KIND = "turn.acknowledged";
+const SESSION_STARTING_STATE = "session_starting";
 const PUBLIC_DECISION_SOURCES = new Set([
   "assistant-authored",
   "model-authored",
@@ -329,7 +330,9 @@ function pruneAcknowledgedClientTurnProgress(
     return turnProgress;
   }
   const replacement = patch.progressByTurn.get(nextTurnId);
-  if (!replacement?.replacesOptimisticClientTurn) return turnProgress;
+  if (!replacesOptimisticClientTurn(previousSummary, replacement)) {
+    return turnProgress;
+  }
   if (!turnProgress[previousTurnId]) return turnProgress;
   const next = { ...turnProgress };
   delete next[previousTurnId];
@@ -356,7 +359,10 @@ function progressBucketsForActiveClientTurn(
   const replacementTurnId =
     nextTurnId &&
     !isClientTurnId(nextTurnId) &&
-    patch.progressByTurn.get(nextTurnId)?.replacesOptimisticClientTurn
+    replacesOptimisticClientTurn(
+      previousSummary,
+      patch.progressByTurn.get(nextTurnId),
+    )
       ? nextTurnId
       : undefined;
 
@@ -541,6 +547,7 @@ function mergeTimelineProgressIntoSummary(
       const replacementTurnId = optimisticClientTurnReplacementId(
         currentTurnId,
         patch,
+        current,
       );
       if (replacementTurnId) {
         selectedTurnId = replacementTurnId;
@@ -590,6 +597,7 @@ function mergeTimelineProgressIntoSummary(
 function optimisticClientTurnReplacementId(
   currentTurnId: string,
   patch: TimelineEventPatch,
+  currentSummary?: SessionSummaryView | null,
 ): string | undefined {
   if (!isClientTurnId(currentTurnId)) return undefined;
   let replacementTurnId: string | undefined;
@@ -597,12 +605,29 @@ function optimisticClientTurnReplacementId(
     if (
       turnId !== patch.unknownProgressTurn &&
       !isClientTurnId(turnId) &&
-      bucket.replacesOptimisticClientTurn
+      replacesOptimisticClientTurn(currentSummary, bucket)
     ) {
       replacementTurnId = turnId;
     }
   }
   return replacementTurnId;
+}
+
+function replacesOptimisticClientTurn(
+  previousSummary: SessionSummaryView | null | undefined,
+  bucket: TimelineProgressBucket | undefined,
+): boolean {
+  if (!bucket) return false;
+  if (bucket.replacesOptimisticClientTurn) return true;
+  const previousLatest = previousSummary?.latest_progress;
+  const previousTurnId = previousLatest?.turn_id;
+  const previousState = previousLatest?.state ?? previousSummary?.turn_state;
+  return Boolean(
+    previousTurnId &&
+      isClientTurnId(previousTurnId) &&
+      previousState === SESSION_STARTING_STATE &&
+      isActiveProgressBucket(bucket),
+  );
 }
 
 function mergeTurnProgressBuckets(
