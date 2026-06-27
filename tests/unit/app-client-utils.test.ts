@@ -2382,6 +2382,43 @@ test("work blocks group contextual objectives with nested toolchain rows", () =>
   });
 });
 
+test("work blocks ignore unauthorised decision fields when choosing labels and context", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "block-runtime",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Runtime fallback label",
+      work_block_id: "work-runtime",
+      work_decision_summary: "This fallback must not become public context",
+      work_decision_rationale: "Runtime-derived repair text is diagnostic only.",
+      work_decision_next_step: "Do not render this as a decision.",
+      work_decision_source: "runtime-derived",
+    },
+    {
+      id: "tool-runtime",
+      kind: "read",
+      state: "delivered",
+      safe_label: "Read local status",
+      safe_tool_name: "Read",
+      tool_call_id: "tool-runtime",
+      work_block_id: "work-runtime",
+      work_decision_summary: "Tool fallback must not become public context",
+      work_decision_source: "review-repaired",
+    },
+  ]);
+
+  expect(blocks).toEqual([
+    expect.objectContaining({
+      id: "work-runtime",
+      label: "Runtime fallback label",
+      state: "delivered",
+      decision_summary: undefined,
+      decision_source: undefined,
+    }),
+  ]);
+});
+
 test("work blocks do not duplicate todo compatibility rows when a work block exists", () => {
   const blocks = workBlocksFromProgressRows([
     {

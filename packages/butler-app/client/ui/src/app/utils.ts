@@ -48,6 +48,11 @@ const LIFECYCLE_ACTIVITY_LABELS = new Set([
 const WORK_BLOCK_MARKER_KIND = "work_block";
 const FIRST_VISIBLE_PROGRESS_EVENT_KIND = "turn.first_progress";
 const TURN_ACKNOWLEDGED_EVENT_KIND = "turn.acknowledged";
+const PUBLIC_DECISION_SOURCES = new Set([
+  "assistant-authored",
+  "model-authored",
+  "principal-authored",
+]);
 const INTERNAL_PROGRESS_TOOL_NAMES = new Set([
   "Update Todo List",
   "List Todo List",
@@ -923,6 +928,7 @@ function buildWorkBlocks(
     created_at?: string,
     row?: ProgressRow,
   ) => {
+    const decision = publicDecisionFieldsFromRow(row);
     let block = blocks.get(id);
     if (!block) {
       block = {
@@ -932,11 +938,11 @@ function buildWorkBlocks(
         rows: [],
         rowMap: new Map(),
         created_at,
-        decision_summary: row?.work_decision_summary,
-        decision_rationale: row?.work_decision_rationale,
-        decision_next_step: row?.work_decision_next_step,
-        decision_source: row?.work_decision_source,
-        decision_evidence_refs: row?.work_decision_evidence_refs,
+        decision_summary: decision.decision_summary,
+        decision_rationale: decision.decision_rationale,
+        decision_next_step: decision.decision_next_step,
+        decision_source: decision.decision_source,
+        decision_evidence_refs: decision.decision_evidence_refs,
       };
       blocks.set(id, block);
       return block;
@@ -944,15 +950,14 @@ function buildWorkBlocks(
     block.label = block.label || label;
     block.state = terminalState(block.state, state);
     block.created_at = block.created_at ?? created_at;
-    block.decision_summary =
-      block.decision_summary ?? row?.work_decision_summary;
+    block.decision_summary = block.decision_summary ?? decision.decision_summary;
     block.decision_rationale =
-      block.decision_rationale ?? row?.work_decision_rationale;
+      block.decision_rationale ?? decision.decision_rationale;
     block.decision_next_step =
-      block.decision_next_step ?? row?.work_decision_next_step;
-    block.decision_source = block.decision_source ?? row?.work_decision_source;
+      block.decision_next_step ?? decision.decision_next_step;
+    block.decision_source = block.decision_source ?? decision.decision_source;
     block.decision_evidence_refs =
-      block.decision_evidence_refs ?? row?.work_decision_evidence_refs;
+      block.decision_evidence_refs ?? decision.decision_evidence_refs;
     return block;
   };
 
@@ -961,7 +966,7 @@ function buildWorkBlocks(
       if (!row.work_block_id) continue;
       ensureBlock(
         row.work_block_id,
-        row.work_block_label ?? row.work_decision_summary ?? row.safe_label,
+        row.work_block_label ?? decisionLabelFromRow(row) ?? row.safe_label,
         row.state,
         row.created_at,
         row,
@@ -972,7 +977,7 @@ function buildWorkBlocks(
     if (!isCompletedTurnWorkActivityRow(row)) continue;
     const blockId = row.work_block_id ?? `row-${row.id}`;
     const label =
-      row.work_block_label ?? row.work_decision_summary ?? row.safe_label;
+      row.work_block_label ?? decisionLabelFromRow(row) ?? row.safe_label;
     const block = ensureBlock(blockId, label, row.state, row.created_at, row);
     block.rowMap.set(progressRowMergeKey(row), row);
     block.rows = [...block.rowMap.values()];
@@ -1323,6 +1328,10 @@ function publicDecisionFields(
   payload: Record<string, unknown>,
   fallbackSummary?: string,
 ): Partial<ProgressRow> {
+  const source = safeOptionalPublicText(
+    payload.decisionSource ?? payload.source,
+  );
+  if (!isPublicDecisionSource(source)) return {};
   const rawEvidenceRefs = payload.decisionEvidenceRefs ?? payload.evidenceRefs;
   const evidenceRefs = Array.isArray(rawEvidenceRefs)
     ? rawEvidenceRefs
@@ -1343,13 +1352,37 @@ function publicDecisionFields(
     payload.decisionNextStep ?? payload.nextStep,
   );
   if (nextStep) fields.work_decision_next_step = nextStep;
-  const source = safeOptionalPublicText(
-    payload.decisionSource ?? payload.source,
-  );
   if (source) fields.work_decision_source = source;
   if (evidenceRefs && evidenceRefs.length > 0)
     fields.work_decision_evidence_refs = evidenceRefs;
   return fields;
+}
+
+function isPublicDecisionSource(source: unknown): source is string {
+  return typeof source === "string" && PUBLIC_DECISION_SOURCES.has(source);
+}
+
+function publicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
+  decision_summary: string;
+  decision_rationale: string;
+  decision_next_step: string;
+  decision_source: string;
+  decision_evidence_refs: string[];
+}> {
+  if (!row || !isPublicDecisionSource(row.work_decision_source)) return {};
+  return {
+    decision_summary: row.work_decision_summary,
+    decision_rationale: row.work_decision_rationale,
+    decision_next_step: row.work_decision_next_step,
+    decision_source: row.work_decision_source,
+    decision_evidence_refs: row.work_decision_evidence_refs,
+  };
+}
+
+function decisionLabelFromRow(row: ProgressRow): string | undefined {
+  return isPublicDecisionSource(row.work_decision_source)
+    ? row.work_decision_summary
+    : undefined;
 }
 
 function safeOptionalPublicText(value: unknown): string | undefined {

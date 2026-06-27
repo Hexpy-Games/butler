@@ -269,6 +269,11 @@ const MESSAGE_FILE_MAX_ATTACHMENTS = 12;
 const MESSAGE_FILE_ID_PATTERN = /^file-[0-9a-f-]{36}$/iu;
 const BUTLER_FINAL_ANSWER_OPEN = "<butler_final_answer>";
 const BUTLER_FINAL_ANSWER_CLOSE = "</butler_final_answer>";
+const PUBLIC_DECISION_SOURCES = new Set([
+  "assistant-authored",
+  "model-authored",
+  "principal-authored",
+]);
 
 type CapturedUserFeedback = {
   entry: {
@@ -8745,7 +8750,7 @@ function workBlocksFromTerminalProgressRows(
       .map((row) =>
         (
           row.work_block_label ??
-          row.work_decision_summary ??
+          decisionLabelFromProgressRow(row) ??
           row.safe_label
         ).trim(),
       )
@@ -8769,9 +8774,10 @@ function workBlocksFromTerminalProgressRows(
       `work-${row.kind}-${row.id}`.replace(/[^a-zA-Z0-9._:-]/gu, "-");
     const label =
       row.work_block_label ??
-      row.work_decision_summary ??
+      decisionLabelFromProgressRow(row) ??
       row.safe_tool_name ??
       row.safe_label;
+    const decision = publicDecisionFieldsFromProgressRow(row);
     const previous = blocks.get(id);
     if (previous) {
       if (row.kind !== "work_block") previous.rows.push(row);
@@ -8783,11 +8789,11 @@ function workBlocksFromTerminalProgressRows(
       label,
       state: row.state,
       rows: row.kind === "work_block" ? [] : [row],
-      decision_summary: row.work_decision_summary,
-      decision_rationale: row.work_decision_rationale,
-      decision_next_step: row.work_decision_next_step,
-      decision_source: row.work_decision_source,
-      decision_evidence_refs: row.work_decision_evidence_refs,
+      decision_summary: decision.decision_summary,
+      decision_rationale: decision.decision_rationale,
+      decision_next_step: decision.decision_next_step,
+      decision_source: decision.decision_source,
+      decision_evidence_refs: decision.decision_evidence_refs,
       created_at: row.created_at,
     });
   }
@@ -8811,6 +8817,33 @@ function progressRowDisplayOrder(row?: ProgressSummaryRow): number {
   return Number.isFinite(order) && order >= 0
     ? order
     : Number.POSITIVE_INFINITY;
+}
+
+function isPublicDecisionSource(source: unknown): source is string {
+  return typeof source === "string" && PUBLIC_DECISION_SOURCES.has(source);
+}
+
+function publicDecisionFieldsFromProgressRow(row: ProgressSummaryRow): Partial<{
+  decision_summary: string;
+  decision_rationale: string;
+  decision_next_step: string;
+  decision_source: string;
+  decision_evidence_refs: string[];
+}> {
+  if (!isPublicDecisionSource(row.work_decision_source)) return {};
+  return {
+    decision_summary: row.work_decision_summary,
+    decision_rationale: row.work_decision_rationale,
+    decision_next_step: row.work_decision_next_step,
+    decision_source: row.work_decision_source,
+    decision_evidence_refs: row.work_decision_evidence_refs,
+  };
+}
+
+function decisionLabelFromProgressRow(row: ProgressSummaryRow): string | undefined {
+  return isPublicDecisionSource(row.work_decision_source)
+    ? row.work_decision_summary
+    : undefined;
 }
 
 function isUserVisibleWorkBlockRow(row: ProgressSummaryRow): boolean {
@@ -9491,22 +9524,24 @@ function normalizeProgressSummaryRow(
   if (workBlockId) row.work_block_id = workBlockId;
   const workBlockLabel = safeOptionalShortText(input.work_block_label);
   if (workBlockLabel) row.work_block_label = workBlockLabel;
-  const decisionSummary = safeOptionalShortText(input.work_decision_summary);
-  if (decisionSummary) row.work_decision_summary = decisionSummary;
-  const decisionRationale = safeOptionalShortText(
-    input.work_decision_rationale,
-  );
-  if (decisionRationale) row.work_decision_rationale = decisionRationale;
-  const decisionNextStep = safeOptionalShortText(input.work_decision_next_step);
-  if (decisionNextStep) row.work_decision_next_step = decisionNextStep;
   const decisionSource = safeOptionalShortText(input.work_decision_source);
-  if (decisionSource) row.work_decision_source = decisionSource;
-  if (Array.isArray(input.work_decision_evidence_refs)) {
-    const refs = input.work_decision_evidence_refs
-      .map((value) => safeOptionalShortText(value))
-      .filter((value): value is string => Boolean(value))
-      .slice(0, 6);
-    if (refs.length > 0) row.work_decision_evidence_refs = refs;
+  if (isPublicDecisionSource(decisionSource)) {
+    const decisionSummary = safeOptionalShortText(input.work_decision_summary);
+    if (decisionSummary) row.work_decision_summary = decisionSummary;
+    const decisionRationale = safeOptionalShortText(
+      input.work_decision_rationale,
+    );
+    if (decisionRationale) row.work_decision_rationale = decisionRationale;
+    const decisionNextStep = safeOptionalShortText(input.work_decision_next_step);
+    if (decisionNextStep) row.work_decision_next_step = decisionNextStep;
+    row.work_decision_source = decisionSource;
+    if (Array.isArray(input.work_decision_evidence_refs)) {
+      const refs = input.work_decision_evidence_refs
+        .map((value) => safeOptionalShortText(value))
+        .filter((value): value is string => Boolean(value))
+        .slice(0, 6);
+      if (refs.length > 0) row.work_decision_evidence_refs = refs;
+    }
   }
   const safeCount = Number(input.safe_count);
   if (Number.isFinite(safeCount) && safeCount >= 0)
