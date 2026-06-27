@@ -9,6 +9,7 @@ import type { ToolAuditEntry } from "./native/output/tool-types.ts";
 export const RUNTIME_SEMANTIC_TODO_LIST_ID = "runtime-semantic";
 
 export interface OpenDirectWorkBlocker {
+  id: string;
   title: string;
   state: string;
   phase: string | null;
@@ -57,8 +58,9 @@ const CONTINUATION_NEXT_ACTION_LINES = [
 export function activeDirectWorkProgressSnapshot(input: {
   butlerData: string;
   sessionId: string;
+  turnId?: string | null;
 }): DirectWorkProgressSnapshot {
-  const workStream = new WorkStreamStore(input.butlerData).activeForSession(input.sessionId);
+  const workStream = activeDirectWorkStream(input);
   if (!workStream || workStream.todo_list_id === RUNTIME_SEMANTIC_TODO_LIST_ID) {
     return { kind: "none" };
   }
@@ -133,8 +135,9 @@ export function turnAdvancedDuringToolPrompt(input: {
 export function finalDeliveryBlockerForOpenDirectWork(input: {
   butlerData: string;
   sessionId: string;
+  turnId?: string | null;
 }): OpenDirectWorkBlocker | null {
-  const workStream = new WorkStreamStore(input.butlerData).activeForSession(input.sessionId);
+  const workStream = activeDirectWorkStream(input);
   if (!workStream || workStream.todo_list_id === RUNTIME_SEMANTIC_TODO_LIST_ID) return null;
   if (
     workStream.linked_planned_task_ids.length > 0 ||
@@ -162,12 +165,34 @@ export function finalDeliveryBlockerForOpenDirectWork(input: {
 
   if (view && activeItems.length === 0) return null;
   return {
+    id: workStream.id,
     title: workStream.title,
     state: workStream.state,
     phase: workStream.current_phase,
     listId: workStream.todo_list_id,
     activeItems: activeItems.slice(0, 8),
   };
+}
+
+function activeDirectWorkStream(input: {
+  butlerData: string;
+  sessionId: string;
+  turnId?: string | null;
+}) {
+  const store = new WorkStreamStore(input.butlerData);
+  const turnId = input.turnId?.trim();
+  if (!turnId) return store.activeForSession(input.sessionId);
+  return store.listActive({ sessionId: input.sessionId })
+    .map((stream) => store.read(stream.id))
+    .find((stream) => Boolean(stream && directWorkStreamBelongsToTurn(stream, turnId))) ?? null;
+}
+
+function directWorkStreamBelongsToTurn(
+  stream: NonNullable<ReturnType<WorkStreamStore["read"]>>,
+  turnId: string,
+): boolean {
+  if (stream.last_user_turn_id === turnId) return true;
+  return Boolean(stream.todo_list_id?.startsWith(`${turnId}:`));
 }
 
 export function openDirectWorkContinuationPrompt(input: {

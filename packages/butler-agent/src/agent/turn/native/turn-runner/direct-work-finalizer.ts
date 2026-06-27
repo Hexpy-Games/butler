@@ -17,6 +17,7 @@ export async function closeDirectWork(input: {
   turnInput: RuntimeTurnInput;
   deps: NativeTurnRunnerDeps;
   useTools: boolean;
+  turnId?: string | null;
   userText: string;
   finalText: string;
   audit: ToolAuditEntry[];
@@ -29,11 +30,13 @@ export async function closeDirectWork(input: {
     const blocker = finalDeliveryBlockerForOpenDirectWork({
       butlerData: input.deps.butlerData,
       sessionId: input.turnInput.handle.sessionId,
+      turnId: input.turnId,
     });
     if (!blocker) break;
     const workBeforeContinuation = activeDirectWorkProgressSnapshot({
       butlerData: input.deps.butlerData,
       sessionId: input.turnInput.handle.sessionId,
+      turnId: input.turnId,
     });
     finalText = await input.runToolPrompt(openDirectWorkContinuationPrompt({
       objective: input.userText,
@@ -47,12 +50,14 @@ export async function closeDirectWork(input: {
     const workAfterContinuation = activeDirectWorkProgressSnapshot({
       butlerData: input.deps.butlerData,
       sessionId: input.turnInput.handle.sessionId,
+      turnId: input.turnId,
     });
     if (!directWorkSemanticProgressAdvanced(workBeforeContinuation, workAfterContinuation)) break;
   }
   const remainingBlocker = finalDeliveryBlockerForOpenDirectWork({
     butlerData: input.deps.butlerData,
     sessionId: input.turnInput.handle.sessionId,
+    turnId: input.turnId,
   });
   if (remainingBlocker) {
     markRemainingDirectWorkRecoverable({
@@ -76,8 +81,9 @@ function markRemainingDirectWorkRecoverable(input: {
 }): void {
   try {
     const store = new WorkStreamStore(input.butlerData);
-    const active = store.activeForSession(input.sessionId);
+    const active = store.read(input.blocker.id);
     if (!active || workStreamTerminal(active.state) || active.state === "recoverable") return;
+    if (active.owner_session_id !== input.sessionId) return;
     store.transition({
       id: active.id,
       state: "recoverable",

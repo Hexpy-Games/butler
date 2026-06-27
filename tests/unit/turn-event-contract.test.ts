@@ -48,9 +48,10 @@ function payloadForEventKind(kind: string): Record<string, unknown> {
   }
   if (kind === "turn.completion_evidence") {
     return {
-      evidenceKind: "not_required",
-      status: "ok",
-      summary: "No external completion evidence is required for this fixture.",
+      evidenceKind: "command_executed",
+      status: "verified",
+      summary: "A command execution receipt was verified for this fixture.",
+      refs: ["receipt:test-command"],
     };
   }
   if (kind === "turn.outcome") {

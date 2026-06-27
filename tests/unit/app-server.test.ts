@@ -859,6 +859,43 @@ test("app server persists and replays deterministic acknowledgement before later
   }
 });
 
+test("app messages emit canonical turn acknowledgement instead of legacy accepted event", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      return { texts: [`reply: ${input.text}`] };
+    },
+  });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "ack this turn",
+      client_message_id: "client-ack-route",
+    });
+    const turnId = result.data.turn.id as string;
+    const replay = await getJson(`${server.url}events?cursor=0`);
+    const turnEvents = replay.data.events
+      .filter(
+        (event: { type: string; payload?: { turn_id?: string } }) =>
+          event.type === "agent.turn_event" &&
+          event.payload?.turn_id === turnId,
+      )
+      .map(
+        (event: { payload: { event?: { kind?: string } } }) =>
+          event.payload.event?.kind,
+      );
+
+    expect(turnEvents).toContain(TURN_ACKNOWLEDGED_EVENT_KIND);
+    expect(turnEvents).not.toContain("turn.accepted");
+    expect(turnEvents.indexOf(TURN_ACKNOWLEDGED_EVENT_KIND)).toBeLessThan(
+      turnEvents.indexOf("turn.started"),
+    );
+  } finally {
+    server.stop();
+  }
+});
+
 test("internal turn events are not exposed through app event replay", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -4136,6 +4173,175 @@ test("session summary excludes recoverable WorkStreams from active projection", 
   }
 });
 
+test("terminal app turn state reconciles matching turn-local WorkStreams", async () => {
+  const streamStore = new WorkStreamStore(tempDir);
+  const todoStore = new TodoListStore(tempDir);
+  let streamId = "";
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder(input) {
+      const todoView = todoStore.update({
+        listId: "terminal-turn-local",
+        items: [
+          {
+            id: "report",
+            content: "Report completion",
+            active_form: "Reporting completion",
+            status: "in_progress",
+            phase: "reporting",
+            priority: "normal",
+            blocked_by: [],
+          },
+        ],
+      });
+      const stream = streamStore.updateFromTodoList({
+        ownerSessionId: "butler/app-general",
+        listId: "terminal-turn-local",
+        lastUserTurnId: input.turnId,
+        items: todoView.list.items,
+      });
+      streamId = stream.id;
+      return { texts: [`reply: ${input.text}`] };
+    },
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "finish active work",
+    });
+
+    expect(streamStore.read(streamId)).toMatchObject({
+      state: "complete",
+      status_note: "Reconciled after delivered turn replay.",
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("session summary and view do not mutate stale terminal WorkStreams on read", async () => {
+  const streamStore = new WorkStreamStore(tempDir);
+  const todoStore = new TodoListStore(tempDir);
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder(input) {
+      return { texts: [`reply: ${input.text}`] };
+    },
+  });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "already delivered",
+    });
+    const turnId = result.data.turn.id as string;
+    const todoView = todoStore.update({
+      listId: "late-stale-turn-local",
+      items: [
+        {
+          id: "code",
+          content: "Keep this active until a terminal write occurs",
+          active_form: "Keeping stale active work",
+          status: "in_progress",
+          phase: "execution",
+          priority: "normal",
+          blocked_by: [],
+        },
+      ],
+    });
+    const stream = streamStore.updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      listId: "late-stale-turn-local",
+      lastUserTurnId: turnId,
+      items: todoView.list.items,
+    });
+    expect(streamStore.read(stream.id)?.state).toBe("executing");
+
+    await getJson(`${server.url}session-summary?session_id=general`);
+    await getJson(`${server.url}session-view?session_id=general`);
+
+    expect(streamStore.read(stream.id)).toMatchObject({
+      state: "executing",
+      active_step_id: "code",
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("message replay does not mutate stale terminal WorkStreams on read", async () => {
+  const streamStore = new WorkStreamStore(tempDir);
+  const todoStore = new TodoListStore(tempDir);
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+      insertMessage(
+        chatId: string,
+        role: string,
+        text: string,
+        status: string,
+        options?: { turnId?: string | null },
+      ): void;
+    };
+    const turn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(turn.id, "delivered", {
+      safeStatusLabel: "Delivered",
+      cancellable: false,
+    });
+    internalStore.insertMessage(
+      "general",
+      "assistant",
+      "already delivered",
+      "delivered",
+      { turnId: turn.id },
+    );
+    const todoView = todoStore.update({
+      listId: "message-read-stale-turn-local",
+      items: [
+        {
+          id: "inspect",
+          content: "Remain unchanged during message replay",
+          active_form: "Remaining unchanged during message replay",
+          status: "in_progress",
+          phase: "execution",
+          priority: "normal",
+          blocked_by: [],
+        },
+      ],
+    });
+    const stream = streamStore.updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      listId: "message-read-stale-turn-local",
+      lastUserTurnId: turn.id,
+      items: todoView.list.items,
+    });
+
+    await getJson(`${server.url}messages?chat_id=general`);
+
+    expect(streamStore.read(stream.id)).toMatchObject({
+      state: "executing",
+      active_step_id: "inspect",
+    });
+    expect(todoStore.view("message-read-stale-turn-local", { includeCompleted: true }).progress.active)
+      .toBe(1);
+  } finally {
+    server.stop();
+  }
+});
+
 test("session summary and view keep current-turn waiting WorkStreams active only for that turn", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -4235,7 +4441,7 @@ test("session summary and view keep current-turn waiting WorkStreams active only
   }
 });
 
-test("session replay reconciles terminal turn-local WorkStreams and todos", async () => {
+test("session replay hides terminal turn-local WorkStreams without mutating todos", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     butlerData: tempDir,
@@ -4288,11 +4494,11 @@ test("session replay reconciles terminal turn-local WorkStreams and todos", asyn
     );
     expect(summary.data.work_streams).toEqual([]);
     expect(new TodoListStore(tempDir).view("stale-replay-work", { includeCompleted: true }).progress.active)
-      .toBe(0);
+      .toBe(2);
     expect(new WorkStreamStore(tempDir).read(stream.id)).toMatchObject({
-      state: "complete",
-      current_phase: null,
-      active_step_id: null,
+      state: "executing",
+      current_phase: "execution",
+      active_step_id: "inspect",
     });
 
     const view = await getJson(
@@ -4304,7 +4510,7 @@ test("session replay reconciles terminal turn-local WorkStreams and todos", asyn
   }
 });
 
-test("session replay reconciles stale work from older terminal turns", async () => {
+test("session replay hides stale work from older terminal turns without mutating it", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     butlerData: tempDir,
@@ -4355,12 +4561,12 @@ test("session replay reconciles stale work from older terminal turns", async () 
     expect(summary.data.turn_state).toBe("thinking");
     expect(summary.data.work_streams).toEqual([]);
     expect(new WorkStreamStore(tempDir).read(stream.id)).toMatchObject({
-      state: "complete",
-      current_phase: null,
-      active_step_id: null,
+      state: "executing",
+      current_phase: "execution",
+      active_step_id: "inspect",
     });
     expect(new TodoListStore(tempDir).view("older-stale-replay-work", { includeCompleted: true }).progress.active)
-      .toBe(0);
+      .toBe(1);
 
     const view = await getJson(
       `${server.url}session-view?session_id=general`,
@@ -5644,7 +5850,7 @@ test("app-server read routes do not execute app-origin worker completions", asyn
   }
 });
 
-test("session view syncs linked orchestration workers without delivering reports", async () => {
+test("session view does not sync linked orchestration workers while reading", async () => {
   const orchestrationStore = new WorkOrchestrationStore(tempDir);
   orchestrationStore.create({
     id: "orch-session-view",
@@ -5724,28 +5930,12 @@ test("session view syncs linked orchestration workers without delivering reports
   });
   try {
     const view = await getJson(`${server.url}session-view?session_id=general`);
-    expect(view.data.workers).toEqual([
-      expect.objectContaining({
-        activity_kind: "planned",
-        task_id: "orch-session-view",
-        orchestration_id: "orch-session-view",
-        phase: "reporting",
-        terminal: false,
-      }),
-      expect.objectContaining({
-        activity_kind: "worker",
-        task_id: "worker-orch-session-view",
-        session_id: "general",
-        orchestration_id: "orch-session-view",
-        phase: "complete",
-        terminal: true,
-      }),
-    ]);
+    expect(view.data.workers).toEqual([]);
     expect(orchestrationStore.read("orch-session-view")).toMatchObject({
-      status: "ready_for_report",
+      status: "running",
       streams: [expect.objectContaining({
         id: "implementation",
-        status: "done",
+        status: "running",
       })],
     });
     expect(responderInputs).toEqual([]);

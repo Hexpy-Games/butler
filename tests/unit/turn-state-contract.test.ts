@@ -77,7 +77,7 @@ test("turn acknowledged payload is deterministic public receipt, not a decision"
   expect(payload.summary).toBeUndefined();
 });
 
-test("public decision payloads require authored sources", () => {
+test("public decision payloads require assistant-authored sources", () => {
   for (const source of AUTHORED_DECISION_SOURCES) {
     expect(isAuthoredDecisionSource(source)).toBe(true);
     expect(createTurnDecisionPayload({
@@ -93,7 +93,7 @@ test("public decision payloads require authored sources", () => {
     });
   }
 
-  for (const source of ["runtime-derived", "review-repaired", "tool-metadata"]) {
+  for (const source of ["model-authored", "principal-authored", "runtime-derived", "review-repaired", "tool-metadata"]) {
     expect(isAuthoredDecisionSource(source)).toBe(false);
     expect(() => createTurnDecisionPayload({
       decisionId: `decision-${source}`,
@@ -143,6 +143,11 @@ test("turn outcome payload enforces evidence and recovery-token invariants", () 
         completionEvidenceRefs: ["evidence-1"],
         publicSummary: "Completed with evidence.",
       })).toMatchObject({ outcome, completionEvidenceRefs: ["evidence-1"] });
+      expect(createTurnOutcomePayload({
+        outcome,
+        completionEvidenceStatus: "not_required",
+        publicSummary: "Completed without external evidence requirement.",
+      })).toMatchObject({ outcome, completionEvidenceStatus: "not_required" });
     } else if (outcome === "recoverable" || outcome === "waiting_user") {
       expect(createTurnOutcomePayload({
         outcome,
@@ -160,7 +165,13 @@ test("turn outcome payload enforces evidence and recovery-token invariants", () 
   expect(() => createTurnOutcomePayload({
     outcome: "completed",
     publicSummary: "No evidence.",
-  })).toThrow("completed turn outcome requires completion evidence refs");
+  })).toThrow("completed turn outcome requires completion evidence refs or not_required evidence status");
+
+  expect(() => createTurnOutcomePayload({
+    outcome: "completed",
+    completionEvidenceStatus: "unknown",
+    publicSummary: "Invalid evidence status.",
+  })).toThrow("turn outcome completion evidence status must be not_required");
 
   expect(() => createTurnOutcomePayload({
     outcome: "recoverable",

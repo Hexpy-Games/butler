@@ -4,6 +4,14 @@ import { type WorkStreamState, WorkStreamStore } from "../../work/work-stream.ts
 
 type ToolCall = { args: Record<string, unknown> };
 
+export const WORK_TRACKING_TOOL_NAMES = [
+  "update_todo_list",
+  "list_todo_list",
+  "list_work_streams",
+  "update_work_stream_state",
+  "control_work",
+] as const;
+
 export function createWorkTrackingToolHandlers(input: {
   butlerData: string;
   sessionId?: string;

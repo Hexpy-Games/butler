@@ -51,8 +51,6 @@ const TURN_ACKNOWLEDGED_EVENT_KIND = "turn.acknowledged";
 const SESSION_STARTING_STATE = "session_starting";
 const PUBLIC_DECISION_SOURCES = new Set([
   "assistant-authored",
-  "model-authored",
-  "principal-authored",
 ]);
 const INTERNAL_PROGRESS_TOOL_NAMES = new Set([
   "Update Todo List",

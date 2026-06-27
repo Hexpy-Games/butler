@@ -94,6 +94,12 @@ const ACTIVE_STATES = new Set<WorkStreamState>([
   "consolidating",
   "reporting",
 ]);
+const RESUMABLE_STATES = new Set<WorkStreamState>([
+  ...ACTIVE_STATES,
+  "waiting_user",
+  "paused",
+  "recoverable",
+]);
 
 const TRANSITIONS: Record<WorkStreamState, WorkStreamState[]> = {
   routing: ["conception", "planning", "waiting_user", "recoverable", "failed", "cancelled"],
@@ -214,6 +220,12 @@ export function workStreamActive(
     record.state === "waiting_user" &&
     record.last_user_turn_id === currentTurnId,
   );
+}
+
+export function workStreamResumable(
+  record: Pick<WorkStreamRecord, "state">,
+): boolean {
+  return RESUMABLE_STATES.has(record.state);
 }
 
 export function completeReportingWorkStreamForSession(input: {
@@ -585,6 +597,21 @@ export class WorkStreamStore {
     if (!sessionId) return null;
     const active = this.listActive({ sessionId, currentTurnId: options.currentTurnId }).at(0);
     return active ? this.read(active.id) : null;
+  }
+
+  latestResumableForSession(
+    sessionId?: string | null,
+    options: { excludeTodoListIds?: string[] } = {},
+  ): WorkStreamRecord | null {
+    if (!sessionId) return null;
+    const excludedTodoListIds = new Set(options.excludeTodoListIds ?? []);
+    const resumable = this.records()
+      .filter((record) => record.owner_session_id === sessionId)
+      .filter((record) => workStreamResumable(record))
+      .filter((record) => !record.todo_list_id || !excludedTodoListIds.has(record.todo_list_id))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .at(0);
+    return resumable ? this.read(resumable.id) : null;
   }
 
   completeTurnLocalActive(input: {
