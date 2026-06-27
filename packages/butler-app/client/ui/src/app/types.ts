@@ -1096,6 +1096,8 @@ export interface TimelineEvent {
       safe_status_label?: string;
       updated_at?: string;
     };
+    message_id?: string;
+    chat_id?: string;
     session_id?: string;
     turn_id?: string;
     state?: string;

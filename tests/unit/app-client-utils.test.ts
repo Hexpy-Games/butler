@@ -350,7 +350,7 @@ test("completed assistant messages freeze work blocks onto the message record", 
     },
   });
 
-  expect(frozen?.work_blocks?.[0]?.rows[0]).toBe(
+  expect(frozen?.work_blocks?.[0]?.rows[0]).toEqual(
     snapshot.safe_progress_rows[0],
   );
   expect(refrozen[0]).toBe(frozen);
@@ -379,7 +379,7 @@ test("completed assistant messages keep frozen work blocks when progress is abse
   const refrozen = freezeMessageWorkBlocks([frozen!], {});
 
   expect(refrozen[0]).toBe(frozen);
-  expect(refrozen[0]?.work_blocks?.[0]?.rows[0]).toBe(
+  expect(refrozen[0]?.work_blocks?.[0]?.rows[0]).toEqual(
     snapshot.safe_progress_rows[0],
   );
 });
@@ -684,6 +684,48 @@ test("accepted real turn removes optimistic client turn progress", () => {
 
   expect(state.turnProgress[clientTurnId]).toBeUndefined();
   expect(activeTurnProgressSnapshot(null, state.turnProgress)).toBeNull();
+});
+
+test("message deleted events remove stale assistant rows from the active chat", () => {
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 2,
+        type: "message.deleted",
+        payload: {
+          chat_id: "general",
+          message_id: "assistant-failure",
+          turn_id: "turn-recovered",
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [
+        {
+          id: "user-request",
+          chat_id: "general",
+          turn_id: "turn-recovered",
+          role: "user",
+          text: "continue",
+          status: "sent",
+        },
+        {
+          id: "assistant-failure",
+          chat_id: "general",
+          turn_id: "turn-recovered",
+          role: "assistant",
+          text: "Butler did not finish this queued request before the dispatch lease expired.",
+          status: "failed",
+          retryable: true,
+        },
+      ],
+      summary: null,
+      turnProgress: {},
+    },
+  );
+
+  expect(state.messages.map((message) => message.id)).toEqual(["user-request"]);
 });
 
 test("turn acknowledgements replace optimistic Thinking progress immediately", () => {
@@ -2294,6 +2336,13 @@ test("work blocks group chained tools by semantic work block label", () => {
     label: "프로젝트 메타정보와 구조 확인 중",
   });
   expect(blocks[0]?.rows).toHaveLength(2);
+  expect(blocks[0]?.rows[0]).toMatchObject({
+    safe_label: "Bash: pwd",
+    safe_tool_name: "Bash",
+    safe_input_label: "pwd",
+  });
+  expect(blocks[0]?.rows[0]?.work_block_label).toBeUndefined();
+  expect(blocks[0]?.rows[0]?.work_decision_summary).toBeUndefined();
 });
 
 test("timeline applies first visible progress turn events as public progress rows", () => {

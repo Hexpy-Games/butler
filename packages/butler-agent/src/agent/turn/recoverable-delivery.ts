@@ -11,7 +11,7 @@ const DEFAULT_LIMITED_DELIVERY_REASON =
   "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.\n\n남은 부분: 완료 보고에 필요한 마지막 결과 정리가 남아 있습니다.\n다음 진행에서는 이 지점부터 이어가면 됩니다.";
 
 export interface RecoverableLimitedDelivery {
-  text: string;
+  text: string | null;
   reason: string;
   delivery: RuntimeDeliveryClassification;
 }
@@ -21,20 +21,19 @@ export function recoverableLimitedDeliveryForError(error: unknown): RecoverableL
   if (classified.issue_kind !== "internal_recovery") return null;
   const failure = safeRuntimeFailure(error);
   const progressText = progressFinalizationTextFromError(error);
-  const reason = safeLimitationText(
-    progressText ?? failure.message,
-    DEFAULT_LIMITED_DELIVERY_REASON,
-  );
-  const text = progressText ?? (isGenericVerificationFailure(reason) ? DEFAULT_LIMITED_DELIVERY_REASON : reason);
+  const failureText = visibleRecoveryTextFromFailureMessage(failure.message);
+  const text = progressText ?? failureText;
+  const publicLimitations = text ? [text] : [];
+  const publicReason = text ?? DEFAULT_LIMITED_DELIVERY_REASON;
   const limitationCode = isPromptUsageModelCallBudget(error)
     ? INTERNAL_RECOVERY_REQUIRED_CODE
     : classified.limitation_codes[0] ?? failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE;
   return {
     text,
-    reason: text,
+    reason: publicReason,
     delivery: deliveredWithLimitationsState({
       limitationCodes: [limitationCode],
-      limitations: [text],
+      limitations: publicLimitations,
     }),
   };
 }
@@ -64,9 +63,20 @@ function progressFinalizationTextFromError(error: unknown): string | null {
   return safeProgressFinalizationText(value);
 }
 
-function isGenericVerificationFailure(value: string): boolean {
+function visibleRecoveryTextFromFailureMessage(message: string): string | null {
+  const text = safeLimitationText(message, "");
+  if (!text || isGenericInternalRecoveryText(text)) return null;
+  return text;
+}
+
+function isGenericInternalRecoveryText(value: string): boolean {
   return /Butler could not verify that the requested goal was completed/iu.test(value) ||
-    /요청한 결과를 완료했는지 확인하지 못했습니다/u.test(value);
+    /요청한 결과를 완료했는지 확인하지 못했습니다/u.test(value) ||
+    /진행한 내용은 보존했습니다/u.test(value) ||
+    /prompt usage model-call budget exhausted/iu.test(value) ||
+    /missing public completion obligation/iu.test(value) ||
+    /unsatisfied public completion obligation/iu.test(value) ||
+    /unresolved public completion obligation/iu.test(value);
 }
 
 function safeProgressFinalizationText(value: string): string | null {

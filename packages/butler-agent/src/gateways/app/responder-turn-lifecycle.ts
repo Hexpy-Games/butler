@@ -53,7 +53,7 @@ export interface CompleteResponderTurnContext<FileRecord> {
     chatId: string,
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
-  ): { reply: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
+  ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
   finalizeCancelledTurn(chatId: string, turnId: string): TurnRecord;
   hasTurnEventKind(turnId: string, kind: string): boolean;
   insertOrReplaceAssistantReplies(
@@ -192,7 +192,7 @@ export async function completeResponderTurn<FileRecord>(
         reply: delivered.reply,
         replies: delivered.replies,
         turn: delivered.turn,
-        next_cursor: delivered.reply.cursor,
+        next_cursor: delivered.reply?.cursor ?? delivered.turn.cursor,
       };
     }
     const safeError = appSafeResponderError(error);
