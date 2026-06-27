@@ -718,6 +718,65 @@ test("task store projects worker transcript command details instead of generic d
   writeFileSync(join(taskDir, "status"), "RUNNING\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "Inspect worker projection details.\n", "utf8");
   writeFileSync(join(taskDir, "session_id"), "worker-projection-session\n", "utf8");
+  writeFileSync(
+    join(taskDir, "worker_activity_events.jsonl"),
+    [
+      {
+        event_id: "runtime-public-decision",
+        event: "public_work_decision",
+        created_at: "2026-05-16T00:02:00.000Z",
+        decision_summary: "Runtime event decision must not become a worker block.",
+        decision_source: "runtime-derived",
+      },
+      {
+        event_id: "missing-source-public-decision",
+        event: "public_work_decision",
+        created_at: "2026-05-16T00:02:00.250Z",
+        decision_summary: "Missing source event decision must not become a worker block.",
+      },
+      {
+        event_id: "runtime-activity",
+        event: "activity_updated",
+        created_at: "2026-05-16T00:02:00.500Z",
+        action_kind: "run_command",
+        status_line: "Executing safe status.",
+        decision_summary: "Runtime activity decision must not become a label.",
+        decision_source: "runtime-derived",
+      },
+    ].map((event) => JSON.stringify(event)).join("\n") + "\n",
+    "utf8",
+  );
+  writeFileSync(
+    join(taskDir, "worker_activity.json"),
+    JSON.stringify({
+      work_blocks: [
+        {
+          id: "stored-runtime-decision",
+          label: "Stored runtime block",
+          state: "running",
+          rows: [],
+          decision_summary: "Stored runtime decision must not become public context.",
+          decision_source: "runtime-derived",
+        },
+        {
+          id: "stored-missing-source-decision",
+          label: "Stored missing source block",
+          state: "running",
+          rows: [],
+          decision_summary: "Stored missing source decision must not become public context.",
+        },
+        {
+          id: "stored-authored-decision",
+          label: "Stored authored block",
+          state: "running",
+          rows: [],
+          decision_summary: "Stored authored decision remains public context.",
+          decision_source: "assistant-authored",
+        },
+      ],
+    }),
+    "utf8",
+  );
   const transcriptDir = join(tempDir, "transcripts");
   mkdirSync(transcriptDir, { recursive: true });
   writeFileSync(
@@ -728,7 +787,22 @@ test("task store projects worker transcript command details instead of generic d
         timestamp: "2026-05-16T00:02:01.000Z",
         payload: {
           category: "public_work_decision",
-          decision: { decisionId: "decision-empty" },
+          decision: {
+            decisionId: "decision-runtime",
+            decisionSummary: "Runtime fallback must not become public context.",
+            decisionSource: "runtime-derived",
+          },
+        },
+      },
+      {
+        kind: "system",
+        timestamp: "2026-05-16T00:02:01.500Z",
+        payload: {
+          category: "public_work_decision",
+          decision: {
+            decisionId: "decision-missing-source",
+            decisionSummary: "Missing source must not become public context.",
+          },
         },
       },
       {
@@ -766,8 +840,17 @@ test("task store projects worker transcript command details instead of generic d
   const serialized = JSON.stringify(summary.activity_work_blocks);
 
   expect(serialized).not.toContain("Recorded worker decision");
+  expect(serialized).not.toContain("Runtime fallback must not become public context.");
+  expect(serialized).not.toContain("Missing source must not become public context.");
+  expect(serialized).not.toContain("Runtime event decision must not become a worker block.");
+  expect(serialized).not.toContain("Missing source event decision must not become a worker block.");
+  expect(serialized).not.toContain("Runtime activity decision must not become a label.");
+  expect(serialized).not.toContain("Stored runtime decision must not become public context.");
+  expect(serialized).not.toContain("Stored missing source decision must not become public context.");
+  expect(serialized).not.toContain("runtime-derived");
+  expect(serialized).toContain("Stored authored decision remains public context.");
   expect(serialized).not.toContain("Started run_command");
-  expect(summary.activity_work_blocks).toEqual([
+  expect(summary.activity_work_blocks).toContainEqual(
     expect.objectContaining({
       label: "rg -n worker_activity packages/butler-agent/src",
       rows: expect.arrayContaining([
@@ -777,7 +860,7 @@ test("task store projects worker transcript command details instead of generic d
         }),
       ]),
     }),
-  ]);
+  );
 });
 
 test("task store resolves task origin from transcript and hot memory references", () => {

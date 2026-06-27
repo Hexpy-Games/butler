@@ -283,8 +283,36 @@ test("work block events project public decision context without private reasonin
   const unsafeRow = progressRowFromTurnEvent(unsafe);
   expect(JSON.stringify(unsafeRow)).not.toContain("private chain");
   expect(JSON.stringify(unsafeRow)).not.toContain("sessionId");
-  expect(unsafeRow?.work_decision_summary).toBe("safe fallback");
+  expect(unsafeRow?.work_decision_summary).toBeUndefined();
   expect(unsafeRow?.work_decision_rationale).toBeUndefined();
+});
+
+test("runtime-derived and repaired progress payloads do not project public decisions", () => {
+  for (const source of ["runtime-derived", "review-repaired", undefined]) {
+    const event = createAgentTurnEvent({
+      sessionId: "general",
+      turnId: "turn-1",
+      sessionSequence: 1,
+      turnSequence: 1,
+      kind: "work.block.started",
+      payload: {
+        workBlockId: `work-${source ?? "missing"}`,
+        label: "Checking local state.",
+        decisionSummary: "This must not become a public decision.",
+        decisionRationale: "Runtime repair text is diagnostic only.",
+        decisionNextStep: "Do not render this as a decision.",
+        decisionSource: source,
+      },
+    });
+
+    expect(progressRowFromTurnEvent(event)).toMatchObject({
+      kind: "work_block",
+      safe_label: "Checking local state.",
+      work_block_label: "Checking local state.",
+    });
+    expect(progressRowFromTurnEvent(event)?.work_decision_summary).toBeUndefined();
+    expect(progressRowFromTurnEvent(event)?.work_decision_source).toBeUndefined();
+  }
 });
 
 test("legacy progress rows map into public turn events", () => {

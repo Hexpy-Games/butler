@@ -3,6 +3,7 @@ import { sanitizePublicText } from "./public-text.ts";
 import {
   TURN_ACKNOWLEDGED_EVENT_KIND,
   TURN_STATE_CONTRACT_EVENT_KINDS,
+  isAuthoredDecisionSource,
   normalizeTurnStateContractPayload,
 } from "./turn-state-contract.ts";
 
@@ -384,10 +385,11 @@ function publicDecisionFields(
   payload: Record<string, unknown>,
   fallbackSummary?: string,
 ): Partial<ProgressRowLike> {
+  const source = optionalPublicText(payload.decisionSource ?? payload.source);
+  if (!isAuthoredDecisionSource(source)) return {};
   const summary = optionalPublicText(payload.decisionSummary ?? payload.summary) ?? fallbackSummary;
   const rationale = optionalPublicText(payload.decisionRationale ?? payload.rationale);
   const nextStep = optionalPublicText(payload.decisionNextStep ?? payload.nextStep);
-  const source = optionalPublicText(payload.decisionSource ?? payload.source);
   const rawEvidenceRefs = payload.decisionEvidenceRefs ?? payload.evidenceRefs;
   const evidenceRefs = Array.isArray(rawEvidenceRefs)
     ? rawEvidenceRefs

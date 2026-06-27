@@ -4640,6 +4640,7 @@ test("session worker activity synthesizes planned parent for orphan work orchest
         decision_summary: "Inspect existing worker activity projection.",
         decision_rationale: "The UI already groups planned parents with worker children.",
         decision_next_step: "Add the missing backend parent and details projection.",
+        decision_source: "assistant-authored",
         evidence_refs: ["store.ts projection"],
         work_block_id: "worker-timeline-call-1",
         raw_prompt: "unsafe raw prompt sentinel",
@@ -4657,6 +4658,7 @@ test("session worker activity synthesizes planned parent for orphan work orchest
         decision_summary: "<think>hidden reasoning sentinel</think>",
         decision_rationale: "sessionId unsafe internal sentinel",
         decision_next_step: "Continue safely.",
+        decision_source: "runtime-derived",
         evidence_refs: ["safe evidence ref", "authorization: bearer unsafe-token"],
         work_block_id: "worker-timeline-call-2",
       },
@@ -4680,6 +4682,7 @@ test("session worker activity synthesizes planned parent for orphan work orchest
             decisionSummary: "Run a focused app-server projection test.",
             decisionRationale: "A route-level fixture proves SessionView receives safe worker details.",
             decisionNextStep: "Assert the worker block and no unsafe fields leak.",
+            decisionSource: "assistant-authored",
             decisionEvidenceRefs: ["app-server worker activity test"],
           },
         },
@@ -4716,6 +4719,7 @@ test("session worker activity synthesizes planned parent for orphan work orchest
             decisionSummary: "Run a focused app-server projection test.",
             decisionRationale: "A route-level fixture proves SessionView receives safe worker details.",
             decisionNextStep: "Assert the worker block and no unsafe fields leak.",
+            decisionSource: "assistant-authored",
             decisionEvidenceRefs: ["app-server worker activity test"],
           },
         },
@@ -4819,6 +4823,8 @@ test("session worker activity synthesizes planned parent for orphan work orchest
     expect(serialized).not.toContain("private raw worker request sentinel");
     expect(serialized).not.toContain("unsafe raw prompt sentinel");
     expect(serialized).not.toContain("hidden reasoning sentinel");
+    expect(serialized).not.toContain("runtime-derived");
+    expect(serialized).not.toContain("Continue safely.");
     expect(serialized).not.toContain("unsafe-secret");
     expect(serialized).not.toContain("unsafe-token");
     expect(serialized).not.toContain("sessionId unsafe internal sentinel");
@@ -8099,6 +8105,51 @@ test("session summary preserves long active turn work history without latest-thr
     expect(workRows).toHaveLength(40);
     expect(workRows[0]?.safe_label).toBe("작업 단계 1");
     expect(workRows.at(-1)?.safe_label).toBe("작업 단계 40");
+  } finally {
+    server.stop();
+  }
+});
+
+test("session summary drops unauthorised legacy progress decision fields", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      input.onProgress?.({
+        id: "runtime-derived-decision",
+        kind: "ran_command",
+        state: "running",
+        safe_label: "Checking local status",
+        safe_tool_name: "Bash",
+        safe_input_label: "status",
+        work_block_id: "work-runtime-derived",
+        work_decision_summary: "Fallback summary must not render as a decision",
+        work_decision_rationale: "Runtime-derived text is diagnostic only.",
+        work_decision_next_step: "Do not show this as model intent.",
+        work_decision_source: "runtime-derived",
+        work_decision_evidence_refs: ["diagnostic"],
+      });
+      return { texts: ["done"] };
+    },
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "check status",
+    });
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    const row = summary.data.latest_progress.safe_progress_rows.find(
+      (candidate: { id?: string }) => candidate.id === "runtime-derived-decision",
+    );
+    expect(row).toMatchObject({
+      safe_label: "Checking local status",
+      work_block_id: "work-runtime-derived",
+    });
+    expect(row.work_decision_summary).toBeUndefined();
+    expect(row.work_decision_source).toBeUndefined();
   } finally {
     server.stop();
   }
