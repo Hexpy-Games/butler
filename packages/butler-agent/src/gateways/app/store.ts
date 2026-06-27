@@ -36,7 +36,11 @@ import {
 } from "../../personalization/profiling.ts";
 import { readPersonaPresets } from "../../personalization/persona-presets.ts";
 import { TaskStore, type TaskSummary } from "../../agent/work/task-store.ts";
-import { WorkStreamStore } from "../../agent/work/work-stream.ts";
+import {
+  applyTurnLocalWorkOutcomeForSession,
+  WorkStreamStore,
+  type TurnLocalWorkOutcome,
+} from "../../agent/work/work-stream.ts";
 import { ensureAppMessageQuerySchema } from "../../agent/cognition/memory/exact-query.ts";
 import {
   PlannedTaskStore,
@@ -2511,6 +2515,7 @@ export class AppServerStore {
     const session = this.getSession(sessionId);
     const turns = this.listTurns(sessionId);
     const latestTurn = turns.at(-1);
+    this.reconcileTurnLocalWorkOutcomesForTurns(turns);
     const messages = this.listMessages(sessionId);
     const latestProgress = latestTurn
       ? this.sessionViewTurn(latestTurn).progress
@@ -2567,6 +2572,7 @@ export class AppServerStore {
     const session = this.getSession(sessionId);
     const turns = this.listTurns(sessionId);
     const latestTurn = turns.at(-1);
+    this.reconcileTurnLocalWorkOutcomesForTurns(turns);
     const messages = this.sessionViewMessages(sessionId);
     const latestMessage = messages.at(-1);
     const latestTurnHasOutOfBandReport = Boolean(
@@ -3027,6 +3033,28 @@ export class AppServerStore {
         // Session read routes may project stale linked ids; projection should
         // remain available even when an old orchestration file was removed.
       }
+    }
+  }
+
+  private reconcileTurnLocalWorkOutcomeForTurn(turn: TurnRecord): void {
+    const outcome = turnLocalWorkOutcomeForAppTurn(turn.state);
+    if (!outcome) return;
+    try {
+      applyTurnLocalWorkOutcomeForSession({
+        butlerData: this.butlerData,
+        sessionId: sessionHintForRow(turn.chat_id),
+        turnId: turn.id,
+        outcome,
+        statusNote: turnLocalWorkOutcomeStatusNote(outcome),
+      });
+    } catch {
+      // Session read/replay must stay available even if stale work repair fails.
+    }
+  }
+
+  private reconcileTurnLocalWorkOutcomesForTurns(turns: TurnRecord[]): void {
+    for (const turn of turns) {
+      this.reconcileTurnLocalWorkOutcomeForTurn(turn);
     }
   }
 
@@ -3536,6 +3564,7 @@ export class AppServerStore {
     for (const turnId of turnIds) {
       const turn = this.getTurnRow(turnId);
       if (!turn) continue;
+      this.reconcileTurnLocalWorkOutcomeForTurn(turnFromRow(turn));
       snapshots[turnId] = {
         turn_id: turnId,
         summary: turn.safe_status_label,
@@ -8413,6 +8442,21 @@ function workModeToPhase(mode: string): WorkerActivityPhase {
   if (mode === "cancelled") return "cancelled";
   if (mode === "failed") return "failed";
   return "executing";
+}
+
+function turnLocalWorkOutcomeForAppTurn(state: TurnState): TurnLocalWorkOutcome | null {
+  if (state === "delivered") return "completed";
+  if (state === "failed") return "failed";
+  if (state === "cancelled") return "cancelled";
+  return null;
+}
+
+function turnLocalWorkOutcomeStatusNote(outcome: TurnLocalWorkOutcome): string {
+  if (outcome === "completed") return "Reconciled after delivered turn replay.";
+  if (outcome === "failed") return "Reconciled after failed turn replay.";
+  if (outcome === "cancelled") return "Reconciled after cancelled turn replay.";
+  if (outcome === "waiting_user") return "Reconciled waiting turn replay.";
+  return "Reconciled recoverable turn replay.";
 }
 
 function workerActivityFromTaskSummary(
