@@ -1,9 +1,7 @@
 import { TodoListStore } from "../../../work/todo-list.ts";
 import {
-  completeReportingWorkStreamForSession,
-  completeTurnLocalWorkStreamForSession,
+  applyTurnLocalWorkOutcomeForSession,
   WorkStreamStore,
-  workStreamTerminal,
 } from "../../../work/work-stream.ts";
 import type { RuntimeMessageLanguage } from "../../../output/messages.ts";
 import { runtimeSemanticTodoItems } from "../progress/runtime-semantic-progress.ts";
@@ -19,6 +17,7 @@ const VALIDATION_CONTINUATION_LIST_PREFIX = "validation-continuation-";
 export function completeReportingWorkStreamBestEffort(input: {
   butlerData: string;
   sessionId: string;
+  turnId?: string | null;
   audit: ToolAuditEntry[];
 }): void {
   try {
@@ -27,23 +26,19 @@ export function completeReportingWorkStreamBestEffort(input: {
       markActiveWorkStreamRecoverableBestEffort({
         butlerData: input.butlerData,
         sessionId: input.sessionId,
+        turnId: input.turnId,
         reason: `Validation suite failed without a later passing receipt: ${validationFailure.suite}`,
       });
       return;
     }
     completeResolvedValidationContinuationStreamsBestEffort(input);
-    const completed = completeTurnLocalWorkStreamForSession({
+    applyTurnLocalWorkOutcomeForSession({
       butlerData: input.butlerData,
       sessionId: input.sessionId,
+      turnId: input.turnId,
+      outcome: "completed",
       statusNote: "Final answer delivered.",
     });
-    if (!completed) {
-      completeReportingWorkStreamForSession({
-        butlerData: input.butlerData,
-        sessionId: input.sessionId,
-        statusNote: "Final answer delivered.",
-      });
-    }
   } catch {
     // Final WorkStream bookkeeping must not block final answer delivery.
   }
@@ -162,22 +157,40 @@ export function completeRuntimeSemanticWorkStreamBestEffort(input: {
 export function markActiveWorkStreamRecoverableBestEffort(input: {
   butlerData: string;
   sessionId: string;
+  turnId?: string | null;
   reason?: string;
 }): void {
   try {
-    const store = new WorkStreamStore(input.butlerData);
-    const record = store.activeForSession(input.sessionId);
-    if (!record || workStreamTerminal(record.state) || record.state === "recoverable") return;
     const reason = safeTextForStatusNote(input.reason);
-    store.transition({
-      id: record.id,
-      state: "recoverable",
+    applyTurnLocalWorkOutcomeForSession({
+      butlerData: input.butlerData,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      outcome: "recoverable",
       statusNote: reason
         ? `Turn interrupted before final delivery; durable work can be resumed. Cause: ${reason}`
         : "Turn interrupted before final delivery; durable work can be resumed.",
     });
   } catch {
     // Recovery marking is best-effort and must not mask the original failure.
+  }
+}
+
+export function cancelActiveWorkStreamBestEffort(input: {
+  butlerData: string;
+  sessionId: string;
+  turnId?: string | null;
+}): void {
+  try {
+    applyTurnLocalWorkOutcomeForSession({
+      butlerData: input.butlerData,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      outcome: "cancelled",
+      statusNote: "Turn cancelled before final delivery.",
+    });
+  } catch {
+    // Cancellation bookkeeping must not mask the cancellation.
   }
 }
 

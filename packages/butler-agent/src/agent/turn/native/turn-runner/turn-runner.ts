@@ -5,6 +5,7 @@ import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
 import { recoverableLimitedDeliveryForError } from "../../recoverable-delivery.ts";
 import { deliveredWithLimitationsState } from "../../runtime-delivery-state.ts";
 import {
+  cancelActiveWorkStreamBestEffort,
   completeReportingWorkStreamBestEffort,
   completeRuntimeSemanticWorkStreamBestEffort,
   markActiveWorkStreamRecoverableBestEffort,
@@ -25,6 +26,7 @@ export async function runNativeToolTurn({
 }: NativeTurnRunnerInput): Promise<RuntimeTurnResult> {
   throwIfRuntimeTurnAborted(input.signal);
   const useTools = ["butler", "steward", "worker"].includes(session.init.role);
+  let turnId: string | undefined;
   try {
     const audit: ToolAuditEntry[] = [];
     const publicDecisionContext: PublicWorkDecision[] = [];
@@ -39,6 +41,7 @@ export async function runNativeToolTurn({
       publicDecisionContext,
       pendingPublicDecisions,
     });
+    turnId = context.turnId;
     const { runToolPrompt, runTextPrompt } = createNativeTurnPromptRunners({
       turnInput: input,
       session,
@@ -82,6 +85,7 @@ export async function runNativeToolTurn({
       completeReportingWorkStreamBestEffort({
         butlerData: deps.butlerData,
         sessionId: input.handle.sessionId,
+        turnId,
         audit,
       });
     }
@@ -113,12 +117,21 @@ export async function runNativeToolTurn({
     };
   } catch (error) {
     const limitedDelivery = recoverableLimitedDeliveryForError(error);
-    if (useTools && !input.signal?.aborted) {
-      markActiveWorkStreamRecoverableBestEffort({
-        butlerData: deps.butlerData,
-        sessionId: input.handle.sessionId,
-        reason: error instanceof Error ? error.message : String(error),
-      });
+    if (useTools) {
+      if (input.signal?.aborted) {
+        cancelActiveWorkStreamBestEffort({
+          butlerData: deps.butlerData,
+          sessionId: input.handle.sessionId,
+          turnId,
+        });
+      } else {
+        markActiveWorkStreamRecoverableBestEffort({
+          butlerData: deps.butlerData,
+          sessionId: input.handle.sessionId,
+          turnId,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
     if (!limitedDelivery) {
       await emitTurnEventBestEffort(input, {
