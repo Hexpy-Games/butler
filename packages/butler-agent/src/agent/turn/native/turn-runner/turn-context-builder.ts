@@ -155,7 +155,7 @@ export async function prepareNativeTurnContext(input: {
       workspacePath: input.session.init.workspacePath,
       sessionId: input.turnInput.handle.sessionId,
       projectId: projectId(input.session),
-      turnId: currentRuntimeTurnId(input.turnInput) ?? undefined,
+      turnId,
       workerModel: input.turnInput.model,
       webSearchProvider: input.deps.webSearchProvider,
       searchPlannerModel: input.turnInput.model,

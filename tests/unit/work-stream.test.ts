@@ -4,11 +4,12 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 import {
+  applyTurnLocalWorkOutcomeForSession,
   assertWorkStreamTransition,
   completeTurnLocalWorkStreamForSession,
   WorkStreamStore,
 } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
-import type { TodoItem } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
+import { TodoListStore, type TodoItem, type TodoItemInput } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 
 let tempDir = "";
 
@@ -34,6 +35,25 @@ function todo(input: Partial<TodoItem> & Pick<TodoItem, "id" | "phase" | "status
     created_at: "2026-05-15T00:00:00.000Z",
     updated_at: "2026-05-15T00:00:00.000Z",
     completed_at: input.status === "completed" ? "2026-05-15T00:00:00.000Z" : null,
+  };
+}
+
+function todoInput(
+  input: Partial<TodoItemInput> & {
+    id: string;
+    phase: NonNullable<TodoItemInput["phase"]>;
+    status: TodoItemInput["status"];
+  },
+): TodoItemInput {
+  return {
+    id: input.id,
+    content: input.content ?? input.id,
+    active_form: input.active_form ?? `Doing ${input.id}`,
+    status: input.status,
+    phase: input.phase,
+    priority: "normal",
+    blocked_by: [],
+    note: input.note,
   };
 }
 
@@ -243,6 +263,124 @@ test("todo updates reuse same-turn waiting revision after terminal base stream",
   expect(store.list({ sessionId, includeTerminal: true })
     .map((item) => item.id)
     .filter((id) => id !== completed.id)).toEqual([revision.id]);
+});
+
+test("turn-local recoverable outcome clears active todos without touching linked streams", () => {
+  const store = new WorkStreamStore(tempDir);
+  const todoStore = new TodoListStore(tempDir);
+  const sessionId = "butler/app-project-butler";
+  const turnLocalTodos = todoStore.update({
+    listId: "turn-local-recoverable",
+    items: [
+      todoInput({ id: "inspect", phase: "execution", status: "in_progress" }),
+      todoInput({ id: "report", phase: "reporting", status: "pending" }),
+    ],
+  });
+  const turnLocal = store.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "turn-local-recoverable",
+    lastUserTurnId: "turn-recoverable",
+    items: turnLocalTodos.list.items,
+  });
+  const linkedTodos = todoStore.update({
+    listId: "linked-worker",
+    items: [
+      todoInput({ id: "worker", phase: "execution", status: "in_progress" }),
+    ],
+  });
+  const linked = store.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "linked-worker",
+    lastUserTurnId: "turn-recoverable",
+    items: linkedTodos.list.items,
+  });
+  store.link({ id: linked.id, workerTaskIds: ["task-worker"] });
+
+  const updated = applyTurnLocalWorkOutcomeForSession({
+    butlerData: tempDir,
+    sessionId,
+    turnId: "turn-recoverable",
+    outcome: "recoverable",
+    statusNote: "Interrupted before final delivery.",
+  });
+
+  expect(updated.map((item) => item.id)).toEqual([turnLocal.id]);
+  expect(store.read(turnLocal.id)).toMatchObject({
+    state: "recoverable",
+    current_phase: "execution",
+    active_step_id: "inspect",
+    status_note: "Interrupted before final delivery.",
+  });
+  expect(new TodoListStore(tempDir).view("turn-local-recoverable", { includeCompleted: true }).progress.active)
+    .toBe(0);
+  expect(store.activeForSession(sessionId, { currentTurnId: "turn-recoverable" })?.id)
+    .toBe(linked.id);
+  expect(store.read(linked.id)).toMatchObject({
+    state: "executing",
+    linked_worker_task_ids: ["task-worker"],
+  });
+});
+
+test("turn-local terminal outcomes clear active todos and active projection", () => {
+  const store = new WorkStreamStore(tempDir);
+  const todoStore = new TodoListStore(tempDir);
+  const sessionId = "butler/app-project-butler";
+  const completedTodos = todoStore.update({
+    listId: "turn-local-completed",
+    items: [
+      todoInput({ id: "report", phase: "reporting", status: "in_progress" }),
+    ],
+  });
+  const completed = store.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "turn-local-completed",
+    lastUserTurnId: "turn-completed",
+    items: completedTodos.list.items,
+  });
+  const cancelledTodos = todoStore.update({
+    listId: "turn-local-cancelled",
+    items: [
+      todoInput({ id: "inspect", phase: "execution", status: "in_progress" }),
+    ],
+  });
+  const cancelled = store.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "turn-local-cancelled",
+    lastUserTurnId: "turn-cancelled",
+    items: cancelledTodos.list.items,
+  });
+
+  applyTurnLocalWorkOutcomeForSession({
+    butlerData: tempDir,
+    sessionId,
+    turnId: "turn-completed",
+    outcome: "completed",
+    statusNote: "Final answer delivered.",
+  });
+  applyTurnLocalWorkOutcomeForSession({
+    butlerData: tempDir,
+    sessionId,
+    turnId: "turn-cancelled",
+    outcome: "cancelled",
+    statusNote: "Turn cancelled.",
+  });
+
+  expect(store.read(completed.id)).toMatchObject({
+    state: "complete",
+    current_phase: null,
+    active_step_id: null,
+  });
+  expect(store.read(cancelled.id)).toMatchObject({
+    state: "cancelled",
+    current_phase: null,
+    active_step_id: null,
+  });
+  expect(new TodoListStore(tempDir).view("turn-local-completed", { includeCompleted: true }).progress)
+    .toMatchObject({ active: 0, completed: 1 });
+  expect(new TodoListStore(tempDir).view("turn-local-cancelled", { includeCompleted: true }).progress)
+    .toMatchObject({ active: 0, cancelled: 1 });
+  expect(store.activeForSession(sessionId, { currentTurnId: "turn-completed" })).toBeNull();
+  expect(store.activeForSession(sessionId, { currentTurnId: "turn-cancelled" })).toBeNull();
 });
 
 test("resumed todo progress preserves terminal streams and opens an active revision", () => {

@@ -18,6 +18,7 @@ import {
   recentConversationBudgetForTurn,
 } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
+import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { readContextMonitor } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
 import {
   operationalMetricsPath,
@@ -6917,6 +6918,8 @@ test("native runtime marks interrupted direct WorkStreams recoverable", async ()
   });
   const record = new WorkStreamStore(tempDir).read(streams[0].id);
   expect(record?.status_note).toContain("interrupted before final delivery");
+  expect(new TodoListStore(tempDir).view(record!.todo_list_id!, { includeCompleted: true }).progress.active)
+    .toBe(0);
 });
 
 test("native runtime synthesizes durable WorkStream progress when a compound tool turn skips todo setup", async () => {

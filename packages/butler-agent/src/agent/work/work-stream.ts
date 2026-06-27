@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
-import { TodoListStore, type TodoItem, type TodoItemInput, type TodoPhase } from "./todo-list.ts";
+import { TodoListStore, type TodoItem, type TodoItemInput, type TodoPhase, type TodoStatus } from "./todo-list.ts";
 
 export type WorkStreamState =
   | "routing"
@@ -25,6 +25,13 @@ export type WorkStreamPhase =
   | "review"
   | "consolidation"
   | "reporting";
+
+export type TurnLocalWorkOutcome =
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "recoverable"
+  | "waiting_user";
 
 export interface WorkStreamRecord {
   version: 1;
@@ -244,6 +251,23 @@ export function completeTurnLocalWorkStreamForSession(input: {
   return store.completeTurnLocalActive({
     sessionId: input.sessionId,
     statusNote: input.statusNote ?? "Final answer delivered.",
+    now: input.now,
+  });
+}
+
+export function applyTurnLocalWorkOutcomeForSession(input: {
+  butlerData: string;
+  sessionId: string;
+  turnId?: string | null;
+  outcome: TurnLocalWorkOutcome;
+  statusNote?: string | null;
+  now?: Date;
+}): WorkStreamRecord[] {
+  return new WorkStreamStore(input.butlerData).applyTurnLocalOutcome({
+    sessionId: input.sessionId,
+    turnId: input.turnId,
+    outcome: input.outcome,
+    statusNote: input.statusNote,
     now: input.now,
   });
 }
@@ -476,6 +500,48 @@ export class WorkStreamStore {
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   }
 
+  applyTurnLocalOutcome(input: {
+    sessionId?: string | null;
+    turnId?: string | null;
+    outcome: TurnLocalWorkOutcome;
+    statusNote?: string | null;
+    now?: Date;
+  }): WorkStreamRecord[] {
+    const sessionId = input.sessionId?.trim();
+    if (!sessionId) return [];
+    const turnId = input.turnId?.trim();
+    const now = input.now ?? new Date();
+    const todoStore = new TodoListStore(this.butlerData);
+    return this.records()
+      .filter((record) => record.owner_session_id === sessionId)
+      .filter((record) => !workStreamTerminal(record.state))
+      .filter((record) => turnId ? record.last_user_turn_id === turnId : workStreamActive(record))
+      .filter((record) => turnLocalOutcomeCanApply(record, input.outcome))
+      .filter((record) => turnLocalOutcomeEligible(record))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .map((record) => {
+        const todoRecord = record.todo_list_id ? todoStore.read(record.todo_list_id) : null;
+        if (todoRecord) {
+          todoStore.update({
+            listId: todoRecord.list_id,
+            title: todoRecord.title,
+            items: todoRecord.items.map((item) => turnLocalOutcomeTodoItem(item, input.outcome)),
+            now,
+          });
+        }
+        const updated: WorkStreamRecord = {
+          ...record,
+          state: workStreamStateForTurnLocalOutcome(input.outcome),
+          current_phase: turnLocalOutcomeCurrentPhase(record, input.outcome),
+          active_step_id: turnLocalOutcomeActiveStepId(record, input.outcome),
+          status_note: safeText(input.statusNote, 600) ?? turnLocalOutcomeStatusNote(input.outcome),
+          updated_at: now.toISOString(),
+        };
+        writeJsonAtomic(this.pathFor(record.id), updated);
+        return updated;
+      });
+  }
+
   cancelLinked(input: {
     workStreamIds?: string[];
     plannedTaskIds?: string[];
@@ -678,4 +744,85 @@ export class WorkStreamStore {
     writeJsonAtomic(this.pathFor(record.id), updated);
     return updated;
   }
+}
+
+function turnLocalOutcomeEligible(record: WorkStreamRecord): boolean {
+  return record.linked_planned_task_ids.length === 0 &&
+    record.linked_orchestration_ids.length === 0 &&
+    record.linked_worker_task_ids.length === 0;
+}
+
+function turnLocalOutcomeCanApply(
+  record: WorkStreamRecord,
+  outcome: TurnLocalWorkOutcome,
+): boolean {
+  if (outcome === "completed") {
+    return record.state !== "recoverable" && record.state !== "paused";
+  }
+  return true;
+}
+
+function workStreamStateForTurnLocalOutcome(outcome: TurnLocalWorkOutcome): WorkStreamState {
+  if (outcome === "completed") return "complete";
+  if (outcome === "failed") return "failed";
+  if (outcome === "cancelled") return "cancelled";
+  if (outcome === "waiting_user") return "waiting_user";
+  return "recoverable";
+}
+
+function turnLocalOutcomeCurrentPhase(
+  record: WorkStreamRecord,
+  outcome: TurnLocalWorkOutcome,
+): WorkStreamPhase | null {
+  if (outcome === "completed" || outcome === "failed" || outcome === "cancelled") return null;
+  return record.current_phase;
+}
+
+function turnLocalOutcomeActiveStepId(
+  record: WorkStreamRecord,
+  outcome: TurnLocalWorkOutcome,
+): string | null {
+  if (outcome === "completed" || outcome === "failed" || outcome === "cancelled") return null;
+  return record.active_step_id;
+}
+
+function turnLocalOutcomeStatusNote(outcome: TurnLocalWorkOutcome): string {
+  if (outcome === "completed") return "Turn outcome completed; local work is no longer active.";
+  if (outcome === "failed") return "Turn outcome failed; local work is no longer active.";
+  if (outcome === "cancelled") return "Turn outcome cancelled; local work is no longer active.";
+  if (outcome === "waiting_user") return "Turn is waiting for a user decision.";
+  return "Turn interrupted before final delivery; durable work can be resumed.";
+}
+
+function turnLocalOutcomeTodoItem(
+  item: TodoItem,
+  outcome: TurnLocalWorkOutcome,
+): TodoItemInput {
+  return {
+    id: item.id,
+    content: item.content,
+    active_form: item.active_form,
+    status: turnLocalOutcomeTodoStatus(item, outcome),
+    phase: item.phase ?? undefined,
+    priority: item.priority,
+    blocked_by: item.blocked_by,
+    note: item.note ?? turnLocalOutcomeTodoNote(outcome),
+  };
+}
+
+function turnLocalOutcomeTodoStatus(
+  item: TodoItem,
+  outcome: TurnLocalWorkOutcome,
+): TodoStatus {
+  if (item.status === "completed" || item.status === "cancelled") return item.status;
+  if (outcome === "completed" && item.phase === "reporting") return "completed";
+  return "cancelled";
+}
+
+function turnLocalOutcomeTodoNote(outcome: TurnLocalWorkOutcome): string {
+  if (outcome === "completed") return "No longer applicable after the turn completed.";
+  if (outcome === "failed") return "Cancelled because the turn failed.";
+  if (outcome === "cancelled") return "Cancelled with the turn.";
+  if (outcome === "waiting_user") return "Paused until the user decision is available.";
+  return "Cancelled in the active projection; resume from the recoverable WorkStream.";
 }
