@@ -24,8 +24,8 @@ import {
 import { butlerAgentResourcesPath } from "../../runtime/paths.ts";
 import { renderFirstChatOnboardingPrompt } from "../../personalization/onboarding.ts";
 import { TaskStore, type TaskSummary } from "../work/task-store.ts";
-import { TodoListStore } from "../work/todo-list.ts";
-import { WorkStreamStore, type WorkStreamRecord } from "../work/work-stream.ts";
+import { TodoListStore, type TodoItem } from "../work/todo-list.ts";
+import { WorkStreamStore, type WorkStreamRecord, workStreamResumable } from "../work/work-stream.ts";
 
 export interface PromptAssemblerOptions {
   butlerHome?: string;
@@ -372,6 +372,7 @@ function buildRuntimeStateSection(input: {
   lines.push(...activeWorkStateLines({
     butlerData: input.butlerData,
     sessionId: input.binding.sessionId,
+    projectId: input.binding.projectId ?? null,
   }));
 
   return {
@@ -385,9 +386,10 @@ function buildRuntimeStateSection(input: {
 function activeWorkStateLines(input: {
   butlerData: string;
   sessionId: string;
+  projectId?: string | null;
 }): string[] {
   const store = new WorkStreamStore(input.butlerData);
-  const stream = promptWorkStreamForSession(store, input.sessionId);
+  const stream = promptWorkStreamForSession(store, input.sessionId, input.projectId);
   if (!stream) return [];
   const lines = [
     "## Active Work State",
@@ -406,6 +408,12 @@ function activeWorkStateLines(input: {
     if (todo.progress.current) {
       lines.push(`Current Todo: ${todo.progress.current.active_form}`);
     }
+    const resumeTodo = resumableTodo(todo.items, stream.active_step_id);
+    if (resumeTodo) {
+      lines.push(
+        `Resume From Todo: ${resumeTodo.id}:${resumeTodo.status}:${resumeTodo.phase ?? "none"}:${resumeTodo.active_form}`,
+      );
+    }
     const remaining = todo.items
       .filter((item) => item.status !== "completed" && item.status !== "cancelled")
       .slice(0, 8)
@@ -414,6 +422,12 @@ function activeWorkStateLines(input: {
       lines.push("Open Todo Items:");
       lines.push(...remaining.map((line) => `- ${line}`));
     }
+    lines.push(...activeWorkContinuationContractLines({
+      stream,
+      todoListId: todo.list.list_id,
+      resumeTodo,
+      openItemCount: remaining.length,
+    }));
   }
   const taskStore = new TaskStore(input.butlerData);
   const summariesById = new Map(taskStore.summaries(250).map((summary) => [summary.task_id, summary]));
@@ -437,13 +451,51 @@ function activeWorkStateLines(input: {
   return lines;
 }
 
+function resumableTodo(items: TodoItem[], activeStepId: string | null): TodoItem | null {
+  const activeStep = activeStepId
+    ? items.find((item) => item.id === activeStepId) ?? null
+    : null;
+  if (activeStep && activeStep.status !== "completed" && activeStep.status !== "cancelled") {
+    return activeStep;
+  }
+  return items.find((item) => item.status === "in_progress") ??
+    items.find((item) => item.status === "pending") ??
+    null;
+}
+
+function activeWorkContinuationContractLines(input: {
+  stream: WorkStreamRecord;
+  todoListId: string;
+  resumeTodo: TodoItem | null;
+  openItemCount: number;
+}): string[] {
+  if (!workStreamResumable(input.stream) || input.openItemCount === 0) return [];
+  const lines = [
+    "Continuation Contract:",
+    `- Primary Target: existing WorkStream ${input.stream.id} and Todo List ${input.todoListId}.`,
+  ];
+  if (input.resumeTodo) {
+    lines.push(
+      `- Next Step: ${input.resumeTodo.id}:${input.resumeTodo.status}:${input.resumeTodo.phase ?? "none"}:${input.resumeTodo.active_form}`,
+    );
+  }
+  lines.push(
+    "- If the current user input asks to continue or resume this session's work, update this existing todo list instead of creating a new turn-scoped checklist.",
+    "- If the next step is pending because a previous turn became recoverable, restore that step to in_progress and execute it before broad validation, review, or replanning.",
+    "- Do not replace open planning or execution steps with a new inspection/review/validation plan; review only after the existing WorkStream reaches its review or reporting phase.",
+  );
+  return lines;
+}
+
 function promptWorkStreamForSession(
   store: WorkStreamStore,
   sessionId: string,
+  projectId?: string | null,
 ): WorkStreamRecord | null {
-  const active = store.activeForSession(sessionId);
-  if (active) return active;
-  const latest = store.list({ sessionId, includeTerminal: true }).at(0);
+  const projectScope = projectId?.trim();
+  const active = store.listActive({ sessionId, projectId: projectScope }).at(0);
+  if (active) return store.read(active.id);
+  const latest = store.list({ sessionId, projectId: projectScope, includeTerminal: true }).at(0);
   if (!latest) return null;
   if (
     latest.state === "paused" ||
