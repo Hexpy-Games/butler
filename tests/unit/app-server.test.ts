@@ -4235,6 +4235,201 @@ test("session summary and view keep current-turn waiting WorkStreams active only
   }
 });
 
+test("session replay reconciles terminal turn-local WorkStreams and todos", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+    };
+    const turn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(turn.id, "delivered", {
+      safeStatusLabel: "Delivered",
+      cancellable: false,
+    });
+    const todoStore = new TodoListStore(tempDir);
+    const todoView = todoStore.update({
+      listId: "stale-replay-work",
+      items: [
+        {
+          id: "inspect",
+          content: "Inspect stale replay state",
+          active_form: "Inspecting stale replay state",
+          status: "in_progress",
+          phase: "execution",
+        },
+        {
+          id: "report",
+          content: "Report stale replay state",
+          active_form: "Reporting stale replay state",
+          status: "pending",
+          phase: "reporting",
+        },
+      ],
+    });
+    const stream = new WorkStreamStore(tempDir).updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      listId: "stale-replay-work",
+      title: "Stale replay work",
+      lastUserTurnId: turn.id,
+      items: todoView.list.items,
+    });
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.work_streams).toEqual([]);
+    expect(new TodoListStore(tempDir).view("stale-replay-work", { includeCompleted: true }).progress.active)
+      .toBe(0);
+    expect(new WorkStreamStore(tempDir).read(stream.id)).toMatchObject({
+      state: "complete",
+      current_phase: null,
+      active_step_id: null,
+    });
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(view.data.work_streams).toEqual([]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("session replay reconciles stale work from older terminal turns", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+    };
+    const oldTurn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(oldTurn.id, "delivered", {
+      safeStatusLabel: "Delivered",
+      cancellable: false,
+    });
+    const latestTurn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(latestTurn.id, "thinking", {
+      safeStatusLabel: "Thinking",
+      cancellable: true,
+    });
+    const todoView = new TodoListStore(tempDir).update({
+      listId: "older-stale-replay-work",
+      items: [
+        {
+          id: "inspect",
+          content: "Inspect older stale replay state",
+          active_form: "Inspecting older stale replay state",
+          status: "in_progress",
+          phase: "execution",
+        },
+      ],
+    });
+    const stream = new WorkStreamStore(tempDir).updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      listId: "older-stale-replay-work",
+      title: "Older stale replay work",
+      lastUserTurnId: oldTurn.id,
+      items: todoView.list.items,
+    });
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.turn_state).toBe("thinking");
+    expect(summary.data.work_streams).toEqual([]);
+    expect(new WorkStreamStore(tempDir).read(stream.id)).toMatchObject({
+      state: "complete",
+      current_phase: null,
+      active_step_id: null,
+    });
+    expect(new TodoListStore(tempDir).view("older-stale-replay-work", { includeCompleted: true }).progress.active)
+      .toBe(0);
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(view.data.work_streams).toEqual([]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("session replay preserves recoverable stale WorkStreams as recovery history", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+    };
+    const turn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(turn.id, "delivered", {
+      safeStatusLabel: "Delivered",
+      cancellable: false,
+    });
+    const todoView = new TodoListStore(tempDir).update({
+      listId: "stale-recoverable-work",
+      items: [
+        {
+          id: "resume",
+          content: "Resume stale recoverable state",
+          active_form: "Resuming stale recoverable state",
+          status: "cancelled",
+          phase: "execution",
+        },
+      ],
+    });
+    const store = new WorkStreamStore(tempDir);
+    const stream = store.updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      listId: "stale-recoverable-work",
+      title: "Stale recoverable work",
+      lastUserTurnId: turn.id,
+      items: todoView.list.items,
+    });
+    store.transition({
+      id: stream.id,
+      state: "recoverable",
+      statusNote: "Recoverable before replay.",
+    });
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.work_streams).toEqual([]);
+    expect(new WorkStreamStore(tempDir).read(stream.id)).toMatchObject({
+      state: "recoverable",
+      status_note: "Recoverable before replay.",
+    });
+  } finally {
+    server.stop();
+  }
+});
+
 test("automations expose prompt bodies only in detail and can run while paused", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
