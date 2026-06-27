@@ -2522,6 +2522,9 @@ export class AppServerStore {
           state: "idle" as const,
           safe_progress_rows: [],
         };
+    const activeWorkStreamTurnId = latestTurn && isActiveSessionTurnState(latestTurn.state)
+      ? latestTurn.id
+      : undefined;
     const now = new Date().toISOString();
     return {
       session_id: session.id,
@@ -2546,7 +2549,7 @@ export class AppServerStore {
         sessionId,
         includeHistory: false,
       }).workers.filter(isActiveWorkerActivity),
-      work_streams: this.listActiveWorkStreams(sessionId),
+      work_streams: this.listActiveWorkStreams(sessionId, undefined, activeWorkStreamTurnId),
       staleness: {
         state: "fresh",
         updated_at: now,
@@ -2584,8 +2587,17 @@ export class AppServerStore {
         ? latestTurnView
         : null;
     const runtimeSessionId = sessionHintForRow(sessionId);
-    this.syncLinkedWorkOrchestrationsForSession(sessionId, runtimeSessionId);
-    const workStreams = this.listActiveWorkStreams(sessionId, runtimeSessionId);
+    const activeWorkStreamTurnId = activeTurn?.id;
+    this.syncLinkedWorkOrchestrationsForSession(
+      sessionId,
+      runtimeSessionId,
+      activeWorkStreamTurnId,
+    );
+    const workStreams = this.listActiveWorkStreams(
+      sessionId,
+      runtimeSessionId,
+      activeWorkStreamTurnId,
+    );
     const now = new Date().toISOString();
     const artifacts = this.listArtifacts(sessionId);
     const context = this.getContextDetails(sessionId);
@@ -2644,14 +2656,15 @@ export class AppServerStore {
   private listActiveWorkStreams(
     sessionId: string,
     runtimeSessionId = sessionHintForRow(sessionId),
+    currentTurnId?: string,
   ): SessionView["work_streams"] {
     const workStreamStore = new WorkStreamStore(this.butlerData);
     const seenWorkStreams = new Set<string>();
     return [
-      ...workStreamStore.list({ sessionId, includeTerminal: false }),
-      ...workStreamStore.list({
+      ...workStreamStore.listActive({ sessionId, currentTurnId }),
+      ...workStreamStore.listActive({
         sessionId: runtimeSessionId,
-        includeTerminal: false,
+        currentTurnId,
       }),
     ]
       .filter((stream) => {
@@ -2992,13 +3005,14 @@ export class AppServerStore {
   private syncLinkedWorkOrchestrationsForSession(
     sessionId: string,
     runtimeSessionId = sessionHintForRow(sessionId),
+    currentTurnId?: string,
   ): void {
     const workStreamStore = new WorkStreamStore(this.butlerData);
     const orchestrationStore = new WorkOrchestrationStore(this.butlerData);
     const orchestrationIds = new Set<string>();
     for (const stream of [
-      ...workStreamStore.list({ sessionId, includeTerminal: false }),
-      ...workStreamStore.list({ sessionId: runtimeSessionId, includeTerminal: false }),
+      ...workStreamStore.listActive({ sessionId, currentTurnId }),
+      ...workStreamStore.listActive({ sessionId: runtimeSessionId, currentTurnId }),
     ]) {
       const record = workStreamStore.read(stream.id);
       for (const orchestrationId of record?.linked_orchestration_ids ?? []) {

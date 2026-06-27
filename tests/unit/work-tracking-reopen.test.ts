@@ -126,6 +126,45 @@ test("update_todo_list allows a later turn to start a new revision", async () =>
   }
 });
 
+test("update_work_stream_state finds same-turn waiting stream without explicit id", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-work-tracking-reopen-"));
+  try {
+    const handler = workTrackingHandler(butlerData, "turn-waiting");
+    const created = await handler.update_todo_list({
+      args: {
+        list_id: "waiting-decision",
+        title: "Wait for decision",
+        todos: [{
+          id: "decide",
+          content: "Wait for current turn decision",
+          active_form: "Waiting for current turn decision",
+          status: "in_progress",
+          phase: "planning",
+        }],
+      },
+    });
+    const store = new WorkStreamStore(butlerData);
+    store.transition({
+      id: created.work_stream.id,
+      state: "waiting_user",
+    });
+
+    const updated = await handler.update_work_stream_state({
+      args: {
+        state: "executing",
+      },
+    });
+
+    expect(updated.work_stream).toMatchObject({
+      id: created.work_stream.id,
+      state: "executing",
+      last_user_turn_id: "turn-waiting",
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 function workTrackingHandler(butlerData: string, turnId: string) {
   return createWorkTrackingToolHandlers({
     butlerData,
