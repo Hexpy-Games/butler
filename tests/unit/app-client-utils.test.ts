@@ -769,6 +769,51 @@ test("turn acknowledgements replace optimistic Thinking progress immediately", (
   });
 });
 
+test("session starting progress is replaced by first active server turn", () => {
+  const clientTurnId = clientTurnIdFromMessageId("client-message");
+  const state = applyTimelineEventsToViewState(
+    [progressEvent(1, "turn-real", "Bash: bun test")] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "session_starting",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "session_starting",
+          safe_progress_rows: [],
+        },
+      },
+      turnProgress: {
+        [clientTurnId]: {
+          turn_id: clientTurnId,
+          state: "session_starting",
+          safe_progress_rows: [],
+        },
+      },
+    },
+  );
+
+  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
+  expect(state.summary?.latest_progress?.state).toBe("running");
+  expect(
+    state.summary?.latest_progress?.safe_progress_rows.map(
+      (row) => row.safe_label,
+    ),
+  ).toEqual(["Bash: bun test"]);
+  expect(state.turnProgress[clientTurnId]).toBeUndefined();
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toMatchObject({
+    turn_id: "turn-real",
+    state: "running",
+    safe_progress_rows: [
+      expect.objectContaining({ safe_label: "Bash: bun test" }),
+    ],
+  });
+});
+
 test("non-ack old-turn progress does not replace optimistic Thinking progress", () => {
   const clientTurnId = clientTurnIdFromMessageId("client-message");
   const state = applyTimelineEventsToViewState(

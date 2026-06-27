@@ -56,7 +56,11 @@ export function OverflowActionMenu({
           <MoreHorizontal size={14} />
         </IconButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={8}>
+      <DropdownMenuContent
+        align="end"
+        onInteractOutside={() => setMenuOpen(false)}
+        sideOffset={8}
+      >
         {items.map((item, index) => (
           <DropdownMenuItem
             key={index}

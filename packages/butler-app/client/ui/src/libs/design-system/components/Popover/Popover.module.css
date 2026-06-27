@@ -20,8 +20,9 @@
 }
 
 .content[data-menu-size="compact"] {
-  width: auto;
-  min-width: min(320px, calc(100vw - 24px));
+  width: min(340px, calc(100vw - 24px));
+  min-width: 0;
+  max-width: min(340px, calc(100vw - 24px));
 }
 
 .content[data-menu-size="content"] {
