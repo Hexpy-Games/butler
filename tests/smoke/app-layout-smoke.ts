@@ -217,9 +217,13 @@ const server = createAppServer({
     };
   },
 });
+const smokeProject = server.store.createProject({
+  source: "scratch",
+  display_name: "Desktop client polish",
+}).project;
 server.store.createSession({
   kind: "project",
-  project_id: "butler",
+  project_id: smokeProject.id,
   session_hint: "butler-client",
   title: "Desktop client polish",
 });

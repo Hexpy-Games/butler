@@ -686,6 +686,492 @@ test("accepted real turn removes optimistic client turn progress", () => {
   expect(activeTurnProgressSnapshot(null, state.turnProgress)).toBeNull();
 });
 
+test("turn acknowledgements replace optimistic Thinking progress immediately", () => {
+  const clientMessageId = "client-message";
+  const clientTurnId = clientTurnIdFromMessageId(clientMessageId);
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 1,
+            turnSequence: 1,
+            createdAt: "2026-05-19T00:01:01.000Z",
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+      turnProgress: {
+        [clientTurnId]: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+    },
+  );
+
+  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
+  expect(state.summary?.latest_progress?.state).toBe("accepted");
+  expect(
+    state.summary?.latest_progress?.safe_progress_rows.map(
+      (row) => row.safe_label,
+    ),
+  ).toEqual(["Request received. Preparing the work."]);
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toMatchObject({
+    turn_id: "turn-real",
+    state: "accepted",
+  });
+});
+
+test("non-ack old-turn progress does not replace optimistic Thinking progress", () => {
+  const clientTurnId = clientTurnIdFromMessageId("client-message");
+  const state = applyTimelineEventsToViewState(
+    [progressEvent(1, "turn-old", "Old command")] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+            },
+          ],
+        },
+      },
+      turnProgress: {},
+    },
+  );
+
+  expect(state.summary?.latest_progress?.turn_id).toBe(clientTurnId);
+  expect(state.summary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({ safe_label: "Thinking" }),
+  );
+  expect(state.turnProgress["turn-old"]).toBeUndefined();
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toMatchObject({
+    turn_id: clientTurnId,
+  });
+});
+
+test("turn acknowledgements suppress later stale old-turn rows in the same batch", () => {
+  const clientTurnId = clientTurnIdFromMessageId("client-message");
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 1,
+            turnSequence: 1,
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+      progressEvent(2, "turn-old", "Old command"),
+      {
+        id: 3,
+        type: "message.created",
+        payload: {
+          message: {
+            id: "assistant-final",
+            chat_id: "general",
+            turn_id: "turn-real",
+            role: "assistant",
+            text: "done",
+            status: "delivered",
+            cursor: 2,
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+            },
+          ],
+        },
+      },
+      turnProgress: {
+        [clientTurnId]: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+            },
+          ],
+        },
+      },
+    },
+  );
+
+  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
+  expect(state.summary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "event-ack",
+      safe_label: "Request received. Preparing the work.",
+    }),
+  );
+  expect(state.summary?.latest_progress?.safe_progress_rows).not.toContainEqual(
+    expect.objectContaining({ safe_label: "Old command" }),
+  );
+  expect(state.turnProgress[clientTurnId]).toBeUndefined();
+  expect(state.turnProgress["turn-old"]).toBeUndefined();
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toBeNull();
+});
+
+test("acknowledged client progress cannot revive Thinking after final delivery", () => {
+  const clientTurnId = clientTurnIdFromMessageId("client-message");
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 1,
+            turnSequence: 1,
+            createdAt: "2026-05-19T00:01:01.000Z",
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "message.created",
+        payload: {
+          message: {
+            id: "assistant-final",
+            chat_id: "general",
+            turn_id: "turn-real",
+            role: "assistant",
+            text: "done",
+            status: "delivered",
+            cursor: 2,
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+      turnProgress: {
+        [clientTurnId]: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+    },
+  );
+
+  expect(state.turnProgress[clientTurnId]).toBeUndefined();
+  expect(state.turnProgress["turn-real"]?.state).toBe("delivered");
+  expect(state.summary?.latest_progress?.state).toBe("delivered");
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toBeNull();
+});
+
+test("dedicated client UX contract projects ack, authored decisions, inactive recovery, and completed evidence", () => {
+  const clientTurnId = clientTurnIdFromMessageId("client-message");
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 1,
+            turnSequence: 1,
+            createdAt: "2026-05-19T00:01:01.000Z",
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-work-start",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 2,
+            turnSequence: 2,
+            createdAt: "2026-05-19T00:01:02.000Z",
+            kind: "work.block.started",
+            visibility: "public",
+            payload: {
+              workBlockId: "work-validation",
+              label: "Validate client turn state",
+              decisionSummary: "Validate client turn state",
+              decisionRationale:
+                "The client must render only authored public decisions.",
+              decisionNextStep: "Run the reducer contract check.",
+              decisionSource: "assistant-authored",
+              decisionEvidenceRefs: ["turn.acknowledged"],
+            },
+          },
+        },
+      },
+      {
+        id: 3,
+        type: "agent.turn_event.progress",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          row: {
+            id: "runtime-fallback",
+            kind: "work_block",
+            state: "running",
+            safe_label: "Runtime fallback",
+            work_block_id: "work-runtime",
+            work_decision_summary: "This must stay hidden.",
+            work_decision_source: "runtime-derived",
+          },
+        },
+      },
+      {
+        id: 4,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-tool-completed",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 3,
+            turnSequence: 3,
+            createdAt: "2026-05-19T00:01:03.000Z",
+            kind: "tool.completed",
+            visibility: "public",
+            payload: {
+              toolName: "Bash",
+              inputLabel: "bun test tests/unit/app-client-utils.test.ts",
+              safeLabel: "Bash: bun test tests/unit/app-client-utils.test.ts",
+              activityKind: "ran_command",
+              toolCallId: "tool-test",
+              workBlockId: "work-validation",
+              workBlockLabel: "Validate client turn state",
+            },
+          },
+        },
+      },
+      {
+        id: 5,
+        type: "message.created",
+        payload: {
+          message: {
+            id: "assistant-final",
+            chat_id: "general",
+            turn_id: "turn-real",
+            role: "assistant",
+            text: "완료했습니다.",
+            status: "delivered",
+            cursor: 2,
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+            },
+          ],
+        },
+      },
+      turnProgress: {},
+    },
+  );
+
+  const labels =
+    state.summary?.latest_progress?.safe_progress_rows.map(
+      (row) => row.safe_label,
+    ) ?? [];
+  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
+  expect(state.summary?.latest_progress?.state).toBe("delivered");
+  expect(labels).not.toContain("Thinking");
+  expect(labels).toContain("Request received. Preparing the work.");
+  expect(
+    isWorkerVisibleInComposer(
+      worker("recoverable", false, "2026-05-19T00:01:04.000Z"),
+    ),
+  ).toBe(false);
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toBeNull();
+  expect(state.messages[0]?.work_blocks).toEqual([
+    expect.objectContaining({
+      id: "work-validation",
+      label: "Validate client turn state",
+      state: "delivered",
+      decision_summary: "Validate client turn state",
+      decision_rationale:
+        "The client must render only authored public decisions.",
+      decision_next_step: "Run the reducer contract check.",
+      decision_source: "assistant-authored",
+      decision_evidence_refs: ["turn.acknowledged"],
+      rows: [
+        expect.objectContaining({
+          id: "event-tool-completed",
+          state: "delivered",
+          safe_tool_name: "Bash",
+          safe_input_label: "bun test tests/unit/app-client-utils.test.ts",
+        }),
+      ],
+    }),
+  ]);
+  expect(JSON.stringify(state.messages[0]?.work_blocks)).not.toContain(
+    "This must stay hidden.",
+  );
+});
+
 test("delivered assistant message terminalizes active turn progress immediately", () => {
   const state = applyTimelineEventsToViewState(
     [

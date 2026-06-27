@@ -265,9 +265,19 @@ export function applyTimelineEventsToViewState(
     patch.progressByTurn.size > 0
       ? mergeTimelineProgressIntoSummary(state.summary, patch)
       : state.summary;
+  const progressByTurn = progressBucketsForActiveClientTurn(
+    patch,
+    state.summary,
+    summary,
+  );
   const turnProgress =
-    patch.progressByTurn.size > 0
-      ? mergeTurnProgressBuckets(state.turnProgress, patch.progressByTurn)
+    progressByTurn.size > 0
+      ? pruneAcknowledgedClientTurnProgress(
+          mergeTurnProgressBuckets(state.turnProgress, progressByTurn),
+          state.summary,
+          summary,
+          patch,
+        )
       : state.turnProgress;
   const mergedMessages =
     patch.incoming.length > 0
@@ -302,11 +312,78 @@ export function pruneReplacedClientTurnProgress(
   return next ?? turnProgress;
 }
 
+function pruneAcknowledgedClientTurnProgress(
+  turnProgress: Record<string, TurnProgressSnapshot>,
+  previousSummary: SessionSummaryView | null,
+  nextSummary: SessionSummaryView | null,
+  patch: TimelineEventPatch,
+): Record<string, TurnProgressSnapshot> {
+  const previousTurnId = previousSummary?.latest_progress?.turn_id;
+  const nextTurnId = nextSummary?.latest_progress?.turn_id;
+  if (
+    !previousTurnId ||
+    !nextTurnId ||
+    !isClientTurnId(previousTurnId) ||
+    isClientTurnId(nextTurnId)
+  ) {
+    return turnProgress;
+  }
+  const replacement = patch.progressByTurn.get(nextTurnId);
+  if (!replacement?.replacesOptimisticClientTurn) return turnProgress;
+  if (!turnProgress[previousTurnId]) return turnProgress;
+  const next = { ...turnProgress };
+  delete next[previousTurnId];
+  return next;
+}
+
+function progressBucketsForActiveClientTurn(
+  patch: TimelineEventPatch,
+  previousSummary: SessionSummaryView | null,
+  nextSummary: SessionSummaryView | null,
+): Map<string, TimelineProgressBucket> {
+  const previousLatest = previousSummary?.latest_progress;
+  const previousTurnId = previousLatest?.turn_id;
+  const previousState = previousLatest?.state ?? previousSummary?.turn_state;
+  const nextTurnId = nextSummary?.latest_progress?.turn_id;
+  if (
+    !previousTurnId ||
+    !isClientTurnId(previousTurnId) ||
+    !previousState ||
+    !ACTIVE_TURN_STATES.has(previousState)
+  ) {
+    return patch.progressByTurn;
+  }
+  const replacementTurnId =
+    nextTurnId &&
+    !isClientTurnId(nextTurnId) &&
+    patch.progressByTurn.get(nextTurnId)?.replacesOptimisticClientTurn
+      ? nextTurnId
+      : undefined;
+
+  const filtered = new Map<string, TimelineProgressBucket>();
+  for (const [turnId, bucket] of patch.progressByTurn) {
+    if (
+      turnId === previousTurnId ||
+      turnId === replacementTurnId ||
+      !isActiveProgressBucket(bucket)
+    ) {
+      filtered.set(turnId, bucket);
+    }
+  }
+  return filtered;
+}
+
+function isActiveProgressBucket(bucket: TimelineProgressBucket): boolean {
+  if (bucket.state && !isTerminalProgressState(bucket.state)) return true;
+  return bucket.rows.some((row) => !isTerminalProgressState(row.state));
+}
+
 interface TimelineProgressBucket {
   rows: ProgressRow[];
   state?: string;
   label?: string;
   resetForRetry?: boolean;
+  replacesOptimisticClientTurn?: boolean;
 }
 
 interface TimelineEventPatch {
@@ -418,6 +495,9 @@ function collectTimelineEventPatch(
       if (!turnEvent || turnEvent.sessionId !== activeChatId) continue;
       const row = progressRowFromTurnEvent(turnEvent);
       if (!row) continue;
+      if (turnEvent.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
+        progressBucket(turnEvent.turnId).replacesOptimisticClientTurn = true;
+      }
       appendProgressRow(row, turnEvent.turnId, row.state);
       continue;
     }
@@ -458,7 +538,15 @@ function mergeTimelineProgressIntoSummary(
       patch.latestProgressTurnId &&
       patch.latestProgressTurnId !== currentTurnId
     ) {
-      return current;
+      const replacementTurnId = optimisticClientTurnReplacementId(
+        currentTurnId,
+        patch,
+      );
+      if (replacementTurnId) {
+        selectedTurnId = replacementTurnId;
+      } else {
+        return current;
+      }
     }
   }
   const selectedKey = selectedTurnId ?? patch.unknownProgressTurn;
@@ -497,6 +585,24 @@ function mergeTimelineProgressIntoSummary(
         : {}),
     },
   };
+}
+
+function optimisticClientTurnReplacementId(
+  currentTurnId: string,
+  patch: TimelineEventPatch,
+): string | undefined {
+  if (!isClientTurnId(currentTurnId)) return undefined;
+  let replacementTurnId: string | undefined;
+  for (const [turnId, bucket] of patch.progressByTurn) {
+    if (
+      turnId !== patch.unknownProgressTurn &&
+      !isClientTurnId(turnId) &&
+      bucket.replacesOptimisticClientTurn
+    ) {
+      replacementTurnId = turnId;
+    }
+  }
+  return replacementTurnId;
 }
 
 function mergeTurnProgressBuckets(
