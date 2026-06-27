@@ -488,6 +488,7 @@ test("native runtime emits safe public turn events for tool, guard, and final ph
     "work.block.completed",
     "guard.started",
     "guard.completed",
+    "turn.outcome",
     "message.final.started",
     "message.final.completed",
     "turn.completed",
@@ -499,6 +500,75 @@ test("native runtime emits safe public turn events for tool, guard, and final ph
     .toBe("Searching public web sources for safe docs.");
   expect(events.find((event) => event.kind === "tool.started")?.payload?.safeLabel)
     .toBe("Web search: safe docs");
+  expect(events.find((event) => event.kind === "turn.outcome")?.payload)
+    .toMatchObject({
+      outcome: "completed",
+      completionEvidenceStatus: "not_required",
+      publicSummary: "Completed.",
+    });
+  expect(events.some((event) => event.kind === "turn.completion_evidence")).toBe(false);
+});
+
+test("native runtime emits completion evidence only from real capability receipts", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "en",
+    executeButlerTool: async (call) => {
+      if (call.name === "run_command") {
+        return {
+          ok: true,
+          stdout_preview: "verified",
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "ecr-real-command",
+            producerName: "run_command",
+            capability: "command_executed",
+            evidenceKind: "execution_result",
+            satisfies: ["command_executed"],
+            reference: { tool_call_id: "tool-real-command" },
+          })],
+        };
+      }
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "printf verified" },
+        rawArguments: JSON.stringify({ command: "printf verified" }),
+      });
+      return "Verified.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/real-completion-evidence",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "Run a verification command." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload });
+    },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(events.find((event) => event.kind === "turn.completion_evidence")?.payload)
+    .toMatchObject({
+      evidenceKind: "command_executed",
+      status: "verified",
+      refs: ["receipt:ecr-real-command", "tool:tool-real-command"],
+    });
+  expect(events.find((event) => event.kind === "turn.outcome")?.payload)
+    .toMatchObject({
+      outcome: "completed",
+      completionEvidenceRefs: ["receipt:ecr-real-command"],
+    });
 });
 
 test("native runtime emits dynamic preparation progress before the first model response", async () => {
@@ -6059,6 +6129,28 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
         },
         rawArguments: JSON.stringify({ todos: [] }),
       });
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          todos: [
+            {
+              id: "collect",
+              content: "자료 수집하기",
+              active_form: "자료 수집하기",
+              status: "completed",
+              phase: "execution",
+            },
+            {
+              id: "chart",
+              content: "그래프 그리기",
+              active_form: "그래프 그리기",
+              status: "completed",
+              phase: "reporting",
+            },
+          ],
+        },
+        rawArguments: JSON.stringify({ todos: [] }),
+      });
       return "진행 단계를 정리했습니다.";
     },
   });
@@ -6101,7 +6193,7 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
   expect(progressActions.some((action) =>
     action.kind === "tool_progress" && action.activityKind !== "model",
   )).toBe(false);
-  expect(progressActions.filter((action) => action.kind === "todo_progress")).toEqual([
+  expect(progressActions.filter((action) => action.kind === "todo_progress")).toEqual(expect.arrayContaining([
     expect.objectContaining({
       safeLabel: "자료 수집하기",
       state: "running",
@@ -6112,10 +6204,10 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
       state: "accepted",
       phase: "reporting",
     }),
-  ]);
+  ]));
   expect(readTranscript("butler/main/todo-progress")
     .filter((event) => event.kind === "tool_call")
-    .map((event) => event.payload.name)).toEqual(["update_todo_list"]);
+    .map((event) => event.payload.name)).toEqual(["update_todo_list", "update_todo_list"]);
 });
 
 test("native runtime groups chained tools under the active semantic todo work block", async () => {
@@ -6150,6 +6242,11 @@ test("native runtime groups chained tools under the active semantic todo work bl
         name: "read_tool_output_artifact",
         args: { artifact_id: "artifact-1" },
         rawArguments: "{\"artifact_id\":\"artifact-1\"}",
+      });
+      await input.executeTool({
+        name: "update_todo_list",
+        args: { todos: [{ ...todos[0], status: "completed" }] },
+        rawArguments: JSON.stringify({ todos: [{ ...todos[0], status: "completed" }] }),
       });
       return "확인했습니다.";
     },
@@ -6268,9 +6365,116 @@ test("native runtime completes reporting WorkStream when final answer is deliver
     includeTerminal: true,
   });
   expect(streams).toHaveLength(1);
+  expect(streams[0].todo_list_id).toStartWith("turn-");
   expect(streams[0].state).toBe("complete");
   expect(streams[0].current_phase).toBeNull();
   expect(streams[0].active_step_id).toBeNull();
+});
+
+test("native runtime does not complete stale reporting WorkStream from another turn", async () => {
+  const sessionId = "butler/main/stale-reporting-not-completed";
+  const todoStore = new TodoListStore(tempDir);
+  const todoView = todoStore.update({
+    listId: "stale-reporting",
+    title: "Previous turn reporting",
+    items: [{
+      id: "report",
+      content: "Report previous work",
+      active_form: "Reporting previous work",
+      status: "in_progress",
+      phase: "reporting",
+    }],
+  });
+  const streamStore = new WorkStreamStore(tempDir);
+  const stale = streamStore.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "stale-reporting",
+    title: "Previous turn reporting",
+    lastUserTurnId: "turn-previous",
+    items: todoView.list.items,
+  });
+  expect(stale.state).toBe("reporting");
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async () => "현재 턴은 별도 작업 없이 답변했습니다.",
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "짧게 답해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(streamStore.read(stale.id)).toMatchObject({
+    state: "reporting",
+    active_step_id: "report",
+    last_user_turn_id: "turn-previous",
+  });
+});
+
+test("native runtime ignores stale unfinished direct WorkStreams when closing a new turn", async () => {
+  const sessionId = "butler/main/stale-unfinished-not-blocking";
+  const todoStore = new TodoListStore(tempDir);
+  const todoView = todoStore.update({
+    listId: "stale-executing",
+    title: "이전 요청의 미완료 작업",
+    items: [{
+      id: "inspect",
+      content: "이전 요청 확인",
+      active_form: "이전 요청 확인 중",
+      status: "in_progress",
+      phase: "execution",
+    }],
+  });
+  const streamStore = new WorkStreamStore(tempDir);
+  const stale = streamStore.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: todoView.list.list_id,
+    title: todoView.list.title ?? "이전 요청의 미완료 작업",
+    items: todoView.list.items,
+    lastUserTurnId: "turn-previous",
+  });
+  expect(stale.state).toBe("executing");
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async () => "새 요청은 별도 근거 없이 답변 가능합니다.",
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "새 요청은 짧게 답해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toBe("새 요청은 별도 근거 없이 답변 가능합니다.");
+  expect(result.text).not.toContain("아직 완료라고 보고할 수 있는 상태");
+  expect(streamStore.read(stale.id)).toMatchObject({
+    state: "executing",
+    active_step_id: "inspect",
+    last_user_turn_id: "turn-previous",
+  });
 });
 
 test("native runtime continues instead of delivering while direct todo work is unfinished", async () => {
@@ -6509,7 +6713,7 @@ test("native runtime keeps extending direct work while continuations make tool p
     .toBe(true);
   expect(continuationPrompts.every((prompt) => !prompt.includes("Final Delivery Blocked")))
     .toBe(true);
-  expect(continuationPrompts.every((prompt) => prompt.includes("todo_list_id: main")))
+  expect(continuationPrompts.every((prompt) => /todo_list_id: turn-[^\n]+:main/u.test(prompt)))
     .toBe(true);
   expect(result.text).toContain("세 번째 continuation");
   const toolCalls = readTranscript("butler/main/open-direct-work-multi-continuation")
@@ -6860,6 +7064,10 @@ test("native runtime does not emit turn failed before recoverable limited delive
   })).rejects.toThrow("missing evidence");
 
   expect(events.some((event) => event.kind === "turn.failed")).toBe(false);
+  expect(events.map((event) => event.kind)).toEqual(expect.arrayContaining([
+    "recovery.recorded",
+    "turn.outcome",
+  ]));
 });
 
 test("native runtime marks interrupted direct WorkStreams recoverable", async () => {

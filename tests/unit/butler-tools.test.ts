@@ -18,6 +18,12 @@ import {
 } from "../../packages/butler-agent/src/agent/tools/profiles.ts";
 import { TaskStore } from "../../packages/butler-agent/src/agent/work/task-store.ts";
 import { PlannedTaskStore } from "../../packages/butler-agent/src/agent/work/planned-task.ts";
+import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
+import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
+import {
+  createWorkTrackingToolHandlers,
+  WORK_TRACKING_TOOL_NAMES,
+} from "../../packages/butler-agent/src/agent/tools/work-tracking/shared.ts";
 import { DisabledWebSearchProvider, MockWebSearchProvider, readWebSearchMetrics } from "../../packages/butler-agent/src/integrations/search/provider.ts";
 import { appendRuntimeTurnContextMetric } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
@@ -236,6 +242,19 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   const personaPresetProperty = onboardingProperties?.persona_preset as { enum?: unknown; description?: unknown } | undefined;
   expect(personaPresetProperty?.enum).toBeUndefined();
   expect(String(personaPresetProperty?.description)).toContain("persona_preset id");
+});
+
+test("work-tracking runtime ownership list matches handler keys", () => {
+  const handlers = createWorkTrackingToolHandlers({
+    butlerData: tempDir,
+    sessionId: "butler/main/work-tracking-ownership",
+    todoListStore: new TodoListStore(tempDir),
+    workStreamStore: new WorkStreamStore(tempDir),
+  });
+
+  const ownedToolNames: string[] = Array.from(WORK_TRACKING_TOOL_NAMES);
+  const handlerNames: string[] = Object.keys(handlers);
+  expect(ownedToolNames).toEqual(handlerNames);
 });
 
 test("agent tools directory groups canonical tool-name entrypoints", () => {

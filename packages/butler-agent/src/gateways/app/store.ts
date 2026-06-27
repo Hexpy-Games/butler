@@ -38,9 +38,14 @@ import { readPersonaPresets } from "../../personalization/persona-presets.ts";
 import { TaskStore, type TaskSummary } from "../../agent/work/task-store.ts";
 import {
   applyTurnLocalWorkOutcomeForSession,
+  workStreamTerminal,
   WorkStreamStore,
   type TurnLocalWorkOutcome,
 } from "../../agent/work/work-stream.ts";
+import {
+  TURN_ACKNOWLEDGED_EVENT_KIND,
+  createTurnAcknowledgedPayload,
+} from "../../agent/events/turn-state-contract.ts";
 import { ensureAppMessageQuerySchema } from "../../agent/cognition/memory/exact-query.ts";
 import {
   PlannedTaskStore,
@@ -275,8 +280,6 @@ const BUTLER_FINAL_ANSWER_OPEN = "<butler_final_answer>";
 const BUTLER_FINAL_ANSWER_CLOSE = "</butler_final_answer>";
 const PUBLIC_DECISION_SOURCES = new Set([
   "assistant-authored",
-  "model-authored",
-  "principal-authored",
 ]);
 
 type CapturedUserFeedback = {
@@ -2515,7 +2518,6 @@ export class AppServerStore {
     const session = this.getSession(sessionId);
     const turns = this.listTurns(sessionId);
     const latestTurn = turns.at(-1);
-    this.reconcileTurnLocalWorkOutcomesForTurns(turns);
     const messages = this.listMessages(sessionId);
     const latestProgress = latestTurn
       ? this.sessionViewTurn(latestTurn).progress
@@ -2572,7 +2574,6 @@ export class AppServerStore {
     const session = this.getSession(sessionId);
     const turns = this.listTurns(sessionId);
     const latestTurn = turns.at(-1);
-    this.reconcileTurnLocalWorkOutcomesForTurns(turns);
     const messages = this.sessionViewMessages(sessionId);
     const latestMessage = messages.at(-1);
     const latestTurnHasOutOfBandReport = Boolean(
@@ -2594,11 +2595,6 @@ export class AppServerStore {
         : null;
     const runtimeSessionId = sessionHintForRow(sessionId);
     const activeWorkStreamTurnId = activeTurn?.id;
-    this.syncLinkedWorkOrchestrationsForSession(
-      sessionId,
-      runtimeSessionId,
-      activeWorkStreamTurnId,
-    );
     const workStreams = this.listActiveWorkStreams(
       sessionId,
       runtimeSessionId,
@@ -2673,6 +2669,9 @@ export class AppServerStore {
         currentTurnId,
       }),
     ]
+      .map((stream) => workStreamStore.read(stream.id))
+      .filter((stream): stream is NonNullable<typeof stream> => Boolean(stream))
+      .filter((stream) => appWorkStreamVisibleInActiveProjection(stream, currentTurnId))
       .filter((stream) => {
         if (seenWorkStreams.has(stream.id)) return false;
         seenWorkStreams.add(stream.id);
@@ -2688,7 +2687,7 @@ export class AppServerStore {
         current_phase: stream.current_phase ?? undefined,
         active_step_id: stream.active_step_id ?? undefined,
         todo_list_id: stream.todo_list_id ?? undefined,
-        terminal: stream.terminal,
+        terminal: workStreamTerminal(stream.state),
         updated_at: stream.updated_at,
       }));
   }
@@ -3008,34 +3007,6 @@ export class AppServerStore {
     );
   }
 
-  private syncLinkedWorkOrchestrationsForSession(
-    sessionId: string,
-    runtimeSessionId = sessionHintForRow(sessionId),
-    currentTurnId?: string,
-  ): void {
-    const workStreamStore = new WorkStreamStore(this.butlerData);
-    const orchestrationStore = new WorkOrchestrationStore(this.butlerData);
-    const orchestrationIds = new Set<string>();
-    for (const stream of [
-      ...workStreamStore.listActive({ sessionId, currentTurnId }),
-      ...workStreamStore.listActive({ sessionId: runtimeSessionId, currentTurnId }),
-    ]) {
-      const record = workStreamStore.read(stream.id);
-      for (const orchestrationId of record?.linked_orchestration_ids ?? []) {
-        orchestrationIds.add(orchestrationId);
-      }
-    }
-    const taskStore = new TaskStore(this.butlerData);
-    for (const orchestrationId of orchestrationIds) {
-      try {
-        orchestrationStore.syncFromTasks(orchestrationId, taskStore);
-      } catch {
-        // Session read routes may project stale linked ids; projection should
-        // remain available even when an old orchestration file was removed.
-      }
-    }
-  }
-
   private reconcileTurnLocalWorkOutcomeForTurn(turn: TurnRecord): void {
     const outcome = turnLocalWorkOutcomeForAppTurn(turn.state);
     if (!outcome) return;
@@ -3048,14 +3019,23 @@ export class AppServerStore {
         statusNote: turnLocalWorkOutcomeStatusNote(outcome),
       });
     } catch {
-      // Session read/replay must stay available even if stale work repair fails.
+      // Terminal turn projection must stay available even if stale work repair fails.
     }
   }
 
-  private reconcileTurnLocalWorkOutcomesForTurns(turns: TurnRecord[]): void {
-    for (const turn of turns) {
-      this.reconcileTurnLocalWorkOutcomeForTurn(turn);
-    }
+  private appendTurnAcknowledgedEvent(chatId: string, turnId: string): void {
+    this.appendTurnEvent(chatId, turnId, {
+      kind: TURN_ACKNOWLEDGED_EVENT_KIND,
+      payload: createTurnAcknowledgedPayload({
+        safeLabel: "Request received. Preparing the work.",
+        transport: "app",
+      }),
+    });
+  }
+
+  private appendTerminalTurnStateChanged(turn: TurnRecord): void {
+    this.appendEvent("turn.state_changed", { turn });
+    this.reconcileTurnLocalWorkOutcomeForTurn(turn);
   }
 
   listWorkerActivity(
@@ -3564,7 +3544,6 @@ export class AppServerStore {
     for (const turnId of turnIds) {
       const turn = this.getTurnRow(turnId);
       if (!turn) continue;
-      this.reconcileTurnLocalWorkOutcomeForTurn(turnFromRow(turn));
       snapshots[turnId] = {
         turn_id: turnId,
         summary: turn.safe_status_label,
@@ -3846,7 +3825,7 @@ export class AppServerStore {
       cancellable: false,
       safeErrorCode: null,
     });
-    this.appendEvent("turn.state_changed", { turn: deliveredTurn });
+    this.appendTerminalTurnStateChanged(deliveredTurn);
     if (!this.hasTurnEventKind(turnId, "turn.completed")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "turn.completed",
@@ -3968,7 +3947,7 @@ export class AppServerStore {
       cancellable: false,
       safeErrorCode: safeError.code,
     });
-    this.appendEvent("turn.state_changed", { turn: failedTurn });
+    this.appendTerminalTurnStateChanged(failedTurn);
     this.touchChat(chatId);
     void this.drainQueuedSessionMessages(chatId).catch(() => undefined);
     return true;
@@ -4524,10 +4503,7 @@ export class AppServerStore {
         },
       });
     }
-    this.appendTurnEvent(chatId, turn.id, {
-      kind: "turn.accepted",
-      payload: { safeLabel: "Accepted" },
-    });
+    this.appendTurnAcknowledgedEvent(chatId, turn.id);
     const thinkingTurn = this.updateTurnState(turn.id, "thinking", {
       safeStatusLabel: "Thinking",
       cancellable: true,
@@ -4660,7 +4636,7 @@ export class AppServerStore {
           cancellable: false,
           safeErrorCode: null,
         });
-        this.appendEvent("turn.state_changed", { turn: deliveredTurn });
+        this.appendTerminalTurnStateChanged(deliveredTurn);
         return deliveredTurn;
       },
       updateTurnFailed: (chatId, turnId, safeError) => {
@@ -4675,7 +4651,7 @@ export class AppServerStore {
           cancellable: false,
           safeErrorCode: safeError.code,
         });
-        this.appendEvent("turn.state_changed", { turn: failedTurn });
+        this.appendTerminalTurnStateChanged(failedTurn);
         return failedTurn;
       },
     });
@@ -4794,10 +4770,7 @@ export class AppServerStore {
     this.ensureChat(chatId);
     const controls = this.getSessionControls(chatId);
     const turn = this.insertTurn(chatId, "accepted", "Accepted");
-    this.appendTurnEvent(chatId, turn.id, {
-      kind: "turn.accepted",
-      payload: { safeLabel: "Accepted" },
-    });
+    this.appendTurnAcknowledgedEvent(chatId, turn.id);
     const thinkingTurn = this.updateTurnState(turn.id, "thinking", {
       safeStatusLabel: "Thinking",
       cancellable: true,
@@ -4852,7 +4825,7 @@ export class AppServerStore {
           cancellable: false,
           safeErrorCode: null,
         });
-        this.appendEvent("turn.state_changed", { turn: deliveredTurn });
+        this.appendTerminalTurnStateChanged(deliveredTurn);
         if (!this.hasTurnEventKind(turn.id, "turn.completed")) {
           appendTurnEvent({
             kind: "turn.completed",
@@ -4909,7 +4882,7 @@ export class AppServerStore {
         cancellable: false,
         safeErrorCode: null,
       });
-      this.appendEvent("turn.state_changed", { turn: deliveredTurn });
+      this.appendTerminalTurnStateChanged(deliveredTurn);
       if (!this.hasTurnEventKind(turn.id, "turn.completed")) {
         appendTurnEvent({
           kind: "turn.completed",
@@ -5002,7 +4975,7 @@ export class AppServerStore {
         cancellable: false,
         safeErrorCode: safeError.code,
       });
-      this.appendEvent("turn.state_changed", { turn: failedTurn });
+      this.appendTerminalTurnStateChanged(failedTurn);
       this.touchChat(chatId);
       throw error;
     } finally {
@@ -6332,7 +6305,7 @@ export class AppServerStore {
       cancellable: false,
       safeErrorCode: null,
     });
-    this.appendEvent("turn.state_changed", { turn: deliveredTurn });
+    this.appendTerminalTurnStateChanged(deliveredTurn);
     if (!this.hasTurnEventKind(turnId, "turn.completed")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "turn.completed",
@@ -6412,7 +6385,7 @@ export class AppServerStore {
       cancellable: false,
       safeErrorCode: null,
     });
-    this.appendEvent("turn.state_changed", { turn: cancelledTurn });
+    this.appendTerminalTurnStateChanged(cancelledTurn);
     if (!this.hasTurnEventKind(turnId, "turn.cancelled")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "turn.cancelled",
@@ -7142,6 +7115,26 @@ export class AppServerStore {
     }
     return `project-${crypto.randomUUID()}`;
   }
+}
+
+function appWorkStreamVisibleInActiveProjection(
+  stream: {
+    last_user_turn_id: string | null;
+    linked_planned_task_ids: string[];
+    linked_orchestration_ids: string[];
+    linked_worker_task_ids: string[];
+  },
+  currentTurnId?: string,
+): boolean {
+  if (
+    stream.linked_planned_task_ids.length > 0 ||
+    stream.linked_orchestration_ids.length > 0 ||
+    stream.linked_worker_task_ids.length > 0
+  ) {
+    return true;
+  }
+  if (!stream.last_user_turn_id) return true;
+  return Boolean(currentTurnId && stream.last_user_turn_id === currentTurnId);
 }
 
 export function createProjectFolderSelectionToken(

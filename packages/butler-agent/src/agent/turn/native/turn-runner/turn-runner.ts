@@ -10,6 +10,11 @@ import {
   completeRuntimeSemanticWorkStreamBestEffort,
   markActiveWorkStreamRecoverableBestEffort,
 } from "./workstream-finalizers.ts";
+import {
+  emitInterruptedTurnOutcome,
+  emitRecoverableTurnOutcome,
+  emitSuccessfulTurnOutcome,
+} from "./turn-outcome-events.ts";
 import { produceFinalDeliveryText } from "./final-delivery-gates.ts";
 import { prepareNativeTurnContext } from "./turn-context-builder.ts";
 import { createNativeTurnPromptRunners } from "./turn-prompt-runners.ts";
@@ -72,6 +77,7 @@ export async function runNativeToolTurn({
       publicDecisionContext,
       toolSurfaceController: context.toolSurfaceController,
       runToolPrompt,
+      turnId,
     });
     if (useTools) {
       completeRuntimeSemanticWorkStreamBestEffort({
@@ -90,7 +96,7 @@ export async function runNativeToolTurn({
       });
     }
     const delivery = deliveryForFinalAudit(audit);
-    await emitFinalEvents(input, decisionCheckedText, delivery);
+    await emitFinalEvents(input, decisionCheckedText, audit, delivery, turnId);
     recordTurnMetric({
       status: "ok",
       input,
@@ -125,15 +131,29 @@ export async function runNativeToolTurn({
           turnId,
         });
       } else {
-        markActiveWorkStreamRecoverableBestEffort({
+        const recoveryStreams = markActiveWorkStreamRecoverableBestEffort({
           butlerData: deps.butlerData,
           sessionId: input.handle.sessionId,
           turnId,
           reason: error instanceof Error ? error.message : String(error),
         });
+        if (limitedDelivery) {
+          await emitRecoverableTurnOutcome({
+            turnInput: input,
+            turnId,
+            reason: error instanceof Error ? error.message : String(error),
+            workStreamId: recoveryStreams.at(0)?.id,
+            todoListId: recoveryStreams.at(0)?.todo_list_id ?? undefined,
+          });
+        }
       }
     }
     if (!limitedDelivery) {
+      await emitInterruptedTurnOutcome({
+        turnInput: input,
+        cancelled: Boolean(input.signal?.aborted),
+        reason: error instanceof Error ? error.message : String(error),
+      });
       await emitTurnEventBestEffort(input, {
         kind: input.signal?.aborted ? "turn.cancelled" : "turn.failed",
         payload: { safeLabel: input.signal?.aborted ? "Cancelled" : "Failed" },
@@ -165,9 +185,17 @@ function deliveryForFinalAudit(audit: ToolAuditEntry[]): RuntimeTurnResult["deli
 async function emitFinalEvents(
   input: NativeTurnRunnerInput["input"],
   text: string,
+  audit: ToolAuditEntry[],
   delivery?: RuntimeTurnResult["delivery"],
+  turnId?: string,
 ): Promise<void> {
   const limitedDelivery = delivery?.delivery_state === "delivered_with_limitations";
+  await emitSuccessfulTurnOutcome({
+    turnInput: input,
+    audit,
+    limitedDelivery,
+    turnId,
+  });
   await emitTurnEventBestEffort(input, {
     kind: "message.final.started",
     payload: { safeLabel: "Preparing final answer" },

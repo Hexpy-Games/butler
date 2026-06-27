@@ -58,6 +58,7 @@ export async function produceFinalDeliveryText(input: {
   session: NativeStoredSessionConfig;
   deps: NativeTurnRunnerDeps;
   useTools: boolean;
+  turnId?: string | null;
   prompt: string;
   userText: string;
   initialText: string;
@@ -167,6 +168,7 @@ async function runGoalCompletionReviews(input: {
   session: NativeStoredSessionConfig;
   deps: NativeTurnRunnerDeps;
   useTools: boolean;
+  turnId?: string | null;
   prompt: string;
   initialText: string;
   audit: ToolAuditEntry[];
@@ -279,6 +281,7 @@ async function runGoalCompletionReviewGate(
   input: {
     turnInput: RuntimeTurnInput;
     deps: NativeTurnRunnerDeps;
+    turnId?: string | null;
     prompt: string;
     audit: ToolAuditEntry[];
     publicDecisionContext: PublicWorkDecision[];
@@ -315,6 +318,7 @@ async function runGoalCompletionReviewGate(
       progress: activeDirectWorkProgressSnapshot({
         butlerData: input.deps.butlerData,
         sessionId: input.turnInput.handle.sessionId,
+        turnId: input.turnId,
       }),
       successfulToolCount: successfulToolAuditCount(),
     }),

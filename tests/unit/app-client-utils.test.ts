@@ -769,6 +769,122 @@ test("turn acknowledgements replace optimistic Thinking progress immediately", (
   });
 });
 
+test("app server acknowledgement batch replaces existing session optimistic Thinking", () => {
+  const clientMessageId = "client-existing-message";
+  const clientTurnId = clientTurnIdFromMessageId(clientMessageId);
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "message.created",
+        payload: {
+          message: {
+            id: clientMessageId,
+            chat_id: "general",
+            turn_id: "turn-real",
+            role: "user",
+            text: "continue",
+            status: "sent",
+            cursor: 1,
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 2,
+            turnSequence: 1,
+            createdAt: "2026-05-19T00:01:01.000Z",
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+      {
+        id: 3,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-started",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 3,
+            turnSequence: 2,
+            createdAt: "2026-05-19T00:01:02.000Z",
+            kind: "turn.started",
+            visibility: "public",
+            payload: {
+              safeLabel: "Started",
+            },
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+      turnProgress: {
+        [clientTurnId]: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+    },
+  );
+
+  expect(state.turnProgress[clientTurnId]).toBeUndefined();
+  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
+  expect(state.summary?.latest_progress?.state).toBe("thinking");
+  expect(
+    state.summary?.latest_progress?.safe_progress_rows.map((row) => row.safe_label),
+  ).toEqual(["Request received. Preparing the work.", "Working on request"]);
+  expect(activeTurnProgressSnapshot(state.summary, state.turnProgress)).toMatchObject({
+    turn_id: "turn-real",
+    state: "thinking",
+  });
+});
+
 test("session starting progress is replaced by first active server turn", () => {
   const clientTurnId = clientTurnIdFromMessageId("client-message");
   const state = applyTimelineEventsToViewState(

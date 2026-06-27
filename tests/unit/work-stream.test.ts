@@ -212,6 +212,7 @@ test("active projection excludes recovery states and historical waiting turns", 
   expect(store.activeForSession(sessionId)).toBeNull();
   expect(store.activeForSession(sessionId, { currentTurnId: "turn-other" })).toBeNull();
   expect(store.listActive({ sessionId })).toEqual([]);
+  expect(store.latestResumableForSession(sessionId)?.id).toBe(waiting.id);
   expect(store.activeForSession(sessionId, { currentTurnId: "turn-waiting" })?.id)
     .toBe(waiting.id);
   expect(store.list({ sessionId }).map((item) => item.state).sort()).toEqual([

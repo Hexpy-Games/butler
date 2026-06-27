@@ -20,8 +20,6 @@ export type TurnStateContractEventKind = typeof TURN_STATE_CONTRACT_EVENT_KINDS[
 
 export const AUTHORED_DECISION_SOURCES = [
   "assistant-authored",
-  "model-authored",
-  "principal-authored",
 ] as const;
 
 export const DIAGNOSTIC_DECISION_SOURCES = [
@@ -45,7 +43,6 @@ export const COMPLETION_EVIDENCE_KINDS = [
   "user_decision_required",
   "cancelled",
   "runtime_failed",
-  "not_required",
 ] as const;
 
 export type CompletionEvidenceKind = typeof COMPLETION_EVIDENCE_KINDS[number];
@@ -88,6 +85,7 @@ export interface CompletionEvidencePayloadInput {
 export interface TurnOutcomePayloadInput {
   outcome: unknown;
   completionEvidenceRefs?: unknown;
+  completionEvidenceStatus?: unknown;
   recoveryToken?: unknown;
   publicSummary: unknown;
 }
@@ -165,9 +163,17 @@ export function createTurnOutcomePayload(input: TurnOutcomePayloadInput): Record
     throw new Error(`unknown turn outcome: ${outcome}`);
   }
   const completionEvidenceRefs = safeStringArray(input.completionEvidenceRefs);
+  const completionEvidenceStatus = optionalSafeText(input.completionEvidenceStatus);
+  if (completionEvidenceStatus && completionEvidenceStatus !== "not_required") {
+    throw new Error("turn outcome completion evidence status must be not_required");
+  }
   const recoveryToken = optionalSafeText(input.recoveryToken);
-  if (outcome === "completed" && completionEvidenceRefs.length === 0) {
-    throw new Error("completed turn outcome requires completion evidence refs");
+  if (
+    outcome === "completed" &&
+    completionEvidenceRefs.length === 0 &&
+    completionEvidenceStatus !== "not_required"
+  ) {
+    throw new Error("completed turn outcome requires completion evidence refs or not_required evidence status");
   }
   if ((outcome === "recoverable" || outcome === "waiting_user") && !recoveryToken) {
     throw new Error(`${outcome} turn outcome requires a recovery token`);
@@ -175,6 +181,7 @@ export function createTurnOutcomePayload(input: TurnOutcomePayloadInput): Record
   return {
     outcome,
     completionEvidenceRefs,
+    ...(completionEvidenceStatus ? { completionEvidenceStatus } : {}),
     ...(recoveryToken ? { recoveryToken } : {}),
     publicSummary: requiredSafeText(input.publicSummary, "turn outcome public summary is required"),
   };
@@ -239,6 +246,7 @@ export function normalizeTurnStateContractPayload(
     return createTurnOutcomePayload({
       outcome: payload.outcome,
       completionEvidenceRefs: payload.completionEvidenceRefs,
+      completionEvidenceStatus: payload.completionEvidenceStatus,
       recoveryToken: payload.recoveryToken,
       publicSummary: payload.publicSummary,
     });

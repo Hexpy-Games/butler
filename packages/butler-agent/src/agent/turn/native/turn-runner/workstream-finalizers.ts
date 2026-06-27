@@ -2,6 +2,7 @@ import { TodoListStore } from "../../../work/todo-list.ts";
 import {
   applyTurnLocalWorkOutcomeForSession,
   WorkStreamStore,
+  type WorkStreamRecord,
 } from "../../../work/work-stream.ts";
 import type { RuntimeMessageLanguage } from "../../../output/messages.ts";
 import { runtimeSemanticTodoItems } from "../progress/runtime-semantic-progress.ts";
@@ -159,10 +160,10 @@ export function markActiveWorkStreamRecoverableBestEffort(input: {
   sessionId: string;
   turnId?: string | null;
   reason?: string;
-}): void {
+}): WorkStreamRecord[] {
   try {
     const reason = safeTextForStatusNote(input.reason);
-    applyTurnLocalWorkOutcomeForSession({
+    return applyTurnLocalWorkOutcomeForSession({
       butlerData: input.butlerData,
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -173,6 +174,7 @@ export function markActiveWorkStreamRecoverableBestEffort(input: {
     });
   } catch {
     // Recovery marking is best-effort and must not mask the original failure.
+    return [];
   }
 }
 

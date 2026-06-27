@@ -136,6 +136,7 @@ test("direct work continuation prompt carries sanitized context and receipts", (
       }],
     }],
     blocker: {
+      id: "ws-direct-report",
       title: "Direct report",
       state: "reviewing",
       phase: "review",

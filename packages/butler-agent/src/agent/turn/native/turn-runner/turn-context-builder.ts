@@ -61,6 +61,10 @@ import {
   recordTurnPreparationStepSkipped,
   type TurnPreparationMetricContext,
 } from "../../preparation-metrics.ts";
+import type { FunctionToolPromptOptions } from "../../../../integrations/providers/provider.ts";
+import { WORK_TRACKING_TOOL_NAMES } from "../../../tools/work-tracking/shared.ts";
+
+const TURN_SCOPED_WORK_TRACKING_TOOLS = new Set<string>(WORK_TRACKING_TOOL_NAMES);
 
 export async function prepareNativeTurnContext(input: {
   turnInput: RuntimeTurnInput;
@@ -137,6 +141,25 @@ export async function prepareNativeTurnContext(input: {
   });
   const semanticProgressSafetyNet = semanticProgressSafetyNetFor(input.deps.messageLanguage);
   const prompt = normalizedPrompt.prompt;
+  const defaultExecutor = createButlerToolExecutor({
+    butlerHome: input.deps.butlerHome,
+    butlerData: input.deps.butlerData,
+    appMessageDbPath: input.deps.appMessageDbPath,
+    workspacePath: input.session.init.workspacePath,
+    sessionId: input.turnInput.handle.sessionId,
+    projectId: projectId(input.session),
+    turnId,
+    workerModel: input.turnInput.model,
+    webSearchProvider: input.deps.webSearchProvider,
+    searchPlannerModel: input.turnInput.model,
+    searchPlannerOriginalRequest: userText,
+    workerModelRules: workerModelRulesFromMetadata(
+      input.turnInput.metadata?.workerModelRules ?? input.session.init.metadata?.workerModelRules,
+    ),
+    turnContext: [prompt, currentAttachmentContext].filter(Boolean).join("\n\n"),
+    currentToolNames: () => toolSurfaceController.currentToolNames(),
+    describedToolIds: () => toolSurfaceController.describedToolIdList(),
+  });
   const executor = createAuditedButlerToolExecutor({
     sessionId: input.turnInput.handle.sessionId,
     audit: input.audit,
@@ -148,24 +171,9 @@ export async function prepareNativeTurnContext(input: {
     plannedReview,
     semanticProgressSafetyNet,
     toolSurfaceController,
-    executor: input.deps.butlerToolExecutor ?? createButlerToolExecutor({
-      butlerHome: input.deps.butlerHome,
-      butlerData: input.deps.butlerData,
-      appMessageDbPath: input.deps.appMessageDbPath,
-      workspacePath: input.session.init.workspacePath,
-      sessionId: input.turnInput.handle.sessionId,
-      projectId: projectId(input.session),
-      turnId,
-      workerModel: input.turnInput.model,
-      webSearchProvider: input.deps.webSearchProvider,
-      searchPlannerModel: input.turnInput.model,
-      searchPlannerOriginalRequest: userText,
-      workerModelRules: workerModelRulesFromMetadata(
-        input.turnInput.metadata?.workerModelRules ?? input.session.init.metadata?.workerModelRules,
-      ),
-      turnContext: [prompt, currentAttachmentContext].filter(Boolean).join("\n\n"),
-      currentToolNames: () => toolSurfaceController.currentToolNames(),
-      describedToolIds: () => toolSurfaceController.describedToolIdList(),
+    executor: turnScopedExecutor({
+      defaultExecutor,
+      injectedExecutor: input.deps.butlerToolExecutor,
     }),
   });
   await emitStartedAndPreparation({
@@ -347,6 +355,20 @@ function preparationMetricInput(
     role: input.session.init.role,
     runtime: input.deps.runtimeId,
     model: input.turnInput.model,
+  };
+}
+
+function turnScopedExecutor(input: {
+  defaultExecutor: FunctionToolPromptOptions["executeTool"];
+  injectedExecutor?: FunctionToolPromptOptions["executeTool"];
+}): FunctionToolPromptOptions["executeTool"] {
+  if (!input.injectedExecutor) return input.defaultExecutor;
+  const injectedExecutor = input.injectedExecutor;
+  return async (call) => {
+    if (TURN_SCOPED_WORK_TRACKING_TOOLS.has(call.name)) {
+      return await input.defaultExecutor(call);
+    }
+    return await injectedExecutor(call);
   };
 }
 
