@@ -4089,6 +4089,152 @@ test("session summary exposes active WorkStreams without raw work internals", as
   }
 });
 
+test("session summary excludes recoverable WorkStreams from active projection", async () => {
+  const store = new WorkStreamStore(tempDir);
+  const stream = store.updateFromTodoList({
+    ownerSessionId: "butler/app-general",
+    projectId: "butler",
+    listId: "recoverable-main",
+    title: "Recover interrupted work",
+    items: [
+      {
+        id: "code",
+        content: "Implement recovery path",
+        active_form: "Implementing recovery path",
+        status: "in_progress",
+        phase: "execution",
+        priority: "normal",
+        blocked_by: [],
+        note: null,
+        created_at: "2026-05-15T00:00:00.000Z",
+        updated_at: "2026-05-15T00:00:00.000Z",
+        completed_at: null,
+      },
+    ],
+  });
+  store.transition({
+    id: stream.id,
+    state: "recoverable",
+    statusNote: "Interrupted before final delivery.",
+  });
+  expect(store.list({ sessionId: "butler/app-general" })).toContainEqual(
+    expect.objectContaining({ id: stream.id, state: "recoverable" }),
+  );
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.work_streams).toEqual([]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("session summary and view keep current-turn waiting WorkStreams active only for that turn", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+    };
+    const historicalTurn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(historicalTurn.id, "delivered", {
+      safeStatusLabel: "Delivered",
+      cancellable: false,
+    });
+    const currentTurn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(currentTurn.id, "waiting_for_tool", {
+      safeStatusLabel: "Waiting for a decision",
+      cancellable: true,
+    });
+    const store = new WorkStreamStore(tempDir);
+    const historical = store.updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      projectId: "butler",
+      listId: "waiting-historical",
+      title: "Historical waiting work",
+      lastUserTurnId: historicalTurn.id,
+      items: [
+        {
+          id: "historical",
+          content: "Wait from an earlier turn",
+          active_form: "Waiting from an earlier turn",
+          status: "in_progress",
+          phase: "planning",
+          priority: "normal",
+          blocked_by: [],
+          note: null,
+          created_at: "2026-05-15T00:00:00.000Z",
+          updated_at: "2026-05-15T00:00:00.000Z",
+          completed_at: null,
+        },
+      ],
+    });
+    store.transition({ id: historical.id, state: "waiting_user" });
+    const current = store.updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      projectId: "butler",
+      listId: "waiting-current",
+      title: "Current waiting work",
+      lastUserTurnId: currentTurn.id,
+      items: [
+        {
+          id: "current",
+          content: "Wait for current turn decision",
+          active_form: "Waiting for current turn decision",
+          status: "in_progress",
+          phase: "planning",
+          priority: "normal",
+          blocked_by: [],
+          note: null,
+          created_at: "2026-05-15T00:00:00.000Z",
+          updated_at: "2026-05-15T00:00:00.000Z",
+          completed_at: null,
+        },
+      ],
+    });
+    store.transition({ id: current.id, state: "waiting_user" });
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.work_streams).toEqual([
+      expect.objectContaining({
+        id: current.id,
+        title: "Current waiting work",
+        state: "waiting_user",
+      }),
+    ]);
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(view.data.work_streams).toEqual([
+      expect.objectContaining({
+        id: current.id,
+        title: "Current waiting work",
+        state: "waiting_user",
+      }),
+    ]);
+  } finally {
+    server.stop();
+  }
+});
+
 test("automations expose prompt bodies only in detail and can run while paused", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),

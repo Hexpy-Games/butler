@@ -143,6 +143,108 @@ test("work streams can re-enter execution from review without blocking unrelated
   expect(resumed.current_phase).toBe("execution");
 });
 
+test("active projection excludes recovery states and historical waiting turns", () => {
+  const store = new WorkStreamStore(tempDir);
+  const sessionId = "butler/app-project-butler";
+  const recoverable = store.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "recoverable-turn",
+    lastUserTurnId: "turn-recoverable",
+    items: [
+      todo({ id: "code", phase: "execution", status: "in_progress" }),
+    ],
+    now: new Date("2026-05-15T01:00:00.000Z"),
+  });
+  store.transition({
+    id: recoverable.id,
+    state: "recoverable",
+    now: new Date("2026-05-15T01:01:00.000Z"),
+  });
+  const paused = store.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "paused-turn",
+    lastUserTurnId: "turn-paused",
+    items: [
+      todo({ id: "review", phase: "review", status: "in_progress" }),
+    ],
+    now: new Date("2026-05-15T01:02:00.000Z"),
+  });
+  store.transition({
+    id: paused.id,
+    state: "paused",
+    now: new Date("2026-05-15T01:03:00.000Z"),
+  });
+  const waiting = store.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "waiting-turn",
+    lastUserTurnId: "turn-waiting",
+    items: [
+      todo({ id: "plan", phase: "planning", status: "in_progress" }),
+    ],
+    now: new Date("2026-05-15T01:04:00.000Z"),
+  });
+  store.transition({
+    id: waiting.id,
+    state: "waiting_user",
+    now: new Date("2026-05-15T01:05:00.000Z"),
+  });
+
+  expect(store.activeForSession(sessionId)).toBeNull();
+  expect(store.activeForSession(sessionId, { currentTurnId: "turn-other" })).toBeNull();
+  expect(store.listActive({ sessionId })).toEqual([]);
+  expect(store.activeForSession(sessionId, { currentTurnId: "turn-waiting" })?.id)
+    .toBe(waiting.id);
+  expect(store.list({ sessionId }).map((item) => item.state).sort()).toEqual([
+    "paused",
+    "recoverable",
+    "waiting_user",
+  ]);
+});
+
+test("todo updates reuse same-turn waiting revision after terminal base stream", () => {
+  const store = new WorkStreamStore(tempDir);
+  const sessionId = "butler/app-project-butler";
+  const completed = store.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "same-turn",
+    lastUserTurnId: "turn-current",
+    items: [
+      todo({ id: "report", phase: "reporting", status: "completed" }),
+    ],
+    now: new Date("2026-05-15T01:00:00.000Z"),
+  });
+  expect(completed.state).toBe("complete");
+  const revision = store.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "same-turn",
+    lastUserTurnId: "turn-current",
+    items: [
+      todo({ id: "decide", phase: "planning", status: "in_progress" }),
+    ],
+    now: new Date("2026-05-15T01:01:00.000Z"),
+  });
+  store.transition({
+    id: revision.id,
+    state: "waiting_user",
+    now: new Date("2026-05-15T01:02:00.000Z"),
+  });
+
+  const resumed = store.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "same-turn",
+    lastUserTurnId: "turn-current",
+    items: [
+      todo({ id: "decide", phase: "planning", status: "in_progress" }),
+    ],
+    now: new Date("2026-05-15T01:03:00.000Z"),
+  });
+
+  expect(resumed.id).toBe(revision.id);
+  expect(store.list({ sessionId, includeTerminal: true })
+    .map((item) => item.id)
+    .filter((id) => id !== completed.id)).toEqual([revision.id]);
+});
+
 test("resumed todo progress preserves terminal streams and opens an active revision", () => {
   const store = new WorkStreamStore(tempDir);
   const completed = store.updateFromTodoList({

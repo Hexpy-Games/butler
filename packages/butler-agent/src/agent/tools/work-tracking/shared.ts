@@ -94,7 +94,9 @@ export function createWorkTrackingToolHandlers(input: {
       const requestedId = typeof call.args.work_stream_id === "string" && call.args.work_stream_id.trim()
         ? call.args.work_stream_id.trim()
         : undefined;
-      const active = requestedId ? input.workStreamStore.read(requestedId) : input.workStreamStore.activeForSession(input.sessionId);
+      const active = requestedId
+        ? input.workStreamStore.read(requestedId)
+        : input.workStreamStore.activeForSession(input.sessionId, { currentTurnId: input.turnId });
       if (!active) throw new Error("update_work_stream_state requires an active work stream");
       return {
         ok: true,

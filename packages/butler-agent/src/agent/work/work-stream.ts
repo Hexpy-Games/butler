@@ -78,6 +78,15 @@ const STATE_VALUES: WorkStreamState[] = [
 ];
 
 const TERMINAL_STATES = new Set<WorkStreamState>(["complete", "failed", "cancelled"]);
+const ACTIVE_STATES = new Set<WorkStreamState>([
+  "routing",
+  "conception",
+  "planning",
+  "executing",
+  "reviewing",
+  "consolidating",
+  "reporting",
+]);
 
 const TRANSITIONS: Record<WorkStreamState, WorkStreamState[]> = {
   routing: ["conception", "planning", "waiting_user", "recoverable", "failed", "cancelled"],
@@ -185,6 +194,19 @@ function phaseForState(state: WorkStreamState, prior: WorkStreamPhase | null): W
 
 export function workStreamTerminal(state: WorkStreamState): boolean {
   return TERMINAL_STATES.has(state);
+}
+
+export function workStreamActive(
+  record: Pick<WorkStreamRecord, "state" | "last_user_turn_id">,
+  options: { currentTurnId?: string | null } = {},
+): boolean {
+  if (ACTIVE_STATES.has(record.state)) return true;
+  const currentTurnId = options.currentTurnId?.trim();
+  return Boolean(
+    currentTurnId &&
+    record.state === "waiting_user" &&
+    record.last_user_turn_id === currentTurnId,
+  );
 }
 
 export function completeReportingWorkStreamForSession(input: {
@@ -393,13 +415,14 @@ export class WorkStreamStore {
     projectId?: string | null;
     listId?: string | null;
     excludeId?: string | null;
+    currentTurnId?: string | null;
   }): WorkStreamRecord | null {
     const ownerSessionId = input.ownerSessionId?.trim() || null;
     const projectId = input.projectId?.trim() || null;
     const listId = input.listId?.trim() || null;
     return this.records()
       .filter((record) => record.id !== input.excludeId)
-      .filter((record) => !workStreamTerminal(record.state))
+      .filter((record) => workStreamActive(record, { currentTurnId: input.currentTurnId }))
       .filter((record) => !ownerSessionId || record.owner_session_id === ownerSessionId)
       .filter((record) => !projectId || record.project_id === projectId)
       .filter((record) => !listId || record.todo_list_id === listId)
@@ -416,6 +439,19 @@ export class WorkStreamStore {
       .filter((record) => !options.sessionId || record.owner_session_id === options.sessionId)
       .filter((record) => !options.projectId || record.project_id === options.projectId)
       .filter((record) => options.includeTerminal === true || !workStreamTerminal(record.state))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .map(summary);
+  }
+
+  listActive(options: {
+    sessionId?: string | null;
+    projectId?: string | null;
+    currentTurnId?: string | null;
+  } = {}): WorkStreamSummary[] {
+    return this.records()
+      .filter((record) => !options.sessionId || record.owner_session_id === options.sessionId)
+      .filter((record) => !options.projectId || record.project_id === options.projectId)
+      .filter((record) => workStreamActive(record, { currentTurnId: options.currentTurnId }))
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .map(summary);
   }
@@ -476,9 +512,12 @@ export class WorkStreamStore {
     });
   }
 
-  activeForSession(sessionId?: string | null): WorkStreamRecord | null {
+  activeForSession(
+    sessionId?: string | null,
+    options: { currentTurnId?: string | null } = {},
+  ): WorkStreamRecord | null {
     if (!sessionId) return null;
-    const active = this.list({ sessionId, includeTerminal: false }).at(0);
+    const active = this.listActive({ sessionId, currentTurnId: options.currentTurnId }).at(0);
     return active ? this.read(active.id) : null;
   }
 
@@ -561,6 +600,7 @@ export class WorkStreamStore {
         projectId: input.projectId ?? prior.project_id,
         listId: input.listId ?? prior.todo_list_id,
         excludeId: baseId,
+        currentTurnId: input.lastUserTurnId,
       });
       id = activePrior?.id ?? revisionStreamId(baseId, now);
       target = targetFromTodos(input.items, activePrior);
