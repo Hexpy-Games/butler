@@ -703,7 +703,8 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(preload).toContain('"/message-files"');
   expect(preload).toContain("sendMessage:");
   expect(preload).toContain("replayEvents:");
-  expect(preload).toContain("liveEventsUrl:");
+  expect(preload).toContain("subscribeLiveEvents");
+  expect(preload).toContain("accept: \"text/event-stream\"");
   expect(preload).toContain("/events/live");
   expect(preload).toContain("listTurns:");
   expect(preload).toContain("retryTurn:");
@@ -726,6 +727,7 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(preload).toContain("controlWorkerActivity:");
   expect(preload).not.toContain("child_process");
   expect(renderer).toContain("window.butlerApp");
+  expect(renderer).toContain("subscribeLiveEvents");
   expect(renderer).toContain("new EventSource(liveEventsUrl");
   expect(renderer).toContain("function bridgeRequest");
   expect(renderer).toContain("function canSelectProjectFolder");
