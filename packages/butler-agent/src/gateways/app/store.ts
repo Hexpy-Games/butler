@@ -10529,6 +10529,7 @@ function progressRowFromAppOutbound(
   }
   const text = typeof message.text === "string" ? message.text.trim() : "";
   if (metadata.kind === "intermediate" && text) {
+    if (metadata.phase === "before_tool_execution") return null;
     return {
       id: actionId,
       kind: "thinking",

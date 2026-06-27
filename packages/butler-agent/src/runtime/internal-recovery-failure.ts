@@ -23,6 +23,7 @@ export function isInternalRecoveryFailure(input: InternalRecoveryFailureInput | 
   const failure = normalizeInternalRecoveryInput(input);
   const message = failure.message ?? "";
   return (
+    failure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
     failure.code === "goal_completion_incomplete" ||
     failure.code === "internal_uncertainty" ||
     failure.code === "prompt_usage_model_call_budget_exhausted" ||
