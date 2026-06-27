@@ -288,6 +288,20 @@ function stripControlCharacters(value: string): string {
   }).join("");
 }
 
+function dispatchClaimIdFromEnvelope(envelope: InboundEnvelope): string | undefined {
+  const raw = envelope.raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const value = (raw as Record<string, unknown>).dispatchClaimId;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function queueIdFromEnvelope(envelope: InboundEnvelope): string | undefined {
+  const raw = envelope.raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const value = (raw as Record<string, unknown>).queueId;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 function finalResultAction(input: {
   binding: StoredSessionBinding;
   envelope: InboundEnvelope;
@@ -324,6 +338,8 @@ function finalResultAction(input: {
       kind: "final_result",
       turnId: turnIdFromEnvelope(input.envelope),
       sessionId: input.binding.sessionId,
+      queueId: queueIdFromEnvelope(input.envelope),
+      dispatchClaimId: dispatchClaimIdFromEnvelope(input.envelope),
       emptyFinal: !input.text.trim(),
       delivery_state: input.delivery?.delivery_state,
       limitation_codes: input.delivery?.limitation_codes,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type {
@@ -60,7 +60,7 @@ class ScriptedRuntime implements AgentRuntimeAdapter {
 }
 
 class PersistenceFailingInboundQueue extends NativeInboundQueue {
-  override fail(): void {
+  override fail(): boolean {
     throw new Error("failed queue persistence unavailable");
   }
 }
@@ -542,6 +542,138 @@ test("queued inbound dispatcher preserves same-session FIFO eligibility", async 
   store.close();
 });
 
+test("queued inbound dispatcher fails timed out app turns and holds the session slot until quiescence", async () => {
+  const queue = new NativeInboundQueue(tempDir);
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  queue.enqueue(appEnvelope({
+    eventId: "app:timeout",
+    messageId: "message-timeout",
+    sessionId: "butler/app-timeout",
+  }), { source: "test" });
+  queue.enqueue(appEnvelope({
+    eventId: "app:after-timeout",
+    messageId: "message-after-timeout",
+    sessionId: "butler/app-timeout",
+  }), { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const dispatcher = new QueuedInboundDispatcher();
+  const guard = new DeliveryGuard({ adapters: [app] });
+  let sawAbort = false;
+  const releaseTimedOutHandler = deferred<void>();
+
+  const first = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: guard,
+    maxConcurrentSessions: 1,
+    limit: 1,
+    dispatchTimeoutMs: 5,
+    server: {
+      async handleInbound(envelope) {
+        envelope.signal?.addEventListener("abort", () => {
+          sawAbort = true;
+        });
+        await releaseTimedOutHandler.promise;
+        return {
+          status: "handled",
+          route: {
+            sessionId: envelope.routingHints?.sessionId ?? "",
+            role: "butler",
+            reason: "session-hint",
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            metadata: { durableFinalRecorded: true },
+          },
+        };
+      },
+    },
+  });
+  expect(first.claimed).toBe(1);
+  await dispatcher.waitForIdle();
+
+  expect(sawAbort).toBe(true);
+  expect(app.sentActions[0]).toMatchObject({
+    transport: "app",
+    message: {
+      text: "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+      replyToMessageId: "message-timeout",
+    },
+    metadata: {
+      kind: "turn_failed",
+      turnId: "turn-message-timeout",
+      safeErrorCode: "inbound_dispatch_timeout",
+    },
+  });
+  const failedDir = join(tempDir, "runtime", "inbound-events", "failed");
+  const failedFiles = existsSync(failedDir) ? readdirSync(failedDir) : [];
+  expect(failedFiles).toHaveLength(1);
+  const failedRecord = JSON.parse(readFileSync(join(failedDir, failedFiles[0]!), "utf8"));
+  expect(failedRecord.metadata.terminalClaimId).toBeString();
+
+  const blockedByUnsettledTimeout = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: guard,
+    maxConcurrentSessions: 1,
+    limit: 1,
+    dispatchTimeoutMs: 5,
+    server: {
+      async handleInbound(envelope) {
+        return {
+          status: "handled",
+          route: {
+            sessionId: envelope.routingHints?.sessionId ?? "",
+            role: "butler",
+            reason: "session-hint",
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            metadata: { durableFinalRecorded: true },
+          },
+        };
+      },
+    },
+  });
+  expect(blockedByUnsettledTimeout.claimed).toBe(0);
+
+  releaseTimedOutHandler.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const second = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: guard,
+    maxConcurrentSessions: 1,
+    limit: 1,
+    dispatchTimeoutMs: 5,
+    server: {
+      async handleInbound(envelope) {
+        return {
+          status: "handled",
+          route: {
+            sessionId: envelope.routingHints?.sessionId ?? "",
+            role: "butler",
+            reason: "session-hint",
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            metadata: { durableFinalRecorded: true },
+          },
+        };
+      },
+    },
+  });
+  expect(second.claimed).toBe(1);
+  await dispatcher.waitForIdle();
+  const processedDir = join(tempDir, "runtime", "inbound-events", "processed");
+  expect(existsSync(processedDir) ? readdirSync(processedDir).length : 0).toBe(1);
+  store.close();
+});
+
 test("queued inbound dispatcher contains failure persistence rejections", async () => {
   const queue = new PersistenceFailingInboundQueue(tempDir);
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
@@ -773,6 +905,69 @@ test("queued inbound provider failure preserves safe API diagnostics for app pro
     },
   });
   expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
+});
+
+test("queued inbound sanitizes unexpected model-call budget exhaustion without internal copy", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue({
+    eventId: "app:message-budget-failure",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-budget-failure",
+      text: "continue until budget failure",
+      timestamp: "2026-05-18T12:04:30.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-budget-failure",
+    },
+  }, { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        const error = new Error(
+          "Prompt usage model-call budget exhausted before provider request",
+        );
+        error.name = "PromptUsageModelCallBudgetExhaustedError";
+        Object.assign(error, {
+          code: "prompt_usage_model_call_budget_exhausted",
+        });
+        throw error;
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 0,
+    delivered: 1,
+    failed: 1,
+  });
+  expect(app.sentActions).toHaveLength(1);
+  expect(app.sentActions[0]).toMatchObject({
+    transport: "app",
+    message: {
+      text: "Butler could not verify that the requested goal was completed.",
+      replyToMessageId: "message-budget-failure",
+    },
+    metadata: {
+      kind: "turn_failed",
+      turnId: "turn-budget-failure",
+      safeErrorCode: "internal_recovery_required",
+      retryable: true,
+    },
+  });
+  store.close();
 });
 
 test("queued inbound goal completion incomplete delivers safe limited result", async () => {

@@ -78,6 +78,7 @@ export async function runNativeToolTurn({
       toolSurfaceController: context.toolSurfaceController,
       runToolPrompt,
       turnId,
+      turnBudget: context.turnBudget,
     });
     if (useTools) {
       completeRuntimeSemanticWorkStreamBestEffort({

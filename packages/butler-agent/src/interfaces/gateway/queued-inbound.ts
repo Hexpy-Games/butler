@@ -25,6 +25,8 @@ export interface ProcessQueuedInboundOptions {
   telegramGroupId?: string;
   limit?: number;
   maxConcurrentSessions?: number;
+  dispatchTimeoutMs?: number;
+  processingLeaseMs?: number;
   onOutcome?: (outcome: QueuedInboundOutcome) => void | Promise<void>;
   now?: () => Date;
 }
@@ -34,6 +36,7 @@ export interface ProcessQueuedInboundSummary {
   handled: number;
   delivered: number;
   failed: number;
+  quiescence?: Promise<void>;
 }
 
 export interface QueuedInboundOutcome {
@@ -45,6 +48,22 @@ export interface QueuedInboundOutcome {
 }
 
 const DEFAULT_MAX_CONCURRENT_SESSIONS = 5;
+const DEFAULT_DISPATCH_TIMEOUT_MS = 15 * 60 * 1000;
+const DEFAULT_PROCESSING_LEASE_MS = DEFAULT_DISPATCH_TIMEOUT_MS + 60 * 1000;
+
+class QueuedInboundDispatchTimeoutError extends Error {
+  readonly code = "inbound_dispatch_timeout";
+
+  constructor(
+    readonly timeoutMs: number,
+    readonly quiescence: Promise<void>,
+  ) {
+    super(
+      "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+    );
+    this.name = "QueuedInboundDispatchTimeoutError";
+  }
+}
 
 function peerKindForTarget(target: SessionTransportBinding): OutboundAction["peer"]["kind"] {
   if (target.threadId) return "thread";
@@ -78,6 +97,7 @@ function actionForTarget(input: {
       source: "gateway/queued-inbound.ts",
       kind: "final_result",
       queueId: input.item.queueId,
+      dispatchClaimId: input.item.processing.claimId,
       originalTransport: input.item.envelope.transport,
       turnId: input.item.envelope.routingHints?.turnId,
       generatedSessionTitle: input.generatedSessionTitle,
@@ -111,6 +131,7 @@ function failureActionForOriginalInbound(input: {
       source: "gateway/queued-inbound.ts",
       kind: "turn_failed",
       queueId: input.item.queueId,
+      dispatchClaimId: input.item.processing.claimId,
       originalTransport: input.item.envelope.transport,
       sessionId,
       turnId,
@@ -150,6 +171,7 @@ function limitedDeliveryActionForOriginalInbound(input: {
       source: "gateway/queued-inbound.ts",
       kind: "final_result",
       queueId: input.item.queueId,
+      dispatchClaimId: input.item.processing.claimId,
       originalTransport: input.item.envelope.transport,
       sessionId,
       turnId,
@@ -344,10 +366,10 @@ async function processClaimedQueuedInboundItem(input: {
 
   try {
     if (options.shouldHandleItem && !options.shouldHandleItem(item)) {
-      options.queue.complete(item, {
+      completeQueueClaim(options, item, {
         dispatchStatus: "skipped-terminal-turn",
         handled: false,
-      }, options.now?.());
+      });
       return summary;
     }
     reactivateHintedSessionForInbound({
@@ -355,18 +377,28 @@ async function processClaimedQueuedInboundItem(input: {
       store: options.store,
       now: options.now,
     });
-    const result = await options.server.handleInbound(item.envelope);
+    const controller = new AbortController();
+    const result = await withDispatchTimeout(
+      {
+        controller,
+        run: (signal) =>
+          options.server.handleInbound({
+            ...item.envelope,
+            signal,
+            raw: {
+              ...(isRecord(item.envelope.raw) ? item.envelope.raw : {}),
+              dispatchClaimId: item.processing.claimId,
+              queueId: item.queueId,
+            },
+          }),
+      },
+      dispatchTimeoutMsFor(options),
+    );
     if (result.status !== "handled") {
       summary.failed += 1;
       const failure = failureForDispatchResult(result);
-      const delivered = await deliverFailureForOriginalInbound({
-        item,
-        deliverAction,
-        failure,
-        queueSource: "gateway/queued-inbound.ts#dispatch-failure",
-      });
-      if (delivered) summary.delivered += 1;
-      options.queue.fail(
+      const terminalRecorded = failQueueClaim(
+        options,
         item,
         failure.message,
         {
@@ -378,18 +410,30 @@ async function processClaimedQueuedInboundItem(input: {
             cause: failure.cause,
           },
         },
-        options.now?.(),
       );
+      if (!terminalRecorded) return summary;
+      const delivered = await deliverFailureForOriginalInbound({
+        item,
+        deliverAction,
+        failure,
+        queueSource: "gateway/queued-inbound.ts#dispatch-failure",
+      });
+      if (delivered) summary.delivered += 1;
       return summary;
     }
     if (result.status === "handled") {
-      summary.handled += 1;
       const actions = targetActionsForResult({
         item,
         result,
         store: options.store,
         telegramGroupId: options.telegramGroupId,
       });
+      const terminalRecorded = completeQueueClaim(options, item, {
+        dispatchStatus: result.status,
+        handled: true,
+      });
+      if (!terminalRecorded) return summary;
+      summary.handled += 1;
       for (const action of actions) {
         const delivery = await deliverAction(result.route.sessionId, action, {
           source: "gateway/queued-inbound.ts",
@@ -398,14 +442,16 @@ async function processClaimedQueuedInboundItem(input: {
         if (delivery.ok) summary.delivered += 1;
       }
     }
-    options.queue.complete(item, {
-      dispatchStatus: result.status,
-      handled: result.status === "handled",
-    }, options.now?.());
   } catch (error) {
+    summary.quiescence = dispatchQuiescenceForError(error);
     const limitedDelivery = recoverableLimitedDeliveryForError(error);
     const sessionId = item.envelope.routingHints?.sessionId?.trim();
     if (limitedDelivery && sessionId) {
+      const terminalRecorded = completeQueueClaim(options, item, {
+        dispatchStatus: "handled",
+        handled: true,
+      });
+      if (!terminalRecorded) return summary;
       summary.handled += 1;
       const action = limitedDeliveryActionForOriginalInbound({
         item,
@@ -419,22 +465,12 @@ async function processClaimedQueuedInboundItem(input: {
         });
         if (delivery.ok) summary.delivered += 1;
       }
-      options.queue.complete(item, {
-        dispatchStatus: "handled",
-        handled: true,
-      }, options.now?.());
       return summary;
     }
     summary.failed += 1;
-    const safeFailure = safeRuntimeFailure(error);
-    const delivered = await deliverFailureForOriginalInbound({
-      item,
-      deliverAction,
-      error,
-      queueSource: "gateway/queued-inbound.ts#failure",
-    });
-    if (delivered) summary.delivered += 1;
-    options.queue.fail(
+    const safeFailure = safeFailureForQueuedInboundError(error);
+    const terminalRecorded = failQueueClaim(
+      options,
       item,
       safeFailure.message,
       {
@@ -450,17 +486,58 @@ async function processClaimedQueuedInboundItem(input: {
           cause: safeFailure.cause,
         },
       },
-      options.now?.(),
     );
+    if (!terminalRecorded) return summary;
+    const delivered = await deliverFailureForOriginalInbound({
+      item,
+      deliverAction,
+      failure: safeFailure,
+      queueSource: "gateway/queued-inbound.ts#failure",
+    });
+    if (delivered) summary.delivered += 1;
   }
 
   return summary;
 }
 
+function completeQueueClaim(
+  options: ProcessQueuedInboundOptions,
+  item: ClaimedInboundEvent,
+  metadata: Record<string, unknown>,
+): boolean {
+  try {
+    return options.queue.complete(item, metadata, options.now?.());
+  } catch {
+    return false;
+  }
+}
+
+function failQueueClaim(
+  options: ProcessQueuedInboundOptions,
+  item: ClaimedInboundEvent,
+  message: string,
+  metadata: Record<string, unknown>,
+): boolean {
+  try {
+    return options.queue.fail(item, message, metadata, options.now?.());
+  } catch {
+    return false;
+  }
+}
+
 export async function processQueuedInboundEvents(
   options: ProcessQueuedInboundOptions,
 ): Promise<ProcessQueuedInboundSummary> {
-  const items = options.queue.claim(options.limit ?? 5);
+  options.queue.recoverStaleProcessing({
+    staleAfterMs: processingLeaseMsFor(options),
+    now: options.now?.(),
+  });
+  const items = options.queue.claimEligible(
+    options.limit ?? 5,
+    () => true,
+    options.now?.(),
+    processingLeaseMsFor(options),
+  );
   const summary: ProcessQueuedInboundSummary = {
     claimed: items.length,
     handled: 0,
@@ -509,12 +586,89 @@ function maxConcurrentSessionsFor(options: ProcessQueuedInboundOptions): number 
   return Math.max(1, Math.floor(configured));
 }
 
+function dispatchTimeoutMsFor(options: ProcessQueuedInboundOptions): number {
+  const configured = options.dispatchTimeoutMs;
+  if (typeof configured !== "number" || !Number.isFinite(configured)) {
+    return DEFAULT_DISPATCH_TIMEOUT_MS;
+  }
+  return Math.max(1, Math.floor(configured));
+}
+
+function processingLeaseMsFor(options: ProcessQueuedInboundOptions): number {
+  const configured = options.processingLeaseMs;
+  if (typeof configured !== "number" || !Number.isFinite(configured)) {
+    return DEFAULT_PROCESSING_LEASE_MS;
+  }
+  return Math.max(1, Math.floor(configured));
+}
+
+function safeFailureForQueuedInboundError(
+  error: unknown,
+): RuntimeFailureDiagnostic {
+  if (error instanceof QueuedInboundDispatchTimeoutError) {
+    return {
+      code: error.code,
+      message: error.message,
+      retryable: true,
+      cause: `dispatch_timeout_ms=${error.timeoutMs}`,
+    };
+  }
+  return safeRuntimeFailure(error);
+}
+
+function dispatchQuiescenceForError(error: unknown): Promise<void> | undefined {
+  return error instanceof QueuedInboundDispatchTimeoutError
+    ? error.quiescence
+    : undefined;
+}
+
+async function withDispatchTimeout<T>(
+  input: {
+    run: (signal: AbortSignal) => Promise<T>;
+    controller: AbortController;
+  },
+  timeoutMs: number,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const promise = input.run(input.controller.signal);
+    const quiescence = promise.then(
+      () => undefined,
+      () => undefined,
+    );
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => {
+            const error = new QueuedInboundDispatchTimeoutError(
+              timeoutMs,
+              quiescence,
+            );
+            input.controller.abort(
+              error,
+            );
+            reject(error);
+          },
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export class QueuedInboundDispatcher {
   private readonly activeSessionKeys = new Set<string>();
   private readonly activeTasks = new Set<Promise<void>>();
 
   poll(options: ProcessQueuedInboundOptions): ProcessQueuedInboundSummary {
     const maxConcurrentSessions = maxConcurrentSessionsFor(options);
+    options.queue.recoverStaleProcessing({
+      staleAfterMs: processingLeaseMsFor(options),
+      now: options.now?.(),
+    });
     const availableSlots = Math.max(0, maxConcurrentSessions - this.activeTasks.size);
     const claimLimit = Math.min(options.limit ?? DEFAULT_MAX_CONCURRENT_SESSIONS, availableSlots);
     const summary: ProcessQueuedInboundSummary = {
@@ -526,25 +680,39 @@ export class QueuedInboundDispatcher {
     if (claimLimit <= 0) return summary;
 
     const batchSessionKeys = new Set<string>();
-    const items = options.queue.claimEligible(claimLimit, (event) => {
-      const sessionKey = sessionKeyForQueuedInbound(event);
-      if (this.activeSessionKeys.has(sessionKey) || batchSessionKeys.has(sessionKey)) {
-        return false;
-      }
-      batchSessionKeys.add(sessionKey);
-      return true;
-    });
+    const items = options.queue.claimEligible(
+      claimLimit,
+      (event) => {
+        const sessionKey = sessionKeyForQueuedInbound(event);
+        if (this.activeSessionKeys.has(sessionKey) || batchSessionKeys.has(sessionKey)) {
+          return false;
+        }
+        batchSessionKeys.add(sessionKey);
+        return true;
+      },
+      options.now?.(),
+      processingLeaseMsFor(options),
+    );
     summary.claimed = items.length;
 
     for (const item of items) {
       const sessionKey = sessionKeyForQueuedInbound(item);
       this.activeSessionKeys.add(sessionKey);
+      let quiescence: Promise<void> | undefined;
       const task = this.handleItem(item, options, summary)
+        .then((settled) => {
+          quiescence = settled.quiescence;
+          if (settled.quiescence) {
+            void settled.quiescence.finally(() => {
+              this.activeSessionKeys.delete(sessionKey);
+            });
+          }
+        })
         .catch(() => {
           summary.failed += 1;
         })
         .finally(() => {
-          this.activeSessionKeys.delete(sessionKey);
+          if (!quiescence) this.activeSessionKeys.delete(sessionKey);
           this.activeTasks.delete(task);
         });
       this.activeTasks.add(task);
@@ -563,7 +731,7 @@ export class QueuedInboundDispatcher {
     item: ClaimedInboundEvent,
     options: ProcessQueuedInboundOptions,
     summary: ProcessQueuedInboundSummary,
-  ): Promise<void> {
+  ): Promise<{ quiescence?: Promise<void> }> {
     const result = await processClaimedQueuedInboundItem({
       item,
       options,
@@ -580,5 +748,6 @@ export class QueuedInboundDispatcher {
         failed: result.failed,
       });
     } catch {}
+    return { quiescence: result.quiescence };
   }
 }

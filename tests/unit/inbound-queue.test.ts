@@ -48,7 +48,12 @@ test("native inbound queue atomically enqueues, claims, completes, and fails eve
     const queued = queue.enqueue(envelope("automation:test"), { source: "test" }, new Date("2026-04-27T00:00:00.000Z"));
     expect(queued.queueId).toContain("automation:test");
 
-    const [claimed] = queue.claim(1);
+    const [claimed] = queue.claimEligible(
+      1,
+      () => true,
+      new Date("2026-04-27T00:00:00.000Z"),
+      60_000,
+    );
     expect(claimed).toBeDefined();
     expect(claimed!.attempts).toBe(1);
     expect(queue.claim(1)).toEqual([]);
@@ -82,6 +87,64 @@ test("native inbound queue claims early without parsing the whole pending direct
 
     expect(claimed.map((item) => item.queueId)).toEqual([first.queueId]);
     expect(queue.readCount).toBe(1);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("native inbound queue recovers stale processing records back to pending", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    const queued = queue.enqueue(envelope("automation:stale-processing"));
+    const [claimed] = queue.claimEligible(
+      1,
+      () => true,
+      new Date("2026-04-27T00:00:00.000Z"),
+      60_000,
+    );
+    expect(claimed?.queueId).toBe(queued.queueId);
+    const recovered = queue.recoverStaleProcessing({
+      staleAfterMs: 60_000,
+      now: new Date("2026-04-27T00:02:00.000Z"),
+    });
+
+    expect(recovered).toEqual({ requeued: 1, skipped: 0 });
+    expect(existsSync(claimed!.path)).toBe(false);
+    const [reclaimed] = queue.claim(1);
+    expect(reclaimed?.queueId).toBe(queued.queueId);
+    expect(reclaimed?.attempts).toBe(2);
+    expect(readFileSync(reclaimed!.path, "utf8")).toContain(
+      "processing_lease_expired",
+    );
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("native inbound queue does not recover processing records with terminal outcomes", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    const queued = queue.enqueue(envelope("automation:terminal-processing"));
+    const [claimed] = queue.claim(1);
+    expect(claimed?.queueId).toBe(queued.queueId);
+    expect(
+      queue.fail(
+        claimed!,
+        "already terminal",
+        {},
+        new Date("2026-04-27T00:00:00.000Z"),
+      ),
+    ).toBe(true);
+
+    const recovered = queue.recoverStaleProcessing({
+      staleAfterMs: 60_000,
+      now: new Date("2026-04-27T00:02:00.000Z"),
+    });
+
+    expect(recovered).toEqual({ requeued: 0, skipped: 0 });
+    expect(queue.claim(1)).toEqual([]);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

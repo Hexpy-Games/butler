@@ -68,6 +68,19 @@ export function beforeDirectTurnModelRequest(budget: DirectTurnBudget): void {
   budget.modelRequestsUsed += 1;
 }
 
+export function hasDirectTurnModelRequestReserve(
+  budget: DirectTurnBudget,
+  reserveRequests: number,
+): boolean {
+  return directTurnModelRequestsRemaining(budget) > reserveRequests;
+}
+
+export function directTurnModelRequestsRemaining(
+  budget: DirectTurnBudget,
+): number {
+  return Math.max(0, budget.maxModelCalls - budget.modelRequestsUsed);
+}
+
 export function addDirectTurnUsage(input: {
   budget: DirectTurnBudget;
   promptTokens: number | null;

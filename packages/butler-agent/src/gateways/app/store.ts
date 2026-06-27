@@ -3767,6 +3767,12 @@ export class AppServerStore {
     }
 
     if (metadata.kind !== "final_result") return false;
+    const queuedFinalProjection = this.queuedFinalProjectionDisposition(metadata);
+    if (queuedFinalProjection === "reject") {
+      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      return false;
+    }
+    if (queuedFinalProjection === "defer") return false;
     const text = sanitizeAppTransportFinalText(message.text);
     const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
     if (!text && artifacts.length === 0) return false;
@@ -3839,6 +3845,37 @@ export class AppServerStore {
     this.touchChat(chatId);
     void this.drainQueuedSessionMessages(chatId).catch(() => undefined);
     return true;
+  }
+
+  private queuedFinalProjectionDisposition(
+    metadata: Record<string, unknown>,
+  ): "accept" | "defer" | "reject" {
+    const queueId = safeInboundQueueId(metadata.queueId);
+    const dispatchClaimId = safeOptionalShortToken(metadata.dispatchClaimId);
+    if (!queueId || !dispatchClaimId) return "accept";
+    const failed = this.readInboundQueueTerminalRecord("failed", queueId);
+    if (failed) return "reject";
+    const processed = this.readInboundQueueTerminalRecord("processed", queueId);
+    const processedClaimId = terminalClaimId(processed);
+    if (!processed) return "defer";
+    if (!processedClaimId) return "defer";
+    return processedClaimId === dispatchClaimId ? "accept" : "reject";
+  }
+
+  private readInboundQueueTerminalRecord(
+    state: "failed" | "processed",
+    queueId: string,
+  ): Record<string, unknown> | null {
+    try {
+      const text = readFileSync(
+        join(this.butlerData, "runtime", "inbound-events", state, `${queueId}.json`),
+        "utf8",
+      );
+      const parsed = JSON.parse(text);
+      return isRecord(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
   }
 
   private applyGeneratedSessionTitleFromProjection(
@@ -4515,7 +4552,7 @@ export class AppServerStore {
     });
 
     if (!responder) {
-      this.enqueueAppTransportTurn({
+      const queuedTurn = this.enqueueAppTransportTurn({
         chatId,
         turnId: turn.id,
         message: accepted,
@@ -4525,7 +4562,7 @@ export class AppServerStore {
       return {
         accepted,
         replies: [],
-        turn: thinkingTurn,
+        turn: queuedTurn,
         next_cursor: accepted.cursor,
       };
     }
@@ -4663,46 +4700,93 @@ export class AppServerStore {
     message: MessageRecord;
     text: string;
     controls: SessionControlState;
-  }): void {
-    const chat = this.getChatRow(input.chatId);
-    const project = chat?.project_id
-      ? this.getProjectRow(chat.project_id)
-      : null;
-    const sessionId = sessionHintForRow(input.chatId);
-    this.ensureAppTransportSessionBinding({
-      chatId: input.chatId,
-      sessionId,
-      project,
-      sessionKind: chat?.kind ?? "chat",
-      controls: input.controls,
-    });
-    this.serviceClient.enqueueAppTurn(
-      {
+  }): TurnRecord {
+    try {
+      const chat = this.getChatRow(input.chatId);
+      const project = chat?.project_id
+        ? this.getProjectRow(chat.project_id)
+        : null;
+      const sessionId = sessionHintForRow(input.chatId);
+      this.ensureAppTransportSessionBinding({
         chatId: input.chatId,
-        messageId: input.message.id,
-        turnId: input.turnId,
-        text: input.text,
-        timestamp: input.message.created_at,
         sessionId,
-        accountId: APP_ACCOUNT,
-        peerKind: "dm",
-        senderId: APP_SENDER_ID,
-        senderDisplayName: "Butler App",
-        projectId: chat?.project_id ?? undefined,
-        attachments: this.listMessageAttachmentsForTransport(input.message.id),
-        rawSource: "app-server",
-      },
-      {
-        source: "app-server",
-        chatId: input.chatId,
-        turnId: input.turnId,
-      },
-    );
-    this.appendEvent("turn.queued", {
+        project,
+        sessionKind: chat?.kind ?? "chat",
+        controls: input.controls,
+      });
+      const queued = this.serviceClient.enqueueAppTurn(
+        {
+          chatId: input.chatId,
+          messageId: input.message.id,
+          turnId: input.turnId,
+          text: input.text,
+          timestamp: input.message.created_at,
+          sessionId,
+          accountId: APP_ACCOUNT,
+          peerKind: "dm",
+          senderId: APP_SENDER_ID,
+          senderDisplayName: "Butler App",
+          projectId: chat?.project_id ?? undefined,
+          attachments: this.listMessageAttachmentsForTransport(input.message.id),
+          rawSource: "app-server",
+        },
+        {
+          source: "app-server",
+          chatId: input.chatId,
+          turnId: input.turnId,
+        },
+      );
+      this.appendEvent("turn.queued", {
+        session_id: input.chatId,
+        turn_id: input.turnId,
+        transport: APP_TRANSPORT,
+        queue_id: queued.queueId,
+      });
+      return this.getTurn(input.turnId) ?? this.updateTurnState(input.turnId, "thinking", {
+        safeStatusLabel: "Thinking",
+        cancellable: true,
+      });
+    } catch (error) {
+      return this.failAppTransportQueueHandoff(input, error);
+    }
+  }
+
+  private failAppTransportQueueHandoff(
+    input: {
+      chatId: string;
+      turnId: string;
+    },
+    error: unknown,
+  ): TurnRecord {
+    const safeError = appSafeResponderError(error);
+    this.upsertAssistantTurnFailure(input.chatId, input.turnId, {
+      code: "app_turn_queue_failed",
+      message:
+        "Butler could not queue this request for execution. Retry the turn.",
+    });
+    this.appendTurnEvent(input.chatId, input.turnId, {
+      kind: "turn.failed",
+      payload: safeTurnFailureEventPayload({
+        code: "app_turn_queue_failed",
+        message:
+          "Butler could not queue this request for execution. Retry the turn.",
+        cause: safeError.cause ?? safeError.message,
+      }),
+    });
+    const failedTurn = this.updateTurnState(input.turnId, "failed", {
+      safeStatusLabel: "Failed",
+      retryable: true,
+      cancellable: false,
+      safeErrorCode: "app_turn_queue_failed",
+    });
+    this.appendTerminalTurnStateChanged(failedTurn);
+    this.appendEvent("turn.queue_failed", {
       session_id: input.chatId,
       turn_id: input.turnId,
       transport: APP_TRANSPORT,
+      safe_error_code: "app_turn_queue_failed",
     });
+    return failedTurn;
   }
 
   private ensureAppTransportSessionBinding(input: {
@@ -9966,6 +10050,19 @@ function safeOptionalShortToken(value: unknown): string | undefined {
   const text = typeof value === "string" ? value.trim() : "";
   if (!text || !/^[\w:./-]+$/u.test(text)) return undefined;
   return text.slice(0, 96);
+}
+
+function safeInboundQueueId(value: unknown): string | undefined {
+  const text = safeOptionalShortToken(value);
+  if (!text || text.includes("..") || text.includes("/") || text.includes("\\")) {
+    return undefined;
+  }
+  return text;
+}
+
+function terminalClaimId(record: Record<string, unknown> | null): string | undefined {
+  const metadata = isRecord(record?.metadata) ? record.metadata : {};
+  return safeOptionalShortToken(metadata.terminalClaimId);
 }
 
 function safeSkillNameList(value: unknown): string[] {

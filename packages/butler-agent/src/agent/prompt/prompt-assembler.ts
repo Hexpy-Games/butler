@@ -444,7 +444,16 @@ function promptWorkStreamForSession(
   const active = store.activeForSession(sessionId);
   if (active) return active;
   const latest = store.list({ sessionId, includeTerminal: true }).at(0);
-  return latest?.state === "failed" ? store.read(latest.id) : null;
+  if (!latest) return null;
+  if (
+    latest.state === "paused" ||
+    latest.state === "waiting_user" ||
+    latest.state === "failed" ||
+    latest.state === "recoverable"
+  ) {
+    return store.read(latest.id);
+  }
+  return null;
 }
 
 function shouldShowActiveWorkStatusNote(stream: WorkStreamRecord): boolean {
