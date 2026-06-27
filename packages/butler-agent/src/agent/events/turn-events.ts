@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sanitizePublicText } from "./public-text.ts";
 import {
+  TURN_ACKNOWLEDGED_EVENT_KIND,
   TURN_STATE_CONTRACT_EVENT_KINDS,
   normalizeTurnStateContractPayload,
 } from "./turn-state-contract.ts";
@@ -179,6 +180,15 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       work_block_id: workBlockId,
       work_block_label: optionalPublicText(payload.workBlockLabel) ?? (workBlockId ? note : undefined),
       ...publicDecisionFields(payload),
+    };
+  }
+  if (event.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
+    return {
+      id: event.id,
+      kind: "turn",
+      safe_label: sanitizePublicText(payload.safeLabel, "Request received. Preparing the work."),
+      state: "accepted",
+      created_at: createdAt,
     };
   }
   if (event.kind === "work.block.started" || event.kind === "work.block.updated" || event.kind === "work.block.completed") {

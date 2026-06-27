@@ -43,8 +43,10 @@ import {
   upsertLocalModelConfig,
 } from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
-import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
-import { firstVisibleProgressPayload } from "../../packages/butler-agent/src/agent/events/first-visible-progress.ts";
+import {
+  TURN_ACKNOWLEDGED_EVENT_KIND,
+  createTurnAcknowledgedPayload,
+} from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
 import type {
   AgentRuntimeAdapter,
   ArtifactRef,
@@ -802,24 +804,25 @@ test("app server live events stream matches replay for turn events", async () =>
   }
 });
 
-test("app server persists and replays first visible progress before later turn events", async () => {
+test("app server persists and replays deterministic acknowledgement before later turn events", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
   });
   try {
-    const firstProgress = server.store.appendTurnEvent("general", "turn-first-progress", {
-      kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-      payload: firstVisibleProgressPayload({
-        note: "필요한 맥락을 확인하겠습니다.",
+    const acknowledged = server.store.appendTurnEvent("general", "turn-acknowledged", {
+      kind: TURN_ACKNOWLEDGED_EVENT_KIND,
+      payload: createTurnAcknowledgedPayload({
+        safeLabel: "Request received. Preparing the work.",
+        transport: "app",
       }),
     });
-    const started = server.store.appendTurnEvent("general", "turn-first-progress", {
+    const started = server.store.appendTurnEvent("general", "turn-acknowledged", {
       kind: "turn.started",
       payload: { safeLabel: "Started" },
     });
 
-    expect(firstProgress.turnSequence).toBeLessThan(started.turnSequence);
+    expect(acknowledged.turnSequence).toBeLessThan(started.turnSequence);
     const replay = await getJson(`${server.url}events?cursor=0`);
     const events = replay.data.events as Array<{
       type: string;
@@ -832,21 +835,23 @@ test("app server persists and replays first visible progress before later turn e
     const turnEvent = events.find(
       (event) =>
         event.type === "agent.turn_event" &&
-        event.payload?.turn_id === "turn-first-progress" &&
-        event.payload.event?.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+        event.payload?.turn_id === "turn-acknowledged" &&
+        event.payload.event?.kind === TURN_ACKNOWLEDGED_EVENT_KIND,
     );
     const progressEvent = events.find(
       (event) =>
         event.type === "agent.turn_event.progress" &&
-        event.payload?.turn_id === "turn-first-progress",
+        event.payload?.turn_id === "turn-acknowledged",
     );
 
     expect(turnEvent?.payload?.event).toMatchObject({
-      kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-      turnSequence: firstProgress.turnSequence,
+      kind: TURN_ACKNOWLEDGED_EVENT_KIND,
+      turnSequence: acknowledged.turnSequence,
     });
     expect(progressEvent?.payload?.row).toMatchObject({
-      safe_label: "필요한 맥락을 확인하겠습니다.",
+      kind: "turn",
+      state: "accepted",
+      safe_label: "Request received. Preparing the work.",
     });
     expect(progressEvent?.payload?.row?.tool_call_id).toBeUndefined();
   } finally {

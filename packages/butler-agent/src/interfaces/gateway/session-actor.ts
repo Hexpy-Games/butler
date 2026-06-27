@@ -13,12 +13,9 @@ import type {
 } from "../../test-support/harness/contracts.ts";
 import type { RuntimeDeliveryClassification } from "../../agent/turn/runtime-delivery-state.ts";
 import {
-  FIRST_VISIBLE_PROGRESS_ASSISTANT_SOURCE,
-  firstVisibleProgressPayload,
-} from "../../agent/events/first-visible-progress.ts";
-import {
-  FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-} from "../../agent/events/turn-events.ts";
+  TURN_ACKNOWLEDGED_EVENT_KIND,
+  createTurnAcknowledgedPayload,
+} from "../../agent/events/turn-state-contract.ts";
 import {
   recordDurableInbound,
   recordDurableOutbound,
@@ -67,11 +64,6 @@ interface SessionActorOptions {
     event: RuntimeTurnEventInput;
   }) => Promise<void>;
   generateSessionTitle?: (input: {
-    binding: StoredSessionBinding;
-    envelope: InboundEnvelope;
-    route?: GatewayRoute;
-  }) => Promise<string | null>;
-  generateFirstVisibleProgress?: (input: {
     binding: StoredSessionBinding;
     envelope: InboundEnvelope;
     route?: GatewayRoute;
@@ -418,7 +410,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     });
 
     try {
-      await this.emitFirstVisibleProgress({
+      await this.emitTurnAcknowledged({
         binding,
         envelope,
         route,
@@ -601,7 +593,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     }
   }
 
-  private async emitFirstVisibleProgress(input: {
+  private async emitTurnAcknowledged(input: {
     binding: StoredSessionBinding;
     envelope: InboundEnvelope;
     route?: GatewayRoute;
@@ -610,54 +602,40 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
   }): Promise<void> {
     if (input.envelope.transport !== APP_TRANSPORT) return;
     if (!this.options.deliverTurnEvent) return;
+    const event: RuntimeTurnEventInput = {
+      kind: TURN_ACKNOWLEDGED_EVENT_KIND,
+      createdAt: input.timestamp,
+      payload: createTurnAcknowledgedPayload({
+        safeLabel: "Request received. Preparing the work.",
+        transport: input.envelope.transport,
+      }),
+    };
     try {
-      const note = await this.generateFirstVisibleProgressBestEffort(
-        input.binding,
-        input.envelope,
-        input.route,
-      );
-      if (!note) return;
       await this.options.deliverTurnEvent({
         binding: input.binding,
         envelope: input.envelope,
         route: input.route,
-        event: {
-          kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-          createdAt: input.timestamp,
-          payload: firstVisibleProgressPayload({
-            note,
-            source: FIRST_VISIBLE_PROGRESS_ASSISTANT_SOURCE,
-          }),
-        },
+        event,
       });
       recordFirstVisibleLatencyMetric({
         butlerData: gatewayMetricsButlerData(),
         durationMs: Date.now() - input.acceptedAtMs,
-        signal: "first_progress",
+        signal: "acknowledged",
         transport: input.envelope.transport,
         role: input.binding.role,
         source: "gateway-actor",
       });
     } catch {
-      // First visible progress is latency UX, not the authoritative turn path.
-    }
-  }
-
-  private async generateFirstVisibleProgressBestEffort(
-    binding: StoredSessionBinding,
-    envelope: InboundEnvelope,
-    route?: GatewayRoute,
-  ): Promise<string | null> {
-    try {
-      return (
-        (await this.options.generateFirstVisibleProgress?.({
-          binding,
-          envelope,
-          route,
-        })) ?? null
-      );
-    } catch {
-      return null;
+      recordFirstVisibleLatencyMetric({
+        butlerData: gatewayMetricsButlerData(),
+        durationMs: Date.now() - input.acceptedAtMs,
+        signal: "acknowledged",
+        status: "error",
+        transport: input.envelope.transport,
+        role: input.binding.role,
+        source: "gateway-actor",
+      });
+      // Acknowledgement is a public latency channel; durable inbound remains authoritative.
     }
   }
 
