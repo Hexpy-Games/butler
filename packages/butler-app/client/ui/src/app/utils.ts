@@ -47,6 +47,7 @@ const LIFECYCLE_ACTIVITY_LABELS = new Set([
 ]);
 const WORK_BLOCK_MARKER_KIND = "work_block";
 const FIRST_VISIBLE_PROGRESS_EVENT_KIND = "turn.first_progress";
+const TURN_ACKNOWLEDGED_EVENT_KIND = "turn.acknowledged";
 const INTERNAL_PROGRESS_TOOL_NAMES = new Set([
   "Update Todo List",
   "List Todo List",
@@ -1021,6 +1022,18 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
         safeOptionalPublicText(payload.workBlockLabel) ??
         (workBlockId ? note : undefined),
       ...publicDecisionFields(payload),
+    };
+  }
+  if (event.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
+    return {
+      id: event.id,
+      kind: "turn",
+      state: "accepted",
+      safe_label: safePublicText(
+        payload.safeLabel,
+        "Request received. Preparing the work.",
+      ),
+      created_at,
     };
   }
   if (

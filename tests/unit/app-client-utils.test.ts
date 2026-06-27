@@ -1522,6 +1522,62 @@ test("timeline applies first visible progress turn events as public progress row
   expect(messages).toEqual([]);
 });
 
+test("timeline applies turn acknowledgements as accepted progress rows", () => {
+  let messages: MessageRecord[] = [];
+  let currentSummary: SessionSummaryView | null = {
+    session_id: "general",
+    turn_state: "thinking",
+    latest_progress: {
+      turn_id: "turn-ack",
+      safe_progress_rows: [],
+    },
+  };
+
+  applyTimelineEvents(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-ack",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-ack",
+            sessionSequence: 1,
+            turnSequence: 1,
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    (update) => {
+      messages = update(messages);
+    },
+    (update) => {
+      currentSummary = update(currentSummary);
+      return currentSummary;
+    },
+  );
+
+  expect(currentSummary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "event-ack",
+      kind: "turn",
+      state: "accepted",
+      safe_label: "Request received. Preparing the work.",
+    }),
+  );
+  expect(messages).toEqual([]);
+});
+
 test("first visible progress rows become active work blocks", () => {
   const blocks = workBlocksFromProgressRows([
     {

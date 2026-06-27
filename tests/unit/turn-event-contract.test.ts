@@ -15,6 +15,10 @@ import {
   FIRST_VISIBLE_PROGRESS_FALLBACK_NOTE,
   firstVisibleProgressPayload,
 } from "../../packages/butler-agent/src/agent/events/first-visible-progress.ts";
+import {
+  TURN_ACKNOWLEDGED_EVENT_KIND,
+  createTurnAcknowledgedPayload,
+} from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
 
 test("turn event contract accepts every public event kind with monotonic sequences", () => {
   for (const [index, kind] of TURN_EVENT_KINDS.entries()) {
@@ -111,6 +115,27 @@ test("turn event privacy fixtures keep public labels and suppress private protoc
     expect(sanitized).not.toContain("sk-private");
     expect(sanitized).not.toContain("postgres://");
   }
+});
+
+test("turn acknowledged event projects a deterministic accepted row", () => {
+  const event = createAgentTurnEvent({
+    sessionId: "general",
+    turnId: "turn-1",
+    sessionSequence: 1,
+    turnSequence: 1,
+    kind: TURN_ACKNOWLEDGED_EVENT_KIND,
+    payload: createTurnAcknowledgedPayload({
+      safeLabel: "Request received. Preparing the work.",
+      transport: "app",
+    }),
+  });
+
+  expect(progressRowFromTurnEvent(event)).toMatchObject({
+    id: event.id,
+    kind: "turn",
+    state: "accepted",
+    safe_label: "Request received. Preparing the work.",
+  });
 });
 
 test("turn event progress projection preserves safe tool activity", () => {
