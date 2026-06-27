@@ -1736,6 +1736,96 @@ test("store prunes optimistic client progress after server accepts the turn", ()
   expect(useButlerStore.getState().turnProgress[clientTurnId]).toBeUndefined();
 });
 
+test("store ACK path prunes optimistic Thinking before terminal delivery", () => {
+  const clientTurnId = "client-turn-client-ack";
+  useButlerStore.setState({
+    activeChatId: "session-a",
+    messages: [],
+    summary: {
+      session_id: "session-a",
+      turn_state: "thinking",
+      latest_progress: {
+        turn_id: clientTurnId,
+        state: "thinking",
+        updated_at: "2026-05-05T00:00:00.000Z",
+        safe_progress_rows: [
+          {
+            id: "optimistic",
+            kind: "thinking",
+            state: "thinking",
+            safe_label: "Thinking",
+            created_at: "2026-05-05T00:00:00.000Z",
+          },
+        ],
+      },
+    },
+    turnProgress: {
+      [clientTurnId]: {
+        turn_id: clientTurnId,
+        state: "thinking",
+        updated_at: "2026-05-05T00:00:00.000Z",
+        safe_progress_rows: [
+          {
+            id: "optimistic",
+            kind: "thinking",
+            state: "thinking",
+            safe_label: "Thinking",
+            created_at: "2026-05-05T00:00:00.000Z",
+          },
+        ],
+      },
+    },
+  });
+
+  useButlerStore.getState().applyTimelineEvents([
+    {
+      id: 13,
+      type: "agent.turn_event",
+      payload: {
+        session_id: "session-a",
+        turn_id: "turn-real",
+        event: {
+          id: "event-ack",
+          sessionId: "session-a",
+          turnId: "turn-real",
+          sessionSequence: 1,
+          turnSequence: 1,
+          createdAt: "2026-05-05T00:00:01.000Z",
+          kind: "turn.acknowledged",
+          visibility: "public",
+          payload: {
+            safeLabel: "Request received. Preparing the work.",
+            transport: "app",
+          },
+        },
+      },
+    },
+    {
+      id: 14,
+      type: "message.created",
+      payload: {
+        message: messageRecord(
+          "assistant-final",
+          "session-a",
+          "assistant",
+          "done",
+          2,
+          "turn-real",
+        ),
+      },
+    },
+  ]);
+
+  const state = useButlerStore.getState();
+  expect(state.turnProgress[clientTurnId]).toBeUndefined();
+  expect(state.turnProgress["turn-real"]?.state).toBe("delivered");
+  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
+  expect(state.summary?.latest_progress?.state).toBe("delivered");
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toBeNull();
+});
+
 test("setSessionView does not regress terminal turn state from a stale refresh", () => {
   const terminalProgress: TurnProgressSnapshot = {
     turn_id: "turn-a",
