@@ -7372,8 +7372,110 @@ test("native runtime marks interrupted direct WorkStreams recoverable", async ()
   });
   const record = new WorkStreamStore(tempDir).read(streams[0].id);
   expect(record?.status_note).toContain("interrupted before final delivery");
-  expect(new TodoListStore(tempDir).view(record!.todo_list_id!, { includeCompleted: true }).progress.active)
-    .toBe(0);
+  const todoView = new TodoListStore(tempDir).view(record!.todo_list_id!, { includeCompleted: true });
+  expect(todoView.progress.active).toBe(2);
+  expect(todoView.items).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      id: "inspect",
+      status: "pending",
+      active_form: "긴 작업 상태 확인 중",
+    }),
+    expect.objectContaining({
+      id: "report",
+      status: "pending",
+    }),
+  ]));
+});
+
+test("native runtime resumes prompt-budget interrupted WorkStreams from durable todo state", async () => {
+  const sessionId = "butler/main/prompt-budget-continuation";
+  let callCount = 0;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      callCount += 1;
+      if (callCount === 1) {
+        await input.executeTool({
+          name: "update_todo_list",
+          args: {
+            title: "Sandy style guard validation",
+            todos: [{
+              id: "w3-style-guard",
+              content: "Inspect Sandy style guard validation evidence",
+              active_form: "Inspecting Sandy style guard validation evidence",
+              status: "in_progress",
+              phase: "execution",
+            }, {
+              id: "w4-report",
+              content: "Report Sandy style guard validation result",
+              active_form: "Reporting Sandy style guard validation result",
+              status: "pending",
+              phase: "reporting",
+            }],
+          },
+          rawArguments: JSON.stringify({ title: "Sandy style guard validation" }),
+        });
+        const error = new Error("Prompt usage model-call budget exhausted before provider request");
+        error.name = "PromptUsageModelCallBudgetExhaustedError";
+        Object.assign(error, { code: "prompt_usage_model_call_budget_exhausted" });
+        throw error;
+      }
+      return "보존된 W3 작업 상태부터 이어서 검증했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "샌디봇 최신세션 W3부터 계속 진행해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  })).rejects.toThrow("Prompt usage model-call budget exhausted");
+
+  const streams = new WorkStreamStore(tempDir).list({ sessionId, includeTerminal: true });
+  expect(streams).toHaveLength(1);
+  expect(streams[0]).toMatchObject({
+    state: "recoverable",
+    current_phase: "execution",
+    active_step_id: "w3-style-guard",
+    terminal: false,
+  });
+  const record = new WorkStreamStore(tempDir).read(streams[0].id);
+  expect(record?.status_note).toContain("Turn interrupted before final delivery");
+  const todoView = new TodoListStore(tempDir).view(record!.todo_list_id!, { includeCompleted: true });
+  expect(todoView.progress.active).toBe(2);
+  expect(todoView.items)
+    .toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "w3-style-guard",
+        status: "pending",
+        active_form: "Inspecting Sandy style guard validation evidence",
+      }),
+      expect.objectContaining({
+        id: "w4-report",
+        status: "pending",
+      }),
+    ]));
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "계속해서 진행해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toContain("W3");
+  expect(callCount).toBe(2);
 });
 
 test("native runtime synthesizes durable WorkStream progress when a compound tool turn skips todo setup", async () => {

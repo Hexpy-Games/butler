@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type {
@@ -24,6 +24,10 @@ import {
 import { DeliveryGuard } from "../../packages/butler-agent/src/interfaces/transport/delivery-guard.ts";
 import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/mock/adapter.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { PromptAssembler } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
+import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
+import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
+import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -907,7 +911,7 @@ test("queued inbound provider failure preserves safe API diagnostics for app pro
   expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
 });
 
-test("queued inbound sanitizes unexpected model-call budget exhaustion without internal copy", async () => {
+test("queued inbound converts model-call budget exhaustion to recoverable limited delivery", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -949,24 +953,214 @@ test("queued inbound sanitizes unexpected model-call budget exhaustion without i
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 0,
+    handled: 1,
     delivered: 1,
-    failed: 1,
+    failed: 0,
   });
   expect(app.sentActions).toHaveLength(1);
   expect(app.sentActions[0]).toMatchObject({
     transport: "app",
     message: {
-      text: "Butler could not verify that the requested goal was completed.",
+      text:
+        "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.\n\n남은 부분: 완료 보고에 필요한 마지막 결과 정리가 남아 있습니다.\n다음 진행에서는 이 지점부터 이어가면 됩니다.",
       replyToMessageId: "message-budget-failure",
     },
     metadata: {
-      kind: "turn_failed",
+      kind: "final_result",
       turnId: "turn-budget-failure",
-      safeErrorCode: "internal_recovery_required",
-      retryable: true,
+      deliveryState: "delivered_with_limitations",
+      limitationCodes: ["internal_recovery_required"],
     },
   });
+  expect(JSON.stringify(app.sentActions[0])).not.toContain("model-call budget");
+  expect(JSON.stringify(app.sentActions[0])).not.toContain("requested goal was completed");
+  store.close();
+});
+
+test("queued app prompt-budget interruption resumes next turn from durable W3 todo context", async () => {
+  const butlerHome = join(tempDir, "home");
+  mkdirSync(join(butlerHome, "resources", "prompts"), { recursive: true });
+  mkdirSync(join(tempDir, "personas"), { recursive: true });
+  writeFileSync(join(butlerHome, "resources", "prompts", "runtime-system-contract.md"), "RUNTIME_CONTRACT", "utf8");
+  writeFileSync(join(butlerHome, "resources", "prompts", "butler.md"), "BUTLER_ROLE", "utf8");
+  writeFileSync(join(tempDir, "personas", "active.md"), "PERSONA_BODY", "utf8");
+
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  let promptCallCount = 0;
+  let resumePrompt = "";
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome,
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    runFunctionToolPromptText: async (input) => {
+      promptCallCount += 1;
+      if (promptCallCount === 1) {
+        await input.executeTool({
+          name: "update_todo_list",
+          args: {
+            title: "Sandy style guard validation",
+            todos: [{
+              id: "w3-style-guard",
+              content: "Inspect Sandy style guard validation evidence",
+              active_form: "Inspecting Sandy style guard validation evidence",
+              status: "in_progress",
+              phase: "execution",
+            }, {
+              id: "w4-report",
+              content: "Report Sandy style guard validation result",
+              active_form: "Reporting Sandy style guard validation result",
+              status: "pending",
+              phase: "reporting",
+            }],
+          },
+          rawArguments: JSON.stringify({ title: "Sandy style guard validation" }),
+        });
+        const error = new Error("Prompt usage model-call budget exhausted before provider request");
+        error.name = "PromptUsageModelCallBudgetExhaustedError";
+        Object.assign(error, { code: "prompt_usage_model_call_budget_exhausted" });
+        throw error;
+      }
+      resumePrompt = input.prompt;
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          title: "Sandy style guard validation",
+          todos: [{
+            id: "w3-style-guard",
+            content: "Inspect Sandy style guard validation evidence",
+            active_form: "Inspecting Sandy style guard validation evidence",
+            status: "completed",
+            phase: "execution",
+          }, {
+            id: "w4-report",
+            content: "Report Sandy style guard validation result",
+            active_form: "Reporting Sandy style guard validation result",
+            status: "completed",
+            phase: "reporting",
+          }],
+        },
+        rawArguments: JSON.stringify({ title: "Sandy style guard validation" }),
+      });
+      return "W3 style guard validation evidence부터 이어서 처리했습니다.";
+    },
+  });
+  const sessionId = "butler/app-general";
+  store.upsert({
+    sessionId,
+    role: "butler",
+    projectId: "sandy",
+    workspacePath: tempDir,
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "general",
+    }],
+    metadata: {
+      runtimePolicy: { completionReview: "disabled" },
+    },
+  });
+  const router = new GatewayRouter({ store });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    promptAssembler: new PromptAssembler({ butlerHome, butlerData: tempDir }),
+    systemPromptFactory: () => "You are Butler in a queued app continuation test.",
+  });
+  const server = createGatewayServer({
+    router,
+    handlers: createLifecycleGatewayHandlers(lifecycle),
+    butlerData: tempDir,
+  });
+  const queue = new NativeInboundQueue(tempDir);
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  queue.enqueue(appEnvelope({
+    eventId: "app:w3-budget-first",
+    messageId: "client-w3-budget-first",
+    sessionId,
+    text: "샌디봇 최신세션 W3부터 계속 진행해줘.",
+  }), { source: "test" });
+
+  const first = await processQueuedInboundEvents({
+    queue,
+    server,
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(first).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    delivered: 1,
+    failed: 0,
+  });
+  expect(app.sentActions[0]).toMatchObject({
+    metadata: {
+      kind: "final_result",
+      deliveryState: "delivered_with_limitations",
+      limitationCodes: ["internal_recovery_required"],
+    },
+  });
+  expect(JSON.stringify(app.sentActions[0])).not.toContain("model-call budget");
+  expect(JSON.stringify(app.sentActions[0])).not.toContain("requested goal was completed");
+
+  const streamStore = new WorkStreamStore(tempDir);
+  const streams = streamStore.list({ sessionId, includeTerminal: true });
+  expect(streams).toHaveLength(1);
+  expect(streams[0]).toMatchObject({
+    state: "recoverable",
+    current_phase: "execution",
+    active_step_id: "w3-style-guard",
+    terminal: false,
+  });
+  const stream = streamStore.read(streams[0].id);
+  const todos = new TodoListStore(tempDir).view(stream!.todo_list_id!, { includeCompleted: true });
+  expect(todos.items).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      id: "w3-style-guard",
+      status: "pending",
+      active_form: "Inspecting Sandy style guard validation evidence",
+    }),
+    expect.objectContaining({
+      id: "w4-report",
+      status: "pending",
+    }),
+  ]));
+
+  queue.enqueue(appEnvelope({
+    eventId: "app:w3-budget-resume",
+    messageId: "client-w3-budget-resume",
+    sessionId,
+    text: "계속해서 진행해줘.",
+  }), { source: "test" });
+
+  const second = await processQueuedInboundEvents({
+    queue,
+    server,
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(second).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    failed: 0,
+  });
+  expect(promptCallCount).toBe(2);
+  expect(resumePrompt).toContain("## Active Work State");
+  expect(resumePrompt).toContain("WorkStream State: recoverable");
+  expect(resumePrompt).toContain("Active Step ID: w3-style-guard");
+  expect(resumePrompt).toContain(
+    "w3-style-guard:pending:execution:Inspecting Sandy style guard validation evidence",
+  );
+  expect(resumePrompt).not.toContain("requested goal was completed");
+  expect(resumePrompt).not.toContain("model-call budget");
   store.close();
 });
 

@@ -566,14 +566,15 @@ function mergeTimelineProgressIntoSummary(
     resetForRetry || (nextTurnId && latest.turn_id && nextTurnId !== latest.turn_id)
       ? []
       : (latest.safe_progress_rows ?? []);
-  const nextRows =
-    selected.rows.length > 0
-      ? mergeProgressRows(previousRows, selected.rows)
-      : previousRows;
   const currentStateForMerge = resetForRetry ? "" : (currentState ?? "");
   const nextState = selected.state
     ? progressMergeState(currentStateForMerge, selected.state)
     : currentState;
+  const mergedRows =
+    selected.rows.length > 0
+      ? mergeProgressRows(previousRows, selected.rows)
+      : previousRows;
+  const nextRows = progressRowsForMergedTerminalState(mergedRows, nextState);
   const selectedStateWins = selected.state
     ? progressMergeState(currentStateForMerge, selected.state) === selected.state
     : false;
@@ -645,13 +646,14 @@ function mergeTurnProgressBuckets(
     const previousRows = resetForRetry
       ? []
       : (previous?.safe_progress_rows ?? []);
-    const rows =
+    const mergedRows =
       safeRows.length > 0
         ? mergeProgressRows(previousRows, safeRows)
         : previousRows;
     const nextState = bucket.state
       ? progressMergeState(previousStateForMerge, bucket.state)
       : previous?.state;
+    const rows = progressRowsForMergedTerminalState(mergedRows, nextState);
     const bucketStateWins = bucket.state
       ? progressMergeState(previousStateForMerge, bucket.state) === bucket.state
       : false;
@@ -707,14 +709,15 @@ export function mergeTurnProgressFromSummary(
   const base = incomingStateWins
     ? { ...(resetForRetry ? {} : previous), ...latest }
     : { ...latest, ...(resetForRetry ? {} : previous) };
+  const mergedRows = mergeProgressRows(
+    resetForRetry ? [] : (previous?.safe_progress_rows ?? []),
+    rows,
+  );
   const nextSnapshot = {
     ...base,
     turn_id: latest.turn_id,
     ...(nextState ? { state: nextState } : {}),
-    safe_progress_rows: mergeProgressRows(
-      resetForRetry ? [] : (previous?.safe_progress_rows ?? []),
-      rows,
-    ),
+    safe_progress_rows: progressRowsForMergedTerminalState(mergedRows, nextState),
   };
   if (previous && turnProgressSnapshotEqual(previous, nextSnapshot)) {
     return current;
@@ -2064,6 +2067,19 @@ function progressMergeState(current: string, incoming: string): string {
     : current;
 }
 
+function progressRowsForMergedTerminalState(
+  rows: ProgressRow[],
+  state?: string,
+): ProgressRow[] {
+  if (!isDeliveredProgressState(state)) return rows;
+  const filtered = rows.filter((row) => !supersededTerminalFailureProgressRow(row));
+  return filtered.length === rows.length ? rows : filtered;
+}
+
+function supersededTerminalFailureProgressRow(row: ProgressRow): boolean {
+  return row.kind === "turn" && row.state === "failed";
+}
+
 function shouldResetProgressForRetry(current: string, incoming: string): boolean {
   return current === "failed" && isRetryProgressState(incoming);
 }
@@ -2104,6 +2120,10 @@ function isTerminalProgressState(state: string): boolean {
     state === "complete" ||
     state === "completed"
   );
+}
+
+function isDeliveredProgressState(state?: string): boolean {
+  return state === "delivered" || state === "complete" || state === "completed";
 }
 
 function progressStateRank(state: string): number {

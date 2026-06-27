@@ -7016,6 +7016,227 @@ test("app transport final projection does not resurrect timed out failed turns",
   }
 });
 
+test("recoverable limited final can close a timeout failed app turn", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue a recoverable WorkStream",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+  const queueId = "queue-recoverable-timeout";
+  const dispatchClaimId = "claim-recoverable-timeout";
+  const failedQueueDir = join(tempDir, "runtime", "inbound-events", "failed");
+  mkdirSync(failedQueueDir, { recursive: true });
+  writeFileSync(
+    join(failedQueueDir, `${queueId}.json`),
+    JSON.stringify({
+      queueId,
+      failedAt: "2026-05-18T12:00:00.000Z",
+      metadata: {
+        terminalClaimId: dispatchClaimId,
+        failure: { code: "inbound_dispatch_timeout" },
+      },
+    }),
+  );
+  const db = new Database(dbPath);
+  db.query(
+    "INSERT INTO events (type, payload_json, created_at) VALUES (?, ?, ?)",
+  ).run(
+    "agent.turn_event",
+    JSON.stringify({
+      session_id: "general",
+      turn_id: turnId,
+      event: {
+        id: "event-stale-prompt-budget-delivery",
+        kind: "turn.completed",
+        payload: {
+          safeLabel: "Completed with limitations",
+          delivery_state: "delivered_with_limitations",
+          limitation_codes: ["prompt_usage_model_call_budget_exhausted"],
+          limitations: [
+            "Butler reached its internal model-call budget while trying to continue the turn.",
+          ],
+        },
+      },
+    }),
+    "2026-05-18T11:59:59.000Z",
+  );
+  db.close();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:recoverable-timeout",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          queueId,
+          dispatchClaimId,
+          safeErrorCode: "inbound_dispatch_timeout",
+          source: "test",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:01.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:recoverable-final",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          queueId,
+          dispatchClaimId,
+          source: "test",
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "continue a recoverable WorkStream",
+      "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+    ]);
+    const assistant = messages.data.messages.find(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistant).toMatchObject({
+      status: "delivered",
+      retryable: false,
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+    });
+    expect(assistant.safe_error_code ?? null).toBeNull();
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "delivered",
+      retryable: false,
+    });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress.state).toBe("delivered");
+    expect(
+      summary.data.latest_progress.safe_progress_rows.some(
+        (row: { kind: string; state: string }) =>
+          row.kind === "turn" && row.state === "failed",
+      ),
+    ).toBe(false);
+  } finally {
+    server.stop();
+  }
+});
+
+test("recoverable limited final without queue claim cannot close a failed app turn", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue a failed turn without claim",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:no-claim",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          safeErrorCode: "inbound_dispatch_timeout",
+          source: "test",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:01.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:no-claim-final",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "continue a failed turn without claim",
+      "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+    ]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "failed",
+      safe_error_code: "inbound_dispatch_timeout",
+      retryable: true,
+    });
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport queued final waits for matching processed terminal record", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });

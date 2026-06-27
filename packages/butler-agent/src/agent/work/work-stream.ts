@@ -843,6 +843,7 @@ function turnLocalOutcomeTodoStatus(
 ): TodoStatus {
   if (item.status === "completed" || item.status === "cancelled") return item.status;
   if (outcome === "completed" && item.phase === "reporting") return "completed";
+  if (outcome === "recoverable" || outcome === "waiting_user") return "pending";
   return "cancelled";
 }
 
@@ -851,5 +852,5 @@ function turnLocalOutcomeTodoNote(outcome: TurnLocalWorkOutcome): string {
   if (outcome === "failed") return "Cancelled because the turn failed.";
   if (outcome === "cancelled") return "Cancelled with the turn.";
   if (outcome === "waiting_user") return "Paused until the user decision is available.";
-  return "Cancelled in the active projection; resume from the recoverable WorkStream.";
+  return "Paused in the active projection; resume from the recoverable WorkStream.";
 }

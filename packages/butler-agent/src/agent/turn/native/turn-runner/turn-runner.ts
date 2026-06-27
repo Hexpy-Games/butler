@@ -158,7 +158,7 @@ export async function runNativeToolTurn({
           butlerData: deps.butlerData,
           sessionId: input.handle.sessionId,
           turnId,
-          reason: error instanceof Error ? error.message : String(error),
+          reason: limitedDelivery?.reason ?? (error instanceof Error ? error.message : String(error)),
         });
         if (limitedDelivery) {
           await emitRecoverableTurnOutcome({

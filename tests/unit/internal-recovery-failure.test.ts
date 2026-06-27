@@ -107,7 +107,7 @@ test("provider and app projections use the full shared internal recovery classif
   });
   expect(appSafeResponderError(promptBudget)).toEqual({
     code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: "Butler could not verify that the requested goal was completed.",
+    message: "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
   });
 });
 

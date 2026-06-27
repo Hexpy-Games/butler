@@ -90,7 +90,7 @@ function safeGoalCompletionIncompleteMessage(message: string): string | null {
 
 function internalRecoveryMessage(rawMessage: string, safeRuntimeMessage: string): string | null {
   if (/prompt usage model-call budget exhausted/iu.test(rawMessage)) {
-    return "Butler could not verify that the requested goal was completed.";
+    return "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.";
   }
   if (isCompletionObligationProtocolMessage(rawMessage)) {
     return safeGoalCompletionIncompleteMessage(rawMessage);

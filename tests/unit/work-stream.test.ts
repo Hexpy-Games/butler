@@ -266,7 +266,7 @@ test("todo updates reuse same-turn waiting revision after terminal base stream",
     .filter((id) => id !== completed.id)).toEqual([revision.id]);
 });
 
-test("turn-local recoverable outcome clears active todos without touching linked streams", () => {
+test("turn-local recoverable outcome keeps interrupted todos resumable without touching linked streams", () => {
   const store = new WorkStreamStore(tempDir);
   const todoStore = new TodoListStore(tempDir);
   const sessionId = "butler/app-project-butler";
@@ -312,8 +312,20 @@ test("turn-local recoverable outcome clears active todos without touching linked
     active_step_id: "inspect",
     status_note: "Interrupted before final delivery.",
   });
-  expect(new TodoListStore(tempDir).view("turn-local-recoverable", { includeCompleted: true }).progress.active)
-    .toBe(0);
+  const recoverableTodo = new TodoListStore(tempDir).view("turn-local-recoverable", { includeCompleted: true });
+  expect(recoverableTodo.progress.active).toBe(2);
+  expect(recoverableTodo.items)
+    .toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "inspect",
+        status: "pending",
+        note: "Paused in the active projection; resume from the recoverable WorkStream.",
+      }),
+      expect.objectContaining({
+        id: "report",
+        status: "pending",
+      }),
+    ]));
   expect(store.activeForSession(sessionId, { currentTurnId: "turn-recoverable" })?.id)
     .toBe(linked.id);
   expect(store.read(linked.id)).toMatchObject({
