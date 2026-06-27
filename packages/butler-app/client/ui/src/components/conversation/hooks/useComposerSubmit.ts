@@ -6,6 +6,7 @@ import type {
   ReasoningEffort,
 } from "@/app/types.ts";
 import type { KeyboardEventLike } from "./composerEventTypes";
+import { composerControlsForSubmit } from "./composerSubmitControls";
 import type { ComposerAttachment } from "./useFileAttachments";
 
 interface UseComposerSubmitProps {
@@ -20,6 +21,7 @@ interface UseComposerSubmitProps {
   reasoning: ReasoningEffort;
   accessMode: AccessMode;
   planMode: boolean;
+  controlsTouched: boolean;
   setModelMenuOpen: (open: boolean) => void;
   setAccessMenuOpen: (open: boolean) => void;
   onSend: (text: string, controls: ComposerControls) => void;
@@ -37,6 +39,7 @@ export function useComposerSubmit({
   reasoning,
   accessMode,
   planMode,
+  controlsTouched,
   setModelMenuOpen,
   setAccessMenuOpen,
   onSend,
@@ -52,19 +55,19 @@ export function useComposerSubmit({
       ) {
         return;
       }
-      const fileRefs = attachments.map((attachment) => attachment.file);
       setText("");
       setAttachments([]);
       setModelMenuOpen(false);
       setAccessMenuOpen(false);
-      onSend(value, {
+      onSend(value, composerControlsForSubmit({
         model,
-        reasoningEffort: reasoning,
+        reasoning,
         accessMode,
         planMode,
-        queuePolicy: activeTurn ? "enqueue_if_busy" : "send_now",
-        attachments: fileRefs,
-      });
+        controlsTouched,
+        activeTurn,
+        attachments,
+      }));
     },
     [
       text,
@@ -81,6 +84,7 @@ export function useComposerSubmit({
       reasoning,
       accessMode,
       planMode,
+      controlsTouched,
     ],
   );
 }

@@ -6305,6 +6305,120 @@ test("app transport send fails the turn instead of leaving thinking when queue h
   }
 });
 
+test("app transport send binds current settings model without persisting implicit composer defaults", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const settings = await patchJson(`${server.url}settings`, {
+      model: "zai/glm-5.2",
+      reasoning_effort: "medium",
+    });
+    expect(settings.data.model).toBe("zai/glm-5.2");
+
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "use the current app settings model",
+      client_message_id: "client-44444444-4444-4444-8444-444444444444",
+    });
+    expect(result.data.turn.state).toBe("thinking");
+
+    const bindings = new SessionBindingStore(
+      join(tempDir, "runtime", "session-store.sqlite"),
+    );
+    try {
+      expect(
+        bindings.getBySessionId("butler/app-general")?.modelRef,
+      ).toBe("zai/glm-5.2");
+    } finally {
+      bindings.close();
+    }
+
+    const db = new Database(join(tempDir, "app.sqlite"));
+    try {
+      const storedControls = db
+        .query<{ value_json: string }, []>(
+          `
+            SELECT value_json
+            FROM app_settings
+            WHERE key = 'session-controls:general'
+          `,
+        )
+        .get();
+      expect(storedControls).toBeNull();
+    } finally {
+      db.close();
+    }
+  } finally {
+    server.stop();
+  }
+});
+
+test("legacy session controls without explicit marker do not override app settings model", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  const server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    await patchJson(`${server.url}settings`, {
+      model: "zai/glm-5.2",
+      reasoning_effort: "medium",
+    });
+    const db = new Database(dbPath);
+    try {
+      db.query(
+        `
+          INSERT INTO app_settings (key, value_json, updated_at)
+          VALUES ('session-controls:general', ?, ?)
+        `,
+      ).run(
+        JSON.stringify({
+          model: "openai/gpt-5.5",
+          reasoning_effort: "medium",
+          access_mode: "full_access",
+          plan_mode: false,
+        }),
+        new Date().toISOString(),
+      );
+    } finally {
+      db.close();
+    }
+
+    const inherited = await getJson(`${server.url}sessions/general/controls`);
+    expect(inherited.data.controls.model).toBe("zai/glm-5.2");
+
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "use settings despite legacy stale controls",
+      client_message_id: "client-55555555-5555-4555-8555-555555555555",
+    });
+    const bindings = new SessionBindingStore(
+      join(tempDir, "runtime", "session-store.sqlite"),
+    );
+    try {
+      expect(bindings.getBySessionId("butler/app-general")?.modelRef).toBe(
+        "zai/glm-5.2",
+      );
+    } finally {
+      bindings.close();
+    }
+
+    const explicit = await patchJson(`${server.url}sessions/general/controls`, {
+      model: "openai/gpt-5.5",
+      reasoning_effort: "medium",
+    });
+    expect(explicit.data.controls.model).toBe("openai/gpt-5.5");
+    const roundTrip = await getJson(`${server.url}sessions/general/controls`);
+    expect(roundTrip.data.controls.model).toBe("openai/gpt-5.5");
+  } finally {
+    server.stop();
+  }
+});
+
 test("active app transport turns keep follow-up messages in the editable session queue", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -7144,6 +7258,8 @@ test("app transport progress projection recovers queued work blocks after app-se
     );
     expect(afterSession.updated_at).not.toBe(beforeSession.updated_at);
     expect(afterSession.last_activity_at).toBe(afterSession.updated_at);
+    expect(afterSession.active_turn_state).toBe("thinking");
+    expect(afterSession.safe_status_label).toBe("Web search: 충주 뉴스");
     expect(
       messages.data.turn_progress[turnId].safe_progress_rows,
     ).toContainEqual(

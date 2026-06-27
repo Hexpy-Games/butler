@@ -1581,7 +1581,8 @@ test("conversation UI renders user bubbles and assistant documents with retryabl
   expect(renderer).toContain("selectedArtifactId");
   expect(renderer).toContain("selectedArtifact");
   expect(renderer).toContain("appCopy.inspector.tabs.summary");
-  expect(renderer).toContain("attachments: fileRefs");
+  expect(renderer).toContain("composerControlsForSubmit");
+  expect(renderer).toContain("attachments,");
   expect(renderer).toContain("file_id: attachment.file_id");
   expect(renderer).toContain('data-picker-filter="all-files"');
   expect(renderer).not.toContain("accept={ATTACHMENT_ACCEPT}");

@@ -18,6 +18,7 @@ import {
 import { produceFinalDeliveryText } from "./final-delivery-gates.ts";
 import { prepareNativeTurnContext } from "./turn-context-builder.ts";
 import { createNativeTurnPromptRunners } from "./turn-prompt-runners.ts";
+import { startModelOrientationProgressBestEffort } from "./model-orientation-progress.ts";
 import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
 import { unresolvedValidationFailureFromAudit } from "./validation-failure-guard.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
@@ -36,6 +37,22 @@ export async function runNativeToolTurn({
     const audit: ToolAuditEntry[] = [];
     const publicDecisionContext: PublicWorkDecision[] = [];
     const pendingPublicDecisions: PublicWorkDecision[] = [];
+    const orientationProgress = useTools
+      ? startModelOrientationProgressBestEffort({
+          turnInput: input,
+          userText: currentUserText(input),
+          language: deps.messageLanguage,
+          runTextPrompt: async (prompt) =>
+            await deps.promptRunner({
+              prompt,
+              model: input.model,
+              instructions: session.init.systemPrompt,
+              cacheScope: "session-turn",
+              signal: input.signal,
+              butlerData: deps.butlerData,
+            }),
+        })
+      : null;
     const context = await prepareNativeTurnContext({
       turnInput: input,
       session,
@@ -61,9 +78,14 @@ export async function runNativeToolTurn({
       publicDecisionContext,
       pendingPublicDecisions,
     });
-    const initialText = useTools
-      ? await runToolPrompt(context.prompt, undefined, "initial_tool_loop")
-      : await runTextPrompt(context.prompt);
+    let initialText: string;
+    try {
+      initialText = useTools
+        ? await runToolPrompt(context.prompt, undefined, "initial_tool_loop")
+        : await runTextPrompt(context.prompt);
+    } finally {
+      orientationProgress?.stop();
+    }
     throwIfRuntimeTurnAborted(input.signal);
     const decisionCheckedText = await produceFinalDeliveryText({
       turnInput: input,
@@ -263,4 +285,9 @@ function projectId(session: NativeTurnRunnerInput["session"]): string | undefine
   return typeof session.init.metadata?.projectId === "string"
     ? session.init.metadata.projectId
     : undefined;
+}
+
+function currentUserText(input: NativeTurnRunnerInput["input"]): string {
+  if ("eventId" in input.input) return input.input.message.text ?? "";
+  return input.input.text ?? "";
 }

@@ -97,6 +97,7 @@ export function useComposerHandlers(props: UseComposerHandlersProps) {
     reasoning,
     accessMode,
     planMode,
+    controlsTouched: composerSelectionTouchedRef.current,
     setModelMenuOpen,
     setAccessMenuOpen,
     onSend,

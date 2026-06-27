@@ -1,4 +1,3 @@
-import { randomUUID } from "crypto";
 import type {
   InboundEnvelope,
   OutboundAction,
@@ -14,7 +13,6 @@ import {
   redactedBridgeToolAuditArgs,
   redactedBridgeToolAuditResult,
 } from "../tools/tool-bridge/audit.ts";
-import { summarizeToolProgress } from "../output/progress/tool-progress.ts";
 import {
   evidenceTranscriptToolCallArgumentsProjection,
   evidenceTranscriptToolResultProjection,
@@ -166,62 +164,7 @@ async function startBridgeToolCallProgress(input: {
   emitIntermediateBestEffort: EmitIntermediateBestEffort;
   emitTurnEventBestEffort: EmitTurnEventBestEffort;
 }): Promise<(result: unknown, bridgeAudit: ReturnType<typeof bridgeToolAuditEvent>, ok: boolean) => Promise<void>> {
-  const startedAt = Date.now();
-  const toolCallId = `tool-${randomUUID().slice(0, 8)}`;
-  const workBlockId = `work-${toolCallId}`;
   const cleanArgs = { ...input.call.args };
-  const progress = summarizeToolProgress(input.call.name, cleanArgs, input.messageLanguage);
-  const workBlockLabel = progress.workBlockLabel || progress.safeLabel;
-  const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
-  await input.emitTurnEventBestEffort(input.turnInput, {
-    kind: "work.block.started",
-    payload: {
-      workBlockId,
-      label: workBlockLabel,
-      activityKind: progress.kind,
-    },
-  });
-  await input.emitTurnEventBestEffort(input.turnInput, {
-    kind: "tool.started",
-    payload: {
-      toolCallId,
-      workBlockId,
-      workBlockLabel,
-      bridgePhase: "invoke",
-      activityKind: progress.kind,
-      toolName: progress.toolName,
-      inputLabel: progress.inputLabel,
-      safeLabel: progress.safeLabel,
-      detailRows: progress.detailRows,
-    },
-  });
-  if (inboundEnvelope && input.turnInput.emitIntermediateDelivery) {
-    await input.emitIntermediateBestEffort(
-      input.turnInput,
-      input.buildIntermediateAction({
-        envelope: inboundEnvelope,
-        suffix: `${input.call.name}-${randomUUID().slice(0, 8)}-bridge-progress`,
-        text: "",
-        metadata: {
-          kind: "tool_progress",
-          activityKind: progress.kind,
-          toolCallId,
-          toolName: progress.toolName,
-          safeLabel: progress.safeLabel,
-          inputLabel: progress.inputLabel,
-          bridgePhase: "invoke",
-          workBlockId,
-          workBlockLabel,
-          detailRows: progress.detailRows,
-        },
-      }),
-      {
-        source: "runtime/native-tool-loop.ts#bridge-tool-progress",
-        kind: "tool_progress",
-        tool: input.call.name,
-      },
-    );
-  }
   appendTranscriptEvent(createTranscriptEvent({
     sessionId: input.sessionId,
     kind: "tool_call",
@@ -235,30 +178,6 @@ async function startBridgeToolCallProgress(input: {
     },
   }));
   return async (result: unknown, bridgeAudit: ReturnType<typeof bridgeToolAuditEvent>, ok: boolean) => {
-    await input.emitTurnEventBestEffort(input.turnInput, {
-      kind: ok ? "tool.completed" : "tool.failed",
-      payload: {
-        toolCallId,
-        workBlockId,
-        workBlockLabel,
-        bridgePhase: ok ? "invoked" : "denied",
-        activityKind: progress.kind,
-        toolName: progress.toolName,
-        inputLabel: progress.inputLabel,
-        safeLabel: progress.safeLabel,
-        detailRows: progress.detailRows,
-        durationMs: Date.now() - startedAt,
-      },
-    });
-    await input.emitTurnEventBestEffort(input.turnInput, {
-      kind: "work.block.completed",
-      payload: {
-        workBlockId,
-        label: workBlockLabel,
-        status: ok ? "completed" : "failed",
-        durationMs: Date.now() - startedAt,
-      },
-    });
     appendTranscriptEvent(createTranscriptEvent({
       sessionId: input.sessionId,
       kind: "tool_result",

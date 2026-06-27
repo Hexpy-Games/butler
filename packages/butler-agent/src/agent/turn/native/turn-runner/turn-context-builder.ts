@@ -184,6 +184,7 @@ export async function prepareNativeTurnContext(input: {
     startedAt: input.startedAt,
     normalizedPrompt,
     currentAttachmentContext,
+    userText,
   });
   recordContextMetric(input, normalizedPrompt, prompt);
   return {
@@ -303,6 +304,7 @@ async function emitStartedAndPreparation(input: {
   startedAt: number;
   normalizedPrompt: ReturnType<typeof normalizeTurnPrompt>;
   currentAttachmentContext: string;
+  userText: string;
 }): Promise<void> {
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "turn.iteration.started",
@@ -326,6 +328,7 @@ async function emitStartedAndPreparation(input: {
           model: input.turnInput.model,
           language: input.deps.messageLanguage,
           useTools: input.useTools,
+          userText: input.userText,
         }),
       });
     },
