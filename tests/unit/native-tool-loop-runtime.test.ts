@@ -1341,6 +1341,17 @@ test("native runtime returns repeated Project Ledger status pressure as structur
     },
     runFunctionToolPromptText: async (input) => {
       for (let index = 0; index < 4; index += 1) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Project Ledger 상태를 확인합니다.",
+            "rationale: 반복 압력 보호가 실제 상태 확인 도구 실행을 기준으로 동작해야 합니다.",
+            "next_step: 상태 결과를 보고 반복 실행 허용 여부를 판단합니다.",
+          ].join("\n"),
+          toolCalls: [{
+            name: "run_command",
+            args: { command: "packages/project-ledger/bin/project-ledger status --project . --json" },
+          }],
+        });
         guardedResults.push(await input.executeTool({
           name: "run_command",
           args: { command: "packages/project-ledger/bin/project-ledger status --project . --json" },
@@ -1480,6 +1491,17 @@ test("native runtime allows repeated tests after a state-mutating command resets
         "printf 'changed' > packages/butler-agent/src/__budget-reset-test.txt",
         "bun test tests/unit/native-tool-loop-runtime.test.ts",
       ]) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: 요청된 테스트 또는 수정 명령을 실행합니다.",
+            "rationale: 반복 테스트 보호가 상태 변경 이후 재실행을 허용하는지 확인해야 합니다.",
+            "next_step: 실행 결과를 바탕으로 다음 테스트 또는 수정 단계를 이어갑니다.",
+          ].join("\n"),
+          toolCalls: [{
+            name: "run_command",
+            args: { command },
+          }],
+        });
         await input.executeTool({
           name: "run_command",
           args: { command },
@@ -4493,6 +4515,20 @@ test("native runtime redacts raw tool failure errors in durable transcripts", as
       throw new Error("failed with token=abc123opaque api_key=sk_live_abc123 raw prompt text <think>hidden</think> /Users/private/file");
     },
     runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: 공개 페이지 읽기 오류의 redaction 경로를 확인합니다.",
+          "rationale: 원시 도구 실패가 transcript와 모델 관찰에 비밀값 없이 남아야 합니다.",
+          "next_step: 실패 결과를 검사해 안전한 오류 요약만 보존되는지 확인합니다.",
+        ].join("\n"),
+        toolCalls: [{
+          name: "web_read",
+          args: {
+            url: "https://example.test/private-error",
+            token: "abc123opaque",
+          },
+        }],
+      });
       observedToolResult = await input.executeTool({
         name: "web_read",
         args: {
@@ -7544,6 +7580,26 @@ test("native runtime does not keep extending direct work from finalization", asy
       }
       continuationPrompts.push(input.prompt);
       const stage = promptCalls - 1;
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          `summary: WATL stage ${stage} 직접 작업을 실행합니다.`,
+          "rationale: 각 continuation이 남은 직접 작업을 실제 도구 실행으로 전진시켜야 합니다.",
+          "next_step: 명령 결과를 반영해 todo 상태를 다음 단계로 갱신합니다.",
+        ].join("\n"),
+        toolCalls: [
+          {
+            name: "run_command",
+            args: { command: `printf 'stage ${stage}\\n'` },
+          },
+          {
+            name: "update_todo_list",
+            args: {
+              title: "WATL 직접 구현",
+              todos: todoForStage(stage),
+            },
+          },
+        ],
+      });
       await input.executeTool({
         name: "run_command",
         args: { command: `printf 'stage ${stage}\\n'` },
@@ -7793,6 +7849,21 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
         }
         if (promptCalls === 2) {
           expect(input.prompt).toContain("Direct Work Continuation");
+          await input.onAssistantTextBeforeTools?.({
+            text: [
+              "summary: WorkStream을 검토 단계로 전환합니다.",
+              "rationale: 실행 근거가 준비된 뒤 FSM 전환이 직접 작업 진행으로 인정되어야 합니다.",
+              "next_step: 전환 결과를 바탕으로 남은 보고 단계를 이어갑니다.",
+            ].join("\n"),
+            toolCalls: [{
+              name: "update_work_stream_state",
+              args: {
+                state: "reviewing",
+                active_step_id: "review",
+                status_note: "Execution evidence is ready for review.",
+              },
+            }],
+          });
           await input.executeTool({
             name: "update_work_stream_state",
             args: {
