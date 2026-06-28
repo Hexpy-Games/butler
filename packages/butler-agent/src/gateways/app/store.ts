@@ -4218,7 +4218,10 @@ export class AppServerStore {
       id: row.id,
       type: row.type,
       created_at: row.created_at,
-      payload: JSON.parse(row.payload_json) as Record<string, unknown>,
+      payload: publicAppEventPayload(
+        row.type,
+        JSON.parse(row.payload_json) as Record<string, unknown>,
+      ),
     }));
   }
 
@@ -4853,10 +4856,12 @@ export class AppServerStore {
         this.upsertAssistantTurnFailure(chatId, turnId, safeError, {
           retryable: isRetryableRuntimeFault,
         });
-        this.appendTurnEvent(chatId, turnId, {
-          kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
-          payload: runtimeFault ?? safeTurnFailureEventPayload(safeError),
-        });
+        if (!this.hasTurnEventKind(turnId, isRuntimeFault ? "runtime.fault" : "turn.failed")) {
+          this.appendTurnEvent(chatId, turnId, {
+            kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
+            payload: runtimeFault ?? safeTurnFailureEventPayload(safeError),
+          });
+        }
         const failedTurn = this.updateTurnState(turnId, isRuntimeFault ? "runtime_fault" : "failed", {
           safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
           retryable: isRetryableRuntimeFault,
@@ -5246,13 +5251,15 @@ export class AppServerStore {
       this.upsertAssistantTurnFailure(chatId, turn.id, safeError, {
         retryable: isRetryableRuntimeFault,
       });
-      this.appendTurnEvent(chatId, turn.id, {
-        kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
-        payload: runtimeFault ?? {
-          safeLabel: safeError.message,
-          safeErrorCode: safeError.code,
-        },
-      });
+      if (!this.hasTurnEventKind(turn.id, isRuntimeFault ? "runtime.fault" : "turn.failed")) {
+        this.appendTurnEvent(chatId, turn.id, {
+          kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
+          payload: runtimeFault ?? {
+            safeLabel: safeError.message,
+            safeErrorCode: safeError.code,
+          },
+        });
+      }
       const failedTurn = this.updateTurnState(turn.id, isRuntimeFault ? "runtime_fault" : "failed", {
         safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
         retryable: isRetryableRuntimeFault,
@@ -9361,6 +9368,7 @@ function publicAppEventPayload(
   type: string,
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
+  if (type === "agent.turn_event") return publicAgentTurnEventPayload(payload);
   if (type !== "turn.state_changed") return payload;
   const turn = isRecord(payload.turn) ? payload.turn : null;
   const state = safeOptionalShortToken(payload.state) ??
@@ -9379,6 +9387,23 @@ function publicAppEventPayload(
     nextPayload.turn = nextTurn;
   }
   return nextPayload;
+}
+
+function publicAgentTurnEventPayload(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const event = isRecord(payload.event) ? payload.event : null;
+  const eventPayload = event && isRecord(event.payload) ? event.payload : null;
+  if (!eventPayload || !("operatorSummary" in eventPayload)) return payload;
+  const nextEventPayload = { ...eventPayload };
+  delete nextEventPayload.operatorSummary;
+  return {
+    ...payload,
+    event: {
+      ...event,
+      payload: nextEventPayload,
+    },
+  };
 }
 
 function isInternalContinuationTurnState(state: string): boolean {

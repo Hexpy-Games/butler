@@ -163,6 +163,7 @@ export function sanitizeTurnEventPayload(
   if (visibility === "internal") return jsonSafeRecord(payload);
   const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(payload)) {
+    if (key === "operatorSummary") continue;
     sanitized[key] = sanitizePublicPayloadValue(value, key);
   }
   return sanitized;

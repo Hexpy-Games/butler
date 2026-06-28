@@ -216,9 +216,9 @@ export function createTurnOutcomePayload(input: TurnOutcomePayloadInput): Record
 }
 
 export function createRuntimeFaultPayload(input: RuntimeFaultPayloadInput): Record<string, unknown> {
-  const faultId = optionalSafeText(input.faultId);
+  const faultId = requiredSafeText(input.faultId, "runtime fault id is required");
   const sessionId = optionalSafeText(input.sessionId);
-  const turnId = optionalSafeText(input.turnId);
+  const turnId = requiredSafeText(input.turnId, "runtime fault turn id is required");
   const kind = requiredSafeText(input.kind, "runtime fault kind is required");
   if (!RECOVERY_KIND_SET.has(kind)) {
     throw new Error(`unknown runtime fault recovery kind: ${kind}`);
@@ -230,11 +230,11 @@ export function createRuntimeFaultPayload(input: RuntimeFaultPayloadInput): Reco
   const operatorSummary = requiredSafeText(input.operatorSummary, "runtime fault operator summary is required");
   const safeErrorCode = optionalSafeText(input.safeErrorCode);
   const safeCause = optionalSafeText(input.safeCause);
-  const createdAt = optionalSafeText(input.createdAt) ?? new Date().toISOString();
+  const createdAt = requiredSafeText(input.createdAt, "runtime fault createdAt is required");
   return {
-    faultId: faultId ?? `runtime-fault-${createdAt.replace(/[^a-zA-Z0-9]/gu, "")}`,
+    faultId,
     ...(sessionId ? { sessionId } : {}),
-    ...(turnId ? { turnId } : {}),
+    turnId,
     kind,
     retryable: input.retryable,
     publicSummary,
