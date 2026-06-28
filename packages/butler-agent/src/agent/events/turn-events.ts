@@ -91,6 +91,13 @@ export interface ProgressRowLike {
   work_decision_next_step?: string;
   work_decision_source?: string;
   work_decision_evidence_refs?: string[];
+  runtime_fault_id?: string;
+  runtime_fault_kind?: string;
+  runtime_fault_retryable?: boolean;
+  runtime_fault_public_summary?: string;
+  runtime_fault_operator_summary?: string;
+  runtime_fault_safe_error_code?: string;
+  runtime_fault_safe_cause?: string;
   safe_detail_rows?: Array<{
     id: string;
     kind?: string;
@@ -237,7 +244,7 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       tool_call_id: optionalPublicText(payload.toolCallId),
       bridge_phase: optionalPublicText(payload.bridgePhase),
       work_block_id: optionalPublicText(payload.workBlockId),
-      work_block_label: optionalPublicText(payload.workBlockLabel) ?? safeLabel,
+      work_block_label: optionalPublicText(payload.workBlockLabel),
       ...publicDecisionFields(payload),
       safe_detail_rows: safeDetailRows(payload.detailRows),
     };
@@ -279,6 +286,26 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       safe_label: label,
       state: event.kind === "turn.failed" ? "failed" : "cancelled",
       created_at: createdAt,
+    };
+  }
+  if (event.kind === "runtime.fault") {
+    const publicSummary = sanitizePublicText(
+      payload.publicSummary,
+      "Butler runtime was interrupted before the turn could continue.",
+    );
+    return {
+      id: event.id,
+      kind: "runtime_fault",
+      safe_label: publicSummary,
+      state: "failed",
+      created_at: createdAt,
+      runtime_fault_id: sanitizePublicText(payload.faultId, event.id),
+      runtime_fault_kind: sanitizePublicText(payload.kind, "runtime_fault"),
+      runtime_fault_retryable: payload.retryable === true,
+      runtime_fault_public_summary: publicSummary,
+      runtime_fault_operator_summary: optionalPublicText(payload.operatorSummary),
+      runtime_fault_safe_error_code: optionalPublicText(payload.safeErrorCode),
+      runtime_fault_safe_cause: optionalPublicText(payload.safeCause),
     };
   }
   return null;
@@ -327,6 +354,7 @@ export const TURN_EVENT_COMPATIBILITY_MAPPINGS = [
 ] as const;
 
 function sanitizePublicPayloadValue(value: unknown, key: string): unknown {
+  if (key === "retryable" && typeof value === "boolean") return value;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return sanitizePublicText(value, decisionPayloadKey(key) ? "" : fallbackLabel(key));
   }

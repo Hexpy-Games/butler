@@ -44,6 +44,27 @@ export function normalizeProgressSummaryRow(
   if (workBlockId) row.work_block_id = workBlockId;
   const workBlockLabel = safeOptionalShortText(input.work_block_label);
   if (workBlockLabel) row.work_block_label = workBlockLabel;
+  const runtimeFaultId = safeOptionalShortToken(input.runtime_fault_id);
+  const runtimeFaultKind = safeOptionalShortToken(input.runtime_fault_kind);
+  const runtimeFaultSummary = safeOptionalShortText(
+    input.runtime_fault_public_summary,
+  );
+  if (runtimeFaultId && runtimeFaultKind && runtimeFaultSummary) {
+    row.runtime_fault_id = runtimeFaultId;
+    row.runtime_fault_kind = runtimeFaultKind;
+    row.runtime_fault_retryable = input.runtime_fault_retryable === true;
+    row.runtime_fault_public_summary = runtimeFaultSummary;
+    const operatorSummary = safeOptionalShortText(
+      input.runtime_fault_operator_summary,
+    );
+    if (operatorSummary) row.runtime_fault_operator_summary = operatorSummary;
+    const safeErrorCode = safeOptionalShortToken(
+      input.runtime_fault_safe_error_code,
+    );
+    if (safeErrorCode) row.runtime_fault_safe_error_code = safeErrorCode;
+    const safeCause = safeOptionalShortText(input.runtime_fault_safe_cause);
+    if (safeCause) row.runtime_fault_safe_cause = safeCause;
+  }
   const decisionSource = safeOptionalShortText(input.work_decision_source);
   if (isPublicDecisionSource(decisionSource)) {
     const decisionSummary = safeOptionalShortText(input.work_decision_summary);
