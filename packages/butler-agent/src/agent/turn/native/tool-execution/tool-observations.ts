@@ -37,6 +37,23 @@ export function publicDecisionRequiredObservation(input: {
   });
 }
 
+export function repeatedToolFamilyObservation(input: {
+  turnId: string;
+  call: NativeToolCall;
+  family: string;
+}): TurnObservation {
+  return createToolObservation({
+    turnId: input.turnId,
+    kind: "validation_failed",
+    summary: `Repeated ${input.family} tool-family pressure was observed.`,
+    modelVisibleContent: [
+      `Tool-family pressure was observed before re-running ${input.call.name}.`,
+      `Family: ${input.family}`,
+      "Use the latest available evidence, choose a distinct verification path, or continue with a bounded limitation.",
+    ].join("\n"),
+  });
+}
+
 export function toolObservationForFailure(input: {
   turnId: string;
   call: NativeToolCall;
