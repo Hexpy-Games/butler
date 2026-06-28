@@ -6547,10 +6547,8 @@ export class AppServerStore {
       kind: "tool.progress",
       payload: {
         activityKind: "model",
-        state: shouldRequeue ? "running" : "waiting_for_tool",
-        safeLabel: shouldRequeue
-          ? "Recovering current turn"
-          : "Recovery needs continuation",
+        state: "running",
+        safeLabel: "Recovering current turn",
         deliveryState,
         delivery_state: deliveryState,
         limitations,
@@ -6566,9 +6564,7 @@ export class AppServerStore {
       turnId,
       shouldRequeue ? "retrying" : "waiting_for_tool",
       {
-        safeStatusLabel: shouldRequeue
-          ? "Recovering"
-          : "Recovery needs continuation",
+        safeStatusLabel: "Recovering",
         retryable: false,
         cancellable: true,
         safeErrorCode: null,
@@ -10402,9 +10398,7 @@ function shouldAutomaticallyRequeueInternalRecovery(
 ): boolean {
   return Boolean(
     turn &&
-      turn.attempt <= 1 &&
-      (deliveryState === "recovering_internal" ||
-        deliveryState === "needs_evidence"),
+      isInternalRecoveryDeliveryState(deliveryState),
   );
 }
 
