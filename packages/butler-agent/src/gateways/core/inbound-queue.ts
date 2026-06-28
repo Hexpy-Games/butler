@@ -29,6 +29,7 @@ export interface RecoverStaleProcessingOptions {
   staleAfterMs: number;
   now?: Date;
   ownerId?: string;
+  shouldRecover?: (record: QueuedInboundEvent) => boolean;
 }
 
 export interface RecoverStaleProcessingSummary {
@@ -173,6 +174,10 @@ export class NativeInboundQueue {
       const leaseExpired =
         Number.isFinite(leaseExpiresAtMs) && nowMs >= leaseExpiresAtMs;
       if (!leaseExpired) {
+        summary.skipped += 1;
+        continue;
+      }
+      if (options.shouldRecover && !options.shouldRecover(record)) {
         summary.skipped += 1;
         continue;
       }

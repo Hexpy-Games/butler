@@ -48,8 +48,8 @@ export interface QueuedInboundOutcome {
 }
 
 const DEFAULT_MAX_CONCURRENT_SESSIONS = 5;
-const DEFAULT_DISPATCH_TIMEOUT_MS = 15 * 60 * 1000;
-const DEFAULT_PROCESSING_LEASE_MS = DEFAULT_DISPATCH_TIMEOUT_MS + 60 * 1000;
+const DEFAULT_DISPATCH_TIMEOUT_MS = 0;
+const DEFAULT_PROCESSING_LEASE_MS = 16 * 60 * 1000;
 
 class QueuedInboundDispatchTimeoutError extends Error {
   readonly code = "inbound_dispatch_timeout";
@@ -593,7 +593,7 @@ function dispatchTimeoutMsFor(options: ProcessQueuedInboundOptions): number {
   if (typeof configured !== "number" || !Number.isFinite(configured)) {
     return DEFAULT_DISPATCH_TIMEOUT_MS;
   }
-  return Math.max(1, Math.floor(configured));
+  return Math.max(0, Math.floor(configured));
 }
 
 function processingLeaseMsFor(options: ProcessQueuedInboundOptions): number {
@@ -631,6 +631,9 @@ async function withDispatchTimeout<T>(
   },
   timeoutMs: number,
 ): Promise<T> {
+  if (timeoutMs <= 0) {
+    return await input.run(input.controller.signal);
+  }
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const promise = input.run(input.controller.signal);
@@ -663,6 +666,7 @@ async function withDispatchTimeout<T>(
 
 export class QueuedInboundDispatcher {
   private readonly activeSessionKeys = new Set<string>();
+  private readonly activeQueueIds = new Set<string>();
   private readonly activeTasks = new Set<Promise<void>>();
 
   poll(options: ProcessQueuedInboundOptions): ProcessQueuedInboundSummary {
@@ -670,6 +674,7 @@ export class QueuedInboundDispatcher {
     options.queue.recoverStaleProcessing({
       staleAfterMs: processingLeaseMsFor(options),
       now: options.now?.(),
+      shouldRecover: (record) => !this.activeQueueIds.has(record.queueId),
     });
     const availableSlots = Math.max(0, maxConcurrentSessions - this.activeTasks.size);
     const claimLimit = Math.min(options.limit ?? DEFAULT_MAX_CONCURRENT_SESSIONS, availableSlots);
@@ -700,6 +705,7 @@ export class QueuedInboundDispatcher {
     for (const item of items) {
       const sessionKey = sessionKeyForQueuedInbound(item);
       this.activeSessionKeys.add(sessionKey);
+      this.activeQueueIds.add(item.queueId);
       let quiescence: Promise<void> | undefined;
       const task = this.handleItem(item, options, summary)
         .then((settled) => {
@@ -707,6 +713,7 @@ export class QueuedInboundDispatcher {
           if (settled.quiescence) {
             void settled.quiescence.finally(() => {
               this.activeSessionKeys.delete(sessionKey);
+              this.activeQueueIds.delete(item.queueId);
             });
           }
         })
@@ -714,7 +721,10 @@ export class QueuedInboundDispatcher {
           summary.failed += 1;
         })
         .finally(() => {
-          if (!quiescence) this.activeSessionKeys.delete(sessionKey);
+          if (!quiescence) {
+            this.activeSessionKeys.delete(sessionKey);
+            this.activeQueueIds.delete(item.queueId);
+          }
           this.activeTasks.delete(task);
         });
       this.activeTasks.add(task);
