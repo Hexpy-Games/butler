@@ -7013,30 +7013,20 @@ test("repeated app transport internal recovery does not requeue the same turn ag
     const secondTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(secondTurns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "delivered",
-      safe_status_label: "Delivered with limitations",
-      retryable: false,
+      state: "failed",
+      safe_status_label: "Retry required",
+      safe_error_code: "internal_recovery_required",
+      retryable: true,
       cancellable: false,
       attempt: 2,
     });
-    expect(secondTurns.data.turns[0].safe_error_code ?? null).toBeNull();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     const assistantMessages = messages.data.messages.filter(
       (message: { role: string }) => message.role === "assistant",
     );
-    expect(assistantMessages).toHaveLength(1);
-    expect(assistantMessages[0]).toMatchObject({
-      role: "assistant",
-      status: "delivered",
-      turn_id: turnId,
-      delivery_state: "needs_evidence",
-      limitation_codes: ["internal_recovery_required"],
-      limitations: [],
-    });
-    expect(assistantMessages[0].text).toContain(
-      "같은 이어가기 상태가 반복되어 자동 재시도를 더 진행하지 않았습니다.",
-    );
+    expect(assistantMessages).toHaveLength(0);
     expect(JSON.stringify(messages)).not.toContain("could not verify");
+    expect(JSON.stringify(messages)).not.toContain("같은 이어가기 상태");
 
     const secondEvents = await getJson(`${server.url}events?cursor=0`);
     const secondQueuedCount = secondEvents.data.events.filter(
@@ -7047,13 +7037,156 @@ test("repeated app transport internal recovery does not requeue the same turn ag
     const secondSummary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(secondSummary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "delivered",
-      delivery_state: "needs_evidence",
-      limitation_codes: ["internal_recovery_required"],
-      limitations: [],
+      state: "failed",
+      summary: "Retry required",
     });
     expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
-    expect(JSON.stringify(secondEvents)).not.toContain("turn.failed");
+    expect(JSON.stringify(secondEvents)).not.toContain("같은 이어가기 상태");
+    expect(
+      secondEvents.data.events.some(
+        (event: { type: string; payload?: { turn_id?: string } }) =>
+          event.type === "agent.turn_event" &&
+          event.payload?.turn_id === turnId,
+      ),
+    ).toBe(true);
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport continuation after retry progress requeues without fallback final text", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue after progressed internal recovery",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:progressed:first",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not verify that the requested goal was completed.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          source: "test",
+          safeErrorCode: "internal_recovery_required",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const firstEvents = await getJson(`${server.url}events?cursor=0`);
+    const firstQueuedEvents = firstEvents.data.events.filter(
+      (event: { type: string; payload?: { turn_id?: string } }) =>
+        event.type === "turn.queued" && event.payload?.turn_id === turnId,
+    );
+    const firstQueuedCount = firstQueuedEvents.length;
+    const queueId = firstQueuedEvents.at(-1)?.payload?.queue_id;
+    expect(typeof queueId).toBe("string");
+    const dispatchClaimId = "claim-progressed-continuation";
+    const processedQueueDir = join(tempDir, "runtime", "inbound-events", "processed");
+    mkdirSync(processedQueueDir, { recursive: true });
+    writeFileSync(
+      join(processedQueueDir, `${queueId}.json`),
+      JSON.stringify({
+        queueId,
+        processedAt: "2026-05-18T12:00:02.000Z",
+        metadata: { terminalClaimId: dispatchClaimId },
+      }),
+    );
+
+    appendTranscriptEvent(
+      createTranscriptEvent({
+        sessionId: "butler/app-general",
+        kind: "outbound",
+        transport: "app",
+        timestamp: "2026-05-18T12:00:01.000Z",
+        payload: {
+          actionId: "runtime-intermediate:test:app:general:progressed:tool",
+          accountId: "local",
+          peer: { kind: "dm", id: "general" },
+          message: { text: "" },
+          metadata: {
+            source: "runtime/native-tool-loop.ts",
+            kind: "tool_progress",
+            activityKind: "ran_command",
+            toolCallId: "tool-progressed",
+            toolName: "Bash",
+            safeLabel: "Bash: test command",
+            inputLabel: "test command",
+            workBlockId: "work-validate",
+            workBlockLabel: "검증 실행 중",
+            decisionSummary: "테스트 실행 결과를 기준으로 다음 수정을 이어간다.",
+            sessionId: "butler/app-general",
+            turnId,
+          },
+        },
+      }),
+    );
+    appendTranscriptEvent(
+      createTranscriptEvent({
+        sessionId: "butler/app-general",
+        kind: "outbound",
+        transport: "app",
+        timestamp: "2026-05-18T12:00:02.000Z",
+        payload: {
+          actionId: `queued-inbound-limited:${queueId}:app:${turnId}`,
+          accountId: "local",
+          peer: { kind: "dm", id: "general" },
+          message: { text: "" },
+          metadata: {
+            kind: "final_result",
+            turnId,
+            queueId,
+            dispatchClaimId,
+            source: "test",
+            noVisibleReply: true,
+            deliveryState: "recovering_internal",
+            limitationCodes: ["internal_recovery_required"],
+            limitations: [],
+          },
+        },
+      }),
+    );
+
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "retrying",
+      safe_status_label: "",
+      retryable: false,
+      cancellable: true,
+      attempt: 3,
+    });
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.filter((message: { role: string }) => message.role === "assistant"),
+    ).toHaveLength(0);
+    expect(JSON.stringify(messages)).not.toContain("같은 이어가기 상태");
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+
+    const secondEvents = await getJson(`${server.url}events?cursor=0`);
+    const secondQueuedCount = secondEvents.data.events.filter(
+      (event: { type: string; payload?: { turn_id?: string } }) =>
+        event.type === "turn.queued" && event.payload?.turn_id === turnId,
+    ).length;
+    expect(secondQueuedCount).toBe(firstQueuedCount + 1);
+    expect(JSON.stringify(secondEvents)).not.toContain("같은 이어가기 상태");
+    expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
   } finally {
     server.stop();
   }

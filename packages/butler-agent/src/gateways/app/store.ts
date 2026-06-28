@@ -263,7 +263,6 @@ import {
   continuationDeliveryFromState,
   isContinuationDeliveryIssue,
   isContinuationDeliveryState,
-  repeatedContinuationLimitedReplyText,
   shouldAutomaticallyRequeueContinuation,
 } from "./continuation-delivery.ts";
 import {
@@ -6658,20 +6657,19 @@ export class AppServerStore {
     this.deleteAssistantMessagesForTurn(turnId);
     const currentTurn = this.getTurnRow(turnId);
     const deliveryState = limitedDelivery.delivery.delivery_state;
-    const shouldRequeue = shouldAutomaticallyRequeueContinuation(
-      currentTurn,
-      deliveryState,
-    );
+    const progressedDuringCurrentQueue =
+      currentTurn && isInternalContinuationTurnState(currentTurn.state)
+        ? this.hasPublicContinuationProgressSinceLatestQueue(turnId)
+        : false;
+    const shouldRequeue =
+      shouldAutomaticallyRequeueContinuation(currentTurn, deliveryState) ||
+      progressedDuringCurrentQueue;
     if (!shouldRequeue && currentTurn && isInternalContinuationTurnState(currentTurn.state)) {
-      return this.finalizeResponderLimitedDelivery(
-        chatId,
-        turnId,
-        limitedDelivery,
-        {
-          allowContinuation: false,
-          visibleNoReplyText: repeatedContinuationLimitedReplyText(),
-        },
-      );
+      const stalledTurn = this.markResponderContinuationStalled(chatId, turnId);
+      return {
+        replies: [],
+        turn: stalledTurn,
+      };
     }
     const attempt = shouldRequeue && currentTurn
       ? currentTurn.attempt + 1
@@ -6693,6 +6691,81 @@ export class AppServerStore {
       replies: [],
       turn: recoveryTurn,
     };
+  }
+
+  private hasPublicContinuationProgressSinceLatestQueue(turnId: string): boolean {
+    const latestQueue = this.db
+      .query<{ id: number }, [string]>(
+        `
+      SELECT id
+      FROM events
+      WHERE type = 'turn.queued'
+        AND json_extract(payload_json, '$.turn_id') = ?
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+      )
+      .get(turnId);
+    if (!latestQueue) return false;
+    const internalContinuationEventIds =
+      this.internalContinuationProgressEventIds(turnId);
+    const rows = this.db
+      .query<EventRow, [number, string]>(
+        `
+      SELECT id, type, payload_json, created_at
+      FROM events
+      WHERE id > ?
+        AND json_extract(payload_json, '$.turn_id') = ?
+        AND type IN ('progress.summary', 'agent.turn_event.progress')
+      ORDER BY id ASC
+      LIMIT 1000
+    `,
+      )
+      .all(latestQueue.id, turnId);
+    const progressRows: ProgressSummaryRow[] = [];
+    for (const event of rows) {
+      const payload = safeParseRecord(event.payload_json);
+      if (payload.turn_id !== turnId) continue;
+      const eventId = safeOptionalShortToken(payload.event_id);
+      if (
+        event.type === "agent.turn_event.progress" &&
+        eventId &&
+        internalContinuationEventIds.has(eventId)
+      ) {
+        continue;
+      }
+      const row = payload.row;
+      if (!isRecord(row)) continue;
+      progressRows.push(normalizeProgressSummaryRow(row));
+    }
+    const turn = this.getTurnRow(turnId);
+    return publicProgressRowsForTurn(progressRows, turn?.state).length > 0;
+  }
+
+  private markResponderContinuationStalled(
+    chatId: string,
+    turnId: string,
+  ): TurnRecord {
+    const current = this.getTurnRow(turnId);
+    if (!current) return this.getTurn(turnId);
+    const stalledTurn = this.updateTurnState(turnId, "failed", {
+      safeStatusLabel: "Retry required",
+      safeErrorCode: INTERNAL_RECOVERY_REQUIRED_CODE,
+      retryable: true,
+      cancellable: false,
+    });
+    this.appendEvent("turn.state_changed", { turn: stalledTurn });
+    if (!this.hasTurnEventKind(turnId, "turn.failed")) {
+      this.appendTurnEvent(chatId, turnId, {
+        kind: "turn.failed",
+        payload: {
+          safeLabel: "Retry required",
+          safeErrorCode: INTERNAL_RECOVERY_REQUIRED_CODE,
+          retryable: true,
+        },
+      });
+    }
+    return stalledTurn;
   }
 
   private requeueRecoverableAppTurn(chatId: string, turn: TurnRecord): void {
