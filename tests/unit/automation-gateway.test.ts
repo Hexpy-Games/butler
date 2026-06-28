@@ -968,7 +968,7 @@ test("queued inbound converts model-call budget exhaustion to recoverable limite
       kind: "final_result",
       turnId: "turn-budget-failure",
       noVisibleReply: true,
-      deliveryState: "delivered_with_limitations",
+      deliveryState: "recovering_internal",
       limitationCodes: ["internal_recovery_required"],
     },
   });
@@ -1031,7 +1031,7 @@ test("queued inbound converts normalized internal recovery failures to limited d
       kind: "final_result",
       turnId: "turn-normalized-internal-recovery",
       noVisibleReply: true,
-      deliveryState: "delivered_with_limitations",
+      deliveryState: "needs_evidence",
       limitationCodes: ["internal_recovery_required"],
     },
   });
@@ -1167,8 +1167,9 @@ test("queued app prompt-budget interruption resumes next turn from durable W3 to
   expect(app.sentActions[0]).toMatchObject({
     metadata: {
       kind: "final_result",
-      deliveryState: "delivered_with_limitations",
+      deliveryState: "recovering_internal",
       limitationCodes: ["internal_recovery_required"],
+      noVisibleReply: true,
     },
   });
   expect(JSON.stringify(app.sentActions[0])).not.toContain("model-call budget");
@@ -1299,17 +1300,16 @@ test("queued inbound goal completion incomplete delivers safe limited result", a
   });
   expect(app.sentActions[0]).toMatchObject({
     message: {
-      text: "확인된 완료 증거가 아직 부족합니다. [redacted]",
+      text: "",
       replyToMessageId: "message-goal-incomplete",
     },
     metadata: {
       kind: "final_result",
       turnId: "turn-goal-incomplete",
-      deliveryState: "delivered_with_limitations",
+      deliveryState: "recovering_internal",
       limitationCodes: ["internal_recovery_required"],
-      limitations: [
-        "확인된 완료 증거가 아직 부족합니다. [redacted]",
-      ],
+      limitations: [],
+      noVisibleReply: true,
     },
   });
   expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");

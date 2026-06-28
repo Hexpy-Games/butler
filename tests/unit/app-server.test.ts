@@ -6703,7 +6703,7 @@ test("app transport no-visible limited final closes queued turns without assista
   }
 });
 
-test("app transport internal recovery failures close queued turns without assistant text", async () => {
+test("app transport internal recovery failures keep queued turns active without assistant text", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -6749,21 +6749,127 @@ test("app transport internal recovery failures close queued turns without assist
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "delivered",
-      safe_status_label: "Delivered with limitations",
+      state: "retrying",
+      safe_status_label: "Recovering",
       retryable: false,
+      cancellable: true,
+      attempt: 2,
     });
     expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
 
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "retrying",
+      delivery_state: "needs_evidence",
       limitation_codes: ["internal_recovery_required"],
       limitations: [],
     });
     expect(JSON.stringify(summary)).not.toContain("could not verify");
+  } finally {
+    server.stop();
+  }
+});
+
+test("repeated app transport internal recovery stays active without unbounded requeue", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue after repeated internal recovery",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:internal-recovery:first",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not verify that the requested goal was completed.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          source: "test",
+          safeErrorCode: "internal_recovery_required",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const firstTurns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(firstTurns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "retrying",
+      safe_status_label: "Recovering",
+      retryable: false,
+      cancellable: true,
+      attempt: 2,
+    });
+    const firstEvents = await getJson(`${server.url}events?cursor=0`);
+    const firstQueuedCount = firstEvents.data.events.filter(
+      (event: { type: string; payload?: { turn_id?: string } }) =>
+        event.type === "turn.queued" && event.payload?.turn_id === turnId,
+    ).length;
+    expect(firstQueuedCount).toBe(2);
+
+    appendTranscriptEvent(
+      createTranscriptEvent({
+        sessionId: "butler/app-general",
+        kind: "outbound",
+        transport: "app",
+        timestamp: "2099-01-01T00:00:00.000Z",
+        payload: {
+          actionId: "queued-inbound-failure:test:app:general:internal-recovery:second",
+          accountId: "local",
+          peer: { kind: "dm", id: "general" },
+          message: {
+            text: "Butler could not verify that the requested goal was completed.",
+          },
+          metadata: {
+            kind: "turn_failed",
+            turnId,
+            source: "test",
+            safeErrorCode: "internal_recovery_required",
+          },
+        },
+      }),
+    );
+
+    const secondTurns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(secondTurns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "waiting_for_tool",
+      safe_status_label: "Recovery needs continuation",
+      retryable: false,
+      cancellable: true,
+      attempt: 2,
+    });
+    expect(secondTurns.data.turns[0].safe_error_code ?? null).toBeNull();
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+
+    const secondEvents = await getJson(`${server.url}events?cursor=0`);
+    const secondQueuedCount = secondEvents.data.events.filter(
+      (event: { type: string; payload?: { turn_id?: string } }) =>
+        event.type === "turn.queued" && event.payload?.turn_id === turnId,
+    ).length;
+    expect(secondQueuedCount).toBe(firstQueuedCount);
+    expect(JSON.stringify(secondEvents)).not.toContain("turn.failed");
   } finally {
     server.stop();
   }
@@ -7000,6 +7106,61 @@ test("app transport no-visible final with missing delivery metadata does not cre
       limitation_codes: ["internal_recovery_required"],
       limitations: [],
     });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport no-visible final with system delivery state is not projected as a limitation", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "keep active when a system blocker has no visible final",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:no-visible-system-error",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          noVisibleReply: true,
+          deliveryState: "system_error",
+          limitationCodes: ["provider_failed"],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["keep active when a system blocker has no visible final"]);
+    expect(JSON.stringify(messages)).not.toContain("Delivered with limitations");
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "thinking",
+      retryable: false,
+      cancellable: true,
+    });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
   } finally {
     server.stop();
   }
@@ -10584,7 +10745,7 @@ test("raw provider aborts remain failed app turns instead of cancellation", asyn
   }
 });
 
-test("goal completion incomplete gaps deliver safe limitation text instead of app failures", async () => {
+test("goal completion incomplete gaps keep turns active instead of app failures", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -10607,38 +10768,32 @@ test("goal completion incomplete gaps deliver safe limitation text instead of ap
     });
     expect(response.status).toBe(202);
 
-    const deliveredTurn = await waitForLatestTurnMatching(
+    const recoveringTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "delivered",
+      (turn) => turn.state === "retrying",
     );
-    expect(deliveredTurn).toMatchObject({
-      state: "delivered",
+    expect(recoveringTurn).toMatchObject({
+      state: "retrying",
+      safe_status_label: "Recovering",
       retryable: false,
+      cancellable: true,
     });
-    expect(deliveredTurn.safe_error_code ?? null).toBeNull();
+    expect(recoveringTurn.safe_error_code ?? null).toBeNull();
 
-    const firstAssistant = await waitForAssistantMessageMatching(
-      server.url,
-      "general",
-      (message) => message.status === "delivered",
-    );
-    expect(firstAssistant).toMatchObject({
-      status: "delivered",
-      retryable: false,
-      delivery_state: "delivered_with_limitations",
-      limitation_codes: ["internal_recovery_required"],
-      limitations: ["확인 가능한 공개 출처를 읽지 못했습니다. [redacted]"],
-    });
-    expect(firstAssistant.safe_error_code ?? null).toBeNull();
-    expect(firstAssistant.text as string).toContain("확인 가능한 공개 출처");
-    expect(firstAssistant.text as string).not.toContain("token=secret");
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(JSON.stringify(messages)).not.toContain("token=secret");
   } finally {
     server.stop();
   }
 });
 
-test("goal completion obligation protocol gaps close without generic assistant text", async () => {
+test("goal completion obligation protocol gaps stay active without generic assistant text", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -10661,16 +10816,18 @@ test("goal completion obligation protocol gaps close without generic assistant t
     });
     expect(response.status).toBe(202);
 
-    const deliveredTurn = await waitForLatestTurnMatching(
+    const recoveringTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "delivered",
+      (turn) => turn.state === "retrying",
     );
-    expect(deliveredTurn).toMatchObject({
-      state: "delivered",
+    expect(recoveringTurn).toMatchObject({
+      state: "retrying",
+      safe_status_label: "Recovering",
       retryable: false,
+      cancellable: true,
     });
-    expect(deliveredTurn.safe_error_code ?? null).toBeNull();
+    expect(recoveringTurn.safe_error_code ?? null).toBeNull();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.filter(
@@ -10686,7 +10843,7 @@ test("goal completion obligation protocol gaps close without generic assistant t
   }
 });
 
-test("generic internal recovery responder failures close without assistant text", async () => {
+test("generic internal recovery responder failures stay active without assistant text", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -10709,17 +10866,18 @@ test("generic internal recovery responder failures close without assistant text"
     });
     expect(response.status).toBe(202);
 
-    const deliveredTurn = await waitForLatestTurnMatching(
+    const recoveringTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "delivered",
+      (turn) => turn.state === "retrying",
     );
-    expect(deliveredTurn).toMatchObject({
-      state: "delivered",
-      safe_status_label: "Delivered with limitations",
+    expect(recoveringTurn).toMatchObject({
+      state: "retrying",
+      safe_status_label: "Recovering",
       retryable: false,
+      cancellable: true,
     });
-    expect(deliveredTurn.safe_error_code ?? null).toBeNull();
+    expect(recoveringTurn.safe_error_code ?? null).toBeNull();
 
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(

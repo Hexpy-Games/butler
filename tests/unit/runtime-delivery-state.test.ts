@@ -180,14 +180,17 @@ test("recoverable delivery uses progress finalization instead of generic verific
   const recovered = recoverableLimitedDeliveryForError(error);
 
   expect(recovered).toMatchObject({
+    text: null,
     delivery: {
-      delivery_state: "delivered_with_limitations",
-      visibility: "assistant_output",
+      delivery_state: "recovering_internal",
+      terminal: false,
+      issue_kind: "internal_recovery",
+      visibility: "recovery_progress",
       failure_notice: false,
     },
   });
-  expect(recovered?.text).toContain("\n\n확인된 진행사항:\n- 파일을 작성했습니다.");
-  expect(recovered?.text).not.toContain("could not verify");
+  expect(recovered?.reason).toContain("\n\n확인된 진행사항:\n- 파일을 작성했습니다.");
+  expect(JSON.stringify(recovered)).not.toContain("could not verify");
   expect(JSON.stringify(recovered)).not.toContain("INCOMPLETE");
   expect(JSON.stringify(recovered)).not.toContain("abc123");
   expect(JSON.stringify(recovered)).not.toContain("/Users/example");
@@ -205,10 +208,12 @@ test("recoverable delivery converts normalized internal recovery failures", () =
     reason:
       "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.\n\n남은 부분: 완료 보고에 필요한 마지막 결과 정리가 남아 있습니다.\n다음 진행에서는 이 지점부터 이어가면 됩니다.",
     delivery: {
-      delivery_state: "delivered_with_limitations",
+      delivery_state: "needs_evidence",
+      terminal: false,
+      issue_kind: "internal_recovery",
       limitation_codes: ["internal_recovery_required"],
       limitations: [],
-      visibility: "assistant_output",
+      visibility: "recovery_progress",
       failure_notice: false,
     },
   });
@@ -226,9 +231,12 @@ test("recoverable delivery never promotes default recovery fallback to public te
   expect(recovered).toMatchObject({
     text: null,
     delivery: {
-      delivery_state: "delivered_with_limitations",
+      delivery_state: "recovering_internal",
+      terminal: false,
+      issue_kind: "internal_recovery",
       limitation_codes: ["internal_recovery_required"],
       limitations: [],
+      visibility: "recovery_progress",
     },
   });
 });
