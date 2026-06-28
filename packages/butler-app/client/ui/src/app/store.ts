@@ -1550,10 +1550,14 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       });
       set((state) => ({
         messages: mergeMessages(
-          state.messages,
+          state.messages.filter(
+            (message) =>
+              message.turn_id !== turnId || message.role !== "assistant",
+          ),
           result.replies ?? (result.reply ? [result.reply] : []),
         ),
       }));
+      await get().reloadMessages(get().activeChatId);
       await get().refreshNavigation();
       await get().refreshSessionSummary(get().activeChatId);
       set({ status: { label: "ready", tone: "ok" } });

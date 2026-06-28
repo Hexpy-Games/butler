@@ -8698,6 +8698,23 @@ test("retry without injected responder requeues the app turn instead of answerin
       join(tempDir, "runtime", "inbound-events", "pending"),
     );
     expect(pending).toHaveLength(1);
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map(
+        (message: { role: string; text: string; status: string }) => ({
+          role: message.role,
+          text: message.text,
+          status: message.status,
+        }),
+      ),
+    ).toEqual([
+      {
+        role: "user",
+        text: "retry through core",
+        status: "sent",
+      },
+    ]);
+    expect(JSON.stringify(messages)).not.toContain("Retrying this turn");
   } finally {
     server.stop();
   }
@@ -10607,12 +10624,13 @@ test("retry failures update the same assistant failure with a safe provider reas
     );
     expect(assistantMessages).toHaveLength(1);
     expect(assistantMessages[0]).toMatchObject({
-      id: firstAssistant.id,
       status: "failed",
       safe_error_code: "provider_empty_response",
       retryable: true,
     });
+    expect(assistantMessages[0].id).not.toBe(firstAssistant.id);
     expect(assistantMessages[0].text).toContain("no visible answer");
+    expect(JSON.stringify(messages)).not.toContain("Retrying this turn");
   } finally {
     server.stop();
   }

@@ -5239,7 +5239,7 @@ export class AppServerStore {
 
     const retryingTurn = this.claimRetryTurn(turnId, row.attempt + 1);
     this.appendEvent("turn.state_changed", { turn: retryingTurn });
-    this.markAssistantTurnRetrying(turnId);
+    this.deleteAssistantMessagesForTurn(turnId);
     this.appendTurnEvent(row.chat_id, turnId, {
       kind: "turn.started",
       payload: { safeLabel: "Started" },
@@ -6665,19 +6665,6 @@ export class AppServerStore {
     });
     this.appendEvent("message.updated", { message: failed });
     return failed;
-  }
-
-  private markAssistantTurnRetrying(turnId: string): MessageRecord | null {
-    const existing = this.getLatestAssistantMessageForTurn(turnId);
-    if (!existing) return null;
-    const retrying = this.updateMessage(existing.id, {
-      text: "Retrying this turn.",
-      status: "retrying",
-      safeErrorCode: null,
-      retryable: false,
-    });
-    this.appendEvent("message.updated", { message: retrying });
-    return retrying;
   }
 
   private finalizeCancelledTurn(chatId: string, turnId: string): TurnRecord {
