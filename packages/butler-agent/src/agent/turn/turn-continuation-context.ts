@@ -14,7 +14,7 @@ export interface TurnContextAtom {
   state: TurnState;
   sourceErrorCode: string;
   reason: string;
-  userRequest?: { id: string; text?: string };
+  userRequest: { id: string };
   latestAssistantDecision?: { id: string };
   unresolvedObservations: TurnContextObservationRef[];
   openToolPairs: TurnContextObservationRef[];
@@ -58,7 +58,7 @@ export function persistTurnContextAtom(input: {
     state: input.state,
     sourceErrorCode: input.sourceErrorCode,
     reason: input.reason,
-    ...(input.userRequest ? { userRequest: input.userRequest } : {}),
+    userRequest: { id: safeRefId(input.userRequest?.id ?? `turn:${input.turnId}`) },
     ...(input.latestAssistantDecision ? { latestAssistantDecision: input.latestAssistantDecision } : {}),
     unresolvedObservations: input.unresolvedObservations ?? [],
     openToolPairs: input.openToolPairs ?? [],
@@ -105,4 +105,8 @@ function continuationPathFor(butlerData: string, fileName: string): string {
 
 function safeIdSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_.-]/gu, "_").slice(0, 96) || "unknown";
+}
+
+function safeRefId(value: string): string {
+  return value.replace(/[^\S\n]+/gu, " ").replace(/[\r\n]+/gu, " ").trim().slice(0, 160) || "unknown";
 }

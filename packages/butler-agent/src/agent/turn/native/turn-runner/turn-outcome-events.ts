@@ -95,6 +95,26 @@ export async function emitInterruptedTurnOutcome(input: {
   });
 }
 
+export async function emitCompletionReviewTerminalOutcome(input: {
+  turnInput: RuntimeTurnInput;
+  outcome: "waiting_user" | "failed";
+  publicSummary: string;
+  evidenceRefs: string[];
+  turnId?: string;
+}): Promise<void> {
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: TURN_OUTCOME_EVENT_KIND,
+    payload: createTurnOutcomePayload({
+      outcome: input.outcome,
+      completionEvidenceRefs: input.evidenceRefs,
+      publicSummary: input.publicSummary,
+      ...(input.outcome === "waiting_user"
+        ? { recoveryToken: `waiting-user:${input.turnId ?? input.turnInput.handle.sessionId}` }
+        : {}),
+    }),
+  });
+}
+
 async function emitCompletionEvidenceFromAudit(
   input: RuntimeTurnInput,
   audit: ToolAuditEntry[],

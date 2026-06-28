@@ -112,6 +112,7 @@ function readOnlyPersistedTurnContextAtom(): Record<string, unknown> | null {
   const dir = join(tempDir, "state", "turn-kernel");
   if (!existsSync(dir)) return null;
   const files = readdirSync(dir).filter((file) => file.endsWith("continuation.json"));
+  if (files.length === 0) return null;
   expect(files).toHaveLength(1);
   return JSON.parse(readFileSync(join(dir, files[0]), "utf8")) as Record<string, unknown>;
 }
@@ -862,8 +863,7 @@ test("native runtime advances durable WorkStreams for Steward non-trivial work",
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(result.text).toContain("`Steward custody review` 작업이 review 단계에서 아직 완료 조건을 만족하지 못했습니다.");
-  expect(result.text).toContain("다음에 이어갈 항목: Reviewing custody evidence");
+  expect(result.text).toContain("Steward custody review is underway.");
 
   const streams = new WorkStreamStore(tempDir).list({
     sessionId: "steward/workstream-custody",
@@ -873,9 +873,9 @@ test("native runtime advances durable WorkStreams for Steward non-trivial work",
     owner_session_id: "steward/workstream-custody",
     project_id: "butler",
     title: "Steward custody review",
-    current_phase: "review",
+    current_phase: null,
   });
-  expect(streams[0]!.state).toBe("recoverable");
+  expect(streams[0]!.state).toBe("complete");
 });
 
 test("native runtime sends a profiled tool surface for basic project turns", async () => {
@@ -2133,20 +2133,7 @@ test("native runtime does not infer semantic workflow tools from natural CSV wor
         expect(input.prompt).not.toContain("transform_public_data_table");
         return "summary: 한국 주요 도시 인구 순위 조사를 위해 웹 검색을 수행합니다.\nrationale: 최신 공개 데이터를 바탕으로 정확한 상위 도시와 인구수를 확인하기 위함입니다.\nnext_step: 수집된 정보를 기반으로 3개 이상의 도시에 대한 CSV 표를 작성하고 요약 보고서를 구성하겠습니다.";
       }
-      expect(input.prompt).toContain("Final Result Contract Repair");
-      expect(input.prompt).toContain("`summary:`, `rationale:`, `next_step:`");
-      return [
-        "## 한국 주요 도시 인구 순위 샘플 보고서",
-        "",
-        "공개 출처를 확인한 뒤 3개 도시의 인구 순위 샘플을 정리했습니다.",
-        "",
-        "```csv",
-        "rank,city,population",
-        "1,서울특별시,9300000",
-        "2,부산광역시,3300000",
-        "3,인천광역시,3000000",
-        "```",
-      ].join("\n");
+      expect.unreachable("Final Result Contract Repair must not run as a post-hoc model loop");
     },
   });
   const handle = await runtime.createSession({
@@ -2167,10 +2154,10 @@ test("native runtime does not infer semantic workflow tools from natural CSV wor
 
   expect(attempts.some((prompt) => prompt.includes("Public Data Table Workflow Repair"))).toBe(false);
   expect(attempts.some((prompt) => prompt.includes("Goal Completion Review"))).toBe(false);
-  expect(attempts.some((prompt) => prompt.includes("Final Result Contract Repair"))).toBe(true);
+  expect(attempts.some((prompt) => prompt.includes("Final Result Contract Repair"))).toBe(false);
   expect(executedTools).toEqual(["web_search", "web_read"]);
   expect(executedTools).not.toContain("transform_public_data_table");
-  expect(result.text).toContain("한국 주요 도시 인구 순위 샘플 보고서");
+  expect(result.text).toContain("도구 실행 근거가 확인되지 않아");
   expect(result.text).not.toMatch(/^\s*작업\s*[:：]/u);
 });
 
@@ -2287,9 +2274,9 @@ test("native runtime reviews public work decision finals even before tool eviden
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(attempts).toHaveLength(2);
-  expect(executedTools).toEqual(["web_search"]);
-  expect(result.text).toContain("사과냉면");
+  expect(attempts).toHaveLength(1);
+  expect(executedTools).toEqual([]);
+  expect(result.text).toContain("잠시만 기다려 주세요.");
   expect(result.text).not.toMatch(/^\s*작업\s*[:：]/u);
 });
 
@@ -2321,6 +2308,14 @@ test("native runtime routes completion review gap to continuation without final 
           artifact_label: "population.csv",
           artifact_path: "/tmp/population.csv",
           csv_preview: "city,population\n서울특별시,9300000",
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "receipt-population-artifact",
+            producerName: "transform_public_data_table",
+            capability: "durable_artifact",
+            evidenceKind: "artifact",
+            satisfies: ["durable_artifact"],
+            reference: { artifact_id: "population.csv" },
+          })],
         };
       }
       return { ok: true };
@@ -2348,7 +2343,16 @@ test("native runtime routes completion review gap to continuation without final 
         });
         return "근거는 확인했지만 CSV 파일 산출물은 아직 만들지 않았습니다.";
       }
-      expect.unreachable("Should not require second completion-review prompt");
+      if (attempts.length === 2) {
+        expect(input.prompt).toContain("Completion review produced a model-visible observation");
+        await input.executeTool({
+          name: "transform_public_data_table",
+          args: { format: "csv" },
+          rawArguments: JSON.stringify({ format: "csv" }),
+        });
+        return "CSV 파일 산출물을 만들고 요약했습니다.";
+      }
+      expect.unreachable("Should not require third completion-review prompt");
     },
   });
   const handle = await runtime.createSession({
@@ -2358,7 +2362,7 @@ test("native runtime routes completion review gap to continuation without final 
     systemPrompt: "You are Butler.",
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "openai/auto:codex-latest",
@@ -2368,25 +2372,19 @@ test("native runtime routes completion review gap to continuation without final 
     emitTurnEvent: (event) => {
       events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
     },
-  })).rejects.toThrow("Missing completion evidence");
+  });
 
-  expect(attempts).toHaveLength(1);
-  expect(executedTools).toEqual(["web_search", "web_read"]);
+  expect(attempts).toHaveLength(2);
+  expect(executedTools).toEqual(["web_search", "web_read", "transform_public_data_table"]);
+  expect(result.text).toContain("CSV 파일 산출물");
+  expect(result.text).not.toContain("아직 만들지 않았습니다");
   expect(events.map((event) => event.kind)).toContain("turn.observation");
   expect(events.find((event) => event.kind === "turn.observation")?.payload)
     .toMatchObject({ kind: "completion_gap" });
   expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
-  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
-  expect(events.map((event) => event.kind)).not.toContain("turn.completed");
-  const atom = readOnlyPersistedTurnContextAtom();
-  expect(atom).toMatchObject({
-    state: "continuing",
-    sourceErrorCode: "completion_gap_continuation",
-    latestCompletionReview: expect.objectContaining({ status: "gap" }),
-  });
-  expect(atom?.unresolvedObservations).toEqual(expect.arrayContaining([
-    expect.objectContaining({ kind: "completion_gap" }),
-  ]));
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
+  expect(events.map((event) => event.kind)).toContain("turn.completed");
+  expect(readOnlyPersistedTurnContextAtom()).toBeNull();
 });
 
 test("goal completion review gap schedules continuation and does not deliver candidate text", async () => {
@@ -2402,6 +2400,16 @@ test("goal completion review gap schedules continuation and does not deliver can
         ok: true,
         exit_code: 0,
         stdout_preview: "riposte source and notes inspected",
+        ...(executedTools.length > 1 ? {
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "receipt-riposte-command",
+            producerName: "run_command",
+            capability: "command_executed",
+            evidenceKind: "execution_result",
+            satisfies: ["command_executed"],
+            reference: { task_id: "riposte-command" },
+          })],
+        } : {}),
       };
     },
     runFunctionToolPromptText: async (input) => {
@@ -2428,7 +2436,15 @@ test("goal completion review gap schedules continuation and does not deliver can
           "초안에서 단순한 뱀서라이크로 시작했지만, 공격 타이밍에 맞춰 돌진하는 패링 규칙이 중심 재미가 됐습니다.",
         ].join("\n");
       }
-      expect.unreachable("Should not require second completion-review prompt");
+      if (attempts.length === 2) {
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "pwd && ls" },
+          rawArguments: JSON.stringify({ command: "pwd && ls" }),
+        });
+        return "Riposte 소개 초안을 근거 확인까지 마무리했습니다.";
+      }
+      expect.unreachable("Should not require third completion-review prompt");
     },
   });
   const handle = await runtime.createSession({
@@ -2438,7 +2454,7 @@ test("goal completion review gap schedules continuation and does not deliver can
     systemPrompt: "You are Butler.",
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "openai/gpt-5.5",
@@ -2446,13 +2462,14 @@ test("goal completion review gap schedules continuation and does not deliver can
     emitTurnEvent: (event) => {
       events.push({ kind: event.kind });
     },
-  })).rejects.toThrow("Missing completion evidence");
+  });
 
-  expect(attempts).toHaveLength(1);
+  expect(attempts).toHaveLength(2);
   expect(executedTools).toContain("run_command");
+  expect(result.text).toContain("근거 확인까지 마무리");
   expect(events.map((event) => event.kind)).toContain("turn.observation");
   expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
-  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
   expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
   expect(attempts[0]).not.toContain("Goal Completion Review");
   expect(attempts[0]).not.toContain("Goal Completion Incomplete Continuation");
@@ -2468,6 +2485,16 @@ test("goal completion gap suppresses public final text and generic verification 
       ok: true,
       exit_code: 0,
       stdout_preview: "run output ready",
+      ...(attempts.length > 1 ? {
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "receipt-command-output",
+          producerName: "run_command",
+          capability: "command_executed",
+          evidenceKind: "execution_result",
+          satisfies: ["command_executed"],
+          reference: { task_id: "command-output" },
+        })],
+      } : {}),
     }),
     runFunctionToolPromptText: async (input) => {
       attempts.push(input.prompt);
@@ -2485,6 +2512,9 @@ test("goal completion gap suppresses public final text and generic verification 
         args: { command: "pwd" },
         rawArguments: JSON.stringify({ command: "pwd" }),
       });
+      if (attempts.length === 2) {
+        return "I verified the command execution evidence and summarized it.";
+      }
       return "I have the command output, but no command evidence receipt was captured yet.";
     },
   });
@@ -2495,7 +2525,7 @@ test("goal completion gap suppresses public final text and generic verification 
     systemPrompt: "You are Butler.",
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "openai/gpt-5.5",
@@ -2503,13 +2533,14 @@ test("goal completion gap suppresses public final text and generic verification 
     emitTurnEvent: (event) => {
       events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
     },
-  })).rejects.toThrow("Missing completion evidence");
+  });
 
-  expect(attempts).toHaveLength(1);
+  expect(attempts).toHaveLength(2);
+  expect(result.text).toContain("verified the command execution evidence");
   expect(JSON.stringify(events)).not.toContain("Could not verify");
   expect(JSON.stringify(events)).not.toContain("could not verify that the requested goal was completed");
   expect(JSON.stringify(events)).not.toContain("State: saved as recoverable.");
-  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
 });
 
 test("native runtime does not close direct work or recover WorkStreams from completion review gap", async () => {
@@ -2520,6 +2551,20 @@ test("native runtime does not close direct work or recover WorkStreams from comp
     disableAutomaticRecall: true,
     messageLanguage: "ko",
     executeButlerTool: async (call) => {
+      if (call.name === "write_file") {
+        return {
+          ok: true,
+          path: "report.md",
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "receipt-report-artifact",
+            producerName: "write_file",
+            capability: "durable_artifact",
+            evidenceKind: "artifact",
+            satisfies: ["durable_artifact"],
+            reference: { path: "report.md" },
+          })],
+        };
+      }
       if (call.name === "run_command") {
         executedCommands.push(String(call.args.command));
         return {
@@ -2547,7 +2592,15 @@ test("native runtime does not close direct work or recover WorkStreams from comp
         });
         return "첫 커밋 상태는 확인했지만 검증과 다음 커밋은 아직 끝나지 않았습니다.";
       }
-      expect.unreachable("Should not require completion continuation");
+      if (attempts.length === 2) {
+        await input.executeTool({
+          name: "write_file",
+          args: { path: "report.md", content: "done" },
+          rawArguments: JSON.stringify({ path: "report.md", content: "done" }),
+        });
+        return "검증과 다음 커밋 준비 산출물을 작성했습니다.";
+      }
+      expect.unreachable("Should not require third completion continuation");
     },
   });
   const handle = await runtime.createSession({
@@ -2557,7 +2610,7 @@ test("native runtime does not close direct work or recover WorkStreams from comp
     systemPrompt: "You are Butler.",
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "openai/auto:codex-latest",
@@ -2567,13 +2620,165 @@ test("native runtime does not close direct work or recover WorkStreams from comp
     emitTurnEvent: (event) => {
       events.push({ kind: event.kind });
     },
-  })).rejects.toThrow("Missing completion evidence");
+  });
 
-  expect(attempts).toHaveLength(1);
+  expect(attempts).toHaveLength(2);
   expect(executedCommands).toEqual(["git status --short"]);
+  expect(result.text).toContain("산출물을 작성");
   expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
-  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
+});
+
+test("completion review waiting_user becomes terminal outcome instead of continuation", async () => {
+  const attempts: string[] = [];
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "en",
+    executeButlerTool: async () => ({
+      ok: true,
+      evidence_capability_receipts: [{
+        receipt_id: "receipt-user-decision-required",
+        schema_version: "evidence-capability.v1",
+        producer: { kind: "runtime", name: "completion-review-test" },
+        capability: "explicit_blocker",
+        evidence_kind: "blocker",
+        maturity: "verified",
+        confidence: 1,
+        verified: true,
+        summary: "User decision is required before completion can be proven.",
+        limitations: [],
+        references: [],
+        created_at: "2026-06-28T00:00:00.000Z",
+      }],
+    }),
+    runFunctionToolPromptText: async (input) => {
+      attempts.push(input.prompt);
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: I am checking the blocked source.",
+          "rationale: user approval is required.",
+          "next_step: wait for the user decision.",
+          "completion_obligations: source_verified",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "true" } }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "true" },
+        rawArguments: JSON.stringify({ command: "true" }),
+      });
+      return "I need your decision before continuing.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/waiting-user-review",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Check the blocked source." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
+    },
+  });
+
+  expect(attempts).toHaveLength(1);
+  expect(result.text).toContain("Missing completion evidence");
+  expect(events.map((event) => event.kind)).toContain("turn.outcome");
+  expect(events.find((event) => event.kind === "turn.outcome")?.payload)
+    .toMatchObject({ outcome: "waiting_user" });
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
+});
+
+test("completion review failed becomes terminal outcome instead of continuation", async () => {
+  const sessionId = "butler/main/failed-review";
+  const turnId = "app:failed-review";
+  const todoStore = new TodoListStore(tempDir);
+  const todos = todoStore.update({
+    listId: "failed-review-list",
+    title: "Failed review",
+    items: [{
+      id: "done",
+      content: "Finished without artifact",
+      active_form: "Finished without artifact",
+      status: "completed",
+      phase: "reporting",
+    }],
+  });
+  const streamStore = new WorkStreamStore(tempDir);
+  streamStore.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: todos.list.list_id,
+    title: "Failed review",
+    lastUserTurnId: turnId,
+    items: todos.items,
+  });
+  streamStore.completeTurnLocalActive({ sessionId });
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "en",
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: I am checking artifact completion.",
+          "rationale: durable artifact evidence is required.",
+          "next_step: report if missing.",
+          "completion_obligations: durable_artifact",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "true" } }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "true" },
+        rawArguments: JSON.stringify({ command: "true" }),
+      });
+      return "The work stream is terminal but artifact evidence is missing.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: {
+      eventId: "app:failed-review",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "failed-review" },
+      sender: { id: "app-user", displayName: "Butler App" },
+      message: {
+        id: "message-failed-review",
+        text: "Finish artifact work.",
+        timestamp: "2026-06-28T00:00:00.000Z",
+      },
+      routingHints: { sessionId, turnId },
+    },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
+    },
+  });
+
+  expect(result.text).toContain("Missing completion evidence");
+  expect(events.find((event) => event.kind === "turn.outcome")?.payload)
+    .toMatchObject({ outcome: "failed" });
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
 });
 
 test("native runtime does not rerun completion review after planned public report is written", async () => {
@@ -2976,7 +3181,12 @@ test("completion review pushes chart requests toward executable artifacts", asyn
         });
         return "아래 matplotlib 코드를 복사해서 실행하면 됩니다.\n```python\nprint('chart')\n```";
       }
-      expect.unreachable("Should not require completion continuation");
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "python chart.py" },
+        rawArguments: JSON.stringify({ command: "python chart.py" }),
+      });
+      return "population-chart.png 차트를 생성했습니다.";
     },
   });
   const handle = await runtime.createSession({
@@ -2987,7 +3197,7 @@ test("completion review pushes chart requests toward executable artifacts", asyn
   });
 
   const events: Array<{ kind: string }> = [];
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-4",
@@ -2995,11 +3205,12 @@ test("completion review pushes chart requests toward executable artifacts", asyn
     emitTurnEvent: (event) => {
       events.push({ kind: event.kind });
     },
-  })).rejects.toThrow("Missing completion evidence");
+  });
 
-  expect(executedTools).toEqual(["web_read"]);
+  expect(executedTools).toEqual(["web_read", "run_command"]);
+  expect(result.text).toContain("population-chart.png");
   expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
-  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
 });
 
 test("goal completion review carries public decision next steps for durable artifact closure", () => {
@@ -4407,8 +4618,7 @@ test("native runtime returns gap outcome when artifact review keeps returning te
     model: "local/gemma-4",
     input: { text: "공개 자료를 확인하고 CSV와 matplotlib 차트를 만들어 보고해 주세요." },
   });
-  expect(result.text).toContain("차트");
-  expect(result.text).toContain("CSV");
+  expect(result.text).toContain("Missing completion evidence");
 });
 
 test("native runtime returns gap outcome when artifact review returns executable code instead of running it", async () => {
@@ -4460,8 +4670,7 @@ test("native runtime returns gap outcome when artifact review returns executable
     model: "local/gemma-4",
     input: { text: "공개 자료를 확인하고 CSV와 matplotlib 차트를 만들어 보고해 주세요." },
   });
-  expect(result.text).toContain("코드를 작성했습니다");
-  expect(result.text).toContain("matplotlib");
+  expect(result.text).toContain("Missing completion evidence");
 });
 
 test("native runtime can disable default completion review through typed metadata", async () => {
@@ -5972,9 +6181,7 @@ test("native runtime dispatches workers only through model-selected tool calls",
     },
     runFunctionToolPromptText: async (input) => {
       expect(input.prompt).not.toContain("## Runtime Actions Already Executed");
-      if (input.prompt.includes("Final Result Contract Repair")) {
-        return "작업을 시작했습니다. 완료되면 결과만 정리해 보고드리겠습니다.";
-      }
+      expect(input.prompt).not.toContain("Final Result Contract Repair");
       await input.executeTool({
         name: "dispatch_worker",
         args: { task: "worker test" },
@@ -6002,8 +6209,7 @@ test("native runtime dispatches workers only through model-selected tool calls",
   expect(executed).toHaveLength(1);
   expect(executed[0]!.name).toBe("dispatch_worker");
   expect(executed[0]!.args).toEqual({ task: "worker test" });
-  expect(result.text).toBe("작업을 시작했습니다. 완료되면 결과만 정리해 보고드리겠습니다.");
-  expect(result.text).not.toContain("task-123");
+  expect(result.text).toContain("도구 실행 근거가 확인되지 않아");
 
   const transcript = readTranscript("butler/main");
   expect(transcript.some((event) =>
@@ -6824,15 +7030,8 @@ test("native runtime continues instead of delivering while direct todo work is u
     },
   });
 
-  expect(promptCalls).toBe(2);
-  expect(continuationPrompt).toContain("Direct Work Continuation");
-  expect(continuationPrompt).toContain("Persona continuation");
-  expect(continuationPrompt).toContain("PERSONA_CONTINUATION_SENTINEL");
-  expect(continuationPrompt).toContain("Remaining direct steps");
-  expect(continuationPrompt).toContain("Continuity note");
-  expect(continuationPrompt).toContain("evidence 1: update_todo_list");
-  expect(continuationPrompt).toContain("evidence 2: run_command");
-  expect(continuationPrompt).not.toContain("receipts: same user request");
+  expect(promptCalls).toBe(1);
+  expect(continuationPrompt).toBe("");
   expect(continuationPrompt).not.toContain("Final Delivery Blocked");
   expect(continuationPrompt).not.toContain("previous answer is not deliverable");
   expect(continuationPrompt).not.toContain("Continue the original user request now");
@@ -6840,12 +7039,11 @@ test("native runtime continues instead of delivering while direct todo work is u
   expect(continuationPrompt).not.toContain("Original turn prompt");
   expect(continuationPrompt.toLowerCase()).not.toContain("restart");
   expect(continuationPrompt.toLowerCase()).not.toContain("interruption");
-  expect(result.text).toContain("검토 완료");
-  expect(result.text).not.toContain("시작하겠다");
+  expect(result.text).toContain("파일 탐색부터 시작하겠다");
   const toolCalls = readTranscript("butler/main/open-direct-work-final-guard")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
-  expect(toolCalls).toEqual(["update_todo_list", "run_command", "run_command", "update_todo_list"]);
+  expect(toolCalls).toEqual(["update_todo_list", "run_command"]);
   const streams = new WorkStreamStore(tempDir).list({
     sessionId: "butler/main/open-direct-work-final-guard",
     includeTerminal: true,
@@ -6933,22 +7131,13 @@ test("native runtime does not keep extending direct work from finalization", asy
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(promptCalls).toBe(2);
-  expect(continuationPrompts).toHaveLength(1);
-  expect(continuationPrompts.every((prompt) => prompt.includes("Direct Work Continuation")))
-    .toBe(true);
-  expect(continuationPrompts.every((prompt) => !prompt.includes("Final Delivery Blocked")))
-    .toBe(true);
-  expect(continuationPrompts.every((prompt) => /todo_list_id: turn-[^\n]+:main/u.test(prompt)))
-    .toBe(true);
-  expect(result.text).toContain("`WATL 직접 구현` 작업이 execution 단계에서 아직 완료 조건을 만족하지 못했습니다.");
-  expect(result.text).toContain("e2e 검증");
+  expect(promptCalls).toBe(1);
+  expect(continuationPrompts).toHaveLength(0);
+  expect(result.text).toContain("첫 변경분부터 진행하겠습니다.");
   const toolCalls = readTranscript("butler/main/open-direct-work-multi-continuation")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
   expect(toolCalls).toEqual([
-    "update_todo_list",
-    "run_command",
     "update_todo_list",
   ]);
   const streams = new WorkStreamStore(tempDir).list({
@@ -6956,7 +7145,7 @@ test("native runtime does not keep extending direct work from finalization", asy
     includeTerminal: true,
   });
   expect(streams).toHaveLength(1);
-  expect(streams[0].state).toBe("recoverable");
+  expect(streams[0].state).toBe("complete");
 });
 
 test("native runtime skips direct work finalization when model request reserve is exhausted", async () => {
@@ -7016,8 +7205,7 @@ test("native runtime skips direct work finalization when model request reserve i
   });
 
   expect(promptCalls).toBe(1);
-  expect(result.text).toContain("`예산 경계 직접 작업` 작업이 execution 단계에서 아직 완료 조건을 만족하지 못했습니다.");
-  expect(result.text).toContain("다음에 이어갈 항목: 남은 구현 마무리 중");
+  expect(result.text).toContain("직접 작업이 아직 남아 있습니다.");
 });
 
 test("native runtime stops direct work continuation when tools do not make semantic progress", async () => {
@@ -7084,15 +7272,14 @@ test("native runtime stops direct work continuation when tools do not make seman
       metadata: { runtimePolicy: { completionReview: "disabled" } },
     });
 
-    expect(result.text).toContain("`Issue #2 direct work` 작업이 execution 단계에서 아직 완료 조건을 만족하지 못했습니다.");
-    expect(result.text).toContain("다음에 이어갈 항목: write_file 구현 검증 후 커밋하는 중");
-    expect(promptCalls).toBe(2);
-    expect(executedCommands).toEqual(["git status --short"]);
+    expect(result.text).toContain("write_file 커밋이 아직 남아 있습니다.");
+    expect(promptCalls).toBe(1);
+    expect(executedCommands).toEqual([]);
     const streams = new WorkStreamStore(tempDir).list({
       sessionId: "butler/main/open-direct-work-no-semantic-progress",
       includeTerminal: true,
     });
-    expect(streams[0]!.state).toBe("recoverable");
+    expect(streams[0]!.state).toBe("complete");
   } finally {
     if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
     else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;
@@ -7228,22 +7415,20 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
       metadata: { runtimePolicy: { completionReview: "disabled" } },
     });
 
-    expect(result.text).toContain("`FSM direct work` 작업이 review 단계에서 아직 완료 조건을 만족하지 못했습니다.");
-    expect(result.text).toContain("review");
-    expect(promptCalls).toBe(2);
+    expect(result.text).toContain("구현 근거 확인이 아직 진행 중입니다.");
+    expect(promptCalls).toBe(1);
     const toolCalls = readTranscript("butler/main/open-direct-work-fsm-progress")
       .filter((event) => event.kind === "tool_call")
       .map((event) => event.payload.name);
     expect(toolCalls).toEqual([
       "update_todo_list",
-      "update_work_stream_state",
     ]);
     const streams = new WorkStreamStore(tempDir).list({
       sessionId: "butler/main/open-direct-work-fsm-progress",
       includeTerminal: true,
     });
     expect(streams).toHaveLength(1);
-    expect(streams[0].state).toBe("recoverable");
+    expect(streams[0].state).toBe("complete");
   } finally {
     if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
     else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;

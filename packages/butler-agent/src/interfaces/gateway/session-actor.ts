@@ -31,9 +31,6 @@ import {
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
 import { isPromptUsageModelCallBudgetError } from "../../agent/turn/recoverable-delivery.ts";
 import {
-  isKernelCompletionGapContinuationError,
-} from "../../agent/turn/native/turn-runner/final-delivery-gates.ts";
-import {
   clearTurnContextAtom,
   persistTurnContextAtom,
 } from "../../agent/turn/turn-continuation-context.ts";
@@ -594,8 +591,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       const turnId = turnIdFromEnvelope(envelope);
       const isContinuationFailure =
         safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
-        isPromptUsageModelCallBudgetError(error) ||
-        isKernelCompletionGapContinuationError(error);
+        isPromptUsageModelCallBudgetError(error);
       if (isPromptUsageModelCallBudgetError(error) && turnId) {
         persistTurnContextAtom({
           butlerData: gatewayMetricsButlerData(),
