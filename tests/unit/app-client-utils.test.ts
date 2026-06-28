@@ -2526,13 +2526,12 @@ test("typed UI read models keep runtime faults separate from progress rows", () 
     {
       id: "fault-row",
       kind: "runtime_fault",
-      state: "failed",
+      state: "runtime_fault",
       safe_label: "Runtime interrupted.",
       runtime_fault_id: "fault-1",
-      runtime_fault_kind: "tool_result_pairing_invariant",
+      runtime_fault_kind: "provider_stream_corruption",
       runtime_fault_retryable: true,
       runtime_fault_public_summary: "Runtime interrupted.",
-      runtime_fault_operator_summary: "Tool result pairing invariant broke.",
       runtime_fault_safe_error_code: "runtime_fault",
     },
     {
@@ -2543,7 +2542,7 @@ test("typed UI read models keep runtime faults separate from progress rows", () 
       safe_tool_name: "Bash",
       safe_input_label: "npm test",
       work_decision_summary: "Decision text must not label the tool.",
-      work_decision_source: "runtime-derived",
+      work_decision_source: "assistant-authored",
     },
   ]);
 
@@ -2551,10 +2550,9 @@ test("typed UI read models keep runtime faults separate from progress rows", () 
     {
       type: "runtime_fault",
       faultId: "fault-1",
-      kind: "tool_result_pairing_invariant",
+      kind: "provider_stream_corruption",
       retryable: true,
       publicSummary: "Runtime interrupted.",
-      operatorSummary: "Tool result pairing invariant broke.",
       safeErrorCode: "runtime_fault",
       safeCause: undefined,
     },

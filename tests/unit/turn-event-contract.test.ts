@@ -61,6 +61,17 @@ function payloadForEventKind(kind: string): Record<string, unknown> {
       publicSummary: "Completed with evidence.",
     };
   }
+  if (kind === "runtime.fault") {
+    return {
+      faultId: "fault-1",
+      turnId: "turn-1",
+      kind: "provider_stream_corruption",
+      retryable: true,
+      publicSummary: "Runtime stream was interrupted.",
+      operatorSummary: "Provider stream emitted an invalid tool result frame.",
+      createdAt: "2026-06-28T00:00:00.000Z",
+    };
+  }
   if (kind === "recovery.recorded") {
     return {
       recoveryToken: "recovery-1",

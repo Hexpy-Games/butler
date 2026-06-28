@@ -986,7 +986,7 @@ export type TypedUiReadModel =
   | { type: "tool_control"; toolName: string; inputLabel?: string; label: string; toolCallId?: string; workBlockId?: string }
   | { type: "observation"; label: string; detailRows?: ProgressRow["safe_detail_rows"] }
   | { type: "outcome"; state: string; publicSummary: string }
-  | { type: "runtime_fault"; faultId: string; kind: string; retryable: boolean; publicSummary: string; operatorSummary?: string; safeErrorCode?: string; safeCause?: string };
+  | { type: "runtime_fault"; faultId: string; kind: string; retryable: boolean; publicSummary: string; safeErrorCode?: string; safeCause?: string };
 
 export function typedUiReadModelsFromProgressRows(
   rows: ProgressRow[],
@@ -999,20 +999,8 @@ export function typedUiReadModelsFromProgressRows(
         kind: row.runtime_fault_kind,
         retryable: row.runtime_fault_retryable === true,
         publicSummary: row.runtime_fault_public_summary,
-        operatorSummary: row.runtime_fault_operator_summary,
         safeErrorCode: row.runtime_fault_safe_error_code,
         safeCause: row.runtime_fault_safe_cause,
-      }];
-    }
-    const decision = publicDecisionFieldsFromRow(row);
-    if (decision.decision_summary && decision.decision_source) {
-      return [{
-        type: "decision",
-        summary: decision.decision_summary,
-        rationale: decision.decision_rationale,
-        nextStep: decision.decision_next_step,
-        source: decision.decision_source,
-        evidenceRefs: decision.decision_evidence_refs,
       }];
     }
     if (row.kind === WORK_BLOCK_MARKER_KIND && row.work_block_id) {
@@ -1033,6 +1021,17 @@ export function typedUiReadModelsFromProgressRows(
           : row.safe_tool_name ?? row.safe_label,
         toolCallId: row.tool_call_id,
         workBlockId: row.work_block_id,
+      }];
+    }
+    const decision = publicDecisionFieldsFromRow(row);
+    if (decision.decision_summary && decision.decision_source) {
+      return [{
+        type: "decision",
+        summary: decision.decision_summary,
+        rationale: decision.decision_rationale,
+        nextStep: decision.decision_next_step,
+        source: decision.decision_source,
+        evidenceRefs: decision.decision_evidence_refs,
       }];
     }
     if (row.kind === "turn" && isTerminalProgressState(row.state)) {
@@ -1410,14 +1409,13 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
     return {
       id: event.id,
       kind: "runtime_fault",
-      state: "failed",
+      state: "runtime_fault",
       safe_label: publicSummary,
       created_at,
       runtime_fault_id: faultId,
       runtime_fault_kind: kind,
       runtime_fault_retryable: payload.retryable === true,
       runtime_fault_public_summary: publicSummary,
-      runtime_fault_operator_summary: safeOptionalPublicText(payload.operatorSummary),
       runtime_fault_safe_error_code: safeOptionalPublicText(payload.safeErrorCode),
       runtime_fault_safe_cause: safeOptionalPublicText(payload.safeCause),
     };

@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import {
   AUTHORED_DECISION_SOURCES,
   COMPLETION_EVIDENCE_KINDS,
+  RECOVERY_KINDS,
+  RUNTIME_FAULT_EVENT_KIND,
   TURN_ACKNOWLEDGED_EVENT_KIND,
   TURN_COMPLETION_EVIDENCE_EVENT_KIND,
   TURN_DECISION_EVENT_KIND,
@@ -9,6 +11,7 @@ import {
   TURN_OUTCOMES,
   createDiagnosticInvariantViolationPayload,
   createCompletionEvidencePayload,
+  createRuntimeFaultPayload,
   createRecoveryRecordedPayload,
   createTurnAcknowledgedPayload,
   createTurnDecisionPayload,
@@ -46,6 +49,18 @@ test("turn state contract event kinds are accepted by the canonical event creato
         outcome: "completed",
         completionEvidenceRefs: ["evidence-1"],
         publicSummary: "Completed with evidence",
+      },
+    },
+    {
+      kind: RUNTIME_FAULT_EVENT_KIND,
+      payload: {
+        faultId: "fault-1",
+        turnId: "turn",
+        kind: "provider_stream_corruption",
+        retryable: true,
+        publicSummary: "Runtime stream was interrupted.",
+        operatorSummary: "Provider stream emitted an invalid tool result frame.",
+        createdAt: "2026-06-28T00:00:00.000Z",
       },
     },
   ] as const;
@@ -177,6 +192,53 @@ test("turn outcome payload enforces evidence and recovery-token invariants", () 
     outcome: "recoverable",
     publicSummary: "Missing token.",
   })).toThrow("recoverable turn outcome requires a recovery token");
+});
+
+test("runtime fault payload enforces exact recovery contract", () => {
+  for (const kind of RECOVERY_KINDS) {
+    expect(createRuntimeFaultPayload({
+      faultId: `fault-${kind}`,
+      turnId: "turn-1",
+      kind,
+      retryable: false,
+      publicSummary: "Runtime stopped before the turn could continue.",
+      operatorSummary: "Operator diagnostic for the runtime fault.",
+      createdAt: "2026-06-28T00:00:00.000Z",
+    })).toMatchObject({
+      faultId: `fault-${kind}`,
+      kind,
+      retryable: false,
+      publicSummary: "Runtime stopped before the turn could continue.",
+      operatorSummary: "Operator diagnostic for the runtime fault.",
+    });
+  }
+
+  expect(() => createRuntimeFaultPayload({
+    faultId: "fault-invalid",
+    turnId: "turn-1",
+    kind: "tool_result_pairing_invariant",
+    retryable: true,
+    publicSummary: "Runtime stopped.",
+    operatorSummary: "Invalid kind.",
+  })).toThrow("unknown runtime fault recovery kind");
+
+  expect(() => createRuntimeFaultPayload({
+    faultId: "fault-missing-retryable",
+    turnId: "turn-1",
+    kind: "provider_stream_corruption",
+    publicSummary: "Runtime stopped.",
+    operatorSummary: "Missing retryability.",
+    retryable: undefined,
+  })).toThrow("runtime fault retryable must be an explicit boolean");
+
+  expect(() => createRuntimeFaultPayload({
+    faultId: "fault-missing-operator",
+    turnId: "turn-1",
+    kind: "provider_stream_corruption",
+    retryable: true,
+    publicSummary: "Runtime stopped.",
+    operatorSummary: undefined,
+  })).toThrow("runtime fault operator summary is required");
 });
 
 test("recovery and diagnostic payload helpers validate stable control surfaces", () => {
