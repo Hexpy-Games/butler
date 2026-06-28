@@ -26,6 +26,7 @@ import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { PromptAssembler } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
+import { normalizeTurnPrompt } from "../../packages/butler-agent/src/agent/turn/native/context/turn-prompt.ts";
 import {
   createTurnContextAtomId,
   readTurnContextAtom,
@@ -1013,7 +1014,7 @@ test("queued inbound provider failure preserves safe API diagnostics for app pro
   expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
 });
 
-test("queued inbound converts model-call budget exhaustion to recoverable limited delivery", async () => {
+test("queued inbound schedules same-logical-turn continuation for raw model-call budget exhaustion", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -1060,6 +1061,15 @@ test("queued inbound converts model-call budget exhaustion to recoverable limite
     failed: 0,
   });
   expect(app.sentActions).toHaveLength(0);
+  const pendingRecords = readdirSync(join(tempDir, "runtime", "inbound-events", "pending"))
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => JSON.parse(readFileSync(join(tempDir, "runtime", "inbound-events", "pending", name), "utf8")));
+  expect(pendingRecords).toHaveLength(1);
+  expect(pendingRecords[0].metadata).toMatchObject({
+    sameLogicalTurnContinuation: true,
+    continuationTurnId: "turn-budget-failure",
+    contextAtomId: createTurnContextAtomId("butler/app-general", "turn-budget-failure"),
+  });
   const persisted = readTurnContextAtom({
     butlerData: tempDir,
     sessionId: "butler/app-general",
@@ -1072,6 +1082,34 @@ test("queued inbound converts model-call budget exhaustion to recoverable limite
     sourceErrorCode: "internal_recovery_required",
   });
   store.close();
+});
+
+test("scheduler continuation metadata fails closed when its atom is unavailable", () => {
+  expect(() => normalizeTurnPrompt({
+    handle: {
+      sessionId: "butler/app-general",
+      role: "butler",
+      runtimeAdapterId: "native-tool-loop",
+      runtimeSessionRef: "runtime:missing-continuation",
+    },
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: appEnvelope({
+      eventId: "app:missing-continuation",
+      messageId: "client-missing-continuation",
+      sessionId: "butler/app-general",
+      text: "this must not reopen as normal inbound",
+    }),
+    metadata: {
+      turnId: "turn-client-missing-continuation",
+      schedulerContinuation: {
+        contextAtomId: createTurnContextAtomId("butler/app-general", "turn-client-missing-continuation"),
+      },
+    },
+  }, {
+    recentConversationTokenBudget: 1_000,
+    butlerData: tempDir,
+  })).toThrow("Scheduler continuation context atom could not be read");
 });
 
 test("queued inbound completion gap consumes same logical turn continuation without second inbound", async () => {
@@ -1299,6 +1337,24 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
           },
           rawArguments: JSON.stringify({ title: "Sandy style guard validation" }),
         });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Inspect Sandy style guard validation evidence.",
+            "rationale: The user asked to continue from W3 with durable work state.",
+            "next_step: Capture a small validation receipt before continuing.",
+          ].join("\n"),
+          toolCalls: [{
+            name: "run_command",
+            args: { command: "printf 'w3 evidence\\n'" },
+          }],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: {
+            command: "printf 'w3 evidence\\n'",
+          },
+          rawArguments: JSON.stringify({ command: "printf 'w3 evidence\\n'" }),
+        });
         const error = new Error("Prompt usage model-call budget exhausted before provider request");
         error.name = "PromptUsageModelCallBudgetExhaustedError";
         Object.assign(error, { code: "prompt_usage_model_call_budget_exhausted" });
@@ -1412,6 +1468,9 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
       expect.objectContaining({ kind: "todo_list" }),
       expect.objectContaining({ kind: "todo_item" }),
     ]),
+    latestAssistantDecision: expect.objectContaining({
+      id: expect.stringContaining("decision-"),
+    }),
   });
 
   const streamStore = new WorkStreamStore(tempDir);
@@ -1456,6 +1515,9 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   expect(readTranscript(sessionId).filter((event) => event.kind === "inbound")).toHaveLength(1);
   expect(resumePrompt).toContain("## Scheduler Continuation Context Atom");
   expect(resumePrompt.indexOf("## Scheduler Continuation Context Atom"))
+    .toBeLessThan(resumePrompt.indexOf("## Active Work State"));
+  expect(resumePrompt).toContain("Latest Assistant Decision Ref: decision-");
+  expect(resumePrompt.indexOf("Latest Assistant Decision Ref:"))
     .toBeLessThan(resumePrompt.indexOf("## Active Work State"));
   expect(resumePrompt).toContain(
     `Context Atom ID: ${createTurnContextAtomId(sessionId, "turn-client-w3-budget-first")}`,

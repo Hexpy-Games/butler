@@ -9,7 +9,11 @@ import {
 } from "../../../../test-support/harness/transcripts.ts";
 import { renderAttachmentContext } from "../../../context/attachment-context.ts";
 import { takeLinesFromEndWithinBudget } from "../../../context/budget.ts";
-import { readTurnContextAtom, type TurnContextAtom } from "../../turn-continuation-context.ts";
+import {
+  createTurnContextAtomId,
+  readTurnContextAtom,
+  type TurnContextAtom,
+} from "../../turn-continuation-context.ts";
 
 export interface NormalizedTurnPrompt {
   prompt: string;
@@ -79,11 +83,12 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
   butlerData: string;
 }): NormalizedTurnPrompt {
   const parts: string[] = [];
+  const schedulerContinuationRequested = hasSchedulerContinuationMetadata(input);
   const schedulerAtomContext = renderSchedulerContinuationAtomContext(input, options.butlerData);
   if (schedulerAtomContext) parts.push(schedulerAtomContext);
   const rawPromptContext =
     typeof input.metadata?.promptContext === "string" ? input.metadata.promptContext.trim() : "";
-  const schedulerContinuation = schedulerAtomContext.length > 0;
+  const schedulerContinuation = schedulerContinuationRequested;
   const structuredCurrentText = metadataCurrentUserText(input);
   const promptContext = structuredCurrentText
     ? removePromptContextSection(rawPromptContext, "Current User Input")
@@ -164,16 +169,53 @@ function renderSchedulerContinuationAtomContext(
   const contextAtomId = typeof continuation?.contextAtomId === "string"
     ? continuation.contextAtomId.trim()
     : "";
-  if (!contextAtomId) return "";
+  if (!contextAtomId) {
+    if (!continuation) return "";
+    throw schedulerContinuationInvariantFault(
+      "turn_scheduler_continuation_missing_atom_id",
+      "Scheduler continuation metadata did not include a context atom id.",
+    );
+  }
   const turnId = currentRuntimeTurnId(input);
-  if (!turnId) return "";
+  if (!turnId) {
+    throw schedulerContinuationInvariantFault(
+      "turn_scheduler_continuation_missing_turn_id",
+      "Scheduler continuation metadata did not include a resolvable turn id.",
+    );
+  }
+  const expectedContextAtomId = createTurnContextAtomId(input.handle.sessionId, turnId);
+  if (contextAtomId !== expectedContextAtomId) {
+    throw schedulerContinuationInvariantFault(
+      "turn_scheduler_continuation_atom_mismatch",
+      "Scheduler continuation metadata referenced an atom that does not match this session turn.",
+    );
+  }
   const atom = readTurnContextAtom({
     butlerData,
     sessionId: input.handle.sessionId,
     turnId,
   });
-  if (!atom) return "";
+  if (!atom) {
+    throw schedulerContinuationInvariantFault(
+      "turn_scheduler_continuation_atom_unavailable",
+      "Scheduler continuation context atom could not be read.",
+    );
+  }
   return renderTurnContextAtom(atom, contextAtomId);
+}
+
+function hasSchedulerContinuationMetadata(input: RuntimeTurnInput): boolean {
+  const metadata = input.metadata && typeof input.metadata === "object"
+    ? input.metadata as Record<string, unknown>
+    : {};
+  return Boolean(metadata.schedulerContinuation && typeof metadata.schedulerContinuation === "object");
+}
+
+function schedulerContinuationInvariantFault(code: string, message: string): Error {
+  return Object.assign(new Error(message), {
+    name: "TurnSchedulerContinuationInvariantError",
+    code,
+  });
 }
 
 function renderTurnContextAtom(atom: TurnContextAtom, contextAtomId: string): string {
