@@ -3691,7 +3691,19 @@ export class AppServerStore {
 
   syncAllAppTransportEvents(): number {
     const rows = this.db
-      .query<{ id: string }, []>("SELECT id FROM chats WHERE archived = 0")
+      .query<{ id: string }, []>(
+        `
+      SELECT c.id
+      FROM chats c
+      WHERE c.archived = 0
+        OR EXISTS (
+          SELECT 1
+          FROM turns t
+          WHERE t.chat_id = c.id
+            AND t.state IN ('accepted', 'thinking', 'running', 'waiting_user')
+        )
+    `,
+      )
       .all();
     return rows.reduce(
       (count, row) => count + this.syncAppTransportEventsForChat(row.id),
@@ -5992,6 +6004,9 @@ export class AppServerStore {
 
       CREATE INDEX IF NOT EXISTS session_queued_messages_session_idx
       ON session_queued_messages(chat_id, state);
+
+      CREATE INDEX IF NOT EXISTS turns_chat_state_idx
+      ON turns(chat_id, state);
 
       CREATE INDEX IF NOT EXISTS events_type_id_idx
       ON events(type, id DESC);

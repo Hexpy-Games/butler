@@ -8509,11 +8509,65 @@ test("app transport sync skips unchanged transcript snapshots", async () => {
       SELECT COUNT(*) AS count
       FROM events
       WHERE type = 'progress.summary'
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '$.turn_id') = ?
     `,
       )
-      .get(`%"turn_id":"${turnId}"%`);
+      .get(turnId);
     expect(row?.count).toBe(1);
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport sync includes archived sessions while a turn is active", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "archived active progress",
+  });
+  const turnId = result.data.turn.id;
+  const userMessageId = result.data.accepted.id;
+  await postJson(`${server.url}sessions/general/archive`, {});
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:05:30.000Z",
+      payload: {
+        actionId: `runtime-intermediate:app:${userMessageId}:archived-active-progress`,
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+          replyToMessageId: userMessageId,
+        },
+        metadata: {
+          kind: "tool_progress",
+          activityKind: "model",
+          toolName: "모델 준비",
+          safeLabel: "요청 확인: archived active progress",
+          inputLabel: "",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    expect(server.store.syncAllAppTransportEvents()).toBe(1);
+    const progress = server.store.listTurnProgressSnapshotsForMessages([
+      result.data.accepted,
+    ]);
+    expect(progress[turnId]?.safe_progress_rows).toContainEqual(
+      expect.objectContaining({
+        kind: "model",
+        safe_label: "요청 확인: archived active progress",
+      }),
+    );
   } finally {
     server.stop();
   }
