@@ -1117,7 +1117,7 @@ export function isVisibleToolchainProgressRow(
 }
 
 function isCompletedTurnWorkActivityRow(row: ProgressRow): boolean {
-  if (!row || row.state === "cancelled") return false;
+  if (!row) return false;
   if (isInternalProgressRow(row)) return false;
   if (row.kind === "todo") return false;
   if (row.kind === WORK_BLOCK_MARKER_KIND) return false;
@@ -2709,11 +2709,25 @@ export function shouldShowTurnActivity(input: {
   hasTodoProgress: boolean;
   isSending: boolean;
   timelineProgressRowCount: number;
+  turnState?: string;
 }): boolean {
+  if (
+    input.activeTurn &&
+    !input.isSending &&
+    input.timelineProgressRowCount === 0 &&
+    !input.hasTodoProgress &&
+    isInternalContinuationTurnState(input.turnState)
+  ) {
+    return false;
+  }
   return (
     (input.isSending || input.activeTurn) &&
     (!input.hasTodoProgress || input.timelineProgressRowCount > 0)
   );
+}
+
+function isInternalContinuationTurnState(state?: string): boolean {
+  return state === "retrying" || state === "waiting_for_tool";
 }
 
 export function isWorkerCancellable(worker: WorkerActivitySummary): boolean {

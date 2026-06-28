@@ -1306,7 +1306,7 @@ test("queued inbound goal completion incomplete delivers safe limited result", a
     metadata: {
       kind: "final_result",
       turnId: "turn-goal-incomplete",
-      deliveryState: "recovering_internal",
+      deliveryState: "needs_evidence",
       limitationCodes: ["internal_recovery_required"],
       limitations: [],
       noVisibleReply: true,
