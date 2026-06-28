@@ -10,7 +10,10 @@ import {
   isPromptUsageModelCallBudgetError,
   recoverableLimitedDeliveryForError,
 } from "../../agent/turn/recoverable-delivery.ts";
-import { persistTurnContextAtom } from "../../agent/turn/turn-continuation-context.ts";
+import {
+  isTurnSchedulerContinuationYieldError,
+  persistTurnContextAtom,
+} from "../../agent/turn/turn-continuation-context.ts";
 import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
 import { join } from "node:path";
 import type { DeliveryGuard } from "../transport/delivery-guard.ts";
@@ -460,6 +463,34 @@ async function processClaimedQueuedInboundItem(input: {
     summary.quiescence = dispatchQuiescenceForError(error);
     const sessionId = item.envelope.routingHints?.sessionId?.trim();
     const turnId = item.envelope.routingHints?.turnId?.trim();
+    if (isTurnSchedulerContinuationYieldError(error) && sessionId && turnId) {
+      const scheduled = scheduleSameLogicalTurnContinuation({
+        queue: options.queue,
+        item,
+        turnId,
+        contextAtomId: error.contextAtomId,
+        now: options.now?.(),
+      });
+      if (!scheduled) {
+        summary.failed += 1;
+        failQueueClaim(options, item, "Unable to schedule same-logical-turn continuation.", {
+          source: "gateway/queued-inbound.ts#scheduler-continuation",
+          failure: {
+            code: "turn_scheduler_continuation_schedule_failed",
+          },
+        });
+        return summary;
+      }
+      const terminalRecorded = completeQueueClaim(options, item, {
+        dispatchStatus: "continuing",
+        handled: true,
+        continuationScheduled: true,
+        contextAtomId: error.contextAtomId,
+      });
+      if (!terminalRecorded) return summary;
+      summary.handled += 1;
+      return summary;
+    }
     const isBudgetError = isPromptUsageModelCallBudgetError(error);
     if (isBudgetError && sessionId && turnId) {
       const safeFailure = safeFailureForQueuedInboundError(error);
@@ -534,6 +565,38 @@ async function processClaimedQueuedInboundItem(input: {
   }
 
   return summary;
+}
+
+function scheduleSameLogicalTurnContinuation(input: {
+  queue: NativeInboundQueue;
+  item: ClaimedInboundEvent;
+  turnId: string;
+  contextAtomId: string;
+  now?: Date;
+}): boolean {
+  try {
+    input.queue.enqueue({
+      ...input.item.envelope,
+      eventId: `${input.item.envelope.eventId}:kernel-continuation:${input.item.attempts}`,
+      message: {
+        ...input.item.envelope.message,
+        id: `${input.item.envelope.message.id}:kernel-continuation:${input.item.attempts}`,
+      },
+      routingHints: {
+        ...input.item.envelope.routingHints,
+        turnId: input.turnId,
+      },
+    }, {
+      source: "gateway/queued-inbound.ts#scheduler-continuation",
+      continuationForQueueId: input.item.queueId,
+      continuationTurnId: input.turnId,
+      contextAtomId: input.contextAtomId,
+      sameLogicalTurnContinuation: true,
+    }, input.now);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function completeQueueClaim(

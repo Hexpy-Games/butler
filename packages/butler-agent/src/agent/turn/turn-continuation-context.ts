@@ -25,6 +25,33 @@ export interface TurnContextAtom {
   createdAt: string;
 }
 
+export const TURN_SCHEDULER_CONTINUATION_YIELD_CODE = "turn_scheduler_continuation_yield";
+
+export class TurnSchedulerContinuationYieldError extends Error {
+  readonly code = TURN_SCHEDULER_CONTINUATION_YIELD_CODE;
+
+  constructor(
+    readonly sessionId: string,
+    readonly turnId: string,
+    readonly contextAtomId: string,
+  ) {
+    super("Turn scheduler yielded after persisting a continuation context atom.");
+    this.name = "TurnSchedulerContinuationYieldError";
+  }
+}
+
+export function isTurnSchedulerContinuationYieldError(
+  error: unknown,
+): error is TurnSchedulerContinuationYieldError {
+  return error instanceof TurnSchedulerContinuationYieldError ||
+    (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: unknown }).code === TURN_SCHEDULER_CONTINUATION_YIELD_CODE
+    );
+}
+
 const TURN_KERNEL_CONTEXT_DIR_NAME = "turn-kernel";
 const CONTINUATION_FILE_SUFFIX = "continuation.json";
 

@@ -7,7 +7,13 @@ import {
   recoverableLimitedDeliveryForError,
 } from "../../recoverable-delivery.ts";
 import { deliveredWithLimitationsState } from "../../runtime-delivery-state.ts";
-import { clearTurnContextAtom, persistTurnContextAtom } from "../../turn-continuation-context.ts";
+import {
+  clearTurnContextAtom,
+  createTurnContextAtomId,
+  isTurnSchedulerContinuationYieldError,
+  persistTurnContextAtom,
+  TurnSchedulerContinuationYieldError,
+} from "../../turn-continuation-context.ts";
 import { safeRuntimeFailure } from "../../../../integrations/providers/provider-errors.ts";
 import {
   cancelActiveWorkStreamBestEffort,
@@ -89,7 +95,7 @@ export async function runNativeToolTurn({
         return await runToolPrompt(promptText, maxToolRounds, phase);
       } catch (error) {
         if (!isPromptUsageModelCallBudgetError(error)) throw error;
-        await persistSchedulerContinuation({
+        const contextAtomId = await persistSchedulerContinuation({
           input,
           deps,
           turnId: context.turnId,
@@ -97,7 +103,11 @@ export async function runNativeToolTurn({
           publicDecisionContext,
           error,
         });
-        return await runToolPrompt(schedulerContinuationPrompt(), maxToolRounds, "scheduler_continuation");
+        throw new TurnSchedulerContinuationYieldError(
+          input.handle.sessionId,
+          context.turnId,
+          contextAtomId,
+        );
       }
     };
     let candidateText = useTools
@@ -261,6 +271,7 @@ export async function runNativeToolTurn({
   } catch (error) {
     const limitedDelivery = recoverableLimitedDeliveryForError(error);
     const isBudgetError = isPromptUsageModelCallBudgetError(error);
+    const isSchedulerYield = isTurnSchedulerContinuationYieldError(error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (isBudgetError && turnId) {
       const safeFailure = safeRuntimeFailure(error);
@@ -281,7 +292,7 @@ export async function runNativeToolTurn({
           sessionId: input.handle.sessionId,
           turnId,
         });
-      } else if (!limitedDelivery && !isBudgetError) {
+      } else if (!limitedDelivery && !isBudgetError && !isSchedulerYield) {
         markActiveWorkStreamRecoverableBestEffort({
           butlerData: deps.butlerData,
           sessionId: input.handle.sessionId,
@@ -290,7 +301,7 @@ export async function runNativeToolTurn({
         });
       }
     }
-    if (!limitedDelivery && !isBudgetError) {
+    if (!limitedDelivery && !isBudgetError && !isSchedulerYield) {
       await emitInterruptedTurnOutcome({
         turnInput: input,
         cancelled: Boolean(input.signal?.aborted),
@@ -321,8 +332,9 @@ async function persistSchedulerContinuation(input: {
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
   error: unknown;
-}): Promise<void> {
+}): Promise<string> {
   const safeFailure = safeRuntimeFailure(input.error);
+  const contextAtomId = createTurnContextAtomId(input.input.handle.sessionId, input.turnId);
   const refs = collectTurnContinuationRefs({
     butlerData: input.deps.butlerData,
     sessionId: input.input.handle.sessionId,
@@ -342,24 +354,36 @@ async function persistSchedulerContinuation(input: {
     },
     ...refs,
     unresolvedObservations: [{
-      kind: "runtime_provider_fault",
-      id: `scheduler:${input.turnId}`,
+      kind: "context_compacted",
+      id: `context-atom:${contextAtomId}`,
     }],
   });
   await emitTurnEventBestEffort(input.input, {
     kind: "turn.observation",
+    visibility: "internal",
     payload: {
-      kind: "runtime_provider_fault",
-      safeLabel: "Scheduler yielded before the next model request.",
+      kind: "context_compacted",
+      visibility: "operator",
+      safeLabel: "Continuation context atom persisted.",
+      refs: [{
+        kind: "context_atom",
+        id: contextAtomId,
+      }],
     },
   });
   await emitTurnEventBestEffort(input.input, {
     kind: "turn.continuation_scheduled",
+    visibility: "internal",
     payload: {
       reason: safeFailure.code,
-      safeLabel: "Continuing current turn after scheduler yield",
+      safeLabel: "Continuation scheduled.",
+      refs: [{
+        kind: "context_atom",
+        id: contextAtomId,
+      }],
     },
   });
+  return contextAtomId;
 }
 
 function completionGapContinuationPrompt(input: {
@@ -374,13 +398,6 @@ function completionGapContinuationPrompt(input: {
   ].filter(Boolean).join("\n\n");
 }
 
-function schedulerContinuationPrompt(): string {
-  return [
-    "The scheduler persisted a continuation checkpoint for this same logical turn.",
-    "Resume the current turn from durable WorkStream, todo, tool, and observation state.",
-    "Do not emit terminal public copy about the scheduler yield.",
-  ].join("\n\n");
-}
 
 async function emitEarlyRuntimePreparationProgress(input: {
   input: NativeTurnRunnerInput["input"];

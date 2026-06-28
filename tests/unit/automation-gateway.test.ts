@@ -1380,20 +1380,78 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
     failed: 0,
   });
   expect(app.sentActions).toHaveLength(0);
-  expect(promptCallCount).toBe(2);
-  expect(resumePrompt).toContain("scheduler persisted a continuation checkpoint");
-  expect(resumePrompt).toContain("same logical turn");
+  expect(promptCallCount).toBe(1);
+  expect(resumePrompt).toBe("");
+
+  const persisted = readTurnContextAtom({
+    butlerData: tempDir,
+    sessionId,
+    turnId: "turn-client-w3-budget-first",
+  });
+  expect(persisted).toMatchObject({
+    state: "continuing",
+    unresolvedObservations: [expect.objectContaining({
+      kind: "context_compacted",
+    })],
+    currentTurnWork: [expect.objectContaining({
+      kind: "work_stream",
+    })],
+    currentTurnTodos: expect.arrayContaining([
+      expect.objectContaining({ kind: "todo_list" }),
+      expect.objectContaining({ kind: "todo_item" }),
+    ]),
+  });
 
   const streamStore = new WorkStreamStore(tempDir);
   const streams = streamStore.list({ sessionId, includeTerminal: true });
   expect(streams).toHaveLength(1);
   expect(streams[0]).toMatchObject({
-    state: "complete",
-    terminal: true,
+    state: "executing",
+    terminal: false,
   });
   const stream = streamStore.read(streams[0].id);
   const todos = new TodoListStore(tempDir).view(stream!.todo_list_id!, { includeCompleted: true });
   expect(todos.items).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      id: "w3-style-guard",
+      status: "in_progress",
+      active_form: "Inspecting Sandy style guard validation evidence",
+    }),
+    expect.objectContaining({
+      id: "w4-report",
+      status: "pending",
+    }),
+  ]));
+
+  const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+  expect(readdirSync(pendingDir).filter((name) => name.endsWith(".json"))).toHaveLength(1);
+
+  const second = await processQueuedInboundEvents({
+    queue,
+    server,
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(second).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
+  });
+  expect(promptCallCount).toBe(2);
+  expect(resumePrompt).toContain("## Active Work State");
+  expect(resumePrompt).toContain("w3-style-guard:in_progress:execution:Inspecting Sandy style guard validation evidence");
+  expect(resumePrompt).not.toContain("model-call budget");
+
+  const completedStreams = streamStore.list({ sessionId, includeTerminal: true });
+  expect(completedStreams).toHaveLength(1);
+  expect(completedStreams[0]).toMatchObject({
+    state: "complete",
+    terminal: true,
+  });
+  const completedTodos = new TodoListStore(tempDir).view(stream!.todo_list_id!, { includeCompleted: true });
+  expect(completedTodos.items).toEqual(expect.arrayContaining([
     expect.objectContaining({
       id: "w3-style-guard",
       status: "completed",

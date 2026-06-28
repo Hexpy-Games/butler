@@ -7767,37 +7767,61 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
     systemPrompt: "You are Butler.",
   });
 
-  const result = await runtime.runTurn({
+  const events: Array<{ kind: string; payload?: Record<string, unknown>; visibility?: string }> = [];
+  await expect(runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-test",
     input: { text: "샌디봇 최신세션 W3부터 계속 진행해줘." },
+    emitTurnEvent: (event) => {
+      events.push({
+        kind: event.kind,
+        payload: event.payload as Record<string, unknown> | undefined,
+        visibility: event.visibility,
+      });
+    },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
-  });
+  })).rejects.toThrow("Turn scheduler yielded");
 
-  expect(result.text).toContain("보존된 W3 작업 상태");
-  expect(callCount).toBe(2);
+  expect(callCount).toBe(1);
+  expect(events.map((event) => event.kind)).toContain("turn.observation");
+  expect(events.find((event) => event.kind === "turn.observation")).toMatchObject({
+    visibility: "internal",
+    payload: {
+      kind: "context_compacted",
+      visibility: "operator",
+    },
+  });
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+  const atom = readOnlyPersistedTurnContextAtom();
+  expect(atom).toMatchObject({
+    state: "continuing",
+    unresolvedObservations: [expect.objectContaining({
+      kind: "context_compacted",
+    })],
+  });
 
   const streams = new WorkStreamStore(tempDir).list({ sessionId, includeTerminal: true });
   expect(streams).toHaveLength(1);
   expect(streams[0]).toMatchObject({
-    state: "complete",
-    terminal: true,
+    state: "executing",
+    terminal: false,
   });
   const record = new WorkStreamStore(tempDir).read(streams[0].id);
-  expect(record?.state).toBe("complete");
+  expect(record?.state).toBe("executing");
   const todoView = new TodoListStore(tempDir).view(record!.todo_list_id!, { includeCompleted: true });
-  expect(todoView.progress.active).toBe(0);
+  expect(todoView.progress.active).toBe(2);
   expect(todoView.items)
     .toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "w3-style-guard",
-        status: "completed",
+        status: "in_progress",
         active_form: "Inspecting Sandy style guard validation evidence",
       }),
       expect.objectContaining({
         id: "w4-report",
-        status: "completed",
+        status: "pending",
       }),
     ]));
 });

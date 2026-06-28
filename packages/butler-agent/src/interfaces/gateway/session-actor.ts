@@ -32,6 +32,7 @@ import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery
 import { isPromptUsageModelCallBudgetError } from "../../agent/turn/recoverable-delivery.ts";
 import {
   clearTurnContextAtom,
+  isTurnSchedulerContinuationYieldError,
   persistTurnContextAtom,
 } from "../../agent/turn/turn-continuation-context.ts";
 import type {
@@ -591,7 +592,8 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       const turnId = turnIdFromEnvelope(envelope);
       const isContinuationFailure =
         safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
-        isPromptUsageModelCallBudgetError(error);
+        isPromptUsageModelCallBudgetError(error) ||
+        isTurnSchedulerContinuationYieldError(error);
       if (isPromptUsageModelCallBudgetError(error) && turnId) {
         persistTurnContextAtom({
           butlerData: gatewayMetricsButlerData(),
