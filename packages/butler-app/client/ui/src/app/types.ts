@@ -1098,6 +1098,7 @@ export interface TimelineEvent {
     };
     message_id?: string;
     chat_id?: string;
+    role?: MessageRecord["role"];
     session_id?: string;
     turn_id?: string;
     state?: string;

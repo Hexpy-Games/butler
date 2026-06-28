@@ -1435,13 +1435,17 @@ test("delivered assistant message terminalizes active turn progress immediately"
   expect(activeTurnProgressSnapshot(state.summary, state.turnProgress)).toBeNull();
 });
 
-test("retrying assistant message revives failed turn progress for the same turn", () => {
+test("retrying turn deletes the failure message and continues existing work progress", () => {
   const failedRow = {
     id: "row-retry",
     kind: "ran_command",
     state: "failed",
     safe_label: "Bash: previous attempt",
     safe_tool_name: "Bash",
+    safe_input_label: "npm test",
+    tool_call_id: "tool-retry",
+    work_block_id: "work-retry",
+    work_block_label: "Fixing the failing test",
   } as const;
   const state = applyTimelineEventsToViewState(
     [
@@ -1459,16 +1463,12 @@ test("retrying assistant message revives failed turn progress for the same turn"
       },
       {
         id: 2,
-        type: "message.updated",
+        type: "message.deleted",
         payload: {
-          message: {
-            id: "assistant-failed",
-            chat_id: "general",
-            turn_id: "turn-retry",
-            role: "assistant",
-            text: "Retrying this turn.",
-            status: "retrying",
-          },
+          message_id: "assistant-failed",
+          chat_id: "general",
+          turn_id: "turn-retry",
+          role: "assistant",
         },
       },
       {
@@ -1516,15 +1516,17 @@ test("retrying assistant message revives failed turn progress for the same turn"
     },
   );
 
-  expect(state.messages[0]?.status).toBe("retrying");
+  expect(state.messages).toEqual([]);
   expect(state.turnProgress["turn-retry"]?.state).toBe("thinking");
-  expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toEqual([
+  expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toHaveLength(1);
+  expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toContainEqual(
     expect.objectContaining({
       id: "row-retry",
       state: "thinking",
       safe_label: "Bash: retry attempt",
+      work_block_id: "work-retry",
     }),
-  ]);
+  );
   expect(activeTurnProgressSnapshot(state.summary, state.turnProgress)).toMatchObject({
     turn_id: "turn-retry",
     state: "thinking",
