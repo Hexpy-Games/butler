@@ -266,6 +266,57 @@ test("native runtime blocks visible tool execution until an authored public deci
   expect(String(observations[0]?.model_visible_content)).toContain("same assistant response");
 });
 
+test("native runtime blocks tool-only visible tool calls without runtime-derived decisions", async () => {
+  let executed = 0;
+  const observations: Array<Record<string, unknown>> = [];
+  const sessionId = "butler/tool-only-public-decision-required";
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async () => {
+      executed += 1;
+      return { ok: true, stdout: "should not run", exit_code: 0 };
+    },
+    runFunctionToolPromptText: async (input) => {
+      observations.push(await input.executeTool({
+        name: "run_command",
+        args: { command: "echo blocked" },
+        rawArguments: JSON.stringify({ command: "echo blocked" }),
+      }) as Record<string, unknown>);
+      return "I need to author the decision first.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run a quick command." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(executed).toBe(0);
+  expect(observations[0]).toMatchObject({
+    ok: false,
+    observation_kind: "public_decision_required",
+  });
+  expect(String(observations[0]?.model_visible_content)).toContain("same assistant response");
+  const transcript = readTranscript(sessionId);
+  expect(transcript.some((event) => event.kind === "tool_call")).toBe(false);
+  expect(JSON.stringify(transcript)).not.toContain("runtime-derived");
+  expect(transcript.some((event) =>
+    event.kind === "system" &&
+    event.payload.category === "public_work_decision",
+  )).toBe(false);
+});
+
 test("native runtime rejects partial public decisions before visible tool execution", async () => {
   let executed = 0;
   const observations: Array<Record<string, unknown>> = [];

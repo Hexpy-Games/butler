@@ -69,6 +69,12 @@ export function createAuditedButlerToolExecutor(
     if (isInternalProgressTool(call.name)) {
       return await internalProgress.run(call, "model");
     }
+    if (!hasCompleteAuthoredPublicDecisionForTool({
+      pending: input.pendingPublicDecisions,
+      toolName: call.name,
+    })) {
+      return appendPublicDecisionRequiredObservation({ input, call });
+    }
     const plannedReviewBlock = applyPlannedReviewToolPolicy({
       plannedReview: input.plannedReview,
       toolName: call.name,
@@ -86,29 +92,6 @@ export function createAuditedButlerToolExecutor(
       startedAt,
     });
     if (repeatedToolFamilyResult) return repeatedToolFamilyResult;
-
-    if (input.assistantTextBeforeToolsSeen() && !hasCompleteAuthoredPublicDecisionForTool({
-      pending: input.pendingPublicDecisions,
-      toolName: call.name,
-    })) {
-      const observation = publicDecisionRequiredObservation({
-        turnId: input.turnId,
-        call,
-      });
-      appendTranscriptEvent(createTranscriptEvent({
-        sessionId: input.sessionId,
-        kind: "tool_result",
-        payload: {
-          name: call.name,
-          ok: false,
-          observation,
-        },
-        metadata: {
-          source: "runtime/native-tool-loop.ts#public-decision-gate",
-        },
-      }));
-      return toolObservationResult(observation);
-    }
 
     const state = await prepareAuditedToolExecution({
       input,
@@ -164,6 +147,29 @@ export function createAuditedButlerToolExecutor(
     executeTarget: executeAuditedTarget,
   });
   return async (call) => await executeAuditedWithBridge(call);
+}
+
+function appendPublicDecisionRequiredObservation(input: {
+  input: NativeAuditedToolExecutorInput;
+  call: NativeToolCall;
+}): ReturnType<typeof toolObservationResult> {
+  const observation = publicDecisionRequiredObservation({
+    turnId: input.input.turnId,
+    call: input.call,
+  });
+  appendTranscriptEvent(createTranscriptEvent({
+    sessionId: input.input.sessionId,
+    kind: "tool_result",
+    payload: {
+      name: input.call.name,
+      ok: false,
+      observation,
+    },
+    metadata: {
+      source: "runtime/native-tool-loop.ts#public-decision-gate",
+    },
+  }));
+  return toolObservationResult(observation);
 }
 
 function throwIfRuntimeTurnAborted(signal?: AbortSignal): void {
