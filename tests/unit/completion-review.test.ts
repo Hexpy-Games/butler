@@ -106,19 +106,33 @@ test("completion review returns failed when terminal work states still miss evid
   }
 });
 
-test("completion review returns failed when terminal todo state still misses evidence", () => {
+test("completion review returns gap when completed todo state still misses evidence", () => {
   const outcome = evaluateCompletionReviewOutcome({
     requestText: "검증 태스크까지 완료해줘",
     candidateText: "검증 태스크를 마쳤습니다.",
     requiredObligations: ["command_executed"],
     evidenceReceipts: [],
-    todoTerminal: true,
+    todoTerminalState: "completed",
   });
 
-  expect(outcome.status).toBe("failed");
-  if (outcome.status === "failed") {
-    expect(outcome.publicSummary).toBe("Missing completion evidence for: command_executed.");
+  expect(outcome.status).toBe("gap");
+  if (outcome.status === "gap") {
+    expect(outcome.observation.kind).toBe("completion_gap");
+    expect(outcome.observation.summary).toBe("Missing completion evidence for: command_executed.");
+    expect(outcome.observation.modelVisibleContent).toContain("next-step: Missing completion evidence for: command_executed.");
   }
+});
+
+test("completion review returns gap when cancelled todo state still misses evidence", () => {
+  const outcome = evaluateCompletionReviewOutcome({
+    requestText: "검증 태스크까지 완료해줘",
+    candidateText: "검증 태스크가 취소되었습니다.",
+    requiredObligations: ["command_executed"],
+    evidenceReceipts: [],
+    todoTerminalState: "cancelled",
+  });
+
+  expect(outcome.status).toBe("gap");
 });
 
 test("completion review is complete when required obligations are satisfied by typed receipts", () => {
