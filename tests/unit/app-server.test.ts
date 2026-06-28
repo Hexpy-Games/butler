@@ -6771,7 +6771,7 @@ test("app transport internal recovery failures keep queued turns active without 
   }
 });
 
-test("repeated app transport internal recovery stays active without unbounded requeue", async () => {
+test("repeated app transport internal recovery requeues without public continuation status", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -6848,11 +6848,11 @@ test("repeated app transport internal recovery stays active without unbounded re
     const secondTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(secondTurns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
-      safe_status_label: "Recovery needs continuation",
+      state: "retrying",
+      safe_status_label: "Recovering",
       retryable: false,
       cancellable: true,
-      attempt: 2,
+      attempt: 3,
     });
     expect(secondTurns.data.turns[0].safe_error_code ?? null).toBeNull();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
@@ -6868,7 +6868,8 @@ test("repeated app transport internal recovery stays active without unbounded re
       (event: { type: string; payload?: { turn_id?: string } }) =>
         event.type === "turn.queued" && event.payload?.turn_id === turnId,
     ).length;
-    expect(secondQueuedCount).toBe(firstQueuedCount);
+    expect(secondQueuedCount).toBe(firstQueuedCount + 1);
+    expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
     expect(JSON.stringify(secondEvents)).not.toContain("turn.failed");
   } finally {
     server.stop();
