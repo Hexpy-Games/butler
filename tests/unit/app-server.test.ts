@@ -10906,6 +10906,146 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
   }
 });
 
+test("turn cancel preserves earlier assistant work history while stopping active turn", async () => {
+  let turnCount = 0;
+  let markSecondStarted: (() => void) | undefined;
+  const secondStarted = new Promise<void>((resolve) => {
+    markSecondStarted = resolve;
+  });
+  let aborted = false;
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      turnCount += 1;
+      if (turnCount === 1) {
+        input.onProgress?.({
+          id: "first-progress-row",
+          kind: "ran_command",
+          state: "delivered",
+          safe_label: "Bash: echo baseline",
+          safe_tool_name: "Bash",
+          safe_input_label: "echo baseline",
+          work_block_id: "legacy-work",
+          work_block_label: "기본 작업",
+        });
+        return { texts: ["기본 작업은 완료했습니다."] };
+      }
+      input.onProgress?.({
+        id: "cancel-progress-row",
+        kind: "ran_command",
+        state: "running",
+        safe_label: "Bash: npm test",
+        safe_tool_name: "Bash",
+        safe_input_label: "npm test",
+        work_block_id: "cancel-work",
+        work_block_label: "중단할 작업",
+      });
+      markSecondStarted?.();
+      input.signal?.addEventListener("abort", () => {
+        aborted = true;
+      });
+      return new Promise(() => undefined);
+    },
+  });
+
+  try {
+    const first = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "run baseline",
+    });
+    await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "기본 작업은 완료했습니다.",
+    );
+
+    const inFlight = fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: "general", text: "stop this new turn" }),
+    });
+    await secondStarted;
+
+    let secondTurnId: string | undefined;
+    for (let attempt = 0; attempt < 30 && !secondTurnId; attempt += 1) {
+      const turns = await getJson(
+        `${server.url}turns?chat_id=general&cursor=0`,
+      );
+      secondTurnId = turns.data.turns.find(
+        (turn: { id: string }) => turn.id !== first.data.turn.id,
+      )?.id;
+      if (!secondTurnId) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
+    expect(secondTurnId).toBeDefined();
+    const cancel = await postJson(
+      `${server.url}turns/${encodeURIComponent(secondTurnId)}/cancel`,
+      {},
+    );
+    expect(cancel.data.turn).toMatchObject({
+      id: secondTurnId,
+      state: "cancelled",
+      retryable: false,
+      cancellable: false,
+    });
+
+    const completedRequest = await inFlight;
+    expect(completedRequest.status).toBe(202);
+    expect(aborted).toBe(true);
+
+    const messages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    const assistantMessages = messages.data.messages.filter(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(2);
+    expect(
+      assistantMessages.find(
+        (message: { text: string }) => message.text === "기본 작업은 완료했습니다.",
+      ),
+    ).toMatchObject({
+      status: "delivered",
+      turn_id: first.data.turn.id,
+      work_blocks: [
+        expect.objectContaining({
+          id: "legacy-work",
+          label: "기본 작업",
+          state: "delivered",
+          rows: [
+            expect.objectContaining({
+              id: "first-progress-row",
+              state: "delivered",
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(
+      assistantMessages.find(
+        (message: { status: string }) => message.status === "cancelled",
+      ),
+    ).toMatchObject({
+      turn_id: secondTurnId,
+      text: "Stopped.",
+      status: "cancelled",
+      work_blocks: [
+        expect.objectContaining({
+          id: "cancel-work",
+          label: "중단할 작업",
+          state: "cancelled",
+          rows: [expect.objectContaining({ id: "cancel-progress-row", state: "cancelled" })],
+        }),
+      ],
+    });
+    expect(JSON.stringify(messages)).not.toContain("Retrying this turn");
+  } finally {
+    server.stop();
+  }
+});
+
 test("app startup repairs cancelled turns that lost their activity carrier", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let markStarted: (() => void) | undefined;
@@ -11100,6 +11240,71 @@ test("failed app turns persist as retryable and can be retried", async () => {
         (message: { role: string }) => message.role === "assistant",
       ),
     ).toHaveLength(1);
+  } finally {
+    server.stop();
+  }
+});
+
+test("retrying a failed turn updates the same logical turn without synthetic retry text", async () => {
+  let attempt = 0;
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder() {
+      attempt += 1;
+      if (attempt === 1) throw new Error("provider temporary issue");
+      return { texts: ["recovered reply"] };
+    },
+  });
+  try {
+    const response = await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: "general",
+        text: "retry this failed app turn",
+      }),
+    });
+    expect(response.status).toBe(202);
+
+    const failedTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "failed" && turn.retryable,
+    );
+    const failedTurnId = failedTurn.id as string;
+
+    const retry = await postJson(
+      `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
+      {},
+    );
+    expect(retry.data.turn).toMatchObject({
+      state: "retrying",
+      retryable: false,
+      cancellable: true,
+      attempt: 2,
+    });
+    await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "recovered reply",
+    );
+
+    const messages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toHaveLength(1);
+    expect(messages.data.messages).not.toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        text: "Retrying this turn.",
+      }),
+    );
+    expect(JSON.stringify(messages)).not.toContain("Retrying this turn.");
   } finally {
     server.stop();
   }

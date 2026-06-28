@@ -9365,11 +9365,7 @@ function workBlocksFromTerminalProgressRows(
           Boolean(row.work_block_id || row.work_block_label),
       )
       .map((row) =>
-        (
-          row.work_block_label ??
-          decisionLabelFromProgressRow(row) ??
-          row.safe_label
-        ).trim(),
+        (row.work_block_label ?? row.safe_label).trim(),
       )
       .filter(Boolean),
   );
@@ -9391,7 +9387,6 @@ function workBlocksFromTerminalProgressRows(
       `work-${row.kind}-${row.id}`.replace(/[^a-zA-Z0-9._:-]/gu, "-");
     const label =
       row.work_block_label ??
-      decisionLabelFromProgressRow(row) ??
       row.safe_tool_name ??
       row.safe_label;
     const decision = publicDecisionFieldsFromProgressRow(row);
@@ -9466,12 +9461,6 @@ function publicDecisionFieldsFromProgressRow(row: ProgressSummaryRow): Partial<{
     decision_source: row.work_decision_source,
     decision_evidence_refs: row.work_decision_evidence_refs,
   };
-}
-
-function decisionLabelFromProgressRow(row: ProgressSummaryRow): string | undefined {
-  return isPublicDecisionSource(row.work_decision_source)
-    ? row.work_decision_summary
-    : undefined;
 }
 
 function isUserVisibleWorkBlockRow(row: ProgressSummaryRow): boolean {
