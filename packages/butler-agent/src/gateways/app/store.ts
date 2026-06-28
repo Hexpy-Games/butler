@@ -3658,19 +3658,18 @@ export class AppServerStore {
   private deliveryLimitationMetadataForTurn(
     turnId: string,
   ): DeliveryLimitationMetadata | null {
-    const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
     const rows = this.db
       .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type = 'agent.turn_event'
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '$.turn_id') = ?
       ORDER BY id DESC
       LIMIT 500
     `,
       )
-      .all(turnPayloadPattern);
+      .all(turnId);
     for (const row of rows) {
       const payload = safeParseRecord(row.payload_json);
       if (payload.turn_id !== turnId) continue;
@@ -4315,21 +4314,20 @@ export class AppServerStore {
   }
 
   private listProgressRowsForTurn(turnId: string): ProgressSummaryRow[] {
-    const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
     const internalContinuationEventIds =
-      this.internalContinuationProgressEventIds(turnId, turnPayloadPattern);
+      this.internalContinuationProgressEventIds(turnId);
     const rows = this.db
       .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type IN ('progress.summary', 'agent.turn_event.progress')
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '$.turn_id') = ?
       ORDER BY id DESC
       LIMIT 1000
     `,
       )
-      .all(turnPayloadPattern);
+      .all(turnId);
     const progressRows: ProgressSummaryRow[] = [];
     for (const event of rows.reverse()) {
       const payload = safeParseRecord(event.payload_json);
@@ -4352,7 +4350,6 @@ export class AppServerStore {
 
   private internalContinuationProgressEventIds(
     turnId: string,
-    turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`,
   ): Set<string> {
     const rows = this.db
       .query<EventRow, [string]>(
@@ -4360,12 +4357,12 @@ export class AppServerStore {
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type = 'agent.turn_event'
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '$.turn_id') = ?
       ORDER BY id DESC
       LIMIT 1000
     `,
       )
-      .all(turnPayloadPattern);
+      .all(turnId);
     const eventIds = new Set<string>();
     for (const row of rows) {
       const payload = safeParseRecord(row.payload_json);
@@ -5998,6 +5995,15 @@ export class AppServerStore {
 
       CREATE INDEX IF NOT EXISTS events_type_id_idx
       ON events(type, id DESC);
+
+      CREATE INDEX IF NOT EXISTS events_type_turn_id_idx
+      ON events(type, json_extract(payload_json, '$.turn_id'), id DESC);
+
+      CREATE INDEX IF NOT EXISTS events_type_session_id_idx
+      ON events(type, json_extract(payload_json, '$.session_id'), id DESC);
+
+      CREATE INDEX IF NOT EXISTS events_turn_event_kind_idx
+      ON events(type, json_extract(payload_json, '$.turn_id'), json_extract(payload_json, '$.event.kind'), id DESC);
     `);
     ensureAppMessageQuerySchema(this.db);
     this.ensureColumn("chats", "pinned", "INTEGER NOT NULL DEFAULT 0");
@@ -7035,18 +7041,17 @@ export class AppServerStore {
     input: ProgressSummaryInput,
   ): boolean {
     const incoming = normalizeProgressSummaryRow(input);
-    const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
     const rows = this.db
       .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type IN ('progress.summary', 'agent.turn_event.progress')
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '$.turn_id') = ?
       ORDER BY id DESC
     `,
       )
-      .all(turnPayloadPattern);
+      .all(turnId);
     return rows.some((row) => {
       const payload = safeParseRecord(row.payload_json);
       if (payload.turn_id !== turnId) return false;
@@ -7350,22 +7355,19 @@ export class AppServerStore {
     scope: "session" | "turn",
     id: string,
   ): number {
-    const payloadPattern =
-      scope === "session"
-        ? `%${escapeSqlLike(`"session_id":"${id}"`)}%`
-        : `%${escapeSqlLike(`"turn_id":"${id}"`)}%`;
+    const field = scope === "session" ? "$.session_id" : "$.turn_id";
     const rows = this.db
       .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type = 'agent.turn_event'
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '${field}') = ?
       ORDER BY id DESC
       LIMIT 20
     `,
       )
-      .all(payloadPattern);
+      .all(id);
     for (const row of rows) {
       const payload = safeParseRecord(row.payload_json);
       if (scope === "session" && payload.session_id !== id) continue;
@@ -7384,25 +7386,20 @@ export class AppServerStore {
   }
 
   private hasTurnEventKind(turnId: string, kind: string): boolean {
-    const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
-    const rows = this.db
-      .query<EventRow, [string]>(
+    const row = this.db
+      .query<{ id: number }, [string, string]>(
         `
-      SELECT id, type, payload_json, created_at
+      SELECT id
       FROM events
       WHERE type = 'agent.turn_event'
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '$.turn_id') = ?
+        AND json_extract(payload_json, '$.event.kind') = ?
       ORDER BY id DESC
-      LIMIT 500
+      LIMIT 1
     `,
       )
-      .all(turnPayloadPattern);
-    return rows.some((row) => {
-      const payload = safeParseRecord(row.payload_json);
-      if (payload.turn_id !== turnId) return false;
-      const event = isRecord(payload.event) ? payload.event : null;
-      return event?.kind === kind;
-    });
+      .get(turnId, kind);
+    return Boolean(row);
   }
 
   private appendEvent(
@@ -10640,10 +10637,6 @@ function mimeTypeForArtifactPath(path: string): string {
   if (lower.endsWith(".webp")) return "image/webp";
   if (lower.endsWith(".pdf")) return "application/pdf";
   return "application/octet-stream";
-}
-
-function escapeSqlLike(value: string): string {
-  return value.replace(/[\\%_]/gu, (char) => `\\${char}`);
 }
 
 function timestampBefore(candidate: string, reference: string): boolean {
