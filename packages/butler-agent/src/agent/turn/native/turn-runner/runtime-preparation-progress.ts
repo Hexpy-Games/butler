@@ -6,9 +6,9 @@ import type { NormalizedTurnPrompt } from "../context/turn-prompt.ts";
 const REQUEST_PREVIEW_MAX_CHARS = 96;
 
 export function runtimePreparationProgressSummary(input: {
-  prompt: NormalizedTurnPrompt;
-  attachmentContextChars: number;
-  attachmentCount: number;
+  prompt?: NormalizedTurnPrompt;
+  attachmentContextChars?: number;
+  attachmentCount?: number;
   model: string;
   language: RuntimeMessageLanguage;
   useTools: boolean;

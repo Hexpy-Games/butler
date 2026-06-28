@@ -1,4 +1,5 @@
 import type { RuntimeTurnInput } from "../../../../test-support/harness/contracts.ts";
+import type { ReasoningEffort } from "../../../../integrations/providers/provider.ts";
 import { sanitizePublicText } from "../../../events/turn-events.ts";
 import type { RuntimeMessageLanguage } from "../../../output/messages.ts";
 import {
@@ -6,14 +7,24 @@ import {
   emitIntermediateBestEffort,
 } from "../progress/turn-delivery-events.ts";
 
-const MODEL_ORIENTATION_PROGRESS_TIMEOUT_MS = 5_000;
+const MODEL_ORIENTATION_PROGRESS_TIMEOUT_MS = 1_500;
 const MODEL_ORIENTATION_PROGRESS_MAX_CHARS = 360;
+
+export interface ModelOrientationPromptOptions {
+  signal: AbortSignal;
+  reasoningEffort: ReasoningEffort;
+  instructions: string;
+  cacheScope: string;
+}
 
 export function startModelOrientationProgressBestEffort(input: {
   turnInput: RuntimeTurnInput;
   userText: string;
   language: RuntimeMessageLanguage;
-  runTextPrompt: (promptText: string) => Promise<string>;
+  runTextPrompt: (
+    promptText: string,
+    options: ModelOrientationPromptOptions,
+  ) => Promise<string>;
 }): { stop: () => void; done: Promise<void> } {
   let active = true;
   const done = emitModelOrientationProgress(input, () => active).catch(() => {});
@@ -30,16 +41,36 @@ async function emitModelOrientationProgress(
     turnInput: RuntimeTurnInput;
     userText: string;
     language: RuntimeMessageLanguage;
-    runTextPrompt: (promptText: string) => Promise<string>;
+    runTextPrompt: (
+      promptText: string,
+      options: ModelOrientationPromptOptions,
+    ) => Promise<string>;
   },
   shouldEmit: () => boolean,
 ): Promise<void> {
   const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
   if (!inboundEnvelope || !input.turnInput.emitIntermediateDelivery) return;
   const prompt = modelOrientationPrompt(input.userText, input.language);
-  const promptResult = input.runTextPrompt(prompt);
-  const text = await withTimeout(promptResult, MODEL_ORIENTATION_PROGRESS_TIMEOUT_MS);
-  promptResult.catch(() => {});
+  const controller = new AbortController();
+  const abortFromTurn = () => controller.abort(input.turnInput.signal?.reason);
+  if (input.turnInput.signal?.aborted) return;
+  input.turnInput.signal?.addEventListener("abort", abortFromTurn, { once: true });
+  const text = await (async () => {
+    try {
+      return await withTimeout(
+        () => input.runTextPrompt(prompt, {
+          signal: controller.signal,
+          reasoningEffort: "low",
+          instructions: modelOrientationInstructions(input.language),
+          cacheScope: "app-model-orientation",
+        }),
+        controller,
+        MODEL_ORIENTATION_PROGRESS_TIMEOUT_MS,
+      );
+    } finally {
+      input.turnInput.signal?.removeEventListener("abort", abortFromTurn);
+    }
+  })();
   if (!shouldEmit() || !text) return;
   const visibleText = publicOrientationText(text);
   if (!visibleText) return;
@@ -63,15 +94,21 @@ async function emitModelOrientationProgress(
 }
 
 async function withTimeout(
-  promise: Promise<string>,
+  run: () => Promise<string>,
+  controller: AbortController,
   timeoutMs: number,
 ): Promise<string | null> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
+    const promptResult = Promise.resolve().then(run);
+    promptResult.catch(() => {});
     return await Promise.race([
-      promise,
+      promptResult,
       new Promise<null>((resolve) => {
-        timeout = setTimeout(() => resolve(null), timeoutMs);
+        timeout = setTimeout(() => {
+          controller.abort(new Error("model orientation progress timed out"));
+          resolve(null);
+        }, timeoutMs);
         if (typeof timeout === "object" && typeof timeout.unref === "function") {
           timeout.unref();
         }
@@ -80,6 +117,19 @@ async function withTimeout(
   } finally {
     if (timeout) clearTimeout(timeout);
   }
+}
+
+function modelOrientationInstructions(language: RuntimeMessageLanguage): string {
+  if (language === "ko") {
+    return [
+      "사용자에게 보여줄 짧은 진행 업데이트 한 문장만 작성하세요.",
+      "답변, 결론, 도구 이름, 내부 지시, 숨은 추론은 쓰지 마세요.",
+    ].join(" ");
+  }
+  return [
+    "Write one short public progress sentence for the user.",
+    "Do not answer the request, mention tools, internal instructions, or hidden reasoning.",
+  ].join(" ");
 }
 
 function publicOrientationText(value: string): string {
