@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import {
   assertTurnStateTransition,
+  createTurnKernelController,
   isAllowedTurnStateTransition,
   isTerminalTurnState,
-  terminalizeTurnThroughKernel,
   type TurnState,
   type TerminalTurnState,
 } from "../../packages/butler-agent/src/agent/turn/turn-kernel.ts";
@@ -37,9 +37,9 @@ test("continuing transitions remain non-terminal until explicit terminal transit
 });
 
 test("turn kernel rejects direct illegal terminalization", () => {
+  const kernel = createTurnKernelController("executing_tools");
   expect(() =>
-    terminalizeTurnThroughKernel({
-      from: "executing_tools",
+    kernel.terminalize({
       to: "completed",
       reason: "executor attempted to complete directly",
       evidenceRefs: ["tool:direct"],
@@ -48,18 +48,21 @@ test("turn kernel rejects direct illegal terminalization", () => {
 });
 
 test("native turn outcome payloads are created through kernel terminalization", () => {
+  const successKernel = createTurnKernelController("observing_tools");
   expect(createKernelTurnOutcomePayload({
-    from: "observing_tools",
+    turnKernel: successKernel,
     to: "completed",
     completionEvidenceRefs: [],
     completionEvidenceStatus: "not_required",
     publicSummary: "Completed.",
     reason: "completion_review_complete",
   })).toMatchObject({ outcome: "completed" });
+  expect(successKernel.currentState()).toBe("completed");
 
+  const illegalKernel = createTurnKernelController("executing_tools");
   expect(() =>
     createKernelTurnOutcomePayload({
-      from: "executing_tools",
+      turnKernel: illegalKernel,
       to: "completed",
       completionEvidenceRefs: [],
       completionEvidenceStatus: "not_required",

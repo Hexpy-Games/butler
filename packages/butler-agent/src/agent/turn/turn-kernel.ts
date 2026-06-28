@@ -103,6 +103,12 @@ export interface KernelTerminalOutcomeTransition {
   evidenceRefs: string[];
 }
 
+export interface TurnKernelController {
+  currentState(): TurnState;
+  transitionTo(to: TurnState): TurnState;
+  terminalize(input: Omit<KernelTerminalOutcomeTransition, "from">): KernelTerminalOutcomeTransition;
+}
+
 const KERNEL_TRANSITIONS: Record<TurnState, ReadonlySet<TurnState>> = {
   accepted: new Set(["model_deciding", "waiting_user", "aborted", "runtime_fault"]),
   model_deciding: new Set([
@@ -172,7 +178,7 @@ export function assertTurnStateTransition(input: TurnStateTransition): TurnState
   return input.to;
 }
 
-export function terminalizeTurnThroughKernel(
+function terminalizeTurnThroughKernel(
   input: KernelTerminalOutcomeTransition,
 ): KernelTerminalOutcomeTransition {
   assertTurnStateTransition(input);
@@ -187,5 +193,24 @@ export function terminalizeTurnThroughKernel(
     to: input.to,
     reason: input.reason,
     evidenceRefs: Array.from(new Set(input.evidenceRefs)),
+  };
+}
+
+export function createTurnKernelController(initialState: TurnState = "accepted"): TurnKernelController {
+  let state = initialState;
+  return {
+    currentState: () => state,
+    transitionTo(to) {
+      state = assertTurnStateTransition({ from: state, to });
+      return state;
+    },
+    terminalize(input) {
+      const terminal = terminalizeTurnThroughKernel({
+        ...input,
+        from: state,
+      });
+      state = terminal.to;
+      return terminal;
+    },
   };
 }

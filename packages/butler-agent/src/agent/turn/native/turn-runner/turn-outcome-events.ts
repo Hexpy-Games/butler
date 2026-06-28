@@ -7,9 +7,8 @@ import {
   type CompletionEvidenceKind,
 } from "../../../events/turn-state-contract.ts";
 import {
-  terminalizeTurnThroughKernel,
   type TerminalTurnState,
-  type TurnState,
+  type TurnKernelController,
 } from "../../turn-kernel.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
 import type { ToolAuditEntry } from "../output/tool-types.ts";
@@ -19,6 +18,7 @@ export async function emitSuccessfulTurnOutcome(input: {
   turnInput: RuntimeTurnInput;
   audit: ToolAuditEntry[];
   limitedDelivery: boolean;
+  turnKernel: TurnKernelController;
   turnId?: string;
 }): Promise<void> {
   const validationFailure = unresolvedValidationFailureFromAudit(input.audit);
@@ -28,7 +28,7 @@ export async function emitSuccessfulTurnOutcome(input: {
     await emitTurnEventBestEffort(input.turnInput, {
       kind: TURN_OUTCOME_EVENT_KIND,
       payload: createKernelTurnOutcomePayload({
-        from: "observing_tools",
+        turnKernel: input.turnKernel,
         to: "failed",
         completionEvidenceRefs: Array.from(new Set([...evidenceRefs, failureRef])),
         publicSummary: `Validation suite failed without a later passing receipt: ${validationFailure.suite}`,
@@ -40,7 +40,7 @@ export async function emitSuccessfulTurnOutcome(input: {
   await emitTurnEventBestEffort(input.turnInput, {
     kind: TURN_OUTCOME_EVENT_KIND,
     payload: createKernelTurnOutcomePayload({
-      from: "observing_tools",
+      turnKernel: input.turnKernel,
       to: "completed",
       completionEvidenceRefs: evidenceRefs,
       completionEvidenceStatus: evidenceRefs.length === 0 ? "not_required" : undefined,
@@ -54,6 +54,7 @@ export async function emitInterruptedTurnOutcome(input: {
   turnInput: RuntimeTurnInput;
   cancelled: boolean;
   reason: string;
+  turnKernel: TurnKernelController;
 }): Promise<void> {
   const evidenceRef = `turn:${input.turnInput.handle.sessionId}:${input.cancelled ? "cancelled" : "failed"}`;
   await emitTurnEventBestEffort(input.turnInput, {
@@ -68,7 +69,7 @@ export async function emitInterruptedTurnOutcome(input: {
   await emitTurnEventBestEffort(input.turnInput, {
     kind: TURN_OUTCOME_EVENT_KIND,
     payload: createKernelTurnOutcomePayload({
-      from: "executing_tools",
+      turnKernel: input.turnKernel,
       to: input.cancelled ? "aborted" : "failed",
       eventOutcome: input.cancelled ? "cancelled" : "failed",
       completionEvidenceRefs: [evidenceRef],
@@ -83,13 +84,14 @@ export async function emitCompletionReviewTerminalOutcome(input: {
   outcome: "waiting_user" | "failed";
   publicSummary: string;
   evidenceRefs: string[];
+  turnKernel: TurnKernelController;
   turnId?: string;
   reason: string;
 }): Promise<void> {
   await emitTurnEventBestEffort(input.turnInput, {
     kind: TURN_OUTCOME_EVENT_KIND,
     payload: createKernelTurnOutcomePayload({
-      from: "observing_tools",
+      turnKernel: input.turnKernel,
       to: input.outcome,
       eventOutcome: input.outcome,
       completionEvidenceRefs: input.evidenceRefs,
@@ -103,7 +105,7 @@ export async function emitCompletionReviewTerminalOutcome(input: {
 }
 
 export function createKernelTurnOutcomePayload(input: {
-  from: TurnState;
+  turnKernel: TurnKernelController;
   to: TerminalTurnState;
   eventOutcome?: "completed" | "failed" | "runtime_fault" | "cancelled" | "waiting_user";
   completionEvidenceRefs: string[];
@@ -112,8 +114,7 @@ export function createKernelTurnOutcomePayload(input: {
   publicSummary: string;
   reason: string;
 }): Record<string, unknown> {
-  const terminal = terminalizeTurnThroughKernel({
-    from: input.from,
+  const terminal = input.turnKernel.terminalize({
     to: input.to,
     reason: input.reason,
     evidenceRefs: input.completionEvidenceRefs,
