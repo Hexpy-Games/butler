@@ -1,12 +1,7 @@
-import type { TurnState, SessionViewTurnDeliveryState } from "./protocol.ts";
+import type { TurnState } from "./protocol.ts";
+import type { InternalContinuationDeliveryState } from "./btcc-public-projection.ts";
 
-export type ContinuationDeliveryState = Extract<
-  SessionViewTurnDeliveryState,
-  | "recovering_internal"
-  | "needs_tool_surface"
-  | "needs_evidence"
-  | "needs_argument_repair"
->;
+export type ContinuationDeliveryState = InternalContinuationDeliveryState;
 
 export interface ContinuationLimitedDeliveryShape {
   delivery_state: ContinuationDeliveryState;
@@ -49,7 +44,7 @@ export function continuationDeliveryFromState(
 
 export function shouldAutomaticallyRequeueContinuation(
   turn: ContinuationTurnState | null,
-  deliveryState: SessionViewTurnDeliveryState,
+  deliveryState: unknown,
 ): boolean {
   return Boolean(
     turn &&
@@ -59,7 +54,7 @@ export function shouldAutomaticallyRequeueContinuation(
 }
 
 export function isContinuationDeliveryState(
-  deliveryState: SessionViewTurnDeliveryState | null,
+  deliveryState: unknown,
 ): deliveryState is ContinuationDeliveryState {
   return (
     deliveryState === "recovering_internal" ||
