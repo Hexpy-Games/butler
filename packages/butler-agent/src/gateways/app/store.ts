@@ -4037,6 +4037,22 @@ export class AppServerStore {
       return false;
     }
     const safeError = projectSafeTurnFailure({ message, metadata });
+    const mayProjectLimitedFailure =
+      turn.state !== "failed" ||
+      turn.safe_error_code === INTERNAL_RECOVERY_REQUIRED_CODE ||
+      turn.safe_error_code === "inbound_dispatch_timeout";
+    const limitedDelivery = mayProjectLimitedFailure
+      ? appLimitedDeliveryForError({
+          code: safeError.code,
+          message: safeError.message,
+        })
+      : null;
+    if (limitedDelivery) {
+      this.finalizeResponderLimitedDelivery(chatId, turnId, limitedDelivery);
+      this.touchChat(chatId);
+      void this.drainQueuedSessionMessages(chatId).catch(() => undefined);
+      return true;
+    }
     const existing = this.getLatestAssistantMessageForTurn(turnId);
     if (
       turn.state === "failed" &&
