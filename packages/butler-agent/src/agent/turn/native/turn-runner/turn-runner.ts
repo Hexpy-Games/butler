@@ -20,7 +20,10 @@ import {
   emitRecoverableTurnOutcome,
   emitSuccessfulTurnOutcome,
 } from "./turn-outcome-events.ts";
-import { produceFinalDeliveryText } from "./final-delivery-gates.ts";
+import {
+  isKernelCompletionGapContinuationError,
+  produceFinalDeliveryText,
+} from "./final-delivery-gates.ts";
 import { prepareNativeTurnContext } from "./turn-context-builder.ts";
 import { createNativeTurnPromptRunners } from "./turn-prompt-runners.ts";
 import { runtimePreparationProgressSummary } from "./runtime-preparation-progress.ts";
@@ -139,7 +142,20 @@ export async function runNativeToolTurn({
   } catch (error) {
     const limitedDelivery = recoverableLimitedDeliveryForError(error);
     const isBudgetError = isPromptUsageModelCallBudgetError(error);
+    const isKernelContinuation = isKernelCompletionGapContinuationError(error);
     const errorMessage = error instanceof Error ? error.message : String(error);
+    if (isKernelContinuation) {
+      recordTurnMetric({
+        status: "error",
+        input,
+        session,
+        deps,
+        startedAt,
+        useTools,
+        errorName: error instanceof Error ? error.name : "KernelContinuation",
+      });
+      throw error;
+    }
     if (isBudgetError && turnId) {
       const safeFailure = safeRuntimeFailure(error);
       persistTurnContextAtom({

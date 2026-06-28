@@ -28,8 +28,11 @@ export const TURN_EVENT_KINDS = [
   "message.final.started",
   "message.final.delta",
   "message.final.completed",
+  "turn.observation",
+  "turn.continuation_scheduled",
   "turn.completed",
   "turn.failed",
+  "runtime.fault",
   "turn.cancelled",
   ...TURN_STATE_CONTRACT_EVENT_KINDS,
 ] as const;

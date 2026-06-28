@@ -51,18 +51,14 @@ function isPromptUsageModelCallBudget(error: unknown): boolean {
   if (error instanceof Error) {
     const record = error as Error & { code?: unknown };
     return record.code === "prompt_usage_model_call_budget_exhausted" ||
-      error.name === "PromptUsageModelCallBudgetExhaustedError" ||
-      /prompt usage model-call budget exhausted/iu.test(error.message);
+      error.name === "PromptUsageModelCallBudgetExhaustedError";
   }
   if (error && typeof error === "object") {
     const record = error as Record<string, unknown>;
     return record.code === "prompt_usage_model_call_budget_exhausted" ||
-      record.name === "PromptUsageModelCallBudgetExhaustedError" ||
-      (typeof record.message === "string" &&
-        /prompt usage model-call budget exhausted/iu.test(record.message));
+      record.name === "PromptUsageModelCallBudgetExhaustedError";
   }
-  return typeof error === "string" &&
-    /prompt usage model-call budget exhausted/iu.test(error);
+  return false;
 }
 
 function progressFinalizationTextFromError(error: unknown): string | null {

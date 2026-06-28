@@ -51,14 +51,35 @@ export type EvidenceReceiptProducerKind =
   | "artifact"
   | "memory"
   | "project_ledger"
-  | "external_source";
+  | "external_source"
+  | "browser"
+  | "app"
+  | "review"
+  | "runtime"
+  | "provider"
+  | "user";
 
 export type EvidenceReceiptType =
   | "source"
   | "deliverable"
   | "execution"
   | "state"
-  | "coverage";
+  | "coverage"
+  | "test"
+  | "file_edit"
+  | "artifact"
+  | "browser_observation"
+  | "app_observation"
+  | "project_ledger_operation"
+  | "review"
+  | "pull_request"
+  | "release"
+  | "route_verification"
+  | "user_decision_required"
+  | "runtime_fault"
+  | "provider_fault"
+  | "cancellation"
+  | "not_required";
 
 export interface EvidenceReference {
   kind:

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { homedir, tmpdir } from "os";
 import { join } from "path";
 import {
@@ -107,6 +107,14 @@ afterEach(() => {
   else process.env.BUTLER_DATA = originalButlerData;
   rmSync(tempDir, { recursive: true, force: true });
 });
+
+function readOnlyPersistedTurnContextAtom(): Record<string, unknown> | null {
+  const dir = join(tempDir, "state", "turn-kernel");
+  if (!existsSync(dir)) return null;
+  const files = readdirSync(dir).filter((file) => file.endsWith("continuation.json"));
+  expect(files).toHaveLength(1);
+  return JSON.parse(readFileSync(join(dir, files[0]), "utf8")) as Record<string, unknown>;
+}
 
 test("native runtime injects Project Ledger Runtime Context only for project-origin sessions", async () => {
   const prompts: string[] = [];
@@ -2285,9 +2293,10 @@ test("native runtime reviews public work decision finals even before tool eviden
   expect(result.text).not.toMatch(/^\s*작업\s*[:：]/u);
 });
 
-test("native runtime uses pure completion review output and skips review continuation", async () => {
+test("native runtime routes completion review gap to continuation without final text", async () => {
   const attempts: string[] = [];
   const executedTools: string[] = [];
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -2329,7 +2338,7 @@ test("native runtime uses pure completion review output and skips review continu
           rawArguments: JSON.stringify({ query: "한국 주요 도시 인구" }),
         });
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 공개 출처 내용을 확인합니다.\nrationale: 파일 산출물의 행 값을 확정해야 합니다.\nnext_step: 확인한 행을 산출물로 정리합니다.",
+          text: "summary: 공개 출처 내용을 확인합니다.\nrationale: 파일 산출물의 행 값을 확정해야 합니다.\nnext_step: 확인한 행을 산출물로 정리합니다.\ncompletion_obligations: durable_artifact",
           toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
         });
         await input.executeTool({
@@ -2349,23 +2358,41 @@ test("native runtime uses pure completion review output and skips review continu
     systemPrompt: "You are Butler.",
   });
 
-  const result = await runtime.runTurn({
+  await expect(runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "openai/auto:codex-latest",
     input: {
       text: "공개 출처를 확인해 한국 주요 도시 3곳 인구 데이터를 CSV 파일 산출물로 정제하고 결과를 요약해 주세요.",
     },
-  });
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
+    },
+  })).rejects.toThrow("Missing completion evidence");
 
   expect(attempts).toHaveLength(1);
   expect(executedTools).toEqual(["web_search", "web_read"]);
-  expect(result.text).toContain("CSV 파일 산출물은 아직 만들지 않았습니다.");
+  expect(events.map((event) => event.kind)).toContain("turn.observation");
+  expect(events.find((event) => event.kind === "turn.observation")?.payload)
+    .toMatchObject({ kind: "completion_gap" });
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+  expect(events.map((event) => event.kind)).not.toContain("turn.completed");
+  const atom = readOnlyPersistedTurnContextAtom();
+  expect(atom).toMatchObject({
+    state: "continuing",
+    sourceErrorCode: "completion_gap_continuation",
+    latestCompletionReview: expect.objectContaining({ status: "gap" }),
+  });
+  expect(atom?.unresolvedObservations).toEqual(expect.arrayContaining([
+    expect.objectContaining({ kind: "completion_gap" }),
+  ]));
 });
 
-test("goal completion review gap is handled as completion-review output only (no model re-review loop)", async () => {
+test("goal completion review gap schedules continuation and does not deliver candidate text", async () => {
   const attempts: string[] = [];
   const executedTools: string[] = [];
+  const events: Array<{ kind: string }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -2411,26 +2438,29 @@ test("goal completion review gap is handled as completion-review output only (no
     systemPrompt: "You are Butler.",
   });
 
-  const result = await runtime.runTurn({
+  await expect(runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "openai/gpt-5.5",
     input: { text: "Riposte 제작 과정을 소개할 글 초안을 정리해줘." },
-  });
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
+  })).rejects.toThrow("Missing completion evidence");
 
   expect(attempts).toHaveLength(1);
   expect(executedTools).toContain("run_command");
-  expect(result.text).toContain("Riposte 소개 초안");
-  expect(result.text).toContain("패링 액션");
-  expect(result.text).not.toContain("이전 답변");
-  expect(result.text).not.toContain("추가 도구 호출 없이");
-  expect(result.text).not.toContain("State: saved as recoverable.");
+  expect(events.map((event) => event.kind)).toContain("turn.observation");
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+  expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
   expect(attempts[0]).not.toContain("Goal Completion Review");
   expect(attempts[0]).not.toContain("Goal Completion Incomplete Continuation");
 });
 
-test("goal completion gap does not emit generic public verification failure copy", async () => {
+test("goal completion gap suppresses public final text and generic verification failure copy", async () => {
   const attempts: string[] = [];
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "en",
@@ -2465,23 +2495,27 @@ test("goal completion gap does not emit generic public verification failure copy
     systemPrompt: "You are Butler.",
   });
 
-  const result = await runtime.runTurn({
+  await expect(runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "openai/gpt-5.5",
     input: { text: "Run command and summarize the result." },
-  });
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
+    },
+  })).rejects.toThrow("Missing completion evidence");
 
   expect(attempts).toHaveLength(1);
-  expect(result.text).toContain("command output");
-  expect(result.text).not.toContain("Could not verify");
-  expect(result.text).not.toContain("could not verify that the requested goal was completed");
-  expect(result.text).not.toContain("State: saved as recoverable.");
+  expect(JSON.stringify(events)).not.toContain("Could not verify");
+  expect(JSON.stringify(events)).not.toContain("could not verify that the requested goal was completed");
+  expect(JSON.stringify(events)).not.toContain("State: saved as recoverable.");
+  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
 });
 
-test("native runtime returns direct work outcome when completion review remains incomplete", async () => {
+test("native runtime does not close direct work or recover WorkStreams from completion review gap", async () => {
   const attempts: string[] = [];
   const executedCommands: string[] = [];
+  const events: Array<{ kind: string }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -2503,7 +2537,7 @@ test("native runtime returns direct work outcome when completion review remains 
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 현재 커밋 상태를 확인합니다.\nrationale: 사용자 요청은 작업 단위 커밋을 요구했습니다.\nnext_step: 검증을 실행한 뒤 결과를 커밋합니다.",
+          text: "summary: 현재 커밋 상태를 확인합니다.\nrationale: 사용자 요청은 작업 단위 커밋을 요구했습니다.\nnext_step: 검증을 실행한 뒤 결과를 커밋합니다.\ncompletion_obligations: durable_artifact",
           toolCalls: [{ name: "run_command", args: { command: "git status --short" } }],
         });
         await input.executeTool({
@@ -2523,19 +2557,23 @@ test("native runtime returns direct work outcome when completion review remains 
     systemPrompt: "You are Butler.",
   });
 
-  const result = await runtime.runTurn({
+  await expect(runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "openai/auto:codex-latest",
     input: {
       text: "작업목록을 순서대로 직접 처리하고, 각 작업이 끝날 때마다 검증 후 커밋해줘.",
     },
-  });
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
+  })).rejects.toThrow("Missing completion evidence");
 
   expect(attempts).toHaveLength(1);
   expect(executedCommands).toEqual(["git status --short"]);
-  expect(result.text).toContain("첫 커밋 상태는 확인했지만");
-  expect(result.text).not.toContain("검증과 다음 커밋을 완료");
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
+  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
 });
 
 test("native runtime does not rerun completion review after planned public report is written", async () => {
@@ -2948,15 +2986,20 @@ test("completion review pushes chart requests toward executable artifacts", asyn
     systemPrompt: "You are Butler.",
   });
 
-  const result = await runtime.runTurn({
+  const events: Array<{ kind: string }> = [];
+  await expect(runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-4",
     input: { text: "2025년 도시 인구 데이터로 matplotlib 차트를 그려줘" },
-  });
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
+  })).rejects.toThrow("Missing completion evidence");
 
   expect(executedTools).toEqual(["web_read"]);
-  expect(result.text).toContain("아래 matplotlib 코드를 복사해서 실행하면 됩니다.");
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
 });
 
 test("goal completion review carries public decision next steps for durable artifact closure", () => {

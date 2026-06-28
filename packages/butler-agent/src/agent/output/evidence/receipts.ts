@@ -109,8 +109,8 @@ function evidenceReceipt(value: unknown): EvidenceReceipt | null {
     !producerName ||
     !receiptType ||
     !summary ||
-    !["tool", "worker", "artifact", "memory", "project_ledger", "external_source"].includes(producerKind) ||
-    !["source", "deliverable", "execution", "state", "coverage"].includes(receiptType)
+    !EVIDENCE_RECEIPT_PRODUCER_KINDS.has(producerKind) ||
+    !EVIDENCE_RECEIPT_TYPES.has(receiptType)
   ) {
     return null;
   }
@@ -140,6 +140,44 @@ function evidenceReceipt(value: unknown): EvidenceReceipt | null {
     ...(numericMetrics(record.metrics) ? { metrics: numericMetrics(record.metrics) } : {}),
   };
 }
+
+const EVIDENCE_RECEIPT_PRODUCER_KINDS = new Set([
+  "tool",
+  "worker",
+  "artifact",
+  "memory",
+  "project_ledger",
+  "external_source",
+  "browser",
+  "app",
+  "review",
+  "runtime",
+  "provider",
+  "user",
+]);
+
+const EVIDENCE_RECEIPT_TYPES = new Set([
+  "source",
+  "deliverable",
+  "execution",
+  "state",
+  "coverage",
+  "test",
+  "file_edit",
+  "artifact",
+  "browser_observation",
+  "app_observation",
+  "project_ledger_operation",
+  "review",
+  "pull_request",
+  "release",
+  "route_verification",
+  "user_decision_required",
+  "runtime_fault",
+  "provider_fault",
+  "cancellation",
+  "not_required",
+]);
 
 export function evidenceReceiptsFromResult(result: unknown): EvidenceReceipt[] {
   const record = recordValue(result);
