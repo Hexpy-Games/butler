@@ -41,6 +41,10 @@ import { unresolvedValidationFailureFromAudit } from "./validation-failure-guard
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
 import type { NativeTurnRunnerInput } from "./turn-runner-types.ts";
 import {
+  createTurnKernelController,
+  type TurnKernelController,
+} from "../../turn-kernel.ts";
+import {
   finalDeliveryBlockerForOpenDirectWork,
   openDirectWorkContinuationPrompt,
 } from "../../direct-work-continuation.ts";
@@ -54,6 +58,7 @@ export async function runNativeToolTurn({
   throwIfRuntimeTurnAborted(input.signal);
   const useTools = ["butler", "steward", "worker"].includes(session.init.role);
   let turnId: string | undefined;
+  const turnKernel = createTurnKernelController("accepted");
   try {
     const audit: ToolAuditEntry[] = [];
     const publicDecisionContext: PublicWorkDecision[] = [];
@@ -78,6 +83,7 @@ export async function runNativeToolTurn({
       skipRuntimePreparationProgress: earlyProgressEmitted,
     });
     turnId = context.turnId;
+    turnKernel.transitionTo("model_deciding");
     const { runToolPrompt, runTextPrompt } = createNativeTurnPromptRunners({
       turnInput: input,
       session,
@@ -123,8 +129,8 @@ export async function runNativeToolTurn({
       ? await runKernelToolPrompt(context.prompt, undefined, "initial_tool_loop")
       : await runTextPrompt(context.prompt);
     throwIfRuntimeTurnAborted(input.signal);
+    turnKernel.transitionTo("observing_tools");
     let decisionCheckedText: string | null = null;
-    let directWorkCompletionGapContinuations = 0;
     while (true) {
       const deliveryOutcome = await produceFinalDeliveryOutcome({
         turnInput: input,
@@ -153,17 +159,6 @@ export async function runNativeToolTurn({
           const publicSummary = directWorkBlocker.activeItems.at(0)
             ? `Direct work remains incomplete: ${directWorkBlocker.activeItems.at(0)?.label}`
             : "Direct work remains incomplete.";
-          if (directWorkCompletionGapContinuations >= 1) {
-            return {
-              text: publicSummary,
-              runtimeSessionRef: input.handle.runtimeSessionRef,
-              artifacts: runtimeArtifactsFromAudit({
-                audit,
-                butlerData: deps.butlerData,
-                workspacePath: session.init.workspacePath,
-              }),
-            };
-          }
           const observation = {
             kind: "completion_gap",
             summary: publicSummary,
@@ -186,23 +181,21 @@ export async function runNativeToolTurn({
             observation,
           });
           if (!hasDirectTurnModelRequestReserve(context.turnBudget, 3)) {
-            return {
-              text: publicSummary,
-              runtimeSessionRef: input.handle.runtimeSessionRef,
-              artifacts: runtimeArtifactsFromAudit({
-                audit,
-                butlerData: deps.butlerData,
-                workspacePath: session.init.workspacePath,
-              }),
-            };
+            throw new TurnSchedulerContinuationYieldError(
+              input.handle.sessionId,
+              context.turnId,
+              createTurnContextAtomId(input.handle.sessionId, context.turnId),
+            );
           }
-          directWorkCompletionGapContinuations += 1;
           candidateText = await runKernelToolPrompt(openDirectWorkContinuationPrompt({
             objective: context.userText,
             audit,
             blocker: directWorkBlocker,
           }), undefined, "direct_work_completion_gap_continuation");
           throwIfRuntimeTurnAborted(input.signal);
+          turnKernel.transitionTo("continuing");
+          turnKernel.transitionTo("model_deciding");
+          turnKernel.transitionTo("observing_tools");
           continue;
         }
         decisionCheckedText = deliveryOutcome.text;
@@ -214,6 +207,7 @@ export async function runNativeToolTurn({
           outcome: "waiting_user",
           publicSummary: deliveryOutcome.question,
           evidenceRefs: deliveryOutcome.evidenceRefs,
+          turnKernel,
           turnId,
           reason: "completion_review_waiting_user",
         });
@@ -233,6 +227,7 @@ export async function runNativeToolTurn({
           outcome: "failed",
           publicSummary: deliveryOutcome.publicSummary,
           evidenceRefs: deliveryOutcome.evidenceRefs,
+          turnKernel,
           turnId,
           reason: "completion_review_failed",
         });
@@ -259,6 +254,9 @@ export async function runNativeToolTurn({
         modelVisibleContent: deliveryOutcome.observation.modelVisibleContent,
       }), undefined, "completion_gap_continuation");
       throwIfRuntimeTurnAborted(input.signal);
+      turnKernel.transitionTo("continuing");
+      turnKernel.transitionTo("model_deciding");
+      turnKernel.transitionTo("observing_tools");
     }
     if (decisionCheckedText === null) {
       throw new Error("completion delivery exited without terminal outcome");
@@ -287,7 +285,7 @@ export async function runNativeToolTurn({
       });
     }
     const delivery = deliveryForFinalAudit(audit);
-    await emitFinalEvents(input, decisionCheckedText, audit, delivery, turnId);
+    await emitFinalEvents(input, decisionCheckedText, audit, turnKernel, delivery, turnId);
     recordTurnMetric({
       status: "ok",
       input,
@@ -351,6 +349,7 @@ export async function runNativeToolTurn({
         turnInput: input,
         cancelled: Boolean(input.signal?.aborted),
         reason: errorMessage,
+        turnKernel,
       });
       await emitTurnEventBestEffort(input, {
         kind: input.signal?.aborted ? "turn.cancelled" : "turn.failed",
@@ -478,6 +477,7 @@ async function emitFinalEvents(
   input: NativeTurnRunnerInput["input"],
   text: string,
   audit: ToolAuditEntry[],
+  turnKernel: TurnKernelController,
   delivery?: RuntimeTurnResult["delivery"],
   turnId?: string,
 ): Promise<void> {
@@ -486,6 +486,7 @@ async function emitFinalEvents(
     turnInput: input,
     audit,
     limitedDelivery,
+    turnKernel,
     turnId,
   });
   await emitTurnEventBestEffort(input, {

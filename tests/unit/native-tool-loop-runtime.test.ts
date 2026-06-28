@@ -7325,7 +7325,7 @@ test("native runtime continues instead of delivering while direct todo work is u
   const finalTodos = [
     { ...firstTodos[0], status: "completed" as const },
     { ...firstTodos[1], status: "completed" as const },
-    { ...firstTodos[2], status: "in_progress" as const },
+    { ...firstTodos[2], status: "completed" as const },
   ];
   const defaultExecutor = createButlerToolExecutor({
     butlerHome: tempDir,
@@ -7401,11 +7401,15 @@ test("native runtime continues instead of delivering while direct todo work is u
     systemPrompt: "You are Butler.",
   });
 
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-test",
     input: { text: "컨텍스트 컴팩션 설계에서 빠진 위험을 짧게 리뷰해줘." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
+    },
     metadata: {
       promptContext: [
         "## Active Persona Reminder",
@@ -7417,8 +7421,8 @@ test("native runtime continues instead of delivering while direct todo work is u
     },
   });
 
-  expect(promptCalls).toBe(1);
-  expect(continuationPrompt).toBe("");
+  expect(promptCalls).toBe(2);
+  expect(continuationPrompt).toContain("Direct Work Continuation");
   expect(continuationPrompt).not.toContain("Final Delivery Blocked");
   expect(continuationPrompt).not.toContain("previous answer is not deliverable");
   expect(continuationPrompt).not.toContain("Continue the original user request now");
@@ -7426,17 +7430,21 @@ test("native runtime continues instead of delivering while direct todo work is u
   expect(continuationPrompt).not.toContain("Original turn prompt");
   expect(continuationPrompt.toLowerCase()).not.toContain("restart");
   expect(continuationPrompt.toLowerCase()).not.toContain("interruption");
-  expect(result.text).toContain("Direct work remains incomplete");
+  expect(result.text).not.toContain("Direct work remains incomplete");
+  expect(result.text).toContain("검토 완료");
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.find((event) => event.kind === "turn.observation")?.payload)
+    .toMatchObject({ kind: "completion_gap" });
   const toolCalls = readTranscript("butler/main/open-direct-work-final-guard")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
-  expect(toolCalls).toEqual(["update_todo_list", "run_command"]);
+  expect(toolCalls).toEqual(["update_todo_list", "run_command", "run_command", "update_todo_list"]);
   const streams = new WorkStreamStore(tempDir).list({
     sessionId: "butler/main/open-direct-work-final-guard",
     includeTerminal: true,
   });
   expect(streams).toHaveLength(1);
-  expect(streams[0].state).not.toBe("complete");
+  expect(streams[0].state).toBe("complete");
 });
 
 test("native runtime does not keep extending direct work from finalization", async () => {
@@ -7518,14 +7526,19 @@ test("native runtime does not keep extending direct work from finalization", asy
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(promptCalls).toBe(2);
-  expect(continuationPrompts).toHaveLength(1);
+  expect(promptCalls).toBe(4);
+  expect(continuationPrompts).toHaveLength(3);
   expect(continuationPrompts[0]).toContain("Direct Work Continuation");
-  expect(result.text).toContain("Direct work remains incomplete");
+  expect(result.text).not.toContain("Direct work remains incomplete");
+  expect(result.text).toContain("완료했습니다");
   const toolCalls = readTranscript("butler/main/open-direct-work-multi-continuation")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
   expect(toolCalls).toEqual([
+    "update_todo_list",
+    "run_command",
+    "update_todo_list",
+    "run_command",
     "update_todo_list",
     "run_command",
     "update_todo_list",
@@ -7535,7 +7548,7 @@ test("native runtime does not keep extending direct work from finalization", asy
     includeTerminal: true,
   });
   expect(streams).toHaveLength(1);
-  expect(streams[0].state).toBe("executing");
+  expect(streams[0].state).toBe("complete");
 });
 
 test("native runtime skips direct work finalization when model request reserve is exhausted", async () => {
@@ -7586,16 +7599,21 @@ test("native runtime skips direct work finalization when model request reserve i
     systemPrompt: "You are Butler.",
   });
 
-  const result = await runtime.runTurn({
+  const events: Array<{ kind: string }> = [];
+  await expect(runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-test",
     input: { text: "남은 구현을 계속 진행해줘." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
-  });
+  })).rejects.toThrow("Turn scheduler yielded");
 
   expect(promptCalls).toBe(1);
-  expect(result.text).toContain("Direct work remains incomplete");
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
 });
 
 test("native runtime stops direct work continuation when tools do not make semantic progress", async () => {
@@ -7638,6 +7656,9 @@ test("native runtime stops direct work continuation when tools do not make seman
           return "write_file 커밋이 아직 남아 있습니다.";
         }
         expect(input.prompt).toContain("Direct Work Continuation");
+        for (let index = 0; index < 29; index += 1) {
+          input.usageAttribution?.beforeModelRequest?.({ roundIndex: index });
+        }
         await input.executeTool({
           name: "run_command",
           args: { command: "git status --short" },
@@ -7654,17 +7675,22 @@ test("native runtime stops direct work continuation when tools do not make seman
       systemPrompt: "You are Butler.",
     });
 
-    const result = await runtime.runTurn({
+    const events: Array<{ kind: string }> = [];
+    await expect(runtime.runTurn({
       handle,
       provider: fakeProvider,
       model: "local/gemma-test",
       input: { text: "Issue #2 작업을 직접 완료하고 task마다 커밋해줘." },
+      emitTurnEvent: (event) => {
+        events.push({ kind: event.kind });
+      },
       metadata: { runtimePolicy: { completionReview: "disabled" } },
-    });
+    })).rejects.toThrow("Turn scheduler yielded");
 
-    expect(result.text).toContain("Direct work remains incomplete");
     expect(promptCalls).toBe(2);
     expect(executedCommands).toEqual(["git status --short"]);
+    expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+    expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
     const streams = new WorkStreamStore(tempDir).list({
       sessionId: "butler/main/open-direct-work-no-semantic-progress",
       includeTerminal: true,
@@ -7732,6 +7758,9 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
           return "검토 단계로 전환했습니다. 보고 단계가 아직 남아 있습니다.";
         }
         expect(input.prompt).toContain("Direct Work Continuation");
+        for (let index = 0; index < 29; index += 1) {
+          input.usageAttribution?.beforeModelRequest?.({ roundIndex: index });
+        }
         await input.executeTool({
           name: "update_todo_list",
           args: {
@@ -7797,22 +7826,28 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
       systemPrompt: "You are Butler.",
     });
 
-    const result = await runtime.runTurn({
+    const events: Array<{ kind: string }> = [];
+    await expect(runtime.runTurn({
       handle,
       provider: fakeProvider,
       model: "local/gemma-test",
       input: { text: "구현 근거를 확인하고 WorkStream 검토까지 직접 진행해줘." },
+      emitTurnEvent: (event) => {
+        events.push({ kind: event.kind });
+      },
       metadata: { runtimePolicy: { completionReview: "disabled" } },
-    });
+    })).rejects.toThrow("Turn scheduler yielded");
 
-    expect(result.text).toContain("Direct work remains incomplete");
-    expect(promptCalls).toBe(2);
+    expect(promptCalls).toBe(3);
+    expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+    expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
     const toolCalls = readTranscript("butler/main/open-direct-work-fsm-progress")
       .filter((event) => event.kind === "tool_call")
       .map((event) => event.payload.name);
     expect(toolCalls).toEqual([
       "update_todo_list",
       "update_work_stream_state",
+      "update_todo_list",
     ]);
     const streams = new WorkStreamStore(tempDir).list({
       sessionId: "butler/main/open-direct-work-fsm-progress",
