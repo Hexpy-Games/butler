@@ -10,6 +10,10 @@ import {
   isPromptUsageModelCallBudgetError,
   recoverableLimitedDeliveryForError,
 } from "../../agent/turn/recoverable-delivery.ts";
+import {
+  isKernelCompletionGapContinuationError,
+  KERNEL_COMPLETION_GAP_CONTINUATION_CODE,
+} from "../../agent/turn/native/turn-runner/final-delivery-gates.ts";
 import { persistTurnContextAtom } from "../../agent/turn/turn-continuation-context.ts";
 import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
 import { join } from "node:path";
@@ -461,17 +465,20 @@ async function processClaimedQueuedInboundItem(input: {
     const sessionId = item.envelope.routingHints?.sessionId?.trim();
     const turnId = item.envelope.routingHints?.turnId?.trim();
     const isBudgetError = isPromptUsageModelCallBudgetError(error);
-    if (isBudgetError && sessionId && turnId) {
+    const isKernelContinuation = isKernelCompletionGapContinuationError(error);
+    if ((isBudgetError || isKernelContinuation) && sessionId && turnId) {
       const safeFailure = safeFailureForQueuedInboundError(error);
-      persistTurnContextAtom({
-        butlerData: butlerDataPath(),
-        sessionId,
-        turnId,
-        state: "continuing",
-        sourceErrorCode: safeFailure.code,
-        reason: safeFailure.message,
-        unresolvedObservations: [],
-      });
+      if (isBudgetError) {
+        persistTurnContextAtom({
+          butlerData: butlerDataPath(),
+          sessionId,
+          turnId,
+          state: "continuing",
+          sourceErrorCode: safeFailure.code,
+          reason: safeFailure.message,
+          unresolvedObservations: [],
+        });
+      }
       const terminalRecorded = completeQueueClaim(options, item, {
         dispatchStatus: "handled",
         handled: true,
@@ -641,6 +648,13 @@ function processingLeaseMsFor(options: ProcessQueuedInboundOptions): number {
 function safeFailureForQueuedInboundError(
   error: unknown,
 ): RuntimeFailureDiagnostic {
+  if (isKernelCompletionGapContinuationError(error)) {
+    return {
+      code: KERNEL_COMPLETION_GAP_CONTINUATION_CODE,
+      message: error instanceof Error ? error.message : "Completion gap continuation scheduled.",
+      retryable: true,
+    };
+  }
   if (error instanceof QueuedInboundDispatchTimeoutError) {
     return {
       code: error.code,

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
+import { evidenceReceiptsFromResult } from "../../packages/butler-agent/src/agent/output/evidence/receipts.ts";
 import { evaluateCompletionReviewOutcome } from "../../packages/butler-agent/src/agent/turn/completion-review.ts";
+import type { EvidenceReceiptType } from "../../packages/butler-agent/src/agent/turn/native/output/tool-types.ts";
 
 test("completion review returns gap when required evidence receipts are missing", () => {
   const outcome = evaluateCompletionReviewOutcome({
@@ -211,4 +213,38 @@ test("completion review supports command executed receipts through typed evidenc
   if (outcome.status === "complete") {
     expect(outcome.evidenceRefs).toContain("task:cmd-1");
   }
+});
+
+test("evidence receipt parser supports C02 reviewer receipt taxonomy", () => {
+  const receiptTypes: EvidenceReceiptType[] = [
+    "test",
+    "file_edit",
+    "artifact",
+    "browser_observation",
+    "app_observation",
+    "project_ledger_operation",
+    "review",
+    "pull_request",
+    "release",
+    "route_verification",
+    "user_decision_required",
+    "runtime_fault",
+    "provider_fault",
+    "cancellation",
+    "not_required",
+  ];
+  const receipts = evidenceReceiptsFromResult({
+    evidence_receipts: receiptTypes.map((receiptType) => ({
+      schema: "butler.evidence-receipt.v1",
+      id: `receipt-${receiptType}`,
+      producer: { kind: receiptType === "provider_fault" ? "provider" : "runtime", name: "completion-review-test" },
+      receiptType,
+      verified: true,
+      covers: [receiptType],
+      summary: `${receiptType} receipt`,
+      references: [{ kind: "tool_output", ref: `tool-${receiptType}` }],
+    })),
+  });
+
+  expect(receipts.map((receipt) => receipt.receiptType)).toEqual(receiptTypes);
 });

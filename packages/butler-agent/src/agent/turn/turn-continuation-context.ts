@@ -14,7 +14,14 @@ export interface TurnContextAtom {
   state: TurnState;
   sourceErrorCode: string;
   reason: string;
+  userRequest?: { id: string; text?: string };
+  latestAssistantDecision?: { id: string };
   unresolvedObservations: TurnContextObservationRef[];
+  openToolPairs: TurnContextObservationRef[];
+  latestCompletionReview?: { status: string; observationId?: string };
+  currentTurnWork: TurnContextObservationRef[];
+  currentTurnTodos: TurnContextObservationRef[];
+  terminalOutcome?: { id: string; state: string };
   createdAt: string;
 }
 
@@ -34,7 +41,14 @@ export function persistTurnContextAtom(input: {
   state: TurnState;
   sourceErrorCode: string;
   reason: string;
+  userRequest?: { id: string; text?: string };
+  latestAssistantDecision?: { id: string };
   unresolvedObservations?: TurnContextObservationRef[];
+  openToolPairs?: TurnContextObservationRef[];
+  latestCompletionReview?: { status: string; observationId?: string };
+  currentTurnWork?: TurnContextObservationRef[];
+  currentTurnTodos?: TurnContextObservationRef[];
+  terminalOutcome?: { id: string; state: string };
 }): void {
   if (isTerminalTurnState(input.state)) return;
   const path = continuationPathFor(input.butlerData, createTurnContextAtomId(input.sessionId, input.turnId));
@@ -44,7 +58,14 @@ export function persistTurnContextAtom(input: {
     state: input.state,
     sourceErrorCode: input.sourceErrorCode,
     reason: input.reason,
+    ...(input.userRequest ? { userRequest: input.userRequest } : {}),
+    ...(input.latestAssistantDecision ? { latestAssistantDecision: input.latestAssistantDecision } : {}),
     unresolvedObservations: input.unresolvedObservations ?? [],
+    openToolPairs: input.openToolPairs ?? [],
+    ...(input.latestCompletionReview ? { latestCompletionReview: input.latestCompletionReview } : {}),
+    currentTurnWork: input.currentTurnWork ?? [],
+    currentTurnTodos: input.currentTurnTodos ?? [],
+    ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
     createdAt: new Date().toISOString(),
   };
   mkdirSync(dirname(path), { recursive: true });

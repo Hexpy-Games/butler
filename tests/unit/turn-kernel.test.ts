@@ -15,7 +15,7 @@ test("turn kernel admits only declared transitions", () => {
   expect(isAllowedTurnStateTransition("model_deciding", "announcing_intent")).toBe(true);
   expect(isAllowedTurnStateTransition("model_deciding", "waiting_user")).toBe(true);
   expect(isAllowedTurnStateTransition("model_deciding", "completed")).toBe(true);
-  expect(isAllowedTurnStateTransition("executing_tools", "completing")).toBe(false);
+  expect(isAllowedTurnStateTransition("executing_tools", "completed")).toBe(false);
 });
 
 test("invalid turn state transitions are rejected deterministically", () => {

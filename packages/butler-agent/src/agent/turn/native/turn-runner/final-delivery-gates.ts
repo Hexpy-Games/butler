@@ -9,31 +9,41 @@ import {
 import { evaluateCompletionReviewOutcome } from "../../completion-review.ts";
 import { requiredCompletionObligations } from "../../../output/completion/obligation-review.ts";
 import {
-  goalCompletionContinuationAttempts,
-} from "../policy/turn-errors.ts";
-import {
   hasGoalCompletionReviewSkipTool,
 } from "../policy/turn-evidence-gates.ts";
 import { shouldRunGoalCompletionReview } from "../policy/turn-metadata-policy.ts";
 import type { NativeStoredSessionConfig, NativeTurnRunnerDeps } from "./turn-runner-types.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
 import type { ToolSurfacePromptController } from "../../tool-surface-prompt-controller.ts";
-import { closeDirectWork } from "./direct-work-finalizer.ts";
 import {
   applyPublicOutputGuards,
   repairFinalContract,
 } from "./public-output-gates.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
-import {
-  unresolvedValidationFailureFromAudit,
-  validationFailureContinuationPrompt,
-} from "./validation-failure-guard.ts";
+import { persistTurnContextAtom } from "../../turn-continuation-context.ts";
 import type { createDirectTurnBudget } from "../../direct-turn-budget.ts";
+import { WorkStreamStore } from "../../../work/work-stream.ts";
 
 const EXPLICIT_TOOL_REPAIR_ATTEMPTS = 2;
 const EXPLICIT_TOOL_REPAIR_BASE_ROUNDS = 2;
 const EXPLICIT_TOOL_REPAIR_MAX_ROUNDS = 4;
-const DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS = 8;
+
+export const KERNEL_COMPLETION_GAP_CONTINUATION_CODE = "completion_gap_continuation";
+
+export class KernelCompletionGapContinuationError extends Error {
+  readonly code = KERNEL_COMPLETION_GAP_CONTINUATION_CODE;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "KernelCompletionGapContinuationError";
+  }
+}
+
+export function isKernelCompletionGapContinuationError(error: unknown): boolean {
+  return error instanceof KernelCompletionGapContinuationError ||
+    Boolean(error && typeof error === "object" &&
+      (error as { code?: unknown }).code === KERNEL_COMPLETION_GAP_CONTINUATION_CODE);
+}
 
 export async function produceFinalDeliveryText(input: {
   turnInput: RuntimeTurnInput;
@@ -53,11 +63,20 @@ export async function produceFinalDeliveryText(input: {
   const textAfterExplicitTools = await repairExplicitToolRequirements(input);
   const groundedText = applyGroundingIfNeeded(input, textAfterExplicitTools);
   const reviewResult = await runGoalCompletionReviews({ ...input, initialText: groundedText });
-  const validationClosedText = await closeUnresolvedValidationWork({ ...input, finalText: reviewResult.reviewedText });
-  const directWorkClosedText = reviewResult.outcome.status === "complete"
-    ? await closeDirectWork({ ...input, finalText: validationClosedText })
-    : validationClosedText;
-  const contractRepairedText = await repairFinalContract({ ...input, finalText: directWorkClosedText });
+  if (reviewResult.outcome.status === "gap") {
+    await persistCompletionGapContinuation({
+      ...input,
+      observation: reviewResult.outcome.observation,
+    });
+    throw new KernelCompletionGapContinuationError(reviewResult.outcome.observation.summary);
+  }
+  if (reviewResult.outcome.status === "waiting_user") {
+    throw new KernelCompletionGapContinuationError(reviewResult.outcome.question);
+  }
+  if (reviewResult.outcome.status === "failed") {
+    throw new KernelCompletionGapContinuationError(reviewResult.outcome.publicSummary);
+  }
+  const contractRepairedText = await repairFinalContract({ ...input, finalText: reviewResult.reviewedText });
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "guard.started",
     payload: { guard: "public_output" },
@@ -68,25 +87,6 @@ export async function produceFinalDeliveryText(input: {
     payload: { guard: "public_output", status: "approved" },
   });
   return checkedText;
-}
-
-async function closeUnresolvedValidationWork(input: {
-  prompt: string;
-  finalText: string;
-  audit: ToolAuditEntry[];
-  runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
-}): Promise<string> {
-  let finalText = input.finalText;
-  for (let attempt = 0; attempt < goalCompletionContinuationAttempts(); attempt += 1) {
-    const failure = unresolvedValidationFailureFromAudit(input.audit);
-    if (!failure) return finalText;
-    finalText = await input.runToolPrompt(validationFailureContinuationPrompt({
-      objective: input.prompt,
-      previousAnswer: finalText,
-      failure,
-    }), DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS, "validation_failure_continuation");
-  }
-  return finalText;
 }
 
 function applyGroundingIfNeeded(
@@ -175,8 +175,12 @@ async function runGoalCompletionReviews(input: {
     candidateText: input.initialText,
     evidenceReceipts: evidenceCapabilityReceiptsFromAudit(input.audit),
     requiredObligations: requiredCompletionObligations(input.publicDecisionContext),
-    observations: [],
-    workStreamTerminal: false,
+    observations: observationsFromAudit(input.audit),
+    workStreamTerminal: currentWorkStreamsTerminal({
+      butlerData: input.deps.butlerData,
+      sessionId: input.turnInput.handle.sessionId,
+      turnId: input.turnId,
+    }),
     todoTerminal: false,
   });
   return { outcome, reviewedText: input.initialText };
@@ -203,5 +207,132 @@ function shouldRunCompletionReview(
 }
 
 function evidenceCapabilityReceiptsFromAudit(audit: ToolAuditEntry[]): unknown[] {
-  return audit.flatMap((entry) => entry.evidenceCapabilityReceipts ?? []);
+  return audit.flatMap((entry) => [
+    ...(entry.evidenceCapabilityReceipts ?? []),
+    ...legacyEvidenceReceiptsAsCapabilityReceipts(entry),
+    ...satisfiedObligationsAsCapabilityReceipts(entry),
+  ]);
+}
+
+function legacyEvidenceReceiptsAsCapabilityReceipts(entry: ToolAuditEntry): unknown[] {
+  return (entry.evidenceReceipts ?? []).flatMap((receipt) =>
+    (receipt.satisfies ?? []).map((obligation) => ({
+      receipt_id: receipt.id,
+      schema_version: "evidence-capability.v1",
+      producer: receipt.producer,
+      capability: obligation,
+      evidence_kind: capabilityEvidenceKind(obligation),
+      maturity: receipt.verified ? "verified" : "candidate",
+      confidence: receipt.verified ? 0.9 : 0.3,
+      verified: receipt.verified,
+      summary: receipt.summary,
+      references: receipt.references.map((reference) => ({
+        ...(reference.kind === "url" ? { url: reference.ref } : {}),
+        ...(reference.kind === "artifact" || reference.kind === "project_document" ? { path: reference.ref } : {}),
+        ...(reference.kind === "tool_output" ? { tool_call_id: reference.ref } : {}),
+      })),
+      satisfies: [obligation],
+      limitations: [],
+      created_at: new Date(0).toISOString(),
+    })));
+}
+
+function satisfiedObligationsAsCapabilityReceipts(entry: ToolAuditEntry): unknown[] {
+  return (entry.satisfiedCompletionObligations ?? []).map((obligation) => ({
+    receipt_id: `audit:${entry.name}:${obligation}`,
+    schema_version: "evidence-capability.v1",
+    producer: { kind: "tool", name: entry.name },
+    capability: obligation,
+    evidence_kind: capabilityEvidenceKind(obligation),
+    maturity: entry.ok ? "verified" : "candidate",
+    confidence: entry.ok ? 0.9 : 0.3,
+    verified: entry.ok,
+    summary: `${entry.name} satisfied ${obligation}.`,
+    references: [],
+    satisfies: [obligation],
+    limitations: [],
+    created_at: new Date(0).toISOString(),
+  }));
+}
+
+function capabilityEvidenceKind(obligation: string): string {
+  if (obligation === "source_verified") return "workspace_inspection";
+  if (obligation === "command_executed") return "execution_result";
+  if (obligation === "durable_artifact") return "artifact";
+  if (obligation === "data_table_created") return "data_table";
+  if (obligation === "chart_rendered") return "chart";
+  return "project_state";
+}
+
+function observationsFromAudit(audit: ToolAuditEntry[]) {
+  return audit
+    .filter((entry) => !entry.ok)
+    .map((entry) => ({
+      kind: entry.name === "run_command" ? "command_failed" as const : "tool_result" as const,
+      summary: entry.error ? `${entry.name}: ${entry.error}` : `${entry.name} failed.`,
+      modelVisibleContent: entry.error ? `${entry.name}: ${entry.error}` : `${entry.name} failed.`,
+      visibility: "model" as const,
+    }));
+}
+
+function currentWorkStreamsTerminal(input: {
+  butlerData: string;
+  sessionId: string;
+  turnId?: string | null;
+}): boolean {
+  if (!input.turnId) return false;
+  const streams = new WorkStreamStore(input.butlerData).list({
+    sessionId: input.sessionId,
+    includeTerminal: true,
+  });
+  const store = new WorkStreamStore(input.butlerData);
+  const turnLocalStreams = streams.filter((stream) => store.read(stream.id)?.last_user_turn_id === input.turnId);
+  if (turnLocalStreams.length === 0) return false;
+  return turnLocalStreams.every((stream) => stream.terminal === true);
+}
+
+async function persistCompletionGapContinuation(input: {
+  turnInput: RuntimeTurnInput;
+  deps: NativeTurnRunnerDeps;
+  turnId?: string | null;
+  observation: {
+    kind: string;
+    summary: string;
+    modelVisibleContent: string;
+    refs?: Array<{ kind: string; id: string; path?: string }>;
+  };
+}): Promise<void> {
+  const turnId = input.turnId;
+  if (!turnId) return;
+  persistTurnContextAtom({
+    butlerData: input.deps.butlerData,
+    sessionId: input.turnInput.handle.sessionId,
+    turnId,
+    state: "continuing",
+    sourceErrorCode: KERNEL_COMPLETION_GAP_CONTINUATION_CODE,
+    reason: input.observation.summary,
+    unresolvedObservations: [{
+      kind: input.observation.kind,
+      id: `completion-gap:${turnId}`,
+    }, ...(input.observation.refs ?? [])],
+    latestCompletionReview: {
+      status: "gap",
+      observationId: `completion-gap:${turnId}`,
+    },
+  });
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: "turn.observation",
+    payload: {
+      kind: input.observation.kind,
+      safeLabel: input.observation.summary,
+      modelVisibleContentChars: input.observation.modelVisibleContent.length,
+    },
+  });
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: "turn.continuation_scheduled",
+    payload: {
+      reason: KERNEL_COMPLETION_GAP_CONTINUATION_CODE,
+      safeLabel: "Continuing from completion gap",
+    },
+  });
 }
