@@ -26,6 +26,7 @@ import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { PromptAssembler } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
+import { readTurnContextAtom } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 
@@ -1051,26 +1052,21 @@ test("queued inbound converts model-call budget exhaustion to recoverable limite
   expect(summary).toMatchObject({
     claimed: 1,
     handled: 1,
-    delivered: 1,
+    delivered: 0,
     failed: 0,
   });
-  expect(app.sentActions).toHaveLength(1);
-  expect(app.sentActions[0]).toMatchObject({
-    transport: "app",
-    message: {
-      text: "",
-      replyToMessageId: "message-budget-failure",
-    },
-    metadata: {
-      kind: "final_result",
-      turnId: "turn-budget-failure",
-      noVisibleReply: true,
-      deliveryState: "recovering_internal",
-      limitationCodes: ["internal_recovery_required"],
-    },
+  expect(app.sentActions).toHaveLength(0);
+  const persisted = readTurnContextAtom({
+    butlerData: tempDir,
+    sessionId: "butler/app-general",
+    turnId: "turn-budget-failure",
   });
-  expect(JSON.stringify(app.sentActions[0])).not.toContain("model-call budget");
-  expect(JSON.stringify(app.sentActions[0])).not.toContain("requested goal was completed");
+  expect(persisted).toMatchObject({
+    sessionId: "butler/app-general",
+    turnId: "turn-budget-failure",
+    state: "continuing",
+    sourceErrorCode: "internal_recovery_required",
+  });
   store.close();
 });
 
@@ -1258,25 +1254,16 @@ test("queued app prompt-budget interruption resumes next turn from durable W3 to
   expect(first).toMatchObject({
     claimed: 1,
     handled: 1,
-    delivered: 1,
+    delivered: 0,
     failed: 0,
   });
-  expect(app.sentActions[0]).toMatchObject({
-    metadata: {
-      kind: "final_result",
-      deliveryState: "recovering_internal",
-      limitationCodes: ["internal_recovery_required"],
-      noVisibleReply: true,
-    },
-  });
-  expect(JSON.stringify(app.sentActions[0])).not.toContain("model-call budget");
-  expect(JSON.stringify(app.sentActions[0])).not.toContain("requested goal was completed");
+  expect(app.sentActions).toHaveLength(0);
 
   const streamStore = new WorkStreamStore(tempDir);
   const streams = streamStore.list({ sessionId, includeTerminal: true });
   expect(streams).toHaveLength(1);
   expect(streams[0]).toMatchObject({
-    state: "recoverable",
+    state: "executing",
     current_phase: "execution",
     active_step_id: "w3-style-guard",
     terminal: false,
@@ -1286,7 +1273,7 @@ test("queued app prompt-budget interruption resumes next turn from durable W3 to
   expect(todos.items).toEqual(expect.arrayContaining([
     expect.objectContaining({
       id: "w3-style-guard",
-      status: "pending",
+      status: "in_progress",
       active_form: "Inspecting Sandy style guard validation evidence",
     }),
     expect.objectContaining({
@@ -1316,13 +1303,13 @@ test("queued app prompt-budget interruption resumes next turn from durable W3 to
   });
   expect(promptCallCount).toBe(2);
   expect(resumePrompt).toContain("## Active Work State");
-  expect(resumePrompt).toContain("WorkStream State: recoverable");
+  expect(resumePrompt).toContain("WorkStream State: executing");
   expect(resumePrompt).toContain("Active Step ID: w3-style-guard");
   expect(resumePrompt).toContain(
-    "w3-style-guard:pending:execution:Inspecting Sandy style guard validation evidence",
+    "w3-style-guard:in_progress:execution:Inspecting Sandy style guard validation evidence",
   );
   expect(resumePrompt).toContain(
-    "Resume From Todo: w3-style-guard:pending:execution:Inspecting Sandy style guard validation evidence",
+    "Resume From Todo: w3-style-guard:in_progress:execution:Inspecting Sandy style guard validation evidence",
   );
   expect(resumePrompt).toContain("Continuation Contract:");
   expect(resumePrompt).toContain(

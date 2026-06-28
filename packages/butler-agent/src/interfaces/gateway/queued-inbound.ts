@@ -2,9 +2,17 @@ import type { GatewayDispatchResult } from "../../gateways/core/contracts.ts";
 import type { ClaimedInboundEvent, NativeInboundQueue, QueuedInboundEvent } from "../../gateways/core/inbound-queue.ts";
 import type { ArtifactRef, DeliveryResult, InboundEnvelope, OutboundAction, SessionTransportBinding } from "../../test-support/harness/contracts.ts";
 import type { SessionBindingStore } from "../../test-support/harness/session-store.ts";
-import { safeRuntimeFailure, type RuntimeFailureDiagnostic } from "../../integrations/providers/provider-errors.ts";
-import { recoverableLimitedDeliveryForError } from "../../agent/turn/recoverable-delivery.ts";
+import {
+  safeRuntimeFailure,
+  type RuntimeFailureDiagnostic,
+} from "../../integrations/providers/provider-errors.ts";
+import {
+  isPromptUsageModelCallBudgetError,
+  recoverableLimitedDeliveryForError,
+} from "../../agent/turn/recoverable-delivery.ts";
+import { persistTurnContextAtom } from "../../agent/turn/turn-continuation-context.ts";
 import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
+import { join } from "node:path";
 import type { DeliveryGuard } from "../transport/delivery-guard.ts";
 
 export interface QueuedInboundServer {
@@ -351,6 +359,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+function butlerDataPath(): string {
+  return process.env.BUTLER_DATA || join(process.env.HOME || process.cwd(), ".butler");
+}
+
 async function processClaimedQueuedInboundItem(input: {
   item: ClaimedInboundEvent;
   options: ProcessQueuedInboundOptions;
@@ -446,8 +458,30 @@ async function processClaimedQueuedInboundItem(input: {
     }
   } catch (error) {
     summary.quiescence = dispatchQuiescenceForError(error);
-    const limitedDelivery = recoverableLimitedDeliveryForError(error);
     const sessionId = item.envelope.routingHints?.sessionId?.trim();
+    const turnId = item.envelope.routingHints?.turnId?.trim();
+    const isBudgetError = isPromptUsageModelCallBudgetError(error);
+    if (isBudgetError && sessionId && turnId) {
+      const safeFailure = safeFailureForQueuedInboundError(error);
+      persistTurnContextAtom({
+        butlerData: butlerDataPath(),
+        sessionId,
+        turnId,
+        state: "continuing",
+        sourceErrorCode: safeFailure.code,
+        reason: safeFailure.message,
+        unresolvedObservations: [],
+      });
+      const terminalRecorded = completeQueueClaim(options, item, {
+        dispatchStatus: "handled",
+        handled: true,
+      });
+      if (!terminalRecorded) return summary;
+      summary.handled += 1;
+      return summary;
+    }
+
+    const limitedDelivery = recoverableLimitedDeliveryForError(error);
     if (limitedDelivery && sessionId) {
       const terminalRecorded = completeQueueClaim(options, item, {
         dispatchStatus: "handled",
