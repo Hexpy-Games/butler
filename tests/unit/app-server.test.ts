@@ -6305,6 +6305,68 @@ test("app transport send fails the turn instead of leaving thinking when queue h
   }
 });
 
+test("app transport send fails instead of leaving thinking when butler-main state is stale", async () => {
+  const servicesDir = join(tempDir, "state", "services");
+  mkdirSync(servicesDir, { recursive: true });
+  writeFileSync(
+    join(servicesDir, "butler-main.json"),
+    JSON.stringify({
+      version: 1,
+      supervisor: "native-supervisor",
+      serviceId: "butler-main",
+      pid: 999_999_999,
+      processGroupId: 999_999_999,
+      mode: "detached",
+      startedAt: "2099-01-01T00:00:00.000Z",
+      command: "bash",
+      args: ["start-butler.sh"],
+      cwd: tempDir,
+      stdoutFile: join(tempDir, "logs", "butler-out.log"),
+      stderrFile: join(tempDir, "logs", "butler-err.log"),
+      restartPolicy: "watchdog",
+    }),
+  );
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "do not leave this thinking",
+      client_message_id: "client-stale-main",
+    });
+
+    expect(result.data.turn).toMatchObject({
+      state: "failed",
+      safe_error_code: "app_turn_queue_failed",
+      retryable: true,
+      cancellable: false,
+    });
+    const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+    expect(existsSync(pendingDir) ? readdirSync(pendingDir) : []).toEqual([]);
+
+    const replay = await getJson(`${server.url}events?cursor=0`);
+    expect(
+      replay.data.events.some(
+        (event: { type: string; payload?: { turn_id?: string } }) =>
+          event.type === "turn.queued" &&
+          event.payload?.turn_id === result.data.turn.id,
+      ),
+    ).toBe(false);
+    expect(
+      replay.data.events.some(
+        (event: { type: string; payload?: { safe_error_code?: string } }) =>
+          event.type === "turn.queue_failed" &&
+          event.payload?.safe_error_code === "app_turn_queue_failed",
+      ),
+    ).toBe(true);
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport send binds current settings model without persisting implicit composer defaults", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),

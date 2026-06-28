@@ -86,6 +86,10 @@ import {
 import { readPromptCacheMetrics } from "../../integrations/providers/prompt-cache-metrics.ts";
 import { readContextMonitor } from "../../operations/metrics/context-monitor.ts";
 import {
+  isPidRunning,
+  readServiceState,
+} from "../../operations/service/native-service-supervisor.ts";
+import {
   estimateContextTokensForModel,
   evaluateWorkingContextBudget,
   resolveContextBudgetConfig,
@@ -4851,6 +4855,7 @@ export class AppServerStore {
     controls: SessionControlState;
   }): TurnRecord {
     try {
+      this.assertAppTransportExecutorReady();
       const chat = this.getChatRow(input.chatId);
       const project = chat?.project_id
         ? this.getProjectRow(chat.project_id)
@@ -4897,6 +4902,13 @@ export class AppServerStore {
       });
     } catch (error) {
       return this.failAppTransportQueueHandoff(input, error);
+    }
+  }
+
+  private assertAppTransportExecutorReady(): void {
+    const state = readServiceState(this.butlerData, "butler-main");
+    if (state && !isPidRunning(state.pid)) {
+      throw new Error(`Butler Agent executor is stale (pid ${state.pid}).`);
     }
   }
 
