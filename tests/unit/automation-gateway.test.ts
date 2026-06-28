@@ -26,9 +26,13 @@ import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { PromptAssembler } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
-import { readTurnContextAtom } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
+import {
+  createTurnContextAtomId,
+  readTurnContextAtom,
+} from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
+import { readTranscript } from "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -1266,6 +1270,7 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   let promptCallCount = 0;
   let resumePrompt = "";
+  const turnEvents: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     butlerHome,
     butlerData: tempDir,
@@ -1349,6 +1354,12 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
     provider: fakeProvider,
     promptAssembler: new PromptAssembler({ butlerHome, butlerData: tempDir }),
     systemPromptFactory: () => "You are Butler in a queued app continuation test.",
+    deliverTurnEvent: async ({ event }) => {
+      turnEvents.push({
+        kind: event.kind,
+        payload: event.payload as Record<string, unknown> | undefined,
+      });
+    },
   });
   const server = createGatewayServer({
     router,
@@ -1382,6 +1393,7 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   expect(app.sentActions).toHaveLength(0);
   expect(promptCallCount).toBe(1);
   expect(resumePrompt).toBe("");
+  expect(turnEvents.filter((event) => event.kind === "turn.acknowledged")).toHaveLength(1);
 
   const persisted = readTurnContextAtom({
     butlerData: tempDir,
@@ -1440,6 +1452,20 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
     failed: 0,
   });
   expect(promptCallCount).toBe(2);
+  expect(turnEvents.filter((event) => event.kind === "turn.acknowledged")).toHaveLength(1);
+  expect(readTranscript(sessionId).filter((event) => event.kind === "inbound")).toHaveLength(1);
+  expect(resumePrompt).toContain("## Scheduler Continuation Context Atom");
+  expect(resumePrompt.indexOf("## Scheduler Continuation Context Atom"))
+    .toBeLessThan(resumePrompt.indexOf("## Active Work State"));
+  expect(resumePrompt).toContain(
+    `Context Atom ID: ${createTurnContextAtomId(sessionId, "turn-client-w3-budget-first")}`,
+  );
+  expect(resumePrompt).toContain("Unresolved Observations:");
+  expect(resumePrompt).toContain("context_compacted:context-atom:");
+  expect(resumePrompt).toContain("Current Turn Work:");
+  expect(resumePrompt).toContain("work_stream:");
+  expect(resumePrompt).toContain("Current Turn Todos:");
+  expect(resumePrompt).toContain("todo_item:");
   expect(resumePrompt).toContain("## Active Work State");
   expect(resumePrompt).toContain("w3-style-guard:in_progress:execution:Inspecting Sandy style guard validation evidence");
   expect(resumePrompt).not.toContain("model-call budget");

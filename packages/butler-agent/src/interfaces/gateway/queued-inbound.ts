@@ -406,6 +406,13 @@ async function processClaimedQueuedInboundItem(input: {
               ...(isRecord(item.envelope.raw) ? item.envelope.raw : {}),
               dispatchClaimId: item.processing.claimId,
               queueId: item.queueId,
+              ...(item.metadata.sameLogicalTurnContinuation === true
+                ? {
+                  sameLogicalTurnContinuation: true,
+                  contextAtomId: item.metadata.contextAtomId,
+                  continuationForQueueId: item.metadata.continuationForQueueId,
+                }
+                : {}),
             },
           }),
       },
@@ -577,11 +584,6 @@ function scheduleSameLogicalTurnContinuation(input: {
   try {
     input.queue.enqueue({
       ...input.item.envelope,
-      eventId: `${input.item.envelope.eventId}:kernel-continuation:${input.item.attempts}`,
-      message: {
-        ...input.item.envelope.message,
-        id: `${input.item.envelope.message.id}:kernel-continuation:${input.item.attempts}`,
-      },
       routingHints: {
         ...input.item.envelope.routingHints,
         turnId: input.turnId,

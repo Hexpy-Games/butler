@@ -413,32 +413,37 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     const binding = this.requireBinding();
     const timestamp =
       envelope.message.timestamp || this.options.now?.() || defaultNow();
+    const schedulerContinuation = schedulerContinuationMetadata(envelope);
 
-    recordDurableInbound({
-      sessionId: binding.sessionId,
-      envelope,
-      route: route
-        ? {
-            sessionId: route.sessionId,
-            role: route.role,
-            reason: route.reason,
-            projectId: route.projectId ?? null,
-          }
-        : undefined,
-      metadata: {
-        source: "gateway-actor",
-      },
-      timestamp,
-    });
+    if (!schedulerContinuation) {
+      recordDurableInbound({
+        sessionId: binding.sessionId,
+        envelope,
+        route: route
+          ? {
+              sessionId: route.sessionId,
+              role: route.role,
+              reason: route.reason,
+              projectId: route.projectId ?? null,
+            }
+          : undefined,
+        metadata: {
+          source: "gateway-actor",
+        },
+        timestamp,
+      });
+    }
 
     try {
-      await this.emitTurnAcknowledged({
-        binding,
-        envelope,
-        route,
-        timestamp,
-        acceptedAtMs,
-      });
+      if (!schedulerContinuation) {
+        await this.emitTurnAcknowledged({
+          binding,
+          envelope,
+          route,
+          timestamp,
+          acceptedAtMs,
+        });
+      }
       const promptContext = this.options.buildTurnContext?.({
         binding,
         envelope,
@@ -510,6 +515,12 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             currentUserText: envelope.message.text?.trim() ?? "",
             promptContext,
             turnId: turnIdFromEnvelope(envelope),
+            schedulerContinuation: schedulerContinuation
+              ? {
+                contextAtomId: schedulerContinuation.contextAtomId,
+                continuationForQueueId: schedulerContinuation.continuationForQueueId,
+              }
+              : undefined,
             runtimePolicy: activeBinding.metadata?.runtimePolicy,
             workerModelRules: activeBinding.metadata?.workerModelRules,
           },
@@ -955,4 +966,20 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       lastActiveAt: overrides.lastActiveAt,
     });
   }
+}
+
+function schedulerContinuationMetadata(envelope: InboundEnvelope): {
+  contextAtomId: string;
+  continuationForQueueId?: string;
+} | null {
+  const raw = envelope.raw && typeof envelope.raw === "object"
+    ? envelope.raw as Record<string, unknown>
+    : {};
+  if (raw.sameLogicalTurnContinuation !== true) return null;
+  const contextAtomId = typeof raw.contextAtomId === "string" ? raw.contextAtomId.trim() : "";
+  if (!contextAtomId) return null;
+  const continuationForQueueId = typeof raw.continuationForQueueId === "string"
+    ? raw.continuationForQueueId
+    : undefined;
+  return { contextAtomId, continuationForQueueId };
 }
