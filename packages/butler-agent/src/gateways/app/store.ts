@@ -3566,16 +3566,18 @@ export class AppServerStore {
     for (const turnId of turnIds) {
       const turn = this.getTurnRow(turnId);
       if (!turn) continue;
+      const rows = progressRowsForTurnState(
+        this.listProgressRowsForTurn(turnId),
+        turn.state,
+      );
+      const summary = publicTurnStatusLabel(turn.safe_status_label, turn.state);
       snapshots[turnId] = {
         turn_id: turnId,
-        summary: turn.safe_status_label,
+        ...(summary ? { summary } : {}),
         updated_at: turn.updated_at,
         state: turn.state,
         ...this.deliveryMetadataForTurnRecord(turnFromRow(turn)),
-        safe_progress_rows: progressRowsForTurnState(
-          this.listProgressRowsForTurn(turnId),
-          turn.state,
-        ),
+        safe_progress_rows: rows,
       };
     }
     return snapshots;
@@ -3586,29 +3588,34 @@ export class AppServerStore {
     options: { suppressProgressRows?: boolean } = {},
   ): SessionViewTurn {
     const delivery = this.deliveryMetadataForTurnRecord(turn);
+    const progressRows = options.suppressProgressRows
+      ? []
+      : progressRowsForTurnState(
+          this.listProgressRowsForTurn(turn.id),
+          turn.state,
+        );
+    const progressSummary = publicTurnStatusLabel(
+      turn.safe_status_label,
+      turn.state,
+    );
     return {
       id: turn.id,
       state: turn.state,
       delivery_state: delivery.delivery_state,
       limitations: delivery.limitations,
       limitation_codes: delivery.limitation_codes,
-      safe_status_label: turn.safe_status_label,
+      safe_status_label: progressSummary,
       cancellable: turn.cancellable,
       retryable: turn.retryable,
       progress: {
         turn_id: turn.id,
-        summary: turn.safe_status_label,
+        ...(progressSummary ? { summary: progressSummary } : {}),
         updated_at: turn.updated_at,
         state: turn.state,
         delivery_state: delivery.delivery_state,
         limitations: delivery.limitations,
         limitation_codes: delivery.limitation_codes,
-        safe_progress_rows: options.suppressProgressRows
-          ? []
-          : progressRowsForTurnState(
-              this.listProgressRowsForTurn(turn.id),
-              turn.state,
-            ),
+        safe_progress_rows: progressRows,
       },
       created_at: turn.created_at,
       updated_at: turn.updated_at,
@@ -6458,8 +6465,12 @@ export class AppServerStore {
     chatId: string,
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
+    options: { allowContinuation?: boolean } = {},
   ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
-    if (isContinuationDeliveryIssue(limitedDelivery.delivery.issue_kind)) {
+    if (
+      options.allowContinuation !== false &&
+      isContinuationDeliveryIssue(limitedDelivery.delivery.issue_kind)
+    ) {
       return this.markResponderContinuation(chatId, turnId, limitedDelivery);
     }
     const text = limitedDelivery.text;
@@ -6533,37 +6544,26 @@ export class AppServerStore {
     this.deleteAssistantMessagesForTurn(turnId);
     const currentTurn = this.getTurnRow(turnId);
     const deliveryState = limitedDelivery.delivery.delivery_state;
-    const limitations = limitedDelivery.delivery.limitations;
-    const limitationCodes = limitedDelivery.delivery.limitation_codes;
     const shouldRequeue = shouldAutomaticallyRequeueContinuation(
       currentTurn,
       deliveryState,
     );
+    if (!shouldRequeue && currentTurn && isInternalContinuationTurnState(currentTurn.state)) {
+      return this.finalizeResponderLimitedDelivery(
+        chatId,
+        turnId,
+        limitedDelivery,
+        { allowContinuation: false },
+      );
+    }
     const attempt = shouldRequeue && currentTurn
       ? currentTurn.attempt + 1
       : currentTurn?.attempt;
-    this.appendTurnEvent(chatId, turnId, {
-      kind: "tool.progress",
-      payload: {
-        activityKind: "model",
-        state: "running",
-        safeLabel: "Continuing current turn",
-        deliveryState,
-        delivery_state: deliveryState,
-        limitations,
-        limitationCodes,
-        limitation_codes: limitationCodes,
-        noVisibleReply: true,
-        continuationRequeued: shouldRequeue,
-        continuation_requeued: shouldRequeue,
-        attempt,
-      },
-    });
     const recoveryTurn = this.updateTurnState(
       turnId,
       shouldRequeue ? "retrying" : "waiting_for_tool",
       {
-        safeStatusLabel: "Continuing",
+        safeStatusLabel: "",
         retryable: false,
         cancellable: true,
         safeErrorCode: null,
@@ -6678,9 +6678,43 @@ export class AppServerStore {
         payload: { safeLabel: "Cancelled" },
       });
     }
+    this.ensureCancelledTurnActivityMessage(chatId, turnId);
     this.touchChat(chatId);
     void this.drainQueuedSessionMessages(chatId).catch(() => undefined);
     return cancelledTurn;
+  }
+
+  private ensureCancelledTurnActivityMessage(
+    chatId: string,
+    turnId: string,
+  ): MessageRecord | null {
+    const existingAssistant = this.listMessages(chatId).find(
+      (message) => message.role === "assistant" && message.turn_id === turnId,
+    );
+    if (existingAssistant) return null;
+    const message = this.insertMessage(chatId, "assistant", "Stopped.", "cancelled", {
+      turnId,
+    });
+    const projected = this.messageWithTerminalWorkBlocks(message, turnId);
+    this.appendEvent("message.created", { message: projected });
+    return projected;
+  }
+
+  private messageWithTerminalWorkBlocks(
+    message: MessageRecord,
+    turnId: string,
+  ): MessageRecord {
+    const turn = this.getTurnRow(turnId);
+    if (!turn || !isTerminalProgressState(turn.state)) return message;
+    const delivery = this.deliveryLimitationMetadataForTurn(turnId);
+    const workBlocks = workBlocksFromTerminalProgressRows(
+      progressRowsForTurnState(this.listProgressRowsForTurn(turnId), turn.state),
+    );
+    return {
+      ...message,
+      ...(delivery ?? {}),
+      ...(workBlocks.length > 0 ? { work_blocks: workBlocks } : {}),
+    };
   }
 
   private updateMessage(
@@ -7270,6 +7304,7 @@ export class AppServerStore {
     payload: Record<string, unknown>,
   ): AppEventEnvelope {
     const createdAt = new Date().toISOString();
+    const publicPayload = publicAppEventPayload(type, payload);
     this.db
       .query(
         `
@@ -7277,7 +7312,7 @@ export class AppServerStore {
       VALUES (?, ?, ?)
     `,
       )
-      .run(type, JSON.stringify(payload), createdAt);
+      .run(type, JSON.stringify(publicPayload), createdAt);
     const inserted = this.db
       .query<{ id: number }, []>("SELECT last_insert_rowid() AS id")
       .get();
@@ -9056,6 +9091,10 @@ function paginationInput(options: { limit?: number; offset?: number }): {
 }
 
 function sessionFromRow(row: SessionSummaryRow): SessionSummary {
+  const publicStatusLabel = publicTurnStatusLabel(
+    row.safe_status_label,
+    row.active_turn_state,
+  );
   return {
     id: row.id,
     kind: row.kind,
@@ -9071,12 +9110,49 @@ function sessionFromRow(row: SessionSummaryRow): SessionSummary {
     last_activity_at: row.updated_at,
     last_message_preview: previewText(row.last_message_preview),
     active_turn_state: row.active_turn_state ?? undefined,
-    safe_status_label: row.safe_status_label ?? undefined,
+    safe_status_label: publicStatusLabel,
     unread_count: 0,
     pinned: row.pinned === 1,
     archived: row.archived === 1,
     automation_target_count: 0,
   };
+}
+
+function publicTurnStatusLabel(
+  label: string | null | undefined,
+  state: string | null | undefined,
+): string | undefined {
+  const trimmed = label?.trim();
+  if (!trimmed) return undefined;
+  return state && isInternalContinuationTurnState(state) ? undefined : trimmed;
+}
+
+function publicAppEventPayload(
+  type: string,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (type !== "turn.state_changed") return payload;
+  const turn = isRecord(payload.turn) ? payload.turn : null;
+  const state = safeOptionalShortToken(payload.state) ??
+    safeOptionalShortToken(turn?.state);
+  const label = publicTurnStatusLabel(
+    safeOptionalShortText(payload.safe_status_label ?? turn?.safe_status_label),
+    state,
+  );
+  const nextPayload: Record<string, unknown> = { ...payload };
+  if (label) nextPayload.safe_status_label = label;
+  else delete nextPayload.safe_status_label;
+  if (turn) {
+    const nextTurn: Record<string, unknown> = { ...turn };
+    if (label) nextTurn.safe_status_label = label;
+    else delete nextTurn.safe_status_label;
+    nextPayload.turn = nextTurn;
+  }
+  return nextPayload;
+}
+
+function isInternalContinuationTurnState(state: string): boolean {
+  return state === "retrying" || state === "waiting_for_tool";
 }
 
 function maxMessageCursor(messages: MessageRecord[]): number {
@@ -10421,6 +10497,7 @@ function shouldAutomaticallyRequeueContinuation(
 ): boolean {
   return Boolean(
     turn &&
+      !isInternalContinuationTurnState(turn.state) &&
       isContinuationDeliveryState(deliveryState),
   );
 }

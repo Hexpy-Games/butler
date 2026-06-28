@@ -280,6 +280,24 @@ test("turn activity remains visible while worker activity exists", () => {
       timelineProgressRowCount: 0,
     }),
   ).toBe(false);
+  expect(
+    shouldShowTurnActivity({
+      activeTurn: true,
+      hasTodoProgress: false,
+      isSending: false,
+      timelineProgressRowCount: 0,
+      turnState: "retrying",
+    }),
+  ).toBe(false);
+  expect(
+    shouldShowTurnActivity({
+      activeTurn: true,
+      hasTodoProgress: false,
+      isSending: false,
+      timelineProgressRowCount: 1,
+      turnState: "retrying",
+    }),
+  ).toBe(true);
 });
 
 test("composer can find the active worker cancel target", () => {
@@ -382,6 +400,47 @@ test("completed assistant messages keep frozen work blocks when progress is abse
   expect(refrozen[0]).toBe(frozen);
   expect(refrozen[0]?.work_blocks?.[0]?.rows[0]).toEqual(
     snapshot.safe_progress_rows[0],
+  );
+});
+
+test("cancelled assistant messages keep completed work evidence", () => {
+  const snapshot: TurnProgressSnapshot = {
+    turn_id: "turn-cancelled",
+    state: "cancelled",
+    safe_progress_rows: [
+      {
+        id: "row-cancelled",
+        kind: "ran_command",
+        state: "cancelled",
+        safe_label: "Bash: npm test",
+        safe_tool_name: "Bash",
+        safe_input_label: "npm test",
+        work_block_id: "work-cancelled",
+        work_block_label: "검증 중단 전 실행한 작업",
+      },
+    ],
+  };
+  const [frozen] = freezeMessageWorkBlocks(
+    [
+      {
+        ...message("assistant-cancelled", "assistant", 2, "turn-cancelled"),
+        status: "cancelled",
+      },
+    ],
+    { "turn-cancelled": snapshot },
+  );
+
+  expect(frozen?.work_blocks?.[0]).toMatchObject({
+    id: "work-cancelled",
+    label: "검증 중단 전 실행한 작업",
+    state: "cancelled",
+  });
+  expect(frozen?.work_blocks?.[0]?.rows).toContainEqual(
+    expect.objectContaining({
+      id: "row-cancelled",
+      state: "cancelled",
+      safe_tool_name: "Bash",
+    }),
   );
 });
 

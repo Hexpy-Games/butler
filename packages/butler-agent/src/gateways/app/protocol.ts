@@ -1106,7 +1106,7 @@ export interface SessionViewTurn {
   delivery_state: SessionViewTurnDeliveryState;
   limitations: string[];
   limitation_codes: string[];
-  safe_status_label: string;
+  safe_status_label?: string;
   cancellable: boolean;
   retryable: boolean;
   progress: TurnProgressSnapshotView;

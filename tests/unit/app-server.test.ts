@@ -6750,28 +6750,60 @@ test("app transport internal recovery failures keep queued turns active without 
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
       state: "retrying",
-      safe_status_label: "Continuing",
+      safe_status_label: "",
       retryable: false,
       cancellable: true,
       attempt: 2,
     });
     expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+    const sessions = await getJson(`${server.url}sessions`);
+    expect(sessions.data.sessions[0]).toMatchObject({
+      id: "general",
+      active_turn_state: "retrying",
+    });
+    expect(sessions.data.sessions[0]).not.toHaveProperty("safe_status_label");
+
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(sessionView.data.active_turn).toMatchObject({
+      id: turnId,
+      state: "retrying",
+    });
+    expect(sessionView.data.active_turn).not.toHaveProperty(
+      "safe_status_label",
+    );
+    expect(sessionView.data.active_turn.progress.summary ?? "").toBe("");
+
+    const events = await getJson(`${server.url}events?cursor=0`);
+    const stateChanged = events.data.events.find(
+      (event: {
+        type: string;
+        payload?: { turn?: { id?: string; state?: string } };
+      }) =>
+        event.type === "turn.state_changed" &&
+        event.payload?.turn?.id === turnId &&
+        event.payload?.turn?.state === "retrying",
+    );
+    expect(stateChanged).toBeTruthy();
+    const stateChangedPayload = stateChanged?.payload;
+    expect(stateChangedPayload).not.toHaveProperty("safe_status_label");
+    expect(stateChangedPayload?.turn).not.toHaveProperty("safe_status_label");
 
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
       state: "retrying",
-      delivery_state: "needs_evidence",
-      limitation_codes: ["internal_recovery_required"],
-      limitations: [],
     });
+    expect(summary.data.latest_progress.summary ?? "").toBe("");
     expect(JSON.stringify(summary)).not.toContain("could not verify");
+    expect(JSON.stringify(summary)).not.toContain("Continuing");
   } finally {
     server.stop();
   }
 });
 
-test("repeated app transport internal recovery requeues without public continuation status", async () => {
+test("repeated app transport internal recovery does not requeue the same turn again", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -6810,7 +6842,7 @@ test("repeated app transport internal recovery requeues without public continuat
     expect(firstTurns.data.turns[0]).toMatchObject({
       id: turnId,
       state: "retrying",
-      safe_status_label: "Continuing",
+      safe_status_label: "",
       retryable: false,
       cancellable: true,
       attempt: 2,
@@ -6848,11 +6880,11 @@ test("repeated app transport internal recovery requeues without public continuat
     const secondTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(secondTurns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "retrying",
-      safe_status_label: "Continuing",
+      state: "delivered",
+      safe_status_label: "Delivered with limitations",
       retryable: false,
-      cancellable: true,
-      attempt: 3,
+      cancellable: false,
+      attempt: 2,
     });
     expect(secondTurns.data.turns[0].safe_error_code ?? null).toBeNull();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
@@ -6868,7 +6900,15 @@ test("repeated app transport internal recovery requeues without public continuat
       (event: { type: string; payload?: { turn_id?: string } }) =>
         event.type === "turn.queued" && event.payload?.turn_id === turnId,
     ).length;
-    expect(secondQueuedCount).toBe(firstQueuedCount + 1);
+    expect(secondQueuedCount).toBe(firstQueuedCount);
+    const secondSummary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(secondSummary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "delivered",
+      delivery_state: "needs_evidence",
+      limitation_codes: ["internal_recovery_required"],
+      limitations: [],
+    });
     expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
     expect(JSON.stringify(secondEvents)).not.toContain("turn.failed");
   } finally {
@@ -7415,7 +7455,7 @@ test("app transport final result projection does not resurrect cancelled turns",
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
-    ).toEqual(["cancel stale app result"]);
+    ).toEqual(["cancel stale app result", "Stopped."]);
 
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns).toHaveLength(1);
@@ -10361,10 +10401,14 @@ test("hung responders stay admitted without gateway timeout cancellation", async
     responderTimeoutMs: 25,
     responder(input) {
       markStarted?.();
-      input.signal?.addEventListener("abort", () => {
-        aborted = true;
+      return new Promise((_, reject) => {
+        input.signal?.addEventListener("abort", () => {
+          aborted = true;
+          const error = new Error("cancelled");
+          error.name = "AppResponderCancelledError";
+          reject(error);
+        });
       });
-      return new Promise(() => undefined);
     },
   });
   try {
@@ -10425,6 +10469,16 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
     responder(input) {
+      input.onProgress?.({
+        id: "cancel-progress-row",
+        kind: "ran_command",
+        state: "running",
+        safe_label: "Bash: npm test",
+        safe_tool_name: "Bash",
+        safe_input_label: "npm test",
+        work_block_id: "cancel-work",
+        work_block_label: "중단 전 실행한 검증",
+      });
       markStarted?.();
       input.signal?.addEventListener("abort", () => {
         aborted = true;
@@ -10475,11 +10529,48 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
     );
-    expect(
-      messages.data.messages.map(
-        (message: { status: string }) => message.status,
-      ),
-    ).toEqual(["sent"]);
+    expect(messages.data.messages).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        status: "cancelled",
+        text: "Stopped.",
+        turn_id: turnId,
+        work_blocks: [
+          expect.objectContaining({
+            id: "cancel-work",
+            label: "중단 전 실행한 검증",
+            state: "cancelled",
+            rows: [
+              expect.objectContaining({
+                id: "cancel-progress-row",
+                state: "cancelled",
+                safe_tool_name: "Bash",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(events.data.events).toContainEqual(
+      expect.objectContaining({
+        type: "message.created",
+        payload: expect.objectContaining({
+          message: expect.objectContaining({
+            role: "assistant",
+            status: "cancelled",
+            turn_id: turnId,
+            work_blocks: [
+              expect.objectContaining({
+                id: "cancel-work",
+                state: "cancelled",
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
   } finally {
     server.stop();
   }
@@ -10796,7 +10887,7 @@ test("goal completion incomplete gaps keep turns active instead of app failures"
     );
     expect(recoveringTurn).toMatchObject({
       state: "retrying",
-      safe_status_label: "Continuing",
+      safe_status_label: "",
       retryable: false,
       cancellable: true,
     });
@@ -10844,7 +10935,7 @@ test("goal completion obligation protocol gaps stay active without generic assis
     );
     expect(recoveringTurn).toMatchObject({
       state: "retrying",
-      safe_status_label: "Continuing",
+      safe_status_label: "",
       retryable: false,
       cancellable: true,
     });
@@ -10894,7 +10985,7 @@ test("generic internal recovery responder failures stay active without assistant
     );
     expect(recoveringTurn).toMatchObject({
       state: "retrying",
-      safe_status_label: "Continuing",
+      safe_status_label: "",
       retryable: false,
       cancellable: true,
     });

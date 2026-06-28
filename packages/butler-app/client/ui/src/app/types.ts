@@ -738,7 +738,7 @@ export type SessionViewStatus =
 export interface SessionViewTurn {
   id: string;
   state: string;
-  safe_status_label: string;
+  safe_status_label?: string;
   cancellable: boolean;
   retryable: boolean;
   delivery_state?: RuntimeDeliveryState;
