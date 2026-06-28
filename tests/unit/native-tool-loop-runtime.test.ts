@@ -4434,6 +4434,7 @@ test("native runtime stores privacy-safe replayable evidence receipts for tool r
 });
 
 test("native runtime redacts raw tool failure errors in durable transcripts", async () => {
+  let observedToolResult: Record<string, unknown> | null = null;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -4441,14 +4442,14 @@ test("native runtime redacts raw tool failure errors in durable transcripts", as
       throw new Error("failed with token=abc123opaque api_key=sk_live_abc123 raw prompt text <think>hidden</think> /Users/private/file");
     },
     runFunctionToolPromptText: async (input) => {
-      await input.executeTool({
+      observedToolResult = await input.executeTool({
         name: "web_read",
         args: {
           url: "https://example.test/private-error",
           token: "abc123opaque",
         },
         rawArguments: JSON.stringify({ url: "https://example.test/private-error", token: "abc123opaque" }),
-      });
+      }) as Record<string, unknown>;
       return "오류를 복구 가능한 결과로 받았습니다.";
     },
   });
@@ -4481,12 +4482,32 @@ test("native runtime redacts raw tool failure errors in durable transcripts", as
     ok: false,
     error: "Tool execution failed.",
   });
+  expect(toolResult?.payload.observation).toMatchObject({
+    summary: expect.stringContaining("Tool execution failed with redacted private details."),
+    modelVisibleContent: expect.stringContaining("Tool execution failed with redacted private details."),
+  });
+  expect(observedToolResult).toMatchObject({
+    ok: false,
+    summary: expect.stringContaining("Tool execution failed with redacted private details."),
+    model_visible_content: expect.stringContaining("Tool execution failed with redacted private details."),
+  });
   const serialized = JSON.stringify(transcript);
-  expect(serialized).not.toContain("abc123opaque");
-  expect(serialized).not.toContain("sk_live_abc123");
-  expect(serialized).not.toContain("raw prompt text");
-  expect(serialized).not.toContain("<think>");
-  expect(serialized).not.toContain("/Users/private");
+  const observation = toolResult?.payload.observation as { modelVisibleContent?: unknown } | undefined;
+  const persistedObservation = JSON.stringify(observation);
+  const modelVisibleContent = String(observation?.modelVisibleContent ?? "");
+  for (const privateText of [
+    "abc123opaque",
+    "sk_live_abc123",
+    "raw prompt text",
+    "<think>",
+    "/Users/private",
+  ]) {
+    expect(toolResult?.payload.error).not.toContain(privateText);
+    expect(persistedObservation).not.toContain(privateText);
+    expect(modelVisibleContent).not.toContain(privateText);
+    expect(JSON.stringify(observedToolResult)).not.toContain(privateText);
+    expect(serialized).not.toContain(privateText);
+  }
 });
 
 test("native runtime satisfies source verification from tool capability audit contracts", async () => {

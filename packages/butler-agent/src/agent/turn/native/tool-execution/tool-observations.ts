@@ -1,8 +1,13 @@
 import { randomUUID } from "crypto";
+import {
+  safeOptionalPublicText,
+  safePublicText,
+} from "../../../output/evidence/transcript-sanitizers.ts";
 import type { ObservationKind, TurnObservation } from "../../turn-kernel.ts";
 import type { NativeToolCall } from "./audited-executor-types.ts";
 
 const MODEL_VISIBLE_OUTPUT_LIMIT = 2_400;
+const TOOL_FAILURE_FALLBACK = "Tool execution failed with redacted private details.";
 
 export class ToolObservationError extends Error {
   readonly observationKind: ObservationKind;
@@ -61,26 +66,28 @@ export function toolObservationForFailure(input: {
   toolCallId?: string;
 }): TurnObservation {
   if (input.error instanceof ToolObservationError) {
+    const safeMessage = safeToolFailureText(input.error.message);
     return createToolObservation({
       turnId: input.turnId,
       kind: input.error.observationKind,
-      summary: input.error.message,
+      summary: safeMessage,
       modelVisibleContent: modelVisibleFailureContent({
         toolName: input.call.name,
-        message: input.error.message,
+        message: safeMessage,
         result: input.error.toolResult,
       }),
       causedByToolCallId: input.toolCallId,
     });
   }
   const message = input.error instanceof Error ? input.error.message : String(input.error);
+  const safeMessage = safeToolFailureText(message);
   return createToolObservation({
     turnId: input.turnId,
     kind: toolFailureKind(input.call.name, input.error),
-    summary: `${input.call.name} could not complete: ${message}`,
+    summary: `${input.call.name} could not complete: ${safeMessage}`,
     modelVisibleContent: modelVisibleFailureContent({
       toolName: input.call.name,
-      message,
+      message: safeMessage,
       result: null,
     }),
     causedByToolCallId: input.toolCallId,
@@ -192,7 +199,10 @@ function summarizedResult(result: unknown): string {
   for (const field of fields) {
     const value = record[field];
     if (typeof value === "string" && value.trim()) {
-      lines.push(`${field}: ${value.trim()}`);
+      const safeValue = safeOptionalPublicText(value);
+      if (safeValue) {
+        lines.push(`${field}: ${safeValue}`);
+      }
     }
   }
   const exitCode = record.exit_code;
@@ -209,4 +219,8 @@ function valueAt(result: unknown, key: string): string | null {
 function limitModelVisibleContent(value: string): string {
   if (value.length <= MODEL_VISIBLE_OUTPUT_LIMIT) return value;
   return `${value.slice(0, MODEL_VISIBLE_OUTPUT_LIMIT)}\n...[observation truncated]`;
+}
+
+function safeToolFailureText(value: string): string {
+  return safePublicText(value, TOOL_FAILURE_FALLBACK);
 }
