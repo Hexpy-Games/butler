@@ -1270,7 +1270,7 @@ test("native runtime attaches turn budget attribution to direct tool prompts", a
   )).toBe(true);
 });
 
-test("native runtime blocks repeated Project Ledger status command families in one turn", async () => {
+test("native runtime returns repeated Project Ledger status pressure as structured observation", async () => {
   const executed: string[] = [];
   const guardedResults: unknown[] = [];
   const runtime = new NativeToolLoopRuntime({
@@ -1320,11 +1320,18 @@ test("native runtime blocks repeated Project Ledger status command families in o
   expect(executed).toHaveLength(3);
   expect(guardedResults[3]).toMatchObject({
     ok: false,
-    budget_policy: "repeated_tool_family_blocked",
-    repeat_family: "project-ledger:status",
-    repeat_count: 4,
-    repeat_limit: 3,
+    observation_kind: "validation_failed",
+    observation: {
+      kind: "validation_failed",
+      visibility: "model",
+      summary: "Repeated project-ledger:status tool-family pressure was observed.",
+      modelVisibleContent: expect.stringContaining("Tool-family pressure was observed before re-running run_command."),
+    },
   });
+  expect(guardedResults[3]).not.toHaveProperty("budget_policy");
+  expect(guardedResults[3]).not.toHaveProperty("repeat_count");
+  expect(JSON.stringify(guardedResults[3])).not.toContain("summarize it");
+  expect(JSON.stringify(guardedResults[3])).not.toContain("ask for an explicit continuation");
 });
 
 test("native runtime reports high provider usage without stopping the next model call", async () => {

@@ -12,6 +12,10 @@ import type {
   NativeAuditedToolExecutorInput,
   NativeToolCall,
 } from "./audited-executor-types.ts";
+import {
+  repeatedToolFamilyObservation,
+  toolObservationResult,
+} from "./tool-observations.ts";
 
 export function maybeHandleRepeatedToolFamily(input: {
   executorInput: NativeAuditedToolExecutorInput;
@@ -22,7 +26,12 @@ export function maybeHandleRepeatedToolFamily(input: {
 }): unknown | null {
   const repeatDecision = input.guard.record(input.call.name, input.cleanArgs);
   if (!repeatDecision?.blocked) return null;
-  const result = repeatDecision.result;
+  const observation = repeatedToolFamilyObservation({
+    turnId: input.executorInput.turnId,
+    call: input.call,
+    family: repeatDecision.family,
+  });
+  const result = toolObservationResult(observation);
   appendTranscriptEvent(createTranscriptEvent({
     sessionId: input.executorInput.sessionId,
     kind: "tool_call",
@@ -41,6 +50,7 @@ export function maybeHandleRepeatedToolFamily(input: {
     payload: {
       name: input.call.name,
       ok: false,
+      observation,
       result: evidenceTranscriptToolResultProjection(result),
     },
     metadata: {
@@ -64,7 +74,7 @@ export function maybeHandleRepeatedToolFamily(input: {
     name: input.call.name,
     args: input.cleanArgs,
     ok: false,
-    error: String(result.message),
+    error: observation.summary,
   });
   return result;
 }

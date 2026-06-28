@@ -1,15 +1,6 @@
 export const DIRECT_TOOL_CHAIN_MAX_ROUNDS = 60;
 export const REPEATED_TOOL_FAMILY_LIMIT = 3;
 
-export interface RepeatedToolFamilyPolicyBlock {
-  ok: false;
-  budget_policy: "repeated_tool_family_blocked";
-  repeat_family: string;
-  repeat_count: number;
-  repeat_limit: number;
-  message: string;
-}
-
 export type RepeatedToolFamilyDecision = {
   family: string;
   count: number;
@@ -18,7 +9,6 @@ export type RepeatedToolFamilyDecision = {
   family: string;
   count: number;
   blocked: true;
-  result: RepeatedToolFamilyPolicyBlock;
 };
 
 export class RepeatedToolFamilyGuard {
@@ -38,11 +28,6 @@ export class RepeatedToolFamilyGuard {
       family,
       count,
       blocked: true,
-      result: repeatedToolFamilyPolicyResult({
-        family,
-        count,
-        limit: this.limit,
-      }),
     };
   }
 
@@ -105,20 +90,4 @@ export function isStateMutatingToolCall(name: string, args: Record<string, unkno
   if (/(?:^|[\s;&|])project-ledger\s+(?:work|task|attempt)\s+(?:create|update|complete|start|succeed|fail)\b/u.test(command)) return true;
   if (/(?:^|[\s;&|])project-ledger\s+render\b[\s\S]*\s--write\b/u.test(command)) return true;
   return false;
-}
-
-export function repeatedToolFamilyPolicyResult(input: {
-  family: string;
-  count: number;
-  limit: number;
-}): RepeatedToolFamilyPolicyBlock {
-  return {
-    ok: false,
-    budget_policy: "repeated_tool_family_blocked",
-    repeat_family: input.family,
-    repeat_count: input.count,
-    repeat_limit: input.limit,
-    message:
-      "This turn has already repeated this tool family enough times. Reuse the latest evidence, summarize it, or ask for an explicit continuation instead of re-running the same status/test/git command loop.",
-  };
 }
