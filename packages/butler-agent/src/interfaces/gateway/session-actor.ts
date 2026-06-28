@@ -29,9 +29,13 @@ import {
   safeRuntimeFailure,
 } from "../../integrations/providers/provider-errors.ts";
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
-import { isPromptUsageModelCallBudgetError } from "../../agent/turn/recoverable-delivery.ts";
+import {
+  isNonPublicContinuationDeliveryError,
+  isPromptUsageModelCallBudgetError,
+} from "../../agent/turn/recoverable-delivery.ts";
 import {
   clearTurnContextAtom,
+  createTurnContextAtomId,
   isTurnSchedulerContinuationYieldError,
   persistTurnContextAtom,
 } from "../../agent/turn/turn-continuation-context.ts";
@@ -603,17 +607,22 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       const turnId = turnIdFromEnvelope(envelope);
       const isContinuationFailure =
         safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
+        isNonPublicContinuationDeliveryError(error) ||
         isPromptUsageModelCallBudgetError(error) ||
         isTurnSchedulerContinuationYieldError(error);
       if (isPromptUsageModelCallBudgetError(error) && turnId) {
+        const contextAtomId = createTurnContextAtomId(binding.sessionId, turnId);
         persistTurnContextAtom({
           butlerData: gatewayMetricsButlerData(),
           sessionId: binding.sessionId,
           turnId,
           state: "continuing",
-          sourceErrorCode: safeFailure.code,
-          reason: safeFailure.message,
-          unresolvedObservations: [],
+          sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+          reason: "Continuation checkpoint persisted before internal scheduler rollover.",
+          unresolvedObservations: [{
+            kind: "context_compacted",
+            id: contextAtomId,
+          }],
         });
       }
       const failureState = isContinuationFailure

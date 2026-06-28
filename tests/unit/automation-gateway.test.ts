@@ -1079,7 +1079,12 @@ test("queued inbound schedules same-logical-turn continuation for raw model-call
     sessionId: "butler/app-general",
     turnId: "turn-budget-failure",
     state: "continuing",
-    sourceErrorCode: "internal_recovery_required",
+    sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+    reason: "Continuation checkpoint persisted before internal scheduler rollover.",
+    unresolvedObservations: [{
+      kind: "context_compacted",
+      id: createTurnContextAtomId("butler/app-general", "turn-budget-failure"),
+    }],
   });
   store.close();
 });
@@ -1234,7 +1239,7 @@ test("queued inbound completion gap consumes same logical turn continuation with
   store.close();
 });
 
-test("queued inbound converts normalized internal recovery failures to limited delivery", async () => {
+test("queued inbound consumes normalized live recovery failures without public copy", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -1274,26 +1279,19 @@ test("queued inbound converts normalized internal recovery failures to limited d
   expect(summary).toMatchObject({
     claimed: 1,
     handled: 1,
-    delivered: 1,
+    delivered: 0,
     failed: 0,
   });
-  expect(app.sentActions).toHaveLength(1);
-  expect(app.sentActions[0]).toMatchObject({
-    transport: "app",
-    message: {
-      text: "",
-      replyToMessageId: "message-normalized-internal-recovery",
-    },
-    metadata: {
-      kind: "final_result",
-      turnId: "turn-normalized-internal-recovery",
-      noVisibleReply: true,
-      deliveryState: "needs_evidence",
-      limitationCodes: ["internal_recovery_required"],
-    },
+  expect(app.sentActions).toHaveLength(0);
+  const processedFiles = readdirSync(join(tempDir, "runtime", "inbound-events", "processed"));
+  const processed = JSON.parse(readFileSync(join(tempDir, "runtime", "inbound-events", "processed", processedFiles[0]!), "utf8"));
+  expect(processed.metadata).toMatchObject({
+    dispatchStatus: "continuing",
+    handled: true,
+    continuationOnly: true,
   });
-  expect(JSON.stringify(app.sentActions[0])).not.toContain("turn_failed");
-  expect(JSON.stringify(app.sentActions[0])).not.toContain("requested goal was completed");
+  expect(JSON.stringify(processed)).not.toContain("turn_failed");
+  expect(JSON.stringify(processed)).not.toContain("requested goal was completed");
   store.close();
 });
 
@@ -1593,24 +1591,10 @@ test("queued inbound goal completion incomplete delivers safe limited result", a
   expect(summary).toMatchObject({
     claimed: 1,
     handled: 1,
-    delivered: 1,
+    delivered: 0,
     failed: 0,
   });
-  expect(app.sentActions[0]).toMatchObject({
-    message: {
-      text: "",
-      replyToMessageId: "message-goal-incomplete",
-    },
-    metadata: {
-      kind: "final_result",
-      turnId: "turn-goal-incomplete",
-      deliveryState: "needs_evidence",
-      limitationCodes: ["internal_recovery_required"],
-      limitations: [],
-      noVisibleReply: true,
-    },
-  });
-  expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
+  expect(app.sentActions).toHaveLength(0);
 });
 
 test("queued inbound reactivates hinted crashed app sessions before routing", async () => {

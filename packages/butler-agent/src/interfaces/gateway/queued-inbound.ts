@@ -7,6 +7,7 @@ import {
   type RuntimeFailureDiagnostic,
 } from "../../integrations/providers/provider-errors.ts";
 import {
+  isNonPublicContinuationDeliveryError,
   isPromptUsageModelCallBudgetError,
   recoverableLimitedDeliveryForError,
 } from "../../agent/turn/recoverable-delivery.ts";
@@ -501,16 +502,18 @@ async function processClaimedQueuedInboundItem(input: {
     }
     const isBudgetError = isPromptUsageModelCallBudgetError(error);
     if (isBudgetError && sessionId && turnId) {
-      const safeFailure = safeFailureForQueuedInboundError(error);
       const contextAtomId = createTurnContextAtomId(sessionId, turnId);
       persistTurnContextAtom({
         butlerData: butlerDataPath(),
         sessionId,
         turnId,
         state: "continuing",
-        sourceErrorCode: safeFailure.code,
-        reason: safeFailure.message,
-        unresolvedObservations: [],
+        sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+        reason: "Continuation checkpoint persisted before internal scheduler rollover.",
+        unresolvedObservations: [{
+          kind: "context_compacted",
+          id: contextAtomId,
+        }],
       });
       const scheduled = scheduleSameLogicalTurnContinuation({
         queue: options.queue,
@@ -560,6 +563,16 @@ async function processClaimedQueuedInboundItem(input: {
         });
         if (delivery.ok) summary.delivered += 1;
       }
+      return summary;
+    }
+    if (isNonPublicContinuationDeliveryError(error)) {
+      const terminalRecorded = completeQueueClaim(options, item, {
+        dispatchStatus: "continuing",
+        handled: true,
+        continuationOnly: true,
+      });
+      if (!terminalRecorded) return summary;
+      summary.handled += 1;
       return summary;
     }
     summary.failed += 1;
