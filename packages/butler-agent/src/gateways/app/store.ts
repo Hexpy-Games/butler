@@ -646,6 +646,7 @@ export class AppServerStore {
     this.projectWorkspaceRoot =
       this.readStoredProjectWorkspaceRoot() ?? this.projectWorkspaceRoot;
     this.seedDefaults();
+    this.reconcileCancelledTurnActivityMessages();
   }
 
   close(): void {
@@ -4304,6 +4305,8 @@ export class AppServerStore {
 
   private listProgressRowsForTurn(turnId: string): ProgressSummaryRow[] {
     const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
+    const internalContinuationEventIds =
+      this.internalContinuationProgressEventIds(turnId, turnPayloadPattern);
     const rows = this.db
       .query<EventRow, [string]>(
         `
@@ -4320,6 +4323,14 @@ export class AppServerStore {
     for (const event of rows.reverse()) {
       const payload = safeParseRecord(event.payload_json);
       if (payload.turn_id !== turnId) continue;
+      const eventId = safeOptionalShortToken(payload.event_id);
+      if (
+        event.type === "agent.turn_event.progress" &&
+        eventId &&
+        internalContinuationEventIds.has(eventId)
+      ) {
+        continue;
+      }
       const row = payload.row;
       if (!isRecord(row)) continue;
       progressRows.push(normalizeProgressSummaryRow(row));
@@ -4328,6 +4339,35 @@ export class AppServerStore {
     return dedupeProgressRows(progressRows)
       .filter((row) => !terminalFailureProgressSupersededByTurn(row, turn))
       .filter(isSessionSummaryProgressRow);
+  }
+
+  private internalContinuationProgressEventIds(
+    turnId: string,
+    turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`,
+  ): Set<string> {
+    const rows = this.db
+      .query<EventRow, [string]>(
+        `
+      SELECT id, type, payload_json, created_at
+      FROM events
+      WHERE type = 'agent.turn_event'
+        AND payload_json LIKE ? ESCAPE '\\'
+      ORDER BY id DESC
+      LIMIT 1000
+    `,
+      )
+      .all(turnPayloadPattern);
+    const eventIds = new Set<string>();
+    for (const row of rows) {
+      const payload = safeParseRecord(row.payload_json);
+      if (payload.turn_id !== turnId) continue;
+      const event = isRecord(payload.event) ? payload.event : null;
+      const eventId = safeOptionalShortToken(event?.id);
+      if (eventId && isInternalContinuationProgressEvent(event)) {
+        eventIds.add(eventId);
+      }
+    }
+    return eventIds;
   }
 
   createMessageFile(input: {
@@ -5745,6 +5785,30 @@ export class AppServerStore {
       .run(now, sessionId);
   }
 
+  private reconcileCancelledTurnActivityMessages(): void {
+    const rows = this.db
+      .query<{ id: string; chat_id: string }, []>(
+        `
+      SELECT turns.id, turns.chat_id
+      FROM turns
+      WHERE turns.state = 'cancelled'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM messages
+          WHERE messages.turn_id = turns.id
+            AND messages.role = 'assistant'
+            AND messages.status = 'cancelled'
+            AND messages.text = 'Stopped.'
+        )
+      ORDER BY turns.rowid ASC
+    `,
+      )
+      .all();
+    for (const row of rows) {
+      this.ensureCancelledTurnActivityMessage(row.chat_id, row.id);
+    }
+  }
+
   private migrate(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS chats (
@@ -6465,7 +6529,7 @@ export class AppServerStore {
     chatId: string,
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
-    options: { allowContinuation?: boolean } = {},
+    options: { allowContinuation?: boolean; visibleNoReplyText?: string } = {},
   ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
     if (
       options.allowContinuation !== false &&
@@ -6473,7 +6537,7 @@ export class AppServerStore {
     ) {
       return this.markResponderContinuation(chatId, turnId, limitedDelivery);
     }
-    const text = limitedDelivery.text;
+    const text = limitedDelivery.text ?? options.visibleNoReplyText ?? null;
     const noVisibleReply = text === null;
     const deliveryState = limitedDelivery.delivery.delivery_state;
     const limitations = limitedDelivery.delivery.limitations;
@@ -6553,7 +6617,10 @@ export class AppServerStore {
         chatId,
         turnId,
         limitedDelivery,
-        { allowContinuation: false },
+        {
+          allowContinuation: false,
+          visibleNoReplyText: repeatedContinuationLimitedReplyText(),
+        },
       );
     }
     const attempt = shouldRequeue && currentTurn
@@ -6664,7 +6731,10 @@ export class AppServerStore {
 
   private finalizeCancelledTurn(chatId: string, turnId: string): TurnRecord {
     const current = this.getTurnRow(turnId);
-    if (current?.state === "cancelled") return this.getTurn(turnId);
+    if (current?.state === "cancelled") {
+      this.ensureCancelledTurnActivityMessage(chatId, turnId);
+      return this.getTurn(turnId);
+    }
     const cancelledTurn = this.updateTurnState(turnId, "cancelled", {
       safeStatusLabel: "Cancelled",
       retryable: false,
@@ -6691,7 +6761,14 @@ export class AppServerStore {
     const existingAssistant = this.listMessages(chatId).find(
       (message) => message.role === "assistant" && message.turn_id === turnId,
     );
-    if (existingAssistant) return null;
+    if (
+      existingAssistant &&
+      existingAssistant.status === "cancelled" &&
+      existingAssistant.text === "Stopped."
+    ) {
+      return null;
+    }
+    if (existingAssistant) this.deleteAssistantMessagesForTurn(turnId);
     const message = this.insertMessage(chatId, "assistant", "Stopped.", "cancelled", {
       turnId,
     });
@@ -10082,6 +10159,22 @@ function isSessionSummaryProgressRow(row: ProgressSummaryRow): boolean {
   return true;
 }
 
+function isInternalContinuationProgressEvent(
+  event: Record<string, unknown> | null,
+): boolean {
+  if (!event || event.kind !== "tool.progress") return false;
+  const payload = isRecord(event.payload) ? event.payload : null;
+  if (!payload) return false;
+  return safeOptionalShortToken(payload.activityKind) === "model" &&
+    safeBooleanLike(payload.noVisibleReply) &&
+    (
+      safeBooleanLike(payload.continuationRequeued) ||
+      safeBooleanLike(payload.continuation_requeued) ||
+      safeBooleanLike(payload.recoveryRequeued) ||
+      safeBooleanLike(payload.recovery_requeued)
+    );
+}
+
 function progressSummaryStatusLabel(row: ProgressSummaryRow): string | null {
   const label = (row.work_decision_summary ?? row.safe_label).trim();
   if (!label) return null;
@@ -10350,6 +10443,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function safeBooleanLike(value: unknown): boolean {
+  return value === true || value === "true";
+}
+
 function isAppWorkerResultOutbound(metadata: Record<string, unknown>): boolean {
   return metadata.kind === "worker_result" || metadata.type === "worker-result";
 }
@@ -10524,6 +10621,14 @@ function isContinuationDeliveryIssue(issueKind: string): boolean {
     issueKind === "tool_call_repair" ||
     issueKind === "completion_continuation" ||
     issueKind === "runtime_continuation";
+}
+
+function repeatedContinuationLimitedReplyText(): string {
+  return [
+    "이 턴은 같은 이어가기 상태가 반복되어 자동 재시도를 더 진행하지 않았습니다.",
+    "",
+    "작업 기록은 보존되어 있습니다. 다음 요청은 남은 작업부터 새 턴으로 이어갑니다.",
+  ].join("\n");
 }
 
 function shouldTreatLimitedFinalAsNoVisible(

@@ -6888,11 +6888,21 @@ test("repeated app transport internal recovery does not requeue the same turn ag
     });
     expect(secondTurns.data.turns[0].safe_error_code ?? null).toBeNull();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
-    expect(
-      messages.data.messages.filter(
-        (message: { role: string }) => message.role === "assistant",
-      ),
-    ).toEqual([]);
+    const assistantMessages = messages.data.messages.filter(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]).toMatchObject({
+      role: "assistant",
+      status: "delivered",
+      turn_id: turnId,
+      delivery_state: "needs_evidence",
+      limitation_codes: ["internal_recovery_required"],
+      limitations: [],
+    });
+    expect(assistantMessages[0].text).toContain(
+      "같은 이어가기 상태가 반복되어 자동 재시도를 더 진행하지 않았습니다.",
+    );
     expect(JSON.stringify(messages)).not.toContain("could not verify");
 
     const secondEvents = await getJson(`${server.url}events?cursor=0`);
@@ -10571,6 +10581,134 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
       }),
     );
     expect(JSON.stringify(messages)).not.toContain("could not verify");
+  } finally {
+    server.stop();
+  }
+});
+
+test("app startup repairs cancelled turns that lost their activity carrier", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let markStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  let server = createAppServer({
+    dbPath,
+    port: 0,
+    responder(input) {
+      input.onProgress?.({
+        id: "legacy-cancel-progress-row",
+        kind: "ran_command",
+        state: "running",
+        safe_label: "Bash: bun test",
+        safe_tool_name: "Bash",
+        safe_input_label: "bun test",
+        work_block_id: "legacy-cancel-work",
+        work_block_label: "중단 전에 남아 있던 작업",
+      });
+      markStarted?.();
+      return new Promise(() => undefined);
+    },
+  });
+
+  try {
+    await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: "general", text: "stop legacy turn" }),
+    });
+    await started;
+    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
+    const turnId = turns.data.turns[0].id;
+    await postJson(`${server.url}turns/${encodeURIComponent(turnId)}/cancel`, {});
+    server.stop();
+
+    const db = new Database(dbPath);
+    try {
+      db.query("DELETE FROM messages WHERE turn_id = ? AND role = 'assistant'")
+        .run(turnId);
+      db.query(`
+        INSERT INTO messages (
+          id, chat_id, turn_id, role, text, status, created_at, updated_at,
+          safe_error_code, retryable
+        )
+        VALUES (?, ?, ?, 'assistant', 'Retrying this turn.', 'retrying', ?, ?, NULL, 0)
+      `).run(
+        "msg-legacy-stale-cancel-carrier",
+        "general",
+        turnId,
+        "2026-06-28T00:00:00.000Z",
+        "2026-06-28T00:00:00.000Z",
+      );
+      db.query("DELETE FROM events WHERE type = 'message.created' AND payload_json LIKE ?")
+        .run(`%${turnId}%`);
+      const internalEventId = "turn-event-legacy-continuation";
+      const createdAt = "2026-06-28T00:00:00.000Z";
+      db.query("INSERT INTO events (type, payload_json, created_at) VALUES (?, ?, ?)")
+        .run("agent.turn_event", JSON.stringify({
+          session_id: "general",
+          turn_id: turnId,
+          event: {
+            id: internalEventId,
+            sessionId: "general",
+            turnId,
+            createdAt,
+            kind: "tool.progress",
+            visibility: "public",
+            payload: {
+              activityKind: "model",
+              state: "running",
+              safeLabel: "Continuing current turn",
+              delivery_state: "needs_evidence",
+              noVisibleReply: true,
+              continuation_requeued: true,
+            },
+          },
+        }), createdAt);
+      db.query("INSERT INTO events (type, payload_json, created_at) VALUES (?, ?, ?)")
+        .run("agent.turn_event.progress", JSON.stringify({
+          session_id: "general",
+          turn_id: turnId,
+          event_id: internalEventId,
+          row: {
+            id: internalEventId,
+            kind: "model",
+            safe_label: "Continuing current turn",
+            state: "running",
+            created_at: createdAt,
+            safe_tool_name: "Tool",
+            work_block_label: "Continuing current turn",
+          },
+        }), createdAt);
+    } finally {
+      db.close();
+    }
+
+    server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(messages.data.messages).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        status: "cancelled",
+        text: "Stopped.",
+        turn_id: turnId,
+        work_blocks: [
+          expect.objectContaining({
+            id: "legacy-cancel-work",
+            label: "중단 전에 남아 있던 작업",
+            state: "cancelled",
+            rows: [
+              expect.objectContaining({
+                id: "legacy-cancel-progress-row",
+                state: "cancelled",
+                safe_tool_name: "Bash",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(JSON.stringify(messages)).not.toContain("Continuing current turn");
   } finally {
     server.stop();
   }
