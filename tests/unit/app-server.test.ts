@@ -6837,7 +6837,7 @@ test("app transport no-visible limited final closes queued turns without assista
   }
 });
 
-test("app transport internal recovery failures keep queued turns active without assistant text", async () => {
+test("app transport internal recovery failures hide recovering_internal and needs_evidence while keeping queued turns active", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -6903,11 +6903,17 @@ test("app transport internal recovery failures keep queued turns active without 
     expect(sessionView.data.active_turn).toMatchObject({
       id: turnId,
       state: "retrying",
+      delivery_state: "running",
     });
     expect(sessionView.data.active_turn).not.toHaveProperty(
       "safe_status_label",
     );
     expect(sessionView.data.active_turn.progress.summary ?? "").toBe("");
+    expect(sessionView.data.active_turn.progress.delivery_state).toBe("running");
+    expect(JSON.stringify(sessionView)).not.toContain("recovering_internal");
+    expect(JSON.stringify(sessionView)).not.toContain("needs_evidence");
+    expect(JSON.stringify(sessionView)).not.toContain("needs_tool_surface");
+    expect(JSON.stringify(sessionView)).not.toContain("needs_argument_repair");
 
     const events = await getJson(`${server.url}events?cursor=0`);
     const stateChanged = events.data.events.find(
@@ -6928,10 +6934,15 @@ test("app transport internal recovery failures keep queued turns active without 
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
       state: "retrying",
+      delivery_state: "running",
     });
     expect(summary.data.latest_progress.summary ?? "").toBe("");
     expect(JSON.stringify(summary)).not.toContain("could not verify");
     expect(JSON.stringify(summary)).not.toContain("Continuing");
+    expect(JSON.stringify(summary)).not.toContain("recovering_internal");
+    expect(JSON.stringify(summary)).not.toContain("needs_evidence");
+    expect(JSON.stringify(summary)).not.toContain("needs_tool_surface");
+    expect(JSON.stringify(summary)).not.toContain("needs_argument_repair");
   } finally {
     server.stop();
   }

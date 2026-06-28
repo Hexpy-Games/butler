@@ -174,7 +174,6 @@ import {
   type SessionView,
   type SessionViewStatus,
   type SessionViewTurn,
-  type SessionViewTurnDeliveryState,
   type SettingsView,
   type SkillImportResult,
   type SkillSettingsView,
@@ -266,6 +265,12 @@ import {
   shouldAutomaticallyRequeueContinuation,
 } from "./continuation-delivery.ts";
 import {
+  publicDeliveryMetadataForProjection,
+  publicDeliveryStateForProjection,
+  publicDeliveryStateForTurnState,
+  type AppProjectionDeliveryState,
+} from "./btcc-public-projection.ts";
+import {
   CANCELLED_TURN_ACTIVITY_TEXT,
   isCancelledTurnActivityCarrier,
 } from "./cancelled-turn-activity.ts";
@@ -277,6 +282,7 @@ import {
 import {
   projectSafeTurnFailure,
   safeTurnFailureEventPayload,
+  type ProjectedSafeTurnFailure,
 } from "./turn-failure-projection.ts";
 import {
   applyComponentUpdate,
@@ -438,7 +444,7 @@ interface TurnRow {
 }
 
 export interface DeliveryLimitationMetadata {
-  delivery_state: SessionViewTurnDeliveryState;
+  delivery_state: AppProjectionDeliveryState;
   limitation_codes: string[];
   limitations: string[];
 }
@@ -3582,12 +3588,15 @@ export class AppServerStore {
         turn.state,
       );
       const summary = publicTurnStatusLabel(turn.safe_status_label, turn.state);
+      const delivery = publicDeliveryMetadataForProjection(
+        this.deliveryMetadataForTurnRecord(turnFromRow(turn)),
+      );
       snapshots[turnId] = {
         turn_id: turnId,
         ...(summary ? { summary } : {}),
         updated_at: turn.updated_at,
         state: turn.state,
-        ...this.deliveryMetadataForTurnRecord(turnFromRow(turn)),
+        ...delivery,
         safe_progress_rows: rows,
       };
     }
@@ -3598,7 +3607,9 @@ export class AppServerStore {
     turn: TurnRecord,
     options: { suppressProgressRows?: boolean } = {},
   ): SessionViewTurn {
-    const delivery = this.deliveryMetadataForTurnRecord(turn);
+    const delivery = publicDeliveryMetadataForProjection(
+      this.deliveryMetadataForTurnRecord(turn),
+    );
     const progressRows = options.suppressProgressRows
       ? []
       : progressRowsForTurnState(
@@ -3639,16 +3650,19 @@ export class AppServerStore {
       const turn = this.getTurnRow(message.turn_id);
       if (!turn || !isTerminalProgressState(turn.state)) return message;
       const delivery = this.deliveryLimitationMetadataForTurn(message.turn_id);
+      const publicDelivery = delivery
+        ? publicDeliveryMetadataForProjection(delivery)
+        : null;
       const workBlocks = workBlocksFromTerminalProgressRows(
         progressRowsForTurnState(
           this.listProgressRowsForTurn(message.turn_id),
           turn.state,
         ),
       );
-      if (workBlocks.length === 0 && !delivery) return message;
+      if (workBlocks.length === 0 && !publicDelivery) return message;
       return {
         ...message,
-        ...(delivery ?? {}),
+        ...(publicDelivery ?? {}),
         ...(workBlocks.length > 0 ? { work_blocks: workBlocks } : {}),
       };
     });
@@ -3682,7 +3696,7 @@ export class AppServerStore {
 
   private deliveryMetadataForTurnRecord(turn: TurnRecord): DeliveryLimitationMetadata {
     return this.deliveryLimitationMetadataForTurn(turn.id) ?? {
-      delivery_state: deliveryStateForTurnState(turn.state),
+      delivery_state: publicDeliveryStateForTurnState(turn.state),
       limitation_codes: [],
       limitations: [],
     };
@@ -4070,10 +4084,7 @@ export class AppServerStore {
       turn.safe_error_code === INTERNAL_RECOVERY_REQUIRED_CODE ||
       turn.safe_error_code === "inbound_dispatch_timeout";
     const limitedDelivery = mayProjectLimitedFailure
-      ? appLimitedDeliveryForError({
-          code: safeError.code,
-          message: safeError.message,
-        })
+      ? appLimitedDeliveryForProjectedFailure(safeError)
       : null;
     if (limitedDelivery) {
       this.finalizeResponderLimitedDelivery(chatId, turnId, limitedDelivery);
@@ -5177,8 +5188,11 @@ export class AppServerStore {
         });
       }
       this.touchChat(chatId);
+      const publicLimitedDelivery = limitedDelivery
+        ? publicDeliveryMetadataForProjection(limitedDelivery)
+        : null;
       const projectedReplies = limitedDelivery
-        ? replies.map((reply) => ({ ...reply, ...limitedDelivery }))
+        ? replies.map((reply) => ({ ...reply, ...publicLimitedDelivery! }))
         : replies;
       const reply = projectedReplies.at(-1)!;
       return {
@@ -6614,7 +6628,9 @@ export class AppServerStore {
     }
     const text = limitedDelivery.text ?? options.visibleNoReplyText ?? null;
     const noVisibleReply = text === null;
-    const deliveryState = limitedDelivery.delivery.delivery_state;
+    const deliveryState = publicDeliveryStateForProjection(
+      limitedDelivery.delivery.delivery_state,
+    );
     const limitations = limitedDelivery.delivery.limitations;
     const limitationCodes = limitedDelivery.delivery.limitation_codes;
     if (!this.hasTurnEventKind(turnId, "message.final.started")) {
@@ -6904,12 +6920,15 @@ export class AppServerStore {
     const turn = this.getTurnRow(turnId);
     if (!turn || !isTerminalProgressState(turn.state)) return message;
     const delivery = this.deliveryLimitationMetadataForTurn(turnId);
+    const publicDelivery = delivery
+      ? publicDeliveryMetadataForProjection(delivery)
+      : null;
     const workBlocks = workBlocksFromTerminalProgressRows(
       progressRowsForTurnState(this.listProgressRowsForTurn(turnId), turn.state),
     );
     return {
       ...message,
-      ...(delivery ?? {}),
+      ...(publicDelivery ?? {}),
       ...(workBlocks.length > 0 ? { work_blocks: workBlocks } : {}),
     };
   }
@@ -10305,6 +10324,28 @@ function deliveryStateFromProjectedNoVisibleFinal(
   });
 }
 
+function appLimitedDeliveryForProjectedFailure(
+  safeError: ProjectedSafeTurnFailure,
+): AppLimitedDelivery | null {
+  const classified = appLimitedDeliveryForError({
+    name: "AppTransportTurnFailure",
+    code: safeError.code,
+    message: safeError.message,
+  });
+  if (classified) return classified;
+  if (
+    safeError.code !== INTERNAL_RECOVERY_REQUIRED_CODE &&
+    safeError.code !== "prompt_usage_model_call_budget_exhausted"
+  ) {
+    return null;
+  }
+  return {
+    text: null,
+    reason: "Internal continuation required.",
+    delivery: continuationDeliveryFromState("needs_evidence", [safeError.code]),
+  };
+}
+
 function shouldTreatLimitedFinalAsNoVisible(
   text: string,
   artifacts: unknown[],
@@ -10380,7 +10421,7 @@ function shouldAcceptRecoverableLimitedFinalForFailedQueue(
   ));
 }
 
-function safeDeliveryState(value: unknown): SessionViewTurnDeliveryState | null {
+function safeDeliveryState(value: unknown): AppProjectionDeliveryState | null {
   if (typeof value !== "string") return null;
   if (
     value === "running" ||
@@ -10398,17 +10439,6 @@ function safeDeliveryState(value: unknown): SessionViewTurnDeliveryState | null 
     return value;
   }
   return null;
-}
-
-function deliveryStateForTurnState(state: TurnState): SessionViewTurnDeliveryState {
-  if (state === "delivered") return "delivered";
-  if (state === "failed" || state === "runtime_fault") return "failed_system";
-  if (state === "cancelled") return "cancelled";
-  if (state === "waiting_for_form") return "waiting_user";
-  if (state === "waiting_for_tool" || state === "retrying") {
-    return "recovering_internal";
-  }
-  return "running";
 }
 
 function safeShortTokenList(value: unknown): string[] {

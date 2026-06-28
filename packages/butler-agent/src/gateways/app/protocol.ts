@@ -1123,10 +1123,6 @@ export interface SessionViewTurn {
 
 export type SessionViewTurnDeliveryState =
   | "running"
-  | "recovering_internal"
-  | "needs_tool_surface"
-  | "needs_evidence"
-  | "needs_argument_repair"
   | "waiting_user"
   | "system_error"
   | "cancelled"

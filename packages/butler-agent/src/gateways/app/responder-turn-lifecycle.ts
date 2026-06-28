@@ -10,6 +10,7 @@ import {
   appSafeResponderError,
   type AppLimitedDelivery,
 } from "./failure-ux-contract.ts";
+import { publicDeliveryMetadataForProjection } from "./btcc-public-projection.ts";
 import type {
   AppMessageResponder,
   AppMessageResponderResult,
@@ -148,8 +149,11 @@ export async function completeResponderTurn<FileRecord>(
       input.options,
     );
 
-    const projectedReplies = limitedDelivery
-      ? replies.map((reply) => ({ ...reply, ...limitedDelivery }))
+    const publicLimitedDelivery = limitedDelivery
+      ? publicDeliveryMetadataForProjection(limitedDelivery)
+      : null;
+    const projectedReplies = publicLimitedDelivery
+      ? replies.map((reply) => ({ ...reply, ...publicLimitedDelivery }))
       : replies;
     const reply = projectedReplies.at(-1)!;
     return {
