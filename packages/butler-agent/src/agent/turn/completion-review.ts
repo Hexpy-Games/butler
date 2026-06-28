@@ -511,7 +511,7 @@ function buildGapModelText(input: {
 
 function hasBlockingObservationKind(observations: CompletionReviewInput["observations"] = []): boolean {
   return observations.some((observation) =>
-    observation.kind === "public_decision_required" || observation.kind === "user_cancelled"
+    observation.kind === "public_decision_required" || observation.kind === "user_cancelled",
   );
 }
 

@@ -4,10 +4,6 @@ import type {
   ToolProgressSummary,
 } from "../../turn/native/output/tool-types.ts";
 import {
-  activityKindForTool,
-  displayToolName,
-} from "../progress/tool-progress.ts";
-import {
   isUsablePublicDecisionText,
   publicDecisionId,
   publicDecisionStructuredFields,
@@ -179,28 +175,6 @@ export function annotateToolResultWithDecisionContext(input: {
     value: input.result,
     public_work_decision: decision,
     public_work_decision_context: context,
-  };
-}
-
-function fallbackDecisionForToolName(
-  toolName: string,
-  language: RuntimeMessageLanguage,
-): Pick<PublicWorkDecision, "summary" | "rationale" | "nextStep" | "evidenceRefs"> {
-  const kind = activityKindForTool(toolName);
-  const toolLabel = displayToolName(toolName, kind);
-  if (language === "ko") {
-    return {
-      summary: `${toolLabel} 작업으로 필요한 근거를 확인합니다.`,
-      rationale: "다음 단계가 추측이 아니라 확인된 작업 결과를 기준으로 이어지도록 하기 위해서입니다.",
-      nextStep: "이 결과를 다음 도구 선택이나 최종 보고의 기준으로 사용합니다.",
-      evidenceRefs: [],
-    };
-  }
-  return {
-    summary: `Checking the needed evidence with ${toolLabel}.`,
-    rationale: "This keeps the next step grounded in observed tool results instead of hidden reasoning.",
-    nextStep: "Use this result to choose the next tool or synthesize the final report.",
-    evidenceRefs: [],
   };
 }
 
