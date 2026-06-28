@@ -84,6 +84,10 @@ import {
   type HostedModelProviderId,
 } from "../../integrations/providers/registered-models.ts";
 import { readPromptCacheMetrics } from "../../integrations/providers/prompt-cache-metrics.ts";
+import {
+  getNativeMainStatePath,
+  readNativeMainState,
+} from "../../integrations/providers/native-main-state.ts";
 import { readContextMonitor } from "../../operations/metrics/context-monitor.ts";
 import {
   isPidRunning,
@@ -4906,8 +4910,20 @@ export class AppServerStore {
   }
 
   private assertAppTransportExecutorReady(): void {
+    const nativeState = readNativeMainState(
+      getNativeMainStatePath(this.butlerData),
+    );
+    if (nativeState && isPidRunning(nativeState.pid)) {
+      return;
+    }
     const state = readServiceState(this.butlerData, "butler-main");
-    if (state && !isPidRunning(state.pid)) {
+    if (state && isPidRunning(state.pid)) {
+      return;
+    }
+    if (nativeState) {
+      throw new Error(`Butler Agent executor is stale (pid ${nativeState.pid}).`);
+    }
+    if (state) {
       throw new Error(`Butler Agent executor is stale (pid ${state.pid}).`);
     }
   }
