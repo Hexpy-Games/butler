@@ -6837,6 +6837,123 @@ test("app transport no-visible limited final closes queued turns without assista
   }
 });
 
+test("app transport live limited final text with could not verify is not hidden by legacy recovery phrases", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "show live limited text",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:live-generic-text",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not verify that the requested goal was completed.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "Butler could not verify that the requested goal was completed.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "show live limited text",
+      "Butler could not verify that the requested goal was completed.",
+    ]);
+    const assistant = messages.data.messages.find(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistant).toMatchObject({
+      status: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport historical limited final text can be hidden for legacy repair", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "repair historical limited text",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:historical-generic-text",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not verify that the requested goal was completed.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          historicalRecoveryState: true,
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "Butler could not verify that the requested goal was completed.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["repair historical limited text"]);
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+      limitations: [],
+    });
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport internal recovery failures hide recovering_internal and needs_evidence while keeping queued turns active", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });

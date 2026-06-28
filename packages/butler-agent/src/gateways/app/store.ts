@@ -10353,6 +10353,7 @@ function shouldTreatLimitedFinalAsNoVisible(
   metadata: Record<string, unknown>,
 ): boolean {
   if (metadata.visibleLimitedReply === true) return false;
+  if (metadata.historicalRecoveryState !== true) return false;
   if (!text || artifacts.length > 0 || !delivery) return false;
   if (
     !delivery.limitation_codes.some((code) =>
