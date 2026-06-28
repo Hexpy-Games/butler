@@ -10,11 +10,10 @@ test("completion review returns gap when required evidence receipts are missing"
     evidenceReceipts: [],
   });
 
-  expect(outcome.kind).toBe("gap");
-  if (outcome.kind === "gap") {
+  expect(outcome.status).toBe("gap");
+  if (outcome.status === "gap") {
     expect(outcome.observation.kind).toBe("completion_gap");
-    expect(outcome.observation.visibility).toBe("model");
-    expect(outcome.observation.summary).toContain("Missing completion evidence");
+    expect(outcome.evidenceRefs).toEqual([]);
   }
 });
 
@@ -39,11 +38,11 @@ test("completion review returns waiting_user for explicit blocker receipt", () =
     ],
   });
 
-  expect(outcome.kind).toBe("waiting_user");
-  if (outcome.kind === "waiting_user") {
-    expect(outcome.observation.kind).toBe("public_decision_required");
-    expect(outcome.observation.visibility).toBe("operator");
+  expect(outcome.status).toBe("waiting_user");
+  if (outcome.status === "waiting_user") {
     expect(outcome.question).toContain("Missing completion evidence");
+    expect(outcome.evidenceRefs.length).toBeGreaterThan(0);
+    expect(outcome.evidenceRefs.some((ref) => ref.startsWith("receipt:"))).toBe(true);
   }
 });
 
@@ -56,33 +55,160 @@ test("completion review returns failed when terminal work states still miss evid
     workStreamTerminal: true,
   });
 
-  expect(outcome.kind).toBe("failed");
-  if (outcome.kind === "failed") {
+  expect(outcome.status).toBe("failed");
+  if (outcome.status === "failed") {
     expect(outcome.publicSummary).toContain("Missing completion evidence");
+    expect(outcome.evidenceRefs).toEqual([]);
   }
 });
 
 test("completion review is complete when required obligations are satisfied by typed receipts", () => {
+  const evidence = createEvidenceCapabilityReceipt({
+    producer: { kind: "tool", name: "web_read" },
+    capability: "source_verified",
+    evidence_kind: "source_page",
+    verified: true,
+    maturity: "verified",
+    confidence: 1,
+    summary: "페이지를 확인해 읽기 완료했습니다.",
+    satisfies: ["source_verified"],
+    limitations: [],
+    references: [{ url: "https://example.test/source" }],
+    created_at: "2026-06-28T10:00:00.000Z",
+  });
   const outcome = evaluateCompletionReviewOutcome({
     requestText: "기록을 확인해줘",
     candidateText: "요청하신 항목을 정리했습니다.",
     requiredObligations: ["source_verified"],
+    evidenceReceipts: [evidence],
+  });
+
+  expect(outcome.status).toBe("complete");
+  if (outcome.status === "complete") {
+    expect(outcome.evidenceRefs).toContain("url:https://example.test/source");
+    expect(outcome.evidenceRefs).toContain(`receipt:${evidence.receipt_id}`);
+  }
+});
+
+test("completion review reports waiting_user when an explicit blocker appears with other satisfied receipts", () => {
+  const outcome = evaluateCompletionReviewOutcome({
+    requestText: "작업 근거를 정리해줘",
+    candidateText: "요약했습니다.",
+    requiredObligations: ["source_verified", "command_executed"],
     evidenceReceipts: [
       createEvidenceCapabilityReceipt({
-        producer: { kind: "tool", name: "web_read" },
+        producer: { kind: "runtime", name: "initial-receiver" },
+        capability: "command_executed",
+        evidence_kind: "execution_result",
+        verified: true,
+        maturity: "verified",
+        confidence: 1,
+        summary: "명령 실행 근거가 확인되었습니다.",
+        satisfies: ["command_executed"],
+        limitations: [],
+        references: [{ task_id: "cmd-1" }],
+        created_at: "2026-06-28T10:00:00.000Z",
+      }),
+      {
+        receipt_id: "ecr-late-failed",
+        schema_version: "evidence-capability.v1",
+        producer: { kind: "runtime", name: "later-receiver" },
+        capability: "source_verified",
+        evidence_kind: "source_page",
+        maturity: "verified",
+        confidence: 1,
+        verified: true,
+        summary: "명령 실행 근거는 누락되었습니다.",
+        limitations: [],
+        satisfies: ["source_verified"],
+        references: [],
+        created_at: "2026-06-28T11:00:00.000Z",
+      },
+      createEvidenceCapabilityReceipt({
+        producer: { kind: "runtime", name: "completion-guard" },
+        capability: "explicit_blocker",
+        evidence_kind: "blocker",
+        verified: true,
+        maturity: "verified",
+        confidence: 1,
+        summary: "로그인 필요한 블로커 상태입니다.",
+        limitations: ["로그인 상태를 확인하세요."],
+        references: [{ url: "https://example.test/private" }],
+        created_at: "2026-06-28T11:01:00.000Z",
+      }),
+    ],
+  });
+
+  expect(outcome.status).toBe("waiting_user");
+});
+
+test("completion review marks contradiction when failed evidence follows later than satisfied evidence", () => {
+  const outcome = evaluateCompletionReviewOutcome({
+    requestText: "작업 근거를 정리해줘",
+    candidateText: "요약했습니다.",
+    requiredObligations: ["source_verified"],
+    evidenceReceipts: [
+      createEvidenceCapabilityReceipt({
+        producer: { kind: "runtime", name: "initial-receiver" },
         capability: "source_verified",
         evidence_kind: "source_page",
         verified: true,
         maturity: "verified",
         confidence: 1,
-        summary: "페이지를 확인해 읽기 완료했습니다.",
+        summary: "초기 근거가 확인되었습니다.",
         satisfies: ["source_verified"],
         limitations: [],
-        references: [{ url: "https://example.test/source" }],
+        references: [{ url: "https://example.test/a" }],
+        created_at: "2026-06-28T10:00:00.000Z",
+      }),
+      {
+        receipt_id: "ecr-contradiction-later-failed",
+        schema_version: "evidence-capability.v1",
+        producer: { kind: "runtime", name: "later-receiver" },
+        capability: "source_verified",
+        evidence_kind: "source_page",
+        maturity: "verified",
+        confidence: 1,
+        verified: true,
+        summary: "같은 근거가 취소되었습니다.",
+        limitations: [],
+        satisfies: ["source_verified"],
+        references: [],
+        created_at: "2026-06-28T11:00:00.000Z",
+      },
+    ],
+  });
+
+  expect(outcome.status).toBe("gap");
+  if (outcome.status === "gap") {
+    expect(outcome.observation.summary).toContain("Conflicting completion evidence rows exist");
+  }
+});
+
+test("completion review supports command executed receipts through typed evidence kinds", () => {
+  const outcome = evaluateCompletionReviewOutcome({
+    requestText: "명령 실행 결과를 저장해줘",
+    candidateText: "결과를 저장했습니다.",
+    requiredObligations: ["command_executed"],
+    evidenceReceipts: [
+      createEvidenceCapabilityReceipt({
+        producer: { kind: "tool", name: "run_command" },
+        capability: "command_executed",
+        evidence_kind: "execution_result",
+        verified: true,
+        maturity: "verified",
+        confidence: 0.9,
+        summary: "명령 실행이 정상 완료되었습니다.",
+        satisfies: ["command_executed"],
+        limitations: [],
+        references: [{ task_id: "cmd-1" }],
         created_at: "2026-06-28T10:00:00.000Z",
       }),
     ],
   });
 
-  expect(outcome.kind).toBe("complete");
+  expect(outcome.status).toBe("complete");
+  if (outcome.status === "complete") {
+    expect(outcome.evidenceRefs).toContain("task:cmd-1");
+  }
 });
