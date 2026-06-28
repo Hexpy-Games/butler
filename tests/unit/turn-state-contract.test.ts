@@ -214,12 +214,33 @@ test("runtime fault payload enforces exact recovery contract", () => {
   }
 
   expect(() => createRuntimeFaultPayload({
+    faultId: undefined,
+    turnId: "turn-1",
+    kind: "provider_stream_corruption",
+    retryable: true,
+    publicSummary: "Runtime stopped.",
+    operatorSummary: "Missing fault id.",
+    createdAt: "2026-06-28T00:00:00.000Z",
+  })).toThrow("runtime fault id is required");
+
+  expect(() => createRuntimeFaultPayload({
+    faultId: "fault-missing-turn",
+    turnId: undefined,
+    kind: "provider_stream_corruption",
+    retryable: true,
+    publicSummary: "Runtime stopped.",
+    operatorSummary: "Missing turn id.",
+    createdAt: "2026-06-28T00:00:00.000Z",
+  })).toThrow("runtime fault turn id is required");
+
+  expect(() => createRuntimeFaultPayload({
     faultId: "fault-invalid",
     turnId: "turn-1",
     kind: "tool_result_pairing_invariant",
     retryable: true,
     publicSummary: "Runtime stopped.",
     operatorSummary: "Invalid kind.",
+    createdAt: "2026-06-28T00:00:00.000Z",
   })).toThrow("unknown runtime fault recovery kind");
 
   expect(() => createRuntimeFaultPayload({
@@ -229,6 +250,7 @@ test("runtime fault payload enforces exact recovery contract", () => {
     publicSummary: "Runtime stopped.",
     operatorSummary: "Missing retryability.",
     retryable: undefined,
+    createdAt: "2026-06-28T00:00:00.000Z",
   })).toThrow("runtime fault retryable must be an explicit boolean");
 
   expect(() => createRuntimeFaultPayload({
@@ -238,7 +260,18 @@ test("runtime fault payload enforces exact recovery contract", () => {
     retryable: true,
     publicSummary: "Runtime stopped.",
     operatorSummary: undefined,
+    createdAt: "2026-06-28T00:00:00.000Z",
   })).toThrow("runtime fault operator summary is required");
+
+  expect(() => createRuntimeFaultPayload({
+    faultId: "fault-missing-created",
+    turnId: "turn-1",
+    kind: "provider_stream_corruption",
+    retryable: true,
+    publicSummary: "Runtime stopped.",
+    operatorSummary: "Missing createdAt.",
+    createdAt: undefined,
+  })).toThrow("runtime fault createdAt is required");
 });
 
 test("recovery and diagnostic payload helpers validate stable control surfaces", () => {

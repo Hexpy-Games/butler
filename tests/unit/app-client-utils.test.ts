@@ -2567,6 +2567,40 @@ test("typed UI read models keep runtime faults separate from progress rows", () 
   ]);
 });
 
+test("production work block projection keeps mixed tool row decisions out of block semantics", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "mixed-tool-row",
+      kind: "ran_command",
+      state: "delivered",
+      safe_label: "Bash: bun test",
+      safe_tool_name: "Bash",
+      safe_input_label: "bun test",
+      tool_call_id: "tool-mixed",
+      work_block_id: "work-mixed",
+      work_decision_summary: "This decision must not become the work block decision.",
+      work_decision_rationale: "Tool compatibility rows are not decision rows.",
+      work_decision_next_step: "Keep rendering this as a tool row.",
+      work_decision_source: "assistant-authored",
+    },
+  ]);
+
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toMatchObject({
+    id: "work-mixed",
+    label: "",
+    rows: [
+      expect.objectContaining({
+        id: "mixed-tool-row",
+        safe_tool_name: "Bash",
+        safe_input_label: "bun test",
+      }),
+    ],
+  });
+  expect(blocks[0]?.decision_summary).toBeUndefined();
+  expect(blocks[0]?.rows[0]?.work_decision_summary).toBeUndefined();
+});
+
 test("timeline applies first visible progress turn events as public progress rows", () => {
   let messages: MessageRecord[] = [];
   let currentSummary: SessionSummaryView | null = {

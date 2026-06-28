@@ -11368,11 +11368,12 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       kind: "provider_stream_corruption",
       retryable: true,
       publicSummary: "Runtime invariant interrupted the turn.",
-      operatorSummary: "Tool result pairing invariant broke.",
       safeErrorCode: "runtime_fault",
       safeCause: "safe cause",
       createdAt: "2026-06-28T00:00:00.000Z",
     });
+    expect(JSON.stringify(events)).not.toContain("operatorSummary");
+    expect(JSON.stringify(events)).not.toContain("Tool result pairing invariant broke.");
 
     const retry = await postJson(
       `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,

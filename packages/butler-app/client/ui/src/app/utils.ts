@@ -1207,7 +1207,9 @@ function buildWorkBlocks(
     created_at?: string,
     row?: ProgressRow,
   ) => {
-    const decision = publicDecisionFieldsFromRow(row);
+    const decision = row?.kind === WORK_BLOCK_MARKER_KIND
+      ? publicDecisionFieldsFromRow(row)
+      : {};
     let block = blocks.get(id);
     if (!block) {
       block = {

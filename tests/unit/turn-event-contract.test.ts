@@ -35,6 +35,7 @@ test("turn event contract accepts every public event kind with monotonic sequenc
     expect(event.visibility).toBe("public");
     expect(event.sessionSequence).toBe(index + 1);
     expect(event.turnSequence).toBe(index + 1);
+    expect(JSON.stringify(event)).not.toContain("operatorSummary");
   }
 });
 
