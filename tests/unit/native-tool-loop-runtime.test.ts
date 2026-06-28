@@ -2956,7 +2956,7 @@ test("completion review failed becomes terminal outcome instead of continuation"
       id: "done",
       content: "Finished without artifact",
       active_form: "Finished without artifact",
-      status: "completed",
+      status: "in_progress",
       phase: "reporting",
     }],
   });
@@ -2968,7 +2968,12 @@ test("completion review failed becomes terminal outcome instead of continuation"
     lastUserTurnId: turnId,
     items: todos.items,
   });
-  streamStore.completeTurnLocalActive({ sessionId });
+  streamStore.applyTurnLocalOutcome({
+    sessionId,
+    turnId,
+    outcome: "failed",
+    statusNote: "Artifact evidence is missing after terminal failure.",
+  });
   const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
@@ -3403,13 +3408,31 @@ test("completion review pushes chart requests toward executable artifacts", asyn
           exit_code: 0,
           artifact_label: "population-chart.png",
           stdout_preview: "wrote population-chart.png",
-          evidence_capability_receipts: [capabilityReceipt({
-            id: "ecr-chart-command",
-            producerName: "run_command",
-            capability: "command_executed",
-            evidenceKind: "execution_result",
-            satisfies: ["command_executed"],
-          })],
+          evidence_capability_receipts: [
+            capabilityReceipt({
+              id: "ecr-chart-command",
+              producerName: "run_command",
+              capability: "command_executed",
+              evidenceKind: "execution_result",
+              satisfies: ["command_executed"],
+            }),
+            capabilityReceipt({
+              id: "ecr-chart-rendered",
+              producerName: "run_command",
+              capability: "chart_rendered",
+              evidenceKind: "chart",
+              satisfies: ["chart_rendered"],
+              reference: { path: "population-chart.png" },
+            }),
+            capabilityReceipt({
+              id: "ecr-chart-artifact",
+              producerName: "run_command",
+              capability: "durable_artifact",
+              evidenceKind: "artifact",
+              satisfies: ["durable_artifact"],
+              reference: { path: "population-chart.png" },
+            }),
+          ],
         };
       }
       return { ok: true };
@@ -3428,6 +3451,10 @@ test("completion review pushes chart requests toward executable artifacts", asyn
         });
         return "아래 matplotlib 코드를 복사해서 실행하면 됩니다.\n```python\nprint('chart')\n```";
       }
+      await input.onAssistantTextBeforeTools?.({
+        text: "summary: 확인한 값으로 차트 파일을 생성합니다.\nrationale: 완료 검토가 command_executed 증거를 요구했습니다.\nnext_step: 실행 결과와 산출물 증거를 최종 답변에 반영합니다.\ncompletion_obligations: command_executed, durable_artifact, chart_rendered",
+        toolCalls: [{ name: "run_command", args: { command: "python chart.py" } }],
+      });
       await input.executeTool({
         name: "run_command",
         args: { command: "python chart.py" },
@@ -7470,13 +7497,16 @@ test("native runtime does not keep extending direct work from finalization", asy
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(promptCalls).toBe(1);
-  expect(continuationPrompts).toHaveLength(0);
+  expect(promptCalls).toBe(2);
+  expect(continuationPrompts).toHaveLength(1);
+  expect(continuationPrompts[0]).toContain("Direct Work Continuation");
   expect(result.text).toContain("Direct work remains incomplete");
   const toolCalls = readTranscript("butler/main/open-direct-work-multi-continuation")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
   expect(toolCalls).toEqual([
+    "update_todo_list",
+    "run_command",
     "update_todo_list",
   ]);
   const streams = new WorkStreamStore(tempDir).list({
@@ -7612,8 +7642,8 @@ test("native runtime stops direct work continuation when tools do not make seman
     });
 
     expect(result.text).toContain("Direct work remains incomplete");
-    expect(promptCalls).toBe(1);
-    expect(executedCommands).toEqual([]);
+    expect(promptCalls).toBe(2);
+    expect(executedCommands).toEqual(["git status --short"]);
     const streams = new WorkStreamStore(tempDir).list({
       sessionId: "butler/main/open-direct-work-no-semantic-progress",
       includeTerminal: true,
@@ -7755,19 +7785,20 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
     });
 
     expect(result.text).toContain("Direct work remains incomplete");
-    expect(promptCalls).toBe(1);
+    expect(promptCalls).toBe(2);
     const toolCalls = readTranscript("butler/main/open-direct-work-fsm-progress")
       .filter((event) => event.kind === "tool_call")
       .map((event) => event.payload.name);
     expect(toolCalls).toEqual([
       "update_todo_list",
+      "update_work_stream_state",
     ]);
     const streams = new WorkStreamStore(tempDir).list({
       sessionId: "butler/main/open-direct-work-fsm-progress",
       includeTerminal: true,
     });
     expect(streams).toHaveLength(1);
-    expect(streams[0].state).not.toBe("complete");
+    expect(streams[0].state).toBe("reviewing");
   } finally {
     if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
     else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;

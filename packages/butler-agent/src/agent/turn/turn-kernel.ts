@@ -96,6 +96,13 @@ export interface TurnStateTransition {
   to: TurnState;
 }
 
+export interface KernelTerminalOutcomeTransition {
+  from: TurnState;
+  to: TerminalTurnState;
+  reason: string;
+  evidenceRefs: string[];
+}
+
 const KERNEL_TRANSITIONS: Record<TurnState, ReadonlySet<TurnState>> = {
   accepted: new Set(["model_deciding", "waiting_user", "aborted", "runtime_fault"]),
   model_deciding: new Set([
@@ -163,4 +170,22 @@ export function assertTurnStateTransition(input: TurnStateTransition): TurnState
     throw new Error(`invalid turn state transition ${input.from} -> ${input.to}`);
   }
   return input.to;
+}
+
+export function terminalizeTurnThroughKernel(
+  input: KernelTerminalOutcomeTransition,
+): KernelTerminalOutcomeTransition {
+  assertTurnStateTransition(input);
+  if (!isTerminalTurnState(input.to)) {
+    throw new Error(`turn kernel terminalization requires terminal state: ${input.to}`);
+  }
+  if (input.reason.trim().length === 0) {
+    throw new Error("turn kernel terminalization requires an explicit reason");
+  }
+  return {
+    from: input.from,
+    to: input.to,
+    reason: input.reason,
+    evidenceRefs: Array.from(new Set(input.evidenceRefs)),
+  };
 }
