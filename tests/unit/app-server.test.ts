@@ -9703,6 +9703,8 @@ test("app gateway bridge captures tool progress without blank assistant messages
       safe_tool_name: "Bash",
       safe_input_label: "route this again",
     });
+    expect(secondAssistant?.work_blocks?.[0]?.rows[0].work_block_id)
+      .toBeUndefined();
     expect(secondAssistant?.work_blocks?.[0]?.rows[0].work_block_label)
       .toBeUndefined();
     expect(secondAssistant?.work_blocks?.[0]?.rows[0].work_decision_summary)

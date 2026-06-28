@@ -9183,6 +9183,7 @@ function workBlocksFromTerminalProgressRows(
 
 function workBlockToolRow(row: ProgressSummaryRow): ProgressSummaryRow {
   const {
+    work_block_id: _workBlockId,
     work_block_label: _workBlockLabel,
     work_decision_summary: _workDecisionSummary,
     work_decision_rationale: _workDecisionRationale,
