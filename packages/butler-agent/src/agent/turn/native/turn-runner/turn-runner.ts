@@ -7,7 +7,7 @@ import {
   recoverableLimitedDeliveryForError,
 } from "../../recoverable-delivery.ts";
 import { deliveredWithLimitationsState } from "../../runtime-delivery-state.ts";
-import { persistTurnContextAtom } from "../../turn-continuation-context.ts";
+import { clearTurnContextAtom, persistTurnContextAtom } from "../../turn-continuation-context.ts";
 import { safeRuntimeFailure } from "../../../../integrations/providers/provider-errors.ts";
 import {
   cancelActiveWorkStreamBestEffort,
@@ -17,12 +17,13 @@ import {
 } from "./workstream-finalizers.ts";
 import {
   emitInterruptedTurnOutcome,
+  emitCompletionReviewTerminalOutcome,
   emitRecoverableTurnOutcome,
   emitSuccessfulTurnOutcome,
 } from "./turn-outcome-events.ts";
 import {
-  isKernelCompletionGapContinuationError,
-  produceFinalDeliveryText,
+  persistCompletionGapContinuation,
+  produceFinalDeliveryOutcome,
 } from "./final-delivery-gates.ts";
 import { prepareNativeTurnContext } from "./turn-context-builder.ts";
 import { createNativeTurnPromptRunners } from "./turn-prompt-runners.ts";
@@ -32,6 +33,8 @@ import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
 import { unresolvedValidationFailureFromAudit } from "./validation-failure-guard.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
 import type { NativeTurnRunnerInput } from "./turn-runner-types.ts";
+
+const COMPLETION_GAP_CONTINUATION_MAX_ATTEMPTS = 2;
 
 export async function runNativeToolTurn({
   input,
@@ -78,25 +81,107 @@ export async function runNativeToolTurn({
       publicDecisionContext,
       pendingPublicDecisions,
     });
-    const initialText = useTools
+    let candidateText = useTools
       ? await runToolPrompt(context.prompt, undefined, "initial_tool_loop")
       : await runTextPrompt(context.prompt);
     throwIfRuntimeTurnAborted(input.signal);
-    const decisionCheckedText = await produceFinalDeliveryText({
-      turnInput: input,
-      session,
-      deps,
-      useTools,
-      prompt: context.prompt,
-      userText: context.userText,
-      initialText,
-      audit,
-      publicDecisionContext,
-      toolSurfaceController: context.toolSurfaceController,
-      runToolPrompt,
-      turnId,
-      turnBudget: context.turnBudget,
-    });
+    let decisionCheckedText: string | null = null;
+    for (let completionAttempt = 0; completionAttempt <= COMPLETION_GAP_CONTINUATION_MAX_ATTEMPTS; completionAttempt += 1) {
+      const deliveryOutcome = await produceFinalDeliveryOutcome({
+        turnInput: input,
+        session,
+        deps,
+        useTools,
+        prompt: context.prompt,
+        userText: context.userText,
+        initialText: candidateText,
+        audit,
+        publicDecisionContext,
+        toolSurfaceController: context.toolSurfaceController,
+        runToolPrompt,
+        turnId,
+        turnBudget: context.turnBudget,
+      });
+      if (deliveryOutcome.kind === "final") {
+        decisionCheckedText = deliveryOutcome.text;
+        break;
+      }
+      if (deliveryOutcome.kind === "waiting_user") {
+        await emitCompletionReviewTerminalOutcome({
+          turnInput: input,
+          outcome: "waiting_user",
+          publicSummary: deliveryOutcome.question,
+          evidenceRefs: deliveryOutcome.evidenceRefs,
+          turnId,
+        });
+        return {
+          text: deliveryOutcome.question,
+          runtimeSessionRef: input.handle.runtimeSessionRef,
+          artifacts: runtimeArtifactsFromAudit({
+            audit,
+            butlerData: deps.butlerData,
+            workspacePath: session.init.workspacePath,
+          }),
+        };
+      }
+      if (deliveryOutcome.kind === "failed") {
+        await emitCompletionReviewTerminalOutcome({
+          turnInput: input,
+          outcome: "failed",
+          publicSummary: deliveryOutcome.publicSummary,
+          evidenceRefs: deliveryOutcome.evidenceRefs,
+          turnId,
+        });
+        return {
+          text: deliveryOutcome.publicSummary,
+          runtimeSessionRef: input.handle.runtimeSessionRef,
+          artifacts: runtimeArtifactsFromAudit({
+            audit,
+            butlerData: deps.butlerData,
+            workspacePath: session.init.workspacePath,
+          }),
+        };
+      }
+      await persistCompletionGapContinuation({
+        turnInput: input,
+        deps,
+        turnId,
+        observation: deliveryOutcome.observation,
+      });
+      if (completionAttempt === COMPLETION_GAP_CONTINUATION_MAX_ATTEMPTS) {
+        await emitCompletionReviewTerminalOutcome({
+          turnInput: input,
+          outcome: "failed",
+          publicSummary: deliveryOutcome.observation.summary,
+          evidenceRefs: deliveryOutcome.evidenceRefs,
+          turnId,
+        });
+        return {
+          text: deliveryOutcome.observation.summary,
+          runtimeSessionRef: input.handle.runtimeSessionRef,
+          artifacts: runtimeArtifactsFromAudit({
+            audit,
+            butlerData: deps.butlerData,
+            workspacePath: session.init.workspacePath,
+          }),
+        };
+      }
+      candidateText = await runToolPrompt(completionGapContinuationPrompt({
+        observationSummary: deliveryOutcome.observation.summary,
+        modelVisibleContent: deliveryOutcome.observation.modelVisibleContent,
+      }), undefined, "completion_gap_continuation");
+      throwIfRuntimeTurnAborted(input.signal);
+    }
+    if (decisionCheckedText === null) {
+      throw new Error("completion delivery exited without terminal outcome");
+    }
+    if (turnId) {
+      clearTurnContextAtom({
+        butlerData: deps.butlerData,
+        sessionId: input.handle.sessionId,
+        turnId,
+      });
+    }
     if (useTools) {
       completeRuntimeSemanticWorkStreamBestEffort({
         butlerData: deps.butlerData,
@@ -142,20 +227,7 @@ export async function runNativeToolTurn({
   } catch (error) {
     const limitedDelivery = recoverableLimitedDeliveryForError(error);
     const isBudgetError = isPromptUsageModelCallBudgetError(error);
-    const isKernelContinuation = isKernelCompletionGapContinuationError(error);
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (isKernelContinuation) {
-      recordTurnMetric({
-        status: "error",
-        input,
-        session,
-        deps,
-        startedAt,
-        useTools,
-        errorName: error instanceof Error ? error.name : "KernelContinuation",
-      });
-      throw error;
-    }
     if (isBudgetError && turnId) {
       const safeFailure = safeRuntimeFailure(error);
       persistTurnContextAtom({
@@ -217,6 +289,18 @@ export async function runNativeToolTurn({
     });
     throw error;
   }
+}
+
+function completionGapContinuationPrompt(input: {
+  observationSummary: string;
+  modelVisibleContent: string;
+}): string {
+  return [
+    "Completion review produced a model-visible observation for this same logical turn.",
+    "Do not deliver final text yet. Continue the current work from the observation.",
+    `Observation: ${input.observationSummary}`,
+    input.modelVisibleContent,
+  ].filter(Boolean).join("\n\n");
 }
 
 async function emitEarlyRuntimePreparationProgress(input: {

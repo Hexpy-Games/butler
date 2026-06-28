@@ -30,22 +30,22 @@ const EXPLICIT_TOOL_REPAIR_MAX_ROUNDS = 4;
 
 export const KERNEL_COMPLETION_GAP_CONTINUATION_CODE = "completion_gap_continuation";
 
-export class KernelCompletionGapContinuationError extends Error {
-  readonly code = KERNEL_COMPLETION_GAP_CONTINUATION_CODE;
+export type FinalDeliveryOutcome =
+  | { kind: "final"; text: string; evidenceRefs: string[] }
+  | {
+      kind: "completion_gap";
+      observation: {
+        kind: string;
+        summary: string;
+        modelVisibleContent: string;
+        refs?: Array<{ kind: string; id: string; path?: string }>;
+      };
+      evidenceRefs: string[];
+    }
+  | { kind: "waiting_user"; question: string; evidenceRefs: string[] }
+  | { kind: "failed"; publicSummary: string; evidenceRefs: string[] };
 
-  constructor(message: string) {
-    super(message);
-    this.name = "KernelCompletionGapContinuationError";
-  }
-}
-
-export function isKernelCompletionGapContinuationError(error: unknown): boolean {
-  return error instanceof KernelCompletionGapContinuationError ||
-    Boolean(error && typeof error === "object" &&
-      (error as { code?: unknown }).code === KERNEL_COMPLETION_GAP_CONTINUATION_CODE);
-}
-
-export async function produceFinalDeliveryText(input: {
+export async function produceFinalDeliveryOutcome(input: {
   turnInput: RuntimeTurnInput;
   session: NativeStoredSessionConfig;
   deps: NativeTurnRunnerDeps;
@@ -59,24 +59,32 @@ export async function produceFinalDeliveryText(input: {
   publicDecisionContext: PublicWorkDecision[];
   toolSurfaceController: ToolSurfacePromptController;
   runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
-}): Promise<string> {
+}): Promise<FinalDeliveryOutcome> {
   const textAfterExplicitTools = await repairExplicitToolRequirements(input);
   const groundedText = applyGroundingIfNeeded(input, textAfterExplicitTools);
   const reviewResult = await runGoalCompletionReviews({ ...input, initialText: groundedText });
   if (reviewResult.outcome.status === "gap") {
-    await persistCompletionGapContinuation({
-      ...input,
+    return {
+      kind: "completion_gap",
       observation: reviewResult.outcome.observation,
-    });
-    throw new KernelCompletionGapContinuationError(reviewResult.outcome.observation.summary);
+      evidenceRefs: reviewResult.outcome.evidenceRefs,
+    };
   }
   if (reviewResult.outcome.status === "waiting_user") {
-    throw new KernelCompletionGapContinuationError(reviewResult.outcome.question);
+    return {
+      kind: "waiting_user",
+      question: reviewResult.outcome.question,
+      evidenceRefs: reviewResult.outcome.evidenceRefs,
+    };
   }
   if (reviewResult.outcome.status === "failed") {
-    throw new KernelCompletionGapContinuationError(reviewResult.outcome.publicSummary);
+    return {
+      kind: "failed",
+      publicSummary: reviewResult.outcome.publicSummary,
+      evidenceRefs: reviewResult.outcome.evidenceRefs,
+    };
   }
-  const contractRepairedText = await repairFinalContract({ ...input, finalText: reviewResult.reviewedText });
+  const contractRepairedText = repairFinalContract({ ...input, finalText: reviewResult.reviewedText });
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "guard.started",
     payload: { guard: "public_output" },
@@ -86,7 +94,7 @@ export async function produceFinalDeliveryText(input: {
     kind: "guard.completed",
     payload: { guard: "public_output", status: "approved" },
   });
-  return checkedText;
+  return { kind: "final", text: checkedText, evidenceRefs: reviewResult.outcome.evidenceRefs };
 }
 
 function applyGroundingIfNeeded(
@@ -291,7 +299,7 @@ function currentWorkStreamsTerminal(input: {
   return turnLocalStreams.every((stream) => stream.terminal === true);
 }
 
-async function persistCompletionGapContinuation(input: {
+export async function persistCompletionGapContinuation(input: {
   turnInput: RuntimeTurnInput;
   deps: NativeTurnRunnerDeps;
   turnId?: string | null;
@@ -311,6 +319,9 @@ async function persistCompletionGapContinuation(input: {
     state: "continuing",
     sourceErrorCode: KERNEL_COMPLETION_GAP_CONTINUATION_CODE,
     reason: input.observation.summary,
+    userRequest: {
+      id: currentUserMessageRef(input.turnInput),
+    },
     unresolvedObservations: [{
       kind: input.observation.kind,
       id: `completion-gap:${turnId}`,
@@ -335,4 +346,11 @@ async function persistCompletionGapContinuation(input: {
       safeLabel: "Continuing from completion gap",
     },
   });
+}
+
+function currentUserMessageRef(input: RuntimeTurnInput): string {
+  if ("message" in input.input && typeof input.input.message?.id === "string") {
+    return input.input.message.id;
+  }
+  return `turn:${input.handle.sessionId}`;
 }

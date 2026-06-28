@@ -1070,6 +1070,128 @@ test("queued inbound converts model-call budget exhaustion to recoverable limite
   store.close();
 });
 
+test("queued inbound completion gap consumes same logical turn continuation without second inbound", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const prompts: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "en",
+    butlerData: tempDir,
+    executeButlerTool: async () => ({
+      ok: true,
+      ...(prompts.length > 1 ? {
+        evidence_capability_receipts: [{
+          receipt_id: "receipt-queued-command",
+          schema_version: "evidence-capability.v1",
+          producer: { kind: "tool", name: "run_command" },
+          capability: "command_executed",
+          evidence_kind: "execution_result",
+          maturity: "verified",
+          confidence: 1,
+          verified: true,
+          summary: "Command execution was verified.",
+          limitations: [],
+          references: [{ task_id: "queued-command" }],
+          satisfies: ["command_executed"],
+          created_at: "2026-06-28T00:00:00.000Z",
+        }],
+      } : {}),
+    }),
+    runFunctionToolPromptText: async (input) => {
+      prompts.push(input.prompt);
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: I am running the requested command.",
+          "rationale: completion requires command evidence.",
+          "next_step: summarize after evidence exists.",
+          "completion_obligations: command_executed",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "pwd" },
+        rawArguments: JSON.stringify({ command: "pwd" }),
+      });
+      return prompts.length === 1
+        ? "I have not captured command evidence yet."
+        : "Command evidence is verified and this is the final result.";
+    },
+  });
+  store.upsert({
+    sessionId: "butler/app-general",
+    role: "butler",
+    workspacePath: tempDir,
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/gpt-5.5",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "general",
+    }],
+  });
+  const router = new GatewayRouter({ store });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler in an automation test.",
+  });
+  const server = createGatewayServer({
+    router,
+    handlers: createLifecycleGatewayHandlers(lifecycle),
+  });
+  let inboundDispatches = 0;
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue({
+    eventId: "app:completion-gap-continuation",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-completion-gap-continuation",
+      text: "Run command and summarize.",
+      timestamp: "2026-06-28T00:00:00.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-completion-gap-continuation",
+    },
+  }, { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound(envelope) {
+        inboundDispatches += 1;
+        return server.handleInbound(envelope);
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    failed: 0,
+  });
+  expect(inboundDispatches).toBe(1);
+  expect(prompts).toHaveLength(2);
+  expect(prompts[1]).toContain("Completion review produced a model-visible observation");
+  expect(readTurnContextAtom({
+    butlerData: tempDir,
+    sessionId: "butler/app-general",
+    turnId: "turn-completion-gap-continuation",
+  })).toBeNull();
+  expect(JSON.stringify(app.sentActions)).not.toContain("not captured command evidence");
+  store.close();
+});
+
 test("queued inbound converts normalized internal recovery failures to limited delivery", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
