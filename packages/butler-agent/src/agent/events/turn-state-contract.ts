@@ -4,6 +4,7 @@ export const TURN_ACKNOWLEDGED_EVENT_KIND = "turn.acknowledged";
 export const TURN_DECISION_EVENT_KIND = "turn.decision";
 export const TURN_COMPLETION_EVIDENCE_EVENT_KIND = "turn.completion_evidence";
 export const TURN_OUTCOME_EVENT_KIND = "turn.outcome";
+export const RUNTIME_FAULT_EVENT_KIND = "runtime.fault";
 export const RECOVERY_RECORDED_EVENT_KIND = "recovery.recorded";
 export const DIAGNOSTIC_INVARIANT_VIOLATION_EVENT_KIND = "diagnostic.invariant_violation";
 
@@ -12,6 +13,7 @@ export const TURN_STATE_CONTRACT_EVENT_KINDS = [
   TURN_DECISION_EVENT_KIND,
   TURN_COMPLETION_EVIDENCE_EVENT_KIND,
   TURN_OUTCOME_EVENT_KIND,
+  RUNTIME_FAULT_EVENT_KIND,
   RECOVERY_RECORDED_EVENT_KIND,
   DIAGNOSTIC_INVARIANT_VIOLATION_EVENT_KIND,
 ] as const;

@@ -6259,7 +6259,7 @@ test("app transport send fails the turn instead of leaving thinking when queue h
       state: "failed",
       safe_status_label: "Failed",
       safe_error_code: "app_turn_queue_failed",
-      retryable: true,
+      retryable: false,
       cancellable: false,
     });
     const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
@@ -6269,7 +6269,7 @@ test("app transport send fails the turn instead of leaving thinking when queue h
     expect(turns.data.turns[0]).toMatchObject({
       state: "failed",
       safe_error_code: "app_turn_queue_failed",
-      retryable: true,
+      retryable: false,
       cancellable: false,
     });
 
@@ -6341,7 +6341,7 @@ test("app transport send fails instead of leaving thinking when butler-main stat
     expect(result.data.turn).toMatchObject({
       state: "failed",
       safe_error_code: "app_turn_queue_failed",
-      retryable: true,
+      retryable: false,
       cancellable: false,
     });
     const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
@@ -7016,7 +7016,7 @@ test("repeated app transport internal recovery does not requeue the same turn ag
       state: "failed",
       safe_status_label: "Retry required",
       safe_error_code: "internal_recovery_required",
-      retryable: true,
+      retryable: false,
       cancellable: false,
       attempt: 2,
     });
@@ -7262,7 +7262,7 @@ test("app transport internal recovery failures do not mask prior provider failur
       id: turnId,
       state: "failed",
       safe_error_code: "provider_api_error",
-      retryable: true,
+      retryable: false,
     });
     expect(JSON.stringify(messages)).not.toContain("could not verify");
   } finally {
@@ -7919,7 +7919,7 @@ test("app transport final projection does not resurrect timed out failed turns",
       id: turnId,
       state: "failed",
       safe_error_code: "inbound_dispatch_timeout",
-      retryable: true,
+      retryable: false,
       cancellable: false,
     });
   } finally {
@@ -8141,7 +8141,7 @@ test("recoverable limited final without queue claim cannot close a failed app tu
       id: turnId,
       state: "failed",
       safe_error_code: "inbound_dispatch_timeout",
-      retryable: true,
+      retryable: false,
     });
   } finally {
     server.stop();
@@ -8987,7 +8987,7 @@ test("app transport failure projection fails queued turns after app-server resta
     expect(assistant).toMatchObject({
       status: "failed",
       safe_error_code: "gateway_failed",
-      retryable: true,
+      retryable: false,
     });
     expect(JSON.stringify(messages)).not.toContain("private stack");
     expect(JSON.stringify(messages)).not.toContain("token=secret");
@@ -8999,7 +8999,7 @@ test("app transport failure projection fails queued turns after app-server resta
       state: "failed",
       safe_error_code: "gateway_failed",
       cancellable: false,
-      retryable: true,
+      retryable: false,
     });
     const events = await getJson(`${server.url}events?cursor=0`);
     const failedEvent = events.data.events.find(
@@ -9025,7 +9025,7 @@ test("app transport failure projection fails queued turns after app-server resta
   }
 });
 
-test("retry without injected responder requeues the app turn instead of answering locally", async () => {
+test("retry without runtime fault rejects ordinary failed app transport turns", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({
     dbPath,
@@ -9054,21 +9054,20 @@ test("retry without injected responder requeues the app turn instead of answerin
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    const retry = await postJson(
+    const retry = await fetch(
       `${server.url}turns/${encodeURIComponent(turnId)}/retry`,
-      {},
+      { method: "POST", headers: { "content-type": "application/json" } },
     );
-    expect(retry.data.replies).toHaveLength(0);
-    expect(retry.data.turn).toMatchObject({
+    expect(retry.status).toBe(409);
+    const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+    expect(existsSync(pendingDir) ? readdirSync(pendingDir) : []).toEqual([]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "retrying",
-      cancellable: true,
-      attempt: 2,
+      state: "failed",
+      retryable: false,
+      attempt: 1,
     });
-    const pending = readdirSync(
-      join(tempDir, "runtime", "inbound-events", "pending"),
-    );
-    expect(pending).toHaveLength(1);
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map(
@@ -9084,6 +9083,11 @@ test("retry without injected responder requeues the app turn instead of answerin
         text: "retry through core",
         status: "sent",
       },
+      {
+        role: "assistant",
+        text: "Butler could not complete this turn.",
+        status: "failed",
+      },
     ]);
     expect(JSON.stringify(messages)).not.toContain("Retrying this turn");
   } finally {
@@ -9091,7 +9095,7 @@ test("retry without injected responder requeues the app turn instead of answerin
   }
 });
 
-test("retry ignores stale app transport failure projection from earlier attempts", async () => {
+test("ordinary failed turn retry rejection keeps stale app transport failure projection unchanged", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({
     dbPath,
@@ -9120,15 +9124,11 @@ test("retry ignores stale app transport failure projection from earlier attempts
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    const retry = await postJson(
+    const retry = await fetch(
       `${server.url}turns/${encodeURIComponent(turnId)}/retry`,
-      {},
+      { method: "POST", headers: { "content-type": "application/json" } },
     );
-    expect(retry.data.turn).toMatchObject({
-      id: turnId,
-      state: "retrying",
-      attempt: 2,
-    });
+    expect(retry.status).toBe(409);
 
     appendTranscriptEvent(
       createTranscriptEvent({
@@ -9156,12 +9156,12 @@ test("retry ignores stale app transport failure projection from earlier attempts
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "retrying",
-      cancellable: true,
+      state: "failed",
+      cancellable: false,
       retryable: false,
-      attempt: 2,
+      attempt: 1,
+      safe_error_code: "gateway_failed",
     });
-    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
   } finally {
     server.stop();
   }
@@ -10980,6 +10980,9 @@ test("turn cancel preserves earlier assistant work history while stopping active
       }
     }
     expect(secondTurnId).toBeDefined();
+    if (typeof secondTurnId !== "string") {
+      throw new Error("Expected a cancelable second turn id.");
+    }
     const cancel = await postJson(
       `${server.url}turns/${encodeURIComponent(secondTurnId)}/cancel`,
       {},
@@ -11174,7 +11177,7 @@ test("app startup repairs cancelled turns that lost their activity carrier", asy
   }
 });
 
-test("failed app turns persist as retryable and can be retried", async () => {
+test("failed app turns are not retryable without a runtime fault record", async () => {
   let attempt = 0;
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -11205,27 +11208,16 @@ test("failed app turns persist as retryable and can be retried", async () => {
     expect(failedTurn).toMatchObject({
       state: "failed",
       safe_error_code: "gateway_failed",
-      retryable: true,
+      retryable: false,
       attempt: 1,
     });
 
     const failedTurnId = failedTurn.id as string;
-    const retry = await postJson(
+    const retry = await fetch(
       `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
-      {},
+      { method: "POST", headers: { "content-type": "application/json" } },
     );
-    expect(retry.data.turn).toMatchObject({
-      state: "retrying",
-      retryable: false,
-      cancellable: true,
-      attempt: 2,
-    });
-    const reply = await waitForAssistantMessageMatching(
-      server.url,
-      "general",
-      (message) => message.text === "recovered reply",
-    );
-    expect(reply.text).toBe("recovered reply");
+    expect(retry.status).toBe(409);
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
@@ -11234,25 +11226,43 @@ test("failed app turns persist as retryable and can be retried", async () => {
       messages.data.messages.map(
         (message: { status: string }) => message.status,
       ),
-    ).toEqual(["sent", "delivered"]);
+    ).toEqual(["sent", "failed"]);
     expect(
       messages.data.messages.filter(
         (message: { role: string }) => message.role === "assistant",
       ),
     ).toHaveLength(1);
+    expect(messages.data.messages.find(
+      (message: { role: string }) => message.role === "assistant",
+    )).toMatchObject({
+      retryable: false,
+      safe_error_code: "gateway_failed",
+    });
   } finally {
     server.stop();
   }
 });
 
-test("retrying a failed turn updates the same logical turn without synthetic retry text", async () => {
+test("retrying a runtime fault updates the same logical turn without synthetic retry text", async () => {
   let attempt = 0;
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
-    responder() {
+    responder(input) {
       attempt += 1;
-      if (attempt === 1) throw new Error("provider temporary issue");
+      if (attempt === 1) {
+        input.onTurnEvent?.({
+          kind: "runtime.fault",
+          payload: {
+            safeLabel: "Runtime invariant interrupted the turn.",
+            safeErrorCode: "runtime_fault",
+            retryable: true,
+          },
+        });
+        const error = new Error("runtime invariant interrupted the turn");
+        (error as Error & { code?: string }).code = "runtime_fault";
+        throw error;
+      }
       return { texts: ["recovered reply"] };
     },
   });
@@ -11270,7 +11280,9 @@ test("retrying a failed turn updates the same logical turn without synthetic ret
     const failedTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "failed" && turn.retryable,
+      (turn) =>
+        turn.state === "runtime_fault" &&
+        turn.retryable === true,
     );
     const failedTurnId = failedTurn.id as string;
 
@@ -11310,7 +11322,7 @@ test("retrying a failed turn updates the same logical turn without synthetic ret
   }
 });
 
-test("retry failures update the same assistant failure with a safe provider reason", async () => {
+test("provider empty responses do not expose Retry without runtime fault", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -11337,7 +11349,7 @@ test("retry failures update the same assistant failure with a safe provider reas
     expect(failedTurn).toMatchObject({
       state: "failed",
       safe_error_code: "provider_empty_response",
-      retryable: true,
+      retryable: false,
     });
 
     let messages = await getJson(
@@ -11349,7 +11361,7 @@ test("retry failures update the same assistant failure with a safe provider reas
     expect(firstAssistant).toMatchObject({
       status: "failed",
       safe_error_code: "provider_empty_response",
-      retryable: true,
+      retryable: false,
     });
     expect(firstAssistant.text).toContain("no visible answer");
     expect(firstAssistant.text).not.toContain("Local model API");
@@ -11363,15 +11375,7 @@ test("retry failures update the same assistant failure with a safe provider reas
         body: JSON.stringify({}),
       },
     );
-    expect(retryResponse.status).toBe(202);
-    await waitForLatestTurnMatching(
-      server.url,
-      "general",
-      (turn) =>
-        turn.state === "failed" &&
-        turn.attempt === 2 &&
-        turn.safe_error_code === "provider_empty_response",
-    );
+    expect(retryResponse.status).toBe(409);
 
     messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
     const assistantMessages = messages.data.messages.filter(
@@ -11381,9 +11385,9 @@ test("retry failures update the same assistant failure with a safe provider reas
     expect(assistantMessages[0]).toMatchObject({
       status: "failed",
       safe_error_code: "provider_empty_response",
-      retryable: true,
+      retryable: false,
     });
-    expect(assistantMessages[0].id).not.toBe(firstAssistant.id);
+    expect(assistantMessages[0].id).toBe(firstAssistant.id);
     expect(assistantMessages[0].text).toContain("no visible answer");
     expect(JSON.stringify(messages)).not.toContain("Retrying this turn");
   } finally {
@@ -11428,7 +11432,7 @@ test("provider failures persist actionable safe API status", async () => {
     expect(failedTurn).toMatchObject({
       state: "failed",
       safe_error_code: "provider_api_error",
-      retryable: true,
+      retryable: false,
       cancellable: false,
     });
 
@@ -11441,7 +11445,7 @@ test("provider failures persist actionable safe API status", async () => {
     expect(assistant).toMatchObject({
       status: "failed",
       safe_error_code: "provider_api_error",
-      retryable: true,
+      retryable: false,
     });
     expect(assistant.text).toContain("HTTP 500");
     expect(JSON.stringify(messages)).not.toContain("token=secret");
@@ -11498,7 +11502,7 @@ test("raw provider aborts remain failed app turns instead of cancellation", asyn
     expect(failedTurn).toMatchObject({
       state: "failed",
       safe_error_code: "provider_network_error",
-      retryable: true,
+      retryable: false,
       cancellable: false,
     });
 
@@ -11511,7 +11515,7 @@ test("raw provider aborts remain failed app turns instead of cancellation", asyn
     expect(assistant).toMatchObject({
       status: "failed",
       safe_error_code: "provider_network_error",
-      retryable: true,
+      retryable: false,
     });
     expect(messages.data.messages.map((message: { status: string }) => message.status))
       .toEqual(["sent", "failed"]);
@@ -11670,7 +11674,7 @@ test("generic internal recovery responder failures stay active without assistant
   }
 });
 
-test("concurrent retry claims only one failed turn attempt", async () => {
+test("concurrent ordinary failed turn retries are rejected", async () => {
   let attempt = 0;
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -11708,16 +11712,12 @@ test("concurrent retry claims only one failed turn attempt", async () => {
       }),
     ]);
     const statuses = [first.status, second.status].sort();
-    expect(statuses).toEqual([202, 409]);
-
-    const finalTurn = await waitForLatestTurnMatching(
-      server.url,
-      "general",
-      (turn) => turn.state === "delivered",
-    );
-    expect(finalTurn).toMatchObject({
-      state: "delivered",
-      attempt: 2,
+    expect(statuses).toEqual([409, 409]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      state: "failed",
+      retryable: false,
+      attempt: 1,
     });
   } finally {
     server.stop();

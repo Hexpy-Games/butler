@@ -1181,7 +1181,7 @@ function buildWorkBlocks(
       if (!row.work_block_id) continue;
       ensureBlock(
         row.work_block_id,
-        row.work_block_label ?? row.safe_label,
+        row.work_block_label ?? "",
         row.state,
         row.created_at,
         row,
@@ -1191,7 +1191,7 @@ function buildWorkBlocks(
     if (row.kind === "todo") continue;
     if (!isCompletedTurnWorkActivityRow(row)) continue;
     const blockId = row.work_block_id ?? `row-${row.id}`;
-    const label = row.work_block_label ?? row.safe_label;
+    const label = row.work_block_label ?? "";
     const block = ensureBlock(blockId, label, row.state, row.created_at, row);
     block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
     block.rows = [...block.rowMap.values()];
@@ -1250,9 +1250,7 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
       safe_label: note,
       created_at,
       work_block_id: workBlockId,
-      work_block_label:
-        safeOptionalPublicText(payload.workBlockLabel) ??
-        (workBlockId ? note : undefined),
+      work_block_label: safeOptionalPublicText(payload.workBlockLabel),
       ...publicDecisionFields(payload),
     };
   }
@@ -1331,8 +1329,7 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
       tool_call_id: safeOptionalPublicText(payload.toolCallId),
       bridge_phase: safeOptionalPublicText(payload.bridgePhase),
       work_block_id: safeOptionalPublicText(payload.workBlockId),
-      work_block_label:
-        safeOptionalPublicText(payload.workBlockLabel) ?? safeLabel,
+      work_block_label: safeOptionalPublicText(payload.workBlockLabel),
       ...publicDecisionFields(payload),
       safe_detail_rows: safeDetailRows(payload.detailRows),
       created_at,

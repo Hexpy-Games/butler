@@ -25,6 +25,8 @@ export function appLimitedDeliveryForError(error: unknown): RecoverableLimitedDe
 export function appSafeResponderError(error: unknown): AppResponderSafeError {
   const timeout = appResponderTimeout(error);
   if (timeout) return timeout;
+  const stableRuntimeFault = appStableRuntimeFault(error);
+  if (stableRuntimeFault) return stableRuntimeFault;
   if (isLocalModelEmptyResponseError(error)) {
     return {
       code: "provider_empty_response",
@@ -56,6 +58,18 @@ export function appSafeResponderError(error: unknown): AppResponderSafeError {
   return {
     code: "gateway_failed",
     message: "Butler could not complete this turn.",
+  };
+}
+
+function appStableRuntimeFault(error: unknown): AppResponderSafeError | null {
+  if (!error || typeof error !== "object") return null;
+  const code = (error as Record<string, unknown>).code;
+  if (code !== "runtime_fault" && code !== "runtime_invariant_violation") {
+    return null;
+  }
+  return {
+    code,
+    message: "Butler runtime was interrupted before the turn could continue.",
   };
 }
 
