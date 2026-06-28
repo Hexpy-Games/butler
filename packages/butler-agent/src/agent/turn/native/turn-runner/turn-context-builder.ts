@@ -75,6 +75,7 @@ export async function prepareNativeTurnContext(input: {
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
   pendingPublicDecisions: PublicWorkDecision[];
+  assistantTextBeforeToolsSeen: () => boolean;
   skipRuntimePreparationProgress?: boolean;
 }) {
   const userText = currentUserText(input.turnInput);
@@ -163,9 +164,11 @@ export async function prepareNativeTurnContext(input: {
   });
   const executor = createAuditedButlerToolExecutor({
     sessionId: input.turnInput.handle.sessionId,
+    turnId,
     audit: input.audit,
     publicDecisionContext: input.publicDecisionContext,
     pendingPublicDecisions: input.pendingPublicDecisions,
+    assistantTextBeforeToolsSeen: input.assistantTextBeforeToolsSeen,
     turnInput: input.turnInput,
     butlerData: input.deps.butlerData,
     messageLanguage: input.deps.messageLanguage,

@@ -626,6 +626,7 @@ export interface MessageRecord {
   delivery_state?: RuntimeDeliveryState;
   limitation_codes?: string[];
   limitations?: string[];
+  safe_error_code?: string;
   retryable?: boolean;
   cursor?: number;
   created_at?: string;

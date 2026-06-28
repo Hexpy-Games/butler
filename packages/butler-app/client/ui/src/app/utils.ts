@@ -1044,6 +1044,12 @@ export function typedUiReadModelsFromProgressRows(
   });
 }
 
+export function isRuntimeFaultRetryableMessage(
+  message: Pick<MessageRecord, "retryable" | "safe_error_code">,
+): boolean {
+  return message.retryable === true && message.safe_error_code === "runtime_fault";
+}
+
 export function freezeMessageWorkBlocks(
   messages: MessageRecord[],
   turnProgress: Record<string, TurnProgressSnapshot>,

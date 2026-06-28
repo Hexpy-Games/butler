@@ -219,6 +219,188 @@ test("native runtime gives worker sessions the execution tool loop and role-limi
   expect(names).not.toContain("write_planned_public_report");
 });
 
+test("native runtime blocks visible tool execution until an authored public decision is present", async () => {
+  let executed = 0;
+  const observations: Array<Record<string, unknown>> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async () => {
+      executed += 1;
+      return { ok: true, stdout: "should not run", exit_code: 0 };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: "I will run a command now.",
+        toolCalls: [{ name: "run_command", args: { command: "echo blocked" } }],
+      });
+      observations.push(await input.executeTool({
+        name: "run_command",
+        args: { command: "echo blocked" },
+        rawArguments: "{\"command\":\"echo blocked\"}",
+      }) as Record<string, unknown>);
+      return "I need to author the decision first.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/public-decision-required",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run a quick command." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(executed).toBe(0);
+  expect(observations[0]).toMatchObject({
+    ok: false,
+    observation_kind: "public_decision_required",
+  });
+  expect(String(observations[0]?.model_visible_content)).toContain("same assistant response");
+});
+
+test("native runtime turns invalid tool arguments into model-visible retry guidance", async () => {
+  let executed = 0;
+  let secondPromptSawObservation = false;
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async (call) => {
+      executed += 1;
+      if (executed === 1) {
+        throw new Error(`${call.name} required command argument`);
+      }
+      return { ok: true, stdout: "fixed\n", stderr: "", exit_code: 0 };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: Validate the shell command input before running it.",
+          "rationale: The command must be executable so the next step is based on observed output.",
+          "next_step: Run the corrected command and use the result in the final answer.",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: {} }],
+      });
+      const first = await input.executeTool({
+        name: "run_command",
+        args: {},
+        rawArguments: "{}",
+      }) as Record<string, unknown>;
+      secondPromptSawObservation = String(first.model_visible_content).includes("required command");
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: Retry run_command with the required command argument.",
+          "rationale: The prior observation identified the missing schema field.",
+          "next_step: Run the corrected command and report the verified output.",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "printf fixed" } }],
+      });
+      const second = await input.executeTool({
+        name: "run_command",
+        args: { command: "printf fixed" },
+        rawArguments: "{\"command\":\"printf fixed\"}",
+      }) as Record<string, unknown>;
+      expect(first).toMatchObject({ ok: false, observation_kind: "tool_invalid_arguments" });
+      expect(second).toMatchObject({ ok: true });
+      return "Retried with the required command argument.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/tool-invalid-arguments",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run the command after fixing any schema issue." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toBe("Retried with the required command argument.");
+  expect(executed).toBe(2);
+  expect(secondPromptSawObservation).toBe(true);
+});
+
+test("native runtime summarizes failed command and test output into model context", async () => {
+  const observedKinds: string[] = [];
+  const observedContext: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async (call) => {
+      if (String(call.args.command).includes("bun test")) {
+        return {
+          ok: false,
+          command: call.args.command,
+          stdout: "1 fail\nexpected true to be false",
+          stderr: "tests/unit/example.test.ts failed",
+          exit_code: 1,
+        };
+      }
+      return {
+        ok: false,
+        command: call.args.command,
+        stdout: "build step output",
+        stderr: "missing file",
+        exit_code: 2,
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      for (const command of ["bun test tests/unit/example.test.ts", "ls missing-file"]) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            `summary: Run ${command} to collect execution evidence.`,
+            "rationale: The next model step needs the concrete process result.",
+            "next_step: Read the exit status and output before deciding how to continue.",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command } }],
+        });
+        const output = await input.executeTool({
+          name: "run_command",
+          args: { command },
+          rawArguments: JSON.stringify({ command }),
+        }) as Record<string, unknown>;
+        observedKinds.push(String(output.observation_kind));
+        observedContext.push(String(output.model_visible_content));
+      }
+      return "I reviewed the failed command observations.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/failed-command-observations",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run tests and inspect the failing command." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(observedKinds).toEqual(["test_failed", "command_failed"]);
+  expect(observedContext.join("\n")).toContain("expected true to be false");
+  expect(observedContext.join("\n")).toContain("missing file");
+  expect(observedContext.join("\n")).not.toContain("recovering_internal");
+  expect(observedContext.join("\n")).not.toContain("could not verify completion");
+});
+
 test("native runtime emits immediate preparation progress without auxiliary orientation model call", async () => {
   const intermediate: Array<{
     message?: { text?: string };
@@ -1695,7 +1877,7 @@ test("native runtime rejects unsafe assistant-authored public decisions before t
     });
 
     const workStart = events.find((event) => event.kind === "work.block.started");
-    expect(workStart?.payload?.decisionSource).toBe("runtime-derived");
+    expect(workStart?.payload?.decisionSource).toBeUndefined();
     expect(JSON.stringify(workStart?.payload ?? {})).not.toContain("FileNotFoundException");
     expect(JSON.stringify(workStart?.payload ?? {})).not.toContain("root_path");
     expect(JSON.stringify(workStart?.payload ?? {})).not.toContain("/tmp/butler-workers");
@@ -1705,7 +1887,7 @@ test("native runtime rejects unsafe assistant-authored public decisions before t
   }
 });
 
-test("native runtime preserves safe public decision fields when repairing unsafe summaries", async () => {
+test("native runtime pauses instead of repairing unsafe public decision summaries", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-native-tools-repaired-decision-"));
   const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   try {
@@ -1751,16 +1933,13 @@ test("native runtime preserves safe public decision fields when repairing unsafe
     });
 
     const workStart = events.find((event) => event.kind === "work.block.started");
-    expect(workStart?.payload?.decisionSource).toBe("review-repaired");
-    expect(workStart?.payload?.decisionSummary).not.toContain("FileNotFoundException");
-    expect(workStart?.payload?.decisionRationale).toBe("선택한 공개 출처의 본문 근거를 확인해야 하기 때문입니다.");
-    expect(workStart?.payload?.decisionNextStep).toBe("확인한 근거를 표 정제 단계의 입력으로 사용합니다.");
+    expect(workStart).toBeUndefined();
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-test("native runtime derives fallback work decision for non-canonical pre-tool prose", async () => {
+test("native runtime pauses instead of deriving fallback decisions from non-canonical pre-tool prose", async () => {
   const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
@@ -1802,9 +1981,7 @@ test("native runtime derives fallback work decision for non-canonical pre-tool p
   });
 
   const workStart = events.find((event) => event.kind === "work.block.started");
-  expect(workStart?.payload?.decisionSource).toBe("runtime-derived");
-  expect(workStart?.payload?.decisionSummary).toBe("선택한 출처의 내용을 확인합니다.");
-  expect(workStart?.payload?.decisionSummary).not.toBe("s");
+  expect(workStart).toBeUndefined();
 });
 
 test("native runtime carries public decision context across dependent tool calls", async () => {
@@ -2345,6 +2522,10 @@ test("native runtime routes completion review gap to continuation without final 
       }
       if (attempts.length === 2) {
         expect(input.prompt).toContain("Completion review produced a model-visible observation");
+        await input.onAssistantTextBeforeTools?.({
+          text: "summary: 정제 도구로 CSV 산출물을 생성합니다.\nrationale: 검토 관찰이 durable_artifact 산출물 생성을 요구했습니다.\nnext_step: 생성 결과의 산출물 증거를 최종 답변에 반영합니다.\ncompletion_obligations: durable_artifact",
+          toolCalls: [{ name: "transform_public_data_table", args: { format: "csv" } }],
+        });
         await input.executeTool({
           name: "transform_public_data_table",
           args: { format: "csv" },
@@ -2437,6 +2618,15 @@ test("goal completion review gap schedules continuation and does not deliver can
         ].join("\n");
       }
       if (attempts.length === 2) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Riposte 제작 기록을 한 번 더 검증합니다.",
+            "rationale: 완료 검토가 추가 실행 증거를 요구했습니다.",
+            "next_step: 검증 결과를 반영해 초안을 확정합니다.",
+            "completion_obligations: command_executed",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "pwd && ls" } }],
+        });
         await input.executeTool({
           name: "run_command",
           args: { command: "pwd && ls" },
@@ -2593,6 +2783,10 @@ test("native runtime does not close direct work or recover WorkStreams from comp
         return "첫 커밋 상태는 확인했지만 검증과 다음 커밋은 아직 끝나지 않았습니다.";
       }
       if (attempts.length === 2) {
+        await input.onAssistantTextBeforeTools?.({
+          text: "summary: 보고 산출물 파일을 작성합니다.\nrationale: 검토 관찰이 durable_artifact 증거를 요구했습니다.\nnext_step: 작성된 파일을 근거로 남은 직접 작업 상태를 판단합니다.\ncompletion_obligations: durable_artifact",
+          toolCalls: [{ name: "write_file", args: { path: "report.md", content: "done" } }],
+        });
         await input.executeTool({
           name: "write_file",
           args: { path: "report.md", content: "done" },

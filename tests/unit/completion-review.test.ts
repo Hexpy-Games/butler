@@ -15,8 +15,50 @@ test("completion review returns gap when required evidence receipts are missing"
   expect(outcome.status).toBe("gap");
   if (outcome.status === "gap") {
     expect(outcome.observation.kind).toBe("completion_gap");
+    expect(outcome.observation.summary).toBe("Missing completion evidence for: source_verified.");
+    expect(outcome.observation.modelVisibleContent).toContain("next-step: Missing completion evidence for: source_verified.");
     expect(outcome.evidenceRefs).toEqual([]);
   }
+});
+
+test("completion review stays pure and returns concrete gaps for candidate-only receipts", () => {
+  const receipt = {
+    receipt_id: "candidate-source-receipt",
+    schema_version: "evidence-capability.v1",
+    producer: { kind: "tool", name: "web_read" },
+    capability: "source_verified",
+    evidence_kind: "source_page",
+    verified: false,
+    maturity: "candidate",
+    confidence: 0.4,
+    summary: "A source was mentioned but not verified.",
+    satisfies: ["source_verified"],
+    limitations: ["The source page was not fetched."],
+    references: [{ url: "https://example.test/source" }],
+    created_at: "2026-06-28T10:00:00.000Z",
+  };
+  const input = Object.freeze({
+    requestText: "Verify this source.",
+    candidateText: "I checked it.",
+    requiredObligations: Object.freeze(["source_verified"] as const),
+    evidenceReceipts: Object.freeze([Object.freeze(receipt)]),
+    observations: Object.freeze([]),
+    workStreamTerminal: false,
+    todoTerminal: false,
+  });
+
+  const outcome = evaluateCompletionReviewOutcome(input);
+
+  expect(outcome.status).toBe("gap");
+  if (outcome.status === "gap") {
+    expect(outcome.observation.summary).toBe("Missing completion evidence for: source_verified.");
+    expect(outcome.observation.modelVisibleContent).toContain("request: Verify this source.");
+    expect(outcome.observation.modelVisibleContent).toContain("candidate: I checked it.");
+    expect(outcome.evidenceRefs).toContain(`receipt:${receipt.receipt_id}`);
+    expect(outcome.evidenceRefs).toContain("url:https://example.test/source");
+  }
+  expect(input.evidenceReceipts).toHaveLength(1);
+  expect(input.requiredObligations).toEqual(["source_verified"]);
 });
 
 test("completion review returns waiting_user for explicit blocker receipt", () => {
@@ -61,6 +103,21 @@ test("completion review returns failed when terminal work states still miss evid
   if (outcome.status === "failed") {
     expect(outcome.publicSummary).toContain("Missing completion evidence");
     expect(outcome.evidenceRefs).toEqual([]);
+  }
+});
+
+test("completion review returns failed when terminal todo state still misses evidence", () => {
+  const outcome = evaluateCompletionReviewOutcome({
+    requestText: "검증 태스크까지 완료해줘",
+    candidateText: "검증 태스크를 마쳤습니다.",
+    requiredObligations: ["command_executed"],
+    evidenceReceipts: [],
+    todoTerminal: true,
+  });
+
+  expect(outcome.status).toBe("failed");
+  if (outcome.status === "failed") {
+    expect(outcome.publicSummary).toBe("Missing completion evidence for: command_executed.");
   }
 });
 

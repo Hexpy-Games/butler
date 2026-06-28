@@ -1,5 +1,6 @@
 import { memo } from "react";
 import type { MessageRecord } from "@/app/types.ts";
+import { isRuntimeFaultRetryableMessage } from "@/app/utils.ts";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
 import {
   AssistantFailureNotice,
@@ -64,7 +65,7 @@ function MessageContentComponent({
       )}
       {message.role !== "assistant" &&
         message.status === "failed" &&
-        message.retryable &&
+        isRuntimeFaultRetryableMessage(message) &&
         message.turn_id && (
           <MessageRetryActionsContainer turnId={message.turn_id} />
         )}

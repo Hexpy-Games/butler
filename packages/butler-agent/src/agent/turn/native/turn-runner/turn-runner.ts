@@ -54,6 +54,7 @@ export async function runNativeToolTurn({
     const audit: ToolAuditEntry[] = [];
     const publicDecisionContext: PublicWorkDecision[] = [];
     const pendingPublicDecisions: PublicWorkDecision[] = [];
+    let assistantTextBeforeToolsSeen = false;
     const earlyProgressEmitted = useTools
       ? await emitEarlyRuntimePreparationProgress({
           input,
@@ -69,6 +70,7 @@ export async function runNativeToolTurn({
       audit,
       publicDecisionContext,
       pendingPublicDecisions,
+      assistantTextBeforeToolsSeen: () => assistantTextBeforeToolsSeen,
       skipRuntimePreparationProgress: earlyProgressEmitted,
     });
     turnId = context.turnId;
@@ -85,6 +87,9 @@ export async function runNativeToolTurn({
       plannedReview: context.plannedReview,
       publicDecisionContext,
       pendingPublicDecisions,
+      markAssistantTextBeforeToolsSeen: () => {
+        assistantTextBeforeToolsSeen = true;
+      },
     });
     const runKernelToolPrompt = async (
       promptText: string,
