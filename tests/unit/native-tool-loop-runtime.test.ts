@@ -4581,16 +4581,53 @@ test("completion obligation guard allows educational code examples without proto
   })).toBeNull();
 });
 
-test("native runtime returns gap outcome when artifact review keeps returning text-environment apology", async () => {
+test("native runtime continues artifact review gaps until executable evidence appears", async () => {
+  let attempts = 0;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
-    executeButlerTool: async () => ({
-      source_url: "https://example.test/population",
-      title: "인구 통계",
-      text: "서울 9300000 부산 3300000 인천 3000000",
-    }),
+    executeButlerTool: async (call) => {
+      if (call.name === "run_command") {
+        return {
+          ok: true,
+          exit_code: 0,
+          stdout_preview: "wrote population.csv and population.png",
+          evidence_capability_receipts: [
+            capabilityReceipt({
+              id: "receipt-population-command",
+              producerName: "run_command",
+              capability: "command_executed",
+              evidenceKind: "execution_result",
+              satisfies: ["command_executed"],
+              reference: { task_id: "population-command" },
+            }),
+            capabilityReceipt({
+              id: "receipt-population-chart",
+              producerName: "run_command",
+              capability: "chart_rendered",
+              evidenceKind: "artifact",
+              satisfies: ["chart_rendered"],
+              reference: { artifact_id: "population.png" },
+            }),
+          ],
+        };
+      }
+      return {
+        source_url: "https://example.test/population",
+        title: "인구 통계",
+        text: "서울 9300000 부산 3300000 인천 3000000",
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "receipt-population-source",
+          producerName: "web_read",
+          capability: "source_verified",
+          evidenceKind: "source_page",
+          satisfies: ["source_verified"],
+          reference: { url: "https://example.test/population" },
+        })],
+      };
+    },
     runFunctionToolPromptText: async (input) => {
+      attempts += 1;
       if (!input.prompt.includes("Goal Completion Review")) {
         await input.onAssistantTextBeforeTools?.({
           text: "summary: 공개 출처 본문을 확인합니다.\nrationale: 수치가 실제 본문 근거를 가져야 합니다.\nnext_step: 확인한 수치로 CSV 파일과 차트 이미지를 생성합니다.\ncompletion_obligations: source_verified, command_executed",
@@ -4601,6 +4638,14 @@ test("native runtime returns gap outcome when artifact review keeps returning te
           args: { url: "https://example.test/population" },
           rawArguments: JSON.stringify({ url: "https://example.test/population" }),
         });
+      }
+      if (attempts >= 4) {
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "python scripts/render_population.py" },
+          rawArguments: JSON.stringify({ command: "python scripts/render_population.py" }),
+        });
+        return "CSV와 matplotlib 차트 파일을 실행 결과로 생성하고 보고했습니다.";
       }
       return "CSV는 본문에 적었고, matplotlib 차트는 텍스트 기반 응답 환경이라 이미지 파일로 직접 제공해 드리지 못합니다.";
     },
@@ -4618,19 +4663,57 @@ test("native runtime returns gap outcome when artifact review keeps returning te
     model: "local/gemma-4",
     input: { text: "공개 자료를 확인하고 CSV와 matplotlib 차트를 만들어 보고해 주세요." },
   });
-  expect(result.text).toContain("Missing completion evidence");
+  expect(attempts).toBeGreaterThan(3);
+  expect(result.text).toContain("실행 결과로 생성");
 });
 
-test("native runtime returns gap outcome when artifact review returns executable code instead of running it", async () => {
+test("native runtime continues executable-code gaps until tool execution evidence appears", async () => {
+  let attempts = 0;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
-    executeButlerTool: async () => ({
-      source_url: "https://example.test/population",
-      title: "인구 통계",
-      text: "서울 9300000 부산 3300000 인천 3000000",
-    }),
+    executeButlerTool: async (call) => {
+      if (call.name === "run_command") {
+        return {
+          ok: true,
+          exit_code: 0,
+          stdout_preview: "created chart artifact",
+          evidence_capability_receipts: [
+            capabilityReceipt({
+              id: "receipt-code-command",
+              producerName: "run_command",
+              capability: "command_executed",
+              evidenceKind: "execution_result",
+              satisfies: ["command_executed"],
+              reference: { task_id: "chart-command" },
+            }),
+            capabilityReceipt({
+              id: "receipt-code-chart",
+              producerName: "run_command",
+              capability: "chart_rendered",
+              evidenceKind: "artifact",
+              satisfies: ["chart_rendered"],
+              reference: { artifact_id: "chart.png" },
+            }),
+          ],
+        };
+      }
+      return {
+        source_url: "https://example.test/population",
+        title: "인구 통계",
+        text: "서울 9300000 부산 3300000 인천 3000000",
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "receipt-code-source",
+          producerName: "web_read",
+          capability: "source_verified",
+          evidenceKind: "source_page",
+          satisfies: ["source_verified"],
+          reference: { url: "https://example.test/population" },
+        })],
+      };
+    },
     runFunctionToolPromptText: async (input) => {
+      attempts += 1;
       if (!input.prompt.includes("Goal Completion Review")) {
         await input.onAssistantTextBeforeTools?.({
           text: [
@@ -4646,6 +4729,14 @@ test("native runtime returns gap outcome when artifact review returns executable
           args: { url: "https://example.test/population" },
           rawArguments: JSON.stringify({ url: "https://example.test/population" }),
         });
+      }
+      if (attempts >= 4) {
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "python scripts/render_chart.py" },
+          rawArguments: JSON.stringify({ command: "python scripts/render_chart.py" }),
+        });
+        return "차트 코드를 실행해 파일 산출물을 만들고 보고했습니다.";
       }
       return [
         "요청하신 데이터를 바탕으로 차트 코드를 작성했습니다.",
@@ -4670,7 +4761,8 @@ test("native runtime returns gap outcome when artifact review returns executable
     model: "local/gemma-4",
     input: { text: "공개 자료를 확인하고 CSV와 matplotlib 차트를 만들어 보고해 주세요." },
   });
-  expect(result.text).toContain("Missing completion evidence");
+  expect(attempts).toBeGreaterThan(3);
+  expect(result.text).toContain("실행해 파일 산출물");
 });
 
 test("native runtime can disable default completion review through typed metadata", async () => {
@@ -7039,7 +7131,7 @@ test("native runtime continues instead of delivering while direct todo work is u
   expect(continuationPrompt).not.toContain("Original turn prompt");
   expect(continuationPrompt.toLowerCase()).not.toContain("restart");
   expect(continuationPrompt.toLowerCase()).not.toContain("interruption");
-  expect(result.text).toContain("파일 탐색부터 시작하겠다");
+  expect(result.text).toContain("Direct work remains incomplete");
   const toolCalls = readTranscript("butler/main/open-direct-work-final-guard")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
@@ -7049,7 +7141,7 @@ test("native runtime continues instead of delivering while direct todo work is u
     includeTerminal: true,
   });
   expect(streams).toHaveLength(1);
-  expect(streams[0].state).toBe("complete");
+  expect(streams[0].state).not.toBe("complete");
 });
 
 test("native runtime does not keep extending direct work from finalization", async () => {
@@ -7133,7 +7225,7 @@ test("native runtime does not keep extending direct work from finalization", asy
 
   expect(promptCalls).toBe(1);
   expect(continuationPrompts).toHaveLength(0);
-  expect(result.text).toContain("첫 변경분부터 진행하겠습니다.");
+  expect(result.text).toContain("Direct work remains incomplete");
   const toolCalls = readTranscript("butler/main/open-direct-work-multi-continuation")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
@@ -7145,7 +7237,7 @@ test("native runtime does not keep extending direct work from finalization", asy
     includeTerminal: true,
   });
   expect(streams).toHaveLength(1);
-  expect(streams[0].state).toBe("complete");
+  expect(streams[0].state).toBe("executing");
 });
 
 test("native runtime skips direct work finalization when model request reserve is exhausted", async () => {
@@ -7205,7 +7297,7 @@ test("native runtime skips direct work finalization when model request reserve i
   });
 
   expect(promptCalls).toBe(1);
-  expect(result.text).toContain("직접 작업이 아직 남아 있습니다.");
+  expect(result.text).toContain("Direct work remains incomplete");
 });
 
 test("native runtime stops direct work continuation when tools do not make semantic progress", async () => {
@@ -7272,14 +7364,14 @@ test("native runtime stops direct work continuation when tools do not make seman
       metadata: { runtimePolicy: { completionReview: "disabled" } },
     });
 
-    expect(result.text).toContain("write_file 커밋이 아직 남아 있습니다.");
+    expect(result.text).toContain("Direct work remains incomplete");
     expect(promptCalls).toBe(1);
     expect(executedCommands).toEqual([]);
     const streams = new WorkStreamStore(tempDir).list({
       sessionId: "butler/main/open-direct-work-no-semantic-progress",
       includeTerminal: true,
     });
-    expect(streams[0]!.state).toBe("complete");
+    expect(streams[0]!.state).toBe("executing");
   } finally {
     if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
     else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;
@@ -7415,7 +7507,7 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
       metadata: { runtimePolicy: { completionReview: "disabled" } },
     });
 
-    expect(result.text).toContain("구현 근거 확인이 아직 진행 중입니다.");
+    expect(result.text).toContain("Direct work remains incomplete");
     expect(promptCalls).toBe(1);
     const toolCalls = readTranscript("butler/main/open-direct-work-fsm-progress")
       .filter((event) => event.kind === "tool_call")
@@ -7428,7 +7520,7 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
       includeTerminal: true,
     });
     expect(streams).toHaveLength(1);
-    expect(streams[0].state).toBe("complete");
+    expect(streams[0].state).not.toBe("complete");
   } finally {
     if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
     else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;
@@ -7534,10 +7626,8 @@ test("native runtime does not emit turn failed before recoverable limited delive
   })).rejects.toThrow("missing evidence");
 
   expect(events.some((event) => event.kind === "turn.failed")).toBe(false);
-  expect(events.map((event) => event.kind)).toEqual(expect.arrayContaining([
-    "recovery.recorded",
-    "turn.outcome",
-  ]));
+  expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
+  expect(events.map((event) => event.kind)).not.toContain("turn.outcome");
 });
 
 test("native runtime marks interrupted direct WorkStreams recoverable", async () => {
@@ -7647,6 +7737,26 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
         Object.assign(error, { code: "prompt_usage_model_call_budget_exhausted" });
         throw error;
       }
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          title: "Sandy style guard validation",
+          todos: [{
+            id: "w3-style-guard",
+            content: "Inspect Sandy style guard validation evidence",
+            active_form: "Inspecting Sandy style guard validation evidence",
+            status: "completed",
+            phase: "execution",
+          }, {
+            id: "w4-report",
+            content: "Report Sandy style guard validation result",
+            active_form: "Reporting Sandy style guard validation result",
+            status: "completed",
+            phase: "reporting",
+          }],
+        },
+        rawArguments: JSON.stringify({ title: "Sandy style guard validation" }),
+      });
       return "보존된 W3 작업 상태부터 이어서 검증했습니다.";
     },
   });
@@ -7657,49 +7767,39 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
     systemPrompt: "You are Butler.",
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-test",
     input: { text: "샌디봇 최신세션 W3부터 계속 진행해줘." },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
-  })).rejects.toThrow("Prompt usage model-call budget exhausted");
+  });
+
+  expect(result.text).toContain("보존된 W3 작업 상태");
+  expect(callCount).toBe(2);
 
   const streams = new WorkStreamStore(tempDir).list({ sessionId, includeTerminal: true });
   expect(streams).toHaveLength(1);
   expect(streams[0]).toMatchObject({
-    state: "executing",
-    current_phase: "execution",
-    active_step_id: "w3-style-guard",
-    terminal: false,
+    state: "complete",
+    terminal: true,
   });
   const record = new WorkStreamStore(tempDir).read(streams[0].id);
-  expect(record?.status_note).toBeNull();
+  expect(record?.state).toBe("complete");
   const todoView = new TodoListStore(tempDir).view(record!.todo_list_id!, { includeCompleted: true });
-  expect(todoView.progress.active).toBe(2);
+  expect(todoView.progress.active).toBe(0);
   expect(todoView.items)
     .toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "w3-style-guard",
-        status: "in_progress",
+        status: "completed",
         active_form: "Inspecting Sandy style guard validation evidence",
       }),
       expect.objectContaining({
         id: "w4-report",
-        status: "pending",
+        status: "completed",
       }),
     ]));
-
-  const result = await runtime.runTurn({
-    handle,
-    provider: fakeProvider,
-    model: "local/gemma-test",
-    input: { text: "계속해서 진행해줘." },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
-  });
-
-  expect(result.text).toContain("W3");
-  expect(callCount).toBe(2);
 });
 
 test("native runtime synthesizes durable WorkStream progress when a compound tool turn skips todo setup", async () => {

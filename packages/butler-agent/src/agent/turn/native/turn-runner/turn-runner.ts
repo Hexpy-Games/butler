@@ -18,10 +18,10 @@ import {
 import {
   emitInterruptedTurnOutcome,
   emitCompletionReviewTerminalOutcome,
-  emitRecoverableTurnOutcome,
   emitSuccessfulTurnOutcome,
 } from "./turn-outcome-events.ts";
 import {
+  collectTurnContinuationRefs,
   persistCompletionGapContinuation,
   produceFinalDeliveryOutcome,
 } from "./final-delivery-gates.ts";
@@ -33,8 +33,7 @@ import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
 import { unresolvedValidationFailureFromAudit } from "./validation-failure-guard.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
 import type { NativeTurnRunnerInput } from "./turn-runner-types.ts";
-
-const COMPLETION_GAP_CONTINUATION_MAX_ATTEMPTS = 2;
+import { finalDeliveryBlockerForOpenDirectWork } from "../../direct-work-continuation.ts";
 
 export async function runNativeToolTurn({
   input,
@@ -81,12 +80,32 @@ export async function runNativeToolTurn({
       publicDecisionContext,
       pendingPublicDecisions,
     });
+    const runKernelToolPrompt = async (
+      promptText: string,
+      maxToolRounds?: number,
+      phase?: string,
+    ): Promise<string> => {
+      try {
+        return await runToolPrompt(promptText, maxToolRounds, phase);
+      } catch (error) {
+        if (!isPromptUsageModelCallBudgetError(error)) throw error;
+        await persistSchedulerContinuation({
+          input,
+          deps,
+          turnId: context.turnId,
+          audit,
+          publicDecisionContext,
+          error,
+        });
+        return await runToolPrompt(schedulerContinuationPrompt(), maxToolRounds, "scheduler_continuation");
+      }
+    };
     let candidateText = useTools
-      ? await runToolPrompt(context.prompt, undefined, "initial_tool_loop")
+      ? await runKernelToolPrompt(context.prompt, undefined, "initial_tool_loop")
       : await runTextPrompt(context.prompt);
     throwIfRuntimeTurnAborted(input.signal);
     let decisionCheckedText: string | null = null;
-    for (let completionAttempt = 0; completionAttempt <= COMPLETION_GAP_CONTINUATION_MAX_ATTEMPTS; completionAttempt += 1) {
+    while (true) {
       const deliveryOutcome = await produceFinalDeliveryOutcome({
         turnInput: input,
         session,
@@ -98,7 +117,7 @@ export async function runNativeToolTurn({
         audit,
         publicDecisionContext,
         toolSurfaceController: context.toolSurfaceController,
-        runToolPrompt,
+        runToolPrompt: runKernelToolPrompt,
         turnId,
         turnBudget: context.turnBudget,
       });
@@ -146,27 +165,11 @@ export async function runNativeToolTurn({
         turnInput: input,
         deps,
         turnId,
+        audit,
+        publicDecisionContext,
         observation: deliveryOutcome.observation,
       });
-      if (completionAttempt === COMPLETION_GAP_CONTINUATION_MAX_ATTEMPTS) {
-        await emitCompletionReviewTerminalOutcome({
-          turnInput: input,
-          outcome: "failed",
-          publicSummary: deliveryOutcome.observation.summary,
-          evidenceRefs: deliveryOutcome.evidenceRefs,
-          turnId,
-        });
-        return {
-          text: deliveryOutcome.observation.summary,
-          runtimeSessionRef: input.handle.runtimeSessionRef,
-          artifacts: runtimeArtifactsFromAudit({
-            audit,
-            butlerData: deps.butlerData,
-            workspacePath: session.init.workspacePath,
-          }),
-        };
-      }
-      candidateText = await runToolPrompt(completionGapContinuationPrompt({
+      candidateText = await runKernelToolPrompt(completionGapContinuationPrompt({
         observationSummary: deliveryOutcome.observation.summary,
         modelVisibleContent: deliveryOutcome.observation.modelVisibleContent,
       }), undefined, "completion_gap_continuation");
@@ -174,6 +177,37 @@ export async function runNativeToolTurn({
     }
     if (decisionCheckedText === null) {
       throw new Error("completion delivery exited without terminal outcome");
+    }
+    const directWorkBlocker = session.init.role === "butler"
+      ? finalDeliveryBlockerForOpenDirectWork({
+        butlerData: deps.butlerData,
+        sessionId: input.handle.sessionId,
+        turnId,
+      })
+      : null;
+    if (directWorkBlocker) {
+      const publicSummary = directWorkBlocker.activeItems.at(0)
+        ? `Direct work remains incomplete: ${directWorkBlocker.activeItems.at(0)?.label}`
+        : "Direct work remains incomplete.";
+      await emitCompletionReviewTerminalOutcome({
+        turnInput: input,
+        outcome: "failed",
+        publicSummary,
+        evidenceRefs: [
+          `work_stream:${directWorkBlocker.id}`,
+          ...(directWorkBlocker.listId ? [`todo_list:${directWorkBlocker.listId}`] : []),
+        ],
+        turnId,
+      });
+      return {
+        text: publicSummary,
+        runtimeSessionRef: input.handle.runtimeSessionRef,
+        artifacts: runtimeArtifactsFromAudit({
+          audit,
+          butlerData: deps.butlerData,
+          workspacePath: session.init.workspacePath,
+        }),
+      };
     }
     if (turnId) {
       clearTurnContextAtom({
@@ -247,24 +281,13 @@ export async function runNativeToolTurn({
           sessionId: input.handle.sessionId,
           turnId,
         });
-      } else {
-        const recoveryStreams = isBudgetError
-          ? []
-          : markActiveWorkStreamRecoverableBestEffort({
-            butlerData: deps.butlerData,
-            sessionId: input.handle.sessionId,
-            turnId,
-            reason: limitedDelivery?.reason ?? errorMessage,
-          });
-        if (limitedDelivery && !isBudgetError) {
-          await emitRecoverableTurnOutcome({
-            turnInput: input,
-            turnId,
-            reason: errorMessage,
-            workStreamId: recoveryStreams.at(0)?.id,
-            todoListId: recoveryStreams.at(0)?.todo_list_id ?? undefined,
-          });
-        }
+      } else if (!limitedDelivery && !isBudgetError) {
+        markActiveWorkStreamRecoverableBestEffort({
+          butlerData: deps.butlerData,
+          sessionId: input.handle.sessionId,
+          turnId,
+          reason: errorMessage,
+        });
       }
     }
     if (!limitedDelivery && !isBudgetError) {
@@ -291,6 +314,54 @@ export async function runNativeToolTurn({
   }
 }
 
+async function persistSchedulerContinuation(input: {
+  input: NativeTurnRunnerInput["input"];
+  deps: NativeTurnRunnerInput["deps"];
+  turnId: string;
+  audit: ToolAuditEntry[];
+  publicDecisionContext: PublicWorkDecision[];
+  error: unknown;
+}): Promise<void> {
+  const safeFailure = safeRuntimeFailure(input.error);
+  const refs = collectTurnContinuationRefs({
+    butlerData: input.deps.butlerData,
+    sessionId: input.input.handle.sessionId,
+    turnId: input.turnId,
+    audit: input.audit,
+    publicDecisionContext: input.publicDecisionContext,
+  });
+  persistTurnContextAtom({
+    butlerData: input.deps.butlerData,
+    sessionId: input.input.handle.sessionId,
+    turnId: input.turnId,
+    state: "continuing",
+    sourceErrorCode: safeFailure.code,
+    reason: "Scheduler yielded before the next model request.",
+    userRequest: {
+      id: currentUserMessageRef(input.input),
+    },
+    ...refs,
+    unresolvedObservations: [{
+      kind: "runtime_provider_fault",
+      id: `scheduler:${input.turnId}`,
+    }],
+  });
+  await emitTurnEventBestEffort(input.input, {
+    kind: "turn.observation",
+    payload: {
+      kind: "runtime_provider_fault",
+      safeLabel: "Scheduler yielded before the next model request.",
+    },
+  });
+  await emitTurnEventBestEffort(input.input, {
+    kind: "turn.continuation_scheduled",
+    payload: {
+      reason: safeFailure.code,
+      safeLabel: "Continuing current turn after scheduler yield",
+    },
+  });
+}
+
 function completionGapContinuationPrompt(input: {
   observationSummary: string;
   modelVisibleContent: string;
@@ -301,6 +372,14 @@ function completionGapContinuationPrompt(input: {
     `Observation: ${input.observationSummary}`,
     input.modelVisibleContent,
   ].filter(Boolean).join("\n\n");
+}
+
+function schedulerContinuationPrompt(): string {
+  return [
+    "The scheduler persisted a continuation checkpoint for this same logical turn.",
+    "Resume the current turn from durable WorkStream, todo, tool, and observation state.",
+    "Do not emit terminal public copy about the scheduler yield.",
+  ].join("\n\n");
 }
 
 async function emitEarlyRuntimePreparationProgress(input: {
@@ -418,4 +497,11 @@ function projectId(session: NativeTurnRunnerInput["session"]): string | undefine
 function currentUserText(input: NativeTurnRunnerInput["input"]): string {
   if ("eventId" in input.input) return input.input.message.text ?? "";
   return input.input.text ?? "";
+}
+
+function currentUserMessageRef(input: NativeTurnRunnerInput["input"]): string {
+  if ("eventId" in input.input && typeof input.input.message.id === "string") {
+    return input.input.message.id;
+  }
+  return `turn:${input.handle.sessionId}`;
 }

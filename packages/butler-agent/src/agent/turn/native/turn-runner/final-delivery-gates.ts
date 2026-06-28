@@ -23,6 +23,7 @@ import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
 import { persistTurnContextAtom } from "../../turn-continuation-context.ts";
 import type { createDirectTurnBudget } from "../../direct-turn-budget.ts";
 import { WorkStreamStore } from "../../../work/work-stream.ts";
+import { TodoListStore } from "../../../work/todo-list.ts";
 
 const EXPLICIT_TOOL_REPAIR_ATTEMPTS = 2;
 const EXPLICIT_TOOL_REPAIR_BASE_ROUNDS = 2;
@@ -276,7 +277,7 @@ function observationsFromAudit(audit: ToolAuditEntry[]) {
   return audit
     .filter((entry) => !entry.ok)
     .map((entry) => ({
-      kind: entry.name === "run_command" ? "command_failed" as const : "tool_result" as const,
+      kind: "tool_result" as const,
       summary: entry.error ? `${entry.name}: ${entry.error}` : `${entry.name} failed.`,
       modelVisibleContent: entry.error ? `${entry.name}: ${entry.error}` : `${entry.name} failed.`,
       visibility: "model" as const,
@@ -303,6 +304,8 @@ export async function persistCompletionGapContinuation(input: {
   turnInput: RuntimeTurnInput;
   deps: NativeTurnRunnerDeps;
   turnId?: string | null;
+  audit: ToolAuditEntry[];
+  publicDecisionContext: PublicWorkDecision[];
   observation: {
     kind: string;
     summary: string;
@@ -312,6 +315,13 @@ export async function persistCompletionGapContinuation(input: {
 }): Promise<void> {
   const turnId = input.turnId;
   if (!turnId) return;
+  const refs = collectTurnContinuationRefs({
+    butlerData: input.deps.butlerData,
+    sessionId: input.turnInput.handle.sessionId,
+    turnId,
+    audit: input.audit,
+    publicDecisionContext: input.publicDecisionContext,
+  });
   persistTurnContextAtom({
     butlerData: input.deps.butlerData,
     sessionId: input.turnInput.handle.sessionId,
@@ -322,6 +332,7 @@ export async function persistCompletionGapContinuation(input: {
     userRequest: {
       id: currentUserMessageRef(input.turnInput),
     },
+    ...refs,
     unresolvedObservations: [{
       kind: input.observation.kind,
       id: `completion-gap:${turnId}`,
@@ -346,6 +357,49 @@ export async function persistCompletionGapContinuation(input: {
       safeLabel: "Continuing from completion gap",
     },
   });
+}
+
+export function collectTurnContinuationRefs(input: {
+  butlerData: string;
+  sessionId: string;
+  turnId: string;
+  audit: ToolAuditEntry[];
+  publicDecisionContext: PublicWorkDecision[];
+}): {
+  latestAssistantDecision?: { id: string };
+  openToolPairs: Array<{ kind: string; id: string; path?: string }>;
+  currentTurnWork: Array<{ kind: string; id: string; path?: string }>;
+  currentTurnTodos: Array<{ kind: string; id: string; path?: string }>;
+} {
+  const workStore = new WorkStreamStore(input.butlerData);
+  const todoStore = new TodoListStore(input.butlerData);
+  const currentTurnWork = workStore.list({
+    sessionId: input.sessionId,
+    includeTerminal: true,
+  })
+    .map((summary) => workStore.read(summary.id))
+    .filter((record) => record?.last_user_turn_id === input.turnId)
+    .map((record) => ({ kind: "work_stream", id: record!.id }));
+  const currentTurnTodos = currentTurnWork.flatMap((work) => {
+    const record = workStore.read(work.id);
+    if (!record?.todo_list_id) return [];
+    const todo = todoStore.read(record.todo_list_id);
+    if (!todo) return [{ kind: "todo_list", id: record.todo_list_id }];
+    return [
+      { kind: "todo_list", id: todo.list_id },
+      ...todo.items.map((item) => ({ kind: "todo_item", id: `${todo.list_id}:${item.id}` })),
+    ];
+  });
+  const openToolPairs = input.audit
+    .filter((entry) => !entry.ok)
+    .map((entry, index) => ({ kind: "tool_pair", id: `audit:${index}:${entry.name}` }));
+  const latestAssistantDecision = input.publicDecisionContext.at(-1)?.decisionId;
+  return {
+    ...(latestAssistantDecision ? { latestAssistantDecision: { id: latestAssistantDecision } } : {}),
+    openToolPairs,
+    currentTurnWork,
+    currentTurnTodos,
+  };
 }
 
 function currentUserMessageRef(input: RuntimeTurnInput): string {

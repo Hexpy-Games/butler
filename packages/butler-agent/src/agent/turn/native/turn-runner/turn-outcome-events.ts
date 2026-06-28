@@ -1,10 +1,8 @@
 import type { RuntimeTurnInput } from "../../../../test-support/harness/contracts.ts";
 import {
-  RECOVERY_RECORDED_EVENT_KIND,
   TURN_COMPLETION_EVIDENCE_EVENT_KIND,
   TURN_OUTCOME_EVENT_KIND,
   createCompletionEvidencePayload,
-  createRecoveryRecordedPayload,
   createTurnOutcomePayload,
   type CompletionEvidenceKind,
 } from "../../../events/turn-state-contract.ts";
@@ -21,11 +19,14 @@ export async function emitSuccessfulTurnOutcome(input: {
   const validationFailure = unresolvedValidationFailureFromAudit(input.audit);
   const evidenceRefs = await emitCompletionEvidenceFromAudit(input.turnInput, input.audit);
   if (validationFailure) {
-    await emitRecoverableTurnOutcome({
-      turnInput: input.turnInput,
-      turnId: input.turnId,
-      reason: `Validation suite failed without a later passing receipt: ${validationFailure.suite}`,
-      completionEvidenceRefs: evidenceRefs,
+    const failureRef = `validation:${validationFailure.suite}`;
+    await emitTurnEventBestEffort(input.turnInput, {
+      kind: TURN_OUTCOME_EVENT_KIND,
+      payload: createTurnOutcomePayload({
+        outcome: "failed",
+        completionEvidenceRefs: Array.from(new Set([...evidenceRefs, failureRef])),
+        publicSummary: `Validation suite failed without a later passing receipt: ${validationFailure.suite}`,
+      }),
     });
     return;
   }
@@ -36,36 +37,6 @@ export async function emitSuccessfulTurnOutcome(input: {
       completionEvidenceRefs: evidenceRefs,
       completionEvidenceStatus: evidenceRefs.length === 0 ? "not_required" : undefined,
       publicSummary: input.limitedDelivery ? "Completed with limitations." : "Completed.",
-    }),
-  });
-}
-
-export async function emitRecoverableTurnOutcome(input: {
-  turnInput: RuntimeTurnInput;
-  turnId?: string;
-  reason: string;
-  workStreamId?: string;
-  todoListId?: string | null;
-  completionEvidenceRefs?: string[];
-}): Promise<void> {
-  const recoveryToken = `recovery:${input.turnId ?? input.turnInput.handle.sessionId}`;
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: RECOVERY_RECORDED_EVENT_KIND,
-    payload: createRecoveryRecordedPayload({
-      recoveryToken,
-      reason: input.reason,
-      workStreamId: input.workStreamId,
-      todoListId: input.todoListId,
-      supportedControls: ["continue", "retry"],
-    }),
-  });
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: TURN_OUTCOME_EVENT_KIND,
-    payload: createTurnOutcomePayload({
-      outcome: "recoverable",
-      recoveryToken,
-      completionEvidenceRefs: input.completionEvidenceRefs ?? [],
-      publicSummary: "Durable work can be resumed.",
     }),
   });
 }
