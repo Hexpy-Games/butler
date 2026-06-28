@@ -290,11 +290,12 @@ function isToolCallRepairFailure(failure: RuntimeDeliveryFailureInput): boolean 
 }
 
 function isLiveContinuationGap(failure: RuntimeDeliveryFailureInput): boolean {
-  const message = failure.message ?? "";
   return (
     failure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
     failure.code === "goal_completion_incomplete" ||
     failure.code === "internal_uncertainty" ||
+    failure.code === "completion_gap" ||
+    failure.code === "completion_review_incomplete" ||
     failure.code === "prompt_usage_model_call_budget_exhausted" ||
     failure.code === "missing_evidence" ||
     failure.code === "candidate_only_evidence" ||
@@ -304,17 +305,7 @@ function isLiveContinuationGap(failure: RuntimeDeliveryFailureInput): boolean {
     failure.code === "invalid_tool_arguments" ||
     failure.code === "tool_arguments_validation_failed" ||
     failure.name === "PromptUsageModelCallBudgetExhaustedError" ||
-    failure.name === "GoalCompletionIncompleteError" ||
-    /(?:unsatisfied|missing|unresolved) public completion obligation/iu.test(message) ||
-    /goal completion|could not verify that the requested goal was completed/iu.test(message) ||
-    /uncertain (?:whether|if) the requested goal was completed/iu.test(message) ||
-    /internal uncertainty/iu.test(message) ||
-    /prompt usage model-call budget exhausted/iu.test(message) ||
-    /completion review .*incomplete/iu.test(message) ||
-    /missing evidence|candidate-only evidence|evidence receipt/iu.test(message) ||
-    /unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message) ||
-    /invalid tool arguments|tool arguments failed validation/iu.test(message) ||
-    /repeated tool|tool pressure|too many tool calls/iu.test(message)
+    failure.name === "GoalCompletionIncompleteError"
   );
 }
 

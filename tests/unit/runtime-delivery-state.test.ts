@@ -99,6 +99,24 @@ test("runtime delivery taxonomy keeps repairable model and evidence gaps out of 
   });
 });
 
+test("runtime delivery taxonomy does not classify live continuation from raw text", () => {
+  for (const message of [
+    "Butler could not verify that the requested goal was completed.",
+    "missing evidence receipt for source_verified",
+    "unknown tool web_read; missing tool surface",
+    "invalid tool arguments failed validation",
+    "Prompt usage model-call budget exhausted before provider request",
+    "repeated tool pressure after too many tool calls",
+  ]) {
+    expect(classifyRuntimeFailureDelivery({ message })).toMatchObject({
+      delivery_state: "failed_system",
+      terminal: true,
+      issue_kind: "system_failure",
+      visibility: "failure_notice",
+    });
+  }
+});
+
 test("runtime delivery taxonomy keeps legacy recovery states diagnostic only", () => {
   expect(classifyRuntimeFailureDelivery({
     historicalRecoveryState: true,
