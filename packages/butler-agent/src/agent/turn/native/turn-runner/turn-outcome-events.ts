@@ -6,6 +6,11 @@ import {
   createTurnOutcomePayload,
   type CompletionEvidenceKind,
 } from "../../../events/turn-state-contract.ts";
+import {
+  terminalizeTurnThroughKernel,
+  type TerminalTurnState,
+  type TurnState,
+} from "../../turn-kernel.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
 import type { ToolAuditEntry } from "../output/tool-types.ts";
 import { unresolvedValidationFailureFromAudit } from "./validation-failure-guard.ts";
@@ -22,21 +27,25 @@ export async function emitSuccessfulTurnOutcome(input: {
     const failureRef = `validation:${validationFailure.suite}`;
     await emitTurnEventBestEffort(input.turnInput, {
       kind: TURN_OUTCOME_EVENT_KIND,
-      payload: createTurnOutcomePayload({
-        outcome: "failed",
+      payload: createKernelTurnOutcomePayload({
+        from: "observing_tools",
+        to: "failed",
         completionEvidenceRefs: Array.from(new Set([...evidenceRefs, failureRef])),
         publicSummary: `Validation suite failed without a later passing receipt: ${validationFailure.suite}`,
+        reason: "validation_failed_without_later_passing_receipt",
       }),
     });
     return;
   }
   await emitTurnEventBestEffort(input.turnInput, {
     kind: TURN_OUTCOME_EVENT_KIND,
-    payload: createTurnOutcomePayload({
-      outcome: "completed",
+    payload: createKernelTurnOutcomePayload({
+      from: "observing_tools",
+      to: "completed",
       completionEvidenceRefs: evidenceRefs,
       completionEvidenceStatus: evidenceRefs.length === 0 ? "not_required" : undefined,
       publicSummary: input.limitedDelivery ? "Completed with limitations." : "Completed.",
+      reason: input.limitedDelivery ? "final_delivery_completed_with_limitations" : "final_delivery_completed",
     }),
   });
 }
@@ -58,10 +67,13 @@ export async function emitInterruptedTurnOutcome(input: {
   });
   await emitTurnEventBestEffort(input.turnInput, {
     kind: TURN_OUTCOME_EVENT_KIND,
-    payload: createTurnOutcomePayload({
-      outcome: input.cancelled ? "cancelled" : "failed",
+    payload: createKernelTurnOutcomePayload({
+      from: "executing_tools",
+      to: input.cancelled ? "aborted" : "failed",
+      eventOutcome: input.cancelled ? "cancelled" : "failed",
       completionEvidenceRefs: [evidenceRef],
       publicSummary: input.cancelled ? "Cancelled." : "Failed.",
+      reason: input.cancelled ? "turn_cancelled" : input.reason,
     }),
   });
 }
@@ -72,17 +84,46 @@ export async function emitCompletionReviewTerminalOutcome(input: {
   publicSummary: string;
   evidenceRefs: string[];
   turnId?: string;
+  reason: string;
 }): Promise<void> {
   await emitTurnEventBestEffort(input.turnInput, {
     kind: TURN_OUTCOME_EVENT_KIND,
-    payload: createTurnOutcomePayload({
-      outcome: input.outcome,
+    payload: createKernelTurnOutcomePayload({
+      from: "observing_tools",
+      to: input.outcome,
+      eventOutcome: input.outcome,
       completionEvidenceRefs: input.evidenceRefs,
       publicSummary: input.publicSummary,
+      reason: input.reason,
       ...(input.outcome === "waiting_user"
         ? { recoveryToken: `waiting-user:${input.turnId ?? input.turnInput.handle.sessionId}` }
         : {}),
     }),
+  });
+}
+
+export function createKernelTurnOutcomePayload(input: {
+  from: TurnState;
+  to: TerminalTurnState;
+  eventOutcome?: "completed" | "failed" | "runtime_fault" | "cancelled" | "waiting_user";
+  completionEvidenceRefs: string[];
+  completionEvidenceStatus?: string;
+  recoveryToken?: string;
+  publicSummary: string;
+  reason: string;
+}): Record<string, unknown> {
+  const terminal = terminalizeTurnThroughKernel({
+    from: input.from,
+    to: input.to,
+    reason: input.reason,
+    evidenceRefs: input.completionEvidenceRefs,
+  });
+  return createTurnOutcomePayload({
+    outcome: input.eventOutcome ?? terminal.to,
+    completionEvidenceRefs: terminal.evidenceRefs,
+    completionEvidenceStatus: input.completionEvidenceStatus,
+    recoveryToken: input.recoveryToken,
+    publicSummary: input.publicSummary,
   });
 }
 

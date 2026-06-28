@@ -3,9 +3,11 @@ import {
   assertTurnStateTransition,
   isAllowedTurnStateTransition,
   isTerminalTurnState,
+  terminalizeTurnThroughKernel,
   type TurnState,
   type TerminalTurnState,
 } from "../../packages/butler-agent/src/agent/turn/turn-kernel.ts";
+import { createKernelTurnOutcomePayload } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/turn-outcome-events.ts";
 
 test("turn kernel admits only declared transitions", () => {
   expect(isAllowedTurnStateTransition("accepted", "model_deciding")).toBe(true);
@@ -20,10 +22,10 @@ test("turn kernel admits only declared transitions", () => {
 
 test("invalid turn state transitions are rejected deterministically", () => {
   expect(() =>
-    assertTurnStateTransition({ from: "model_deciding", to: "accepted" as TurnState })
+    assertTurnStateTransition({ from: "model_deciding", to: "accepted" as TurnState }),
   ).toThrow("invalid turn state transition");
   expect(() =>
-    assertTurnStateTransition({ from: "completed", to: "waiting_user" as TerminalTurnState })
+    assertTurnStateTransition({ from: "completed", to: "waiting_user" as TerminalTurnState }),
   ).toThrow("invalid turn state transition");
 });
 
@@ -32,4 +34,37 @@ test("continuing transitions remain non-terminal until explicit terminal transit
   expect(isAllowedTurnStateTransition("continuing", "waiting_user")).toBe(true);
   expect(isTerminalTurnState("continuing")).toBe(false);
   expect(isTerminalTurnState("waiting_user")).toBe(true);
+});
+
+test("turn kernel rejects direct illegal terminalization", () => {
+  expect(() =>
+    terminalizeTurnThroughKernel({
+      from: "executing_tools",
+      to: "completed",
+      reason: "executor attempted to complete directly",
+      evidenceRefs: ["tool:direct"],
+    }),
+  ).toThrow("invalid turn state transition executing_tools -> completed");
+});
+
+test("native turn outcome payloads are created through kernel terminalization", () => {
+  expect(createKernelTurnOutcomePayload({
+    from: "observing_tools",
+    to: "completed",
+    completionEvidenceRefs: [],
+    completionEvidenceStatus: "not_required",
+    publicSummary: "Completed.",
+    reason: "completion_review_complete",
+  })).toMatchObject({ outcome: "completed" });
+
+  expect(() =>
+    createKernelTurnOutcomePayload({
+      from: "executing_tools",
+      to: "completed",
+      completionEvidenceRefs: [],
+      completionEvidenceStatus: "not_required",
+      publicSummary: "Completed.",
+      reason: "executor attempted to complete directly",
+    }),
+  ).toThrow("invalid turn state transition executing_tools -> completed");
 });
