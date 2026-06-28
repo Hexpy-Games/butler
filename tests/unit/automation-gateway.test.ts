@@ -712,6 +712,103 @@ test("queued inbound dispatcher contains failure persistence rejections", async 
   store.close();
 });
 
+test("queued inbound dispatcher does not time out active app turns by default", async () => {
+  const queue = new NativeInboundQueue(tempDir);
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  queue.enqueue(appEnvelope({
+    eventId: "app:long-running-default",
+    messageId: "message-long-running-default",
+    sessionId: "butler/app-long-running-default",
+  }), { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const dispatcher = new QueuedInboundDispatcher();
+  const guard = new DeliveryGuard({ adapters: [app] });
+  const releaseHandler = deferred<void>();
+  store.upsert({
+    sessionId: "butler/app-long-running-default",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: tempDir,
+    runtimeAdapterId: "test-runtime",
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "long-running-default",
+    }],
+    lifecycleState: "active",
+  });
+
+  const first = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: guard,
+    maxConcurrentSessions: 1,
+    limit: 1,
+    processingLeaseMs: 5,
+    server: {
+      async handleInbound(envelope) {
+        await releaseHandler.promise;
+        return {
+          status: "handled",
+          route: {
+            sessionId: envelope.routingHints?.sessionId ?? "",
+            role: "butler",
+            reason: "session-hint",
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            metadata: { text: "done after long work" },
+          },
+        };
+      },
+    },
+  });
+  expect(first.claimed).toBe(1);
+
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  const whileActive = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: guard,
+    maxConcurrentSessions: 1,
+    limit: 1,
+    processingLeaseMs: 5,
+    server: {
+      async handleInbound() {
+        throw new Error("active turn should not be reprocessed");
+      },
+    },
+  });
+  expect(whileActive.claimed).toBe(0);
+  expect(app.sentActions).toEqual([]);
+  expect(existsSync(join(tempDir, "runtime", "inbound-events", "pending")) ?
+    readdirSync(join(tempDir, "runtime", "inbound-events", "pending")) :
+    []).toEqual([]);
+  expect(existsSync(join(tempDir, "runtime", "inbound-events", "failed")) ?
+    readdirSync(join(tempDir, "runtime", "inbound-events", "failed")) :
+    []).toEqual([]);
+
+  releaseHandler.resolve();
+  await dispatcher.waitForIdle();
+
+  expect(app.sentActions).toHaveLength(1);
+  expect(app.sentActions[0]).toMatchObject({
+    transport: "app",
+    message: {
+      text: "done after long work",
+      replyToMessageId: "message-long-running-default",
+    },
+    metadata: {
+      kind: "final_result",
+      turnId: "turn-message-long-running-default",
+    },
+  });
+  store.close();
+});
+
 test("queued inbound delivery preserves safe artifact refs for app projection", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const runtime = new ScriptedRuntime([{
