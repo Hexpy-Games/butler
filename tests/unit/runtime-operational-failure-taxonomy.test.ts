@@ -90,7 +90,7 @@ test("runtime delivery taxonomy preserves operational failures with exact safe c
   }
 });
 
-test("runtime delivery taxonomy keeps disabled tools and missing evidence recoverable", () => {
+test("runtime delivery taxonomy separates tool retry from completion continuation", () => {
   const cases = [
     {
       label: "disabled tool",
@@ -100,6 +100,8 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
       },
       state: "needs_tool_surface",
       code: "disabled_tool",
+      issueKind: "tool_call_repair",
+      visibility: "tool_retry_progress",
     },
     {
       label: "missing evidence",
@@ -109,6 +111,8 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
       },
       state: "needs_evidence",
       code: "missing_evidence",
+      issueKind: "completion_continuation",
+      visibility: "continuation_progress",
     },
     {
       label: "disabled tool with storage-like name",
@@ -118,6 +122,8 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
       },
       state: "needs_tool_surface",
       code: "disabled_tool",
+      issueKind: "tool_call_repair",
+      visibility: "tool_retry_progress",
     },
     {
       label: "missing evidence with gateway-like name",
@@ -127,6 +133,8 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
       },
       state: "needs_evidence",
       code: "missing_evidence",
+      issueKind: "completion_continuation",
+      visibility: "continuation_progress",
     },
   ];
 
@@ -135,8 +143,8 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
     expect(classified, item.label).toMatchObject({
       delivery_state: item.state,
       terminal: false,
-      issue_kind: "internal_recovery",
-      visibility: "recovery_progress",
+      issue_kind: item.issueKind,
+      visibility: item.visibility,
       failure_notice: false,
       limitation_codes: [item.code],
     });
@@ -144,8 +152,8 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
       delivery: {
         delivery_state: item.state,
         terminal: false,
-        issue_kind: "internal_recovery",
-        visibility: "recovery_progress",
+        issue_kind: item.issueKind,
+        visibility: item.visibility,
         failure_notice: false,
         limitation_codes: [item.code],
       },
@@ -159,8 +167,8 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
   expect(classifyRuntimeFailureDelivery(promptBudget)).toMatchObject({
     delivery_state: "recovering_internal",
     terminal: false,
-    issue_kind: "internal_recovery",
-    visibility: "recovery_progress",
+    issue_kind: "runtime_continuation",
+    visibility: "continuation_progress",
     failure_notice: false,
     limitation_codes: ["prompt_usage_model_call_budget_exhausted"],
   });
@@ -168,8 +176,8 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
     delivery: {
       delivery_state: "recovering_internal",
       terminal: false,
-      issue_kind: "internal_recovery",
-      visibility: "recovery_progress",
+      issue_kind: "runtime_continuation",
+      visibility: "continuation_progress",
       failure_notice: false,
       limitation_codes: ["internal_recovery_required"],
     },

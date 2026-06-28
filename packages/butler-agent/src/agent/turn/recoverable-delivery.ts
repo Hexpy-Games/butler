@@ -2,10 +2,8 @@ import { safeRuntimeFailure } from "../../integrations/providers/provider-errors
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
 import {
   classifyRuntimeFailureDelivery,
-  recoveringInternalDeliveryState,
   safeLimitationText,
   type RuntimeDeliveryClassification,
-  type RuntimeDeliveryState,
 } from "./runtime-delivery-state.ts";
 
 const DEFAULT_LIMITED_DELIVERY_REASON =
@@ -19,7 +17,7 @@ export interface RecoverableLimitedDelivery {
 
 export function recoverableLimitedDeliveryForError(error: unknown): RecoverableLimitedDelivery | null {
   const classified = classifyRuntimeFailureDelivery(error);
-  if (classified.issue_kind !== "internal_recovery") return null;
+  if (!isContinuationDelivery(classified)) return null;
   const failure = safeRuntimeFailure(error);
   const progressText = progressFinalizationTextFromError(error);
   const failureText = visibleRecoveryTextFromFailureMessage(failure.message);
@@ -30,26 +28,19 @@ export function recoverableLimitedDeliveryForError(error: unknown): RecoverableL
   return {
     text: null,
     reason: publicReason,
-    delivery: recoveringInternalDeliveryState({
-      state: recoverableDeliveryState(classified.delivery_state),
-      limitationCodes: [limitationCode],
+    delivery: {
+      ...classified,
+      limitation_codes: [limitationCode],
       limitations: [],
-    }),
+    },
   };
 }
 
-function recoverableDeliveryState(
-  state: RuntimeDeliveryState,
-): Extract<RuntimeDeliveryState, "recovering_internal" | "needs_tool_surface" | "needs_evidence" | "needs_argument_repair"> {
-  if (
-    state === "recovering_internal" ||
-    state === "needs_tool_surface" ||
-    state === "needs_evidence" ||
-    state === "needs_argument_repair"
-  ) {
-    return state;
-  }
-  return "recovering_internal";
+function isContinuationDelivery(classified: RuntimeDeliveryClassification): boolean {
+  return classified.issue_kind === "internal_recovery" ||
+    classified.issue_kind === "tool_call_repair" ||
+    classified.issue_kind === "completion_continuation" ||
+    classified.issue_kind === "runtime_continuation";
 }
 
 function isPromptUsageModelCallBudget(error: unknown): boolean {

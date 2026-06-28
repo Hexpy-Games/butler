@@ -6750,7 +6750,7 @@ test("app transport internal recovery failures keep queued turns active without 
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
       state: "retrying",
-      safe_status_label: "Recovering",
+      safe_status_label: "Continuing",
       retryable: false,
       cancellable: true,
       attempt: 2,
@@ -6810,7 +6810,7 @@ test("repeated app transport internal recovery requeues without public continuat
     expect(firstTurns.data.turns[0]).toMatchObject({
       id: turnId,
       state: "retrying",
-      safe_status_label: "Recovering",
+      safe_status_label: "Continuing",
       retryable: false,
       cancellable: true,
       attempt: 2,
@@ -6849,7 +6849,7 @@ test("repeated app transport internal recovery requeues without public continuat
     expect(secondTurns.data.turns[0]).toMatchObject({
       id: turnId,
       state: "retrying",
-      safe_status_label: "Recovering",
+      safe_status_label: "Continuing",
       retryable: false,
       cancellable: true,
       attempt: 3,
@@ -10796,7 +10796,7 @@ test("goal completion incomplete gaps keep turns active instead of app failures"
     );
     expect(recoveringTurn).toMatchObject({
       state: "retrying",
-      safe_status_label: "Recovering",
+      safe_status_label: "Continuing",
       retryable: false,
       cancellable: true,
     });
@@ -10844,7 +10844,7 @@ test("goal completion obligation protocol gaps stay active without generic assis
     );
     expect(recoveringTurn).toMatchObject({
       state: "retrying",
-      safe_status_label: "Recovering",
+      safe_status_label: "Continuing",
       retryable: false,
       cancellable: true,
     });
@@ -10894,7 +10894,7 @@ test("generic internal recovery responder failures stay active without assistant
     );
     expect(recoveringTurn).toMatchObject({
       state: "retrying",
-      safe_status_label: "Recovering",
+      safe_status_label: "Continuing",
       retryable: false,
       cancellable: true,
     });

@@ -4,7 +4,6 @@ import {
   deliveredDeliveryState,
   deliveredWithLimitationsState,
   isUserFacingFailureDelivery,
-  recoveringInternalDeliveryState,
   waitingUserDeliveryState,
 } from "../../packages/butler-agent/src/agent/turn/runtime-delivery-state.ts";
 import { recoverableLimitedDeliveryForError } from "../../packages/butler-agent/src/agent/turn/recoverable-delivery.ts";
@@ -42,8 +41,8 @@ test("runtime delivery taxonomy keeps repairable model and evidence gaps out of 
   expect(goalGap).toMatchObject({
     delivery_state: "needs_evidence",
     terminal: false,
-    issue_kind: "internal_recovery",
-    visibility: "recovery_progress",
+    issue_kind: "completion_continuation",
+    visibility: "continuation_progress",
     failure_notice: false,
     limitation_codes: ["internal_recovery_required"],
   });
@@ -54,19 +53,20 @@ test("runtime delivery taxonomy keeps repairable model and evidence gaps out of 
   });
   expect(toolSurfaceGap).toMatchObject({
     delivery_state: "needs_tool_surface",
-    issue_kind: "internal_recovery",
-    visibility: "recovery_progress",
+    issue_kind: "tool_call_repair",
+    visibility: "tool_retry_progress",
     failure_notice: false,
   });
 
-  const argumentGap = recoveringInternalDeliveryState({
-    state: "needs_argument_repair",
-    limitationCodes: ["invalid_tool_arguments"],
+  const argumentGap = classifyRuntimeFailureDelivery({
+    code: "invalid_tool_arguments",
+    message: "tool arguments failed validation",
   });
   expect(argumentGap).toMatchObject({
     delivery_state: "needs_argument_repair",
     terminal: false,
-    issue_kind: "internal_recovery",
+    issue_kind: "tool_call_repair",
+    visibility: "tool_retry_progress",
     failure_notice: false,
     limitation_codes: ["invalid_tool_arguments"],
   });
@@ -78,8 +78,8 @@ test("runtime delivery taxonomy keeps repairable model and evidence gaps out of 
   expect(uncertainty).toMatchObject({
     delivery_state: "recovering_internal",
     terminal: false,
-    issue_kind: "internal_recovery",
-    visibility: "recovery_progress",
+    issue_kind: "runtime_continuation",
+    visibility: "continuation_progress",
     failure_notice: false,
     limitation_codes: ["internal_uncertainty"],
   });
@@ -92,8 +92,8 @@ test("runtime delivery taxonomy keeps repairable model and evidence gaps out of 
   expect(normalizedRecovery).toMatchObject({
     delivery_state: "needs_evidence",
     terminal: false,
-    issue_kind: "internal_recovery",
-    visibility: "recovery_progress",
+    issue_kind: "completion_continuation",
+    visibility: "continuation_progress",
     failure_notice: false,
     limitation_codes: ["internal_recovery_required"],
   });
@@ -182,10 +182,10 @@ test("recoverable delivery uses progress finalization instead of generic verific
   expect(recovered).toMatchObject({
     text: null,
     delivery: {
-      delivery_state: "recovering_internal",
+      delivery_state: "needs_evidence",
       terminal: false,
-      issue_kind: "internal_recovery",
-      visibility: "recovery_progress",
+      issue_kind: "completion_continuation",
+      visibility: "continuation_progress",
       failure_notice: false,
     },
   });
@@ -210,10 +210,10 @@ test("recoverable delivery converts normalized internal recovery failures", () =
     delivery: {
       delivery_state: "needs_evidence",
       terminal: false,
-      issue_kind: "internal_recovery",
+      issue_kind: "completion_continuation",
       limitation_codes: ["internal_recovery_required"],
       limitations: [],
-      visibility: "recovery_progress",
+      visibility: "continuation_progress",
       failure_notice: false,
     },
   });
@@ -233,10 +233,10 @@ test("recoverable delivery never promotes default recovery fallback to public te
     delivery: {
       delivery_state: "recovering_internal",
       terminal: false,
-      issue_kind: "internal_recovery",
+      issue_kind: "runtime_continuation",
       limitation_codes: ["internal_recovery_required"],
       limitations: [],
-      visibility: "recovery_progress",
+      visibility: "continuation_progress",
     },
   });
 });

@@ -2,8 +2,10 @@ export const INTERNAL_RECOVERY_REQUIRED_CODE = "internal_recovery_required";
 
 export type InternalRecoveryState =
   | "recovering_internal"
+  | "needs_evidence";
+
+export type ToolCallRepairState =
   | "needs_tool_surface"
-  | "needs_evidence"
   | "needs_argument_repair";
 
 export interface InternalRecoveryFailureInput {
@@ -35,9 +37,21 @@ export function isInternalRecoveryFailure(input: InternalRecoveryFailureInput | 
     /internal uncertainty/iu.test(message) ||
     /prompt usage model-call budget exhausted/iu.test(message) ||
     /completion review .*incomplete/iu.test(message) ||
-    /unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message) ||
-    /invalid tool arguments|tool arguments failed validation/iu.test(message) ||
     /missing evidence|candidate-only evidence|evidence receipt/iu.test(message)
+  );
+}
+
+export function isToolCallRepairFailure(input: InternalRecoveryFailureInput | unknown): boolean {
+  const failure = normalizeInternalRecoveryInput(input);
+  const message = failure.message ?? "";
+  return (
+    failure.code === "unknown_tool" ||
+    failure.code === "disabled_tool" ||
+    failure.code === "missing_tool_surface" ||
+    failure.code === "invalid_tool_arguments" ||
+    failure.code === "tool_arguments_validation_failed" ||
+    /unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message) ||
+    /invalid tool arguments|tool arguments failed validation/iu.test(message)
   );
 }
 
@@ -46,16 +60,37 @@ export function internalRecoveryStateForFailure(
 ): InternalRecoveryState {
   const failure = normalizeInternalRecoveryInput(input);
   const message = failure.message ?? "";
+  if (
+    failure.code === "goal_completion_incomplete" ||
+    failure.name === "GoalCompletionIncompleteError"
+  ) {
+    return "needs_evidence";
+  }
+  if (/missing evidence|candidate-only evidence|evidence receipt|completion obligation|could not verify/iu.test(message)) {
+    return "needs_evidence";
+  }
+  return "recovering_internal";
+}
+
+export function toolCallRepairStateForFailure(
+  input: InternalRecoveryFailureInput | unknown,
+): ToolCallRepairState {
+  const failure = normalizeInternalRecoveryInput(input);
+  const message = failure.message ?? "";
   if (/unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message)) {
     return "needs_tool_surface";
   }
   if (/invalid tool arguments|tool arguments failed validation/iu.test(message)) {
     return "needs_argument_repair";
   }
-  if (/missing evidence|candidate-only evidence|evidence receipt|completion obligation|could not verify/iu.test(message)) {
-    return "needs_evidence";
+  if (
+    failure.code === "unknown_tool" ||
+    failure.code === "disabled_tool" ||
+    failure.code === "missing_tool_surface"
+  ) {
+    return "needs_tool_surface";
   }
-  return "recovering_internal";
+  return "needs_argument_repair";
 }
 
 export function safeInternalRecoveryMessage(
