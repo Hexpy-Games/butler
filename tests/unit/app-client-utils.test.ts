@@ -13,6 +13,7 @@ import {
   groupWorkerActivities,
   hasFollowableWorkerActivity,
   isInternalProgressRow,
+  isVisibleToolchainProgressRow,
   mergeMessages,
   mergeTurnProgressFromSummary,
   mergeTurnProgressSnapshotMap,
@@ -3372,6 +3373,36 @@ test("completed work blocks exclude Delivered and keep only process evidence", (
     "Rendering Project Ledger dashboard view",
   ]);
   expect(JSON.stringify(blocks)).not.toContain("Delivered");
+});
+
+test("toolchain visibility does not render work block titles as tool buttons", () => {
+  const blockLabel = "Inspecting failed validation evidence";
+  expect(
+    isVisibleToolchainProgressRow(
+      {
+        id: "block-title-row",
+        kind: "model",
+        state: "running",
+        safe_label: blockLabel,
+        safe_tool_name: blockLabel,
+      },
+      blockLabel,
+    ),
+  ).toBe(false);
+  expect(
+    isVisibleToolchainProgressRow(
+      {
+        id: "real-tool-row",
+        kind: "ran_command",
+        state: "running",
+        safe_label: "Bash: npm test",
+        safe_tool_name: "Bash",
+        safe_input_label: "npm test",
+        tool_call_id: "tool-test",
+      },
+      blockLabel,
+    ),
+  ).toBe(true);
 });
 
 test("timeline fallback redacts private turn event labels before rendering", () => {

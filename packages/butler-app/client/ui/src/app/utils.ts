@@ -1037,19 +1037,30 @@ export function isVisibleToolchainProgressRow(
   blockLabel: string,
 ): boolean {
   const normalizedLabel = row.safe_label.trim();
+  const normalizedBlockLabel = blockLabel.trim();
+  const normalizedToolName = row.safe_tool_name?.trim();
   if (isInternalProgressRow(row)) return false;
   if (row.kind === "todo") return false;
   if (row.kind === "message") return false;
   if (
     normalizedLabel &&
-    normalizedLabel === blockLabel.trim() &&
-    !row.safe_tool_name &&
+    normalizedLabel === normalizedBlockLabel &&
+    !row.safe_input_label &&
     row.kind !== "todo"
   ) {
     return false;
   }
+  if (
+    normalizedToolName &&
+    normalizedToolName === normalizedBlockLabel &&
+    !row.tool_call_id &&
+    !row.safe_input_label &&
+    !row.safe_detail_rows?.length
+  ) {
+    return false;
+  }
   return Boolean(
-    row.safe_tool_name ||
+    row.tool_call_id ||
     row.safe_input_label ||
     row.safe_detail_rows?.length ||
     COLLAPSED_WORK_ACTIVITY_KINDS.has(row.kind ?? ""),
