@@ -19,6 +19,8 @@ import { produceFinalDeliveryText } from "./final-delivery-gates.ts";
 import { prepareNativeTurnContext } from "./turn-context-builder.ts";
 import { createNativeTurnPromptRunners } from "./turn-prompt-runners.ts";
 import { startModelOrientationProgressBestEffort } from "./model-orientation-progress.ts";
+import { runtimePreparationProgressSummary } from "./runtime-preparation-progress.ts";
+import { emitRuntimePreparationProgressBestEffort } from "../progress/turn-delivery-events.ts";
 import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
 import { unresolvedValidationFailureFromAudit } from "./validation-failure-guard.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
@@ -37,18 +39,25 @@ export async function runNativeToolTurn({
     const audit: ToolAuditEntry[] = [];
     const publicDecisionContext: PublicWorkDecision[] = [];
     const pendingPublicDecisions: PublicWorkDecision[] = [];
+    const earlyProgressEmitted = useTools
+      ? await emitEarlyRuntimePreparationProgress({
+          input,
+          language: deps.messageLanguage,
+        })
+      : false;
     const orientationProgress = useTools
       ? startModelOrientationProgressBestEffort({
           turnInput: input,
           userText: currentUserText(input),
           language: deps.messageLanguage,
-          runTextPrompt: async (prompt) =>
+          runTextPrompt: async (prompt, options) =>
             await deps.promptRunner({
               prompt,
               model: input.model,
-              instructions: session.init.systemPrompt,
-              cacheScope: "session-turn",
-              signal: input.signal,
+              reasoningEffort: options.reasoningEffort,
+              instructions: options.instructions,
+              cacheScope: options.cacheScope,
+              signal: options.signal,
               butlerData: deps.butlerData,
             }),
         })
@@ -62,6 +71,7 @@ export async function runNativeToolTurn({
       audit,
       publicDecisionContext,
       pendingPublicDecisions,
+      skipRuntimePreparationProgress: earlyProgressEmitted,
     });
     turnId = context.turnId;
     const { runToolPrompt, runTextPrompt } = createNativeTurnPromptRunners({
@@ -192,6 +202,26 @@ export async function runNativeToolTurn({
       errorName: error instanceof Error ? error.name : "UnknownError",
     });
     throw error;
+  }
+}
+
+async function emitEarlyRuntimePreparationProgress(input: {
+  input: NativeTurnRunnerInput["input"];
+  language: NativeTurnRunnerInput["deps"]["messageLanguage"];
+}): Promise<boolean> {
+  try {
+    await emitRuntimePreparationProgressBestEffort({
+      turnInput: input.input,
+      progress: runtimePreparationProgressSummary({
+        model: input.input.model,
+        language: input.language,
+        useTools: true,
+        userText: currentUserText(input.input),
+      }),
+    });
+    return true;
+  } catch {
+    return false;
   }
 }
 

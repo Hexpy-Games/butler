@@ -225,6 +225,10 @@ test("native runtime emits model-authored orientation before slow tool prompt re
     messageLanguage: "ko",
     runPromptText: async (input) => {
       expect(input.prompt).toContain("사용자에게 즉시 보여줄 진행 업데이트");
+      expect(input.reasoningEffort).toBe("low");
+      expect(input.cacheScope).toBe("app-model-orientation");
+      expect(input.instructions).toContain("짧은 진행 업데이트");
+      expect(input.instructions).not.toBe("You are Butler.");
       return "최신 기상 근거를 확인한 뒤 원인을 짧게 정리하겠습니다.";
     },
     runFunctionToolPromptText: async () => {
@@ -274,6 +278,12 @@ test("native runtime emits model-authored orientation before slow tool prompt re
   });
 
   expect(result.text).toBe("최신 근거 확인을 마쳤습니다.");
+  expect(intermediate[0]?.metadata).toMatchObject({
+    kind: "tool_progress",
+    activityKind: "model",
+    toolName: "모델 준비",
+  });
+  expect(intermediate[0]?.metadata?.safeLabel).toContain("요청 확인:");
   const orientation = intermediate.find((action) =>
     action.metadata?.phase === "model_orientation",
   );

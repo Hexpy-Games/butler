@@ -75,6 +75,7 @@ export async function prepareNativeTurnContext(input: {
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
   pendingPublicDecisions: PublicWorkDecision[];
+  skipRuntimePreparationProgress?: boolean;
 }) {
   const userText = currentUserText(input.turnInput);
   const plannedReview = plannedReviewTurnContext(input.turnInput);
@@ -185,6 +186,7 @@ export async function prepareNativeTurnContext(input: {
     normalizedPrompt,
     currentAttachmentContext,
     userText,
+    skipRuntimePreparationProgress: input.skipRuntimePreparationProgress === true,
   });
   recordContextMetric(input, normalizedPrompt, prompt);
   return {
@@ -305,6 +307,7 @@ async function emitStartedAndPreparation(input: {
   normalizedPrompt: ReturnType<typeof normalizeTurnPrompt>;
   currentAttachmentContext: string;
   userText: string;
+  skipRuntimePreparationProgress: boolean;
 }): Promise<void> {
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "turn.iteration.started",
@@ -316,6 +319,13 @@ async function emitStartedAndPreparation(input: {
       budget: directTurnBudgetState(input.turnBudget),
     },
   });
+  if (input.skipRuntimePreparationProgress) {
+    recordTurnPreparationStepSkipped({
+      ...preparationMetricInput(input, "runtime_preparation_progress"),
+      skippedReason: "early_runtime_preparation_progress_emitted",
+    });
+    return;
+  }
   await measureTurnPreparationStep(
     preparationMetricInput(input, "runtime_preparation_progress"),
     async () => {
