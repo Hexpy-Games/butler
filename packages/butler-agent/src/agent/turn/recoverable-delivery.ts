@@ -2,9 +2,10 @@ import { safeRuntimeFailure } from "../../integrations/providers/provider-errors
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
 import {
   classifyRuntimeFailureDelivery,
-  deliveredWithLimitationsState,
+  recoveringInternalDeliveryState,
   safeLimitationText,
   type RuntimeDeliveryClassification,
+  type RuntimeDeliveryState,
 } from "./runtime-delivery-state.ts";
 
 const DEFAULT_LIMITED_DELIVERY_REASON =
@@ -22,20 +23,33 @@ export function recoverableLimitedDeliveryForError(error: unknown): RecoverableL
   const failure = safeRuntimeFailure(error);
   const progressText = progressFinalizationTextFromError(error);
   const failureText = visibleRecoveryTextFromFailureMessage(failure.message);
-  const text = progressText ?? failureText;
-  const publicLimitations = text ? [text] : [];
-  const publicReason = text ?? DEFAULT_LIMITED_DELIVERY_REASON;
+  const publicReason = progressText ?? failureText ?? DEFAULT_LIMITED_DELIVERY_REASON;
   const limitationCode = isPromptUsageModelCallBudget(error)
     ? INTERNAL_RECOVERY_REQUIRED_CODE
     : classified.limitation_codes[0] ?? failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE;
   return {
-    text,
+    text: null,
     reason: publicReason,
-    delivery: deliveredWithLimitationsState({
+    delivery: recoveringInternalDeliveryState({
+      state: recoverableDeliveryState(classified.delivery_state),
       limitationCodes: [limitationCode],
-      limitations: publicLimitations,
+      limitations: [],
     }),
   };
+}
+
+function recoverableDeliveryState(
+  state: RuntimeDeliveryState,
+): Extract<RuntimeDeliveryState, "recovering_internal" | "needs_tool_surface" | "needs_evidence" | "needs_argument_repair"> {
+  if (
+    state === "recovering_internal" ||
+    state === "needs_tool_surface" ||
+    state === "needs_evidence" ||
+    state === "needs_argument_repair"
+  ) {
+    return state;
+  }
+  return "recovering_internal";
 }
 
 function isPromptUsageModelCallBudget(error: unknown): boolean {

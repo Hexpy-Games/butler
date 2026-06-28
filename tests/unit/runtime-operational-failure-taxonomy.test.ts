@@ -142,8 +142,10 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
     });
     expect(recoverableLimitedDeliveryForError(item.error), item.label).toMatchObject({
       delivery: {
-        delivery_state: "delivered_with_limitations",
-        visibility: "assistant_output",
+        delivery_state: item.state,
+        terminal: false,
+        issue_kind: "internal_recovery",
+        visibility: "recovery_progress",
         failure_notice: false,
         limitation_codes: [item.code],
       },
@@ -164,8 +166,10 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
   });
   expect(recoverableLimitedDeliveryForError(promptBudget)).toMatchObject({
     delivery: {
-      delivery_state: "delivered_with_limitations",
-      visibility: "assistant_output",
+      delivery_state: "recovering_internal",
+      terminal: false,
+      issue_kind: "internal_recovery",
+      visibility: "recovery_progress",
       failure_notice: false,
       limitation_codes: ["internal_recovery_required"],
     },

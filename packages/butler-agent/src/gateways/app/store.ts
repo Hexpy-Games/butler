@@ -219,6 +219,7 @@ import {
 } from "../../agent/events/turn-events.ts";
 import {
   deliveredWithLimitationsState,
+  recoveringInternalDeliveryState,
   safeLimitationText,
 } from "../../agent/turn/runtime-delivery-state.ts";
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
@@ -3808,17 +3809,16 @@ export class AppServerStore {
     const limitedDelivery = delivery?.delivery_state === "delivered_with_limitations";
     const noVisibleReply = metadata.noVisibleReply === true ||
       shouldTreatLimitedFinalAsNoVisible(text, artifacts, delivery, metadata);
+    if (noVisibleReply && hasUnsupportedNoVisibleDeliveryState(metadata, delivery)) {
+      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      return false;
+    }
     if (!text && artifacts.length === 0 && !noVisibleReply) return false;
     if (noVisibleReply) {
       this.finalizeResponderLimitedDelivery(chatId, turnId, {
         text: null,
         reason: delivery?.limitations[0] ?? "Internal recovery required.",
-        delivery: deliveredWithLimitationsState({
-          limitationCodes: delivery?.limitation_codes.length
-            ? delivery.limitation_codes
-            : [INTERNAL_RECOVERY_REQUIRED_CODE],
-          limitations: [],
-        }),
+        delivery: deliveryStateFromProjectedNoVisibleFinal(delivery),
       });
       this.markProjectedTransportEvent(actionId, event.eventId, chatId);
       this.touchChat(chatId);
@@ -6460,6 +6460,9 @@ export class AppServerStore {
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
   ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
+    if (limitedDelivery.delivery.issue_kind === "internal_recovery") {
+      return this.markResponderInternalRecovery(chatId, turnId, limitedDelivery);
+    }
     const text = limitedDelivery.text;
     const noVisibleReply = text === null;
     const deliveryState = limitedDelivery.delivery.delivery_state;
@@ -6521,6 +6524,77 @@ export class AppServerStore {
       replies: projectedReplies,
       turn: deliveredTurn,
     };
+  }
+
+  private markResponderInternalRecovery(
+    chatId: string,
+    turnId: string,
+    limitedDelivery: AppLimitedDelivery,
+  ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
+    this.deleteAssistantMessagesForTurn(turnId);
+    const currentTurn = this.getTurnRow(turnId);
+    const deliveryState = limitedDelivery.delivery.delivery_state;
+    const limitations = limitedDelivery.delivery.limitations;
+    const limitationCodes = limitedDelivery.delivery.limitation_codes;
+    const shouldRequeue = shouldAutomaticallyRequeueInternalRecovery(
+      currentTurn,
+      deliveryState,
+    );
+    const attempt = shouldRequeue && currentTurn
+      ? currentTurn.attempt + 1
+      : currentTurn?.attempt;
+    this.appendTurnEvent(chatId, turnId, {
+      kind: "tool.progress",
+      payload: {
+        activityKind: "model",
+        state: shouldRequeue ? "running" : "waiting_for_tool",
+        safeLabel: shouldRequeue
+          ? "Recovering current turn"
+          : "Recovery needs continuation",
+        deliveryState,
+        delivery_state: deliveryState,
+        limitations,
+        limitationCodes,
+        limitation_codes: limitationCodes,
+        noVisibleReply: true,
+        recoveryRequeued: shouldRequeue,
+        recovery_requeued: shouldRequeue,
+        attempt,
+      },
+    });
+    const recoveryTurn = this.updateTurnState(
+      turnId,
+      shouldRequeue ? "retrying" : "waiting_for_tool",
+      {
+        safeStatusLabel: shouldRequeue
+          ? "Recovering"
+          : "Recovery needs continuation",
+        retryable: false,
+        cancellable: true,
+        safeErrorCode: null,
+        attempt,
+      },
+    );
+    this.appendEvent("turn.state_changed", { turn: recoveryTurn });
+    if (shouldRequeue) this.requeueRecoverableAppTurn(chatId, recoveryTurn);
+    return {
+      replies: [],
+      turn: recoveryTurn,
+    };
+  }
+
+  private requeueRecoverableAppTurn(chatId: string, turn: TurnRecord): void {
+    const row = this.getTurnRow(turn.id);
+    if (!row?.user_message_id) return;
+    const messageRow = this.getMessageRow(row.user_message_id);
+    if (!messageRow) return;
+    this.enqueueAppTransportTurn({
+      chatId,
+      turnId: turn.id,
+      message: messageFromRow(messageRow, this.listMessageAttachments(messageRow.id)),
+      text: messageRow.text,
+      controls: this.getSessionControls(chatId),
+    });
   }
 
   private deleteAssistantMessagesForTurn(turnId: string): void {
@@ -10290,7 +10364,12 @@ function deliveryLimitationMetadataFromRecord(
   const deliveryState = safeDeliveryState(
     record.delivery_state ?? record.deliveryState,
   );
-  if (deliveryState !== "delivered_with_limitations") return null;
+  if (
+    deliveryState !== "delivered_with_limitations" &&
+    !isInternalRecoveryDeliveryState(deliveryState)
+  ) {
+    return null;
+  }
   return {
     delivery_state: deliveryState,
     limitation_codes: safeShortTokenList(
@@ -10298,6 +10377,64 @@ function deliveryLimitationMetadataFromRecord(
     ),
     limitations: options.noVisibleReply ? [] : safeShortTextList(record.limitations),
   };
+}
+
+function hasUnsupportedNoVisibleDeliveryState(
+  metadata: Record<string, unknown>,
+  delivery: DeliveryLimitationMetadata | null,
+): boolean {
+  const deliveryState = safeDeliveryState(
+    metadata.delivery_state ?? metadata.deliveryState,
+  );
+  return Boolean(deliveryState && !delivery);
+}
+
+function deliveryStateFromProjectedNoVisibleFinal(
+  delivery: DeliveryLimitationMetadata | null,
+): AppLimitedDelivery["delivery"] {
+  const limitationCodes = delivery?.limitation_codes.length
+    ? delivery.limitation_codes
+    : [INTERNAL_RECOVERY_REQUIRED_CODE];
+  if (delivery && isInternalRecoveryDeliveryState(delivery.delivery_state)) {
+    return recoveringInternalDeliveryState({
+      state: delivery.delivery_state,
+      limitationCodes,
+      limitations: [],
+    });
+  }
+  return deliveredWithLimitationsState({
+    limitationCodes,
+    limitations: [],
+  });
+}
+
+function shouldAutomaticallyRequeueInternalRecovery(
+  turn: TurnRow | null,
+  deliveryState: SessionViewTurnDeliveryState,
+): boolean {
+  return Boolean(
+    turn &&
+      turn.attempt <= 1 &&
+      (deliveryState === "recovering_internal" ||
+        deliveryState === "needs_evidence"),
+  );
+}
+
+function isInternalRecoveryDeliveryState(
+  deliveryState: SessionViewTurnDeliveryState | null,
+): deliveryState is Extract<
+  SessionViewTurnDeliveryState,
+  | "recovering_internal"
+  | "needs_tool_surface"
+  | "needs_evidence"
+  | "needs_argument_repair"
+> {
+  return (
+    deliveryState === "recovering_internal" ||
+    deliveryState === "needs_tool_surface" ||
+    deliveryState === "needs_evidence" ||
+    deliveryState === "needs_argument_repair"
+  );
 }
 
 function shouldTreatLimitedFinalAsNoVisible(
