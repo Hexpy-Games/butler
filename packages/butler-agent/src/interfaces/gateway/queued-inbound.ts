@@ -11,6 +11,7 @@ import {
   recoverableLimitedDeliveryForError,
 } from "../../agent/turn/recoverable-delivery.ts";
 import {
+  createTurnContextAtomId,
   isTurnSchedulerContinuationYieldError,
   persistTurnContextAtom,
 } from "../../agent/turn/turn-continuation-context.ts";
@@ -501,6 +502,7 @@ async function processClaimedQueuedInboundItem(input: {
     const isBudgetError = isPromptUsageModelCallBudgetError(error);
     if (isBudgetError && sessionId && turnId) {
       const safeFailure = safeFailureForQueuedInboundError(error);
+      const contextAtomId = createTurnContextAtomId(sessionId, turnId);
       persistTurnContextAtom({
         butlerData: butlerDataPath(),
         sessionId,
@@ -510,9 +512,28 @@ async function processClaimedQueuedInboundItem(input: {
         reason: safeFailure.message,
         unresolvedObservations: [],
       });
+      const scheduled = scheduleSameLogicalTurnContinuation({
+        queue: options.queue,
+        item,
+        turnId,
+        contextAtomId,
+        now: options.now?.(),
+      });
+      if (!scheduled) {
+        summary.failed += 1;
+        failQueueClaim(options, item, "Unable to schedule same-logical-turn continuation.", {
+          source: "gateway/queued-inbound.ts#budget-continuation",
+          failure: {
+            code: "turn_scheduler_continuation_schedule_failed",
+          },
+        });
+        return summary;
+      }
       const terminalRecorded = completeQueueClaim(options, item, {
-        dispatchStatus: "handled",
+        dispatchStatus: "continuing",
         handled: true,
+        continuationScheduled: true,
+        contextAtomId,
       });
       if (!terminalRecorded) return summary;
       summary.handled += 1;
