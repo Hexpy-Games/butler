@@ -31,6 +31,7 @@ export type TurnState =
   | "cancelling"
   | "cancelled"
   | "delivered"
+  | "runtime_fault"
   | "failed"
   | "retrying";
 export interface ApiEnvelope<T> {

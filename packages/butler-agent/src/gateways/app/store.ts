@@ -4092,16 +4092,20 @@ export class AppServerStore {
       return false;
     }
 
-    this.upsertAssistantTurnFailure(chatId, turnId, safeError);
-    if (!this.hasTurnEventKind(turnId, "turn.failed")) {
+    const isRuntimeFault = isRetryableRuntimeFault(safeError.code) &&
+      this.hasTurnEventKind(turnId, "runtime.fault");
+    this.upsertAssistantTurnFailure(chatId, turnId, safeError, {
+      retryable: isRuntimeFault,
+    });
+    if (!this.hasTurnEventKind(turnId, isRuntimeFault ? "runtime.fault" : "turn.failed")) {
       this.appendTurnEvent(chatId, turnId, {
-        kind: "turn.failed",
+        kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
         payload: safeTurnFailureEventPayload(safeError),
       });
     }
-    const failedTurn = this.updateTurnState(turnId, "failed", {
-      safeStatusLabel: "Failed",
-      retryable: true,
+    const failedTurn = this.updateTurnState(turnId, isRuntimeFault ? "runtime_fault" : "failed", {
+      safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
+      retryable: isRuntimeFault,
       cancellable: false,
       safeErrorCode: safeError.code,
     });
@@ -4842,14 +4846,18 @@ export class AppServerStore {
         return deliveredTurn;
       },
       updateTurnFailed: (chatId, turnId, safeError) => {
-        this.upsertAssistantTurnFailure(chatId, turnId, safeError);
+        const isRuntimeFault = isRetryableRuntimeFault(safeError.code) &&
+          this.hasTurnEventKind(turnId, "runtime.fault");
+        this.upsertAssistantTurnFailure(chatId, turnId, safeError, {
+          retryable: isRuntimeFault,
+        });
         this.appendTurnEvent(chatId, turnId, {
-          kind: "turn.failed",
+          kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
           payload: safeTurnFailureEventPayload(safeError),
         });
-        const failedTurn = this.updateTurnState(turnId, "failed", {
-          safeStatusLabel: "Failed",
-          retryable: true,
+        const failedTurn = this.updateTurnState(turnId, isRuntimeFault ? "runtime_fault" : "failed", {
+          safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
+          retryable: isRuntimeFault,
           cancellable: false,
           safeErrorCode: safeError.code,
         });
@@ -4960,7 +4968,7 @@ export class AppServerStore {
     });
     const failedTurn = this.updateTurnState(input.turnId, "failed", {
       safeStatusLabel: "Failed",
-      retryable: true,
+      retryable: false,
       cancellable: false,
       safeErrorCode: "app_turn_queue_failed",
     });
@@ -5230,17 +5238,21 @@ export class AppServerStore {
         };
       }
       const safeError = appSafeResponderError(error);
-      this.upsertAssistantTurnFailure(chatId, turn.id, safeError);
+      const isRuntimeFault = isRetryableRuntimeFault(safeError.code) &&
+        this.hasTurnEventKind(turn.id, "runtime.fault");
+      this.upsertAssistantTurnFailure(chatId, turn.id, safeError, {
+        retryable: isRuntimeFault,
+      });
       this.appendTurnEvent(chatId, turn.id, {
-        kind: "turn.failed",
+        kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
         payload: {
           safeLabel: safeError.message,
           safeErrorCode: safeError.code,
         },
       });
-      const failedTurn = this.updateTurnState(turn.id, "failed", {
-        safeStatusLabel: "Failed",
-        retryable: true,
+      const failedTurn = this.updateTurnState(turn.id, isRuntimeFault ? "runtime_fault" : "failed", {
+        safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
+        retryable: isRuntimeFault,
         cancellable: false,
         safeErrorCode: safeError.code,
       });
@@ -5298,7 +5310,11 @@ export class AppServerStore {
         "turn_not_found",
         "Turn not found.",
       );
-    if (!row.retryable || row.state !== "failed") {
+    if (
+      !row.retryable ||
+      row.state !== "runtime_fault" ||
+      !this.hasTurnEventKind(turnId, "runtime.fault")
+    ) {
       throw new AppStoreOperationError(
         409,
         "turn_not_retryable",
@@ -6170,7 +6186,7 @@ export class AppServerStore {
       UPDATE turns
       SET state = 'retrying', safe_status_label = 'Retrying', safe_error_code = NULL,
         retryable = 0, cancellable = 1, attempt = ?, updated_at = ?
-      WHERE id = ? AND state = 'failed' AND retryable = 1
+      WHERE id = ? AND state = 'runtime_fault' AND retryable = 1
     `,
       )
       .run(attempt, now, turnId) as { changes: number };
@@ -6751,7 +6767,7 @@ export class AppServerStore {
     const stalledTurn = this.updateTurnState(turnId, "failed", {
       safeStatusLabel: "Retry required",
       safeErrorCode: INTERNAL_RECOVERY_REQUIRED_CODE,
-      retryable: true,
+      retryable: false,
       cancellable: false,
     });
     this.appendEvent("turn.state_changed", { turn: stalledTurn });
@@ -6761,7 +6777,7 @@ export class AppServerStore {
         payload: {
           safeLabel: "Retry required",
           safeErrorCode: INTERNAL_RECOVERY_REQUIRED_CODE,
-          retryable: true,
+          retryable: false,
         },
       });
     }
@@ -6825,6 +6841,7 @@ export class AppServerStore {
     chatId: string,
     turnId: string,
     safeError: { code: string; message: string },
+    options: { retryable?: boolean } = {},
   ): MessageRecord {
     const existing = this.getLatestAssistantMessageForTurn(turnId);
     if (!existing) {
@@ -6836,7 +6853,7 @@ export class AppServerStore {
         {
           turnId,
           safeErrorCode: safeError.code,
-          retryable: true,
+          retryable: options.retryable ?? false,
         },
       );
       this.appendEvent("message.created", { message: failed });
@@ -6846,7 +6863,7 @@ export class AppServerStore {
       text: safeError.message,
       status: "failed",
       safeErrorCode: safeError.code,
-      retryable: true,
+      retryable: options.retryable ?? false,
     });
     this.appendEvent("message.updated", { message: failed });
     return failed;
@@ -7097,6 +7114,7 @@ export class AppServerStore {
     if (!turn || !isTerminalTurnState(turn.state)) return true;
     if (turn.state === "cancelled") return kind === "turn.cancelled";
     if (turn.state === "failed") return kind === "turn.failed";
+    if (turn.state === "runtime_fault") return kind === "runtime.fault";
     if (turn.state === "delivered") return kind === "turn.completed";
     return false;
   }
@@ -8964,7 +8982,7 @@ function workModeToPhase(mode: string): WorkerActivityPhase {
 
 function turnLocalWorkOutcomeForAppTurn(state: TurnState): TurnLocalWorkOutcome | null {
   if (state === "delivered") return "completed";
-  if (state === "failed") return "failed";
+  if (state === "failed" || state === "runtime_fault") return "failed";
   if (state === "cancelled") return "cancelled";
   return null;
 }
@@ -10117,7 +10135,16 @@ function turnFromRow(row: TurnRow): TurnRecord {
 }
 
 function isTerminalTurnState(state: TurnState): boolean {
-  return state === "delivered" || state === "failed" || state === "cancelled";
+  return (
+    state === "delivered" ||
+    state === "failed" ||
+    state === "runtime_fault" ||
+    state === "cancelled"
+  );
+}
+
+function isRetryableRuntimeFault(code: string | null | undefined): boolean {
+  return code === "runtime_fault" || code === "runtime_invariant_violation";
 }
 
 function safeParseRecord(value: string): Record<string, unknown> {
@@ -10338,7 +10365,7 @@ function safeDeliveryState(value: unknown): SessionViewTurnDeliveryState | null 
 
 function deliveryStateForTurnState(state: TurnState): SessionViewTurnDeliveryState {
   if (state === "delivered") return "delivered";
-  if (state === "failed") return "failed_system";
+  if (state === "failed" || state === "runtime_fault") return "failed_system";
   if (state === "cancelled") return "cancelled";
   if (state === "waiting_for_form") return "waiting_user";
   if (state === "waiting_for_tool" || state === "retrying") {

@@ -29,7 +29,6 @@ import {
   workerActivityStatusLine,
   workBlocksFromProgressRows,
 } from "../../packages/butler-app/client/ui/src/app/utils.ts";
-import { toolchainSummaryLabel } from "../../packages/butler-app/client/ui/src/components/conversation/toolchainUtils.tsx";
 import {
   browserRandomId,
   browserRandomUUID,
@@ -2443,7 +2442,8 @@ test("tool controls use their own input label instead of decision summary", () =
     safe_label: "Bash: sandbox/run-checks.sh",
   });
   expect(toolRow?.work_decision_summary).toBeUndefined();
-  expect(toolchainSummaryLabel(toolRow)).toBe("Bash: sandbox/run-checks.sh");
+  expect(toolRow?.safe_tool_name).toBe("Bash");
+  expect(toolRow?.safe_input_label).toBe("sandbox/run-checks.sh");
 });
 
 test("tool row safe input labels do not inherit decision summary from missing input", () => {
@@ -2484,10 +2484,40 @@ test("tool row safe input labels do not inherit decision summary from missing in
   expect(toolRow?.safe_input_label).toBeUndefined();
   expect(toolRow?.safe_label).toBe("Bash");
   expect(toolRow?.work_decision_summary).toBeUndefined();
-  expect(toolchainSummaryLabel(toolRow)).toBe("Bash");
-  expect(toolchainSummaryLabel(toolRow)).not.toContain(
-    "Sandy bot 실행 검증 요약",
-  );
+  expect(toolRow?.safe_tool_name).toBe("Bash");
+  expect(JSON.stringify(toolRow)).not.toContain("Sandy bot 실행 검증 요약");
+});
+
+test("work blocks do not synthesize missing workBlockLabel from safe labels", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "work-without-label",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Runtime fallback label",
+      work_block_id: "work-without-label",
+    },
+    {
+      id: "tool-without-work-label",
+      kind: "ran_command",
+      state: "running",
+      safe_label: "Bash: npm test",
+      safe_tool_name: "Bash",
+      safe_input_label: "npm test",
+      tool_call_id: "tool-without-work-label",
+      work_block_id: "work-without-label",
+    },
+  ]);
+
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]?.label).toBe("");
+  expect(blocks[0]?.rows[0]).toMatchObject({
+    safe_label: "Bash: npm test",
+    safe_tool_name: "Bash",
+    safe_input_label: "npm test",
+  });
+  expect(blocks[0]?.rows[0]?.work_block_label).toBeUndefined();
+  expect(JSON.stringify(blocks)).not.toContain("Runtime fallback label");
 });
 
 test("timeline applies first visible progress turn events as public progress rows", () => {
@@ -3437,7 +3467,7 @@ test("work blocks ignore unauthorised decision fields when choosing labels and c
   expect(blocks).toEqual([
     expect.objectContaining({
       id: "work-runtime",
-      label: "Runtime fallback label",
+      label: "",
       state: "delivered",
       decision_summary: undefined,
       decision_source: undefined,
