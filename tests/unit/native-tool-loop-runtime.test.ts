@@ -210,39 +210,34 @@ test("native runtime gives worker sessions the execution tool loop and role-limi
   expect(names).not.toContain("write_planned_public_report");
 });
 
-test("native runtime emits model-authored orientation before slow tool prompt returns", async () => {
+test("native runtime emits immediate preparation progress without auxiliary orientation model call", async () => {
   const intermediate: Array<{
     message?: { text?: string };
     metadata?: Record<string, unknown>;
   }> = [];
-  let resolveOrientation: (() => void) | undefined;
-  const orientationSeen = new Promise<void>((resolve) => {
-    resolveOrientation = resolve;
+  let resolvePreparation: (() => void) | undefined;
+  const preparationSeen = new Promise<void>((resolve) => {
+    resolvePreparation = resolve;
   });
   const runtime = new NativeToolLoopRuntime({
     butlerHome: process.cwd(),
     disableAutomaticRecall: true,
     messageLanguage: "ko",
     runPromptText: async (input) => {
-      expect(input.prompt).toContain("사용자에게 즉시 보여줄 진행 업데이트");
-      expect(input.reasoningEffort).toBe("low");
-      expect(input.cacheScope).toBe("app-model-orientation");
-      expect(input.instructions).toContain("짧은 진행 업데이트");
-      expect(input.instructions).not.toBe("You are Butler.");
-      return "최신 기상 근거를 확인한 뒤 원인을 짧게 정리하겠습니다.";
+      throw new Error(`unexpected auxiliary text prompt: ${input.cacheScope ?? "none"}`);
     },
     runFunctionToolPromptText: async () => {
       await Promise.race([
-        orientationSeen,
+        preparationSeen,
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("orientation progress was not emitted")), 1_000),
+          setTimeout(() => reject(new Error("preparation progress was not emitted")), 1_000),
         ),
       ]);
       return "최신 근거 확인을 마쳤습니다.";
     },
   });
   const handle = await runtime.createSession({
-    sessionId: "butler/main/model-orientation-progress",
+    sessionId: "butler/main/immediate-preparation-progress",
     role: "butler",
     workspacePath: tempDir,
     systemPrompt: "You are Butler.",
@@ -271,8 +266,8 @@ test("native runtime emits model-authored orientation before slow tool prompt re
         metadata?: Record<string, unknown>;
       };
       intermediate.push(projected);
-      if (projected.metadata?.phase === "model_orientation") {
-        resolveOrientation?.();
+      if (projected.metadata?.kind === "tool_progress") {
+        resolvePreparation?.();
       }
     },
   });
@@ -284,11 +279,9 @@ test("native runtime emits model-authored orientation before slow tool prompt re
     toolName: "모델 준비",
   });
   expect(intermediate[0]?.metadata?.safeLabel).toContain("요청 확인:");
-  const orientation = intermediate.find((action) =>
-    action.metadata?.phase === "model_orientation",
-  );
-  expect(orientation?.message?.text).toBe("최신 기상 근거를 확인한 뒤 원인을 짧게 정리하겠습니다.");
-  expect(orientation?.metadata?.modelAuthored).toBe(true);
+  expect(
+    intermediate.some((action) => action.metadata?.phase === "model_orientation"),
+  ).toBe(false);
 });
 
 test("native runtime injects recent transcript context and excludes current inbound event", async () => {

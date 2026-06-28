@@ -18,7 +18,6 @@ import {
 import { produceFinalDeliveryText } from "./final-delivery-gates.ts";
 import { prepareNativeTurnContext } from "./turn-context-builder.ts";
 import { createNativeTurnPromptRunners } from "./turn-prompt-runners.ts";
-import { startModelOrientationProgressBestEffort } from "./model-orientation-progress.ts";
 import { runtimePreparationProgressSummary } from "./runtime-preparation-progress.ts";
 import { emitRuntimePreparationProgressBestEffort } from "../progress/turn-delivery-events.ts";
 import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
@@ -45,23 +44,6 @@ export async function runNativeToolTurn({
           language: deps.messageLanguage,
         })
       : false;
-    const orientationProgress = useTools
-      ? startModelOrientationProgressBestEffort({
-          turnInput: input,
-          userText: currentUserText(input),
-          language: deps.messageLanguage,
-          runTextPrompt: async (prompt, options) =>
-            await deps.promptRunner({
-              prompt,
-              model: input.model,
-              reasoningEffort: options.reasoningEffort,
-              instructions: options.instructions,
-              cacheScope: options.cacheScope,
-              signal: options.signal,
-              butlerData: deps.butlerData,
-            }),
-        })
-      : null;
     const context = await prepareNativeTurnContext({
       turnInput: input,
       session,
@@ -88,14 +70,9 @@ export async function runNativeToolTurn({
       publicDecisionContext,
       pendingPublicDecisions,
     });
-    let initialText: string;
-    try {
-      initialText = useTools
-        ? await runToolPrompt(context.prompt, undefined, "initial_tool_loop")
-        : await runTextPrompt(context.prompt);
-    } finally {
-      orientationProgress?.stop();
-    }
+    const initialText = useTools
+      ? await runToolPrompt(context.prompt, undefined, "initial_tool_loop")
+      : await runTextPrompt(context.prompt);
     throwIfRuntimeTurnAborted(input.signal);
     const decisionCheckedText = await produceFinalDeliveryText({
       turnInput: input,
