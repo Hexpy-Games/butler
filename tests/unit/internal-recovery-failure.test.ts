@@ -5,7 +5,9 @@ import {
   isCompletionObligationProtocolMessage,
   isGoalCompletionIncompleteFailure,
   isInternalRecoveryFailure,
+  isToolCallRepairFailure,
   safeInternalRecoveryMessage,
+  toolCallRepairStateForFailure,
 } from "../../packages/butler-agent/src/runtime/internal-recovery-failure.ts";
 import { appSafeResponderError } from "../../packages/butler-agent/src/gateways/app/failure-ux-contract.ts";
 import { safeRuntimeFailure } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
@@ -34,16 +36,22 @@ test("internal recovery classifier centralizes goal completion protocol gaps", (
   });
 });
 
-test("internal recovery classifier separates recovery sub-states", () => {
-  expect(internalRecoveryStateForFailure({
+test("runtime continuation classifier separates tool retry from completion continuation", () => {
+  const disabledTool = {
     code: "disabled_tool",
     message: "disabled tool web_search; tool is not active in the current surface",
-  })).toBe("needs_tool_surface");
+  };
+  expect(isInternalRecoveryFailure(disabledTool)).toBe(false);
+  expect(isToolCallRepairFailure(disabledTool)).toBe(true);
+  expect(toolCallRepairStateForFailure(disabledTool)).toBe("needs_tool_surface");
 
-  expect(internalRecoveryStateForFailure({
+  const invalidArguments = {
     code: "invalid_tool_arguments",
     message: "tool arguments failed validation",
-  })).toBe("needs_argument_repair");
+  };
+  expect(isInternalRecoveryFailure(invalidArguments)).toBe(false);
+  expect(isToolCallRepairFailure(invalidArguments)).toBe(true);
+  expect(toolCallRepairStateForFailure(invalidArguments)).toBe("needs_argument_repair");
 
   expect(internalRecoveryStateForFailure({
     code: "missing_evidence",
@@ -73,13 +81,14 @@ test("provider and app projections use the full shared internal recovery classif
     message: "disabled tool web_read; tool is not active in the current surface",
   };
   expect(safeRuntimeFailure(disabledTool)).toMatchObject({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
+    code: "disabled_tool",
     message: disabledTool.message,
     retryable: true,
   });
   expect(appSafeResponderError(disabledTool)).toEqual({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
+    code: "disabled_tool",
     message: disabledTool.message,
+    cause: disabledTool.message,
   });
 
   const missingEvidence = {

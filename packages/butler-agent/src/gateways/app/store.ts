@@ -219,7 +219,6 @@ import {
 } from "../../agent/events/turn-events.ts";
 import {
   deliveredWithLimitationsState,
-  recoveringInternalDeliveryState,
   safeLimitationText,
 } from "../../agent/turn/runtime-delivery-state.ts";
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
@@ -6460,8 +6459,8 @@ export class AppServerStore {
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
   ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
-    if (limitedDelivery.delivery.issue_kind === "internal_recovery") {
-      return this.markResponderInternalRecovery(chatId, turnId, limitedDelivery);
+    if (isContinuationDeliveryIssue(limitedDelivery.delivery.issue_kind)) {
+      return this.markResponderContinuation(chatId, turnId, limitedDelivery);
     }
     const text = limitedDelivery.text;
     const noVisibleReply = text === null;
@@ -6526,7 +6525,7 @@ export class AppServerStore {
     };
   }
 
-  private markResponderInternalRecovery(
+  private markResponderContinuation(
     chatId: string,
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
@@ -6536,7 +6535,7 @@ export class AppServerStore {
     const deliveryState = limitedDelivery.delivery.delivery_state;
     const limitations = limitedDelivery.delivery.limitations;
     const limitationCodes = limitedDelivery.delivery.limitation_codes;
-    const shouldRequeue = shouldAutomaticallyRequeueInternalRecovery(
+    const shouldRequeue = shouldAutomaticallyRequeueContinuation(
       currentTurn,
       deliveryState,
     );
@@ -6548,15 +6547,15 @@ export class AppServerStore {
       payload: {
         activityKind: "model",
         state: "running",
-        safeLabel: "Recovering current turn",
+        safeLabel: "Continuing current turn",
         deliveryState,
         delivery_state: deliveryState,
         limitations,
         limitationCodes,
         limitation_codes: limitationCodes,
         noVisibleReply: true,
-        recoveryRequeued: shouldRequeue,
-        recovery_requeued: shouldRequeue,
+        continuationRequeued: shouldRequeue,
+        continuation_requeued: shouldRequeue,
         attempt,
       },
     });
@@ -6564,7 +6563,7 @@ export class AppServerStore {
       turnId,
       shouldRequeue ? "retrying" : "waiting_for_tool",
       {
-        safeStatusLabel: "Recovering",
+        safeStatusLabel: "Continuing",
         retryable: false,
         cancellable: true,
         safeErrorCode: null,
@@ -10350,7 +10349,7 @@ function deliveryLimitationMetadataFromRecord(
   );
   if (
     deliveryState !== "delivered_with_limitations" &&
-    !isInternalRecoveryDeliveryState(deliveryState)
+    !isContinuationDeliveryState(deliveryState)
   ) {
     return null;
   }
@@ -10379,12 +10378,8 @@ function deliveryStateFromProjectedNoVisibleFinal(
   const limitationCodes = delivery?.limitation_codes.length
     ? delivery.limitation_codes
     : [INTERNAL_RECOVERY_REQUIRED_CODE];
-  if (delivery && isInternalRecoveryDeliveryState(delivery.delivery_state)) {
-    return recoveringInternalDeliveryState({
-      state: delivery.delivery_state,
-      limitationCodes,
-      limitations: [],
-    });
+  if (delivery && isContinuationDeliveryState(delivery.delivery_state)) {
+    return continuationDeliveryFromState(delivery.delivery_state, limitationCodes);
   }
   return deliveredWithLimitationsState({
     limitationCodes,
@@ -10392,17 +10387,45 @@ function deliveryStateFromProjectedNoVisibleFinal(
   });
 }
 
-function shouldAutomaticallyRequeueInternalRecovery(
+function continuationDeliveryFromState(
+  deliveryState: Extract<
+    SessionViewTurnDeliveryState,
+    | "recovering_internal"
+    | "needs_tool_surface"
+    | "needs_evidence"
+    | "needs_argument_repair"
+  >,
+  limitationCodes: string[],
+): AppLimitedDelivery["delivery"] {
+  const toolRepair =
+    deliveryState === "needs_tool_surface" ||
+    deliveryState === "needs_argument_repair";
+  return {
+    delivery_state: deliveryState,
+    terminal: false,
+    issue_kind: toolRepair
+      ? "tool_call_repair"
+      : deliveryState === "needs_evidence"
+        ? "completion_continuation"
+        : "runtime_continuation",
+    visibility: toolRepair ? "tool_retry_progress" : "continuation_progress",
+    failure_notice: false,
+    limitation_codes: limitationCodes,
+    limitations: [],
+  };
+}
+
+function shouldAutomaticallyRequeueContinuation(
   turn: TurnRow | null,
   deliveryState: SessionViewTurnDeliveryState,
 ): boolean {
   return Boolean(
     turn &&
-      isInternalRecoveryDeliveryState(deliveryState),
+      isContinuationDeliveryState(deliveryState),
   );
 }
 
-function isInternalRecoveryDeliveryState(
+function isContinuationDeliveryState(
   deliveryState: SessionViewTurnDeliveryState | null,
 ): deliveryState is Extract<
   SessionViewTurnDeliveryState,
@@ -10417,6 +10440,13 @@ function isInternalRecoveryDeliveryState(
     deliveryState === "needs_evidence" ||
     deliveryState === "needs_argument_repair"
   );
+}
+
+function isContinuationDeliveryIssue(issueKind: string): boolean {
+  return issueKind === "internal_recovery" ||
+    issueKind === "tool_call_repair" ||
+    issueKind === "completion_continuation" ||
+    issueKind === "runtime_continuation";
 }
 
 function shouldTreatLimitedFinalAsNoVisible(

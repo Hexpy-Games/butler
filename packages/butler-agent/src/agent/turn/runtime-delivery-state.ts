@@ -3,7 +3,9 @@ import { isOperationalFailure, operationalSafeErrorCode } from "./operational-fa
 import {
   INTERNAL_RECOVERY_REQUIRED_CODE,
   isInternalRecoveryFailure as isSharedInternalRecoveryFailure,
+  isToolCallRepairFailure as isSharedToolCallRepairFailure,
   internalRecoveryStateForFailure,
+  toolCallRepairStateForFailure,
 } from "../../runtime/internal-recovery-failure.ts";
 
 export type RuntimeDeliveryState =
@@ -28,6 +30,8 @@ export type RuntimeDeliveryTerminalState =
 export type RuntimeDeliveryVisibility =
   | "assistant_output"
   | "recovery_progress"
+  | "continuation_progress"
+  | "tool_retry_progress"
   | "user_action_required"
   | "failure_notice"
   | "cancelled_notice";
@@ -35,6 +39,9 @@ export type RuntimeDeliveryVisibility =
 export type RuntimeDeliveryIssueKind =
   | "none"
   | "internal_recovery"
+  | "tool_call_repair"
+  | "completion_continuation"
+  | "runtime_continuation"
   | "limitation"
   | "user_action_blocker"
   | "system_failure"
@@ -83,7 +90,7 @@ export function deliveredWithLimitationsState(input: {
 }
 
 export function recoveringInternalDeliveryState(input: {
-  state: Extract<RuntimeDeliveryState, "recovering_internal" | "needs_tool_surface" | "needs_evidence" | "needs_argument_repair">;
+  state: Extract<RuntimeDeliveryState, "recovering_internal" | "needs_evidence">;
   limitationCodes?: string[];
   limitations?: string[];
 }): RuntimeDeliveryClassification {
@@ -122,12 +129,24 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
       safeErrorCode: "turn_cancelled",
     });
   }
-  if (isInternalRecoveryFailure(failure)) {
+  if (isToolCallRepairFailure(failure)) {
     return classification({
-      deliveryState: recoveryStateForInternalFailure(failure),
+      deliveryState: toolCallRepairStateForFailure(failure),
       terminal: false,
-      issueKind: "internal_recovery",
-      visibility: "recovery_progress",
+      issueKind: "tool_call_repair",
+      visibility: "tool_retry_progress",
+      limitationCodes: [safeCode(failure.code ?? "tool_call_repair")],
+    });
+  }
+  if (isInternalRecoveryFailure(failure)) {
+    const state = recoveryStateForInternalFailure(failure);
+    return classification({
+      deliveryState: state,
+      terminal: false,
+      issueKind: state === "needs_evidence"
+        ? "completion_continuation"
+        : "runtime_continuation",
+      visibility: "continuation_progress",
       limitationCodes: [safeCode(failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE)],
     });
   }
@@ -221,9 +240,13 @@ function isInternalRecoveryFailure(failure: RuntimeDeliveryFailureInput): boolea
   return isSharedInternalRecoveryFailure(failure);
 }
 
+function isToolCallRepairFailure(failure: RuntimeDeliveryFailureInput): boolean {
+  return isSharedToolCallRepairFailure(failure);
+}
+
 function recoveryStateForInternalFailure(
   failure: RuntimeDeliveryFailureInput,
-): Extract<RuntimeDeliveryState, "recovering_internal" | "needs_tool_surface" | "needs_evidence" | "needs_argument_repair"> {
+): Extract<RuntimeDeliveryState, "recovering_internal" | "needs_evidence"> {
   return internalRecoveryStateForFailure(failure);
 }
 
