@@ -4092,15 +4092,15 @@ export class AppServerStore {
       return false;
     }
 
-    const isRuntimeFault = isRetryableRuntimeFault(safeError.code) &&
-      this.hasTurnEventKind(turnId, "runtime.fault");
+    const runtimeFault = this.runtimeFaultRecordForTurn(turnId);
+    const isRuntimeFault = runtimeFault?.retryable === true;
     this.upsertAssistantTurnFailure(chatId, turnId, safeError, {
       retryable: isRuntimeFault,
     });
     if (!this.hasTurnEventKind(turnId, isRuntimeFault ? "runtime.fault" : "turn.failed")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
-        payload: safeTurnFailureEventPayload(safeError),
+        payload: runtimeFault ?? safeTurnFailureEventPayload(safeError),
       });
     }
     const failedTurn = this.updateTurnState(turnId, isRuntimeFault ? "runtime_fault" : "failed", {
@@ -4846,14 +4846,14 @@ export class AppServerStore {
         return deliveredTurn;
       },
       updateTurnFailed: (chatId, turnId, safeError) => {
-        const isRuntimeFault = isRetryableRuntimeFault(safeError.code) &&
-          this.hasTurnEventKind(turnId, "runtime.fault");
+        const runtimeFault = this.runtimeFaultRecordForTurn(turnId);
+        const isRuntimeFault = runtimeFault?.retryable === true;
         this.upsertAssistantTurnFailure(chatId, turnId, safeError, {
           retryable: isRuntimeFault,
         });
         this.appendTurnEvent(chatId, turnId, {
           kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
-          payload: safeTurnFailureEventPayload(safeError),
+          payload: runtimeFault ?? safeTurnFailureEventPayload(safeError),
         });
         const failedTurn = this.updateTurnState(turnId, isRuntimeFault ? "runtime_fault" : "failed", {
           safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
@@ -5238,14 +5238,14 @@ export class AppServerStore {
         };
       }
       const safeError = appSafeResponderError(error);
-      const isRuntimeFault = isRetryableRuntimeFault(safeError.code) &&
-        this.hasTurnEventKind(turn.id, "runtime.fault");
+      const runtimeFault = this.runtimeFaultRecordForTurn(turn.id);
+      const isRuntimeFault = runtimeFault?.retryable === true;
       this.upsertAssistantTurnFailure(chatId, turn.id, safeError, {
         retryable: isRuntimeFault,
       });
       this.appendTurnEvent(chatId, turn.id, {
         kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
-        payload: {
+        payload: runtimeFault ?? {
           safeLabel: safeError.message,
           safeErrorCode: safeError.code,
         },
@@ -5313,7 +5313,7 @@ export class AppServerStore {
     if (
       !row.retryable ||
       row.state !== "runtime_fault" ||
-      !this.hasTurnEventKind(turnId, "runtime.fault")
+      this.runtimeFaultRecordForTurn(turnId)?.retryable !== true
     ) {
       throw new AppStoreOperationError(
         409,
@@ -6681,11 +6681,7 @@ export class AppServerStore {
       shouldAutomaticallyRequeueContinuation(currentTurn, deliveryState) ||
       progressedDuringCurrentQueue;
     if (!shouldRequeue && currentTurn && isInternalContinuationTurnState(currentTurn.state)) {
-      const stalledTurn = this.markResponderContinuationStalled(chatId, turnId);
-      return {
-        replies: [],
-        turn: stalledTurn,
-      };
+      return { replies: [], turn: turnFromRow(currentTurn) };
     }
     const attempt = shouldRequeue && currentTurn
       ? currentTurn.attempt + 1
@@ -6756,32 +6752,6 @@ export class AppServerStore {
     }
     const turn = this.getTurnRow(turnId);
     return publicProgressRowsForTurn(progressRows, turn?.state).length > 0;
-  }
-
-  private markResponderContinuationStalled(
-    chatId: string,
-    turnId: string,
-  ): TurnRecord {
-    const current = this.getTurnRow(turnId);
-    if (!current) return this.getTurn(turnId);
-    const stalledTurn = this.updateTurnState(turnId, "failed", {
-      safeStatusLabel: "Retry required",
-      safeErrorCode: INTERNAL_RECOVERY_REQUIRED_CODE,
-      retryable: false,
-      cancellable: false,
-    });
-    this.appendEvent("turn.state_changed", { turn: stalledTurn });
-    if (!this.hasTurnEventKind(turnId, "turn.failed")) {
-      this.appendTurnEvent(chatId, turnId, {
-        kind: "turn.failed",
-        payload: {
-          safeLabel: "Retry required",
-          safeErrorCode: INTERNAL_RECOVERY_REQUIRED_CODE,
-          retryable: false,
-        },
-      });
-    }
-    return stalledTurn;
   }
 
   private requeueRecoverableAppTurn(chatId: string, turn: TurnRecord): void {
@@ -7506,6 +7476,54 @@ export class AppServerStore {
       )
       .get(turnId, kind);
     return Boolean(row);
+  }
+
+  private runtimeFaultRecordForTurn(turnId: string): Record<string, unknown> | null {
+    const row = this.db
+      .query<EventRow, [string]>(
+        `
+      SELECT id, type, payload_json, created_at
+      FROM events
+      WHERE type = 'agent.turn_event'
+        AND json_extract(payload_json, '$.turn_id') = ?
+        AND json_extract(payload_json, '$.event.kind') = 'runtime.fault'
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+      )
+      .get(turnId);
+    if (!row) return null;
+    const payload = safeParseRecord(row.payload_json);
+    const event = isRecord(payload.event) ? payload.event : null;
+    const fault = event && isRecord(event.payload) ? event.payload : null;
+    if (!fault) return null;
+    const faultId = safeOptionalShortText(fault.faultId);
+    const kind = safeOptionalShortText(fault.kind);
+    const publicSummary = safeOptionalShortText(fault.publicSummary);
+    const retryable = fault.retryable === true;
+    if (!faultId || !kind || !publicSummary) return null;
+    return {
+      faultId,
+      kind,
+      retryable,
+      publicSummary,
+      ...(safeOptionalShortText(fault.sessionId)
+        ? { sessionId: safeOptionalShortText(fault.sessionId) }
+        : {}),
+      ...(safeOptionalShortText(fault.turnId)
+        ? { turnId: safeOptionalShortText(fault.turnId) }
+        : {}),
+      ...(safeOptionalShortText(fault.operatorSummary)
+        ? { operatorSummary: safeOptionalShortText(fault.operatorSummary) }
+        : {}),
+      ...(safeOptionalShortText(fault.safeErrorCode)
+        ? { safeErrorCode: safeOptionalShortText(fault.safeErrorCode) }
+        : {}),
+      ...(safeOptionalShortText(fault.safeCause)
+        ? { safeCause: safeOptionalShortText(fault.safeCause) }
+        : {}),
+      createdAt: safeOptionalShortText(fault.createdAt) ?? row.created_at,
+    };
   }
 
   private appendEvent(
@@ -9380,11 +9398,9 @@ function workBlocksFromTerminalProgressRows(
       .filter(
         (row) =>
           row.kind === "work_block" ||
-          Boolean(row.work_block_id || row.work_block_label),
+          Boolean(row.work_block_label),
       )
-      .map((row) =>
-        (row.work_block_label ?? row.safe_label).trim(),
-      )
+      .map((row) => (row.work_block_label ?? "").trim())
       .filter(Boolean),
   );
   const sortedRows = rows
@@ -9403,10 +9419,7 @@ function workBlocksFromTerminalProgressRows(
       row.work_block_id ??
       row.tool_call_id ??
       `work-${row.kind}-${row.id}`.replace(/[^a-zA-Z0-9._:-]/gu, "-");
-    const label =
-      row.work_block_label ??
-      row.safe_tool_name ??
-      row.safe_label;
+    const label = row.work_block_label ?? "";
     const decision = publicDecisionFieldsFromProgressRow(row);
     const previous = blocks.get(id);
     const blockRow = workBlockToolRow(row);
@@ -10141,10 +10154,6 @@ function isTerminalTurnState(state: TurnState): boolean {
     state === "runtime_fault" ||
     state === "cancelled"
   );
-}
-
-function isRetryableRuntimeFault(code: string | null | undefined): boolean {
-  return code === "runtime_fault" || code === "runtime_invariant_violation";
 }
 
 function safeParseRecord(value: string): Record<string, unknown> {

@@ -45,6 +45,7 @@ import {
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
 import {
   TURN_ACKNOWLEDGED_EVENT_KIND,
+  createRuntimeFaultPayload,
   createTurnAcknowledgedPayload,
 } from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
 import type { ButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
@@ -7013,13 +7014,13 @@ test("repeated app transport internal recovery does not requeue the same turn ag
     const secondTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(secondTurns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "failed",
-      safe_status_label: "Retry required",
-      safe_error_code: "internal_recovery_required",
+      state: "retrying",
+      safe_status_label: "",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
       attempt: 2,
     });
+    expect(secondTurns.data.turns[0].safe_error_code ?? null).toBeNull();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     const assistantMessages = messages.data.messages.filter(
       (message: { role: string }) => message.role === "assistant",
@@ -7037,10 +7038,13 @@ test("repeated app transport internal recovery does not requeue the same turn ag
     const secondSummary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(secondSummary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "failed",
-      summary: "Retry required",
+      state: "retrying",
     });
+    expect(JSON.stringify(secondSummary)).not.toContain("Retry required");
+    expect(JSON.stringify(secondSummary)).not.toContain("internal_recovery_required");
     expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
+    expect(JSON.stringify(secondEvents)).not.toContain("Retry required");
+    expect(JSON.stringify(secondEvents)).not.toContain("internal_recovery_required");
     expect(JSON.stringify(secondEvents)).not.toContain("같은 이어가기 상태");
     expect(
       secondEvents.data.events.some(
@@ -10113,6 +10117,60 @@ test("app gateway bridge captures tool progress without blank assistant messages
   }
 });
 
+test("terminal work blocks do not fall back to tool or safe labels when workBlockLabel is missing", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      input.onProgress?.({
+        id: "terminal-no-label-tool",
+        kind: "ran_command",
+        state: "delivered",
+        safe_label: "Bash: npm test",
+        safe_tool_name: "Bash",
+        safe_input_label: "npm test",
+        tool_call_id: "terminal-no-label-tool",
+        work_block_id: "terminal-no-label-work",
+      });
+      return { texts: ["done"] };
+    },
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "run unlabeled terminal work",
+    });
+    const reply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "done",
+    );
+    const workBlocks = reply.work_blocks as Array<{
+      id: string;
+      label: string;
+      rows: Array<Record<string, unknown>>;
+    }>;
+
+    expect(workBlocks[0]).toMatchObject({
+      id: "terminal-no-label-work",
+      label: "",
+      rows: [
+        expect.objectContaining({
+          safe_tool_name: "Bash",
+          safe_input_label: "npm test",
+        }),
+      ],
+    });
+    expect(workBlocks[0]?.label).not.toBe("Bash");
+    expect(workBlocks[0]?.label).not.toBe("Bash: npm test");
+    expect(JSON.stringify(workBlocks)).not.toContain(
+      '"work_block_label":"Bash',
+    );
+  } finally {
+    server.stop();
+  }
+});
+
 test("app gateway bridge projects todo progress as semantic steps", async () => {
   const runtime = new ScriptedRuntime("gateway bridge reply", async (turn) => {
     if (!("eventId" in turn.input)) return;
@@ -11253,11 +11311,18 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       if (attempt === 1) {
         input.onTurnEvent?.({
           kind: "runtime.fault",
-          payload: {
-            safeLabel: "Runtime invariant interrupted the turn.",
-            safeErrorCode: "runtime_fault",
+          payload: createRuntimeFaultPayload({
+            faultId: "fault-retryable-runtime",
+            sessionId: input.chatId,
+            turnId: input.turnId,
+            kind: "tool_result_pairing_invariant",
             retryable: true,
-          },
+            publicSummary: "Runtime invariant interrupted the turn.",
+            operatorSummary: "Tool result pairing invariant broke.",
+            safeErrorCode: "runtime_fault",
+            safeCause: "safe cause",
+            createdAt: "2026-06-28T00:00:00.000Z",
+          }),
         });
         const error = new Error("runtime invariant interrupted the turn");
         (error as Error & { code?: string }).code = "runtime_fault";
@@ -11285,6 +11350,29 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
         turn.retryable === true,
     );
     const failedTurnId = failedTurn.id as string;
+    const events = await getJson(`${server.url}events?cursor=0`);
+    const runtimeFaultEvent = events.data.events.find(
+      (
+        event: {
+          type: string;
+          payload?: { event?: { kind?: string; payload?: unknown } };
+        },
+      ) =>
+        event.type === "agent.turn_event" &&
+        event.payload?.event?.kind === "runtime.fault",
+    );
+    expect(runtimeFaultEvent?.payload?.event?.payload).toEqual({
+      faultId: "fault-retryable-runtime",
+      sessionId: "general",
+      turnId: failedTurnId,
+      kind: "tool_result_pairing_invariant",
+      retryable: true,
+      publicSummary: "Runtime invariant interrupted the turn.",
+      operatorSummary: "Tool result pairing invariant broke.",
+      safeErrorCode: "runtime_fault",
+      safeCause: "safe cause",
+      createdAt: "2026-06-28T00:00:00.000Z",
+    });
 
     const retry = await postJson(
       `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
@@ -11317,6 +11405,59 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       }),
     );
     expect(JSON.stringify(messages)).not.toContain("Retrying this turn.");
+  } finally {
+    server.stop();
+  }
+});
+
+test("runtime fault retry eligibility comes from the fault record", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      input.onTurnEvent?.({
+        kind: "runtime.fault",
+        payload: createRuntimeFaultPayload({
+          faultId: "fault-non-retryable-runtime",
+          sessionId: input.chatId,
+          turnId: input.turnId,
+          kind: "non_retryable_runtime_fault",
+          retryable: false,
+          publicSummary: "Runtime stopped with a non-retryable fault.",
+          operatorSummary: "Operator-only non-retryable detail.",
+          safeErrorCode: "runtime_fault",
+          createdAt: "2026-06-28T00:00:01.000Z",
+        }),
+      });
+      const error = new Error("runtime invariant interrupted the turn");
+      (error as Error & { code?: string }).code = "runtime_fault";
+      throw error;
+    },
+  });
+  try {
+    const response = await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: "general",
+        text: "do not retry this runtime fault",
+      }),
+    });
+    expect(response.status).toBe(202);
+
+    const failedTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) =>
+        turn.state === "failed" &&
+        turn.safe_error_code === "runtime_fault" &&
+        turn.retryable === false,
+    );
+    const retry = await fetch(
+      `${server.url}turns/${encodeURIComponent(failedTurn.id as string)}/retry`,
+      { method: "POST", headers: { "content-type": "application/json" } },
+    );
+    expect(retry.status).toBe(409);
   } finally {
     server.stop();
   }

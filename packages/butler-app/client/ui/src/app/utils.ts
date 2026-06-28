@@ -980,6 +980,71 @@ export function completedTurnWorkBlocks(rows: ProgressRow[]): WorkBlockView[] {
   return buildWorkBlocks(rows, { completedOnly: true });
 }
 
+export type TypedUiReadModel =
+  | { type: "decision"; summary: string; rationale?: string; nextStep?: string; source: string; evidenceRefs?: string[] }
+  | { type: "work_block"; id: string; label?: string; state: string }
+  | { type: "tool_control"; toolName: string; inputLabel?: string; label: string; toolCallId?: string; workBlockId?: string }
+  | { type: "observation"; label: string; detailRows?: ProgressRow["safe_detail_rows"] }
+  | { type: "outcome"; state: string; publicSummary: string }
+  | { type: "runtime_fault"; faultId: string; kind: string; retryable: boolean; publicSummary: string; operatorSummary?: string; safeErrorCode?: string; safeCause?: string };
+
+export function typedUiReadModelsFromProgressRows(
+  rows: ProgressRow[],
+): TypedUiReadModel[] {
+  return rows.flatMap((row): TypedUiReadModel[] => {
+    if (row.runtime_fault_id && row.runtime_fault_kind && row.runtime_fault_public_summary) {
+      return [{
+        type: "runtime_fault",
+        faultId: row.runtime_fault_id,
+        kind: row.runtime_fault_kind,
+        retryable: row.runtime_fault_retryable === true,
+        publicSummary: row.runtime_fault_public_summary,
+        operatorSummary: row.runtime_fault_operator_summary,
+        safeErrorCode: row.runtime_fault_safe_error_code,
+        safeCause: row.runtime_fault_safe_cause,
+      }];
+    }
+    const decision = publicDecisionFieldsFromRow(row);
+    if (decision.decision_summary && decision.decision_source) {
+      return [{
+        type: "decision",
+        summary: decision.decision_summary,
+        rationale: decision.decision_rationale,
+        nextStep: decision.decision_next_step,
+        source: decision.decision_source,
+        evidenceRefs: decision.decision_evidence_refs,
+      }];
+    }
+    if (row.kind === WORK_BLOCK_MARKER_KIND && row.work_block_id) {
+      return [{
+        type: "work_block",
+        id: row.work_block_id,
+        label: row.work_block_label,
+        state: row.state,
+      }];
+    }
+    if (row.safe_tool_name || row.safe_input_label || row.tool_call_id) {
+      return [{
+        type: "tool_control",
+        toolName: row.safe_tool_name ?? "Tool",
+        inputLabel: row.safe_input_label,
+        label: row.safe_input_label && row.safe_tool_name
+          ? `${row.safe_tool_name}: ${row.safe_input_label}`
+          : row.safe_tool_name ?? row.safe_label,
+        toolCallId: row.tool_call_id,
+        workBlockId: row.work_block_id,
+      }];
+    }
+    if (row.kind === "turn" && isTerminalProgressState(row.state)) {
+      return [{ type: "outcome", state: row.state, publicSummary: row.safe_label }];
+    }
+    if (row.safe_detail_rows?.length) {
+      return [{ type: "observation", label: row.safe_label, detailRows: row.safe_detail_rows }];
+    }
+    return [];
+  });
+}
+
 export function freezeMessageWorkBlocks(
   messages: MessageRecord[],
   turnProgress: Record<string, TurnProgressSnapshot>,
@@ -1333,6 +1398,28 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
       ...publicDecisionFields(payload),
       safe_detail_rows: safeDetailRows(payload.detailRows),
       created_at,
+    };
+  }
+  if (event.kind === "runtime.fault") {
+    const faultId = safePublicText(payload.faultId, event.id);
+    const kind = safePublicText(payload.kind, "runtime_fault");
+    const publicSummary = safePublicText(
+      payload.publicSummary,
+      "Butler runtime was interrupted before the turn could continue.",
+    );
+    return {
+      id: event.id,
+      kind: "runtime_fault",
+      state: "failed",
+      safe_label: publicSummary,
+      created_at,
+      runtime_fault_id: faultId,
+      runtime_fault_kind: kind,
+      runtime_fault_retryable: payload.retryable === true,
+      runtime_fault_public_summary: publicSummary,
+      runtime_fault_operator_summary: safeOptionalPublicText(payload.operatorSummary),
+      runtime_fault_safe_error_code: safeOptionalPublicText(payload.safeErrorCode),
+      runtime_fault_safe_cause: safeOptionalPublicText(payload.safeCause),
     };
   }
   if (

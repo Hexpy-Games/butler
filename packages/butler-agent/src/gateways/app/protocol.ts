@@ -1007,6 +1007,13 @@ export interface ProgressSummaryRow {
   work_decision_next_step?: string;
   work_decision_source?: string;
   work_decision_evidence_refs?: string[];
+  runtime_fault_id?: string;
+  runtime_fault_kind?: string;
+  runtime_fault_retryable?: boolean;
+  runtime_fault_public_summary?: string;
+  runtime_fault_operator_summary?: string;
+  runtime_fault_safe_error_code?: string;
+  runtime_fault_safe_cause?: string;
   safe_count?: number;
   safe_path_labels?: string[];
   safe_detail_rows?: ProgressDetailRow[];

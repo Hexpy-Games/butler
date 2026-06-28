@@ -52,6 +52,7 @@ export type CompletionEvidenceKind = typeof COMPLETION_EVIDENCE_KINDS[number];
 export const TURN_OUTCOMES = [
   "completed",
   "failed",
+  "runtime_fault",
   "cancelled",
   "waiting_user",
   "recoverable",
@@ -90,6 +91,19 @@ export interface TurnOutcomePayloadInput {
   completionEvidenceStatus?: unknown;
   recoveryToken?: unknown;
   publicSummary: unknown;
+}
+
+export interface RuntimeFaultPayloadInput {
+  faultId?: unknown;
+  sessionId?: unknown;
+  turnId?: unknown;
+  kind: unknown;
+  retryable: unknown;
+  publicSummary: unknown;
+  operatorSummary?: unknown;
+  safeErrorCode?: unknown;
+  safeCause?: unknown;
+  createdAt?: unknown;
 }
 
 export interface RecoveryRecordedPayloadInput {
@@ -189,6 +203,30 @@ export function createTurnOutcomePayload(input: TurnOutcomePayloadInput): Record
   };
 }
 
+export function createRuntimeFaultPayload(input: RuntimeFaultPayloadInput): Record<string, unknown> {
+  const faultId = optionalSafeText(input.faultId);
+  const sessionId = optionalSafeText(input.sessionId);
+  const turnId = optionalSafeText(input.turnId);
+  const kind = requiredSafeText(input.kind, "runtime fault kind is required");
+  const publicSummary = requiredSafeText(input.publicSummary, "runtime fault public summary is required");
+  const operatorSummary = optionalSafeText(input.operatorSummary);
+  const safeErrorCode = optionalSafeText(input.safeErrorCode);
+  const safeCause = optionalSafeText(input.safeCause);
+  const createdAt = optionalSafeText(input.createdAt) ?? new Date().toISOString();
+  return {
+    faultId: faultId ?? `runtime-fault-${createdAt.replace(/[^a-zA-Z0-9]/gu, "")}`,
+    ...(sessionId ? { sessionId } : {}),
+    ...(turnId ? { turnId } : {}),
+    kind,
+    retryable: input.retryable === true,
+    publicSummary,
+    ...(operatorSummary ? { operatorSummary } : {}),
+    ...(safeErrorCode ? { safeErrorCode } : {}),
+    ...(safeCause ? { safeCause } : {}),
+    createdAt,
+  };
+}
+
 export function createRecoveryRecordedPayload(
   input: RecoveryRecordedPayloadInput,
 ): Record<string, unknown> {
@@ -251,6 +289,20 @@ export function normalizeTurnStateContractPayload(
       completionEvidenceStatus: payload.completionEvidenceStatus,
       recoveryToken: payload.recoveryToken,
       publicSummary: payload.publicSummary,
+    });
+  }
+  if (kind === RUNTIME_FAULT_EVENT_KIND) {
+    return createRuntimeFaultPayload({
+      faultId: payload.faultId,
+      sessionId: payload.sessionId,
+      turnId: payload.turnId,
+      kind: payload.kind ?? payload.faultKind ?? payload.safeErrorCode,
+      retryable: payload.retryable,
+      publicSummary: payload.publicSummary ?? payload.safeLabel,
+      operatorSummary: payload.operatorSummary,
+      safeErrorCode: payload.safeErrorCode,
+      safeCause: payload.safeCause,
+      createdAt: payload.createdAt,
     });
   }
   if (kind === RECOVERY_RECORDED_EVENT_KIND) {
