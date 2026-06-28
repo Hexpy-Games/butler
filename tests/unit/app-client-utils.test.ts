@@ -29,6 +29,7 @@ import {
   workerActivityStatusLine,
   workBlocksFromProgressRows,
 } from "../../packages/butler-app/client/ui/src/app/utils.ts";
+import { toolchainSummaryLabel } from "../../packages/butler-app/client/ui/src/components/conversation/toolchainUtils.tsx";
 import {
   browserRandomId,
   browserRandomUUID,
@@ -2405,6 +2406,88 @@ test("work blocks group chained tools by semantic work block label", () => {
   });
   expect(blocks[0]?.rows[0]?.work_block_label).toBeUndefined();
   expect(blocks[0]?.rows[0]?.work_decision_summary).toBeUndefined();
+});
+
+test("tool controls use their own input label instead of decision summary", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "tool-sandy",
+      kind: "ran_command",
+      state: "running",
+      safe_label: "Bash: sandbox/run-checks.sh",
+      safe_tool_name: "Bash",
+      safe_input_label: "sandbox/run-checks.sh",
+      tool_call_id: "tool-sandy-run",
+      work_block_id: "work-sandy",
+      work_block_label: "Sandy bot를 통한 실행 검증",
+      work_decision_summary: "Sandy bot 실행 검증 요약",
+      work_decision_source: "assistant-authored",
+    },
+    {
+      id: "work-sandy",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Sandy bot 검증",
+      work_block_id: "work-sandy",
+      work_block_label: "Sandy bot를 통한 실행 검증",
+      work_decision_summary: "Sandy bot 실행 검증 요약",
+      work_decision_source: "assistant-authored",
+    },
+  ]);
+
+  expect(blocks).toHaveLength(1);
+  const toolRow = blocks[0]?.rows[0];
+  expect(toolRow).toMatchObject({
+    safe_tool_name: "Bash",
+    safe_input_label: "sandbox/run-checks.sh",
+    safe_label: "Bash: sandbox/run-checks.sh",
+  });
+  expect(toolRow?.work_decision_summary).toBeUndefined();
+  expect(toolchainSummaryLabel(toolRow)).toBe("Bash: sandbox/run-checks.sh");
+});
+
+test("tool row safe input labels do not inherit decision summary from missing input", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "work-sandy-2",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Sandy bot를 통한 실행 검증",
+      work_block_id: "work-sandy-2",
+      work_block_label: "Sandy bot를 통한 실행 검증",
+      work_decision_summary: "Sandy bot 실행 검증 요약",
+      work_decision_source: "assistant-authored",
+    },
+    {
+      id: "tool-sandy-2",
+      kind: "ran_command",
+      state: "running",
+      safe_label: "Bash",
+      safe_tool_name: "Bash",
+      tool_call_id: "tool-sandy-run-2",
+      work_block_id: "work-sandy-2",
+      work_block_label: "Sandy bot를 통한 실행 검증",
+      work_decision_summary: "Sandy bot 실행 검증 요약",
+      work_decision_source: "assistant-authored",
+    },
+  ]);
+
+  expect(blocks).toHaveLength(1);
+  const block = blocks[0];
+  expect(block).toMatchObject({
+    id: "work-sandy-2",
+    label: "Sandy bot를 통한 실행 검증",
+    decision_summary: "Sandy bot 실행 검증 요약",
+  });
+  expect(block?.rows).toHaveLength(1);
+  const toolRow = block?.rows[0];
+  expect(toolRow?.safe_input_label).toBeUndefined();
+  expect(toolRow?.safe_label).toBe("Bash");
+  expect(toolRow?.work_decision_summary).toBeUndefined();
+  expect(toolchainSummaryLabel(toolRow)).toBe("Bash");
+  expect(toolchainSummaryLabel(toolRow)).not.toContain(
+    "Sandy bot 실행 검증 요약",
+  );
 });
 
 test("timeline applies first visible progress turn events as public progress rows", () => {

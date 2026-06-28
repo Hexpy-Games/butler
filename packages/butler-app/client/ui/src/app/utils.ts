@@ -1181,7 +1181,7 @@ function buildWorkBlocks(
       if (!row.work_block_id) continue;
       ensureBlock(
         row.work_block_id,
-        row.work_block_label ?? decisionLabelFromRow(row) ?? row.safe_label,
+        row.work_block_label ?? row.safe_label,
         row.state,
         row.created_at,
         row,
@@ -1191,8 +1191,7 @@ function buildWorkBlocks(
     if (row.kind === "todo") continue;
     if (!isCompletedTurnWorkActivityRow(row)) continue;
     const blockId = row.work_block_id ?? `row-${row.id}`;
-    const label =
-      row.work_block_label ?? decisionLabelFromRow(row) ?? row.safe_label;
+    const label = row.work_block_label ?? row.safe_label;
     const block = ensureBlock(blockId, label, row.state, row.created_at, row);
     block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
     block.rows = [...block.rowMap.values()];
@@ -1283,7 +1282,7 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
       created_at,
       work_block_id: safeOptionalPublicText(payload.workBlockId) ?? event.id,
       work_block_label: label,
-      ...publicDecisionFields(payload, label),
+      ...publicDecisionFields(payload),
     };
   }
   if (event.kind === "guard.started" || event.kind === "guard.completed") {
@@ -1554,11 +1553,8 @@ function safeDetailRows(value: unknown): ProgressRow["safe_detail_rows"] {
 
 function publicDecisionFields(
   payload: Record<string, unknown>,
-  fallbackSummary?: string,
 ): Partial<ProgressRow> {
-  const source = safeOptionalPublicText(
-    payload.decisionSource ?? payload.source,
-  );
+  const source = safeOptionalPublicText(payload.decisionSource);
   if (!isPublicDecisionSource(source)) return {};
   const rawEvidenceRefs = payload.decisionEvidenceRefs ?? payload.evidenceRefs;
   const evidenceRefs = Array.isArray(rawEvidenceRefs)
@@ -1568,17 +1564,11 @@ function publicDecisionFields(
         .slice(0, 6)
     : undefined;
   const fields: Partial<ProgressRow> = {};
-  const summary =
-    safeOptionalPublicText(payload.decisionSummary ?? payload.summary) ??
-    fallbackSummary;
+  const summary = safeOptionalPublicText(payload.decisionSummary);
   if (summary) fields.work_decision_summary = summary;
-  const rationale = safeOptionalPublicText(
-    payload.decisionRationale ?? payload.rationale,
-  );
+  const rationale = safeOptionalPublicText(payload.decisionRationale);
   if (rationale) fields.work_decision_rationale = rationale;
-  const nextStep = safeOptionalPublicText(
-    payload.decisionNextStep ?? payload.nextStep,
-  );
+  const nextStep = safeOptionalPublicText(payload.decisionNextStep);
   if (nextStep) fields.work_decision_next_step = nextStep;
   if (source) fields.work_decision_source = source;
   if (evidenceRefs && evidenceRefs.length > 0)
@@ -1605,12 +1595,6 @@ function publicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
     decision_source: row.work_decision_source,
     decision_evidence_refs: row.work_decision_evidence_refs,
   };
-}
-
-function decisionLabelFromRow(row: ProgressRow): string | undefined {
-  return isPublicDecisionSource(row.work_decision_source)
-    ? row.work_decision_summary
-    : undefined;
 }
 
 function safeOptionalPublicText(value: unknown): string | undefined {
