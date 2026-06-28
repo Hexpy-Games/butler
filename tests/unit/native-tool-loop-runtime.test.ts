@@ -1960,7 +1960,7 @@ test("native runtime repairs turns that skip explicitly required tools", async (
         });
         return "필수 표 정제를 마쳤습니다.";
       }
-      expect(input.prompt).toContain("Goal Completion Review");
+      expect(input.prompt).not.toContain("Goal Completion Review");
       return "필수 표 정제를 마쳤습니다.";
     },
   });
@@ -2158,7 +2158,7 @@ test("native runtime does not infer semantic workflow tools from natural CSV wor
   });
 
   expect(attempts.some((prompt) => prompt.includes("Public Data Table Workflow Repair"))).toBe(false);
-  expect(attempts.some((prompt) => prompt.includes("Goal Completion Review"))).toBe(true);
+  expect(attempts.some((prompt) => prompt.includes("Goal Completion Review"))).toBe(false);
   expect(attempts.some((prompt) => prompt.includes("Final Result Contract Repair"))).toBe(true);
   expect(executedTools).toEqual(["web_search", "web_read"]);
   expect(executedTools).not.toContain("transform_public_data_table");
@@ -2255,7 +2255,7 @@ test("native runtime reviews public work decision finals even before tool eviden
           "잠시만 기다려 주세요.",
         ].join("\n");
       }
-      expect(input.prompt).toContain("Goal Completion Review");
+      expect(input.prompt).not.toContain("Goal Completion Review");
       await input.executeTool({
         name: "web_search",
         args: { query: "테스트 식당 사과냉면만두 추천 메뉴" },
@@ -2285,7 +2285,7 @@ test("native runtime reviews public work decision finals even before tool eviden
   expect(result.text).not.toMatch(/^\s*작업\s*[:：]/u);
 });
 
-test("native runtime uses generic completion review to continue model-selected missing deliverables", async () => {
+test("native runtime uses pure completion review output and skips review continuation", async () => {
   const attempts: string[] = [];
   const executedTools: string[] = [];
   const runtime = new NativeToolLoopRuntime({
@@ -2339,24 +2339,7 @@ test("native runtime uses generic completion review to continue model-selected m
         });
         return "근거는 확인했지만 CSV 파일 산출물은 아직 만들지 않았습니다.";
       }
-      expect(input.prompt).toContain("Goal Completion Review");
-      expect(input.prompt).toContain("Do not apply hardcoded rules for any specific tool");
-      expect(input.prompt).toContain("This review is an action gate");
-      expect(input.prompt).toContain("Attached native tool schemas are the source of truth");
-      expect(input.prompt).toContain("reuse public facts, values, URLs, labels, artifact references");
-      expect(input.prompt).toContain("Discovery/search evidence identifies candidates");
-      expect(input.prompt).toContain("Durable deliverables require durable evidence");
-      expect(input.prompt).not.toContain("transform_public_data_table");
-      await input.onAssistantTextBeforeTools?.({
-        text: "summary: 확인한 행을 파일 산출물로 정제합니다.\nrationale: 사용자가 결과와 별도 산출물을 함께 요청했습니다.\nnext_step: 산출물 기준으로 결과만 보고합니다.",
-        toolCalls: [{ name: "transform_public_data_table", args: { columns: ["city", "population"], rows: [{ city: "서울특별시", population: 9300000 }] } }],
-      });
-      await input.executeTool({
-        name: "transform_public_data_table",
-        args: { columns: ["city", "population"], rows: [{ city: "서울특별시", population: 9300000 }] },
-        rawArguments: JSON.stringify({ columns: ["city", "population"], rows: [{ city: "서울특별시", population: 9300000 }] }),
-      });
-      return "CSV 파일 산출물 population.csv를 만들고 결과를 요약했습니다.";
+      expect.unreachable("Should not require second completion-review prompt");
     },
   });
   const handle = await runtime.createSession({
@@ -2375,12 +2358,12 @@ test("native runtime uses generic completion review to continue model-selected m
     },
   });
 
-  expect(attempts).toHaveLength(2);
-  expect(executedTools).toEqual(["web_search", "web_read", "transform_public_data_table"]);
-  expect(result.text).toContain("CSV 파일 산출물");
+  expect(attempts).toHaveLength(1);
+  expect(executedTools).toEqual(["web_search", "web_read"]);
+  expect(result.text).toContain("CSV 파일 산출물은 아직 만들지 않았습니다.");
 });
 
-test("goal completion review verdict without new tool evidence is not delivered as final answer", async () => {
+test("goal completion review gap is handled as completion-review output only (no model re-review loop)", async () => {
   const attempts: string[] = [];
   const executedTools: string[] = [];
   const runtime = new NativeToolLoopRuntime({
@@ -2398,7 +2381,12 @@ test("goal completion review verdict without new tool evidence is not delivered 
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: Riposte 제작 기록을 확인합니다.\nrationale: 사용자가 제작 과정을 소개할 글의 근거가 필요합니다.\nnext_step: 확인한 내용을 바탕으로 초안을 작성합니다.",
+          text: [
+            "summary: Riposte 제작 기록을 확인합니다.",
+            "rationale: 사용자가 제작 과정을 소개할 글의 근거가 필요합니다.",
+            "next_step: 실행 결과를 바탕으로 초안을 작성합니다.",
+            "completion_obligations: command_executed",
+          ].join("\n"),
           toolCalls: [{ name: "run_command", args: { command: "pwd && ls" } }],
         });
         await input.executeTool({
@@ -2413,12 +2401,7 @@ test("goal completion review verdict without new tool evidence is not delivered 
           "초안에서 단순한 뱀서라이크로 시작했지만, 공격 타이밍에 맞춰 돌진하는 패링 규칙이 중심 재미가 됐습니다.",
         ].join("\n");
       }
-      expect(input.prompt).toContain("Goal Completion Review");
-      return [
-        "순찰 완료다냐. 이전 답변은 테스트 사용자님의 원래 요청을 충족한 최종 답변으로 봐도 된다냐.",
-        "",
-        "따라서 지금 기준으로는 추가 도구 호출 없이, 이전 답변을 바탕으로 글을 다듬어가면 된다냐.",
-      ].join("\n");
+      expect.unreachable("Should not require second completion-review prompt");
     },
   });
   const handle = await runtime.createSession({
@@ -2435,15 +2418,68 @@ test("goal completion review verdict without new tool evidence is not delivered 
     input: { text: "Riposte 제작 과정을 소개할 글 초안을 정리해줘." },
   });
 
-  expect(attempts).toHaveLength(2);
+  expect(attempts).toHaveLength(1);
   expect(executedTools).toContain("run_command");
   expect(result.text).toContain("Riposte 소개 초안");
   expect(result.text).toContain("패링 액션");
   expect(result.text).not.toContain("이전 답변");
   expect(result.text).not.toContain("추가 도구 호출 없이");
+  expect(result.text).not.toContain("State: saved as recoverable.");
+  expect(attempts[0]).not.toContain("Goal Completion Review");
+  expect(attempts[0]).not.toContain("Goal Completion Incomplete Continuation");
 });
 
-test("native runtime continues direct work when completion review returns incomplete", async () => {
+test("goal completion gap does not emit generic public verification failure copy", async () => {
+  const attempts: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "en",
+    executeButlerTool: async () => ({
+      ok: true,
+      exit_code: 0,
+      stdout_preview: "run output ready",
+    }),
+    runFunctionToolPromptText: async (input) => {
+      attempts.push(input.prompt);
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: I am collecting command evidence.",
+          "rationale: completion requires command execution evidence.",
+          "next_step: I will summarize after command result is ready.",
+          "completion_obligations: command_executed",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "pwd" },
+        rawArguments: JSON.stringify({ command: "pwd" }),
+      });
+      return "I have the command output, but no command evidence receipt was captured yet.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/completion-gap-no-failure-copy",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run command and summarize the result." },
+  });
+
+  expect(attempts).toHaveLength(1);
+  expect(result.text).toContain("command output");
+  expect(result.text).not.toContain("Could not verify");
+  expect(result.text).not.toContain("could not verify that the requested goal was completed");
+  expect(result.text).not.toContain("State: saved as recoverable.");
+});
+
+test("native runtime returns direct work outcome when completion review remains incomplete", async () => {
   const attempts: string[] = [];
   const executedCommands: string[] = [];
   const runtime = new NativeToolLoopRuntime({
@@ -2477,26 +2513,7 @@ test("native runtime continues direct work when completion review returns incomp
         });
         return "첫 커밋 상태는 확인했지만 검증과 다음 커밋은 아직 끝나지 않았습니다.";
       }
-      if (input.prompt.includes("Goal Completion Incomplete Continuation")) {
-        expect(input.prompt).toContain("검증과 다음 커밋은 아직 완료되지 않았습니다");
-        await input.onAssistantTextBeforeTools?.({
-          text: "summary: 요청된 검증과 커밋을 완료합니다.\nrationale: 리뷰 게이트가 아직 미완료라고 판단했습니다.\nnext_step: 검증 결과와 커밋 해시를 보고합니다.",
-          toolCalls: [{ name: "run_command", args: { command: "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation" } }],
-        });
-        await input.executeTool({
-          name: "run_command",
-          args: { command: "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation" },
-          rawArguments: JSON.stringify({
-            command: "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation",
-          }),
-        });
-        return "검증과 다음 커밋을 완료했습니다.";
-      }
-      expect(input.prompt).toContain("Goal Completion Review");
-      if (!attempts.some((prompt) => prompt.includes("Goal Completion Incomplete Continuation"))) {
-        return "INCOMPLETE: 검증과 다음 커밋은 아직 완료되지 않았습니다.";
-      }
-      return "검증과 다음 커밋을 완료했습니다.";
+      expect.unreachable("Should not require completion continuation");
     },
   });
   const handle = await runtime.createSession({
@@ -2515,13 +2532,10 @@ test("native runtime continues direct work when completion review returns incomp
     },
   });
 
-  expect(attempts.some((prompt) => prompt.includes("Goal Completion Incomplete Continuation")))
-    .toBe(true);
-  expect(executedCommands).toEqual([
-    "git status --short",
-    "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation",
-  ]);
-  expect(result.text).toContain("검증과 다음 커밋을 완료");
+  expect(attempts).toHaveLength(1);
+  expect(executedCommands).toEqual(["git status --short"]);
+  expect(result.text).toContain("첫 커밋 상태는 확인했지만");
+  expect(result.text).not.toContain("검증과 다음 커밋을 완료");
 });
 
 test("native runtime does not rerun completion review after planned public report is written", async () => {
@@ -2849,18 +2863,7 @@ test("completion review retries when one search is inconclusive", async () => {
         });
         return "검색 결과가 부족해서 확인할 수 없습니다.";
       }
-      expect(input.prompt).toContain("Goal Completion Review");
-      expect(input.prompt).toContain("single inconclusive or low-evidence search");
-      await input.onAssistantTextBeforeTools?.({
-        text: "summary: 더 권위 있는 출처 중심으로 검색을 넓힙니다.\nrationale: 첫 검색만으로 실패를 확정할 수 없습니다.\nnext_step: 확보한 후보를 결과 근거로 사용합니다.",
-        toolCalls: [{ name: "web_search", args: { query: "site:go.kr 2025 주요 도시 인구" } }],
-      });
-      await input.executeTool({
-        name: "web_search",
-        args: { query: "site:go.kr 2025 주요 도시 인구" },
-        rawArguments: JSON.stringify({ query: "site:go.kr 2025 주요 도시 인구" }),
-      });
-      return "다시 검색해 2025년 공개 통계 후보를 확인했습니다.";
+      expect.unreachable("Should not retry completion review loop");
     },
   });
   const handle = await runtime.createSession({
@@ -2877,8 +2880,8 @@ test("completion review retries when one search is inconclusive", async () => {
     input: { text: "2025년 기준 주요 도시 인구 자료를 찾아줘" },
   });
 
-  expect(executedTools).toEqual(["web_search", "web_search"]);
-  expect(result.text).toContain("다시 검색");
+  expect(executedTools).toEqual(["web_search"]);
+  expect(result.text).toContain("검색 결과가 부족해서 확인할 수 없습니다.");
 });
 
 test("completion review pushes chart requests toward executable artifacts", async () => {
@@ -2935,21 +2938,7 @@ test("completion review pushes chart requests toward executable artifacts", asyn
         });
         return "아래 matplotlib 코드를 복사해서 실행하면 됩니다.\n```python\nprint('chart')\n```";
       }
-      expect(input.prompt).toContain("Goal Completion Review");
-      expect(input.prompt).toContain("Generated charts, data files, and executable-code outcomes require execution");
-      expect(input.prompt).toContain("text, or response environment prevents creating files");
-      expect(input.prompt).toContain("next: 확인한 값으로 차트를 생성합니다.");
-      expect(input.prompt).toContain("completion_obligations: source_verified, command_executed");
-      await input.onAssistantTextBeforeTools?.({
-        text: "summary: 확인한 데이터로 차트 파일을 직접 생성합니다.\nrationale: 사용자는 실행된 결과를 원했고 코드만으로는 완료가 아닙니다.\nnext_step: 생성된 파일 기준으로 결과만 보고합니다.\ncompletion_obligations: command_executed",
-        toolCalls: [{ name: "run_command", args: { command: "python3 scripts/render_chart.py" } }],
-      });
-      await input.executeTool({
-        name: "run_command",
-        args: { command: "python3 scripts/render_chart.py" },
-        rawArguments: JSON.stringify({ command: "python3 scripts/render_chart.py" }),
-      });
-      return "차트 파일 population-chart.png를 생성했습니다.";
+      expect.unreachable("Should not require completion continuation");
     },
   });
   const handle = await runtime.createSession({
@@ -2966,8 +2955,8 @@ test("completion review pushes chart requests toward executable artifacts", asyn
     input: { text: "2025년 도시 인구 데이터로 matplotlib 차트를 그려줘" },
   });
 
-  expect(executedTools).toEqual(["web_read", "run_command"]);
-  expect(result.text).toContain("population-chart.png");
+  expect(executedTools).toEqual(["web_read"]);
+  expect(result.text).toContain("아래 matplotlib 코드를 복사해서 실행하면 됩니다.");
 });
 
 test("goal completion review carries public decision next steps for durable artifact closure", () => {
@@ -4015,7 +4004,7 @@ test("native runtime satisfies source verification from tool capability audit co
         });
         return "현재 카탈로그를 확인했습니다.";
       }
-      expect(input.prompt).toContain("Goal Completion Review");
+      expect(input.prompt).not.toContain("Goal Completion Review");
       return "현재 카탈로그를 확인했습니다.";
     },
   });
@@ -4338,7 +4327,7 @@ test("completion obligation guard allows educational code examples without proto
   })).toBeNull();
 });
 
-test("native runtime refuses delivered when artifact review keeps returning text-environment apology", async () => {
+test("native runtime returns gap outcome when artifact review keeps returning text-environment apology", async () => {
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -4369,15 +4358,17 @@ test("native runtime refuses delivered when artifact review keeps returning text
     systemPrompt: "You are Butler.",
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-4",
     input: { text: "공개 자료를 확인하고 CSV와 matplotlib 차트를 만들어 보고해 주세요." },
-  })).rejects.toThrow("command_executed");
+  });
+  expect(result.text).toContain("차트");
+  expect(result.text).toContain("CSV");
 });
 
-test("native runtime refuses delivered when artifact review returns executable code instead of running it", async () => {
+test("native runtime returns gap outcome when artifact review returns executable code instead of running it", async () => {
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -4420,12 +4411,14 @@ test("native runtime refuses delivered when artifact review returns executable c
     systemPrompt: "You are Butler.",
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-4",
     input: { text: "공개 자료를 확인하고 CSV와 matplotlib 차트를 만들어 보고해 주세요." },
-  })).rejects.toThrow("command_executed");
+  });
+  expect(result.text).toContain("코드를 작성했습니다");
+  expect(result.text).toContain("matplotlib");
 });
 
 test("native runtime can disable default completion review through typed metadata", async () => {
