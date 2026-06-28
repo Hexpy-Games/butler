@@ -385,7 +385,7 @@ test("agent loop keeps mixed concurrency-safe and unsafe tool batches serial", a
   ]);
 });
 
-test("agent loop stops repeated identical failed tool calls before loop limit", async () => {
+test("agent loop feeds repeated identical failed tool calls back to the model", async () => {
   let modelCalls = 0;
 
   const result = await runAgentLoop({
@@ -394,6 +394,9 @@ test("agent loop stops repeated identical failed tool calls before loop limit", 
     maxIterations: 8,
     callModel: async (input) => {
       modelCalls += 1;
+      if (input.iteration === 3) {
+        return { text: "I saw the repeated tool failures and can answer normally." };
+      }
       return {
         toolCalls: [{
           id: `call-${input.iteration}`,
@@ -405,14 +408,13 @@ test("agent loop stops repeated identical failed tool calls before loop limit", 
     executeTool: async () => {
       throw new Error("boom");
     },
-    onRepeatedToolFailure: ({ failureCount, toolResult }) =>
-      `Stopped after ${failureCount} repeated failures: ${toolResult.error}`,
   });
 
-  expect(modelCalls).toBe(2);
+  expect(modelCalls).toBe(4);
   expect(result.stoppedByLimit).toBe(false);
-  expect(result.finalText).toBe("Stopped after 2 repeated failures: boom");
-  expect(result.events.map((event) => event.type)).toContain("repeated_tool_failure");
+  expect(result.finalText).toBe("I saw the repeated tool failures and can answer normally.");
+  expect(result.finalText).not.toContain("same tool call failed repeatedly");
+  expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(3);
   expect(result.events.map((event) => event.type)).not.toContain("loop_limit");
 });
 
@@ -451,64 +453,71 @@ test("agent loop records every completed parallel result before terminal finaliz
   ]);
 });
 
-test("agent loop treats the same failed tool call as repeated even when error text changes", async () => {
+test("agent loop does not terminalize repeated failed tool calls when error text changes", async () => {
   let attempts = 0;
 
   const result = await runAgentLoop({
     messages: [{ role: "user", content: "retry same missing file" }],
     tools,
     maxIterations: 8,
-    callModel: async (input) => ({
-      toolCalls: [{
-        id: `call-${input.iteration}`,
-        name: "echo",
-        arguments: { message: "same path" },
-      }],
-    }),
+    callModel: async (input) => {
+      if (input.iteration === 3) {
+        return { text: "I can report the changing failures without synthetic stop text." };
+      }
+      return {
+        toolCalls: [{
+          id: `call-${input.iteration}`,
+          name: "echo",
+          arguments: { message: "same path" },
+        }],
+      };
+    },
     executeTool: async () => {
       attempts += 1;
       throw new Error(`ENOENT attempt ${attempts}`);
     },
   });
 
-  expect(attempts).toBe(2);
+  expect(attempts).toBe(3);
   expect(result.stoppedByLimit).toBe(false);
-  expect(result.finalText).toContain("same tool call failed repeatedly");
-  expect(result.finalText).toContain("ENOENT attempt 2");
-  expect(result.events.map((event) => event.type)).toContain("repeated_tool_failure");
+  expect(result.finalText).toBe("I can report the changing failures without synthetic stop text.");
+  expect(result.finalText).not.toContain("same tool call failed repeatedly");
+  expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(3);
   expect(result.events.map((event) => event.type)).not.toContain("loop_limit");
 });
 
-test("agent loop gives repeated-failure finalizer all completed parallel results", async () => {
+test("agent loop records every repeated parallel failure before continuing", async () => {
   const safeTools: AgentLoopToolDefinition[] = [
     { name: "fail", description: "Failing safe tool.", concurrencySafe: true },
     { name: "other", description: "Other safe tool.", concurrencySafe: true },
   ];
-  let callbackToolResults: string[] = [];
 
   const result = await runAgentLoop({
     messages: [{ role: "user", content: "retry then run another safe check" }],
     tools: safeTools,
-    callModel: async (input) => ({
-      toolCalls: input.iteration === 0
-        ? [{ id: "call-fail-1", name: "fail", arguments: {} }]
-        : [
-            { id: "call-fail-2", name: "fail", arguments: {} },
-            { id: "call-other", name: "other", arguments: {} },
-          ],
-    }),
+    callModel: async (input) => {
+      if (input.iteration === 2) {
+        return { text: "Repeated failure observations stayed in context." };
+      }
+      return {
+        toolCalls: input.iteration === 0
+          ? [{ id: "call-fail-1", name: "fail", arguments: {} }]
+          : [
+              { id: "call-fail-2", name: "fail", arguments: {} },
+              { id: "call-other", name: "other", arguments: {} },
+            ],
+      };
+    },
     executeTool: async (call) => {
       if (call.name === "fail") throw new Error("still failing");
       return { tool: call.name };
     },
-    onRepeatedToolFailure: ({ toolResults }) => {
-      callbackToolResults = toolResults.map((toolResult) => toolResult.name);
-      return "Repeated failure finalizer saw the completed batch.";
-    },
   });
 
-  expect(result.finalText).toBe("Repeated failure finalizer saw the completed batch.");
-  expect(callbackToolResults).toEqual(["fail", "fail", "other"]);
+  expect(result.finalText).toBe("Repeated failure observations stayed in context.");
+  expect(result.messages
+    .filter((message) => message.role === "tool")
+    .map((message) => message.name ?? "")).toEqual(["fail", "fail", "other"]);
   expect(result.events.map((event) => event.type)).toEqual([
     "model_call",
     "model_response",
@@ -520,11 +529,12 @@ test("agent loop gives repeated-failure finalizer all completed parallel results
     "tool_call",
     "tool_result",
     "tool_result",
-    "repeated_tool_failure",
+    "model_call",
+    "model_response",
   ]);
 });
 
-test("agent loop lets model use successful alternate result before default repeated-failure stop", async () => {
+test("agent loop lets model use successful alternate result after repeated failure observations", async () => {
   const safeTools: AgentLoopToolDefinition[] = [
     { name: "fail", description: "Failing safe tool.", concurrencySafe: true },
     { name: "alternate", description: "Alternate safe tool.", concurrencySafe: true },
@@ -559,7 +569,37 @@ test("agent loop lets model use successful alternate result before default repea
 
   expect(modelCalls).toBe(3);
   expect(result.finalText).toBe("Used the successful alternate result.");
-  expect(result.events.map((event) => event.type)).not.toContain("repeated_tool_failure");
+});
+
+test("agent loop keeps repeated invalid schema arguments as structured observations", async () => {
+  const modelInputs: string[] = [];
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "echo with repaired schema" }],
+    tools,
+    maxIterations: 5,
+    callModel: async (input) => {
+      modelInputs.push(input.messages.map((message) => `${message.role}:${message.content}`).join("\n"));
+      if (input.iteration < 3) {
+        return {
+          toolCalls: [{
+            id: `call-invalid-${input.iteration}`,
+            name: "echo",
+            arguments: {},
+          }],
+        };
+      }
+      return { text: "I repaired the arguments after the observations." };
+    },
+    executeTool: async () => {
+      throw new Error("invalid calls should not execute");
+    },
+  });
+
+  expect(result.finalText).toBe("I repaired the arguments after the observations.");
+  expect(result.finalText).not.toContain("same tool call failed repeatedly");
+  expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(3);
+  expect(modelInputs.slice(1).join("\n")).toContain("\"observation_kind\":\"tool_invalid_arguments\"");
+  expect(modelInputs.slice(1).join("\n")).toContain("Tool echo requires argument: message");
 });
 
 test("agent loop produces truthful partial response when loop limit is reached", async () => {

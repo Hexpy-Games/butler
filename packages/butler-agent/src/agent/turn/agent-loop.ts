@@ -51,7 +51,6 @@ export interface AgentLoopEvent {
     | "model_response"
     | "tool_call"
     | "tool_result"
-    | "repeated_tool_failure"
     | "loop_limit";
   iteration: number;
   toolCall?: AgentLoopToolCall;
@@ -74,15 +73,6 @@ export interface AgentLoopInput {
     toolCall: AgentLoopToolCall;
     toolResult: AgentLoopToolResult;
   }) => Promise<string | null | undefined> | string | null | undefined;
-  maxRepeatedToolFailures?: number;
-  onRepeatedToolFailure?: (input: {
-    messages: AgentLoopMessage[];
-    toolResults: AgentLoopToolResult[];
-    toolCall: AgentLoopToolCall;
-    toolResult: AgentLoopToolResult;
-    failureCount: number;
-    maxRepeatedToolFailures: number;
-  }) => Promise<string> | string;
   onEvent?: (event: AgentLoopEvent) => void;
   onLoopLimit?: (input: {
     messages: AgentLoopMessage[];
@@ -99,8 +89,6 @@ export interface AgentLoopOutput {
 }
 
 const DEFAULT_MAX_ITERATIONS = 8;
-const MIN_REPEATED_TOOL_FAILURES_BEFORE_STOP = 2;
-const DEFAULT_MAX_REPEATED_TOOL_FAILURES = MIN_REPEATED_TOOL_FAILURES_BEFORE_STOP;
 const CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS = 6_000;
 const CHECKPOINT_CUMULATIVE_TOOL_RESULT_TOKENS = 30_000;
 const GENERIC_TOOL_RESULT_PREVIEW_TOKENS = 1_200;
@@ -154,23 +142,6 @@ function compactStringList(value: unknown, limit: number): string[] {
     .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
     .map((item) => item.trim())
     .slice(0, limit);
-}
-
-function stableJson(value: unknown): unknown {
-  if (!value || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(stableJson);
-  const output: Record<string, unknown> = {};
-  for (const key of Object.keys(value).sort()) {
-    output[key] = stableJson((value as Record<string, unknown>)[key]);
-  }
-  return output;
-}
-
-function failedToolSignature(input: { toolCall: AgentLoopToolCall }): string {
-  return JSON.stringify({
-    name: input.toolCall.name,
-    arguments: stableJson(input.toolCall.arguments),
-  });
 }
 
 function trimTextToTokenBudgetBalanced(text: string, maxTokens: number): string {
@@ -347,19 +318,6 @@ function renderPartialLimitResponse(results: AgentLoopToolResult[]): string {
   return lines.join("\n");
 }
 
-function renderRepeatedToolFailureResponse(input: {
-  toolResult: AgentLoopToolResult;
-  failureCount: number;
-}): string {
-  return [
-    "I stopped because the same tool call failed repeatedly.",
-    `Tool: ${input.toolResult.name}`,
-    `Repeated failures: ${input.failureCount}`,
-    `Last error: ${input.toolResult.error ?? "unknown tool error"}`,
-    "I could not make further local progress without repeating the same failing action.",
-  ].join("\n");
-}
-
 interface PreparedToolCall {
   call: AgentLoopToolCall;
   tool: AgentLoopToolDefinition | undefined;
@@ -367,12 +325,11 @@ interface PreparedToolCall {
 }
 
 interface ToolStopCandidate {
-  type: "tool_final_text" | "repeated_tool_failure";
+  type: "tool_final_text";
   iteration: number;
   toolCall: AgentLoopToolCall;
   toolResult: AgentLoopToolResult;
   finalText?: string;
-  failureCount?: number;
 }
 
 function prepareToolCall(input: AgentLoopInput, call: AgentLoopToolCall): PreparedToolCall {
@@ -465,13 +422,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
   const messages = [...input.messages];
   const events: AgentLoopEvent[] = [];
   const maxIterations = Math.max(1, input.maxIterations ?? DEFAULT_MAX_ITERATIONS);
-  const maxRepeatedToolFailures = Math.max(
-    // The first failure must be visible to the model so it can try a different strategy.
-    MIN_REPEATED_TOOL_FAILURES_BEFORE_STOP,
-    input.maxRepeatedToolFailures ?? DEFAULT_MAX_REPEATED_TOOL_FAILURES,
-  );
   const toolResults: AgentLoopToolResult[] = [];
-  const failedToolCounts = new Map<string, number>();
   let cumulativeToolResultTokens = 0;
 
   const recordToolResult = async (inputRecord: {
@@ -495,18 +446,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
     });
 
     if (!result.ok) {
-      const signature = failedToolSignature({ toolCall: call });
-      const failureCount = (failedToolCounts.get(signature) ?? 0) + 1;
-      failedToolCounts.set(signature, failureCount);
-      if (evaluateStop && failureCount >= maxRepeatedToolFailures) {
-        return {
-          type: "repeated_tool_failure",
-          iteration,
-          toolCall: call,
-          toolResult: result,
-          failureCount,
-        };
-      }
       return null;
     }
 
@@ -531,27 +470,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
 
   const finishWithStopCandidate = async (candidate: ToolStopCandidate): Promise<AgentLoopOutput> => {
     let finalText = candidate.finalText;
-    if (candidate.type === "repeated_tool_failure") {
-      emit(events, input.onEvent, {
-        type: "repeated_tool_failure",
-        iteration: candidate.iteration,
-        toolCall: candidate.toolCall,
-        toolResult: candidate.toolResult,
-      });
-      const failureCount = candidate.failureCount ?? maxRepeatedToolFailures;
-      const synthesizedText = (await input.onRepeatedToolFailure?.({
-        messages,
-        toolResults,
-        toolCall: candidate.toolCall,
-        toolResult: candidate.toolResult,
-        failureCount,
-        maxRepeatedToolFailures,
-      }))?.trim();
-      finalText = synthesizedText || renderRepeatedToolFailureResponse({
-        toolResult: candidate.toolResult,
-        failureCount,
-      });
-    }
     if (!finalText) finalText = "";
     messages.push({
       role: "assistant",
@@ -629,14 +547,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
         });
         if (!stop && candidate) stop = candidate;
       }
-      const hasSuccessfulAlternateInBatch = stop?.type === "repeated_tool_failure" &&
-        input.onRepeatedToolFailure === undefined &&
-        results.some((result, index) =>
-          result.ok &&
-          failedToolSignature({ toolCall: preparedCalls[index]!.call }) !==
-            failedToolSignature({ toolCall: stop!.toolCall }),
-        );
-      if (hasSuccessfulAlternateInBatch) continue;
       if (stop) return finishWithStopCandidate(stop);
       continue;
     }
