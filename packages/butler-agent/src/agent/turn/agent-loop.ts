@@ -105,6 +105,7 @@ const CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS = 6_000;
 const CHECKPOINT_CUMULATIVE_TOOL_RESULT_TOKENS = 30_000;
 const GENERIC_TOOL_RESULT_PREVIEW_TOKENS = 1_200;
 const TOOL_RESULT_COMPACT_MARKER = "[...compacted tool result for context budget...]";
+const GENERIC_AGENT_LOOP_TURN_ID = "generic-agent-loop";
 
 function emit(
   events: AgentLoopEvent[],
@@ -283,7 +284,9 @@ function toolResultToMessage(input: {
 } {
   const rawContent = JSON.stringify(input.result.ok ? { ok: true, output: input.result.output } : {
     ok: false,
-    error: input.result.error ?? "unknown tool error",
+    ...(input.result.output !== undefined
+      ? { output: input.result.output }
+      : { error: input.result.error ?? "unknown tool error" }),
   });
   const rawTokens = estimateTokens(rawContent);
   const shouldCheckpoint = input.result.ok && (
@@ -386,11 +389,16 @@ async function executePreparedToolCall(
   prepared: PreparedToolCall,
 ): Promise<AgentLoopToolResult> {
   if (prepared.validationError) {
+    const observation = genericToolInvalidArgumentsObservation({
+      call: prepared.call,
+      message: prepared.validationError,
+    });
     return {
       toolCallId: prepared.call.id,
       name: prepared.call.name,
       ok: false,
-      error: prepared.validationError,
+      error: observation.summary,
+      output: toolObservationResult(observation),
     };
   }
 
@@ -408,6 +416,49 @@ async function executePreparedToolCall(
       error: error instanceof Error ? error.message : String(error),
     }),
   );
+}
+
+function genericToolInvalidArgumentsObservation(input: {
+  call: AgentLoopToolCall;
+  message: string;
+}): {
+  observationId: string;
+  turnId: string;
+  kind: "tool_invalid_arguments" | "tool_unavailable";
+  visibility: "model";
+  summary: string;
+  modelVisibleContent: string;
+  causedByToolCallId: string;
+  createdAt: string;
+} {
+  const kind = input.message.startsWith("No such tool available:")
+    ? "tool_unavailable"
+    : "tool_invalid_arguments";
+  return {
+    observationId: `obs-${input.call.id}`,
+    turnId: GENERIC_AGENT_LOOP_TURN_ID,
+    kind,
+    visibility: "model",
+    summary: input.message,
+    modelVisibleContent: [
+      `Tool: ${input.call.name}`,
+      `Observation: ${input.message}`,
+      `Arguments: ${JSON.stringify(input.call.arguments)}`,
+      "Use this observation to retry with the tool schema: include required fields, remove unsupported fields, or select an available tool.",
+    ].join("\n"),
+    causedByToolCallId: input.call.id,
+    createdAt: new Date(0).toISOString(),
+  };
+}
+
+function toolObservationResult(observation: ReturnType<typeof genericToolInvalidArgumentsObservation>): Record<string, unknown> {
+  return {
+    ok: false,
+    observation,
+    observation_kind: observation.kind,
+    summary: observation.summary,
+    model_visible_content: observation.modelVisibleContent,
+  };
 }
 
 export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutput> {

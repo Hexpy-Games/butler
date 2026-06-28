@@ -24,6 +24,7 @@ import { persistTurnContextAtom } from "../../turn-continuation-context.ts";
 import type { createDirectTurnBudget } from "../../direct-turn-budget.ts";
 import { WorkStreamStore } from "../../../work/work-stream.ts";
 import { TodoListStore } from "../../../work/todo-list.ts";
+import type { CompletionTerminalState } from "../../completion-review.ts";
 
 const EXPLICIT_TOOL_REPAIR_ATTEMPTS = 2;
 const EXPLICIT_TOOL_REPAIR_BASE_ROUNDS = 2;
@@ -185,12 +186,12 @@ async function runGoalCompletionReviews(input: {
     evidenceReceipts: evidenceCapabilityReceiptsFromAudit(input.audit),
     requiredObligations: requiredCompletionObligations(input.publicDecisionContext),
     observations: observationsFromAudit(input.audit),
-    workStreamTerminal: currentWorkStreamsTerminal({
+    workStreamTerminalState: currentWorkStreamsTerminalState({
       butlerData: input.deps.butlerData,
       sessionId: input.turnInput.handle.sessionId,
       turnId: input.turnId,
     }),
-    todoTerminal: currentTurnTodosTerminal({
+    todoTerminalState: currentTurnTodosTerminalState({
       butlerData: input.deps.butlerData,
       sessionId: input.turnInput.handle.sessionId,
       turnId: input.turnId,
@@ -288,28 +289,32 @@ function observationsFromAudit(audit: ToolAuditEntry[]) {
     }));
 }
 
-function currentWorkStreamsTerminal(input: {
+function currentWorkStreamsTerminalState(input: {
   butlerData: string;
   sessionId: string;
   turnId?: string | null;
-}): boolean {
-  if (!input.turnId) return false;
+}): CompletionTerminalState {
+  if (!input.turnId) return "none";
   const streams = new WorkStreamStore(input.butlerData).list({
     sessionId: input.sessionId,
     includeTerminal: true,
   });
   const store = new WorkStreamStore(input.butlerData);
   const turnLocalStreams = streams.filter((stream) => store.read(stream.id)?.last_user_turn_id === input.turnId);
-  if (turnLocalStreams.length === 0) return false;
-  return turnLocalStreams.every((stream) => stream.terminal === true);
+  if (turnLocalStreams.length === 0) return "none";
+  if (turnLocalStreams.some((stream) => stream.state === "failed")) return "failed";
+  if (turnLocalStreams.some((stream) => stream.state === "waiting_user")) return "waiting_user";
+  if (turnLocalStreams.some((stream) => stream.terminal !== true)) return "none";
+  if (turnLocalStreams.some((stream) => stream.state === "cancelled")) return "cancelled";
+  return "completed";
 }
 
-function currentTurnTodosTerminal(input: {
+function currentTurnTodosTerminalState(input: {
   butlerData: string;
   sessionId: string;
   turnId?: string | null;
-}): boolean {
-  if (!input.turnId) return false;
+}): CompletionTerminalState {
+  if (!input.turnId) return "none";
   const workStore = new WorkStreamStore(input.butlerData);
   const todoStore = new TodoListStore(input.butlerData);
   const todoListIds = workStore.list({
@@ -320,12 +325,17 @@ function currentTurnTodosTerminal(input: {
     .filter((record) => record?.last_user_turn_id === input.turnId)
     .map((record) => record?.todo_list_id)
     .filter((listId): listId is string => Boolean(listId));
-  if (todoListIds.length === 0) return false;
-  return [...new Set(todoListIds)].every((listId) => {
+  if (todoListIds.length === 0) return "none";
+  let sawTerminal = false;
+  for (const listId of [...new Set(todoListIds)]) {
     const todo = todoStore.read(listId);
-    if (!todo) return false;
-    return todo.items.every((item) => item.status === "completed" || item.status === "cancelled");
-  });
+    if (!todo) return "none";
+    if (todo.items.some((item) => item.status === "in_progress" || item.status === "pending")) return "none";
+    if (todo.items.some((item) => item.status === "completed" || item.status === "cancelled")) {
+      sawTerminal = true;
+    }
+  }
+  return sawTerminal ? "completed" : "none";
 }
 
 export async function persistCompletionGapContinuation(input: {

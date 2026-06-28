@@ -76,6 +76,51 @@ test("agent loop executes model-selected tool call and continues with tool resul
   expect(modelInputs[1]).toContain("hello");
 });
 
+test("agent loop serializes schema validation failures as structured observations", async () => {
+  const modelInputs: string[] = [];
+  let executed = 0;
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "echo hello" }],
+    tools,
+    maxIterations: 3,
+    callModel: async (input) => {
+      modelInputs.push(input.messages.map((message) => `${message.role}:${message.content}`).join("\n"));
+      if (input.iteration === 0) {
+        return {
+          toolCalls: [{
+            id: "call-missing",
+            name: "echo",
+            arguments: {},
+          }],
+        };
+      }
+      if (input.iteration === 1) {
+        return {
+          toolCalls: [{
+            id: "call-extra",
+            name: "echo",
+            arguments: { message: "hello", extra: true },
+          }],
+        };
+      }
+      return { text: "I can retry with the schema now." };
+    },
+    executeTool: async () => {
+      executed += 1;
+      return { ok: true };
+    },
+  });
+
+  expect(result.finalText).toBe("I can retry with the schema now.");
+  expect(executed).toBe(0);
+  expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(2);
+  const context = modelInputs.slice(1).join("\n");
+  expect(context).toContain("\"observation_kind\":\"tool_invalid_arguments\"");
+  expect(context).toContain("Tool echo requires argument: message");
+  expect(context).toContain("Tool echo received unsupported argument(s): extra");
+  expect(context).toContain("\"model_visible_content\"");
+});
+
 test("agent loop checkpoints large evidence-bearing tool results for model context", async () => {
   let checkpointMessage = "";
   const result = await runAgentLoop({

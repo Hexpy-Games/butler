@@ -39,27 +39,36 @@ export function publicWorkDecisionsFromAssistantText(input: {
   if (structured.length === 0) {
     return [];
   }
-  return input.toolCalls.map((call, index) => {
+  return input.toolCalls.flatMap((call, index) => {
     const indexedDecision = structured[index];
     const sharedDecision = structured[0];
-    const fallback = fallbackDecisionForToolName(call.name, input.language);
     const decisionWasRepaired = indexedDecision?.repaired === true || sharedDecision?.repaired === true;
+    const summary = indexedDecision?.summary ?? sharedDecision?.summary;
+    const rationale = indexedDecision?.rationale ?? sharedDecision?.rationale;
+    const nextStep = indexedDecision?.nextStep ?? sharedDecision?.nextStep;
+    if (
+      decisionWasRepaired ||
+      typeof summary !== "string" ||
+      typeof rationale !== "string" ||
+      typeof nextStep !== "string" ||
+      !isUsablePublicDecisionText(summary ?? "") ||
+      !isUsablePublicDecisionText(rationale ?? "", { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS }) ||
+      !isUsablePublicDecisionText(nextStep ?? "", { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS })
+    ) {
+      return [];
+    }
     return {
       decisionId: publicDecisionId(),
-      summary: indexedDecision?.summary ??
-        sharedDecision?.summary ??
-        fallback.summary,
-      rationale: indexedDecision?.rationale ??
-        sharedDecision?.rationale ??
-        fallback.rationale,
+      summary,
+      rationale,
       evidenceRefs: input.existingDecisions
         .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
         .map((decision) => decision.summary),
-      nextStep: indexedDecision?.nextStep ?? sharedDecision?.nextStep ?? fallback.nextStep,
+      nextStep,
       completionObligations: indexedDecision?.completionObligations ??
         sharedDecision?.completionObligations ??
         [],
-      source: decisionWasRepaired ? "review-repaired" : "assistant-authored",
+      source: "assistant-authored",
       toolName: call.name,
     };
   });

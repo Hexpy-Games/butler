@@ -54,7 +54,11 @@ export interface CompletionReviewInput {
   }>;
   workStreamTerminal?: boolean;
   todoTerminal?: boolean;
+  workStreamTerminalState?: CompletionTerminalState;
+  todoTerminalState?: CompletionTerminalState;
 }
+
+export type CompletionTerminalState = "none" | "completed" | "cancelled" | "failed" | "waiting_user";
 
 export interface CompletionReviewComplete {
   status: "complete";
@@ -110,6 +114,8 @@ export function evaluateCompletionReviewOutcome(input: CompletionReviewInput): C
     observations = [],
     workStreamTerminal = false,
     todoTerminal = false,
+    workStreamTerminalState = legacyTerminalState(workStreamTerminal),
+    todoTerminalState = legacyTerminalState(todoTerminal),
   } = input;
 
   const request = trimSafeText(requestText);
@@ -175,7 +181,7 @@ export function evaluateCompletionReviewOutcome(input: CompletionReviewInput): C
     if (contradictionObligations.size > 0) {
       return buildGapOutcome({
         status: decideNonCompleteStatus({
-          isTerminal: workStreamTerminal || todoTerminal,
+          terminalStates: [workStreamTerminalState, todoTerminalState],
           blockingObservation: hasBlockingObservation,
           explicitBlocker: false,
         }),
@@ -194,7 +200,7 @@ export function evaluateCompletionReviewOutcome(input: CompletionReviewInput): C
 
   return buildGapOutcome({
     status: decideNonCompleteStatus({
-      isTerminal: workStreamTerminal || todoTerminal,
+      terminalStates: [workStreamTerminalState, todoTerminalState],
       blockingObservation: hasBlockingObservation,
       explicitBlocker: explicitBlocker || hasExplicitBlocker,
     }),
@@ -510,13 +516,18 @@ function hasBlockingObservationKind(observations: CompletionReviewInput["observa
 }
 
 function decideNonCompleteStatus(input: {
-  isTerminal: boolean;
+  terminalStates: CompletionTerminalState[];
   blockingObservation: boolean;
   explicitBlocker: boolean;
 }): Exclude<CompletionReviewStatus, "complete"> {
-  if (input.isTerminal) return "failed";
   if (input.blockingObservation || input.explicitBlocker) return "waiting_user";
+  if (input.terminalStates.includes("failed")) return "failed";
+  if (input.terminalStates.includes("waiting_user")) return "waiting_user";
   return "gap";
+}
+
+function legacyTerminalState(value: boolean): CompletionTerminalState {
+  return value ? "failed" : "none";
 }
 
 function collectEvidenceRefsFromUnknownReceipts(receipts: readonly unknown[]): string[] {

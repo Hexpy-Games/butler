@@ -266,6 +266,52 @@ test("native runtime blocks visible tool execution until an authored public deci
   expect(String(observations[0]?.model_visible_content)).toContain("same assistant response");
 });
 
+test("native runtime rejects partial public decisions before visible tool execution", async () => {
+  let executed = 0;
+  const observations: Array<Record<string, unknown>> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async () => {
+      executed += 1;
+      return { ok: true, stdout: "should not run", exit_code: 0 };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: "summary: I will inspect the workspace.",
+        toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
+      });
+      observations.push(await input.executeTool({
+        name: "run_command",
+        args: { command: "pwd" },
+        rawArguments: JSON.stringify({ command: "pwd" }),
+      }) as Record<string, unknown>);
+      return "I need a complete public decision first.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/partial-public-decision-required",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run a quick command." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(executed).toBe(0);
+  expect(observations[0]).toMatchObject({
+    ok: false,
+    observation_kind: "public_decision_required",
+  });
+});
+
 test("native runtime turns invalid tool arguments into model-visible retry guidance", async () => {
   let executed = 0;
   let secondPromptSawObservation = false;
