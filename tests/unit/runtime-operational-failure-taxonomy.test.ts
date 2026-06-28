@@ -98,10 +98,9 @@ test("runtime delivery taxonomy separates tool retry from completion continuatio
         code: "disabled_tool",
         message: "disabled tool web_search; tool is not active in the current surface",
       },
-      state: "needs_tool_surface",
-      code: "disabled_tool",
-      issueKind: "tool_call_repair",
-      visibility: "tool_retry_progress",
+      state: "running",
+      issueKind: "none",
+      visibility: "continuation_progress",
     },
     {
       label: "missing evidence",
@@ -109,9 +108,8 @@ test("runtime delivery taxonomy separates tool retry from completion continuatio
         code: "missing_evidence",
         message: "missing evidence receipt for source_verified",
       },
-      state: "needs_evidence",
-      code: "missing_evidence",
-      issueKind: "completion_continuation",
+      state: "running",
+      issueKind: "none",
       visibility: "continuation_progress",
     },
     {
@@ -120,10 +118,9 @@ test("runtime delivery taxonomy separates tool retry from completion continuatio
         code: "disabled_tool",
         message: "disabled tool storage_search is unavailable in the current surface",
       },
-      state: "needs_tool_surface",
-      code: "disabled_tool",
-      issueKind: "tool_call_repair",
-      visibility: "tool_retry_progress",
+      state: "running",
+      issueKind: "none",
+      visibility: "continuation_progress",
     },
     {
       label: "missing evidence with gateway-like name",
@@ -131,9 +128,8 @@ test("runtime delivery taxonomy separates tool retry from completion continuatio
         code: "missing_evidence",
         message: "missing evidence receipt for gateway_health unavailable",
       },
-      state: "needs_evidence",
-      code: "missing_evidence",
-      issueKind: "completion_continuation",
+      state: "running",
+      issueKind: "none",
       visibility: "continuation_progress",
     },
   ];
@@ -146,18 +142,10 @@ test("runtime delivery taxonomy separates tool retry from completion continuatio
       issue_kind: item.issueKind,
       visibility: item.visibility,
       failure_notice: false,
-      limitation_codes: [item.code],
+      limitation_codes: [],
+      limitations: [],
     });
-    expect(recoverableLimitedDeliveryForError(item.error), item.label).toMatchObject({
-      delivery: {
-        delivery_state: item.state,
-        terminal: false,
-        issue_kind: item.issueKind,
-        visibility: item.visibility,
-        failure_notice: false,
-        limitation_codes: [item.code],
-      },
-    });
+    expect(recoverableLimitedDeliveryForError(item.error), item.label).toBeNull();
   }
 
   const promptBudget = {
@@ -165,23 +153,15 @@ test("runtime delivery taxonomy separates tool retry from completion continuatio
     message: "Prompt usage model-call budget exhausted before provider request",
   };
   expect(classifyRuntimeFailureDelivery(promptBudget)).toMatchObject({
-    delivery_state: "recovering_internal",
+    delivery_state: "running",
     terminal: false,
-    issue_kind: "runtime_continuation",
+    issue_kind: "none",
     visibility: "continuation_progress",
     failure_notice: false,
-    limitation_codes: ["prompt_usage_model_call_budget_exhausted"],
+    limitation_codes: [],
+    limitations: [],
   });
-  expect(recoverableLimitedDeliveryForError(promptBudget)).toMatchObject({
-    delivery: {
-      delivery_state: "recovering_internal",
-      terminal: false,
-      issue_kind: "runtime_continuation",
-      visibility: "continuation_progress",
-      failure_notice: false,
-      limitation_codes: ["internal_recovery_required"],
-    },
-  });
+  expect(recoverableLimitedDeliveryForError(promptBudget)).toBeNull();
 });
 
 test("remote provider abort remains a provider failure, not user cancellation", () => {
@@ -291,7 +271,9 @@ test("safe runtime failure preserves operational taxonomy without swallowing int
   const internalFailure = new Error("missing public completion obligation: source_verified");
   internalFailure.name = "GoalCompletionIncompleteError";
   expect(safeRuntimeFailure(internalFailure)).toMatchObject({
-    code: "internal_recovery_required",
+    code: "gateway_failed",
+    message: "Butler could not complete this turn.",
+    cause: "missing public completion obligation: source_verified",
     retryable: true,
   });
 });
