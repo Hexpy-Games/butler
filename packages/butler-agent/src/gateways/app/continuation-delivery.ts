@@ -76,14 +76,6 @@ export function isContinuationDeliveryIssue(issueKind: string): boolean {
     issueKind === "runtime_continuation";
 }
 
-export function repeatedContinuationLimitedReplyText(): string {
-  return [
-    "이 턴은 같은 이어가기 상태가 반복되어 자동 재시도를 더 진행하지 않았습니다.",
-    "",
-    "작업 기록은 보존되어 있습니다. 다음 요청은 남은 작업부터 새 턴으로 이어갑니다.",
-  ].join("\n");
-}
-
 function isInternalContinuationTurnState(state: TurnState): boolean {
   return state === "retrying" || state === "waiting_for_tool";
 }
