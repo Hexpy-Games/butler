@@ -16,9 +16,11 @@ export interface RuntimeSemanticProgressSafetyNet {
 
 export interface NativeAuditedToolExecutorInput {
   sessionId: string;
+  turnId: string;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
   pendingPublicDecisions: PublicWorkDecision[];
+  assistantTextBeforeToolsSeen: () => boolean;
   turnInput: RuntimeTurnInput;
   butlerData: string;
   messageLanguage: RuntimeMessageLanguage;

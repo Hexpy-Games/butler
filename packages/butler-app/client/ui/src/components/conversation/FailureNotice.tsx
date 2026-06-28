@@ -1,6 +1,7 @@
 import { AlertCircle, Button, Notice } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageRecord } from "@/app/types.ts";
+import { isRuntimeFaultRetryableMessage } from "@/app/utils.ts";
 
 export function FailureNotice({
   message,
@@ -28,7 +29,7 @@ export function FailureNotice({
         title={appCopy.conversation.failure.title}
         message={reason}
         action={
-          message.retryable && message.turn_id ? (
+          isRuntimeFaultRetryableMessage(message) && message.turn_id ? (
             <Button
               type="button"
               size="sm"

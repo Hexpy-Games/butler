@@ -32,8 +32,14 @@ import {
   evidenceTranscriptErrorMessage,
 } from "../../../output/evidence/transcript-result.ts";
 import {
+  hasCompleteAuthoredPublicDecisionForTool,
   takePublicWorkDecisionForTool,
 } from "../../../output/public-work/decisions.ts";
+import {
+  publicDecisionRequiredObservation,
+  throwIfToolResultNeedsObservation,
+  toolObservationResult,
+} from "./tool-observations.ts";
 import type {
   NativeAuditedToolExecutorInput,
   NativeToolCall,
@@ -81,6 +87,29 @@ export function createAuditedButlerToolExecutor(
     });
     if (repeatedToolFamilyResult) return repeatedToolFamilyResult;
 
+    if (input.assistantTextBeforeToolsSeen() && !hasCompleteAuthoredPublicDecisionForTool({
+      pending: input.pendingPublicDecisions,
+      toolName: call.name,
+    })) {
+      const observation = publicDecisionRequiredObservation({
+        turnId: input.turnId,
+        call,
+      });
+      appendTranscriptEvent(createTranscriptEvent({
+        sessionId: input.sessionId,
+        kind: "tool_result",
+        payload: {
+          name: call.name,
+          ok: false,
+          observation,
+        },
+        metadata: {
+          source: "runtime/native-tool-loop.ts#public-decision-gate",
+        },
+      }));
+      return toolObservationResult(observation);
+    }
+
     const state = await prepareAuditedToolExecution({
       input,
       call,
@@ -93,6 +122,7 @@ export function createAuditedButlerToolExecutor(
       if (call.name === "tool_describe") {
         input.toolSurfaceController?.recordToolDescriptionResult(result);
       }
+      throwIfToolResultNeedsObservation({ call, result });
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       repeatedToolFamilyGuard.resetAfterStateMutation(call.name, cleanArgs);
       return await handleAuditedToolSuccess({

@@ -108,6 +108,24 @@ export function takePublicWorkDecisionForTool(input: {
   };
 }
 
+export function hasCompleteAuthoredPublicDecisionForTool(input: {
+  pending: PublicWorkDecision[];
+  toolName: string;
+}): boolean {
+  const decision = input.pending.find((candidate) => candidate.toolName === input.toolName) ??
+    input.pending[0];
+  if (!decision || decision.source !== "assistant-authored") {
+    return false;
+  }
+  return isUsablePublicDecisionText(decision.summary) &&
+    isUsablePublicDecisionText(decision.rationale ?? "", {
+      minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS,
+    }) &&
+    isUsablePublicDecisionText(decision.nextStep ?? "", {
+      minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS,
+    });
+}
+
 function takePendingDecision(
   pending: PublicWorkDecision[],
   toolName: string,

@@ -1200,7 +1200,7 @@ test("electron shell mediates existing-folder project selection without exposing
   expect(preload).not.toContain("fs/promises");
 });
 
-test("conversation UI renders user bubbles and assistant documents with retryable failures", () => {
+test("conversation UI renders user bubbles and assistant documents with runtime-fault retry actions", () => {
   const renderer = readUiSources();
   const messageItem = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageItem.tsx",
@@ -1381,7 +1381,7 @@ test("conversation UI renders user bubbles and assistant documents with retryabl
   expect(renderer).toContain("ConversationShell");
   expect(renderer).toContain('message.role === "assistant"');
   expect(renderer).toContain('message.status === "failed"');
-  expect(renderer).toContain("message.retryable");
+  expect(renderer).toContain("isRuntimeFaultRetryableMessage(message)");
   expect(renderer).toContain("onRetryTurn(turnId)");
   expect(renderer).toContain("eventPollingRef");
   expect(renderer).toContain("function collapseAssistantAttempts");

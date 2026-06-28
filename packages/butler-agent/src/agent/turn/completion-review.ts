@@ -43,9 +43,9 @@ export interface CompletionReviewObservation {
 export interface CompletionReviewInput {
   requestText: string;
   candidateText: string;
-  evidenceReceipts?: unknown[];
-  requiredObligations?: PublicWorkObligationKind[];
-  observations?: Array<Pick<
+  evidenceReceipts?: readonly unknown[];
+  requiredObligations?: readonly PublicWorkObligationKind[];
+  observations?: ReadonlyArray<Pick<
     CompletionReviewObservation,
     "kind" | "summary" | "modelVisibleContent"
   > & {
@@ -231,7 +231,7 @@ interface ReceiptClaimBundle {
 }
 
 function collectReceiptClaims(
-  receipts: unknown[],
+  receipts: readonly unknown[],
   requiredSet: Set<PublicWorkObligationKind>,
 ): ReceiptClaimBundle {
   const result = new Map<PublicWorkObligationKind, ParsedClaim[]>();
@@ -519,7 +519,7 @@ function decideNonCompleteStatus(input: {
   return "gap";
 }
 
-function collectEvidenceRefsFromUnknownReceipts(receipts: unknown[]): string[] {
+function collectEvidenceRefsFromUnknownReceipts(receipts: readonly unknown[]): string[] {
   const refs = new Set<string>();
   for (const raw of receipts) {
     const normalized = normalizeEvidenceCapabilityReceipts(raw);
@@ -568,7 +568,7 @@ function parseCreatedAt(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function dedupe<T>(values: T[]): T[] {
+function dedupe<T>(values: readonly T[]): T[] {
   return [...new Set(values)];
 }
 

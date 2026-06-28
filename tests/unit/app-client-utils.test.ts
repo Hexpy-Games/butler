@@ -13,6 +13,7 @@ import {
   groupWorkerActivities,
   hasFollowableWorkerActivity,
   isInternalProgressRow,
+  isRuntimeFaultRetryableMessage,
   isVisibleToolchainProgressRow,
   mergeMessages,
   mergeTurnProgressFromSummary,
@@ -2565,6 +2566,28 @@ test("typed UI read models keep runtime faults separate from progress rows", () 
       workBlockId: undefined,
     },
   ]);
+});
+
+test("retry eligibility requires runtime fault message code", () => {
+  expect(
+    isRuntimeFaultRetryableMessage({
+      retryable: true,
+      safe_error_code: "runtime_fault",
+    }),
+  ).toBe(true);
+  expect(
+    isRuntimeFaultRetryableMessage({
+      retryable: true,
+      safe_error_code: "tool_invalid_arguments",
+    }),
+  ).toBe(false);
+  expect(isRuntimeFaultRetryableMessage({ retryable: true })).toBe(false);
+  expect(
+    isRuntimeFaultRetryableMessage({
+      retryable: false,
+      safe_error_code: "runtime_fault",
+    }),
+  ).toBe(false);
 });
 
 test("production work block projection keeps mixed tool row decisions out of block semantics", () => {

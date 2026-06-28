@@ -46,6 +46,7 @@ export function createNativeTurnPromptRunners(input: {
   plannedReview: PlannedReviewTurnContext | null;
   publicDecisionContext: PublicWorkDecision[];
   pendingPublicDecisions: PublicWorkDecision[];
+  markAssistantTextBeforeToolsSeen: () => void;
 }) {
   const usageAttribution = (phase: string, roundIndex?: number): PromptUsageAttribution => ({
     turnId: input.turnId,
@@ -104,6 +105,7 @@ export function createNativeTurnPromptRunners(input: {
           },
           onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
             throwIfRuntimeTurnAborted(input.turnInput.signal);
+            input.markAssistantTextBeforeToolsSeen();
             input.pendingPublicDecisions.push(...publicWorkDecisionsFromAssistantText({
               text,
               toolCalls,

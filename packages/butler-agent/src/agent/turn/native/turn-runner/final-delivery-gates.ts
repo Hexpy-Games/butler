@@ -190,7 +190,11 @@ async function runGoalCompletionReviews(input: {
       sessionId: input.turnInput.handle.sessionId,
       turnId: input.turnId,
     }),
-    todoTerminal: false,
+    todoTerminal: currentTurnTodosTerminal({
+      butlerData: input.deps.butlerData,
+      sessionId: input.turnInput.handle.sessionId,
+      turnId: input.turnId,
+    }),
   });
   return { outcome, reviewedText: input.initialText };
 }
@@ -298,6 +302,30 @@ function currentWorkStreamsTerminal(input: {
   const turnLocalStreams = streams.filter((stream) => store.read(stream.id)?.last_user_turn_id === input.turnId);
   if (turnLocalStreams.length === 0) return false;
   return turnLocalStreams.every((stream) => stream.terminal === true);
+}
+
+function currentTurnTodosTerminal(input: {
+  butlerData: string;
+  sessionId: string;
+  turnId?: string | null;
+}): boolean {
+  if (!input.turnId) return false;
+  const workStore = new WorkStreamStore(input.butlerData);
+  const todoStore = new TodoListStore(input.butlerData);
+  const todoListIds = workStore.list({
+    sessionId: input.sessionId,
+    includeTerminal: true,
+  })
+    .map((summary) => workStore.read(summary.id))
+    .filter((record) => record?.last_user_turn_id === input.turnId)
+    .map((record) => record?.todo_list_id)
+    .filter((listId): listId is string => Boolean(listId));
+  if (todoListIds.length === 0) return false;
+  return [...new Set(todoListIds)].every((listId) => {
+    const todo = todoStore.read(listId);
+    if (!todo) return false;
+    return todo.items.every((item) => item.status === "completed" || item.status === "cancelled");
+  });
 }
 
 export async function persistCompletionGapContinuation(input: {
