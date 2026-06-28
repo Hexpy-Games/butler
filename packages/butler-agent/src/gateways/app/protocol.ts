@@ -1011,7 +1011,6 @@ export interface ProgressSummaryRow {
   runtime_fault_kind?: string;
   runtime_fault_retryable?: boolean;
   runtime_fault_public_summary?: string;
-  runtime_fault_operator_summary?: string;
   runtime_fault_safe_error_code?: string;
   runtime_fault_safe_cause?: string;
   safe_count?: number;

@@ -4093,9 +4093,10 @@ export class AppServerStore {
     }
 
     const runtimeFault = this.runtimeFaultRecordForTurn(turnId);
-    const isRuntimeFault = runtimeFault?.retryable === true;
+    const isRuntimeFault = Boolean(runtimeFault);
+    const isRetryableRuntimeFault = runtimeFault?.retryable === true;
     this.upsertAssistantTurnFailure(chatId, turnId, safeError, {
-      retryable: isRuntimeFault,
+      retryable: isRetryableRuntimeFault,
     });
     if (!this.hasTurnEventKind(turnId, isRuntimeFault ? "runtime.fault" : "turn.failed")) {
       this.appendTurnEvent(chatId, turnId, {
@@ -4105,7 +4106,7 @@ export class AppServerStore {
     }
     const failedTurn = this.updateTurnState(turnId, isRuntimeFault ? "runtime_fault" : "failed", {
       safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
-      retryable: isRuntimeFault,
+      retryable: isRetryableRuntimeFault,
       cancellable: false,
       safeErrorCode: safeError.code,
     });
@@ -4847,9 +4848,10 @@ export class AppServerStore {
       },
       updateTurnFailed: (chatId, turnId, safeError) => {
         const runtimeFault = this.runtimeFaultRecordForTurn(turnId);
-        const isRuntimeFault = runtimeFault?.retryable === true;
+        const isRuntimeFault = Boolean(runtimeFault);
+        const isRetryableRuntimeFault = runtimeFault?.retryable === true;
         this.upsertAssistantTurnFailure(chatId, turnId, safeError, {
-          retryable: isRuntimeFault,
+          retryable: isRetryableRuntimeFault,
         });
         this.appendTurnEvent(chatId, turnId, {
           kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
@@ -4857,7 +4859,7 @@ export class AppServerStore {
         });
         const failedTurn = this.updateTurnState(turnId, isRuntimeFault ? "runtime_fault" : "failed", {
           safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
-          retryable: isRuntimeFault,
+          retryable: isRetryableRuntimeFault,
           cancellable: false,
           safeErrorCode: safeError.code,
         });
@@ -5239,9 +5241,10 @@ export class AppServerStore {
       }
       const safeError = appSafeResponderError(error);
       const runtimeFault = this.runtimeFaultRecordForTurn(turn.id);
-      const isRuntimeFault = runtimeFault?.retryable === true;
+      const isRuntimeFault = Boolean(runtimeFault);
+      const isRetryableRuntimeFault = runtimeFault?.retryable === true;
       this.upsertAssistantTurnFailure(chatId, turn.id, safeError, {
-        retryable: isRuntimeFault,
+        retryable: isRetryableRuntimeFault,
       });
       this.appendTurnEvent(chatId, turn.id, {
         kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
@@ -5252,7 +5255,7 @@ export class AppServerStore {
       });
       const failedTurn = this.updateTurnState(turn.id, isRuntimeFault ? "runtime_fault" : "failed", {
         safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
-        retryable: isRuntimeFault,
+        retryable: isRetryableRuntimeFault,
         cancellable: false,
         safeErrorCode: safeError.code,
       });

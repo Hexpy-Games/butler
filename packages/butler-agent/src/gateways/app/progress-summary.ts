@@ -54,10 +54,6 @@ export function normalizeProgressSummaryRow(
     row.runtime_fault_kind = runtimeFaultKind;
     row.runtime_fault_retryable = input.runtime_fault_retryable === true;
     row.runtime_fault_public_summary = runtimeFaultSummary;
-    const operatorSummary = safeOptionalShortText(
-      input.runtime_fault_operator_summary,
-    );
-    if (operatorSummary) row.runtime_fault_operator_summary = operatorSummary;
     const safeErrorCode = safeOptionalShortToken(
       input.runtime_fault_safe_error_code,
     );

@@ -95,7 +95,6 @@ export interface ProgressRowLike {
   runtime_fault_kind?: string;
   runtime_fault_retryable?: boolean;
   runtime_fault_public_summary?: string;
-  runtime_fault_operator_summary?: string;
   runtime_fault_safe_error_code?: string;
   runtime_fault_safe_cause?: string;
   safe_detail_rows?: Array<{
@@ -297,13 +296,12 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       id: event.id,
       kind: "runtime_fault",
       safe_label: publicSummary,
-      state: "failed",
+      state: "runtime_fault",
       created_at: createdAt,
       runtime_fault_id: sanitizePublicText(payload.faultId, event.id),
       runtime_fault_kind: sanitizePublicText(payload.kind, "runtime_fault"),
       runtime_fault_retryable: payload.retryable === true,
       runtime_fault_public_summary: publicSummary,
-      runtime_fault_operator_summary: optionalPublicText(payload.operatorSummary),
       runtime_fault_safe_error_code: optionalPublicText(payload.safeErrorCode),
       runtime_fault_safe_cause: optionalPublicText(payload.safeCause),
     };

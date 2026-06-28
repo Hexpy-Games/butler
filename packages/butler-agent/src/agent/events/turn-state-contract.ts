@@ -60,9 +60,21 @@ export const TURN_OUTCOMES = [
 
 export type TurnOutcome = typeof TURN_OUTCOMES[number];
 
+export const RECOVERY_KINDS = [
+  "runtime_process_crash",
+  "provider_stream_corruption",
+  "storage_invariant_violation",
+  "api_protocol_invariant_violation",
+  "queue_claim_invariant_violation",
+  "compaction_invariant_violation",
+] as const;
+
+export type RecoveryKind = typeof RECOVERY_KINDS[number];
+
 const AUTHORED_DECISION_SOURCE_SET = new Set<string>(AUTHORED_DECISION_SOURCES);
 const COMPLETION_EVIDENCE_KIND_SET = new Set<string>(COMPLETION_EVIDENCE_KINDS);
 const TURN_OUTCOME_SET = new Set<string>(TURN_OUTCOMES);
+const RECOVERY_KIND_SET = new Set<string>(RECOVERY_KINDS);
 
 export interface TurnAcknowledgedPayloadInput {
   safeLabel?: unknown;
@@ -100,7 +112,7 @@ export interface RuntimeFaultPayloadInput {
   kind: unknown;
   retryable: unknown;
   publicSummary: unknown;
-  operatorSummary?: unknown;
+  operatorSummary: unknown;
   safeErrorCode?: unknown;
   safeCause?: unknown;
   createdAt?: unknown;
@@ -208,8 +220,14 @@ export function createRuntimeFaultPayload(input: RuntimeFaultPayloadInput): Reco
   const sessionId = optionalSafeText(input.sessionId);
   const turnId = optionalSafeText(input.turnId);
   const kind = requiredSafeText(input.kind, "runtime fault kind is required");
+  if (!RECOVERY_KIND_SET.has(kind)) {
+    throw new Error(`unknown runtime fault recovery kind: ${kind}`);
+  }
+  if (typeof input.retryable !== "boolean") {
+    throw new Error("runtime fault retryable must be an explicit boolean");
+  }
   const publicSummary = requiredSafeText(input.publicSummary, "runtime fault public summary is required");
-  const operatorSummary = optionalSafeText(input.operatorSummary);
+  const operatorSummary = requiredSafeText(input.operatorSummary, "runtime fault operator summary is required");
   const safeErrorCode = optionalSafeText(input.safeErrorCode);
   const safeCause = optionalSafeText(input.safeCause);
   const createdAt = optionalSafeText(input.createdAt) ?? new Date().toISOString();
@@ -218,9 +236,9 @@ export function createRuntimeFaultPayload(input: RuntimeFaultPayloadInput): Reco
     ...(sessionId ? { sessionId } : {}),
     ...(turnId ? { turnId } : {}),
     kind,
-    retryable: input.retryable === true,
+    retryable: input.retryable,
     publicSummary,
-    ...(operatorSummary ? { operatorSummary } : {}),
+    operatorSummary,
     ...(safeErrorCode ? { safeErrorCode } : {}),
     ...(safeCause ? { safeCause } : {}),
     createdAt,
@@ -296,9 +314,9 @@ export function normalizeTurnStateContractPayload(
       faultId: payload.faultId,
       sessionId: payload.sessionId,
       turnId: payload.turnId,
-      kind: payload.kind ?? payload.faultKind ?? payload.safeErrorCode,
+      kind: payload.kind,
       retryable: payload.retryable,
-      publicSummary: payload.publicSummary ?? payload.safeLabel,
+      publicSummary: payload.publicSummary,
       operatorSummary: payload.operatorSummary,
       safeErrorCode: payload.safeErrorCode,
       safeCause: payload.safeCause,

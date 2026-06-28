@@ -11315,7 +11315,7 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
             faultId: "fault-retryable-runtime",
             sessionId: input.chatId,
             turnId: input.turnId,
-            kind: "tool_result_pairing_invariant",
+            kind: "provider_stream_corruption",
             retryable: true,
             publicSummary: "Runtime invariant interrupted the turn.",
             operatorSummary: "Tool result pairing invariant broke.",
@@ -11365,7 +11365,7 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       faultId: "fault-retryable-runtime",
       sessionId: "general",
       turnId: failedTurnId,
-      kind: "tool_result_pairing_invariant",
+      kind: "provider_stream_corruption",
       retryable: true,
       publicSummary: "Runtime invariant interrupted the turn.",
       operatorSummary: "Tool result pairing invariant broke.",
@@ -11421,7 +11421,7 @@ test("runtime fault retry eligibility comes from the fault record", async () => 
           faultId: "fault-non-retryable-runtime",
           sessionId: input.chatId,
           turnId: input.turnId,
-          kind: "non_retryable_runtime_fault",
+          kind: "storage_invariant_violation",
           retryable: false,
           publicSummary: "Runtime stopped with a non-retryable fault.",
           operatorSummary: "Operator-only non-retryable detail.",
@@ -11449,7 +11449,7 @@ test("runtime fault retry eligibility comes from the fault record", async () => 
       server.url,
       "general",
       (turn) =>
-        turn.state === "failed" &&
+        turn.state === "runtime_fault" &&
         turn.safe_error_code === "runtime_fault" &&
         turn.retryable === false,
     );
@@ -11458,6 +11458,10 @@ test("runtime fault retry eligibility comes from the fault record", async () => 
       { method: "POST", headers: { "content-type": "application/json" } },
     );
     expect(retry.status).toBe(409);
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(JSON.stringify(summary)).not.toContain("Operator-only non-retryable detail");
+    expect(JSON.stringify(messages)).not.toContain("Operator-only non-retryable detail");
   } finally {
     server.stop();
   }
