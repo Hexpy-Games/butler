@@ -36,6 +36,14 @@ export function recoverableLimitedDeliveryForError(error: unknown): RecoverableL
   };
 }
 
+export function isNonPublicContinuationDeliveryError(error: unknown): boolean {
+  const classified = classifyRuntimeFailureDelivery(error);
+  return classified.delivery_state === "running" &&
+    classified.terminal === false &&
+    classified.visibility === "continuation_progress" &&
+    classified.issue_kind === "none";
+}
+
 export function isPromptUsageModelCallBudgetError(error: unknown): boolean {
   return isPromptUsageModelCallBudget(error);
 }

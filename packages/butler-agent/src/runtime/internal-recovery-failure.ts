@@ -12,6 +12,7 @@ export interface InternalRecoveryFailureInput {
   code?: string;
   name?: string;
   message?: string;
+  historicalRecoveryState?: boolean;
 }
 
 export function isGoalCompletionIncompleteFailure(error: unknown): boolean {
@@ -23,6 +24,7 @@ export function isGoalCompletionIncompleteFailure(error: unknown): boolean {
 
 export function isInternalRecoveryFailure(input: InternalRecoveryFailureInput | unknown): boolean {
   const failure = normalizeInternalRecoveryInput(input);
+  if (!failure.historicalRecoveryState) return false;
   const message = failure.message ?? "";
   return (
     failure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
@@ -43,6 +45,7 @@ export function isInternalRecoveryFailure(input: InternalRecoveryFailureInput | 
 
 export function isToolCallRepairFailure(input: InternalRecoveryFailureInput | unknown): boolean {
   const failure = normalizeInternalRecoveryInput(input);
+  if (!failure.historicalRecoveryState) return false;
   const message = failure.message ?? "";
   return (
     failure.code === "unknown_tool" ||
@@ -114,11 +117,15 @@ function isGoalCompletionIncompleteMessage(message: string): boolean {
 
 function normalizeInternalRecoveryInput(input: InternalRecoveryFailureInput | unknown): InternalRecoveryFailureInput {
   if (input instanceof Error) {
-    const record = input as Error & { code?: unknown };
+    const record = input as Error & {
+      code?: unknown;
+      historicalRecoveryState?: unknown;
+    };
     return {
       code: typeof record.code === "string" ? record.code : undefined,
       name: input.name,
       message: input.message,
+      historicalRecoveryState: record.historicalRecoveryState === true,
     };
   }
   if (input && typeof input === "object") {
@@ -127,6 +134,7 @@ function normalizeInternalRecoveryInput(input: InternalRecoveryFailureInput | un
       code: typeof record.code === "string" ? record.code : undefined,
       name: typeof record.name === "string" ? record.name : undefined,
       message: typeof record.message === "string" ? record.message : undefined,
+      historicalRecoveryState: record.historicalRecoveryState === true,
     };
   }
   return {

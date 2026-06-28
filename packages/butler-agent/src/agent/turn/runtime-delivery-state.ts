@@ -19,7 +19,8 @@ export type RuntimeDeliveryState =
   | "cancelled"
   | "delivered"
   | "delivered_with_limitations"
-  | "failed_system";
+  | "failed_system"
+  | "runtime_fault";
 
 export type RuntimeDeliveryTerminalState =
   | "delivered"
@@ -45,6 +46,7 @@ export type RuntimeDeliveryIssueKind =
   | "limitation"
   | "user_action_blocker"
   | "system_failure"
+  | "runtime_fault"
   | "cancelled";
 
 export interface RuntimeDeliveryFailureInput {
@@ -53,6 +55,7 @@ export interface RuntimeDeliveryFailureInput {
   message?: string;
   statusCode?: number;
   retryable?: boolean;
+  historicalRecoveryState?: boolean;
 }
 
 export interface RuntimeDeliveryClassification {
@@ -130,25 +133,16 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
     });
   }
   if (isToolCallRepairFailure(failure)) {
-    return classification({
-      deliveryState: toolCallRepairStateForFailure(failure),
-      terminal: false,
-      issueKind: "tool_call_repair",
-      visibility: "tool_retry_progress",
-      limitationCodes: [safeCode(failure.code ?? "tool_call_repair")],
-    });
+    return historicalRepairDeliveryState(failure);
   }
   if (isInternalRecoveryFailure(failure)) {
-    const state = recoveryStateForInternalFailure(failure);
-    return classification({
-      deliveryState: state,
-      terminal: false,
-      issueKind: state === "needs_evidence"
-        ? "completion_continuation"
-        : "runtime_continuation",
-      visibility: "continuation_progress",
-      limitationCodes: [safeCode(failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE)],
-    });
+    return historicalInternalRecoveryDeliveryState(failure);
+  }
+  if (isLiveContinuationGap(failure)) {
+    return liveContinuationObservationState();
+  }
+  if (isRuntimeFault(failure)) {
+    return runtimeFaultDeliveryState(failure);
   }
   if (isOperationalFailure(failure)) {
     return systemFailureDeliveryState(failure);
@@ -160,6 +154,54 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
     });
   }
   return systemFailureDeliveryState(failure);
+}
+
+function liveContinuationObservationState(): RuntimeDeliveryClassification {
+  return classification({
+    deliveryState: "running",
+    terminal: false,
+    issueKind: "none",
+    visibility: "continuation_progress",
+  });
+}
+
+function historicalRepairDeliveryState(
+  failure: RuntimeDeliveryFailureInput,
+): RuntimeDeliveryClassification {
+  return classification({
+    deliveryState: toolCallRepairStateForFailure(failure),
+    terminal: false,
+    issueKind: "tool_call_repair",
+    visibility: "tool_retry_progress",
+    limitationCodes: [safeCode(failure.code ?? "tool_call_repair")],
+  });
+}
+
+function historicalInternalRecoveryDeliveryState(
+  failure: RuntimeDeliveryFailureInput,
+): RuntimeDeliveryClassification {
+  const state = recoveryStateForInternalFailure(failure);
+  return classification({
+    deliveryState: state,
+    terminal: false,
+    issueKind: state === "needs_evidence"
+      ? "completion_continuation"
+      : "runtime_continuation",
+    visibility: "continuation_progress",
+    limitationCodes: [safeCode(failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE)],
+  });
+}
+
+function runtimeFaultDeliveryState(
+  failure: RuntimeDeliveryFailureInput,
+): RuntimeDeliveryClassification {
+  return classification({
+    deliveryState: "runtime_fault",
+    terminal: true,
+    issueKind: "runtime_fault",
+    visibility: "failure_notice",
+    safeErrorCode: safeCode(failure.code ?? "runtime_fault"),
+  });
 }
 
 function systemFailureDeliveryState(failure: RuntimeDeliveryFailureInput): RuntimeDeliveryClassification {
@@ -208,6 +250,7 @@ function normalizeFailureInput(input: RuntimeDeliveryFailureInput | unknown): Ru
       code?: unknown;
       statusCode?: unknown;
       retryable?: unknown;
+      historicalRecoveryState?: unknown;
     };
     return {
       code: typeof record.code === "string" ? record.code : undefined,
@@ -215,6 +258,7 @@ function normalizeFailureInput(input: RuntimeDeliveryFailureInput | unknown): Ru
       message: input.message,
       statusCode: typeof record.statusCode === "number" ? record.statusCode : undefined,
       retryable: typeof record.retryable === "boolean" ? record.retryable : undefined,
+      historicalRecoveryState: record.historicalRecoveryState === true,
     };
   }
   if (input && typeof input === "object") {
@@ -225,6 +269,7 @@ function normalizeFailureInput(input: RuntimeDeliveryFailureInput | unknown): Ru
       message: typeof record.message === "string" ? record.message : undefined,
       statusCode: typeof record.statusCode === "number" ? record.statusCode : undefined,
       retryable: typeof record.retryable === "boolean" ? record.retryable : undefined,
+      historicalRecoveryState: record.historicalRecoveryState === true,
     };
   }
   return {
@@ -242,6 +287,42 @@ function isInternalRecoveryFailure(failure: RuntimeDeliveryFailureInput): boolea
 
 function isToolCallRepairFailure(failure: RuntimeDeliveryFailureInput): boolean {
   return isSharedToolCallRepairFailure(failure);
+}
+
+function isLiveContinuationGap(failure: RuntimeDeliveryFailureInput): boolean {
+  const message = failure.message ?? "";
+  return (
+    failure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
+    failure.code === "goal_completion_incomplete" ||
+    failure.code === "internal_uncertainty" ||
+    failure.code === "prompt_usage_model_call_budget_exhausted" ||
+    failure.code === "missing_evidence" ||
+    failure.code === "candidate_only_evidence" ||
+    failure.code === "unknown_tool" ||
+    failure.code === "disabled_tool" ||
+    failure.code === "missing_tool_surface" ||
+    failure.code === "invalid_tool_arguments" ||
+    failure.code === "tool_arguments_validation_failed" ||
+    failure.name === "PromptUsageModelCallBudgetExhaustedError" ||
+    failure.name === "GoalCompletionIncompleteError" ||
+    /(?:unsatisfied|missing|unresolved) public completion obligation/iu.test(message) ||
+    /goal completion|could not verify that the requested goal was completed/iu.test(message) ||
+    /uncertain (?:whether|if) the requested goal was completed/iu.test(message) ||
+    /internal uncertainty/iu.test(message) ||
+    /prompt usage model-call budget exhausted/iu.test(message) ||
+    /completion review .*incomplete/iu.test(message) ||
+    /missing evidence|candidate-only evidence|evidence receipt/iu.test(message) ||
+    /unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message) ||
+    /invalid tool arguments|tool arguments failed validation/iu.test(message) ||
+    /repeated tool|tool pressure|too many tool calls/iu.test(message)
+  );
+}
+
+function isRuntimeFault(failure: RuntimeDeliveryFailureInput): boolean {
+  return failure.code === "runtime_fault" ||
+    failure.code === "runtime_invariant_violation" ||
+    /runtime (?:process )?crash|protocol invariant|storage invariant|queue claim invariant/iu
+      .test(failure.message ?? "");
 }
 
 function recoveryStateForInternalFailure(
