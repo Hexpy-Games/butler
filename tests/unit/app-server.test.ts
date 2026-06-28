@@ -6703,6 +6703,150 @@ test("app transport no-visible limited final closes queued turns without assista
   }
 });
 
+test("app transport internal recovery failures close queued turns without assistant text", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue after internal recovery",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:internal-recovery",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not verify that the requested goal was completed.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          source: "test",
+          safeErrorCode: "internal_recovery_required",
+          safeErrorCause:
+            "Butler could not verify that the requested goal was completed.",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["continue after internal recovery"]);
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "delivered",
+      safe_status_label: "Delivered with limitations",
+      retryable: false,
+    });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["internal_recovery_required"],
+      limitations: [],
+    });
+    expect(JSON.stringify(summary)).not.toContain("could not verify");
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport internal recovery failures do not mask prior provider failures", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "preserve provider failure",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:provider-first",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "OpenAI API request failed with HTTP 500.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          source: "test",
+          safeErrorCode: "provider_api_error",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:01.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:late-internal",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not verify that the requested goal was completed.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          source: "test",
+          safeErrorCode: "internal_recovery_required",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "preserve provider failure",
+      "OpenAI API request failed with HTTP 500.",
+    ]);
+
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "failed",
+      safe_error_code: "provider_api_error",
+      retryable: true,
+    });
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport no-visible final removes an earlier failure assistant for the same turn", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
@@ -10537,6 +10681,57 @@ test("goal completion obligation protocol gaps close without generic assistant t
     expect(JSON.stringify(messages)).not.toContain("could not verify");
     expect(JSON.stringify(messages)).not.toContain("durable_artifact");
     expect(JSON.stringify(messages)).not.toContain("data_table_created");
+  } finally {
+    server.stop();
+  }
+});
+
+test("generic internal recovery responder failures close without assistant text", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder() {
+      const error = new Error(
+        "Butler could not verify that the requested goal was completed.",
+      );
+      (error as Error & { code?: string }).code = "internal_recovery_required";
+      throw error;
+    },
+  });
+  try {
+    const response = await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: "general",
+        text: "continue the latest work",
+      }),
+    });
+    expect(response.status).toBe(202);
+
+    const deliveredTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "delivered",
+    );
+    expect(deliveredTurn).toMatchObject({
+      state: "delivered",
+      safe_status_label: "Delivered with limitations",
+      retryable: false,
+    });
+    expect(deliveredTurn.safe_error_code ?? null).toBeNull();
+
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(JSON.stringify(events)).not.toContain("turn.failed");
+    expect(JSON.stringify(events)).not.toContain("could not verify");
   } finally {
     server.stop();
   }
