@@ -29,6 +29,11 @@ import {
   safeRuntimeFailure,
 } from "../../integrations/providers/provider-errors.ts";
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
+import { isPromptUsageModelCallBudgetError } from "../../agent/turn/recoverable-delivery.ts";
+import {
+  clearTurnContextAtom,
+  persistTurnContextAtom,
+} from "../../agent/turn/turn-continuation-context.ts";
 import type {
   GatewayActorTurnResult,
   GatewayDurableRole,
@@ -538,6 +543,14 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           },
         });
       }
+      const turnId = turnIdFromEnvelope(envelope);
+      if (turnId) {
+        clearTurnContextAtom({
+          butlerData: gatewayMetricsButlerData(),
+          sessionId: activeBinding.sessionId,
+          turnId,
+        });
+      }
       const generatedSessionTitle = await this.generateSessionTitleBestEffort(
         activeBinding,
         envelope,
@@ -572,10 +585,25 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         runtimeSessionRef: nextHandle.runtimeSessionRef,
         raw: result.raw,
       };
-    } catch (error) {
+      } catch (error) {
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
-      const failureState = safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE
+      const turnId = turnIdFromEnvelope(envelope);
+      const isContinuationFailure =
+        safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
+        isPromptUsageModelCallBudgetError(error);
+      if (isPromptUsageModelCallBudgetError(error) && turnId) {
+        persistTurnContextAtom({
+          butlerData: gatewayMetricsButlerData(),
+          sessionId: binding.sessionId,
+          turnId,
+          state: "continuing",
+          sourceErrorCode: safeFailure.code,
+          reason: safeFailure.message,
+          unresolvedObservations: [],
+        });
+      }
+      const failureState = isContinuationFailure
         ? "active"
         : "crashed";
       this.options.store.updateLifecycleState(binding.sessionId, failureState, timestamp);

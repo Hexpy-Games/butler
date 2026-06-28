@@ -36,6 +36,10 @@ export function recoverableLimitedDeliveryForError(error: unknown): RecoverableL
   };
 }
 
+export function isPromptUsageModelCallBudgetError(error: unknown): boolean {
+  return isPromptUsageModelCallBudget(error);
+}
+
 function isContinuationDelivery(classified: RuntimeDeliveryClassification): boolean {
   return classified.issue_kind === "internal_recovery" ||
     classified.issue_kind === "tool_call_repair" ||

@@ -2,8 +2,13 @@ import { recordOperationalMetric } from "../../../../operations/metrics/operatio
 import type { RuntimeTurnResult } from "../../../../test-support/harness/contracts.ts";
 import { runtimeArtifactsFromAudit } from "../output/runtime-artifacts.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
-import { recoverableLimitedDeliveryForError } from "../../recoverable-delivery.ts";
+import {
+  isPromptUsageModelCallBudgetError,
+  recoverableLimitedDeliveryForError,
+} from "../../recoverable-delivery.ts";
 import { deliveredWithLimitationsState } from "../../runtime-delivery-state.ts";
+import { persistTurnContextAtom } from "../../turn-continuation-context.ts";
+import { safeRuntimeFailure } from "../../../../integrations/providers/provider-errors.ts";
 import {
   cancelActiveWorkStreamBestEffort,
   completeReportingWorkStreamBestEffort,
@@ -133,6 +138,20 @@ export async function runNativeToolTurn({
     };
   } catch (error) {
     const limitedDelivery = recoverableLimitedDeliveryForError(error);
+    const isBudgetError = isPromptUsageModelCallBudgetError(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (isBudgetError && turnId) {
+      const safeFailure = safeRuntimeFailure(error);
+      persistTurnContextAtom({
+        butlerData: deps.butlerData,
+        sessionId: input.handle.sessionId,
+        turnId,
+        state: "continuing",
+        sourceErrorCode: safeFailure.code,
+        reason: safeFailure.message,
+        unresolvedObservations: [],
+      });
+    }
     if (useTools) {
       if (input.signal?.aborted) {
         cancelActiveWorkStreamBestEffort({
@@ -141,28 +160,30 @@ export async function runNativeToolTurn({
           turnId,
         });
       } else {
-        const recoveryStreams = markActiveWorkStreamRecoverableBestEffort({
-          butlerData: deps.butlerData,
-          sessionId: input.handle.sessionId,
-          turnId,
-          reason: limitedDelivery?.reason ?? (error instanceof Error ? error.message : String(error)),
-        });
-        if (limitedDelivery) {
+        const recoveryStreams = isBudgetError
+          ? []
+          : markActiveWorkStreamRecoverableBestEffort({
+            butlerData: deps.butlerData,
+            sessionId: input.handle.sessionId,
+            turnId,
+            reason: limitedDelivery?.reason ?? errorMessage,
+          });
+        if (limitedDelivery && !isBudgetError) {
           await emitRecoverableTurnOutcome({
             turnInput: input,
             turnId,
-            reason: error instanceof Error ? error.message : String(error),
+            reason: errorMessage,
             workStreamId: recoveryStreams.at(0)?.id,
             todoListId: recoveryStreams.at(0)?.todo_list_id ?? undefined,
           });
         }
       }
     }
-    if (!limitedDelivery) {
+    if (!limitedDelivery && !isBudgetError) {
       await emitInterruptedTurnOutcome({
         turnInput: input,
         cancelled: Boolean(input.signal?.aborted),
-        reason: error instanceof Error ? error.message : String(error),
+        reason: errorMessage,
       });
       await emitTurnEventBestEffort(input, {
         kind: input.signal?.aborted ? "turn.cancelled" : "turn.failed",

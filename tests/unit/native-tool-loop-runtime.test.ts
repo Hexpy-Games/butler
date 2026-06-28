@@ -7447,20 +7447,20 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
   const streams = new WorkStreamStore(tempDir).list({ sessionId, includeTerminal: true });
   expect(streams).toHaveLength(1);
   expect(streams[0]).toMatchObject({
-    state: "recoverable",
+    state: "executing",
     current_phase: "execution",
     active_step_id: "w3-style-guard",
     terminal: false,
   });
   const record = new WorkStreamStore(tempDir).read(streams[0].id);
-  expect(record?.status_note).toContain("Turn interrupted before final delivery");
+  expect(record?.status_note).toBeNull();
   const todoView = new TodoListStore(tempDir).view(record!.todo_list_id!, { includeCompleted: true });
   expect(todoView.progress.active).toBe(2);
   expect(todoView.items)
     .toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "w3-style-guard",
-        status: "pending",
+        status: "in_progress",
         active_form: "Inspecting Sandy style guard validation evidence",
       }),
       expect.objectContaining({
