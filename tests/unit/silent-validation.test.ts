@@ -302,6 +302,98 @@ test("timeout flag with custom timeout value", () => {
   }
 });
 
+test("timeout terminates descendants that keep validation pipes open", () => {
+  const tempDir = tempRoot();
+
+  try {
+    const scriptPath = join(tempDir, "hold-open.sh");
+    writeFileSync(
+      scriptPath,
+      [
+        "#!/usr/bin/env bash",
+        "trap '' TERM",
+        "(trap '' TERM; while true; do echo descendant-output; sleep 1; done) &",
+        "wait",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(tempDir, "package.json"),
+      JSON.stringify({
+        name: "test",
+        scripts: {
+          "timeout-gate": `bash ${scriptPath}`,
+        },
+      }),
+    );
+
+    const startedAt = Date.now();
+    const result = spawnSync("bun", [validator, "timeout-gate", "--json", "--timeout=1"], {
+      cwd: tempDir,
+      encoding: "utf8",
+      env: { ...process.env, FORCE_COLOR: "0" },
+      timeout: 10_000,
+    });
+    const durationMs = Date.now() - startedAt;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).not.toBe(0);
+    expect(durationMs).toBeLessThan(10_000);
+
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.gate).toBe("timeout-gate");
+    expect(parsed.exitCode).not.toBe(0);
+    expect(parsed.timedOut).toBe(true);
+    expect(parsed.stdoutTail).toContain("descendant-output");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("timeout remains failure when child exits zero during grace period", () => {
+  const tempDir = tempRoot();
+
+  try {
+    const scriptPath = join(tempDir, "exit-zero-after-timeout.sh");
+    writeFileSync(
+      scriptPath,
+      [
+        "#!/usr/bin/env bash",
+        "trap '' TERM",
+        "echo before-timeout",
+        "sleep 2",
+        "exit 0",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(tempDir, "package.json"),
+      JSON.stringify({
+        name: "test",
+        scripts: {
+          "timeout-then-zero": `bash ${scriptPath}`,
+        },
+      }),
+    );
+
+    const result = spawnSync("bun", [validator, "timeout-then-zero", "--json", "--timeout=1"], {
+      cwd: tempDir,
+      encoding: "utf8",
+      env: { ...process.env, FORCE_COLOR: "0" },
+      timeout: 10_000,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).not.toBe(0);
+
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.gate).toBe("timeout-then-zero");
+    expect(parsed.timedOut).toBe(true);
+    expect(parsed.exitCode).not.toBe(0);
+    expect(parsed.stdoutTail).toContain("before-timeout");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("validator requires gate argument", () => {
   const result = spawnSync("bun", [validator], {
     cwd: root,
