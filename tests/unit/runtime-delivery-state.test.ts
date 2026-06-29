@@ -185,6 +185,36 @@ test("runtime delivery taxonomy separates user blockers from system failures", (
     safe_error_code: "provider_auth_error",
   });
   expect(isUserFacingFailureDelivery(providerAuth)).toBe(true);
+
+  const providerAuthLoginMessage = classifyRuntimeFailureDelivery({
+    code: "provider_auth_error",
+    message: "HTTP 401 login required for provider account.",
+    statusCode: 401,
+  });
+  expect(providerAuthLoginMessage).toMatchObject({
+    delivery_state: "failed_system",
+    terminal: true,
+    issue_kind: "system_failure",
+    visibility: "failure_notice",
+    failure_notice: true,
+    safe_error_code: "provider_auth_error",
+  });
+});
+
+test("completion_review_incomplete with concrete user action waits for user", () => {
+  const completionReviewCredentialBlocker = classifyRuntimeFailureDelivery({
+    code: "completion_review_incomplete",
+    message: "login required for the private account.",
+    retryable: true,
+  });
+  expect(completionReviewCredentialBlocker).toMatchObject({
+    delivery_state: "waiting_user",
+    terminal: false,
+    issue_kind: "user_action_blocker",
+    visibility: "user_action_required",
+    failure_notice: false,
+    safe_error_code: "completion_review_incomplete",
+  });
 });
 
 test("runtime delivery taxonomy preserves cancellation as terminal cancellation", () => {

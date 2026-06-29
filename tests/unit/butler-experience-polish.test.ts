@@ -170,7 +170,11 @@ test("runtime omits leaked pre-dispatch internals and keeps model heartbeat", as
   });
 
   expect(deliveries).toHaveLength(0);
-  expect(progressActions.filter((action) => action.activityKind !== "model")).toHaveLength(1);
+  expect(progressActions.filter((action) => action.activityKind !== "model")).toHaveLength(0);
+  expect(
+    progressActions.filter((action) => action.activityKind === "model"),
+  ).toHaveLength(1);
+  expect(JSON.stringify(progressActions)).not.toContain("task-hidden-from-user");
   expect(result.text).toBe("시작했습니다. 완료되면 결과만 정리하겠습니다.");
   expectNoInternalLeak(result.text);
 });
