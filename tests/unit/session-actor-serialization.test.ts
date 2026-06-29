@@ -18,6 +18,7 @@ import { DeliveryGuard } from "../../packages/butler-agent/src/interfaces/transp
 import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/mock/adapter.ts";
 import { APP_TRANSPORT } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
 import { TURN_ACKNOWLEDGED_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
+import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
 import { readFirstVisibleLatencySummary } from "../../packages/butler-agent/src/operations/metrics/first-visible-latency.ts";
 
 let tempDir = "";
@@ -545,6 +546,7 @@ test("app session actor emits deterministic acknowledgement before context prepa
   const order: string[] = [];
   const turnEvents: string[] = [];
   const acknowledgedPayloads: Array<Record<string, unknown> | undefined> = [];
+  const firstProgressPayloads: Array<Record<string, unknown> | undefined> = [];
   store.upsert({
     sessionId: "butler/main",
     role: "butler",
@@ -577,6 +579,9 @@ test("app session actor emits deterministic acknowledgement before context prepa
       if (event.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
         acknowledgedPayloads.push(event.payload);
       }
+      if (event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
+        firstProgressPayloads.push(event.payload);
+      }
     },
   });
   const actor = await lifecycle.getOrCreate("butler/main", "butler");
@@ -586,18 +591,26 @@ test("app session actor emits deterministic acknowledgement before context prepa
   });
 
   expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
+  expect(turnEvents[1]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
   expect(acknowledgedPayloads[0]).toMatchObject({
     safeLabel: "Request received. Preparing the work.",
     transport: APP_TRANSPORT,
   });
+  expect(firstProgressPayloads[0]).toMatchObject({
+    note: "Request received. Preparing the work.",
+    source: "gateway-accepted",
+  });
   expect(order.indexOf(`turnEvent:${TURN_ACKNOWLEDGED_EVENT_KIND}`)).toBeLessThan(
+    order.indexOf("buildTurnContext"),
+  );
+  expect(order.indexOf(`turnEvent:${FIRST_VISIBLE_PROGRESS_EVENT_KIND}`)).toBeLessThan(
     order.indexOf("buildTurnContext"),
   );
   const summary = readFirstVisibleLatencySummary({ butlerData: tempDir });
   expect(summary).toMatchObject({
     events: 1,
     bySignal: {
-      acknowledged: 1,
+      first_progress: 1,
     },
     privacy: {
       rawTextStored: false,
@@ -652,7 +665,7 @@ test("app session actor acknowledgement does not wait for provider progress gene
   await runtime.firstTurnStarted.promise;
 
   expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
-  expect(turnEvents).not.toContain("turn.first_progress");
+  expect(turnEvents[1]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
   expect(providerInvokeCount).toBe(0);
   runtime.firstTurnRelease.resolve();
 
@@ -662,7 +675,7 @@ test("app session actor acknowledgement does not wait for provider progress gene
 
   expect(turnEvents).toContain("turn.completed");
   expect(readFirstVisibleLatencySummary({ butlerData: tempDir }).bySignal).toMatchObject({
-    acknowledged: 1,
+    first_progress: 1,
   });
   store.close();
 });
@@ -784,7 +797,7 @@ test("app session actor treats acknowledgement delivery as best effort", async (
   expect(turnEvents).toContain("turn.completed");
   const summary = readFirstVisibleLatencySummary({ butlerData: tempDir });
   expect(summary.bySignal).toMatchObject({
-    acknowledged: 1,
+    first_progress: 1,
   });
   expect(summary.latest?.status).toBe("error");
   store.close();

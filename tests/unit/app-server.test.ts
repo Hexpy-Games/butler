@@ -48,6 +48,7 @@ import {
   createRuntimeFaultPayload,
   createTurnAcknowledgedPayload,
 } from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
+import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
 import type { ButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
 import type {
   AgentRuntimeAdapter,
@@ -889,8 +890,12 @@ test("app messages emit canonical turn acknowledgement instead of legacy accepte
       );
 
     expect(turnEvents).toContain(TURN_ACKNOWLEDGED_EVENT_KIND);
+    expect(turnEvents).toContain(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
     expect(turnEvents).not.toContain("turn.accepted");
     expect(turnEvents.indexOf(TURN_ACKNOWLEDGED_EVENT_KIND)).toBeLessThan(
+      turnEvents.indexOf(FIRST_VISIBLE_PROGRESS_EVENT_KIND),
+    );
+    expect(turnEvents.indexOf(FIRST_VISIBLE_PROGRESS_EVENT_KIND)).toBeLessThan(
       turnEvents.indexOf("turn.started"),
     );
   } finally {

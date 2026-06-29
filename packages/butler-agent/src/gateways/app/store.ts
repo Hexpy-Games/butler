@@ -46,6 +46,12 @@ import {
   TURN_ACKNOWLEDGED_EVENT_KIND,
   createTurnAcknowledgedPayload,
 } from "../../agent/events/turn-state-contract.ts";
+import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../agent/events/turn-events.ts";
+import {
+  FIRST_VISIBLE_PROGRESS_GATEWAY_NOTE,
+  FIRST_VISIBLE_PROGRESS_GATEWAY_SOURCE,
+  firstVisibleProgressPayload,
+} from "../../agent/events/first-visible-progress.ts";
 import { ensureAppMessageQuerySchema } from "../../agent/cognition/memory/exact-query.ts";
 import {
   PlannedTaskStore,
@@ -3102,6 +3108,13 @@ export class AppServerStore {
       payload: createTurnAcknowledgedPayload({
         safeLabel: "Request received. Preparing the work.",
         transport: "app",
+      }),
+    });
+    this.appendTurnEvent(chatId, turnId, {
+      kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+      payload: firstVisibleProgressPayload({
+        note: FIRST_VISIBLE_PROGRESS_GATEWAY_NOTE,
+        source: FIRST_VISIBLE_PROGRESS_GATEWAY_SOURCE,
       }),
     });
   }
@@ -7213,6 +7226,13 @@ export class AppServerStore {
   }
 
   private shouldPersistRuntimeTurnEvent(turnId: string, kind: string): boolean {
+    if (
+      (kind === TURN_ACKNOWLEDGED_EVENT_KIND ||
+        kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) &&
+      this.hasTurnEventKind(turnId, kind)
+    ) {
+      return false;
+    }
     const turn = this.getTurnRow(turnId);
     if (!turn || !isTerminalTurnState(turn.state)) return true;
     if (turn.state === "cancelled") return kind === "turn.cancelled";
