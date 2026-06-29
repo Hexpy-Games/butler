@@ -80,6 +80,30 @@ function capabilityReceipt(input: {
   };
 }
 
+async function authorPublicDecisionForTool(
+  input: {
+    onAssistantTextBeforeTools?: (message: {
+      text: string;
+      toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
+    }) => Promise<void> | void;
+  },
+  call: { name: string; args: Record<string, unknown> },
+  text: {
+    summary: string;
+    rationale: string;
+    nextStep: string;
+  },
+): Promise<void> {
+  await input.onAssistantTextBeforeTools?.({
+    text: [
+      `summary: ${text.summary}`,
+      `rationale: ${text.rationale}`,
+      `next_step: ${text.nextStep}`,
+    ].join("\n"),
+    toolCalls: [call],
+  });
+}
+
 const fakeProvider: ModelProviderAdapter = {
   id: "fake-openai",
   capabilities: {
@@ -818,6 +842,15 @@ test("native runtime emits safe public turn events for tool, guard, and final ph
     messageLanguage: "en",
     executeButlerTool: async () => ({ ok: true, outputText: "safe result" }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_search", args: { query: "safe docs" } },
+        {
+          summary: "Searching public web sources for safe docs.",
+          rationale: "The test needs real tool and work-block events from a model-selected web search.",
+          nextStep: "Use the search result to finish with a safe confirmation.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: { query: "safe docs" },
@@ -896,6 +929,15 @@ test("native runtime emits completion evidence only from real capability receipt
       return { ok: true };
     },
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command: "printf verified" } },
+        {
+          summary: "Run a verification command.",
+          rationale: "Completion evidence must come from the real command receipt.",
+          nextStep: "Use the receipt to report the verification result.",
+        },
+      );
       await input.executeTool({
         name: "run_command",
         args: { command: "printf verified" },
@@ -1603,6 +1645,15 @@ test("native runtime resolves run_command generated artifacts from Butler data",
     runFunctionToolPromptText: async (input) => {
       const command =
         "mkdir -p \"$BUTLER_ARTIFACTS_DIR/cyrene\"; printf 'name,count\\ncyrene,1\\n' > \"$BUTLER_ARTIFACTS_DIR/cyrene/report.csv\"";
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command } },
+        {
+          summary: "Create the generated Cyrene report artifact.",
+          rationale: "The test verifies that generated artifacts under Butler data are resolved correctly.",
+          nextStep: "Read the generated artifact metadata from the command result.",
+        },
+      );
       const result = await input.executeTool({
         name: "run_command",
         args: { command },
@@ -1645,6 +1696,15 @@ test("native runtime uses the web search query in public work labels when safe",
     messageLanguage: "ko",
     executeButlerTool: async () => ({ ok: true, outputText: "safe result" }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_search", args: { query: "충주 5월 축제" } },
+        {
+          summary: '공개 웹에서 "충주 5월 축제" 관련 정보를 검색합니다.',
+          rationale: "이 테스트는 안전한 검색어가 공개 진행 라벨에 반영되는지 확인합니다.",
+          nextStep: "검색 결과를 바탕으로 확인 사실을 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: { query: "충주 5월 축제" },
@@ -1685,11 +1745,29 @@ test("native runtime falls back only when web search has no safe query label", a
     messageLanguage: "en",
     executeButlerTool: async () => ({ ok: true, outputText: "safe result" }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_search", args: {} },
+        {
+          summary: "Searching public web sources for the needed information.",
+          rationale: "The first call intentionally has no safe query label for fallback coverage.",
+          nextStep: "Compare the fallback label with the next labeled search.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: {},
         rawArguments: "{}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_search", args: { query: "query" } },
+        {
+          summary: "Searching public web sources for query.",
+          rationale: "The second call has a safe query label for comparison.",
+          nextStep: "Use the two work labels to complete the assertion.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: { query: "query" },
@@ -1737,16 +1815,43 @@ test("native runtime describes Project Ledger tool progress by work context", as
     messageLanguage: "en",
     executeButlerTool: async () => ({ ok: true }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "inspect_project_status", args: { project_path: workspacePath } },
+        {
+          summary: "Checking the Project Ledger status.",
+          rationale: "The progress-label test needs the status tool's public work context.",
+          nextStep: "Use the status result to choose the next Project Ledger action.",
+        },
+      );
       await input.executeTool({
         name: "inspect_project_status",
         args: { project_path: workspacePath },
         rawArguments: JSON.stringify({ project_path: workspacePath }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "query_project_work", args: { project_path: workspacePath, kind: "next-actions" } },
+        {
+          summary: "Reviewing the needed Project Ledger work context.",
+          rationale: "The test verifies that query progress is labeled by public work context.",
+          nextStep: "Use next actions before rendering the dashboard.",
+        },
+      );
       await input.executeTool({
         name: "query_project_work",
         args: { project_path: workspacePath, kind: "next-actions" },
         rawArguments: JSON.stringify({ project_path: workspacePath, kind: "next-actions" }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "render_project_dashboard", args: { project_path: workspacePath, view: "dashboard", write: true } },
+        {
+          summary: "Updating the Project Ledger dashboard.",
+          rationale: "The final Project Ledger tool should keep a safe dashboard progress label.",
+          nextStep: "Report that the dashboard is ready.",
+        },
+      );
       await input.executeTool({
         name: "render_project_dashboard",
         args: { project_path: workspacePath, view: "dashboard", write: true },
@@ -1834,26 +1939,76 @@ test("native runtime caches Project Ledger reads only until a same-turn mutation
       return { ok: true };
     },
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "inspect_project_status", args: { project_path: tempDir } },
+        {
+          summary: "Inspect the Project Ledger status before mutation.",
+          rationale: "The cache test needs a first status read through the real tool path.",
+          nextStep: "Repeat the status read to check same-turn cache behavior.",
+        },
+      );
       const firstStatus = await input.executeTool({
         name: "inspect_project_status",
         args: { project_path: tempDir },
         rawArguments: JSON.stringify({ project_path: tempDir }),
       }) as Record<string, unknown>;
+      await authorPublicDecisionForTool(
+        input,
+        { name: "inspect_project_status", args: { project_path: tempDir } },
+        {
+          summary: "Inspect the Project Ledger status again.",
+          rationale: "The repeated status read should use the same-turn cache.",
+          nextStep: "Compare the cached status with the first status.",
+        },
+      );
       const cachedStatus = await input.executeTool({
         name: "inspect_project_status",
         args: { project_path: tempDir },
         rawArguments: JSON.stringify({ project_path: tempDir }),
       }) as Record<string, unknown>;
+      await authorPublicDecisionForTool(
+        input,
+        { name: "query_project_work", args: { project_path: tempDir, kind: "next-actions" } },
+        {
+          summary: "Query Project Ledger next actions before mutation.",
+          rationale: "The cache test needs a first query result through the real tool path.",
+          nextStep: "Repeat the query to check same-turn cache behavior.",
+        },
+      );
       const firstQuery = await input.executeTool({
         name: "query_project_work",
         args: { project_path: tempDir, kind: "next-actions" },
         rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
       }) as Record<string, unknown>;
+      await authorPublicDecisionForTool(
+        input,
+        { name: "query_project_work", args: { project_path: tempDir, kind: "next-actions" } },
+        {
+          summary: "Query Project Ledger next actions again.",
+          rationale: "The repeated query should use the same-turn cache.",
+          nextStep: "Mutate the Project Ledger after comparing cached query data.",
+        },
+      );
       const cachedQuery = await input.executeTool({
         name: "query_project_work",
         args: { project_path: tempDir, kind: "next-actions" },
         rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
       }) as Record<string, unknown>;
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "run_command",
+          args: {
+            command: "node packages/project-ledger/bin/project-ledger task update --project \"$PWD\" --id T-1 --status in_progress",
+          },
+        },
+        {
+          summary: "Mutate Project Ledger task state.",
+          rationale: "The mutation should invalidate same-turn Project Ledger read caches.",
+          nextStep: "Inspect status again after the mutation.",
+        },
+      );
       await input.executeTool({
         name: "run_command",
         args: {
@@ -1863,6 +2018,15 @@ test("native runtime caches Project Ledger reads only until a same-turn mutation
           command: "node packages/project-ledger/bin/project-ledger task update --project \"$PWD\" --id T-1 --status in_progress",
         }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "inspect_project_status", args: { project_path: tempDir } },
+        {
+          summary: "Inspect Project Ledger status after mutation.",
+          rationale: "The final read should bypass stale cache data after mutation.",
+          nextStep: "Compare the post-mutation version with previous reads.",
+        },
+      );
       const statusAfterMutation = await input.executeTool({
         name: "inspect_project_status",
         args: { project_path: tempDir },
@@ -3129,6 +3293,21 @@ test("native runtime does not rerun completion review after planned public repor
       if (attempts.length > 1) {
         throw new Error("completion review should not run after a planned public report");
       }
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "write_planned_public_report",
+          args: {
+            task_id: "planned-public-report",
+            report: "검토된 공개 보고입니다.",
+          },
+        },
+        {
+          summary: "완료된 계획 작업의 공개 보고를 작성합니다.",
+          rationale: "이 테스트는 계획 공개 보고 도구 실행 뒤 재검토가 반복되지 않는지 확인합니다.",
+          nextStep: "작성된 공개 보고를 최종 답변으로 사용합니다.",
+        },
+      );
       await input.executeTool({
         name: "write_planned_public_report",
         args: {
@@ -3173,6 +3352,21 @@ test("planned review turns block sibling planned task creation", async () => {
       return { ok: true };
     },
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "create_planned_task",
+          args: {
+            goal: "같은 목표를 새 계획으로 다시 실행한다.",
+            acceptance_criteria: ["새 sibling plan이 생기면 안 된다."],
+          },
+        },
+        {
+          summary: "완료된 계획 검토 중 새 계획 생성을 시도합니다.",
+          rationale: "이 테스트는 공개 결정 이후에도 sibling 계획 생성 정책이 차단되는지 확인합니다.",
+          nextStep: "도구의 정책 차단 결과를 확인합니다.",
+        },
+      );
       blockedOutput = await input.executeTool({
         name: "create_planned_task",
         args: {
@@ -3251,6 +3445,21 @@ test("planned review turns stop after starting a repair attempt", async () => {
     },
     runFunctionToolPromptText: async (input) => {
       attempts.push(input.prompt);
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "review_planned_task",
+          args: {
+            task_id: "planned-parent",
+            attempt: 1,
+          },
+        },
+        {
+          summary: "계획 작업의 실패한 검토 결과를 기록합니다.",
+          rationale: "수리 흐름 테스트는 실제 review_planned_task 실행이 먼저 필요합니다.",
+          nextStep: "검토 실패 결과에 따라 수리 작업을 시작합니다.",
+        },
+      );
       await input.executeTool({
         name: "review_planned_task",
         args: {
@@ -3268,6 +3477,21 @@ test("planned review turns stop after starting a repair attempt", async () => {
         },
         rawArguments: JSON.stringify({ task_id: "planned-parent" }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "repair_planned_task",
+          args: {
+            task_id: "planned-parent",
+            repair_objective: "원래 목표 안에서 누락된 구현을 완료한다.",
+          },
+        },
+        {
+          summary: "원래 계획 목표 안에서 수리 작업을 시작합니다.",
+          rationale: "테스트는 수리 도구 실행 뒤 흐름이 즉시 종료되는지 확인합니다.",
+          nextStep: "수리 시작 결과를 최종 텍스트로 변환합니다.",
+        },
+      );
       const repairOutput = await input.executeTool({
         name: "repair_planned_task",
         args: {
@@ -3340,6 +3564,20 @@ test("planned review turns inject event ownership into scoped review tools", asy
       };
     },
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "review_planned_task",
+          args: {
+            criteria: [],
+          },
+        },
+        {
+          summary: "계획 작업의 소유권이 포함된 검토 결과를 기록합니다.",
+          rationale: "이 테스트는 시스템 이벤트 소유권이 scoped review 도구 인자에 주입되는지 확인합니다.",
+          nextStep: "주입된 소유권 인자를 검증합니다.",
+        },
+      );
       await input.executeTool({
         name: "review_planned_task",
         args: {
@@ -4447,6 +4685,15 @@ test("native runtime stores privacy-safe replayable evidence receipts for tool r
       }],
     }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_read", args: { url: "https://example.test/runtime-source" } },
+        {
+          summary: "Read the selected runtime source page.",
+          rationale: "The transcript privacy test needs a real tool result receipt to project safely.",
+          nextStep: "Use the model-visible tool result and durable transcript projection for assertions.",
+        },
+      );
       modelVisibleToolResult = await input.executeTool({
         name: "web_read",
         args: { url: "https://example.test/runtime-source" },
@@ -5022,6 +5269,15 @@ test("native runtime continues artifact review gaps until executable evidence ap
         });
       }
       if (attempts >= 4) {
+        await authorPublicDecisionForTool(
+          input,
+          { name: "run_command", args: { command: "python scripts/render_population.py" } },
+          {
+            summary: "CSV와 matplotlib 차트 파일을 실제 명령으로 생성합니다.",
+            rationale: "완료 검토가 요구한 실행 증거와 차트 산출물 증거를 남겨야 합니다.",
+            nextStep: "실행 결과를 근거로 최종 보고를 완료합니다.",
+          },
+        );
         await input.executeTool({
           name: "run_command",
           args: { command: "python scripts/render_population.py" },
@@ -5113,6 +5369,15 @@ test("native runtime continues executable-code gaps until tool execution evidenc
         });
       }
       if (attempts >= 4) {
+        await authorPublicDecisionForTool(
+          input,
+          { name: "run_command", args: { command: "python scripts/render_chart.py" } },
+          {
+            summary: "차트 코드를 실행해 파일 산출물을 생성합니다.",
+            rationale: "완료 검토가 코드 예시가 아니라 실제 실행 증거를 요구합니다.",
+            nextStep: "실행된 산출물 증거를 바탕으로 최종 보고를 완료합니다.",
+          },
+        );
         await input.executeTool({
           name: "run_command",
           args: { command: "python scripts/render_chart.py" },
@@ -5312,6 +5577,15 @@ test("native runtime lets the model expand local conversation context when the m
     runFunctionToolPromptText: async (input) => {
       capturedPrompt = input.prompt;
       expect(input.prompt).not.toContain("Conversation context may be under-specified");
+      await authorPublicDecisionForTool(
+        input,
+        { name: "read_conversation_context", args: { query: "항목A", limit: 4 } },
+        {
+          summary: "이전 대화에서 항목A 단서를 확인합니다.",
+          rationale: "최근 대화 예산이 작아 필요한 맥락을 직접 조회해야 합니다.",
+          nextStep: "조회한 맥락으로 항목A 단계를 답합니다.",
+        },
+      );
       const context = await input.executeTool({
         name: "read_conversation_context",
         args: { query: "항목A", limit: 4 },
@@ -5723,11 +5997,29 @@ test("native runtime uses structured current user text for gateway memory recall
     runFunctionToolPromptText: async (input) => {
       expect(input.prompt).toContain(actualCue);
       expect(input.prompt).not.toContain(promptContextText);
+      await authorPublicDecisionForTool(
+        input,
+        { name: "recall_memory", args: { cue: actualCue } },
+        {
+          summary: "현재 사용자 질문으로 연상 기억을 확인합니다.",
+          rationale: "정확한 과거 대화를 찾기 전에 관련 후보를 좁혀야 합니다.",
+          nextStep: "연상 후보 다음에 정확한 기록을 조회합니다.",
+        },
+      );
       await input.executeTool({
         name: "recall_memory",
         args: { cue: actualCue },
         rawArguments: JSON.stringify({ cue: actualCue }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "query_memory", args: { order: "earliest", limit: 1 } },
+        {
+          summary: "첫 대화 기록을 정확히 조회합니다.",
+          rationale: "연상 후보만으로 날짜를 답하지 않고 원 기록을 확인해야 합니다.",
+          nextStep: "조회한 기록으로 첫 대화 날짜를 답합니다.",
+        },
+      );
       await input.executeTool({
         name: "query_memory",
         args: { order: "earliest", limit: 1 },
@@ -5976,21 +6268,57 @@ test("native runtime exposes Project Ledger project context without forcing tool
         task: "프로젝트 세션 품질 조정을 구현한다.",
         acceptance_criteria: ["Ledger 상태와 작업 조회 뒤 계획 작업을 시작한다."],
       };
+      await authorPublicDecisionForTool(
+        input,
+        { name: "inspect_project_status", args: {} },
+        {
+          summary: "Project Ledger 상태를 먼저 확인합니다.",
+          rationale: "계획형 작업을 시작하기 전에 현재 프로젝트 상태를 알아야 합니다.",
+          nextStep: "상태 확인 뒤 필요한 작업 항목을 조회합니다.",
+        },
+      );
       await input.executeTool({
         name: "inspect_project_status",
         args: {},
         rawArguments: "{}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "query_project_work", args: { kind: "next-actions" } },
+        {
+          summary: "Project Ledger 다음 작업을 조회합니다.",
+          rationale: "새 계획 작업이 기존 작업 흐름과 충돌하지 않게 해야 합니다.",
+          nextStep: "조회 결과를 바탕으로 계획 작업을 생성합니다.",
+        },
+      );
       await input.executeTool({
         name: "query_project_work",
         args: { kind: "next-actions" },
         rawArguments: "{\"kind\":\"next-actions\"}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "create_planned_task", args: plannedTaskArgs },
+        {
+          summary: "품질 조정 계획 작업을 생성합니다.",
+          rationale: "프로젝트 작업은 추적 가능한 계획 작업으로 진행해야 합니다.",
+          nextStep: "생성된 계획 작업을 실행합니다.",
+        },
+      );
       await input.executeTool({
         name: "create_planned_task",
         args: plannedTaskArgs,
         rawArguments: "{\"title\":\"품질 조정\"}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_planned_task", args: { task_id: "planned-quality" } },
+        {
+          summary: "생성된 품질 조정 계획 작업을 실행합니다.",
+          rationale: "작업 생성만으로는 구현이 시작되지 않으므로 실행이 필요합니다.",
+          nextStep: "실행 시작 결과를 사용자에게 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "run_planned_task",
         args: { task_id: "planned-quality" },
@@ -6049,6 +6377,15 @@ test("native runtime does not force broad project investigations into planned di
     runFunctionToolPromptText: async (input) => {
       prompts.push(input.prompt);
       expect(input.tools.map((tool) => tool.name)).toContain("run_command");
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command: "find . -maxdepth 2 -type f" } },
+        {
+          summary: "프로젝트 파일 구조를 직접 확인합니다.",
+          rationale: "광범위한 프로젝트 조사는 로컬 파일 근거가 있어야 합니다.",
+          nextStep: "확인한 파일 목록으로 프로젝트 특징을 정리합니다.",
+        },
+      );
       await input.executeTool({
         name: "run_command",
         args: { command: "find . -maxdepth 2 -type f" },
@@ -6100,6 +6437,15 @@ test("native runtime stops executing tools after turn cancellation", async () =>
       return { ok: true };
     },
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command: "pwd" } },
+        {
+          summary: "취소 전 첫 명령만 실행합니다.",
+          rationale: "테스트는 취소 이후 추가 도구가 실행되지 않는지 확인합니다.",
+          nextStep: "첫 실행 뒤 취소 신호를 확인합니다.",
+        },
+      );
       await input.executeTool({
         name: "run_command",
         args: { command: "pwd" },
@@ -6239,11 +6585,29 @@ test("model-selected public evidence toolchain still receives structural citatio
       const toolNames = input.tools.map((tool) => tool.name);
       expect(toolNames).toContain("web_search");
       expect(toolNames).toContain("web_read");
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_search", args: { query: "오늘 샘플 뉴스" } },
+        {
+          summary: "오늘 샘플 뉴스 후보 출처를 검색합니다.",
+          rationale: "기사 핵심을 답하려면 공개 출처 후보가 필요합니다.",
+          nextStep: "검색 결과에서 원문 본문을 읽습니다.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: { query: "오늘 샘플 뉴스" },
         rawArguments: "{\"query\":\"오늘 샘플 뉴스\"}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_read", args: { url: "https://example.com/sample-news" } },
+        {
+          summary: "선택한 샘플 뉴스 원문을 읽습니다.",
+          rationale: "검색 후보만으로는 원문 본문 근거를 확인할 수 없습니다.",
+          nextStep: "본문 근거로 핵심을 답합니다.",
+        },
+      );
       await input.executeTool({
         name: "web_read",
         args: { url: "https://example.com/sample-news" },
@@ -6340,6 +6704,15 @@ test("native runtime does not apply user-action grounding guard to worker comple
 test("native runtime records Butler tool call and result in transcript", async () => {
   const runtime = new NativeToolLoopRuntime({
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "list_tasks", args: { limit: 3 } },
+        {
+          summary: "현재 작업 큐 상태를 확인합니다.",
+          rationale: "사용자가 작업 큐를 물었으므로 실제 작업 목록을 조회해야 합니다.",
+          nextStep: "조회한 작업 상태를 간단히 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "list_tasks",
         args: { limit: 3 },
@@ -6376,6 +6749,15 @@ test("native runtime unwraps tool_call through audited target dispatch", async (
     butlerHome: tempDir,
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_call", args: { id: "native:get_context_monitor", arguments: {} } },
+        {
+          summary: "컨텍스트 상태 확인 도구를 호출합니다.",
+          rationale: "감사 경로가 실제 대상 도구 호출을 기록하는지 확인해야 합니다.",
+          nextStep: "대상 도구 결과를 바탕으로 상태를 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "tool_call",
         args: { id: "native:get_context_monitor", arguments: {} },
@@ -6425,11 +6807,29 @@ test("native runtime records bridge audit metadata for bridged target failures",
     butlerHome: tempDir,
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_describe", args: { ids: ["native:web_search"] } },
+        {
+          summary: "검색 도구 설명을 확인합니다.",
+          rationale: "실패 경로를 확인하기 전에 대상 도구 정보를 알아야 합니다.",
+          nextStep: "설명된 검색 도구를 짧은 쿼리로 호출합니다.",
+        },
+      );
       await input.executeTool({
         name: "tool_describe",
         args: { ids: ["native:web_search"] },
         rawArguments: JSON.stringify({ ids: ["native:web_search"] }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_call", args: { id: "native:web_search", arguments: { query: "x" } } },
+        {
+          summary: "검색 도구의 실패 경로를 확인합니다.",
+          rationale: "감사 메타데이터가 대상 실패를 안전하게 남기는지 확인해야 합니다.",
+          nextStep: "실패 결과의 감사 정보를 검증합니다.",
+        },
+      );
       await input.executeTool({
         name: "tool_call",
         args: { id: "native:web_search", arguments: { query: "x" } },
@@ -6480,6 +6880,15 @@ test("native runtime records bridge audit metadata for tool_call resolution fail
     butlerHome: tempDir,
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_search", args: { provider: "native", query: "SECRET_TOKEN_123 web search" } },
+        {
+          summary: "필요한 검색 관련 도구를 찾습니다.",
+          rationale: "도구 검색 감사 정보가 민감한 검색 원문 없이 남는지 확인해야 합니다.",
+          nextStep: "도구 검색 결과의 감사 정보를 검증합니다.",
+        },
+      );
       await input.executeTool({
         name: "tool_call",
         args: { id: "native:missing_tool", arguments: { token: "SECRET_TOKEN_123" } },
@@ -6603,6 +7012,15 @@ test("native runtime records bridge audit metadata without raw search arguments"
     butlerHome: tempDir,
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_search", args: { provider: "native", query: "web search" } },
+        {
+          summary: "필요한 검색 도구 후보를 찾습니다.",
+          rationale: "감사 메타데이터가 민감한 원문 없이 남는지 확인해야 합니다.",
+          nextStep: "도구 검색 감사 결과를 검증합니다.",
+        },
+      );
       await input.executeTool({
         name: "tool_search",
         args: { provider: "native", query: "SECRET_TOKEN_123 web search" },
@@ -6656,6 +7074,15 @@ test("native runtime dispatches workers only through model-selected tool calls",
     runFunctionToolPromptText: async (input) => {
       expect(input.prompt).not.toContain("## Runtime Actions Already Executed");
       expect(input.prompt).not.toContain("Final Result Contract Repair");
+      await authorPublicDecisionForTool(
+        input,
+        { name: "dispatch_worker", args: { task: "worker test" } },
+        {
+          summary: "워커 테스트 작업을 백그라운드로 시작합니다.",
+          rationale: "사용자가 워커 진행을 요청했으므로 모델이 직접 작업 시작을 선택했습니다.",
+          nextStep: "작업 시작 결과를 확인하고 후속 보고를 준비합니다.",
+        },
+      );
       await input.executeTool({
         name: "dispatch_worker",
         args: { task: "worker test" },
@@ -6791,6 +7218,15 @@ test("native runtime tolerates tool progress when no intermediate callback exist
     messageLanguage: "ko",
     executeButlerTool: async () => ({ ok: true }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "bash", args: { command: "bun test" } },
+        {
+          summary: "테스트 명령을 실행합니다.",
+          rationale: "중간 진행 콜백이 없어도 도구 실행이 안전하게 완료되어야 합니다.",
+          nextStep: "명령 완료 뒤 최종 답변을 반환합니다.",
+        },
+      );
       await input.executeTool({
         name: "bash",
         args: { command: "bun test" },
@@ -6834,6 +7270,21 @@ test("native runtime redacts complex tool progress command metadata", async () =
     messageLanguage: "ko",
     executeButlerTool: async () => ({ ok: true }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "bash",
+          args: {
+            command: `cat ${privatePath} api_key=sk-test token=super-token password=hunter2`,
+            nested: { secret: "nested-secret" },
+          },
+        },
+        {
+          summary: "민감한 명령 진행 상태의 공개 표시를 확인합니다.",
+          rationale: "테스트는 명령 진행 메타데이터가 안전하게 마스킹되는지 검증합니다.",
+          nextStep: "진행 메타데이터에 민감값이 남지 않았는지 확인합니다.",
+        },
+      );
       await input.executeTool({
         name: "bash",
         args: {
@@ -6917,6 +7368,20 @@ test("native runtime updates smart web search progress with planned queries", as
       },
     }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "web_search",
+          args: {
+            query: "젠레스 존 제로 현재 진행중인 이벤트 2026 5월 22 공식 HoYoverse Zenless Zone Zero events",
+          },
+        },
+        {
+          summary: "젠레스 존 제로 현재 이벤트를 공식 출처 중심으로 검색합니다.",
+          rationale: "진행 중인 이벤트 답변에는 최신 공개 검색 근거가 필요합니다.",
+          nextStep: "검색 계획과 결과를 바탕으로 확인 내용을 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: {
@@ -7139,11 +7604,29 @@ test("native runtime groups chained tools under the active semantic todo work bl
         args: { todos },
         rawArguments: JSON.stringify({ todos }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command: "pwd" } },
+        {
+          summary: "현재 프로젝트 위치를 확인합니다.",
+          rationale: "활성 작업 블록 안에서 로컬 상태 확인 명령을 실행해야 합니다.",
+          nextStep: "명령 산출물을 읽어 같은 작업 블록에서 이어갑니다.",
+        },
+      );
       await input.executeTool({
         name: "run_command",
         args: { command: "pwd" },
         rawArguments: "{\"command\":\"pwd\"}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "read_tool_output_artifact", args: { artifact_id: "artifact-1" } },
+        {
+          summary: "명령 산출물 아티팩트를 읽습니다.",
+          rationale: "같은 작업 블록의 후속 도구가 기존 산출물을 확인해야 합니다.",
+          nextStep: "아티팩트 확인 뒤 작업 항목을 완료 처리합니다.",
+        },
+      );
       await input.executeTool({
         name: "read_tool_output_artifact",
         args: { artifact_id: "artifact-1" },
@@ -7453,6 +7936,15 @@ test("native runtime continues instead of delivering while direct todo work is u
           },
           rawArguments: JSON.stringify({ title: "컨텍스트 컴팩션 설계 리뷰", todos: firstTodos }),
         });
+        await authorPublicDecisionForTool(
+          input,
+          { name: "run_command", args: { command: "printf 'blank receipt fixture\\n'" } },
+          {
+            summary: "초기 설계 리뷰 명령을 실행합니다.",
+            rationale: "미완료 직접 작업이 남는 경우를 만들기 위해 실행 흔적이 필요합니다.",
+            nextStep: "명령 결과를 확인한 뒤 이어서 계속할지 판단합니다.",
+          },
+        );
         await input.executeTool({
           name: "run_command",
           args: { command: "printf 'blank receipt fixture\\n'" },
@@ -7461,6 +7953,20 @@ test("native runtime continues instead of delivering while direct todo work is u
         return "파일 탐색부터 시작하겠다냐.";
       }
       continuationPrompt = input.prompt;
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "run_command",
+          args: {
+            command: "printf 'packages/butler-agent/src/agent/context/budget.ts\\npackages/butler-agent/src/agent/context/compaction.ts\\n'",
+          },
+        },
+        {
+          summary: "컴팩션 관련 핵심 파일을 확인합니다.",
+          rationale: "직접 작업을 완료하려면 실제 파일 근거가 필요합니다.",
+          nextStep: "확인한 파일 근거를 바탕으로 작업 항목을 완료합니다.",
+        },
+      );
       await input.executeTool({
         name: "run_command",
         args: {
@@ -8813,6 +9319,21 @@ test("native runtime persists task origin context when dispatch_worker succeeds"
       status: "RUNNING",
     }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "dispatch_worker",
+          args: {
+            task: "A 주제 차트를 생성하고 결과를 요약",
+            project_path: "fixtures/butler-project",
+          },
+        },
+        {
+          summary: "A 주제 차트 작업을 백그라운드에서 시작합니다.",
+          rationale: "작업 출처 맥락이 저장되는지 확인하려면 실제 작업 시작이 필요합니다.",
+          nextStep: "작업 시작 결과와 origin 정보를 확인합니다.",
+        },
+      );
       await input.executeTool({
         name: "dispatch_worker",
         args: {
@@ -8877,6 +9398,15 @@ test("native runtime inspects tasks only through model-selected tool calls", asy
     },
     runFunctionToolPromptText: async (input) => {
       expect(input.prompt).not.toContain("## Runtime Actions Already Executed");
+      await authorPublicDecisionForTool(
+        input,
+        { name: "list_tasks", args: { limit: 10 } },
+        {
+          summary: "최근 작업 큐 상태를 조회합니다.",
+          rationale: "사용자가 보낸 작업의 상태를 물었으므로 실제 작업 목록 확인이 필요합니다.",
+          nextStep: "조회한 작업 큐 상태를 사용자에게 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "list_tasks",
         args: { limit: 10 },
