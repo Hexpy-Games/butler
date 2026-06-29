@@ -4342,10 +4342,12 @@ export class AppServerStore {
     });
     const progressRow = progressRowFromTurnEvent(event);
     if (progressRow) {
+      const row = normalizeProgressSummaryRow(progressRow);
+      this.updateActiveTurnProgressSummary(turnId, row);
       this.appendEvent("agent.turn_event.progress", {
         session_id: sessionId,
         turn_id: turnId,
-        row: normalizeProgressSummaryRow(progressRow),
+        row,
         event_id: event.id,
       });
     }
@@ -9539,6 +9541,18 @@ function workBlocksFromTerminalProgressRows(
   rows: ProgressSummaryRow[],
 ): WorkerActivityWorkBlock[] {
   const blocks = new Map<string, WorkerActivityWorkBlock>();
+  const decisionWorkBlockAliases = new Map<string, string>();
+  const canonicalWorkBlockId = (
+    row: ProgressSummaryRow,
+    fallbackId: string,
+  ) => {
+    const decisionKey = publicDecisionIntentKey(row);
+    if (!decisionKey) return fallbackId;
+    const existing = decisionWorkBlockAliases.get(decisionKey);
+    if (existing) return existing;
+    decisionWorkBlockAliases.set(decisionKey, fallbackId);
+    return fallbackId;
+  };
   const workBlockLabels = new Set(
     rows
       .filter(
@@ -9561,12 +9575,15 @@ function workBlocksFromTerminalProgressRows(
     if (!isUserVisibleWorkBlockRow(row)) continue;
     if (row.kind === "todo" && workBlockLabels.has(row.safe_label.trim()))
       continue;
-    const id =
+    const fallbackId =
       row.work_block_id ??
       row.tool_call_id ??
       `work-${row.kind}-${row.id}`.replace(/[^a-zA-Z0-9._:-]/gu, "-");
+    const id = canonicalWorkBlockId(row, fallbackId);
     const label = row.work_block_label ?? "";
-    const decision = publicDecisionFieldsFromProgressRow(row);
+    const decision = isWorkBlockDecisionCarrierRow(row)
+      ? publicDecisionFieldsFromProgressRow(row)
+      : {};
     const previous = blocks.get(id);
     const blockRow = workBlockToolRow(row);
     if (previous) {
@@ -9642,7 +9659,10 @@ function publicDecisionFieldsFromProgressRow(row: ProgressSummaryRow): Partial<{
 
 function isUserVisibleWorkBlockRow(row: ProgressSummaryRow): boolean {
   if (row.kind === "todo") return false;
-  if (row.kind === "message" || row.kind === "system") return false;
+  if (row.kind === "message") {
+    return Boolean(row.work_block_id && row.work_block_label);
+  }
+  if (row.kind === "system") return false;
   if (row.kind === "thinking" || row.kind === "worked_duration") return false;
   if (row.kind === "dispatch" && !row.tool_call_id) return false;
   return Boolean(
@@ -9652,6 +9672,28 @@ function isUserVisibleWorkBlockRow(row: ProgressSummaryRow): boolean {
     row.safe_input_label ||
     row.safe_detail_rows?.length,
   );
+}
+
+function isWorkBlockDecisionCarrierRow(row?: ProgressSummaryRow): boolean {
+  if (!row) return false;
+  return row.kind === "work_block" ||
+    (row.kind === "message" && Boolean(row.work_block_id && row.work_block_label));
+}
+
+function publicDecisionIntentKey(row?: ProgressSummaryRow): string | null {
+  if (!row || !isPublicDecisionSource(row.work_decision_source)) return null;
+  const summary = normalizedDecisionIntentPart(row.work_decision_summary);
+  if (!summary) return null;
+  return JSON.stringify([
+    row.work_decision_source,
+    summary,
+    normalizedDecisionIntentPart(row.work_decision_rationale),
+    normalizedDecisionIntentPart(row.work_decision_next_step),
+  ]);
+}
+
+function normalizedDecisionIntentPart(value?: string): string {
+  return (value ?? "").replace(/\s+/gu, " ").trim();
 }
 
 function isActiveSessionTurnState(state: string): boolean {
@@ -10723,7 +10765,7 @@ function progressRowFromAppOutbound(
     return {
       id: actionId,
       kind: safeOptionalShortToken(metadata.activityKind) ?? "used_tool",
-      state: "running",
+      state: safeOptionalShortToken(metadata.state) ?? "running",
       safe_label: safeShortText(metadata.safeLabel, "Working"),
       safe_tool_name: safeOptionalShortText(metadata.toolName),
       safe_input_label: safeOptionalShortText(metadata.inputLabel),
@@ -10759,7 +10801,29 @@ function progressRowFromAppOutbound(
   }
   const text = typeof message.text === "string" ? message.text.trim() : "";
   if (metadata.kind === "intermediate" && text) {
-    if (metadata.phase === "before_tool_execution") return null;
+    if (metadata.phase === "before_tool_execution") {
+      const label = safeOptionalShortText(metadata.workBlockLabel) ??
+        safeOptionalShortText(text) ??
+        "Working";
+      return {
+        id: actionId,
+        kind: "message",
+        state: "running",
+        safe_label: safeOptionalShortText(text) ?? label,
+        work_block_id: safeOptionalShortToken(metadata.workBlockId) ?? actionId,
+        work_block_label: label,
+        work_decision_summary: safeOptionalShortText(metadata.decisionSummary),
+        work_decision_rationale: safeOptionalShortText(
+          metadata.decisionRationale,
+        ),
+        work_decision_next_step: safeOptionalShortText(metadata.decisionNextStep),
+        work_decision_source: safeOptionalShortText(metadata.decisionSource),
+        work_decision_evidence_refs: Array.isArray(metadata.decisionEvidenceRefs)
+          ? metadata.decisionEvidenceRefs
+          : undefined,
+        created_at: timestamp,
+      };
+    }
     return {
       id: actionId,
       kind: "thinking",

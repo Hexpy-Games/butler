@@ -1206,6 +1206,15 @@ function isWorkBlockToolActivityRow(row: ProgressRow): boolean {
   return isCompletedTurnWorkActivityRow(row);
 }
 
+function isStandaloneWorkBlockMessageRow(row: ProgressRow): boolean {
+  return row.kind === "message" && Boolean(row.work_block_id && row.work_block_label);
+}
+
+function isWorkBlockDecisionCarrierRow(row?: ProgressRow): boolean {
+  if (!row) return false;
+  return row.kind === WORK_BLOCK_MARKER_KIND || isStandaloneWorkBlockMessageRow(row);
+}
+
 function buildWorkBlocks(
   rows: ProgressRow[],
   options: { completedOnly: boolean },
@@ -1214,6 +1223,15 @@ function buildWorkBlocks(
     string,
     WorkBlockView & { rowMap: Map<string, ProgressRow> }
   >();
+  const decisionWorkBlockAliases = new Map<string, string>();
+  const canonicalWorkBlockId = (row: ProgressRow, fallbackId: string) => {
+    const decisionKey = publicDecisionIntentKey(row);
+    if (!decisionKey) return fallbackId;
+    const existing = decisionWorkBlockAliases.get(decisionKey);
+    if (existing) return existing;
+    decisionWorkBlockAliases.set(decisionKey, fallbackId);
+    return fallbackId;
+  };
   const ensureBlock = (
     id: string,
     label: string,
@@ -1221,7 +1239,7 @@ function buildWorkBlocks(
     created_at?: string,
     row?: ProgressRow,
   ) => {
-    const decision = row?.kind === WORK_BLOCK_MARKER_KIND
+    const decision = isWorkBlockDecisionCarrierRow(row)
       ? publicDecisionFieldsFromRow(row)
       : {};
     let block = blocks.get(id);
@@ -1259,8 +1277,9 @@ function buildWorkBlocks(
   for (const row of sortProgressRowsForDisplay(rows)) {
     if (row.kind === WORK_BLOCK_MARKER_KIND) {
       if (!row.work_block_id) continue;
+      const blockId = canonicalWorkBlockId(row, row.work_block_id);
       ensureBlock(
-        row.work_block_id,
+        blockId,
         row.work_block_label ?? "",
         row.state,
         row.created_at,
@@ -1268,9 +1287,19 @@ function buildWorkBlocks(
       );
       continue;
     }
+    if (isStandaloneWorkBlockMessageRow(row)) {
+      const fallbackId = row.work_block_id ?? `row-${row.id}`;
+      const blockId = canonicalWorkBlockId(row, fallbackId);
+      const label = row.work_block_label ?? row.safe_label;
+      const block = ensureBlock(blockId, label, row.state, row.created_at, row);
+      block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
+      block.rows = [...block.rowMap.values()];
+      continue;
+    }
     if (row.kind === "todo") continue;
     if (!isWorkBlockToolActivityRow(row)) continue;
-    const blockId = row.work_block_id ?? `row-${row.id}`;
+    const fallbackId = row.work_block_id ?? `row-${row.id}`;
+    const blockId = canonicalWorkBlockId(row, fallbackId);
     const label = row.work_block_label ?? "";
     const block = ensureBlock(blockId, label, row.state, row.created_at, row);
     block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
@@ -1693,6 +1722,22 @@ function publicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
     decision_source: row.work_decision_source,
     decision_evidence_refs: row.work_decision_evidence_refs,
   };
+}
+
+function publicDecisionIntentKey(row?: ProgressRow): string | null {
+  if (!row || !isPublicDecisionSource(row.work_decision_source)) return null;
+  const summary = normalizedDecisionIntentPart(row.work_decision_summary);
+  if (!summary) return null;
+  return JSON.stringify([
+    row.work_decision_source,
+    summary,
+    normalizedDecisionIntentPart(row.work_decision_rationale),
+    normalizedDecisionIntentPart(row.work_decision_next_step),
+  ]);
+}
+
+function normalizedDecisionIntentPart(value?: string): string {
+  return (value ?? "").replace(/\s+/gu, " ").trim();
 }
 
 function safeOptionalPublicText(value: unknown): string | undefined {

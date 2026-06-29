@@ -152,8 +152,10 @@ test("mock transport drives NativeToolLoopRuntime through dispatch_worker and ex
   const visibleActions = mock.sentActions.filter((action) => action.message.text?.trim());
   const progressActions = mock.sentActions.filter((action) => action.metadata?.kind === "tool_progress");
   const dispatchProgressActions = progressActions.filter((action) => action.metadata?.activityKind !== "model");
-  expect(mock.sentActions).toHaveLength(5);
+  expect(mock.sentActions).toHaveLength(4);
   expect(visibleActions).toHaveLength(2);
+  expect(progressActions.filter((action) => action.metadata?.activityKind === "model"))
+    .toHaveLength(0);
   expect(dispatchProgressActions).toHaveLength(1);
   expect(dispatchProgressActions[0]!.message.text).toBe("");
   expect(mock.sentActions[0]!.presence).toMatchObject({ kind: "typing" });

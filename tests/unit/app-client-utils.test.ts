@@ -2451,6 +2451,70 @@ test("work blocks group chained tools by semantic work block label", () => {
   expect(blocks[0]?.rows[0]?.work_decision_summary).toBeUndefined();
 });
 
+test("work blocks collapse repeated authored decisions with different fallback ids", () => {
+  const decision = {
+    work_decision_summary:
+      "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠습니다.",
+    work_decision_rationale:
+      "실패 테스트명을 먼저 확인해야 불필요한 수정 범위를 줄일 수 있습니다.",
+    work_decision_next_step:
+      "실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠습니다.",
+    work_decision_source: "assistant-authored",
+  };
+  const rows = [
+    {
+      id: "public-note-failure",
+      kind: "message",
+      state: "running",
+      safe_label:
+        "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠습니다.\n실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠습니다.",
+      work_block_id: "public-note-failure",
+      work_block_label: "검증 실패 지점을 좁히는 중",
+      ...decision,
+    },
+    ...["read-ledger", "grep-failure", "run-single-test"].map((id, index) => ({
+      id,
+      kind: index === 0 ? "read" : index === 1 ? "searched" : "ran_command",
+      state: "running",
+      safe_label:
+        index === 0
+          ? "Read Project Ledger"
+          : index === 1
+            ? "Search failure lines"
+            : "Bash: bun test sandy-decision-single-test",
+      safe_tool_name:
+        index === 0 ? "Read" : index === 1 ? "Search" : "Bash",
+      safe_input_label:
+        index === 0
+          ? "Project Ledger"
+          : index === 1
+            ? "failure lines"
+            : "bun test sandy-decision-single-test",
+      tool_call_id: `tool-${id}`,
+      work_block_id: `work-${id}`,
+      work_block_label: "검증 실패 지점을 좁히는 중",
+      ...decision,
+    })),
+  ];
+
+  const blocks = workBlocksFromProgressRows(rows);
+
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toMatchObject({
+    id: "public-note-failure",
+    label: "검증 실패 지점을 좁히는 중",
+    decision_summary:
+      "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠습니다.",
+  });
+  expect(blocks[0]?.rows).toHaveLength(4);
+  expect(blocks[0]?.rows.map((row) => row.safe_tool_name)).toEqual([
+    undefined,
+    "Read",
+    "Search",
+    "Bash",
+  ]);
+});
+
 test("tool controls use their own input label instead of decision summary", () => {
   const blocks = workBlocksFromProgressRows([
     {
@@ -2827,7 +2891,7 @@ test("timeline applies turn acknowledgements as accepted progress rows", () => {
   expect(messages).toEqual([]);
 });
 
-test("first visible progress message rows stay outside active work blocks", () => {
+test("first visible progress message rows render as standalone active work blocks", () => {
   const blocks = workBlocksFromProgressRows([
     {
       id: "event-first-progress",
@@ -2839,7 +2903,20 @@ test("first visible progress message rows stay outside active work blocks", () =
     },
   ]);
 
-  expect(blocks).toEqual([]);
+  expect(blocks).toEqual([
+    expect.objectContaining({
+      id: "first-progress-note",
+      label: "필요한 맥락을 확인하겠습니다.",
+      state: "running",
+      rows: [
+        expect.objectContaining({
+          id: "event-first-progress",
+          kind: "message",
+          safe_label: "필요한 맥락을 확인하겠습니다.",
+        }),
+      ],
+    }),
+  ]);
 });
 
 test("first visible progress stays scoped through failure and ignores other sessions", () => {

@@ -9026,7 +9026,7 @@ test("app transport progress projection recovers queued work blocks after app-se
   }
 });
 
-test("app transport progress projection ignores tool-start intermediate decisions", async () => {
+test("app transport progress projection preserves tool-start public notes", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -9056,6 +9056,16 @@ test("app transport progress projection ignores tool-start intermediate decision
           tool: "grep_files",
           phase: "before_tool_execution",
           turnId,
+          workBlockId: "public-note-test-failure-lines",
+          workBlockLabel:
+            "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐. 실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠다냐.",
+          decisionSummary:
+            "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐.",
+          decisionRationale:
+            "실패 테스트명을 먼저 확인해야 불필요한 수정 범위를 줄일 수 있다냐.",
+          decisionNextStep:
+            "실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠다냐.",
+          decisionSource: "assistant-authored",
         },
       },
     }),
@@ -9095,9 +9105,17 @@ test("app transport progress projection ignores tool-start intermediate decision
   try {
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     const rows = messages.data.turn_progress[turnId].safe_progress_rows;
-    expect(rows).not.toContainEqual(
+    expect(rows).toContainEqual(
       expect.objectContaining({
         id: `runtime-intermediate:app:${userMessageId}:grep_files-start`,
+        kind: "message",
+        safe_label:
+          "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐. 실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠다냐.",
+        work_block_id: "public-note-test-failure-lines",
+        work_block_label:
+          "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐. 실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠다냐.",
+        work_decision_summary:
+          "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐.",
       }),
     );
     expect(rows).toContainEqual(
@@ -10669,8 +10687,8 @@ test("app gateway bridge captures tool progress without blank assistant messages
     expect(secondAssistant?.work_blocks?.[0]).toMatchObject({
       id: "work-progress",
       label: "상태를 확인하는 중",
-      decision_summary: "상태 확인을 위해 Bash를 실행합니다.",
     });
+    expect(secondAssistant?.work_blocks?.[0]?.decision_summary).toBeUndefined();
     expect(secondAssistant?.work_blocks?.[0]?.rows[0]).toMatchObject({
       safe_tool_name: "Bash",
       safe_input_label: "route this again",
