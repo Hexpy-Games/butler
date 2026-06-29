@@ -9588,7 +9588,7 @@ function workBlocksFromTerminalProgressRows(
     });
   }
   return [...blocks.values()]
-    .filter((block) => block.rows.length > 0)
+    .filter((block) => block.rows.length > 0 && Boolean(block.label.trim()))
     .sort((left, right) => {
       const orderDelta =
         progressRowDisplayOrder(left.rows[0]) -
@@ -9644,6 +9644,7 @@ function isUserVisibleWorkBlockRow(row: ProgressSummaryRow): boolean {
   if (row.kind === "todo") return false;
   if (row.kind === "message" || row.kind === "system") return false;
   if (row.kind === "thinking" || row.kind === "worked_duration") return false;
+  if (row.kind === "dispatch" && !row.tool_call_id) return false;
   return Boolean(
     row.work_block_id ||
     row.work_block_label ||

@@ -145,6 +145,19 @@ const FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
 let liveClientModel = process.env.BUTLER_APP_CLIENT_E2E_MODEL?.trim();
 let liveClientReasoning = process.env.BUTLER_APP_CLIENT_E2E_REASONING?.trim();
 const runId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const TOOL_CALL_ARGUMENTS_TRANSCRIPT_SCHEMA = "butler.tool-call-arguments-transcript.v1";
+const TOOL_RESULT_EVIDENCE_TRANSCRIPT_SCHEMA = "butler.tool-result-evidence-transcript.v1";
+const RAW_TOOL_RESULT_TRANSCRIPT_FIELDS = [
+  "path",
+  "content",
+  "bytes",
+  "before_sha256",
+  "after_sha256",
+  "sha256",
+  "created",
+  "overwritten",
+  "atomic_write",
+] as const;
 const MEMORY_RECALL_TOKEN = `LIVE_E2E_RECALL_TOKEN_${runId}`;
 const MEMORY_QUERY_FIRST_TEXT = `LIVE_E2E_FIRST_USER_MESSAGE_${runId}`;
 const MEMORY_QUERY_SECOND_TEXT = `LIVE_E2E_SECOND_USER_MESSAGE_${runId}`;
@@ -165,6 +178,11 @@ const appDbPath = join(tempDir, "app.sqlite");
 const toolchainDashboardPath = join(toolchainProjectDir, ".project-ledger", "views", "dashboard.md");
 const artifactReportRelativePath = join(".tmp", "app-client-multiturn-e2e", `artifact-report-${runId}`);
 const artifactReportDir = resolve(root, artifactReportRelativePath);
+const artifactReportCsvRelativePath = join(
+  artifactReportRelativePath,
+  "korea_major_city_population_sample.csv",
+);
+const artifactReportCsvPath = resolve(root, artifactReportCsvRelativePath);
 const workStreamCommandToken = `WORKSTREAM_E2E_COMMAND_${runId}`;
 const requiredToolchainCalls = [
   "inspect_project_status",
@@ -207,7 +225,7 @@ const activeRequiredToolCalls = usesArtifactReportScenario
   : usesWorkStreamScenario
     ? ["update_todo_list", "run_command"]
   : usesDynamicDecisionContextScenario
-    ? ["web_search", "web_read"]
+    ? ["web_search", "web_read", "write_file", "read_file"]
   : usesDecisionContextScenario
   ? requiredDecisionContextCalls
   : requiredToolchainCalls;
@@ -239,6 +257,12 @@ const toolchainPrompt = usesRealProjectCheckScenario
   ].join("\n")
   : usesDynamicDecisionContextScenario
   ? [
+    "이 작업은 Butler live toolchain E2E입니다. 반드시 사용 가능한 function tool 중 web_search를 호출해 공개 출처 후보를 찾고, web_read를 호출해 선택한 출처 본문을 직접 읽은 뒤 진행하세요.",
+    "검색 결과 요약이나 모델 기억만으로 공개 출처를 확인했다고 판단하지 마세요.",
+    `CSV는 반드시 write_file로 ${artifactReportCsvRelativePath} 경로에 실제로 생성하고, read_file로 같은 파일을 다시 읽어 city와 population 열 및 3개 이상 데이터 행을 검증하세요.`,
+    "말로 저장했다고만 하지 말고 실제 파일 생성과 재읽기 검증을 끝낸 뒤 답변하세요.",
+    "최종 답변에서는 앞에서 지정한 함수의 영문 식별자를 그대로 쓰지 말고, 공개 출처 검색·본문 확인·파일 저장·재읽기 검증처럼 사용자-facing 결과만 표현하세요.",
+    "후속 질문을 하지 말고 이번 턴 안에서 완료 결과만 보고하세요.",
     "공개 웹에서 접근 가능한 자료를 바탕으로 한국 주요 도시 3곳의 인구 순위 샘플을 수집해 작은 보고서를 작성해 주세요.",
     "근거가 되는 공개 출처 하나 이상을 직접 확인하고, 수집한 3행 이상의 데이터를 작은 CSV 파일로 정제한 뒤 결과를 요약해 주세요.",
     "CSV 파일에는 도시명과 인구 값을 포함해 주세요.",
@@ -1317,6 +1341,7 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
       client,
       [turnWorkPanelSelector, turnWorkCollapsedSelector],
       "work surface",
+      waitForFinalTimeoutMs,
     );
     await waitForActiveToolchainWorkBlock(client);
     const activeScreenshotPath = join(screenshotDir, `${e2eMode}-toolchain-active-work.png`);
@@ -1348,8 +1373,12 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
   await assertFinalAnswerIsOutcomeOnly(client);
   if (usesDynamicDecisionContextScenario) {
     assert(
-      publicDataArtifactWritten() || csvReportFileWritten(),
-      "decision-context toolchain did not create durable CSV evidence.",
+      csvReportFileWritten(),
+      `decision-context toolchain did not create the expected CSV file at ${artifactReportCsvRelativePath}.`,
+    );
+    assert(
+      durableCsvFileToolEvidenceVerified(),
+      "decision-context toolchain did not produce durable write_file/read_file evidence for the expected CSV path and contents.",
     );
   } else if (usesWorkStreamScenario) {
     const runtimeToolCalls = readRuntimeToolCalls();
@@ -1375,13 +1404,24 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
     );
   }
   const durableToolCalls = durableTranscriptToolCalls();
-  const requiredObservedToolCalls = usesWorkStreamScenario ? durableToolCalls : observedToolCalls;
+  const requiredObservedToolCalls = usesWorkStreamScenario
+    ? durableToolCalls
+    : [...observedToolCalls, ...durableToolCalls];
   for (const name of activeRequiredToolCalls) {
-    assert(requiredObservedToolCalls.includes(name), `single-prompt toolchain did not execute ${name}.`);
+    assert(
+      requiredObservedToolCalls.includes(name),
+      [
+        `single-prompt toolchain did not execute ${name}.`,
+        `observed=${observedToolCalls.join(" -> ") || "(none)"}`,
+        `durable=${durableToolCalls.join(" -> ") || "(none)"}`,
+      ].join(" "),
+    );
   }
   assertRequiredToolchainOrder(
     requiredObservedToolCalls,
-    usesWorkStreamScenario ? "durable runtime tool calls" : "observed runtime tool calls",
+    usesWorkStreamScenario
+      ? "durable runtime tool calls"
+      : "observed or durable runtime tool calls",
   );
   assertRequiredToolchainOrder(durableToolCalls, "durable transcript tool calls");
   if (e2eMode === "toolchain") {
@@ -1420,10 +1460,11 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
     : turnEvents
         .filter((event) => event.kind.startsWith("work.block."))
         .map((event) => String(event.payload?.workBlockId ?? ""));
+  const minDynamicWorkLabels = usesDynamicDecisionContextScenario ? 2 : 1;
   const minWorkEvents = usesWorkStreamScenario
     ? 1
     : usesDynamicWorkLabels
-      ? activeRequiredToolCalls.length * 2
+      ? minDynamicWorkLabels
       : 6;
   assert(
     workEvents.length >= minWorkEvents,
@@ -1443,7 +1484,7 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
       .filter((event) => event.kind === "work.block.started")
       .map((event) => String(event.payload?.safeLabel ?? event.payload?.decisionSummary ?? event.payload?.label ?? ""))
       .filter(Boolean);
-    const minReplayWorkLabels = usesWorkStreamScenario ? 1 : activeRequiredToolCalls.length;
+    const minReplayWorkLabels = minDynamicWorkLabels;
     assert(
       replayedWorkLabels.length >= minReplayWorkLabels,
       `toolchain replay did not include enough live public work labels: ${replayedWorkLabels.join(" | ")}`,
@@ -1466,9 +1507,12 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
       event.payload?.decisionSource === "assistant-authored" ||
       event.payload?.decisionSource === "review-repaired",
     );
+    const minDecisionEvents = usesDynamicDecisionContextScenario
+      ? minDynamicWorkLabels
+      : activeRequiredToolCalls.length;
     assert(
-      decisionEvents.length >= activeRequiredToolCalls.length,
-      `expected at least ${activeRequiredToolCalls.length} public decision work blocks, observed ${decisionEvents.length}.`,
+      decisionEvents.length >= minDecisionEvents,
+      `expected at least ${minDecisionEvents} public decision work blocks, observed ${decisionEvents.length}.`,
     );
     if (usesDynamicDecisionContextScenario) {
       assert(
@@ -1701,7 +1745,7 @@ async function waitForActiveToolchainWorkBlock(client: CdpClient): Promise<void>
 
 async function waitForToolchainActivityContext(client: CdpClient): Promise<void> {
   if (usesDynamicWorkLabels) {
-    const minimumExpandedBlocks = usesWorkStreamScenario ? 1 : activeRequiredToolCalls.length;
+    const minimumExpandedBlocks = usesWorkStreamScenario ? 1 : 2;
     await waitForExpression(
       client,
       `(() => {
@@ -1746,9 +1790,13 @@ async function waitForToolchainActivityContext(client: CdpClient): Promise<void>
         `collapsed live work trigger should use the single public work summary, observed: ${triggerText}`,
       );
     } else {
+      const expectedTriggerText =
+        blockData.length <= 1
+          ? blockData[0]?.label
+          : `${blockData[0]?.label} 외 ${blockData.length - 1}개 진행 내역`;
       assert(
-        !/^(?:작업|결과)(?:\s|$|[:：])/u.test(triggerText) && triggerText.includes("진행 내역"),
-        `collapsed live work trigger should use the public work summary, observed: ${triggerText}`,
+        triggerText === expectedTriggerText,
+        `collapsed live work trigger should use the public work summary, observed: ${triggerText}, expected: ${expectedTriggerText}`,
       );
     }
     return;
@@ -1920,6 +1968,8 @@ async function assertFinalAnswerIsOutcomeOnly(client: CdpClient): Promise<void> 
     "render_project_dashboard",
     "web_search",
     "web_read",
+    "write_file",
+    "read_file",
     "transform_public_data_table",
     "run_command",
     "Checking local Project Ledger status",
@@ -2408,6 +2458,49 @@ function durableTranscriptToolCalls(sessionId?: string): string[] {
   return names;
 }
 
+function durableTranscriptToolCallArguments(toolName: string, sessionId?: string): Array<Record<string, unknown>> {
+  const dir = join(tempDir, "transcripts");
+  if (!existsSync(dir)) return [];
+  const calls: Array<Record<string, unknown>> = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".jsonl")) continue;
+    for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const event = JSON.parse(trimmed) as {
+          sessionId?: unknown;
+          kind?: string;
+          payload?: { name?: unknown; arguments?: unknown };
+        };
+        if (
+          durableTranscriptEventMatchesSession(event, sessionId) &&
+          event.kind === "tool_call" &&
+          event.payload?.name === toolName &&
+          event.payload.arguments &&
+          typeof event.payload.arguments === "object" &&
+          !Array.isArray(event.payload.arguments)
+        ) {
+          const projected = projectedToolArguments(event.payload.arguments);
+          if (projected) calls.push(projected);
+        }
+      } catch {
+        // Ignore malformed transcript lines; the E2E assertions use valid durable events.
+      }
+    }
+  }
+  return calls;
+}
+
+function projectedToolArguments(value: unknown): Record<string, unknown> | null {
+  const record = objectRecord(value);
+  if (record?.schema_version !== TOOL_CALL_ARGUMENTS_TRANSCRIPT_SCHEMA) {
+    return null;
+  }
+  const safeArguments = objectRecord(record?.safe_arguments);
+  return safeArguments;
+}
+
 function durableTranscriptEventMatchesSession(event: { sessionId?: unknown }, sessionId?: string): boolean {
   if (!sessionId) return true;
   const eventSessionId = typeof event.sessionId === "string" ? event.sessionId : "";
@@ -2476,6 +2569,34 @@ function durableTranscriptToolResultPayloads(toolName: string, sessionId?: strin
     }
   }
   return results;
+}
+
+function durableTranscriptEvidenceToolResultPayloads(
+  toolName: string,
+  sessionId?: string,
+): Array<Record<string, unknown>> {
+  return durableTranscriptToolResultPayloads(toolName, sessionId)
+    .filter(isEvidenceTranscriptToolResultProjection);
+}
+
+function isEvidenceTranscriptToolResultProjection(
+  result: Record<string, unknown>,
+): boolean {
+  if (result.schema_version !== TOOL_RESULT_EVIDENCE_TRANSCRIPT_SCHEMA) {
+    return false;
+  }
+  if (
+    RAW_TOOL_RESULT_TRANSCRIPT_FIELDS.some((field) =>
+      Object.prototype.hasOwnProperty.call(result, field),
+    )
+  ) {
+    return false;
+  }
+  return (
+    Array.isArray(result.evidence_capability_receipts) &&
+    Array.isArray(result.evidence_receipts) &&
+    Boolean(objectRecord(result.completion_obligation_evidence))
+  );
 }
 
 function stringArray(value: unknown): string[] {
@@ -2596,9 +2717,115 @@ function artifactReportFilesWritten(): boolean {
 }
 
 function csvReportFileWritten(): boolean {
-  const files = listFilesRecursive(artifactReportDir);
-  const csv = files.find((file) => file.endsWith(".csv"));
-  return Boolean(csv && statSync(csv).size > 32);
+  return (
+    existsSync(artifactReportCsvPath) &&
+    statSync(artifactReportCsvPath).isFile() &&
+    csvContentHasRequiredCityPopulationRows(
+      readFileSync(artifactReportCsvPath, "utf8"),
+    )
+  );
+}
+
+function durableCsvFileToolEvidenceVerified(): boolean {
+  const writeCalls = durableTranscriptToolCallArguments("write_file");
+  const readCalls = durableTranscriptToolCallArguments("read_file");
+  const writeResults = durableTranscriptEvidenceToolResultPayloads("write_file");
+  const readResults = durableTranscriptEvidenceToolResultPayloads("read_file");
+  const matchesExpectedPath = (value: unknown) =>
+    normalizeRelativePath(value) === normalizeRelativePath(artifactReportCsvRelativePath);
+  const hasWriteCall = writeCalls.some((call) => matchesExpectedPath(call.path));
+  const hasReadCall = readCalls.some((call) => matchesExpectedPath(call.path));
+  const hasWriteResult = writeResults.some((result) =>
+    evidenceResultHasReceipt(result, {
+      capability: "durable_artifact",
+      satisfies: "durable_artifact",
+      pathMatches: matchesExpectedPath,
+    }),
+  );
+  const hasReadResult = readResults.some((result) =>
+    evidenceResultHasReceipt(result, {
+      capability: "source_verified",
+      satisfies: "source_verified",
+      pathMatches: matchesExpectedPath,
+    }),
+  );
+  return hasWriteCall && hasReadCall && hasWriteResult && hasReadResult;
+}
+
+function evidenceResultHasReceipt(
+  result: Record<string, unknown>,
+  options: {
+    capability: string;
+    satisfies: string;
+    pathMatches: (value: unknown) => boolean;
+  },
+): boolean {
+  return (
+    evidenceCapabilityReceipts(result).some((receipt) =>
+      receipt.capability === options.capability &&
+      receipt.verified === true &&
+      evidenceReceiptHasReferencePath(receipt, options.pathMatches),
+    ) ||
+    legacyEvidenceReceipts(result).some((receipt) =>
+      stringArray(receipt.satisfies).includes(options.satisfies) &&
+      receipt.verified === true &&
+      evidenceReceiptHasReferencePath(receipt, options.pathMatches),
+    )
+  );
+}
+
+function evidenceCapabilityReceipts(result: Record<string, unknown>): Array<Record<string, unknown>> {
+  return recordArray(result.evidence_capability_receipts);
+}
+
+function legacyEvidenceReceipts(result: Record<string, unknown>): Array<Record<string, unknown>> {
+  return recordArray(result.evidence_receipts);
+}
+
+function evidenceReceiptHasReferencePath(
+  receipt: Record<string, unknown>,
+  pathMatches: (value: unknown) => boolean,
+): boolean {
+  return recordArray(receipt.references).some((reference) =>
+    pathMatches(reference.path ?? reference.ref),
+  );
+}
+
+function recordArray(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(objectRecord(item)))
+    : [];
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function normalizeRelativePath(value: unknown): string {
+  return typeof value === "string" ? value.replace(/\\/gu, "/").replace(/^\.\//u, "") : "";
+}
+
+function csvContentHasRequiredCityPopulationRows(content: string): boolean {
+  const lines = content
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 4) return false;
+  const headers = lines[0]!
+    .split(",")
+    .map((header) => header.trim().toLocaleLowerCase("en-US"));
+  const cityIndex = headers.indexOf("city");
+  const populationIndex = headers.indexOf("population");
+  if (cityIndex < 0 || populationIndex < 0) return false;
+  const dataRows = lines.slice(1).filter((line) => {
+    const columns = line.split(",").map((column) => column.trim());
+    const city = columns[cityIndex] ?? "";
+    const population = columns[populationIndex] ?? "";
+    return city.length > 0 && /\d/u.test(population);
+  });
+  return dataRows.length >= 3;
 }
 
 function listFilesRecursive(dir: string): string[] {

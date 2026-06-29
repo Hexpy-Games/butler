@@ -1295,18 +1295,6 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       todoItemCompletedLabel: "Done",
       todoItemFailedLabel: "Failed",
       todoItemCancelledLabel: "Cancelled",
-      collapsedSummary: (primaryLabel, count) =>
-        count <= 1
-          ? primaryLabel
-          : `${primaryLabel} and ${count - 1} more progress items`,
-      expandHistoryLabel: (primaryLabel, count) =>
-        count <= 1
-          ? `Open ${primaryLabel} details`
-          : `Open ${primaryLabel} and ${count - 1} more progress items`,
-      collapseHistoryLabel: (primaryLabel, count) =>
-        count <= 1
-          ? `Close ${primaryLabel} details`
-          : `Close ${primaryLabel} and ${count - 1} more progress items`,
       toolchainRegionLabel: (label) => `${label} tool run history`,
       detailsRegionLabel: (label) => `${label} details`,
     },
