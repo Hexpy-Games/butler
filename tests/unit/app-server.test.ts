@@ -6269,21 +6269,27 @@ test("app transport send fails the turn instead of leaving thinking when queue h
     const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
     expect(turns.data.turns[0]).toMatchObject({
       state: "failed",
-      safe_error_code: "app_turn_queue_failed",
       retryable: false,
       cancellable: false,
     });
+    expect(turns.data.turns[0]).not.toHaveProperty("safe_error_code");
+    expect(turns.data.turns[0].safe_status_label ?? "").toBe("");
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
     );
-    expect(messages.data.messages).toContainEqual(
-      expect.objectContaining({
-        role: "assistant",
-        status: "failed",
-        safe_error_code: "app_turn_queue_failed",
-        text: "Butler could not queue this request for execution. Retry the turn.",
-      }),
+    expect(
+      messages.data.messages.map(
+        (message: { role: string; text: string }) => ({
+          role: message.role,
+          text: message.text,
+        }),
+      ),
+    ).toEqual([
+      { role: "user", text: "this must not get stuck thinking" },
+    ]);
+    expect(JSON.stringify(messages)).not.toContain(
+      "Butler could not queue this request for execution. Retry the turn.",
     );
 
     const replay = await getJson(`${server.url}events?cursor=0`);
@@ -6301,6 +6307,363 @@ test("app transport send fails the turn instead of leaving thinking when queue h
           event.payload?.safe_error_code === "app_turn_queue_failed",
       ),
     ).toBe(true);
+  } finally {
+    server.stop();
+  }
+});
+
+test("legacy app transport queue failure assistant rows are hidden from projections and previews", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  const legacyQueueFailureText =
+    "Butler could not queue this request for execution. Retry the turn.";
+  const legacyGoalCompletionText =
+    "Butler could not verify that the requested goal was completed.";
+  const deliveredSamePhraseText =
+    "Visible assistant note: Butler could not verify that the requested goal was completed.";
+  const server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const storeDb = (
+      server.store as unknown as {
+        db: Database;
+      }
+    ).db;
+    const now = () => new Date().toISOString();
+    storeDb.query(`
+      INSERT INTO messages (
+        id, chat_id, turn_id, role, text, status, created_at, updated_at,
+        safe_error_code, retryable
+      )
+      VALUES (?, 'general', NULL, 'user', ?, 'sent', ?, ?, NULL, 0)
+    `).run(
+      "msg-visible-user-before-legacy-failures",
+      "keep the visible user request",
+      now(),
+      now(),
+    );
+    const seedMessage = (
+      id: string,
+      text: string,
+      status: "failed" | "delivered",
+      safeErrorCode: string | null,
+      turnId: string | null = null,
+    ) => {
+      storeDb.query(`
+        INSERT INTO messages (
+          id, chat_id, turn_id, role, text, status, created_at, updated_at,
+          safe_error_code, retryable
+        )
+        VALUES (?, 'general', ?, 'assistant', ?, ?, ?, ?, ?, 0)
+      `).run(
+        id,
+        turnId,
+        text,
+        status,
+        now(),
+        now(),
+        safeErrorCode,
+      );
+    };
+    seedMessage(
+      "msg-visible-delivered-same-phrase",
+      deliveredSamePhraseText,
+      "delivered",
+      null,
+      null,
+    );
+    seedMessage(
+      "msg-legacy-app-queue-failed",
+      legacyQueueFailureText,
+      "failed",
+      "app_turn_queue_failed",
+      null,
+    );
+    seedMessage(
+      "msg-legacy-goal-completion-incomplete",
+      legacyGoalCompletionText,
+      "failed",
+      "goal_completion_incomplete",
+      null,
+    );
+    const messages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    expect(messages.data.messages).toContainEqual(
+      expect.objectContaining({
+        role: "user",
+        text: "keep the visible user request",
+      }),
+    );
+    expect(messages.data.messages).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        text: deliveredSamePhraseText,
+      }),
+    );
+    expect(messages.data.messages).not.toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        safe_error_code: "app_turn_queue_failed",
+      }),
+    );
+    expect(messages.data.messages).not.toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        safe_error_code: "goal_completion_incomplete",
+      }),
+    );
+    expect(JSON.stringify(messages)).not.toContain(legacyQueueFailureText);
+
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(JSON.stringify(sessionView)).not.toContain(legacyQueueFailureText);
+    expect(sessionView.data.messages).not.toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        safe_error_code: "goal_completion_incomplete",
+      }),
+    );
+    expect(sessionView.data.messages).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        text: deliveredSamePhraseText,
+      }),
+    );
+
+    const sessions = await getJson(`${server.url}sessions`);
+    expect(sessions.data.sessions[0]).toMatchObject({
+      id: "general",
+      last_message_preview: deliveredSamePhraseText,
+    });
+    expect(JSON.stringify(sessions)).not.toContain(legacyQueueFailureText);
+    expect(JSON.stringify(sessions)).not.toContain(
+      "goal_completion_incomplete",
+    );
+
+    const navigation = await getJson(`${server.url}navigation`);
+    expect(navigation.data.chats[0]).toMatchObject({
+      id: "general",
+      last_message_preview: deliveredSamePhraseText,
+    });
+    expect(JSON.stringify(navigation)).not.toContain(legacyQueueFailureText);
+    expect(JSON.stringify(navigation)).not.toContain(
+      "goal_completion_incomplete",
+    );
+  } finally {
+    server.stop();
+  }
+});
+
+test("historical internal continuation failed turns are normalized in public projections", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  const server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const storeDb = (
+      server.store as unknown as {
+        db: Database;
+      }
+    ).db;
+    const seedTurn = (
+      id: string,
+      safeErrorCode: "internal_recovery_required" | "goal_completion_incomplete",
+      createdAt: string,
+    ) => {
+      storeDb.query(`
+        INSERT INTO turns (
+          id, chat_id, user_message_id, state, safe_status_label,
+          safe_error_code, retryable, cancellable, attempt, created_at, updated_at
+        )
+        VALUES (?, 'general', NULL, 'failed', 'Retry required', ?, 1, 0, 1, ?, ?)
+      `).run(id, safeErrorCode, createdAt, createdAt);
+      storeDb.query(`
+        INSERT INTO events (type, payload_json, created_at)
+        VALUES ('turn.state_changed', ?, ?)
+      `).run(
+        JSON.stringify({
+          turn: {
+            id,
+            chat_id: "general",
+            state: "failed",
+            safe_status_label: "Retry required",
+            safe_error_code: safeErrorCode,
+            retryable: true,
+            cancellable: false,
+            attempt: 1,
+            created_at: createdAt,
+            updated_at: createdAt,
+          },
+        }),
+        createdAt,
+      );
+      storeDb.query(`
+        INSERT INTO messages (
+          id, chat_id, turn_id, role, text, status, created_at, updated_at,
+          safe_error_code, retryable
+        )
+        VALUES (?, 'general', ?, 'user', ?, 'sent', ?, ?, NULL, 0)
+      `).run(
+        `msg-${id}`,
+        id,
+        `visible user message for ${id}`,
+        createdAt,
+        createdAt,
+      );
+    };
+    seedTurn(
+      "turn-historical-internal-recovery",
+      "internal_recovery_required",
+      "2026-06-29T00:00:00.000Z",
+    );
+    seedTurn(
+      "turn-historical-goal-completion",
+      "goal_completion_incomplete",
+      "2026-06-29T00:01:00.000Z",
+    );
+
+    const sessions = await getJson(`${server.url}sessions`);
+    const navigation = await getJson(`${server.url}navigation`);
+    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    const events = await getJson(`${server.url}events?cursor=0`);
+    const messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
+    const publicPayloads = [
+      sessions,
+      navigation,
+      turns,
+      sessionView,
+      summary,
+      events,
+      messages,
+    ];
+    for (const payload of publicPayloads) {
+      const serialized = JSON.stringify(payload);
+      expect(serialized).not.toContain("Retry required");
+      expect(serialized).not.toContain("internal_recovery_required");
+      expect(serialized).not.toContain("goal_completion_incomplete");
+    }
+    const projectedTurns = turns.data.turns.filter(
+      (turn: { id: string }) =>
+        turn.id === "turn-historical-internal-recovery" ||
+        turn.id === "turn-historical-goal-completion",
+    );
+    expect(projectedTurns).toHaveLength(2);
+    expect(projectedTurns).toEqual([
+      expect.objectContaining({
+        id: "turn-historical-internal-recovery",
+        state: "failed",
+        retryable: false,
+      }),
+      expect.objectContaining({
+        id: "turn-historical-goal-completion",
+        state: "failed",
+        retryable: false,
+      }),
+    ]);
+    for (const turn of projectedTurns) {
+      expect(turn).not.toHaveProperty("safe_error_code");
+      expect(turn).not.toHaveProperty("safe_status_label", "Retry required");
+    }
+    expect(
+      Object.keys(messages.data.turn_progress).sort(),
+    ).toEqual([
+      "turn-historical-goal-completion",
+      "turn-historical-internal-recovery",
+    ]);
+    for (const progress of Object.values(
+      messages.data.turn_progress,
+    ) as Array<Record<string, unknown>>) {
+      expect(progress).toMatchObject({
+        state: "failed",
+        delivery_state: "failed_system",
+        limitation_codes: [],
+        limitations: [],
+        safe_progress_rows: [],
+      });
+      expect(progress).not.toHaveProperty("summary", "Retry required");
+      expect(JSON.stringify(progress)).not.toContain(
+        "internal_recovery_required",
+      );
+      expect(JSON.stringify(progress)).not.toContain(
+        "goal_completion_incomplete",
+      );
+    }
+    expect(sessions.data.sessions[0]).toMatchObject({
+      id: "general",
+      active_turn_state: "failed",
+    });
+    expect(sessions.data.sessions[0]).not.toHaveProperty("safe_status_label");
+    expect(navigation.data.chats[0]).toMatchObject({
+      id: "general",
+      active_turn_state: "failed",
+    });
+    expect(navigation.data.chats[0]).not.toHaveProperty("safe_status_label");
+    expect(sessionView.data.latest_turn).toMatchObject({
+      id: "turn-historical-goal-completion",
+      state: "failed",
+      retryable: false,
+    });
+    expect(sessionView.data.latest_turn).not.toHaveProperty("safe_error_code");
+    expect(sessionView.data.latest_turn).not.toHaveProperty(
+      "safe_status_label",
+      "Retry required",
+    );
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: "turn-historical-goal-completion",
+      state: "failed",
+    });
+    expect(summary.data.latest_progress.summary ?? "").toBe("");
+    const stateChangedEvents = events.data.events.filter(
+      (event: { type: string; payload?: { turn?: { id?: string } } }) =>
+        event.type === "turn.state_changed" &&
+        (
+          event.payload?.turn?.id === "turn-historical-internal-recovery" ||
+          event.payload?.turn?.id === "turn-historical-goal-completion"
+        ),
+    );
+    expect(stateChangedEvents).toHaveLength(2);
+    for (const event of stateChangedEvents) {
+      expect(event.payload.turn.retryable).toBe(false);
+      expect(event.payload.turn).not.toHaveProperty("safe_error_code");
+      expect(event.payload.turn).not.toHaveProperty("safe_status_label");
+    }
+    const rawRows = storeDb.query<{
+      safe_status_label: string;
+      safe_error_code: string;
+      retryable: number;
+    }, []>(`
+      SELECT safe_status_label, safe_error_code, retryable
+      FROM turns
+      WHERE id IN (
+        'turn-historical-internal-recovery',
+        'turn-historical-goal-completion'
+      )
+      ORDER BY id ASC
+    `).all();
+    expect(rawRows).toEqual([
+      {
+        safe_status_label: "Retry required",
+        safe_error_code: "goal_completion_incomplete",
+        retryable: 1,
+      },
+      {
+        safe_status_label: "Retry required",
+        safe_error_code: "internal_recovery_required",
+        retryable: 1,
+      },
+    ]);
   } finally {
     server.stop();
   }
@@ -6687,6 +7050,15 @@ test("app transport final result projection delivers queued turns after app-serv
       "continue even if the app exits",
       "Core result projected from the durable app transport.",
     ]);
+    expect(messages.data.turn_progress[turnId]).toMatchObject({
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["source_verified_missing"],
+      limitations: [
+        "Source verification remained unavailable.",
+        "A runtime limitation remained.",
+      ],
+    });
     expect(server.store.getSession(chatId).title).toBe("Durable App 제목");
     const assistant = messages.data.messages.find(
       (message: { role: string }) => message.role === "assistant",
@@ -6816,6 +7188,15 @@ test("app transport no-visible limited final closes queued turns without assista
       messages.data.messages.map((message: { text: string }) => message.text),
     ).toEqual(["continue without generic recovery text"]);
     expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
+    expect(messages.data.turn_progress[turnId]).toMatchObject({
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
+      "internal_recovery_required",
+    );
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
@@ -6829,9 +7210,25 @@ test("app transport no-visible limited final closes queued turns without assista
       turn_id: turnId,
       state: "delivered",
       delivery_state: "delivered_with_limitations",
-      limitation_codes: ["internal_recovery_required"],
+      limitation_codes: [],
       limitations: [],
     });
+    expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
+      "internal_recovery_required",
+    );
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(sessionView.data.latest_turn).toMatchObject({
+      id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(sessionView.data.latest_turn)).not.toContain(
+      "internal_recovery_required",
+    );
   } finally {
     server.stop();
   }
@@ -6889,8 +7286,36 @@ test("app transport live limited final text with could not verify is not hidden 
     expect(assistant).toMatchObject({
       status: "delivered",
       delivery_state: "delivered_with_limitations",
-      limitation_codes: ["internal_recovery_required"],
+      limitation_codes: [],
+      limitations: [],
     });
+    expect(JSON.stringify(assistant)).not.toContain(
+      "internal_recovery_required",
+    );
+    expect(messages.data.turn_progress[turnId]).toMatchObject({
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
+      "internal_recovery_required",
+    );
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    const sessionAssistant = sessionView.data.messages.find(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(sessionAssistant).toMatchObject({
+      status: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(sessionAssistant)).not.toContain(
+      "internal_recovery_required",
+    );
   } finally {
     server.stop();
   }
@@ -6946,9 +7371,12 @@ test("app transport historical limited final text can be hidden for legacy repai
       turn_id: turnId,
       state: "delivered",
       delivery_state: "delivered_with_limitations",
-      limitation_codes: ["internal_recovery_required"],
+      limitation_codes: [],
       limitations: [],
     });
+    expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
+      "internal_recovery_required",
+    );
   } finally {
     server.stop();
   }
@@ -7494,14 +7922,26 @@ test("app transport no-visible final removes an earlier failure assistant for th
     ]);
     expect(JSON.stringify(messages)).not.toContain("dispatch lease expired");
     expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
+    expect(messages.data.turn_progress[turnId]).toMatchObject({
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
+      "internal_recovery_required",
+    );
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
       state: "delivered",
       delivery_state: "delivered_with_limitations",
-      limitation_codes: ["internal_recovery_required"],
+      limitation_codes: [],
       limitations: [],
     });
+    expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
+      "internal_recovery_required",
+    );
   } finally {
     server.stop();
   }
@@ -7552,9 +7992,12 @@ test("app transport no-visible final with missing delivery metadata does not cre
       turn_id: turnId,
       state: "delivered",
       delivery_state: "delivered_with_limitations",
-      limitation_codes: ["internal_recovery_required"],
+      limitation_codes: [],
       limitations: [],
     });
+    expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
+      "internal_recovery_required",
+    );
   } finally {
     server.stop();
   }
@@ -11502,6 +11945,15 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
     });
     expect(JSON.stringify(events)).not.toContain("operatorSummary");
     expect(JSON.stringify(events)).not.toContain("Tool result pairing invariant broke.");
+    const failedMessages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    expect(failedMessages.data.turn_progress[failedTurnId]).toMatchObject({
+      state: "runtime_fault",
+      delivery_state: "failed_system",
+      limitation_codes: [],
+      limitations: [],
+    });
 
     const retry = await postJson(
       `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
@@ -11709,10 +12161,18 @@ test("provider failures persist actionable safe API status", async () => {
       retryable: false,
       cancellable: false,
     });
+    const failedTurnId = failedTurn.id as string;
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
     );
+    expect(messages.data.turn_progress[failedTurnId]).toMatchObject({
+      state: "failed",
+      summary: "Failed",
+      delivery_state: "failed_system",
+      limitation_codes: [],
+      limitations: [],
+    });
     const assistant = messages.data.messages.find(
       (message: { role: string }) => message.role === "assistant",
     );
