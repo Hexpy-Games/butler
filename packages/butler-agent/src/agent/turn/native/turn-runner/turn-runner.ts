@@ -1,4 +1,5 @@
 import { recordOperationalMetric } from "../../../../operations/metrics/operational-metrics.ts";
+import { recordFirstVisibleLatencyMetric } from "../../../../operations/metrics/first-visible-latency.ts";
 import type { RuntimeTurnResult } from "../../../../test-support/harness/contracts.ts";
 import { runtimeArtifactsFromAudit } from "../output/runtime-artifacts.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
@@ -67,7 +68,9 @@ export async function runNativeToolTurn({
     const earlyProgressEmitted = useTools
       ? await emitEarlyRuntimePreparationProgress({
           input,
-          language: deps.messageLanguage,
+          deps,
+          session,
+          startedAt,
         })
       : false;
     const context = await prepareNativeTurnContext({
@@ -445,17 +448,28 @@ function completionGapContinuationPrompt(input: {
 
 async function emitEarlyRuntimePreparationProgress(input: {
   input: NativeTurnRunnerInput["input"];
-  language: NativeTurnRunnerInput["deps"]["messageLanguage"];
+  deps: NativeTurnRunnerInput["deps"];
+  session: NativeTurnRunnerInput["session"];
+  startedAt: number;
 }): Promise<boolean> {
   try {
     await emitRuntimePreparationProgressBestEffort({
       turnInput: input.input,
       progress: runtimePreparationProgressSummary({
         model: input.input.model,
-        language: input.language,
+        language: input.deps.messageLanguage,
         useTools: true,
         userText: currentUserText(input.input),
       }),
+    });
+    recordFirstVisibleLatencyMetric({
+      butlerData: input.deps.butlerData,
+      durationMs: Date.now() - input.startedAt,
+      signal: "runtime_preparation",
+      role: input.session.init.role,
+      runtime: input.deps.runtimeId,
+      model: input.input.model,
+      source: "native-turn-runner-early-runtime-preparation",
     });
     return true;
   } catch {
