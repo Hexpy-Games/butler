@@ -265,9 +265,16 @@ import {
   shouldAutomaticallyRequeueContinuation,
 } from "./continuation-delivery.ts";
 import {
+  APP_TURN_QUEUE_FAILED_CODE,
+  HIDDEN_LEGACY_ASSISTANT_SAFE_ERROR_CODES,
+  isPublicSuppressedInternalContinuationCode,
+  publicAppDeliveryMetadata,
   publicDeliveryMetadataForProjection,
   publicDeliveryStateForProjection,
   publicDeliveryStateForTurnState,
+  publicTurnPayloadRecord,
+  publicTurnRecord,
+  publicTurnStatusLabel,
   type AppProjectionDeliveryState,
 } from "./btcc-public-projection.ts";
 import {
@@ -318,6 +325,15 @@ const MESSAGE_FILE_MAX_ATTACHMENTS = 12;
 const MESSAGE_FILE_ID_PATTERN = /^file-[0-9a-f-]{36}$/iu;
 const BUTLER_FINAL_ANSWER_OPEN = "<butler_final_answer>";
 const BUTLER_FINAL_ANSWER_CLOSE = "</butler_final_answer>";
+
+function visibleMessageSqlPredicate(alias?: string): string {
+  const prefix = alias ? `${alias}.` : "";
+  const codes = HIDDEN_LEGACY_ASSISTANT_SAFE_ERROR_CODES.map(
+    (code) => `'${code}'`,
+  ).join(", ");
+  return `NOT (${prefix}role = 'assistant' AND ${prefix}safe_error_code IS NOT NULL AND ${prefix}safe_error_code IN (${codes}))`;
+}
+
 type CapturedUserFeedback = {
   entry: {
     feedback_id: string;
@@ -375,6 +391,7 @@ interface SessionSummaryRow {
   last_message_preview: string | null;
   active_turn_state: TurnState | null;
   safe_status_label: string | null;
+  active_turn_safe_error_code: string | null;
   pinned: number;
   archived: number;
 }
@@ -1025,6 +1042,7 @@ export class AppServerStore {
           SELECT m.text
           FROM messages m
           WHERE m.chat_id = c.id
+            AND ${visibleMessageSqlPredicate("m")}
           ORDER BY m.rowid DESC
           LIMIT 1
         ) AS last_message_preview,
@@ -1042,6 +1060,13 @@ export class AppServerStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+        (
+          SELECT t.safe_error_code
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS active_turn_safe_error_code,
         c.pinned,
         c.archived
       FROM chats c
@@ -1086,6 +1111,7 @@ export class AppServerStore {
           SELECT m.text
           FROM messages m
           WHERE m.chat_id = c.id
+            AND ${visibleMessageSqlPredicate("m")}
           ORDER BY m.rowid DESC
           LIMIT 1
         ) AS last_message_preview,
@@ -1103,6 +1129,13 @@ export class AppServerStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+        (
+          SELECT t.safe_error_code
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS active_turn_safe_error_code,
         c.pinned,
         c.archived
       FROM chats c
@@ -3493,6 +3526,7 @@ export class AppServerStore {
           SELECT m.text
           FROM messages m
           WHERE m.chat_id = c.id
+            AND ${visibleMessageSqlPredicate("m")}
           ORDER BY m.rowid DESC
           LIMIT 1
         ) AS last_message_preview,
@@ -3510,6 +3544,13 @@ export class AppServerStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+        (
+          SELECT t.safe_error_code
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS active_turn_safe_error_code,
         c.pinned,
         c.archived
       FROM chats c
@@ -3533,7 +3574,7 @@ export class AppServerStore {
         `
       SELECT rowid, id, chat_id, turn_id, role, text, status, created_at, updated_at, safe_error_code, retryable
       FROM messages
-      WHERE chat_id = ? AND rowid > ?
+      WHERE chat_id = ? AND rowid > ? AND ${visibleMessageSqlPredicate()}
       ORDER BY rowid ASC
       LIMIT 200
     `,
@@ -3566,7 +3607,7 @@ export class AppServerStore {
     `,
       )
       .all(chatId, cursor);
-    return rows.map(turnFromRow);
+    return rows.map((row) => publicTurnRecord(turnFromRow(row)));
   }
 
   listTurnProgressSnapshotsForMessages(
@@ -3583,20 +3624,34 @@ export class AppServerStore {
     for (const turnId of turnIds) {
       const turn = this.getTurnRow(turnId);
       if (!turn) continue;
+      const publicTurn = publicTurnRecord(turnFromRow(turn));
       const rows = progressRowsForTurnState(
         this.listProgressRowsForTurn(turnId),
         turn.state,
       );
-      const summary = publicTurnStatusLabel(turn.safe_status_label, turn.state);
-      const delivery = publicDeliveryMetadataForProjection(
-        this.deliveryMetadataForTurnRecord(turnFromRow(turn)),
+      const summary = publicTurnStatusLabel(
+        turn.safe_status_label,
+        turn.state,
+        turn.safe_error_code,
       );
+      const delivery = isPublicSuppressedInternalContinuationCode(
+        turn.safe_error_code,
+      )
+        ? {
+            delivery_state: publicDeliveryStateForTurnState(publicTurn.state),
+            limitations: [],
+            limitation_codes: [],
+          }
+        : publicDeliveryMetadataForProjection(
+            this.deliveryMetadataForTurnRecord(publicTurn),
+          );
+      const publicDelivery = publicAppDeliveryMetadata(delivery);
       snapshots[turnId] = {
         turn_id: turnId,
         ...(summary ? { summary } : {}),
         updated_at: turn.updated_at,
-        state: turn.state,
-        ...delivery,
+        state: publicTurn.state,
+        ...publicDelivery,
         safe_progress_rows: rows,
       };
     }
@@ -3607,8 +3662,8 @@ export class AppServerStore {
     turn: TurnRecord,
     options: { suppressProgressRows?: boolean } = {},
   ): SessionViewTurn {
-    const delivery = publicDeliveryMetadataForProjection(
-      this.deliveryMetadataForTurnRecord(turn),
+    const delivery = publicAppDeliveryMetadata(
+      publicDeliveryMetadataForProjection(this.deliveryMetadataForTurnRecord(turn)),
     );
     const progressRows = options.suppressProgressRows
       ? []
@@ -3651,7 +3706,7 @@ export class AppServerStore {
       if (!turn || !isTerminalProgressState(turn.state)) return message;
       const delivery = this.deliveryLimitationMetadataForTurn(message.turn_id);
       const publicDelivery = delivery
-        ? publicDeliveryMetadataForProjection(delivery)
+        ? publicAppDeliveryMetadata(publicDeliveryMetadataForProjection(delivery))
         : null;
       const workBlocks = workBlocksFromTerminalProgressRows(
         progressRowsForTurnState(
@@ -4970,15 +5025,10 @@ export class AppServerStore {
     error: unknown,
   ): TurnRecord {
     const safeError = appSafeResponderError(error);
-    this.upsertAssistantTurnFailure(input.chatId, input.turnId, {
-      code: "app_turn_queue_failed",
-      message:
-        "Butler could not queue this request for execution. Retry the turn.",
-    });
     this.appendTurnEvent(input.chatId, input.turnId, {
       kind: "turn.failed",
       payload: safeTurnFailureEventPayload({
-        code: "app_turn_queue_failed",
+        code: APP_TURN_QUEUE_FAILED_CODE,
         message:
           "Butler could not queue this request for execution. Retry the turn.",
         cause: safeError.cause ?? safeError.message,
@@ -4988,14 +5038,14 @@ export class AppServerStore {
       safeStatusLabel: "Failed",
       retryable: false,
       cancellable: false,
-      safeErrorCode: "app_turn_queue_failed",
+      safeErrorCode: APP_TURN_QUEUE_FAILED_CODE,
     });
     this.appendTerminalTurnStateChanged(failedTurn);
     this.appendEvent("turn.queue_failed", {
       session_id: input.chatId,
       turn_id: input.turnId,
       transport: APP_TRANSPORT,
-      safe_error_code: "app_turn_queue_failed",
+      safe_error_code: APP_TURN_QUEUE_FAILED_CODE,
     });
     return failedTurn;
   }
@@ -9350,6 +9400,7 @@ function sessionFromRow(row: SessionSummaryRow): SessionSummary {
   const publicStatusLabel = publicTurnStatusLabel(
     row.safe_status_label,
     row.active_turn_state,
+    row.active_turn_safe_error_code,
   );
   return {
     id: row.id,
@@ -9374,15 +9425,6 @@ function sessionFromRow(row: SessionSummaryRow): SessionSummary {
   };
 }
 
-function publicTurnStatusLabel(
-  label: string | null | undefined,
-  state: string | null | undefined,
-): string | undefined {
-  const trimmed = label?.trim();
-  if (!trimmed) return undefined;
-  return state && isInternalContinuationTurnState(state) ? undefined : trimmed;
-}
-
 function publicAppEventPayload(
   type: string,
   payload: Record<string, unknown>,
@@ -9392,18 +9434,23 @@ function publicAppEventPayload(
   const turn = isRecord(payload.turn) ? payload.turn : null;
   const state = safeOptionalShortToken(payload.state) ??
     safeOptionalShortToken(turn?.state);
+  const safeErrorCode = safeOptionalShortToken(
+    payload.safe_error_code ?? turn?.safe_error_code,
+  );
   const label = publicTurnStatusLabel(
     safeOptionalShortText(payload.safe_status_label ?? turn?.safe_status_label),
     state,
+    safeErrorCode,
   );
   const nextPayload: Record<string, unknown> = { ...payload };
+  if (isPublicSuppressedInternalContinuationCode(safeErrorCode)) {
+    delete nextPayload.safe_error_code;
+    nextPayload.retryable = false;
+  }
   if (label) nextPayload.safe_status_label = label;
   else delete nextPayload.safe_status_label;
   if (turn) {
-    const nextTurn: Record<string, unknown> = { ...turn };
-    if (label) nextTurn.safe_status_label = label;
-    else delete nextTurn.safe_status_label;
-    nextPayload.turn = nextTurn;
+    nextPayload.turn = publicTurnPayloadRecord(turn);
   }
   return nextPayload;
 }
