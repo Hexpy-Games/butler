@@ -622,6 +622,7 @@ export interface AppModelSummary {
   token_estimator: string;
   source_url: string;
   runtime_supported: boolean;
+  hosted_api_shape?: "openai_chat_completions" | "anthropic_messages";
   api_base_url?: string;
   api_type?: "openai_compatible";
   platform?: "llama_cpp" | "ollama" | "lm_studio" | "custom";
@@ -2080,7 +2081,8 @@ function isHostedProviderId(
     value === "xai" ||
     value === "qwen" ||
     value === "kimi" ||
-    value === "zai"
+    value === "zai" ||
+    value === "opencode-go"
   );
 }
 
