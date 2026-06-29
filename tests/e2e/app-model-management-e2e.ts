@@ -5,6 +5,10 @@ import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/server.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
+import {
+  FIRST_RUN_STORAGE_KEY,
+  firstRunCompleteState,
+} from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
 
 const root = process.cwd();
 const tempDir = mkdtempSync(join(tmpdir(), "butler-model-management-e2e-"));
@@ -19,6 +23,7 @@ const hostedProviders = [
   { label: "Qwen Cloud", model: "Qwen3.7 Max" },
   { label: "Moonshot / Kimi", model: "Kimi K2.6" },
   { label: "Z.AI / GLM", model: "GLM-5.2" },
+  { label: "OpenCode Go", model: "GLM-5.2" },
 ] as const;
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -31,6 +36,25 @@ function escapeRegExp(value: string): string {
 
 async function clickButton(page: Page, label: string): Promise<void> {
   await page.getByRole("button", { name: label, exact: true }).click();
+}
+
+async function clickSidebarAction(page: Page, label: string): Promise<void> {
+  const action = page
+    .locator(
+      `[data-test-class="app-sidebar"] [role="button"][aria-label="${label}"]`,
+    )
+    .first();
+  if (!(await action.isVisible().catch(() => false))) {
+    const showSidebar = page.getByRole("button", {
+      name: "Show sidebar",
+      exact: true,
+    });
+    if (await showSidebar.isVisible().catch(() => false)) {
+      await showSidebar.click();
+    }
+  }
+  await action.waitFor({ state: "visible" });
+  await action.click();
 }
 
 async function openSelect(page: Page, selector: string): Promise<void> {
@@ -69,6 +93,14 @@ async function assertSelectHasModel(page: Page, label: string): Promise<void> {
   });
   await option.waitFor({ state: "visible" });
   await option.click();
+}
+
+async function seedCompletedFirstRun(page: Page): Promise<void> {
+  const firstRunState = JSON.stringify(firstRunCompleteState("en"));
+  await page.addInitScript(
+    ({ key, value }) => localStorage.setItem(key, value),
+    { key: FIRST_RUN_STORAGE_KEY, value: firstRunState },
+  );
 }
 
 async function startLocalModelServer(): Promise<{
@@ -122,6 +154,7 @@ const page = await browser.newPage({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
 });
+await seedCompletedFirstRun(page);
 
 try {
   const catalogResponse = await fetch(`${server.url}model-catalog`);
@@ -140,7 +173,7 @@ try {
   }
 
   await page.goto(server.url, { waitUntil: "networkidle" });
-  await clickButton(page, appCopy.sidebar.settings);
+  await clickSidebarAction(page, appCopy.sidebar.settings);
   await clickButton(page, appCopy.settings.sections.models);
   await page
     .getByText(appCopy.settings.panels.butlerModel, { exact: true })
