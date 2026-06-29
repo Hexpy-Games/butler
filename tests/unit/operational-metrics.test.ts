@@ -231,7 +231,18 @@ test("native runtime and tool execution emit operational metrics without tool pa
     const runtime = new NativeToolLoopRuntime({
       butlerHome: root,
       butlerData,
-      runFunctionToolPromptText: async ({ executeTool }) => {
+      runFunctionToolPromptText: async ({ executeTool, onAssistantTextBeforeTools }) => {
+        await onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Check the usage monitor status.",
+            "rationale: The metrics test needs the selected tool to execute without storing payload text.",
+            "next_step: Use the sanitized tool metric to finish the turn.",
+          ].join("\n"),
+          toolCalls: [{
+            name: "get_usage_monitor",
+            args: { message: "SECRET_TOOL_ARGUMENT" },
+          }],
+        });
         await executeTool({
           name: "get_usage_monitor",
           args: { message: "SECRET_TOOL_ARGUMENT" },

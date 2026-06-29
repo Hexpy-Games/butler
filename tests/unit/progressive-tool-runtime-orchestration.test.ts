@@ -65,6 +65,30 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
 
+async function authorPublicDecisionForTool(
+  input: {
+    onAssistantTextBeforeTools?: (message: {
+      text: string;
+      toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
+    }) => Promise<void> | void;
+  },
+  call: { name: string; args: Record<string, unknown> },
+  text: {
+    summary: string;
+    rationale: string;
+    nextStep: string;
+  },
+): Promise<void> {
+  await input.onAssistantTextBeforeTools?.({
+    text: [
+      `summary: ${text.summary}`,
+      `rationale: ${text.rationale}`,
+      `next_step: ${text.nextStep}`,
+    ].join("\n"),
+    toolCalls: [call],
+  });
+}
+
 test("native runtime executes tool_search tool_describe and tool_call in one model turn", async () => {
   const events: RuntimeTurnEventInput[] = [];
   const observedToolResults: Record<string, unknown> = {};
@@ -86,26 +110,71 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
       budgetAtPromptStart = input.usageAttribution?.getBudgetState?.();
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
       budgetAfterModelRequest = input.usageAttribution?.getBudgetState?.();
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_search", args: { provider: "native", query: "web search", limit: 5 } },
+        {
+          summary: "Search the native tool catalog for web search.",
+          rationale: "The orchestration test needs model-selected discovery before describing a concrete tool.",
+          nextStep: "Use the search result to decide which native tool to describe.",
+        },
+      );
       observedToolResults.search = await input.executeTool({
         name: "tool_search",
         args: { provider: "native", query: "web search", limit: 5 },
         rawArguments: JSON.stringify({ provider: "native", query: "web search", limit: 5 }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_call", args: { id: "native:web_search", arguments: { query: "butler release" } } },
+        {
+          summary: "Attempt the discovered native web search call before description.",
+          rationale: "The test verifies that undescribed bridge calls remain recoverable.",
+          nextStep: "Confirm the recoverable error before describing the tool.",
+        },
+      );
       observedToolResults.callBeforeDescribe = await input.executeTool({
         name: "tool_call",
         args: { id: "native:web_search", arguments: { query: "butler release" } },
         rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler release" } }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_describe", args: { ids: ["native:web_search"] } },
+        {
+          summary: "Describe the selected native web search tool.",
+          rationale: "The model needs the promoted schema before a valid bridge invocation.",
+          nextStep: "Use the described schema to call the native web search tool.",
+        },
+      );
       observedToolResults.describe = await input.executeTool({
         name: "tool_describe",
         args: { ids: ["native:web_search"] },
         rawArguments: JSON.stringify({ ids: ["native:web_search"] }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_call", args: { id: "native:web_search", arguments: { query: "butler release", max_results: 1 } } },
+        {
+          summary: "Call the described native web search tool.",
+          rationale: "The test verifies bridge audit and transcript records for a successful promoted call.",
+          nextStep: "Use the search result to finish the orchestration turn.",
+        },
+      );
       observedToolResults.call = await input.executeTool({
         name: "tool_call",
         args: { id: "native:web_search", arguments: { query: "butler release", max_results: 1 } },
         rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler release", max_results: 1 } }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_call", args: { id: "native:tool_call", arguments: { id: "native:web_search", arguments: { query: "butler release" } } } },
+        {
+          summary: "Attempt a recursive bridge tool call.",
+          rationale: "The bridge audit test must prove recursive tool_call is denied safely.",
+          nextStep: "Record the denial without executing the nested call.",
+        },
+      );
       observedToolResults.recursion = await input.executeTool({
         name: "tool_call",
         args: { id: "native:tool_call", arguments: { id: "native:web_search", arguments: { query: "butler release" } } },
@@ -245,11 +314,29 @@ test("native runtime exposes promoted dynamic schemas only for capable providers
       const dynamicBeforeDescribe = input.dynamicTools?.() ?? [];
       toolsBeforeDescribe = dynamicBeforeDescribe.map((tool) => tool.name);
       initialDynamicToolSchemaJson = JSON.stringify(dynamicBeforeDescribe);
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_search", args: { provider: "native", query: "web search", limit: 5 } },
+        {
+          summary: "Search the native tool catalog for web search.",
+          rationale: "The schema promotion test starts with progressive discovery only.",
+          nextStep: "Describe the discovered tool to promote its schema.",
+        },
+      );
       await input.executeTool({
         name: "tool_search",
         args: { provider: "native", query: "web search", limit: 5 },
         rawArguments: JSON.stringify({ provider: "native", query: "web search", limit: 5 }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_describe", args: { ids: ["native:web_search"] } },
+        {
+          summary: "Describe the native web search tool for schema promotion.",
+          rationale: "Capable providers should see the promoted dynamic schema after description.",
+          nextStep: "Call web_search directly after promotion.",
+        },
+      );
       await input.executeTool({
         name: "tool_describe",
         args: { ids: ["native:web_search"] },
@@ -258,6 +345,15 @@ test("native runtime exposes promoted dynamic schemas only for capable providers
       const dynamicAfterDescribe = input.dynamicTools?.() ?? [];
       toolsAfterDescribe = dynamicAfterDescribe.map((tool) => tool.name);
       promotedDynamicToolSchemaJson = JSON.stringify(dynamicAfterDescribe);
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_search", args: { query: "butler release", max_results: 1 } },
+        {
+          summary: "Search public web sources for Butler release information.",
+          rationale: "A current public answer needs a directly available search source.",
+          nextStep: "Use the fixture search result to finish the turn.",
+        },
+      );
       const result = await input.executeTool({
         name: "web_search",
         args: { query: "butler release", max_results: 1 },
