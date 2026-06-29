@@ -31,6 +31,8 @@ test("turn state contract event kinds are accepted by the canonical event creato
       payload: {
         decisionId: "decision-1",
         summary: "Check the projection contract",
+        rationale: "The event contract needs the model-authored reason.",
+        nextStep: "Use this decision before visible work.",
         source: "assistant-authored",
       },
     },
@@ -163,11 +165,11 @@ test("turn outcome payload enforces evidence and recovery-token invariants", () 
         completionEvidenceStatus: "not_required",
         publicSummary: "Completed without external evidence requirement.",
       })).toMatchObject({ outcome, completionEvidenceStatus: "not_required" });
-    } else if (outcome === "recoverable" || outcome === "waiting_user") {
+    } else if (outcome === "waiting_user") {
       expect(createTurnOutcomePayload({
         outcome,
         recoveryToken: `recovery-${outcome}`,
-        publicSummary: "The turn can resume from recovery state.",
+        publicSummary: "The turn is waiting for user action.",
       })).toMatchObject({ outcome, recoveryToken: `recovery-${outcome}` });
     } else {
       expect(createTurnOutcomePayload({
@@ -189,9 +191,15 @@ test("turn outcome payload enforces evidence and recovery-token invariants", () 
   })).toThrow("turn outcome completion evidence status must be not_required");
 
   expect(() => createTurnOutcomePayload({
-    outcome: "recoverable",
+    outcome: "waiting_user",
     publicSummary: "Missing token.",
-  })).toThrow("recoverable turn outcome requires a recovery token");
+  })).toThrow("waiting_user turn outcome requires a recovery token");
+
+  expect(() => createTurnOutcomePayload({
+    outcome: "recoverable",
+    recoveryToken: "legacy-recovery",
+    publicSummary: "Recoverable is not a public turn outcome.",
+  })).toThrow("unknown turn outcome: recoverable");
 });
 
 test("runtime fault payload enforces exact recovery contract", () => {

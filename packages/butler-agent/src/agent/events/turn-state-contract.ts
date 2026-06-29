@@ -1,17 +1,27 @@
 import { sanitizePublicText } from "./public-text.ts";
 
 export const TURN_ACKNOWLEDGED_EVENT_KIND = "turn.acknowledged";
-export const TURN_DECISION_EVENT_KIND = "turn.decision";
-export const TURN_COMPLETION_EVIDENCE_EVENT_KIND = "turn.completion_evidence";
+export const TURN_ACCEPTED_EVENT_KIND = "turn.accepted";
+export const TURN_STATE_CHANGED_EVENT_KIND = "turn.state_changed";
+export const TURN_DECISION_EVENT_KIND = "assistant.decision";
+export const TOOL_INVOCATION_STARTED_EVENT_KIND = "tool.invocation.started";
+export const TOOL_OBSERVATION_RECORDED_EVENT_KIND = "tool.observation.recorded";
+export const TURN_COMPLETION_EVIDENCE_EVENT_KIND = "completion.evidence.recorded";
+export const COMPLETION_REVIEWED_EVENT_KIND = "completion.reviewed";
 export const TURN_OUTCOME_EVENT_KIND = "turn.outcome";
 export const RUNTIME_FAULT_EVENT_KIND = "runtime.fault";
 export const RECOVERY_RECORDED_EVENT_KIND = "recovery.recorded";
 export const DIAGNOSTIC_INVARIANT_VIOLATION_EVENT_KIND = "diagnostic.invariant_violation";
 
 export const TURN_STATE_CONTRACT_EVENT_KINDS = [
+  TURN_ACCEPTED_EVENT_KIND,
   TURN_ACKNOWLEDGED_EVENT_KIND,
+  TURN_STATE_CHANGED_EVENT_KIND,
   TURN_DECISION_EVENT_KIND,
+  TOOL_INVOCATION_STARTED_EVENT_KIND,
+  TOOL_OBSERVATION_RECORDED_EVENT_KIND,
   TURN_COMPLETION_EVIDENCE_EVENT_KIND,
+  COMPLETION_REVIEWED_EVENT_KIND,
   TURN_OUTCOME_EVENT_KIND,
   RUNTIME_FAULT_EVENT_KIND,
   RECOVERY_RECORDED_EVENT_KIND,
@@ -39,12 +49,15 @@ export const COMPLETION_EVIDENCE_KINDS = [
   "test_passed",
   "test_failed",
   "artifact_exists",
+  "artifact_missing",
   "pr_verified",
   "release_verified",
   "route_verified",
   "user_decision_required",
   "cancelled",
-  "runtime_failed",
+  "provider_failed",
+  "runtime_fault",
+  "not_required",
 ] as const;
 
 export type CompletionEvidenceKind = typeof COMPLETION_EVIDENCE_KINDS[number];
@@ -55,7 +68,7 @@ export const TURN_OUTCOMES = [
   "runtime_fault",
   "cancelled",
   "waiting_user",
-  "recoverable",
+  "aborted",
 ] as const;
 
 export type TurnOutcome = typeof TURN_OUTCOMES[number];
@@ -155,14 +168,14 @@ export function createTurnDecisionPayload(input: TurnDecisionPayloadInput): Reco
   }
   const decisionId = requiredSafeText(input.decisionId, "turn decision id is required");
   const summary = requiredSafeText(input.summary, "turn decision summary is required");
-  const rationale = optionalSafeText(input.rationale);
-  const nextStep = optionalSafeText(input.nextStep);
+  const rationale = requiredSafeText(input.rationale, "turn decision rationale is required");
+  const nextStep = requiredSafeText(input.nextStep, "turn decision nextStep is required");
   const evidenceRefs = safeStringArray(input.evidenceRefs);
   return {
     decisionId,
     summary,
-    ...(rationale ? { rationale } : {}),
-    ...(nextStep ? { nextStep } : {}),
+    rationale,
+    nextStep,
     source: input.source,
     ...(evidenceRefs.length > 0 ? { evidenceRefs } : {}),
   };
@@ -203,7 +216,7 @@ export function createTurnOutcomePayload(input: TurnOutcomePayloadInput): Record
   ) {
     throw new Error("completed turn outcome requires completion evidence refs or not_required evidence status");
   }
-  if ((outcome === "recoverable" || outcome === "waiting_user") && !recoveryToken) {
+  if (outcome === "waiting_user" && !recoveryToken) {
     throw new Error(`${outcome} turn outcome requires a recovery token`);
   }
   return {
