@@ -687,15 +687,7 @@ export async function processQueuedInboundEvents(
     summary.handled += result.handled;
     summary.delivered += result.delivered;
     summary.failed += result.failed;
-    try {
-      await options.onOutcome?.({
-        queueId: item.queueId,
-        sessionKey: sessionKeyForQueuedInbound(item),
-        handled: result.handled,
-        delivered: result.delivered,
-        failed: result.failed,
-      });
-    } catch {}
+    await notifyQueuedInboundOutcome(options, item, result);
   }
 
   return summary;
@@ -884,15 +876,30 @@ export class QueuedInboundDispatcher {
     summary.handled += result.handled;
     summary.delivered += result.delivered;
     summary.failed += result.failed;
-    try {
-      await options.onOutcome?.({
-        queueId: item.queueId,
-        sessionKey: sessionKeyForQueuedInbound(item),
-        handled: result.handled,
-        delivered: result.delivered,
-        failed: result.failed,
-      });
-    } catch {}
+    await notifyQueuedInboundOutcome(options, item, result);
     return { quiescence: result.quiescence };
+  }
+}
+
+async function notifyQueuedInboundOutcome(
+  options: ProcessQueuedInboundOptions,
+  item: ClaimedInboundEvent,
+  result: Pick<ProcessQueuedInboundSummary, "handled" | "delivered" | "failed">,
+): Promise<void> {
+  if (!options.onOutcome) return;
+  const outcome = {
+    queueId: item.queueId,
+    sessionKey: sessionKeyForQueuedInbound(item),
+    handled: result.handled,
+    delivered: result.delivered,
+    failed: result.failed,
+  };
+  try {
+    await options.onOutcome(outcome);
+  } catch (error) {
+    const failure = safeRuntimeFailure(error);
+    console.warn(
+      `[queued-inbound] outcome callback failed queueId=${outcome.queueId} code=${failure.code ?? "unknown"} message=${failure.message}`,
+    );
   }
 }

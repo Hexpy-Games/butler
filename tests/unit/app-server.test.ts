@@ -7324,7 +7324,7 @@ test("app transport live generic internal verification text is hidden unless mar
   }
 });
 
-test("app transport historical limited final text can be hidden for legacy repair", async () => {
+test("app transport internal limited final text is hidden by typed limitation code", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -7345,17 +7345,16 @@ test("app transport historical limited final text can be hidden for legacy repai
         accountId: "local",
         peer: { kind: "dm", id: "general" },
         message: {
-          text: "Butler could not verify that the requested goal was completed.",
+          text: "Arbitrary internal continuation text that must remain private.",
         },
         metadata: {
           kind: "final_result",
           turnId,
           source: "test",
-          historicalRecoveryState: true,
           deliveryState: "delivered_with_limitations",
           limitationCodes: ["internal_recovery_required"],
           limitations: [
-            "Butler could not verify that the requested goal was completed.",
+            "Arbitrary internal continuation detail.",
           ],
         },
       },
@@ -7368,7 +7367,7 @@ test("app transport historical limited final text can be hidden for legacy repai
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
     ).toEqual(["repair historical limited text"]);
-    expect(JSON.stringify(messages)).not.toContain("could not verify");
+    expect(JSON.stringify(messages)).not.toContain("Arbitrary internal continuation");
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,

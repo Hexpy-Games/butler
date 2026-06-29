@@ -79,38 +79,17 @@ export function takePublicWorkDecisionForTool(input: {
   previousDecisions: PublicWorkDecision[];
 }): PublicWorkDecision {
   const pending = takePendingDecision(input.pending, input.toolName);
-  if (pending) {
-    const fallback = fallbackDecisionForProgress(input.progress, input.previousDecisions);
-    const summaryOk = isUsablePublicDecisionText(pending.summary);
-    const rationaleOk = isUsablePublicDecisionText(
-      pending.rationale ?? "",
-      { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS },
-    );
-    const nextStepOk = isUsablePublicDecisionText(
-      pending.nextStep ?? "",
-      { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS },
-    );
-    const hasEvidenceRefs = pending.evidenceRefs.length > 0;
-    const evidenceRefs = hasEvidenceRefs
-      ? pending.evidenceRefs
-      : input.previousDecisions
-        .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
-        .map((decision) => decision.summary);
-    return {
-      ...pending,
-      summary: decisionTextOrFallback(summaryOk, pending.summary, fallback.summary),
-      rationale: decisionTextOrFallback(rationaleOk, pending.rationale, fallback.rationale),
-      nextStep: decisionTextOrFallback(nextStepOk, pending.nextStep, fallback.nextStep),
-      evidenceRefs,
-      source: summaryOk ? pending.source : "review-repaired",
-    };
+  if (!pending || !isCompleteAuthoredDecision(pending)) {
+    throw new Error("Public work decision required before visible tool execution.");
   }
-  const fallback = fallbackDecisionForProgress(input.progress, input.previousDecisions);
+  const evidenceRefs = pending.evidenceRefs.length > 0
+    ? pending.evidenceRefs
+    : input.previousDecisions
+      .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
+      .map((decision) => decision.summary);
   return {
-    decisionId: publicDecisionId(),
-    ...fallback,
-    source: "runtime-derived",
-    toolName: input.toolName,
+    ...pending,
+    evidenceRefs,
   };
 }
 
@@ -120,16 +99,7 @@ export function hasCompleteAuthoredPublicDecisionForTool(input: {
 }): boolean {
   const decision = input.pending.find((candidate) => candidate.toolName === input.toolName) ??
     input.pending[0];
-  if (!decision || !isAuthoredDecisionSource(decision.source)) {
-    return false;
-  }
-  return isUsablePublicDecisionText(decision.summary) &&
-    isUsablePublicDecisionText(decision.rationale ?? "", {
-      minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS,
-    }) &&
-    isUsablePublicDecisionText(decision.nextStep ?? "", {
-      minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS,
-    });
+  return Boolean(decision && isCompleteAuthoredDecision(decision));
 }
 
 function takePendingDecision(
@@ -142,17 +112,6 @@ function takePendingDecision(
     return pending.splice(matchingIndex, 1)[0];
   }
   return pending.shift();
-}
-
-function decisionTextOrFallback(
-  useCandidate: boolean,
-  candidate: string | undefined,
-  fallback: string | undefined,
-): string {
-  if (useCandidate && candidate) {
-    return candidate;
-  }
-  return fallback ?? "";
 }
 
 export function annotateToolResultWithDecisionContext(input: {
@@ -179,15 +138,13 @@ export function annotateToolResultWithDecisionContext(input: {
   };
 }
 
-function fallbackDecisionForProgress(
-  progress: ToolProgressSummary,
-  previousDecisions: PublicWorkDecision[],
-): Pick<PublicWorkDecision, "summary" | "rationale" | "nextStep" | "evidenceRefs"> {
-  const evidenceRefs = previousDecisions
-    .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
-    .map((decision) => decision.summary);
-  return {
-    summary: progress.workBlockLabel,
-    evidenceRefs,
-  };
+function isCompleteAuthoredDecision(decision: PublicWorkDecision): boolean {
+  if (!isAuthoredDecisionSource(decision.source)) return false;
+  return isUsablePublicDecisionText(decision.summary) &&
+    isUsablePublicDecisionText(decision.rationale ?? "", {
+      minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS,
+    }) &&
+    isUsablePublicDecisionText(decision.nextStep ?? "", {
+      minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS,
+    });
 }
