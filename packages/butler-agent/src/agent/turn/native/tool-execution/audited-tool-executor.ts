@@ -254,7 +254,10 @@ async function prepareAuditedToolExecution(input: {
   const semanticWorkBlock = input.internalProgress.semanticProgressEstablished()
     ? input.internalProgress.currentSemanticWorkBlock()
     : null;
-  const workBlockId = semanticWorkBlock?.id ?? `work-${toolCallId}`;
+  const matchingDecisionWorkBlockId =
+    semanticWorkBlock?.id ??
+    reusableDecisionWorkBlockId(input.input.publicDecisionContext, decision);
+  const workBlockId = matchingDecisionWorkBlockId ?? `work-${toolCallId}`;
   decision.workBlockId = workBlockId;
   decision.toolName = input.call.name;
   const workBlockLabel = semanticWorkBlock?.label ?? decision.summary;
@@ -282,6 +285,32 @@ async function prepareAuditedToolExecution(input: {
     isWorkerStartTool,
     taskSummary: taskSummaryForTool(input.call.name, input.cleanArgs),
   };
+}
+
+function reusableDecisionWorkBlockId(
+  previousDecisions: Array<{ workBlockId?: string; source: string; summary: string; rationale?: string; nextStep?: string }>,
+  decision: { source: string; summary: string; rationale?: string; nextStep?: string },
+): string | null {
+  for (let index = previousDecisions.length - 1; index >= 0; index -= 1) {
+    const previous = previousDecisions[index];
+    if (!previous?.workBlockId) continue;
+    if (samePublicDecisionIntent(previous, decision)) return previous.workBlockId;
+  }
+  return null;
+}
+
+function samePublicDecisionIntent(
+  left: { source: string; summary: string; rationale?: string; nextStep?: string },
+  right: { source: string; summary: string; rationale?: string; nextStep?: string },
+): boolean {
+  return left.source === right.source &&
+    normalizedDecisionText(left.summary) === normalizedDecisionText(right.summary) &&
+    normalizedDecisionText(left.rationale) === normalizedDecisionText(right.rationale) &&
+    normalizedDecisionText(left.nextStep) === normalizedDecisionText(right.nextStep);
+}
+
+function normalizedDecisionText(value?: string): string {
+  return (value ?? "").replace(/\s+/gu, " ").trim();
 }
 
 async function maybeEmitRuntimeProgress(

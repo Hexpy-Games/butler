@@ -104,9 +104,10 @@ test("search citation guard keeps sources compact", () => {
   expect(text.length).toBeLessThanOrEqual(260);
 });
 
-test("runtime omits leaked pre-dispatch internals and keeps model heartbeat", async () => {
+test("runtime omits leaked pre-dispatch internals and keeps first progress note", async () => {
   const deliveries: string[] = [];
   const progressActions: Array<Record<string, unknown>> = [];
+  const turnEvents: Array<Record<string, unknown>> = [];
   const runtime = new NativeToolLoopRuntime({
     messageLanguage: "ko",
     disableAutomaticRecall: true,
@@ -160,6 +161,9 @@ test("runtime omits leaked pre-dispatch internals and keeps model heartbeat", as
         timestamp: new Date().toISOString(),
       },
     },
+    emitTurnEvent: (event) => {
+      turnEvents.push(event as Record<string, unknown>);
+    },
     emitIntermediateDelivery: async (action) => {
       if (action.metadata?.kind === "tool_progress") {
         progressActions.push(action.metadata);
@@ -171,10 +175,18 @@ test("runtime omits leaked pre-dispatch internals and keeps model heartbeat", as
 
   expect(deliveries).toHaveLength(0);
   expect(progressActions.filter((action) => action.activityKind !== "model")).toHaveLength(0);
-  expect(
-    progressActions.filter((action) => action.activityKind === "model"),
-  ).toHaveLength(1);
-  expect(JSON.stringify(progressActions)).not.toContain("task-hidden-from-user");
+  expect(progressActions.filter((action) => action.activityKind === "model")).toHaveLength(0);
+  expect(turnEvents).toContainEqual(
+    expect.objectContaining({
+      kind: "turn.first_progress",
+      payload: expect.objectContaining({
+        note: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+      }),
+    }),
+  );
+  expect(JSON.stringify([...progressActions, ...turnEvents])).not.toContain(
+    "task-hidden-from-user",
+  );
   expect(result.text).toBe("시작했습니다. 완료되면 결과만 정리하겠습니다.");
   expectNoInternalLeak(result.text);
 });

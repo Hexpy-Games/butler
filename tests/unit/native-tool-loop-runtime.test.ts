@@ -836,6 +836,7 @@ test("native runtime emits immediate preparation progress without auxiliary orie
     message?: { text?: string };
     metadata?: Record<string, unknown>;
   }> = [];
+  const turnEvents: Array<Record<string, unknown>> = [];
   let resolvePreparation: (() => void) | undefined;
   const preparationSeen = new Promise<void>((resolve) => {
     resolvePreparation = resolve;
@@ -881,25 +882,32 @@ test("native runtime emits immediate preparation progress without auxiliary orie
       },
     },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      turnEvents.push(event as Record<string, unknown>);
+      if (event.kind === "turn.first_progress") {
+        resolvePreparation?.();
+      }
+    },
     emitIntermediateDelivery: async (action) => {
       const projected = action as {
         message?: { text?: string };
         metadata?: Record<string, unknown>;
       };
       intermediate.push(projected);
-      if (projected.metadata?.kind === "tool_progress") {
-        resolvePreparation?.();
-      }
     },
   });
 
   expect(result.text).toBe("최신 근거 확인을 마쳤습니다.");
-  expect(intermediate[0]?.metadata).toMatchObject({
-    kind: "tool_progress",
-    activityKind: "model",
-    toolName: "모델 준비",
+  expect(turnEvents[0]).toMatchObject({
+    kind: "turn.first_progress",
+    payload: {
+      note: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+      workBlockLabel: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+    },
   });
-  expect(intermediate[0]?.metadata?.safeLabel).toContain("요청 확인:");
+  expect(
+    intermediate.some((action) => action.metadata?.kind === "tool_progress"),
+  ).toBe(false);
   expect(
     intermediate.some((action) => action.metadata?.phase === "model_orientation"),
   ).toBe(false);
@@ -1286,15 +1294,15 @@ test("native runtime emits completion evidence only from real capability receipt
     });
 });
 
-test("native runtime emits dynamic preparation progress before the first model response", async () => {
+test("native runtime emits first progress note before the first model response", async () => {
   const progressActions: Array<Record<string, any>> = [];
   const turnEvents: Array<Record<string, any>> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
     runFunctionToolPromptText: async () => {
-      const preparationProgress = progressActions.find((action) =>
-        action.kind === "tool_progress" && action.activityKind === "model",
+      const preparationProgress = turnEvents.find((event) =>
+        event.kind === "turn.first_progress",
       );
       expect(preparationProgress).toBeTruthy();
       return "확인했습니다.";
@@ -1338,18 +1346,16 @@ test("native runtime emits dynamic preparation progress before the first model r
   });
 
   expect(result.text).toBe("확인했습니다.");
-  const preparationProgress = progressActions.find((action) =>
-    action.kind === "tool_progress" && action.activityKind === "model",
+  const preparationProgress = turnEvents.find((event) =>
+    event.kind === "turn.first_progress",
   );
-  expect(preparationProgress?.safeLabel).toContain("요청 확인:");
-  expect(preparationProgress?.safeLabel).toContain("내 비밀 경로");
-  expect(preparationProgress?.safeLabel).not.toContain("/Users/example/private");
-  expect(preparationProgress?.inputLabel).toBe("");
-  expect(preparationProgress?.detailRows).toEqual([]);
-  expect(preparationProgress?.safeLabel).not.toBe("Working");
-  expect(preparationProgress?.safeLabel).not.toBe("Thinking");
-  expect(preparationProgress?.safeLabel).not.toBe("응답 준비 중");
-  const serialized = JSON.stringify(progressActions);
+  expect(preparationProgress?.payload).toMatchObject({
+    note: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+    source: "runtime-derived",
+    workBlockLabel: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+  });
+  expect(progressActions).toEqual([]);
+  const serialized = JSON.stringify(preparationProgress);
   expect(serialized).not.toContain("gpt-5.5");
   expect(serialized).not.toContain("도구 루프");
   expect(serialized).not.toContain("tool loop");
