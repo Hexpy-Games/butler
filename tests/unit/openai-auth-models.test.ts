@@ -510,7 +510,7 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
 test("registered OpenCode Go chat-completions models use the hosted OpenAI-compatible endpoint", async () => {
   registerHostedModelConfig({
     providerId: "opencode-go",
-    modelId: "kimi-k2.7-code",
+    modelId: "glm-5.2",
     authType: "api_key",
     apiKey: "opencode-go-secret",
   }, tempDir);
@@ -523,18 +523,18 @@ test("registered OpenCode Go chat-completions models use the hosted OpenAI-compa
     seenAuthorization = String(new Headers(init?.headers).get("authorization"));
     seenBody = JSON.parse(String(init?.body || "{}"));
     return new Response(JSON.stringify({
-      choices: [{ message: { role: "assistant", content: "kimi ok" } }],
+      choices: [{ message: { role: "assistant", content: "glm ok" } }],
     }), { status: 200 });
   }) as unknown as typeof fetch;
 
   await expect(runPromptText({
-    model: "opencode-go/kimi-k2.7-code",
+    model: "opencode-go/glm-5.2",
     prompt: "hi",
-  })).resolves.toBe("kimi ok");
+  })).resolves.toBe("glm ok");
 
   expect(seenUrl).toBe("https://opencode.ai/zen/go/v1/chat/completions");
   expect(seenAuthorization).toBe("Bearer opencode-go-secret");
-  expect(seenBody.model).toBe("kimi-k2.7-code");
+  expect(seenBody.model).toBe("glm-5.2");
   expect(seenBody.messages).toContainEqual({ role: "user", content: "hi" });
 });
 
