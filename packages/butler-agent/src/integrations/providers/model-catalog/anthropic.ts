@@ -1,0 +1,51 @@
+import type { ProviderModelMetadata } from "../model-catalog.ts";
+
+export const ANTHROPIC_SOURCE = "https://docs.anthropic.com/en/docs/about-claude/models/all-models";
+
+export const ANTHROPIC_MODELS: readonly ProviderModelMetadata[] = [
+  {
+    provider_id: "anthropic",
+    provider_label: "Anthropic",
+    model_id: "claude-opus-4-7",
+    model_ref: "anthropic/claude-opus-4-7",
+    display_name: "Claude Opus 4.7",
+    status: "latest",
+    context_window_tokens: 1_000_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "high",
+    reasoning_efforts: ["none", "low", "medium", "high", "xhigh"],
+    token_estimator: "anthropic_count_tokens_api",
+    source_url: ANTHROPIC_SOURCE,
+    runtime_supported: true,
+  },
+  {
+    provider_id: "anthropic",
+    provider_label: "Anthropic",
+    model_id: "claude-sonnet-4-6",
+    model_ref: "anthropic/claude-sonnet-4-6",
+    display_name: "Claude Sonnet 4.6",
+    status: "recommended",
+    context_window_tokens: 1_000_000,
+    max_output_tokens: 64_000,
+    default_reasoning_effort: "medium",
+    reasoning_efforts: ["none", "low", "medium", "high"],
+    token_estimator: "anthropic_count_tokens_api",
+    source_url: ANTHROPIC_SOURCE,
+    runtime_supported: true,
+  },
+  {
+    provider_id: "anthropic",
+    provider_label: "Anthropic",
+    model_id: "claude-haiku-4-5",
+    model_ref: "anthropic/claude-haiku-4-5",
+    display_name: "Claude Haiku 4.5",
+    status: "available",
+    context_window_tokens: 200_000,
+    max_output_tokens: 64_000,
+    default_reasoning_effort: "low",
+    reasoning_efforts: ["none", "low", "medium"],
+    token_estimator: "anthropic_count_tokens_api",
+    source_url: ANTHROPIC_SOURCE,
+    runtime_supported: true,
+  },
+];
