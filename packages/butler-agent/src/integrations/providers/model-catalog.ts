@@ -1,6 +1,6 @@
 import { getEncoding, type Tiktoken } from "js-tiktoken";
 import { readLocalModelConfigs, type LocalModelApiType, type LocalModelConfig, type LocalModelPlatform, type LocalModelSource } from "./local-models.ts";
-import { parseModelRef } from "./model-ref.ts";
+import { parseModelRef, type ParsedModelRef } from "./model-ref.ts";
 
 export type ModelProviderId =
   | "openai"
@@ -10,9 +10,11 @@ export type ModelProviderId =
   | "qwen"
   | "kimi"
   | "zai"
+  | "opencode-go"
   | "local";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 export type ProviderAuthMethod = "api_key" | "codex_oauth";
+export type HostedProviderApiShape = "openai_chat_completions" | "anthropic_messages";
 export type TokenEstimatorKind =
   | "provider_usage"
   | "openai_tiktoken_o200k"
@@ -36,6 +38,7 @@ export interface ProviderModelMetadata {
   token_estimator: TokenEstimatorKind;
   source_url: string;
   runtime_supported: boolean;
+  hosted_api_shape?: HostedProviderApiShape;
   api_base_url?: string;
   api_type?: LocalModelApiType;
   platform?: LocalModelPlatform;
@@ -104,6 +107,38 @@ const XAI_SOURCE = "https://docs.x.ai/developers/models";
 const QWEN_SOURCE = "https://docs.qwencloud.com/developer-guides/getting-started/text-generation-models";
 const KIMI_SOURCE = "https://platform.kimi.ai/docs/models";
 const ZAI_SOURCE = "https://docs.z.ai/guides/overview/quick-start";
+const OPENCODE_GO_SOURCE = "https://opencode.ai/docs/go/";
+const OPENCODE_GO_PROVIDER_LABEL = "OpenCode Go";
+const OPENCODE_GO_DEFAULT_CONTEXT_WINDOW = 200_000;
+const OPENCODE_GO_DEFAULT_MAX_OUTPUT = 64_000;
+
+function openCodeGoModel(input: {
+  modelId: string;
+  displayName: string;
+  status?: ProviderModelMetadata["status"];
+  contextWindowTokens?: number;
+  maxOutputTokens?: number;
+  defaultReasoningEffort?: ReasoningEffort;
+  reasoningEfforts?: ReasoningEffort[];
+  apiShape: HostedProviderApiShape;
+}): ProviderModelMetadata {
+  return {
+    provider_id: "opencode-go",
+    provider_label: OPENCODE_GO_PROVIDER_LABEL,
+    model_id: input.modelId,
+    model_ref: `opencode-go/${input.modelId}`,
+    display_name: input.displayName,
+    status: input.status ?? "available",
+    context_window_tokens: input.contextWindowTokens ?? OPENCODE_GO_DEFAULT_CONTEXT_WINDOW,
+    max_output_tokens: input.maxOutputTokens ?? OPENCODE_GO_DEFAULT_MAX_OUTPUT,
+    default_reasoning_effort: input.defaultReasoningEffort ?? "medium",
+    reasoning_efforts: input.reasoningEfforts ?? ["none", "low", "medium", "high"],
+    token_estimator: "character_estimate",
+    source_url: OPENCODE_GO_SOURCE,
+    runtime_supported: true,
+    hosted_api_shape: input.apiShape,
+  };
+}
 
 export const DEFAULT_MODEL_REF = "openai/gpt-5.5" as const;
 export const DEFAULT_REASONING_EFFORT: ReasoningEffort = "xhigh";
@@ -412,6 +447,99 @@ const MODELS: ProviderModelMetadata[] = [
     source_url: ZAI_SOURCE,
     runtime_supported: true,
   },
+  openCodeGoModel({
+    modelId: "glm-5.2",
+    displayName: "GLM-5.2",
+    status: "latest",
+    contextWindowTokens: 1_000_000,
+    maxOutputTokens: 128_000,
+    defaultReasoningEffort: "high",
+    reasoningEfforts: ["none", "low", "medium", "high", "xhigh"],
+    apiShape: "openai_chat_completions",
+  }),
+  openCodeGoModel({
+    modelId: "glm-5.1",
+    displayName: "GLM-5.1",
+    status: "recommended",
+    defaultReasoningEffort: "high",
+    apiShape: "openai_chat_completions",
+  }),
+  openCodeGoModel({
+    modelId: "kimi-k2.7-code",
+    displayName: "Kimi K2.7 Code",
+    status: "recommended",
+    contextWindowTokens: 256_000,
+    maxOutputTokens: 96_000,
+    defaultReasoningEffort: "high",
+    reasoningEfforts: ["none", "high"],
+    apiShape: "openai_chat_completions",
+  }),
+  openCodeGoModel({
+    modelId: "kimi-k2.6",
+    displayName: "Kimi K2.6",
+    contextWindowTokens: 256_000,
+    maxOutputTokens: 96_000,
+    defaultReasoningEffort: "high",
+    reasoningEfforts: ["none", "high"],
+    apiShape: "openai_chat_completions",
+  }),
+  openCodeGoModel({
+    modelId: "deepseek-v4-pro",
+    displayName: "DeepSeek V4 Pro",
+    apiShape: "openai_chat_completions",
+  }),
+  openCodeGoModel({
+    modelId: "deepseek-v4-flash",
+    displayName: "DeepSeek V4 Flash",
+    apiShape: "openai_chat_completions",
+  }),
+  openCodeGoModel({
+    modelId: "mimo-v2.5",
+    displayName: "MiMo-V2.5",
+    apiShape: "openai_chat_completions",
+  }),
+  openCodeGoModel({
+    modelId: "mimo-v2.5-pro",
+    displayName: "MiMo-V2.5-Pro",
+    apiShape: "openai_chat_completions",
+  }),
+  openCodeGoModel({
+    modelId: "minimax-m3",
+    displayName: "MiniMax M3",
+    apiShape: "anthropic_messages",
+  }),
+  openCodeGoModel({
+    modelId: "minimax-m2.7",
+    displayName: "MiniMax M2.7",
+    apiShape: "anthropic_messages",
+  }),
+  openCodeGoModel({
+    modelId: "minimax-m2.5",
+    displayName: "MiniMax M2.5",
+    apiShape: "anthropic_messages",
+  }),
+  openCodeGoModel({
+    modelId: "qwen3.7-max",
+    displayName: "Qwen3.7 Max",
+    contextWindowTokens: 1_048_576,
+    defaultReasoningEffort: "high",
+    reasoningEfforts: ["none", "low", "medium", "high", "xhigh"],
+    apiShape: "anthropic_messages",
+  }),
+  openCodeGoModel({
+    modelId: "qwen3.7-plus",
+    displayName: "Qwen3.7 Plus",
+    contextWindowTokens: 1_048_576,
+    defaultReasoningEffort: "medium",
+    apiShape: "anthropic_messages",
+  }),
+  openCodeGoModel({
+    modelId: "qwen3.6-plus",
+    displayName: "Qwen3.6 Plus",
+    contextWindowTokens: 1_048_576,
+    defaultReasoningEffort: "medium",
+    apiShape: "anthropic_messages",
+  }),
 ];
 
 let openAIEncoding: Tiktoken | null = null;
@@ -487,6 +615,7 @@ export function defaultHostedProviderApiBaseUrl(
   if (providerId === "qwen") return "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
   if (providerId === "kimi") return "https://api.moonshot.ai/v1";
   if (providerId === "zai") return "https://api.z.ai/api/paas/v4";
+  if (providerId === "opencode-go") return "https://opencode.ai/zen/go/v1";
   return undefined;
 }
 
@@ -507,6 +636,17 @@ function lookupModelMetadata(extraModels: ProviderModelMetadata[] = []): Provide
     });
   }
   return [...byRef.values()];
+}
+
+function matchesParsedModelRef(
+  model: Pick<ProviderModelMetadata, "model_ref" | "provider_id" | "model_id">,
+  parsed: ParsedModelRef,
+): boolean {
+  if (model.model_ref === parsed.canonicalRef) return true;
+  if (parsed.source === "namespaced") {
+    return model.provider_id === parsed.providerId && model.model_id === parsed.modelId;
+  }
+  return model.model_id === parsed.modelId;
 }
 
 export function defaultWorkerModelRules(): WorkerModelRule[] {
@@ -659,9 +799,7 @@ export function resolveRegisteredRuntimeModelMetadata(
   const selectable = registeredModels.filter((model) => model.runtime_supported);
   if (selectable.length === 0) return resolveRuntimeModelMetadata(modelRef);
   const parsed = parseModelRef(modelRef?.trim() || selectable[0]!.model_ref);
-  const exact = selectable.find((model) =>
-    model.model_ref === parsed.canonicalRef || model.model_id === parsed.modelId,
-  );
+  const exact = selectable.find((model) => matchesParsedModelRef(model, parsed));
   const fallback = exact ??
     selectable.find((model) => model.provider_id === parsed.providerId) ??
     selectable[0]!;
@@ -674,7 +812,7 @@ export function resolveModelMetadata(
 ): ProviderModelMetadata {
   const parsed = parseModelRef(modelRef?.trim() || DEFAULT_MODEL_REF);
   const models = lookupModelMetadata(extraModels);
-  const exact = models.find((model) => model.model_ref === parsed.canonicalRef || model.model_id === parsed.modelId);
+  const exact = models.find((model) => matchesParsedModelRef(model, parsed));
   if (exact) return { ...exact, reasoning_efforts: [...exact.reasoning_efforts] };
   const providerDefault = models.find((model) => model.provider_id === parsed.providerId && model.status === "latest");
   if (providerDefault) return { ...providerDefault, reasoning_efforts: [...providerDefault.reasoning_efforts] };
@@ -688,7 +826,7 @@ export function resolveRuntimeModelMetadata(
   const parsed = parseModelRef(modelRef?.trim() || DEFAULT_MODEL_REF);
   const models = lookupModelMetadata(extraModels);
   const exact = models.find((model) =>
-    model.runtime_supported && (model.model_ref === parsed.canonicalRef || model.model_id === parsed.modelId),
+    model.runtime_supported && matchesParsedModelRef(model, parsed),
   );
   if (exact) return { ...exact, reasoning_efforts: [...exact.reasoning_efforts] };
   const providerDefault = models.find((model) =>

@@ -84,6 +84,7 @@ beforeEach(() => {
   delete process.env.BUTLER_ANTHROPIC_BASE_URL;
   delete process.env.BUTLER_GOOGLE_BASE_URL;
   delete process.env.BUTLER_ZAI_BASE_URL;
+  delete process.env.BUTLER_OPENCODE_GO_BASE_URL;
 });
 
 afterEach(() => {
@@ -91,6 +92,7 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
   delete process.env.BUTLER_DATA;
   delete process.env.BUTLER_RUNTIME;
+  delete process.env.BUTLER_OPENCODE_GO_BASE_URL;
 });
 
 function fakeJwt(payload: Record<string, unknown>): string {
@@ -503,6 +505,69 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
     authorization: "Bearer zai-secret",
   });
   expect(calls[2]!.body.model).toBe("glm-5.2");
+});
+
+test("registered OpenCode Go chat-completions models use the hosted OpenAI-compatible endpoint", async () => {
+  registerHostedModelConfig({
+    providerId: "opencode-go",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "opencode-go-secret",
+  }, tempDir);
+
+  let seenUrl = "";
+  let seenAuthorization = "";
+  let seenBody: Record<string, any> = {};
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    seenUrl = String(input);
+    seenAuthorization = String(new Headers(init?.headers).get("authorization"));
+    seenBody = JSON.parse(String(init?.body || "{}"));
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "glm ok" } }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runPromptText({
+    model: "opencode-go/glm-5.2",
+    prompt: "hi",
+  })).resolves.toBe("glm ok");
+
+  expect(seenUrl).toBe("https://opencode.ai/zen/go/v1/chat/completions");
+  expect(seenAuthorization).toBe("Bearer opencode-go-secret");
+  expect(seenBody.model).toBe("glm-5.2");
+  expect(seenBody.messages).toContainEqual({ role: "user", content: "hi" });
+});
+
+test("registered OpenCode Go messages models use the hosted Anthropic-compatible endpoint", async () => {
+  registerHostedModelConfig({
+    providerId: "opencode-go",
+    modelId: "minimax-m3",
+    authType: "api_key",
+    apiKey: "opencode-go-message-secret",
+  }, tempDir);
+
+  let seenUrl = "";
+  let seenApiKey = "";
+  let seenBody: Record<string, any> = {};
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    seenUrl = String(input);
+    const headers = new Headers(init?.headers);
+    seenApiKey = String(headers.get("x-api-key"));
+    seenBody = JSON.parse(String(init?.body || "{}"));
+    return new Response(JSON.stringify({
+      content: [{ type: "text", text: "minimax ok" }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runPromptText({
+    model: "opencode-go/minimax-m3",
+    prompt: "hi",
+  })).resolves.toBe("minimax ok");
+
+  expect(seenUrl).toBe("https://opencode.ai/zen/go/v1/messages");
+  expect(seenApiKey).toBe("opencode-go-message-secret");
+  expect(seenBody.model).toBe("minimax-m3");
+  expect(seenBody.messages).toContainEqual({ role: "user", content: "hi" });
 });
 
 test("model API calls retry transient backend failures without caller rework", async () => {
