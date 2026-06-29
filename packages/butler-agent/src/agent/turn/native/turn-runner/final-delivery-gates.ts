@@ -1,7 +1,6 @@
 import type { RuntimeTurnInput } from "../../../../test-support/harness/contracts.ts";
 import {
   enforceGroundedActionClaims,
-  explicitToolRequirementRepairPrompt,
   hasSuccessfulTool,
   requiredExplicitToolNames,
   shouldEnforceGrounding,
@@ -24,11 +23,8 @@ import { persistTurnContextAtom } from "../../turn-continuation-context.ts";
 import type { createDirectTurnBudget } from "../../direct-turn-budget.ts";
 import { WorkStreamStore } from "../../../work/work-stream.ts";
 import { TodoListStore } from "../../../work/todo-list.ts";
+import { safePublicText } from "../../../output/evidence/transcript-sanitizers.ts";
 import type { CompletionTerminalState } from "../../completion-review.ts";
-
-const EXPLICIT_TOOL_REPAIR_ATTEMPTS = 2;
-const EXPLICIT_TOOL_REPAIR_BASE_ROUNDS = 2;
-const EXPLICIT_TOOL_REPAIR_MAX_ROUNDS = 4;
 
 export const KERNEL_COMPLETION_GAP_CONTINUATION_CODE = "completion_gap_continuation";
 
@@ -60,10 +56,10 @@ export async function produceFinalDeliveryOutcome(input: {
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
   toolSurfaceController: ToolSurfacePromptController;
-  runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
 }): Promise<FinalDeliveryOutcome> {
-  const textAfterExplicitTools = await repairExplicitToolRequirements(input);
-  const groundedText = applyGroundingIfNeeded(input, textAfterExplicitTools);
+  const explicitToolGap = explicitToolRequirementGap(input);
+  if (explicitToolGap) return explicitToolGap;
+  const groundedText = applyGroundingIfNeeded(input, input.initialText);
   const reviewResult = await runGoalCompletionReviews({ ...input, initialText: groundedText });
   if (reviewResult.outcome.status === "gap") {
     return {
@@ -121,41 +117,41 @@ function applyGroundingIfNeeded(
   });
 }
 
-async function repairExplicitToolRequirements(input: {
+function explicitToolRequirementGap(input: {
   turnInput: RuntimeTurnInput;
   session: NativeStoredSessionConfig;
   useTools: boolean;
-  prompt: string;
-  initialText: string;
   audit: ToolAuditEntry[];
   toolSurfaceController: ToolSurfacePromptController;
-  runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
-}): Promise<string> {
-  let text = input.initialText;
+}): FinalDeliveryOutcome | null {
   if (!input.useTools) {
-    return text;
+    return null;
   }
   const explicitTools = requiredExplicitToolNames(
     [input.session.init.metadata, input.turnInput.metadata],
     input.toolSurfaceController.initialToolNames(),
   );
-  for (let repairAttempt = 0; repairAttempt < EXPLICIT_TOOL_REPAIR_ATTEMPTS; repairAttempt += 1) {
-    const missingExplicitTools = explicitTools.filter((toolName) =>
-      !hasSuccessfulTool(input.audit, [toolName]));
-    if (missingExplicitTools.length === 0) {
-      break;
-    }
-    const repairMaxToolRounds = Math.min(
-      EXPLICIT_TOOL_REPAIR_MAX_ROUNDS,
-      missingExplicitTools.length + EXPLICIT_TOOL_REPAIR_BASE_ROUNDS,
-    );
-    text = await input.runToolPrompt(explicitToolRequirementRepairPrompt({
-      prompt: input.prompt,
-      previousAnswer: text,
-      missingTools: missingExplicitTools,
-    }), repairMaxToolRounds, "explicit_tool_repair");
+  const missingExplicitTools = explicitTools.filter((toolName) =>
+    !hasSuccessfulTool(input.audit, [toolName]));
+  if (missingExplicitTools.length === 0) {
+    return null;
   }
-  return text;
+  return {
+    kind: "completion_gap",
+    observation: {
+      kind: "missing_required_tool",
+      summary: `Missing required tool execution: ${missingExplicitTools.join(", ")}`,
+      modelVisibleContent: [
+        "The current turn has not executed all explicitly required native tools.",
+        "Continue the same logical turn by selecting the missing required tool(s) through the normal tool path.",
+        "Do not deliver final text until these tool observations exist.",
+        "Missing required tools:",
+        ...missingExplicitTools.map((toolName) => `- ${toolName}`),
+      ].join("\n"),
+      refs: missingExplicitTools.map((toolName) => ({ kind: "tool", id: toolName })),
+    },
+    evidenceRefs: [],
+  };
 }
 
 async function runGoalCompletionReviews(input: {
@@ -168,7 +164,6 @@ async function runGoalCompletionReviews(input: {
   initialText: string;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
-  runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
 }): Promise<{ outcome: ReturnType<typeof evaluateCompletionReviewOutcome>; reviewedText: string }> {
   const shouldReview = shouldRunCompletionReview(input);
   if (!shouldReview) {
@@ -281,12 +276,18 @@ function capabilityEvidenceKind(obligation: string): string {
 function observationsFromAudit(audit: ToolAuditEntry[]) {
   return audit
     .filter((entry) => !entry.ok)
-    .map((entry) => ({
-      kind: "tool_result" as const,
-      summary: entry.error ? `${entry.name}: ${entry.error}` : `${entry.name} failed.`,
-      modelVisibleContent: entry.error ? `${entry.name}: ${entry.error}` : `${entry.name} failed.`,
-      visibility: "model" as const,
-    }));
+    .map((entry) => {
+      const safeError = entry.error
+        ? safePublicText(entry.error, "Tool execution failed with redacted private details.")
+        : null;
+      const message = safeError ? `${entry.name}: ${safeError}` : `${entry.name} failed.`;
+      return {
+        kind: "tool_result" as const,
+        summary: message,
+        modelVisibleContent: message,
+        visibility: "model" as const,
+      };
+    });
 }
 
 function currentWorkStreamsTerminalState(input: {

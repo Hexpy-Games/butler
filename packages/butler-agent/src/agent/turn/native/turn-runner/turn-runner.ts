@@ -146,7 +146,6 @@ export async function runNativeToolTurn({
         audit,
         publicDecisionContext,
         toolSurfaceController: context.toolSurfaceController,
-        runToolPrompt: runKernelToolPrompt,
         turnId,
         turnBudget: context.turnBudget,
       });
@@ -438,7 +437,7 @@ function completionGapContinuationPrompt(input: {
   modelVisibleContent: string;
 }): string {
   return [
-    "Completion review produced a model-visible observation for this same logical turn.",
+    "The Turn Kernel recorded a model-visible observation for this same logical turn.",
     "Do not deliver final text yet. Continue the current work from the observation.",
     `Observation: ${input.observationSummary}`,
     input.modelVisibleContent,
