@@ -6,7 +6,7 @@ import { parseEvidenceCapabilityReceipt } from "../output/evidence/parser.ts";
 import { normalizeEvidenceCapabilityReceipts } from "../output/evidence/ledger-state.ts";
 import type { PublicWorkObligationKind } from "./native/output/tool-types.ts";
 
-export type CompletionReviewStatus = "complete" | "gap" | "waiting_user" | "failed";
+export type CompletionReviewStatus = "complete" | "gap";
 
 export type CompletionReviewObservationVisibility = "model" | "public" | "operator";
 
@@ -52,13 +52,7 @@ export interface CompletionReviewInput {
     visibility?: CompletionReviewObservationVisibility;
     publicSummary?: string;
   }>;
-  workStreamTerminal?: boolean;
-  todoTerminal?: boolean;
-  workStreamTerminalState?: CompletionTerminalState;
-  todoTerminalState?: CompletionTerminalState;
 }
-
-export type CompletionTerminalState = "none" | "completed" | "cancelled" | "failed" | "waiting_user";
 
 export interface CompletionReviewComplete {
   status: "complete";
@@ -71,23 +65,9 @@ export interface CompletionReviewGap {
   evidenceRefs: string[];
 }
 
-export interface CompletionReviewWaitingUser {
-  status: "waiting_user";
-  question: string;
-  evidenceRefs: string[];
-}
-
-export interface CompletionReviewFailed {
-  status: "failed";
-  publicSummary: string;
-  evidenceRefs: string[];
-}
-
 export type CompletionReviewOutcome =
   | CompletionReviewComplete
-  | CompletionReviewGap
-  | CompletionReviewWaitingUser
-  | CompletionReviewFailed;
+  | CompletionReviewGap;
 
 const DEFAULT_PUBLIC_SUMMARY = "Missing completion evidence.";
 const TEXT_TRUNCATE = 180;
@@ -112,19 +92,18 @@ export function evaluateCompletionReviewOutcome(input: CompletionReviewInput): C
     evidenceReceipts = [],
     requiredObligations = [],
     observations = [],
-    workStreamTerminal = false,
-    todoTerminal = false,
-    workStreamTerminalState = legacyTerminalState(workStreamTerminal),
-    todoTerminalState = legacyTerminalState(todoTerminal),
   } = input;
 
   const request = trimSafeText(requestText);
   const candidate = trimSafeText(candidateText);
 
   if (!request) {
-    return buildFailedOutcome({
-      publicSummary: "Could not evaluate completion without request text.",
+    return buildGapOutcome({
+      requestText: "",
+      candidateText: candidate,
+      summary: "Could not evaluate completion without request text.",
       evidenceRefs: collectEvidenceRefsFromUnknownReceipts(evidenceReceipts),
+      observations,
     });
   }
 
@@ -136,17 +115,17 @@ export function evaluateCompletionReviewOutcome(input: CompletionReviewInput): C
     };
   }
 
-  const hasBlockingObservation = hasBlockingObservationKind(observations);
   const requiredSet = new Set(required);
   const {
     claimsByObligation,
     hasExplicitBlocker,
     explicitBlockerEvidenceRefs,
+    latestExplicitBlockerCreatedAt,
   } = collectReceiptClaims(evidenceReceipts, requiredSet);
   const contradictionObligations = new Set<PublicWorkObligationKind>();
   const missing = new Set<PublicWorkObligationKind>(required);
+  const latestSatisfiedCreatedAtByObligation = new Map<PublicWorkObligationKind, number>();
   const observationEvidenceRefs = collectObservationRefIds(observations);
-  let explicitBlocker = false;
   const latestEvidenceRefs = new Set<string>(observationEvidenceRefs);
   for (const ref of explicitBlockerEvidenceRefs) latestEvidenceRefs.add(ref);
 
@@ -161,9 +140,12 @@ export function evaluateCompletionReviewOutcome(input: CompletionReviewInput): C
     const hasSatisfied = claims.some((claim) => claim.status === "satisfied");
     const hasFailed = claims.some((claim) => claim.status === "failed");
     const latest = latestClaim(claims);
-    if (latest?.isExplicitBlocker) explicitBlocker = true;
     if (hasSatisfied) {
       missing.delete(obligation);
+      const latestSatisfied = latestClaim(claims.filter((claim) => claim.status === "satisfied"));
+      if (latestSatisfied) {
+        latestSatisfiedCreatedAtByObligation.set(obligation, latestSatisfied.createdAt);
+      }
     }
     if (hasSatisfied && hasFailed) {
       contradictionObligations.add(obligation);
@@ -177,14 +159,24 @@ export function evaluateCompletionReviewOutcome(input: CompletionReviewInput): C
   }
 
   const evidenceRefs = [...latestEvidenceRefs];
+  const activeExplicitBlocker = hasActiveExplicitBlocker({
+    required,
+    hasExplicitBlocker,
+    latestExplicitBlockerCreatedAt,
+    latestSatisfiedCreatedAtByObligation,
+  });
   if (!missing.size) {
+    if (activeExplicitBlocker) {
+      return buildGapOutcome({
+        requestText: request,
+        candidateText: candidate,
+        summary: "Completion is blocked by explicit blocker evidence.",
+        evidenceRefs,
+        observations,
+      });
+    }
     if (contradictionObligations.size > 0) {
       return buildGapOutcome({
-        status: decideNonCompleteStatus({
-          terminalStates: [workStreamTerminalState, todoTerminalState],
-          blockingObservation: hasBlockingObservation,
-          explicitBlocker: false,
-        }),
         requestText: request,
         candidateText: candidate,
         summary: buildContradictionSummary([...contradictionObligations]),
@@ -199,14 +191,11 @@ export function evaluateCompletionReviewOutcome(input: CompletionReviewInput): C
   }
 
   return buildGapOutcome({
-    status: decideNonCompleteStatus({
-      terminalStates: [workStreamTerminalState, todoTerminalState],
-      blockingObservation: hasBlockingObservation,
-      explicitBlocker: explicitBlocker || hasExplicitBlocker,
-    }),
     requestText: request,
     candidateText: candidate,
-    summary: buildMissingSummary([...missing]),
+    summary: activeExplicitBlocker
+      ? buildExplicitBlockerSummary([...missing])
+      : buildMissingSummary([...missing]),
     evidenceRefs,
     observations,
   });
@@ -215,7 +204,6 @@ export function evaluateCompletionReviewOutcome(input: CompletionReviewInput): C
 interface ParsedClaim {
   evidenceRefs: string[];
   status: "satisfied" | "failed";
-  isExplicitBlocker: boolean;
   obligation: PublicWorkObligationKind;
   createdAt: number;
 }
@@ -234,6 +222,7 @@ interface ReceiptClaimBundle {
   claimsByObligation: Map<PublicWorkObligationKind, ParsedClaim[]>;
   hasExplicitBlocker: boolean;
   explicitBlockerEvidenceRefs: string[];
+  latestExplicitBlockerCreatedAt: number | null;
 }
 
 function collectReceiptClaims(
@@ -243,12 +232,17 @@ function collectReceiptClaims(
   const result = new Map<PublicWorkObligationKind, ParsedClaim[]>();
   let hasExplicitBlocker = false;
   const explicitBlockerEvidenceRefs = new Set<string>();
+  let latestExplicitBlockerCreatedAt: number | null = null;
   for (const raw of receipts) {
     const parsed = parseEvidenceCapabilityReceipt(raw);
     if (parsed.ok) {
       const receipt = parsed.receipt;
       if (isExplicitBlockerReceipt(receipt)) {
         hasExplicitBlocker = true;
+        const createdAt = parseCreatedAt(receipt.created_at);
+        latestExplicitBlockerCreatedAt = latestExplicitBlockerCreatedAt === null
+          ? createdAt
+          : Math.max(latestExplicitBlockerCreatedAt, createdAt);
         for (const ref of buildEvidenceRefs(receipt.receipt_id, receipt.references)) {
           explicitBlockerEvidenceRefs.add(ref);
         }
@@ -262,7 +256,21 @@ function collectReceiptClaims(
     claimsByObligation: result,
     hasExplicitBlocker,
     explicitBlockerEvidenceRefs: [...explicitBlockerEvidenceRefs],
+    latestExplicitBlockerCreatedAt,
   };
+}
+
+function hasActiveExplicitBlocker(input: {
+  required: PublicWorkObligationKind[];
+  hasExplicitBlocker: boolean;
+  latestExplicitBlockerCreatedAt: number | null;
+  latestSatisfiedCreatedAtByObligation: Map<PublicWorkObligationKind, number>;
+}): boolean {
+  if (!input.hasExplicitBlocker || input.latestExplicitBlockerCreatedAt === null) return false;
+  return input.required.some((obligation) => {
+    const satisfiedAt = input.latestSatisfiedCreatedAtByObligation.get(obligation);
+    return satisfiedAt === undefined || satisfiedAt <= input.latestExplicitBlockerCreatedAt!;
+  });
 }
 
 function processFailedReceipt(
@@ -301,7 +309,6 @@ function processFailedReceipt(
         evidenceKind,
         createdAt,
       }),
-      isExplicitBlocker: capability === "explicit_blocker" && evidenceKind === "blocker" && verified && maturity === "verified",
       createdAt,
     };
     const list = result.get(obligation) ?? [];
@@ -378,7 +385,6 @@ function processNormalizedReceipt(
       obligation,
       evidenceRefs: buildEvidenceRefs(input.receiptId, input.references),
       status: evaluateReceiptClaimStatus(input),
-      isExplicitBlocker: isExplicitBlockerReceipt(receipt),
       createdAt: input.createdAt,
     };
     const list = result.get(obligation) ?? [];
@@ -435,7 +441,6 @@ function isEvidenceCompatible(
 }
 
 interface GapInput {
-  status: Exclude<CompletionReviewStatus, "complete">;
   requestText: string;
   candidateText: string;
   summary: string;
@@ -443,24 +448,8 @@ interface GapInput {
   observations?: CompletionReviewInput["observations"];
 }
 
-function buildGapOutcome(input: GapInput): CompletionReviewOutcome {
-  if (input.status === "failed") {
-    return {
-      status: "failed",
-      publicSummary: input.summary,
-      evidenceRefs: input.evidenceRefs,
-    };
-  }
-
+function buildGapOutcome(input: GapInput): CompletionReviewGap {
   const question = input.summary || DEFAULT_PUBLIC_SUMMARY;
-  if (input.status === "waiting_user") {
-    return {
-      status: "waiting_user",
-      question,
-      evidenceRefs: input.evidenceRefs,
-    };
-  }
-
   return {
     status: "gap",
     observation: {
@@ -479,17 +468,15 @@ function buildGapOutcome(input: GapInput): CompletionReviewOutcome {
   };
 }
 
-function buildFailedOutcome(input: { publicSummary: string; evidenceRefs: string[] }): CompletionReviewFailed {
-  return {
-    status: "failed",
-    publicSummary: input.publicSummary || DEFAULT_PUBLIC_SUMMARY,
-    evidenceRefs: input.evidenceRefs,
-  };
-}
-
 function buildMissingSummary(missing: string[]): string {
   if (missing.length === 0) return DEFAULT_PUBLIC_SUMMARY;
   return `Missing completion evidence for: ${missing.join(", ")}.`;
+}
+
+function buildExplicitBlockerSummary(missing: string[]): string {
+  const missingSummary = buildMissingSummary(missing);
+  if (missing.length === 0) return "Completion is blocked by explicit blocker evidence.";
+  return `Completion is blocked by explicit blocker evidence. ${missingSummary}`;
 }
 
 function buildContradictionSummary(obligations: PublicWorkObligationKind[]): string {
@@ -507,27 +494,6 @@ function buildGapModelText(input: {
     candidate ? `candidate: ${candidate}` : "candidate: <empty>",
     `next-step: ${input.summary}`,
   ].join("\n");
-}
-
-function hasBlockingObservationKind(observations: CompletionReviewInput["observations"] = []): boolean {
-  return observations.some((observation) =>
-    observation.kind === "public_decision_required" || observation.kind === "user_cancelled",
-  );
-}
-
-function decideNonCompleteStatus(input: {
-  terminalStates: CompletionTerminalState[];
-  blockingObservation: boolean;
-  explicitBlocker: boolean;
-}): Exclude<CompletionReviewStatus, "complete"> {
-  if (input.blockingObservation || input.explicitBlocker) return "waiting_user";
-  if (input.terminalStates.includes("failed")) return "failed";
-  if (input.terminalStates.includes("waiting_user")) return "waiting_user";
-  return "gap";
-}
-
-function legacyTerminalState(value: boolean): CompletionTerminalState {
-  return value ? "failed" : "none";
 }
 
 function collectEvidenceRefsFromUnknownReceipts(receipts: readonly unknown[]): string[] {

@@ -142,7 +142,7 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
   if (isInternalRecoveryFailure(failure)) {
     return historicalInternalRecoveryDeliveryState(failure);
   }
-  if (isRuntimeFault(failure)) {
+  if (isRuntimeFaultFailureInput(failure)) {
     return runtimeFaultDeliveryState(failure);
   }
   if (isExactOrStatusOperationalFailure(failure)) {
@@ -154,8 +154,11 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
       limitations: [safeLimitationText(failure.message, "User action is required before Butler can continue.")],
     });
   }
-  if (isLiveContinuationGap(failure)) {
-    return liveContinuationObservationState();
+  if (isLiveToolObservationGap(failure)) {
+    return liveKernelContinuationState();
+  }
+  if (isLiveKernelContinuationGap(failure)) {
+    return liveKernelContinuationState();
   }
   if (isOperationalFailure(failure)) {
     return systemFailureDeliveryState(failure);
@@ -163,7 +166,7 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
   return systemFailureDeliveryState(failure);
 }
 
-function liveContinuationObservationState(): RuntimeDeliveryClassification {
+function liveKernelContinuationState(): RuntimeDeliveryClassification {
   return classification({
     deliveryState: "running",
     terminal: false,
@@ -296,7 +299,17 @@ function isToolCallRepairFailure(failure: RuntimeDeliveryFailureInput): boolean 
   return isSharedToolCallRepairFailure(failure);
 }
 
-function isLiveContinuationGap(failure: RuntimeDeliveryFailureInput): boolean {
+export function isRuntimeFaultFailure(input: unknown): boolean {
+  return isRuntimeFaultFailureInput(normalizeFailureInput(input));
+}
+
+function isRuntimeFaultFailureInput(failure: RuntimeDeliveryFailureInput): boolean {
+  return failure.code === "runtime_fault" ||
+    failure.code === "runtime_invariant_violation" ||
+    failure.name === "RuntimeFaultError";
+}
+
+function isLiveKernelContinuationGap(failure: RuntimeDeliveryFailureInput): boolean {
   return (
     failure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
     failure.code === "goal_completion_incomplete" ||
@@ -306,21 +319,19 @@ function isLiveContinuationGap(failure: RuntimeDeliveryFailureInput): boolean {
     failure.code === "prompt_usage_model_call_budget_exhausted" ||
     failure.code === "missing_evidence" ||
     failure.code === "candidate_only_evidence" ||
+    failure.name === "GoalCompletionIncompleteError" ||
+    failure.name === "PromptUsageModelCallBudgetExhaustedError"
+  );
+}
+
+function isLiveToolObservationGap(failure: RuntimeDeliveryFailureInput): boolean {
+  return (
     failure.code === "unknown_tool" ||
     failure.code === "disabled_tool" ||
     failure.code === "missing_tool_surface" ||
     failure.code === "invalid_tool_arguments" ||
-    failure.code === "tool_arguments_validation_failed" ||
-    failure.name === "PromptUsageModelCallBudgetExhaustedError" ||
-    failure.name === "GoalCompletionIncompleteError"
+    failure.code === "tool_arguments_validation_failed"
   );
-}
-
-function isRuntimeFault(failure: RuntimeDeliveryFailureInput): boolean {
-  return failure.code === "runtime_fault" ||
-    failure.code === "runtime_invariant_violation" ||
-    /runtime (?:process )?crash|protocol invariant|storage invariant|queue claim invariant/iu
-      .test(failure.message ?? "");
 }
 
 function recoveryStateForInternalFailure(
@@ -330,13 +341,12 @@ function recoveryStateForInternalFailure(
 }
 
 function isUserActionBlocker(failure: RuntimeDeliveryFailureInput): boolean {
-  const message = failure.message ?? "";
   return (
     failure.code === "permission_denied" ||
     failure.code === "confirmation_required" ||
     failure.code === "credential_required" ||
-    /permission denied|confirmation required|credential required|captcha|login required|payment required/iu
-      .test(message)
+    failure.code === "captcha_required" ||
+    failure.code === "payment_required"
   );
 }
 

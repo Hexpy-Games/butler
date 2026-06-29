@@ -32,6 +32,8 @@ export type TurnStateContractEventKind = typeof TURN_STATE_CONTRACT_EVENT_KINDS[
 
 export const AUTHORED_DECISION_SOURCES = [
   "assistant-authored",
+  "model-authored",
+  "principal-authored",
 ] as const;
 
 export const DIAGNOSTIC_DECISION_SOURCES = [
@@ -215,9 +217,6 @@ export function createTurnOutcomePayload(input: TurnOutcomePayloadInput): Record
     completionEvidenceStatus !== "not_required"
   ) {
     throw new Error("completed turn outcome requires completion evidence refs or not_required evidence status");
-  }
-  if (outcome === "waiting_user" && !recoveryToken) {
-    throw new Error(`${outcome} turn outcome requires a recovery token`);
   }
   return {
     outcome,

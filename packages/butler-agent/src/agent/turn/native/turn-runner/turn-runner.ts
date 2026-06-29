@@ -25,7 +25,6 @@ import {
 } from "./workstream-finalizers.ts";
 import {
   emitInterruptedTurnOutcome,
-  emitCompletionReviewTerminalOutcome,
   emitSuccessfulTurnOutcome,
 } from "./turn-outcome-events.ts";
 import {
@@ -202,46 +201,6 @@ export async function runNativeToolTurn({
         }
         decisionCheckedText = deliveryOutcome.text;
         break;
-      }
-      if (deliveryOutcome.kind === "waiting_user") {
-        await emitCompletionReviewTerminalOutcome({
-          turnInput: input,
-          outcome: "waiting_user",
-          publicSummary: deliveryOutcome.question,
-          evidenceRefs: deliveryOutcome.evidenceRefs,
-          turnKernel,
-          turnId,
-          reason: "completion_review_waiting_user",
-        });
-        return {
-          text: deliveryOutcome.question,
-          runtimeSessionRef: input.handle.runtimeSessionRef,
-          artifacts: runtimeArtifactsFromAudit({
-            audit,
-            butlerData: deps.butlerData,
-            workspacePath: session.init.workspacePath,
-          }),
-        };
-      }
-      if (deliveryOutcome.kind === "failed") {
-        await emitCompletionReviewTerminalOutcome({
-          turnInput: input,
-          outcome: "failed",
-          publicSummary: deliveryOutcome.publicSummary,
-          evidenceRefs: deliveryOutcome.evidenceRefs,
-          turnKernel,
-          turnId,
-          reason: "completion_review_failed",
-        });
-        return {
-          text: deliveryOutcome.publicSummary,
-          runtimeSessionRef: input.handle.runtimeSessionRef,
-          artifacts: runtimeArtifactsFromAudit({
-            audit,
-            butlerData: deps.butlerData,
-            workspacePath: session.init.workspacePath,
-          }),
-        };
       }
       await persistCompletionGapContinuation({
         turnInput: input,

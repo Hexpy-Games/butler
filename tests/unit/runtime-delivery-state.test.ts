@@ -34,7 +34,7 @@ test("runtime delivery taxonomy maps normal and limited delivery as assistant ou
   expect(isUserFacingFailureDelivery(limited)).toBe(false);
 });
 
-test("runtime delivery taxonomy keeps repairable model and evidence gaps out of failure notices", () => {
+test("runtime delivery taxonomy keeps live completion gaps non-public without classifying tool failures as recovery", () => {
   const goalError = new Error("missing public completion obligation: source_verified");
   goalError.name = "GoalCompletionIncompleteError";
   const goalGap = classifyRuntimeFailureDelivery(goalError);
@@ -53,6 +53,7 @@ test("runtime delivery taxonomy keeps repairable model and evidence gaps out of 
   });
   expect(toolSurfaceGap).toMatchObject({
     delivery_state: "running",
+    terminal: false,
     issue_kind: "none",
     visibility: "continuation_progress",
     failure_notice: false,
@@ -201,19 +202,35 @@ test("runtime delivery taxonomy separates user blockers from system failures", (
   });
 });
 
-test("completion_review_incomplete with concrete user action waits for user", () => {
-  const completionReviewCredentialBlocker = classifyRuntimeFailureDelivery({
+test("completion_review_incomplete stays non-public and never infers user action from message text", () => {
+  const completionReviewGap = classifyRuntimeFailureDelivery({
     code: "completion_review_incomplete",
     message: "login required for the private account.",
     retryable: true,
   });
-  expect(completionReviewCredentialBlocker).toMatchObject({
+  expect(completionReviewGap).toMatchObject({
+    delivery_state: "running",
+    terminal: false,
+    issue_kind: "none",
+    visibility: "continuation_progress",
+    failure_notice: false,
+    limitation_codes: [],
+  });
+});
+
+test("typed user action blocker waits for user", () => {
+  const credentialBlocker = classifyRuntimeFailureDelivery({
+    code: "credential_required",
+    message: "A private account credential is required before Butler can continue.",
+    retryable: true,
+  });
+  expect(credentialBlocker).toMatchObject({
     delivery_state: "waiting_user",
     terminal: false,
     issue_kind: "user_action_blocker",
     visibility: "user_action_required",
     failure_notice: false,
-    safe_error_code: "completion_review_incomplete",
+    safe_error_code: "credential_required",
   });
 });
 
@@ -302,9 +319,9 @@ test("recoverable delivery remains available for historical repair diagnostics",
   expect(recovered).toMatchObject({
     text: null,
     delivery: {
-      delivery_state: "needs_evidence",
+      delivery_state: "recovering_internal",
       terminal: false,
-      issue_kind: "completion_continuation",
+      issue_kind: "runtime_continuation",
       limitation_codes: ["internal_recovery_required"],
     },
   });

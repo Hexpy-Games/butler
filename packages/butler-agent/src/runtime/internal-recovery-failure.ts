@@ -18,43 +18,35 @@ export interface InternalRecoveryFailureInput {
 export function isGoalCompletionIncompleteFailure(error: unknown): boolean {
   if (error instanceof Error && error.name === "GoalCompletionIncompleteError") return true;
   const failure = normalizeInternalRecoveryInput(error);
-  return failure.code === "goal_completion_incomplete" ||
-    isGoalCompletionIncompleteMessage(failure.message ?? "");
+  return failure.code === "goal_completion_incomplete";
 }
 
 export function isInternalRecoveryFailure(input: InternalRecoveryFailureInput | unknown): boolean {
   const failure = normalizeInternalRecoveryInput(input);
   if (!failure.historicalRecoveryState) return false;
-  const message = failure.message ?? "";
   return (
     failure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
     failure.code === "goal_completion_incomplete" ||
     failure.code === "internal_uncertainty" ||
     failure.code === "prompt_usage_model_call_budget_exhausted" ||
+    failure.code === "missing_evidence" ||
+    failure.code === "candidate_only_evidence" ||
+    failure.code === "completion_gap" ||
+    failure.code === "completion_review_incomplete" ||
     failure.name === "PromptUsageModelCallBudgetExhaustedError" ||
-    failure.name === "GoalCompletionIncompleteError" ||
-    isCompletionObligationProtocolMessage(message) ||
-    isGoalCompletionIncompleteMessage(message) ||
-    /uncertain (?:whether|if) the requested goal was completed/iu.test(message) ||
-    /internal uncertainty/iu.test(message) ||
-    /prompt usage model-call budget exhausted/iu.test(message) ||
-    /completion review .*incomplete/iu.test(message) ||
-    /missing evidence|candidate-only evidence|evidence receipt/iu.test(message)
+    failure.name === "GoalCompletionIncompleteError"
   );
 }
 
 export function isToolCallRepairFailure(input: InternalRecoveryFailureInput | unknown): boolean {
   const failure = normalizeInternalRecoveryInput(input);
   if (!failure.historicalRecoveryState) return false;
-  const message = failure.message ?? "";
   return (
     failure.code === "unknown_tool" ||
     failure.code === "disabled_tool" ||
     failure.code === "missing_tool_surface" ||
     failure.code === "invalid_tool_arguments" ||
-    failure.code === "tool_arguments_validation_failed" ||
-    /unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message) ||
-    /invalid tool arguments|tool arguments failed validation/iu.test(message)
+    failure.code === "tool_arguments_validation_failed"
   );
 }
 
@@ -62,14 +54,14 @@ export function internalRecoveryStateForFailure(
   input: InternalRecoveryFailureInput | unknown,
 ): InternalRecoveryState {
   const failure = normalizeInternalRecoveryInput(input);
-  const message = failure.message ?? "";
   if (
     failure.code === "goal_completion_incomplete" ||
+    failure.code === "missing_evidence" ||
+    failure.code === "candidate_only_evidence" ||
+    failure.code === "completion_gap" ||
+    failure.code === "completion_review_incomplete" ||
     failure.name === "GoalCompletionIncompleteError"
   ) {
-    return "needs_evidence";
-  }
-  if (/missing evidence|candidate-only evidence|evidence receipt|completion obligation|could not verify/iu.test(message)) {
     return "needs_evidence";
   }
   return "recovering_internal";
@@ -79,13 +71,6 @@ export function toolCallRepairStateForFailure(
   input: InternalRecoveryFailureInput | unknown,
 ): ToolCallRepairState {
   const failure = normalizeInternalRecoveryInput(input);
-  const message = failure.message ?? "";
-  if (/unknown tool|disabled tool|tool .*not.*active|missing tool surface/iu.test(message)) {
-    return "needs_tool_surface";
-  }
-  if (/invalid tool arguments|tool arguments failed validation/iu.test(message)) {
-    return "needs_argument_repair";
-  }
   if (
     failure.code === "unknown_tool" ||
     failure.code === "disabled_tool" ||
@@ -109,10 +94,6 @@ export function safeInternalRecoveryMessage(
 
 export function isCompletionObligationProtocolMessage(message: string): boolean {
   return /(?:unsatisfied|missing|unresolved) public completion obligation/iu.test(message);
-}
-
-function isGoalCompletionIncompleteMessage(message: string): boolean {
-  return /goal completion|could not verify that the requested goal was completed/iu.test(message);
 }
 
 function normalizeInternalRecoveryInput(input: InternalRecoveryFailureInput | unknown): InternalRecoveryFailureInput {

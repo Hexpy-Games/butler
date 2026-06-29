@@ -79,31 +79,6 @@ export async function emitInterruptedTurnOutcome(input: {
   });
 }
 
-export async function emitCompletionReviewTerminalOutcome(input: {
-  turnInput: RuntimeTurnInput;
-  outcome: "waiting_user" | "failed";
-  publicSummary: string;
-  evidenceRefs: string[];
-  turnKernel: TurnKernelController;
-  turnId?: string;
-  reason: string;
-}): Promise<void> {
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: TURN_OUTCOME_EVENT_KIND,
-    payload: createKernelTurnOutcomePayload({
-      turnKernel: input.turnKernel,
-      to: input.outcome,
-      eventOutcome: input.outcome,
-      completionEvidenceRefs: input.evidenceRefs,
-      publicSummary: input.publicSummary,
-      reason: input.reason,
-      ...(input.outcome === "waiting_user"
-        ? { recoveryToken: `waiting-user:${input.turnId ?? input.turnInput.handle.sessionId}` }
-        : {}),
-    }),
-  });
-}
-
 export function createKernelTurnOutcomePayload(input: {
   turnKernel: TurnKernelController;
   to: TerminalTurnState;

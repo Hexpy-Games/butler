@@ -43,8 +43,6 @@ test("completion review stays pure and returns concrete gaps for candidate-only 
     requiredObligations: Object.freeze(["source_verified"] as const),
     evidenceReceipts: Object.freeze([Object.freeze(receipt)]),
     observations: Object.freeze([]),
-    workStreamTerminal: false,
-    todoTerminal: false,
   });
 
   const outcome = evaluateCompletionReviewOutcome(input);
@@ -61,7 +59,7 @@ test("completion review stays pure and returns concrete gaps for candidate-only 
   expect(input.requiredObligations).toEqual(["source_verified"]);
 });
 
-test("completion review returns waiting_user for explicit blocker receipt", () => {
+test("completion review returns gap for explicit blocker receipt", () => {
   const outcome = evaluateCompletionReviewOutcome({
     requestText: "비공개 API 상태를 점검해줘",
     candidateText: "결과를 확인 중입니다.",
@@ -82,57 +80,13 @@ test("completion review returns waiting_user for explicit blocker receipt", () =
     ],
   });
 
-  expect(outcome.status).toBe("waiting_user");
-  if (outcome.status === "waiting_user") {
-    expect(outcome.question).toContain("Missing completion evidence");
-    expect(outcome.evidenceRefs.length).toBeGreaterThan(0);
-    expect(outcome.evidenceRefs.some((ref) => ref.startsWith("receipt:"))).toBe(true);
-  }
-});
-
-test("completion review returns failed when terminal work states still miss evidence", () => {
-  const outcome = evaluateCompletionReviewOutcome({
-    requestText: "실행 결과를 확인해줘",
-    candidateText: "요약했습니다.",
-    requiredObligations: ["durable_artifact"],
-    evidenceReceipts: [],
-    workStreamTerminal: true,
-  });
-
-  expect(outcome.status).toBe("failed");
-  if (outcome.status === "failed") {
-    expect(outcome.publicSummary).toContain("Missing completion evidence");
-    expect(outcome.evidenceRefs).toEqual([]);
-  }
-});
-
-test("completion review returns gap when completed todo state still misses evidence", () => {
-  const outcome = evaluateCompletionReviewOutcome({
-    requestText: "검증 태스크까지 완료해줘",
-    candidateText: "검증 태스크를 마쳤습니다.",
-    requiredObligations: ["command_executed"],
-    evidenceReceipts: [],
-    todoTerminalState: "completed",
-  });
-
   expect(outcome.status).toBe("gap");
   if (outcome.status === "gap") {
     expect(outcome.observation.kind).toBe("completion_gap");
-    expect(outcome.observation.summary).toBe("Missing completion evidence for: command_executed.");
-    expect(outcome.observation.modelVisibleContent).toContain("next-step: Missing completion evidence for: command_executed.");
+    expect(outcome.observation.summary).toContain("Missing completion evidence");
+    expect(outcome.evidenceRefs.length).toBeGreaterThan(0);
+    expect(outcome.evidenceRefs.some((ref) => ref.startsWith("receipt:"))).toBe(true);
   }
-});
-
-test("completion review returns gap when cancelled todo state still misses evidence", () => {
-  const outcome = evaluateCompletionReviewOutcome({
-    requestText: "검증 태스크까지 완료해줘",
-    candidateText: "검증 태스크가 취소되었습니다.",
-    requiredObligations: ["command_executed"],
-    evidenceReceipts: [],
-    todoTerminalState: "cancelled",
-  });
-
-  expect(outcome.status).toBe("gap");
 });
 
 test("completion review is complete when required obligations are satisfied by typed receipts", () => {
@@ -163,7 +117,7 @@ test("completion review is complete when required obligations are satisfied by t
   }
 });
 
-test("completion review reports waiting_user when an explicit blocker appears with other satisfied receipts", () => {
+test("completion review reports gap when an explicit blocker appears with other satisfied receipts", () => {
   const outcome = evaluateCompletionReviewOutcome({
     requestText: "작업 근거를 정리해줘",
     candidateText: "요약했습니다.",
@@ -212,7 +166,52 @@ test("completion review reports waiting_user when an explicit blocker appears wi
     ],
   });
 
-  expect(outcome.status).toBe("waiting_user");
+  expect(outcome.status).toBe("gap");
+  if (outcome.status === "gap") {
+    expect(outcome.observation.summary).toContain("explicit blocker");
+  }
+});
+
+test("completion review treats later satisfying evidence as resolving an older explicit blocker", () => {
+  const evidence = createEvidenceCapabilityReceipt({
+    producer: { kind: "tool", name: "web_read" },
+    capability: "source_verified",
+    evidence_kind: "source_page",
+    verified: true,
+    maturity: "verified",
+    confidence: 1,
+    summary: "Later source evidence verified the blocked page.",
+    satisfies: ["source_verified"],
+    limitations: [],
+    references: [{ url: "https://example.test/private" }],
+    created_at: "2026-06-28T11:00:00.000Z",
+  });
+  const outcome = evaluateCompletionReviewOutcome({
+    requestText: "비공개 API 상태를 점검해줘",
+    candidateText: "검증 결과를 정리했습니다.",
+    requiredObligations: ["source_verified"],
+    evidenceReceipts: [
+      createEvidenceCapabilityReceipt({
+        producer: { kind: "runtime", name: "completion-guard" },
+        capability: "explicit_blocker",
+        evidence_kind: "blocker",
+        verified: true,
+        maturity: "verified",
+        confidence: 1,
+        summary: "로그인 필요한 블로커 상태입니다.",
+        limitations: ["로그인 상태를 확인하세요."],
+        references: [{ url: "https://example.test/private" }],
+        created_at: "2026-06-28T10:00:00.000Z",
+      }),
+      evidence,
+    ],
+  });
+
+  expect(outcome.status).toBe("complete");
+  if (outcome.status === "complete") {
+    expect(outcome.evidenceRefs).toContain(`receipt:${evidence.receipt_id}`);
+    expect(outcome.evidenceRefs).toContain("url:https://example.test/private");
+  }
 });
 
 test("completion review marks contradiction when failed evidence follows later than satisfied evidence", () => {

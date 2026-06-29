@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import type {
   InboundEnvelope,
   OutboundAction,
@@ -17,8 +18,15 @@ import {
   evidenceTranscriptToolCallArgumentsProjection,
   evidenceTranscriptToolResultProjection,
 } from "../output/evidence/transcript-result.ts";
+import {
+  safeOptionalPublicText,
+  safePublicText,
+} from "../output/evidence/transcript-sanitizers.ts";
 import type { RuntimeMessageLanguage } from "../output/messages.ts";
+import { isRuntimeFaultFailure } from "./runtime-delivery-state.ts";
+import type { ObservationKind, TurnObservation } from "./turn-kernel.ts";
 import type { ToolAuditEntry } from "./native/output/tool-types.ts";
+import { toolObservationResult } from "./native/tool-execution/tool-observations.ts";
 
 export type BridgeToolCall = Parameters<FunctionToolPromptOptions["executeTool"]>[0];
 
@@ -26,6 +34,25 @@ export type BridgedToolCallAuditContext = {
   args: Record<string, unknown>;
   invocation: Record<string, unknown>;
 };
+
+const MODEL_VISIBLE_BRIDGE_OBSERVATION_LIMIT = 2_400;
+const BRIDGE_FAILURE_FALLBACK = "Tool bridge failed with redacted private details.";
+const BRIDGE_ARGUMENT_ERROR_CODES = new Set([
+  "invalid_tool_arguments",
+  "invalid_tool_catalog_id",
+]);
+const BRIDGE_UNAVAILABLE_ERROR_CODES = new Set([
+  "disabled_tool",
+  "missing_tool_surface",
+  "plugin_invoker_unavailable",
+  "tool_not_described",
+  "tool_unavailable",
+  "unknown_tool",
+  "unknown_tool_catalog_id",
+  "unsupported_tool_affordance",
+  "forbidden_bridge_target",
+  "invalid_mcp_affordance",
+]);
 
 type BuildIntermediateAction = (input: {
   envelope: InboundEnvelope;
@@ -64,6 +91,7 @@ export function withBridgeInvocationForAudit(
 
 export function createAuditedBridgeToolExecutor(input: {
   sessionId: string;
+  turnId: string;
   audit: ToolAuditEntry[];
   turnInput: RuntimeTurnInput;
   messageLanguage: RuntimeMessageLanguage;
@@ -99,18 +127,27 @@ export function createAuditedBridgeToolExecutor(input: {
         bridgeInvocation?: Record<string, unknown>;
       };
       if (resolved.ok !== true || !resolved.targetCall) {
-        const result = resolved.result ?? resolved;
+        const result = bridgeFailureResult(resolved.result ?? resolved);
         const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, result);
+        const observation = bridgeFailureObservation({
+          turnId: input.turnId,
+          call,
+          result,
+          fallbackCode: bridgeAudit?.error?.code ?? "tool_call_bridge_resolution_failed",
+          fallbackMessage: "tool_call could not resolve a target tool.",
+        });
+        const observationResult = toolObservationResult(observation);
         input.audit.push({
           name: "tool_call",
           args: redactedBridgeToolAuditArgs("tool_call", call.args),
           ok: false,
           result: redactedBridgeToolAuditResult("tool_call", result),
           error: bridgeAudit?.error?.code ?? "tool_call_bridge_resolution_failed",
+          observation,
           bridgeAudit: bridgeAudit ?? undefined,
         });
-        await finishBridgeProgress(result, bridgeAudit, false);
-        return result;
+        await finishBridgeProgress(observationResult, bridgeAudit, false);
+        return observationResult;
       }
       const auditStartIndex = input.audit.length;
       const result = await executeWithBridge(resolved.targetCall, {
@@ -132,6 +169,12 @@ export function createAuditedBridgeToolExecutor(input: {
       await finishBridgeProgress(bridgedResult, bridgeAudit, true);
       return bridgedResult;
     } catch (error) {
+      if (isBridgeAbortFailure(error, input.turnInput.signal)) {
+        throw error;
+      }
+      if (isRuntimeFaultFailure(error)) {
+        throw error;
+      }
       const failureResult = {
         ok: false,
         error: {
@@ -140,19 +183,122 @@ export function createAuditedBridgeToolExecutor(input: {
         },
       };
       const bridgeAudit = bridgeToolAuditEvent("tool_call", call.args, failureResult);
+      const message = error instanceof Error ? error.message : String(error);
+      const observation = bridgeFailureObservation({
+        turnId: input.turnId,
+        call,
+        result: failureResult,
+        fallbackCode: bridgeAudit?.error?.code ?? "tool_call_bridge_exception",
+        fallbackMessage: message,
+      });
+      const observationResult = toolObservationResult(observation);
       input.audit.push({
         name: "tool_call",
         args: redactedBridgeToolAuditArgs("tool_call", call.args),
         ok: false,
         result: redactedBridgeToolAuditResult("tool_call", failureResult),
         error: bridgeAudit?.error?.code ?? "tool_call_bridge_exception",
+        observation,
         bridgeAudit: bridgeAudit ?? undefined,
       });
-      await finishBridgeProgress(failureResult, bridgeAudit, false);
-      throw error;
+      await finishBridgeProgress(observationResult, bridgeAudit, false);
+      return observationResult;
     }
   };
   return executeWithBridge;
+}
+
+function isBridgeAbortFailure(error: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true;
+  if (!(error instanceof Error)) return false;
+  return error.name === "AbortError";
+}
+
+function bridgeFailureObservation(input: {
+  turnId: string;
+  call: BridgeToolCall;
+  result: unknown;
+  fallbackCode: string;
+  fallbackMessage: string;
+}): TurnObservation {
+  const code = bridgeErrorCode(input.result) ?? input.fallbackCode;
+  const message = bridgeErrorMessage(input.result) ?? input.fallbackMessage;
+  const safeMessage = safePublicText(message, BRIDGE_FAILURE_FALLBACK);
+  const catalogId = safeOptionalPublicText(stringArg(input.call.args.id) ?? "");
+  const nextAction = safeOptionalPublicText(bridgeNextAction(input.result) ?? "");
+  const parts = [
+    "Tool: tool_call",
+    `Bridge error code: ${safePublicText(code, "tool_call_bridge_error")}`,
+    ...(catalogId ? [`Catalog id: ${catalogId}`] : []),
+    `Observation: ${safeMessage}`,
+    ...(nextAction ? [`Next action: ${nextAction}`] : []),
+    "Use this observation to repair the catalog id, describe the tool first, adjust arguments, choose a different enabled tool, or continue with a bounded limitation.",
+  ];
+  return {
+    observationId: `obs-${randomUUID().slice(0, 8)}`,
+    turnId: input.turnId,
+    kind: bridgeObservationKind(code),
+    visibility: "model",
+    summary: `tool_call bridge ${safePublicText(code, "tool_call_bridge_error")}: ${safeMessage}`,
+    modelVisibleContent: limitBridgeObservationContent(parts.join("\n")),
+    ...(catalogId ? { refs: [{ kind: "tool_catalog_id", id: catalogId }] } : {}),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function bridgeFailureResult(value: unknown): unknown {
+  let current = value;
+  for (let depth = 0; depth < 3; depth += 1) {
+    const record = objectRecord(current);
+    if (!record) return current;
+    if (objectRecord(record.error)) return current;
+    const nested = objectRecord(record.result);
+    if (record.ok === false && nested) {
+      current = nested;
+      continue;
+    }
+    return current;
+  }
+  return current;
+}
+
+function bridgeObservationKind(code: string): ObservationKind {
+  if (BRIDGE_ARGUMENT_ERROR_CODES.has(code)) return "tool_invalid_arguments";
+  if (BRIDGE_UNAVAILABLE_ERROR_CODES.has(code)) return "tool_unavailable";
+  return "validation_failed";
+}
+
+function bridgeErrorCode(result: unknown): string | null {
+  const error = objectRecord(objectRecord(result)?.error);
+  const code = error?.code;
+  return typeof code === "string" && code.trim() ? code.trim() : null;
+}
+
+function bridgeErrorMessage(result: unknown): string | null {
+  const error = objectRecord(objectRecord(result)?.error);
+  const message = error?.message;
+  return typeof message === "string" && message.trim() ? message.trim() : null;
+}
+
+function bridgeNextAction(result: unknown): string | null {
+  const error = objectRecord(objectRecord(result)?.error);
+  const nextAction = error?.next_action;
+  return typeof nextAction === "string" && nextAction.trim() ? nextAction.trim() : null;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function stringArg(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function limitBridgeObservationContent(value: string): string {
+  if (value.length <= MODEL_VISIBLE_BRIDGE_OBSERVATION_LIMIT) return value;
+  return `${value.slice(0, MODEL_VISIBLE_BRIDGE_OBSERVATION_LIMIT)}\n...[observation truncated]`;
 }
 
 async function startBridgeToolCallProgress(input: {

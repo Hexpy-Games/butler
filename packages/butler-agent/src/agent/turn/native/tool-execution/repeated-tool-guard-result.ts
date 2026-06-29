@@ -75,6 +75,7 @@ export function maybeHandleRepeatedToolFamily(input: {
     args: input.cleanArgs,
     ok: false,
     error: observation.summary,
+    observation,
   });
   return result;
 }

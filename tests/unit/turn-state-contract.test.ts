@@ -94,7 +94,7 @@ test("turn acknowledged payload is deterministic public receipt, not a decision"
   expect(payload.summary).toBeUndefined();
 });
 
-test("public decision payloads require assistant-authored sources", () => {
+test("public decision payloads require authored sources", () => {
   for (const source of AUTHORED_DECISION_SOURCES) {
     expect(isAuthoredDecisionSource(source)).toBe(true);
     expect(createTurnDecisionPayload({
@@ -110,11 +110,13 @@ test("public decision payloads require assistant-authored sources", () => {
     });
   }
 
-  for (const source of ["model-authored", "principal-authored", "runtime-derived", "review-repaired", "tool-metadata"]) {
+  for (const source of ["runtime-derived", "review-repaired", "tool-metadata"]) {
     expect(isAuthoredDecisionSource(source)).toBe(false);
     expect(() => createTurnDecisionPayload({
       decisionId: `decision-${source}`,
       summary: "Fallback",
+      rationale: "Fallback rationale",
+      nextStep: "Fallback next step",
       source,
     })).toThrow("public turn decision source must be authored");
   }
@@ -168,9 +170,8 @@ test("turn outcome payload enforces evidence and recovery-token invariants", () 
     } else if (outcome === "waiting_user") {
       expect(createTurnOutcomePayload({
         outcome,
-        recoveryToken: `recovery-${outcome}`,
         publicSummary: "The turn is waiting for user action.",
-      })).toMatchObject({ outcome, recoveryToken: `recovery-${outcome}` });
+      })).toMatchObject({ outcome });
     } else {
       expect(createTurnOutcomePayload({
         outcome,
@@ -189,11 +190,6 @@ test("turn outcome payload enforces evidence and recovery-token invariants", () 
     completionEvidenceStatus: "unknown",
     publicSummary: "Invalid evidence status.",
   })).toThrow("turn outcome completion evidence status must be not_required");
-
-  expect(() => createTurnOutcomePayload({
-    outcome: "waiting_user",
-    publicSummary: "Missing token.",
-  })).toThrow("waiting_user turn outcome requires a recovery token");
 
   expect(() => createTurnOutcomePayload({
     outcome: "recoverable",
