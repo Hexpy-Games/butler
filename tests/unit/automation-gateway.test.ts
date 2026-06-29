@@ -1229,7 +1229,8 @@ test("queued inbound completion gap consumes same logical turn continuation with
   });
   expect(inboundDispatches).toBe(1);
   expect(prompts).toHaveLength(2);
-  expect(prompts[1]).toContain("Completion review produced a model-visible observation");
+  expect(prompts[1]).toContain("The Turn Kernel recorded a model-visible observation");
+  expect(prompts[1]).toContain("Missing completion evidence for: command_executed");
   expect(readTurnContextAtom({
     butlerData: tempDir,
     sessionId: "butler/app-general",
