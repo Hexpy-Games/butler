@@ -3657,6 +3657,44 @@ test("work blocks ignore unauthorised decision fields when choosing labels and c
   ]);
 });
 
+test("work blocks accept every public decision source from the app contract", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "block-principal",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Principal decision status",
+      work_block_id: "work-principal",
+      work_block_label: "사용자 결정에 따라 작업합니다.",
+      work_decision_summary: "사용자 지시를 기준으로 작업합니다.",
+      work_decision_rationale: "사용자가 명시한 방향이 현재 작업의 권한입니다.",
+      work_decision_next_step: "명시된 방향에 맞춰 다음 검증을 실행합니다.",
+      work_decision_source: "principal-authored",
+    },
+    {
+      id: "block-model",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Model decision status",
+      work_block_id: "work-model",
+      work_block_label: "모델 판단에 따라 작업합니다.",
+      work_decision_summary: "모델이 선택한 검증 경로를 실행합니다.",
+      work_decision_rationale: "관찰된 증거가 추가 검증을 요구합니다.",
+      work_decision_next_step: "선택한 검증을 실행하고 결과를 반영합니다.",
+      work_decision_source: "model-authored",
+    },
+  ]);
+
+  expect(blocks.map((block) => block.decision_source)).toEqual([
+    "principal-authored",
+    "model-authored",
+  ]);
+  expect(blocks.map((block) => block.decision_summary)).toEqual([
+    "사용자 지시를 기준으로 작업합니다.",
+    "모델이 선택한 검증 경로를 실행합니다.",
+  ]);
+});
+
 test("work blocks do not duplicate todo compatibility rows when a work block exists", () => {
   const blocks = workBlocksFromProgressRows([
     {

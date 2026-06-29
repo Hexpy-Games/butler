@@ -4335,7 +4335,7 @@ test("public work decision parser carries completion obligations without display
   ]);
 });
 
-test("public work decision parser ignores non-canonical prose before tool calls", () => {
+test("public work decision parser rejects non-canonical prose before visible tool calls", () => {
   const pending = publicWorkDecisionsFromAssistantText({
     text: "Je vais verifier la source publique avant de continuer. 次に公開情報を確認します。",
     toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
@@ -4345,27 +4345,22 @@ test("public work decision parser ignores non-canonical prose before tool calls"
 
   expect(pending).toEqual([]);
 
-  const fallback = takePublicWorkDecisionForTool({
-    pending,
-    toolName: "web_read",
-    language: "ko",
-    previousDecisions: [],
-    progress: {
-      kind: "read",
-      toolName: "Web read",
-      safeLabel: "Reading public source: example.test",
-      workBlockLabel: "선택한 출처의 내용을 확인합니다.",
-      inputLabel: "example.test",
-      detailRows: [],
-    },
-  });
-
-  expect(fallback.source).toBe("runtime-derived");
-  expect(fallback.summary).toBe("선택한 출처의 내용을 확인합니다.");
-  expect(fallback.rationale).toBeUndefined();
-  expect(fallback.nextStep).toBeUndefined();
-  expect(JSON.stringify(fallback)).not.toContain("앞선 작업에서 확인한 내용을 이어받아");
-  expect(JSON.stringify(fallback)).not.toContain("확인된 결과를 다음 작업 선택");
+  expect(() =>
+    takePublicWorkDecisionForTool({
+      pending,
+      toolName: "web_read",
+      language: "ko",
+      previousDecisions: [],
+      progress: {
+        kind: "read",
+        toolName: "Web read",
+        safeLabel: "Reading public source: example.test",
+        workBlockLabel: "선택한 출처의 내용을 확인합니다.",
+        inputLabel: "example.test",
+        detailRows: [],
+      },
+    }),
+  ).toThrow("Public work decision required before visible tool execution.");
 });
 
 test("assistant pre-tool progress emits structured decisions for ordinary tools", async () => {

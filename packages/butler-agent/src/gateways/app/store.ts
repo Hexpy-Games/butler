@@ -3906,7 +3906,7 @@ export class AppServerStore {
     const delivery = deliveryLimitationMetadataFromRecord(metadata);
     const limitedDelivery = delivery?.delivery_state === "delivered_with_limitations";
     const noVisibleReply = metadata.noVisibleReply === true ||
-      shouldTreatLimitedFinalAsNoVisible(text, artifacts, delivery, metadata);
+      shouldTreatLimitedFinalAsNoVisible(artifacts, delivery, metadata);
     if (noVisibleReply && hasUnsupportedNoVisibleDeliveryState(metadata, delivery)) {
       this.markProjectedTransportEvent(actionId, event.eventId, chatId);
       return false;
@@ -10447,27 +10447,15 @@ function appLimitedDeliveryForProjectedFailure(
 }
 
 function shouldTreatLimitedFinalAsNoVisible(
-  text: string,
   artifacts: unknown[],
   delivery: DeliveryLimitationMetadata | null,
   metadata: Record<string, unknown>,
 ): boolean {
   if (metadata.visibleLimitedReply === true) return false;
-  if (!text || artifacts.length > 0 || !delivery) return false;
-  const hasSuppressedInternalCode = delivery.limitation_codes.some((code) =>
+  if (artifacts.length > 0 || !delivery) return false;
+  return delivery.limitation_codes.some((code) =>
     isPublicSuppressedInternalContinuationCode(code),
   );
-  if (!hasSuppressedInternalCode) return false;
-  if (metadata.historicalRecoveryState !== true) return true;
-  return isGenericInternalRecoveryFinalText(text) ||
-    delivery.limitations.some(isGenericInternalRecoveryFinalText);
-}
-
-function isGenericInternalRecoveryFinalText(value: string): boolean {
-  return /진행한 내용은 보존했습니다/u.test(value) ||
-    /Butler could not verify that the requested goal was completed/iu.test(value) ||
-    /Butler reached its internal model-call budget/iu.test(value) ||
-    /prompt usage model-call budget exhausted/iu.test(value);
 }
 
 function shouldProjectRecoverableLimitedFinalOverTerminalTurn(
