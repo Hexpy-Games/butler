@@ -1,0 +1,51 @@
+import type { ProviderModelMetadata } from "../model-catalog.ts";
+
+export const GEMINI_SOURCE = "https://ai.google.dev/gemini-api/docs/models";
+
+export const GOOGLE_MODELS: readonly ProviderModelMetadata[] = [
+  {
+    provider_id: "google",
+    provider_label: "Google",
+    model_id: "gemini-3.1-pro",
+    model_ref: "google/gemini-3.1-pro",
+    display_name: "Gemini 3.1 Pro Preview",
+    status: "latest",
+    context_window_tokens: 1_048_576,
+    max_output_tokens: 65_536,
+    default_reasoning_effort: "high",
+    reasoning_efforts: ["low", "medium", "high"],
+    token_estimator: "gemini_count_tokens_api",
+    source_url: GEMINI_SOURCE,
+    runtime_supported: true,
+  },
+  {
+    provider_id: "google",
+    provider_label: "Google",
+    model_id: "gemini-3.5-flash",
+    model_ref: "google/gemini-3.5-flash",
+    display_name: "Gemini 3.5 Flash",
+    status: "recommended",
+    context_window_tokens: 1_048_576,
+    max_output_tokens: 65_536,
+    default_reasoning_effort: "medium",
+    reasoning_efforts: ["none", "low", "medium", "high"],
+    token_estimator: "gemini_count_tokens_api",
+    source_url: GEMINI_SOURCE,
+    runtime_supported: true,
+  },
+  {
+    provider_id: "google",
+    provider_label: "Google",
+    model_id: "gemini-3-flash-preview",
+    model_ref: "google/gemini-3-flash-preview",
+    display_name: "Gemini 3 Flash Preview",
+    status: "available",
+    context_window_tokens: 1_048_576,
+    max_output_tokens: 65_536,
+    default_reasoning_effort: "medium",
+    reasoning_efforts: ["none", "low", "medium", "high"],
+    token_estimator: "gemini_count_tokens_api",
+    source_url: GEMINI_SOURCE,
+    runtime_supported: true,
+  },
+];
