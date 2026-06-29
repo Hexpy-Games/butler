@@ -1,6 +1,6 @@
 import { getEncoding, type Tiktoken } from "js-tiktoken";
 import { readLocalModelConfigs, type LocalModelApiType, type LocalModelConfig, type LocalModelPlatform, type LocalModelSource } from "./local-models.ts";
-import { parseModelRef } from "./model-ref.ts";
+import { parseModelRef, type ParsedModelRef } from "./model-ref.ts";
 
 export type ModelProviderId =
   | "openai"
@@ -638,6 +638,17 @@ function lookupModelMetadata(extraModels: ProviderModelMetadata[] = []): Provide
   return [...byRef.values()];
 }
 
+function matchesParsedModelRef(
+  model: Pick<ProviderModelMetadata, "model_ref" | "provider_id" | "model_id">,
+  parsed: ParsedModelRef,
+): boolean {
+  if (model.model_ref === parsed.canonicalRef) return true;
+  if (parsed.source === "namespaced") {
+    return model.provider_id === parsed.providerId && model.model_id === parsed.modelId;
+  }
+  return model.model_id === parsed.modelId;
+}
+
 export function defaultWorkerModelRules(): WorkerModelRule[] {
   return workerModelPresets().find((preset) => preset.provider_id === "openai")?.runtime_supported
     ? cloneWorkerRules([
@@ -788,9 +799,7 @@ export function resolveRegisteredRuntimeModelMetadata(
   const selectable = registeredModels.filter((model) => model.runtime_supported);
   if (selectable.length === 0) return resolveRuntimeModelMetadata(modelRef);
   const parsed = parseModelRef(modelRef?.trim() || selectable[0]!.model_ref);
-  const exact = selectable.find((model) =>
-    model.model_ref === parsed.canonicalRef || model.model_id === parsed.modelId,
-  );
+  const exact = selectable.find((model) => matchesParsedModelRef(model, parsed));
   const fallback = exact ??
     selectable.find((model) => model.provider_id === parsed.providerId) ??
     selectable[0]!;
@@ -803,7 +812,7 @@ export function resolveModelMetadata(
 ): ProviderModelMetadata {
   const parsed = parseModelRef(modelRef?.trim() || DEFAULT_MODEL_REF);
   const models = lookupModelMetadata(extraModels);
-  const exact = models.find((model) => model.model_ref === parsed.canonicalRef || model.model_id === parsed.modelId);
+  const exact = models.find((model) => matchesParsedModelRef(model, parsed));
   if (exact) return { ...exact, reasoning_efforts: [...exact.reasoning_efforts] };
   const providerDefault = models.find((model) => model.provider_id === parsed.providerId && model.status === "latest");
   if (providerDefault) return { ...providerDefault, reasoning_efforts: [...providerDefault.reasoning_efforts] };
@@ -817,7 +826,7 @@ export function resolveRuntimeModelMetadata(
   const parsed = parseModelRef(modelRef?.trim() || DEFAULT_MODEL_REF);
   const models = lookupModelMetadata(extraModels);
   const exact = models.find((model) =>
-    model.runtime_supported && (model.model_ref === parsed.canonicalRef || model.model_id === parsed.modelId),
+    model.runtime_supported && matchesParsedModelRef(model, parsed),
   );
   if (exact) return { ...exact, reasoning_efforts: [...exact.reasoning_efforts] };
   const providerDefault = models.find((model) =>
