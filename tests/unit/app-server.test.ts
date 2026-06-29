@@ -10732,21 +10732,72 @@ test("terminal work blocks do not fall back to tool or safe labels when workBloc
       rows: Array<Record<string, unknown>>;
     }>;
 
-    expect(workBlocks[0]).toMatchObject({
-      id: "terminal-no-label-work",
-      label: "",
-      rows: [
-        expect.objectContaining({
-          safe_tool_name: "Bash",
-          safe_input_label: "npm test",
-        }),
-      ],
-    });
-    expect(workBlocks[0]?.label).not.toBe("Bash");
-    expect(workBlocks[0]?.label).not.toBe("Bash: npm test");
-    expect(JSON.stringify(workBlocks)).not.toContain(
+    expect(workBlocks ?? []).toEqual([]);
+    expect(JSON.stringify(workBlocks ?? [])).not.toContain(
       '"work_block_label":"Bash',
     );
+  } finally {
+    server.stop();
+  }
+});
+
+test("terminal work blocks drop synthetic dispatch rows but keep real dispatch evidence", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      input.onProgress?.({
+        id: "synthetic-dispatch",
+        kind: "dispatch",
+        state: "delivered",
+        safe_label: "Dispatch: public plan text",
+        safe_tool_name: "Dispatch",
+        safe_input_label: "public plan text",
+        work_block_id: "work-synthetic-dispatch",
+        work_block_label: "공개 계획을 정리하는 중",
+      });
+      input.onProgress?.({
+        id: "real-dispatch",
+        kind: "dispatch",
+        state: "delivered",
+        safe_label: "Dispatch: worker review",
+        safe_tool_name: "Dispatch",
+        safe_input_label: "worker review",
+        tool_call_id: "tool-real-dispatch",
+        work_block_id: "work-real-dispatch",
+        work_block_label: "검토 작업을 맡기는 중",
+      });
+      return { texts: ["done"] };
+    },
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "run dispatch projection",
+    });
+    const reply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "done",
+    );
+    const workBlocks = (reply.work_blocks ?? []) as Array<{
+      id: string;
+      label: string;
+      rows: Array<Record<string, unknown>>;
+    }>;
+
+    expect(workBlocks).toHaveLength(1);
+    expect(workBlocks[0]).toMatchObject({
+      id: "work-real-dispatch",
+      label: "검토 작업을 맡기는 중",
+    });
+    expect(workBlocks[0]?.rows[0]).toMatchObject({
+      safe_tool_name: "Dispatch",
+      safe_input_label: "worker review",
+      tool_call_id: "tool-real-dispatch",
+    });
+    expect(JSON.stringify(workBlocks)).not.toContain("public plan text");
+    expect(JSON.stringify(workBlocks)).not.toContain("work-synthetic-dispatch");
   } finally {
     server.stop();
   }

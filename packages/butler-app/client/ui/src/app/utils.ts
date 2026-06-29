@@ -1198,6 +1198,12 @@ function isCompletedTurnWorkActivityRow(row: ProgressRow): boolean {
   return !LIFECYCLE_ACTIVITY_LABELS.has(row.safe_label.trim().toLowerCase());
 }
 
+function isWorkBlockToolActivityRow(row: ProgressRow): boolean {
+  if (row.kind === "message") return false;
+  if (row.kind === "dispatch" && !row.tool_call_id) return false;
+  return isCompletedTurnWorkActivityRow(row);
+}
+
 function buildWorkBlocks(
   rows: ProgressRow[],
   options: { completedOnly: boolean },
@@ -1261,7 +1267,7 @@ function buildWorkBlocks(
       continue;
     }
     if (row.kind === "todo") continue;
-    if (!isCompletedTurnWorkActivityRow(row)) continue;
+    if (!isWorkBlockToolActivityRow(row)) continue;
     const blockId = row.work_block_id ?? `row-${row.id}`;
     const label = row.work_block_label ?? "";
     const block = ensureBlock(blockId, label, row.state, row.created_at, row);
@@ -1271,7 +1277,7 @@ function buildWorkBlocks(
 
   return [...blocks.values()]
     .map(({ rowMap: _rowMap, ...block }) => block)
-    .filter((block) => block.rows.length > 0 || Boolean(block.label.trim()))
+    .filter((block) => Boolean(block.label.trim()))
     .filter((block) =>
       options.completedOnly
         ? isTerminalProgressState(block.state) ||

@@ -2166,6 +2166,8 @@ test("openSession restores a server-loaded session before debounce cache writes"
             safe_label: "Bash: server-loaded",
             safe_tool_name: "Bash",
             safe_input_label: "server-loaded",
+            work_block_id: "work-server-loaded",
+            work_block_label: "서버 로드 확인 중",
           },
         ],
       },
@@ -2583,6 +2585,8 @@ test("completed message work blocks stay frozen across identical progress writes
         safe_label: "Bash: cached",
         safe_tool_name: "Bash",
         safe_input_label: "cached",
+        work_block_id: "work-cached",
+        work_block_label: "캐시된 작업 확인 중",
       },
     ],
   };
@@ -2618,9 +2622,22 @@ test("completed message work blocks stay frozen across identical progress writes
 
   expect(messageNotifications).toBe(0);
   expect(useButlerStore.getState().messages[0]).toBe(message);
-  expect(useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]).toEqual(
-    snapshot.safe_progress_rows[0],
-  );
+  expect(useButlerStore.getState().messages[0]?.work_blocks?.[0]).toMatchObject({
+    id: "work-cached",
+    label: "캐시된 작업 확인 중",
+  });
+  expect(useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0])
+    .toMatchObject({
+      id: "row-a",
+      safe_label: "Bash: cached",
+      safe_tool_name: "Bash",
+      safe_input_label: "cached",
+      work_block_id: "work-cached",
+    });
+  expect(
+    useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]
+      ?.work_block_label,
+  ).toBeUndefined();
 });
 
 test("active turn summary does not erase frozen work blocks from previous assistant messages", () => {
@@ -2635,6 +2652,8 @@ test("active turn summary does not erase frozen work blocks from previous assist
         safe_label: "Web search: previous briefing",
         safe_tool_name: "Web search",
         safe_input_label: "previous briefing",
+        work_block_id: "work-previous-briefing",
+        work_block_label: "이전 브리핑 출처 확인 중",
       },
     ],
   };
@@ -2684,9 +2703,22 @@ test("active turn summary does not erase frozen work blocks from previous assist
   });
 
   expect(useButlerStore.getState().messages[0]).toBe(message);
-  expect(useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]).toEqual(
-    snapshot.safe_progress_rows[0],
-  );
+  expect(useButlerStore.getState().messages[0]?.work_blocks?.[0]).toMatchObject({
+    id: "work-previous-briefing",
+    label: "이전 브리핑 출처 확인 중",
+  });
+  expect(useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0])
+    .toMatchObject({
+      id: "row-a",
+      safe_label: "Web search: previous briefing",
+      safe_tool_name: "Web search",
+      safe_input_label: "previous briefing",
+      work_block_id: "work-previous-briefing",
+    });
+  expect(
+    useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]
+      ?.work_block_label,
+  ).toBeUndefined();
   expect(useButlerStore.getState().turnProgress["turn-b"]?.state).toBe(
     "thinking",
   );

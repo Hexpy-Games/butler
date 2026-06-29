@@ -35,6 +35,7 @@ import {
   browserRandomId,
   browserRandomUUID,
 } from "../../packages/butler-app/client/ui/src/app/id.ts";
+import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import { resolveMarkdownImageSource } from "../../packages/butler-app/client/ui/src/components/conversation/messageMedia.ts";
 import type {
   MessageFileRef,
@@ -84,6 +85,20 @@ test("browser random ids still exist when Web Crypto is unavailable", () => {
 
   expect(id).toMatch(
     /^client-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+  );
+});
+
+test("work summary copy keeps public progress suffix language-stable", () => {
+  const copy = getAppCopy("en-US").conversation.work;
+
+  expect(copy.collapsedSummary("공개 출처를 확인하는 중", 2)).toBe(
+    "공개 출처를 확인하는 중 외 1개 진행 내역",
+  );
+  expect(copy.expandHistoryLabel("공개 출처를 확인하는 중", 2)).toBe(
+    "공개 출처를 확인하는 중 외 1개 진행 내역 열기",
+  );
+  expect(copy.collapseHistoryLabel("공개 출처를 확인하는 중", 2)).toBe(
+    "공개 출처를 확인하는 중 외 1개 진행 내역 닫기",
   );
 });
 
@@ -328,6 +343,8 @@ test("summary progress merging preserves unchanged snapshot references", () => {
         safe_label: "Bash: bun test",
         safe_tool_name: "Bash",
         safe_input_label: "bun test",
+        work_block_id: "work-test",
+        work_block_label: "테스트 실행 중",
       },
     ],
   };
@@ -357,6 +374,8 @@ test("completed assistant messages freeze work blocks onto the message record", 
         safe_label: "Bash: bun test",
         safe_tool_name: "Bash",
         safe_input_label: "bun test",
+        work_block_id: "work-test",
+        work_block_label: "테스트 실행 중",
       },
     ],
   };
@@ -371,9 +390,19 @@ test("completed assistant messages freeze work blocks onto the message record", 
     },
   });
 
-  expect(frozen?.work_blocks?.[0]?.rows[0]).toEqual(
-    snapshot.safe_progress_rows[0],
-  );
+  expect(frozen?.work_blocks?.[0]).toMatchObject({
+    id: "work-test",
+    label: "테스트 실행 중",
+  });
+  expect(frozen?.work_blocks?.[0]?.rows[0]).toMatchObject({
+    id: "row-a",
+    kind: "ran_command",
+    safe_label: "Bash: bun test",
+    safe_tool_name: "Bash",
+    safe_input_label: "bun test",
+    work_block_id: "work-test",
+  });
+  expect(frozen?.work_blocks?.[0]?.rows[0]?.work_block_label).toBeUndefined();
   expect(refrozen[0]).toBe(frozen);
 });
 
@@ -389,6 +418,8 @@ test("completed assistant messages keep frozen work blocks when progress is abse
         safe_label: "Bash: bun test",
         safe_tool_name: "Bash",
         safe_input_label: "bun test",
+        work_block_id: "work-test",
+        work_block_label: "테스트 실행 중",
       },
     ],
   };
@@ -400,9 +431,20 @@ test("completed assistant messages keep frozen work blocks when progress is abse
   const refrozen = freezeMessageWorkBlocks([frozen!], {});
 
   expect(refrozen[0]).toBe(frozen);
-  expect(refrozen[0]?.work_blocks?.[0]?.rows[0]).toEqual(
-    snapshot.safe_progress_rows[0],
-  );
+  expect(refrozen[0]?.work_blocks?.[0]).toMatchObject({
+    id: "work-test",
+    label: "테스트 실행 중",
+  });
+  expect(refrozen[0]?.work_blocks?.[0]?.rows[0]).toMatchObject({
+    id: "row-a",
+    kind: "ran_command",
+    safe_label: "Bash: bun test",
+    safe_tool_name: "Bash",
+    safe_input_label: "bun test",
+    work_block_id: "work-test",
+  });
+  expect(refrozen[0]?.work_blocks?.[0]?.rows[0]?.work_block_label)
+    .toBeUndefined();
 });
 
 test("cancelled assistant messages keep completed work evidence", () => {
@@ -2511,15 +2553,61 @@ test("work blocks do not synthesize missing workBlockLabel from safe labels", ()
     },
   ]);
 
-  expect(blocks).toHaveLength(1);
-  expect(blocks[0]?.label).toBe("");
-  expect(blocks[0]?.rows[0]).toMatchObject({
-    safe_label: "Bash: npm test",
-    safe_tool_name: "Bash",
-    safe_input_label: "npm test",
-  });
-  expect(blocks[0]?.rows[0]?.work_block_label).toBeUndefined();
+  expect(blocks).toEqual([]);
   expect(JSON.stringify(blocks)).not.toContain("Runtime fallback label");
+});
+
+test("work blocks do not project public message rows as tool activity", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "public-note",
+      kind: "message",
+      state: "running",
+      safe_label:
+        "요청하신 공개 출처 확인과 CSV 생성 단계를 먼저 잡겠습니다.",
+      work_block_id: "work-dispatch",
+    },
+    {
+      id: "dispatch-row",
+      kind: "dispatch",
+      state: "delivered",
+      safe_label: "Dispatch: 공개 출처 확인과 CSV 생성",
+      safe_tool_name: "Dispatch",
+      safe_input_label: "공개 출처 확인과 CSV 생성",
+      work_block_id: "work-dispatch",
+      work_block_label: "공개 출처 확인과 CSV 생성 중",
+    },
+  ]);
+
+  expect(blocks).toEqual([]);
+  expect(JSON.stringify(blocks)).not.toContain("Dispatch:");
+});
+
+test("work blocks still keep real dispatch tool evidence", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "dispatch-worker-row",
+      kind: "dispatch",
+      state: "delivered",
+      safe_label: "Dispatch: worker review",
+      safe_tool_name: "Dispatch",
+      safe_input_label: "worker review",
+      tool_call_id: "tool-dispatch-worker",
+      work_block_id: "work-dispatch-worker",
+      work_block_label: "검토 작업을 맡기는 중",
+    },
+  ]);
+
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toMatchObject({
+    id: "work-dispatch-worker",
+    label: "검토 작업을 맡기는 중",
+  });
+  expect(blocks[0]?.rows[0]).toMatchObject({
+    safe_tool_name: "Dispatch",
+    safe_input_label: "worker review",
+    tool_call_id: "tool-dispatch-worker",
+  });
 });
 
 test("typed UI read models keep runtime faults separate from progress rows", () => {
@@ -2601,6 +2689,7 @@ test("production work block projection keeps mixed tool row decisions out of blo
       safe_input_label: "bun test",
       tool_call_id: "tool-mixed",
       work_block_id: "work-mixed",
+      work_block_label: "테스트 실행 중",
       work_decision_summary: "This decision must not become the work block decision.",
       work_decision_rationale: "Tool compatibility rows are not decision rows.",
       work_decision_next_step: "Keep rendering this as a tool row.",
@@ -2611,7 +2700,7 @@ test("production work block projection keeps mixed tool row decisions out of blo
   expect(blocks).toHaveLength(1);
   expect(blocks[0]).toMatchObject({
     id: "work-mixed",
-    label: "",
+    label: "테스트 실행 중",
     rows: [
       expect.objectContaining({
         id: "mixed-tool-row",
@@ -2738,7 +2827,7 @@ test("timeline applies turn acknowledgements as accepted progress rows", () => {
   expect(messages).toEqual([]);
 });
 
-test("first visible progress rows become active work blocks", () => {
+test("first visible progress message rows stay outside active work blocks", () => {
   const blocks = workBlocksFromProgressRows([
     {
       id: "event-first-progress",
@@ -2750,20 +2839,7 @@ test("first visible progress rows become active work blocks", () => {
     },
   ]);
 
-  expect(blocks).toEqual([
-    expect.objectContaining({
-      id: "first-progress-note",
-      label: "필요한 맥락을 확인하겠습니다.",
-      state: "running",
-      rows: [
-        expect.objectContaining({
-          id: "event-first-progress",
-          kind: "message",
-          safe_label: "필요한 맥락을 확인하겠습니다.",
-        }),
-      ],
-    }),
-  ]);
+  expect(blocks).toEqual([]);
 });
 
 test("first visible progress stays scoped through failure and ignores other sessions", () => {
@@ -3550,6 +3626,7 @@ test("work blocks ignore unauthorised decision fields when choosing labels and c
       state: "running",
       safe_label: "Runtime fallback label",
       work_block_id: "work-runtime",
+      work_block_label: "Explicit work block label",
       work_decision_summary: "This fallback must not become public context",
       work_decision_rationale: "Runtime-derived repair text is diagnostic only.",
       work_decision_next_step: "Do not render this as a decision.",
@@ -3563,6 +3640,7 @@ test("work blocks ignore unauthorised decision fields when choosing labels and c
       safe_tool_name: "Read",
       tool_call_id: "tool-runtime",
       work_block_id: "work-runtime",
+      work_block_label: "Explicit work block label",
       work_decision_summary: "Tool fallback must not become public context",
       work_decision_source: "review-repaired",
     },
@@ -3571,7 +3649,7 @@ test("work blocks ignore unauthorised decision fields when choosing labels and c
   expect(blocks).toEqual([
     expect.objectContaining({
       id: "work-runtime",
-      label: "",
+      label: "Explicit work block label",
       state: "delivered",
       decision_summary: undefined,
       decision_source: undefined,
