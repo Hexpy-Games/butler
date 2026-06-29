@@ -1,4 +1,5 @@
 import {
+  isNonPublicContinuationDeliveryError,
   recoverableLimitedDeliveryForError,
   type RecoverableLimitedDelivery,
 } from "../../agent/turn/recoverable-delivery.ts";
@@ -21,6 +22,8 @@ export type AppLimitedDelivery = RecoverableLimitedDelivery;
 export function appLimitedDeliveryForError(error: unknown): RecoverableLimitedDelivery | null {
   return recoverableLimitedDeliveryForError(error);
 }
+
+export { isNonPublicContinuationDeliveryError };
 
 export function appSafeResponderError(error: unknown): AppResponderSafeError {
   const timeout = appResponderTimeout(error);

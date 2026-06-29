@@ -245,6 +245,7 @@ import {
 import {
   appLimitedDeliveryForError,
   appSafeResponderError,
+  isNonPublicContinuationDeliveryError,
   type AppLimitedDelivery,
 } from "./failure-ux-contract.ts";
 import {
@@ -4878,6 +4879,8 @@ export class AppServerStore {
         this.drainQueuedSessionMessages(chatId, responder, options),
       finalizeResponderLimitedDelivery: (chatId, turnId, limitedDelivery) =>
         this.finalizeResponderLimitedDelivery(chatId, turnId, limitedDelivery),
+      markResponderNonPublicContinuation: (chatId, turnId) =>
+        this.markResponderNonPublicContinuation(chatId, turnId),
       finalizeCancelledTurn: (chatId, turnId) =>
         this.finalizeCancelledTurn(chatId, turnId),
       hasTurnEventKind: (turnId, kind) => this.hasTurnEventKind(turnId, kind),
@@ -5277,6 +5280,36 @@ export class AppServerStore {
           replies: [],
           turn: cancelledTurn,
           next_cursor: accepted.cursor,
+        };
+      }
+      if (isNonPublicContinuationDeliveryError(error)) {
+        const continuation = this.markResponderNonPublicContinuation(
+          chatId,
+          turn.id,
+        );
+        const existingMessage = this.getMessageRow(messageId);
+        const accepted = existingMessage
+          ? messageFromRow(
+              existingMessage,
+              this.listMessageAttachments(messageId),
+            )
+          : ({
+              id: messageId,
+              chat_id: chatId,
+              role: "system_event",
+              text: "",
+              status: "delivered",
+              retryable: false,
+              cursor: continuation.turn.cursor,
+              created_at: continuation.turn.updated_at,
+              updated_at: continuation.turn.updated_at,
+            } satisfies MessageRecord);
+        this.touchChat(chatId);
+        return {
+          accepted,
+          replies: [],
+          turn: continuation.turn,
+          next_cursor: continuation.turn.cursor,
         };
       }
       const limitedDelivery = appLimitedDeliveryForError(error);
@@ -6779,6 +6812,25 @@ export class AppServerStore {
       replies: [],
       turn: recoveryTurn,
     };
+  }
+
+  private markResponderNonPublicContinuation(
+    chatId: string,
+    turnId: string,
+  ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
+    return this.markResponderContinuation(chatId, turnId, {
+      text: null,
+      reason: "Continuation remains active.",
+      delivery: {
+        delivery_state: "running",
+        issue_kind: "none",
+        visibility: "continuation_progress",
+        terminal: false,
+        failure_notice: false,
+        limitation_codes: [],
+        limitations: [],
+      },
+    });
   }
 
   private hasPublicContinuationProgressSinceLatestQueue(turnId: string): boolean {
@@ -10400,16 +10452,12 @@ function shouldTreatLimitedFinalAsNoVisible(
   metadata: Record<string, unknown>,
 ): boolean {
   if (metadata.visibleLimitedReply === true) return false;
-  if (metadata.historicalRecoveryState !== true) return false;
   if (!text || artifacts.length > 0 || !delivery) return false;
-  if (
-    !delivery.limitation_codes.some((code) =>
-      code === INTERNAL_RECOVERY_REQUIRED_CODE ||
-      code === "prompt_usage_model_call_budget_exhausted",
-    )
-  ) {
-    return false;
-  }
+  const hasSuppressedInternalCode = delivery.limitation_codes.some((code) =>
+    isPublicSuppressedInternalContinuationCode(code),
+  );
+  if (!hasSuppressedInternalCode) return false;
+  if (metadata.historicalRecoveryState !== true) return true;
   return isGenericInternalRecoveryFinalText(text) ||
     delivery.limitations.some(isGenericInternalRecoveryFinalText);
 }

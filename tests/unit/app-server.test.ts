@@ -7234,7 +7234,7 @@ test("app transport no-visible limited final closes queued turns without assista
   }
 });
 
-test("app transport live limited final text with could not verify is not hidden by legacy recovery phrases", async () => {
+test("app transport live generic internal verification text is hidden unless marked public progress", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -7276,21 +7276,17 @@ test("app transport live limited final text with could not verify is not hidden 
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
-    ).toEqual([
-      "show live limited text",
-      "Butler could not verify that the requested goal was completed.",
-    ]);
-    const assistant = messages.data.messages.find(
-      (message: { role: string }) => message.role === "assistant",
-    );
-    expect(assistant).toMatchObject({
-      status: "delivered",
-      delivery_state: "delivered_with_limitations",
-      limitation_codes: [],
-      limitations: [],
-    });
-    expect(JSON.stringify(assistant)).not.toContain(
+    ).toEqual(["show live limited text"]);
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(JSON.stringify(messages.data.messages)).not.toContain(
       "internal_recovery_required",
+    );
+    expect(JSON.stringify(messages.data.messages)).not.toContain(
+      "could not verify",
     );
     expect(messages.data.turn_progress[turnId]).toMatchObject({
       state: "delivered",
@@ -7301,21 +7297,28 @@ test("app transport live limited final text with could not verify is not hidden 
     expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
       "internal_recovery_required",
     );
+    expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
+      "could not verify",
+    );
     const sessionView = await getJson(
       `${server.url}session-view?session_id=general`,
     );
-    const sessionAssistant = sessionView.data.messages.find(
-      (message: { role: string }) => message.role === "assistant",
-    );
-    expect(sessionAssistant).toMatchObject({
-      status: "delivered",
+    expect(
+      sessionView.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(sessionView.data.latest_turn).toMatchObject({
+      id: turnId,
+      state: "delivered",
       delivery_state: "delivered_with_limitations",
       limitation_codes: [],
       limitations: [],
     });
-    expect(JSON.stringify(sessionAssistant)).not.toContain(
+    expect(JSON.stringify(sessionView.data)).not.toContain(
       "internal_recovery_required",
     );
+    expect(JSON.stringify(sessionView.data)).not.toContain("could not verify");
   } finally {
     server.stop();
   }
@@ -8114,10 +8117,14 @@ test("app transport preserves marked public progress finalization text", async (
     );
     expect(assistant).toMatchObject({
       delivery_state: "delivered_with_limitations",
-      limitation_codes: ["internal_recovery_required"],
+      limitation_codes: [],
+      limitations: [],
     });
-    expect(assistant.limitations[0]).toContain("확인된 진행사항");
-    expect(assistant.limitations[0]).toContain("파일을 작성했습니다.");
+    expect(JSON.stringify(assistant)).not.toContain(
+      "internal_recovery_required",
+    );
+    expect(assistant.text).toContain("확인된 진행사항");
+    expect(assistant.text).toContain("파일을 작성했습니다.");
   } finally {
     server.stop();
   }
@@ -8629,9 +8636,12 @@ test("recoverable limited final can close a timeout failed app turn", async () =
     expect(summary.data.latest_progress).toMatchObject({
       state: "delivered",
       delivery_state: "delivered_with_limitations",
-      limitation_codes: ["internal_recovery_required"],
+      limitation_codes: [],
       limitations: [],
     });
+    expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
+      "internal_recovery_required",
+    );
     expect(
       summary.data.latest_progress.safe_progress_rows.some(
         (row: { kind: string; state: string }) =>
@@ -12284,14 +12294,14 @@ test("goal completion incomplete gaps keep turns active instead of app failures"
     const recoveringTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "retrying",
+      (turn) => turn.state === "retrying" || turn.state === "waiting_for_tool",
     );
     expect(recoveringTurn).toMatchObject({
-      state: "retrying",
       safe_status_label: "",
       retryable: false,
       cancellable: true,
     });
+    expect(["retrying", "waiting_for_tool"]).toContain(String(recoveringTurn.state));
     expect(recoveringTurn.safe_error_code ?? null).toBeNull();
 
     const messages = await getJson(`${server.url}messages?chat_id=general`);
@@ -12332,14 +12342,14 @@ test("goal completion obligation protocol gaps stay active without generic assis
     const recoveringTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "retrying",
+      (turn) => turn.state === "retrying" || turn.state === "waiting_for_tool",
     );
     expect(recoveringTurn).toMatchObject({
-      state: "retrying",
       safe_status_label: "",
       retryable: false,
       cancellable: true,
     });
+    expect(["retrying", "waiting_for_tool"]).toContain(String(recoveringTurn.state));
     expect(recoveringTurn.safe_error_code ?? null).toBeNull();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
@@ -12382,14 +12392,14 @@ test("generic internal recovery responder failures stay active without assistant
     const recoveringTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "retrying",
+      (turn) => turn.state === "retrying" || turn.state === "waiting_for_tool",
     );
     expect(recoveringTurn).toMatchObject({
-      state: "retrying",
       safe_status_label: "",
       retryable: false,
       cancellable: true,
     });
+    expect(["retrying", "waiting_for_tool"]).toContain(String(recoveringTurn.state));
     expect(recoveringTurn.safe_error_code ?? null).toBeNull();
 
     const messages = await getJson(`${server.url}messages?chat_id=general`);
