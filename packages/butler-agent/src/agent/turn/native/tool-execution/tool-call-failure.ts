@@ -83,6 +83,7 @@ export async function handleAuditedToolFailure(input: {
       : input.cleanArgs,
     ok: false,
     error: message,
+    observation,
     publicDecision: input.decision,
     bridgeAudit: bridgeAudit ?? undefined,
   });

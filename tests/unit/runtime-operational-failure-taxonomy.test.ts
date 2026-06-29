@@ -90,7 +90,7 @@ test("runtime delivery taxonomy preserves operational failures with exact safe c
   }
 });
 
-test("runtime delivery taxonomy separates tool retry from completion continuation", () => {
+test("runtime delivery taxonomy separates tool observation gaps from completion continuation", () => {
   const cases = [
     {
       label: "disabled tool",
@@ -99,8 +99,10 @@ test("runtime delivery taxonomy separates tool retry from completion continuatio
         message: "disabled tool web_search; tool is not active in the current surface",
       },
       state: "running",
+      terminal: false,
       issueKind: "none",
       visibility: "continuation_progress",
+      failureNotice: false,
     },
     {
       label: "missing evidence",
@@ -109,8 +111,10 @@ test("runtime delivery taxonomy separates tool retry from completion continuatio
         message: "missing evidence receipt for source_verified",
       },
       state: "running",
+      terminal: false,
       issueKind: "none",
       visibility: "continuation_progress",
+      failureNotice: false,
     },
     {
       label: "disabled tool with storage-like name",
@@ -119,8 +123,10 @@ test("runtime delivery taxonomy separates tool retry from completion continuatio
         message: "disabled tool storage_search is unavailable in the current surface",
       },
       state: "running",
+      terminal: false,
       issueKind: "none",
       visibility: "continuation_progress",
+      failureNotice: false,
     },
     {
       label: "missing evidence with gateway-like name",
@@ -129,8 +135,10 @@ test("runtime delivery taxonomy separates tool retry from completion continuatio
         message: "missing evidence receipt for gateway_health unavailable",
       },
       state: "running",
+      terminal: false,
       issueKind: "none",
       visibility: "continuation_progress",
+      failureNotice: false,
     },
   ];
 
@@ -138,10 +146,10 @@ test("runtime delivery taxonomy separates tool retry from completion continuatio
     const classified = classifyRuntimeFailureDelivery(item.error);
     expect(classified, item.label).toMatchObject({
       delivery_state: item.state,
-      terminal: false,
+      terminal: item.terminal,
       issue_kind: item.issueKind,
       visibility: item.visibility,
-      failure_notice: false,
+      failure_notice: item.failureNotice,
       limitation_codes: [],
       limitations: [],
     });

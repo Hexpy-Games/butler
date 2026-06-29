@@ -1,5 +1,6 @@
 import type { BridgeToolAuditEvent } from "../../../tools/tool-bridge/audit.ts";
 import type { EvidenceCapabilityReceipt } from "../../../output/evidence/types.ts";
+import type { TurnObservation } from "../../turn-kernel.ts";
 
 export type PublicWorkObligationKind =
   | "source_verified"
@@ -128,7 +129,7 @@ export interface PublicWorkDecision {
   evidenceRefs: string[];
   nextStep?: string;
   completionObligations?: PublicWorkObligationKind[];
-  source: "assistant-authored" | "runtime-derived" | "review-repaired";
+  source: "assistant-authored" | "model-authored" | "principal-authored" | "runtime-derived" | "review-repaired";
   toolName?: string;
 }
 
@@ -138,6 +139,17 @@ export interface ToolAuditEntry {
   ok: boolean;
   result?: unknown;
   error?: string;
+  observation?: Pick<
+    TurnObservation,
+    | "kind"
+    | "visibility"
+    | "summary"
+    | "modelVisibleContent"
+    | "publicSummary"
+    | "refs"
+    | "causedByToolCallId"
+    | "causedByDecisionId"
+  >;
   publicDecision?: PublicWorkDecision;
   satisfiedCompletionObligations?: PublicWorkObligationKind[];
   evidenceReceipts?: EvidenceReceipt[];

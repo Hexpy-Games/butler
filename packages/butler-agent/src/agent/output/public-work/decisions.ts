@@ -3,6 +3,7 @@ import type {
   PublicWorkDecision,
   ToolProgressSummary,
 } from "../../turn/native/output/tool-types.ts";
+import { isAuthoredDecisionSource } from "../../events/turn-state-contract.ts";
 import {
   isUsablePublicDecisionText,
   publicDecisionId,
@@ -119,7 +120,7 @@ export function hasCompleteAuthoredPublicDecisionForTool(input: {
 }): boolean {
   const decision = input.pending.find((candidate) => candidate.toolName === input.toolName) ??
     input.pending[0];
-  if (!decision || decision.source !== "assistant-authored") {
+  if (!decision || !isAuthoredDecisionSource(decision.source)) {
     return false;
   }
   return isUsablePublicDecisionText(decision.summary) &&

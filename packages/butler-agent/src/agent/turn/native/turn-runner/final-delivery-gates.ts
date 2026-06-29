@@ -24,7 +24,6 @@ import type { createDirectTurnBudget } from "../../direct-turn-budget.ts";
 import { WorkStreamStore } from "../../../work/work-stream.ts";
 import { TodoListStore } from "../../../work/todo-list.ts";
 import { safePublicText } from "../../../output/evidence/transcript-sanitizers.ts";
-import type { CompletionTerminalState } from "../../completion-review.ts";
 
 export const KERNEL_COMPLETION_GAP_CONTINUATION_CODE = "completion_gap_continuation";
 
@@ -39,9 +38,7 @@ export type FinalDeliveryOutcome =
         refs?: Array<{ kind: string; id: string; path?: string }>;
       };
       evidenceRefs: string[];
-    }
-  | { kind: "waiting_user"; question: string; evidenceRefs: string[] }
-  | { kind: "failed"; publicSummary: string; evidenceRefs: string[] };
+    };
 
 export async function produceFinalDeliveryOutcome(input: {
   turnInput: RuntimeTurnInput;
@@ -65,20 +62,6 @@ export async function produceFinalDeliveryOutcome(input: {
     return {
       kind: "completion_gap",
       observation: reviewResult.outcome.observation,
-      evidenceRefs: reviewResult.outcome.evidenceRefs,
-    };
-  }
-  if (reviewResult.outcome.status === "waiting_user") {
-    return {
-      kind: "waiting_user",
-      question: reviewResult.outcome.question,
-      evidenceRefs: reviewResult.outcome.evidenceRefs,
-    };
-  }
-  if (reviewResult.outcome.status === "failed") {
-    return {
-      kind: "failed",
-      publicSummary: reviewResult.outcome.publicSummary,
       evidenceRefs: reviewResult.outcome.evidenceRefs,
     };
   }
@@ -139,7 +122,7 @@ function explicitToolRequirementGap(input: {
   return {
     kind: "completion_gap",
     observation: {
-      kind: "missing_required_tool",
+      kind: "completion_gap",
       summary: `Missing required tool execution: ${missingExplicitTools.join(", ")}`,
       modelVisibleContent: [
         "The current turn has not executed all explicitly required native tools.",
@@ -181,16 +164,6 @@ async function runGoalCompletionReviews(input: {
     evidenceReceipts: evidenceCapabilityReceiptsFromAudit(input.audit),
     requiredObligations: requiredCompletionObligations(input.publicDecisionContext),
     observations: observationsFromAudit(input.audit),
-    workStreamTerminalState: currentWorkStreamsTerminalState({
-      butlerData: input.deps.butlerData,
-      sessionId: input.turnInput.handle.sessionId,
-      turnId: input.turnId,
-    }),
-    todoTerminalState: currentTurnTodosTerminalState({
-      butlerData: input.deps.butlerData,
-      sessionId: input.turnInput.handle.sessionId,
-      turnId: input.turnId,
-    }),
   });
   return { outcome, reviewedText: input.initialText };
 }
@@ -277,6 +250,15 @@ function observationsFromAudit(audit: ToolAuditEntry[]) {
   return audit
     .filter((entry) => !entry.ok)
     .map((entry) => {
+      if (entry.observation) {
+        return {
+          kind: entry.observation.kind,
+          summary: entry.observation.summary,
+          modelVisibleContent: entry.observation.modelVisibleContent,
+          visibility: entry.observation.visibility,
+          publicSummary: entry.observation.publicSummary,
+        };
+      }
       const safeError = entry.error
         ? safePublicText(entry.error, "Tool execution failed with redacted private details.")
         : null;
@@ -288,55 +270,6 @@ function observationsFromAudit(audit: ToolAuditEntry[]) {
         visibility: "model" as const,
       };
     });
-}
-
-function currentWorkStreamsTerminalState(input: {
-  butlerData: string;
-  sessionId: string;
-  turnId?: string | null;
-}): CompletionTerminalState {
-  if (!input.turnId) return "none";
-  const streams = new WorkStreamStore(input.butlerData).list({
-    sessionId: input.sessionId,
-    includeTerminal: true,
-  });
-  const store = new WorkStreamStore(input.butlerData);
-  const turnLocalStreams = streams.filter((stream) => store.read(stream.id)?.last_user_turn_id === input.turnId);
-  if (turnLocalStreams.length === 0) return "none";
-  if (turnLocalStreams.some((stream) => stream.state === "failed")) return "failed";
-  if (turnLocalStreams.some((stream) => stream.state === "waiting_user")) return "waiting_user";
-  if (turnLocalStreams.some((stream) => stream.terminal !== true)) return "none";
-  if (turnLocalStreams.some((stream) => stream.state === "cancelled")) return "cancelled";
-  return "completed";
-}
-
-function currentTurnTodosTerminalState(input: {
-  butlerData: string;
-  sessionId: string;
-  turnId?: string | null;
-}): CompletionTerminalState {
-  if (!input.turnId) return "none";
-  const workStore = new WorkStreamStore(input.butlerData);
-  const todoStore = new TodoListStore(input.butlerData);
-  const todoListIds = workStore.list({
-    sessionId: input.sessionId,
-    includeTerminal: true,
-  })
-    .map((summary) => workStore.read(summary.id))
-    .filter((record) => record?.last_user_turn_id === input.turnId)
-    .map((record) => record?.todo_list_id)
-    .filter((listId): listId is string => Boolean(listId));
-  if (todoListIds.length === 0) return "none";
-  let sawTerminal = false;
-  for (const listId of [...new Set(todoListIds)]) {
-    const todo = todoStore.read(listId);
-    if (!todo) return "none";
-    if (todo.items.some((item) => item.status === "in_progress" || item.status === "pending")) return "none";
-    if (todo.items.some((item) => item.status === "completed" || item.status === "cancelled")) {
-      sawTerminal = true;
-    }
-  }
-  return sawTerminal ? "completed" : "none";
 }
 
 export async function persistCompletionGapContinuation(input: {
@@ -383,6 +316,7 @@ export async function persistCompletionGapContinuation(input: {
   });
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "turn.observation",
+    visibility: "internal",
     payload: {
       kind: input.observation.kind,
       safeLabel: input.observation.summary,

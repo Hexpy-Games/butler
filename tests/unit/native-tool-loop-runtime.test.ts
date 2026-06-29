@@ -459,6 +459,290 @@ test("native runtime turns invalid tool arguments into model-visible retry guida
   expect(secondPromptSawObservation).toBe(true);
 });
 
+test("completion review continuation preserves typed failed-tool observations", async () => {
+  let promptCalls = 0;
+  let atomDuringContinuation: Record<string, unknown> | null = null;
+  const executedTools: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async (call) => {
+      if (call.name === "tool_call" && call.args.__bridge_resolve_only === true) {
+        if (call.args.arguments === "not-an-object") {
+          return {
+            ok: false,
+            error: {
+              code: "invalid_tool_arguments",
+              message: "tool_call arguments must be an object.",
+              recoverable: true,
+            },
+          };
+        }
+        if (call.args.id === "native:missing_tool") {
+          return {
+            ok: false,
+            error: {
+              code: "unknown_tool_catalog_id",
+              message: "Unknown tool catalog id: native:missing_tool",
+              recoverable: true,
+              id: "native:missing_tool",
+            },
+          };
+        }
+        if (call.args.id === "native:disabled_tool") {
+          return {
+            ok: false,
+            error: {
+              code: "disabled_tool",
+              message: "Tool is disabled.",
+              recoverable: true,
+              id: "native:disabled_tool",
+            },
+          };
+        }
+      }
+      executedTools.push(call.name);
+      if (call.name === "web_read") {
+        throw new ToolObservationError({
+          message: "web_read is disabled in the current tool surface",
+          observationKind: "tool_unavailable",
+          toolResult: null,
+        });
+      }
+      if (call.name === "run_command" && typeof call.args.command !== "string") {
+        throw new ToolObservationError({
+          message: "run_command required command argument",
+          observationKind: "tool_invalid_arguments",
+          toolResult: null,
+        });
+      }
+      if (call.name === "run_command" && String(call.args.command).includes("bun test")) {
+        return {
+          ok: false,
+          stdout: "1 fail\nexpected true to be false",
+          stderr: "unit suite failed",
+          exit_code: 1,
+          evidence_capability_receipts: [
+            createEvidenceCapabilityReceipt({
+              producer: { kind: "tool", name: "run_command" },
+              capability: "validation_passed",
+              evidence_kind: "execution_result",
+              maturity: "rejected",
+              verified: false,
+              confidence: 0.25,
+              summary: "A validation suite did not complete successfully.",
+              scope: {
+                suite: "unit-example",
+                result: "failed",
+                failure_summary: "example assertion failed",
+              },
+              limitations: ["example assertion failed"],
+            }),
+          ],
+        };
+      }
+      if (call.name === "run_command" && String(call.args.command).includes("ls missing")) {
+        return { ok: false, stdout: "", stderr: "missing file", exit_code: 2 };
+      }
+      if (call.name === "write_file") {
+        return {
+          ok: true,
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "receipt-durable-artifact-after-tool-observation",
+            producerName: "write_file",
+            capability: "durable_artifact",
+            evidenceKind: "artifact",
+            satisfies: ["durable_artifact"],
+            reference: { path: "artifacts/result.md" },
+          })],
+        };
+      }
+      return { ok: true, stdout: "ok\n", stderr: "", exit_code: 0 };
+    },
+    runFunctionToolPromptText: async (input) => {
+      promptCalls += 1;
+      if (promptCalls === 1) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Validate the command path before writing the artifact.",
+            "rationale: The command output should inform the durable artifact.",
+            "next_step: Retry invalid arguments if needed, then create the artifact.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: {} }],
+        });
+        const invalidArgs = await input.executeTool({
+          name: "run_command",
+          args: {},
+          rawArguments: "{}",
+        }) as Record<string, unknown>;
+        expect(invalidArgs).toMatchObject({ observation_kind: "tool_invalid_arguments" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Check whether the source-reading tool is available.",
+            "rationale: Unavailable tools must be observed before choosing a different path.",
+            "next_step: Record the unavailable tool observation and continue with command evidence.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "web_read", args: { url: "https://example.test/source" } }],
+        });
+        const unavailable = await input.executeTool({
+          name: "web_read",
+          args: { url: "https://example.test/source" },
+          rawArguments: JSON.stringify({ url: "https://example.test/source" }),
+        }) as Record<string, unknown>;
+        expect(unavailable).toMatchObject({ observation_kind: "tool_unavailable" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Try the bridged search with invalid arguments.",
+            "rationale: Bridge argument failures must remain typed observations for the continuation.",
+            "next_step: Use the bridge observation before choosing a valid tool path.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "tool_call", args: { id: "native:web_search", arguments: "not-an-object" } }],
+        });
+        const bridgeInvalidArgs = await input.executeTool({
+          name: "tool_call",
+          args: { id: "native:web_search", arguments: "not-an-object" },
+          rawArguments: JSON.stringify({ id: "native:web_search", arguments: "not-an-object" }),
+        }) as Record<string, unknown>;
+        expect(bridgeInvalidArgs).toMatchObject({ observation_kind: "tool_invalid_arguments" });
+        expect(bridgeInvalidArgs.observation).toMatchObject({ kind: "tool_invalid_arguments" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Try a bridged call to an unavailable catalog id.",
+            "rationale: Bridge resolution failures must be model-visible tool observations, not recovery states.",
+            "next_step: Use the unavailable observation and continue with another evidence path.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "tool_call", args: { id: "native:missing_tool", arguments: {} } }],
+        });
+        const bridgeUnavailable = await input.executeTool({
+          name: "tool_call",
+          args: { id: "native:missing_tool", arguments: {} },
+          rawArguments: JSON.stringify({ id: "native:missing_tool", arguments: {} }),
+        }) as Record<string, unknown>;
+        expect(bridgeUnavailable).toMatchObject({ observation_kind: "tool_unavailable" });
+        expect(bridgeUnavailable.observation).toMatchObject({ kind: "tool_unavailable" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Try a bridged call to a disabled catalog id.",
+            "rationale: Disabled bridge targets must remain typed unavailable observations for continuation.",
+            "next_step: Choose another enabled evidence path after recording the disabled tool observation.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "tool_call", args: { id: "native:disabled_tool", arguments: {} } }],
+        });
+        const bridgeDisabled = await input.executeTool({
+          name: "tool_call",
+          args: { id: "native:disabled_tool", arguments: {} },
+          rawArguments: JSON.stringify({ id: "native:disabled_tool", arguments: {} }),
+        }) as Record<string, unknown>;
+        expect(bridgeDisabled).toMatchObject({ observation_kind: "tool_unavailable" });
+        expect(bridgeDisabled.observation).toMatchObject({ kind: "tool_unavailable" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Run the validation command and inspect failures.",
+            "rationale: Failed tests must remain typed observations for the continuation.",
+            "next_step: Use the failure name before selecting the next fix.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "bun test tests/unit/example.test.ts", validation_suite: "unit-example" } }],
+        });
+        const testFailed = await input.executeTool({
+          name: "run_command",
+          args: { command: "bun test tests/unit/example.test.ts", validation_suite: "unit-example" },
+          rawArguments: JSON.stringify({ command: "bun test tests/unit/example.test.ts", validation_suite: "unit-example" }),
+        }) as Record<string, unknown>;
+        expect(testFailed).toMatchObject({ observation_kind: "test_failed" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Run the file inspection command and inspect failures.",
+            "rationale: Failed commands must remain typed observations for the continuation.",
+            "next_step: Use the command error before selecting the next fix.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "ls missing-file" } }],
+        });
+        const commandFailed = await input.executeTool({
+          name: "run_command",
+          args: { command: "ls missing-file" },
+          rawArguments: JSON.stringify({ command: "ls missing-file" }),
+        }) as Record<string, unknown>;
+        expect(commandFailed).toMatchObject({ observation_kind: "command_failed" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Retry the command with valid arguments.",
+            "rationale: The previous observation showed the missing command field.",
+            "next_step: Use the command result before writing the artifact.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "printf ok" } }],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "printf ok" },
+          rawArguments: JSON.stringify({ command: "printf ok" }),
+        });
+        return "The command was checked, but the durable artifact is not created yet.";
+      }
+      if (promptCalls === 2) {
+        expect(input.prompt).toContain("Missing completion evidence for: durable_artifact");
+        atomDuringContinuation = readOnlyPersistedTurnContextAtom();
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Create the durable artifact required by the completion gap.",
+            "rationale: The kernel preserved the earlier tool observation and now requires artifact evidence.",
+            "next_step: Write the artifact and include the evidence in the final answer.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "write_file", args: { path: "artifacts/result.md", content: "ok" } }],
+        });
+        await input.executeTool({
+          name: "write_file",
+          args: { path: "artifacts/result.md", content: "ok" },
+          rawArguments: JSON.stringify({ path: "artifacts/result.md", content: "ok" }),
+        });
+        return "The durable artifact is created with evidence.";
+      }
+      throw new Error("Should not need a third prompt");
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/tool-observation-completion-gap",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run the command and create the durable artifact." },
+  });
+
+  expect(promptCalls).toBe(2);
+  expect(executedTools).toEqual([
+    "run_command",
+    "web_read",
+    "run_command",
+    "run_command",
+    "run_command",
+    "write_file",
+  ]);
+  expect(result.text).toContain("durable artifact");
+  const atomSnapshot = atomDuringContinuation as { unresolvedObservations?: Array<{ kind?: string }> } | null;
+  const unresolved = atomSnapshot?.unresolvedObservations;
+  const unresolvedKinds = unresolved?.map((item) => item.kind) ?? [];
+  expect(unresolved?.map((item) => item.kind)).toContain("completion_gap");
+  expect(unresolvedKinds.filter((kind) => kind === "tool_invalid_arguments").length).toBeGreaterThanOrEqual(2);
+  expect(unresolvedKinds.filter((kind) => kind === "tool_unavailable").length).toBeGreaterThanOrEqual(3);
+  expect(unresolvedKinds).toContain("test_failed");
+  expect(unresolvedKinds).toContain("command_failed");
+});
+
 test("native runtime summarizes failed command and test output into model context", async () => {
   const observedKinds: string[] = [];
   const observedContext: string[] = [];
@@ -3156,46 +3440,92 @@ test("native runtime does not close direct work or recover WorkStreams from comp
   expect(events.map((event) => event.kind)).toContain("message.final.completed");
 });
 
-test("completion review waiting_user becomes terminal outcome instead of continuation", async () => {
+test("completion review explicit blocker becomes continuation gap instead of terminal waiting_user", async () => {
   const attempts: string[] = [];
+  const executedTools: string[] = [];
   const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "en",
-    executeButlerTool: async () => ({
-      ok: true,
-      evidence_capability_receipts: [{
-        receipt_id: "receipt-user-decision-required",
-        schema_version: "evidence-capability.v1",
-        producer: { kind: "runtime", name: "completion-review-test" },
-        capability: "explicit_blocker",
-        evidence_kind: "blocker",
-        maturity: "verified",
-        confidence: 1,
-        verified: true,
-        summary: "User decision is required before completion can be proven.",
-        limitations: [],
-        references: [],
-        created_at: "2026-06-28T00:00:00.000Z",
-      }],
-    }),
+    executeButlerTool: async (call) => {
+      executedTools.push(call.name);
+      if (executedTools.length === 1) {
+        return {
+          ok: true,
+          evidence_capability_receipts: [{
+            receipt_id: "receipt-user-decision-required",
+            schema_version: "evidence-capability.v1",
+            producer: { kind: "runtime", name: "completion-review-test" },
+            capability: "explicit_blocker",
+            evidence_kind: "blocker",
+            maturity: "verified",
+            confidence: 1,
+            verified: true,
+            summary: "User decision is required before completion can be proven.",
+            limitations: [],
+            references: [],
+            created_at: "2026-06-28T00:00:00.000Z",
+          }],
+        };
+      }
+      return {
+        ok: true,
+        evidence_capability_receipts: [{
+          receipt_id: "receipt-source-verified-after-gap",
+          schema_version: "evidence-capability.v1",
+          producer: { kind: "tool", name: call.name },
+          capability: "source_verified",
+          evidence_kind: "source_page",
+          maturity: "verified",
+          confidence: 1,
+          verified: true,
+          summary: "The blocked source was verified after the blocker observation.",
+          limitations: [],
+          references: [{ url: "https://example.test/blocked-source" }],
+          satisfies: ["source_verified"],
+          created_at: "2026-06-29T00:00:00.000Z",
+        }],
+      };
+    },
     runFunctionToolPromptText: async (input) => {
       attempts.push(input.prompt);
-      await input.onAssistantTextBeforeTools?.({
-        text: [
-          "summary: I am checking the blocked source.",
-          "rationale: user approval is required.",
-          "next_step: wait for the user decision.",
-          "completion_obligations: source_verified",
-        ].join("\n"),
-        toolCalls: [{ name: "run_command", args: { command: "true" } }],
-      });
-      await input.executeTool({
-        name: "run_command",
-        args: { command: "true" },
-        rawArguments: JSON.stringify({ command: "true" }),
-      });
-      return "I need your decision before continuing.";
+      if (attempts.length === 1) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: I am checking the blocked source.",
+            "rationale: user approval is required.",
+            "next_step: verify the blocked source.",
+            "completion_obligations: source_verified",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "true" } }],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "true" },
+          rawArguments: JSON.stringify({ command: "true" }),
+        });
+        return "I need your decision before continuing.";
+      }
+      if (attempts.length === 2) {
+        expect(input.prompt).toContain("The Turn Kernel recorded a model-visible observation");
+        expect(input.prompt).toContain("Completion is blocked by explicit blocker evidence");
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: I am verifying the source after the completion gap.",
+            "rationale: the kernel observation requires source evidence before final delivery.",
+            "next_step: include the verified source evidence in the final answer.",
+            "completion_obligations: source_verified",
+          ].join("\n"),
+          toolCalls: [{ name: "web_read", args: { url: "https://example.test/blocked-source" } }],
+        });
+        await input.executeTool({
+          name: "web_read",
+          args: { url: "https://example.test/blocked-source" },
+          rawArguments: JSON.stringify({ url: "https://example.test/blocked-source" }),
+        });
+        return "The blocked source is verified with cited evidence.";
+      }
+      expect.unreachable("Should not require a third explicit-blocker continuation");
     },
   });
   const handle = await runtime.createSession({
@@ -3215,18 +3545,23 @@ test("completion review waiting_user becomes terminal outcome instead of continu
     },
   });
 
-  expect(attempts).toHaveLength(1);
-  expect(result.text).toContain("Missing completion evidence");
+  expect(attempts).toHaveLength(2);
+  expect(executedTools).toEqual(["run_command", "web_read"]);
+  expect(result.text).toContain("blocked source is verified");
   expect(events.map((event) => event.kind)).toContain("turn.outcome");
   expect(events.find((event) => event.kind === "turn.outcome")?.payload)
-    .toMatchObject({ outcome: "waiting_user" });
-  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
+    .toMatchObject({ outcome: "completed" });
+  expect(events.find((event) => event.kind === "turn.observation")?.payload)
+    .toMatchObject({ kind: "completion_gap" });
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
 });
 
-test("completion review failed becomes terminal outcome instead of continuation", async () => {
+test("completion review ignores failed WorkStream terminal state and continues for missing evidence", async () => {
   const sessionId = "butler/main/failed-review";
   const turnId = "app:failed-review";
+  const attempts: string[] = [];
+  const executedTools: string[] = [];
   const todoStore = new TodoListStore(tempDir);
   const todos = todoStore.update({
     listId: "failed-review-list",
@@ -3258,22 +3593,62 @@ test("completion review failed becomes terminal outcome instead of continuation"
     disableAutomaticRecall: true,
     messageLanguage: "en",
     butlerData: tempDir,
+    executeButlerTool: async (call) => {
+      executedTools.push(call.name);
+      if (executedTools.length === 1) {
+        return { ok: true };
+      }
+      return {
+        ok: true,
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "receipt-durable-artifact-after-gap",
+          producerName: call.name,
+          capability: "durable_artifact",
+          evidenceKind: "artifact",
+          satisfies: ["durable_artifact"],
+          reference: { path: "artifacts/final-report.md" },
+        })],
+      };
+    },
     runFunctionToolPromptText: async (input) => {
-      await input.onAssistantTextBeforeTools?.({
-        text: [
-          "summary: I am checking artifact completion.",
-          "rationale: durable artifact evidence is required.",
-          "next_step: report if missing.",
-          "completion_obligations: durable_artifact",
-        ].join("\n"),
-        toolCalls: [{ name: "run_command", args: { command: "true" } }],
-      });
-      await input.executeTool({
-        name: "run_command",
-        args: { command: "true" },
-        rawArguments: JSON.stringify({ command: "true" }),
-      });
-      return "The work stream is terminal but artifact evidence is missing.";
+      attempts.push(input.prompt);
+      if (attempts.length === 1) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: I am checking artifact completion.",
+            "rationale: durable artifact evidence is required.",
+            "next_step: inspect artifact state before final delivery.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "true" } }],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "true" },
+          rawArguments: JSON.stringify({ command: "true" }),
+        });
+        return "The work stream is terminal but artifact evidence is missing.";
+      }
+      if (attempts.length === 2) {
+        expect(input.prompt).toContain("The Turn Kernel recorded a model-visible observation");
+        expect(input.prompt).toContain("Missing completion evidence for: durable_artifact");
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: I am creating the durable artifact required by the completion gap.",
+            "rationale: completion review cannot close the turn without artifact evidence.",
+            "next_step: report the artifact evidence in the final answer.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "write_file", args: { path: "artifacts/final-report.md", content: "done" } }],
+        });
+        await input.executeTool({
+          name: "write_file",
+          args: { path: "artifacts/final-report.md", content: "done" },
+          rawArguments: JSON.stringify({ path: "artifacts/final-report.md", content: "done" }),
+        });
+        return "The durable artifact was created and verified.";
+      }
+      expect.unreachable("Should not require a third failed-workstream continuation");
     },
   });
   const handle = await runtime.createSession({
@@ -3305,10 +3680,14 @@ test("completion review failed becomes terminal outcome instead of continuation"
     },
   });
 
-  expect(result.text).toContain("Missing completion evidence");
+  expect(attempts).toHaveLength(2);
+  expect(executedTools).toEqual(["run_command", "write_file"]);
+  expect(result.text).toContain("durable artifact was created");
   expect(events.find((event) => event.kind === "turn.outcome")?.payload)
-    .toMatchObject({ outcome: "failed" });
-  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
+    .toMatchObject({ outcome: "completed" });
+  expect(events.find((event) => event.kind === "turn.observation")?.payload)
+    .toMatchObject({ kind: "completion_gap" });
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
 });
 
@@ -4051,6 +4430,7 @@ test("bridge tool executor keeps wrapper progress out of visible turn events", a
   const audit: unknown[] = [];
   const executor = createAuditedBridgeToolExecutor({
     sessionId: "butler/app-chat-1",
+    turnId: "turn-bridge-wrapper-progress",
     audit: audit as never,
     messageLanguage: "ko",
     turnInput: {
@@ -6917,6 +7297,7 @@ test("native runtime records bridge audit metadata for bridged target failures",
 });
 
 test("native runtime records bridge audit metadata for tool_call resolution failures", async () => {
+  let bridgeResult: Record<string, unknown> | null = null;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     butlerHome: tempDir,
@@ -6931,11 +7312,11 @@ test("native runtime records bridge audit metadata for tool_call resolution fail
           nextStep: "도구 검색 결과의 감사 정보를 검증합니다.",
         },
       );
-      await input.executeTool({
+      bridgeResult = await input.executeTool({
         name: "tool_call",
         args: { id: "native:missing_tool", arguments: { token: "SECRET_TOKEN_123" } },
         rawArguments: JSON.stringify({ id: "native:missing_tool", arguments: { token: "SECRET_TOKEN_123" } }),
-      });
+      }) as Record<string, unknown>;
       return "없는 도구 선택을 복구 가능한 결과로 받았습니다.";
     },
   });
@@ -6955,6 +7336,11 @@ test("native runtime records bridge audit metadata for tool_call resolution fail
   });
 
   const transcript = readTranscript("butler/main/progressive-tool-call-resolution-failure");
+  expect(bridgeResult).toMatchObject({
+    ok: false,
+    observation_kind: "tool_unavailable",
+    observation: { kind: "tool_unavailable" },
+  });
   const result = transcript.find((event) => event.kind === "tool_result" && event.payload.name === "tool_call");
   expect(result?.metadata?.bridge_audit).toEqual(expect.objectContaining({
     schema: "butler.bridge-tool-audit.v1",
@@ -6988,7 +7374,7 @@ test("native runtime records bridge audit metadata for tool_call resolution fail
 
 test("native runtime records bridge resolution failures without visible wrapper progress", async () => {
   const turnEvents: RuntimeTurnEventInput[] = [];
-  let caughtMessage = "";
+  let bridgeResult: Record<string, unknown> | null = null;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     butlerHome: tempDir,
@@ -7000,15 +7386,11 @@ test("native runtime records bridge resolution failures without visible wrapper 
       return { ok: true };
     },
     runFunctionToolPromptText: async (input) => {
-      try {
-        await input.executeTool({
-          name: "tool_call",
-          args: { id: "native:web_search", arguments: { query: "butler" } },
-          rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler" } }),
-        });
-      } catch (error) {
-        caughtMessage = error instanceof Error ? error.message : String(error);
-      }
+      bridgeResult = await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:web_search", arguments: { query: "butler" } },
+        rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler" } }),
+      }) as Record<string, unknown>;
       return "도구 호출 예외를 복구했습니다.";
     },
   });
@@ -7030,7 +7412,11 @@ test("native runtime records bridge resolution failures without visible wrapper 
     },
   });
 
-  expect(caughtMessage).toBe("resolve exploded");
+  expect(bridgeResult).toMatchObject({
+    ok: false,
+    observation_kind: "validation_failed",
+    observation: { kind: "validation_failed" },
+  });
   const bridgeStarted = turnEvents.find((event) =>
     event.kind === "tool.started" && event.payload?.toolName === "Tool Call",
   );
@@ -7046,6 +7432,104 @@ test("native runtime records bridge resolution failures without visible wrapper 
     event.payload.ok === false &&
     event.metadata?.tool_surface_transition === "denied",
   )).toBe(true);
+});
+
+test("native runtime rethrows runtime-fault-shaped bridge resolution exceptions", async () => {
+  let bridgeResult: Record<string, unknown> | null = null;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    executeButlerTool: async (call) => {
+      if (call.name === "tool_call" && call.args.__bridge_resolve_only === true) {
+        const error = new Error("bridge invariant broke") as Error & { code?: string };
+        error.name = "RuntimeFaultError";
+        error.code = "runtime_fault";
+        throw error;
+      }
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      bridgeResult = await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:web_search", arguments: { query: "butler" } },
+        rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler" } }),
+      }) as Record<string, unknown>;
+      return "runtime fault should not become model-visible observation.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-runtime-fault",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "도구 호출 runtime fault를 확인해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  })).rejects.toThrow("bridge invariant broke");
+
+  expect(bridgeResult).toBeNull();
+  const transcript = readTranscript("butler/main/progressive-tool-call-runtime-fault");
+  expect(transcript.some((event) => {
+    return event.kind === "tool_result" &&
+      event.payload.name === "tool_call" &&
+      JSON.stringify(event.payload).includes("validation_failed");
+  })).toBe(false);
+});
+
+test("native runtime rethrows abort-shaped bridge resolution exceptions without bridge observations", async () => {
+  const controller = new AbortController();
+  let bridgeResult: Record<string, unknown> | null = null;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    executeButlerTool: async (call) => {
+      if (call.name === "tool_call" && call.args.__bridge_resolve_only === true) {
+        controller.abort();
+        const error = new Error("Runtime turn was cancelled.") as Error & { code?: string };
+        error.name = "AbortError";
+        throw error;
+      }
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      bridgeResult = await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:web_search", arguments: { query: "butler" } },
+        rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler" } }),
+      }) as Record<string, unknown>;
+      return "abort should not become model-visible observation.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-abort",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "도구 호출 abort를 확인해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    signal: controller.signal,
+  })).rejects.toThrow("Runtime turn was cancelled.");
+
+  expect(bridgeResult).toBeNull();
+  const transcript = readTranscript("butler/main/progressive-tool-call-abort");
+  expect(transcript.some((event) => {
+    return event.kind === "tool_result" &&
+      event.payload.name === "tool_call" &&
+      JSON.stringify(event.payload).includes("validation_failed");
+  })).toBe(false);
 });
 
 test("native runtime records bridge audit metadata without raw search arguments", async () => {

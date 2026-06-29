@@ -219,7 +219,8 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
   }));
   expect(observedToolResults.callBeforeDescribe).toEqual(expect.objectContaining({
     ok: false,
-    error: expect.objectContaining({ code: "tool_not_described", recoverable: true }),
+    observation_kind: "tool_unavailable",
+    observation: expect.objectContaining({ kind: "tool_unavailable" }),
   }));
   expect(observedToolResults.describe).toEqual(expect.objectContaining({
     ok: true,
@@ -236,11 +237,8 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
   }));
   expect(observedToolResults.recursion).toEqual(expect.objectContaining({
     ok: false,
-    error: expect.objectContaining({
-      code: "disabled_tool",
-      id: "native:tool_call",
-      recoverable: true,
-    }),
+    observation_kind: "tool_unavailable",
+    observation: expect.objectContaining({ kind: "tool_unavailable" }),
   }));
 
   const transcript = readTranscript("butler/main/progressive-same-turn");

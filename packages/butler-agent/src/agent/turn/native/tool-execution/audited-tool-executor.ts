@@ -136,6 +136,7 @@ export function createAuditedButlerToolExecutor(
   };
   const executeAuditedWithBridge = createAuditedBridgeToolExecutor({
     sessionId: input.sessionId,
+    turnId: input.turnId,
     audit: input.audit,
     turnInput: input.turnInput,
     messageLanguage: input.messageLanguage,
