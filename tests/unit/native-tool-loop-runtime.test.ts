@@ -2852,7 +2852,8 @@ test("native runtime routes completion review gap to continuation without final 
         return "근거는 확인했지만 CSV 파일 산출물은 아직 만들지 않았습니다.";
       }
       if (attempts.length === 2) {
-        expect(input.prompt).toContain("Completion review produced a model-visible observation");
+        expect(input.prompt).toContain("The Turn Kernel recorded a model-visible observation");
+        expect(input.prompt).toContain("Missing completion evidence for: durable_artifact");
         await input.onAssistantTextBeforeTools?.({
           text: "summary: 정제 도구로 CSV 산출물을 생성합니다.\nrationale: 검토 관찰이 durable_artifact 산출물 생성을 요구했습니다.\nnext_step: 생성 결과의 산출물 증거를 최종 답변에 반영합니다.\ncompletion_obligations: durable_artifact",
           toolCalls: [{ name: "transform_public_data_table", args: { format: "csv" } }],
