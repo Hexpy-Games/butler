@@ -1,0 +1,68 @@
+import type { ProviderModelMetadata, ReasoningEffort } from "../model-catalog.ts";
+
+export const OPENAI_SOURCE = "https://developers.openai.com/api/docs/models/compare";
+
+const DEFAULT_REASONING_EFFORT: ReasoningEffort = "xhigh";
+
+export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
+  {
+    provider_id: "openai",
+    provider_label: "OpenAI",
+    model_id: "gpt-5.5",
+    model_ref: "openai/gpt-5.5",
+    display_name: "GPT-5.5",
+    status: "latest",
+    context_window_tokens: 1_050_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: DEFAULT_REASONING_EFFORT,
+    reasoning_efforts: ["none", "low", "medium", "high", "xhigh"],
+    token_estimator: "openai_tiktoken_o200k",
+    source_url: OPENAI_SOURCE,
+    runtime_supported: true,
+  },
+  {
+    provider_id: "openai",
+    provider_label: "OpenAI",
+    model_id: "gpt-5.4",
+    model_ref: "openai/gpt-5.4",
+    display_name: "GPT-5.4",
+    status: "available",
+    context_window_tokens: 1_050_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "medium",
+    reasoning_efforts: ["none", "low", "medium", "high", "xhigh"],
+    token_estimator: "openai_tiktoken_o200k",
+    source_url: OPENAI_SOURCE,
+    runtime_supported: true,
+  },
+  {
+    provider_id: "openai",
+    provider_label: "OpenAI",
+    model_id: "gpt-5.4-mini",
+    model_ref: "openai/gpt-5.4-mini",
+    display_name: "GPT-5.4 Mini",
+    status: "available",
+    context_window_tokens: 400_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "medium",
+    reasoning_efforts: ["none", "low", "medium", "high", "xhigh"],
+    token_estimator: "openai_tiktoken_o200k",
+    source_url: OPENAI_SOURCE,
+    runtime_supported: true,
+  },
+  {
+    provider_id: "openai",
+    provider_label: "OpenAI",
+    model_id: "gpt-5.4-nano",
+    model_ref: "openai/gpt-5.4-nano",
+    display_name: "GPT-5.4 Nano",
+    status: "available",
+    context_window_tokens: 400_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "medium",
+    reasoning_efforts: ["none", "low", "medium", "high", "xhigh"],
+    token_estimator: "openai_tiktoken_o200k",
+    source_url: OPENAI_SOURCE,
+    runtime_supported: true,
+  },
+];
