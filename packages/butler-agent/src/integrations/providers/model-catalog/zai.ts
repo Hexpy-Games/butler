@@ -1,0 +1,51 @@
+import type { ProviderModelMetadata } from "../model-catalog.ts";
+
+const ZAI_SOURCE = "https://docs.z.ai/guides/overview/quick-start";
+
+export const ZAI_MODELS: readonly ProviderModelMetadata[] = [
+  {
+    provider_id: "zai",
+    provider_label: "Z.AI / GLM",
+    model_id: "glm-5.2",
+    model_ref: "zai/glm-5.2",
+    display_name: "GLM-5.2",
+    status: "latest",
+    context_window_tokens: 1_000_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "high",
+    reasoning_efforts: ["none", "low", "medium", "high", "xhigh"],
+    token_estimator: "character_estimate",
+    source_url: ZAI_SOURCE,
+    runtime_supported: true,
+  },
+  {
+    provider_id: "zai",
+    provider_label: "Z.AI / GLM",
+    model_id: "glm-5.1",
+    model_ref: "zai/glm-5.1",
+    display_name: "GLM-5.1",
+    status: "recommended",
+    context_window_tokens: 200_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "high",
+    reasoning_efforts: ["none", "low", "medium", "high"],
+    token_estimator: "character_estimate",
+    source_url: ZAI_SOURCE,
+    runtime_supported: true,
+  },
+  {
+    provider_id: "zai",
+    provider_label: "Z.AI / GLM",
+    model_id: "glm-4.7",
+    model_ref: "zai/glm-4.7",
+    display_name: "GLM-4.7",
+    status: "available",
+    context_window_tokens: 200_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "medium",
+    reasoning_efforts: ["none", "low", "medium", "high"],
+    token_estimator: "character_estimate",
+    source_url: ZAI_SOURCE,
+    runtime_supported: true,
+  },
+];
