@@ -45,6 +45,7 @@ import {
 } from "../../packages/butler-agent/src/agent/output/public-work/decisions.ts";
 import { emitAssistantTextBeforeTools } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/assistant-pretool-progress.ts";
 import { createAuditedBridgeToolExecutor } from "../../packages/butler-agent/src/agent/turn/bridge-tool-executor.ts";
+import { ToolObservationError } from "../../packages/butler-agent/src/agent/turn/native/tool-execution/tool-observations.ts";
 import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
 import {
   evidenceTranscriptToolCallArgumentsProjection,
@@ -397,7 +398,11 @@ test("native runtime turns invalid tool arguments into model-visible retry guida
     executeButlerTool: async (call) => {
       executed += 1;
       if (executed === 1) {
-        throw new Error(`${call.name} required command argument`);
+        throw new ToolObservationError({
+          message: `${call.name} required command argument`,
+          observationKind: "tool_invalid_arguments",
+          toolResult: null,
+        });
       }
       return { ok: true, stdout: "fixed\n", stderr: "", exit_code: 0 };
     },
@@ -469,6 +474,23 @@ test("native runtime summarizes failed command and test output into model contex
           stdout: "1 fail\nexpected true to be false",
           stderr: "tests/unit/example.test.ts failed",
           exit_code: 1,
+          evidence_capability_receipts: [
+            createEvidenceCapabilityReceipt({
+              producer: { kind: "tool", name: "run_command" },
+              capability: "validation_passed",
+              evidence_kind: "execution_result",
+              maturity: "rejected",
+              verified: false,
+              confidence: 0.25,
+              summary: "A validation suite did not complete successfully.",
+              scope: {
+                suite: "unit-example",
+                result: "failed",
+                failure_summary: "example assertion failed",
+              },
+              limitations: ["example assertion failed"],
+            }),
+          ],
         };
       }
       return {
@@ -480,19 +502,22 @@ test("native runtime summarizes failed command and test output into model contex
       };
     },
     runFunctionToolPromptText: async (input) => {
-      for (const command of ["bun test tests/unit/example.test.ts", "ls missing-file"]) {
+      for (const toolArgs of [
+        { command: "bun test tests/unit/example.test.ts", validation_suite: "unit-example" },
+        { command: "ls missing-file" },
+      ]) {
         await input.onAssistantTextBeforeTools?.({
           text: [
-            `summary: Run ${command} to collect execution evidence.`,
+            `summary: Run ${toolArgs.command} to collect execution evidence.`,
             "rationale: The next model step needs the concrete process result.",
             "next_step: Read the exit status and output before deciding how to continue.",
           ].join("\n"),
-          toolCalls: [{ name: "run_command", args: { command } }],
+          toolCalls: [{ name: "run_command", args: toolArgs }],
         });
         const output = await input.executeTool({
           name: "run_command",
-          args: { command },
-          rawArguments: JSON.stringify({ command }),
+          args: toolArgs,
+          rawArguments: JSON.stringify(toolArgs),
         }) as Record<string, unknown>;
         observedKinds.push(String(output.observation_kind));
         observedContext.push(String(output.model_visible_content));
@@ -903,7 +928,7 @@ test("native runtime emits safe public turn events for tool, guard, and final ph
       completionEvidenceStatus: "not_required",
       publicSummary: "Completed.",
     });
-  expect(events.some((event) => event.kind === "turn.completion_evidence")).toBe(false);
+  expect(events.some((event) => event.kind === "completion.evidence.recorded")).toBe(false);
 });
 
 test("native runtime emits completion evidence only from real capability receipts", async () => {
@@ -964,7 +989,7 @@ test("native runtime emits completion evidence only from real capability receipt
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(events.find((event) => event.kind === "turn.completion_evidence")?.payload)
+  expect(events.find((event) => event.kind === "completion.evidence.recorded")?.payload)
     .toMatchObject({
       evidenceKind: "command_executed",
       status: "verified",
@@ -2407,7 +2432,17 @@ test("native runtime repairs turns that skip explicitly required tools", async (
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
-    executeButlerTool: async (call) => ({ ok: true, tool: call.name }),
+    executeButlerTool: async (call) => {
+      if (call.name === "web_search") {
+        return {
+          ok: true,
+          tool: call.name,
+          source_urls: ["https://example.com/korea-city-population"],
+          results: [{ url: "https://example.com/korea-city-population", title: "Korea city population" }],
+        };
+      }
+      return { ok: true, tool: call.name };
+    },
     runFunctionToolPromptText: async (input) => {
       attempts.push(input.prompt);
       if (attempts.length === 1) {
@@ -2422,8 +2457,11 @@ test("native runtime repairs turns that skip explicitly required tools", async (
         });
         return "검색만 하고 마쳤습니다.";
       }
-      if (input.prompt.includes("Explicit Tool Requirement Repair")) {
+      if (attempts.length === 2) {
+        expect(input.prompt).toContain("The Turn Kernel recorded a model-visible observation");
+        expect(input.prompt).toContain("Missing required tools:");
         expect(input.prompt).toContain("transform_public_data_table");
+        expect(input.prompt).not.toContain("Explicit Tool Requirement Repair");
         await input.onAssistantTextBeforeTools?.({
           text: "summary: 필수 표 정제 단계를 완료합니다.\nrationale: 사용자가 CSV 표 생성을 필수로 요구했습니다.\nnext_step: 정제 표를 기준으로 결과만 보고합니다.",
           toolCalls: [{ name: "transform_public_data_table", args: { columns: ["city"], rows: [{ city: "Seoul" }] } }],
@@ -2455,7 +2493,8 @@ test("native runtime repairs turns that skip explicitly required tools", async (
   });
 
   expect(attempts.length).toBeGreaterThanOrEqual(2);
-  expect(result.text).toBe("필수 표 정제를 마쳤습니다.");
+  expect(result.text).toContain("필수 표 정제를 마쳤습니다.");
+  expect(result.text).toContain("https://example.com/korea-city-population");
   expect(readTranscript("butler/main")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name)).toEqual(expect.arrayContaining([
@@ -2485,8 +2524,10 @@ test("native runtime repairs skipped tools required by session metadata", async 
       if (attempts.length === 1) {
         return "명령 실행 없이 마쳤습니다.";
       }
-      expect(input.prompt).toContain("Explicit Tool Requirement Repair");
+      expect(input.prompt).toContain("The Turn Kernel recorded a model-visible observation");
+      expect(input.prompt).toContain("Missing required tools:");
       expect(input.prompt).toContain("run_command");
+      expect(input.prompt).not.toContain("Explicit Tool Requirement Repair");
       await input.onAssistantTextBeforeTools?.({
         text: "summary: 필수 명령 실행을 완료합니다.\nrationale: 세션 정책이 run_command를 요구했습니다.\nnext_step: 실행 결과만 요약합니다.",
         toolCalls: [{ name: "run_command", args: { command: "pwd" } }],

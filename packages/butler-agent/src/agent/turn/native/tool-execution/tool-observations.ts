@@ -8,6 +8,15 @@ import type { NativeToolCall } from "./audited-executor-types.ts";
 
 const MODEL_VISIBLE_OUTPUT_LIMIT = 2_400;
 const TOOL_FAILURE_FALLBACK = "Tool execution failed with redacted private details.";
+const TOOL_ARGUMENT_ERROR_CODES = new Set([
+  "tool_arguments_validation_failed",
+  "invalid_tool_arguments",
+]);
+const TOOL_UNAVAILABLE_ERROR_CODES = new Set([
+  "disabled_tool",
+  "tool_unavailable",
+  "unknown_tool",
+]);
 
 export class ToolObservationError extends Error {
   readonly observationKind: ObservationKind;
@@ -136,13 +145,9 @@ function createToolObservation(input: {
 }
 
 function toolFailureKind(toolName: string, error: unknown): ObservationKind {
-  const message = error instanceof Error ? error.message : String(error);
-  if (/validation|schema|argument|required|invalid/iu.test(message)) {
-    return "tool_invalid_arguments";
-  }
-  if (toolName === "run_command" && /\brequires?\s+\w+|\bmissing\b/iu.test(message)) {
-    return "tool_invalid_arguments";
-  }
+  const errorCode = codeAt(error);
+  if (errorCode && TOOL_ARGUMENT_ERROR_CODES.has(errorCode)) return "tool_invalid_arguments";
+  if (errorCode && TOOL_UNAVAILABLE_ERROR_CODES.has(errorCode)) return "tool_unavailable";
   if (toolName === "run_command") {
     return "command_failed";
   }
@@ -150,10 +155,10 @@ function toolFailureKind(toolName: string, error: unknown): ObservationKind {
 }
 
 function failedToolResultKind(toolName: string, result: unknown): ObservationKind {
+  const explicitObservationKind = observationKindAt(result);
+  if (explicitObservationKind) return explicitObservationKind;
   if (toolName === "run_command") {
-    const commandText = valueAt(result, "command");
-    const suiteText = valueAt(result, "validation_suite") ?? valueAt(result, "suite");
-    if (suiteText || /\b(?:bun|npm|pnpm|yarn)\s+(?:test|run\s+test)|\btest\b/iu.test(commandText ?? "")) {
+    if (hasFailedValidationEvidence(result)) {
       return "test_failed";
     }
     return "command_failed";
@@ -162,7 +167,7 @@ function failedToolResultKind(toolName: string, result: unknown): ObservationKin
 }
 
 function failedToolResultSummary(toolName: string, result: unknown): string {
-  const exitCode = valueAt(result, "exit_code");
+  const exitCode = numberAt(result, "exit_code");
   if (toolName === "run_command" && typeof exitCode === "number") {
     return `run_command exited with code ${exitCode}.`;
   }
@@ -214,6 +219,51 @@ function valueAt(result: unknown, key: string): string | null {
   if (!result || typeof result !== "object" || Array.isArray(result)) return null;
   const value = (result as Record<string, unknown>)[key];
   return typeof value === "string" ? value : null;
+}
+
+function numberAt(result: unknown, key: string): number | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+  const value = (result as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function codeAt(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const code = (value as Record<string, unknown>).code;
+  return typeof code === "string" && code.trim() ? code.trim() : null;
+}
+
+function observationKindAt(result: unknown): ObservationKind | null {
+  const kind = valueAt(result, "observation_kind") ?? valueAt(result, "observationKind");
+  if (
+    kind === "tool_invalid_arguments" ||
+    kind === "tool_unavailable" ||
+    kind === "command_failed" ||
+    kind === "test_failed" ||
+    kind === "validation_failed" ||
+    kind === "completion_gap" ||
+    kind === "public_decision_required"
+  ) {
+    return kind;
+  }
+  return null;
+}
+
+function hasFailedValidationEvidence(result: unknown): boolean {
+  if (valueAt(result, "validation_suite") || valueAt(result, "suite")) return true;
+  if (!result || typeof result !== "object" || Array.isArray(result)) return false;
+  const receipts = (result as Record<string, unknown>).evidence_capability_receipts;
+  if (!Array.isArray(receipts)) return false;
+  return receipts.some((receipt) => {
+    if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) return false;
+    const record = receipt as Record<string, unknown>;
+    if (record.capability !== "validation_passed") return false;
+    if (record.verified === false) return true;
+    const scope = record.scope;
+    if (!scope || typeof scope !== "object" || Array.isArray(scope)) return false;
+    const validationResult = (scope as Record<string, unknown>).result;
+    return validationResult === "failed" || validationResult === "partial";
+  });
 }
 
 function limitModelVisibleContent(value: string): string {
