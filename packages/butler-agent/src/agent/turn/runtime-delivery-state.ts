@@ -138,9 +138,6 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
   if (isInternalRecoveryFailure(failure)) {
     return historicalInternalRecoveryDeliveryState(failure);
   }
-  if (isLiveContinuationGap(failure)) {
-    return liveContinuationObservationState();
-  }
   if (isRuntimeFault(failure)) {
     return runtimeFaultDeliveryState(failure);
   }
@@ -152,6 +149,9 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
       safeErrorCode: safeCode(failure.code ?? "user_action_required"),
       limitations: [safeLimitationText(failure.message, "User action is required before Butler can continue.")],
     });
+  }
+  if (isLiveContinuationGap(failure)) {
+    return liveContinuationObservationState();
   }
   return systemFailureDeliveryState(failure);
 }
