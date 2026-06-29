@@ -2441,9 +2441,6 @@ function localCompactEvidenceTools(tools: FunctionToolDefinition[]): FunctionToo
   return tools.filter((tool) => evidenceToolNames.has(tool.name));
 }
 
-const MIN_LOCAL_TOOL_RESULT_MODEL_TOKENS = 400;
-const MAX_LOCAL_TOOL_RESULT_MODEL_TOKENS = 4_000;
-const LOCAL_TOOL_RESULT_CONTEXT_RATIO = 0.06;
 const MIN_LOCAL_TOOL_RESULT_TOTAL_TOKENS = 800;
 const MAX_LOCAL_TOOL_RESULT_TOTAL_TOKENS = 12_000;
 const LOCAL_TOOL_RESULT_TOTAL_CONTEXT_RATIO = 0.15;
@@ -2451,19 +2448,6 @@ const MIN_LOCAL_TOOL_RESULT_AGGRESSIVE_TOTAL_TOKENS = 300;
 const MAX_LOCAL_TOOL_RESULT_AGGRESSIVE_TOTAL_TOKENS = 4_000;
 const LOCAL_TOOL_RESULT_AGGRESSIVE_TOTAL_CONTEXT_RATIO = 0.04;
 const LOCAL_TOOL_RESULT_COMPACT_MARKER = "[...compacted local tool result for context budget...]";
-
-function localToolResultModelTokenBudget(config: LocalModelConfig): number {
-  const window = Number.isFinite(config.context_window_tokens)
-    ? Math.max(0, Math.trunc(Number(config.context_window_tokens)))
-    : 0;
-  const proportional = window > 0
-    ? Math.floor(window * LOCAL_TOOL_RESULT_CONTEXT_RATIO)
-    : MAX_LOCAL_TOOL_RESULT_MODEL_TOKENS;
-  return Math.max(
-    MIN_LOCAL_TOOL_RESULT_MODEL_TOKENS,
-    Math.min(MAX_LOCAL_TOOL_RESULT_MODEL_TOKENS, proportional),
-  );
-}
 
 function localToolResultTotalTokenBudget(config: LocalModelConfig, aggressive = false): number {
   const window = Number.isFinite(config.context_window_tokens)
@@ -2534,19 +2518,7 @@ function localToolResultMessageContent(input: {
   config: LocalModelConfig;
   log: (line: string) => void;
 }): string {
-  const raw = JSON.stringify(input.payload);
-  const rawTokens = estimateContextTokens(raw);
-  const maxTokens = localToolResultModelTokenBudget(input.config);
-  if (rawTokens <= maxTokens) return raw;
-
-  return compactLocalToolResultContent({
-    source: raw,
-    toolName: input.toolName,
-    maxTokens,
-    log: input.log,
-    reason: "single_tool_result_budget",
-    ok: input.payload.ok === true,
-  });
+  return JSON.stringify(input.payload);
 }
 
 function existingLocalToolContentSource(content: unknown): {
@@ -2749,6 +2721,9 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
         attachments: options.attachments,
       });
     }
+    if (executedToolCalls > 0) {
+      rebudgetLocalToolMessages({ messages, config, log });
+    }
     const assistant = firstLocalAssistantMessage(response);
     const text = extractLocalChatText(assistant);
     const toolCalls = extractLocalToolCalls(assistant, allowedNames);
@@ -2870,7 +2845,6 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
           log,
         }),
       });
-      rebudgetLocalToolMessages({ messages, config, log });
     }
   }
 

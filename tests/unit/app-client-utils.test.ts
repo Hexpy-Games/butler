@@ -2919,6 +2919,59 @@ test("first visible progress message rows render as standalone active work block
   ]);
 });
 
+test("work block projection groups decision message rows with their following tool rows", () => {
+  const decision = {
+    work_decision_summary: "저장된 targeted test 로그 파일을 직접 읽겠습니다.",
+    work_decision_rationale: "실패 출력이 압축되어 로그 파일을 읽어야 합니다.",
+    work_decision_next_step: "실패 블록 기준으로 parser repair를 최소 패치하겠습니다.",
+    work_decision_source: "assistant-authored",
+  };
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "event-decision-message",
+      kind: "message",
+      state: "running",
+      safe_label:
+        "저장된 targeted test 로그 파일을 직접 읽겠습니다.\n실패 블록 기준으로 parser repair를 최소 패치하겠습니다.",
+      work_block_id: "public-note-decision",
+      work_block_label:
+        "저장된 targeted test 로그 파일을 직접 읽겠습니다.\n실패 블록 기준으로 parser repair를 최소 패치하겠습니다.",
+      ...decision,
+    },
+    {
+      id: "event-tool-read",
+      kind: "read",
+      state: "running",
+      safe_label: "Read: sandy-decision-targeted.log",
+      safe_tool_name: "Read",
+      safe_input_label: "sandy-decision-targeted.log",
+      tool_call_id: "tool-read",
+      work_block_id: "work-todo-decision-judge-closeout",
+      work_block_label: "Decision Judge 변경분을 검증하고 실패를 고쳐 커밋하는 중",
+      ...decision,
+    },
+  ]);
+
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toMatchObject({
+    id: "public-note-decision",
+    label:
+      "저장된 targeted test 로그 파일을 직접 읽겠습니다.\n실패 블록 기준으로 parser repair를 최소 패치하겠습니다.",
+    decision_summary: "저장된 targeted test 로그 파일을 직접 읽겠습니다.",
+    rows: [
+      expect.objectContaining({
+        id: "event-decision-message",
+        kind: "message",
+      }),
+      expect.objectContaining({
+        id: "event-tool-read",
+        kind: "read",
+        safe_tool_name: "Read",
+      }),
+    ],
+  });
+});
+
 test("first visible progress stays scoped through failure and ignores other sessions", () => {
   let messages: MessageRecord[] = [];
   let currentSummary: SessionSummaryView | null = {

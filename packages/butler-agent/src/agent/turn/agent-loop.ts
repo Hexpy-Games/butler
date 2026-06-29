@@ -248,51 +248,16 @@ function compactToolOutputForModel(input: {
 
 function toolResultToMessage(input: {
   result: AgentLoopToolResult;
-  cumulativeToolResultTokens: number;
 }): {
   message: AgentLoopMessage;
   estimatedTokens: number;
 } {
-  const rawContent = JSON.stringify(input.result.ok ? { ok: true, output: input.result.output } : {
+  const content = JSON.stringify(input.result.ok ? { ok: true, output: input.result.output } : {
     ok: false,
     ...(input.result.output !== undefined
       ? { output: input.result.output }
       : { error: input.result.error ?? "unknown tool error" }),
   });
-  const rawTokens = estimateTokens(rawContent);
-  const shouldCheckpoint = input.result.ok && (
-    rawTokens >= CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS ||
-    input.cumulativeToolResultTokens + rawTokens >= CHECKPOINT_CUMULATIVE_TOOL_RESULT_TOKENS
-  );
-  let content = rawContent;
-  if (shouldCheckpoint) {
-    const output = compactToolOutputForModel({
-      toolName: input.result.name,
-      output: input.result.output,
-      reason: rawTokens >= CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS
-        ? "single_tool_result_budget"
-        : "cumulative_tool_result_budget",
-      rawTokens,
-    });
-    const outputMetadata = outputRecord(output);
-    const checkpointTokens = estimateTokens(JSON.stringify({ ok: true, output }));
-    if (checkpointTokens < rawTokens) {
-      if (
-        outputMetadata?.butler_evidence_checkpoint === true ||
-        outputMetadata?.butler_tool_result_compacted === true
-      ) {
-        const checkpointKey = outputMetadata.butler_evidence_checkpoint === true
-          ? "checkpoint_estimated_tokens"
-          : "compact_estimated_tokens";
-        outputMetadata[checkpointKey] = checkpointTokens;
-        outputMetadata.estimated_saved_tokens = Math.max(0, rawTokens - checkpointTokens);
-      }
-      content = JSON.stringify({ ok: true, output });
-    } else if (outputMetadata?.butler_evidence_checkpoint === true) {
-      outputMetadata.checkpoint_estimated_tokens = checkpointTokens;
-      outputMetadata.estimated_saved_tokens = Math.max(0, rawTokens - checkpointTokens);
-    }
-  }
   return {
     message: {
       role: "tool",
@@ -302,6 +267,71 @@ function toolResultToMessage(input: {
     },
     estimatedTokens: estimateTokens(content),
   };
+}
+
+function compactObservedToolMessagesForFutureModelCalls(
+  messages: AgentLoopMessage[],
+): number {
+  let totalTokens = 0;
+  for (const message of messages) {
+    if (message.role !== "tool") continue;
+    const currentTokens = estimateTokens(message.content);
+    const shouldCompactSingle = currentTokens >= CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS;
+    const shouldCompactCumulative =
+      totalTokens + currentTokens >= CHECKPOINT_CUMULATIVE_TOOL_RESULT_TOKENS;
+    if (!shouldCompactSingle && !shouldCompactCumulative) {
+      totalTokens += currentTokens;
+      continue;
+    }
+    const compacted = compactToolMessageContent({
+      content: message.content,
+      toolName: message.name ?? "tool",
+      reason: shouldCompactSingle
+        ? "single_tool_result_budget"
+        : "cumulative_tool_result_budget",
+      rawTokens: currentTokens,
+    });
+    message.content = compacted;
+    totalTokens += estimateTokens(compacted);
+  }
+  return totalTokens;
+}
+
+function compactToolMessageContent(input: {
+  content: string;
+  toolName: string;
+  reason: string;
+  rawTokens: number;
+}): string {
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = JSON.parse(input.content) as Record<string, unknown>;
+  } catch {
+    // Invalid JSON cannot be safely compacted as a structured tool result.
+  }
+  if (parsed?.ok !== true) return input.content;
+  const output = compactToolOutputForModel({
+    toolName: input.toolName,
+    output: parsed.output,
+    reason: input.reason,
+    rawTokens: input.rawTokens,
+  });
+  const outputMetadata = outputRecord(output);
+  const compactContent = JSON.stringify({ ok: true, output });
+  const compactTokens = estimateTokens(compactContent);
+  if (compactTokens >= input.rawTokens) return input.content;
+  if (
+    outputMetadata?.butler_evidence_checkpoint === true ||
+    outputMetadata?.butler_tool_result_compacted === true
+  ) {
+    const checkpointKey = outputMetadata.butler_evidence_checkpoint === true
+      ? "checkpoint_estimated_tokens"
+      : "compact_estimated_tokens";
+    outputMetadata[checkpointKey] = compactTokens;
+    outputMetadata.estimated_saved_tokens = Math.max(0, input.rawTokens - compactTokens);
+    return JSON.stringify({ ok: true, output });
+  }
+  return compactContent;
 }
 
 function renderPartialLimitResponse(results: AgentLoopToolResult[]): string {
@@ -423,7 +453,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
   const events: AgentLoopEvent[] = [];
   const maxIterations = Math.max(1, input.maxIterations ?? DEFAULT_MAX_ITERATIONS);
   const toolResults: AgentLoopToolResult[] = [];
-  let cumulativeToolResultTokens = 0;
 
   const recordToolResult = async (inputRecord: {
     call: AgentLoopToolCall;
@@ -435,9 +464,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
     toolResults.push(result);
     const toolMessage = toolResultToMessage({
       result,
-      cumulativeToolResultTokens,
     });
-    cumulativeToolResultTokens += toolMessage.estimatedTokens;
     messages.push(toolMessage.message);
     emit(events, input.onEvent, {
       type: "tool_result",
@@ -490,6 +517,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
       tools: input.tools,
       iteration,
     });
+    compactObservedToolMessagesForFutureModelCalls(messages);
     emit(events, input.onEvent, {
       type: "model_response",
       iteration,

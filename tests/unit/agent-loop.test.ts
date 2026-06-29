@@ -121,8 +121,9 @@ test("agent loop serializes schema validation failures as structured observation
   expect(context).toContain("\"model_visible_content\"");
 });
 
-test("agent loop checkpoints large evidence-bearing tool results for model context", async () => {
-  let checkpointMessage = "";
+test("agent loop preserves large evidence-bearing tool results for the immediate follow-up", async () => {
+  let immediateMessage = "";
+  let futureMessage = "";
   const result = await runAgentLoop({
     messages: [{ role: "user", content: "read a large source" }],
     tools,
@@ -136,39 +137,56 @@ test("agent loop checkpoints large evidence-bearing tool results for model conte
           }],
         };
       }
-      checkpointMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
+      if (input.iteration === 1) {
+        immediateMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
+        return {
+          toolCalls: [{
+            id: "call-2",
+            name: "echo",
+            arguments: { message: "small follow-up" },
+          }],
+        };
+      }
+      futureMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
       return { text: "checkpoint received" };
     },
-    executeTool: async () => ({
-      ok: true,
-      source_urls: ["https://example.test/source"],
-      evidence_receipts: [{
-        schema: "butler.evidence-receipt.v1",
-        id: "receipt-large-source",
-        producer: { kind: "tool", name: "web_read" },
-        receiptType: "source",
-        verified: true,
-        covers: ["source_verified"],
-        summary: "Large page evidence was read.",
-        references: [{ kind: "url", ref: "https://example.test/source" }],
-        satisfies: ["source_verified"],
-      }],
-      markdown: "Evidence body ".repeat(2_500),
-    }),
+    executeTool: async (call) =>
+      call.id === "call-1"
+        ? {
+            ok: true,
+            source_urls: ["https://example.test/source"],
+            evidence_receipts: [{
+              schema: "butler.evidence-receipt.v1",
+              id: "receipt-large-source",
+              producer: { kind: "tool", name: "web_read" },
+              receiptType: "source",
+              verified: true,
+              covers: ["source_verified"],
+              summary: "Large page evidence was read.",
+              references: [{ kind: "url", ref: "https://example.test/source" }],
+              satisfies: ["source_verified"],
+            }],
+            markdown: "Evidence body ".repeat(2_500),
+          }
+        : { ok: true, small: true },
   });
 
-  const parsed = JSON.parse(checkpointMessage) as Record<string, any>;
+  const immediate = JSON.parse(immediateMessage) as Record<string, any>;
+  const future = JSON.parse(futureMessage) as Record<string, any>;
   expect(result.finalText).toBe("checkpoint received");
-  expect(parsed.output.butler_evidence_checkpoint).toBe(true);
-  expect(parsed.output.evidence_receipts[0].id).toBe("receipt-large-source");
-  expect(parsed.output.source_urls).toEqual(["https://example.test/source"]);
-  expect(parsed.output.raw_estimated_tokens).toBeGreaterThan(6_000);
-  expect(parsed.output.estimated_saved_tokens).toBeGreaterThan(5_000);
-  expect(checkpointMessage).not.toContain("Evidence body Evidence body Evidence body");
+  expect(immediate.output.butler_evidence_checkpoint).toBeUndefined();
+  expect(immediate.output.markdown).toContain("Evidence body Evidence body Evidence body");
+  expect(future.output.butler_evidence_checkpoint).toBe(true);
+  expect(future.output.evidence_receipts[0].id).toBe("receipt-large-source");
+  expect(future.output.source_urls).toEqual(["https://example.test/source"]);
+  expect(future.output.raw_estimated_tokens).toBeGreaterThan(6_000);
+  expect(future.output.estimated_saved_tokens).toBeGreaterThan(5_000);
+  expect(futureMessage).not.toContain("Evidence body Evidence body Evidence body");
 });
 
-test("agent loop compacts large non-evidence tool results for model context", async () => {
-  let compactMessage = "";
+test("agent loop preserves large non-evidence tool results for the immediate follow-up", async () => {
+  let immediateMessage = "";
+  let futureMessage = "";
   const result = await runAgentLoop({
     messages: [{ role: "user", content: "inspect a noisy command" }],
     tools,
@@ -182,31 +200,47 @@ test("agent loop compacts large non-evidence tool results for model context", as
           }],
         };
       }
-      compactMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
+      if (input.iteration === 1) {
+        immediateMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
+        return {
+          toolCalls: [{
+            id: "call-2",
+            name: "echo",
+            arguments: { message: "small follow-up" },
+          }],
+        };
+      }
+      futureMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
       return { text: "compact result received" };
     },
-    executeTool: async () => ({
-      ok: true,
-      title: "Large command output",
-      stdout: [
-        "HEAD_START",
-        "RAW_MIDDLE_SHOULD_BE_COMPACTED ".repeat(3_200),
-        "TAIL_END",
-      ].join("\n"),
-    }),
+    executeTool: async (call) =>
+      call.id === "call-1"
+        ? {
+            ok: true,
+            title: "Large command output",
+            stdout: [
+              "HEAD_START",
+              "RAW_MIDDLE_SHOULD_BE_COMPACTED ".repeat(3_200),
+              "TAIL_END",
+            ].join("\n"),
+          }
+        : { ok: true, small: true },
   });
 
-  const parsed = JSON.parse(compactMessage) as Record<string, any>;
+  const immediate = JSON.parse(immediateMessage) as Record<string, any>;
+  const future = JSON.parse(futureMessage) as Record<string, any>;
   expect(result.finalText).toBe("compact result received");
-  expect(parsed.output.butler_tool_result_compacted).toBe(true);
-  expect(parsed.output.tool_name).toBe("echo");
-  expect(parsed.output.title).toBe("Large command output");
-  expect(parsed.output.raw_estimated_tokens).toBeGreaterThan(6_000);
-  expect(parsed.output.estimated_saved_tokens).toBeGreaterThan(4_000);
-  expect(parsed.output.preview).toContain("HEAD_START");
-  expect(parsed.output.preview).toContain("TAIL_END");
-  expect(parsed.output.preview).toContain("compacted tool result for context budget");
-  expect(compactMessage.length).toBeLessThan(6_000);
+  expect(immediate.output.butler_tool_result_compacted).toBeUndefined();
+  expect(immediate.output.stdout).toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
+  expect(future.output.butler_tool_result_compacted).toBe(true);
+  expect(future.output.tool_name).toBe("echo");
+  expect(future.output.title).toBe("Large command output");
+  expect(future.output.raw_estimated_tokens).toBeGreaterThan(6_000);
+  expect(future.output.estimated_saved_tokens).toBeGreaterThan(4_000);
+  expect(future.output.preview).toContain("HEAD_START");
+  expect(future.output.preview).toContain("TAIL_END");
+  expect(future.output.preview).toContain("compacted tool result for context budget");
+  expect(futureMessage.length).toBeLessThan(6_000);
 });
 
 test("agent loop exposes assistant text before executing selected tools", async () => {

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { FIRST_VISIBLE_PROGRESS_WORK_BLOCK_PREFIX } from "../../agent/events/first-visible-progress.ts";
 import type { ProgressSummaryRow, TurnState } from "./protocol.ts";
 import { isPublicDecisionSource } from "./public-decision-source.ts";
 
@@ -151,18 +152,20 @@ export function progressRowsForTurnState(
 ): ProgressSummaryRow[] {
   if (!turnState || !isTerminalProgressState(turnState)) return rows;
   const rowState = progressRowStateForTerminalTurn(turnState);
-  return rows.map((row) => {
-    const safeDetailRows = row.safe_detail_rows?.map((detail) =>
-      detail.state && !isTerminalProgressState(detail.state)
-        ? { ...detail, state: rowState }
-        : detail,
-    );
-    const nextRow = !isTerminalProgressState(row.state)
-      ? { ...row, state: rowState }
-      : row;
-    if (!safeDetailRows) return nextRow;
-    return { ...nextRow, safe_detail_rows: safeDetailRows };
-  });
+  return rows
+    .filter((row) => !isFirstVisibleProgressRow(row))
+    .map((row) => {
+      const safeDetailRows = row.safe_detail_rows?.map((detail) =>
+        detail.state && !isTerminalProgressState(detail.state)
+          ? { ...detail, state: rowState }
+          : detail,
+      );
+      const nextRow = !isTerminalProgressState(row.state)
+        ? { ...row, state: rowState }
+        : row;
+      if (!safeDetailRows) return nextRow;
+      return { ...nextRow, safe_detail_rows: safeDetailRows };
+    });
 }
 
 export function progressRowsEquivalent(
@@ -217,6 +220,11 @@ function dedupeProgressRows(rows: ProgressSummaryRow[]): ProgressSummaryRow[] {
     byKey.set(key, previous ? mergeProgressRow(previous, row) : row);
   }
   return [...byKey.values()];
+}
+
+function isFirstVisibleProgressRow(row: ProgressSummaryRow): boolean {
+  return row.kind === "message" &&
+    Boolean(row.work_block_id?.startsWith(`${FIRST_VISIBLE_PROGRESS_WORK_BLOCK_PREFIX}-`));
 }
 
 function findProgressRowKey(

@@ -47,6 +47,7 @@ const LIFECYCLE_ACTIVITY_LABELS = new Set([
 ]);
 const WORK_BLOCK_MARKER_KIND = "work_block";
 const FIRST_VISIBLE_PROGRESS_EVENT_KIND = "turn.first_progress";
+const FIRST_VISIBLE_PROGRESS_WORK_BLOCK_ID_PREFIX = "first-progress-";
 const TURN_ACKNOWLEDGED_EVENT_KIND = "turn.acknowledged";
 const SESSION_STARTING_STATE = "session_starting";
 const PUBLIC_DECISION_SOURCES = new Set([
@@ -1134,11 +1135,13 @@ export function completedMessageWorkBlocksFromSnapshot(
   if (!snapshot) return [];
   const snapshotState = terminalStateOverride ?? snapshot.state ?? "";
   const rows = isTerminalProgressState(snapshotState)
-    ? (snapshot.safe_progress_rows ?? []).map((row) =>
-        isTerminalProgressState(row.state)
-          ? row
-          : { ...row, state: snapshotState },
-      )
+    ? (snapshot.safe_progress_rows ?? [])
+        .filter((row) => !isFirstVisibleProgressRow(row))
+        .map((row) =>
+          isTerminalProgressState(row.state)
+            ? row
+            : { ...row, state: snapshotState },
+        )
     : (snapshot.safe_progress_rows ?? []);
   return completedTurnWorkBlocks(rows).filter((block) =>
     block.rows.some((row) => isVisibleToolchainProgressRow(row, block.label)),
@@ -1190,6 +1193,7 @@ export function isVisibleToolchainProgressRow(
 
 function isCompletedTurnWorkActivityRow(row: ProgressRow): boolean {
   if (!row) return false;
+  if (isFirstVisibleProgressRow(row)) return false;
   if (isInternalProgressRow(row)) return false;
   if (row.kind === "todo") return false;
   if (row.kind === WORK_BLOCK_MARKER_KIND) return false;
@@ -1208,6 +1212,11 @@ function isWorkBlockToolActivityRow(row: ProgressRow): boolean {
 
 function isStandaloneWorkBlockMessageRow(row: ProgressRow): boolean {
   return row.kind === "message" && Boolean(row.work_block_id && row.work_block_label);
+}
+
+function isFirstVisibleProgressRow(row: ProgressRow): boolean {
+  return row.kind === "message" &&
+    Boolean(row.work_block_id?.startsWith(FIRST_VISIBLE_PROGRESS_WORK_BLOCK_ID_PREFIX));
 }
 
 function isWorkBlockDecisionCarrierRow(row?: ProgressRow): boolean {

@@ -2104,9 +2104,10 @@ test("local function tool context fallback preserves compact web evidence tools"
   }
 });
 
-test("local function tool prompts compact large tool results before follow-up local calls", async () => {
+test("local function tool prompts preserve large tool results for the immediate follow-up", async () => {
   const seenBodies: Array<Record<string, any>> = [];
-  let followupToolContent = "";
+  let immediateToolContent = "";
+  let finalSynthesisToolContent = "";
   const localServer = Bun.serve({
     port: 0,
     fetch: async (request) => {
@@ -2132,18 +2133,23 @@ test("local function tool prompts compact large tool results before follow-up lo
         });
       }
 
-      followupToolContent = String(toolMessage.content || "");
-      if (followupToolContent.includes("RAW_MIDDLE_SHOULD_BE_COMPACTED")) {
+      const toolContent = String(toolMessage.content || "");
+      if (immediateToolContent) {
+        finalSynthesisToolContent = toolContent;
         return Response.json({
-          error: {
-            message: "request (17000 tokens) exceeds the available context size (16384 tokens), try increasing it",
-          },
-        }, { status: 400 });
+          choices: [{
+            message: {
+              role: "assistant",
+              content: finalEnvelope("used raw tool evidence"),
+            },
+          }],
+        });
       }
-      if (!followupToolContent.includes("butler_tool_result_compacted")) {
+      immediateToolContent = toolContent;
+      if (!immediateToolContent.includes("RAW_MIDDLE_SHOULD_BE_COMPACTED")) {
         return Response.json({
           error: {
-            message: "expected compacted local tool result",
+            message: "expected raw local tool result on the immediate follow-up",
           },
         }, { status: 400 });
       }
@@ -2151,7 +2157,7 @@ test("local function tool prompts compact large tool results before follow-up lo
         choices: [{
           message: {
             role: "assistant",
-            content: finalEnvelope("used compacted tool evidence"),
+            content: "draft after raw tool evidence",
           },
         }],
       });
@@ -2160,7 +2166,6 @@ test("local function tool prompts compact large tool results before follow-up lo
   writeLocalModelConfig(localServer.url.toString(), "gemma-large-tool-result");
 
   try {
-    const logs: string[] = [];
     const text = await runFunctionToolPromptText({
       model: "local/gemma-large-tool-result",
       instructions: "Be concise.",
@@ -2178,7 +2183,6 @@ test("local function tool prompts compact large tool results before follow-up lo
           required: ["query"],
         },
       }],
-      log: (line) => logs.push(line),
       executeTool: async () => ({
         rows: Array.from({ length: 80 }, (_, index) => ({
           id: `row-${index}`,
@@ -2193,22 +2197,23 @@ test("local function tool prompts compact large tool results before follow-up lo
       }),
     });
 
-    expect(text).toBe("used compacted tool evidence");
+    expect(text).toBe("used raw tool evidence");
     expect(seenBodies).toHaveLength(3);
-    expect(followupToolContent).toContain("butler_tool_result_compacted");
-    expect(followupToolContent).toContain("row-0");
-    expect(followupToolContent).toContain("critical-source-at-end");
-    expect(followupToolContent).not.toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
+    expect(immediateToolContent).not.toContain("butler_tool_result_compacted");
+    expect(immediateToolContent).toContain("row-0");
+    expect(immediateToolContent).toContain("critical-source-at-end");
+    expect(immediateToolContent).toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
+    expect(finalSynthesisToolContent).toContain("butler_tool_result_compacted");
+    expect(finalSynthesisToolContent).not.toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
     expect(seenBodies.every((body) =>
       Array.isArray(body.tools) || body.messages.some((message: any) => message.role === "tool"),
     )).toBe(true);
-    expect(logs.some((line) => line.includes("result compacted for local context"))).toBe(true);
   } finally {
     localServer.stop(true);
   }
 });
 
-test("local function tool prompts rebudget multiple large tool results cumulatively", async () => {
+test("local function tool prompts compact observed large tool results for final synthesis overflow", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   let totalToolContentLength = 0;
   const localServer = Bun.serve({
@@ -2303,8 +2308,8 @@ test("local function tool prompts rebudget multiple large tool results cumulativ
 
     expect(text).toBe("used cumulatively compacted evidence");
     expect(totalToolContentLength).toBeLessThanOrEqual(12_000);
-    expect(logs.some((line) => line.includes("cumulative_tool_result_budget"))).toBe(true);
-    expect(seenBodies).toHaveLength(3);
+    expect(logs.some((line) => line.includes("final_synthesis_context_retry"))).toBe(true);
+    expect(seenBodies).toHaveLength(4);
   } finally {
     localServer.stop(true);
   }

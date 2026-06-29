@@ -16,6 +16,12 @@ import {
   TURN_ACKNOWLEDGED_EVENT_KIND,
   createTurnAcknowledgedPayload,
 } from "../../agent/events/turn-state-contract.ts";
+import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../agent/events/turn-events.ts";
+import {
+  FIRST_VISIBLE_PROGRESS_GATEWAY_NOTE,
+  FIRST_VISIBLE_PROGRESS_GATEWAY_SOURCE,
+  firstVisibleProgressPayload,
+} from "../../agent/events/first-visible-progress.ts";
 import {
   recordDurableInbound,
   recordDurableOutbound,
@@ -668,7 +674,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
   }): Promise<void> {
     if (input.envelope.transport !== APP_TRANSPORT) return;
     if (!this.options.deliverTurnEvent) return;
-    const event: RuntimeTurnEventInput = {
+    const acknowledgedEvent: RuntimeTurnEventInput = {
       kind: TURN_ACKNOWLEDGED_EVENT_KIND,
       createdAt: input.timestamp,
       payload: createTurnAcknowledgedPayload({
@@ -676,17 +682,31 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         transport: input.envelope.transport,
       }),
     };
+    const firstProgressEvent: RuntimeTurnEventInput = {
+      kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+      createdAt: input.timestamp,
+      payload: firstVisibleProgressPayload({
+        note: FIRST_VISIBLE_PROGRESS_GATEWAY_NOTE,
+        source: FIRST_VISIBLE_PROGRESS_GATEWAY_SOURCE,
+      }),
+    };
     try {
       await this.options.deliverTurnEvent({
         binding: input.binding,
         envelope: input.envelope,
         route: input.route,
-        event,
+        event: acknowledgedEvent,
+      });
+      await this.options.deliverTurnEvent({
+        binding: input.binding,
+        envelope: input.envelope,
+        route: input.route,
+        event: firstProgressEvent,
       });
       recordFirstVisibleLatencyMetric({
         butlerData: gatewayMetricsButlerData(),
         durationMs: Date.now() - input.acceptedAtMs,
-        signal: "acknowledged",
+        signal: "first_progress",
         transport: input.envelope.transport,
         role: input.binding.role,
         source: "gateway-actor",
@@ -695,7 +715,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       recordFirstVisibleLatencyMetric({
         butlerData: gatewayMetricsButlerData(),
         durationMs: Date.now() - input.acceptedAtMs,
-        signal: "acknowledged",
+        signal: "first_progress",
         status: "error",
         transport: input.envelope.transport,
         role: input.binding.role,
