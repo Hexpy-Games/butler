@@ -212,7 +212,7 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       created_at: createdAt,
       work_block_id: optionalPublicText(payload.workBlockId) ?? event.id,
       work_block_label: label,
-      ...publicDecisionFields(payload, label),
+      ...publicDecisionFields(payload),
     };
   }
   if (event.kind === "guard.started" || event.kind === "guard.completed") {
@@ -411,15 +411,13 @@ function safeDetailRows(value: unknown): ProgressRowLike["safe_detail_rows"] {
   return rows.length > 0 ? rows : undefined;
 }
 
-function publicDecisionFields(
-  payload: Record<string, unknown>,
-  fallbackSummary?: string,
-): Partial<ProgressRowLike> {
+function publicDecisionFields(payload: Record<string, unknown>): Partial<ProgressRowLike> {
   const source = optionalPublicText(payload.decisionSource ?? payload.source);
   if (!isAuthoredDecisionSource(source)) return {};
-  const summary = optionalPublicText(payload.decisionSummary ?? payload.summary) ?? fallbackSummary;
+  const summary = optionalPublicText(payload.decisionSummary ?? payload.summary);
   const rationale = optionalPublicText(payload.decisionRationale ?? payload.rationale);
   const nextStep = optionalPublicText(payload.decisionNextStep ?? payload.nextStep);
+  if (!summary || !rationale || !nextStep) return {};
   const rawEvidenceRefs = payload.decisionEvidenceRefs ?? payload.evidenceRefs;
   const evidenceRefs = Array.isArray(rawEvidenceRefs)
     ? rawEvidenceRefs

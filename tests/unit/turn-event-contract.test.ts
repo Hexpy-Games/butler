@@ -16,6 +16,8 @@ import {
   firstVisibleProgressPayload,
 } from "../../packages/butler-agent/src/agent/events/first-visible-progress.ts";
 import {
+  TURN_COMPLETION_EVIDENCE_EVENT_KIND,
+  TURN_DECISION_EVENT_KIND,
   TURN_ACKNOWLEDGED_EVENT_KIND,
   createTurnAcknowledgedPayload,
 } from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
@@ -40,14 +42,16 @@ test("turn event contract accepts every public event kind with monotonic sequenc
 });
 
 function payloadForEventKind(kind: string): Record<string, unknown> {
-  if (kind === "turn.decision") {
+  if (kind === TURN_DECISION_EVENT_KIND) {
     return {
       decisionId: "decision-1",
       summary: "Checking the turn contract.",
+      rationale: "The fixture needs an authored public decision record.",
+      nextStep: "Use the decision before visible work.",
       source: "assistant-authored",
     };
   }
-  if (kind === "turn.completion_evidence") {
+  if (kind === TURN_COMPLETION_EVIDENCE_EVENT_KIND) {
     return {
       evidenceKind: "command_executed",
       status: "verified",
@@ -298,6 +302,24 @@ test("work block events project public decision context without private reasonin
   expect(JSON.stringify(unsafeRow)).not.toContain("sessionId");
   expect(unsafeRow?.work_decision_summary).toBeUndefined();
   expect(unsafeRow?.work_decision_rationale).toBeUndefined();
+
+  const authoredWithoutSummary = createAgentTurnEvent({
+    sessionId: "general",
+    turnId: "turn-1",
+    sessionSequence: 1,
+    turnSequence: 3,
+    kind: "work.block.started",
+    payload: {
+      workBlockId: "work-authored-empty",
+      label: "This label must stay a work-block label only.",
+      decisionSource: "assistant-authored",
+    },
+  });
+  const authoredWithoutSummaryRow = progressRowFromTurnEvent(authoredWithoutSummary);
+  expect(authoredWithoutSummaryRow?.work_block_label)
+    .toBe("This label must stay a work-block label only.");
+  expect(authoredWithoutSummaryRow?.work_decision_summary).toBeUndefined();
+  expect(authoredWithoutSummaryRow?.work_decision_source).toBeUndefined();
 });
 
 test("runtime-derived and repaired progress payloads do not project public decisions", () => {

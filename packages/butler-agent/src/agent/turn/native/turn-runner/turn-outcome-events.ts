@@ -60,7 +60,7 @@ export async function emitInterruptedTurnOutcome(input: {
   await emitTurnEventBestEffort(input.turnInput, {
     kind: TURN_COMPLETION_EVIDENCE_EVENT_KIND,
     payload: createCompletionEvidencePayload({
-      evidenceKind: input.cancelled ? "cancelled" : "runtime_failed",
+      evidenceKind: input.cancelled ? "cancelled" : "provider_failed",
       status: input.cancelled ? "cancelled" : "failed",
       summary: input.cancelled ? "Turn was cancelled before final delivery." : input.reason,
       refs: [evidenceRef],
@@ -170,7 +170,7 @@ function completionEvidenceKindForCapability(
   }
   if (capability === "browser_observed") return "route_verified";
   if (capability === "explicit_blocker") return "user_decision_required";
-  if (capability === "limitation_recorded") return "runtime_failed";
+  if (capability === "limitation_recorded") return "provider_failed";
   return null;
 }
 
