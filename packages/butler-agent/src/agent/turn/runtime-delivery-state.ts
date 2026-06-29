@@ -1,5 +1,9 @@
 import { isRuntimeCancellationFailure } from "./runtime-cancellation.ts";
-import { isOperationalFailure, operationalSafeErrorCode } from "./operational-failure.ts";
+import {
+  isExactOrStatusOperationalFailure,
+  isOperationalFailure,
+  operationalSafeErrorCode,
+} from "./operational-failure.ts";
 import {
   INTERNAL_RECOVERY_REQUIRED_CODE,
   isInternalRecoveryFailure as isSharedInternalRecoveryFailure,
@@ -141,7 +145,7 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
   if (isRuntimeFault(failure)) {
     return runtimeFaultDeliveryState(failure);
   }
-  if (isOperationalFailure(failure)) {
+  if (isExactOrStatusOperationalFailure(failure)) {
     return systemFailureDeliveryState(failure);
   }
   if (isUserActionBlocker(failure)) {
@@ -152,6 +156,9 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
   }
   if (isLiveContinuationGap(failure)) {
     return liveContinuationObservationState();
+  }
+  if (isOperationalFailure(failure)) {
+    return systemFailureDeliveryState(failure);
   }
   return systemFailureDeliveryState(failure);
 }
