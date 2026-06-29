@@ -2609,6 +2609,7 @@ test("settings, command palette, and project actions are route-backed and privac
       "qwen",
       "kimi",
       "zai",
+      "opencode-go",
     ]) {
       expect(providerIds).toContain(providerId);
     }
@@ -2620,6 +2621,7 @@ test("settings, command palette, and project actions are route-backed and privac
       "qwen",
       "kimi",
       "zai",
+      "opencode-go",
     ]) {
       const provider = catalog.data.providers.find(
         (item: { provider_id: string }) => item.provider_id === providerId,
@@ -2633,6 +2635,8 @@ test("settings, command palette, and project actions are route-backed and privac
     expect(modelRefs).toContain("qwen/qwen3.7-max");
     expect(modelRefs).toContain("kimi/kimi-k2.6");
     expect(modelRefs).toContain("zai/glm-5.2");
+    expect(modelRefs).toContain("opencode-go/kimi-k2.7-code");
+    expect(modelRefs).toContain("opencode-go/minimax-m3");
     expect(
       catalog.data.models.find(
         (model: { model_ref: string }) => model.model_ref === "zai/glm-5.2",
@@ -2640,6 +2644,23 @@ test("settings, command palette, and project actions are route-backed and privac
     ).toMatchObject({
       context_window_tokens: 1_000_000,
       max_output_tokens: 128_000,
+      runtime_supported: true,
+    });
+    expect(
+      catalog.data.models.find(
+        (model: { model_ref: string }) => model.model_ref === "opencode-go/kimi-k2.7-code",
+      ),
+    ).toMatchObject({
+      provider_label: "OpenCode Go",
+      hosted_api_shape: "openai_chat_completions",
+      runtime_supported: true,
+    });
+    expect(
+      catalog.data.models.find(
+        (model: { model_ref: string }) => model.model_ref === "opencode-go/minimax-m3",
+      ),
+    ).toMatchObject({
+      hosted_api_shape: "anthropic_messages",
       runtime_supported: true,
     });
     expect(
@@ -3193,6 +3214,10 @@ test("hosted model registration uses masked credentials without pre-release migr
       (provider: { provider_id: string }) => provider.provider_id === "zai",
     );
     expect(zaiProvider?.default_api_base_url).toBe("https://api.z.ai/api/paas/v4");
+    const openCodeGoProvider = catalog.data.providers.find(
+      (provider: { provider_id: string }) => provider.provider_id === "opencode-go",
+    );
+    expect(openCodeGoProvider?.default_api_base_url).toBe("https://opencode.ai/zen/go/v1");
     expect(
       catalog.data.registered_models.map(
         (model: { model_ref: string }) => model.model_ref,
@@ -3258,6 +3283,72 @@ test("hosted model registration persists editable provider API base URLs", async
   }
 });
 
+test("OpenCode Go hosted model registration uses masked API key credentials", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const credential = await postJson(
+      `${server.url}model-catalog/provider-credentials`,
+      {
+        provider_id: "opencode-go",
+        auth_type: "api_key",
+        label: "OpenCode Go",
+        api_key: "ocg-secret-key",
+      },
+    );
+    expect(credential.data.credential).toMatchObject({
+      provider_id: "opencode-go",
+      auth_type: "api_key",
+      label: "OpenCode Go",
+      masked_value: "ocg...y",
+    });
+    expect(JSON.stringify(credential)).not.toContain("ocg-secret-key");
+
+    const registered = await postJson(
+      `${server.url}model-catalog/registered-models`,
+      {
+        provider_id: "opencode-go",
+        model_id: "kimi-k2.7-code",
+        auth_type: "api_key",
+        credential_id: credential.data.credential.id,
+        api_base_url: "https://proxy.example.test/go/v1/",
+      },
+    );
+    expect(registered.data.model).toMatchObject({
+      provider_id: "opencode-go",
+      model_ref: "opencode-go/kimi-k2.7-code",
+      hosted_api_shape: "openai_chat_completions",
+      api_base_url: "https://proxy.example.test/go/v1",
+      credential_id: credential.data.credential.id,
+      runtime_supported: true,
+    });
+    expect(JSON.stringify(registered)).not.toContain("ocg-secret-key");
+
+    const catalog = await getJson(`${server.url}model-catalog`);
+    expect(
+      catalog.data.registered_models.find(
+        (model: { model_ref: string }) => model.model_ref === "opencode-go/kimi-k2.7-code",
+      ),
+    ).toMatchObject({
+      hosted_api_shape: "openai_chat_completions",
+      api_base_url: "https://proxy.example.test/go/v1",
+    });
+    expect(catalog.data.provider_credentials).toContainEqual(
+      expect.objectContaining({
+        id: credential.data.credential.id,
+        provider_id: "opencode-go",
+        masked_value: "ocg...y",
+      }),
+    );
+    expect(JSON.stringify(catalog)).not.toContain("ocg-secret-key");
+  } finally {
+    server.stop();
+  }
+});
+
 test("hosted model registration exposes provider auth capability gates", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -3296,6 +3387,10 @@ test("hosted model registration exposes provider auth capability gates", async (
     ).toEqual(["api_key"]);
     expect(
       providers.find((provider) => provider.provider_id === "zai")
+        ?.auth_methods,
+    ).toEqual(["api_key"]);
+    expect(
+      providers.find((provider) => provider.provider_id === "opencode-go")
         ?.auth_methods,
     ).toEqual(["api_key"]);
   } finally {

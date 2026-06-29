@@ -11,7 +11,11 @@ import {
   type OpenAIAuthMode,
 } from "./openai-auth.ts";
 import { DEFAULT_CODEX_MODEL, resolveDynamicOpenAIModel } from "./openai-models.ts";
-import { defaultHostedProviderApiBaseUrl } from "./model-catalog.ts";
+import {
+  defaultHostedProviderApiBaseUrl,
+  resolveModelMetadata,
+  type HostedProviderApiShape,
+} from "./model-catalog.ts";
 import {
   readRegisteredHostedModelConfigs,
   resolveProviderCredentialSecret,
@@ -281,6 +285,7 @@ interface HostedRuntimeConfig {
   authType: "api_key" | "codex_oauth";
   apiKey?: string;
   apiBaseUrl?: string;
+  apiShape?: HostedProviderApiShape;
 }
 
 interface OpenAIAuthOverride {
@@ -1876,7 +1881,8 @@ function hostedProviderId(value: string): HostedModelProviderId | null {
     value === "xai" ||
     value === "qwen" ||
     value === "kimi" ||
-    value === "zai"
+    value === "zai" ||
+    value === "opencode-go"
   ) return value;
   return null;
 }
@@ -1900,6 +1906,7 @@ function resolveRegisteredHostedModelConfig(model?: string): RegisteredHostedMod
 function resolveHostedRuntimeConfig(model?: string): HostedRuntimeConfig | null {
   const registered = resolveRegisteredHostedModelConfig(model);
   if (!registered) return null;
+  const metadata = resolveModelMetadata(registered.model_ref);
   if (registered.auth_type === "codex_oauth") {
     return {
       providerId: registered.provider_id,
@@ -1907,6 +1914,7 @@ function resolveHostedRuntimeConfig(model?: string): HostedRuntimeConfig | null 
       modelRef: registered.model_ref,
       authType: "codex_oauth",
       apiBaseUrl: registered.api_base_url,
+      apiShape: metadata.hosted_api_shape,
     };
   }
   const apiKey = resolveProviderCredentialSecret(
@@ -1924,6 +1932,7 @@ function resolveHostedRuntimeConfig(model?: string): HostedRuntimeConfig | null 
     authType: "api_key",
     apiKey,
     apiBaseUrl: registered.api_base_url,
+    apiShape: metadata.hosted_api_shape,
   };
 }
 
@@ -2976,9 +2985,14 @@ function isHostedOpenAICompatibleProvider(
   return providerId === "xai" || providerId === "qwen" || providerId === "kimi" || providerId === "zai";
 }
 
+function hostedProviderBaseUrlEnvKey(providerId: HostedModelProviderId): string {
+  if (providerId === "opencode-go") return "BUTLER_OPENCODE_GO_BASE_URL";
+  return `BUTLER_${providerId.toUpperCase()}_BASE_URL`;
+}
+
 function hostedProviderApiBase(config: HostedRuntimeConfig): string {
   if (config.apiBaseUrl) return config.apiBaseUrl.replace(/\/+$/u, "");
-  const envKey = `BUTLER_${config.providerId.toUpperCase()}_BASE_URL`;
+  const envKey = hostedProviderBaseUrlEnvKey(config.providerId);
   const fromEnv = process.env[envKey]?.trim();
   if (fromEnv) return fromEnv.replace(/\/+$/u, "");
   const defaultBaseUrl = defaultHostedProviderApiBaseUrl(config.providerId);
@@ -3011,6 +3025,16 @@ function hostedAuthHeader(config: HostedRuntimeConfig): string {
 
 function hostedProviderErrorLabel(config: HostedRuntimeConfig): string {
   return config.providerId;
+}
+
+function openCodeGoApiShape(config: HostedRuntimeConfig): HostedProviderApiShape {
+  if (config.providerId !== "opencode-go") {
+    throw new Error(`OpenCode Go API shape requested for unsupported provider: ${config.providerId}`);
+  }
+  if (config.apiShape === "openai_chat_completions" || config.apiShape === "anthropic_messages") {
+    return config.apiShape;
+  }
+  throw new Error(`OpenCode Go model is missing a supported API shape: ${config.modelRef}`);
 }
 
 function hostedChatTools(tools: FunctionToolDefinition[]): Array<Record<string, unknown>> {
@@ -3272,7 +3296,7 @@ async function createAnthropicMessage(
     });
   } catch (error) {
     throw providerNetworkError({
-      provider: "anthropic",
+      provider: hostedProviderErrorLabel(config),
       api: "messages",
       endpoint,
       model: config.modelId,
@@ -3286,7 +3310,7 @@ async function createAnthropicMessage(
   } catch {}
   if (!response.ok) {
     throw providerHttpError({
-      provider: "anthropic",
+      provider: hostedProviderErrorLabel(config),
       api: "messages",
       statusCode: response.status,
       detail: parsed?.error?.message || raw || `status ${response.status}`,
@@ -3325,7 +3349,7 @@ async function runAnthropicPromptText(
   const text = anthropicText(response);
   if (!text) {
     throw providerEmptyResponseError({
-      provider: "anthropic",
+      provider: hostedProviderErrorLabel(config),
       api: "messages",
       endpoint: safeEndpointLabel(anthropicMessagesUrl(config)),
       model: config.modelId,
@@ -3363,7 +3387,7 @@ async function runAnthropicFunctionToolPromptText(
     if (toolUses.length === 0) {
       if (text) return text;
       throw providerEmptyResponseError({
-        provider: "anthropic",
+        provider: hostedProviderErrorLabel(config),
         api: "messages",
         endpoint: safeEndpointLabel(anthropicMessagesUrl(config)),
         model: config.modelId,
@@ -3416,7 +3440,7 @@ async function runAnthropicFunctionToolPromptText(
   const text = anthropicText(response);
   if (!text) {
     throw providerEmptyResponseError({
-      provider: "anthropic",
+      provider: hostedProviderErrorLabel(config),
       api: "messages",
       endpoint: safeEndpointLabel(anthropicMessagesUrl(config)),
       model: config.modelId,
@@ -3658,6 +3682,13 @@ async function runHostedPromptText(
   }
   if (config.providerId === "anthropic") return await runAnthropicPromptText(config, options);
   if (config.providerId === "google") return await runGeminiPromptText(config, options);
+  if (config.providerId === "opencode-go") {
+    const apiShape = openCodeGoApiShape(config);
+    if (apiShape === "openai_chat_completions") {
+      return await runHostedOpenAICompatiblePromptText(config, options);
+    }
+    return await runAnthropicPromptText(config, options);
+  }
   if (isHostedOpenAICompatibleProvider(config.providerId)) {
     return await runHostedOpenAICompatiblePromptText(config, options);
   }
@@ -3673,6 +3704,13 @@ async function runHostedFunctionToolPromptText(
   }
   if (config.providerId === "anthropic") return await runAnthropicFunctionToolPromptText(config, options);
   if (config.providerId === "google") return await runGeminiFunctionToolPromptText(config, options);
+  if (config.providerId === "opencode-go") {
+    const apiShape = openCodeGoApiShape(config);
+    if (apiShape === "openai_chat_completions") {
+      return await runHostedOpenAICompatibleFunctionToolPromptText(config, options);
+    }
+    return await runAnthropicFunctionToolPromptText(config, options);
+  }
   if (isHostedOpenAICompatibleProvider(config.providerId)) {
     return await runHostedOpenAICompatibleFunctionToolPromptText(config, options);
   }
