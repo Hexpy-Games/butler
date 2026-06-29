@@ -27,6 +27,20 @@ const fakeProvider: ModelProviderAdapter = {
   },
 };
 
+type FixtureToolCall = {
+  name: string;
+  args: Record<string, unknown>;
+  rawArguments: string;
+};
+
+type FixturePublicDecision = {
+  text: string;
+  toolCalls: Array<{
+    name: string;
+    args: Record<string, unknown>;
+  }>;
+};
+
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "butler-conversation-quality-"));
 });
@@ -37,11 +51,11 @@ afterEach(() => {
 
 async function runRuntimeFixture(input: {
   userText: string;
-  answer: string | ((input: { prompt: string; executeTool: (call: {
-    name: string;
-    args: Record<string, unknown>;
-    rawArguments: string;
-  }) => Promise<unknown> }) => string | Promise<string>);
+  answer: string | ((input: {
+    prompt: string;
+    executeTool: (call: FixtureToolCall) => Promise<unknown>;
+    onAssistantTextBeforeTools?: (message: FixturePublicDecision) => Promise<void> | void;
+  }) => string | Promise<string>);
   executeTool?: (call: { name: string; args: Record<string, unknown> }) => Promise<unknown>;
 }): Promise<{ text: string; prompts: string[]; tools: string[] }> {
   const prompts: string[] = [];
@@ -60,6 +74,7 @@ async function runRuntimeFixture(input: {
         return input.answer({
           prompt: toolInput.prompt,
           executeTool: toolInput.executeTool,
+          onAssistantTextBeforeTools: toolInput.onAssistantTextBeforeTools,
         });
       }
       return input.answer;
@@ -127,12 +142,34 @@ test("model-selected multilingual tool calls execute without runtime semantic le
       }
       throw new Error(`unexpected tool ${call.name}`);
     },
-    answer: async ({ prompt, executeTool }) => {
+    answer: async ({ prompt, executeTool, onAssistantTextBeforeTools }) => {
       expect(prompt).not.toContain("Freshness evidence required");
+      await onAssistantTextBeforeTools?.({
+        text: [
+          "summary: Search for Madrid weather because the user asked for tomorrow's forecast.",
+          "rationale: A current weather answer needs an external source selected by the model.",
+          "next_step: Read the most relevant result before answering.",
+        ].join("\n"),
+        toolCalls: [{
+          name: "web_search",
+          args: { query: "Madrid weather tomorrow" },
+        }],
+      });
       await executeTool({
         name: "web_search",
         args: { query: "Madrid weather tomorrow" },
         rawArguments: "{\"query\":\"Madrid weather tomorrow\"}",
+      });
+      await onAssistantTextBeforeTools?.({
+        text: [
+          "summary: Read the selected Madrid weather source.",
+          "rationale: The final answer should cite the checked source, not runtime keyword rules.",
+          "next_step: Use the source text to answer with citations.",
+        ].join("\n"),
+        toolCalls: [{
+          name: "web_read",
+          args: { url: "https://example.com/madrid-weather" },
+        }],
       });
       await executeTool({
         name: "web_read",
