@@ -2285,7 +2285,9 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("function toolchainLabel");
   expect(renderer).toContain("function toolchainSummaryLabel");
   expect(renderer).toContain("function toolchainGroupLabel");
-  expect(renderer).toContain('label.includes("검증")');
+  expect(renderer).toContain('return row.safe_tool_name ?? row.safe_input_label ?? "Tool"');
+  expect(renderer).not.toContain('label.includes("검증")');
+  expect(renderer).not.toContain('label.includes("review")');
   expect(renderer).toContain("activityLabel");
   expect(renderer).not.toContain("Using web search:");
   expect(renderer).not.toContain("Running command:");

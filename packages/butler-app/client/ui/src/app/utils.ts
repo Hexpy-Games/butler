@@ -984,6 +984,7 @@ export function completedTurnWorkBlocks(rows: ProgressRow[]): WorkBlockView[] {
 }
 
 export type TypedUiReadModel =
+  | { type: "receipt"; label: string; state: string; receiptKind: string }
   | { type: "decision"; summary: string; rationale?: string; nextStep?: string; source: string; evidenceRefs?: string[] }
   | { type: "work_block"; id: string; label?: string; state: string }
   | { type: "tool_control"; toolName: string; inputLabel?: string; label: string; toolCallId?: string; workBlockId?: string }
@@ -1006,27 +1007,15 @@ export function typedUiReadModelsFromProgressRows(
         safeCause: row.runtime_fault_safe_cause,
       }];
     }
-    if (row.kind === WORK_BLOCK_MARKER_KIND && row.work_block_id) {
+    if (row.receipt_kind) {
       return [{
-        type: "work_block",
-        id: row.work_block_id,
-        label: row.work_block_label,
+        type: "receipt",
+        label: row.safe_label,
         state: row.state,
+        receiptKind: row.receipt_kind,
       }];
     }
-    if (row.safe_tool_name || row.safe_input_label || row.tool_call_id) {
-      return [{
-        type: "tool_control",
-        toolName: row.safe_tool_name ?? "Tool",
-        inputLabel: row.safe_input_label,
-        label: row.safe_input_label && row.safe_tool_name
-          ? `${row.safe_tool_name}: ${row.safe_input_label}`
-          : row.safe_tool_name ?? row.safe_label,
-        toolCallId: row.tool_call_id,
-        workBlockId: row.work_block_id,
-      }];
-    }
-    const decision = publicDecisionFieldsFromRow(row);
+    const decision = explicitPublicDecisionFieldsFromRow(row);
     if (decision.decision_summary && decision.decision_source) {
       return [{
         type: "decision",
@@ -1035,6 +1024,28 @@ export function typedUiReadModelsFromProgressRows(
         nextStep: decision.decision_next_step,
         source: decision.decision_source,
         evidenceRefs: decision.decision_evidence_refs,
+      }];
+    }
+    if (row.kind === WORK_BLOCK_MARKER_KIND && row.work_block_id) {
+      return [{
+        type: "work_block",
+        id: row.work_block_id,
+        label: row.work_block_label,
+        state: row.state,
+      }];
+    }
+    if (isToolControlReadModelRow(row)) {
+      const toolName = row.safe_tool_name ?? "Tool";
+      const inputLabel = row.safe_input_label;
+      return [{
+        type: "tool_control",
+        toolName,
+        inputLabel,
+        label: inputLabel && row.safe_tool_name
+          ? `${toolName}: ${inputLabel}`
+          : row.safe_tool_name ?? inputLabel ?? "Tool",
+        toolCallId: row.tool_call_id,
+        workBlockId: row.work_block_id,
       }];
     }
     if (row.kind === "turn" && isTerminalProgressState(row.state)) {
@@ -1214,6 +1225,11 @@ function isStandaloneWorkBlockMessageRow(row: ProgressRow): boolean {
   return row.kind === "message" && Boolean(row.work_block_id && row.work_block_label);
 }
 
+function isToolControlReadModelRow(row: ProgressRow): boolean {
+  if (row.kind === "decision" || row.kind === WORK_BLOCK_MARKER_KIND) return false;
+  return Boolean(row.safe_tool_name || row.safe_input_label || row.tool_call_id);
+}
+
 function isFirstVisibleProgressRow(row: ProgressRow): boolean {
   return row.kind === "message" &&
     Boolean(row.work_block_id?.startsWith(FIRST_VISIBLE_PROGRESS_WORK_BLOCK_ID_PREFIX));
@@ -1299,7 +1315,7 @@ function buildWorkBlocks(
     if (isStandaloneWorkBlockMessageRow(row)) {
       const fallbackId = row.work_block_id ?? `row-${row.id}`;
       const blockId = canonicalWorkBlockId(row, fallbackId);
-      const label = row.work_block_label ?? row.safe_label;
+      const label = row.work_block_label ?? "";
       const block = ensureBlock(blockId, label, row.state, row.created_at, row);
       block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
       block.rows = [...block.rowMap.values()];
@@ -1387,7 +1403,22 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
         payload.safeLabel,
         "Request received. Preparing the work.",
       ),
+      receipt_kind: TURN_ACKNOWLEDGED_EVENT_KIND,
       created_at,
+    };
+  }
+  if (event.kind === "assistant.decision") {
+    const decision = explicitPublicDecisionFields(payload);
+    if (!decision.public_decision_summary || !decision.public_decision_source) {
+      return null;
+    }
+    return {
+      id: event.id,
+      kind: "decision",
+      state: "running",
+      safe_label: decision.public_decision_summary,
+      created_at,
+      ...decision,
     };
   }
   if (
@@ -1718,6 +1749,33 @@ function publicDecisionFields(
   return fields;
 }
 
+function explicitPublicDecisionFields(
+  payload: Record<string, unknown>,
+): Partial<ProgressRow> {
+  const source = safeOptionalPublicText(payload.source);
+  if (!isPublicDecisionSource(source)) return {};
+  const rawEvidenceRefs = payload.evidenceRefs;
+  const evidenceRefs = Array.isArray(rawEvidenceRefs)
+    ? rawEvidenceRefs
+        .map((item) => safeOptionalPublicText(item))
+        .filter((item): item is string => Boolean(item))
+        .slice(0, 6)
+    : undefined;
+  const fields: Partial<ProgressRow> = {};
+  const role = safeOptionalPublicText(payload.role);
+  if (role) fields.public_decision_role = role;
+  const summary = safeOptionalPublicText(payload.summary);
+  if (summary) fields.public_decision_summary = summary;
+  const rationale = safeOptionalPublicText(payload.rationale);
+  if (rationale) fields.public_decision_rationale = rationale;
+  const nextStep = safeOptionalPublicText(payload.nextStep);
+  if (nextStep) fields.public_decision_next_step = nextStep;
+  if (source) fields.public_decision_source = source;
+  if (evidenceRefs && evidenceRefs.length > 0)
+    fields.public_decision_evidence_refs = evidenceRefs;
+  return fields;
+}
+
 function isPublicDecisionSource(source: unknown): source is string {
   return typeof source === "string" && PUBLIC_DECISION_SOURCES.has(source);
 }
@@ -1736,6 +1794,29 @@ function publicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
     decision_next_step: row.work_decision_next_step,
     decision_source: row.work_decision_source,
     decision_evidence_refs: row.work_decision_evidence_refs,
+  };
+}
+
+function explicitPublicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
+  decision_summary: string;
+  decision_rationale: string;
+  decision_next_step: string;
+  decision_source: string;
+  decision_evidence_refs: string[];
+}> {
+  if (
+    !row ||
+    row.kind !== "decision" ||
+    !isPublicDecisionSource(row.public_decision_source)
+  ) {
+    return {};
+  }
+  return {
+    decision_summary: row.public_decision_summary,
+    decision_rationale: row.public_decision_rationale,
+    decision_next_step: row.public_decision_next_step,
+    decision_source: row.public_decision_source,
+    decision_evidence_refs: row.public_decision_evidence_refs,
   };
 }
 

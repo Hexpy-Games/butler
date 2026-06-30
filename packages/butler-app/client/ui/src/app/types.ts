@@ -701,6 +701,13 @@ export interface ProgressRow {
   safe_input_label?: string;
   tool_call_id?: string;
   bridge_phase?: string;
+  receipt_kind?: string;
+  public_decision_role?: string;
+  public_decision_summary?: string;
+  public_decision_rationale?: string;
+  public_decision_next_step?: string;
+  public_decision_source?: string;
+  public_decision_evidence_refs?: string[];
   work_block_id?: string;
   work_block_label?: string;
   work_decision_summary?: string;

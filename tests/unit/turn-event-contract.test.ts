@@ -24,6 +24,7 @@ import {
   TURN_DECISION_EVENT_KIND,
   TURN_ACKNOWLEDGED_EVENT_KIND,
   createTurnAcknowledgedPayload,
+  createTurnDecisionPayload,
 } from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
 
 test("turn event contract accepts every public event kind with monotonic sequences", () => {
@@ -316,7 +317,46 @@ test("turn acknowledged event projects a deterministic accepted row", () => {
     kind: "turn",
     state: "accepted",
     safe_label: "Request received. Preparing the work.",
+    receipt_kind: TURN_ACKNOWLEDGED_EVENT_KIND,
   });
+});
+
+test("assistant decision event projects as a dedicated public decision row", () => {
+  const event = createAgentTurnEvent({
+    sessionId: "general",
+    turnId: "turn-1",
+    sessionSequence: 1,
+    turnSequence: 2,
+    kind: TURN_DECISION_EVENT_KIND,
+    payload: createTurnDecisionPayload({
+      decisionId: "opening-decision-1",
+      role: "opening",
+      source: "model-authored",
+      firstVisible: true,
+      summary: "I will inspect the active read model.",
+      rationale: "Opening decisions must survive reload as typed rows.",
+      nextStep: "Render this decision before work blocks.",
+      evidenceRefs: [TURN_ACKNOWLEDGED_EVENT_KIND],
+    }),
+  });
+
+  expect(progressRowFromTurnEvent(event)).toMatchObject({
+    id: event.id,
+    kind: "decision",
+    state: "running",
+    safe_label: "I will inspect the active read model.",
+    public_decision_role: "opening",
+    public_decision_summary: "I will inspect the active read model.",
+    public_decision_rationale:
+      "Opening decisions must survive reload as typed rows.",
+    public_decision_next_step: "Render this decision before work blocks.",
+    public_decision_source: "model-authored",
+    public_decision_evidence_refs: [TURN_ACKNOWLEDGED_EVENT_KIND],
+  });
+  expect(progressRowFromTurnEvent(event)?.work_block_id).toBeUndefined();
+  expect(progressRowFromTurnEvent(event)?.work_block_label).toBeUndefined();
+  expect(progressRowFromTurnEvent(event)?.safe_tool_name).toBeUndefined();
+  expect(progressRowFromTurnEvent(event)?.work_decision_summary).toBeUndefined();
 });
 
 test("turn event progress projection preserves safe tool activity", () => {
