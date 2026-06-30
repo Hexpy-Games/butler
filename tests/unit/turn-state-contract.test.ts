@@ -160,10 +160,14 @@ test("opening decisions require model authored semantic fields and first visible
     nextStep: "Update the typed payload validation before runtime generation work.",
     source: "model-authored",
     firstVisible: true,
+    modelCallId: "model-call-opening-1",
+    latencyMs: 42,
   })).toMatchObject({
     role: "opening",
     source: "model-authored",
     firstVisible: true,
+    modelCallId: "model-call-opening-1",
+    latencyMs: 42,
   });
 
   expect(() => createTurnDecisionPayload({

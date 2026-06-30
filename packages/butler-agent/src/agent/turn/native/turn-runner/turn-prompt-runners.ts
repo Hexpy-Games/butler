@@ -1,4 +1,8 @@
-import type { FunctionToolPromptOptions, PromptUsageAttribution } from "../../../../integrations/providers/provider.ts";
+import type {
+  FunctionToolPromptOptions,
+  PromptUsageAttribution,
+  ReasoningEffort,
+} from "../../../../integrations/providers/provider.ts";
 import type { RuntimeTurnInput } from "../../../../test-support/harness/contracts.ts";
 import {
   addDirectTurnUsage,
@@ -19,6 +23,7 @@ import {
 } from "../output/tool-result-text.ts";
 import { publicWorkDecisionsFromAssistantText } from "../../../output/public-work/decisions.ts";
 import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
+import { metadataPolicyValue } from "../policy/turn-metadata-policy.ts";
 import { emitAssistantTextBeforeTools } from "./assistant-pretool-progress.ts";
 import { createProviderStreamTurnEventProjector } from "../stream/provider-stream-projector.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
@@ -34,6 +39,26 @@ import type {
   createDirectTurnBudget,
   promptUsageSectionsFromPrompt,
 } from "../../direct-turn-budget.ts";
+
+const REASONING_EFFORT_VALUES = new Set<ReasoningEffort>([
+  "none",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+]);
+
+function selectedReasoningEffort(turnInput: RuntimeTurnInput): ReasoningEffort | undefined {
+  const snakeCase = metadataPolicyValue(turnInput.metadata, "reasoning_effort");
+  const camelCase = metadataPolicyValue(turnInput.metadata, "reasoningEffort");
+  if (isReasoningEffort(snakeCase)) return snakeCase;
+  if (isReasoningEffort(camelCase)) return camelCase;
+  return undefined;
+}
+
+function isReasoningEffort(value: unknown): value is ReasoningEffort {
+  return typeof value === "string" && REASONING_EFFORT_VALUES.has(value as ReasoningEffort);
+}
 
 export function createNativeTurnPromptRunners(input: {
   turnInput: RuntimeTurnInput;
@@ -73,6 +98,7 @@ export function createNativeTurnPromptRunners(input: {
       await emitTurnEventBestEffort(input.turnInput, event);
     },
   });
+  const reasoningEffort = selectedReasoningEffort(input.turnInput);
 
   return {
     runToolPrompt: async (
@@ -88,6 +114,7 @@ export function createNativeTurnPromptRunners(input: {
           const text = await input.deps.toolPromptRunner({
             prompt: promptText,
             model: input.turnInput.model,
+            reasoningEffort,
             instructions: appendRoleToolPolicyInstructions(
               input.session.init.role,
               appendButlerToolInstructions(input.session.init.systemPrompt),
@@ -147,6 +174,7 @@ export function createNativeTurnPromptRunners(input: {
         const text = await input.deps.promptRunner({
           prompt: promptText,
           model: input.turnInput.model,
+          reasoningEffort,
           instructions: input.session.init.systemPrompt,
           cacheScope: "session-turn",
           signal: input.turnInput.signal,

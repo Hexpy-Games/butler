@@ -200,6 +200,38 @@ test("native runtime injects Project Ledger Runtime Context only for project-ori
   expect(nonProjectPrompt).not.toContain("query_project_work");
 });
 
+test("native runtime forwards turn reasoning metadata to prompt runners", async () => {
+  const observedReasoning: Array<string | undefined> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runFunctionToolPromptText: async (input) => {
+      observedReasoning.push(input.reasoningEffort);
+      return "reasoning metadata propagated";
+    },
+  });
+
+  const handle = await runtime.createSession({
+    sessionId: "butler/reasoning-metadata",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "zai/glm-5.2",
+    input: { text: "Use the selected reasoning effort." },
+    metadata: {
+      runtimePolicy: { completionReview: "disabled" },
+      reasoning_effort: "low",
+    },
+  });
+
+  expect(result.text).toBe("reasoning metadata propagated");
+  expect(observedReasoning).toContain("low");
+});
+
 test("native runtime gives worker sessions the execution tool loop and role-limited tool profile", async () => {
   const toolCatalogs: string[][] = [];
   const runtime = new NativeToolLoopRuntime({

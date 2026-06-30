@@ -537,6 +537,8 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
               : undefined,
             runtimePolicy: activeBinding.metadata?.runtimePolicy,
             workerModelRules: activeBinding.metadata?.workerModelRules,
+            reasoning_effort: activeBinding.metadata?.reasoning_effort,
+            reasoningEffort: activeBinding.metadata?.reasoningEffort,
           },
           emitIntermediateDelivery: emitIntermediate,
           emitTurnEvent,

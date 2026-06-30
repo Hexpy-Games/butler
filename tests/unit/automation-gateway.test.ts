@@ -338,6 +338,67 @@ test("queued automation events are consumed by butler-main path and delivered to
   );
 });
 
+test("queued app inbound dispatch preserves selected reasoning effort", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new ScriptedRuntime();
+  store.upsert({
+    sessionId: "butler/app-general",
+    role: "butler",
+    workspacePath: tempDir,
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "zai/glm-5.2",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "general",
+    }],
+    lifecycleState: "active",
+    metadata: {
+      reasoning_effort: "low",
+      runtimePolicy: { completionReview: "disabled" },
+    },
+  });
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue(appEnvelope({
+    eventId: "app:reasoning-low",
+    messageId: "message-reasoning-low",
+    sessionId: "butler/app-general",
+    text: "Use selected GLM low reasoning.",
+  }), { source: "test" });
+
+  const router = new GatewayRouter({ store });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler in an app queue test.",
+  });
+  const server = createGatewayServer({
+    router,
+    handlers: createLifecycleGatewayHandlers(lifecycle),
+  });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server,
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    failed: 0,
+  });
+  expect(runtime.turns[0]?.model).toBe("zai/glm-5.2");
+  expect(runtime.turns[0]?.metadata).toMatchObject({
+    reasoning_effort: "low",
+  });
+});
+
 test("queued inbound skips terminal app turns before dispatch", async () => {
   const queue = new NativeInboundQueue(tempDir);
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));

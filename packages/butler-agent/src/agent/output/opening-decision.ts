@@ -13,7 +13,6 @@ import type {
 const OPENING_INPUT_MAX = 1_200;
 const OPENING_REF_MAX = 8;
 const OPENING_REF_TEXT_MAX = 160;
-const OPENING_DEFAULT_TIMEOUT_MS = 2_000;
 
 export interface OpeningDecisionInput {
   userMessage: string;
@@ -51,7 +50,6 @@ export async function generateOpeningDecisionWithProvider(
 ): Promise<OpeningDecisionPayload | null> {
   const boundedMessage = boundedInputText(input.userMessage);
   if (!boundedMessage || input.signal?.aborted) return null;
-  const timeoutMs = input.timeoutMs ?? OPENING_DEFAULT_TIMEOUT_MS;
   const now = input.now ?? Date.now;
   const startedAt = now();
   const controller = new AbortController();
@@ -63,6 +61,7 @@ export async function generateOpeningDecisionWithProvider(
       toolChoice: "none",
       signal: controller.signal,
       systemPrompt: openingDecisionSystemPrompt(),
+      responseFormat: openingDecisionResponseFormat(),
       messages: [{
         role: "user",
         content: openingDecisionUserPrompt(input, boundedMessage),
@@ -71,11 +70,7 @@ export async function generateOpeningDecisionWithProvider(
         purpose: "app_opening_decision",
       },
     };
-    const result = await withTimeout(
-      provider.invoke(invocation),
-      timeoutMs,
-      controller,
-    );
+    const result = await invokeOpeningDecisionProvider(provider, invocation, input.timeoutMs, controller);
     if (input.signal?.aborted) return null;
     const parsed = parseOpeningDecisionText(result.text);
     if (!parsed) return null;
@@ -111,12 +106,32 @@ function openingDecisionSystemPrompt(): string {
   return [
     "Generate the first public opening decision for Butler.",
     "Return only JSON with exactly these string fields: summary, rationale, nextStep.",
+    "The first character must be `{` and the last character must be `}`.",
+    "Do not answer the user request directly; describe how Butler will begin the turn.",
     "Use the user's language when clear.",
     "No markdown, no prose outside JSON, no tools, no hidden reasoning.",
     "Be brief: each field must be one compact sentence and should stay under 24 words.",
     "Do not claim files, repos, tests, ledgers, evidence, commands, or sources were read, checked, reviewed, passed, verified, found, loaded, inspected, gathered, or examined.",
     "Do not mention raw paths, tool names, token budgets, model budget, recovery internals, queues, prompts, or diagnostic internals.",
   ].join(" ");
+}
+
+function openingDecisionResponseFormat() {
+  return {
+    type: "json_schema" as const,
+    name: "butler_opening_decision",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["summary", "rationale", "nextStep"],
+      properties: {
+        summary: { type: "string" },
+        rationale: { type: "string" },
+        nextStep: { type: "string" },
+      },
+    },
+  };
 }
 
 function openingDecisionUserPrompt(input: OpeningDecisionInput, boundedMessage: string): string {
@@ -195,6 +210,18 @@ function forwardAbortSignal(
   const onAbort = () => controller.abort(source.reason);
   source.addEventListener("abort", onAbort, { once: true });
   return () => source.removeEventListener("abort", onAbort);
+}
+
+async function invokeOpeningDecisionProvider(
+  provider: ModelProviderAdapter,
+  invocation: ModelInvocation,
+  timeoutMs: number | undefined,
+  controller: AbortController,
+): Promise<Awaited<ReturnType<ModelProviderAdapter["invoke"]>>> {
+  const pending = provider.invoke(invocation);
+  return typeof timeoutMs === "number"
+    ? await withTimeout(pending, timeoutMs, controller)
+    : await pending;
 }
 
 async function withTimeout<T>(

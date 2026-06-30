@@ -109,6 +109,19 @@ test("dedicated client design foundation uses React and Hugeicons", () => {
   expect(rootPackage.scripts["app:client:multiturn:e2e"]).toContain(
     "tests/e2e/app-client-multiturn-e2e.ts",
   );
+  expect(rootPackage.scripts["app:client:btcc-opening-decision:e2e"]).toContain(
+    "BUTLER_APP_CLIENT_E2E_MODE=btcc-opening-decision",
+  );
+  expect(rootPackage.scripts["app:client:btcc-opening-decision:live-llm:e2e"]).toContain(
+    "BUTLER_APP_CLIENT_E2E_MODE=live-llm-btcc-opening-decision BUTLER_APP_CLIENT_E2E_MODEL=openai/gpt-5.5 BUTLER_APP_CLIENT_E2E_REASONING=medium",
+  );
+  expect(rootPackage.scripts["app:client:btcc-opening-decision:live-llm:glm-low:e2e"]).toContain(
+    "BUTLER_APP_CLIENT_E2E_MODE=live-llm-btcc-opening-decision BUTLER_APP_CLIENT_E2E_MODEL=zai/glm-5.2 BUTLER_APP_CLIENT_E2E_REASONING=low",
+  );
+  const appClientMultiturnE2e = read("tests/e2e/app-client-multiturn-e2e.ts");
+  expect(appClientMultiturnE2e).toContain("copyRegisteredHostedModelConfig");
+  expect(appClientMultiturnE2e).toContain("readRegisteredHostedModelConfigs");
+  expect(appClientMultiturnE2e).toContain("resolveProviderCredentialSecret");
   expect(rootPackage.scripts["app:client:multiturn:live-llm:e2e"]).toContain(
     "BUTLER_APP_CLIENT_E2E_MODE=live-llm",
   );

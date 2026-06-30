@@ -336,6 +336,8 @@ test("assistant decision event projects as a dedicated public decision row", () 
       summary: "I will inspect the active read model.",
       rationale: "Opening decisions must survive reload as typed rows.",
       nextStep: "Render this decision before work blocks.",
+      modelCallId: "model-call-opening-1",
+      latencyMs: 37,
       evidenceRefs: [TURN_ACKNOWLEDGED_EVENT_KIND],
     }),
   });
@@ -351,6 +353,8 @@ test("assistant decision event projects as a dedicated public decision row", () 
       "Opening decisions must survive reload as typed rows.",
     public_decision_next_step: "Render this decision before work blocks.",
     public_decision_source: "model-authored",
+    public_decision_model_call_id: "model-call-opening-1",
+    public_decision_latency_ms: 37,
     public_decision_evidence_refs: [TURN_ACKNOWLEDGED_EVENT_KIND],
   });
   expect(progressRowFromTurnEvent(event)?.work_block_id).toBeUndefined();

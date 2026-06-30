@@ -2038,6 +2038,44 @@ test("app session access mode supplies structured workspace tool policy", async 
   }
 });
 
+test("app gateway bridge preserves selected reasoning effort through native runtime metadata", async () => {
+  const runtime = new ScriptedRuntime("reasoning metadata reply");
+  const bridge = new AppGatewayBridge({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runtime,
+    provider: fakeProvider,
+    sessionTitleGenerator: false,
+  });
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder: bridge.responder,
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "run with low reasoning",
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+    await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "reasoning metadata reply",
+    );
+
+    expect(runtime.turns.at(-1)?.model).toBe("openai/gpt-5.5");
+    expect(runtime.turns.at(-1)?.metadata).toMatchObject({
+      reasoning_effort: "low",
+    });
+  } finally {
+    server.stop();
+    bridge.close();
+  }
+});
+
 test("app runtime policy strips stale workspace required tools outside full access", () => {
   expect(appRuntimePolicy({
     existing: {
@@ -6466,6 +6504,32 @@ test("posted messages persist and replay after restart", async () => {
       cancellable: true,
       attempt: 1,
     });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport session binding preserves selected reasoning effort", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  const server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "queue with selected reasoning",
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+
+    const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+    try {
+      const binding = store.getBySessionId("butler/app-general");
+      expect(binding?.modelRef).toBe("openai/gpt-5.5");
+      expect(binding?.metadata).toMatchObject({
+        reasoning_effort: "low",
+      });
+    } finally {
+      store.close();
+    }
   } finally {
     server.stop();
   }

@@ -296,6 +296,52 @@ test("default OpenAI model is concrete and does not require model discovery", as
   expect(seenBody.model).toBe("gpt-5.5-codex");
 });
 
+test("registered OpenAI hosted prompt forwards response format", async () => {
+  registerHostedModelConfig({
+    providerId: "openai",
+    modelId: "gpt-5.5",
+    authType: "api_key",
+    apiKey: "registered-openai-secret",
+  }, tempDir);
+
+  let seenUrl = "";
+  let seenAuthorization = "";
+  let seenBody: Record<string, any> = {};
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    seenUrl = String(input);
+    seenAuthorization = String(new Headers(init?.headers).get("authorization"));
+    seenBody = JSON.parse(String(init?.body || "{}"));
+    return new Response(JSON.stringify({
+      id: "resp_registered_openai_format",
+      output: [{
+        type: "message",
+        content: [{ type: "output_text", text: "{\"ok\":\"yes\"}" }],
+      }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const responseFormat = {
+    type: "json_schema" as const,
+    name: "registered_openai_json_gate",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["ok"],
+      properties: { ok: { type: "string" } },
+    },
+  };
+
+  await expect(runPromptText({
+    model: "openai/gpt-5.5",
+    prompt: "hi",
+    responseFormat,
+  })).resolves.toBe("{\"ok\":\"yes\"}");
+  expect(seenUrl).toContain("/responses");
+  expect(seenAuthorization).toBe("Bearer registered-openai-secret");
+  expect(seenBody.text).toEqual({ format: responseFormat });
+});
+
 test("registered xAI model uses stored credential through OpenAI-compatible adapter", async () => {
   registerHostedModelConfig({
     providerId: "xai",
@@ -396,6 +442,64 @@ test("registered OpenAI-compatible hosted model executes tool calls", async () =
   );
 });
 
+test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  const bodies: Record<string, any>[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    bodies.push(body);
+    if (bodies.length === 1) {
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: "call_1",
+              type: "function",
+              function: {
+                name: "lookup",
+                arguments: "{\"query\":\"butler\"}",
+              },
+            }],
+          },
+        }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "tool result used" } }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runFunctionToolPromptText({
+    model: "zai/glm-5.2",
+    reasoningEffort: "low",
+    prompt: "search",
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "Look up a term.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    executeTool: async () => ({ answer: "found" }),
+  })).resolves.toBe("tool result used");
+
+  expect(bodies).toHaveLength(2);
+  expect(bodies[0]!.reasoning_effort).toBe("low");
+  expect(bodies[1]!.reasoning_effort).toBe("low");
+});
+
 test("registered Anthropic and Gemini models use provider-native API keys", async () => {
   registerHostedModelConfig({
     providerId: "anthropic",
@@ -486,6 +590,18 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
   await expect(runPromptText({
     model: "zai/glm-5.2",
     prompt: "hi",
+    reasoningEffort: "low",
+    responseFormat: {
+      type: "json_schema",
+      name: "hosted_json_gate",
+      strict: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["ok"],
+        properties: { ok: { type: "string" } },
+      },
+    },
   })).resolves.toBe("ok");
 
   expect(calls[0]!).toMatchObject({
@@ -503,6 +619,20 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
     authorization: "Bearer zai-secret",
   });
   expect(calls[2]!.body.model).toBe("glm-5.2");
+  expect(calls[2]!.body.reasoning_effort).toBe("low");
+  expect(calls[2]!.body.response_format).toEqual({
+    type: "json_schema",
+    json_schema: {
+      name: "hosted_json_gate",
+      strict: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["ok"],
+        properties: { ok: { type: "string" } },
+      },
+    },
+  });
 });
 
 test("model API calls retry transient backend failures without caller rework", async () => {

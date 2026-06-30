@@ -136,6 +136,8 @@ export interface ProgressRowLike {
   public_decision_rationale?: string;
   public_decision_next_step?: string;
   public_decision_source?: string;
+  public_decision_model_call_id?: string;
+  public_decision_latency_ms?: number;
   public_decision_evidence_refs?: string[];
   work_block_id?: string;
   work_block_label?: string;
@@ -485,6 +487,7 @@ export const TURN_EVENT_COMPATIBILITY_MAPPINGS = [
 function sanitizePublicPayloadValue(value: unknown, key: string): unknown {
   if (key === "retryable" && typeof value === "boolean") return value;
   if (key === "firstVisible" && typeof value === "boolean") return value;
+  if (key === "latencyMs") return optionalNonNegativeInteger(value) ?? null;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return sanitizePublicText(value, decisionPayloadKey(key) ? "" : fallbackLabel(key));
   }
@@ -505,7 +508,7 @@ function sanitizePublicPayloadValue(value: unknown, key: string): unknown {
 
 function decisionPayloadKey(key: string): boolean {
   return /^decision(?:Summary|Rationale|NextStep|EvidenceRefs|Source|Id)?$/u.test(key) ||
-    /^(?:summary|rationale|nextStep|evidenceRefs)$/u.test(key);
+    /^(?:summary|rationale|nextStep|evidenceRefs|modelCallId)$/u.test(key);
 }
 
 function jsonSafeRecord(value: Record<string, unknown>): Record<string, unknown> {
@@ -578,6 +581,10 @@ function publicDecisionRowFields(payload: Record<string, unknown>): Partial<Prog
   if (rationale) fields.public_decision_rationale = rationale;
   if (nextStep) fields.public_decision_next_step = nextStep;
   fields.public_decision_source = source;
+  const modelCallId = optionalPublicText(payload.modelCallId);
+  if (modelCallId) fields.public_decision_model_call_id = modelCallId;
+  const latencyMs = optionalNonNegativeInteger(payload.latencyMs);
+  if (latencyMs !== undefined) fields.public_decision_latency_ms = latencyMs;
   const rawEvidenceRefs = payload.evidenceRefs;
   const evidenceRefs = Array.isArray(rawEvidenceRefs)
     ? rawEvidenceRefs
@@ -593,6 +600,17 @@ function publicDecisionRowFields(payload: Record<string, unknown>): Partial<Prog
 function optionalPublicText(value: unknown): string | undefined {
   const text = sanitizePublicText(value, "");
   return text || undefined;
+}
+
+function optionalNonNegativeInteger(value: unknown): number | undefined {
+  const numberValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(numberValue) || numberValue < 0) return undefined;
+  return Math.round(numberValue);
 }
 
 function requiredPayloadText(value: unknown, message: string): string {

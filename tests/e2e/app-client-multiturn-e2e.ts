@@ -12,11 +12,16 @@ import { BUTLER_TOOLS, createButlerToolExecutor } from "../../packages/butler-ag
 import { toolContractJsonChars } from "../../packages/butler-agent/src/agent/tools/profiles.ts";
 import { indexTranscriptLinesForQuery } from "../../packages/butler-agent/src/agent/cognition/memory/exact-query.ts";
 import { loadPrivateEnvIntoProcess } from "../../packages/butler-agent/src/interfaces/cli/private-env.ts";
-import { runFunctionToolPromptText } from "../../packages/butler-agent/src/integrations/providers/provider.ts";
+import { runFunctionToolPromptText, runPromptText } from "../../packages/butler-agent/src/integrations/providers/provider.ts";
 import {
   readLocalModelConfigs,
   upsertLocalModelConfig,
 } from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
+import {
+  readRegisteredHostedModelConfigs,
+  registerHostedModelConfig,
+  resolveProviderCredentialSecret,
+} from "../../packages/butler-agent/src/integrations/providers/registered-models.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 const root = process.cwd();
@@ -40,6 +45,8 @@ const sourceButlerData = process.env.BUTLER_LIVE_SOURCE_BUTLER_DATA ||
 const screenshotDir = resolve(root, ".tmp", "app-client-multiturn-e2e");
 type E2eMode =
   | "deterministic"
+  | "btcc-opening-decision"
+  | "live-llm-btcc-opening-decision"
   | "tool-profile"
   | "live-llm"
   | "toolchain"
@@ -57,6 +64,10 @@ type E2eMode =
 const requestedMode = process.env.BUTLER_APP_CLIENT_E2E_MODE;
 const e2eMode: E2eMode = requestedMode === "live-llm"
   ? "live-llm"
+  : requestedMode === "btcc-opening-decision"
+    ? "btcc-opening-decision"
+  : requestedMode === "live-llm-btcc-opening-decision"
+    ? "live-llm-btcc-opening-decision"
   : requestedMode === "tool-profile"
     ? "tool-profile"
   : requestedMode === "toolchain"
@@ -85,6 +96,7 @@ const e2eMode: E2eMode = requestedMode === "live-llm"
             ? "live-llm-watl-worker"
           : "deterministic";
 const usesLiveLlm = e2eMode === "live-llm" ||
+  e2eMode === "live-llm-btcc-opening-decision" ||
   e2eMode === "live-llm-toolchain" ||
   e2eMode === "live-llm-memory-recall" ||
   e2eMode === "live-llm-beeg-autonomous" ||
@@ -95,6 +107,9 @@ const usesLiveLlm = e2eMode === "live-llm" ||
   e2eMode === "live-llm-workstream-natural-external" ||
   e2eMode === "live-llm-artifact-report" ||
   e2eMode === "live-llm-watl-worker";
+const usesBtccOpeningDecisionScenario = e2eMode === "btcc-opening-decision" ||
+  e2eMode === "live-llm-btcc-opening-decision";
+const usesDeterministicBtccOpeningDecisionScenario = e2eMode === "btcc-opening-decision";
 const usesDecisionContextScenario = e2eMode === "decision-context" || e2eMode === "live-llm-decision-context";
 const usesDynamicDecisionContextScenario = e2eMode === "live-llm-decision-context";
 const usesExternalButlerService = e2eMode === "live-llm-workstream-natural-external";
@@ -113,6 +128,7 @@ const usesDynamicWorkLabels = e2eMode === "live-llm-toolchain" ||
   usesArtifactReportScenario ||
   usesWatlWorkerScenario;
 const usesToolchainScenario = e2eMode === "toolchain" ||
+  usesDeterministicBtccOpeningDecisionScenario ||
   e2eMode === "tool-profile" ||
   e2eMode === "live-llm-toolchain" ||
   usesDecisionContextScenario ||
@@ -147,6 +163,14 @@ let liveClientReasoning = process.env.BUTLER_APP_CLIENT_E2E_REASONING?.trim();
 const runId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const TOOL_CALL_ARGUMENTS_TRANSCRIPT_SCHEMA = "butler.tool-call-arguments-transcript.v1";
 const TOOL_RESULT_EVIDENCE_TRANSCRIPT_SCHEMA = "butler.tool-result-evidence-transcript.v1";
+const BTCC_OPENING_DECISION_VISIBLE_THRESHOLD_MS = 250;
+const BTCC_OPENING_DECISION_WAIT_GRACE_MS = 1_000;
+const MOCK_OPENING_DECISION = {
+  summary: "I will orient this deterministic app validation turn.",
+  rationale: "You asked Butler to cover the opening decision stream with typed progress.",
+  nextStep: "Start with a bounded local status step before continuing the report.",
+} as const;
+const MOCK_OPENING_DECISION_TEXT = JSON.stringify(MOCK_OPENING_DECISION);
 const RAW_TOOL_RESULT_TRANSCRIPT_FIELDS = [
   "path",
   "content",
@@ -173,9 +197,10 @@ const MISSING_FINAL = usesLiveLlm
 const TOOLCHAIN_FINAL = usesLiveLlm
   ? `LIVE_E2E_TOOLCHAIN_OK_${runId}`
   : `TOOLCHAIN_E2E_OK_${runId}`;
-const toolchainProjectDir = join(tempDir, "toolchain-project");
+const toolchainProjectId = "toolchain-project";
+const toolchainProjectDir = join(tempDir, toolchainProjectId);
 const appDbPath = join(tempDir, "app.sqlite");
-const toolchainDashboardPath = join(toolchainProjectDir, ".project-ledger", "views", "dashboard.md");
+const toolchainDashboardPath = join(tempDir, "project-ledger", "projects", toolchainProjectId, "views", "dashboard.md");
 const artifactReportRelativePath = join(".tmp", "app-client-multiturn-e2e", `artifact-report-${runId}`);
 const artifactReportDir = resolve(root, artifactReportRelativePath);
 const artifactReportCsvRelativePath = join(
@@ -208,6 +233,11 @@ const expectedToolchainProgressLabels = [
   "Checking local Project Ledger status",
   "Reviewing Project Ledger next actions",
   "Rendering Project Ledger dashboard view",
+];
+const expectedToolchainToolControlLabels = [
+  "Project Ledger: status",
+  "Project Ledger: next actions",
+  "Project Ledger: dashboard view",
 ];
 const expectedDecisionContextProgressLabels = [
   "Web search: 충주 행사 2026 공개 일정",
@@ -293,7 +323,7 @@ const toolchainPrompt = usesRealProjectCheckScenario
         `2. Query local Project Ledger work with kind: next-actions for workspace path: ${toolchainProjectDir}`,
         `3. Render the local Project Ledger dashboard with view: dashboard, write: true, workspace path: ${toolchainProjectDir}`,
       ]),
-    "For every tool call, include a public work decision with 작업/이유/다음 fields.",
+    "For every tool call, include a public work decision with summary/rationale/next_step fields.",
     ...(e2eMode === "live-llm-toolchain"
       ? [
         "Call exactly these three tools once each and in order: inspect_project_status, query_project_work, render_project_dashboard.",
@@ -335,19 +365,30 @@ const beegAutonomousPrompt = [
 const waitForFinalTimeoutMs = usesLiveLlm ? 300_000 : 20_000;
 
 mkdirSync(screenshotDir, { recursive: true });
+if (usesLiveLlm) {
+  loadPrivateEnvIntoProcess(sourceButlerData);
+  liveClientModel ||= process.env.BUTLER_APP_CLIENT_E2E_MODEL?.trim() || "openai/gpt-5.5";
+  liveClientReasoning ||= process.env.BUTLER_APP_CLIENT_E2E_REASONING?.trim() || "medium";
+  if (isGptHostedE2eModel(liveClientModel)) {
+    assert(
+      liveClientModel === "openai/gpt-5.5" || liveClientModel === "gpt-5.5",
+      `live GPT E2E must use gpt-5.5, got ${liveClientModel}.`,
+    );
+    assert(
+      liveClientReasoning === "low" || liveClientReasoning === "medium",
+      `live GPT E2E reasoning must be low or medium, got ${liveClientReasoning}.`,
+    );
+  }
+  process.env.BUTLER_RUNTIME ||= "codex-api";
+  if (liveClientModel?.startsWith("local/")) copyLocalModelConfig(liveClientModel, sourceButlerData, tempDir);
+  else if (liveClientModel) copyRegisteredHostedModelConfig(liveClientModel, sourceButlerData, tempDir);
+}
+process.env.BUTLER_DATA = tempDir;
 if (usesMemoryRecallScenario) initializeMemoryRecallFixture();
 if (usesBeegAutonomousScenario || usesWatlWorkerScenario) initializeBeegRealDataSnapshot();
 if (usesToolchainScenario && !usesArtifactReportScenario) {
   initializeToolchainProject();
 }
-if (usesLiveLlm) {
-  loadPrivateEnvIntoProcess(sourceButlerData);
-  liveClientModel ||= process.env.BUTLER_APP_CLIENT_E2E_MODEL?.trim() || "openai/gpt-5.5";
-  liveClientReasoning ||= process.env.BUTLER_APP_CLIENT_E2E_REASONING?.trim();
-  process.env.BUTLER_RUNTIME ||= "codex-api";
-  if (liveClientModel?.startsWith("local/")) copyLocalModelConfig(liveClientModel, sourceButlerData, tempDir);
-}
-process.env.BUTLER_DATA = tempDir;
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -356,8 +397,12 @@ function assert(condition: unknown, message: string): asserts condition {
 assert(existsSync(electronBin), "Electron binary is missing; run npm --prefix packages/butler-app/client/electron install first.");
 assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; run npm --prefix packages/butler-app/client/ui run build first.");
 
+let mockOpeningDecisionProviderCalls = 0;
+let mockOpeningDecisionProviderLatencyMs: number | undefined;
+let btccOpeningDecisionGate: Record<string, unknown> | undefined;
+
 const fakeProvider: ModelProviderAdapter = {
-  id: "fake-openai",
+  id: "mock-provider",
   capabilities: {
     supportsStreaming: false,
     supportsToolCalls: true,
@@ -367,7 +412,35 @@ const fakeProvider: ModelProviderAdapter = {
     supportsReasoningConfig: true,
     supportsPromptCaching: true,
   },
-  async invoke() {
+  async invoke(input) {
+    if (input.metadata?.purpose === "app_opening_decision") {
+      const startedAt = Date.now();
+      assert(input.toolChoice === "none", "opening decision provider expected toolChoice=none.");
+      assert(input.reasoning?.effort === "low", "opening decision provider expected low reasoning.");
+      assert(!input.tools?.length, "opening decision provider must not receive tools.");
+      mockOpeningDecisionProviderCalls += 1;
+      if (usesLiveLlm) {
+        const prompt = input.messages
+          .map((message) => `${message.role}: ${message.content}`)
+          .join("\n\n");
+        const text = await runPromptText({
+          prompt,
+          model: input.model,
+          instructions: input.systemPrompt,
+          responseFormat: input.responseFormat,
+          reasoningEffort: input.reasoning?.effort ?? "low",
+          signal: input.signal,
+          cacheScope: "app-opening-decision-e2e",
+        });
+        mockOpeningDecisionProviderLatencyMs = Date.now() - startedAt;
+        return { text };
+      }
+      mockOpeningDecisionProviderLatencyMs = Date.now() - startedAt;
+      return {
+        text: MOCK_OPENING_DECISION_TEXT,
+        raw: { modelCallId: `mock-opening-${mockOpeningDecisionProviderCalls}` },
+      };
+    }
     return { text: "unused" };
   },
 };
@@ -412,7 +485,7 @@ const runtime = new NativeToolLoopRuntime({
         TOOLCHAIN_FINAL,
       ].join("\n");
     }
-    if (e2eMode === "toolchain" || e2eMode === "tool-profile") {
+    if (e2eMode === "toolchain" || e2eMode === "tool-profile" || usesDeterministicBtccOpeningDecisionScenario) {
       await runDeterministicToolchain(input);
       return [
         "Project Ledger check completed.",
@@ -443,7 +516,7 @@ const bridge = usesExternalButlerService
       butlerData: tempDir,
       runtime,
       provider: fakeProvider,
-      runtimePolicy: usesLiveLlm ? undefined : { completionReview: "disabled" },
+      runtimePolicy: e2eRuntimePolicy(),
     });
 const server = createAppServer({
   dbPath: appDbPath,
@@ -456,6 +529,12 @@ const server = createAppServer({
   automationSchedulerIntervalMs: false,
   responder: bridge?.responder,
 });
+if (usesDeterministicBtccOpeningDecisionScenario) {
+  server.store.updateSettings({
+    model: "openai/gpt-5.5",
+    reasoning_effort: "medium",
+  });
+}
 if (usesLiveLlm && liveClientModel) {
   server.store.updateSettings({
     model: liveClientModel,
@@ -485,6 +564,16 @@ if (usesLiveLlm && liveClientModel) {
     }, null, 2)}\n`,
     "utf8",
   );
+}
+
+function e2eRuntimePolicy(): Record<string, unknown> | undefined {
+  if (usesLiveLlm) return undefined;
+  return {
+    completionReview: "disabled",
+    ...(usesDeterministicBtccOpeningDecisionScenario
+      ? { requiredNativeToolProfiles: ["project"] }
+      : {}),
+  };
 }
 
 let electronProcess: ChildProcess | null = null;
@@ -635,6 +724,7 @@ try {
     memoryRecall: usesMemoryRecallScenario ? readMemoryRecallEvidence() : undefined,
     beegAutonomous: usesBeegAutonomousScenario ? readBeegAutonomousEvidence() : undefined,
     watlWorker: usesWatlWorkerScenario ? readWatlWorkerEvidence() : undefined,
+    btccOpeningDecision: usesBtccOpeningDecisionScenario ? btccOpeningDecisionGate : undefined,
     inboundQueue: usesExternalButlerService ? inboundQueueCounts() : undefined,
     decisionSourceCounts,
     workStreams: workStreamEvidence,
@@ -671,6 +761,7 @@ try {
   if (originalButlerData === undefined) delete process.env.BUTLER_DATA;
   else process.env.BUTLER_DATA = originalButlerData;
   if (process.env.BUTLER_APP_CLIENT_E2E_KEEP_TEMP === "1") {
+    redactE2eProviderCredentialSecrets(tempDir);
     console.error(`Preserved E2E temp dir: ${tempDir}`);
   } else {
     rmSync(tempDir, { recursive: true, force: true });
@@ -692,6 +783,11 @@ function initializeToolchainProject(): void {
   ], {
     cwd: root,
     encoding: "utf8",
+    env: {
+      ...process.env,
+      BUTLER_DATA: tempDir,
+      BUTLER_HOME: root,
+    },
   });
   assert(
     result.status === 0,
@@ -781,6 +877,55 @@ function copyLocalModelConfig(modelRef: string, source: string, target: string):
     reasoningBudgetRatio: model.reasoning_budget_ratio,
     source: model.source,
   }, target);
+}
+
+function copyRegisteredHostedModelConfig(modelRef: string, source: string, target: string): void {
+  const requestedModelId = modelRef.includes("/") ? modelRef.split("/").pop() : modelRef;
+  const model = readRegisteredHostedModelConfigs(source)
+    .find((candidate) => candidate.model_ref === modelRef || candidate.model_id === requestedModelId);
+  if (!model) return;
+  if (model.auth_type === "codex_oauth") {
+    registerHostedModelConfig({
+      providerId: model.provider_id,
+      modelId: model.model_id,
+      displayName: model.display_name,
+      authType: "codex_oauth",
+      apiBaseUrl: model.api_base_url,
+    }, target);
+    return;
+  }
+  const apiKey = resolveProviderCredentialSecret(model.credential_id, model.provider_id, source);
+  if (!apiKey) throw new Error(`registered hosted model ${model.model_ref} is missing a source credential`);
+  registerHostedModelConfig({
+    providerId: model.provider_id,
+    modelId: model.model_id,
+    displayName: model.display_name,
+    authType: "api_key",
+    apiKey,
+    credentialLabel: `${model.display_name} E2E`,
+    apiBaseUrl: model.api_base_url,
+  }, target);
+}
+
+function redactE2eProviderCredentialSecrets(target: string): void {
+  const credentialPath = join(target, "auth", "model-provider-credentials.json");
+  if (!existsSync(credentialPath)) return;
+  try {
+    const parsed = JSON.parse(readFileSync(credentialPath, "utf8")) as Record<string, unknown>;
+    const credentials = Array.isArray(parsed.credentials) ? parsed.credentials : [];
+    writeFileSync(credentialPath, `${JSON.stringify({
+      ...parsed,
+      credentials: credentials.map((credential) => {
+        if (!credential || typeof credential !== "object" || Array.isArray(credential)) return credential;
+        return {
+          ...credential,
+          secret: "[redacted-by-e2e-harness]",
+        };
+      }),
+    }, null, 2)}\n`, "utf8");
+  } catch {
+    rmSync(credentialPath, { force: true });
+  }
 }
 
 function readWorkStreamEvidence(): Array<Record<string, unknown>> {
@@ -900,6 +1045,11 @@ function isReasoningEffort(value: string | undefined): value is "none" | "low" |
   return value === "none" || value === "low" || value === "medium" || value === "high" || value === "xhigh";
 }
 
+function isGptHostedE2eModel(value: string | undefined): boolean {
+  if (!value) return false;
+  return value === "gpt-5.5" || value.startsWith("openai/gpt-");
+}
+
 function assertProfiledToolSurface(
   toolNames: string[],
   tools: Parameters<typeof runFunctionToolPromptText>[0]["tools"],
@@ -929,28 +1079,33 @@ async function runDeterministicToolchain(
   for (const name of requiredToolchainCalls) {
     assert(toolNames.includes(name), `deterministic toolchain provider surface did not include required tool: ${name}`);
   }
-  for (const name of requiredToolchainCalls) {
-    if (name === "inspect_project_status") {
-      await input.executeTool({
-        name,
-        args: { project_path: toolchainProjectDir },
-        rawArguments: JSON.stringify({ project_path: toolchainProjectDir }),
-      });
-    } else if (name === "query_project_work") {
-      await input.executeTool({
-        name,
-        args: { project_path: toolchainProjectDir, kind: "next-actions" },
-        rawArguments: JSON.stringify({ project_path: toolchainProjectDir, kind: "next-actions" }),
-      });
-    } else {
-      await input.executeTool({
-        name,
-        args: { project_path: toolchainProjectDir, view: "dashboard", write: true },
-        rawArguments: JSON.stringify({ project_path: toolchainProjectDir, view: "dashboard", write: true }),
-      });
-    }
+  for (const [index, name] of requiredToolchainCalls.entries()) {
+    const args = deterministicToolchainArgs(name);
+    await input.onAssistantTextBeforeTools?.({
+      text: [
+        `summary: ${expectedToolchainWorkBlockLabels[index]}`,
+        "rationale: 요청한 Project Ledger 검증은 단계별 도구 결과를 관찰해야 안전하게 진행됩니다.",
+        `next_step: ${expectedToolchainProgressLabels[index]}.`,
+      ].join("\n"),
+      toolCalls: [{ name, args }],
+    });
+    await input.executeTool({
+      name,
+      args,
+      rawArguments: JSON.stringify(args),
+    });
     observedToolCalls.push(name);
   }
+}
+
+function deterministicToolchainArgs(name: string): Record<string, unknown> {
+  if (name === "inspect_project_status") {
+    return { project_path: toolchainProjectDir };
+  }
+  if (name === "query_project_work") {
+    return { project_path: toolchainProjectDir, kind: "next-actions" };
+  }
+  return { project_path: toolchainProjectDir, view: "dashboard", write: true };
 }
 
 async function runDeterministicDecisionContext(
@@ -1079,6 +1234,12 @@ function deterministicPublicEventRows(): Array<Record<string, string>> {
 
 async function runMultiturnBrowserScenario(client: CdpClient): Promise<void> {
   await sendComposerTurn(client, firstPrompt);
+  if (usesBtccOpeningDecisionScenario) {
+    await waitForBtccOpeningDecisionVisible(
+      client,
+      usesLiveLlm ? undefined : BTCC_OPENING_DECISION_VISIBLE_THRESHOLD_MS,
+    );
+  }
   await waitForVisibleOrAssistantFinalText(client, turnActivityPanelSelector, "live turn activity", FIRST_FINAL);
   await waitForAssistantFinalText(client, FIRST_FINAL, waitForFinalTimeoutMs);
   await assertNoVisibleStatusOnlyFinalActivity(client);
@@ -1295,6 +1456,9 @@ function readBeegAutonomousEvidence(): Record<string, unknown> {
 
 async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
   await sendComposerTurn(client, toolchainPrompt);
+  if (usesBtccOpeningDecisionScenario) {
+    await waitForBtccOpeningDecisionVisible(client, BTCC_OPENING_DECISION_VISIBLE_THRESHOLD_MS);
+  }
   if (e2eMode === "tool-profile") {
     await waitForAssistantFinalText(client, TOOLCHAIN_FINAL, waitForFinalTimeoutMs);
     const durableToolCalls = durableTranscriptToolCalls();
@@ -1424,7 +1588,7 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
       : "observed or durable runtime tool calls",
   );
   assertRequiredToolchainOrder(durableToolCalls, "durable transcript tool calls");
-  if (e2eMode === "toolchain") {
+  if (e2eMode === "toolchain" || usesBtccOpeningDecisionScenario) {
     assert(
       prompts.length === 1,
       `deterministic toolchain should use one runtime prompt, observed ${prompts.length}: ${promptInvocationPreview()}`,
@@ -1529,6 +1693,424 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
   if (usesLiveLlm && usesToolchainScenario && !usesExternalButlerService) {
     assert(liveLlmCalls >= 1, `expected at least 1 real LLM call, observed ${liveLlmCalls}.`);
   }
+  if (usesBtccOpeningDecisionScenario) {
+    await assertBtccOpeningDecisionTypedGate("final");
+  }
+}
+
+interface BtccProgressRow {
+  id?: string;
+  kind?: string;
+  safe_label?: string;
+  state?: string;
+  created_at?: string;
+  safe_tool_name?: string;
+  safe_input_label?: string;
+  tool_call_id?: string;
+  receipt_kind?: string;
+  public_decision_role?: string;
+  public_decision_summary?: string;
+  public_decision_rationale?: string;
+  public_decision_next_step?: string;
+  public_decision_source?: string;
+  public_decision_model_call_id?: string;
+  public_decision_latency_ms?: number;
+  work_block_id?: string;
+  work_block_label?: string;
+  work_decision_summary?: string;
+  work_decision_rationale?: string;
+  work_decision_next_step?: string;
+  runtime_fault_id?: string;
+  runtime_fault_kind?: string;
+  runtime_fault_retryable?: boolean;
+  runtime_fault_public_summary?: string;
+  runtime_fault_safe_error_code?: string;
+  safe_detail_rows?: Array<{ safe_label?: string; safe_value?: string; kind?: string }>;
+}
+
+type BtccTypedReadModel =
+  | { type: "receipt"; row: BtccProgressRow }
+  | { type: "decision"; row: BtccProgressRow }
+  | { type: "work_block"; row: BtccProgressRow }
+  | { type: "tool_control"; row: BtccProgressRow }
+  | { type: "runtime_fault"; row: BtccProgressRow }
+  | { type: "outcome"; row: BtccProgressRow }
+  | { type: "observation"; row: BtccProgressRow };
+
+async function waitForBtccOpeningDecisionVisible(client: CdpClient, thresholdMs?: number): Promise<void> {
+  const startedAt = Date.now();
+  let ackVisibleAt: number | undefined;
+  let lastRowSummary = "";
+  while (Date.now() - startedAt < waitForFinalTimeoutMs) {
+    const projection = await readBtccTypedProjection();
+    lastRowSummary = projection.rows
+      .map((row) => `${row.kind ?? "unknown"}:${row.receipt_kind ?? row.public_decision_role ?? row.safe_label ?? ""}`)
+      .join(" | ");
+    if (projection.rows.some(isAcknowledgedReceiptRow)) {
+      ackVisibleAt ??= Date.now();
+    }
+    const openingIndex = projection.rows.findIndex(isOpeningDecisionRow);
+    if (openingIndex < 0) {
+      const finalText = await visibleAssistantFinalText(client);
+      assert(
+        finalText.length === 0,
+        `opening decision must precede assistant final text; observed ${JSON.stringify(finalText.slice(0, 240))}`,
+      );
+    }
+    if (ackVisibleAt !== undefined && openingIndex < 0) {
+      const prematureRows = projection.rows.filter(isPrematureBeforeOpeningRow);
+      assert(
+        prematureRows.length === 0,
+        `opening decision must precede visible work, terminal state, or runtime fault; observed ${JSON.stringify(prematureRows)}`,
+      );
+      if (thresholdMs !== undefined && Date.now() - ackVisibleAt > thresholdMs + BTCC_OPENING_DECISION_WAIT_GRACE_MS) {
+        throw new Error(
+          `timed out waiting for typed opening decision after ACK; threshold=${thresholdMs}ms rows=${lastRowSummary}`,
+        );
+      }
+    }
+    if (ackVisibleAt !== undefined && projection.rows.some(isOpeningDecisionRow)) {
+      const visibleLatencyMs = Date.now() - ackVisibleAt;
+      btccOpeningDecisionGate = {
+        ack_to_opening_decision_visible_ms: visibleLatencyMs,
+        ...(thresholdMs === undefined ? {} : { threshold_ms: thresholdMs }),
+        provider_opening_latency_ms: mockOpeningDecisionProviderLatencyMs,
+        event_opening_latency_ms: projection.rows.find(isOpeningDecisionRow)?.public_decision_latency_ms,
+      };
+      if (thresholdMs !== undefined) {
+        assert(
+          visibleLatencyMs <= thresholdMs,
+          `ack_to_opening_decision_visible_ms exceeded ${thresholdMs}: ${visibleLatencyMs}`,
+        );
+      }
+      await assertBtccOpeningDecisionTypedGate("opening-visible");
+      return;
+    }
+    await delay(20);
+  }
+  throw new Error(`timed out waiting for typed opening decision; rows=${lastRowSummary}`);
+}
+
+function isPrematureBeforeOpeningRow(row: BtccProgressRow): boolean {
+  return row.runtime_fault_id !== undefined ||
+    row.kind === "work_block" ||
+    isTypedToolControlRow(row) ||
+    (row.kind === "turn" && ["delivered", "failed", "cancelled"].includes(row.state ?? ""));
+}
+
+async function visibleAssistantFinalText(client: CdpClient): Promise<string> {
+  return await evaluateString(client, `(() => {
+    const documents = Array.from(document.querySelectorAll(${JSON.stringify(assistantFinalMarkdownSelector)}));
+    return documents
+      .map((element) => element.textContent?.trim() ?? "")
+      .filter(Boolean)
+      .join("\\n");
+  })()`);
+}
+
+async function assertBtccOpeningDecisionTypedGate(phase: string): Promise<void> {
+  const projection = await readBtccTypedProjection();
+  const rows = projection.rows;
+  const models = projection.models;
+  const ackIndex = rows.findIndex(isAcknowledgedReceiptRow);
+  const openingIndex = rows.findIndex(isOpeningDecisionRow);
+  assert(ackIndex >= 0, `${phase}: typed projection is missing turn.acknowledged receipt.`);
+  assert(openingIndex >= 0, `${phase}: typed projection is missing assistant.decision role=opening.`);
+  assert(ackIndex < openingIndex, `${phase}: opening decision must follow turn.acknowledged.`);
+  assert(
+    mockOpeningDecisionProviderCalls === 1,
+    `${phase}: mock provider should emit exactly one opening decision, observed ${mockOpeningDecisionProviderCalls}.`,
+  );
+  const ackRow = rows[ackIndex]!;
+  assert(
+    ackRow.kind === "turn" &&
+      ackRow.state === "accepted" &&
+      ackRow.receipt_kind === "turn.acknowledged" &&
+      !ackRow.public_decision_role &&
+      !ackRow.public_decision_source &&
+      !ackRow.work_block_id &&
+      !ackRow.tool_call_id,
+    `${phase}: turn.acknowledged must remain a receipt/status row only: ${JSON.stringify(ackRow)}`,
+  );
+  const openingRow = rows[openingIndex]!;
+  assert(
+      openingRow.kind === "decision" &&
+      openingRow.public_decision_role === "opening" &&
+      openingRow.public_decision_source === "model-authored" &&
+      typeof openingRow.public_decision_summary === "string" &&
+      openingRow.public_decision_summary.trim().length > 0,
+    `${phase}: opening decision row does not carry the expected typed model-authored projection: ${JSON.stringify(openingRow)}`,
+  );
+  if (usesDeterministicBtccOpeningDecisionScenario) {
+    assert(
+      openingRow.public_decision_summary === MOCK_OPENING_DECISION.summary &&
+        openingRow.public_decision_model_call_id === "mock-opening-1",
+      `${phase}: deterministic opening decision did not preserve the mock summary/modelCallId: ${JSON.stringify(openingRow)}`,
+    );
+  }
+  assert(
+    typeof openingRow.public_decision_latency_ms === "number" &&
+      Number.isFinite(openingRow.public_decision_latency_ms) &&
+      openingRow.public_decision_latency_ms >= 0,
+    `${phase}: opening decision row must preserve typed latencyMs: ${JSON.stringify(openingRow)}`,
+  );
+  assert(
+    !/^(Request received\. Preparing the work\.|Preparing to work on this\.|Working|Thinking)$/iu.test(
+      openingRow.public_decision_summary,
+    ),
+    `${phase}: opening decision summary fell back to generic progress copy: ${JSON.stringify(openingRow)}`,
+  );
+  assertRowTimestampOrder(ackRow, openingRow, `${phase}: acknowledged/opening row order`);
+  const preOpeningSemanticRows = rows
+    .slice(ackIndex + 1, openingIndex)
+    .filter((row) =>
+      row.kind === "decision" ||
+      row.kind === "work_block" ||
+      isTypedToolControlRow(row) ||
+      row.kind === "message" ||
+      (row.kind === "turn" && !row.receipt_kind),
+    );
+  assert(
+    preOpeningSemanticRows.length === 0,
+    `${phase}: opening decision must be the first meaningful assistant event; observed earlier rows ${JSON.stringify(preOpeningSemanticRows)}`,
+  );
+  const workBlocks = models.filter((model) => model.type === "work_block");
+  const toolControls = models.filter((model) => model.type === "tool_control");
+  if (phase === "opening-visible") {
+    assertNoBtccFallbackTypedState(rows, models, phase);
+    assertNoGenericFirstProgressWorkBlock(workBlocks, phase);
+    return;
+  }
+  assert(workBlocks.length >= 3, `${phase}: expected deterministic multi-tool work blocks, observed ${workBlocks.length}.`);
+  assert(toolControls.length >= 3, `${phase}: expected deterministic multi-tool controls, observed ${toolControls.length}.`);
+  assertTypedSurfaceOrder(models, phase);
+  assertNoBtccFallbackTypedState(rows, models, phase);
+  assertNoDuplicateBlockToolLabels(workBlocks, toolControls, phase);
+  assertNoGenericFirstProgressWorkBlock(workBlocks, phase);
+  assertTypedToolControlLabels(toolControls, phase);
+}
+
+async function readBtccTypedProjection(): Promise<{ rows: BtccProgressRow[]; models: BtccTypedReadModel[] }> {
+  const sessionId = latestE2eSessionId();
+  const [sessionView, eventRows] = await Promise.all([
+    fetchJson(`${server.url}session-view?session_id=${encodeURIComponent(sessionId)}`),
+    replayAgentProgressRows(),
+  ]);
+  const viewData = sessionView.data as {
+    latest_turn?: {
+      progress?: { safe_progress_rows?: BtccProgressRow[] };
+    } | null;
+  };
+  const sessionRows = viewData.latest_turn?.progress?.safe_progress_rows ?? [];
+  const rows = dedupeBtccProgressRows([...eventRows, ...sessionRows]);
+  return {
+    rows,
+    models: rows.flatMap(projectBtccTypedReadModel),
+  };
+}
+
+async function replayAgentProgressRows(): Promise<BtccProgressRow[]> {
+  const response = await fetch(`${server.url}events?cursor=0`);
+  assert(response.ok, `event replay failed with HTTP ${response.status}`);
+  const body = await response.json() as {
+    data?: {
+      events?: Array<{
+        type?: string;
+        payload?: {
+          row?: BtccProgressRow;
+        };
+      }>;
+    };
+  };
+  return (body.data?.events ?? [])
+    .filter((event) => event.type === "agent.turn_event.progress" && event.payload?.row)
+    .map((event) => event.payload!.row!);
+}
+
+function dedupeBtccProgressRows(rows: BtccProgressRow[]): BtccProgressRow[] {
+  const seen = new Set<string>();
+  const deduped: BtccProgressRow[] = [];
+  for (const row of rows) {
+    const key = [
+      row.id,
+      row.kind,
+      row.receipt_kind,
+      row.public_decision_role,
+      row.tool_call_id,
+      row.work_block_id,
+      row.safe_label,
+    ].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(row);
+  }
+  return deduped;
+}
+
+function projectBtccTypedReadModel(row: BtccProgressRow): BtccTypedReadModel[] {
+  if (row.runtime_fault_id && row.runtime_fault_kind && row.runtime_fault_public_summary) {
+    return [{ type: "runtime_fault", row }];
+  }
+  if (row.receipt_kind) return [{ type: "receipt", row }];
+  if (row.kind === "decision" && row.public_decision_source && row.public_decision_summary) {
+    return [{ type: "decision", row }];
+  }
+  if (row.kind === "work_block" && row.work_block_id) return [{ type: "work_block", row }];
+  if (isTypedToolControlRow(row)) return [{ type: "tool_control", row }];
+  if (row.kind === "turn" && ["delivered", "failed", "cancelled"].includes(row.state ?? "")) {
+    return [{ type: "outcome", row }];
+  }
+  if (row.safe_detail_rows?.length) return [{ type: "observation", row }];
+  return [];
+}
+
+function isAcknowledgedReceiptRow(row: BtccProgressRow): boolean {
+  return row.receipt_kind === "turn.acknowledged";
+}
+
+function isOpeningDecisionRow(row: BtccProgressRow): boolean {
+  return row.kind === "decision" &&
+    row.public_decision_role === "opening" &&
+    row.public_decision_source === "model-authored";
+}
+
+function isTypedToolControlRow(row: BtccProgressRow): boolean {
+  return Boolean(row.tool_call_id && (row.safe_tool_name || row.safe_input_label));
+}
+
+function assertRowTimestampOrder(left: BtccProgressRow, right: BtccProgressRow, label: string): void {
+  const leftMs = Date.parse(left.created_at ?? "");
+  const rightMs = Date.parse(right.created_at ?? "");
+  if (!Number.isFinite(leftMs) || !Number.isFinite(rightMs)) return;
+  assert(leftMs <= rightMs, `${label}: ${left.created_at} should be <= ${right.created_at}`);
+}
+
+function assertTypedSurfaceOrder(models: BtccTypedReadModel[], phase: string): void {
+  const receiptIndex = models.findIndex((model) => model.type === "receipt" && isAcknowledgedReceiptRow(model.row));
+  const openingIndex = models.findIndex((model) => model.type === "decision" && isOpeningDecisionRow(model.row));
+  const workIndex = models.findIndex((model) => model.type === "work_block");
+  const toolIndex = models.findIndex((model) => model.type === "tool_control");
+  assert(
+    receiptIndex >= 0 && openingIndex > receiptIndex,
+    `${phase}: typed readmodels must start with receipt before opening decision.`,
+  );
+  assert(
+    workIndex > openingIndex,
+    `${phase}: work blocks must not appear before the opening decision.`,
+  );
+  assert(
+    toolIndex > workIndex,
+    `${phase}: tool controls must appear after their work block surface.`,
+  );
+}
+
+function assertNoBtccFallbackTypedState(
+  rows: BtccProgressRow[],
+  models: BtccTypedReadModel[],
+  phase: string,
+): void {
+  const forbiddenStates = new Set([
+    "recovering_internal",
+    "needs_evidence",
+    "completion_continuation",
+    "runtime_continuation",
+  ]);
+  const badStateRows = rows.filter((row) => forbiddenStates.has(row.state ?? ""));
+  assert(badStateRows.length === 0, `${phase}: public projection exposed forbidden turn states: ${JSON.stringify(badStateRows)}`);
+  const runtimeFaults = models.filter((model) => model.type === "runtime_fault");
+  assert(runtimeFaults.length === 0, `${phase}: deterministic gate exposed public runtime fault/retry state: ${JSON.stringify(runtimeFaults)}`);
+  const fallbackPatterns = [
+    /recover(?:y|ing)|recovering_internal/iu,
+    /model[- ]?budget|token budget|maxOutputTokens/iu,
+    /verification failure|completion verification|could not verify/iu,
+    /needs_evidence/iu,
+    /\bretry\b/iu,
+  ];
+  const badPublicFields = rows
+    .filter((row) => !isAcknowledgedReceiptRow(row))
+    .flatMap((row) => typedPublicTextFields(row).map((value) => ({ row, value })))
+    .filter(({ value }) => fallbackPatterns.some((pattern) => pattern.test(value)));
+  assert(
+    badPublicFields.length === 0,
+    `${phase}: public typed fields exposed recovery/model-budget/verification fallback text: ${JSON.stringify(badPublicFields)}`,
+  );
+}
+
+function typedPublicTextFields(row: BtccProgressRow): string[] {
+  return [
+    row.safe_label,
+    row.public_decision_summary,
+    row.public_decision_rationale,
+    row.public_decision_next_step,
+    row.work_block_label,
+    row.work_decision_summary,
+    row.work_decision_rationale,
+    row.work_decision_next_step,
+    row.runtime_fault_public_summary,
+    ...(row.safe_detail_rows ?? []).flatMap((detail) => [detail.safe_label, detail.safe_value]),
+  ].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+}
+
+function assertNoDuplicateBlockToolLabels(
+  workBlocks: Array<Extract<BtccTypedReadModel, { type: "work_block" }>>,
+  toolControls: Array<Extract<BtccTypedReadModel, { type: "tool_control" }>>,
+  phase: string,
+): void {
+  for (const block of workBlocks) {
+    const blockLabel = (block.row.work_block_label ?? "").trim();
+    if (!blockLabel) continue;
+    const duplicateTools = toolControls.filter((tool) =>
+      tool.row.work_block_id === block.row.work_block_id &&
+      typedToolControlLabel(tool.row) === blockLabel,
+    );
+    assert(
+      duplicateTools.length === 0,
+      `${phase}: work block label was duplicated into tool controls: ${blockLabel}`,
+    );
+  }
+}
+
+function typedToolControlLabel(row: BtccProgressRow): string {
+  const toolName = row.safe_tool_name ?? "";
+  const inputLabel = row.safe_input_label ?? "";
+  return toolName && inputLabel ? `${toolName}: ${inputLabel}` : toolName || inputLabel;
+}
+
+function assertTypedToolControlLabels(
+  toolControls: Array<Extract<BtccTypedReadModel, { type: "tool_control" }>>,
+  phase: string,
+): void {
+  const labels = toolControls.map((model) => typedToolControlLabel(model.row)).filter(Boolean);
+  for (const label of labels) {
+    assert(
+      !requiredToolchainCalls.some((name) => label.includes(name)),
+      `${phase}: typed tool control exposed raw tool id in user-facing label: ${label}`,
+    );
+  }
+  let cursor = 0;
+  for (const label of labels) {
+    if (label === expectedToolchainToolControlLabels[cursor]) cursor += 1;
+    if (cursor === expectedToolchainToolControlLabels.length) return;
+  }
+  throw new Error(
+    `${phase}: expected user-facing tool control order not observed: ${labels.join(" -> ")}`,
+  );
+}
+
+function assertNoGenericFirstProgressWorkBlock(
+  workBlocks: Array<Extract<BtccTypedReadModel, { type: "work_block" }>>,
+  phase: string,
+): void {
+  const genericBlocks = workBlocks.filter((block) =>
+    block.row.work_block_id?.startsWith("first-progress-") ||
+    /^(Request received\. Preparing the work\.|Preparing to work on this\.|Working|Thinking)$/iu.test(
+      (block.row.work_block_label ?? block.row.safe_label ?? "").trim(),
+    ),
+  );
+  assert(
+    genericBlocks.length === 0,
+    `${phase}: generic first-progress row leaked as a standalone work block: ${JSON.stringify(genericBlocks)}`,
+  );
 }
 
 async function assertCanonicalSessionSnapshot(
