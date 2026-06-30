@@ -3,9 +3,12 @@ import { sanitizePublicText } from "./turn-events.ts";
 export const FIRST_VISIBLE_PROGRESS_WORK_BLOCK_PREFIX = "first-progress";
 export const FIRST_VISIBLE_PROGRESS_FALLBACK_NOTE = "Preparing to work on this.";
 export const FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE = "runtime-derived";
+export const FIRST_VISIBLE_PROGRESS_GATEWAY_SOURCE = "gateway-accepted";
 export const FIRST_VISIBLE_PROGRESS_ASSISTANT_SOURCE = "assistant-authored";
 export const FIRST_VISIBLE_PROGRESS_ACCEPTED_SAFETY_STATUS = "accepted";
 export const FIRST_VISIBLE_PROGRESS_REPAIRED_SAFETY_STATUS = "repaired";
+export const FIRST_VISIBLE_PROGRESS_GATEWAY_NOTE =
+  "Request received. Preparing the work.";
 
 const FIRST_VISIBLE_PROGRESS_ID_FRAGMENT_MAX = 48;
 const UNSUPPORTED_EVIDENCE_CLAIM_PATTERN =

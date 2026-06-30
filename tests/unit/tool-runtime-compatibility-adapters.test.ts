@@ -16,7 +16,6 @@ import {
   appSafeResponderError,
 } from "../../packages/butler-agent/src/gateways/app/failure-ux-contract.ts";
 import { recoverableLimitedDeliveryForError } from "../../packages/butler-agent/src/agent/turn/recoverable-delivery.ts";
-import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../packages/butler-agent/src/runtime/internal-recovery-failure.ts";
 
 test("final output contract preserves completion obligation compatibility exports", () => {
   expect(completionObligationIncompleteReasonCompat).toBe(completionObligationIncompleteReason);
@@ -45,15 +44,16 @@ test("final output contract preserves completion obligation compatibility export
   });
 });
 
-test("app failure contract preserves limited-delivery compatibility adapter", () => {
+test("app failure contract keeps live missing evidence out of public limited delivery", () => {
   const error = {
     code: "missing_evidence",
     message: "missing evidence receipt for source_verified",
   };
 
-  expect(appLimitedDeliveryForError(error)).toEqual(recoverableLimitedDeliveryForError(error));
+  expect(appLimitedDeliveryForError(error)).toBeNull();
+  expect(recoverableLimitedDeliveryForError(error)).toBeNull();
   expect(appSafeResponderError(error)).toEqual({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: "missing evidence receipt for source_verified",
+    code: "gateway_failed",
+    message: "Butler could not complete this turn.",
   });
 });

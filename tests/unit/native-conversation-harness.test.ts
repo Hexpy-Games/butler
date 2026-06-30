@@ -62,7 +62,11 @@ test("mock transport drives NativeToolLoopRuntime through dispatch_worker and ex
     },
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "A 주제 차트 작업은 백그라운드에서 진행하겠습니다. 완료되면 생성 결과와 확인한 내용을 짧게 보고드리겠습니다.",
+        text: [
+          "summary: A 주제 차트 생성을 별도 실행 흐름으로 시작합니다.",
+          "rationale: 차트 생성은 시간이 걸릴 수 있어 진행 상태를 안전하게 분리해 추적해야 합니다.",
+          "next_step: 실행이 시작되면 생성 결과와 확인한 내용을 짧게 보고합니다.",
+        ].join("\n"),
         toolCalls: [{
           name: "dispatch_worker",
           args: {
@@ -148,12 +152,18 @@ test("mock transport drives NativeToolLoopRuntime through dispatch_worker and ex
   const visibleActions = mock.sentActions.filter((action) => action.message.text?.trim());
   const progressActions = mock.sentActions.filter((action) => action.metadata?.kind === "tool_progress");
   const dispatchProgressActions = progressActions.filter((action) => action.metadata?.activityKind !== "model");
-  expect(mock.sentActions).toHaveLength(5);
+  expect(mock.sentActions).toHaveLength(4);
   expect(visibleActions).toHaveLength(2);
+  expect(progressActions.filter((action) => action.metadata?.activityKind === "model"))
+    .toHaveLength(0);
   expect(dispatchProgressActions).toHaveLength(1);
   expect(dispatchProgressActions[0]!.message.text).toBe("");
   expect(mock.sentActions[0]!.presence).toMatchObject({ kind: "typing" });
-  expect(visibleActions[0]!.message.text).toContain("A 주제 차트 작업은 백그라운드에서 진행하겠습니다");
+  expect(visibleActions[0]!.message.text).toContain("A 주제 차트 생성을 별도 실행 흐름으로 시작합니다.");
+  expect(visibleActions[0]!.message.text).toContain("실행이 시작되면 생성 결과와 확인한 내용을 짧게 보고합니다.");
+  expect(visibleActions[0]!.message.text).not.toContain("summary:");
+  expect(visibleActions[0]!.message.text).not.toContain("rationale:");
+  expect(visibleActions[0]!.message.text).not.toContain("next_step:");
   expect(visibleActions[0]!.message.text).not.toContain("워커");
   expect(visibleActions[0]!.message.text).not.toContain("Topic A chart generation");
   expect(visibleActions[1]!.message.text).toBe("실행을 시작했습니다. 완료되면 생성 결과와 확인한 내용을 짧게 보고드리겠습니다.");

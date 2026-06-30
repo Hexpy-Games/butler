@@ -298,6 +298,52 @@ test("default OpenAI model is concrete and does not require model discovery", as
   expect(seenBody.model).toBe("gpt-5.5-codex");
 });
 
+test("registered OpenAI hosted prompt forwards response format", async () => {
+  registerHostedModelConfig({
+    providerId: "openai",
+    modelId: "gpt-5.5",
+    authType: "api_key",
+    apiKey: "registered-openai-secret",
+  }, tempDir);
+
+  let seenUrl = "";
+  let seenAuthorization = "";
+  let seenBody: Record<string, any> = {};
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    seenUrl = String(input);
+    seenAuthorization = String(new Headers(init?.headers).get("authorization"));
+    seenBody = JSON.parse(String(init?.body || "{}"));
+    return new Response(JSON.stringify({
+      id: "resp_registered_openai_format",
+      output: [{
+        type: "message",
+        content: [{ type: "output_text", text: "{\"ok\":\"yes\"}" }],
+      }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const responseFormat = {
+    type: "json_schema" as const,
+    name: "registered_openai_json_gate",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["ok"],
+      properties: { ok: { type: "string" } },
+    },
+  };
+
+  await expect(runPromptText({
+    model: "openai/gpt-5.5",
+    prompt: "hi",
+    responseFormat,
+  })).resolves.toBe("{\"ok\":\"yes\"}");
+  expect(seenUrl).toContain("/responses");
+  expect(seenAuthorization).toBe("Bearer registered-openai-secret");
+  expect(seenBody.text).toEqual({ format: responseFormat });
+});
+
 test("registered xAI model uses stored credential through OpenAI-compatible adapter", async () => {
   registerHostedModelConfig({
     providerId: "xai",
@@ -398,6 +444,64 @@ test("registered OpenAI-compatible hosted model executes tool calls", async () =
   );
 });
 
+test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  const bodies: Record<string, any>[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    bodies.push(body);
+    if (bodies.length === 1) {
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: "call_1",
+              type: "function",
+              function: {
+                name: "lookup",
+                arguments: "{\"query\":\"butler\"}",
+              },
+            }],
+          },
+        }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "tool result used" } }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runFunctionToolPromptText({
+    model: "zai/glm-5.2",
+    reasoningEffort: "low",
+    prompt: "search",
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "Look up a term.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    executeTool: async () => ({ answer: "found" }),
+  })).resolves.toBe("tool result used");
+
+  expect(bodies).toHaveLength(2);
+  expect(bodies[0]!.reasoning_effort).toBe("low");
+  expect(bodies[1]!.reasoning_effort).toBe("low");
+});
+
 test("registered Anthropic and Gemini models use provider-native API keys", async () => {
   registerHostedModelConfig({
     providerId: "anthropic",
@@ -488,6 +592,18 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
   await expect(runPromptText({
     model: "zai/glm-5.2",
     prompt: "hi",
+    reasoningEffort: "low",
+    responseFormat: {
+      type: "json_schema",
+      name: "hosted_json_gate",
+      strict: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["ok"],
+        properties: { ok: { type: "string" } },
+      },
+    },
   })).resolves.toBe("ok");
 
   expect(calls[0]!).toMatchObject({
@@ -505,6 +621,20 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
     authorization: "Bearer zai-secret",
   });
   expect(calls[2]!.body.model).toBe("glm-5.2");
+  expect(calls[2]!.body.reasoning_effort).toBe("low");
+  expect(calls[2]!.body.response_format).toEqual({
+    type: "json_schema",
+    json_schema: {
+      name: "hosted_json_gate",
+      strict: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["ok"],
+        properties: { ok: { type: "string" } },
+      },
+    },
+  });
 });
 
 test("registered OpenCode Go chat-completions models use the hosted OpenAI-compatible endpoint", async () => {
@@ -2169,9 +2299,10 @@ test("local function tool context fallback preserves compact web evidence tools"
   }
 });
 
-test("local function tool prompts compact large tool results before follow-up local calls", async () => {
+test("local function tool prompts preserve large tool results for the immediate follow-up", async () => {
   const seenBodies: Array<Record<string, any>> = [];
-  let followupToolContent = "";
+  let immediateToolContent = "";
+  let finalSynthesisToolContent = "";
   const localServer = Bun.serve({
     port: 0,
     fetch: async (request) => {
@@ -2197,18 +2328,23 @@ test("local function tool prompts compact large tool results before follow-up lo
         });
       }
 
-      followupToolContent = String(toolMessage.content || "");
-      if (followupToolContent.includes("RAW_MIDDLE_SHOULD_BE_COMPACTED")) {
+      const toolContent = String(toolMessage.content || "");
+      if (immediateToolContent) {
+        finalSynthesisToolContent = toolContent;
         return Response.json({
-          error: {
-            message: "request (17000 tokens) exceeds the available context size (16384 tokens), try increasing it",
-          },
-        }, { status: 400 });
+          choices: [{
+            message: {
+              role: "assistant",
+              content: finalEnvelope("used raw tool evidence"),
+            },
+          }],
+        });
       }
-      if (!followupToolContent.includes("butler_tool_result_compacted")) {
+      immediateToolContent = toolContent;
+      if (!immediateToolContent.includes("RAW_MIDDLE_SHOULD_BE_COMPACTED")) {
         return Response.json({
           error: {
-            message: "expected compacted local tool result",
+            message: "expected raw local tool result on the immediate follow-up",
           },
         }, { status: 400 });
       }
@@ -2216,7 +2352,7 @@ test("local function tool prompts compact large tool results before follow-up lo
         choices: [{
           message: {
             role: "assistant",
-            content: finalEnvelope("used compacted tool evidence"),
+            content: "draft after raw tool evidence",
           },
         }],
       });
@@ -2225,7 +2361,6 @@ test("local function tool prompts compact large tool results before follow-up lo
   writeLocalModelConfig(localServer.url.toString(), "gemma-large-tool-result");
 
   try {
-    const logs: string[] = [];
     const text = await runFunctionToolPromptText({
       model: "local/gemma-large-tool-result",
       instructions: "Be concise.",
@@ -2243,7 +2378,6 @@ test("local function tool prompts compact large tool results before follow-up lo
           required: ["query"],
         },
       }],
-      log: (line) => logs.push(line),
       executeTool: async () => ({
         rows: Array.from({ length: 80 }, (_, index) => ({
           id: `row-${index}`,
@@ -2258,22 +2392,23 @@ test("local function tool prompts compact large tool results before follow-up lo
       }),
     });
 
-    expect(text).toBe("used compacted tool evidence");
+    expect(text).toBe("used raw tool evidence");
     expect(seenBodies).toHaveLength(3);
-    expect(followupToolContent).toContain("butler_tool_result_compacted");
-    expect(followupToolContent).toContain("row-0");
-    expect(followupToolContent).toContain("critical-source-at-end");
-    expect(followupToolContent).not.toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
+    expect(immediateToolContent).not.toContain("butler_tool_result_compacted");
+    expect(immediateToolContent).toContain("row-0");
+    expect(immediateToolContent).toContain("critical-source-at-end");
+    expect(immediateToolContent).toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
+    expect(finalSynthesisToolContent).toContain("butler_tool_result_compacted");
+    expect(finalSynthesisToolContent).not.toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
     expect(seenBodies.every((body) =>
       Array.isArray(body.tools) || body.messages.some((message: any) => message.role === "tool"),
     )).toBe(true);
-    expect(logs.some((line) => line.includes("result compacted for local context"))).toBe(true);
   } finally {
     localServer.stop(true);
   }
 });
 
-test("local function tool prompts rebudget multiple large tool results cumulatively", async () => {
+test("local function tool prompts compact observed large tool results for final synthesis overflow", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   let totalToolContentLength = 0;
   const localServer = Bun.serve({
@@ -2368,8 +2503,8 @@ test("local function tool prompts rebudget multiple large tool results cumulativ
 
     expect(text).toBe("used cumulatively compacted evidence");
     expect(totalToolContentLength).toBeLessThanOrEqual(12_000);
-    expect(logs.some((line) => line.includes("cumulative_tool_result_budget"))).toBe(true);
-    expect(seenBodies).toHaveLength(3);
+    expect(logs.some((line) => line.includes("final_synthesis_context_retry"))).toBe(true);
+    expect(seenBodies).toHaveLength(4);
   } finally {
     localServer.stop(true);
   }
@@ -2727,6 +2862,122 @@ test("Codex subscription profile routes prompts to the Codex backend", async () 
   expect(seenBody.store).toBe(false);
   expect(seenBody.prompt_cache_retention).toBeUndefined();
   expect(seenBody.include).toBeUndefined();
+});
+
+test("Codex subscription SSE projects provider chunks before final response resolves", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+  process.env.BUTLER_CODEX_USER_AGENT = "butler-test";
+
+  const encoder = new TextEncoder();
+  let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  globalThis.fetch = (async () => new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+      controller.enqueue(encoder.encode(
+        'data: {"type":"response.output_text.delta","response_id":"resp_live","delta":"hello"}\n\n',
+      ));
+    },
+  }), { status: 200 })) as unknown as typeof fetch;
+
+  let resolved = false;
+  let firstCallbackResolve: (() => void) | null = null;
+  const firstCallback = new Promise<void>((resolve) => {
+    firstCallbackResolve = resolve;
+  });
+  const chunks: Array<Record<string, unknown>> = [];
+  const resultPromise = runPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "hi",
+    onProviderStreamEvent: (chunk) => {
+      chunks.push(chunk);
+      firstCallbackResolve?.();
+    },
+  }).then((result) => {
+    resolved = true;
+    return result;
+  });
+
+  await firstCallback;
+  expect(resolved).toBe(false);
+  expect(chunks[0]).toMatchObject({
+    type: "text_delta",
+    streamId: "resp_live",
+    sequence: 1,
+    textDelta: "hello",
+    target: "final_candidate",
+  });
+
+  streamController!.enqueue(encoder.encode([
+    'data: {"type":"response.completed","response":{"id":"resp_live","status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2,"input_tokens_details":{"cached_tokens":0}}}}',
+    "data: [DONE]",
+  ].join("\n\n") + "\n\n"));
+  streamController!.close();
+
+  await expect(resultPromise).resolves.toBe("hello");
+  expect(resolved).toBe(true);
+  expect(chunks.at(-1)).toMatchObject({
+    type: "completed",
+    streamId: "resp_live",
+    status: "completed",
+  });
+});
+
+test("Codex subscription SSE ignores rejecting stream callbacks without retrying provider call", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+  process.env.BUTLER_CODEX_USER_AGENT = "butler-test";
+
+  let fetchCalls = 0;
+  let callbackCalls = 0;
+  globalThis.fetch = (async () => {
+    fetchCalls += 1;
+    const body = [
+      'data: {"type":"response.output_text.delta","response_id":"resp_reject","delta":"hello"}',
+      "",
+      'data: {"type":"response.reasoning_text.delta","response_id":"resp_reject","delta":"private reasoning"}',
+      "",
+      'data: {"type":"response.completed","response":{"id":"resp_reject","status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2,"input_tokens_details":{"cached_tokens":0}}}}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n");
+    return new Response(body, { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "hi",
+    onProviderStreamEvent: () => {
+      callbackCalls += 1;
+      throw new Error("stream projection sink rejected");
+    },
+  })).resolves.toBe("hello");
+
+  expect(fetchCalls).toBe(1);
+  expect(callbackCalls).toBeGreaterThan(0);
 });
 
 test("Codex subscription tool continuation is sent as stateless input without previous_response_id", async () => {

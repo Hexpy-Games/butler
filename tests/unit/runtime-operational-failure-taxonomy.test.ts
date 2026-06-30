@@ -90,7 +90,7 @@ test("runtime delivery taxonomy preserves operational failures with exact safe c
   }
 });
 
-test("runtime delivery taxonomy keeps disabled tools and missing evidence recoverable", () => {
+test("runtime delivery taxonomy separates tool observation gaps from completion continuation", () => {
   const cases = [
     {
       label: "disabled tool",
@@ -98,8 +98,11 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
         code: "disabled_tool",
         message: "disabled tool web_search; tool is not active in the current surface",
       },
-      state: "needs_tool_surface",
-      code: "disabled_tool",
+      state: "running",
+      terminal: false,
+      issueKind: "none",
+      visibility: "continuation_progress",
+      failureNotice: false,
     },
     {
       label: "missing evidence",
@@ -107,8 +110,11 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
         code: "missing_evidence",
         message: "missing evidence receipt for source_verified",
       },
-      state: "needs_evidence",
-      code: "missing_evidence",
+      state: "running",
+      terminal: false,
+      issueKind: "none",
+      visibility: "continuation_progress",
+      failureNotice: false,
     },
     {
       label: "disabled tool with storage-like name",
@@ -116,8 +122,11 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
         code: "disabled_tool",
         message: "disabled tool storage_search is unavailable in the current surface",
       },
-      state: "needs_tool_surface",
-      code: "disabled_tool",
+      state: "running",
+      terminal: false,
+      issueKind: "none",
+      visibility: "continuation_progress",
+      failureNotice: false,
     },
     {
       label: "missing evidence with gateway-like name",
@@ -125,17 +134,11 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
         code: "missing_evidence",
         message: "missing evidence receipt for gateway_health unavailable",
       },
-      state: "needs_evidence",
-      code: "missing_evidence",
-    },
-    {
-      label: "prompt usage model-call budget",
-      error: {
-        code: "prompt_usage_model_call_budget_exhausted",
-        message: "Prompt usage model-call budget exhausted before provider request",
-      },
-      state: "recovering_internal",
-      code: "prompt_usage_model_call_budget_exhausted",
+      state: "running",
+      terminal: false,
+      issueKind: "none",
+      visibility: "continuation_progress",
+      failureNotice: false,
     },
   ];
 
@@ -143,21 +146,30 @@ test("runtime delivery taxonomy keeps disabled tools and missing evidence recove
     const classified = classifyRuntimeFailureDelivery(item.error);
     expect(classified, item.label).toMatchObject({
       delivery_state: item.state,
-      terminal: false,
-      issue_kind: "internal_recovery",
-      visibility: "recovery_progress",
-      failure_notice: false,
-      limitation_codes: [item.code],
+      terminal: item.terminal,
+      issue_kind: item.issueKind,
+      visibility: item.visibility,
+      failure_notice: item.failureNotice,
+      limitation_codes: [],
+      limitations: [],
     });
-    expect(recoverableLimitedDeliveryForError(item.error), item.label).toMatchObject({
-      delivery: {
-        delivery_state: "delivered_with_limitations",
-        visibility: "assistant_output",
-        failure_notice: false,
-        limitation_codes: [item.code],
-      },
-    });
+    expect(recoverableLimitedDeliveryForError(item.error), item.label).toBeNull();
   }
+
+  const promptBudget = {
+    code: "prompt_usage_model_call_budget_exhausted",
+    message: "Prompt usage model-call budget exhausted before provider request",
+  };
+  expect(classifyRuntimeFailureDelivery(promptBudget)).toMatchObject({
+    delivery_state: "running",
+    terminal: false,
+    issue_kind: "none",
+    visibility: "continuation_progress",
+    failure_notice: false,
+    limitation_codes: [],
+    limitations: [],
+  });
+  expect(recoverableLimitedDeliveryForError(promptBudget)).toBeNull();
 });
 
 test("remote provider abort remains a provider failure, not user cancellation", () => {
@@ -267,7 +279,9 @@ test("safe runtime failure preserves operational taxonomy without swallowing int
   const internalFailure = new Error("missing public completion obligation: source_verified");
   internalFailure.name = "GoalCompletionIncompleteError";
   expect(safeRuntimeFailure(internalFailure)).toMatchObject({
-    code: "internal_recovery_required",
+    code: "gateway_failed",
+    message: "Butler could not complete this turn.",
+    cause: "missing public completion obligation: source_verified",
     retryable: true,
   });
 });

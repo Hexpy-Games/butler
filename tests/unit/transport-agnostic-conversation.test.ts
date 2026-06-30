@@ -308,6 +308,17 @@ test("mock transport can deliver a source-backed web search answer without Teleg
   const runtime = new NativeToolLoopRuntime({
     executeButlerTool: createWebSearchExecutor(tempDir),
     runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: Search public web sources for Butler documentation.",
+          "rationale: The transport answer needs a current source-backed reference.",
+          "next_step: Use the source URL from search evidence in the final reply.",
+        ].join("\n"),
+        toolCalls: [{
+          name: "web_search",
+          args: { query: "Butler web search docs" },
+        }],
+      });
       await input.executeTool({
         name: "web_search",
         args: { query: "Butler web search docs" },

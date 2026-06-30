@@ -9,6 +9,10 @@ import {
   createTranscriptEvent,
 } from "../../../../test-support/harness/transcripts.ts";
 import type { RuntimeTurnEventInput } from "../../../events/turn-events.ts";
+import {
+  FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+} from "../../../events/turn-events.ts";
+import { firstVisibleProgressPayload } from "../../../events/first-visible-progress.ts";
 import type { PublicWorkDecision } from "../output/tool-types.ts";
 import type { ToolProgressSummary } from "../output/tool-types.ts";
 import { todoProgressItemsFromArgs } from "./runtime-semantic-progress.ts";
@@ -154,38 +158,12 @@ export async function emitRuntimePreparationProgressBestEffort(input: {
   progress: ToolProgressSummary;
 }): Promise<void> {
   await emitTurnEventBestEffort(input.turnInput, {
-    kind: "tool.progress",
-    payload: {
-      activityKind: input.progress.kind,
-      toolName: input.progress.toolName,
-      inputLabel: input.progress.inputLabel,
-      safeLabel: input.progress.safeLabel,
-      detailRows: input.progress.detailRows,
-    },
-  });
-  const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
-  if (!inboundEnvelope || !input.turnInput.emitIntermediateDelivery) return;
-  await emitIntermediateBestEffort(
-    input.turnInput,
-    buildIntermediateAction({
-      envelope: inboundEnvelope,
-      suffix: `runtime-preparation-${randomUUID().slice(0, 8)}`,
-      text: "",
-      metadata: {
-        kind: "tool_progress",
-        activityKind: input.progress.kind,
-        toolName: input.progress.toolName,
-        safeLabel: input.progress.safeLabel,
-        inputLabel: input.progress.inputLabel,
-        detailRows: input.progress.detailRows,
-      },
+    kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+    payload: firstVisibleProgressPayload({
+      note: input.progress.safeLabel,
+      source: "runtime-derived",
     }),
-    {
-      source: "runtime/native-tool-loop.ts#runtime-preparation-progress",
-      kind: "tool_progress",
-      tool: "runtime_preparation",
-    },
-  );
+  });
 }
 
 function peerForOutbound(envelope: InboundEnvelope): OutboundAction["peer"] {

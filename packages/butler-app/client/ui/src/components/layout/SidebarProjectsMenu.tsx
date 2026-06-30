@@ -60,6 +60,7 @@ export function SidebarProjectsMenu({
         <DropdownMenuContent
           className={popoverThemeClass}
           align="end"
+          onInteractOutside={() => onMenuOpenChange(false)}
           sideOffset={8}
         >
           <DropdownMenuGroup>

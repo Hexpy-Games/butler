@@ -1,5 +1,6 @@
 import type { BridgeToolAuditEvent } from "../../../tools/tool-bridge/audit.ts";
 import type { EvidenceCapabilityReceipt } from "../../../output/evidence/types.ts";
+import type { TurnObservation } from "../../turn-kernel.ts";
 
 export type PublicWorkObligationKind =
   | "source_verified"
@@ -51,14 +52,35 @@ export type EvidenceReceiptProducerKind =
   | "artifact"
   | "memory"
   | "project_ledger"
-  | "external_source";
+  | "external_source"
+  | "browser"
+  | "app"
+  | "review"
+  | "runtime"
+  | "provider"
+  | "user";
 
 export type EvidenceReceiptType =
   | "source"
   | "deliverable"
   | "execution"
   | "state"
-  | "coverage";
+  | "coverage"
+  | "test"
+  | "file_edit"
+  | "artifact"
+  | "browser_observation"
+  | "app_observation"
+  | "project_ledger_operation"
+  | "review"
+  | "pull_request"
+  | "release"
+  | "route_verification"
+  | "user_decision_required"
+  | "runtime_fault"
+  | "provider_fault"
+  | "cancellation"
+  | "not_required";
 
 export interface EvidenceReference {
   kind:
@@ -107,7 +129,7 @@ export interface PublicWorkDecision {
   evidenceRefs: string[];
   nextStep?: string;
   completionObligations?: PublicWorkObligationKind[];
-  source: "assistant-authored" | "runtime-derived" | "review-repaired";
+  source: "assistant-authored" | "model-authored" | "principal-authored" | "runtime-derived" | "review-repaired";
   toolName?: string;
 }
 
@@ -117,6 +139,17 @@ export interface ToolAuditEntry {
   ok: boolean;
   result?: unknown;
   error?: string;
+  observation?: Pick<
+    TurnObservation,
+    | "kind"
+    | "visibility"
+    | "summary"
+    | "modelVisibleContent"
+    | "publicSummary"
+    | "refs"
+    | "causedByToolCallId"
+    | "causedByDecisionId"
+  >;
   publicDecision?: PublicWorkDecision;
   satisfiedCompletionObligations?: PublicWorkObligationKind[];
   evidenceReceipts?: EvidenceReceipt[];

@@ -1,77 +1,71 @@
 import type { RuntimeTurnInput } from "../../../../test-support/harness/contracts.ts";
 import {
-  activeDirectWorkProgressSnapshot,
-  turnAdvancedDuringToolPrompt,
-  type DirectWorkProgressSnapshot,
-} from "../../direct-work-continuation.ts";
-import { CompletionReviewOrchestrator } from "../../completion-review-orchestrator.ts";
-import {
   enforceGroundedActionClaims,
-  explicitToolRequirementRepairPrompt,
   hasSuccessfulTool,
   requiredExplicitToolNames,
   shouldEnforceGrounding,
 } from "../../../policy/runtime-policy.ts";
-import {
-  completionObligationIncompleteReason,
-  containsFinalPublicWorkDecisionLeak,
-  containsFinalToolImplementationLeak,
-  completionReviewIncompleteReason,
-  goalCompletionIncompleteContinuationPrompt,
-  goalCompletionReviewPrompt,
-} from "../../../output/completion/final-output-contract.ts";
-import {
-  progressFinalizationText,
-} from "../../../output/completion/progress-finalization.ts";
-import {
-  goalCompletionContinuationAttempts,
-  goalCompletionIncompleteError,
-} from "../policy/turn-errors.ts";
+import { evaluateCompletionReviewOutcome } from "../../completion-review.ts";
+import { requiredCompletionObligations } from "../../../output/completion/obligation-review.ts";
 import {
   hasGoalCompletionReviewSkipTool,
-  hasPendingReadRequirement,
-  hasVerifiedEvidenceReceipt,
 } from "../policy/turn-evidence-gates.ts";
 import { shouldRunGoalCompletionReview } from "../policy/turn-metadata-policy.ts";
 import type { NativeStoredSessionConfig, NativeTurnRunnerDeps } from "./turn-runner-types.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
 import type { ToolSurfacePromptController } from "../../tool-surface-prompt-controller.ts";
-import { closeDirectWork } from "./direct-work-finalizer.ts";
 import {
   applyPublicOutputGuards,
   repairFinalContract,
 } from "./public-output-gates.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
-import {
-  unresolvedValidationFailureFromAudit,
-  validationFailureContinuationPrompt,
-} from "./validation-failure-guard.ts";
+import { persistTurnContextAtom } from "../../turn-continuation-context.ts";
+import type { createDirectTurnBudget } from "../../direct-turn-budget.ts";
+import { WorkStreamStore } from "../../../work/work-stream.ts";
+import { TodoListStore } from "../../../work/todo-list.ts";
+import { safePublicText } from "../../../output/evidence/transcript-sanitizers.ts";
 
-const EXPLICIT_TOOL_REPAIR_ATTEMPTS = 2;
-const EXPLICIT_TOOL_REPAIR_BASE_ROUNDS = 2;
-const EXPLICIT_TOOL_REPAIR_MAX_ROUNDS = 4;
-const GOAL_REVIEW_MAX_TOOL_ROUNDS = 4;
-const DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS = 8;
+export const KERNEL_COMPLETION_GAP_CONTINUATION_CODE = "completion_gap_continuation";
 
-export async function produceFinalDeliveryText(input: {
+export type FinalDeliveryOutcome =
+  | { kind: "final"; text: string; evidenceRefs: string[] }
+  | {
+      kind: "completion_gap";
+      observation: {
+        kind: string;
+        summary: string;
+        modelVisibleContent: string;
+        refs?: Array<{ kind: string; id: string; path?: string }>;
+      };
+      evidenceRefs: string[];
+    };
+
+export async function produceFinalDeliveryOutcome(input: {
   turnInput: RuntimeTurnInput;
   session: NativeStoredSessionConfig;
   deps: NativeTurnRunnerDeps;
   useTools: boolean;
+  turnId?: string | null;
+  turnBudget: ReturnType<typeof createDirectTurnBudget>;
   prompt: string;
   userText: string;
   initialText: string;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
   toolSurfaceController: ToolSurfacePromptController;
-  runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
-}): Promise<string> {
-  const textAfterExplicitTools = await repairExplicitToolRequirements(input);
-  const groundedText = applyGroundingIfNeeded(input, textAfterExplicitTools);
-  const reviewedText = await runGoalCompletionReviews({ ...input, initialText: groundedText });
-  const validationClosedText = await closeUnresolvedValidationWork({ ...input, finalText: reviewedText });
-  const directWorkClosedText = await closeDirectWork({ ...input, finalText: validationClosedText });
-  const contractRepairedText = await repairFinalContract({ ...input, finalText: directWorkClosedText });
+}): Promise<FinalDeliveryOutcome> {
+  const explicitToolGap = explicitToolRequirementGap(input);
+  if (explicitToolGap) return explicitToolGap;
+  const groundedText = applyGroundingIfNeeded(input, input.initialText);
+  const reviewResult = await runGoalCompletionReviews({ ...input, initialText: groundedText });
+  if (reviewResult.outcome.status === "gap") {
+    return {
+      kind: "completion_gap",
+      observation: reviewResult.outcome.observation,
+      evidenceRefs: reviewResult.outcome.evidenceRefs,
+    };
+  }
+  const contractRepairedText = repairFinalContract({ ...input, finalText: reviewResult.reviewedText });
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "guard.started",
     payload: { guard: "public_output" },
@@ -81,26 +75,7 @@ export async function produceFinalDeliveryText(input: {
     kind: "guard.completed",
     payload: { guard: "public_output", status: "approved" },
   });
-  return checkedText;
-}
-
-async function closeUnresolvedValidationWork(input: {
-  prompt: string;
-  finalText: string;
-  audit: ToolAuditEntry[];
-  runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
-}): Promise<string> {
-  let finalText = input.finalText;
-  for (let attempt = 0; attempt < goalCompletionContinuationAttempts(); attempt += 1) {
-    const failure = unresolvedValidationFailureFromAudit(input.audit);
-    if (!failure) return finalText;
-    finalText = await input.runToolPrompt(validationFailureContinuationPrompt({
-      objective: input.prompt,
-      previousAnswer: finalText,
-      failure,
-    }), DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS, "validation_failure_continuation");
-  }
-  return finalText;
+  return { kind: "final", text: checkedText, evidenceRefs: reviewResult.outcome.evidenceRefs };
 }
 
 function applyGroundingIfNeeded(
@@ -125,41 +100,41 @@ function applyGroundingIfNeeded(
   });
 }
 
-async function repairExplicitToolRequirements(input: {
+function explicitToolRequirementGap(input: {
   turnInput: RuntimeTurnInput;
   session: NativeStoredSessionConfig;
   useTools: boolean;
-  prompt: string;
-  initialText: string;
   audit: ToolAuditEntry[];
   toolSurfaceController: ToolSurfacePromptController;
-  runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
-}): Promise<string> {
-  let text = input.initialText;
+}): FinalDeliveryOutcome | null {
   if (!input.useTools) {
-    return text;
+    return null;
   }
   const explicitTools = requiredExplicitToolNames(
     [input.session.init.metadata, input.turnInput.metadata],
     input.toolSurfaceController.initialToolNames(),
   );
-  for (let repairAttempt = 0; repairAttempt < EXPLICIT_TOOL_REPAIR_ATTEMPTS; repairAttempt += 1) {
-    const missingExplicitTools = explicitTools.filter((toolName) =>
-      !hasSuccessfulTool(input.audit, [toolName]));
-    if (missingExplicitTools.length === 0) {
-      break;
-    }
-    const repairMaxToolRounds = Math.min(
-      EXPLICIT_TOOL_REPAIR_MAX_ROUNDS,
-      missingExplicitTools.length + EXPLICIT_TOOL_REPAIR_BASE_ROUNDS,
-    );
-    text = await input.runToolPrompt(explicitToolRequirementRepairPrompt({
-      prompt: input.prompt,
-      previousAnswer: text,
-      missingTools: missingExplicitTools,
-    }), repairMaxToolRounds, "explicit_tool_repair");
+  const missingExplicitTools = explicitTools.filter((toolName) =>
+    !hasSuccessfulTool(input.audit, [toolName]));
+  if (missingExplicitTools.length === 0) {
+    return null;
   }
-  return text;
+  return {
+    kind: "completion_gap",
+    observation: {
+      kind: "completion_gap",
+      summary: `Missing required tool execution: ${missingExplicitTools.join(", ")}`,
+      modelVisibleContent: [
+        "The current turn has not executed all explicitly required native tools.",
+        "Continue the same logical turn by selecting the missing required tool(s) through the normal tool path.",
+        "Do not deliver final text until these tool observations exist.",
+        "Missing required tools:",
+        ...missingExplicitTools.map((toolName) => `- ${toolName}`),
+      ].join("\n"),
+      refs: missingExplicitTools.map((toolName) => ({ kind: "tool", id: toolName })),
+    },
+    evidenceRefs: [],
+  };
 }
 
 async function runGoalCompletionReviews(input: {
@@ -167,175 +142,242 @@ async function runGoalCompletionReviews(input: {
   session: NativeStoredSessionConfig;
   deps: NativeTurnRunnerDeps;
   useTools: boolean;
+  turnId?: string | null;
   prompt: string;
   initialText: string;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
-  runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
-}): Promise<string> {
-  let finalText = input.initialText;
-  const hasSuccessfulToolAudit = input.audit.some((entry) => entry.ok);
-  const shouldRepairDecisionLeakBeforeReview = input.useTools &&
-    shouldEnforceGrounding(input.turnInput) &&
-    containsFinalPublicWorkDecisionLeak(finalText) &&
-    !hasSuccessfulToolAudit;
-  if (shouldRepairDecisionLeakBeforeReview) {
-    finalText = await runGoalCompletionReviewGate(input, finalText, goalCompletionReviewPrompt({
-      prompt: input.prompt,
-      previousAnswer: finalText,
-      audit: input.audit,
-      decisions: input.publicDecisionContext,
-    }), GOAL_REVIEW_MAX_TOOL_ROUNDS);
+}): Promise<{ outcome: ReturnType<typeof evaluateCompletionReviewOutcome>; reviewedText: string }> {
+  const shouldReview = shouldRunCompletionReview(input);
+  if (!shouldReview) {
+    return {
+      outcome: {
+        status: "complete",
+        evidenceRefs: [],
+      },
+      reviewedText: input.initialText,
+    };
   }
-  if (!shouldRunModelReview(input)) {
-    return finalText;
-  }
-  finalText = await maybeRunEvidenceReview(input, finalText);
-  return await repairCompletionObligations(input, finalText);
-}
-
-function shouldRunModelReview(input: {
-  turnInput: RuntimeTurnInput;
-  session: NativeStoredSessionConfig;
-  useTools: boolean;
-  audit: ToolAuditEntry[];
-}): boolean {
-  const shouldEnforceRuntimeGrounding = shouldEnforceGrounding(input.turnInput);
-  const roleRequiresReview = shouldRunGoalCompletionReview(input.turnInput.metadata, input.session.init.role);
-  const hasReviewSkipTool = hasGoalCompletionReviewSkipTool(input.audit);
-  const hasSuccessfulToolAudit = input.audit.some((entry) => entry.ok);
-  return input.useTools &&
-    shouldEnforceRuntimeGrounding &&
-    roleRequiresReview &&
-    !hasReviewSkipTool &&
-    hasSuccessfulToolAudit;
-}
-
-async function maybeRunEvidenceReview(
-  input: Parameters<typeof runGoalCompletionReviews>[0],
-  finalText: string,
-): Promise<string> {
-  const successfulToolNamesForReview = input.audit.filter((entry) => entry.ok).map((entry) => entry.name);
-  const preReviewObligationIncompleteReason = completionObligationIncompleteReason({
-    audit: input.audit,
-    decisions: input.publicDecisionContext,
+  const outcome = evaluateCompletionReviewOutcome({
+    requestText: input.prompt,
+    candidateText: input.initialText,
+    evidenceReceipts: evidenceCapabilityReceiptsFromAudit(input.audit),
+    requiredObligations: requiredCompletionObligations(input.publicDecisionContext),
+    observations: observationsFromAudit(input.audit),
   });
-  const preReviewNeedsContractRepair =
-    containsFinalPublicWorkDecisionLeak(finalText) ||
-    containsFinalToolImplementationLeak(finalText, successfulToolNamesForReview);
-  const shouldRunModelCompletionReview =
-    !hasVerifiedEvidenceReceipt(input.audit) ||
-    hasPendingReadRequirement(input.audit) ||
-    Boolean(preReviewObligationIncompleteReason) ||
-    preReviewNeedsContractRepair;
-  if (!shouldRunModelCompletionReview) {
-    return finalText;
-  }
-  return await runGoalCompletionReviewGate(input, finalText, goalCompletionReviewPrompt({
-    prompt: input.prompt,
-    previousAnswer: finalText,
-    audit: input.audit,
-    decisions: input.publicDecisionContext,
-  }), GOAL_REVIEW_MAX_TOOL_ROUNDS);
+  return { outcome, reviewedText: input.initialText };
 }
 
-async function repairCompletionObligations(
-  input: Parameters<typeof runGoalCompletionReviews>[0],
-  finalText: string,
-): Promise<string> {
-  const obligationIncompleteReason = completionObligationIncompleteReason({
-    audit: input.audit,
-    decisions: input.publicDecisionContext,
-  });
-  if (!obligationIncompleteReason) {
-    return finalText;
-  }
-  const repairedText = await runGoalCompletionReviewGate(input, finalText, goalCompletionReviewPrompt({
-    prompt: input.prompt,
-    previousAnswer: [`INCOMPLETE: ${obligationIncompleteReason}`, "", "Previous draft:", finalText].join("\n"),
-    audit: input.audit,
-    decisions: input.publicDecisionContext,
-  }), GOAL_REVIEW_MAX_TOOL_ROUNDS);
-  const secondObligationIncompleteReason = completionObligationIncompleteReason({
-    audit: input.audit,
-    decisions: input.publicDecisionContext,
-  });
-  if (secondObligationIncompleteReason) {
-    throw goalCompletionIncompleteError(
-      secondObligationIncompleteReason,
-      progressFinalizationText({
-        language: input.deps.messageLanguage,
-        previousAnswer: repairedText,
-        audit: input.audit,
-        decisions: input.publicDecisionContext,
-        reason: secondObligationIncompleteReason,
-      }),
-    );
-  }
-  return repairedText;
-}
-
-async function runGoalCompletionReviewGate(
+function shouldRunCompletionReview(
   input: {
     turnInput: RuntimeTurnInput;
-    deps: NativeTurnRunnerDeps;
-    prompt: string;
+    session: NativeStoredSessionConfig;
+    useTools: boolean;
     audit: ToolAuditEntry[];
-    publicDecisionContext: PublicWorkDecision[];
-    runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
   },
-  currentFinalText: string,
-  reviewPromptText: string,
-  maxToolRounds: number,
-): Promise<string> {
-  const successfulToolAuditCount = () => input.audit.filter((entry) => entry.ok).length;
-  const outcome = await new CompletionReviewOrchestrator<DirectWorkProgressSnapshot>().run({
-    currentFinalText,
-    initialReviewPromptText: reviewPromptText,
-    reviewMaxToolRounds: maxToolRounds,
-    continuationMaxToolRounds: DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS,
-    maxContinuationAttempts: goalCompletionContinuationAttempts(),
-    runToolPrompt: input.runToolPrompt,
-    incompleteReason: completionReviewIncompleteReason,
-    buildContinuationPrompt: ({ previousAnswer, incompleteReason }) =>
-      goalCompletionIncompleteContinuationPrompt({
-        prompt: input.prompt,
-        previousAnswer,
-        incompleteReason,
-        audit: input.audit,
-        decisions: input.publicDecisionContext,
-      }),
-    buildReviewPrompt: ({ candidateFinalText }) => goalCompletionReviewPrompt({
-      prompt: input.prompt,
-      previousAnswer: candidateFinalText,
-      audit: input.audit,
-      decisions: input.publicDecisionContext,
-    }),
-    captureProgress: () => ({
-      progress: activeDirectWorkProgressSnapshot({
-        butlerData: input.deps.butlerData,
-        sessionId: input.turnInput.handle.sessionId,
-      }),
-      successfulToolCount: successfulToolAuditCount(),
-    }),
-    didProgressAdvance: (before, after) => turnAdvancedDuringToolPrompt({
-      beforeWork: before.progress,
-      afterWork: after.progress,
-      successfulToolsBefore: before.successfulToolCount,
-      successfulToolsAfter: after.successfulToolCount,
-    }),
-  });
-  if (outcome.kind === "deliverable") {
-    return outcome.text;
+): boolean {
+  if (!input.useTools || !shouldEnforceGrounding(input.turnInput)) {
+    return false;
   }
-  throw goalCompletionIncompleteError(
-    outcome.reason,
-    progressFinalizationText({
-      language: input.deps.messageLanguage,
-      previousAnswer: currentFinalText,
-      audit: input.audit,
-      decisions: input.publicDecisionContext,
-      reason: outcome.reason,
-    }),
-  );
+  if (!shouldRunGoalCompletionReview(input.turnInput.metadata, input.session.init.role)) {
+    return false;
+  }
+  if (hasGoalCompletionReviewSkipTool(input.audit)) {
+    return false;
+  }
+  return input.audit.some((entry) => entry.ok);
+}
+
+function evidenceCapabilityReceiptsFromAudit(audit: ToolAuditEntry[]): unknown[] {
+  return audit.flatMap((entry) => [
+    ...(entry.evidenceCapabilityReceipts ?? []),
+    ...legacyEvidenceReceiptsAsCapabilityReceipts(entry),
+    ...satisfiedObligationsAsCapabilityReceipts(entry),
+  ]);
+}
+
+function legacyEvidenceReceiptsAsCapabilityReceipts(entry: ToolAuditEntry): unknown[] {
+  return (entry.evidenceReceipts ?? []).flatMap((receipt) =>
+    (receipt.satisfies ?? []).map((obligation) => ({
+      receipt_id: receipt.id,
+      schema_version: "evidence-capability.v1",
+      producer: receipt.producer,
+      capability: obligation,
+      evidence_kind: capabilityEvidenceKind(obligation),
+      maturity: receipt.verified ? "verified" : "candidate",
+      confidence: receipt.verified ? 0.9 : 0.3,
+      verified: receipt.verified,
+      summary: receipt.summary,
+      references: receipt.references.map((reference) => ({
+        ...(reference.kind === "url" ? { url: reference.ref } : {}),
+        ...(reference.kind === "artifact" || reference.kind === "project_document" ? { path: reference.ref } : {}),
+        ...(reference.kind === "tool_output" ? { tool_call_id: reference.ref } : {}),
+      })),
+      satisfies: [obligation],
+      limitations: [],
+      created_at: new Date(0).toISOString(),
+    })));
+}
+
+function satisfiedObligationsAsCapabilityReceipts(entry: ToolAuditEntry): unknown[] {
+  return (entry.satisfiedCompletionObligations ?? []).map((obligation) => ({
+    receipt_id: `audit:${entry.name}:${obligation}`,
+    schema_version: "evidence-capability.v1",
+    producer: { kind: "tool", name: entry.name },
+    capability: obligation,
+    evidence_kind: capabilityEvidenceKind(obligation),
+    maturity: entry.ok ? "verified" : "candidate",
+    confidence: entry.ok ? 0.9 : 0.3,
+    verified: entry.ok,
+    summary: `${entry.name} satisfied ${obligation}.`,
+    references: [],
+    satisfies: [obligation],
+    limitations: [],
+    created_at: new Date(0).toISOString(),
+  }));
+}
+
+function capabilityEvidenceKind(obligation: string): string {
+  if (obligation === "source_verified") return "workspace_inspection";
+  if (obligation === "command_executed") return "execution_result";
+  if (obligation === "durable_artifact") return "artifact";
+  if (obligation === "data_table_created") return "data_table";
+  if (obligation === "chart_rendered") return "chart";
+  return "project_state";
+}
+
+function observationsFromAudit(audit: ToolAuditEntry[]) {
+  return audit
+    .filter((entry) => !entry.ok)
+    .map((entry) => {
+      if (entry.observation) {
+        return {
+          kind: entry.observation.kind,
+          summary: entry.observation.summary,
+          modelVisibleContent: entry.observation.modelVisibleContent,
+          visibility: entry.observation.visibility,
+          publicSummary: entry.observation.publicSummary,
+        };
+      }
+      const safeError = entry.error
+        ? safePublicText(entry.error, "Tool execution failed with redacted private details.")
+        : null;
+      const message = safeError ? `${entry.name}: ${safeError}` : `${entry.name} failed.`;
+      return {
+        kind: "tool_result" as const,
+        summary: message,
+        modelVisibleContent: message,
+        visibility: "model" as const,
+      };
+    });
+}
+
+export async function persistCompletionGapContinuation(input: {
+  turnInput: RuntimeTurnInput;
+  deps: NativeTurnRunnerDeps;
+  turnId?: string | null;
+  audit: ToolAuditEntry[];
+  publicDecisionContext: PublicWorkDecision[];
+  observation: {
+    kind: string;
+    summary: string;
+    modelVisibleContent: string;
+    refs?: Array<{ kind: string; id: string; path?: string }>;
+  };
+}): Promise<void> {
+  const turnId = input.turnId;
+  if (!turnId) return;
+  const refs = collectTurnContinuationRefs({
+    butlerData: input.deps.butlerData,
+    sessionId: input.turnInput.handle.sessionId,
+    turnId,
+    audit: input.audit,
+    publicDecisionContext: input.publicDecisionContext,
+  });
+  persistTurnContextAtom({
+    butlerData: input.deps.butlerData,
+    sessionId: input.turnInput.handle.sessionId,
+    turnId,
+    state: "continuing",
+    sourceErrorCode: KERNEL_COMPLETION_GAP_CONTINUATION_CODE,
+    reason: input.observation.summary,
+    userRequest: {
+      id: currentUserMessageRef(input.turnInput),
+    },
+    ...refs,
+    unresolvedObservations: [{
+      kind: input.observation.kind,
+      id: `completion-gap:${turnId}`,
+    }, ...(input.observation.refs ?? [])],
+    latestCompletionReview: {
+      status: "gap",
+      observationId: `completion-gap:${turnId}`,
+    },
+  });
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: "turn.observation",
+    visibility: "internal",
+    payload: {
+      kind: input.observation.kind,
+      safeLabel: input.observation.summary,
+      modelVisibleContentChars: input.observation.modelVisibleContent.length,
+    },
+  });
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: "turn.continuation_scheduled",
+    payload: {
+      reason: KERNEL_COMPLETION_GAP_CONTINUATION_CODE,
+      safeLabel: "Continuing from completion gap",
+    },
+  });
+}
+
+export function collectTurnContinuationRefs(input: {
+  butlerData: string;
+  sessionId: string;
+  turnId: string;
+  audit: ToolAuditEntry[];
+  publicDecisionContext: PublicWorkDecision[];
+}): {
+  latestAssistantDecision?: { id: string };
+  openToolPairs: Array<{ kind: string; id: string; path?: string }>;
+  currentTurnWork: Array<{ kind: string; id: string; path?: string }>;
+  currentTurnTodos: Array<{ kind: string; id: string; path?: string }>;
+} {
+  const workStore = new WorkStreamStore(input.butlerData);
+  const todoStore = new TodoListStore(input.butlerData);
+  const currentTurnWork = workStore.list({
+    sessionId: input.sessionId,
+    includeTerminal: true,
+  })
+    .map((summary) => workStore.read(summary.id))
+    .filter((record) => record?.last_user_turn_id === input.turnId)
+    .map((record) => ({ kind: "work_stream", id: record!.id }));
+  const currentTurnTodos = currentTurnWork.flatMap((work) => {
+    const record = workStore.read(work.id);
+    if (!record?.todo_list_id) return [];
+    const todo = todoStore.read(record.todo_list_id);
+    if (!todo) return [{ kind: "todo_list", id: record.todo_list_id }];
+    return [
+      { kind: "todo_list", id: todo.list_id },
+      ...todo.items.map((item) => ({ kind: "todo_item", id: `${todo.list_id}:${item.id}` })),
+    ];
+  });
+  const openToolPairs = input.audit
+    .filter((entry) => !entry.ok)
+    .map((entry, index) => ({ kind: "tool_pair", id: `audit:${index}:${entry.name}` }));
+  const latestAssistantDecision = input.publicDecisionContext.at(-1)?.decisionId;
+  return {
+    ...(latestAssistantDecision ? { latestAssistantDecision: { id: latestAssistantDecision } } : {}),
+    openToolPairs,
+    currentTurnWork,
+    currentTurnTodos,
+  };
+}
+
+function currentUserMessageRef(input: RuntimeTurnInput): string {
+  if ("message" in input.input && typeof input.input.message?.id === "string") {
+    return input.input.message.id;
+  }
+  return `turn:${input.handle.sessionId}`;
 }

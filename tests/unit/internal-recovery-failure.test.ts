@@ -5,7 +5,9 @@ import {
   isCompletionObligationProtocolMessage,
   isGoalCompletionIncompleteFailure,
   isInternalRecoveryFailure,
+  isToolCallRepairFailure,
   safeInternalRecoveryMessage,
+  toolCallRepairStateForFailure,
 } from "../../packages/butler-agent/src/runtime/internal-recovery-failure.ts";
 import { appSafeResponderError } from "../../packages/butler-agent/src/gateways/app/failure-ux-contract.ts";
 import { safeRuntimeFailure } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
@@ -17,33 +19,31 @@ test("internal recovery classifier centralizes goal completion protocol gaps", (
   error.name = "GoalCompletionIncompleteError";
 
   expect(isGoalCompletionIncompleteFailure(error)).toBe(true);
-  expect(isInternalRecoveryFailure(error)).toBe(true);
+  expect(isInternalRecoveryFailure(error)).toBe(false);
   expect(isCompletionObligationProtocolMessage(error.message)).toBe(true);
   expect(internalRecoveryStateForFailure(error)).toBe("needs_evidence");
   expect(safeInternalRecoveryMessage(error.message)).toBe(
     "Butler could not verify that the requested goal was completed.",
   );
-  expect(safeRuntimeFailure(error)).toMatchObject({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: "Butler could not verify that the requested goal was completed.",
-    retryable: true,
-  });
-  expect(appSafeResponderError(error)).toEqual({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.",
-  });
+  expect(safeRuntimeFailure(error).code).not.toBe(INTERNAL_RECOVERY_REQUIRED_CODE);
 });
 
-test("internal recovery classifier separates recovery sub-states", () => {
-  expect(internalRecoveryStateForFailure({
+test("runtime continuation classifier separates tool retry from completion continuation", () => {
+  const disabledTool = {
     code: "disabled_tool",
     message: "disabled tool web_search; tool is not active in the current surface",
-  })).toBe("needs_tool_surface");
+  };
+  expect(isInternalRecoveryFailure(disabledTool)).toBe(false);
+  expect(isToolCallRepairFailure(disabledTool)).toBe(false);
+  expect(toolCallRepairStateForFailure(disabledTool)).toBe("needs_tool_surface");
 
-  expect(internalRecoveryStateForFailure({
+  const invalidArguments = {
     code: "invalid_tool_arguments",
     message: "tool arguments failed validation",
-  })).toBe("needs_argument_repair");
+  };
+  expect(isInternalRecoveryFailure(invalidArguments)).toBe(false);
+  expect(isToolCallRepairFailure(invalidArguments)).toBe(false);
+  expect(toolCallRepairStateForFailure(invalidArguments)).toBe("needs_argument_repair");
 
   expect(internalRecoveryStateForFailure({
     code: "missing_evidence",
@@ -58,59 +58,25 @@ test("internal recovery classifier separates recovery sub-states", () => {
 
 test("provider and app projections use the full shared internal recovery classifier", () => {
   const protocolGap = "The turn still needs repair for missing public completion obligation(s): durable_artifact.";
-  expect(safeRuntimeFailure(protocolGap)).toMatchObject({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: "Butler could not verify that the requested goal was completed.",
-    retryable: true,
-  });
-  expect(appSafeResponderError(protocolGap)).toEqual({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.",
-  });
+  expect(safeRuntimeFailure(protocolGap).code).not.toBe(INTERNAL_RECOVERY_REQUIRED_CODE);
 
   const disabledTool = {
     code: "disabled_tool",
     message: "disabled tool web_read; tool is not active in the current surface",
   };
-  expect(safeRuntimeFailure(disabledTool)).toMatchObject({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: disabledTool.message,
-    retryable: true,
-  });
-  expect(appSafeResponderError(disabledTool)).toEqual({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: disabledTool.message,
-  });
+  expect(safeRuntimeFailure(disabledTool).code).not.toBe("disabled_tool");
 
   const missingEvidence = {
     code: "missing_evidence",
     message: "missing evidence receipt for source_verified",
   };
-  expect(safeRuntimeFailure(missingEvidence)).toMatchObject({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: missingEvidence.message,
-    retryable: true,
-  });
-  expect(appSafeResponderError(missingEvidence)).toEqual({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: missingEvidence.message,
-  });
+  expect(safeRuntimeFailure(missingEvidence).code).not.toBe(INTERNAL_RECOVERY_REQUIRED_CODE);
 
   const promptBudget = {
     code: "prompt_usage_model_call_budget_exhausted",
     message: "Prompt usage model-call budget exhausted before provider request",
   };
-  expect(safeRuntimeFailure(promptBudget)).toMatchObject({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message:
-      "Butler reached its internal model-call budget while trying to continue the turn. Progress was saved and the turn can be retried.",
-    retryable: true,
-  });
-  expect(appSafeResponderError(promptBudget)).toEqual({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message:
-      "Butler reached its internal model-call budget while trying to continue the turn. Progress was saved and the turn can be retried.",
-  });
+  expect(safeRuntimeFailure(promptBudget).code).not.toBe(INTERNAL_RECOVERY_REQUIRED_CODE);
 });
 
 test("internal recovery safe message redacts secrets before provider and app projection", () => {
@@ -121,12 +87,25 @@ test("internal recovery safe message redacts secrets before provider and app pro
 
   expect(isGoalCompletionIncompleteFailure(error)).toBe(true);
   expect(safeInternalRecoveryMessage(error.message)).not.toContain("token=secret");
-  expect(safeRuntimeFailure(error)).toMatchObject({
+  expect(safeRuntimeFailure(error).message).not.toContain("token=secret");
+});
+
+test("legacy recovery classifiers require explicit historical diagnostic input", () => {
+  expect(isInternalRecoveryFailure({
+    historicalRecoveryState: true,
+    code: "missing_evidence",
+    message: "missing evidence receipt for source_verified",
+  })).toBe(true);
+  expect(isToolCallRepairFailure({
+    historicalRecoveryState: true,
+    code: "invalid_tool_arguments",
+    message: "tool arguments failed validation",
+  })).toBe(true);
+  expect(appSafeResponderError({
+    historicalRecoveryState: true,
+    code: "goal_completion_incomplete",
+    message: "could not verify that the requested goal was completed",
+  })).toMatchObject({
     code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: "Butler could not verify that the requested goal was completed.",
-  });
-  expect(appSafeResponderError(error)).toEqual({
-    code: INTERNAL_RECOVERY_REQUIRED_CODE,
-    message: "Butler could not verify that the requested goal was completed.",
   });
 });

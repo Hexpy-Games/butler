@@ -2,6 +2,7 @@ import { safeOperationalRuntimeFailure } from "./operational-errors.ts";
 import {
   INTERNAL_RECOVERY_REQUIRED_CODE,
   isInternalRecoveryFailure,
+  isToolCallRepairFailure,
   safeInternalRecoveryMessage,
 } from "../../runtime/internal-recovery-failure.ts";
 
@@ -139,6 +140,14 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
   if (error instanceof ModelProviderRequestError) return error.diagnostic();
   const message = errorMessage(error);
   const code = errorCode(error);
+  if (isToolCallRepairFailure(error)) {
+    return {
+      code: code ?? "tool_call_repair",
+      message: safeErrorText(message) ?? "Butler needs to retry the tool call with corrected arguments.",
+      retryable: true,
+      cause: safeErrorText(message),
+    };
+  }
   if (isInternalRecoveryFailure(error)) {
     const safeMessage = safeInternalRecoveryMessage(message);
     return {

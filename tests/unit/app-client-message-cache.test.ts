@@ -30,6 +30,8 @@ test("message cache snapshots keep completed messages and skip pending rows", ()
             safe_label: "Bash: first",
             safe_tool_name: "Bash",
             safe_input_label: "first",
+            work_block_id: "work-first",
+            work_block_label: "첫 작업 실행 중",
           },
         ],
       },
@@ -120,6 +122,8 @@ test("message cache merge keeps unchanged cached row identities", () => {
         safe_label: "Bash: cached",
         safe_tool_name: "Bash",
         safe_input_label: "cached",
+        work_block_id: "work-cached",
+        work_block_label: "캐시된 작업 실행 중",
       },
     ],
   };

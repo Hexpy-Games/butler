@@ -47,6 +47,14 @@ test("NativeToolLoopRuntime executes read_file, write_file, and grep_files throu
         ];
 
         for (const call of calls) {
+          await input.onAssistantTextBeforeTools?.({
+            text: [
+              `summary: Execute ${call.name} as part of the native file tool smoke test.`,
+              "rationale: The test must exercise the real native file executor through the model-selected tool path.",
+              "next_step: Capture the structured result and continue to the next file operation.",
+            ].join("\n"),
+            toolCalls: [call],
+          });
           observedCalls.push(call.name);
           toolOutputs[call.name] = await input.executeTool({
             name: call.name,

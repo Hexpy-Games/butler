@@ -249,6 +249,7 @@ export class AppGatewayBridge {
         required_tools: policyStringArray(runtimePolicy?.required_tools),
         requiredNativeToolProfiles: policyStringArray(runtimePolicy?.requiredNativeToolProfiles),
         runtimePolicy,
+        reasoning_effort: input?.reasoningEffort,
         workerModelRules: safeWorkerModelRules(input?.workerModelRules),
       },
     });

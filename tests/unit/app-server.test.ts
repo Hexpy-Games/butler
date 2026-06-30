@@ -43,8 +43,18 @@ import {
   upsertLocalModelConfig,
 } from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
-import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
-import { firstVisibleProgressPayload } from "../../packages/butler-agent/src/agent/events/first-visible-progress.ts";
+import {
+  TURN_DECISION_EVENT_KIND,
+  TURN_ACKNOWLEDGED_EVENT_KIND,
+  createTurnDecisionPayload,
+  createRuntimeFaultPayload,
+  createTurnAcknowledgedPayload,
+} from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
+import {
+  FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+  type RuntimeTurnEventInput,
+} from "../../packages/butler-agent/src/agent/events/turn-events.ts";
+import type { ButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
 import type {
   AgentRuntimeAdapter,
   ArtifactRef,
@@ -108,6 +118,76 @@ function writeAppUpdateManifest(path: string, version: string): void {
       rollback_policy: "preserve-previous-app-managed-runtime",
     }],
   }), "utf8");
+}
+
+function appendAppTurnEventOutboundForTest(input: {
+  sessionId: string;
+  actionId: string;
+  turnId: string;
+  replyToMessageId: string;
+  event: RuntimeTurnEventInput;
+  delivered?: boolean;
+  includeDelivery?: boolean;
+  timestamp?: string;
+}): void {
+  const timestamp = input.timestamp ?? "2026-05-18T12:00:30.000Z";
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: input.sessionId,
+      kind: "outbound",
+      transport: "app",
+      timestamp,
+      payload: {
+        actionId: input.actionId,
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+          replyToMessageId: input.replyToMessageId,
+        },
+        metadata: {
+          kind: "turn_event",
+          turnId: input.turnId,
+          event: input.event,
+        },
+      },
+    }),
+  );
+  if (input.includeDelivery === false) return;
+  appendAppTurnEventDeliveryForTest({
+    sessionId: input.sessionId,
+    actionId: input.actionId,
+    delivered: input.delivered,
+    timestamp,
+  });
+}
+
+function appendAppTurnEventDeliveryForTest(input: {
+  sessionId: string;
+  actionId: string;
+  delivered?: boolean;
+  timestamp?: string;
+}): void {
+  const delivered = input.delivered ?? true;
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: input.sessionId,
+      kind: "delivery",
+      transport: "app",
+      timestamp: input.timestamp ?? "2026-05-18T12:00:30.000Z",
+      payload: {
+        actionId: input.actionId,
+        ok: delivered,
+        transportMessageId: delivered ? `app:${input.actionId}` : null,
+        error: delivered ? null : "delivery failed",
+        raw: null,
+      },
+      metadata: {
+        source: "transport/delivery-guard.ts",
+        attempts: 1,
+      },
+    }),
+  );
 }
 
 function writeServiceUpdateManifest(path: string, version: string): void {
@@ -802,24 +882,25 @@ test("app server live events stream matches replay for turn events", async () =>
   }
 });
 
-test("app server persists and replays first visible progress before later turn events", async () => {
+test("app server persists and replays deterministic acknowledgement before later turn events", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
   });
   try {
-    const firstProgress = server.store.appendTurnEvent("general", "turn-first-progress", {
-      kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-      payload: firstVisibleProgressPayload({
-        note: "필요한 맥락을 확인하겠습니다.",
+    const acknowledged = server.store.appendTurnEvent("general", "turn-acknowledged", {
+      kind: TURN_ACKNOWLEDGED_EVENT_KIND,
+      payload: createTurnAcknowledgedPayload({
+        safeLabel: "Request received. Preparing the work.",
+        transport: "app",
       }),
     });
-    const started = server.store.appendTurnEvent("general", "turn-first-progress", {
+    const started = server.store.appendTurnEvent("general", "turn-acknowledged", {
       kind: "turn.started",
       payload: { safeLabel: "Started" },
     });
 
-    expect(firstProgress.turnSequence).toBeLessThan(started.turnSequence);
+    expect(acknowledged.turnSequence).toBeLessThan(started.turnSequence);
     const replay = await getJson(`${server.url}events?cursor=0`);
     const events = replay.data.events as Array<{
       type: string;
@@ -832,23 +913,220 @@ test("app server persists and replays first visible progress before later turn e
     const turnEvent = events.find(
       (event) =>
         event.type === "agent.turn_event" &&
-        event.payload?.turn_id === "turn-first-progress" &&
-        event.payload.event?.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+        event.payload?.turn_id === "turn-acknowledged" &&
+        event.payload.event?.kind === TURN_ACKNOWLEDGED_EVENT_KIND,
     );
     const progressEvent = events.find(
       (event) =>
         event.type === "agent.turn_event.progress" &&
-        event.payload?.turn_id === "turn-first-progress",
+        event.payload?.turn_id === "turn-acknowledged",
     );
 
     expect(turnEvent?.payload?.event).toMatchObject({
-      kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-      turnSequence: firstProgress.turnSequence,
+      kind: TURN_ACKNOWLEDGED_EVENT_KIND,
+      turnSequence: acknowledged.turnSequence,
     });
     expect(progressEvent?.payload?.row).toMatchObject({
-      safe_label: "필요한 맥락을 확인하겠습니다.",
+      kind: "turn",
+      state: "accepted",
+      safe_label: "Request received. Preparing the work.",
     });
     expect(progressEvent?.payload?.row?.tool_call_id).toBeUndefined();
+  } finally {
+    server.stop();
+  }
+});
+
+test("app messages emit canonical turn acknowledgement instead of legacy accepted event", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      return { texts: [`reply: ${input.text}`] };
+    },
+  });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "ack this turn",
+      client_message_id: "client-ack-route",
+    });
+    const turnId = result.data.turn.id as string;
+    const replay = await getJson(`${server.url}events?cursor=0`);
+    const turnEvents = replay.data.events
+      .filter(
+        (event: { type: string; payload?: { turn_id?: string } }) =>
+          event.type === "agent.turn_event" &&
+          event.payload?.turn_id === turnId,
+      )
+      .map(
+        (event: { payload: { event?: { kind?: string } } }) =>
+          event.payload.event?.kind,
+      );
+
+    expect(turnEvents).toContain(TURN_ACKNOWLEDGED_EVENT_KIND);
+    expect(turnEvents).not.toContain(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+    expect(turnEvents).not.toContain("turn.accepted");
+    expect(turnEvents).not.toContain("turn.started");
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport sync projects native actor turn event outbounds", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "sync opening decision",
+  });
+  const turnId = result.data.turn.id as string;
+  const userMessageId = result.data.accepted.id as string;
+  const actionId = `app-turn-event:${turnId}:opening`;
+  server.stop();
+
+  appendAppTurnEventOutboundForTest({
+    sessionId: "butler/app-general",
+    actionId,
+    turnId,
+    replyToMessageId: userMessageId,
+    includeDelivery: false,
+    event: {
+      kind: TURN_DECISION_EVENT_KIND,
+      createdAt: "2026-05-18T12:00:30.000Z",
+      payload: {
+        decisionId: "opening-test-decision",
+        role: "opening",
+        source: "model-authored",
+        firstVisible: true,
+        summary: "Orient to the app turn.",
+        rationale: "The native actor emitted a model-authored opening decision.",
+        nextStep: "Continue into the runtime turn.",
+      },
+    },
+  });
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    await getJson(`${server.url}messages?chat_id=general`);
+    let replay = await getJson(`${server.url}events?cursor=0`);
+    expect(
+      replay.data.events.find(
+        (event: { type: string; payload?: { turn_id?: string; event?: { kind?: string } } }) =>
+          event.type === "agent.turn_event" &&
+          event.payload?.turn_id === turnId &&
+          event.payload.event?.kind === TURN_DECISION_EVENT_KIND,
+      ),
+    ).toBeUndefined();
+
+    appendAppTurnEventDeliveryForTest({
+      sessionId: "butler/app-general",
+      actionId,
+    });
+    await getJson(`${server.url}messages?chat_id=general`);
+    replay = await getJson(`${server.url}events?cursor=0`);
+    const turnEventKinds = replay.data.events
+      .filter(
+        (event: { type: string; payload?: { turn_id?: string } }) =>
+          event.type === "agent.turn_event" &&
+          event.payload?.turn_id === turnId,
+      )
+      .map(
+        (event: { payload: { event?: { kind?: string } } }) =>
+          event.payload.event?.kind,
+      );
+    const opening = replay.data.events.find(
+      (event: { type: string; payload?: { turn_id?: string; event?: { kind?: string; payload?: Record<string, unknown> } } }) =>
+        event.type === "agent.turn_event" &&
+        event.payload?.turn_id === turnId &&
+        event.payload.event?.kind === TURN_DECISION_EVENT_KIND,
+    );
+    expect(opening?.payload?.event?.payload).toMatchObject({
+      decisionId: "opening-test-decision",
+      role: "opening",
+      source: "model-authored",
+      firstVisible: true,
+      summary: "Orient to the app turn.",
+    });
+    const openingProgress = replay.data.events.find(
+      (event: { type: string; payload?: { turn_id?: string; row?: { kind?: string; public_decision_summary?: string } } }) =>
+        event.type === "agent.turn_event.progress" &&
+        event.payload?.turn_id === turnId &&
+        event.payload.row?.kind === "decision",
+    );
+    expect(openingProgress?.payload?.row).toMatchObject({
+      kind: "decision",
+      safe_label: "Orient to the app turn.",
+      public_decision_role: "opening",
+      public_decision_summary: "Orient to the app turn.",
+      public_decision_rationale:
+        "The native actor emitted a model-authored opening decision.",
+      public_decision_next_step: "Continue into the runtime turn.",
+      public_decision_source: "model-authored",
+    });
+    server.stop();
+    server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(messages.data.turn_progress[turnId].safe_progress_rows).toContainEqual(
+      expect.objectContaining({
+        kind: "decision",
+        public_decision_summary: "Orient to the app turn.",
+      }),
+    );
+    expect(turnEventKinds).toContain(TURN_ACKNOWLEDGED_EVENT_KIND);
+    expect(turnEventKinds).toContain(TURN_DECISION_EVENT_KIND);
+    expect(turnEventKinds).not.toContain("turn.started");
+    expect(turnEventKinds.indexOf(TURN_ACKNOWLEDGED_EVENT_KIND)).toBeLessThan(
+      turnEventKinds.indexOf(TURN_DECISION_EVENT_KIND),
+    );
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport sync does not project failed native actor turn event delivery", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "sync failed opening decision",
+  });
+  const turnId = result.data.turn.id as string;
+  const userMessageId = result.data.accepted.id as string;
+  server.stop();
+
+  appendAppTurnEventOutboundForTest({
+    sessionId: "butler/app-general",
+    actionId: `app-turn-event:${turnId}:failed-opening`,
+    turnId,
+    replyToMessageId: userMessageId,
+    delivered: false,
+    event: {
+      kind: TURN_DECISION_EVENT_KIND,
+      createdAt: "2026-05-18T12:00:30.000Z",
+      payload: {
+        decisionId: "opening-failed-delivery",
+        role: "opening",
+        source: "model-authored",
+        firstVisible: true,
+        summary: "This must stay private because delivery failed.",
+        rationale: "A failed delivery is not public proof.",
+        nextStep: "Continue without a public fallback.",
+      },
+    },
+  });
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    await getJson(`${server.url}messages?chat_id=general`);
+    const replay = await getJson(`${server.url}events?cursor=0`);
+    const opening = replay.data.events.find(
+      (event: { type: string; payload?: { turn_id?: string; event?: { kind?: string } } }) =>
+        event.type === "agent.turn_event" &&
+        event.payload?.turn_id === turnId &&
+        event.payload.event?.kind === TURN_DECISION_EVENT_KIND,
+    );
+    expect(opening).toBeUndefined();
   } finally {
     server.stop();
   }
@@ -1753,6 +2031,44 @@ test("app session access mode supplies structured workspace tool policy", async 
       requiredNativeTools: [],
       required_tools: [],
       requiredNativeToolProfiles: [],
+    });
+  } finally {
+    server.stop();
+    bridge.close();
+  }
+});
+
+test("app gateway bridge preserves selected reasoning effort through native runtime metadata", async () => {
+  const runtime = new ScriptedRuntime("reasoning metadata reply");
+  const bridge = new AppGatewayBridge({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runtime,
+    provider: fakeProvider,
+    sessionTitleGenerator: false,
+  });
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder: bridge.responder,
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "run with low reasoning",
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+    await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "reasoning metadata reply",
+    );
+
+    expect(runtime.turns.at(-1)?.model).toBe("openai/gpt-5.5");
+    expect(runtime.turns.at(-1)?.metadata).toMatchObject({
+      reasoning_effort: "low",
     });
   } finally {
     server.stop();
@@ -4179,6 +4495,516 @@ test("session summary exposes active WorkStreams without raw work internals", as
   }
 });
 
+test("session summary excludes recoverable WorkStreams from active projection", async () => {
+  const store = new WorkStreamStore(tempDir);
+  const stream = store.updateFromTodoList({
+    ownerSessionId: "butler/app-general",
+    projectId: "butler",
+    listId: "recoverable-main",
+    title: "Recover interrupted work",
+    items: [
+      {
+        id: "code",
+        content: "Implement recovery path",
+        active_form: "Implementing recovery path",
+        status: "in_progress",
+        phase: "execution",
+        priority: "normal",
+        blocked_by: [],
+        note: null,
+        created_at: "2026-05-15T00:00:00.000Z",
+        updated_at: "2026-05-15T00:00:00.000Z",
+        completed_at: null,
+      },
+    ],
+  });
+  store.transition({
+    id: stream.id,
+    state: "recoverable",
+    statusNote: "Interrupted before final delivery.",
+  });
+  expect(store.list({ sessionId: "butler/app-general" })).toContainEqual(
+    expect.objectContaining({ id: stream.id, state: "recoverable" }),
+  );
+
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.work_streams).toEqual([]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("terminal app turn state reconciles matching turn-local WorkStreams", async () => {
+  const streamStore = new WorkStreamStore(tempDir);
+  const todoStore = new TodoListStore(tempDir);
+  let streamId = "";
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder(input) {
+      const todoView = todoStore.update({
+        listId: "terminal-turn-local",
+        items: [
+          {
+            id: "report",
+            content: "Report completion",
+            active_form: "Reporting completion",
+            status: "in_progress",
+            phase: "reporting",
+            priority: "normal",
+            blocked_by: [],
+          },
+        ],
+      });
+      const stream = streamStore.updateFromTodoList({
+        ownerSessionId: "butler/app-general",
+        listId: "terminal-turn-local",
+        lastUserTurnId: input.turnId,
+        items: todoView.list.items,
+      });
+      streamId = stream.id;
+      return { texts: [`reply: ${input.text}`] };
+    },
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "finish active work",
+    });
+
+    expect(streamStore.read(streamId)).toMatchObject({
+      state: "complete",
+      status_note: "Reconciled after delivered turn replay.",
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("session summary and view do not mutate stale terminal WorkStreams on read", async () => {
+  const streamStore = new WorkStreamStore(tempDir);
+  const todoStore = new TodoListStore(tempDir);
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder(input) {
+      return { texts: [`reply: ${input.text}`] };
+    },
+  });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "already delivered",
+    });
+    const turnId = result.data.turn.id as string;
+    const todoView = todoStore.update({
+      listId: "late-stale-turn-local",
+      items: [
+        {
+          id: "code",
+          content: "Keep this active until a terminal write occurs",
+          active_form: "Keeping stale active work",
+          status: "in_progress",
+          phase: "execution",
+          priority: "normal",
+          blocked_by: [],
+        },
+      ],
+    });
+    const stream = streamStore.updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      listId: "late-stale-turn-local",
+      lastUserTurnId: turnId,
+      items: todoView.list.items,
+    });
+    expect(streamStore.read(stream.id)?.state).toBe("executing");
+
+    await getJson(`${server.url}session-summary?session_id=general`);
+    await getJson(`${server.url}session-view?session_id=general`);
+
+    expect(streamStore.read(stream.id)).toMatchObject({
+      state: "executing",
+      active_step_id: "code",
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("message replay does not mutate stale terminal WorkStreams on read", async () => {
+  const streamStore = new WorkStreamStore(tempDir);
+  const todoStore = new TodoListStore(tempDir);
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+      insertMessage(
+        chatId: string,
+        role: string,
+        text: string,
+        status: string,
+        options?: { turnId?: string | null },
+      ): void;
+    };
+    const turn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(turn.id, "delivered", {
+      safeStatusLabel: "Delivered",
+      cancellable: false,
+    });
+    internalStore.insertMessage(
+      "general",
+      "assistant",
+      "already delivered",
+      "delivered",
+      { turnId: turn.id },
+    );
+    const todoView = todoStore.update({
+      listId: "message-read-stale-turn-local",
+      items: [
+        {
+          id: "inspect",
+          content: "Remain unchanged during message replay",
+          active_form: "Remaining unchanged during message replay",
+          status: "in_progress",
+          phase: "execution",
+          priority: "normal",
+          blocked_by: [],
+        },
+      ],
+    });
+    const stream = streamStore.updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      listId: "message-read-stale-turn-local",
+      lastUserTurnId: turn.id,
+      items: todoView.list.items,
+    });
+
+    await getJson(`${server.url}messages?chat_id=general`);
+
+    expect(streamStore.read(stream.id)).toMatchObject({
+      state: "executing",
+      active_step_id: "inspect",
+    });
+    expect(todoStore.view("message-read-stale-turn-local", { includeCompleted: true }).progress.active)
+      .toBe(1);
+  } finally {
+    server.stop();
+  }
+});
+
+test("session summary and view keep current-turn waiting WorkStreams active only for that turn", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+    };
+    const historicalTurn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(historicalTurn.id, "delivered", {
+      safeStatusLabel: "Delivered",
+      cancellable: false,
+    });
+    const currentTurn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(currentTurn.id, "waiting_for_tool", {
+      safeStatusLabel: "Waiting for a decision",
+      cancellable: true,
+    });
+    const store = new WorkStreamStore(tempDir);
+    const historical = store.updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      projectId: "butler",
+      listId: "waiting-historical",
+      title: "Historical waiting work",
+      lastUserTurnId: historicalTurn.id,
+      items: [
+        {
+          id: "historical",
+          content: "Wait from an earlier turn",
+          active_form: "Waiting from an earlier turn",
+          status: "in_progress",
+          phase: "planning",
+          priority: "normal",
+          blocked_by: [],
+          note: null,
+          created_at: "2026-05-15T00:00:00.000Z",
+          updated_at: "2026-05-15T00:00:00.000Z",
+          completed_at: null,
+        },
+      ],
+    });
+    store.transition({ id: historical.id, state: "waiting_user" });
+    const current = store.updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      projectId: "butler",
+      listId: "waiting-current",
+      title: "Current waiting work",
+      lastUserTurnId: currentTurn.id,
+      items: [
+        {
+          id: "current",
+          content: "Wait for current turn decision",
+          active_form: "Waiting for current turn decision",
+          status: "in_progress",
+          phase: "planning",
+          priority: "normal",
+          blocked_by: [],
+          note: null,
+          created_at: "2026-05-15T00:00:00.000Z",
+          updated_at: "2026-05-15T00:00:00.000Z",
+          completed_at: null,
+        },
+      ],
+    });
+    store.transition({ id: current.id, state: "waiting_user" });
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.work_streams).toEqual([
+      expect.objectContaining({
+        id: current.id,
+        title: "Current waiting work",
+        state: "waiting_user",
+      }),
+    ]);
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(view.data.work_streams).toEqual([
+      expect.objectContaining({
+        id: current.id,
+        title: "Current waiting work",
+        state: "waiting_user",
+      }),
+    ]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("session replay hides terminal turn-local WorkStreams without mutating todos", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+    };
+    const turn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(turn.id, "delivered", {
+      safeStatusLabel: "Delivered",
+      cancellable: false,
+    });
+    const todoStore = new TodoListStore(tempDir);
+    const todoView = todoStore.update({
+      listId: "stale-replay-work",
+      items: [
+        {
+          id: "inspect",
+          content: "Inspect stale replay state",
+          active_form: "Inspecting stale replay state",
+          status: "in_progress",
+          phase: "execution",
+        },
+        {
+          id: "report",
+          content: "Report stale replay state",
+          active_form: "Reporting stale replay state",
+          status: "pending",
+          phase: "reporting",
+        },
+      ],
+    });
+    const stream = new WorkStreamStore(tempDir).updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      listId: "stale-replay-work",
+      title: "Stale replay work",
+      lastUserTurnId: turn.id,
+      items: todoView.list.items,
+    });
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.work_streams).toEqual([]);
+    expect(new TodoListStore(tempDir).view("stale-replay-work", { includeCompleted: true }).progress.active)
+      .toBe(2);
+    expect(new WorkStreamStore(tempDir).read(stream.id)).toMatchObject({
+      state: "executing",
+      current_phase: "execution",
+      active_step_id: "inspect",
+    });
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(view.data.work_streams).toEqual([]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("session replay hides stale work from older terminal turns without mutating it", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+    };
+    const oldTurn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(oldTurn.id, "delivered", {
+      safeStatusLabel: "Delivered",
+      cancellable: false,
+    });
+    const latestTurn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(latestTurn.id, "thinking", {
+      safeStatusLabel: "Thinking",
+      cancellable: true,
+    });
+    const todoView = new TodoListStore(tempDir).update({
+      listId: "older-stale-replay-work",
+      items: [
+        {
+          id: "inspect",
+          content: "Inspect older stale replay state",
+          active_form: "Inspecting older stale replay state",
+          status: "in_progress",
+          phase: "execution",
+        },
+      ],
+    });
+    const stream = new WorkStreamStore(tempDir).updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      listId: "older-stale-replay-work",
+      title: "Older stale replay work",
+      lastUserTurnId: oldTurn.id,
+      items: todoView.list.items,
+    });
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.turn_state).toBe("thinking");
+    expect(summary.data.work_streams).toEqual([]);
+    expect(new WorkStreamStore(tempDir).read(stream.id)).toMatchObject({
+      state: "executing",
+      current_phase: "execution",
+      active_step_id: "inspect",
+    });
+    expect(new TodoListStore(tempDir).view("older-stale-replay-work", { includeCompleted: true }).progress.active)
+      .toBe(1);
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(view.data.work_streams).toEqual([]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("session replay preserves recoverable stale WorkStreams as recovery history", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+    };
+    const turn = internalStore.insertTurn("general", "accepted", "Accepted");
+    internalStore.updateTurnState(turn.id, "delivered", {
+      safeStatusLabel: "Delivered",
+      cancellable: false,
+    });
+    const todoView = new TodoListStore(tempDir).update({
+      listId: "stale-recoverable-work",
+      items: [
+        {
+          id: "resume",
+          content: "Resume stale recoverable state",
+          active_form: "Resuming stale recoverable state",
+          status: "cancelled",
+          phase: "execution",
+        },
+      ],
+    });
+    const store = new WorkStreamStore(tempDir);
+    const stream = store.updateFromTodoList({
+      ownerSessionId: "butler/app-general",
+      listId: "stale-recoverable-work",
+      title: "Stale recoverable work",
+      lastUserTurnId: turn.id,
+      items: todoView.list.items,
+    });
+    store.transition({
+      id: stream.id,
+      state: "recoverable",
+      statusNote: "Recoverable before replay.",
+    });
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.work_streams).toEqual([]);
+    expect(new WorkStreamStore(tempDir).read(stream.id)).toMatchObject({
+      state: "recoverable",
+      status_note: "Recoverable before replay.",
+    });
+  } finally {
+    server.stop();
+  }
+});
+
 test("automations expose prompt bodies only in detail and can run while paused", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -4730,6 +5556,7 @@ test("session worker activity synthesizes planned parent for orphan work orchest
         decision_summary: "Inspect existing worker activity projection.",
         decision_rationale: "The UI already groups planned parents with worker children.",
         decision_next_step: "Add the missing backend parent and details projection.",
+        decision_source: "assistant-authored",
         evidence_refs: ["store.ts projection"],
         work_block_id: "worker-timeline-call-1",
         raw_prompt: "unsafe raw prompt sentinel",
@@ -4747,6 +5574,7 @@ test("session worker activity synthesizes planned parent for orphan work orchest
         decision_summary: "<think>hidden reasoning sentinel</think>",
         decision_rationale: "sessionId unsafe internal sentinel",
         decision_next_step: "Continue safely.",
+        decision_source: "runtime-derived",
         evidence_refs: ["safe evidence ref", "authorization: bearer unsafe-token"],
         work_block_id: "worker-timeline-call-2",
       },
@@ -4770,6 +5598,7 @@ test("session worker activity synthesizes planned parent for orphan work orchest
             decisionSummary: "Run a focused app-server projection test.",
             decisionRationale: "A route-level fixture proves SessionView receives safe worker details.",
             decisionNextStep: "Assert the worker block and no unsafe fields leak.",
+            decisionSource: "assistant-authored",
             decisionEvidenceRefs: ["app-server worker activity test"],
           },
         },
@@ -4806,6 +5635,7 @@ test("session worker activity synthesizes planned parent for orphan work orchest
             decisionSummary: "Run a focused app-server projection test.",
             decisionRationale: "A route-level fixture proves SessionView receives safe worker details.",
             decisionNextStep: "Assert the worker block and no unsafe fields leak.",
+            decisionSource: "assistant-authored",
             decisionEvidenceRefs: ["app-server worker activity test"],
           },
         },
@@ -4909,6 +5739,8 @@ test("session worker activity synthesizes planned parent for orphan work orchest
     expect(serialized).not.toContain("private raw worker request sentinel");
     expect(serialized).not.toContain("unsafe raw prompt sentinel");
     expect(serialized).not.toContain("hidden reasoning sentinel");
+    expect(serialized).not.toContain("runtime-derived");
+    expect(serialized).not.toContain("Continue safely.");
     expect(serialized).not.toContain("unsafe-secret");
     expect(serialized).not.toContain("unsafe-token");
     expect(serialized).not.toContain("sessionId unsafe internal sentinel");
@@ -5387,7 +6219,7 @@ test("app-server read routes do not execute app-origin worker completions", asyn
   }
 });
 
-test("session view syncs linked orchestration workers without delivering reports", async () => {
+test("session view does not sync linked orchestration workers while reading", async () => {
   const orchestrationStore = new WorkOrchestrationStore(tempDir);
   orchestrationStore.create({
     id: "orch-session-view",
@@ -5467,28 +6299,12 @@ test("session view syncs linked orchestration workers without delivering reports
   });
   try {
     const view = await getJson(`${server.url}session-view?session_id=general`);
-    expect(view.data.workers).toEqual([
-      expect.objectContaining({
-        activity_kind: "planned",
-        task_id: "orch-session-view",
-        orchestration_id: "orch-session-view",
-        phase: "reporting",
-        terminal: false,
-      }),
-      expect.objectContaining({
-        activity_kind: "worker",
-        task_id: "worker-orch-session-view",
-        session_id: "general",
-        orchestration_id: "orch-session-view",
-        phase: "complete",
-        terminal: true,
-      }),
-    ]);
+    expect(view.data.workers).toEqual([]);
     expect(orchestrationStore.read("orch-session-view")).toMatchObject({
-      status: "ready_for_report",
+      status: "running",
       streams: [expect.objectContaining({
         id: "implementation",
-        status: "done",
+        status: "running",
       })],
     });
     expect(responderInputs).toEqual([]);
@@ -5751,6 +6567,14 @@ test("posted messages persist and replay after restart", async () => {
     join(tempDir, "runtime", "inbound-events", "pending"),
   );
   expect(pending).toHaveLength(1);
+  const replay = await getJson(`${url}events?cursor=0`);
+  const queuedEvent = replay.data.events.find(
+    (event: { type: string; payload?: { turn_id?: string } }) =>
+      event.type === "turn.queued" &&
+      event.payload?.turn_id === result.data.turn.id,
+  );
+  expect(queuedEvent?.payload?.queue_id).toBeString();
+  expect(pending).toEqual([`${queuedEvent.payload.queue_id}.json`]);
   server.stop();
 
   server = createAppServer({ dbPath, port: 0 });
@@ -5775,6 +6599,711 @@ test("posted messages persist and replay after restart", async () => {
       cancellable: true,
       attempt: 1,
     });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport session binding preserves selected reasoning effort", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  const server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "queue with selected reasoning",
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+
+    const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+    try {
+      const binding = store.getBySessionId("butler/app-general");
+      expect(binding?.modelRef).toBe("openai/gpt-5.5");
+      expect(binding?.metadata).toMatchObject({
+        reasoning_effort: "low",
+      });
+    } finally {
+      store.close();
+    }
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport send fails the turn instead of leaving thinking when queue handoff fails", async () => {
+  const serviceClient: ButlerServiceClient = {
+    enqueueAppTurn() {
+      throw new Error("simulated queue write failure");
+    },
+  };
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    serviceClient,
+  });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "this must not get stuck thinking",
+      client_message_id: "client-queue-failure",
+    });
+
+    expect(result.data.turn).toMatchObject({
+      state: "failed",
+      safe_status_label: "Failed",
+      safe_error_code: "app_turn_queue_failed",
+      retryable: false,
+      cancellable: false,
+    });
+    const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+    expect(existsSync(pendingDir) ? readdirSync(pendingDir) : []).toEqual([]);
+
+    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
+    expect(turns.data.turns[0]).toMatchObject({
+      state: "failed",
+      retryable: false,
+      cancellable: false,
+    });
+    expect(turns.data.turns[0]).not.toHaveProperty("safe_error_code");
+    expect(turns.data.turns[0].safe_status_label ?? "").toBe("");
+
+    const messages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    expect(
+      messages.data.messages.map(
+        (message: { role: string; text: string }) => ({
+          role: message.role,
+          text: message.text,
+        }),
+      ),
+    ).toEqual([
+      { role: "user", text: "this must not get stuck thinking" },
+    ]);
+    expect(JSON.stringify(messages)).not.toContain(
+      "Butler could not queue this request for execution. Retry the turn.",
+    );
+
+    const replay = await getJson(`${server.url}events?cursor=0`);
+    expect(
+      replay.data.events.some(
+        (event: { type: string; payload?: { turn_id?: string } }) =>
+          event.type === "turn.queued" &&
+          event.payload?.turn_id === result.data.turn.id,
+      ),
+    ).toBe(false);
+    expect(
+      replay.data.events.some(
+        (event: { type: string; payload?: { safe_error_code?: string } }) =>
+          event.type === "turn.queue_failed" &&
+          event.payload?.safe_error_code === "app_turn_queue_failed",
+      ),
+    ).toBe(true);
+  } finally {
+    server.stop();
+  }
+});
+
+test("legacy app transport queue failure assistant rows are hidden from projections and previews", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  const legacyQueueFailureText =
+    "Butler could not queue this request for execution. Retry the turn.";
+  const legacyGoalCompletionText =
+    "Butler could not verify that the requested goal was completed.";
+  const deliveredSamePhraseText =
+    "Visible assistant note: Butler could not verify that the requested goal was completed.";
+  const server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const storeDb = (
+      server.store as unknown as {
+        db: Database;
+      }
+    ).db;
+    const now = () => new Date().toISOString();
+    storeDb.query(`
+      INSERT INTO messages (
+        id, chat_id, turn_id, role, text, status, created_at, updated_at,
+        safe_error_code, retryable
+      )
+      VALUES (?, 'general', NULL, 'user', ?, 'sent', ?, ?, NULL, 0)
+    `).run(
+      "msg-visible-user-before-legacy-failures",
+      "keep the visible user request",
+      now(),
+      now(),
+    );
+    const seedMessage = (
+      id: string,
+      text: string,
+      status: "failed" | "delivered",
+      safeErrorCode: string | null,
+      turnId: string | null = null,
+    ) => {
+      storeDb.query(`
+        INSERT INTO messages (
+          id, chat_id, turn_id, role, text, status, created_at, updated_at,
+          safe_error_code, retryable
+        )
+        VALUES (?, 'general', ?, 'assistant', ?, ?, ?, ?, ?, 0)
+      `).run(
+        id,
+        turnId,
+        text,
+        status,
+        now(),
+        now(),
+        safeErrorCode,
+      );
+    };
+    seedMessage(
+      "msg-visible-delivered-same-phrase",
+      deliveredSamePhraseText,
+      "delivered",
+      null,
+      null,
+    );
+    seedMessage(
+      "msg-legacy-app-queue-failed",
+      legacyQueueFailureText,
+      "failed",
+      "app_turn_queue_failed",
+      null,
+    );
+    seedMessage(
+      "msg-legacy-goal-completion-incomplete",
+      legacyGoalCompletionText,
+      "failed",
+      "goal_completion_incomplete",
+      null,
+    );
+    const messages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    expect(messages.data.messages).toContainEqual(
+      expect.objectContaining({
+        role: "user",
+        text: "keep the visible user request",
+      }),
+    );
+    expect(messages.data.messages).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        text: deliveredSamePhraseText,
+      }),
+    );
+    expect(messages.data.messages).not.toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        safe_error_code: "app_turn_queue_failed",
+      }),
+    );
+    expect(messages.data.messages).not.toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        safe_error_code: "goal_completion_incomplete",
+      }),
+    );
+    expect(JSON.stringify(messages)).not.toContain(legacyQueueFailureText);
+
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(JSON.stringify(sessionView)).not.toContain(legacyQueueFailureText);
+    expect(sessionView.data.messages).not.toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        safe_error_code: "goal_completion_incomplete",
+      }),
+    );
+    expect(sessionView.data.messages).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        text: deliveredSamePhraseText,
+      }),
+    );
+
+    const sessions = await getJson(`${server.url}sessions`);
+    expect(sessions.data.sessions[0]).toMatchObject({
+      id: "general",
+      last_message_preview: deliveredSamePhraseText,
+    });
+    expect(JSON.stringify(sessions)).not.toContain(legacyQueueFailureText);
+    expect(JSON.stringify(sessions)).not.toContain(
+      "goal_completion_incomplete",
+    );
+
+    const navigation = await getJson(`${server.url}navigation`);
+    expect(navigation.data.chats[0]).toMatchObject({
+      id: "general",
+      last_message_preview: deliveredSamePhraseText,
+    });
+    expect(JSON.stringify(navigation)).not.toContain(legacyQueueFailureText);
+    expect(JSON.stringify(navigation)).not.toContain(
+      "goal_completion_incomplete",
+    );
+  } finally {
+    server.stop();
+  }
+});
+
+test("historical internal continuation failed turns are normalized in public projections", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  const server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const storeDb = (
+      server.store as unknown as {
+        db: Database;
+      }
+    ).db;
+    const seedTurn = (
+      id: string,
+      safeErrorCode: "internal_recovery_required" | "goal_completion_incomplete",
+      createdAt: string,
+    ) => {
+      storeDb.query(`
+        INSERT INTO turns (
+          id, chat_id, user_message_id, state, safe_status_label,
+          safe_error_code, retryable, cancellable, attempt, created_at, updated_at
+        )
+        VALUES (?, 'general', NULL, 'failed', 'Retry required', ?, 1, 0, 1, ?, ?)
+      `).run(id, safeErrorCode, createdAt, createdAt);
+      storeDb.query(`
+        INSERT INTO events (type, payload_json, created_at)
+        VALUES ('turn.state_changed', ?, ?)
+      `).run(
+        JSON.stringify({
+          turn: {
+            id,
+            chat_id: "general",
+            state: "failed",
+            safe_status_label: "Retry required",
+            safe_error_code: safeErrorCode,
+            retryable: true,
+            cancellable: false,
+            attempt: 1,
+            created_at: createdAt,
+            updated_at: createdAt,
+          },
+        }),
+        createdAt,
+      );
+      storeDb.query(`
+        INSERT INTO messages (
+          id, chat_id, turn_id, role, text, status, created_at, updated_at,
+          safe_error_code, retryable
+        )
+        VALUES (?, 'general', ?, 'user', ?, 'sent', ?, ?, NULL, 0)
+      `).run(
+        `msg-${id}`,
+        id,
+        `visible user message for ${id}`,
+        createdAt,
+        createdAt,
+      );
+    };
+    seedTurn(
+      "turn-historical-internal-recovery",
+      "internal_recovery_required",
+      "2026-06-29T00:00:00.000Z",
+    );
+    seedTurn(
+      "turn-historical-goal-completion",
+      "goal_completion_incomplete",
+      "2026-06-29T00:01:00.000Z",
+    );
+
+    const sessions = await getJson(`${server.url}sessions`);
+    const navigation = await getJson(`${server.url}navigation`);
+    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    const events = await getJson(`${server.url}events?cursor=0`);
+    const messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
+    const publicPayloads = [
+      sessions,
+      navigation,
+      turns,
+      sessionView,
+      summary,
+      events,
+      messages,
+    ];
+    for (const payload of publicPayloads) {
+      const serialized = JSON.stringify(payload);
+      expect(serialized).not.toContain("Retry required");
+      expect(serialized).not.toContain("internal_recovery_required");
+      expect(serialized).not.toContain("goal_completion_incomplete");
+    }
+    const projectedTurns = turns.data.turns.filter(
+      (turn: { id: string }) =>
+        turn.id === "turn-historical-internal-recovery" ||
+        turn.id === "turn-historical-goal-completion",
+    );
+    expect(projectedTurns).toHaveLength(2);
+    expect(projectedTurns).toEqual([
+      expect.objectContaining({
+        id: "turn-historical-internal-recovery",
+        state: "failed",
+        retryable: false,
+      }),
+      expect.objectContaining({
+        id: "turn-historical-goal-completion",
+        state: "failed",
+        retryable: false,
+      }),
+    ]);
+    for (const turn of projectedTurns) {
+      expect(turn).not.toHaveProperty("safe_error_code");
+      expect(turn).not.toHaveProperty("safe_status_label", "Retry required");
+    }
+    expect(
+      Object.keys(messages.data.turn_progress).sort(),
+    ).toEqual([
+      "turn-historical-goal-completion",
+      "turn-historical-internal-recovery",
+    ]);
+    for (const progress of Object.values(
+      messages.data.turn_progress,
+    ) as Array<Record<string, unknown>>) {
+      expect(progress).toMatchObject({
+        state: "failed",
+        delivery_state: "failed_system",
+        limitation_codes: [],
+        limitations: [],
+        safe_progress_rows: [],
+      });
+      expect(progress).not.toHaveProperty("summary", "Retry required");
+      expect(JSON.stringify(progress)).not.toContain(
+        "internal_recovery_required",
+      );
+      expect(JSON.stringify(progress)).not.toContain(
+        "goal_completion_incomplete",
+      );
+    }
+    expect(sessions.data.sessions[0]).toMatchObject({
+      id: "general",
+      active_turn_state: "failed",
+    });
+    expect(sessions.data.sessions[0]).not.toHaveProperty("safe_status_label");
+    expect(navigation.data.chats[0]).toMatchObject({
+      id: "general",
+      active_turn_state: "failed",
+    });
+    expect(navigation.data.chats[0]).not.toHaveProperty("safe_status_label");
+    expect(sessionView.data.latest_turn).toMatchObject({
+      id: "turn-historical-goal-completion",
+      state: "failed",
+      retryable: false,
+    });
+    expect(sessionView.data.latest_turn).not.toHaveProperty("safe_error_code");
+    expect(sessionView.data.latest_turn).not.toHaveProperty(
+      "safe_status_label",
+      "Retry required",
+    );
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: "turn-historical-goal-completion",
+      state: "failed",
+    });
+    expect(summary.data.latest_progress.summary ?? "").toBe("");
+    const stateChangedEvents = events.data.events.filter(
+      (event: { type: string; payload?: { turn?: { id?: string } } }) =>
+        event.type === "turn.state_changed" &&
+        (
+          event.payload?.turn?.id === "turn-historical-internal-recovery" ||
+          event.payload?.turn?.id === "turn-historical-goal-completion"
+        ),
+    );
+    expect(stateChangedEvents).toHaveLength(2);
+    for (const event of stateChangedEvents) {
+      expect(event.payload.turn.retryable).toBe(false);
+      expect(event.payload.turn).not.toHaveProperty("safe_error_code");
+      expect(event.payload.turn).not.toHaveProperty("safe_status_label");
+    }
+    const rawRows = storeDb.query<{
+      safe_status_label: string;
+      safe_error_code: string;
+      retryable: number;
+    }, []>(`
+      SELECT safe_status_label, safe_error_code, retryable
+      FROM turns
+      WHERE id IN (
+        'turn-historical-internal-recovery',
+        'turn-historical-goal-completion'
+      )
+      ORDER BY id ASC
+    `).all();
+    expect(rawRows).toEqual([
+      {
+        safe_status_label: "Retry required",
+        safe_error_code: "goal_completion_incomplete",
+        retryable: 1,
+      },
+      {
+        safe_status_label: "Retry required",
+        safe_error_code: "internal_recovery_required",
+        retryable: 1,
+      },
+    ]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport send fails instead of leaving thinking when butler-main state is stale", async () => {
+  const servicesDir = join(tempDir, "state", "services");
+  mkdirSync(servicesDir, { recursive: true });
+  writeFileSync(
+    join(servicesDir, "butler-main.json"),
+    JSON.stringify({
+      version: 1,
+      supervisor: "native-supervisor",
+      serviceId: "butler-main",
+      pid: 999_999_999,
+      processGroupId: 999_999_999,
+      mode: "detached",
+      startedAt: "2099-01-01T00:00:00.000Z",
+      command: "bash",
+      args: ["start-butler.sh"],
+      cwd: tempDir,
+      stdoutFile: join(tempDir, "logs", "butler-out.log"),
+      stderrFile: join(tempDir, "logs", "butler-err.log"),
+      restartPolicy: "watchdog",
+    }),
+  );
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "do not leave this thinking",
+      client_message_id: "client-stale-main",
+    });
+
+    expect(result.data.turn).toMatchObject({
+      state: "failed",
+      safe_error_code: "app_turn_queue_failed",
+      retryable: false,
+      cancellable: false,
+    });
+    const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+    expect(existsSync(pendingDir) ? readdirSync(pendingDir) : []).toEqual([]);
+
+    const replay = await getJson(`${server.url}events?cursor=0`);
+    expect(
+      replay.data.events.some(
+        (event: { type: string; payload?: { turn_id?: string } }) =>
+          event.type === "turn.queued" &&
+          event.payload?.turn_id === result.data.turn.id,
+      ),
+    ).toBe(false);
+    expect(
+      replay.data.events.some(
+        (event: { type: string; payload?: { safe_error_code?: string } }) =>
+          event.type === "turn.queue_failed" &&
+          event.payload?.safe_error_code === "app_turn_queue_failed",
+      ),
+    ).toBe(true);
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport send accepts live native main state when service supervisor state is stale", async () => {
+  const servicesDir = join(tempDir, "state", "services");
+  mkdirSync(servicesDir, { recursive: true });
+  writeFileSync(
+    join(servicesDir, "butler-main.json"),
+    JSON.stringify({
+      version: 1,
+      supervisor: "native-supervisor",
+      serviceId: "butler-main",
+      pid: 999_999_999,
+      processGroupId: 999_999_999,
+      mode: "detached",
+      startedAt: "2099-01-01T00:00:00.000Z",
+      command: "bash",
+      args: ["start-butler.sh"],
+      cwd: tempDir,
+      stdoutFile: join(tempDir, "logs", "butler-out.log"),
+      stderrFile: join(tempDir, "logs", "butler-err.log"),
+      restartPolicy: "watchdog",
+    }),
+  );
+  writeFileSync(
+    join(tempDir, "state", "butler-main-native.json"),
+    JSON.stringify({
+      pid: process.pid,
+      startedAt: "2026-06-28T00:00:00.000Z",
+      runtime: "codex-api",
+      launcher: "start-butler.sh",
+    }),
+  );
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "queue this with live native main",
+      client_message_id: "client-live-native-main",
+    });
+
+    expect(result.data.turn).toMatchObject({
+      state: "thinking",
+      retryable: false,
+      cancellable: true,
+    });
+    expect(result.data.turn.safe_error_code).toBeUndefined();
+    const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+    expect(existsSync(pendingDir) ? readdirSync(pendingDir) : []).toHaveLength(1);
+
+    const replay = await getJson(`${server.url}events?cursor=0`);
+    expect(
+      replay.data.events.some(
+        (event: { type: string; payload?: { turn_id?: string } }) =>
+          event.type === "turn.queued" &&
+          event.payload?.turn_id === result.data.turn.id,
+      ),
+    ).toBe(true);
+    expect(
+      replay.data.events.some(
+        (event: { type: string; payload?: { safe_error_code?: string } }) =>
+          event.type === "turn.queue_failed" &&
+          event.payload?.safe_error_code === "app_turn_queue_failed",
+      ),
+    ).toBe(false);
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport send binds current settings model without persisting implicit composer defaults", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const settings = await patchJson(`${server.url}settings`, {
+      model: "zai/glm-5.2",
+      reasoning_effort: "medium",
+    });
+    expect(settings.data.model).toBe("zai/glm-5.2");
+
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "use the current app settings model",
+      client_message_id: "client-44444444-4444-4444-8444-444444444444",
+    });
+    expect(result.data.turn.state).toBe("thinking");
+
+    const bindings = new SessionBindingStore(
+      join(tempDir, "runtime", "session-store.sqlite"),
+    );
+    try {
+      expect(
+        bindings.getBySessionId("butler/app-general")?.modelRef,
+      ).toBe("zai/glm-5.2");
+    } finally {
+      bindings.close();
+    }
+
+    const db = new Database(join(tempDir, "app.sqlite"));
+    try {
+      const storedControls = db
+        .query<{ value_json: string }, []>(
+          `
+            SELECT value_json
+            FROM app_settings
+            WHERE key = 'session-controls:general'
+          `,
+        )
+        .get();
+      expect(storedControls).toBeNull();
+    } finally {
+      db.close();
+    }
+  } finally {
+    server.stop();
+  }
+});
+
+test("legacy session controls without explicit marker do not override app settings model", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  const server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    await patchJson(`${server.url}settings`, {
+      model: "zai/glm-5.2",
+      reasoning_effort: "medium",
+    });
+    const db = new Database(dbPath);
+    try {
+      db.query(
+        `
+          INSERT INTO app_settings (key, value_json, updated_at)
+          VALUES ('session-controls:general', ?, ?)
+        `,
+      ).run(
+        JSON.stringify({
+          model: "openai/gpt-5.5",
+          reasoning_effort: "medium",
+          access_mode: "full_access",
+          plan_mode: false,
+        }),
+        new Date().toISOString(),
+      );
+    } finally {
+      db.close();
+    }
+
+    const inherited = await getJson(`${server.url}sessions/general/controls`);
+    expect(inherited.data.controls.model).toBe("zai/glm-5.2");
+
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "use settings despite legacy stale controls",
+      client_message_id: "client-55555555-5555-4555-8555-555555555555",
+    });
+    const bindings = new SessionBindingStore(
+      join(tempDir, "runtime", "session-store.sqlite"),
+    );
+    try {
+      expect(bindings.getBySessionId("butler/app-general")?.modelRef).toBe(
+        "zai/glm-5.2",
+      );
+    } finally {
+      bindings.close();
+    }
+
+    const explicit = await patchJson(`${server.url}sessions/general/controls`, {
+      model: "openai/gpt-5.5",
+      reasoning_effort: "medium",
+    });
+    expect(explicit.data.controls.model).toBe("openai/gpt-5.5");
+    const roundTrip = await getJson(`${server.url}sessions/general/controls`);
+    expect(roundTrip.data.controls.model).toBe("openai/gpt-5.5");
   } finally {
     server.stop();
   }
@@ -5914,6 +7443,15 @@ test("app transport final result projection delivers queued turns after app-serv
       "continue even if the app exits",
       "Core result projected from the durable app transport.",
     ]);
+    expect(messages.data.turn_progress[turnId]).toMatchObject({
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: ["source_verified_missing"],
+      limitations: [
+        "Source verification remained unavailable.",
+        "A runtime limitation remained.",
+      ],
+    });
     expect(server.store.getSession(chatId).title).toBe("Durable App 제목");
     const assistant = messages.data.messages.find(
       (message: { role: string }) => message.role === "assistant",
@@ -5993,6 +7531,992 @@ test("app transport final result projection delivers queued turns after app-serv
     expect(sessionView.data.artifacts).toContainEqual(
       expect.objectContaining({ title: "queued-result.md" }),
     );
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport no-visible limited final closes queued turns without assistant text", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue without generic recovery text",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:no-visible",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          noVisibleReply: true,
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["continue without generic recovery text"]);
+    expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
+    expect(messages.data.turn_progress[turnId]).toMatchObject({
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
+      "internal_recovery_required",
+    );
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "delivered",
+      safe_status_label: "Delivered with limitations",
+      retryable: false,
+    });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
+      "internal_recovery_required",
+    );
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(sessionView.data.latest_turn).toMatchObject({
+      id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(sessionView.data.latest_turn)).not.toContain(
+      "internal_recovery_required",
+    );
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport live generic internal verification text is hidden unless marked public progress", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "show live limited text",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:live-generic-text",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not verify that the requested goal was completed.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "Butler could not verify that the requested goal was completed.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["show live limited text"]);
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(JSON.stringify(messages.data.messages)).not.toContain(
+      "internal_recovery_required",
+    );
+    expect(JSON.stringify(messages.data.messages)).not.toContain(
+      "could not verify",
+    );
+    expect(messages.data.turn_progress[turnId]).toMatchObject({
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
+      "internal_recovery_required",
+    );
+    expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
+      "could not verify",
+    );
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(
+      sessionView.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(sessionView.data.latest_turn).toMatchObject({
+      id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(sessionView.data)).not.toContain(
+      "internal_recovery_required",
+    );
+    expect(JSON.stringify(sessionView.data)).not.toContain("could not verify");
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport internal limited final text is hidden by typed limitation code", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "repair historical limited text",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:historical-generic-text",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Arbitrary internal continuation text that must remain private.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "Arbitrary internal continuation detail.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["repair historical limited text"]);
+    expect(JSON.stringify(messages)).not.toContain("Arbitrary internal continuation");
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
+      "internal_recovery_required",
+    );
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport internal recovery failures hide recovering_internal and needs_evidence while keeping queued turns active", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue after internal recovery",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:internal-recovery",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not verify that the requested goal was completed.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          source: "test",
+          safeErrorCode: "internal_recovery_required",
+          safeErrorCause:
+            "Butler could not verify that the requested goal was completed.",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["continue after internal recovery"]);
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "retrying",
+      safe_status_label: "",
+      retryable: false,
+      cancellable: true,
+      attempt: 2,
+    });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+    const sessions = await getJson(`${server.url}sessions`);
+    expect(sessions.data.sessions[0]).toMatchObject({
+      id: "general",
+      active_turn_state: "retrying",
+    });
+    expect(sessions.data.sessions[0]).not.toHaveProperty("safe_status_label");
+
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(sessionView.data.active_turn).toMatchObject({
+      id: turnId,
+      state: "retrying",
+      delivery_state: "running",
+    });
+    expect(sessionView.data.active_turn).not.toHaveProperty(
+      "safe_status_label",
+    );
+    expect(sessionView.data.active_turn.progress.summary ?? "").toBe("");
+    expect(sessionView.data.active_turn.progress.delivery_state).toBe("running");
+    expect(JSON.stringify(sessionView)).not.toContain("recovering_internal");
+    expect(JSON.stringify(sessionView)).not.toContain("needs_evidence");
+    expect(JSON.stringify(sessionView)).not.toContain("needs_tool_surface");
+    expect(JSON.stringify(sessionView)).not.toContain("needs_argument_repair");
+
+    const events = await getJson(`${server.url}events?cursor=0`);
+    const stateChanged = events.data.events.find(
+      (event: {
+        type: string;
+        payload?: { turn?: { id?: string; state?: string } };
+      }) =>
+        event.type === "turn.state_changed" &&
+        event.payload?.turn?.id === turnId &&
+        event.payload?.turn?.state === "retrying",
+    );
+    expect(stateChanged).toBeTruthy();
+    const stateChangedPayload = stateChanged?.payload;
+    expect(stateChangedPayload).not.toHaveProperty("safe_status_label");
+    expect(stateChangedPayload?.turn).not.toHaveProperty("safe_status_label");
+
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "retrying",
+      delivery_state: "running",
+    });
+    expect(summary.data.latest_progress.summary ?? "").toBe("");
+    expect(JSON.stringify(summary)).not.toContain("could not verify");
+    expect(JSON.stringify(summary)).not.toContain("Continuing");
+    expect(JSON.stringify(summary)).not.toContain("recovering_internal");
+    expect(JSON.stringify(summary)).not.toContain("needs_evidence");
+    expect(JSON.stringify(summary)).not.toContain("needs_tool_surface");
+    expect(JSON.stringify(summary)).not.toContain("needs_argument_repair");
+  } finally {
+    server.stop();
+  }
+});
+
+test("repeated app transport internal recovery does not requeue the same turn again", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue after repeated internal recovery",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:internal-recovery:first",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not verify that the requested goal was completed.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          source: "test",
+          safeErrorCode: "internal_recovery_required",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const firstTurns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(firstTurns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "retrying",
+      safe_status_label: "",
+      retryable: false,
+      cancellable: true,
+      attempt: 2,
+    });
+    const firstEvents = await getJson(`${server.url}events?cursor=0`);
+    const firstQueuedCount = firstEvents.data.events.filter(
+      (event: { type: string; payload?: { turn_id?: string } }) =>
+        event.type === "turn.queued" && event.payload?.turn_id === turnId,
+    ).length;
+    expect(firstQueuedCount).toBe(2);
+
+    appendTranscriptEvent(
+      createTranscriptEvent({
+        sessionId: "butler/app-general",
+        kind: "outbound",
+        transport: "app",
+        timestamp: "2099-01-01T00:00:00.000Z",
+        payload: {
+          actionId: "queued-inbound-failure:test:app:general:internal-recovery:second",
+          accountId: "local",
+          peer: { kind: "dm", id: "general" },
+          message: {
+            text: "Butler could not verify that the requested goal was completed.",
+          },
+          metadata: {
+            kind: "turn_failed",
+            turnId,
+            source: "test",
+            safeErrorCode: "internal_recovery_required",
+          },
+        },
+      }),
+    );
+
+    const secondTurns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(secondTurns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "retrying",
+      safe_status_label: "",
+      retryable: false,
+      cancellable: true,
+      attempt: 2,
+    });
+    expect(secondTurns.data.turns[0].safe_error_code ?? null).toBeNull();
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    const assistantMessages = messages.data.messages.filter(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(0);
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+    expect(JSON.stringify(messages)).not.toContain("같은 이어가기 상태");
+
+    const secondEvents = await getJson(`${server.url}events?cursor=0`);
+    const secondQueuedCount = secondEvents.data.events.filter(
+      (event: { type: string; payload?: { turn_id?: string } }) =>
+        event.type === "turn.queued" && event.payload?.turn_id === turnId,
+    ).length;
+    expect(secondQueuedCount).toBe(firstQueuedCount);
+    const secondSummary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(secondSummary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "retrying",
+    });
+    expect(JSON.stringify(secondSummary)).not.toContain("Retry required");
+    expect(JSON.stringify(secondSummary)).not.toContain("internal_recovery_required");
+    expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
+    expect(JSON.stringify(secondEvents)).not.toContain("Retry required");
+    expect(JSON.stringify(secondEvents)).not.toContain("internal_recovery_required");
+    expect(JSON.stringify(secondEvents)).not.toContain("같은 이어가기 상태");
+    expect(
+      secondEvents.data.events.some(
+        (event: { type: string; payload?: { turn_id?: string } }) =>
+          event.type === "agent.turn_event" &&
+          event.payload?.turn_id === turnId,
+      ),
+    ).toBe(true);
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport continuation after retry progress requeues without fallback final text", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue after progressed internal recovery",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:progressed:first",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not verify that the requested goal was completed.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          source: "test",
+          safeErrorCode: "internal_recovery_required",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const firstEvents = await getJson(`${server.url}events?cursor=0`);
+    const firstQueuedEvents = firstEvents.data.events.filter(
+      (event: { type: string; payload?: { turn_id?: string } }) =>
+        event.type === "turn.queued" && event.payload?.turn_id === turnId,
+    );
+    const firstQueuedCount = firstQueuedEvents.length;
+    const queueId = firstQueuedEvents.at(-1)?.payload?.queue_id;
+    expect(typeof queueId).toBe("string");
+    const dispatchClaimId = "claim-progressed-continuation";
+    const processedQueueDir = join(tempDir, "runtime", "inbound-events", "processed");
+    mkdirSync(processedQueueDir, { recursive: true });
+    writeFileSync(
+      join(processedQueueDir, `${queueId}.json`),
+      JSON.stringify({
+        queueId,
+        processedAt: "2026-05-18T12:00:02.000Z",
+        metadata: { terminalClaimId: dispatchClaimId },
+      }),
+    );
+
+    appendTranscriptEvent(
+      createTranscriptEvent({
+        sessionId: "butler/app-general",
+        kind: "outbound",
+        transport: "app",
+        timestamp: "2026-05-18T12:00:01.000Z",
+        payload: {
+          actionId: "runtime-intermediate:test:app:general:progressed:tool",
+          accountId: "local",
+          peer: { kind: "dm", id: "general" },
+          message: { text: "" },
+          metadata: {
+            source: "runtime/native-tool-loop.ts",
+            kind: "tool_progress",
+            activityKind: "ran_command",
+            toolCallId: "tool-progressed",
+            toolName: "Bash",
+            safeLabel: "Bash: test command",
+            inputLabel: "test command",
+            workBlockId: "work-validate",
+            workBlockLabel: "검증 실행 중",
+            decisionSummary: "테스트 실행 결과를 기준으로 다음 수정을 이어간다.",
+            sessionId: "butler/app-general",
+            turnId,
+          },
+        },
+      }),
+    );
+    appendTranscriptEvent(
+      createTranscriptEvent({
+        sessionId: "butler/app-general",
+        kind: "outbound",
+        transport: "app",
+        timestamp: "2026-05-18T12:00:02.000Z",
+        payload: {
+          actionId: `queued-inbound-limited:${queueId}:app:${turnId}`,
+          accountId: "local",
+          peer: { kind: "dm", id: "general" },
+          message: { text: "" },
+          metadata: {
+            kind: "final_result",
+            turnId,
+            queueId,
+            dispatchClaimId,
+            source: "test",
+            noVisibleReply: true,
+            deliveryState: "recovering_internal",
+            limitationCodes: ["internal_recovery_required"],
+            limitations: [],
+          },
+        },
+      }),
+    );
+
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "retrying",
+      safe_status_label: "",
+      retryable: false,
+      cancellable: true,
+      attempt: 3,
+    });
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.filter((message: { role: string }) => message.role === "assistant"),
+    ).toHaveLength(0);
+    expect(JSON.stringify(messages)).not.toContain("같은 이어가기 상태");
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+
+    const secondEvents = await getJson(`${server.url}events?cursor=0`);
+    const secondQueuedCount = secondEvents.data.events.filter(
+      (event: { type: string; payload?: { turn_id?: string } }) =>
+        event.type === "turn.queued" && event.payload?.turn_id === turnId,
+    ).length;
+    expect(secondQueuedCount).toBe(firstQueuedCount + 1);
+    expect(JSON.stringify(secondEvents)).not.toContain("같은 이어가기 상태");
+    expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport internal recovery failures do not mask prior provider failures", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "preserve provider failure",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:provider-first",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "OpenAI API request failed with HTTP 500.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          source: "test",
+          safeErrorCode: "provider_api_error",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:01.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:late-internal",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler could not verify that the requested goal was completed.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          source: "test",
+          safeErrorCode: "internal_recovery_required",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "preserve provider failure",
+      "OpenAI API request failed with HTTP 500.",
+    ]);
+
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "failed",
+      safe_error_code: "provider_api_error",
+      retryable: false,
+    });
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport no-visible final removes an earlier failure assistant for the same turn", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue after a recoverable dispatch failure",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+  const queueId = "queue-no-visible-cleanup";
+  const dispatchClaimId = "claim-no-visible-cleanup";
+  const failedQueueDir = join(tempDir, "runtime", "inbound-events", "failed");
+  mkdirSync(failedQueueDir, { recursive: true });
+  writeFileSync(
+    join(failedQueueDir, `${queueId}.json`),
+    JSON.stringify({
+      queueId,
+      failedAt: "2026-05-18T12:00:00.000Z",
+      metadata: {
+        terminalClaimId: dispatchClaimId,
+        failure: { code: "inbound_dispatch_timeout" },
+      },
+    }),
+  );
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:no-visible-cleanup",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          queueId,
+          dispatchClaimId,
+          safeErrorCode: "inbound_dispatch_timeout",
+          source: "test",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:01.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:no-visible-cleanup",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          queueId,
+          dispatchClaimId,
+          source: "test",
+          noVisibleReply: true,
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { role: string; text: string }) => [
+        message.role,
+        message.text,
+      ]),
+    ).toEqual([
+      ["user", "continue after a recoverable dispatch failure"],
+    ]);
+    expect(JSON.stringify(messages)).not.toContain("dispatch lease expired");
+    expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
+    expect(messages.data.turn_progress[turnId]).toMatchObject({
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(messages.data.turn_progress[turnId])).not.toContain(
+      "internal_recovery_required",
+    );
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
+      "internal_recovery_required",
+    );
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport no-visible final with missing delivery metadata does not create fallback text", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "close this without visible final text",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:no-visible-no-delivery",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          noVisibleReply: true,
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["close this without visible final text"]);
+    expect(JSON.stringify(messages)).not.toContain("Butler did not return a visible reply");
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress).toMatchObject({
+      turn_id: turnId,
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
+      "internal_recovery_required",
+    );
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport no-visible final with system delivery state is not projected as a limitation", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "keep active when a system blocker has no visible final",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:no-visible-system-error",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          noVisibleReply: true,
+          deliveryState: "system_error",
+          limitationCodes: ["provider_failed"],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["keep active when a system blocker has no visible final"]);
+    expect(JSON.stringify(messages)).not.toContain("Delivered with limitations");
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "thinking",
+      retryable: false,
+      cancellable: true,
+    });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport preserves marked public progress finalization text", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue with a public progress summary",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+  const progressText = [
+    "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.",
+    "",
+    "확인된 진행사항:",
+    "- 파일을 작성했습니다.",
+    "",
+    "남은 부분: 최종 보고 정리가 남아 있습니다.",
+    "다음 진행에서는 이 지점부터 이어가면 됩니다.",
+  ].join("\n");
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:visible-progress-finalization",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: progressText,
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          visibleLimitedReply: true,
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [progressText],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual(["continue with a public progress summary", progressText]);
+    const assistant = messages.data.messages.find(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistant).toMatchObject({
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(assistant)).not.toContain(
+      "internal_recovery_required",
+    );
+    expect(assistant.text).toContain("확인된 진행사항");
+    expect(assistant.text).toContain("파일을 작성했습니다.");
   } finally {
     server.stop();
   }
@@ -6181,7 +8705,7 @@ test("app transport final result projection does not resurrect cancelled turns",
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
-    ).toEqual(["cancel stale app result"]);
+    ).toEqual(["cancel stale app result", "Stopped."]);
 
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns).toHaveLength(1);
@@ -6277,6 +8801,414 @@ test("app transport failure projection does not downgrade delivered turns", asyn
       retryable: false,
     });
     expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport final projection does not resurrect timed out failed turns", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const url = server.url;
+  const result = await postJson(`${url}messages`, {
+    chat_id: "general",
+    text: "this turn times out before a late final",
+  });
+  const turnId = result.data.turn.id;
+  expect(result.data.turn.state).toBe("thinking");
+  server.stop();
+
+  const failedQueueDir = join(tempDir, "runtime", "inbound-events", "failed");
+  mkdirSync(failedQueueDir, { recursive: true });
+  writeFileSync(
+    join(failedQueueDir, "queue-timeout.json"),
+    JSON.stringify({
+      queueId: "queue-timeout",
+      failedAt: "2026-05-18T12:00:00.000Z",
+      metadata: {
+        terminalClaimId: "claim-timeout",
+        failure: { code: "inbound_dispatch_timeout" },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "runtime-final:late-after-timeout",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Late final must not resurrect the timed out turn.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          queueId: "queue-timeout",
+          dispatchClaimId: "claim-late-stale",
+          source: "test",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:01.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:timeout-first",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          safeErrorCode: "inbound_dispatch_timeout",
+          queueId: "queue-timeout",
+          dispatchClaimId: "claim-timeout",
+          source: "test",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "this turn times out before a late final",
+      "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+    ]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "failed",
+      safe_error_code: "inbound_dispatch_timeout",
+      retryable: false,
+      cancellable: false,
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("recoverable limited final can close a timeout failed app turn", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue a recoverable WorkStream",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+  const queueId = "queue-recoverable-timeout";
+  const dispatchClaimId = "claim-recoverable-timeout";
+  const failedQueueDir = join(tempDir, "runtime", "inbound-events", "failed");
+  mkdirSync(failedQueueDir, { recursive: true });
+  writeFileSync(
+    join(failedQueueDir, `${queueId}.json`),
+    JSON.stringify({
+      queueId,
+      failedAt: "2026-05-18T12:00:00.000Z",
+      metadata: {
+        terminalClaimId: dispatchClaimId,
+        failure: { code: "inbound_dispatch_timeout" },
+      },
+    }),
+  );
+  const db = new Database(dbPath);
+  db.query(
+    "INSERT INTO events (type, payload_json, created_at) VALUES (?, ?, ?)",
+  ).run(
+    "agent.turn_event",
+    JSON.stringify({
+      session_id: "general",
+      turn_id: turnId,
+      event: {
+        id: "event-stale-prompt-budget-delivery",
+        kind: "turn.completed",
+        payload: {
+          safeLabel: "Completed with limitations",
+          delivery_state: "delivered_with_limitations",
+          limitation_codes: ["prompt_usage_model_call_budget_exhausted"],
+          limitations: [
+            "Butler reached its internal model-call budget while trying to continue the turn.",
+          ],
+        },
+      },
+    }),
+    "2026-05-18T11:59:59.000Z",
+  );
+  db.close();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:recoverable-timeout",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          queueId,
+          dispatchClaimId,
+          safeErrorCode: "inbound_dispatch_timeout",
+          source: "test",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:01.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:recoverable-final",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          queueId,
+          dispatchClaimId,
+          source: "test",
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "continue a recoverable WorkStream",
+    ]);
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "delivered",
+      retryable: false,
+    });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    expect(summary.data.latest_progress).toMatchObject({
+      state: "delivered",
+      delivery_state: "delivered_with_limitations",
+      limitation_codes: [],
+      limitations: [],
+    });
+    expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
+      "internal_recovery_required",
+    );
+    expect(
+      summary.data.latest_progress.safe_progress_rows.some(
+        (row: { kind: string; state: string }) =>
+          row.kind === "turn" && row.state === "failed",
+      ),
+    ).toBe(false);
+  } finally {
+    server.stop();
+  }
+});
+
+test("recoverable limited final without queue claim cannot close a failed app turn", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "continue a failed turn without claim",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "queued-inbound-failure:test:app:general:no-claim",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+        },
+        metadata: {
+          kind: "turn_failed",
+          turnId,
+          safeErrorCode: "inbound_dispatch_timeout",
+          source: "test",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:01.000Z",
+      payload: {
+        actionId: "queued-inbound-limited:test:app:general:no-claim-final",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          source: "test",
+          deliveryState: "delivered_with_limitations",
+          limitationCodes: ["internal_recovery_required"],
+          limitations: [
+            "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.",
+          ],
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "continue a failed turn without claim",
+      "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+    ]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "failed",
+      safe_error_code: "inbound_dispatch_timeout",
+      retryable: false,
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport queued final waits for matching processed terminal record", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const url = server.url;
+  const result = await postJson(`${url}messages`, {
+    chat_id: "general",
+    text: "this queued final must wait for queue completion",
+  });
+  const turnId = result.data.turn.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:00.000Z",
+      payload: {
+        actionId: "runtime-final:wait-for-processed-terminal",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "Final after processed terminal.",
+        },
+        metadata: {
+          kind: "final_result",
+          turnId,
+          queueId: "queue-wait-terminal",
+          dispatchClaimId: "claim-wait-terminal",
+          source: "test",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "this queued final must wait for queue completion",
+    ]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "thinking",
+      retryable: false,
+      cancellable: true,
+    });
+  } finally {
+    server.stop();
+  }
+
+  const processedQueueDir = join(tempDir, "runtime", "inbound-events", "processed");
+  mkdirSync(processedQueueDir, { recursive: true });
+  writeFileSync(
+    join(processedQueueDir, "queue-wait-terminal.json"),
+    JSON.stringify({
+      queueId: "queue-wait-terminal",
+      processedAt: "2026-05-18T12:00:01.000Z",
+      metadata: {
+        terminalClaimId: "claim-wait-terminal",
+        dispatchStatus: "handled",
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map((message: { text: string }) => message.text),
+    ).toEqual([
+      "this queued final must wait for queue completion",
+      "Final after processed terminal.",
+    ]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      id: turnId,
+      state: "delivered",
+      retryable: false,
+      cancellable: false,
+    });
   } finally {
     server.stop();
   }
@@ -6435,6 +9367,8 @@ test("app transport progress projection recovers queued work blocks after app-se
     );
     expect(afterSession.updated_at).not.toBe(beforeSession.updated_at);
     expect(afterSession.last_activity_at).toBe(afterSession.updated_at);
+    expect(afterSession.active_turn_state).toBe("thinking");
+    expect(afterSession.safe_status_label).toBe("Web search: 충주 뉴스");
     expect(
       messages.data.turn_progress[turnId].safe_progress_rows,
     ).toContainEqual(
@@ -6478,6 +9412,115 @@ test("app transport progress projection recovers queued work blocks after app-se
         safe_tool_name: "Web search",
         safe_input_label: "충주 뉴스",
         work_block_label: "오늘 브리핑 근거를 찾는 중입니다.",
+      }),
+    );
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport progress projection preserves tool-start public notes", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "show queued tool progress",
+  });
+  const turnId = result.data.turn.id;
+  const userMessageId = result.data.accepted.id;
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:30.000Z",
+      payload: {
+        actionId: `runtime-intermediate:app:${userMessageId}:grep_files-start`,
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐. 실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠다냐.",
+          replyToMessageId: userMessageId,
+        },
+        metadata: {
+          kind: "intermediate",
+          tool: "grep_files",
+          phase: "before_tool_execution",
+          turnId,
+          workBlockId: "public-note-test-failure-lines",
+          workBlockLabel:
+            "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐. 실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠다냐.",
+          decisionSummary:
+            "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐.",
+          decisionRationale:
+            "실패 테스트명을 먼저 확인해야 불필요한 수정 범위를 줄일 수 있다냐.",
+          decisionNextStep:
+            "실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠다냐.",
+          decisionSource: "assistant-authored",
+        },
+      },
+    }),
+  );
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:00:30.050Z",
+      payload: {
+        actionId: `runtime-intermediate:app:${userMessageId}:grep_files-progress`,
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+          replyToMessageId: userMessageId,
+        },
+        metadata: {
+          kind: "tool_progress",
+          activityKind: "searched",
+          toolName: "Search",
+          safeLabel: "Search: not ok|AssertionError",
+          inputLabel: "not ok|AssertionError",
+          toolCallId: "tool-grep-files",
+          workBlockId: "work-validate",
+          workBlockLabel: "실패 테스트명을 확인하는 중",
+          decisionSummary:
+            "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐.",
+          decisionSource: "assistant-authored",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    const rows = messages.data.turn_progress[turnId].safe_progress_rows;
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        id: `runtime-intermediate:app:${userMessageId}:grep_files-start`,
+        kind: "message",
+        safe_label:
+          "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐. 실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠다냐.",
+        work_block_id: "public-note-test-failure-lines",
+        work_block_label:
+          "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐. 실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠다냐.",
+        work_decision_summary:
+          "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐.",
+      }),
+    );
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        id: `runtime-intermediate:app:${userMessageId}:grep_files-progress`,
+        kind: "searched",
+        safe_label: "Search: not ok|AssertionError",
+        safe_tool_name: "Search",
+        safe_input_label: "not ok|AssertionError",
+        work_block_label: "실패 테스트명을 확인하는 중",
+        work_decision_summary:
+          "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠다냐.",
       }),
     );
   } finally {
@@ -6594,11 +9637,65 @@ test("app transport sync skips unchanged transcript snapshots", async () => {
       SELECT COUNT(*) AS count
       FROM events
       WHERE type = 'progress.summary'
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '$.turn_id') = ?
     `,
       )
-      .get(`%"turn_id":"${turnId}"%`);
+      .get(turnId);
     expect(row?.count).toBe(1);
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport sync includes archived sessions while a turn is active", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "archived active progress",
+  });
+  const turnId = result.data.turn.id;
+  const userMessageId = result.data.accepted.id;
+  await postJson(`${server.url}sessions/general/archive`, {});
+  server.stop();
+
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: "butler/app-general",
+      kind: "outbound",
+      transport: "app",
+      timestamp: "2026-05-18T12:05:30.000Z",
+      payload: {
+        actionId: `runtime-intermediate:app:${userMessageId}:archived-active-progress`,
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+          replyToMessageId: userMessageId,
+        },
+        metadata: {
+          kind: "tool_progress",
+          activityKind: "model",
+          toolName: "모델 준비",
+          safeLabel: "요청 확인: archived active progress",
+          inputLabel: "",
+        },
+      },
+    }),
+  );
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    expect(server.store.syncAllAppTransportEvents()).toBe(1);
+    const progress = server.store.listTurnProgressSnapshotsForMessages([
+      result.data.accepted,
+    ]);
+    expect(progress[turnId]?.safe_progress_rows).toContainEqual(
+      expect.objectContaining({
+        kind: "model",
+        safe_label: "요청 확인: archived active progress",
+      }),
+    );
   } finally {
     server.stop();
   }
@@ -6885,7 +9982,7 @@ test("app transport failure projection fails queued turns after app-server resta
     expect(assistant).toMatchObject({
       status: "failed",
       safe_error_code: "gateway_failed",
-      retryable: true,
+      retryable: false,
     });
     expect(JSON.stringify(messages)).not.toContain("private stack");
     expect(JSON.stringify(messages)).not.toContain("token=secret");
@@ -6897,7 +9994,7 @@ test("app transport failure projection fails queued turns after app-server resta
       state: "failed",
       safe_error_code: "gateway_failed",
       cancellable: false,
-      retryable: true,
+      retryable: false,
     });
     const events = await getJson(`${server.url}events?cursor=0`);
     const failedEvent = events.data.events.find(
@@ -6923,7 +10020,7 @@ test("app transport failure projection fails queued turns after app-server resta
   }
 });
 
-test("retry without injected responder requeues the app turn instead of answering locally", async () => {
+test("retry without runtime fault rejects ordinary failed app transport turns", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({
     dbPath,
@@ -6952,27 +10049,48 @@ test("retry without injected responder requeues the app turn instead of answerin
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    const retry = await postJson(
+    const retry = await fetch(
       `${server.url}turns/${encodeURIComponent(turnId)}/retry`,
-      {},
+      { method: "POST", headers: { "content-type": "application/json" } },
     );
-    expect(retry.data.replies).toHaveLength(0);
-    expect(retry.data.turn).toMatchObject({
+    expect(retry.status).toBe(409);
+    const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+    expect(existsSync(pendingDir) ? readdirSync(pendingDir) : []).toEqual([]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "retrying",
-      cancellable: true,
-      attempt: 2,
+      state: "failed",
+      retryable: false,
+      attempt: 1,
     });
-    const pending = readdirSync(
-      join(tempDir, "runtime", "inbound-events", "pending"),
-    );
-    expect(pending).toHaveLength(1);
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.map(
+        (message: { role: string; text: string; status: string }) => ({
+          role: message.role,
+          text: message.text,
+          status: message.status,
+        }),
+      ),
+    ).toEqual([
+      {
+        role: "user",
+        text: "retry through core",
+        status: "sent",
+      },
+      {
+        role: "assistant",
+        text: "Butler could not complete this turn.",
+        status: "failed",
+      },
+    ]);
+    expect(JSON.stringify(messages)).not.toContain("Retrying this turn");
   } finally {
     server.stop();
   }
 });
 
-test("retry ignores stale app transport failure projection from earlier attempts", async () => {
+test("ordinary failed turn retry rejection keeps stale app transport failure projection unchanged", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({
     dbPath,
@@ -7001,15 +10119,11 @@ test("retry ignores stale app transport failure projection from earlier attempts
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    const retry = await postJson(
+    const retry = await fetch(
       `${server.url}turns/${encodeURIComponent(turnId)}/retry`,
-      {},
+      { method: "POST", headers: { "content-type": "application/json" } },
     );
-    expect(retry.data.turn).toMatchObject({
-      id: turnId,
-      state: "retrying",
-      attempt: 2,
-    });
+    expect(retry.status).toBe(409);
 
     appendTranscriptEvent(
       createTranscriptEvent({
@@ -7037,12 +10151,12 @@ test("retry ignores stale app transport failure projection from earlier attempts
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "retrying",
-      cancellable: true,
+      state: "failed",
+      cancellable: false,
       retryable: false,
-      attempt: 2,
+      attempt: 1,
+      safe_error_code: "gateway_failed",
     });
-    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
   } finally {
     server.stop();
   }
@@ -7873,6 +10987,10 @@ test("app gateway bridge captures tool progress without blank assistant messages
             toolName: "Bash",
             safeLabel: `Bash: ${turn.input.message.text}`,
             inputLabel: turn.input.message.text,
+            workBlockId: "work-progress",
+            workBlockLabel: "상태를 확인하는 중",
+            decisionSummary: "상태 확인을 위해 Bash를 실행합니다.",
+            decisionSource: "assistant-authored",
             detailRows: [
               {
                 id: "bridge-progress-command",
@@ -7954,6 +11072,26 @@ test("app gateway bridge captures tool progress without blank assistant messages
         }),
       );
     }
+    const secondAssistant = messages.data.messages.find(
+      (message: { role: string; text: string }) =>
+        message.role === "assistant" &&
+        message.text === "gateway bridge reply: route this again",
+    );
+    expect(secondAssistant?.work_blocks?.[0]).toMatchObject({
+      id: "work-progress",
+      label: "상태를 확인하는 중",
+    });
+    expect(secondAssistant?.work_blocks?.[0]?.decision_summary).toBeUndefined();
+    expect(secondAssistant?.work_blocks?.[0]?.rows[0]).toMatchObject({
+      safe_tool_name: "Bash",
+      safe_input_label: "route this again",
+    });
+    expect(secondAssistant?.work_blocks?.[0]?.rows[0].work_block_id)
+      .toBeUndefined();
+    expect(secondAssistant?.work_blocks?.[0]?.rows[0].work_block_label)
+      .toBeUndefined();
+    expect(secondAssistant?.work_blocks?.[0]?.rows[0].work_decision_summary)
+      .toBeUndefined();
     const summary = await getJson(
       `${server.url}session-summary?session_id=general`,
     );
@@ -7967,6 +11105,111 @@ test("app gateway bridge captures tool progress without blank assistant messages
   } finally {
     server.stop();
     bridge.close();
+  }
+});
+
+test("terminal work blocks do not fall back to tool or safe labels when workBlockLabel is missing", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      input.onProgress?.({
+        id: "terminal-no-label-tool",
+        kind: "ran_command",
+        state: "delivered",
+        safe_label: "Bash: npm test",
+        safe_tool_name: "Bash",
+        safe_input_label: "npm test",
+        tool_call_id: "terminal-no-label-tool",
+        work_block_id: "terminal-no-label-work",
+      });
+      return { texts: ["done"] };
+    },
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "run unlabeled terminal work",
+    });
+    const reply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "done",
+    );
+    const workBlocks = reply.work_blocks as Array<{
+      id: string;
+      label: string;
+      rows: Array<Record<string, unknown>>;
+    }>;
+
+    expect(workBlocks ?? []).toEqual([]);
+    expect(JSON.stringify(workBlocks ?? [])).not.toContain(
+      '"work_block_label":"Bash',
+    );
+  } finally {
+    server.stop();
+  }
+});
+
+test("terminal work blocks drop synthetic dispatch rows but keep real dispatch evidence", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      input.onProgress?.({
+        id: "synthetic-dispatch",
+        kind: "dispatch",
+        state: "delivered",
+        safe_label: "Dispatch: public plan text",
+        safe_tool_name: "Dispatch",
+        safe_input_label: "public plan text",
+        work_block_id: "work-synthetic-dispatch",
+        work_block_label: "공개 계획을 정리하는 중",
+      });
+      input.onProgress?.({
+        id: "real-dispatch",
+        kind: "dispatch",
+        state: "delivered",
+        safe_label: "Dispatch: worker review",
+        safe_tool_name: "Dispatch",
+        safe_input_label: "worker review",
+        tool_call_id: "tool-real-dispatch",
+        work_block_id: "work-real-dispatch",
+        work_block_label: "검토 작업을 맡기는 중",
+      });
+      return { texts: ["done"] };
+    },
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "run dispatch projection",
+    });
+    const reply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "done",
+    );
+    const workBlocks = (reply.work_blocks ?? []) as Array<{
+      id: string;
+      label: string;
+      rows: Array<Record<string, unknown>>;
+    }>;
+
+    expect(workBlocks).toHaveLength(1);
+    expect(workBlocks[0]).toMatchObject({
+      id: "work-real-dispatch",
+      label: "검토 작업을 맡기는 중",
+    });
+    expect(workBlocks[0]?.rows[0]).toMatchObject({
+      safe_tool_name: "Dispatch",
+      safe_input_label: "worker review",
+      tool_call_id: "tool-real-dispatch",
+    });
+    expect(JSON.stringify(workBlocks)).not.toContain("public plan text");
+    expect(JSON.stringify(workBlocks)).not.toContain("work-synthetic-dispatch");
+  } finally {
+    server.stop();
   }
 });
 
@@ -8189,6 +11432,51 @@ test("session summary preserves long active turn work history without latest-thr
     expect(workRows).toHaveLength(40);
     expect(workRows[0]?.safe_label).toBe("작업 단계 1");
     expect(workRows.at(-1)?.safe_label).toBe("작업 단계 40");
+  } finally {
+    server.stop();
+  }
+});
+
+test("session summary drops unauthorised legacy progress decision fields", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      input.onProgress?.({
+        id: "runtime-derived-decision",
+        kind: "ran_command",
+        state: "running",
+        safe_label: "Checking local status",
+        safe_tool_name: "Bash",
+        safe_input_label: "status",
+        work_block_id: "work-runtime-derived",
+        work_decision_summary: "Fallback summary must not render as a decision",
+        work_decision_rationale: "Runtime-derived text is diagnostic only.",
+        work_decision_next_step: "Do not show this as model intent.",
+        work_decision_source: "runtime-derived",
+        work_decision_evidence_refs: ["diagnostic"],
+      });
+      return { texts: ["done"] };
+    },
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "check status",
+    });
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    const row = summary.data.latest_progress.safe_progress_rows.find(
+      (candidate: { id?: string }) => candidate.id === "runtime-derived-decision",
+    );
+    expect(row).toMatchObject({
+      safe_label: "Checking local status",
+      work_block_id: "work-runtime-derived",
+    });
+    expect(row.work_decision_summary).toBeUndefined();
+    expect(row.work_decision_source).toBeUndefined();
   } finally {
     server.stop();
   }
@@ -8543,10 +11831,14 @@ test("hung responders stay admitted without gateway timeout cancellation", async
     responderTimeoutMs: 25,
     responder(input) {
       markStarted?.();
-      input.signal?.addEventListener("abort", () => {
-        aborted = true;
+      return new Promise((_, reject) => {
+        input.signal?.addEventListener("abort", () => {
+          aborted = true;
+          const error = new Error("cancelled");
+          error.name = "AppResponderCancelledError";
+          reject(error);
+        });
       });
-      return new Promise(() => undefined);
     },
   });
   try {
@@ -8607,6 +11899,16 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
     responder(input) {
+      input.onProgress?.({
+        id: "cancel-progress-row",
+        kind: "ran_command",
+        state: "running",
+        safe_label: "Bash: npm test",
+        safe_tool_name: "Bash",
+        safe_input_label: "npm test",
+        work_block_id: "cancel-work",
+        work_block_label: "중단 전 실행한 검증",
+      });
       markStarted?.();
       input.signal?.addEventListener("abort", () => {
         aborted = true;
@@ -8657,17 +11959,345 @@ test("turn cancel aborts in-flight responder without creating a failure reply", 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
     );
-    expect(
-      messages.data.messages.map(
-        (message: { status: string }) => message.status,
-      ),
-    ).toEqual(["sent"]);
+    expect(messages.data.messages).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        status: "cancelled",
+        text: "Stopped.",
+        turn_id: turnId,
+        work_blocks: [
+          expect.objectContaining({
+            id: "cancel-work",
+            label: "중단 전 실행한 검증",
+            state: "cancelled",
+            rows: [
+              expect.objectContaining({
+                id: "cancel-progress-row",
+                state: "cancelled",
+                safe_tool_name: "Bash",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(events.data.events).toContainEqual(
+      expect.objectContaining({
+        type: "message.created",
+        payload: expect.objectContaining({
+          message: expect.objectContaining({
+            role: "assistant",
+            status: "cancelled",
+            turn_id: turnId,
+            work_blocks: [
+              expect.objectContaining({
+                id: "cancel-work",
+                state: "cancelled",
+              }),
+            ],
+          }),
+        }),
+      }),
+    );
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
   } finally {
     server.stop();
   }
 });
 
-test("failed app turns persist as retryable and can be retried", async () => {
+test("turn cancel preserves earlier assistant work history while stopping active turn", async () => {
+  let turnCount = 0;
+  let markSecondStarted: (() => void) | undefined;
+  const secondStarted = new Promise<void>((resolve) => {
+    markSecondStarted = resolve;
+  });
+  let aborted = false;
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      turnCount += 1;
+      if (turnCount === 1) {
+        input.onProgress?.({
+          id: "first-progress-row",
+          kind: "ran_command",
+          state: "delivered",
+          safe_label: "Bash: echo baseline",
+          safe_tool_name: "Bash",
+          safe_input_label: "echo baseline",
+          work_block_id: "legacy-work",
+          work_block_label: "기본 작업",
+        });
+        return { texts: ["기본 작업은 완료했습니다."] };
+      }
+      input.onTurnEvent?.({
+        kind: TURN_DECISION_EVENT_KIND,
+        payload: createTurnDecisionPayload({
+          decisionId: "opening-cancel-turn",
+          role: "opening",
+          source: "model-authored",
+          firstVisible: true,
+          summary: "I will preserve this opening decision through Stop.",
+          rationale: "Stopping the turn must not erase typed decision history.",
+          nextStep: "Keep the cancellation attached to the same turn.",
+        }),
+      });
+      input.onProgress?.({
+        id: "cancel-progress-row",
+        kind: "ran_command",
+        state: "running",
+        safe_label: "Bash: npm test",
+        safe_tool_name: "Bash",
+        safe_input_label: "npm test",
+        work_block_id: "cancel-work",
+        work_block_label: "중단할 작업",
+      });
+      markSecondStarted?.();
+      input.signal?.addEventListener("abort", () => {
+        aborted = true;
+      });
+      return new Promise(() => undefined);
+    },
+  });
+
+  try {
+    const first = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "run baseline",
+    });
+    await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "기본 작업은 완료했습니다.",
+    );
+
+    const inFlight = fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: "general", text: "stop this new turn" }),
+    });
+    await secondStarted;
+
+    let secondTurnId: string | undefined;
+    for (let attempt = 0; attempt < 30 && !secondTurnId; attempt += 1) {
+      const turns = await getJson(
+        `${server.url}turns?chat_id=general&cursor=0`,
+      );
+      secondTurnId = turns.data.turns.find(
+        (turn: { id: string }) => turn.id !== first.data.turn.id,
+      )?.id;
+      if (!secondTurnId) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
+    expect(secondTurnId).toBeDefined();
+    if (typeof secondTurnId !== "string") {
+      throw new Error("Expected a cancelable second turn id.");
+    }
+    const cancel = await postJson(
+      `${server.url}turns/${encodeURIComponent(secondTurnId)}/cancel`,
+      {},
+    );
+    expect(cancel.data.turn).toMatchObject({
+      id: secondTurnId,
+      state: "cancelled",
+      retryable: false,
+      cancellable: false,
+    });
+
+    const completedRequest = await inFlight;
+    expect(completedRequest.status).toBe(202);
+    expect(aborted).toBe(true);
+
+    const messages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    const assistantMessages = messages.data.messages.filter(
+      (message: { role: string }) => message.role === "assistant",
+    );
+    expect(assistantMessages).toHaveLength(2);
+    expect(
+      assistantMessages.find(
+        (message: { text: string }) => message.text === "기본 작업은 완료했습니다.",
+      ),
+    ).toMatchObject({
+      status: "delivered",
+      turn_id: first.data.turn.id,
+      work_blocks: [
+        expect.objectContaining({
+          id: "legacy-work",
+          label: "기본 작업",
+          state: "delivered",
+          rows: [
+            expect.objectContaining({
+              id: "first-progress-row",
+              state: "delivered",
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(
+      assistantMessages.find(
+        (message: { status: string }) => message.status === "cancelled",
+      ),
+    ).toMatchObject({
+      turn_id: secondTurnId,
+      text: "Stopped.",
+      status: "cancelled",
+      work_blocks: [
+        expect.objectContaining({
+          id: "cancel-work",
+          label: "중단할 작업",
+          state: "cancelled",
+          rows: [expect.objectContaining({ id: "cancel-progress-row", state: "cancelled" })],
+        }),
+      ],
+    });
+    expect(messages.data.turn_progress[secondTurnId].safe_progress_rows)
+      .toContainEqual(
+        expect.objectContaining({
+          kind: "decision",
+          public_decision_summary:
+            "I will preserve this opening decision through Stop.",
+        }),
+      );
+    expect(JSON.stringify(messages)).not.toContain("Retrying this turn");
+  } finally {
+    server.stop();
+  }
+});
+
+test("app startup repairs cancelled turns that lost their activity carrier", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let markStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  let server = createAppServer({
+    dbPath,
+    port: 0,
+    responder(input) {
+      input.onProgress?.({
+        id: "legacy-cancel-progress-row",
+        kind: "ran_command",
+        state: "running",
+        safe_label: "Bash: bun test",
+        safe_tool_name: "Bash",
+        safe_input_label: "bun test",
+        work_block_id: "legacy-cancel-work",
+        work_block_label: "중단 전에 남아 있던 작업",
+      });
+      markStarted?.();
+      return new Promise(() => undefined);
+    },
+  });
+
+  try {
+    await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: "general", text: "stop legacy turn" }),
+    });
+    await started;
+    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
+    const turnId = turns.data.turns[0].id;
+    await postJson(`${server.url}turns/${encodeURIComponent(turnId)}/cancel`, {});
+    server.stop();
+
+    const db = new Database(dbPath);
+    try {
+      db.query("DELETE FROM messages WHERE turn_id = ? AND role = 'assistant'")
+        .run(turnId);
+      db.query(`
+        INSERT INTO messages (
+          id, chat_id, turn_id, role, text, status, created_at, updated_at,
+          safe_error_code, retryable
+        )
+        VALUES (?, ?, ?, 'assistant', 'Retrying this turn.', 'retrying', ?, ?, NULL, 0)
+      `).run(
+        "msg-legacy-stale-cancel-carrier",
+        "general",
+        turnId,
+        "2026-06-28T00:00:00.000Z",
+        "2026-06-28T00:00:00.000Z",
+      );
+      db.query("DELETE FROM events WHERE type = 'message.created' AND payload_json LIKE ?")
+        .run(`%${turnId}%`);
+      const internalEventId = "turn-event-legacy-continuation";
+      const createdAt = "2026-06-28T00:00:00.000Z";
+      db.query("INSERT INTO events (type, payload_json, created_at) VALUES (?, ?, ?)")
+        .run("agent.turn_event", JSON.stringify({
+          session_id: "general",
+          turn_id: turnId,
+          event: {
+            id: internalEventId,
+            sessionId: "general",
+            turnId,
+            createdAt,
+            kind: "tool.progress",
+            visibility: "public",
+            payload: {
+              activityKind: "model",
+              state: "running",
+              safeLabel: "Continuing current turn",
+              delivery_state: "needs_evidence",
+              noVisibleReply: true,
+              continuation_requeued: true,
+            },
+          },
+        }), createdAt);
+      db.query("INSERT INTO events (type, payload_json, created_at) VALUES (?, ?, ?)")
+        .run("agent.turn_event.progress", JSON.stringify({
+          session_id: "general",
+          turn_id: turnId,
+          event_id: internalEventId,
+          row: {
+            id: internalEventId,
+            kind: "model",
+            safe_label: "Continuing current turn",
+            state: "running",
+            created_at: createdAt,
+            safe_tool_name: "Tool",
+            work_block_label: "Continuing current turn",
+          },
+        }), createdAt);
+    } finally {
+      db.close();
+    }
+
+    server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(messages.data.messages).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        status: "cancelled",
+        text: "Stopped.",
+        turn_id: turnId,
+        work_blocks: [
+          expect.objectContaining({
+            id: "legacy-cancel-work",
+            label: "중단 전에 남아 있던 작업",
+            state: "cancelled",
+            rows: [
+              expect.objectContaining({
+                id: "legacy-cancel-progress-row",
+                state: "cancelled",
+                safe_tool_name: "Bash",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(JSON.stringify(messages)).not.toContain("Continuing current turn");
+  } finally {
+    server.stop();
+  }
+});
+
+test("failed app turns are not retryable without a runtime fault record", async () => {
   let attempt = 0;
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -8698,11 +12328,136 @@ test("failed app turns persist as retryable and can be retried", async () => {
     expect(failedTurn).toMatchObject({
       state: "failed",
       safe_error_code: "gateway_failed",
-      retryable: true,
+      retryable: false,
       attempt: 1,
     });
 
     const failedTurnId = failedTurn.id as string;
+    const retry = await fetch(
+      `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
+      { method: "POST", headers: { "content-type": "application/json" } },
+    );
+    expect(retry.status).toBe(409);
+
+    const messages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    expect(
+      messages.data.messages.map(
+        (message: { status: string }) => message.status,
+      ),
+    ).toEqual(["sent", "failed"]);
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toHaveLength(1);
+    expect(messages.data.messages.find(
+      (message: { role: string }) => message.role === "assistant",
+    )).toMatchObject({
+      retryable: false,
+      safe_error_code: "gateway_failed",
+    });
+  } finally {
+    server.stop();
+  }
+});
+
+test("retrying a runtime fault updates the same logical turn without synthetic retry text", async () => {
+  let attempt = 0;
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      attempt += 1;
+      if (attempt === 1) {
+        input.onTurnEvent?.({
+          kind: TURN_DECISION_EVENT_KIND,
+          payload: createTurnDecisionPayload({
+            decisionId: "opening-runtime-retry",
+            role: "opening",
+            source: "model-authored",
+            firstVisible: true,
+            summary: "I will preserve this opening decision through Retry.",
+            rationale: "Retry must keep typed turn history on the same turn.",
+            nextStep: "Retry the failed runtime attempt without synthetic text.",
+          }),
+        });
+        input.onTurnEvent?.({
+          kind: "runtime.fault",
+          payload: createRuntimeFaultPayload({
+            faultId: "fault-retryable-runtime",
+            sessionId: input.chatId,
+            turnId: input.turnId,
+            kind: "provider_stream_corruption",
+            retryable: true,
+            publicSummary: "Runtime invariant interrupted the turn.",
+            operatorSummary: "Tool result pairing invariant broke.",
+            safeErrorCode: "runtime_fault",
+            safeCause: "safe cause",
+            createdAt: "2026-06-28T00:00:00.000Z",
+          }),
+        });
+        const error = new Error("runtime invariant interrupted the turn");
+        (error as Error & { code?: string }).code = "runtime_fault";
+        throw error;
+      }
+      return { texts: ["recovered reply"] };
+    },
+  });
+  try {
+    const response = await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: "general",
+        text: "retry this failed app turn",
+      }),
+    });
+    expect(response.status).toBe(202);
+
+    const failedTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) =>
+        turn.state === "runtime_fault" &&
+        turn.retryable === true,
+    );
+    const failedTurnId = failedTurn.id as string;
+    const events = await getJson(`${server.url}events?cursor=0`);
+    const runtimeFaultEvent = events.data.events.find(
+      (
+        event: {
+          type: string;
+          payload?: { event?: { kind?: string; payload?: unknown } };
+        },
+      ) =>
+        event.type === "agent.turn_event" &&
+        event.payload?.event?.kind === "runtime.fault",
+    );
+    expect(runtimeFaultEvent?.payload?.event?.payload).toEqual({
+      faultId: "fault-retryable-runtime",
+      sessionId: "general",
+      turnId: failedTurnId,
+      kind: "provider_stream_corruption",
+      retryable: true,
+      publicSummary: "Runtime invariant interrupted the turn.",
+      safeErrorCode: "runtime_fault",
+      safeCause: "safe cause",
+      createdAt: "2026-06-28T00:00:00.000Z",
+    });
+    expect(JSON.stringify(events)).not.toContain("operatorSummary");
+    expect(JSON.stringify(events)).not.toContain("Tool result pairing invariant broke.");
+    const failedMessages = await getJson(
+      `${server.url}messages?chat_id=general&cursor=0`,
+    );
+    expect(failedMessages.data.turn_progress[failedTurnId]).toMatchObject({
+      state: "runtime_fault",
+      delivery_state: "failed_system",
+      limitation_codes: [],
+      limitations: [],
+    });
+
     const retry = await postJson(
       `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
       {},
@@ -8713,32 +12468,99 @@ test("failed app turns persist as retryable and can be retried", async () => {
       cancellable: true,
       attempt: 2,
     });
-    const reply = await waitForAssistantMessageMatching(
+    await waitForAssistantMessageMatching(
       server.url,
       "general",
       (message) => message.text === "recovered reply",
     );
-    expect(reply.text).toBe("recovered reply");
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
     );
     expect(
-      messages.data.messages.map(
-        (message: { status: string }) => message.status,
-      ),
-    ).toEqual(["sent", "delivered"]);
-    expect(
       messages.data.messages.filter(
         (message: { role: string }) => message.role === "assistant",
       ),
     ).toHaveLength(1);
+    const openingRows = messages.data.turn_progress[
+      failedTurnId
+    ].safe_progress_rows.filter(
+      (row: { kind?: string; public_decision_summary?: string }) =>
+        row.kind === "decision" &&
+        row.public_decision_summary ===
+          "I will preserve this opening decision through Retry.",
+    );
+    expect(openingRows).toHaveLength(1);
+    expect(messages.data.messages).not.toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        text: "Retrying this turn.",
+      }),
+    );
+    expect(JSON.stringify(messages)).not.toContain("Retrying this turn.");
   } finally {
     server.stop();
   }
 });
 
-test("retry failures update the same assistant failure with a safe provider reason", async () => {
+test("runtime fault retry eligibility comes from the fault record", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      input.onTurnEvent?.({
+        kind: "runtime.fault",
+        payload: createRuntimeFaultPayload({
+          faultId: "fault-non-retryable-runtime",
+          sessionId: input.chatId,
+          turnId: input.turnId,
+          kind: "storage_invariant_violation",
+          retryable: false,
+          publicSummary: "Runtime stopped with a non-retryable fault.",
+          operatorSummary: "Operator-only non-retryable detail.",
+          safeErrorCode: "runtime_fault",
+          createdAt: "2026-06-28T00:00:01.000Z",
+        }),
+      });
+      const error = new Error("runtime invariant interrupted the turn");
+      (error as Error & { code?: string }).code = "runtime_fault";
+      throw error;
+    },
+  });
+  try {
+    const response = await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: "general",
+        text: "do not retry this runtime fault",
+      }),
+    });
+    expect(response.status).toBe(202);
+
+    const failedTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) =>
+        turn.state === "runtime_fault" &&
+        turn.safe_error_code === "runtime_fault" &&
+        turn.retryable === false,
+    );
+    const retry = await fetch(
+      `${server.url}turns/${encodeURIComponent(failedTurn.id as string)}/retry`,
+      { method: "POST", headers: { "content-type": "application/json" } },
+    );
+    expect(retry.status).toBe(409);
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(JSON.stringify(summary)).not.toContain("Operator-only non-retryable detail");
+    expect(JSON.stringify(messages)).not.toContain("Operator-only non-retryable detail");
+  } finally {
+    server.stop();
+  }
+});
+
+test("provider empty responses do not expose Retry without runtime fault", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -8765,7 +12587,7 @@ test("retry failures update the same assistant failure with a safe provider reas
     expect(failedTurn).toMatchObject({
       state: "failed",
       safe_error_code: "provider_empty_response",
-      retryable: true,
+      retryable: false,
     });
 
     let messages = await getJson(
@@ -8777,7 +12599,7 @@ test("retry failures update the same assistant failure with a safe provider reas
     expect(firstAssistant).toMatchObject({
       status: "failed",
       safe_error_code: "provider_empty_response",
-      retryable: true,
+      retryable: false,
     });
     expect(firstAssistant.text).toContain("no visible answer");
     expect(firstAssistant.text).not.toContain("Local model API");
@@ -8791,15 +12613,7 @@ test("retry failures update the same assistant failure with a safe provider reas
         body: JSON.stringify({}),
       },
     );
-    expect(retryResponse.status).toBe(202);
-    await waitForLatestTurnMatching(
-      server.url,
-      "general",
-      (turn) =>
-        turn.state === "failed" &&
-        turn.attempt === 2 &&
-        turn.safe_error_code === "provider_empty_response",
-    );
+    expect(retryResponse.status).toBe(409);
 
     messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
     const assistantMessages = messages.data.messages.filter(
@@ -8807,12 +12621,13 @@ test("retry failures update the same assistant failure with a safe provider reas
     );
     expect(assistantMessages).toHaveLength(1);
     expect(assistantMessages[0]).toMatchObject({
-      id: firstAssistant.id,
       status: "failed",
       safe_error_code: "provider_empty_response",
-      retryable: true,
+      retryable: false,
     });
+    expect(assistantMessages[0].id).toBe(firstAssistant.id);
     expect(assistantMessages[0].text).toContain("no visible answer");
+    expect(JSON.stringify(messages)).not.toContain("Retrying this turn");
   } finally {
     server.stop();
   }
@@ -8855,20 +12670,28 @@ test("provider failures persist actionable safe API status", async () => {
     expect(failedTurn).toMatchObject({
       state: "failed",
       safe_error_code: "provider_api_error",
-      retryable: true,
+      retryable: false,
       cancellable: false,
     });
+    const failedTurnId = failedTurn.id as string;
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
     );
+    expect(messages.data.turn_progress[failedTurnId]).toMatchObject({
+      state: "failed",
+      summary: "Failed",
+      delivery_state: "failed_system",
+      limitation_codes: [],
+      limitations: [],
+    });
     const assistant = messages.data.messages.find(
       (message: { role: string }) => message.role === "assistant",
     );
     expect(assistant).toMatchObject({
       status: "failed",
       safe_error_code: "provider_api_error",
-      retryable: true,
+      retryable: false,
     });
     expect(assistant.text).toContain("HTTP 500");
     expect(JSON.stringify(messages)).not.toContain("token=secret");
@@ -8925,7 +12748,7 @@ test("raw provider aborts remain failed app turns instead of cancellation", asyn
     expect(failedTurn).toMatchObject({
       state: "failed",
       safe_error_code: "provider_network_error",
-      retryable: true,
+      retryable: false,
       cancellable: false,
     });
 
@@ -8938,7 +12761,7 @@ test("raw provider aborts remain failed app turns instead of cancellation", asyn
     expect(assistant).toMatchObject({
       status: "failed",
       safe_error_code: "provider_network_error",
-      retryable: true,
+      retryable: false,
     });
     expect(messages.data.messages.map((message: { status: string }) => message.status))
       .toEqual(["sent", "failed"]);
@@ -8947,7 +12770,7 @@ test("raw provider aborts remain failed app turns instead of cancellation", asyn
   }
 });
 
-test("goal completion incomplete gaps deliver safe limitation text instead of app failures", async () => {
+test("goal completion incomplete gaps keep turns active instead of app failures", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -8970,38 +12793,32 @@ test("goal completion incomplete gaps deliver safe limitation text instead of ap
     });
     expect(response.status).toBe(202);
 
-    const deliveredTurn = await waitForLatestTurnMatching(
+    const recoveringTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "delivered",
+      (turn) => turn.state === "retrying" || turn.state === "waiting_for_tool",
     );
-    expect(deliveredTurn).toMatchObject({
-      state: "delivered",
+    expect(recoveringTurn).toMatchObject({
+      safe_status_label: "",
       retryable: false,
+      cancellable: true,
     });
-    expect(deliveredTurn.safe_error_code ?? null).toBeNull();
+    expect(["retrying", "waiting_for_tool"]).toContain(String(recoveringTurn.state));
+    expect(recoveringTurn.safe_error_code ?? null).toBeNull();
 
-    const firstAssistant = await waitForAssistantMessageMatching(
-      server.url,
-      "general",
-      (message) => message.status === "delivered",
-    );
-    expect(firstAssistant).toMatchObject({
-      status: "delivered",
-      retryable: false,
-      delivery_state: "delivered_with_limitations",
-      limitation_codes: ["internal_recovery_required"],
-      limitations: ["확인 가능한 공개 출처를 읽지 못했습니다. [redacted]"],
-    });
-    expect(firstAssistant.safe_error_code ?? null).toBeNull();
-    expect(firstAssistant.text as string).toContain("확인 가능한 공개 출처");
-    expect(firstAssistant.text as string).not.toContain("token=secret");
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(JSON.stringify(messages)).not.toContain("token=secret");
   } finally {
     server.stop();
   }
 });
 
-test("goal completion obligation protocol gaps render as clean limited delivery", async () => {
+test("goal completion obligation protocol gaps stay active without generic assistant text", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -9024,32 +12841,86 @@ test("goal completion obligation protocol gaps render as clean limited delivery"
     });
     expect(response.status).toBe(202);
 
-    const firstAssistant = await waitForAssistantMessageMatching(
+    const recoveringTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (message) => message.status === "delivered",
+      (turn) => turn.state === "retrying" || turn.state === "waiting_for_tool",
     );
-    expect(firstAssistant).toMatchObject({
-      status: "delivered",
+    expect(recoveringTurn).toMatchObject({
+      safe_status_label: "",
       retryable: false,
+      cancellable: true,
     });
-    expect(firstAssistant.safe_error_code ?? null).toBeNull();
-    expect(firstAssistant.text as string).toContain("진행한 내용은 보존했습니다");
-    expect(firstAssistant.text as string).not.toContain("could not verify");
-    expect(firstAssistant.text as string).not.toContain(
-      "unsatisfied public completion obligation",
-    );
-    expect(firstAssistant.text as string).not.toContain(
-      "missing public completion obligation",
-    );
-    expect(firstAssistant.text as string).not.toContain("durable_artifact");
-    expect(firstAssistant.text as string).not.toContain("data_table_created");
+    expect(["retrying", "waiting_for_tool"]).toContain(String(recoveringTurn.state));
+    expect(recoveringTurn.safe_error_code ?? null).toBeNull();
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+    expect(JSON.stringify(messages)).not.toContain("durable_artifact");
+    expect(JSON.stringify(messages)).not.toContain("data_table_created");
   } finally {
     server.stop();
   }
 });
 
-test("concurrent retry claims only one failed turn attempt", async () => {
+test("generic internal recovery responder failures stay active without assistant text", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder() {
+      const error = new Error(
+        "Butler could not verify that the requested goal was completed.",
+      );
+      (error as Error & { code?: string }).code = "internal_recovery_required";
+      throw error;
+    },
+  });
+  try {
+    const response = await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: "general",
+        text: "continue the latest work",
+      }),
+    });
+    expect(response.status).toBe(202);
+
+    const recoveringTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "retrying" || turn.state === "waiting_for_tool",
+    );
+    expect(recoveringTurn).toMatchObject({
+      safe_status_label: "",
+      retryable: false,
+      cancellable: true,
+    });
+    expect(["retrying", "waiting_for_tool"]).toContain(String(recoveringTurn.state));
+    expect(recoveringTurn.safe_error_code ?? null).toBeNull();
+
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(
+      messages.data.messages.filter(
+        (message: { role: string }) => message.role === "assistant",
+      ),
+    ).toEqual([]);
+    expect(JSON.stringify(messages)).not.toContain("could not verify");
+
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(JSON.stringify(events)).not.toContain("turn.failed");
+    expect(JSON.stringify(events)).not.toContain("could not verify");
+  } finally {
+    server.stop();
+  }
+});
+
+test("concurrent ordinary failed turn retries are rejected", async () => {
   let attempt = 0;
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -9087,16 +12958,12 @@ test("concurrent retry claims only one failed turn attempt", async () => {
       }),
     ]);
     const statuses = [first.status, second.status].sort();
-    expect(statuses).toEqual([202, 409]);
-
-    const finalTurn = await waitForLatestTurnMatching(
-      server.url,
-      "general",
-      (turn) => turn.state === "delivered",
-    );
-    expect(finalTurn).toMatchObject({
-      state: "delivered",
-      attempt: 2,
+    expect(statuses).toEqual([409, 409]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns[0]).toMatchObject({
+      state: "failed",
+      retryable: false,
+      attempt: 1,
     });
   } finally {
     server.stop();

@@ -12,7 +12,10 @@ import { projectMemoryPath, sanitizeProjectMemoryId } from "../../packages/butle
 import { addFeedbackEntry } from "../../packages/butler-agent/src/agent/cognition/feedback/buffer.ts";
 import { writeRuntimeProfileProjection } from "../../packages/butler-agent/src/personalization/profiling.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
-import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
+import {
+  applyTurnLocalWorkOutcomeForSession,
+  WorkStreamStore,
+} from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 
 function binding(
   workspacePath: string,
@@ -403,6 +406,211 @@ test("active work state hides noisy executing status notes but keeps blocker not
     });
     const usefulPrompt = assembledTurnContext(assembler, usefulExecuting.session, "계속 진행해줘");
     expect(usefulPrompt).toContain("Status Note: Waiting for file watcher confirmation.");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("recoverable work state keeps interrupted todo labels in turn context", () => {
+  const root = join(tmpdir(), `butler-prompt-recoverable-${Date.now()}`);
+  const butlerHome = join(root, "home");
+  const butlerData = join(root, "data");
+  const workspacePath = join(root, "workspace");
+  mkdirSync(join(butlerHome, "resources", "prompts"), { recursive: true });
+  mkdirSync(join(butlerData, "personas"), { recursive: true });
+  writeFileSync(join(butlerHome, "resources", "prompts", "runtime-system-contract.md"), "RUNTIME_CONTRACT", "utf8");
+  writeFileSync(join(butlerHome, "resources", "prompts", "butler.md"), "BUTLER_ROLE", "utf8");
+  writeFileSync(join(butlerData, "personas", "active.md"), "PERSONA_BODY", "utf8");
+
+  try {
+    const assembler = new PromptAssembler({ butlerHome, butlerData });
+    const session = binding(workspacePath, {
+      role: "butler",
+      sessionId: "butler/app-project-sandy",
+      projectId: "sandy",
+    });
+    const todoStore = new TodoListStore(butlerData);
+    const workStreamStore = new WorkStreamStore(butlerData);
+    const todos = todoStore.update({
+      listId: "validation-continuation-style-guard",
+      title: "Sandy style guard validation",
+      items: [{
+        id: "w3-style-guard",
+        content: "Inspect Sandy style guard validation evidence",
+        active_form: "Inspecting Sandy style guard validation evidence",
+        status: "in_progress",
+        phase: "execution",
+      }, {
+        id: "w4-report",
+        content: "Report Sandy style guard validation result",
+        active_form: "Reporting Sandy style guard validation result",
+        status: "pending",
+        phase: "reporting",
+      }],
+    });
+    workStreamStore.updateFromTodoList({
+      ownerSessionId: session.sessionId,
+      projectId: session.projectId,
+      listId: todos.list.list_id,
+      title: todos.list.title ?? "Sandy style guard validation",
+      items: todos.list.items,
+      lastUserTurnId: "turn-sandy-budget",
+    });
+    applyTurnLocalWorkOutcomeForSession({
+      butlerData,
+      sessionId: session.sessionId,
+      turnId: "turn-sandy-budget",
+      outcome: "recoverable",
+      statusNote: "Turn interrupted before final delivery; durable work can be resumed.",
+    });
+
+    const turnContext = assembledTurnContext(assembler, session, "계속해서 진행해줘");
+
+    expect(turnContext).toContain("## Active Work State");
+    expect(turnContext).toContain("WorkStream State: recoverable");
+    expect(turnContext).toContain("WorkStream Phase: execution");
+    expect(turnContext).toContain("Active Step ID: w3-style-guard");
+    expect(turnContext).toContain(
+      "Status Note: Turn interrupted before final delivery; durable work can be resumed.",
+    );
+    expect(turnContext).toContain("Open Todo Items:");
+    expect(turnContext).toContain(
+      "w3-style-guard:pending:execution:Inspecting Sandy style guard validation evidence",
+    );
+    expect(turnContext).toContain(
+      "Resume From Todo: w3-style-guard:pending:execution:Inspecting Sandy style guard validation evidence",
+    );
+    expect(turnContext).toContain("Continuation Contract:");
+    expect(turnContext).toContain(
+      "Primary Target: existing WorkStream",
+    );
+    expect(turnContext).toContain(
+      "If the next step is pending because a previous turn became recoverable, restore that step to in_progress and execute it before broad validation, review, or replanning.",
+    );
+    expect(turnContext).toContain(
+      "Do not replace open planning or execution steps with a new inspection/review/validation plan",
+    );
+    expect(turnContext).toContain(
+      "w4-report:pending:reporting:Reporting Sandy style guard validation result",
+    );
+    expect(turnContext).not.toContain("requested goal was completed");
+    expect(turnContext).not.toContain("model-call budget");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("recoverable work state resumes the next open todo when active step was completed", () => {
+  const root = join(tmpdir(), `butler-prompt-active-work-next-open-${Date.now()}`);
+  const butlerHome = join(root, "home");
+  const butlerData = join(root, "data");
+  const workspacePath = join(root, "workspace");
+  mkdirSync(join(butlerHome, "resources", "prompts"), { recursive: true });
+  mkdirSync(workspacePath, { recursive: true });
+  writeFileSync(join(butlerHome, "resources", "prompts", "runtime-system-contract.md"), "RUNTIME_CONTRACT_STABLE", "utf8");
+  writeFileSync(join(butlerHome, "resources", "prompts", "butler.md"), "BUTLER_STABLE", "utf8");
+
+  try {
+    const assembler = new PromptAssembler({ butlerHome, butlerData });
+    const session = binding(workspacePath, {
+      sessionId: "butler/sandy",
+      projectId: "sandy",
+    });
+    const todoStore = new TodoListStore(butlerData);
+    const workStreamStore = new WorkStreamStore(butlerData);
+    const todos = todoStore.update({
+      listId: "partial-continuation",
+      title: "Sandy partial continuation",
+      items: [{
+        id: "w3-style-guard",
+        content: "Inspect Sandy style guard validation evidence",
+        active_form: "Inspecting Sandy style guard validation evidence",
+        status: "completed",
+        phase: "execution",
+      }, {
+        id: "w4-report",
+        content: "Report Sandy style guard validation result",
+        active_form: "Reporting Sandy style guard validation result",
+        status: "pending",
+        phase: "reporting",
+      }],
+    });
+    const stream = workStreamStore.updateFromTodoList({
+      ownerSessionId: session.sessionId,
+      projectId: session.projectId,
+      listId: todos.list.list_id,
+      title: todos.list.title ?? "Sandy partial continuation",
+      items: todos.list.items,
+      lastUserTurnId: "turn-sandy-budget",
+    });
+    workStreamStore.transition({
+      id: stream.id,
+      state: "recoverable",
+      activeStepId: "w3-style-guard",
+      statusNote: "Turn interrupted after W3 completed.",
+    });
+
+    const turnContext = assembledTurnContext(assembler, session, "계속해서 진행해줘");
+
+    expect(turnContext).toContain(
+      "Resume From Todo: w4-report:pending:reporting:Reporting Sandy style guard validation result",
+    );
+    expect(turnContext).not.toContain(
+      "Resume From Todo: w3-style-guard:completed:execution:Inspecting Sandy style guard validation evidence",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("active work state is scoped to the current project", () => {
+  const root = join(tmpdir(), `butler-prompt-active-work-project-scope-${Date.now()}`);
+  const butlerHome = join(root, "home");
+  const butlerData = join(root, "data");
+  const workspacePath = join(root, "workspace");
+  mkdirSync(join(butlerHome, "resources", "prompts"), { recursive: true });
+  mkdirSync(workspacePath, { recursive: true });
+  writeFileSync(join(butlerHome, "resources", "prompts", "runtime-system-contract.md"), "RUNTIME_CONTRACT_STABLE", "utf8");
+  writeFileSync(join(butlerHome, "resources", "prompts", "butler.md"), "BUTLER_STABLE", "utf8");
+
+  try {
+    const assembler = new PromptAssembler({ butlerHome, butlerData });
+    const sessionId = "butler/shared";
+    const todoStore = new TodoListStore(butlerData);
+    const workStreamStore = new WorkStreamStore(butlerData);
+    const todos = todoStore.update({
+      listId: "project-a-recoverable",
+      title: "Project A recoverable",
+      items: [{
+        id: "project-a-step",
+        content: "Resume project A",
+        active_form: "Resuming project A",
+        status: "in_progress",
+        phase: "execution",
+      }],
+    });
+    const stream = workStreamStore.updateFromTodoList({
+      ownerSessionId: sessionId,
+      projectId: "project-a",
+      listId: todos.list.list_id,
+      title: todos.list.title ?? "Project A recoverable",
+      items: todos.list.items,
+      lastUserTurnId: "turn-project-a",
+    });
+    workStreamStore.transition({
+      id: stream.id,
+      state: "recoverable",
+      statusNote: "Project A recoverable.",
+    });
+
+    const projectBTurnContext = assembledTurnContext(assembler, binding(workspacePath, {
+      sessionId,
+      projectId: "project-b",
+    }), "project B 작업을 진행해줘");
+
+    expect(projectBTurnContext).not.toContain("Project A recoverable");
+    expect(projectBTurnContext).not.toContain("project-a-step");
+    expect(projectBTurnContext).not.toContain("Continuation Contract:");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

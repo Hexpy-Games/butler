@@ -56,7 +56,14 @@ export interface ModelInvocation {
   reasoning?: {
     effort?: "low" | "medium" | "high" | "xhigh";
   };
+  signal?: AbortSignal;
   promptCache?: PromptCacheHint;
+  responseFormat?: {
+    type: "json_schema";
+    name: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
+  };
   threadRef?: string;
   metadata?: Record<string, unknown>;
 }

@@ -1,8 +1,17 @@
 import { performWorkControl } from "../../work/work-dashboard.ts";
 import { type TodoItemInput, type TodoPhase, type TodoPriority, type TodoStatus, TodoListStore } from "../../work/todo-list.ts";
 import { type WorkStreamState, WorkStreamStore } from "../../work/work-stream.ts";
+import { RUNTIME_SEMANTIC_TODO_LIST_ID } from "../../turn/direct-work-continuation.ts";
 
 type ToolCall = { args: Record<string, unknown> };
+
+export const WORK_TRACKING_TOOL_NAMES = [
+  "update_todo_list",
+  "list_todo_list",
+  "list_work_streams",
+  "update_work_stream_state",
+  "control_work",
+] as const;
 
 export function createWorkTrackingToolHandlers(input: {
   butlerData: string;
@@ -14,8 +23,8 @@ export function createWorkTrackingToolHandlers(input: {
 }) {
   return {
     "update_todo_list": async (call: ToolCall) => {
-      const listId = scopedTodoListId(call.args.list_id, input.turnId);
       const items = todoInputs(call.args.todos);
+      const listId = resolvedTodoListId(call.args.list_id, input, items);
       const completedReplay = completedSameTurnWorkStreamForList({
         workStreamStore: input.workStreamStore,
         sessionId: input.sessionId,
@@ -60,7 +69,7 @@ export function createWorkTrackingToolHandlers(input: {
       };
     },
     "list_todo_list": async (call: ToolCall) => {
-      const listId = scopedTodoListId(call.args.list_id, input.turnId);
+      const listId = resolvedTodoListId(call.args.list_id, input);
       const view = input.todoListStore.view(
         listId,
         { includeCompleted: call.args.include_completed === true },
@@ -94,8 +103,12 @@ export function createWorkTrackingToolHandlers(input: {
       const requestedId = typeof call.args.work_stream_id === "string" && call.args.work_stream_id.trim()
         ? call.args.work_stream_id.trim()
         : undefined;
-      const active = requestedId ? input.workStreamStore.read(requestedId) : input.workStreamStore.activeForSession(input.sessionId);
-      if (!active) throw new Error("update_work_stream_state requires an active work stream");
+      const active = requestedId
+        ? input.workStreamStore.read(requestedId)
+        : input.workStreamStore.activeForSession(input.sessionId, { currentTurnId: input.turnId });
+      if (!active) {
+        throw new Error("update_work_stream_state requires an active current-turn work stream or explicit work_stream_id");
+      }
       return {
         ok: true,
         work_stream: input.workStreamStore.transition({
@@ -160,11 +173,81 @@ function stringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function scopedTodoListId(rawListId: unknown, turnId?: string): string {
-  const listId = typeof rawListId === "string" && rawListId.trim()
-    ? rawListId.trim()
-    : "main";
-  if (listId !== "main" || !turnId?.trim()) return listId;
+function resolvedTodoListId(
+  rawListId: unknown,
+  input: {
+    sessionId?: string;
+    projectId?: string;
+    turnId?: string;
+    todoListStore: TodoListStore;
+    workStreamStore: WorkStreamStore;
+  },
+  requestedItems?: TodoItemInput[],
+): string {
+  const explicitListId = explicitTodoListId(rawListId);
+  const continuation = input.workStreamStore.latestResumableForSession(input.sessionId, {
+    projectId: input.projectId,
+    excludeTodoListIds: [RUNTIME_SEMANTIC_TODO_LIST_ID],
+  });
+  const continuationListId = continuation?.todo_list_id?.trim();
+  if (explicitListId && explicitListId !== continuationListId) return explicitListId;
+  if (continuationListId && requestedItems) {
+    if (requestedTodosPreserveContinuation({
+      todoListStore: input.todoListStore,
+      listId: continuationListId,
+      requestedItems,
+    })) {
+      return continuationListId;
+    }
+    throw new Error(
+      "A recoverable WorkStream already has open todo items. Update that existing list by keeping its open todo ids, or start unrelated work with an explicit non-main list_id.",
+    );
+  }
+  if (explicitListId) return explicitListId;
+  if (continuationListId && !requestedItems) return continuationListId;
+  return turnScopedMainTodoListId(input.turnId);
+}
+
+function requestedTodosPreserveContinuation(input: {
+  todoListStore: TodoListStore;
+  listId: string;
+  requestedItems: TodoItemInput[];
+}): boolean {
+  const record = input.todoListStore.read(input.listId);
+  if (!record) return false;
+  const requestedById = new Map(input.requestedItems
+    .filter((item): item is TodoItemInput & { id: string } => Boolean(item.id))
+    .map((item) => [item.id, item]));
+  const existingIds = record.items
+    .filter((item) => item.status !== "cancelled")
+    .map((item) => item.id);
+  if (existingIds.length === 0) return false;
+  if (input.requestedItems.some((item) => !item.id || !existingIds.includes(item.id))) {
+    return false;
+  }
+  if (existingIds.some((id) => !requestedById.has(id))) return false;
+  return record.items
+    .filter((item) => item.status === "pending" || item.status === "in_progress")
+    .every((item) => {
+      const requested = requestedById.get(item.id);
+      return Boolean(
+        requested &&
+        requested.content.trim() === item.content &&
+        requested.active_form.trim() === item.active_form &&
+        (requested.phase ?? null) === item.phase,
+      );
+    });
+}
+
+function explicitTodoListId(rawListId: unknown): string | null {
+  if (typeof rawListId !== "string") return null;
+  const trimmed = rawListId.trim();
+  if (!trimmed || trimmed === "main") return null;
+  return trimmed;
+}
+
+function turnScopedMainTodoListId(turnId?: string): string {
+  if (!turnId?.trim()) return "main";
   const safeTurnId = turnId.trim().replace(/[^A-Za-z0-9._:-]/gu, "-").slice(0, 70);
   return ((safeTurnId || "turn") + ":main").slice(0, 80);
 }

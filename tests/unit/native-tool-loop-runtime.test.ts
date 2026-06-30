@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { homedir, tmpdir } from "os";
 import { join } from "path";
 import {
@@ -18,6 +18,7 @@ import {
   recentConversationBudgetForTurn,
 } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
+import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { readContextMonitor } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
 import {
   operationalMetricsPath,
@@ -42,6 +43,9 @@ import {
   publicWorkDecisionsFromAssistantText,
   takePublicWorkDecisionForTool,
 } from "../../packages/butler-agent/src/agent/output/public-work/decisions.ts";
+import { emitAssistantTextBeforeTools } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/assistant-pretool-progress.ts";
+import { createAuditedBridgeToolExecutor } from "../../packages/butler-agent/src/agent/turn/bridge-tool-executor.ts";
+import { ToolObservationError } from "../../packages/butler-agent/src/agent/turn/native/tool-execution/tool-observations.ts";
 import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence/ledger.ts";
 import {
   evidenceTranscriptToolCallArgumentsProjection,
@@ -77,6 +81,30 @@ function capabilityReceipt(input: {
   };
 }
 
+async function authorPublicDecisionForTool(
+  input: {
+    onAssistantTextBeforeTools?: (message: {
+      text: string;
+      toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
+    }) => Promise<void> | void;
+  },
+  call: { name: string; args: Record<string, unknown> },
+  text: {
+    summary: string;
+    rationale: string;
+    nextStep: string;
+  },
+): Promise<void> {
+  await input.onAssistantTextBeforeTools?.({
+    text: [
+      `summary: ${text.summary}`,
+      `rationale: ${text.rationale}`,
+      `next_step: ${text.nextStep}`,
+    ].join("\n"),
+    toolCalls: [call],
+  });
+}
+
 const fakeProvider: ModelProviderAdapter = {
   id: "fake-openai",
   capabilities: {
@@ -104,6 +132,15 @@ afterEach(() => {
   else process.env.BUTLER_DATA = originalButlerData;
   rmSync(tempDir, { recursive: true, force: true });
 });
+
+function readOnlyPersistedTurnContextAtom(): Record<string, unknown> | null {
+  const dir = join(tempDir, "state", "turn-kernel");
+  if (!existsSync(dir)) return null;
+  const files = readdirSync(dir).filter((file) => file.endsWith("continuation.json"));
+  if (files.length === 0) return null;
+  expect(files).toHaveLength(1);
+  return JSON.parse(readFileSync(join(dir, files[0]), "utf8")) as Record<string, unknown>;
+}
 
 test("native runtime injects Project Ledger Runtime Context only for project-origin sessions", async () => {
   const prompts: string[] = [];
@@ -163,6 +200,38 @@ test("native runtime injects Project Ledger Runtime Context only for project-ori
   expect(nonProjectPrompt).not.toContain("query_project_work");
 });
 
+test("native runtime forwards turn reasoning metadata to prompt runners", async () => {
+  const observedReasoning: Array<string | undefined> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runFunctionToolPromptText: async (input) => {
+      observedReasoning.push(input.reasoningEffort);
+      return "reasoning metadata propagated";
+    },
+  });
+
+  const handle = await runtime.createSession({
+    sessionId: "butler/reasoning-metadata",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "zai/glm-5.2",
+    input: { text: "Use the selected reasoning effort." },
+    metadata: {
+      runtimePolicy: { completionReview: "disabled" },
+      reasoning_effort: "low",
+    },
+  });
+
+  expect(result.text).toBe("reasoning metadata propagated");
+  expect(observedReasoning).toContain("low");
+});
+
 test("native runtime gives worker sessions the execution tool loop and role-limited tool profile", async () => {
   const toolCatalogs: string[][] = [];
   const runtime = new NativeToolLoopRuntime({
@@ -205,6 +274,821 @@ test("native runtime gives worker sessions the execution tool loop and role-limi
   expect(names).not.toContain("create_work_orchestration");
   expect(names).not.toContain("run_ready_work_streams");
   expect(names).not.toContain("write_planned_public_report");
+});
+
+test("native runtime projects provider stream events before final response delivery", async () => {
+  const events: RuntimeTurnEventInput[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    runFunctionToolPromptText: async (input) => {
+      await input.onProviderStreamEvent?.({
+        type: "text_delta",
+        streamId: "mock-stream-1",
+        sequence: 1,
+        textDelta: "Checking the fixture.",
+        target: "public_note",
+      });
+      await input.onProviderStreamEvent?.({
+        type: "reasoning_delta",
+        streamId: "mock-stream-1",
+        sequence: 2,
+        textDelta: "private reasoning text",
+      });
+      await input.onProviderStreamEvent?.({
+        type: "tool_call_delta",
+        streamId: "mock-stream-1",
+        callIndex: 0,
+        sequence: 3,
+        toolCallId: "mock-call-1",
+        toolName: "run_command",
+        argumentsDelta: "{\"command\":\"echo hi\"",
+      });
+      await input.onProviderStreamEvent?.({
+        type: "tool_call_delta",
+        streamId: "mock-stream-1",
+        callIndex: 0,
+        sequence: 3,
+        toolCallId: "mock-call-1",
+        toolName: "run_command",
+        argumentsDelta: "{\"command\":\"echo hi\"",
+      });
+      return "Final answer reconstructed after streaming.";
+    },
+    runPromptText: async () => {
+      throw new Error("tool loop prompt runner should be used");
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/provider-stream-projection",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Exercise provider streaming." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      events.push(event);
+    },
+  });
+
+  expect(result.text).toBe("Final answer reconstructed after streaming.");
+  expect(events[0]).toMatchObject({
+    kind: "turn.first_progress",
+  });
+  const textDeltaIndex = events.findIndex((event) => event.kind === "model.stream.text_delta");
+  const finalCompletedIndex = events.findIndex((event) => event.kind === "message.final.completed");
+  expect(textDeltaIndex).toBeGreaterThanOrEqual(0);
+  expect(finalCompletedIndex).toBeGreaterThan(textDeltaIndex);
+  expect(events[textDeltaIndex]).toMatchObject({
+    visibility: "public",
+    payload: {
+      streamId: "mock-stream-1",
+      textDelta: "Checking the fixture.",
+      target: "public_note",
+      sequence: 1,
+    },
+  });
+  const reasoningEvent = events.find((event) => event.kind === "model.stream.reasoning_delta");
+  expect(reasoningEvent).toMatchObject({
+    visibility: "internal",
+    payload: {
+      streamId: "mock-stream-1",
+      charCount: "private reasoning text".length,
+      sequence: 2,
+    },
+  });
+  expect(JSON.stringify(reasoningEvent)).not.toContain("private reasoning text");
+  const toolDeltaEvents = events.filter((event) => event.kind === "model.stream.tool_call_delta");
+  expect(toolDeltaEvents).toHaveLength(1);
+  expect(toolDeltaEvents[0]).toMatchObject({
+    visibility: "internal",
+    payload: {
+      streamId: "mock-stream-1",
+      callIndex: 0,
+      sequence: 3,
+      toolCallId: "mock-call-1",
+      safeToolName: "run_command",
+      argumentCharCount: "{\"command\":\"echo hi\"".length,
+      rawArgumentsDelta: "{\"command\":\"echo hi\"",
+      publicState: "generating",
+    },
+  });
+  expect(events.some((event) => event.kind === "tool.started")).toBe(false);
+});
+
+test("native runtime treats provider stream projection delivery as best-effort", async () => {
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    runFunctionToolPromptText: async (input) => {
+      await input.onProviderStreamEvent?.({
+        type: "text_delta",
+        streamId: "mock-stream-best-effort",
+        sequence: 1,
+        textDelta: "Visible stream progress.",
+        target: "public_note",
+      });
+      return "Final answer survives stream event delivery failure.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/provider-stream-best-effort",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Exercise best-effort stream event delivery." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      if (event.kind.startsWith("model.stream.")) {
+        throw new Error("stream event sink failed");
+      }
+    },
+  });
+
+  expect(result.text).toBe("Final answer survives stream event delivery failure.");
+});
+
+test("native runtime blocks visible tool execution until an authored public decision is present", async () => {
+  let executed = 0;
+  const observations: Array<Record<string, unknown>> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async () => {
+      executed += 1;
+      return { ok: true, stdout: "should not run", exit_code: 0 };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: "I will run a command now.",
+        toolCalls: [{ name: "run_command", args: { command: "echo blocked" } }],
+      });
+      observations.push(await input.executeTool({
+        name: "run_command",
+        args: { command: "echo blocked" },
+        rawArguments: "{\"command\":\"echo blocked\"}",
+      }) as Record<string, unknown>);
+      return "I need to author the decision first.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/public-decision-required",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run a quick command." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(executed).toBe(0);
+  expect(observations[0]).toMatchObject({
+    ok: false,
+    observation_kind: "public_decision_required",
+  });
+  expect(String(observations[0]?.model_visible_content)).toContain("same assistant response");
+});
+
+test("native runtime blocks tool-only visible tool calls without runtime-derived decisions", async () => {
+  let executed = 0;
+  const observations: Array<Record<string, unknown>> = [];
+  const sessionId = "butler/tool-only-public-decision-required";
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async () => {
+      executed += 1;
+      return { ok: true, stdout: "should not run", exit_code: 0 };
+    },
+    runFunctionToolPromptText: async (input) => {
+      observations.push(await input.executeTool({
+        name: "run_command",
+        args: { command: "echo blocked" },
+        rawArguments: JSON.stringify({ command: "echo blocked" }),
+      }) as Record<string, unknown>);
+      return "I need to author the decision first.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run a quick command." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(executed).toBe(0);
+  expect(observations[0]).toMatchObject({
+    ok: false,
+    observation_kind: "public_decision_required",
+  });
+  expect(String(observations[0]?.model_visible_content)).toContain("same assistant response");
+  const transcript = readTranscript(sessionId);
+  expect(transcript.some((event) => event.kind === "tool_call")).toBe(false);
+  expect(JSON.stringify(transcript)).not.toContain("runtime-derived");
+  expect(transcript.some((event) =>
+    event.kind === "system" &&
+    event.payload.category === "public_work_decision",
+  )).toBe(false);
+});
+
+test("native runtime rejects partial public decisions before visible tool execution", async () => {
+  let executed = 0;
+  const observations: Array<Record<string, unknown>> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async () => {
+      executed += 1;
+      return { ok: true, stdout: "should not run", exit_code: 0 };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: "summary: I will inspect the workspace.",
+        toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
+      });
+      observations.push(await input.executeTool({
+        name: "run_command",
+        args: { command: "pwd" },
+        rawArguments: JSON.stringify({ command: "pwd" }),
+      }) as Record<string, unknown>);
+      return "I need a complete public decision first.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/partial-public-decision-required",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run a quick command." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(executed).toBe(0);
+  expect(observations[0]).toMatchObject({
+    ok: false,
+    observation_kind: "public_decision_required",
+  });
+});
+
+test("native runtime turns invalid tool arguments into model-visible retry guidance", async () => {
+  let executed = 0;
+  let secondPromptSawObservation = false;
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async (call) => {
+      executed += 1;
+      if (executed === 1) {
+        throw new ToolObservationError({
+          message: `${call.name} required command argument`,
+          observationKind: "tool_invalid_arguments",
+          toolResult: null,
+        });
+      }
+      return { ok: true, stdout: "fixed\n", stderr: "", exit_code: 0 };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: Validate the shell command input before running it.",
+          "rationale: The command must be executable so the next step is based on observed output.",
+          "next_step: Run the corrected command and use the result in the final answer.",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: {} }],
+      });
+      const first = await input.executeTool({
+        name: "run_command",
+        args: {},
+        rawArguments: "{}",
+      }) as Record<string, unknown>;
+      secondPromptSawObservation = String(first.model_visible_content).includes("required command");
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: Retry run_command with the required command argument.",
+          "rationale: The prior observation identified the missing schema field.",
+          "next_step: Run the corrected command and report the verified output.",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "printf fixed" } }],
+      });
+      const second = await input.executeTool({
+        name: "run_command",
+        args: { command: "printf fixed" },
+        rawArguments: "{\"command\":\"printf fixed\"}",
+      }) as Record<string, unknown>;
+      expect(first).toMatchObject({ ok: false, observation_kind: "tool_invalid_arguments" });
+      expect(second).toMatchObject({ ok: true });
+      return "Retried with the required command argument.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/tool-invalid-arguments",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run the command after fixing any schema issue." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toBe("Retried with the required command argument.");
+  expect(executed).toBe(2);
+  expect(secondPromptSawObservation).toBe(true);
+});
+
+test("completion review continuation preserves typed failed-tool observations", async () => {
+  let promptCalls = 0;
+  let atomDuringContinuation: Record<string, unknown> | null = null;
+  const executedTools: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async (call) => {
+      if (call.name === "tool_call" && call.args.__bridge_resolve_only === true) {
+        if (call.args.arguments === "not-an-object") {
+          return {
+            ok: false,
+            error: {
+              code: "invalid_tool_arguments",
+              message: "tool_call arguments must be an object.",
+              recoverable: true,
+            },
+          };
+        }
+        if (call.args.id === "native:missing_tool") {
+          return {
+            ok: false,
+            error: {
+              code: "unknown_tool_catalog_id",
+              message: "Unknown tool catalog id: native:missing_tool",
+              recoverable: true,
+              id: "native:missing_tool",
+            },
+          };
+        }
+        if (call.args.id === "native:disabled_tool") {
+          return {
+            ok: false,
+            error: {
+              code: "disabled_tool",
+              message: "Tool is disabled.",
+              recoverable: true,
+              id: "native:disabled_tool",
+            },
+          };
+        }
+      }
+      executedTools.push(call.name);
+      if (call.name === "web_read") {
+        throw new ToolObservationError({
+          message: "web_read is disabled in the current tool surface",
+          observationKind: "tool_unavailable",
+          toolResult: null,
+        });
+      }
+      if (call.name === "run_command" && typeof call.args.command !== "string") {
+        throw new ToolObservationError({
+          message: "run_command required command argument",
+          observationKind: "tool_invalid_arguments",
+          toolResult: null,
+        });
+      }
+      if (call.name === "run_command" && String(call.args.command).includes("bun test")) {
+        return {
+          ok: false,
+          stdout: "1 fail\nexpected true to be false",
+          stderr: "unit suite failed",
+          exit_code: 1,
+          evidence_capability_receipts: [
+            createEvidenceCapabilityReceipt({
+              producer: { kind: "tool", name: "run_command" },
+              capability: "validation_passed",
+              evidence_kind: "execution_result",
+              maturity: "rejected",
+              verified: false,
+              confidence: 0.25,
+              summary: "A validation suite did not complete successfully.",
+              scope: {
+                suite: "unit-example",
+                result: "failed",
+                failure_summary: "example assertion failed",
+              },
+              limitations: ["example assertion failed"],
+            }),
+          ],
+        };
+      }
+      if (call.name === "run_command" && String(call.args.command).includes("ls missing")) {
+        return { ok: false, stdout: "", stderr: "missing file", exit_code: 2 };
+      }
+      if (call.name === "write_file") {
+        return {
+          ok: true,
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "receipt-durable-artifact-after-tool-observation",
+            producerName: "write_file",
+            capability: "durable_artifact",
+            evidenceKind: "artifact",
+            satisfies: ["durable_artifact"],
+            reference: { path: "artifacts/result.md" },
+          })],
+        };
+      }
+      return { ok: true, stdout: "ok\n", stderr: "", exit_code: 0 };
+    },
+    runFunctionToolPromptText: async (input) => {
+      promptCalls += 1;
+      if (promptCalls === 1) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Validate the command path before writing the artifact.",
+            "rationale: The command output should inform the durable artifact.",
+            "next_step: Retry invalid arguments if needed, then create the artifact.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: {} }],
+        });
+        const invalidArgs = await input.executeTool({
+          name: "run_command",
+          args: {},
+          rawArguments: "{}",
+        }) as Record<string, unknown>;
+        expect(invalidArgs).toMatchObject({ observation_kind: "tool_invalid_arguments" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Check whether the source-reading tool is available.",
+            "rationale: Unavailable tools must be observed before choosing a different path.",
+            "next_step: Record the unavailable tool observation and continue with command evidence.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "web_read", args: { url: "https://example.test/source" } }],
+        });
+        const unavailable = await input.executeTool({
+          name: "web_read",
+          args: { url: "https://example.test/source" },
+          rawArguments: JSON.stringify({ url: "https://example.test/source" }),
+        }) as Record<string, unknown>;
+        expect(unavailable).toMatchObject({ observation_kind: "tool_unavailable" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Try the bridged search with invalid arguments.",
+            "rationale: Bridge argument failures must remain typed observations for the continuation.",
+            "next_step: Use the bridge observation before choosing a valid tool path.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "tool_call", args: { id: "native:web_search", arguments: "not-an-object" } }],
+        });
+        const bridgeInvalidArgs = await input.executeTool({
+          name: "tool_call",
+          args: { id: "native:web_search", arguments: "not-an-object" },
+          rawArguments: JSON.stringify({ id: "native:web_search", arguments: "not-an-object" }),
+        }) as Record<string, unknown>;
+        expect(bridgeInvalidArgs).toMatchObject({ observation_kind: "tool_invalid_arguments" });
+        expect(bridgeInvalidArgs.observation).toMatchObject({ kind: "tool_invalid_arguments" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Try a bridged call to an unavailable catalog id.",
+            "rationale: Bridge resolution failures must be model-visible tool observations, not recovery states.",
+            "next_step: Use the unavailable observation and continue with another evidence path.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "tool_call", args: { id: "native:missing_tool", arguments: {} } }],
+        });
+        const bridgeUnavailable = await input.executeTool({
+          name: "tool_call",
+          args: { id: "native:missing_tool", arguments: {} },
+          rawArguments: JSON.stringify({ id: "native:missing_tool", arguments: {} }),
+        }) as Record<string, unknown>;
+        expect(bridgeUnavailable).toMatchObject({ observation_kind: "tool_unavailable" });
+        expect(bridgeUnavailable.observation).toMatchObject({ kind: "tool_unavailable" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Try a bridged call to a disabled catalog id.",
+            "rationale: Disabled bridge targets must remain typed unavailable observations for continuation.",
+            "next_step: Choose another enabled evidence path after recording the disabled tool observation.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "tool_call", args: { id: "native:disabled_tool", arguments: {} } }],
+        });
+        const bridgeDisabled = await input.executeTool({
+          name: "tool_call",
+          args: { id: "native:disabled_tool", arguments: {} },
+          rawArguments: JSON.stringify({ id: "native:disabled_tool", arguments: {} }),
+        }) as Record<string, unknown>;
+        expect(bridgeDisabled).toMatchObject({ observation_kind: "tool_unavailable" });
+        expect(bridgeDisabled.observation).toMatchObject({ kind: "tool_unavailable" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Run the validation command and inspect failures.",
+            "rationale: Failed tests must remain typed observations for the continuation.",
+            "next_step: Use the failure name before selecting the next fix.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "bun test tests/unit/example.test.ts", validation_suite: "unit-example" } }],
+        });
+        const testFailed = await input.executeTool({
+          name: "run_command",
+          args: { command: "bun test tests/unit/example.test.ts", validation_suite: "unit-example" },
+          rawArguments: JSON.stringify({ command: "bun test tests/unit/example.test.ts", validation_suite: "unit-example" }),
+        }) as Record<string, unknown>;
+        expect(testFailed).toMatchObject({ observation_kind: "test_failed" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Run the file inspection command and inspect failures.",
+            "rationale: Failed commands must remain typed observations for the continuation.",
+            "next_step: Use the command error before selecting the next fix.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "ls missing-file" } }],
+        });
+        const commandFailed = await input.executeTool({
+          name: "run_command",
+          args: { command: "ls missing-file" },
+          rawArguments: JSON.stringify({ command: "ls missing-file" }),
+        }) as Record<string, unknown>;
+        expect(commandFailed).toMatchObject({ observation_kind: "command_failed" });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Retry the command with valid arguments.",
+            "rationale: The previous observation showed the missing command field.",
+            "next_step: Use the command result before writing the artifact.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "printf ok" } }],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "printf ok" },
+          rawArguments: JSON.stringify({ command: "printf ok" }),
+        });
+        return "The command was checked, but the durable artifact is not created yet.";
+      }
+      if (promptCalls === 2) {
+        expect(input.prompt).toContain("Missing completion evidence for: durable_artifact");
+        atomDuringContinuation = readOnlyPersistedTurnContextAtom();
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Create the durable artifact required by the completion gap.",
+            "rationale: The kernel preserved the earlier tool observation and now requires artifact evidence.",
+            "next_step: Write the artifact and include the evidence in the final answer.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "write_file", args: { path: "artifacts/result.md", content: "ok" } }],
+        });
+        await input.executeTool({
+          name: "write_file",
+          args: { path: "artifacts/result.md", content: "ok" },
+          rawArguments: JSON.stringify({ path: "artifacts/result.md", content: "ok" }),
+        });
+        return "The durable artifact is created with evidence.";
+      }
+      throw new Error("Should not need a third prompt");
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/tool-observation-completion-gap",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run the command and create the durable artifact." },
+  });
+
+  expect(promptCalls).toBe(2);
+  expect(executedTools).toEqual([
+    "run_command",
+    "web_read",
+    "run_command",
+    "run_command",
+    "run_command",
+    "write_file",
+  ]);
+  expect(result.text).toContain("durable artifact");
+  const atomSnapshot = atomDuringContinuation as { unresolvedObservations?: Array<{ kind?: string }> } | null;
+  const unresolved = atomSnapshot?.unresolvedObservations;
+  const unresolvedKinds = unresolved?.map((item) => item.kind) ?? [];
+  expect(unresolved?.map((item) => item.kind)).toContain("completion_gap");
+  expect(unresolvedKinds.filter((kind) => kind === "tool_invalid_arguments").length).toBeGreaterThanOrEqual(2);
+  expect(unresolvedKinds.filter((kind) => kind === "tool_unavailable").length).toBeGreaterThanOrEqual(3);
+  expect(unresolvedKinds).toContain("test_failed");
+  expect(unresolvedKinds).toContain("command_failed");
+});
+
+test("native runtime summarizes failed command and test output into model context", async () => {
+  const observedKinds: string[] = [];
+  const observedContext: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async (call) => {
+      if (String(call.args.command).includes("bun test")) {
+        return {
+          ok: false,
+          command: call.args.command,
+          stdout: "1 fail\nexpected true to be false",
+          stderr: "tests/unit/example.test.ts failed",
+          exit_code: 1,
+          evidence_capability_receipts: [
+            createEvidenceCapabilityReceipt({
+              producer: { kind: "tool", name: "run_command" },
+              capability: "validation_passed",
+              evidence_kind: "execution_result",
+              maturity: "rejected",
+              verified: false,
+              confidence: 0.25,
+              summary: "A validation suite did not complete successfully.",
+              scope: {
+                suite: "unit-example",
+                result: "failed",
+                failure_summary: "example assertion failed",
+              },
+              limitations: ["example assertion failed"],
+            }),
+          ],
+        };
+      }
+      return {
+        ok: false,
+        command: call.args.command,
+        stdout: "build step output",
+        stderr: "missing file",
+        exit_code: 2,
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      for (const toolArgs of [
+        { command: "bun test tests/unit/example.test.ts", validation_suite: "unit-example" },
+        { command: "ls missing-file" },
+      ]) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            `summary: Run ${toolArgs.command} to collect execution evidence.`,
+            "rationale: The next model step needs the concrete process result.",
+            "next_step: Read the exit status and output before deciding how to continue.",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: toolArgs }],
+        });
+        const output = await input.executeTool({
+          name: "run_command",
+          args: toolArgs,
+          rawArguments: JSON.stringify(toolArgs),
+        }) as Record<string, unknown>;
+        observedKinds.push(String(output.observation_kind));
+        observedContext.push(String(output.model_visible_content));
+      }
+      return "I reviewed the failed command observations.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/failed-command-observations",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run tests and inspect the failing command." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(observedKinds).toEqual(["test_failed", "command_failed"]);
+  expect(observedContext.join("\n")).toContain("expected true to be false");
+  expect(observedContext.join("\n")).toContain("missing file");
+  expect(observedContext.join("\n")).not.toContain("recovering_internal");
+  expect(observedContext.join("\n")).not.toContain("could not verify completion");
+});
+
+test("native runtime emits immediate preparation progress without auxiliary orientation model call", async () => {
+  const intermediate: Array<{
+    message?: { text?: string };
+    metadata?: Record<string, unknown>;
+  }> = [];
+  const turnEvents: Array<Record<string, unknown>> = [];
+  let resolvePreparation: (() => void) | undefined;
+  const preparationSeen = new Promise<void>((resolve) => {
+    resolvePreparation = resolve;
+  });
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    runPromptText: async (input) => {
+      throw new Error(`unexpected auxiliary text prompt: ${input.cacheScope ?? "none"}`);
+    },
+    runFunctionToolPromptText: async () => {
+      await Promise.race([
+        preparationSeen,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("preparation progress was not emitted")), 1_000),
+        ),
+      ]);
+      return "최신 근거 확인을 마쳤습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/immediate-preparation-progress",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: {
+      eventId: "app:orientation-message-1",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "chat-orientation" },
+      sender: { id: "app-user", displayName: "Butler App" },
+      message: {
+        id: "orientation-message-1",
+        text: "요즘 한국 여름 날씨가 선선한 이유를 최신 근거로 짧게 확인해줘.",
+        timestamp: "2026-06-27T11:00:00.000Z",
+      },
+    },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      turnEvents.push(event as Record<string, unknown>);
+      if (event.kind === "turn.first_progress") {
+        resolvePreparation?.();
+      }
+    },
+    emitIntermediateDelivery: async (action) => {
+      const projected = action as {
+        message?: { text?: string };
+        metadata?: Record<string, unknown>;
+      };
+      intermediate.push(projected);
+    },
+  });
+
+  expect(result.text).toBe("최신 근거 확인을 마쳤습니다.");
+  expect(turnEvents[0]).toMatchObject({
+    kind: "turn.first_progress",
+    payload: {
+      note: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+      workBlockLabel: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+    },
+  });
+  expect(
+    intermediate.some((action) => action.metadata?.kind === "tool_progress"),
+  ).toBe(false);
+  expect(
+    intermediate.some((action) => action.metadata?.phase === "model_orientation"),
+  ).toBe(false);
 });
 
 test("native runtime injects recent transcript context and excludes current inbound event", async () => {
@@ -453,6 +1337,15 @@ test("native runtime emits safe public turn events for tool, guard, and final ph
     messageLanguage: "en",
     executeButlerTool: async () => ({ ok: true, outputText: "safe result" }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_search", args: { query: "safe docs" } },
+        {
+          summary: "Searching public web sources for safe docs.",
+          rationale: "The test needs real tool and work-block events from a model-selected web search.",
+          nextStep: "Use the search result to finish with a safe confirmation.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: { query: "safe docs" },
@@ -487,6 +1380,7 @@ test("native runtime emits safe public turn events for tool, guard, and final ph
     "work.block.completed",
     "guard.started",
     "guard.completed",
+    "turn.outcome",
     "message.final.started",
     "message.final.completed",
     "turn.completed",
@@ -498,17 +1392,95 @@ test("native runtime emits safe public turn events for tool, guard, and final ph
     .toBe("Searching public web sources for safe docs.");
   expect(events.find((event) => event.kind === "tool.started")?.payload?.safeLabel)
     .toBe("Web search: safe docs");
+  expect(events.find((event) => event.kind === "turn.outcome")?.payload)
+    .toMatchObject({
+      outcome: "completed",
+      completionEvidenceStatus: "not_required",
+      publicSummary: "Completed.",
+    });
+  expect(events.some((event) => event.kind === "completion.evidence.recorded")).toBe(false);
 });
 
-test("native runtime emits dynamic preparation progress before the first model response", async () => {
+test("native runtime emits completion evidence only from real capability receipts", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "en",
+    executeButlerTool: async (call) => {
+      if (call.name === "run_command") {
+        return {
+          ok: true,
+          stdout_preview: "verified",
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "ecr-real-command",
+            producerName: "run_command",
+            capability: "command_executed",
+            evidenceKind: "execution_result",
+            satisfies: ["command_executed"],
+            reference: { tool_call_id: "tool-real-command" },
+          })],
+        };
+      }
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command: "printf verified" } },
+        {
+          summary: "Run a verification command.",
+          rationale: "Completion evidence must come from the real command receipt.",
+          nextStep: "Use the receipt to report the verification result.",
+        },
+      );
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "printf verified" },
+        rawArguments: JSON.stringify({ command: "printf verified" }),
+      });
+      return "Verified.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/real-completion-evidence",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "Run a verification command." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload });
+    },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(events.find((event) => event.kind === "completion.evidence.recorded")?.payload)
+    .toMatchObject({
+      evidenceKind: "command_executed",
+      status: "verified",
+      refs: ["receipt:ecr-real-command", "tool:tool-real-command"],
+    });
+  expect(events.find((event) => event.kind === "turn.outcome")?.payload)
+    .toMatchObject({
+      outcome: "completed",
+      completionEvidenceRefs: ["receipt:ecr-real-command"],
+    });
+});
+
+test("native runtime emits first progress note before the first model response", async () => {
   const progressActions: Array<Record<string, any>> = [];
   const turnEvents: Array<Record<string, any>> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
     runFunctionToolPromptText: async () => {
-      const preparationProgress = progressActions.find((action) =>
-        action.kind === "tool_progress" && action.activityKind === "model",
+      const preparationProgress = turnEvents.find((event) =>
+        event.kind === "turn.first_progress",
       );
       expect(preparationProgress).toBeTruthy();
       return "확인했습니다.";
@@ -552,21 +1524,21 @@ test("native runtime emits dynamic preparation progress before the first model r
   });
 
   expect(result.text).toBe("확인했습니다.");
-  const preparationProgress = progressActions.find((action) =>
-    action.kind === "tool_progress" && action.activityKind === "model",
+  const preparationProgress = turnEvents.find((event) =>
+    event.kind === "turn.first_progress",
   );
-  expect(preparationProgress?.safeLabel).toBe("응답 준비 중");
-  expect(preparationProgress?.inputLabel).toBe("");
-  expect(preparationProgress?.detailRows).toEqual([]);
-  expect(preparationProgress?.safeLabel).not.toBe("Working");
-  expect(preparationProgress?.safeLabel).not.toBe("Thinking");
-  const serialized = JSON.stringify(progressActions);
+  expect(preparationProgress?.payload).toMatchObject({
+    note: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+    source: "runtime-derived",
+    workBlockLabel: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+  });
+  expect(progressActions).toEqual([]);
+  const serialized = JSON.stringify(preparationProgress);
   expect(serialized).not.toContain("gpt-5.5");
   expect(serialized).not.toContain("도구 루프");
   expect(serialized).not.toContain("tool loop");
   expect(serialized).not.toContain("/Users/example/private");
   expect(serialized).not.toContain("Runtime visibility spec fixture");
-  expect(serialized).not.toContain("그대로 노출");
   expect(turnEvents.find((event) =>
     event.kind === "tool.progress" && event.payload?.activityKind === "model",
   )?.payload?.safeLabel).toBe(preparationProgress?.safeLabel);
@@ -705,7 +1677,7 @@ test("native runtime advances durable WorkStreams for Steward non-trivial work",
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(result.text).toContain("아직 완료라고 보고할 수 있는 상태까지는 도달하지 못했습니다.");
+  expect(result.text).toContain("Steward custody review is underway.");
 
   const streams = new WorkStreamStore(tempDir).list({
     sessionId: "steward/workstream-custody",
@@ -715,9 +1687,9 @@ test("native runtime advances durable WorkStreams for Steward non-trivial work",
     owner_session_id: "steward/workstream-custody",
     project_id: "butler",
     title: "Steward custody review",
-    current_phase: "review",
+    current_phase: null,
   });
-  expect(streams[0]!.state).toBe("recoverable");
+  expect(streams[0]!.state).toBe("complete");
 });
 
 test("native runtime sends a profiled tool surface for basic project turns", async () => {
@@ -884,7 +1856,7 @@ test("native runtime attaches turn budget attribution to direct tool prompts", a
   )).toBe(true);
 });
 
-test("native runtime blocks repeated Project Ledger status command families in one turn", async () => {
+test("native runtime returns repeated Project Ledger status pressure as structured observation", async () => {
   const executed: string[] = [];
   const guardedResults: unknown[] = [];
   const runtime = new NativeToolLoopRuntime({
@@ -904,6 +1876,17 @@ test("native runtime blocks repeated Project Ledger status command families in o
     },
     runFunctionToolPromptText: async (input) => {
       for (let index = 0; index < 4; index += 1) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Project Ledger 상태를 확인합니다.",
+            "rationale: 반복 압력 보호가 실제 상태 확인 도구 실행을 기준으로 동작해야 합니다.",
+            "next_step: 상태 결과를 보고 반복 실행 허용 여부를 판단합니다.",
+          ].join("\n"),
+          toolCalls: [{
+            name: "run_command",
+            args: { command: "packages/project-ledger/bin/project-ledger status --project . --json" },
+          }],
+        });
         guardedResults.push(await input.executeTool({
           name: "run_command",
           args: { command: "packages/project-ledger/bin/project-ledger status --project . --json" },
@@ -934,11 +1917,18 @@ test("native runtime blocks repeated Project Ledger status command families in o
   expect(executed).toHaveLength(3);
   expect(guardedResults[3]).toMatchObject({
     ok: false,
-    budget_policy: "repeated_tool_family_blocked",
-    repeat_family: "project-ledger:status",
-    repeat_count: 4,
-    repeat_limit: 3,
+    observation_kind: "validation_failed",
+    observation: {
+      kind: "validation_failed",
+      visibility: "model",
+      summary: "Repeated project-ledger:status tool-family pressure was observed.",
+      modelVisibleContent: expect.stringContaining("Tool-family pressure was observed before re-running run_command."),
+    },
   });
+  expect(guardedResults[3]).not.toHaveProperty("budget_policy");
+  expect(guardedResults[3]).not.toHaveProperty("repeat_count");
+  expect(JSON.stringify(guardedResults[3])).not.toContain("summarize it");
+  expect(JSON.stringify(guardedResults[3])).not.toContain("ask for an explicit continuation");
 });
 
 test("native runtime reports high provider usage without stopping the next model call", async () => {
@@ -1036,6 +2026,17 @@ test("native runtime allows repeated tests after a state-mutating command resets
         "printf 'changed' > packages/butler-agent/src/__budget-reset-test.txt",
         "bun test tests/unit/native-tool-loop-runtime.test.ts",
       ]) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: 요청된 테스트 또는 수정 명령을 실행합니다.",
+            "rationale: 반복 테스트 보호가 상태 변경 이후 재실행을 허용하는지 확인해야 합니다.",
+            "next_step: 실행 결과를 바탕으로 다음 테스트 또는 수정 단계를 이어갑니다.",
+          ].join("\n"),
+          toolCalls: [{
+            name: "run_command",
+            args: { command },
+          }],
+        });
         await input.executeTool({
           name: "run_command",
           args: { command },
@@ -1137,6 +2138,15 @@ test("native runtime resolves run_command generated artifacts from Butler data",
     runFunctionToolPromptText: async (input) => {
       const command =
         "mkdir -p \"$BUTLER_ARTIFACTS_DIR/cyrene\"; printf 'name,count\\ncyrene,1\\n' > \"$BUTLER_ARTIFACTS_DIR/cyrene/report.csv\"";
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command } },
+        {
+          summary: "Create the generated Cyrene report artifact.",
+          rationale: "The test verifies that generated artifacts under Butler data are resolved correctly.",
+          nextStep: "Read the generated artifact metadata from the command result.",
+        },
+      );
       const result = await input.executeTool({
         name: "run_command",
         args: { command },
@@ -1179,6 +2189,15 @@ test("native runtime uses the web search query in public work labels when safe",
     messageLanguage: "ko",
     executeButlerTool: async () => ({ ok: true, outputText: "safe result" }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_search", args: { query: "충주 5월 축제" } },
+        {
+          summary: '공개 웹에서 "충주 5월 축제" 관련 정보를 검색합니다.',
+          rationale: "이 테스트는 안전한 검색어가 공개 진행 라벨에 반영되는지 확인합니다.",
+          nextStep: "검색 결과를 바탕으로 확인 사실을 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: { query: "충주 5월 축제" },
@@ -1219,11 +2238,29 @@ test("native runtime falls back only when web search has no safe query label", a
     messageLanguage: "en",
     executeButlerTool: async () => ({ ok: true, outputText: "safe result" }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_search", args: {} },
+        {
+          summary: "Searching public web sources for the needed information.",
+          rationale: "The first call intentionally has no safe query label for fallback coverage.",
+          nextStep: "Compare the fallback label with the next labeled search.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: {},
         rawArguments: "{}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_search", args: { query: "query" } },
+        {
+          summary: "Searching public web sources for query.",
+          rationale: "The second call has a safe query label for comparison.",
+          nextStep: "Use the two work labels to complete the assertion.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: { query: "query" },
@@ -1271,16 +2308,43 @@ test("native runtime describes Project Ledger tool progress by work context", as
     messageLanguage: "en",
     executeButlerTool: async () => ({ ok: true }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "inspect_project_status", args: { project_path: workspacePath } },
+        {
+          summary: "Checking the Project Ledger status.",
+          rationale: "The progress-label test needs the status tool's public work context.",
+          nextStep: "Use the status result to choose the next Project Ledger action.",
+        },
+      );
       await input.executeTool({
         name: "inspect_project_status",
         args: { project_path: workspacePath },
         rawArguments: JSON.stringify({ project_path: workspacePath }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "query_project_work", args: { project_path: workspacePath, kind: "next-actions" } },
+        {
+          summary: "Reviewing the needed Project Ledger work context.",
+          rationale: "The test verifies that query progress is labeled by public work context.",
+          nextStep: "Use next actions before rendering the dashboard.",
+        },
+      );
       await input.executeTool({
         name: "query_project_work",
         args: { project_path: workspacePath, kind: "next-actions" },
         rawArguments: JSON.stringify({ project_path: workspacePath, kind: "next-actions" }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "render_project_dashboard", args: { project_path: workspacePath, view: "dashboard", write: true } },
+        {
+          summary: "Updating the Project Ledger dashboard.",
+          rationale: "The final Project Ledger tool should keep a safe dashboard progress label.",
+          nextStep: "Report that the dashboard is ready.",
+        },
+      );
       await input.executeTool({
         name: "render_project_dashboard",
         args: { project_path: workspacePath, view: "dashboard", write: true },
@@ -1368,26 +2432,76 @@ test("native runtime caches Project Ledger reads only until a same-turn mutation
       return { ok: true };
     },
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "inspect_project_status", args: { project_path: tempDir } },
+        {
+          summary: "Inspect the Project Ledger status before mutation.",
+          rationale: "The cache test needs a first status read through the real tool path.",
+          nextStep: "Repeat the status read to check same-turn cache behavior.",
+        },
+      );
       const firstStatus = await input.executeTool({
         name: "inspect_project_status",
         args: { project_path: tempDir },
         rawArguments: JSON.stringify({ project_path: tempDir }),
       }) as Record<string, unknown>;
+      await authorPublicDecisionForTool(
+        input,
+        { name: "inspect_project_status", args: { project_path: tempDir } },
+        {
+          summary: "Inspect the Project Ledger status again.",
+          rationale: "The repeated status read should use the same-turn cache.",
+          nextStep: "Compare the cached status with the first status.",
+        },
+      );
       const cachedStatus = await input.executeTool({
         name: "inspect_project_status",
         args: { project_path: tempDir },
         rawArguments: JSON.stringify({ project_path: tempDir }),
       }) as Record<string, unknown>;
+      await authorPublicDecisionForTool(
+        input,
+        { name: "query_project_work", args: { project_path: tempDir, kind: "next-actions" } },
+        {
+          summary: "Query Project Ledger next actions before mutation.",
+          rationale: "The cache test needs a first query result through the real tool path.",
+          nextStep: "Repeat the query to check same-turn cache behavior.",
+        },
+      );
       const firstQuery = await input.executeTool({
         name: "query_project_work",
         args: { project_path: tempDir, kind: "next-actions" },
         rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
       }) as Record<string, unknown>;
+      await authorPublicDecisionForTool(
+        input,
+        { name: "query_project_work", args: { project_path: tempDir, kind: "next-actions" } },
+        {
+          summary: "Query Project Ledger next actions again.",
+          rationale: "The repeated query should use the same-turn cache.",
+          nextStep: "Mutate the Project Ledger after comparing cached query data.",
+        },
+      );
       const cachedQuery = await input.executeTool({
         name: "query_project_work",
         args: { project_path: tempDir, kind: "next-actions" },
         rawArguments: JSON.stringify({ project_path: tempDir, kind: "next-actions" }),
       }) as Record<string, unknown>;
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "run_command",
+          args: {
+            command: "node packages/project-ledger/bin/project-ledger task update --project \"$PWD\" --id T-1 --status in_progress",
+          },
+        },
+        {
+          summary: "Mutate Project Ledger task state.",
+          rationale: "The mutation should invalidate same-turn Project Ledger read caches.",
+          nextStep: "Inspect status again after the mutation.",
+        },
+      );
       await input.executeTool({
         name: "run_command",
         args: {
@@ -1397,6 +2511,15 @@ test("native runtime caches Project Ledger reads only until a same-turn mutation
           command: "node packages/project-ledger/bin/project-ledger task update --project \"$PWD\" --id T-1 --status in_progress",
         }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "inspect_project_status", args: { project_path: tempDir } },
+        {
+          summary: "Inspect Project Ledger status after mutation.",
+          rationale: "The final read should bypass stale cache data after mutation.",
+          nextStep: "Compare the post-mutation version with previous reads.",
+        },
+      );
       const statusAfterMutation = await input.executeTool({
         name: "inspect_project_status",
         args: { project_path: tempDir },
@@ -1537,7 +2660,7 @@ test("native runtime rejects unsafe assistant-authored public decisions before t
     });
 
     const workStart = events.find((event) => event.kind === "work.block.started");
-    expect(workStart?.payload?.decisionSource).toBe("runtime-derived");
+    expect(workStart?.payload?.decisionSource).toBeUndefined();
     expect(JSON.stringify(workStart?.payload ?? {})).not.toContain("FileNotFoundException");
     expect(JSON.stringify(workStart?.payload ?? {})).not.toContain("root_path");
     expect(JSON.stringify(workStart?.payload ?? {})).not.toContain("/tmp/butler-workers");
@@ -1547,7 +2670,7 @@ test("native runtime rejects unsafe assistant-authored public decisions before t
   }
 });
 
-test("native runtime preserves safe public decision fields when repairing unsafe summaries", async () => {
+test("native runtime pauses instead of repairing unsafe public decision summaries", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-native-tools-repaired-decision-"));
   const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   try {
@@ -1593,16 +2716,13 @@ test("native runtime preserves safe public decision fields when repairing unsafe
     });
 
     const workStart = events.find((event) => event.kind === "work.block.started");
-    expect(workStart?.payload?.decisionSource).toBe("review-repaired");
-    expect(workStart?.payload?.decisionSummary).not.toContain("FileNotFoundException");
-    expect(workStart?.payload?.decisionRationale).toBe("선택한 공개 출처의 본문 근거를 확인해야 하기 때문입니다.");
-    expect(workStart?.payload?.decisionNextStep).toBe("확인한 근거를 표 정제 단계의 입력으로 사용합니다.");
+    expect(workStart).toBeUndefined();
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-test("native runtime derives fallback work decision for non-canonical pre-tool prose", async () => {
+test("native runtime pauses instead of deriving fallback decisions from non-canonical pre-tool prose", async () => {
   const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
@@ -1644,9 +2764,7 @@ test("native runtime derives fallback work decision for non-canonical pre-tool p
   });
 
   const workStart = events.find((event) => event.kind === "work.block.started");
-  expect(workStart?.payload?.decisionSource).toBe("runtime-derived");
-  expect(workStart?.payload?.decisionSummary).toBe("선택한 출처의 내용을 확인합니다.");
-  expect(workStart?.payload?.decisionSummary).not.toBe("s");
+  expect(workStart).toBeUndefined();
 });
 
 test("native runtime carries public decision context across dependent tool calls", async () => {
@@ -1782,7 +2900,17 @@ test("native runtime repairs turns that skip explicitly required tools", async (
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
-    executeButlerTool: async (call) => ({ ok: true, tool: call.name }),
+    executeButlerTool: async (call) => {
+      if (call.name === "web_search") {
+        return {
+          ok: true,
+          tool: call.name,
+          source_urls: ["https://example.com/korea-city-population"],
+          results: [{ url: "https://example.com/korea-city-population", title: "Korea city population" }],
+        };
+      }
+      return { ok: true, tool: call.name };
+    },
     runFunctionToolPromptText: async (input) => {
       attempts.push(input.prompt);
       if (attempts.length === 1) {
@@ -1797,8 +2925,11 @@ test("native runtime repairs turns that skip explicitly required tools", async (
         });
         return "검색만 하고 마쳤습니다.";
       }
-      if (input.prompt.includes("Explicit Tool Requirement Repair")) {
+      if (attempts.length === 2) {
+        expect(input.prompt).toContain("The Turn Kernel recorded a model-visible observation");
+        expect(input.prompt).toContain("Missing required tools:");
         expect(input.prompt).toContain("transform_public_data_table");
+        expect(input.prompt).not.toContain("Explicit Tool Requirement Repair");
         await input.onAssistantTextBeforeTools?.({
           text: "summary: 필수 표 정제 단계를 완료합니다.\nrationale: 사용자가 CSV 표 생성을 필수로 요구했습니다.\nnext_step: 정제 표를 기준으로 결과만 보고합니다.",
           toolCalls: [{ name: "transform_public_data_table", args: { columns: ["city"], rows: [{ city: "Seoul" }] } }],
@@ -1810,7 +2941,7 @@ test("native runtime repairs turns that skip explicitly required tools", async (
         });
         return "필수 표 정제를 마쳤습니다.";
       }
-      expect(input.prompt).toContain("Goal Completion Review");
+      expect(input.prompt).not.toContain("Goal Completion Review");
       return "필수 표 정제를 마쳤습니다.";
     },
   });
@@ -1830,7 +2961,8 @@ test("native runtime repairs turns that skip explicitly required tools", async (
   });
 
   expect(attempts.length).toBeGreaterThanOrEqual(2);
-  expect(result.text).toBe("필수 표 정제를 마쳤습니다.");
+  expect(result.text).toContain("필수 표 정제를 마쳤습니다.");
+  expect(result.text).toContain("https://example.com/korea-city-population");
   expect(readTranscript("butler/main")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name)).toEqual(expect.arrayContaining([
@@ -1860,8 +2992,10 @@ test("native runtime repairs skipped tools required by session metadata", async 
       if (attempts.length === 1) {
         return "명령 실행 없이 마쳤습니다.";
       }
-      expect(input.prompt).toContain("Explicit Tool Requirement Repair");
+      expect(input.prompt).toContain("The Turn Kernel recorded a model-visible observation");
+      expect(input.prompt).toContain("Missing required tools:");
       expect(input.prompt).toContain("run_command");
+      expect(input.prompt).not.toContain("Explicit Tool Requirement Repair");
       await input.onAssistantTextBeforeTools?.({
         text: "summary: 필수 명령 실행을 완료합니다.\nrationale: 세션 정책이 run_command를 요구했습니다.\nnext_step: 실행 결과만 요약합니다.",
         toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
@@ -1975,20 +3109,7 @@ test("native runtime does not infer semantic workflow tools from natural CSV wor
         expect(input.prompt).not.toContain("transform_public_data_table");
         return "summary: 한국 주요 도시 인구 순위 조사를 위해 웹 검색을 수행합니다.\nrationale: 최신 공개 데이터를 바탕으로 정확한 상위 도시와 인구수를 확인하기 위함입니다.\nnext_step: 수집된 정보를 기반으로 3개 이상의 도시에 대한 CSV 표를 작성하고 요약 보고서를 구성하겠습니다.";
       }
-      expect(input.prompt).toContain("Final Result Contract Repair");
-      expect(input.prompt).toContain("`summary:`, `rationale:`, `next_step:`");
-      return [
-        "## 한국 주요 도시 인구 순위 샘플 보고서",
-        "",
-        "공개 출처를 확인한 뒤 3개 도시의 인구 순위 샘플을 정리했습니다.",
-        "",
-        "```csv",
-        "rank,city,population",
-        "1,서울특별시,9300000",
-        "2,부산광역시,3300000",
-        "3,인천광역시,3000000",
-        "```",
-      ].join("\n");
+      expect.unreachable("Final Result Contract Repair must not run as a post-hoc model loop");
     },
   });
   const handle = await runtime.createSession({
@@ -2008,11 +3129,11 @@ test("native runtime does not infer semantic workflow tools from natural CSV wor
   });
 
   expect(attempts.some((prompt) => prompt.includes("Public Data Table Workflow Repair"))).toBe(false);
-  expect(attempts.some((prompt) => prompt.includes("Goal Completion Review"))).toBe(true);
-  expect(attempts.some((prompt) => prompt.includes("Final Result Contract Repair"))).toBe(true);
+  expect(attempts.some((prompt) => prompt.includes("Goal Completion Review"))).toBe(false);
+  expect(attempts.some((prompt) => prompt.includes("Final Result Contract Repair"))).toBe(false);
   expect(executedTools).toEqual(["web_search", "web_read"]);
   expect(executedTools).not.toContain("transform_public_data_table");
-  expect(result.text).toContain("한국 주요 도시 인구 순위 샘플 보고서");
+  expect(result.text).toContain("도구 실행 근거가 확인되지 않아");
   expect(result.text).not.toMatch(/^\s*작업\s*[:：]/u);
 });
 
@@ -2105,7 +3226,7 @@ test("native runtime reviews public work decision finals even before tool eviden
           "잠시만 기다려 주세요.",
         ].join("\n");
       }
-      expect(input.prompt).toContain("Goal Completion Review");
+      expect(input.prompt).not.toContain("Goal Completion Review");
       await input.executeTool({
         name: "web_search",
         args: { query: "테스트 식당 사과냉면만두 추천 메뉴" },
@@ -2129,15 +3250,16 @@ test("native runtime reviews public work decision finals even before tool eviden
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(attempts).toHaveLength(2);
-  expect(executedTools).toEqual(["web_search"]);
-  expect(result.text).toContain("사과냉면");
+  expect(attempts).toHaveLength(1);
+  expect(executedTools).toEqual([]);
+  expect(result.text).toContain("잠시만 기다려 주세요.");
   expect(result.text).not.toMatch(/^\s*작업\s*[:：]/u);
 });
 
-test("native runtime uses generic completion review to continue model-selected missing deliverables", async () => {
+test("native runtime routes completion review gap to continuation without final text", async () => {
   const attempts: string[] = [];
   const executedTools: string[] = [];
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -2162,6 +3284,14 @@ test("native runtime uses generic completion review to continue model-selected m
           artifact_label: "population.csv",
           artifact_path: "/tmp/population.csv",
           csv_preview: "city,population\n서울특별시,9300000",
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "receipt-population-artifact",
+            producerName: "transform_public_data_table",
+            capability: "durable_artifact",
+            evidenceKind: "artifact",
+            satisfies: ["durable_artifact"],
+            reference: { artifact_id: "population.csv" },
+          })],
         };
       }
       return { ok: true };
@@ -2179,7 +3309,7 @@ test("native runtime uses generic completion review to continue model-selected m
           rawArguments: JSON.stringify({ query: "한국 주요 도시 인구" }),
         });
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 공개 출처 내용을 확인합니다.\nrationale: 파일 산출물의 행 값을 확정해야 합니다.\nnext_step: 확인한 행을 산출물로 정리합니다.",
+          text: "summary: 공개 출처 내용을 확인합니다.\nrationale: 파일 산출물의 행 값을 확정해야 합니다.\nnext_step: 확인한 행을 산출물로 정리합니다.\ncompletion_obligations: durable_artifact",
           toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
         });
         await input.executeTool({
@@ -2189,24 +3319,21 @@ test("native runtime uses generic completion review to continue model-selected m
         });
         return "근거는 확인했지만 CSV 파일 산출물은 아직 만들지 않았습니다.";
       }
-      expect(input.prompt).toContain("Goal Completion Review");
-      expect(input.prompt).toContain("Do not apply hardcoded rules for any specific tool");
-      expect(input.prompt).toContain("This review is an action gate");
-      expect(input.prompt).toContain("Attached native tool schemas are the source of truth");
-      expect(input.prompt).toContain("reuse public facts, values, URLs, labels, artifact references");
-      expect(input.prompt).toContain("Discovery/search evidence identifies candidates");
-      expect(input.prompt).toContain("Durable deliverables require durable evidence");
-      expect(input.prompt).not.toContain("transform_public_data_table");
-      await input.onAssistantTextBeforeTools?.({
-        text: "summary: 확인한 행을 파일 산출물로 정제합니다.\nrationale: 사용자가 결과와 별도 산출물을 함께 요청했습니다.\nnext_step: 산출물 기준으로 결과만 보고합니다.",
-        toolCalls: [{ name: "transform_public_data_table", args: { columns: ["city", "population"], rows: [{ city: "서울특별시", population: 9300000 }] } }],
-      });
-      await input.executeTool({
-        name: "transform_public_data_table",
-        args: { columns: ["city", "population"], rows: [{ city: "서울특별시", population: 9300000 }] },
-        rawArguments: JSON.stringify({ columns: ["city", "population"], rows: [{ city: "서울특별시", population: 9300000 }] }),
-      });
-      return "CSV 파일 산출물 population.csv를 만들고 결과를 요약했습니다.";
+      if (attempts.length === 2) {
+        expect(input.prompt).toContain("The Turn Kernel recorded a model-visible observation");
+        expect(input.prompt).toContain("Missing completion evidence for: durable_artifact");
+        await input.onAssistantTextBeforeTools?.({
+          text: "summary: 정제 도구로 CSV 산출물을 생성합니다.\nrationale: 검토 관찰이 durable_artifact 산출물 생성을 요구했습니다.\nnext_step: 생성 결과의 산출물 증거를 최종 답변에 반영합니다.\ncompletion_obligations: durable_artifact",
+          toolCalls: [{ name: "transform_public_data_table", args: { format: "csv" } }],
+        });
+        await input.executeTool({
+          name: "transform_public_data_table",
+          args: { format: "csv" },
+          rawArguments: JSON.stringify({ format: "csv" }),
+        });
+        return "CSV 파일 산출물을 만들고 요약했습니다.";
+      }
+      expect.unreachable("Should not require third completion-review prompt");
     },
   });
   const handle = await runtime.createSession({
@@ -2223,16 +3350,28 @@ test("native runtime uses generic completion review to continue model-selected m
     input: {
       text: "공개 출처를 확인해 한국 주요 도시 3곳 인구 데이터를 CSV 파일 산출물로 정제하고 결과를 요약해 주세요.",
     },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
+    },
   });
 
   expect(attempts).toHaveLength(2);
   expect(executedTools).toEqual(["web_search", "web_read", "transform_public_data_table"]);
   expect(result.text).toContain("CSV 파일 산출물");
+  expect(result.text).not.toContain("아직 만들지 않았습니다");
+  expect(events.map((event) => event.kind)).toContain("turn.observation");
+  expect(events.find((event) => event.kind === "turn.observation")?.payload)
+    .toMatchObject({ kind: "completion_gap" });
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
+  expect(events.map((event) => event.kind)).toContain("turn.completed");
+  expect(readOnlyPersistedTurnContextAtom()).toBeNull();
 });
 
-test("goal completion review verdict without new tool evidence is not delivered as final answer", async () => {
+test("goal completion review gap schedules continuation and does not deliver candidate text", async () => {
   const attempts: string[] = [];
   const executedTools: string[] = [];
+  const events: Array<{ kind: string }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -2242,13 +3381,28 @@ test("goal completion review verdict without new tool evidence is not delivered 
         ok: true,
         exit_code: 0,
         stdout_preview: "riposte source and notes inspected",
+        ...(executedTools.length > 1 ? {
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "receipt-riposte-command",
+            producerName: "run_command",
+            capability: "command_executed",
+            evidenceKind: "execution_result",
+            satisfies: ["command_executed"],
+            reference: { task_id: "riposte-command" },
+          })],
+        } : {}),
       };
     },
     runFunctionToolPromptText: async (input) => {
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: Riposte 제작 기록을 확인합니다.\nrationale: 사용자가 제작 과정을 소개할 글의 근거가 필요합니다.\nnext_step: 확인한 내용을 바탕으로 초안을 작성합니다.",
+          text: [
+            "summary: Riposte 제작 기록을 확인합니다.",
+            "rationale: 사용자가 제작 과정을 소개할 글의 근거가 필요합니다.",
+            "next_step: 실행 결과를 바탕으로 초안을 작성합니다.",
+            "completion_obligations: command_executed",
+          ].join("\n"),
           toolCalls: [{ name: "run_command", args: { command: "pwd && ls" } }],
         });
         await input.executeTool({
@@ -2263,12 +3417,24 @@ test("goal completion review verdict without new tool evidence is not delivered 
           "초안에서 단순한 뱀서라이크로 시작했지만, 공격 타이밍에 맞춰 돌진하는 패링 규칙이 중심 재미가 됐습니다.",
         ].join("\n");
       }
-      expect(input.prompt).toContain("Goal Completion Review");
-      return [
-        "순찰 완료다냐. 이전 답변은 테스트 사용자님의 원래 요청을 충족한 최종 답변으로 봐도 된다냐.",
-        "",
-        "따라서 지금 기준으로는 추가 도구 호출 없이, 이전 답변을 바탕으로 글을 다듬어가면 된다냐.",
-      ].join("\n");
+      if (attempts.length === 2) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Riposte 제작 기록을 한 번 더 검증합니다.",
+            "rationale: 완료 검토가 추가 실행 증거를 요구했습니다.",
+            "next_step: 검증 결과를 반영해 초안을 확정합니다.",
+            "completion_obligations: command_executed",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "pwd && ls" } }],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "pwd && ls" },
+          rawArguments: JSON.stringify({ command: "pwd && ls" }),
+        });
+        return "Riposte 소개 초안을 근거 확인까지 마무리했습니다.";
+      }
+      expect.unreachable("Should not require third completion-review prompt");
     },
   });
   const handle = await runtime.createSession({
@@ -2283,23 +3449,112 @@ test("goal completion review verdict without new tool evidence is not delivered 
     provider: fakeProvider,
     model: "openai/gpt-5.5",
     input: { text: "Riposte 제작 과정을 소개할 글 초안을 정리해줘." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
   });
 
   expect(attempts).toHaveLength(2);
   expect(executedTools).toContain("run_command");
-  expect(result.text).toContain("Riposte 소개 초안");
-  expect(result.text).toContain("패링 액션");
-  expect(result.text).not.toContain("이전 답변");
-  expect(result.text).not.toContain("추가 도구 호출 없이");
+  expect(result.text).toContain("근거 확인까지 마무리");
+  expect(events.map((event) => event.kind)).toContain("turn.observation");
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
+  expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
+  expect(attempts[0]).not.toContain("Goal Completion Review");
+  expect(attempts[0]).not.toContain("Goal Completion Incomplete Continuation");
 });
 
-test("native runtime continues direct work when completion review returns incomplete", async () => {
+test("goal completion gap suppresses public final text and generic verification failure copy", async () => {
+  const attempts: string[] = [];
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "en",
+    executeButlerTool: async () => ({
+      ok: true,
+      exit_code: 0,
+      stdout_preview: "run output ready",
+      ...(attempts.length > 1 ? {
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "receipt-command-output",
+          producerName: "run_command",
+          capability: "command_executed",
+          evidenceKind: "execution_result",
+          satisfies: ["command_executed"],
+          reference: { task_id: "command-output" },
+        })],
+      } : {}),
+    }),
+    runFunctionToolPromptText: async (input) => {
+      attempts.push(input.prompt);
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: I am collecting command evidence.",
+          "rationale: completion requires command execution evidence.",
+          "next_step: I will summarize after command result is ready.",
+          "completion_obligations: command_executed",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "pwd" },
+        rawArguments: JSON.stringify({ command: "pwd" }),
+      });
+      if (attempts.length === 2) {
+        return "I verified the command execution evidence and summarized it.";
+      }
+      return "I have the command output, but no command evidence receipt was captured yet.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/completion-gap-no-failure-copy",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Run command and summarize the result." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
+    },
+  });
+
+  expect(attempts).toHaveLength(2);
+  expect(result.text).toContain("verified the command execution evidence");
+  expect(JSON.stringify(events)).not.toContain("Could not verify");
+  expect(JSON.stringify(events)).not.toContain("could not verify that the requested goal was completed");
+  expect(JSON.stringify(events)).not.toContain("State: saved as recoverable.");
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
+});
+
+test("native runtime does not close direct work or recover WorkStreams from completion review gap", async () => {
   const attempts: string[] = [];
   const executedCommands: string[] = [];
+  const events: Array<{ kind: string }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
     executeButlerTool: async (call) => {
+      if (call.name === "write_file") {
+        return {
+          ok: true,
+          path: "report.md",
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "receipt-report-artifact",
+            producerName: "write_file",
+            capability: "durable_artifact",
+            evidenceKind: "artifact",
+            satisfies: ["durable_artifact"],
+            reference: { path: "report.md" },
+          })],
+        };
+      }
       if (call.name === "run_command") {
         executedCommands.push(String(call.args.command));
         return {
@@ -2317,7 +3572,7 @@ test("native runtime continues direct work when completion review returns incomp
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 현재 커밋 상태를 확인합니다.\nrationale: 사용자 요청은 작업 단위 커밋을 요구했습니다.\nnext_step: 검증을 실행한 뒤 결과를 커밋합니다.",
+          text: "summary: 현재 커밋 상태를 확인합니다.\nrationale: 사용자 요청은 작업 단위 커밋을 요구했습니다.\nnext_step: 검증을 실행한 뒤 결과를 커밋합니다.\ncompletion_obligations: durable_artifact",
           toolCalls: [{ name: "run_command", args: { command: "git status --short" } }],
         });
         await input.executeTool({
@@ -2327,26 +3582,19 @@ test("native runtime continues direct work when completion review returns incomp
         });
         return "첫 커밋 상태는 확인했지만 검증과 다음 커밋은 아직 끝나지 않았습니다.";
       }
-      if (input.prompt.includes("Goal Completion Incomplete Continuation")) {
-        expect(input.prompt).toContain("검증과 다음 커밋은 아직 완료되지 않았습니다");
+      if (attempts.length === 2) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 요청된 검증과 커밋을 완료합니다.\nrationale: 리뷰 게이트가 아직 미완료라고 판단했습니다.\nnext_step: 검증 결과와 커밋 해시를 보고합니다.",
-          toolCalls: [{ name: "run_command", args: { command: "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation" } }],
+          text: "summary: 보고 산출물 파일을 작성합니다.\nrationale: 검토 관찰이 durable_artifact 증거를 요구했습니다.\nnext_step: 작성된 파일을 근거로 남은 직접 작업 상태를 판단합니다.\ncompletion_obligations: durable_artifact",
+          toolCalls: [{ name: "write_file", args: { path: "report.md", content: "done" } }],
         });
         await input.executeTool({
-          name: "run_command",
-          args: { command: "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation" },
-          rawArguments: JSON.stringify({
-            command: "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation",
-          }),
+          name: "write_file",
+          args: { path: "report.md", content: "done" },
+          rawArguments: JSON.stringify({ path: "report.md", content: "done" }),
         });
-        return "검증과 다음 커밋을 완료했습니다.";
+        return "검증과 다음 커밋 준비 산출물을 작성했습니다.";
       }
-      expect(input.prompt).toContain("Goal Completion Review");
-      if (!attempts.some((prompt) => prompt.includes("Goal Completion Incomplete Continuation"))) {
-        return "INCOMPLETE: 검증과 다음 커밋은 아직 완료되지 않았습니다.";
-      }
-      return "검증과 다음 커밋을 완료했습니다.";
+      expect.unreachable("Should not require third completion continuation");
     },
   });
   const handle = await runtime.createSession({
@@ -2363,15 +3611,268 @@ test("native runtime continues direct work when completion review returns incomp
     input: {
       text: "작업목록을 순서대로 직접 처리하고, 각 작업이 끝날 때마다 검증 후 커밋해줘.",
     },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
   });
 
-  expect(attempts.some((prompt) => prompt.includes("Goal Completion Incomplete Continuation")))
-    .toBe(true);
-  expect(executedCommands).toEqual([
-    "git status --short",
-    "bun test tests/e2e/direct-work.test.ts && git commit --allow-empty -m continuation",
-  ]);
-  expect(result.text).toContain("검증과 다음 커밋을 완료");
+  expect(attempts).toHaveLength(2);
+  expect(executedCommands).toEqual(["git status --short"]);
+  expect(result.text).toContain("산출물을 작성");
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
+});
+
+test("completion review explicit blocker becomes continuation gap instead of terminal waiting_user", async () => {
+  const attempts: string[] = [];
+  const executedTools: string[] = [];
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "en",
+    executeButlerTool: async (call) => {
+      executedTools.push(call.name);
+      if (executedTools.length === 1) {
+        return {
+          ok: true,
+          evidence_capability_receipts: [{
+            receipt_id: "receipt-user-decision-required",
+            schema_version: "evidence-capability.v1",
+            producer: { kind: "runtime", name: "completion-review-test" },
+            capability: "explicit_blocker",
+            evidence_kind: "blocker",
+            maturity: "verified",
+            confidence: 1,
+            verified: true,
+            summary: "User decision is required before completion can be proven.",
+            limitations: [],
+            references: [],
+            created_at: "2026-06-28T00:00:00.000Z",
+          }],
+        };
+      }
+      return {
+        ok: true,
+        evidence_capability_receipts: [{
+          receipt_id: "receipt-source-verified-after-gap",
+          schema_version: "evidence-capability.v1",
+          producer: { kind: "tool", name: call.name },
+          capability: "source_verified",
+          evidence_kind: "source_page",
+          maturity: "verified",
+          confidence: 1,
+          verified: true,
+          summary: "The blocked source was verified after the blocker observation.",
+          limitations: [],
+          references: [{ url: "https://example.test/blocked-source" }],
+          satisfies: ["source_verified"],
+          created_at: "2026-06-29T00:00:00.000Z",
+        }],
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      attempts.push(input.prompt);
+      if (attempts.length === 1) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: I am checking the blocked source.",
+            "rationale: user approval is required.",
+            "next_step: verify the blocked source.",
+            "completion_obligations: source_verified",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "true" } }],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "true" },
+          rawArguments: JSON.stringify({ command: "true" }),
+        });
+        return "I need your decision before continuing.";
+      }
+      if (attempts.length === 2) {
+        expect(input.prompt).toContain("The Turn Kernel recorded a model-visible observation");
+        expect(input.prompt).toContain("Completion is blocked by explicit blocker evidence");
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: I am verifying the source after the completion gap.",
+            "rationale: the kernel observation requires source evidence before final delivery.",
+            "next_step: include the verified source evidence in the final answer.",
+            "completion_obligations: source_verified",
+          ].join("\n"),
+          toolCalls: [{ name: "web_read", args: { url: "https://example.test/blocked-source" } }],
+        });
+        await input.executeTool({
+          name: "web_read",
+          args: { url: "https://example.test/blocked-source" },
+          rawArguments: JSON.stringify({ url: "https://example.test/blocked-source" }),
+        });
+        return "The blocked source is verified with cited evidence.";
+      }
+      expect.unreachable("Should not require a third explicit-blocker continuation");
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/waiting-user-review",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Check the blocked source." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
+    },
+  });
+
+  expect(attempts).toHaveLength(2);
+  expect(executedTools).toEqual(["run_command", "web_read"]);
+  expect(result.text).toContain("blocked source is verified");
+  expect(events.map((event) => event.kind)).toContain("turn.outcome");
+  expect(events.find((event) => event.kind === "turn.outcome")?.payload)
+    .toMatchObject({ outcome: "completed" });
+  expect(events.find((event) => event.kind === "turn.observation")?.payload)
+    .toMatchObject({ kind: "completion_gap" });
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
+});
+
+test("completion review ignores failed WorkStream terminal state and continues for missing evidence", async () => {
+  const sessionId = "butler/main/failed-review";
+  const turnId = "app:failed-review";
+  const attempts: string[] = [];
+  const executedTools: string[] = [];
+  const todoStore = new TodoListStore(tempDir);
+  const todos = todoStore.update({
+    listId: "failed-review-list",
+    title: "Failed review",
+    items: [{
+      id: "done",
+      content: "Finished without artifact",
+      active_form: "Finished without artifact",
+      status: "in_progress",
+      phase: "reporting",
+    }],
+  });
+  const streamStore = new WorkStreamStore(tempDir);
+  streamStore.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: todos.list.list_id,
+    title: "Failed review",
+    lastUserTurnId: turnId,
+    items: todos.items,
+  });
+  streamStore.applyTurnLocalOutcome({
+    sessionId,
+    turnId,
+    outcome: "failed",
+    statusNote: "Artifact evidence is missing after terminal failure.",
+  });
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "en",
+    butlerData: tempDir,
+    executeButlerTool: async (call) => {
+      executedTools.push(call.name);
+      if (executedTools.length === 1) {
+        return { ok: true };
+      }
+      return {
+        ok: true,
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "receipt-durable-artifact-after-gap",
+          producerName: call.name,
+          capability: "durable_artifact",
+          evidenceKind: "artifact",
+          satisfies: ["durable_artifact"],
+          reference: { path: "artifacts/final-report.md" },
+        })],
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      attempts.push(input.prompt);
+      if (attempts.length === 1) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: I am checking artifact completion.",
+            "rationale: durable artifact evidence is required.",
+            "next_step: inspect artifact state before final delivery.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "run_command", args: { command: "true" } }],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "true" },
+          rawArguments: JSON.stringify({ command: "true" }),
+        });
+        return "The work stream is terminal but artifact evidence is missing.";
+      }
+      if (attempts.length === 2) {
+        expect(input.prompt).toContain("The Turn Kernel recorded a model-visible observation");
+        expect(input.prompt).toContain("Missing completion evidence for: durable_artifact");
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: I am creating the durable artifact required by the completion gap.",
+            "rationale: completion review cannot close the turn without artifact evidence.",
+            "next_step: report the artifact evidence in the final answer.",
+            "completion_obligations: durable_artifact",
+          ].join("\n"),
+          toolCalls: [{ name: "write_file", args: { path: "artifacts/final-report.md", content: "done" } }],
+        });
+        await input.executeTool({
+          name: "write_file",
+          args: { path: "artifacts/final-report.md", content: "done" },
+          rawArguments: JSON.stringify({ path: "artifacts/final-report.md", content: "done" }),
+        });
+        return "The durable artifact was created and verified.";
+      }
+      expect.unreachable("Should not require a third failed-workstream continuation");
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: {
+      eventId: "app:failed-review",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "failed-review" },
+      sender: { id: "app-user", displayName: "Butler App" },
+      message: {
+        id: "message-failed-review",
+        text: "Finish artifact work.",
+        timestamp: "2026-06-28T00:00:00.000Z",
+      },
+      routingHints: { sessionId, turnId },
+    },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
+    },
+  });
+
+  expect(attempts).toHaveLength(2);
+  expect(executedTools).toEqual(["run_command", "write_file"]);
+  expect(result.text).toContain("durable artifact was created");
+  expect(events.find((event) => event.kind === "turn.outcome")?.payload)
+    .toMatchObject({ outcome: "completed" });
+  expect(events.find((event) => event.kind === "turn.observation")?.payload)
+    .toMatchObject({ kind: "completion_gap" });
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
 });
 
 test("native runtime does not rerun completion review after planned public report is written", async () => {
@@ -2397,6 +3898,21 @@ test("native runtime does not rerun completion review after planned public repor
       if (attempts.length > 1) {
         throw new Error("completion review should not run after a planned public report");
       }
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "write_planned_public_report",
+          args: {
+            task_id: "planned-public-report",
+            report: "검토된 공개 보고입니다.",
+          },
+        },
+        {
+          summary: "완료된 계획 작업의 공개 보고를 작성합니다.",
+          rationale: "이 테스트는 계획 공개 보고 도구 실행 뒤 재검토가 반복되지 않는지 확인합니다.",
+          nextStep: "작성된 공개 보고를 최종 답변으로 사용합니다.",
+        },
+      );
       await input.executeTool({
         name: "write_planned_public_report",
         args: {
@@ -2441,6 +3957,21 @@ test("planned review turns block sibling planned task creation", async () => {
       return { ok: true };
     },
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "create_planned_task",
+          args: {
+            goal: "같은 목표를 새 계획으로 다시 실행한다.",
+            acceptance_criteria: ["새 sibling plan이 생기면 안 된다."],
+          },
+        },
+        {
+          summary: "완료된 계획 검토 중 새 계획 생성을 시도합니다.",
+          rationale: "이 테스트는 공개 결정 이후에도 sibling 계획 생성 정책이 차단되는지 확인합니다.",
+          nextStep: "도구의 정책 차단 결과를 확인합니다.",
+        },
+      );
       blockedOutput = await input.executeTool({
         name: "create_planned_task",
         args: {
@@ -2519,6 +4050,21 @@ test("planned review turns stop after starting a repair attempt", async () => {
     },
     runFunctionToolPromptText: async (input) => {
       attempts.push(input.prompt);
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "review_planned_task",
+          args: {
+            task_id: "planned-parent",
+            attempt: 1,
+          },
+        },
+        {
+          summary: "계획 작업의 실패한 검토 결과를 기록합니다.",
+          rationale: "수리 흐름 테스트는 실제 review_planned_task 실행이 먼저 필요합니다.",
+          nextStep: "검토 실패 결과에 따라 수리 작업을 시작합니다.",
+        },
+      );
       await input.executeTool({
         name: "review_planned_task",
         args: {
@@ -2536,6 +4082,21 @@ test("planned review turns stop after starting a repair attempt", async () => {
         },
         rawArguments: JSON.stringify({ task_id: "planned-parent" }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "repair_planned_task",
+          args: {
+            task_id: "planned-parent",
+            repair_objective: "원래 목표 안에서 누락된 구현을 완료한다.",
+          },
+        },
+        {
+          summary: "원래 계획 목표 안에서 수리 작업을 시작합니다.",
+          rationale: "테스트는 수리 도구 실행 뒤 흐름이 즉시 종료되는지 확인합니다.",
+          nextStep: "수리 시작 결과를 최종 텍스트로 변환합니다.",
+        },
+      );
       const repairOutput = await input.executeTool({
         name: "repair_planned_task",
         args: {
@@ -2608,6 +4169,20 @@ test("planned review turns inject event ownership into scoped review tools", asy
       };
     },
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "review_planned_task",
+          args: {
+            criteria: [],
+          },
+        },
+        {
+          summary: "계획 작업의 소유권이 포함된 검토 결과를 기록합니다.",
+          rationale: "이 테스트는 시스템 이벤트 소유권이 scoped review 도구 인자에 주입되는지 확인합니다.",
+          nextStep: "주입된 소유권 인자를 검증합니다.",
+        },
+      );
       await input.executeTool({
         name: "review_planned_task",
         args: {
@@ -2699,18 +4274,7 @@ test("completion review retries when one search is inconclusive", async () => {
         });
         return "검색 결과가 부족해서 확인할 수 없습니다.";
       }
-      expect(input.prompt).toContain("Goal Completion Review");
-      expect(input.prompt).toContain("single inconclusive or low-evidence search");
-      await input.onAssistantTextBeforeTools?.({
-        text: "summary: 더 권위 있는 출처 중심으로 검색을 넓힙니다.\nrationale: 첫 검색만으로 실패를 확정할 수 없습니다.\nnext_step: 확보한 후보를 결과 근거로 사용합니다.",
-        toolCalls: [{ name: "web_search", args: { query: "site:go.kr 2025 주요 도시 인구" } }],
-      });
-      await input.executeTool({
-        name: "web_search",
-        args: { query: "site:go.kr 2025 주요 도시 인구" },
-        rawArguments: JSON.stringify({ query: "site:go.kr 2025 주요 도시 인구" }),
-      });
-      return "다시 검색해 2025년 공개 통계 후보를 확인했습니다.";
+      expect.unreachable("Should not retry completion review loop");
     },
   });
   const handle = await runtime.createSession({
@@ -2727,8 +4291,8 @@ test("completion review retries when one search is inconclusive", async () => {
     input: { text: "2025년 기준 주요 도시 인구 자료를 찾아줘" },
   });
 
-  expect(executedTools).toEqual(["web_search", "web_search"]);
-  expect(result.text).toContain("다시 검색");
+  expect(executedTools).toEqual(["web_search"]);
+  expect(result.text).toContain("검색 결과가 부족해서 확인할 수 없습니다.");
 });
 
 test("completion review pushes chart requests toward executable artifacts", async () => {
@@ -2760,13 +4324,31 @@ test("completion review pushes chart requests toward executable artifacts", asyn
           exit_code: 0,
           artifact_label: "population-chart.png",
           stdout_preview: "wrote population-chart.png",
-          evidence_capability_receipts: [capabilityReceipt({
-            id: "ecr-chart-command",
-            producerName: "run_command",
-            capability: "command_executed",
-            evidenceKind: "execution_result",
-            satisfies: ["command_executed"],
-          })],
+          evidence_capability_receipts: [
+            capabilityReceipt({
+              id: "ecr-chart-command",
+              producerName: "run_command",
+              capability: "command_executed",
+              evidenceKind: "execution_result",
+              satisfies: ["command_executed"],
+            }),
+            capabilityReceipt({
+              id: "ecr-chart-rendered",
+              producerName: "run_command",
+              capability: "chart_rendered",
+              evidenceKind: "chart",
+              satisfies: ["chart_rendered"],
+              reference: { path: "population-chart.png" },
+            }),
+            capabilityReceipt({
+              id: "ecr-chart-artifact",
+              producerName: "run_command",
+              capability: "durable_artifact",
+              evidenceKind: "artifact",
+              satisfies: ["durable_artifact"],
+              reference: { path: "population-chart.png" },
+            }),
+          ],
         };
       }
       return { ok: true };
@@ -2785,21 +4367,16 @@ test("completion review pushes chart requests toward executable artifacts", asyn
         });
         return "아래 matplotlib 코드를 복사해서 실행하면 됩니다.\n```python\nprint('chart')\n```";
       }
-      expect(input.prompt).toContain("Goal Completion Review");
-      expect(input.prompt).toContain("Generated charts, data files, and executable-code outcomes require execution");
-      expect(input.prompt).toContain("text, or response environment prevents creating files");
-      expect(input.prompt).toContain("next: 확인한 값으로 차트를 생성합니다.");
-      expect(input.prompt).toContain("completion_obligations: source_verified, command_executed");
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 확인한 데이터로 차트 파일을 직접 생성합니다.\nrationale: 사용자는 실행된 결과를 원했고 코드만으로는 완료가 아닙니다.\nnext_step: 생성된 파일 기준으로 결과만 보고합니다.\ncompletion_obligations: command_executed",
-        toolCalls: [{ name: "run_command", args: { command: "python3 scripts/render_chart.py" } }],
+        text: "summary: 확인한 값으로 차트 파일을 생성합니다.\nrationale: 완료 검토가 command_executed 증거를 요구했습니다.\nnext_step: 실행 결과와 산출물 증거를 최종 답변에 반영합니다.\ncompletion_obligations: command_executed, durable_artifact, chart_rendered",
+        toolCalls: [{ name: "run_command", args: { command: "python chart.py" } }],
       });
       await input.executeTool({
         name: "run_command",
-        args: { command: "python3 scripts/render_chart.py" },
-        rawArguments: JSON.stringify({ command: "python3 scripts/render_chart.py" }),
+        args: { command: "python chart.py" },
+        rawArguments: JSON.stringify({ command: "python chart.py" }),
       });
-      return "차트 파일 population-chart.png를 생성했습니다.";
+      return "population-chart.png 차트를 생성했습니다.";
     },
   });
   const handle = await runtime.createSession({
@@ -2809,15 +4386,21 @@ test("completion review pushes chart requests toward executable artifacts", asyn
     systemPrompt: "You are Butler.",
   });
 
+  const events: Array<{ kind: string }> = [];
   const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-4",
     input: { text: "2025년 도시 인구 데이터로 matplotlib 차트를 그려줘" },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
   });
 
   expect(executedTools).toEqual(["web_read", "run_command"]);
   expect(result.text).toContain("population-chart.png");
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
 });
 
 test("goal completion review carries public decision next steps for durable artifact closure", () => {
@@ -2936,7 +4519,7 @@ test("public work decision parser carries completion obligations without display
   ]);
 });
 
-test("public work decision parser ignores non-canonical prose before tool calls", () => {
+test("public work decision parser rejects non-canonical prose before visible tool calls", () => {
   const pending = publicWorkDecisionsFromAssistantText({
     text: "Je vais verifier la source publique avant de continuer. 次に公開情報を確認します。",
     toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
@@ -2946,23 +4529,135 @@ test("public work decision parser ignores non-canonical prose before tool calls"
 
   expect(pending).toEqual([]);
 
-  const fallback = takePublicWorkDecisionForTool({
-    pending,
-    toolName: "web_read",
+  expect(() =>
+    takePublicWorkDecisionForTool({
+      pending,
+      toolName: "web_read",
+      language: "ko",
+      previousDecisions: [],
+      progress: {
+        kind: "read",
+        toolName: "Web read",
+        safeLabel: "Reading public source: example.test",
+        workBlockLabel: "선택한 출처의 내용을 확인합니다.",
+        inputLabel: "example.test",
+        detailRows: [],
+      },
+    }),
+  ).toThrow("Public work decision required before visible tool execution.");
+});
+
+test("assistant pre-tool progress emits structured decisions for ordinary tools", async () => {
+  const actions: Array<{ message?: { text?: string }; metadata?: Record<string, unknown> }> = [];
+  await emitAssistantTextBeforeTools({
     language: "ko",
-    previousDecisions: [],
-    progress: {
-      kind: "read",
-      toolName: "Web read",
-      safeLabel: "Reading public source: example.test",
-      workBlockLabel: "선택한 출처의 내용을 확인합니다.",
-      inputLabel: "example.test",
-      detailRows: [],
-    },
+    text: [
+      "summary: 최신 기상 근거를 먼저 검색합니다.",
+      "rationale: 현재 날씨 원인은 최신 자료 없이는 단정하면 안 됩니다.",
+      "next_step: 검색 결과에서 신뢰할 만한 출처를 읽고 답변합니다.",
+    ].join("\n"),
+    toolCalls: [{ name: "web_search", args: { query: "한국 선선한 여름 날씨 원인" } }],
+    turnInput: {
+      input: {
+        eventId: "event-1",
+        transport: "app",
+        accountId: "local",
+        peer: { kind: "dm", id: "chat-1" },
+        message: { id: "message-1", text: "왜 선선해?", timestamp: "2026-06-27T11:00:00.000Z" },
+      },
+      handle: { sessionId: "butler/app-chat-1" },
+      emitIntermediateDelivery: async (action: unknown) => {
+        actions.push(action as { message?: { text?: string }; metadata?: Record<string, unknown> });
+      },
+    } as unknown as Parameters<typeof emitAssistantTextBeforeTools>[0]["turnInput"],
   });
 
-  expect(fallback.source).toBe("runtime-derived");
-  expect(fallback.summary).toBe("선택한 출처의 내용을 확인합니다.");
+  expect(actions).toHaveLength(1);
+  expect(actions[0]!.message?.text).toContain("최신 기상 근거를 먼저 검색합니다.");
+  expect(actions[0]!.message?.text).toContain("검색 결과에서 신뢰할 만한 출처를 읽고 답변합니다.");
+  expect(actions[0]!.message?.text).not.toContain("summary:");
+  expect(actions[0]!.metadata?.phase).toBe("before_tool_execution");
+});
+
+test("assistant pre-tool progress hides non-canonical ordinary tool prose", async () => {
+  const actions: unknown[] = [];
+  await emitAssistantTextBeforeTools({
+    language: "ko",
+    text: "web_search로 바로 찾아보겠습니다. tool_call arguments는 곧 구성합니다.",
+    toolCalls: [{ name: "web_search", args: { query: "한국 선선한 여름 날씨 원인" } }],
+    turnInput: {
+      input: {
+        eventId: "event-raw-prose",
+        transport: "app",
+        accountId: "local",
+        peer: { kind: "dm", id: "chat-raw-prose" },
+        message: { id: "message-raw-prose", text: "왜 선선해?", timestamp: "2026-06-27T11:00:00.000Z" },
+      },
+      handle: { sessionId: "butler/app-chat-raw-prose" },
+      emitIntermediateDelivery: async (action: unknown) => {
+        actions.push(action);
+      },
+    } as unknown as Parameters<typeof emitAssistantTextBeforeTools>[0]["turnInput"],
+  });
+
+  expect(actions).toEqual([]);
+});
+
+test("bridge tool executor keeps wrapper progress out of visible turn events", async () => {
+  const turnEvents: unknown[] = [];
+  const intermediate: unknown[] = [];
+  const audit: unknown[] = [];
+  const executor = createAuditedBridgeToolExecutor({
+    sessionId: "butler/app-chat-1",
+    turnId: "turn-bridge-wrapper-progress",
+    audit: audit as never,
+    messageLanguage: "ko",
+    turnInput: {
+      input: {
+        eventId: "event-1",
+        transport: "app",
+        accountId: "local",
+        peer: { kind: "dm", id: "chat-1" },
+        message: { id: "message-1", text: "검색해줘", timestamp: "2026-06-27T11:00:00.000Z" },
+      },
+      handle: { sessionId: "butler/app-chat-1" },
+    } as never,
+    buildIntermediateAction: (input) => ({
+      actionId: `runtime-intermediate:${input.suffix}`,
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "chat-1" },
+      message: { text: input.text },
+      metadata: input.metadata ?? {},
+    }),
+    emitIntermediateBestEffort: async (_turnInput, action) => {
+      intermediate.push(action);
+    },
+    emitTurnEventBestEffort: async (_turnInput, event) => {
+      turnEvents.push(event);
+    },
+    throwIfAborted: () => {},
+    executor: async () => ({
+      ok: true,
+      targetCall: {
+        name: "web_search",
+        args: { query: "한국 선선한 여름 날씨 원인" },
+        rawArguments: JSON.stringify({ query: "한국 선선한 여름 날씨 원인" }),
+      },
+      bridgeInvocation: { id: "native:web_search" },
+    }),
+    executeTarget: async () => ({ ok: true, results: [] }),
+  });
+
+  await executor({
+    name: "tool_call",
+    args: { id: "native:web_search", arguments: { query: "한국 선선한 여름 날씨 원인" } },
+    rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "한국 선선한 여름 날씨 원인" } }),
+  });
+
+  expect(turnEvents).toEqual([]);
+  expect(intermediate).toEqual([]);
+  expect(JSON.stringify(audit)).toContain("web_search");
 });
 
 test("completion obligation guard detects unsatisfied command execution", () => {
@@ -3591,6 +5286,15 @@ test("native runtime stores privacy-safe replayable evidence receipts for tool r
       }],
     }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_read", args: { url: "https://example.test/runtime-source" } },
+        {
+          summary: "Read the selected runtime source page.",
+          rationale: "The transcript privacy test needs a real tool result receipt to project safely.",
+          nextStep: "Use the model-visible tool result and durable transcript projection for assertions.",
+        },
+      );
       modelVisibleToolResult = await input.executeTool({
         name: "web_read",
         args: { url: "https://example.test/runtime-source" },
@@ -3651,6 +5355,7 @@ test("native runtime stores privacy-safe replayable evidence receipts for tool r
 });
 
 test("native runtime redacts raw tool failure errors in durable transcripts", async () => {
+  let observedToolResult: Record<string, unknown> | null = null;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -3658,14 +5363,28 @@ test("native runtime redacts raw tool failure errors in durable transcripts", as
       throw new Error("failed with token=abc123opaque api_key=sk_live_abc123 raw prompt text <think>hidden</think> /Users/private/file");
     },
     runFunctionToolPromptText: async (input) => {
-      await input.executeTool({
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: 공개 페이지 읽기 오류의 redaction 경로를 확인합니다.",
+          "rationale: 원시 도구 실패가 transcript와 모델 관찰에 비밀값 없이 남아야 합니다.",
+          "next_step: 실패 결과를 검사해 안전한 오류 요약만 보존되는지 확인합니다.",
+        ].join("\n"),
+        toolCalls: [{
+          name: "web_read",
+          args: {
+            url: "https://example.test/private-error",
+            token: "abc123opaque",
+          },
+        }],
+      });
+      observedToolResult = await input.executeTool({
         name: "web_read",
         args: {
           url: "https://example.test/private-error",
           token: "abc123opaque",
         },
         rawArguments: JSON.stringify({ url: "https://example.test/private-error", token: "abc123opaque" }),
-      });
+      }) as Record<string, unknown>;
       return "오류를 복구 가능한 결과로 받았습니다.";
     },
   });
@@ -3698,12 +5417,32 @@ test("native runtime redacts raw tool failure errors in durable transcripts", as
     ok: false,
     error: "Tool execution failed.",
   });
+  expect(toolResult?.payload.observation).toMatchObject({
+    summary: expect.stringContaining("Tool execution failed with redacted private details."),
+    modelVisibleContent: expect.stringContaining("Tool execution failed with redacted private details."),
+  });
+  expect(observedToolResult).toMatchObject({
+    ok: false,
+    summary: expect.stringContaining("Tool execution failed with redacted private details."),
+    model_visible_content: expect.stringContaining("Tool execution failed with redacted private details."),
+  });
   const serialized = JSON.stringify(transcript);
-  expect(serialized).not.toContain("abc123opaque");
-  expect(serialized).not.toContain("sk_live_abc123");
-  expect(serialized).not.toContain("raw prompt text");
-  expect(serialized).not.toContain("<think>");
-  expect(serialized).not.toContain("/Users/private");
+  const observation = toolResult?.payload.observation as { modelVisibleContent?: unknown } | undefined;
+  const persistedObservation = JSON.stringify(observation);
+  const modelVisibleContent = String(observation?.modelVisibleContent ?? "");
+  for (const privateText of [
+    "abc123opaque",
+    "sk_live_abc123",
+    "raw prompt text",
+    "<think>",
+    "/Users/private",
+  ]) {
+    expect(toolResult?.payload.error).not.toContain(privateText);
+    expect(persistedObservation).not.toContain(privateText);
+    expect(modelVisibleContent).not.toContain(privateText);
+    expect(JSON.stringify(observedToolResult)).not.toContain(privateText);
+    expect(serialized).not.toContain(privateText);
+  }
 });
 
 test("native runtime satisfies source verification from tool capability audit contracts", async () => {
@@ -3749,7 +5488,7 @@ test("native runtime satisfies source verification from tool capability audit co
         });
         return "현재 카탈로그를 확인했습니다.";
       }
-      expect(input.prompt).toContain("Goal Completion Review");
+      expect(input.prompt).not.toContain("Goal Completion Review");
       return "현재 카탈로그를 확인했습니다.";
     },
   });
@@ -4072,16 +5811,53 @@ test("completion obligation guard allows educational code examples without proto
   })).toBeNull();
 });
 
-test("native runtime refuses delivered when artifact review keeps returning text-environment apology", async () => {
+test("native runtime continues artifact review gaps until executable evidence appears", async () => {
+  let attempts = 0;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
-    executeButlerTool: async () => ({
-      source_url: "https://example.test/population",
-      title: "인구 통계",
-      text: "서울 9300000 부산 3300000 인천 3000000",
-    }),
+    executeButlerTool: async (call) => {
+      if (call.name === "run_command") {
+        return {
+          ok: true,
+          exit_code: 0,
+          stdout_preview: "wrote population.csv and population.png",
+          evidence_capability_receipts: [
+            capabilityReceipt({
+              id: "receipt-population-command",
+              producerName: "run_command",
+              capability: "command_executed",
+              evidenceKind: "execution_result",
+              satisfies: ["command_executed"],
+              reference: { task_id: "population-command" },
+            }),
+            capabilityReceipt({
+              id: "receipt-population-chart",
+              producerName: "run_command",
+              capability: "chart_rendered",
+              evidenceKind: "artifact",
+              satisfies: ["chart_rendered"],
+              reference: { artifact_id: "population.png" },
+            }),
+          ],
+        };
+      }
+      return {
+        source_url: "https://example.test/population",
+        title: "인구 통계",
+        text: "서울 9300000 부산 3300000 인천 3000000",
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "receipt-population-source",
+          producerName: "web_read",
+          capability: "source_verified",
+          evidenceKind: "source_page",
+          satisfies: ["source_verified"],
+          reference: { url: "https://example.test/population" },
+        })],
+      };
+    },
     runFunctionToolPromptText: async (input) => {
+      attempts += 1;
       if (!input.prompt.includes("Goal Completion Review")) {
         await input.onAssistantTextBeforeTools?.({
           text: "summary: 공개 출처 본문을 확인합니다.\nrationale: 수치가 실제 본문 근거를 가져야 합니다.\nnext_step: 확인한 수치로 CSV 파일과 차트 이미지를 생성합니다.\ncompletion_obligations: source_verified, command_executed",
@@ -4093,6 +5869,23 @@ test("native runtime refuses delivered when artifact review keeps returning text
           rawArguments: JSON.stringify({ url: "https://example.test/population" }),
         });
       }
+      if (attempts >= 4) {
+        await authorPublicDecisionForTool(
+          input,
+          { name: "run_command", args: { command: "python scripts/render_population.py" } },
+          {
+            summary: "CSV와 matplotlib 차트 파일을 실제 명령으로 생성합니다.",
+            rationale: "완료 검토가 요구한 실행 증거와 차트 산출물 증거를 남겨야 합니다.",
+            nextStep: "실행 결과를 근거로 최종 보고를 완료합니다.",
+          },
+        );
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "python scripts/render_population.py" },
+          rawArguments: JSON.stringify({ command: "python scripts/render_population.py" }),
+        });
+        return "CSV와 matplotlib 차트 파일을 실행 결과로 생성하고 보고했습니다.";
+      }
       return "CSV는 본문에 적었고, matplotlib 차트는 텍스트 기반 응답 환경이라 이미지 파일로 직접 제공해 드리지 못합니다.";
     },
   });
@@ -4103,24 +5896,63 @@ test("native runtime refuses delivered when artifact review keeps returning text
     systemPrompt: "You are Butler.",
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-4",
     input: { text: "공개 자료를 확인하고 CSV와 matplotlib 차트를 만들어 보고해 주세요." },
-  })).rejects.toThrow("command_executed");
+  });
+  expect(attempts).toBeGreaterThan(3);
+  expect(result.text).toContain("실행 결과로 생성");
 });
 
-test("native runtime refuses delivered when artifact review returns executable code instead of running it", async () => {
+test("native runtime continues executable-code gaps until tool execution evidence appears", async () => {
+  let attempts = 0;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
-    executeButlerTool: async () => ({
-      source_url: "https://example.test/population",
-      title: "인구 통계",
-      text: "서울 9300000 부산 3300000 인천 3000000",
-    }),
+    executeButlerTool: async (call) => {
+      if (call.name === "run_command") {
+        return {
+          ok: true,
+          exit_code: 0,
+          stdout_preview: "created chart artifact",
+          evidence_capability_receipts: [
+            capabilityReceipt({
+              id: "receipt-code-command",
+              producerName: "run_command",
+              capability: "command_executed",
+              evidenceKind: "execution_result",
+              satisfies: ["command_executed"],
+              reference: { task_id: "chart-command" },
+            }),
+            capabilityReceipt({
+              id: "receipt-code-chart",
+              producerName: "run_command",
+              capability: "chart_rendered",
+              evidenceKind: "artifact",
+              satisfies: ["chart_rendered"],
+              reference: { artifact_id: "chart.png" },
+            }),
+          ],
+        };
+      }
+      return {
+        source_url: "https://example.test/population",
+        title: "인구 통계",
+        text: "서울 9300000 부산 3300000 인천 3000000",
+        evidence_capability_receipts: [capabilityReceipt({
+          id: "receipt-code-source",
+          producerName: "web_read",
+          capability: "source_verified",
+          evidenceKind: "source_page",
+          satisfies: ["source_verified"],
+          reference: { url: "https://example.test/population" },
+        })],
+      };
+    },
     runFunctionToolPromptText: async (input) => {
+      attempts += 1;
       if (!input.prompt.includes("Goal Completion Review")) {
         await input.onAssistantTextBeforeTools?.({
           text: [
@@ -4136,6 +5968,23 @@ test("native runtime refuses delivered when artifact review returns executable c
           args: { url: "https://example.test/population" },
           rawArguments: JSON.stringify({ url: "https://example.test/population" }),
         });
+      }
+      if (attempts >= 4) {
+        await authorPublicDecisionForTool(
+          input,
+          { name: "run_command", args: { command: "python scripts/render_chart.py" } },
+          {
+            summary: "차트 코드를 실행해 파일 산출물을 생성합니다.",
+            rationale: "완료 검토가 코드 예시가 아니라 실제 실행 증거를 요구합니다.",
+            nextStep: "실행된 산출물 증거를 바탕으로 최종 보고를 완료합니다.",
+          },
+        );
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "python scripts/render_chart.py" },
+          rawArguments: JSON.stringify({ command: "python scripts/render_chart.py" }),
+        });
+        return "차트 코드를 실행해 파일 산출물을 만들고 보고했습니다.";
       }
       return [
         "요청하신 데이터를 바탕으로 차트 코드를 작성했습니다.",
@@ -4154,12 +6003,14 @@ test("native runtime refuses delivered when artifact review returns executable c
     systemPrompt: "You are Butler.",
   });
 
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-4",
     input: { text: "공개 자료를 확인하고 CSV와 matplotlib 차트를 만들어 보고해 주세요." },
-  })).rejects.toThrow("command_executed");
+  });
+  expect(attempts).toBeGreaterThan(3);
+  expect(result.text).toContain("실행해 파일 산출물");
 });
 
 test("native runtime can disable default completion review through typed metadata", async () => {
@@ -4327,6 +6178,15 @@ test("native runtime lets the model expand local conversation context when the m
     runFunctionToolPromptText: async (input) => {
       capturedPrompt = input.prompt;
       expect(input.prompt).not.toContain("Conversation context may be under-specified");
+      await authorPublicDecisionForTool(
+        input,
+        { name: "read_conversation_context", args: { query: "항목A", limit: 4 } },
+        {
+          summary: "이전 대화에서 항목A 단서를 확인합니다.",
+          rationale: "최근 대화 예산이 작아 필요한 맥락을 직접 조회해야 합니다.",
+          nextStep: "조회한 맥락으로 항목A 단계를 답합니다.",
+        },
+      );
       const context = await input.executeTool({
         name: "read_conversation_context",
         args: { query: "항목A", limit: 4 },
@@ -4738,11 +6598,29 @@ test("native runtime uses structured current user text for gateway memory recall
     runFunctionToolPromptText: async (input) => {
       expect(input.prompt).toContain(actualCue);
       expect(input.prompt).not.toContain(promptContextText);
+      await authorPublicDecisionForTool(
+        input,
+        { name: "recall_memory", args: { cue: actualCue } },
+        {
+          summary: "현재 사용자 질문으로 연상 기억을 확인합니다.",
+          rationale: "정확한 과거 대화를 찾기 전에 관련 후보를 좁혀야 합니다.",
+          nextStep: "연상 후보 다음에 정확한 기록을 조회합니다.",
+        },
+      );
       await input.executeTool({
         name: "recall_memory",
         args: { cue: actualCue },
         rawArguments: JSON.stringify({ cue: actualCue }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "query_memory", args: { order: "earliest", limit: 1 } },
+        {
+          summary: "첫 대화 기록을 정확히 조회합니다.",
+          rationale: "연상 후보만으로 날짜를 답하지 않고 원 기록을 확인해야 합니다.",
+          nextStep: "조회한 기록으로 첫 대화 날짜를 답합니다.",
+        },
+      );
       await input.executeTool({
         name: "query_memory",
         args: { order: "earliest", limit: 1 },
@@ -4991,21 +6869,57 @@ test("native runtime exposes Project Ledger project context without forcing tool
         task: "프로젝트 세션 품질 조정을 구현한다.",
         acceptance_criteria: ["Ledger 상태와 작업 조회 뒤 계획 작업을 시작한다."],
       };
+      await authorPublicDecisionForTool(
+        input,
+        { name: "inspect_project_status", args: {} },
+        {
+          summary: "Project Ledger 상태를 먼저 확인합니다.",
+          rationale: "계획형 작업을 시작하기 전에 현재 프로젝트 상태를 알아야 합니다.",
+          nextStep: "상태 확인 뒤 필요한 작업 항목을 조회합니다.",
+        },
+      );
       await input.executeTool({
         name: "inspect_project_status",
         args: {},
         rawArguments: "{}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "query_project_work", args: { kind: "next-actions" } },
+        {
+          summary: "Project Ledger 다음 작업을 조회합니다.",
+          rationale: "새 계획 작업이 기존 작업 흐름과 충돌하지 않게 해야 합니다.",
+          nextStep: "조회 결과를 바탕으로 계획 작업을 생성합니다.",
+        },
+      );
       await input.executeTool({
         name: "query_project_work",
         args: { kind: "next-actions" },
         rawArguments: "{\"kind\":\"next-actions\"}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "create_planned_task", args: plannedTaskArgs },
+        {
+          summary: "품질 조정 계획 작업을 생성합니다.",
+          rationale: "프로젝트 작업은 추적 가능한 계획 작업으로 진행해야 합니다.",
+          nextStep: "생성된 계획 작업을 실행합니다.",
+        },
+      );
       await input.executeTool({
         name: "create_planned_task",
         args: plannedTaskArgs,
         rawArguments: "{\"title\":\"품질 조정\"}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_planned_task", args: { task_id: "planned-quality" } },
+        {
+          summary: "생성된 품질 조정 계획 작업을 실행합니다.",
+          rationale: "작업 생성만으로는 구현이 시작되지 않으므로 실행이 필요합니다.",
+          nextStep: "실행 시작 결과를 사용자에게 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "run_planned_task",
         args: { task_id: "planned-quality" },
@@ -5064,6 +6978,15 @@ test("native runtime does not force broad project investigations into planned di
     runFunctionToolPromptText: async (input) => {
       prompts.push(input.prompt);
       expect(input.tools.map((tool) => tool.name)).toContain("run_command");
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command: "find . -maxdepth 2 -type f" } },
+        {
+          summary: "프로젝트 파일 구조를 직접 확인합니다.",
+          rationale: "광범위한 프로젝트 조사는 로컬 파일 근거가 있어야 합니다.",
+          nextStep: "확인한 파일 목록으로 프로젝트 특징을 정리합니다.",
+        },
+      );
       await input.executeTool({
         name: "run_command",
         args: { command: "find . -maxdepth 2 -type f" },
@@ -5115,6 +7038,15 @@ test("native runtime stops executing tools after turn cancellation", async () =>
       return { ok: true };
     },
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command: "pwd" } },
+        {
+          summary: "취소 전 첫 명령만 실행합니다.",
+          rationale: "테스트는 취소 이후 추가 도구가 실행되지 않는지 확인합니다.",
+          nextStep: "첫 실행 뒤 취소 신호를 확인합니다.",
+        },
+      );
       await input.executeTool({
         name: "run_command",
         args: { command: "pwd" },
@@ -5254,11 +7186,29 @@ test("model-selected public evidence toolchain still receives structural citatio
       const toolNames = input.tools.map((tool) => tool.name);
       expect(toolNames).toContain("web_search");
       expect(toolNames).toContain("web_read");
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_search", args: { query: "오늘 샘플 뉴스" } },
+        {
+          summary: "오늘 샘플 뉴스 후보 출처를 검색합니다.",
+          rationale: "기사 핵심을 답하려면 공개 출처 후보가 필요합니다.",
+          nextStep: "검색 결과에서 원문 본문을 읽습니다.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: { query: "오늘 샘플 뉴스" },
         rawArguments: "{\"query\":\"오늘 샘플 뉴스\"}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "web_read", args: { url: "https://example.com/sample-news" } },
+        {
+          summary: "선택한 샘플 뉴스 원문을 읽습니다.",
+          rationale: "검색 후보만으로는 원문 본문 근거를 확인할 수 없습니다.",
+          nextStep: "본문 근거로 핵심을 답합니다.",
+        },
+      );
       await input.executeTool({
         name: "web_read",
         args: { url: "https://example.com/sample-news" },
@@ -5355,6 +7305,15 @@ test("native runtime does not apply user-action grounding guard to worker comple
 test("native runtime records Butler tool call and result in transcript", async () => {
   const runtime = new NativeToolLoopRuntime({
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "list_tasks", args: { limit: 3 } },
+        {
+          summary: "현재 작업 큐 상태를 확인합니다.",
+          rationale: "사용자가 작업 큐를 물었으므로 실제 작업 목록을 조회해야 합니다.",
+          nextStep: "조회한 작업 상태를 간단히 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "list_tasks",
         args: { limit: 3 },
@@ -5391,6 +7350,15 @@ test("native runtime unwraps tool_call through audited target dispatch", async (
     butlerHome: tempDir,
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_call", args: { id: "native:get_context_monitor", arguments: {} } },
+        {
+          summary: "컨텍스트 상태 확인 도구를 호출합니다.",
+          rationale: "감사 경로가 실제 대상 도구 호출을 기록하는지 확인해야 합니다.",
+          nextStep: "대상 도구 결과를 바탕으로 상태를 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "tool_call",
         args: { id: "native:get_context_monitor", arguments: {} },
@@ -5431,12 +7399,7 @@ test("native runtime unwraps tool_call through audited target dispatch", async (
     event.metadata?.tool_surface_transition === "invoked",
   )).toBe(true);
   const toolStarts = events.filter((event) => event.kind === "tool.started");
-  expect(toolStarts.map((event) => event.payload?.toolName)).toEqual(
-    expect.arrayContaining(["Tool Call", "Get Context Monitor"]),
-  );
-  expect(toolStarts.findIndex((event) => event.payload?.toolName === "Tool Call")).toBeLessThan(
-    toolStarts.findIndex((event) => event.payload?.toolName === "Get Context Monitor"),
-  );
+  expect(toolStarts.map((event) => event.payload?.toolName)).toEqual(["Get Context Monitor"]);
 });
 
 test("native runtime records bridge audit metadata for bridged target failures", async () => {
@@ -5445,11 +7408,29 @@ test("native runtime records bridge audit metadata for bridged target failures",
     butlerHome: tempDir,
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_describe", args: { ids: ["native:web_search"] } },
+        {
+          summary: "검색 도구 설명을 확인합니다.",
+          rationale: "실패 경로를 확인하기 전에 대상 도구 정보를 알아야 합니다.",
+          nextStep: "설명된 검색 도구를 짧은 쿼리로 호출합니다.",
+        },
+      );
       await input.executeTool({
         name: "tool_describe",
         args: { ids: ["native:web_search"] },
         rawArguments: JSON.stringify({ ids: ["native:web_search"] }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_call", args: { id: "native:web_search", arguments: { query: "x" } } },
+        {
+          summary: "검색 도구의 실패 경로를 확인합니다.",
+          rationale: "감사 메타데이터가 대상 실패를 안전하게 남기는지 확인해야 합니다.",
+          nextStep: "실패 결과의 감사 정보를 검증합니다.",
+        },
+      );
       await input.executeTool({
         name: "tool_call",
         args: { id: "native:web_search", arguments: { query: "x" } },
@@ -5495,16 +7476,26 @@ test("native runtime records bridge audit metadata for bridged target failures",
 });
 
 test("native runtime records bridge audit metadata for tool_call resolution failures", async () => {
+  let bridgeResult: Record<string, unknown> | null = null;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     butlerHome: tempDir,
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
-      await input.executeTool({
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_search", args: { provider: "native", query: "SECRET_TOKEN_123 web search" } },
+        {
+          summary: "필요한 검색 관련 도구를 찾습니다.",
+          rationale: "도구 검색 감사 정보가 민감한 검색 원문 없이 남는지 확인해야 합니다.",
+          nextStep: "도구 검색 결과의 감사 정보를 검증합니다.",
+        },
+      );
+      bridgeResult = await input.executeTool({
         name: "tool_call",
         args: { id: "native:missing_tool", arguments: { token: "SECRET_TOKEN_123" } },
         rawArguments: JSON.stringify({ id: "native:missing_tool", arguments: { token: "SECRET_TOKEN_123" } }),
-      });
+      }) as Record<string, unknown>;
       return "없는 도구 선택을 복구 가능한 결과로 받았습니다.";
     },
   });
@@ -5524,6 +7515,11 @@ test("native runtime records bridge audit metadata for tool_call resolution fail
   });
 
   const transcript = readTranscript("butler/main/progressive-tool-call-resolution-failure");
+  expect(bridgeResult).toMatchObject({
+    ok: false,
+    observation_kind: "tool_unavailable",
+    observation: { kind: "tool_unavailable" },
+  });
   const result = transcript.find((event) => event.kind === "tool_result" && event.payload.name === "tool_call");
   expect(result?.metadata?.bridge_audit).toEqual(expect.objectContaining({
     schema: "butler.bridge-tool-audit.v1",
@@ -5555,9 +7551,9 @@ test("native runtime records bridge audit metadata for tool_call resolution fail
   });
 });
 
-test("native runtime closes bridge progress rows when tool_call resolution throws", async () => {
+test("native runtime records bridge resolution failures without visible wrapper progress", async () => {
   const turnEvents: RuntimeTurnEventInput[] = [];
-  let caughtMessage = "";
+  let bridgeResult: Record<string, unknown> | null = null;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     butlerHome: tempDir,
@@ -5569,15 +7565,11 @@ test("native runtime closes bridge progress rows when tool_call resolution throw
       return { ok: true };
     },
     runFunctionToolPromptText: async (input) => {
-      try {
-        await input.executeTool({
-          name: "tool_call",
-          args: { id: "native:web_search", arguments: { query: "butler" } },
-          rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler" } }),
-        });
-      } catch (error) {
-        caughtMessage = error instanceof Error ? error.message : String(error);
-      }
+      bridgeResult = await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:web_search", arguments: { query: "butler" } },
+        rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler" } }),
+      }) as Record<string, unknown>;
       return "도구 호출 예외를 복구했습니다.";
     },
   });
@@ -5599,15 +7591,19 @@ test("native runtime closes bridge progress rows when tool_call resolution throw
     },
   });
 
-  expect(caughtMessage).toBe("resolve exploded");
+  expect(bridgeResult).toMatchObject({
+    ok: false,
+    observation_kind: "validation_failed",
+    observation: { kind: "validation_failed" },
+  });
   const bridgeStarted = turnEvents.find((event) =>
     event.kind === "tool.started" && event.payload?.toolName === "Tool Call",
   );
   const bridgeFailed = turnEvents.find((event) =>
     event.kind === "tool.failed" && event.payload?.toolName === "Tool Call",
   );
-  expect(bridgeStarted?.payload?.bridgePhase).toBe("invoke");
-  expect(bridgeFailed?.payload?.bridgePhase).toBe("denied");
+  expect(bridgeStarted).toBeUndefined();
+  expect(bridgeFailed).toBeUndefined();
   const transcript = readTranscript("butler/main/progressive-tool-call-throwing-resolution");
   expect(transcript.some((event) =>
     event.kind === "tool_result" &&
@@ -5617,12 +7613,119 @@ test("native runtime closes bridge progress rows when tool_call resolution throw
   )).toBe(true);
 });
 
+test("native runtime rethrows runtime-fault-shaped bridge resolution exceptions", async () => {
+  let bridgeResult: Record<string, unknown> | null = null;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    executeButlerTool: async (call) => {
+      if (call.name === "tool_call" && call.args.__bridge_resolve_only === true) {
+        const error = new Error("bridge invariant broke") as Error & { code?: string };
+        error.name = "RuntimeFaultError";
+        error.code = "runtime_fault";
+        throw error;
+      }
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      bridgeResult = await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:web_search", arguments: { query: "butler" } },
+        rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler" } }),
+      }) as Record<string, unknown>;
+      return "runtime fault should not become model-visible observation.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-runtime-fault",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "도구 호출 runtime fault를 확인해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  })).rejects.toThrow("bridge invariant broke");
+
+  expect(bridgeResult).toBeNull();
+  const transcript = readTranscript("butler/main/progressive-tool-call-runtime-fault");
+  expect(transcript.some((event) => {
+    return event.kind === "tool_result" &&
+      event.payload.name === "tool_call" &&
+      JSON.stringify(event.payload).includes("validation_failed");
+  })).toBe(false);
+});
+
+test("native runtime rethrows abort-shaped bridge resolution exceptions without bridge observations", async () => {
+  const controller = new AbortController();
+  let bridgeResult: Record<string, unknown> | null = null;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    executeButlerTool: async (call) => {
+      if (call.name === "tool_call" && call.args.__bridge_resolve_only === true) {
+        controller.abort();
+        const error = new Error("Runtime turn was cancelled.") as Error & { code?: string };
+        error.name = "AbortError";
+        throw error;
+      }
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      bridgeResult = await input.executeTool({
+        name: "tool_call",
+        args: { id: "native:web_search", arguments: { query: "butler" } },
+        rawArguments: JSON.stringify({ id: "native:web_search", arguments: { query: "butler" } }),
+      }) as Record<string, unknown>;
+      return "abort should not become model-visible observation.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/progressive-tool-call-abort",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "도구 호출 abort를 확인해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    signal: controller.signal,
+  })).rejects.toThrow("Runtime turn was cancelled.");
+
+  expect(bridgeResult).toBeNull();
+  const transcript = readTranscript("butler/main/progressive-tool-call-abort");
+  expect(transcript.some((event) => {
+    return event.kind === "tool_result" &&
+      event.payload.name === "tool_call" &&
+      JSON.stringify(event.payload).includes("validation_failed");
+  })).toBe(false);
+});
+
 test("native runtime records bridge audit metadata without raw search arguments", async () => {
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     butlerHome: tempDir,
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_search", args: { provider: "native", query: "web search" } },
+        {
+          summary: "필요한 검색 도구 후보를 찾습니다.",
+          rationale: "감사 메타데이터가 민감한 원문 없이 남는지 확인해야 합니다.",
+          nextStep: "도구 검색 감사 결과를 검증합니다.",
+        },
+      );
       await input.executeTool({
         name: "tool_search",
         args: { provider: "native", query: "SECRET_TOKEN_123 web search" },
@@ -5675,9 +7778,16 @@ test("native runtime dispatches workers only through model-selected tool calls",
     },
     runFunctionToolPromptText: async (input) => {
       expect(input.prompt).not.toContain("## Runtime Actions Already Executed");
-      if (input.prompt.includes("Final Result Contract Repair")) {
-        return "작업을 시작했습니다. 완료되면 결과만 정리해 보고드리겠습니다.";
-      }
+      expect(input.prompt).not.toContain("Final Result Contract Repair");
+      await authorPublicDecisionForTool(
+        input,
+        { name: "dispatch_worker", args: { task: "worker test" } },
+        {
+          summary: "워커 테스트 작업을 백그라운드로 시작합니다.",
+          rationale: "사용자가 워커 진행을 요청했으므로 모델이 직접 작업 시작을 선택했습니다.",
+          nextStep: "작업 시작 결과를 확인하고 후속 보고를 준비합니다.",
+        },
+      );
       await input.executeTool({
         name: "dispatch_worker",
         args: { task: "worker test" },
@@ -5705,8 +7815,7 @@ test("native runtime dispatches workers only through model-selected tool calls",
   expect(executed).toHaveLength(1);
   expect(executed[0]!.name).toBe("dispatch_worker");
   expect(executed[0]!.args).toEqual({ task: "worker test" });
-  expect(result.text).toBe("작업을 시작했습니다. 완료되면 결과만 정리해 보고드리겠습니다.");
-  expect(result.text).not.toContain("task-123");
+  expect(result.text).toContain("도구 실행 근거가 확인되지 않아");
 
   const transcript = readTranscript("butler/main");
   expect(transcript.some((event) =>
@@ -5814,6 +7923,15 @@ test("native runtime tolerates tool progress when no intermediate callback exist
     messageLanguage: "ko",
     executeButlerTool: async () => ({ ok: true }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "bash", args: { command: "bun test" } },
+        {
+          summary: "테스트 명령을 실행합니다.",
+          rationale: "중간 진행 콜백이 없어도 도구 실행이 안전하게 완료되어야 합니다.",
+          nextStep: "명령 완료 뒤 최종 답변을 반환합니다.",
+        },
+      );
       await input.executeTool({
         name: "bash",
         args: { command: "bun test" },
@@ -5857,6 +7975,21 @@ test("native runtime redacts complex tool progress command metadata", async () =
     messageLanguage: "ko",
     executeButlerTool: async () => ({ ok: true }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "bash",
+          args: {
+            command: `cat ${privatePath} api_key=sk-test token=super-token password=hunter2`,
+            nested: { secret: "nested-secret" },
+          },
+        },
+        {
+          summary: "민감한 명령 진행 상태의 공개 표시를 확인합니다.",
+          rationale: "테스트는 명령 진행 메타데이터가 안전하게 마스킹되는지 검증합니다.",
+          nextStep: "진행 메타데이터에 민감값이 남지 않았는지 확인합니다.",
+        },
+      );
       await input.executeTool({
         name: "bash",
         args: {
@@ -5940,6 +8073,20 @@ test("native runtime updates smart web search progress with planned queries", as
       },
     }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "web_search",
+          args: {
+            query: "젠레스 존 제로 현재 진행중인 이벤트 2026 5월 22 공식 HoYoverse Zenless Zone Zero events",
+          },
+        },
+        {
+          summary: "젠레스 존 제로 현재 이벤트를 공식 출처 중심으로 검색합니다.",
+          rationale: "진행 중인 이벤트 답변에는 최신 공개 검색 근거가 필요합니다.",
+          nextStep: "검색 계획과 결과를 바탕으로 확인 내용을 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "web_search",
         args: {
@@ -6058,6 +8205,28 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
         },
         rawArguments: JSON.stringify({ todos: [] }),
       });
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          todos: [
+            {
+              id: "collect",
+              content: "자료 수집하기",
+              active_form: "자료 수집하기",
+              status: "completed",
+              phase: "execution",
+            },
+            {
+              id: "chart",
+              content: "그래프 그리기",
+              active_form: "그래프 그리기",
+              status: "completed",
+              phase: "reporting",
+            },
+          ],
+        },
+        rawArguments: JSON.stringify({ todos: [] }),
+      });
       return "진행 단계를 정리했습니다.";
     },
   });
@@ -6100,7 +8269,7 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
   expect(progressActions.some((action) =>
     action.kind === "tool_progress" && action.activityKind !== "model",
   )).toBe(false);
-  expect(progressActions.filter((action) => action.kind === "todo_progress")).toEqual([
+  expect(progressActions.filter((action) => action.kind === "todo_progress")).toEqual(expect.arrayContaining([
     expect.objectContaining({
       safeLabel: "자료 수집하기",
       state: "running",
@@ -6111,10 +8280,10 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
       state: "accepted",
       phase: "reporting",
     }),
-  ]);
+  ]));
   expect(readTranscript("butler/main/todo-progress")
     .filter((event) => event.kind === "tool_call")
-    .map((event) => event.payload.name)).toEqual(["update_todo_list"]);
+    .map((event) => event.payload.name)).toEqual(["update_todo_list", "update_todo_list"]);
 });
 
 test("native runtime groups chained tools under the active semantic todo work block", async () => {
@@ -6140,15 +8309,38 @@ test("native runtime groups chained tools under the active semantic todo work bl
         args: { todos },
         rawArguments: JSON.stringify({ todos }),
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command: "pwd" } },
+        {
+          summary: "현재 프로젝트 위치를 확인합니다.",
+          rationale: "활성 작업 블록 안에서 로컬 상태 확인 명령을 실행해야 합니다.",
+          nextStep: "명령 산출물을 읽어 같은 작업 블록에서 이어갑니다.",
+        },
+      );
       await input.executeTool({
         name: "run_command",
         args: { command: "pwd" },
         rawArguments: "{\"command\":\"pwd\"}",
       });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "read_tool_output_artifact", args: { artifact_id: "artifact-1" } },
+        {
+          summary: "명령 산출물 아티팩트를 읽습니다.",
+          rationale: "같은 작업 블록의 후속 도구가 기존 산출물을 확인해야 합니다.",
+          nextStep: "아티팩트 확인 뒤 작업 항목을 완료 처리합니다.",
+        },
+      );
       await input.executeTool({
         name: "read_tool_output_artifact",
         args: { artifact_id: "artifact-1" },
         rawArguments: "{\"artifact_id\":\"artifact-1\"}",
+      });
+      await input.executeTool({
+        name: "update_todo_list",
+        args: { todos: [{ ...todos[0], status: "completed" }] },
+        rawArguments: JSON.stringify({ todos: [{ ...todos[0], status: "completed" }] }),
       });
       return "확인했습니다.";
     },
@@ -6267,9 +8459,116 @@ test("native runtime completes reporting WorkStream when final answer is deliver
     includeTerminal: true,
   });
   expect(streams).toHaveLength(1);
+  expect(streams[0].todo_list_id).toStartWith("turn-");
   expect(streams[0].state).toBe("complete");
   expect(streams[0].current_phase).toBeNull();
   expect(streams[0].active_step_id).toBeNull();
+});
+
+test("native runtime does not complete stale reporting WorkStream from another turn", async () => {
+  const sessionId = "butler/main/stale-reporting-not-completed";
+  const todoStore = new TodoListStore(tempDir);
+  const todoView = todoStore.update({
+    listId: "stale-reporting",
+    title: "Previous turn reporting",
+    items: [{
+      id: "report",
+      content: "Report previous work",
+      active_form: "Reporting previous work",
+      status: "in_progress",
+      phase: "reporting",
+    }],
+  });
+  const streamStore = new WorkStreamStore(tempDir);
+  const stale = streamStore.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: "stale-reporting",
+    title: "Previous turn reporting",
+    lastUserTurnId: "turn-previous",
+    items: todoView.list.items,
+  });
+  expect(stale.state).toBe("reporting");
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async () => "현재 턴은 별도 작업 없이 답변했습니다.",
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "짧게 답해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(streamStore.read(stale.id)).toMatchObject({
+    state: "reporting",
+    active_step_id: "report",
+    last_user_turn_id: "turn-previous",
+  });
+});
+
+test("native runtime ignores stale unfinished direct WorkStreams when closing a new turn", async () => {
+  const sessionId = "butler/main/stale-unfinished-not-blocking";
+  const todoStore = new TodoListStore(tempDir);
+  const todoView = todoStore.update({
+    listId: "stale-executing",
+    title: "이전 요청의 미완료 작업",
+    items: [{
+      id: "inspect",
+      content: "이전 요청 확인",
+      active_form: "이전 요청 확인 중",
+      status: "in_progress",
+      phase: "execution",
+    }],
+  });
+  const streamStore = new WorkStreamStore(tempDir);
+  const stale = streamStore.updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: todoView.list.list_id,
+    title: todoView.list.title ?? "이전 요청의 미완료 작업",
+    items: todoView.list.items,
+    lastUserTurnId: "turn-previous",
+  });
+  expect(stale.state).toBe("executing");
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async () => "새 요청은 별도 근거 없이 답변 가능합니다.",
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "새 요청은 짧게 답해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toBe("새 요청은 별도 근거 없이 답변 가능합니다.");
+  expect(result.text).not.toContain("아직 완료라고 보고할 수 있는 상태");
+  expect(streamStore.read(stale.id)).toMatchObject({
+    state: "executing",
+    active_step_id: "inspect",
+    last_user_turn_id: "turn-previous",
+  });
 });
 
 test("native runtime continues instead of delivering while direct todo work is unfinished", async () => {
@@ -6301,7 +8600,7 @@ test("native runtime continues instead of delivering while direct todo work is u
   const finalTodos = [
     { ...firstTodos[0], status: "completed" as const },
     { ...firstTodos[1], status: "completed" as const },
-    { ...firstTodos[2], status: "in_progress" as const },
+    { ...firstTodos[2], status: "completed" as const },
   ];
   const defaultExecutor = createButlerToolExecutor({
     butlerHome: tempDir,
@@ -6342,6 +8641,15 @@ test("native runtime continues instead of delivering while direct todo work is u
           },
           rawArguments: JSON.stringify({ title: "컨텍스트 컴팩션 설계 리뷰", todos: firstTodos }),
         });
+        await authorPublicDecisionForTool(
+          input,
+          { name: "run_command", args: { command: "printf 'blank receipt fixture\\n'" } },
+          {
+            summary: "초기 설계 리뷰 명령을 실행합니다.",
+            rationale: "미완료 직접 작업이 남는 경우를 만들기 위해 실행 흔적이 필요합니다.",
+            nextStep: "명령 결과를 확인한 뒤 이어서 계속할지 판단합니다.",
+          },
+        );
         await input.executeTool({
           name: "run_command",
           args: { command: "printf 'blank receipt fixture\\n'" },
@@ -6350,6 +8658,20 @@ test("native runtime continues instead of delivering while direct todo work is u
         return "파일 탐색부터 시작하겠다냐.";
       }
       continuationPrompt = input.prompt;
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "run_command",
+          args: {
+            command: "printf 'packages/butler-agent/src/agent/context/budget.ts\\npackages/butler-agent/src/agent/context/compaction.ts\\n'",
+          },
+        },
+        {
+          summary: "컴팩션 관련 핵심 파일을 확인합니다.",
+          rationale: "직접 작업을 완료하려면 실제 파일 근거가 필요합니다.",
+          nextStep: "확인한 파일 근거를 바탕으로 작업 항목을 완료합니다.",
+        },
+      );
       await input.executeTool({
         name: "run_command",
         args: {
@@ -6377,11 +8699,15 @@ test("native runtime continues instead of delivering while direct todo work is u
     systemPrompt: "You are Butler.",
   });
 
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-test",
     input: { text: "컨텍스트 컴팩션 설계에서 빠진 위험을 짧게 리뷰해줘." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
+    },
     metadata: {
       promptContext: [
         "## Active Persona Reminder",
@@ -6395,13 +8721,6 @@ test("native runtime continues instead of delivering while direct todo work is u
 
   expect(promptCalls).toBe(2);
   expect(continuationPrompt).toContain("Direct Work Continuation");
-  expect(continuationPrompt).toContain("Persona continuation");
-  expect(continuationPrompt).toContain("PERSONA_CONTINUATION_SENTINEL");
-  expect(continuationPrompt).toContain("Remaining direct steps");
-  expect(continuationPrompt).toContain("Continuity note");
-  expect(continuationPrompt).toContain("evidence 1: update_todo_list");
-  expect(continuationPrompt).toContain("evidence 2: run_command");
-  expect(continuationPrompt).not.toContain("receipts: same user request");
   expect(continuationPrompt).not.toContain("Final Delivery Blocked");
   expect(continuationPrompt).not.toContain("previous answer is not deliverable");
   expect(continuationPrompt).not.toContain("Continue the original user request now");
@@ -6409,8 +8728,11 @@ test("native runtime continues instead of delivering while direct todo work is u
   expect(continuationPrompt).not.toContain("Original turn prompt");
   expect(continuationPrompt.toLowerCase()).not.toContain("restart");
   expect(continuationPrompt.toLowerCase()).not.toContain("interruption");
+  expect(result.text).not.toContain("Direct work remains incomplete");
   expect(result.text).toContain("검토 완료");
-  expect(result.text).not.toContain("시작하겠다");
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.find((event) => event.kind === "turn.observation")?.payload)
+    .toMatchObject({ kind: "completion_gap" });
   const toolCalls = readTranscript("butler/main/open-direct-work-final-guard")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
@@ -6423,7 +8745,7 @@ test("native runtime continues instead of delivering while direct todo work is u
   expect(streams[0].state).toBe("complete");
 });
 
-test("native runtime keeps extending direct work while continuations make tool progress", async () => {
+test("native runtime does not keep extending direct work from finalization", async () => {
   let promptCalls = 0;
   const continuationPrompts: string[] = [];
   const todoForStage = (stage: number) => [
@@ -6469,6 +8791,26 @@ test("native runtime keeps extending direct work while continuations make tool p
       }
       continuationPrompts.push(input.prompt);
       const stage = promptCalls - 1;
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          `summary: WATL stage ${stage} 직접 작업을 실행합니다.`,
+          "rationale: 각 continuation이 남은 직접 작업을 실제 도구 실행으로 전진시켜야 합니다.",
+          "next_step: 명령 결과를 반영해 todo 상태를 다음 단계로 갱신합니다.",
+        ].join("\n"),
+        toolCalls: [
+          {
+            name: "run_command",
+            args: { command: `printf 'stage ${stage}\\n'` },
+          },
+          {
+            name: "update_todo_list",
+            args: {
+              title: "WATL 직접 구현",
+              todos: todoForStage(stage),
+            },
+          },
+        ],
+      });
       await input.executeTool({
         name: "run_command",
         args: { command: `printf 'stage ${stage}\\n'` },
@@ -6504,13 +8846,9 @@ test("native runtime keeps extending direct work while continuations make tool p
 
   expect(promptCalls).toBe(4);
   expect(continuationPrompts).toHaveLength(3);
-  expect(continuationPrompts.every((prompt) => prompt.includes("Direct Work Continuation")))
-    .toBe(true);
-  expect(continuationPrompts.every((prompt) => !prompt.includes("Final Delivery Blocked")))
-    .toBe(true);
-  expect(continuationPrompts.every((prompt) => prompt.includes("todo_list_id: main")))
-    .toBe(true);
-  expect(result.text).toContain("세 번째 continuation");
+  expect(continuationPrompts[0]).toContain("Direct Work Continuation");
+  expect(result.text).not.toContain("Direct work remains incomplete");
+  expect(result.text).toContain("완료했습니다");
   const toolCalls = readTranscript("butler/main/open-direct-work-multi-continuation")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
@@ -6529,6 +8867,71 @@ test("native runtime keeps extending direct work while continuations make tool p
   });
   expect(streams).toHaveLength(1);
   expect(streams[0].state).toBe("complete");
+});
+
+test("native runtime skips direct work finalization when model request reserve is exhausted", async () => {
+  let promptCalls = 0;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      promptCalls += 1;
+      if (promptCalls !== 1) {
+        throw new Error("finalization repair must not start without model request reserve");
+      }
+      for (let index = 0; index < 29; index += 1) {
+        input.usageAttribution?.beforeModelRequest?.({ roundIndex: index });
+      }
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          title: "예산 경계 직접 작업",
+          todos: [{
+            id: "finish",
+            content: "남은 구현 마무리",
+            active_form: "남은 구현 마무리 중",
+            status: "in_progress",
+            phase: "execution",
+          }],
+        },
+        rawArguments: JSON.stringify({
+          title: "예산 경계 직접 작업",
+          todos: [{
+            id: "finish",
+            content: "남은 구현 마무리",
+            active_form: "남은 구현 마무리 중",
+            status: "in_progress",
+            phase: "execution",
+          }],
+        }),
+      });
+      return "직접 작업이 아직 남아 있습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/open-direct-work-budget-reserve",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const events: Array<{ kind: string }> = [];
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "남은 구현을 계속 진행해줘." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  })).rejects.toThrow("Turn scheduler yielded");
+
+  expect(promptCalls).toBe(1);
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
 });
 
 test("native runtime stops direct work continuation when tools do not make semantic progress", async () => {
@@ -6571,6 +8974,9 @@ test("native runtime stops direct work continuation when tools do not make seman
           return "write_file 커밋이 아직 남아 있습니다.";
         }
         expect(input.prompt).toContain("Direct Work Continuation");
+        for (let index = 0; index < 29; index += 1) {
+          input.usageAttribution?.beforeModelRequest?.({ roundIndex: index });
+        }
         await input.executeTool({
           name: "run_command",
           args: { command: "git status --short" },
@@ -6587,22 +8993,27 @@ test("native runtime stops direct work continuation when tools do not make seman
       systemPrompt: "You are Butler.",
     });
 
-    const result = await runtime.runTurn({
+    const events: Array<{ kind: string }> = [];
+    await expect(runtime.runTurn({
       handle,
       provider: fakeProvider,
       model: "local/gemma-test",
       input: { text: "Issue #2 작업을 직접 완료하고 task마다 커밋해줘." },
+      emitTurnEvent: (event) => {
+        events.push({ kind: event.kind });
+      },
       metadata: { runtimePolicy: { completionReview: "disabled" } },
-    });
+    })).rejects.toThrow("Turn scheduler yielded");
 
-    expect(result.text).toContain("아직 완료라고 보고할 수 있는 상태까지는 도달하지 못했습니다.");
     expect(promptCalls).toBe(2);
     expect(executedCommands).toEqual(["git status --short"]);
+    expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+    expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
     const streams = new WorkStreamStore(tempDir).list({
       sessionId: "butler/main/open-direct-work-no-semantic-progress",
       includeTerminal: true,
     });
-    expect(streams[0]!.state).toBe("recoverable");
+    expect(streams[0]!.state).toBe("executing");
   } finally {
     if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
     else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;
@@ -6649,6 +9060,21 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
         }
         if (promptCalls === 2) {
           expect(input.prompt).toContain("Direct Work Continuation");
+          await input.onAssistantTextBeforeTools?.({
+            text: [
+              "summary: WorkStream을 검토 단계로 전환합니다.",
+              "rationale: 실행 근거가 준비된 뒤 FSM 전환이 직접 작업 진행으로 인정되어야 합니다.",
+              "next_step: 전환 결과를 바탕으로 남은 보고 단계를 이어갑니다.",
+            ].join("\n"),
+            toolCalls: [{
+              name: "update_work_stream_state",
+              args: {
+                state: "reviewing",
+                active_step_id: "review",
+                status_note: "Execution evidence is ready for review.",
+              },
+            }],
+          });
           await input.executeTool({
             name: "update_work_stream_state",
             args: {
@@ -6665,6 +9091,9 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
           return "검토 단계로 전환했습니다. 보고 단계가 아직 남아 있습니다.";
         }
         expect(input.prompt).toContain("Direct Work Continuation");
+        for (let index = 0; index < 29; index += 1) {
+          input.usageAttribution?.beforeModelRequest?.({ roundIndex: index });
+        }
         await input.executeTool({
           name: "update_todo_list",
           args: {
@@ -6730,16 +9159,21 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
       systemPrompt: "You are Butler.",
     });
 
-    const result = await runtime.runTurn({
+    const events: Array<{ kind: string }> = [];
+    await expect(runtime.runTurn({
       handle,
       provider: fakeProvider,
       model: "local/gemma-test",
       input: { text: "구현 근거를 확인하고 WorkStream 검토까지 직접 진행해줘." },
+      emitTurnEvent: (event) => {
+        events.push({ kind: event.kind });
+      },
       metadata: { runtimePolicy: { completionReview: "disabled" } },
-    });
+    })).rejects.toThrow("Turn scheduler yielded");
 
-    expect(result.text).toContain("FSM 전진");
     expect(promptCalls).toBe(3);
+    expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+    expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
     const toolCalls = readTranscript("butler/main/open-direct-work-fsm-progress")
       .filter((event) => event.kind === "tool_call")
       .map((event) => event.payload.name);
@@ -6753,7 +9187,7 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
       includeTerminal: true,
     });
     expect(streams).toHaveLength(1);
-    expect(streams[0].state).toBe("complete");
+    expect(streams[0].state).toBe("reviewing");
   } finally {
     if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
     else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;
@@ -6859,6 +9293,8 @@ test("native runtime does not emit turn failed before recoverable limited delive
   })).rejects.toThrow("missing evidence");
 
   expect(events.some((event) => event.kind === "turn.failed")).toBe(false);
+  expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
+  expect(events.map((event) => event.kind)).not.toContain("turn.outcome");
 });
 
 test("native runtime marks interrupted direct WorkStreams recoverable", async () => {
@@ -6917,6 +9353,144 @@ test("native runtime marks interrupted direct WorkStreams recoverable", async ()
   });
   const record = new WorkStreamStore(tempDir).read(streams[0].id);
   expect(record?.status_note).toContain("interrupted before final delivery");
+  const todoView = new TodoListStore(tempDir).view(record!.todo_list_id!, { includeCompleted: true });
+  expect(todoView.progress.active).toBe(2);
+  expect(todoView.items).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      id: "inspect",
+      status: "pending",
+      active_form: "긴 작업 상태 확인 중",
+    }),
+    expect.objectContaining({
+      id: "report",
+      status: "pending",
+    }),
+  ]));
+});
+
+test("native runtime resumes prompt-budget interrupted WorkStreams from durable todo state", async () => {
+  const sessionId = "butler/main/prompt-budget-continuation";
+  let callCount = 0;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      callCount += 1;
+      if (callCount === 1) {
+        await input.executeTool({
+          name: "update_todo_list",
+          args: {
+            title: "Sandy style guard validation",
+            todos: [{
+              id: "w3-style-guard",
+              content: "Inspect Sandy style guard validation evidence",
+              active_form: "Inspecting Sandy style guard validation evidence",
+              status: "in_progress",
+              phase: "execution",
+            }, {
+              id: "w4-report",
+              content: "Report Sandy style guard validation result",
+              active_form: "Reporting Sandy style guard validation result",
+              status: "pending",
+              phase: "reporting",
+            }],
+          },
+          rawArguments: JSON.stringify({ title: "Sandy style guard validation" }),
+        });
+        const error = new Error("Prompt usage model-call budget exhausted before provider request");
+        error.name = "PromptUsageModelCallBudgetExhaustedError";
+        Object.assign(error, { code: "prompt_usage_model_call_budget_exhausted" });
+        throw error;
+      }
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          title: "Sandy style guard validation",
+          todos: [{
+            id: "w3-style-guard",
+            content: "Inspect Sandy style guard validation evidence",
+            active_form: "Inspecting Sandy style guard validation evidence",
+            status: "completed",
+            phase: "execution",
+          }, {
+            id: "w4-report",
+            content: "Report Sandy style guard validation result",
+            active_form: "Reporting Sandy style guard validation result",
+            status: "completed",
+            phase: "reporting",
+          }],
+        },
+        rawArguments: JSON.stringify({ title: "Sandy style guard validation" }),
+      });
+      return "보존된 W3 작업 상태부터 이어서 검증했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const events: Array<{ kind: string; payload?: Record<string, unknown>; visibility?: string }> = [];
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "샌디봇 최신세션 W3부터 계속 진행해줘." },
+    emitTurnEvent: (event) => {
+      events.push({
+        kind: event.kind,
+        payload: event.payload as Record<string, unknown> | undefined,
+        visibility: event.visibility,
+      });
+    },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  })).rejects.toThrow("Turn scheduler yielded");
+
+  expect(callCount).toBe(1);
+  expect(events.map((event) => event.kind)).toContain("turn.observation");
+  expect(events.find((event) => event.kind === "turn.observation")).toMatchObject({
+    visibility: "internal",
+    payload: {
+      kind: "context_compacted",
+      visibility: "operator",
+    },
+  });
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+  const atom = readOnlyPersistedTurnContextAtom();
+  expect(atom).toMatchObject({
+    state: "continuing",
+    unresolvedObservations: [expect.objectContaining({
+      kind: "context_compacted",
+    })],
+  });
+
+  const streams = new WorkStreamStore(tempDir).list({ sessionId, includeTerminal: true });
+  expect(streams).toHaveLength(1);
+  expect(streams[0]).toMatchObject({
+    state: "executing",
+    terminal: false,
+  });
+  const record = new WorkStreamStore(tempDir).read(streams[0].id);
+  expect(record?.state).toBe("executing");
+  const todoView = new TodoListStore(tempDir).view(record!.todo_list_id!, { includeCompleted: true });
+  expect(todoView.progress.active).toBe(2);
+  expect(todoView.items)
+    .toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "w3-style-guard",
+        status: "in_progress",
+        active_form: "Inspecting Sandy style guard validation evidence",
+      }),
+      expect.objectContaining({
+        id: "w4-report",
+        status: "pending",
+      }),
+    ]));
 });
 
 test("native runtime synthesizes durable WorkStream progress when a compound tool turn skips todo setup", async () => {
@@ -7450,6 +10024,21 @@ test("native runtime persists task origin context when dispatch_worker succeeds"
       status: "RUNNING",
     }),
     runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "dispatch_worker",
+          args: {
+            task: "A 주제 차트를 생성하고 결과를 요약",
+            project_path: "fixtures/butler-project",
+          },
+        },
+        {
+          summary: "A 주제 차트 작업을 백그라운드에서 시작합니다.",
+          rationale: "작업 출처 맥락이 저장되는지 확인하려면 실제 작업 시작이 필요합니다.",
+          nextStep: "작업 시작 결과와 origin 정보를 확인합니다.",
+        },
+      );
       await input.executeTool({
         name: "dispatch_worker",
         args: {
@@ -7514,6 +10103,15 @@ test("native runtime inspects tasks only through model-selected tool calls", asy
     },
     runFunctionToolPromptText: async (input) => {
       expect(input.prompt).not.toContain("## Runtime Actions Already Executed");
+      await authorPublicDecisionForTool(
+        input,
+        { name: "list_tasks", args: { limit: 10 } },
+        {
+          summary: "최근 작업 큐 상태를 조회합니다.",
+          rationale: "사용자가 보낸 작업의 상태를 물었으므로 실제 작업 목록 확인이 필요합니다.",
+          nextStep: "조회한 작업 큐 상태를 사용자에게 보고합니다.",
+        },
+      );
       await input.executeTool({
         name: "list_tasks",
         args: { limit: 10 },

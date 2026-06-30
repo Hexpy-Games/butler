@@ -12,11 +12,22 @@ import { directWorkContinuationAttempts } from "../policy/turn-errors.ts";
 import type { NativeTurnRunnerDeps } from "./turn-runner-types.ts";
 import type { ToolAuditEntry } from "../output/tool-types.ts";
 import { WorkStreamStore, workStreamTerminal } from "../../../work/work-stream.ts";
+import {
+  directTurnModelRequestsRemaining,
+  hasDirectTurnModelRequestReserve,
+  type createDirectTurnBudget,
+} from "../../direct-turn-budget.ts";
+
+const DIRECT_WORK_FINALIZATION_MODEL_REQUEST_RESERVE = 2;
+const DIRECT_WORK_FINALIZATION_SYNTHESIS_REQUEST_ALLOWANCE = 1;
+const DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS = 8;
 
 export async function closeDirectWork(input: {
   turnInput: RuntimeTurnInput;
   deps: NativeTurnRunnerDeps;
   useTools: boolean;
+  turnId?: string | null;
+  turnBudget: ReturnType<typeof createDirectTurnBudget>;
   userText: string;
   finalText: string;
   audit: ToolAuditEntry[];
@@ -29,11 +40,21 @@ export async function closeDirectWork(input: {
     const blocker = finalDeliveryBlockerForOpenDirectWork({
       butlerData: input.deps.butlerData,
       sessionId: input.turnInput.handle.sessionId,
+      turnId: input.turnId,
     });
     if (!blocker) break;
+    if (!hasDirectTurnModelRequestReserve(
+      input.turnBudget,
+      DIRECT_WORK_FINALIZATION_MODEL_REQUEST_RESERVE,
+    )) {
+      break;
+    }
+    const repairModelRounds = directWorkFinalizationRepairRounds(input.turnBudget);
+    if (repairModelRounds <= 0) break;
     const workBeforeContinuation = activeDirectWorkProgressSnapshot({
       butlerData: input.deps.butlerData,
       sessionId: input.turnInput.handle.sessionId,
+      turnId: input.turnId,
     });
     finalText = await input.runToolPrompt(openDirectWorkContinuationPrompt({
       objective: input.userText,
@@ -43,16 +64,18 @@ export async function closeDirectWork(input: {
       ),
       audit: input.audit,
       blocker,
-    }), 8, "direct_work_continuation");
+    }), repairModelRounds, "direct_work_continuation");
     const workAfterContinuation = activeDirectWorkProgressSnapshot({
       butlerData: input.deps.butlerData,
       sessionId: input.turnInput.handle.sessionId,
+      turnId: input.turnId,
     });
     if (!directWorkSemanticProgressAdvanced(workBeforeContinuation, workAfterContinuation)) break;
   }
   const remainingBlocker = finalDeliveryBlockerForOpenDirectWork({
     butlerData: input.deps.butlerData,
     sessionId: input.turnInput.handle.sessionId,
+    turnId: input.turnId,
   });
   if (remainingBlocker) {
     markRemainingDirectWorkRecoverable({
@@ -69,6 +92,15 @@ export async function closeDirectWork(input: {
   return finalText;
 }
 
+function directWorkFinalizationRepairRounds(
+  turnBudget: ReturnType<typeof createDirectTurnBudget>,
+): number {
+  const spendable = directTurnModelRequestsRemaining(turnBudget) -
+    DIRECT_WORK_FINALIZATION_MODEL_REQUEST_RESERVE -
+    DIRECT_WORK_FINALIZATION_SYNTHESIS_REQUEST_ALLOWANCE;
+  return Math.max(0, Math.min(DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS, spendable));
+}
+
 function markRemainingDirectWorkRecoverable(input: {
   butlerData: string;
   sessionId: string;
@@ -76,8 +108,9 @@ function markRemainingDirectWorkRecoverable(input: {
 }): void {
   try {
     const store = new WorkStreamStore(input.butlerData);
-    const active = store.activeForSession(input.sessionId);
+    const active = store.read(input.blocker.id);
     if (!active || workStreamTerminal(active.state) || active.state === "recoverable") return;
+    if (active.owner_session_id !== input.sessionId) return;
     store.transition({
       id: active.id,
       state: "recoverable",
@@ -96,19 +129,17 @@ function recoverableDirectWorkDeliveryText(input: {
   const active = input.blocker.activeItems.at(0);
   if (input.language === "ko") {
     return [
-      "아직 완료라고 보고할 수 있는 상태까지는 도달하지 못했습니다.",
-      "",
-      `현재 작업은 \`${input.blocker.title}\`이고, ${input.blocker.phase ?? "현재"} 단계에서 다시 이어갈 수 있게 복구 상태로 남겨뒀습니다.`,
-      active ? `남은 항목: ${active.label}` : "남은 항목: active WorkStream이 아직 보고 가능한 상태가 아닙니다.",
+      `\`${input.blocker.title}\` 작업이 ${input.blocker.phase ?? "현재"} 단계에서 아직 완료 조건을 만족하지 못했습니다.`,
+      active ? `다음에 이어갈 항목: ${active.label}` : "다음에 이어갈 항목: 보고 가능한 상태까지 WorkStream 정리가 더 필요합니다.",
+      "상태: recoverable로 저장했습니다.",
       "",
       compactPriorText(input.finalText),
     ].filter(Boolean).join("\n");
   }
   return [
-    "I cannot honestly report this as complete yet.",
-    "",
-    `The current work is \`${input.blocker.title}\`, and I left it recoverable from the ${input.blocker.phase ?? "current"} phase.`,
-    active ? `Remaining item: ${active.label}` : "Remaining item: the active WorkStream is not reportable yet.",
+    `\`${input.blocker.title}\` has not met the completion condition in the ${input.blocker.phase ?? "current"} phase.`,
+    active ? `Next item to resume: ${active.label}` : "Next item to resume: the WorkStream still needs reportable closure.",
+    "State: saved as recoverable.",
     "",
     compactPriorText(input.finalText),
   ].filter(Boolean).join("\n");

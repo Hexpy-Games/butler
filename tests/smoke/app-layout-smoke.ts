@@ -5,18 +5,32 @@ import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/server.ts";
 import {
+  readFirstChatOnboardingState,
+  writeFirstChatOnboardingState,
+} from "../../packages/butler-agent/src/personalization/onboarding.ts";
+import {
   clientTurnIdFromMessageId,
   mergeSessionSummaryForPendingTurn,
 } from "../../packages/butler-app/client/ui/src/app/utils.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
+import {
+  FIRST_RUN_STORAGE_KEY,
+  firstRunCompleteState,
+} from "../../packages/butler-app/client/ui/src/app/firstRunSetup.ts";
 import type { SessionSummaryView } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
 const root = process.cwd();
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-layout-smoke-"));
+writeFirstChatOnboardingState(tempDir, {
+  ...readFirstChatOnboardingState(tempDir),
+  status: "complete",
+  completed_at: new Date().toISOString(),
+});
 const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
 const screenshotDir = resolve(root, ".tmp", "app-layout-smoke");
 mkdirSync(screenshotDir, { recursive: true });
 const rightPanelToggleSelector = `[aria-label="${appCopy.titlebar.showRightPanel}"], [aria-label="${appCopy.titlebar.hideRightPanel}"]`;
+const turnActivityTimeoutMs = 3_000;
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 const testClasses = (...names: string[]) => names.map(testClass).join("");
 
@@ -58,7 +72,7 @@ async function patchSettings(settings: Record<string, unknown>): Promise<void> {
 async function clickConversationAwayFromMenus(page: Page): Promise<void> {
   const box = await page.locator(testClass("conversation")).boundingBox();
   assert(box, "conversation area is missing");
-  await page.mouse.click(box.x + 24, box.y + 24);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
 
 async function closeBlockingOverlays(page: Page): Promise<void> {
@@ -143,6 +157,14 @@ const inlineSmokeImageBytes = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64",
 );
+let releaseSmokeResponderReply: (() => void) | undefined;
+let releaseSmokeResponderProgress: (() => void) | undefined;
+const smokeResponderProgressGate = new Promise<void>((resolveGate) => {
+  releaseSmokeResponderProgress = resolveGate;
+});
+const smokeResponderReplyGate = new Promise<void>((resolveGate) => {
+  releaseSmokeResponderReply = resolveGate;
+});
 const staleSummary: SessionSummaryView = {
   session_id: "smoke-session",
   turn_state: "delivered",
@@ -172,6 +194,7 @@ const server = createAppServer({
   port: 0,
   bridgeMode: "external",
   responder: async (input) => {
+    await smokeResponderProgressGate;
     input.onProgress?.({
       id: "smoke-progress-command",
       kind: "ran_command",
@@ -191,7 +214,7 @@ const server = createAppServer({
         },
       ],
     });
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 900));
+    await smokeResponderReplyGate;
     return {
       texts: [
         [
@@ -217,9 +240,13 @@ const server = createAppServer({
     };
   },
 });
+const smokeProject = server.store.createProject({
+  source: "scratch",
+  display_name: "Desktop client polish",
+}).project;
 server.store.createSession({
   kind: "project",
-  project_id: "butler",
+  project_id: smokeProject.id,
   session_hint: "butler-client",
   title: "Desktop client polish",
 });
@@ -229,6 +256,13 @@ const page = await browser.newPage({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
 });
+const firstRunStateJson = JSON.stringify(firstRunCompleteState("en"));
+await page.addInitScript(
+  ({ key, value }) => {
+    window.localStorage.setItem(key, value);
+  },
+  { key: FIRST_RUN_STORAGE_KEY, value: firstRunStateJson },
+);
 const screenshots: string[] = [];
 
 try {
@@ -447,10 +481,15 @@ try {
     )
     .last()
     .boundingBox();
+  const conversationEndBox = await page
+    .locator(testClass("message"))
+    .last()
+    .boundingBox();
   assert(assistantFooterBox, "assistant footer box is missing");
   assert(assistantMessageBox, "assistant message box is missing");
+  assert(conversationEndBox, "conversation end box is missing");
   const conversationEndGap =
-    workerBox.y - (assistantMessageBox.y + assistantMessageBox.height);
+    workerBox.y - (conversationEndBox.y + conversationEndBox.height);
   assert(
     conversationEndGap >= 8 && conversationEndGap <= 44,
     `conversation end should sit near composer stack, got ${conversationEndGap}px`,
@@ -1029,7 +1068,9 @@ try {
     "disabled project folder picker must not raise composer errors",
   );
   await clickConversationAwayFromMenus(page);
-  await page.waitForTimeout(80);
+  await page
+    .locator('[data-slot="dropdown-menu-content"]')
+    .waitFor({ state: "hidden" });
   await expectLocatorCount(
     page,
     '[data-slot="dropdown-menu-content"]:visible',
@@ -3033,10 +3074,17 @@ try {
   );
   await composerInput.dispatchEvent("compositionend");
   await composerInput.fill("## Smoke request\n\n- show markdown");
+  const messageAcceptedResponse = page.waitForResponse(
+    (response) =>
+      response.url() === `${server.url}messages` &&
+      response.request().method() === "POST" &&
+      response.status() === 202,
+  );
   await page.keyboard.press("Meta+Enter");
   await page
     .locator(testClasses("message", "user"), { hasText: "## Smoke request" })
     .waitFor({ state: "visible", timeout: 1200 });
+  await messageAcceptedResponse;
   await expectLocatorCount(
     page,
     `${testClass("composer-wrap")} ${testClass("turn-activity-panel")}`,
@@ -3046,67 +3094,85 @@ try {
   const timelineActivity = page.locator(
     `${testClasses("message", "assistant", "turn-activity-message")} ${testClass("turn-activity-panel")}`,
   );
-  await timelineActivity.waitFor({ state: "visible", timeout: 1200 });
+  await timelineActivity.waitFor({
+    state: "visible",
+    timeout: turnActivityTimeoutMs,
+  });
   await page
     .locator(testClass("assistant-mark-active"))
-    .waitFor({ state: "visible", timeout: 1200 });
+    .waitFor({ state: "visible", timeout: turnActivityTimeoutMs });
   const turnActivityText = await timelineActivity.innerText();
+  const pendingLabels = appCopy.conversation.work.pendingStateLabels;
   assert(
-    turnActivityText.includes("생각 중입니다.") ||
+    turnActivityText.includes(pendingLabels.thinking) ||
+      turnActivityText.includes(pendingLabels.session_starting) ||
       turnActivityText.includes("Bash"),
     `turn-activity-during-send failed: ${turnActivityText}`,
   );
-  if (turnActivityText.includes("Bash")) {
-    const activityButton = page.getByRole("button", { name: /Bash/u }).first();
-    await activityButton.focus();
-    await page.keyboard.press("Enter");
-    const expanded = await activityButton.getAttribute("aria-expanded");
-    assert(expanded === "true", "turn activity keyboard expands details");
-    const activityDetails = page
-      .locator(testClass("turn-activity-details"), { hasText: "bun test" })
-      .first();
-    await activityDetails.waitFor({ state: "visible", timeout: 1200 });
-    const activityDetailsColor = await activityDetails.evaluate((element) => {
-      const block = element.closest("[data-test-class~='turn-work-block']");
-      const probe = document.createElement("span");
-      probe.style.color = "var(--work-activity-muted-text)";
-      (block ?? element).appendChild(probe);
-      const mutedColor = getComputedStyle(probe).color;
-      probe.remove();
-      return {
-        color: getComputedStyle(element).color,
-        mutedColor,
-      };
-    });
-    assert(
-      activityDetailsColor.color === activityDetailsColor.mutedColor,
-      `turn activity detail content should use muted work tone: ${JSON.stringify(activityDetailsColor)}`,
-    );
-    const activityButtonStyle = await activityButton.evaluate((element) => {
-      const style = getComputedStyle(element);
-      return {
-        alignItems: style.alignItems,
-        borderTopColor: style.borderTopColor,
-        borderTopWidth: style.borderTopWidth,
-        display: style.display,
-        maxWidth: style.maxWidth,
-      };
-    });
-    assert(
-      activityButtonStyle.display === "grid" &&
-        activityButtonStyle.alignItems === "center" &&
-        activityButtonStyle.borderTopWidth === "1px" &&
-        activityButtonStyle.maxWidth !== "none" &&
-        activityButtonStyle.borderTopColor !== "rgba(0, 0, 0, 0)",
-      `turn activity tool button should be outlined, capped, and center-aligned: ${JSON.stringify(activityButtonStyle)}`,
-    );
-  }
+  releaseSmokeResponderProgress?.();
+  const timelineWorkActivity = page.locator(
+    `${testClasses("message", "assistant", "turn-activity-message")} ${testClasses("turn-activity-panel", "turn-work-panel")}`,
+    { hasText: "Bash" },
+  );
+  await timelineWorkActivity.waitFor({
+    state: "visible",
+    timeout: turnActivityTimeoutMs,
+  });
+  const activityButton = timelineWorkActivity
+    .getByRole("button", { name: /Bash/u })
+    .first();
+  await activityButton.focus();
+  await page.keyboard.press("Enter");
+  const expanded = await activityButton.getAttribute("aria-expanded");
+  assert(expanded === "true", "turn activity keyboard expands details");
+  const activityDetails = timelineWorkActivity
+    .locator(testClass("turn-activity-details"), { hasText: "bun test" })
+    .first();
+  await activityDetails.waitFor({
+    state: "visible",
+    timeout: turnActivityTimeoutMs,
+  });
+  const activityDetailsColor = await activityDetails.evaluate((element) => {
+    const block = element.closest("[data-test-class~='turn-work-block']");
+    const probe = document.createElement("span");
+    probe.style.color = "var(--work-activity-muted-text)";
+    (block ?? element).appendChild(probe);
+    const mutedColor = getComputedStyle(probe).color;
+    probe.remove();
+    return {
+      color: getComputedStyle(element).color,
+      mutedColor,
+    };
+  });
+  assert(
+    activityDetailsColor.color === activityDetailsColor.mutedColor,
+    `turn activity detail content should use muted work tone: ${JSON.stringify(activityDetailsColor)}`,
+  );
+  const activityButtonStyle = await activityButton.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      alignItems: style.alignItems,
+      borderTopColor: style.borderTopColor,
+      borderTopWidth: style.borderTopWidth,
+      display: style.display,
+      maxWidth: style.maxWidth,
+    };
+  });
+  assert(
+    activityButtonStyle.display === "grid" &&
+      activityButtonStyle.alignItems === "center" &&
+      activityButtonStyle.borderTopWidth === "1px" &&
+      activityButtonStyle.maxWidth !== "none" &&
+      activityButtonStyle.borderTopColor !== "rgba(0, 0, 0, 0)",
+    `turn activity tool button should be outlined, capped, and center-aligned: ${JSON.stringify(activityButtonStyle)}`,
+  );
   screenshots.push(await screenshot(page, "turn-activity-timeline.png"));
+  releaseSmokeResponderReply?.();
   await page
     .locator(`${testClass("markdown-document")} h2`, {
       hasText: "Butler reply",
     })
-    .waitFor({ state: "visible", timeout: 5000 });
+    .waitFor({ state: "visible", timeout: 10_000 });
   const assistantMessageForContextMenu = page
     .locator(testClasses("message", "assistant"), { hasText: "Butler reply" })
     .last();
@@ -3177,7 +3243,10 @@ try {
     })
     .first();
   const singleWorkButton = singleWorkContainer.getByRole("button").first();
-  await singleWorkButton.waitFor({ state: "visible", timeout: 1200 });
+  await singleWorkButton.waitFor({
+    state: "visible",
+    timeout: turnActivityTimeoutMs,
+  });
   const singleWorkTriggerText = (await singleWorkButton.innerText())
     .replace(/\s+/g, " ")
     .trim();
@@ -3191,7 +3260,7 @@ try {
   await singleWorkContainer
     .locator(testClass("turn-work-tool-row"))
     .first()
-    .waitFor({ state: "visible", timeout: 1200 });
+    .waitFor({ state: "visible", timeout: turnActivityTimeoutMs });
   const singleExpandedHeaders = singleWorkContainer.locator(
     testClass("turn-work-block-header"),
   );

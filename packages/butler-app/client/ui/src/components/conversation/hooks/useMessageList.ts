@@ -73,6 +73,7 @@ export function useMessageList(
     hasTodoProgress,
     isSending,
     timelineProgressRowCount: timelineProgressRows.length,
+    turnState,
   });
 
   const itemCount = visibleMessages.length + (showTurnActivity ? 1 : 0);

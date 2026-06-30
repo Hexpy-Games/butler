@@ -47,6 +47,14 @@ const LIFECYCLE_ACTIVITY_LABELS = new Set([
 ]);
 const WORK_BLOCK_MARKER_KIND = "work_block";
 const FIRST_VISIBLE_PROGRESS_EVENT_KIND = "turn.first_progress";
+const FIRST_VISIBLE_PROGRESS_WORK_BLOCK_ID_PREFIX = "first-progress-";
+const TURN_ACKNOWLEDGED_EVENT_KIND = "turn.acknowledged";
+const SESSION_STARTING_STATE = "session_starting";
+const PUBLIC_DECISION_SOURCES = new Set([
+  "assistant-authored",
+  "model-authored",
+  "principal-authored",
+]);
 const INTERNAL_PROGRESS_TOOL_NAMES = new Set([
   "Update Todo List",
   "List Todo List",
@@ -175,6 +183,9 @@ function mergeTerminalSameTurnSummary(
 
   const currentState = currentLatest.state ?? current?.turn_state ?? "";
   const incomingState = incomingLatest.state ?? incoming.turn_state ?? "";
+  if (shouldReviveProgressForRetry(currentState, incomingState)) {
+    return null;
+  }
   if (shouldResetProgressForRetry(currentState, incomingState)) {
     return null;
   }
@@ -233,8 +244,13 @@ export function applyTimelineEvents(
       mergeTurnProgressBuckets(current, patch.progressByTurn),
     );
   }
-  if (patch.incoming.length > 0) {
-    setMessages((current) => mergeMessages(current, patch.incoming));
+  if (patch.incoming.length > 0 || patch.deletedMessageIds.size > 0) {
+    setMessages((current) =>
+      removeDeletedMessages(
+        mergeMessages(current, patch.incoming),
+        patch.deletedMessageIds,
+      ),
+    );
   }
 }
 
@@ -252,26 +268,44 @@ export function applyTimelineEventsToViewState(
   turnProgress: Record<string, TurnProgressSnapshot>;
 } {
   const patch = collectTimelineEventPatch(events, activeChatId);
-  if (patch.incoming.length === 0 && patch.progressByTurn.size === 0) {
+  if (
+    patch.incoming.length === 0 &&
+    patch.progressByTurn.size === 0 &&
+    patch.deletedMessageIds.size === 0
+  ) {
     return state;
   }
   const summary =
     patch.progressByTurn.size > 0
       ? mergeTimelineProgressIntoSummary(state.summary, patch)
       : state.summary;
+  const progressByTurn = progressBucketsForActiveClientTurn(
+    patch,
+    state.summary,
+    summary,
+  );
   const turnProgress =
-    patch.progressByTurn.size > 0
-      ? mergeTurnProgressBuckets(state.turnProgress, patch.progressByTurn)
+    progressByTurn.size > 0
+      ? pruneAcknowledgedClientTurnProgress(
+          mergeTurnProgressBuckets(state.turnProgress, progressByTurn),
+          state.summary,
+          summary,
+          patch,
+        )
       : state.turnProgress;
   const mergedMessages =
     patch.incoming.length > 0
       ? mergeMessages(state.messages, patch.incoming)
       : state.messages;
+  const visibleMessages = removeDeletedMessages(
+    mergedMessages,
+    patch.deletedMessageIds,
+  );
   const prunedTurnProgress = pruneReplacedClientTurnProgress(
     turnProgress,
-    mergedMessages,
+    visibleMessages,
   );
-  const messages = freezeMessageWorkBlocks(mergedMessages, prunedTurnProgress);
+  const messages = freezeMessageWorkBlocks(visibleMessages, prunedTurnProgress);
   return {
     messages,
     summary,
@@ -296,15 +330,89 @@ export function pruneReplacedClientTurnProgress(
   return next ?? turnProgress;
 }
 
+function pruneAcknowledgedClientTurnProgress(
+  turnProgress: Record<string, TurnProgressSnapshot>,
+  previousSummary: SessionSummaryView | null,
+  nextSummary: SessionSummaryView | null,
+  patch: TimelineEventPatch,
+): Record<string, TurnProgressSnapshot> {
+  const previousTurnId = previousSummary?.latest_progress?.turn_id;
+  const nextTurnId = nextSummary?.latest_progress?.turn_id;
+  if (
+    !previousTurnId ||
+    !nextTurnId ||
+    !isClientTurnId(previousTurnId) ||
+    isClientTurnId(nextTurnId)
+  ) {
+    return turnProgress;
+  }
+  const replacement = patch.progressByTurn.get(nextTurnId);
+  if (!replacesOptimisticClientTurn(previousSummary, replacement)) {
+    return turnProgress;
+  }
+  if (!turnProgress[previousTurnId]) return turnProgress;
+  const next = { ...turnProgress };
+  delete next[previousTurnId];
+  return next;
+}
+
+function progressBucketsForActiveClientTurn(
+  patch: TimelineEventPatch,
+  previousSummary: SessionSummaryView | null,
+  nextSummary: SessionSummaryView | null,
+): Map<string, TimelineProgressBucket> {
+  const previousLatest = previousSummary?.latest_progress;
+  const previousTurnId = previousLatest?.turn_id;
+  const previousState = previousLatest?.state ?? previousSummary?.turn_state;
+  const nextTurnId = nextSummary?.latest_progress?.turn_id;
+  if (
+    !previousTurnId ||
+    !isClientTurnId(previousTurnId) ||
+    !previousState ||
+    !ACTIVE_TURN_STATES.has(previousState)
+  ) {
+    return patch.progressByTurn;
+  }
+  const replacementTurnId =
+    nextTurnId &&
+    !isClientTurnId(nextTurnId) &&
+    replacesOptimisticClientTurn(
+      previousSummary,
+      patch.progressByTurn.get(nextTurnId),
+    )
+      ? nextTurnId
+      : undefined;
+
+  const filtered = new Map<string, TimelineProgressBucket>();
+  for (const [turnId, bucket] of patch.progressByTurn) {
+    if (
+      turnId === previousTurnId ||
+      turnId === replacementTurnId ||
+      !isActiveProgressBucket(bucket)
+    ) {
+      filtered.set(turnId, bucket);
+    }
+  }
+  return filtered;
+}
+
+function isActiveProgressBucket(bucket: TimelineProgressBucket): boolean {
+  if (bucket.state && !isTerminalProgressState(bucket.state)) return true;
+  return bucket.rows.some((row) => !isTerminalProgressState(row.state));
+}
+
 interface TimelineProgressBucket {
   rows: ProgressRow[];
   state?: string;
   label?: string;
-  resetForRetry?: boolean;
+  reviveForRetry?: boolean;
+  replacesOptimisticClientTurn?: boolean;
 }
 
 interface TimelineEventPatch {
   incoming: MessageRecord[];
+  deletedMessageIds: Set<string>;
+  deletedAssistantTurnIds: Set<string>;
   progressByTurn: Map<string, TimelineProgressBucket>;
   latestProgressTurnId?: string;
   unknownProgressTurn: string;
@@ -315,6 +423,8 @@ function collectTimelineEventPatch(
   activeChatId: string,
 ): TimelineEventPatch {
   const incoming: MessageRecord[] = [];
+  const deletedMessageIds = new Set<string>();
+  const deletedAssistantTurnIds = new Set<string>();
   const unknownProgressTurn = "__unknown__";
   const progressByTurn = new Map<string, TimelineProgressBucket>();
   let latestProgressTurnId: string | undefined;
@@ -334,7 +444,12 @@ function collectTimelineEventPatch(
     label?: string,
   ) => {
     const bucket = progressBucket(turnId);
-    if (isRetryProgressState(state)) bucket.resetForRetry = true;
+    if (
+      state === "retrying" ||
+      shouldReviveProgressForRetry(bucket.state ?? "", state ?? "")
+    ) {
+      bucket.reviveForRetry = true;
+    }
     bucket.state = state ?? bucket.state;
     bucket.label = label ?? bucket.label;
   };
@@ -380,6 +495,20 @@ function collectTimelineEventPatch(
       noteAssistantMessageTerminalState(message);
       continue;
     }
+    if (event.type === "message.deleted") {
+      const chatId = event.payload?.chat_id;
+      const messageId = event.payload?.message_id;
+      if (chatId !== activeChatId || !messageId) continue;
+      deletedMessageIds.add(messageId);
+      if (
+        event.payload?.role === "assistant" &&
+        typeof event.payload.turn_id === "string" &&
+        event.payload.turn_id
+      ) {
+        deletedAssistantTurnIds.add(event.payload.turn_id);
+      }
+      continue;
+    }
     if (event.type === "turn.state_changed") {
       const turn = event.payload?.turn;
       const sessionId = event.payload?.session_id ?? turn?.chat_id;
@@ -412,6 +541,9 @@ function collectTimelineEventPatch(
       if (!turnEvent || turnEvent.sessionId !== activeChatId) continue;
       const row = progressRowFromTurnEvent(turnEvent);
       if (!row) continue;
+      if (turnEvent.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
+        progressBucket(turnEvent.turnId).replacesOptimisticClientTurn = true;
+      }
       appendProgressRow(row, turnEvent.turnId, row.state);
       continue;
     }
@@ -422,8 +554,19 @@ function collectTimelineEventPatch(
       appendProgressRow(row, event.payload.turn_id, row.state);
     }
   }
+  for (const [turnId, bucket] of progressByTurn) {
+    if (
+      turnId !== unknownProgressTurn &&
+      deletedAssistantTurnIds.has(turnId) &&
+      isActiveProgressBucket(bucket)
+    ) {
+      bucket.reviveForRetry = true;
+    }
+  }
   return {
     incoming,
+    deletedMessageIds,
+    deletedAssistantTurnIds,
     progressByTurn,
     latestProgressTurnId,
     unknownProgressTurn,
@@ -452,7 +595,16 @@ function mergeTimelineProgressIntoSummary(
       patch.latestProgressTurnId &&
       patch.latestProgressTurnId !== currentTurnId
     ) {
-      return current;
+      const replacementTurnId = optimisticClientTurnReplacementId(
+        currentTurnId,
+        patch,
+        current,
+      );
+      if (replacementTurnId) {
+        selectedTurnId = replacementTurnId;
+      } else {
+        return current;
+      }
     }
   }
   const selectedKey = selectedTurnId ?? patch.unknownProgressTurn;
@@ -460,21 +612,27 @@ function mergeTimelineProgressIntoSummary(
   if (!selected) return current;
   const nextTurnId =
     selectedKey === patch.unknownProgressTurn ? latest.turn_id : selectedKey;
-  const resetForRetry =
-    selected.resetForRetry ||
-    shouldResetProgressForRetry(currentState ?? "", selected.state ?? "");
+  const reviveForRetry =
+    selected.reviveForRetry ||
+    shouldReviveProgressForRetry(currentState ?? "", selected.state ?? "");
+  const resetForRetry = shouldResetProgressForRetry(
+    currentState ?? "",
+    selected.state ?? "",
+  );
   const previousRows =
     resetForRetry || (nextTurnId && latest.turn_id && nextTurnId !== latest.turn_id)
       ? []
       : (latest.safe_progress_rows ?? []);
-  const nextRows =
-    selected.rows.length > 0
-      ? mergeProgressRows(previousRows, selected.rows)
-      : previousRows;
-  const currentStateForMerge = resetForRetry ? "" : (currentState ?? "");
+  const currentStateForMerge =
+    resetForRetry || reviveForRetry ? "" : (currentState ?? "");
   const nextState = selected.state
     ? progressMergeState(currentStateForMerge, selected.state)
     : currentState;
+  const mergedRows =
+    selected.rows.length > 0
+      ? mergeProgressRows(previousRows, selected.rows, { reviveForRetry })
+      : previousRows;
+  const nextRows = progressRowsForMergedTerminalState(mergedRows, nextState);
   const selectedStateWins = selected.state
     ? progressMergeState(currentStateForMerge, selected.state) === selected.state
     : false;
@@ -493,6 +651,42 @@ function mergeTimelineProgressIntoSummary(
   };
 }
 
+function optimisticClientTurnReplacementId(
+  currentTurnId: string,
+  patch: TimelineEventPatch,
+  currentSummary?: SessionSummaryView | null,
+): string | undefined {
+  if (!isClientTurnId(currentTurnId)) return undefined;
+  let replacementTurnId: string | undefined;
+  for (const [turnId, bucket] of patch.progressByTurn) {
+    if (
+      turnId !== patch.unknownProgressTurn &&
+      !isClientTurnId(turnId) &&
+      replacesOptimisticClientTurn(currentSummary, bucket)
+    ) {
+      replacementTurnId = turnId;
+    }
+  }
+  return replacementTurnId;
+}
+
+function replacesOptimisticClientTurn(
+  previousSummary: SessionSummaryView | null | undefined,
+  bucket: TimelineProgressBucket | undefined,
+): boolean {
+  if (!bucket) return false;
+  if (bucket.replacesOptimisticClientTurn) return true;
+  const previousLatest = previousSummary?.latest_progress;
+  const previousTurnId = previousLatest?.turn_id;
+  const previousState = previousLatest?.state ?? previousSummary?.turn_state;
+  return Boolean(
+    previousTurnId &&
+      isClientTurnId(previousTurnId) &&
+      previousState === SESSION_STARTING_STATE &&
+      isActiveProgressBucket(bucket),
+  );
+}
+
 function mergeTurnProgressBuckets(
   current: Record<string, TurnProgressSnapshot>,
   progressByTurn: Map<string, TimelineProgressBucket>,
@@ -503,20 +697,26 @@ function mergeTurnProgressBuckets(
     if (!turnId || turnId === "__unknown__") continue;
     const previous = next[turnId];
     const safeRows = bucket.rows.filter((row) => !isInternalProgressRow(row));
-    const resetForRetry =
-      bucket.resetForRetry ||
-      shouldResetProgressForRetry(previous?.state ?? "", bucket.state ?? "");
-    const previousStateForMerge = resetForRetry ? "" : (previous?.state ?? "");
+    const reviveForRetry =
+      bucket.reviveForRetry ||
+      shouldReviveProgressForRetry(previous?.state ?? "", bucket.state ?? "");
+    const resetForRetry = shouldResetProgressForRetry(
+      previous?.state ?? "",
+      bucket.state ?? "",
+    );
+    const previousStateForMerge =
+      resetForRetry || reviveForRetry ? "" : (previous?.state ?? "");
     const previousRows = resetForRetry
       ? []
       : (previous?.safe_progress_rows ?? []);
-    const rows =
+    const mergedRows =
       safeRows.length > 0
-        ? mergeProgressRows(previousRows, safeRows)
+        ? mergeProgressRows(previousRows, safeRows, { reviveForRetry })
         : previousRows;
     const nextState = bucket.state
       ? progressMergeState(previousStateForMerge, bucket.state)
       : previous?.state;
+    const rows = progressRowsForMergedTerminalState(mergedRows, nextState);
     const bucketStateWins = bucket.state
       ? progressMergeState(previousStateForMerge, bucket.state) === bucket.state
       : false;
@@ -558,11 +758,16 @@ export function mergeTurnProgressFromSummary(
   ) {
     return current;
   }
+  const reviveForRetry = shouldReviveProgressForRetry(
+    previous?.state ?? "",
+    incomingState,
+  );
   const resetForRetry = shouldResetProgressForRetry(
     previous?.state ?? "",
     incomingState,
   );
-  const previousStateForMerge = resetForRetry ? "" : (previous?.state ?? "");
+  const previousStateForMerge =
+    resetForRetry || reviveForRetry ? "" : (previous?.state ?? "");
   const nextState = incomingState
     ? progressMergeState(previousStateForMerge, incomingState)
     : previous?.state;
@@ -572,14 +777,16 @@ export function mergeTurnProgressFromSummary(
   const base = incomingStateWins
     ? { ...(resetForRetry ? {} : previous), ...latest }
     : { ...latest, ...(resetForRetry ? {} : previous) };
+  const mergedRows = mergeProgressRows(
+    resetForRetry ? [] : (previous?.safe_progress_rows ?? []),
+    rows,
+    { reviveForRetry },
+  );
   const nextSnapshot = {
     ...base,
     turn_id: latest.turn_id,
     ...(nextState ? { state: nextState } : {}),
-    safe_progress_rows: mergeProgressRows(
-      resetForRetry ? [] : (previous?.safe_progress_rows ?? []),
-      rows,
-    ),
+    safe_progress_rows: progressRowsForMergedTerminalState(mergedRows, nextState),
   };
   if (previous && turnProgressSnapshotEqual(previous, nextSnapshot)) {
     return current;
@@ -680,11 +887,16 @@ export function mergeTurnProgressSnapshotMap(
     ) {
       continue;
     }
+    const reviveForRetry = shouldReviveProgressForRetry(
+      previous.state ?? "",
+      incomingState,
+    );
     const resetForRetry = shouldResetProgressForRetry(
       previous.state ?? "",
       incomingState,
     );
-    const previousStateForMerge = resetForRetry ? "" : (previous.state ?? "");
+    const previousStateForMerge =
+      resetForRetry || reviveForRetry ? "" : (previous.state ?? "");
     const nextState = incomingState
       ? progressMergeState(previousStateForMerge, incomingState)
       : previous.state;
@@ -706,6 +918,7 @@ export function mergeTurnProgressSnapshotMap(
       safe_progress_rows: mergeProgressRows(
         resetForRetry ? [] : (previous.safe_progress_rows ?? []),
         safeIncomingRows,
+        { reviveForRetry },
       ),
     };
     if (turnProgressSnapshotEqual(previous, nextSnapshot)) continue;
@@ -768,6 +981,89 @@ export function workBlocksFromProgressRows(
 
 export function completedTurnWorkBlocks(rows: ProgressRow[]): WorkBlockView[] {
   return buildWorkBlocks(rows, { completedOnly: true });
+}
+
+export type TypedUiReadModel =
+  | { type: "receipt"; label: string; state: string; receiptKind: string }
+  | { type: "decision"; summary: string; rationale?: string; nextStep?: string; source: string; modelCallId?: string; latencyMs?: number; evidenceRefs?: string[] }
+  | { type: "work_block"; id: string; label?: string; state: string }
+  | { type: "tool_control"; toolName: string; inputLabel?: string; label: string; toolCallId?: string; workBlockId?: string }
+  | { type: "observation"; label: string; detailRows?: ProgressRow["safe_detail_rows"] }
+  | { type: "outcome"; state: string; publicSummary: string }
+  | { type: "runtime_fault"; faultId: string; kind: string; retryable: boolean; publicSummary: string; safeErrorCode?: string; safeCause?: string };
+
+export function typedUiReadModelsFromProgressRows(
+  rows: ProgressRow[],
+): TypedUiReadModel[] {
+  return rows.flatMap((row): TypedUiReadModel[] => {
+    if (row.runtime_fault_id && row.runtime_fault_kind && row.runtime_fault_public_summary) {
+      return [{
+        type: "runtime_fault",
+        faultId: row.runtime_fault_id,
+        kind: row.runtime_fault_kind,
+        retryable: row.runtime_fault_retryable === true,
+        publicSummary: row.runtime_fault_public_summary,
+        safeErrorCode: row.runtime_fault_safe_error_code,
+        safeCause: row.runtime_fault_safe_cause,
+      }];
+    }
+    if (row.receipt_kind) {
+      return [{
+        type: "receipt",
+        label: row.safe_label,
+        state: row.state,
+        receiptKind: row.receipt_kind,
+      }];
+    }
+    const decision = explicitPublicDecisionFieldsFromRow(row);
+    if (decision.decision_summary && decision.decision_source) {
+      return [{
+        type: "decision",
+        summary: decision.decision_summary,
+        rationale: decision.decision_rationale,
+        nextStep: decision.decision_next_step,
+        source: decision.decision_source,
+        ...(decision.decision_model_call_id ? { modelCallId: decision.decision_model_call_id } : {}),
+        ...(decision.decision_latency_ms !== undefined ? { latencyMs: decision.decision_latency_ms } : {}),
+        ...(decision.decision_evidence_refs ? { evidenceRefs: decision.decision_evidence_refs } : {}),
+      }];
+    }
+    if (row.kind === WORK_BLOCK_MARKER_KIND && row.work_block_id) {
+      return [{
+        type: "work_block",
+        id: row.work_block_id,
+        label: row.work_block_label,
+        state: row.state,
+      }];
+    }
+    if (isToolControlReadModelRow(row)) {
+      const toolName = row.safe_tool_name ?? "Tool";
+      const inputLabel = row.safe_input_label;
+      return [{
+        type: "tool_control",
+        toolName,
+        inputLabel,
+        label: inputLabel && row.safe_tool_name
+          ? `${toolName}: ${inputLabel}`
+          : row.safe_tool_name ?? inputLabel ?? "Tool",
+        toolCallId: row.tool_call_id,
+        workBlockId: row.work_block_id,
+      }];
+    }
+    if (row.kind === "turn" && isTerminalProgressState(row.state)) {
+      return [{ type: "outcome", state: row.state, publicSummary: row.safe_label }];
+    }
+    if (row.safe_detail_rows?.length) {
+      return [{ type: "observation", label: row.safe_label, detailRows: row.safe_detail_rows }];
+    }
+    return [];
+  });
+}
+
+export function isRuntimeFaultRetryableMessage(
+  message: Pick<MessageRecord, "retryable" | "safe_error_code">,
+): boolean {
+  return message.retryable === true && message.safe_error_code === "runtime_fault";
 }
 
 export function freezeMessageWorkBlocks(
@@ -852,11 +1148,13 @@ export function completedMessageWorkBlocksFromSnapshot(
   if (!snapshot) return [];
   const snapshotState = terminalStateOverride ?? snapshot.state ?? "";
   const rows = isTerminalProgressState(snapshotState)
-    ? (snapshot.safe_progress_rows ?? []).map((row) =>
-        isTerminalProgressState(row.state)
-          ? row
-          : { ...row, state: snapshotState },
-      )
+    ? (snapshot.safe_progress_rows ?? [])
+        .filter((row) => !isFirstVisibleProgressRow(row))
+        .map((row) =>
+          isTerminalProgressState(row.state)
+            ? row
+            : { ...row, state: snapshotState },
+        )
     : (snapshot.safe_progress_rows ?? []);
   return completedTurnWorkBlocks(rows).filter((block) =>
     block.rows.some((row) => isVisibleToolchainProgressRow(row, block.label)),
@@ -876,19 +1174,30 @@ export function isVisibleToolchainProgressRow(
   blockLabel: string,
 ): boolean {
   const normalizedLabel = row.safe_label.trim();
+  const normalizedBlockLabel = blockLabel.trim();
+  const normalizedToolName = row.safe_tool_name?.trim();
   if (isInternalProgressRow(row)) return false;
   if (row.kind === "todo") return false;
   if (row.kind === "message") return false;
   if (
     normalizedLabel &&
-    normalizedLabel === blockLabel.trim() &&
-    !row.safe_tool_name &&
+    normalizedLabel === normalizedBlockLabel &&
+    !row.safe_input_label &&
     row.kind !== "todo"
   ) {
     return false;
   }
+  if (
+    normalizedToolName &&
+    normalizedToolName === normalizedBlockLabel &&
+    !row.tool_call_id &&
+    !row.safe_input_label &&
+    !row.safe_detail_rows?.length
+  ) {
+    return false;
+  }
   return Boolean(
-    row.safe_tool_name ||
+    row.tool_call_id ||
     row.safe_input_label ||
     row.safe_detail_rows?.length ||
     COLLAPSED_WORK_ACTIVITY_KINDS.has(row.kind ?? ""),
@@ -896,7 +1205,8 @@ export function isVisibleToolchainProgressRow(
 }
 
 function isCompletedTurnWorkActivityRow(row: ProgressRow): boolean {
-  if (!row || row.state === "cancelled") return false;
+  if (!row) return false;
+  if (isFirstVisibleProgressRow(row)) return false;
   if (isInternalProgressRow(row)) return false;
   if (row.kind === "todo") return false;
   if (row.kind === WORK_BLOCK_MARKER_KIND) return false;
@@ -907,6 +1217,31 @@ function isCompletedTurnWorkActivityRow(row: ProgressRow): boolean {
   return !LIFECYCLE_ACTIVITY_LABELS.has(row.safe_label.trim().toLowerCase());
 }
 
+function isWorkBlockToolActivityRow(row: ProgressRow): boolean {
+  if (row.kind === "message") return false;
+  if (row.kind === "dispatch" && !row.tool_call_id) return false;
+  return isCompletedTurnWorkActivityRow(row);
+}
+
+function isStandaloneWorkBlockMessageRow(row: ProgressRow): boolean {
+  return row.kind === "message" && Boolean(row.work_block_id && row.work_block_label);
+}
+
+function isToolControlReadModelRow(row: ProgressRow): boolean {
+  if (row.kind === "decision" || row.kind === WORK_BLOCK_MARKER_KIND) return false;
+  return Boolean(row.safe_tool_name || row.safe_input_label || row.tool_call_id);
+}
+
+function isFirstVisibleProgressRow(row: ProgressRow): boolean {
+  return row.kind === "message" &&
+    Boolean(row.work_block_id?.startsWith(FIRST_VISIBLE_PROGRESS_WORK_BLOCK_ID_PREFIX));
+}
+
+function isWorkBlockDecisionCarrierRow(row?: ProgressRow): boolean {
+  if (!row) return false;
+  return row.kind === WORK_BLOCK_MARKER_KIND || isStandaloneWorkBlockMessageRow(row);
+}
+
 function buildWorkBlocks(
   rows: ProgressRow[],
   options: { completedOnly: boolean },
@@ -915,6 +1250,15 @@ function buildWorkBlocks(
     string,
     WorkBlockView & { rowMap: Map<string, ProgressRow> }
   >();
+  const decisionWorkBlockAliases = new Map<string, string>();
+  const canonicalWorkBlockId = (row: ProgressRow, fallbackId: string) => {
+    const decisionKey = publicDecisionIntentKey(row);
+    if (!decisionKey) return fallbackId;
+    const existing = decisionWorkBlockAliases.get(decisionKey);
+    if (existing) return existing;
+    decisionWorkBlockAliases.set(decisionKey, fallbackId);
+    return fallbackId;
+  };
   const ensureBlock = (
     id: string,
     label: string,
@@ -922,6 +1266,9 @@ function buildWorkBlocks(
     created_at?: string,
     row?: ProgressRow,
   ) => {
+    const decision = isWorkBlockDecisionCarrierRow(row)
+      ? publicDecisionFieldsFromRow(row)
+      : {};
     let block = blocks.get(id);
     if (!block) {
       block = {
@@ -931,11 +1278,11 @@ function buildWorkBlocks(
         rows: [],
         rowMap: new Map(),
         created_at,
-        decision_summary: row?.work_decision_summary,
-        decision_rationale: row?.work_decision_rationale,
-        decision_next_step: row?.work_decision_next_step,
-        decision_source: row?.work_decision_source,
-        decision_evidence_refs: row?.work_decision_evidence_refs,
+        decision_summary: decision.decision_summary,
+        decision_rationale: decision.decision_rationale,
+        decision_next_step: decision.decision_next_step,
+        decision_source: decision.decision_source,
+        decision_evidence_refs: decision.decision_evidence_refs,
       };
       blocks.set(id, block);
       return block;
@@ -943,49 +1290,71 @@ function buildWorkBlocks(
     block.label = block.label || label;
     block.state = terminalState(block.state, state);
     block.created_at = block.created_at ?? created_at;
-    block.decision_summary =
-      block.decision_summary ?? row?.work_decision_summary;
+    block.decision_summary = block.decision_summary ?? decision.decision_summary;
     block.decision_rationale =
-      block.decision_rationale ?? row?.work_decision_rationale;
+      block.decision_rationale ?? decision.decision_rationale;
     block.decision_next_step =
-      block.decision_next_step ?? row?.work_decision_next_step;
-    block.decision_source = block.decision_source ?? row?.work_decision_source;
+      block.decision_next_step ?? decision.decision_next_step;
+    block.decision_source = block.decision_source ?? decision.decision_source;
     block.decision_evidence_refs =
-      block.decision_evidence_refs ?? row?.work_decision_evidence_refs;
+      block.decision_evidence_refs ?? decision.decision_evidence_refs;
     return block;
   };
 
   for (const row of sortProgressRowsForDisplay(rows)) {
     if (row.kind === WORK_BLOCK_MARKER_KIND) {
       if (!row.work_block_id) continue;
+      const blockId = canonicalWorkBlockId(row, row.work_block_id);
       ensureBlock(
-        row.work_block_id,
-        row.work_block_label ?? row.work_decision_summary ?? row.safe_label,
+        blockId,
+        row.work_block_label ?? "",
         row.state,
         row.created_at,
         row,
       );
       continue;
     }
+    if (isStandaloneWorkBlockMessageRow(row)) {
+      const fallbackId = row.work_block_id ?? `row-${row.id}`;
+      const blockId = canonicalWorkBlockId(row, fallbackId);
+      const label = row.work_block_label ?? "";
+      const block = ensureBlock(blockId, label, row.state, row.created_at, row);
+      block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
+      block.rows = [...block.rowMap.values()];
+      continue;
+    }
     if (row.kind === "todo") continue;
-    if (!isCompletedTurnWorkActivityRow(row)) continue;
-    const blockId = row.work_block_id ?? `row-${row.id}`;
-    const label =
-      row.work_block_label ?? row.work_decision_summary ?? row.safe_label;
+    if (!isWorkBlockToolActivityRow(row)) continue;
+    const fallbackId = row.work_block_id ?? `row-${row.id}`;
+    const blockId = canonicalWorkBlockId(row, fallbackId);
+    const label = row.work_block_label ?? "";
     const block = ensureBlock(blockId, label, row.state, row.created_at, row);
-    block.rowMap.set(progressRowMergeKey(row), row);
+    block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
     block.rows = [...block.rowMap.values()];
   }
 
   return [...blocks.values()]
     .map(({ rowMap: _rowMap, ...block }) => block)
-    .filter((block) => block.rows.length > 0 || Boolean(block.label.trim()))
+    .filter((block) => Boolean(block.label.trim()))
     .filter((block) =>
       options.completedOnly
         ? isTerminalProgressState(block.state) ||
           block.rows.some((row) => isTerminalProgressState(row.state))
         : true,
     );
+}
+
+function workBlockToolRow(row: ProgressRow): ProgressRow {
+  const {
+    work_block_label: _workBlockLabel,
+    work_decision_summary: _workDecisionSummary,
+    work_decision_rationale: _workDecisionRationale,
+    work_decision_next_step: _workDecisionNextStep,
+    work_decision_source: _workDecisionSource,
+    work_decision_evidence_refs: _workDecisionEvidenceRefs,
+    ...toolRow
+  } = row;
+  return toolRow;
 }
 
 function terminalState(current: string, next: string): string {
@@ -1004,10 +1373,7 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
   if (event.visibility === "internal") return null;
   const payload = safeRecordPayload(event.payload);
   const created_at = event.createdAt;
-  if (
-    event.kind === "assistant.public_note" ||
-    event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND
-  ) {
+  if (event.kind === "assistant.public_note") {
     const note = safePublicText(payload.note, "Working");
     const workBlockId = safeOptionalPublicText(payload.workBlockId);
     return {
@@ -1017,10 +1383,44 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
       safe_label: note,
       created_at,
       work_block_id: workBlockId,
-      work_block_label:
-        safeOptionalPublicText(payload.workBlockLabel) ??
-        (workBlockId ? note : undefined),
+      work_block_label: safeOptionalPublicText(payload.workBlockLabel),
       ...publicDecisionFields(payload),
+    };
+  }
+  if (event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
+    return {
+      id: event.id,
+      kind: "turn",
+      state: "thinking",
+      safe_label: safePublicText(payload.note ?? payload.safeLabel, "Working"),
+      created_at,
+    };
+  }
+  if (event.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
+    return {
+      id: event.id,
+      kind: "turn",
+      state: "accepted",
+      safe_label: safePublicText(
+        payload.safeLabel,
+        "Request received. Preparing the work.",
+      ),
+      receipt_kind: TURN_ACKNOWLEDGED_EVENT_KIND,
+      created_at,
+    };
+  }
+  if (event.kind === "assistant.decision") {
+    const decision = explicitPublicDecisionFields(payload);
+    if (!decision.public_decision_summary || !decision.public_decision_source) {
+      return null;
+    }
+    return {
+      id: event.id,
+      kind: "decision",
+      state: "running",
+      safe_label: decision.public_decision_summary,
+      created_at,
+      ...decision,
     };
   }
   if (
@@ -1037,7 +1437,7 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
       created_at,
       work_block_id: safeOptionalPublicText(payload.workBlockId) ?? event.id,
       work_block_label: label,
-      ...publicDecisionFields(payload, label),
+      ...publicDecisionFields(payload),
     };
   }
   if (event.kind === "guard.started" || event.kind === "guard.completed") {
@@ -1086,11 +1486,31 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
       tool_call_id: safeOptionalPublicText(payload.toolCallId),
       bridge_phase: safeOptionalPublicText(payload.bridgePhase),
       work_block_id: safeOptionalPublicText(payload.workBlockId),
-      work_block_label:
-        safeOptionalPublicText(payload.workBlockLabel) ?? safeLabel,
+      work_block_label: safeOptionalPublicText(payload.workBlockLabel),
       ...publicDecisionFields(payload),
       safe_detail_rows: safeDetailRows(payload.detailRows),
       created_at,
+    };
+  }
+  if (event.kind === "runtime.fault") {
+    const faultId = safePublicText(payload.faultId, event.id);
+    const kind = safePublicText(payload.kind, "runtime_fault");
+    const publicSummary = safePublicText(
+      payload.publicSummary,
+      "Butler runtime was interrupted before the turn could continue.",
+    );
+    return {
+      id: event.id,
+      kind: "runtime_fault",
+      state: "runtime_fault",
+      safe_label: publicSummary,
+      created_at,
+      runtime_fault_id: faultId,
+      runtime_fault_kind: kind,
+      runtime_fault_retryable: payload.retryable === true,
+      runtime_fault_public_summary: publicSummary,
+      runtime_fault_safe_error_code: safeOptionalPublicText(payload.safeErrorCode),
+      runtime_fault_safe_cause: safeOptionalPublicText(payload.safeCause),
     };
   }
   if (
@@ -1308,8 +1728,9 @@ function safeDetailRows(value: unknown): ProgressRow["safe_detail_rows"] {
 
 function publicDecisionFields(
   payload: Record<string, unknown>,
-  fallbackSummary?: string,
 ): Partial<ProgressRow> {
+  const source = safeOptionalPublicText(payload.decisionSource);
+  if (!isPublicDecisionSource(source)) return {};
   const rawEvidenceRefs = payload.decisionEvidenceRefs ?? payload.evidenceRefs;
   const evidenceRefs = Array.isArray(rawEvidenceRefs)
     ? rawEvidenceRefs
@@ -1318,25 +1739,113 @@ function publicDecisionFields(
         .slice(0, 6)
     : undefined;
   const fields: Partial<ProgressRow> = {};
-  const summary =
-    safeOptionalPublicText(payload.decisionSummary ?? payload.summary) ??
-    fallbackSummary;
+  const summary = safeOptionalPublicText(payload.decisionSummary);
   if (summary) fields.work_decision_summary = summary;
-  const rationale = safeOptionalPublicText(
-    payload.decisionRationale ?? payload.rationale,
-  );
+  const rationale = safeOptionalPublicText(payload.decisionRationale);
   if (rationale) fields.work_decision_rationale = rationale;
-  const nextStep = safeOptionalPublicText(
-    payload.decisionNextStep ?? payload.nextStep,
-  );
+  const nextStep = safeOptionalPublicText(payload.decisionNextStep);
   if (nextStep) fields.work_decision_next_step = nextStep;
-  const source = safeOptionalPublicText(
-    payload.decisionSource ?? payload.source,
-  );
   if (source) fields.work_decision_source = source;
   if (evidenceRefs && evidenceRefs.length > 0)
     fields.work_decision_evidence_refs = evidenceRefs;
   return fields;
+}
+
+function explicitPublicDecisionFields(
+  payload: Record<string, unknown>,
+): Partial<ProgressRow> {
+  const source = safeOptionalPublicText(payload.source);
+  if (!isPublicDecisionSource(source)) return {};
+  const rawEvidenceRefs = payload.evidenceRefs;
+  const evidenceRefs = Array.isArray(rawEvidenceRefs)
+    ? rawEvidenceRefs
+        .map((item) => safeOptionalPublicText(item))
+        .filter((item): item is string => Boolean(item))
+        .slice(0, 6)
+    : undefined;
+  const fields: Partial<ProgressRow> = {};
+  const role = safeOptionalPublicText(payload.role);
+  if (role) fields.public_decision_role = role;
+  const summary = safeOptionalPublicText(payload.summary);
+  if (summary) fields.public_decision_summary = summary;
+  const rationale = safeOptionalPublicText(payload.rationale);
+  if (rationale) fields.public_decision_rationale = rationale;
+  const nextStep = safeOptionalPublicText(payload.nextStep);
+  if (nextStep) fields.public_decision_next_step = nextStep;
+  if (source) fields.public_decision_source = source;
+  const modelCallId = safeOptionalPublicText(payload.modelCallId);
+  if (modelCallId) fields.public_decision_model_call_id = modelCallId;
+  const latencyMs = safeOptionalNumber(payload.latencyMs);
+  if (latencyMs !== undefined) fields.public_decision_latency_ms = latencyMs;
+  if (evidenceRefs && evidenceRefs.length > 0)
+    fields.public_decision_evidence_refs = evidenceRefs;
+  return fields;
+}
+
+function isPublicDecisionSource(source: unknown): source is string {
+  return typeof source === "string" && PUBLIC_DECISION_SOURCES.has(source);
+}
+
+function publicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
+  decision_summary: string;
+  decision_rationale: string;
+  decision_next_step: string;
+  decision_source: string;
+  decision_model_call_id: string;
+  decision_latency_ms: number;
+  decision_evidence_refs: string[];
+}> {
+  if (!row || !isPublicDecisionSource(row.work_decision_source)) return {};
+  return {
+    decision_summary: row.work_decision_summary,
+    decision_rationale: row.work_decision_rationale,
+    decision_next_step: row.work_decision_next_step,
+    decision_source: row.work_decision_source,
+    decision_evidence_refs: row.work_decision_evidence_refs,
+  };
+}
+
+function explicitPublicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
+  decision_summary: string;
+  decision_rationale: string;
+  decision_next_step: string;
+  decision_source: string;
+  decision_model_call_id: string;
+  decision_latency_ms: number;
+  decision_evidence_refs: string[];
+}> {
+  if (
+    !row ||
+    row.kind !== "decision" ||
+    !isPublicDecisionSource(row.public_decision_source)
+  ) {
+    return {};
+  }
+  return {
+    decision_summary: row.public_decision_summary,
+    decision_rationale: row.public_decision_rationale,
+    decision_next_step: row.public_decision_next_step,
+    decision_source: row.public_decision_source,
+    decision_model_call_id: row.public_decision_model_call_id,
+    decision_latency_ms: row.public_decision_latency_ms,
+    decision_evidence_refs: row.public_decision_evidence_refs,
+  };
+}
+
+function publicDecisionIntentKey(row?: ProgressRow): string | null {
+  if (!row || !isPublicDecisionSource(row.work_decision_source)) return null;
+  const summary = normalizedDecisionIntentPart(row.work_decision_summary);
+  if (!summary) return null;
+  return JSON.stringify([
+    row.work_decision_source,
+    summary,
+    normalizedDecisionIntentPart(row.work_decision_rationale),
+    normalizedDecisionIntentPart(row.work_decision_next_step),
+  ]);
+}
+
+function normalizedDecisionIntentPart(value?: string): string {
+  return (value ?? "").replace(/\s+/gu, " ").trim();
 }
 
 function safeOptionalPublicText(value: unknown): string | undefined {
@@ -1451,6 +1960,15 @@ function systemEventMessageFromEvent(
   };
 }
 
+function removeDeletedMessages(
+  messages: MessageRecord[],
+  deletedMessageIds: Set<string>,
+): MessageRecord[] {
+  if (deletedMessageIds.size === 0) return messages;
+  const filtered = messages.filter((message) => !deletedMessageIds.has(message.id));
+  return filtered.length === messages.length ? messages : filtered;
+}
+
 export function mergeMessages(
   current: MessageRecord[],
   incoming: MessageRecord[],
@@ -1516,6 +2034,7 @@ function mergeMessageRecord(
 function mergeProgressRows(
   current: ProgressRow[],
   incoming: ProgressRow[],
+  options: { reviveForRetry?: boolean } = {},
 ): ProgressRow[] {
   const byKey = new Map<string, ProgressRow>();
   for (const row of current) {
@@ -1551,7 +2070,10 @@ function mergeProgressRows(
       if (toolCandidates.length === 1) key = toolCandidates[0]!;
     }
     const previous = byKey.get(key);
-    byKey.set(key, previous ? mergeProgressRow(previous, row) : row);
+    byKey.set(
+      key,
+      previous ? mergeProgressRow(previous, row, options) : row,
+    );
   }
   const merged = [...byKey.values()];
   return progressRowArrayReferencesEqual(current, merged) ? current : merged;
@@ -1708,15 +2230,16 @@ function normalizeProgressPart(value?: string): string {
 function mergeProgressRow(
   current: ProgressRow,
   incoming: ProgressRow,
+  options: { reviveForRetry?: boolean } = {},
 ): ProgressRow {
-  const incomingWins =
-    progressMergeState(current.state, incoming.state) === incoming.state;
+  const mergedState = progressMergeRowState(current, incoming, options);
+  const incomingWins = mergedState === incoming.state;
   const base = incomingWins
     ? { ...current, ...incoming }
     : { ...incoming, ...current };
   const next = {
     ...base,
-    state: progressMergeState(current.state, incoming.state),
+    state: mergedState,
     safe_label: base.safe_label || current.safe_label || incoming.safe_label,
     safe_tool_name:
       base.safe_tool_name ?? current.safe_tool_name ?? incoming.safe_tool_name,
@@ -1744,6 +2267,21 @@ function mergeProgressRow(
     created_at: current.created_at ?? incoming.created_at,
   };
   return progressRowEqual(current, next) ? current : next;
+}
+
+function progressMergeRowState(
+  current: ProgressRow,
+  incoming: ProgressRow,
+  options: { reviveForRetry?: boolean },
+): string {
+  if (
+    options.reviveForRetry &&
+    current.state === "failed" &&
+    !isTerminalProgressState(incoming.state)
+  ) {
+    return incoming.state;
+  }
+  return progressMergeState(current.state, incoming.state);
 }
 
 function messageRecordEqual(
@@ -1883,14 +2421,32 @@ function progressRowEqual(left: ProgressRow, right: ProgressRow): boolean {
 function progressMergeState(current: string, incoming: string): string {
   if (isTerminalProgressState(incoming)) return incoming;
   if (shouldResetProgressForRetry(current, incoming)) return incoming;
+  if (shouldReviveProgressForRetry(current, incoming)) return incoming;
   if (isTerminalProgressState(current)) return current;
   return progressStateRank(incoming) >= progressStateRank(current)
     ? incoming
     : current;
 }
 
-function shouldResetProgressForRetry(current: string, incoming: string): boolean {
-  return current === "failed" && isRetryProgressState(incoming);
+function progressRowsForMergedTerminalState(
+  rows: ProgressRow[],
+  state?: string,
+): ProgressRow[] {
+  if (!isDeliveredProgressState(state)) return rows;
+  const filtered = rows.filter((row) => !supersededTerminalFailureProgressRow(row));
+  return filtered.length === rows.length ? rows : filtered;
+}
+
+function supersededTerminalFailureProgressRow(row: ProgressRow): boolean {
+  return row.kind === "turn" && row.state === "failed";
+}
+
+function shouldResetProgressForRetry(_current: string, _incoming: string): boolean {
+  return false;
+}
+
+function shouldReviveProgressForRetry(current: string, incoming: string): boolean {
+  return current === "failed" && incoming === "retrying";
 }
 
 function shouldPreserveActiveSnapshotOverStaleTerminal(
@@ -1917,10 +2473,6 @@ function shouldPreserveActiveSnapshotOverStaleTerminal(
   );
 }
 
-function isRetryProgressState(state?: string): boolean {
-  return state === "retrying";
-}
-
 function isTerminalProgressState(state: string): boolean {
   return (
     state === "failed" ||
@@ -1929,6 +2481,10 @@ function isTerminalProgressState(state: string): boolean {
     state === "complete" ||
     state === "completed"
   );
+}
+
+function isDeliveredProgressState(state?: string): boolean {
+  return state === "delivered" || state === "complete" || state === "completed";
 }
 
 function progressStateRank(state: string): number {
@@ -2388,11 +2944,25 @@ export function shouldShowTurnActivity(input: {
   hasTodoProgress: boolean;
   isSending: boolean;
   timelineProgressRowCount: number;
+  turnState?: string;
 }): boolean {
+  if (
+    input.activeTurn &&
+    !input.isSending &&
+    input.timelineProgressRowCount === 0 &&
+    !input.hasTodoProgress &&
+    isInternalContinuationTurnState(input.turnState)
+  ) {
+    return false;
+  }
   return (
     (input.isSending || input.activeTurn) &&
     (!input.hasTodoProgress || input.timelineProgressRowCount > 0)
   );
+}
+
+function isInternalContinuationTurnState(state?: string): boolean {
+  return state === "retrying" || state === "waiting_for_tool";
 }
 
 export function isWorkerCancellable(worker: WorkerActivitySummary): boolean {

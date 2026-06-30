@@ -19,6 +19,7 @@ import {
   summarizeWorkerCompletionEvidence,
   type WorkerCompletionEvidenceSummary,
 } from "./worker-evidence.ts";
+import { isAuthoredDecisionSource } from "../events/turn-state-contract.ts";
 
 export type TaskStatus =
   | "APPROVED"
@@ -587,15 +588,22 @@ function readWorkerTimelineWorkBlocks(taskDir: string): WorkerActivityWorkBlock[
       label: blockLabel,
       state: row.state,
       rows: [row],
-      decision_summary: row.work_decision_summary,
-      decision_rationale: row.work_decision_rationale,
-      decision_next_step: row.work_decision_next_step,
-      decision_source: row.work_decision_source,
-      decision_evidence_refs: row.work_decision_evidence_refs,
+      ...workerBlockDecisionFields(row),
       created_at: row.created_at,
     });
   }
   return [...blocks.values()].slice(-25);
+}
+
+function workerBlockDecisionFields(row: WorkerActivityProgressRow): Partial<WorkerActivityWorkBlock> {
+  if (!isAuthoredDecisionSource(row.work_decision_source)) return {};
+  return {
+    decision_summary: row.work_decision_summary,
+    decision_rationale: row.work_decision_rationale,
+    decision_next_step: row.work_decision_next_step,
+    decision_source: row.work_decision_source,
+    decision_evidence_refs: row.work_decision_evidence_refs,
+  };
 }
 
 function workerActivityRowsFromEvents(taskDir: string): WorkerActivityProgressRow[] {
@@ -621,8 +629,10 @@ function rowFromWorkerActivityEvent(
   }
   const createdAt = typeof event.created_at === "string" ? event.created_at : new Date(0).toISOString();
   const actionKind = safeTimelineKind(event.action_kind ?? eventName);
+  const decisionFields = workerDecisionFieldsFromRecord(event);
+  if (eventName === "public_work_decision" && Object.keys(decisionFields).length === 0) return null;
   const title = safeTimelineText(event.current_title, 180) ??
-    safeTimelineText(event.decision_summary, 180) ??
+    decisionFields.work_decision_summary ??
     safeTimelineText(event.status_line, 180) ??
     workerTimelineFallbackLabel(actionKind);
   const statusLine = safeTimelineText(event.status_line, 220);
@@ -636,7 +646,7 @@ function rowFromWorkerActivityEvent(
     ...(statusLine ? { safe_input_label: statusLine } : {}),
     work_block_id: workBlockId,
     work_block_label: title,
-    ...workerDecisionFieldsFromRecord(event),
+    ...decisionFields,
     created_at: createdAt,
   };
   return row;
@@ -676,12 +686,12 @@ function rowFromWorkerTranscriptEvent(
   if (kind === "system" && payload.category === "public_work_decision") {
     const decision = transcriptDecisionFromPayload(payload) ?? payload;
     const decisionFields = workerDecisionFieldsFromRecord(decision);
+    if (Object.keys(decisionFields).length === 0) return null;
     const titleCandidate =
-      safeTimelineText(decision.decisionSummary ?? decision.summary, 180) ??
+      decisionFields.work_decision_summary ??
       decisionFields.work_decision_next_step ??
       decisionFields.work_decision_rationale ??
       null;
-    if (!titleCandidate && Object.keys(decisionFields).length === 0) return null;
     const title = titleCandidate ?? "Worker decision";
     const createdAt = transcriptEventCreatedAt(event);
     const decisionId = safeActivityToken(decision.decisionId) ?? `worker-transcript-decision-${index + 1}`;
@@ -702,9 +712,10 @@ function rowFromWorkerTranscriptEvent(
   const toolCallId = safeActivityToken(payload.tool_call_id ?? payload.id) ?? `transcript-tool-${index + 1}`;
   const decision = transcriptDecisionFromPayload(payload) ?? toolDecisions.get(toolCallId) ?? previousDecision;
   const decisionFields = decision ? workerDecisionFieldsFromRecord(decision) : {};
+  const hasPublicDecision = Object.keys(decisionFields).length > 0;
   const decisionSummary = decisionFields.work_decision_summary;
-  const workBlockId = decision
-    ? `worker-transcript-decision-${safeActivityToken(decision.decisionId) ?? toolCallId}`
+  const workBlockId = hasPublicDecision
+    ? `worker-transcript-decision-${safeActivityToken(decision?.decisionId) ?? toolCallId}`
     : toolCallId;
   const toolName = transcriptToolDisplayName(name);
   const label = transcriptToolLabel(name, kind);
@@ -809,6 +820,7 @@ function workerDecisionFieldsFromRecord(
   const rationale = safeTimelineText(record.decision_rationale ?? record.decisionRationale ?? record.rationale, 300);
   const nextStep = safeTimelineText(record.decision_next_step ?? record.decisionNextStep ?? record.nextStep, 300);
   const source = safeTimelineText(record.decision_source ?? record.decisionSource ?? record.source, 80);
+  if (!isAuthoredDecisionSource(source)) return {};
   const rawRefs = record.evidence_refs ?? record.decision_evidence_refs ?? record.decisionEvidenceRefs ?? record.evidenceRefs;
   const refs = Array.isArray(rawRefs)
     ? rawRefs.map((ref) => safeTimelineText(ref, 220)).filter((ref): ref is string => Boolean(ref)).slice(0, 8)
@@ -901,16 +913,31 @@ function safeWorkerActivityWorkBlocks(value: unknown): WorkerActivityWorkBlock[]
         label,
         state: safeActivityText(record.state, 40) || "running",
         rows: safeWorkerActivityRows(record.rows),
-        ...(safeActivityText(record.decision_summary, 220) ? { decision_summary: safeActivityText(record.decision_summary, 220)! } : {}),
-        ...(safeActivityText(record.decision_rationale, 300) ? { decision_rationale: safeActivityText(record.decision_rationale, 300)! } : {}),
-        ...(safeActivityText(record.decision_next_step, 300) ? { decision_next_step: safeActivityText(record.decision_next_step, 300)! } : {}),
-        ...(safeActivityText(record.decision_source, 80) ? { decision_source: safeActivityText(record.decision_source, 80)! } : {}),
-        ...(Array.isArray(record.decision_evidence_refs) ? { decision_evidence_refs: record.decision_evidence_refs.map((ref) => safeActivityText(ref, 220)).filter((ref): ref is string => Boolean(ref)).slice(0, 8) } : {}),
+        ...workerActivityBlockDecisionFields(record),
         ...(typeof record.created_at === "string" ? { created_at: record.created_at } : {}),
       } satisfies WorkerActivityWorkBlock;
     })
     .filter((block): block is WorkerActivityWorkBlock => Boolean(block))
     .slice(-25);
+}
+
+function workerActivityBlockDecisionFields(record: Record<string, unknown>): Partial<WorkerActivityWorkBlock> {
+  const source = safeTimelineText(record.decision_source, 80);
+  if (!isAuthoredDecisionSource(source)) return {};
+  const summary = safeTimelineText(record.decision_summary, 220);
+  const rationale = safeTimelineText(record.decision_rationale, 300);
+  const nextStep = safeTimelineText(record.decision_next_step, 300);
+  const rawRefs = record.decision_evidence_refs;
+  const refs = Array.isArray(rawRefs)
+    ? rawRefs.map((ref) => safeTimelineText(ref, 220)).filter((ref): ref is string => Boolean(ref)).slice(0, 8)
+    : [];
+  return {
+    ...(summary ? { decision_summary: summary } : {}),
+    ...(rationale ? { decision_rationale: rationale } : {}),
+    ...(nextStep ? { decision_next_step: nextStep } : {}),
+    decision_source: source,
+    ...(refs.length > 0 ? { decision_evidence_refs: refs } : {}),
+  };
 }
 
 function safeWorkerActivityRows(value: unknown): WorkerActivityProgressRow[] {

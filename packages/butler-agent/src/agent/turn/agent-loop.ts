@@ -51,7 +51,6 @@ export interface AgentLoopEvent {
     | "model_response"
     | "tool_call"
     | "tool_result"
-    | "repeated_tool_failure"
     | "loop_limit";
   iteration: number;
   toolCall?: AgentLoopToolCall;
@@ -74,15 +73,6 @@ export interface AgentLoopInput {
     toolCall: AgentLoopToolCall;
     toolResult: AgentLoopToolResult;
   }) => Promise<string | null | undefined> | string | null | undefined;
-  maxRepeatedToolFailures?: number;
-  onRepeatedToolFailure?: (input: {
-    messages: AgentLoopMessage[];
-    toolResults: AgentLoopToolResult[];
-    toolCall: AgentLoopToolCall;
-    toolResult: AgentLoopToolResult;
-    failureCount: number;
-    maxRepeatedToolFailures: number;
-  }) => Promise<string> | string;
   onEvent?: (event: AgentLoopEvent) => void;
   onLoopLimit?: (input: {
     messages: AgentLoopMessage[];
@@ -99,12 +89,11 @@ export interface AgentLoopOutput {
 }
 
 const DEFAULT_MAX_ITERATIONS = 8;
-const MIN_REPEATED_TOOL_FAILURES_BEFORE_STOP = 2;
-const DEFAULT_MAX_REPEATED_TOOL_FAILURES = MIN_REPEATED_TOOL_FAILURES_BEFORE_STOP;
 const CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS = 6_000;
 const CHECKPOINT_CUMULATIVE_TOOL_RESULT_TOKENS = 30_000;
 const GENERIC_TOOL_RESULT_PREVIEW_TOKENS = 1_200;
 const TOOL_RESULT_COMPACT_MARKER = "[...compacted tool result for context budget...]";
+const GENERIC_AGENT_LOOP_TURN_ID = "generic-agent-loop";
 
 function emit(
   events: AgentLoopEvent[],
@@ -153,23 +142,6 @@ function compactStringList(value: unknown, limit: number): string[] {
     .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
     .map((item) => item.trim())
     .slice(0, limit);
-}
-
-function stableJson(value: unknown): unknown {
-  if (!value || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(stableJson);
-  const output: Record<string, unknown> = {};
-  for (const key of Object.keys(value).sort()) {
-    output[key] = stableJson((value as Record<string, unknown>)[key]);
-  }
-  return output;
-}
-
-function failedToolSignature(input: { toolCall: AgentLoopToolCall }): string {
-  return JSON.stringify({
-    name: input.toolCall.name,
-    arguments: stableJson(input.toolCall.arguments),
-  });
 }
 
 function trimTextToTokenBudgetBalanced(text: string, maxTokens: number): string {
@@ -276,49 +248,16 @@ function compactToolOutputForModel(input: {
 
 function toolResultToMessage(input: {
   result: AgentLoopToolResult;
-  cumulativeToolResultTokens: number;
 }): {
   message: AgentLoopMessage;
   estimatedTokens: number;
 } {
-  const rawContent = JSON.stringify(input.result.ok ? { ok: true, output: input.result.output } : {
+  const content = JSON.stringify(input.result.ok ? { ok: true, output: input.result.output } : {
     ok: false,
-    error: input.result.error ?? "unknown tool error",
+    ...(input.result.output !== undefined
+      ? { output: input.result.output }
+      : { error: input.result.error ?? "unknown tool error" }),
   });
-  const rawTokens = estimateTokens(rawContent);
-  const shouldCheckpoint = input.result.ok && (
-    rawTokens >= CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS ||
-    input.cumulativeToolResultTokens + rawTokens >= CHECKPOINT_CUMULATIVE_TOOL_RESULT_TOKENS
-  );
-  let content = rawContent;
-  if (shouldCheckpoint) {
-    const output = compactToolOutputForModel({
-      toolName: input.result.name,
-      output: input.result.output,
-      reason: rawTokens >= CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS
-        ? "single_tool_result_budget"
-        : "cumulative_tool_result_budget",
-      rawTokens,
-    });
-    const outputMetadata = outputRecord(output);
-    const checkpointTokens = estimateTokens(JSON.stringify({ ok: true, output }));
-    if (checkpointTokens < rawTokens) {
-      if (
-        outputMetadata?.butler_evidence_checkpoint === true ||
-        outputMetadata?.butler_tool_result_compacted === true
-      ) {
-        const checkpointKey = outputMetadata.butler_evidence_checkpoint === true
-          ? "checkpoint_estimated_tokens"
-          : "compact_estimated_tokens";
-        outputMetadata[checkpointKey] = checkpointTokens;
-        outputMetadata.estimated_saved_tokens = Math.max(0, rawTokens - checkpointTokens);
-      }
-      content = JSON.stringify({ ok: true, output });
-    } else if (outputMetadata?.butler_evidence_checkpoint === true) {
-      outputMetadata.checkpoint_estimated_tokens = checkpointTokens;
-      outputMetadata.estimated_saved_tokens = Math.max(0, rawTokens - checkpointTokens);
-    }
-  }
   return {
     message: {
       role: "tool",
@@ -328,6 +267,71 @@ function toolResultToMessage(input: {
     },
     estimatedTokens: estimateTokens(content),
   };
+}
+
+function compactObservedToolMessagesForFutureModelCalls(
+  messages: AgentLoopMessage[],
+): number {
+  let totalTokens = 0;
+  for (const message of messages) {
+    if (message.role !== "tool") continue;
+    const currentTokens = estimateTokens(message.content);
+    const shouldCompactSingle = currentTokens >= CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS;
+    const shouldCompactCumulative =
+      totalTokens + currentTokens >= CHECKPOINT_CUMULATIVE_TOOL_RESULT_TOKENS;
+    if (!shouldCompactSingle && !shouldCompactCumulative) {
+      totalTokens += currentTokens;
+      continue;
+    }
+    const compacted = compactToolMessageContent({
+      content: message.content,
+      toolName: message.name ?? "tool",
+      reason: shouldCompactSingle
+        ? "single_tool_result_budget"
+        : "cumulative_tool_result_budget",
+      rawTokens: currentTokens,
+    });
+    message.content = compacted;
+    totalTokens += estimateTokens(compacted);
+  }
+  return totalTokens;
+}
+
+function compactToolMessageContent(input: {
+  content: string;
+  toolName: string;
+  reason: string;
+  rawTokens: number;
+}): string {
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = JSON.parse(input.content) as Record<string, unknown>;
+  } catch {
+    // Invalid JSON cannot be safely compacted as a structured tool result.
+  }
+  if (parsed?.ok !== true) return input.content;
+  const output = compactToolOutputForModel({
+    toolName: input.toolName,
+    output: parsed.output,
+    reason: input.reason,
+    rawTokens: input.rawTokens,
+  });
+  const outputMetadata = outputRecord(output);
+  const compactContent = JSON.stringify({ ok: true, output });
+  const compactTokens = estimateTokens(compactContent);
+  if (compactTokens >= input.rawTokens) return input.content;
+  if (
+    outputMetadata?.butler_evidence_checkpoint === true ||
+    outputMetadata?.butler_tool_result_compacted === true
+  ) {
+    const checkpointKey = outputMetadata.butler_evidence_checkpoint === true
+      ? "checkpoint_estimated_tokens"
+      : "compact_estimated_tokens";
+    outputMetadata[checkpointKey] = compactTokens;
+    outputMetadata.estimated_saved_tokens = Math.max(0, input.rawTokens - compactTokens);
+    return JSON.stringify({ ok: true, output });
+  }
+  return compactContent;
 }
 
 function renderPartialLimitResponse(results: AgentLoopToolResult[]): string {
@@ -344,19 +348,6 @@ function renderPartialLimitResponse(results: AgentLoopToolResult[]): string {
   return lines.join("\n");
 }
 
-function renderRepeatedToolFailureResponse(input: {
-  toolResult: AgentLoopToolResult;
-  failureCount: number;
-}): string {
-  return [
-    "I stopped because the same tool call failed repeatedly.",
-    `Tool: ${input.toolResult.name}`,
-    `Repeated failures: ${input.failureCount}`,
-    `Last error: ${input.toolResult.error ?? "unknown tool error"}`,
-    "I could not make further local progress without repeating the same failing action.",
-  ].join("\n");
-}
-
 interface PreparedToolCall {
   call: AgentLoopToolCall;
   tool: AgentLoopToolDefinition | undefined;
@@ -364,12 +355,11 @@ interface PreparedToolCall {
 }
 
 interface ToolStopCandidate {
-  type: "tool_final_text" | "repeated_tool_failure";
+  type: "tool_final_text";
   iteration: number;
   toolCall: AgentLoopToolCall;
   toolResult: AgentLoopToolResult;
   finalText?: string;
-  failureCount?: number;
 }
 
 function prepareToolCall(input: AgentLoopInput, call: AgentLoopToolCall): PreparedToolCall {
@@ -386,11 +376,16 @@ async function executePreparedToolCall(
   prepared: PreparedToolCall,
 ): Promise<AgentLoopToolResult> {
   if (prepared.validationError) {
+    const observation = genericToolInvalidArgumentsObservation({
+      call: prepared.call,
+      message: prepared.validationError,
+    });
     return {
       toolCallId: prepared.call.id,
       name: prepared.call.name,
       ok: false,
-      error: prepared.validationError,
+      error: observation.summary,
+      output: toolObservationResult(observation),
     };
   }
 
@@ -410,18 +405,54 @@ async function executePreparedToolCall(
   );
 }
 
+function genericToolInvalidArgumentsObservation(input: {
+  call: AgentLoopToolCall;
+  message: string;
+}): {
+  observationId: string;
+  turnId: string;
+  kind: "tool_invalid_arguments" | "tool_unavailable";
+  visibility: "model";
+  summary: string;
+  modelVisibleContent: string;
+  causedByToolCallId: string;
+  createdAt: string;
+} {
+  const kind = input.message.startsWith("No such tool available:")
+    ? "tool_unavailable"
+    : "tool_invalid_arguments";
+  return {
+    observationId: `obs-${input.call.id}`,
+    turnId: GENERIC_AGENT_LOOP_TURN_ID,
+    kind,
+    visibility: "model",
+    summary: input.message,
+    modelVisibleContent: [
+      `Tool: ${input.call.name}`,
+      `Observation: ${input.message}`,
+      `Arguments: ${JSON.stringify(input.call.arguments)}`,
+      "Use this observation to retry with the tool schema: include required fields, remove unsupported fields, or select an available tool.",
+    ].join("\n"),
+    causedByToolCallId: input.call.id,
+    createdAt: new Date(0).toISOString(),
+  };
+}
+
+function toolObservationResult(observation: ReturnType<typeof genericToolInvalidArgumentsObservation>): Record<string, unknown> {
+  return {
+    ok: false,
+    observation,
+    observation_kind: observation.kind,
+    summary: observation.summary,
+    model_visible_content: observation.modelVisibleContent,
+  };
+}
+
 export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutput> {
   const messages = [...input.messages];
   const events: AgentLoopEvent[] = [];
   const maxIterations = Math.max(1, input.maxIterations ?? DEFAULT_MAX_ITERATIONS);
-  const maxRepeatedToolFailures = Math.max(
-    // The first failure must be visible to the model so it can try a different strategy.
-    MIN_REPEATED_TOOL_FAILURES_BEFORE_STOP,
-    input.maxRepeatedToolFailures ?? DEFAULT_MAX_REPEATED_TOOL_FAILURES,
-  );
   const toolResults: AgentLoopToolResult[] = [];
-  const failedToolCounts = new Map<string, number>();
-  let cumulativeToolResultTokens = 0;
 
   const recordToolResult = async (inputRecord: {
     call: AgentLoopToolCall;
@@ -433,9 +464,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
     toolResults.push(result);
     const toolMessage = toolResultToMessage({
       result,
-      cumulativeToolResultTokens,
     });
-    cumulativeToolResultTokens += toolMessage.estimatedTokens;
     messages.push(toolMessage.message);
     emit(events, input.onEvent, {
       type: "tool_result",
@@ -444,18 +473,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
     });
 
     if (!result.ok) {
-      const signature = failedToolSignature({ toolCall: call });
-      const failureCount = (failedToolCounts.get(signature) ?? 0) + 1;
-      failedToolCounts.set(signature, failureCount);
-      if (evaluateStop && failureCount >= maxRepeatedToolFailures) {
-        return {
-          type: "repeated_tool_failure",
-          iteration,
-          toolCall: call,
-          toolResult: result,
-          failureCount,
-        };
-      }
       return null;
     }
 
@@ -480,27 +497,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
 
   const finishWithStopCandidate = async (candidate: ToolStopCandidate): Promise<AgentLoopOutput> => {
     let finalText = candidate.finalText;
-    if (candidate.type === "repeated_tool_failure") {
-      emit(events, input.onEvent, {
-        type: "repeated_tool_failure",
-        iteration: candidate.iteration,
-        toolCall: candidate.toolCall,
-        toolResult: candidate.toolResult,
-      });
-      const failureCount = candidate.failureCount ?? maxRepeatedToolFailures;
-      const synthesizedText = (await input.onRepeatedToolFailure?.({
-        messages,
-        toolResults,
-        toolCall: candidate.toolCall,
-        toolResult: candidate.toolResult,
-        failureCount,
-        maxRepeatedToolFailures,
-      }))?.trim();
-      finalText = synthesizedText || renderRepeatedToolFailureResponse({
-        toolResult: candidate.toolResult,
-        failureCount,
-      });
-    }
     if (!finalText) finalText = "";
     messages.push({
       role: "assistant",
@@ -521,6 +517,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
       tools: input.tools,
       iteration,
     });
+    compactObservedToolMessagesForFutureModelCalls(messages);
     emit(events, input.onEvent, {
       type: "model_response",
       iteration,
@@ -578,14 +575,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
         });
         if (!stop && candidate) stop = candidate;
       }
-      const hasSuccessfulAlternateInBatch = stop?.type === "repeated_tool_failure" &&
-        input.onRepeatedToolFailure === undefined &&
-        results.some((result, index) =>
-          result.ok &&
-          failedToolSignature({ toolCall: preparedCalls[index]!.call }) !==
-            failedToolSignature({ toolCall: stop!.toolCall }),
-        );
-      if (hasSuccessfulAlternateInBatch) continue;
       if (stop) return finishWithStopCandidate(stop);
       continue;
     }

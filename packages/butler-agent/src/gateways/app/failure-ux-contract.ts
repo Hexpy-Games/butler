@@ -1,4 +1,5 @@
 import {
+  isNonPublicContinuationDeliveryError,
   recoverableLimitedDeliveryForError,
   type RecoverableLimitedDelivery,
 } from "../../agent/turn/recoverable-delivery.ts";
@@ -22,9 +23,13 @@ export function appLimitedDeliveryForError(error: unknown): RecoverableLimitedDe
   return recoverableLimitedDeliveryForError(error);
 }
 
+export { isNonPublicContinuationDeliveryError };
+
 export function appSafeResponderError(error: unknown): AppResponderSafeError {
   const timeout = appResponderTimeout(error);
   if (timeout) return timeout;
+  const stableRuntimeFault = appStableRuntimeFault(error);
+  if (stableRuntimeFault) return stableRuntimeFault;
   if (isLocalModelEmptyResponseError(error)) {
     return {
       code: "provider_empty_response",
@@ -59,6 +64,18 @@ export function appSafeResponderError(error: unknown): AppResponderSafeError {
   };
 }
 
+function appStableRuntimeFault(error: unknown): AppResponderSafeError | null {
+  if (!error || typeof error !== "object") return null;
+  const code = (error as Record<string, unknown>).code;
+  if (code !== "runtime_fault" && code !== "runtime_invariant_violation") {
+    return null;
+  }
+  return {
+    code,
+    message: "Butler runtime was interrupted before the turn could continue.",
+  };
+}
+
 function appResponderTimeout(error: unknown): AppResponderSafeError | null {
   if (!(error instanceof Error)) return null;
   if (error.name !== "AppResponderTimeoutError") return null;
@@ -89,6 +106,9 @@ function safeGoalCompletionIncompleteMessage(message: string): string | null {
 }
 
 function internalRecoveryMessage(rawMessage: string, safeRuntimeMessage: string): string | null {
+  if (/prompt usage model-call budget exhausted/iu.test(rawMessage)) {
+    return "진행한 내용은 보존했습니다. 다음 요청에서 남은 작업을 이어갈 수 있습니다.";
+  }
   if (isCompletionObligationProtocolMessage(rawMessage)) {
     return safeGoalCompletionIncompleteMessage(rawMessage);
   }
