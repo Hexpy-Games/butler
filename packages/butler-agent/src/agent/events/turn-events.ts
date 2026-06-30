@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sanitizePublicText } from "./public-text.ts";
 import {
   TURN_ACKNOWLEDGED_EVENT_KIND,
+  TURN_DECISION_EVENT_KIND,
   TURN_STATE_CONTRACT_EVENT_KINDS,
   isAuthoredDecisionSource,
   normalizeTurnStateContractPayload,
@@ -129,6 +130,13 @@ export interface ProgressRowLike {
   safe_path_labels?: string[];
   tool_call_id?: string;
   bridge_phase?: string;
+  receipt_kind?: string;
+  public_decision_role?: string;
+  public_decision_summary?: string;
+  public_decision_rationale?: string;
+  public_decision_next_step?: string;
+  public_decision_source?: string;
+  public_decision_evidence_refs?: string[];
   work_block_id?: string;
   work_block_label?: string;
   work_decision_summary?: string;
@@ -306,7 +314,22 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       kind: "turn",
       safe_label: sanitizePublicText(payload.safeLabel, "Request received. Preparing the work."),
       state: "accepted",
+      receipt_kind: TURN_ACKNOWLEDGED_EVENT_KIND,
       created_at: createdAt,
+    };
+  }
+  if (event.kind === TURN_DECISION_EVENT_KIND) {
+    const decision = publicDecisionRowFields(payload);
+    if (!decision.public_decision_summary || !decision.public_decision_source) {
+      return null;
+    }
+    return {
+      id: event.id,
+      kind: "decision",
+      safe_label: decision.public_decision_summary,
+      state: "running",
+      created_at: createdAt,
+      ...decision,
     };
   }
   if (event.kind === "work.block.started" || event.kind === "work.block.updated" || event.kind === "work.block.completed") {
@@ -539,6 +562,31 @@ function publicDecisionFields(payload: Record<string, unknown>): Partial<Progres
   if (nextStep) fields.work_decision_next_step = nextStep;
   if (source) fields.work_decision_source = source;
   if (evidenceRefs && evidenceRefs.length > 0) fields.work_decision_evidence_refs = evidenceRefs;
+  return fields;
+}
+
+function publicDecisionRowFields(payload: Record<string, unknown>): Partial<ProgressRowLike> {
+  const source = optionalPublicText(payload.source);
+  if (!isAuthoredDecisionSource(source)) return {};
+  const fields: Partial<ProgressRowLike> = {};
+  const role = optionalPublicText(payload.role);
+  const summary = optionalPublicText(payload.summary);
+  const rationale = optionalPublicText(payload.rationale);
+  const nextStep = optionalPublicText(payload.nextStep);
+  if (role) fields.public_decision_role = role;
+  if (summary) fields.public_decision_summary = summary;
+  if (rationale) fields.public_decision_rationale = rationale;
+  if (nextStep) fields.public_decision_next_step = nextStep;
+  fields.public_decision_source = source;
+  const rawEvidenceRefs = payload.evidenceRefs;
+  const evidenceRefs = Array.isArray(rawEvidenceRefs)
+    ? rawEvidenceRefs
+        .map((item) => optionalPublicText(item))
+        .filter((item): item is string => Boolean(item))
+        .slice(0, 6)
+    : undefined;
+  if (evidenceRefs && evidenceRefs.length > 0)
+    fields.public_decision_evidence_refs = evidenceRefs;
   return fields;
 }
 

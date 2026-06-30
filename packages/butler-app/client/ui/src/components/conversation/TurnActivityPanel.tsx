@@ -1,7 +1,12 @@
 import { appCopy } from "@/app/copy.ts";
-import { workBlocksFromProgressRows } from "@/app/utils.ts";
+import {
+  typedUiReadModelsFromProgressRows,
+  workBlocksFromProgressRows,
+  type TypedUiReadModel,
+} from "@/app/utils.ts";
 import type { ProgressRow } from "@/app/types.ts";
 import { WorkDecisionBody } from "./WorkDecisionBody";
+import { TurnDecisionRow } from "./TurnDecisionRow";
 import {
   toolchainRowsForBlock,
   isTerminalActivityState,
@@ -21,14 +26,19 @@ export function TurnActivityPanel({
   rows: ProgressRow[];
   state?: string;
 }) {
+  const readModels = typedUiReadModelsFromProgressRows(rows);
+  const decisions = readModels.filter(isDecisionReadModel);
   const activeBlocks = workBlocksFromProgressRows(rows).filter(
     (block) =>
       !isTerminalActivityState(block.state) ||
       toolchainRowsForBlock(block).length > 0,
   );
-  if (activeBlocks.length === 0) {
-    const pendingLabel = turnActivityPendingLabel(state);
-    if (state === SESSION_STARTING_STATE) {
+  if (decisions.length === 0 && activeBlocks.length === 0) {
+    const receipt = acknowledgedReceipt(readModels);
+    const pendingLabel = receipt?.label.trim()
+      ? receipt.label
+      : turnActivityPendingLabel(state);
+    if (state === SESSION_STARTING_STATE && !receipt) {
       return (
         <Stack
           gap="2"
@@ -82,10 +92,16 @@ export function TurnActivityPanel({
     <Stack
       as="section"
       gap="md"
-      data-test-class="turn-activity-panel turn-work-panel"
+      data-test-class="turn-activity-panel turn-work-panel turn-decision-work-panel"
       aria-live="polite"
       aria-label={appCopy.conversation.work.historyRegionLabel}
     >
+      {decisions.map((decision, decisionIndex) => (
+        <TurnDecisionRow
+          decision={decision}
+          key={`${decision.summary}:${decisionIndex}`}
+        />
+      ))}
       {activeBlocks.map((block, blockIndex) => (
         <WorkActivityBlock
           className="turn-activity-item"
@@ -107,7 +123,22 @@ export function TurnActivityPanel({
 function turnActivityPendingLabel(state?: string): string {
   const normalizedState = state?.trim().toLowerCase();
   return normalizedState
-    ? appCopy.conversation.work.pendingStateLabels[normalizedState] ??
-        appCopy.conversation.work.pendingLabel
+    ? (appCopy.conversation.work.pendingStateLabels[normalizedState] ??
+        appCopy.conversation.work.pendingLabel)
     : appCopy.conversation.work.pendingLabel;
+}
+
+function acknowledgedReceipt(
+  readModels: TypedUiReadModel[],
+): Extract<TypedUiReadModel, { type: "receipt" }> | undefined {
+  return readModels.find(
+    (model): model is Extract<TypedUiReadModel, { type: "receipt" }> =>
+      model.type === "receipt" && model.receiptKind === "turn.acknowledged",
+  );
+}
+
+function isDecisionReadModel(
+  model: TypedUiReadModel,
+): model is Extract<TypedUiReadModel, { type: "decision" }> {
+  return model.type === "decision";
 }

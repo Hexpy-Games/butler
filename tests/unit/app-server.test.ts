@@ -46,6 +46,7 @@ import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integra
 import {
   TURN_DECISION_EVENT_KIND,
   TURN_ACKNOWLEDGED_EVENT_KIND,
+  createTurnDecisionPayload,
   createRuntimeFaultPayload,
   createTurnAcknowledgedPayload,
 } from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
@@ -1047,6 +1048,31 @@ test("app transport sync projects native actor turn event outbounds", async () =
       firstVisible: true,
       summary: "Orient to the app turn.",
     });
+    const openingProgress = replay.data.events.find(
+      (event: { type: string; payload?: { turn_id?: string; row?: { kind?: string; public_decision_summary?: string } } }) =>
+        event.type === "agent.turn_event.progress" &&
+        event.payload?.turn_id === turnId &&
+        event.payload.row?.kind === "decision",
+    );
+    expect(openingProgress?.payload?.row).toMatchObject({
+      kind: "decision",
+      safe_label: "Orient to the app turn.",
+      public_decision_role: "opening",
+      public_decision_summary: "Orient to the app turn.",
+      public_decision_rationale:
+        "The native actor emitted a model-authored opening decision.",
+      public_decision_next_step: "Continue into the runtime turn.",
+      public_decision_source: "model-authored",
+    });
+    server.stop();
+    server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(messages.data.turn_progress[turnId].safe_progress_rows).toContainEqual(
+      expect.objectContaining({
+        kind: "decision",
+        public_decision_summary: "Orient to the app turn.",
+      }),
+    );
     expect(turnEventKinds).toContain(TURN_ACKNOWLEDGED_EVENT_KIND);
     expect(turnEventKinds).toContain(TURN_DECISION_EVENT_KIND);
     expect(turnEventKinds).not.toContain("turn.started");
@@ -11846,6 +11872,18 @@ test("turn cancel preserves earlier assistant work history while stopping active
         });
         return { texts: ["기본 작업은 완료했습니다."] };
       }
+      input.onTurnEvent?.({
+        kind: TURN_DECISION_EVENT_KIND,
+        payload: createTurnDecisionPayload({
+          decisionId: "opening-cancel-turn",
+          role: "opening",
+          source: "model-authored",
+          firstVisible: true,
+          summary: "I will preserve this opening decision through Stop.",
+          rationale: "Stopping the turn must not erase typed decision history.",
+          nextStep: "Keep the cancellation attached to the same turn.",
+        }),
+      });
       input.onProgress?.({
         id: "cancel-progress-row",
         kind: "ran_command",
@@ -11958,6 +11996,14 @@ test("turn cancel preserves earlier assistant work history while stopping active
         }),
       ],
     });
+    expect(messages.data.turn_progress[secondTurnId].safe_progress_rows)
+      .toContainEqual(
+        expect.objectContaining({
+          kind: "decision",
+          public_decision_summary:
+            "I will preserve this opening decision through Stop.",
+        }),
+      );
     expect(JSON.stringify(messages)).not.toContain("Retrying this turn");
   } finally {
     server.stop();
@@ -12167,6 +12213,18 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       attempt += 1;
       if (attempt === 1) {
         input.onTurnEvent?.({
+          kind: TURN_DECISION_EVENT_KIND,
+          payload: createTurnDecisionPayload({
+            decisionId: "opening-runtime-retry",
+            role: "opening",
+            source: "model-authored",
+            firstVisible: true,
+            summary: "I will preserve this opening decision through Retry.",
+            rationale: "Retry must keep typed turn history on the same turn.",
+            nextStep: "Retry the failed runtime attempt without synthetic text.",
+          }),
+        });
+        input.onTurnEvent?.({
           kind: "runtime.fault",
           payload: createRuntimeFaultPayload({
             faultId: "fault-retryable-runtime",
@@ -12265,6 +12323,15 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
         (message: { role: string }) => message.role === "assistant",
       ),
     ).toHaveLength(1);
+    const openingRows = messages.data.turn_progress[
+      failedTurnId
+    ].safe_progress_rows.filter(
+      (row: { kind?: string; public_decision_summary?: string }) =>
+        row.kind === "decision" &&
+        row.public_decision_summary ===
+          "I will preserve this opening decision through Retry.",
+    );
+    expect(openingRows).toHaveLength(1);
     expect(messages.data.messages).not.toContainEqual(
       expect.objectContaining({
         role: "assistant",

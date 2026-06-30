@@ -41,6 +41,27 @@ export function normalizeProgressSummaryRow(
   if (toolCallId) row.tool_call_id = toolCallId;
   const bridgePhase = safeOptionalShortToken(input.bridge_phase);
   if (bridgePhase) row.bridge_phase = bridgePhase;
+  const receiptKind = safeOptionalShortToken(input.receipt_kind);
+  if (receiptKind) row.receipt_kind = receiptKind;
+  const publicDecisionSource = safeOptionalShortText(input.public_decision_source);
+  if (isPublicDecisionSource(publicDecisionSource)) {
+    const publicDecisionRole = safeOptionalShortText(input.public_decision_role);
+    if (publicDecisionRole) row.public_decision_role = publicDecisionRole;
+    const publicDecisionSummary = safeOptionalShortText(input.public_decision_summary);
+    if (publicDecisionSummary) row.public_decision_summary = publicDecisionSummary;
+    const publicDecisionRationale = safeOptionalShortText(input.public_decision_rationale);
+    if (publicDecisionRationale) row.public_decision_rationale = publicDecisionRationale;
+    const publicDecisionNextStep = safeOptionalShortText(input.public_decision_next_step);
+    if (publicDecisionNextStep) row.public_decision_next_step = publicDecisionNextStep;
+    row.public_decision_source = publicDecisionSource;
+    if (Array.isArray(input.public_decision_evidence_refs)) {
+      const refs = input.public_decision_evidence_refs
+        .map((value) => safeOptionalShortText(value))
+        .filter((value): value is string => Boolean(value))
+        .slice(0, 6);
+      if (refs.length > 0) row.public_decision_evidence_refs = refs;
+    }
+  }
   const workBlockId = safeOptionalShortToken(input.work_block_id);
   if (workBlockId) row.work_block_id = workBlockId;
   const workBlockLabel = safeOptionalShortText(input.work_block_label);

@@ -1543,6 +1543,18 @@ test("delivered assistant message terminalizes active turn progress immediately"
 });
 
 test("retrying turn deletes the failure message and continues existing work progress", () => {
+  const openingRow = {
+    id: "opening-retry",
+    kind: "decision",
+    state: "running",
+    safe_label: "I will keep the retry on the same turn.",
+    public_decision_role: "opening",
+    public_decision_summary: "I will keep the retry on the same turn.",
+    public_decision_rationale:
+      "Retry must continue existing typed progress instead of cloning blocks.",
+    public_decision_next_step: "Run the retry attempt.",
+    public_decision_source: "model-authored",
+  } as const;
   const failedRow = {
     id: "row-retry",
     kind: "ran_command",
@@ -1610,14 +1622,14 @@ test("retrying turn deletes the failure message and continues existing work prog
         latest_progress: {
           turn_id: "turn-retry",
           state: "failed",
-          safe_progress_rows: [failedRow],
+          safe_progress_rows: [openingRow, failedRow],
         },
       },
       turnProgress: {
         "turn-retry": {
           turn_id: "turn-retry",
           state: "failed",
-          safe_progress_rows: [failedRow],
+          safe_progress_rows: [openingRow, failedRow],
         },
       },
     },
@@ -1625,7 +1637,14 @@ test("retrying turn deletes the failure message and continues existing work prog
 
   expect(state.messages).toEqual([]);
   expect(state.turnProgress["turn-retry"]?.state).toBe("thinking");
-  expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toHaveLength(1);
+  expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toHaveLength(2);
+  expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "opening-retry",
+      kind: "decision",
+      public_decision_summary: "I will keep the retry on the same turn.",
+    }),
+  );
   expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toContainEqual(
     expect.objectContaining({
       id: "row-retry",
@@ -2722,6 +2741,132 @@ test("typed UI read models keep runtime faults separate from progress rows", () 
       workBlockId: undefined,
     },
   ]);
+});
+
+test("typed UI acknowledged receipt projects as status without decision or work block fallback", () => {
+  const models = typedUiReadModelsFromProgressRows([
+    {
+      id: "ack-row",
+      kind: "turn",
+      state: "accepted",
+      safe_label: "Request received. Preparing the work.",
+      receipt_kind: "turn.acknowledged",
+      work_block_id: "work-ack",
+      work_block_label: "This must not become a work block.",
+      public_decision_summary: "This must not become a decision.",
+      public_decision_source: "assistant-authored",
+    },
+  ]);
+
+  expect(models).toEqual([
+    {
+      type: "receipt",
+      label: "Request received. Preparing the work.",
+      state: "accepted",
+      receiptKind: "turn.acknowledged",
+    },
+  ]);
+});
+
+test("typed UI opening assistant decision does not become a work block or tool control", () => {
+  const models = typedUiReadModelsFromProgressRows([
+    {
+      id: "opening-decision",
+      kind: "decision",
+      state: "running",
+      safe_label: "I will inspect the current app-client readmodel contract.",
+      safe_tool_name: "Bash",
+      safe_input_label: "bun test",
+      tool_call_id: "tool-leak",
+      work_block_id: "work-leak",
+      work_block_label: "This must not become a work block.",
+      public_decision_role: "opening",
+      public_decision_summary:
+        "I will inspect the current app-client readmodel contract.",
+      public_decision_rationale:
+        "The UI must render opening decisions from explicit public decisions.",
+      public_decision_next_step: "Patch only the client readmodel helpers.",
+      public_decision_source: "model-authored",
+      public_decision_evidence_refs: ["turn.acknowledged"],
+    },
+  ]);
+
+  expect(models).toEqual([
+    {
+      type: "decision",
+      summary: "I will inspect the current app-client readmodel contract.",
+      rationale:
+        "The UI must render opening decisions from explicit public decisions.",
+      nextStep: "Patch only the client readmodel helpers.",
+      source: "model-authored",
+      evidenceRefs: ["turn.acknowledged"],
+    },
+  ]);
+});
+
+test("typed UI tool controls use safe tool labels when rows carry opening decision text", () => {
+  const openingText =
+    "I will inspect the current app-client readmodel contract.";
+  const models = typedUiReadModelsFromProgressRows([
+    {
+      id: "tool-row",
+      kind: "ran_command",
+      state: "running",
+      safe_label: openingText,
+      safe_tool_name: "Bash",
+      safe_input_label: "bun test tests/unit/app-client-utils.test.ts",
+      tool_call_id: "tool-test",
+      work_block_id: "work-test",
+      work_block_label: "Run app-client utils tests",
+      work_decision_summary: openingText,
+      work_decision_source: "assistant-authored",
+      public_decision_role: "opening",
+      public_decision_summary: openingText,
+      public_decision_source: "model-authored",
+    },
+  ]);
+
+  expect(models).toEqual([
+    {
+      type: "tool_control",
+      toolName: "Bash",
+      inputLabel: "bun test tests/unit/app-client-utils.test.ts",
+      label: "Bash: bun test tests/unit/app-client-utils.test.ts",
+      toolCallId: "tool-test",
+      workBlockId: "work-test",
+    },
+  ]);
+  expect(JSON.stringify(models)).not.toContain(openingText);
+});
+
+test("work blocks ignore opening decisions and acknowledged receipt rows", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "ack-row",
+      kind: "turn",
+      state: "accepted",
+      safe_label: "Request received. Preparing the work.",
+      receipt_kind: "turn.acknowledged",
+      work_block_id: "work-ack",
+      work_block_label: "Receipt text must not become a block.",
+    },
+    {
+      id: "opening-decision",
+      kind: "decision",
+      state: "running",
+      safe_label: "I will inspect the current app-client readmodel contract.",
+      work_block_id: "work-opening",
+      work_block_label: "Opening text must not become a block.",
+      public_decision_role: "opening",
+      public_decision_summary:
+        "I will inspect the current app-client readmodel contract.",
+      public_decision_source: "model-authored",
+    },
+  ]);
+
+  expect(blocks).toEqual([]);
+  expect(JSON.stringify(blocks)).not.toContain("Request received");
+  expect(JSON.stringify(blocks)).not.toContain("app-client readmodel");
 });
 
 test("retry eligibility requires runtime fault message code", () => {
