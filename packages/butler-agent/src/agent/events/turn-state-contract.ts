@@ -36,12 +36,21 @@ export const AUTHORED_DECISION_SOURCES = [
   "principal-authored",
 ] as const;
 
+export const PUBLIC_DECISION_ROLES = [
+  "opening",
+  "tool_intent",
+  "continuation",
+  "correction",
+  "final_preparation",
+] as const;
+
 export const DIAGNOSTIC_DECISION_SOURCES = [
   "runtime-derived",
   "review-repaired",
 ] as const;
 
 export type AuthoredDecisionSource = typeof AUTHORED_DECISION_SOURCES[number];
+export type PublicDecisionRole = typeof PUBLIC_DECISION_ROLES[number];
 export type DiagnosticDecisionSource = typeof DIAGNOSTIC_DECISION_SOURCES[number];
 export type PublicDecisionSource = AuthoredDecisionSource;
 
@@ -87,6 +96,7 @@ export const RECOVERY_KINDS = [
 export type RecoveryKind = typeof RECOVERY_KINDS[number];
 
 const AUTHORED_DECISION_SOURCE_SET = new Set<string>(AUTHORED_DECISION_SOURCES);
+const PUBLIC_DECISION_ROLE_SET = new Set<string>(PUBLIC_DECISION_ROLES);
 const COMPLETION_EVIDENCE_KIND_SET = new Set<string>(COMPLETION_EVIDENCE_KINDS);
 const TURN_OUTCOME_SET = new Set<string>(TURN_OUTCOMES);
 const RECOVERY_KIND_SET = new Set<string>(RECOVERY_KINDS);
@@ -98,10 +108,12 @@ export interface TurnAcknowledgedPayloadInput {
 
 export interface TurnDecisionPayloadInput {
   decisionId: unknown;
+  role: unknown;
   summary: unknown;
   rationale?: unknown;
   nextStep?: unknown;
   source: unknown;
+  firstVisible?: unknown;
   evidenceRefs?: unknown;
 }
 
@@ -152,6 +164,10 @@ export function isAuthoredDecisionSource(source: unknown): source is AuthoredDec
   return typeof source === "string" && AUTHORED_DECISION_SOURCE_SET.has(source);
 }
 
+export function isPublicDecisionRole(role: unknown): role is PublicDecisionRole {
+  return typeof role === "string" && PUBLIC_DECISION_ROLE_SET.has(role);
+}
+
 export function createTurnAcknowledgedPayload(
   input: TurnAcknowledgedPayloadInput = {},
 ): Record<string, unknown> {
@@ -169,16 +185,30 @@ export function createTurnDecisionPayload(input: TurnDecisionPayloadInput): Reco
     throw new Error("public turn decision source must be authored");
   }
   const decisionId = requiredSafeText(input.decisionId, "turn decision id is required");
+  const role = requiredSafeText(input.role, "turn decision role is required");
+  if (!isPublicDecisionRole(role)) {
+    throw new Error(`unknown turn decision role: ${role}`);
+  }
   const summary = requiredSafeText(input.summary, "turn decision summary is required");
   const rationale = requiredSafeText(input.rationale, "turn decision rationale is required");
   const nextStep = requiredSafeText(input.nextStep, "turn decision nextStep is required");
+  if (role === "opening") {
+    if (input.source !== "model-authored") {
+      throw new Error("opening decision source must be model-authored");
+    }
+    if (input.firstVisible !== true) {
+      throw new Error("opening decision firstVisible must be true");
+    }
+  }
   const evidenceRefs = safeStringArray(input.evidenceRefs);
   return {
     decisionId,
+    role,
     summary,
     rationale,
     nextStep,
     source: input.source,
+    ...(input.firstVisible === true ? { firstVisible: true } : {}),
     ...(evidenceRefs.length > 0 ? { evidenceRefs } : {}),
   };
 }
@@ -297,10 +327,12 @@ export function normalizeTurnStateContractPayload(
   if (kind === TURN_DECISION_EVENT_KIND) {
     return createTurnDecisionPayload({
       decisionId: payload.decisionId,
+      role: payload.role ?? payload.decisionRole,
       summary: payload.summary ?? payload.decisionSummary,
       rationale: payload.rationale ?? payload.decisionRationale,
       nextStep: payload.nextStep ?? payload.decisionNextStep,
       source: payload.source ?? payload.decisionSource,
+      firstVisible: payload.firstVisible,
       evidenceRefs: payload.evidenceRefs ?? payload.decisionEvidenceRefs,
     });
   }

@@ -37,6 +37,10 @@ import {
 } from "../../packages/butler-app/client/ui/src/app/id.ts";
 import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import { resolveMarkdownImageSource } from "../../packages/butler-app/client/ui/src/components/conversation/messageMedia.ts";
+import {
+  createAgentTurnEvent,
+  progressRowFromTurnEvent as sharedProgressRowFromTurnEvent,
+} from "../../packages/butler-agent/src/agent/events/turn-events.ts";
 import type {
   MessageFileRef,
   MessageRecord,
@@ -2777,7 +2781,7 @@ test("production work block projection keeps mixed tool row decisions out of blo
   expect(blocks[0]?.rows[0]?.work_decision_summary).toBeUndefined();
 });
 
-test("timeline applies first visible progress turn events as public progress rows", () => {
+test("timeline applies first visible progress turn events as legacy status rows", () => {
   let messages: MessageRecord[] = [];
   let currentSummary: SessionSummaryView | null = {
     session_id: "general",
@@ -2826,12 +2830,17 @@ test("timeline applies first visible progress turn events as public progress row
   expect(currentSummary?.latest_progress?.safe_progress_rows).toContainEqual(
     expect.objectContaining({
       id: "event-first-progress",
-      kind: "message",
+      kind: "turn",
+      state: "thinking",
       safe_label: "필요한 맥락을 확인하겠습니다.",
-      work_block_id: "first-progress-note",
-      work_block_label: "필요한 맥락을 확인하겠습니다.",
     }),
   );
+  const row = currentSummary?.latest_progress?.safe_progress_rows?.find(
+    (item) => item.id === "event-first-progress",
+  );
+  expect(row?.work_block_id).toBeUndefined();
+  expect(row?.work_block_label).toBeUndefined();
+  expect(row?.work_decision_summary).toBeUndefined();
   expect(messages).toEqual([]);
 });
 
@@ -2891,32 +2900,85 @@ test("timeline applies turn acknowledgements as accepted progress rows", () => {
   expect(messages).toEqual([]);
 });
 
-test("first visible progress message rows render as standalone active work blocks", () => {
+test("first visible progress status rows do not render as standalone active work blocks", () => {
   const blocks = workBlocksFromProgressRows([
     {
       id: "event-first-progress",
-      kind: "message",
-      state: "running",
+      kind: "turn",
+      state: "thinking",
       safe_label: "필요한 맥락을 확인하겠습니다.",
-      work_block_id: "first-progress-note",
-      work_block_label: "필요한 맥락을 확인하겠습니다.",
     },
   ]);
 
-  expect(blocks).toEqual([
-    expect.objectContaining({
-      id: "first-progress-note",
-      label: "필요한 맥락을 확인하겠습니다.",
-      state: "running",
-      rows: [
-        expect.objectContaining({
-          id: "event-first-progress",
-          kind: "message",
-          safe_label: "필요한 맥락을 확인하겠습니다.",
-        }),
-      ],
-    }),
-  ]);
+  expect(blocks).toEqual([]);
+});
+
+test("client and shared first-progress projections stay status-only", () => {
+  const event = createAgentTurnEvent({
+    id: "event-first-progress-shared",
+    sessionId: "general",
+    turnId: "turn-1",
+    sessionSequence: 1,
+    turnSequence: 1,
+    kind: "turn.first_progress",
+    visibility: "public",
+    payload: {
+      note: "필요한 맥락을 확인하겠습니다.",
+      workBlockId: "first-progress-note",
+      workBlockLabel: "필요한 맥락을 확인하겠습니다.",
+      decisionSummary: "This must not project as a decision.",
+      decisionSource: "assistant-authored",
+    },
+  });
+  const sharedRow = sharedProgressRowFromTurnEvent(event);
+  let messages: MessageRecord[] = [];
+  let currentSummary: SessionSummaryView | null = {
+    session_id: "general",
+    turn_state: "thinking",
+    latest_progress: {
+      turn_id: "turn-1",
+      safe_progress_rows: [],
+    },
+  };
+
+  applyTimelineEvents(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-1",
+          event,
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    (update) => {
+      messages = update(messages);
+    },
+    (update) => {
+      currentSummary = update(currentSummary);
+      return currentSummary;
+    },
+  );
+
+  const clientRow = currentSummary?.latest_progress?.safe_progress_rows?.find(
+    (item) => item.id === event.id,
+  );
+  if (!sharedRow) {
+    throw new Error("shared first-progress projection must produce a row");
+  }
+  expect(clientRow).toEqual(sharedRow);
+  expect(clientRow).toMatchObject({
+    kind: "turn",
+    state: "thinking",
+    safe_label: "필요한 맥락을 확인하겠습니다.",
+  });
+  expect(clientRow?.work_block_id).toBeUndefined();
+  expect(clientRow?.work_block_label).toBeUndefined();
+  expect(clientRow?.work_decision_summary).toBeUndefined();
+  expect(messages).toEqual([]);
 });
 
 test("work block projection groups decision message rows with their following tool rows", () => {
@@ -2993,11 +3055,9 @@ test("first visible progress stays scoped through failure and ignores other sess
           turn_id: "turn-first",
           row: {
             id: "row-first-progress",
-            kind: "message",
-            state: "running",
+            kind: "turn",
+            state: "thinking",
             safe_label: "필요한 맥락을 확인하겠습니다.",
-            work_block_id: "first-progress-note",
-            work_block_label: "필요한 맥락을 확인하겠습니다.",
           },
         },
       },
@@ -3068,9 +3128,15 @@ test("first visible progress stays scoped through failure and ignores other sess
     expect.objectContaining({
       id: "row-first-progress",
       safe_label: "필요한 맥락을 확인하겠습니다.",
-      work_block_id: "first-progress-note",
+      kind: "turn",
+      state: "thinking",
     }),
   );
+  const row = currentSummary?.latest_progress?.safe_progress_rows?.find(
+    (item) => item.id === "row-first-progress",
+  );
+  expect(row?.work_block_id).toBeUndefined();
+  expect(row?.work_block_label).toBeUndefined();
   expect(JSON.stringify(currentSummary)).not.toContain("다른 세션 진행입니다.");
   expect(messages).toEqual([]);
 });

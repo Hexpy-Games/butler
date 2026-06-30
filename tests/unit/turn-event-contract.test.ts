@@ -3,6 +3,10 @@ import { Buffer } from "node:buffer";
 import {
   TURN_EVENT_COMPATIBILITY_MAPPINGS,
   FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+  type ModelStreamReasoningDeltaPayload,
+  type ModelStreamTextDeltaPayload,
+  type ModelStreamToolCallDeltaPayload,
+  type ProviderStreamEventKind,
   TURN_EVENT_KINDS,
   createAgentTurnEvent,
   progressRowFromTurnEvent,
@@ -30,21 +34,33 @@ test("turn event contract accepts every public event kind with monotonic sequenc
       sessionSequence: index + 1,
       turnSequence: index + 1,
       kind,
+      visibility: visibilityForEventKind(kind),
       payload: payloadForEventKind(kind),
     });
 
     expect(event.kind).toBe(kind);
-    expect(event.visibility).toBe("public");
+    expect(event.visibility).toBe(visibilityForEventKind(kind));
     expect(event.sessionSequence).toBe(index + 1);
     expect(event.turnSequence).toBe(index + 1);
     expect(JSON.stringify(event)).not.toContain("operatorSummary");
   }
 });
 
+test("turn event kind registry has no duplicate values", () => {
+  expect(new Set(TURN_EVENT_KINDS).size).toBe(TURN_EVENT_KINDS.length);
+});
+
+function visibilityForEventKind(kind: string): "public" | "internal" {
+  if (kind === "model.stream.reasoning_delta") return "internal";
+  if (kind === "model.stream.tool_call_delta") return "internal";
+  return "public";
+}
+
 function payloadForEventKind(kind: string): Record<string, unknown> {
   if (kind === TURN_DECISION_EVENT_KIND) {
     return {
       decisionId: "decision-1",
+      role: "tool_intent",
       summary: "Checking the turn contract.",
       rationale: "The fixture needs an authored public decision record.",
       nextStep: "Use the decision before visible work.",
@@ -89,8 +105,156 @@ function payloadForEventKind(kind: string): Record<string, unknown> {
       summary: "Fixture diagnostic.",
     };
   }
+  if (kind === "model.stream.text_delta") {
+    return {
+      streamId: "stream-1",
+      textDelta: "Opening draft",
+      target: "opening_decision",
+      sequence: 1,
+    };
+  }
+  if (kind === "model.stream.reasoning_delta") {
+    return {
+      streamId: "stream-1",
+      charCount: 42,
+      sequence: 1,
+    };
+  }
+  if (kind === "model.stream.tool_call_delta") {
+    return {
+      streamId: "stream-1",
+      callIndex: 0,
+      sequence: 1,
+      toolCallId: "tool-call-1",
+      safeToolName: "Read file",
+      argumentCharCount: 12,
+      publicState: "generating",
+    };
+  }
+  if (kind === "model.stream.completed") {
+    return {
+      streamId: "stream-1",
+      status: "completed",
+    };
+  }
   return { safeLabel: "Working" };
 }
+
+test("provider stream event kinds and payloads are explicit contract members", () => {
+  const textPayload: ModelStreamTextDeltaPayload = {
+    streamId: "stream-opening-1",
+    textDelta: "Public draft text",
+    target: "opening_decision",
+    sequence: 1,
+  };
+  const reasoningPayload: ModelStreamReasoningDeltaPayload = {
+    streamId: "stream-opening-1",
+    charCount: 128,
+    sequence: 2,
+  };
+  const toolCallPayload: ModelStreamToolCallDeltaPayload = {
+    streamId: "stream-opening-1",
+    callIndex: 0,
+    sequence: 3,
+    toolCallId: "tool-call-1",
+    safeToolName: "Read file",
+    argumentCharCount: 7,
+    rawArgumentsDelta: "{\"path\":\"/Users/example/private/raw-payload.json\",\"query\":\"<think>keep raw</think>\"",
+    publicState: "generating",
+  };
+  const fixtures: Array<{
+    kind: ProviderStreamEventKind;
+    visibility: "public" | "internal";
+    payload: unknown;
+  }> = [
+    { kind: "model.stream.text_delta", visibility: "public", payload: textPayload },
+    { kind: "model.stream.reasoning_delta", visibility: "internal", payload: reasoningPayload },
+    { kind: "model.stream.tool_call_delta", visibility: "internal", payload: toolCallPayload },
+    {
+      kind: "model.stream.completed",
+      visibility: "internal",
+      payload: { streamId: "stream-opening-1", status: "completed" },
+    },
+  ];
+
+  for (const [index, fixture] of fixtures.entries()) {
+    if (!isRecordPayload(fixture.payload)) {
+      throw new Error("provider stream fixture payload must be a record");
+    }
+    const event = createAgentTurnEvent({
+      sessionId: "general",
+      turnId: "turn-1",
+      sessionSequence: index + 1,
+      turnSequence: index + 1,
+      kind: fixture.kind,
+      visibility: fixture.visibility,
+      payload: fixture.payload,
+    });
+    expect(event.kind).toBe(fixture.kind);
+    expect(event.payload.streamId).toBe(fixture.payload.streamId);
+    if ("textDelta" in fixture.payload) {
+      expect(event.payload.textDelta).toBe(fixture.payload.textDelta);
+    }
+    if ("charCount" in fixture.payload) {
+      expect(event.payload.charCount).toBe(fixture.payload.charCount);
+      expect(event.payload).not.toHaveProperty("delta");
+    }
+    if ("rawArgumentsDelta" in fixture.payload) {
+      expect(event.payload.rawArgumentsDelta).toBe(fixture.payload.rawArgumentsDelta);
+      expect(event.payload.toolCallId).toBe(fixture.payload.toolCallId);
+      expect(event.payload.rawArgumentsDelta).toContain("/Users/example/private/raw-payload.json");
+      expect(event.payload.rawArgumentsDelta).toContain("<think>keep raw</think>");
+    }
+  }
+});
+
+function isRecordPayload(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+test("public provider stream tool call deltas reject raw argument fragments", () => {
+  expect(() => createAgentTurnEvent({
+    sessionId: "general",
+    turnId: "turn-1",
+    sessionSequence: 1,
+    turnSequence: 1,
+    kind: "model.stream.tool_call_delta",
+    visibility: "public",
+    payload: {
+      streamId: "stream-public-tool-1",
+      callIndex: 0,
+      sequence: 1,
+      safeToolName: "Read file",
+      argumentCharCount: 7,
+      rawArgumentsDelta: "{\"path\"",
+      publicState: "generating",
+    },
+  })).toThrow("public model stream tool call deltas must not include rawArgumentsDelta");
+
+  const event = createAgentTurnEvent({
+    sessionId: "general",
+    turnId: "turn-1",
+    sessionSequence: 1,
+    turnSequence: 2,
+    kind: "model.stream.tool_call_delta",
+    visibility: "public",
+    payload: {
+      streamId: "stream-public-tool-1",
+      callIndex: 0,
+      sequence: 2,
+      safeToolName: "Read file",
+      argumentCharCount: 7,
+      publicState: "ready",
+    },
+  });
+
+  expect(event.payload).toMatchObject({
+    streamId: "stream-public-tool-1",
+    safeToolName: "Read file",
+    publicState: "ready",
+  });
+  expect(event.payload).not.toHaveProperty("rawArgumentsDelta");
+});
 
 test("turn event privacy fixtures keep public labels and suppress private protocol text", () => {
   const positive = [
@@ -187,7 +351,7 @@ test("turn event progress projection preserves safe tool activity", () => {
   });
 });
 
-test("first visible progress event is public prose without tool or todo dependencies", () => {
+test("first visible progress event projects as legacy turn status only", () => {
   const event = createAgentTurnEvent({
     sessionId: "general",
     turnId: "turn-1",
@@ -212,11 +376,14 @@ test("first visible progress event is public prose without tool or todo dependen
   expect(event.payload.activityKind).toBeUndefined();
 
   expect(progressRowFromTurnEvent(event)).toMatchObject({
-    kind: "message",
-    state: "running",
+    id: event.id,
+    kind: "turn",
+    state: "thinking",
     safe_label: "관련 매핑을 확인하겠습니다.",
-    work_block_label: "관련 매핑을 확인하겠습니다.",
   });
+  expect(progressRowFromTurnEvent(event)?.work_block_id).toBeUndefined();
+  expect(progressRowFromTurnEvent(event)?.work_block_label).toBeUndefined();
+  expect(progressRowFromTurnEvent(event)?.work_decision_summary).toBeUndefined();
 });
 
 test("first visible progress policy repairs unsafe or evidence-claiming notes", () => {
@@ -266,6 +433,7 @@ test("work block events project public decision context without private reasonin
     payload: {
       workBlockId: "work-decision-1",
       label: "Checking official event data before transforming it.",
+      decisionRole: "tool_intent",
       decisionSummary: "Checking official event data before transforming it.",
       decisionRationale: "This keeps the report grounded in accessible public sources.",
       decisionNextStep: "Use the verified rows as the CSV input for the local transform.",
@@ -312,6 +480,7 @@ test("work block events project public decision context without private reasonin
     payload: {
       workBlockId: "work-authored-empty",
       label: "This label must stay a work-block label only.",
+      decisionRole: "tool_intent",
       decisionSource: "assistant-authored",
     },
   });
@@ -336,6 +505,7 @@ test("runtime-derived and repaired progress payloads do not project public decis
         decisionSummary: "This must not become a public decision.",
         decisionRationale: "Runtime repair text is diagnostic only.",
         decisionNextStep: "Do not render this as a decision.",
+        decisionRole: "tool_intent",
         decisionSource: source,
       },
     });
