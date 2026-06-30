@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
-import { basename, join, resolve, sep } from "node:path";
+import { basename, join, resolve } from "node:path";
 import {
   PERSONALIZATION_PROFILE_STORAGE_LABEL,
   readPersonalizationProfile,
@@ -101,8 +101,6 @@ import {
   type AutomationRunListView,
   type AutomationRunResult,
   type AutomationRunSummary,
-  type AutomationRunState,
-  type AutomationState,
   type AutomationTargetSummary,
   type ArchiveListView,
   type ChatKind,
@@ -118,7 +116,6 @@ import {
   type HostedModelRegistrationRequest,
   type HostedModelRegistrationResult,
   type MessageRecord,
-  type MessageFileKind,
   type MessageFileRef,
   type MessageFileUploadResult,
   type MessageRole,
@@ -251,13 +248,6 @@ import {
 } from "./session-read-model.ts";
 import { systemEventsForButlerData } from "./system-events-read-model.ts";
 import {
-  automationDetailFromRow,
-  automationRunFromRow,
-  automationSummaryFromRow,
-  automationSummaryWithoutPrompt,
-  normalizeAutomationInterval,
-} from "./automation-read-model.ts";
-import {
   turnLocalWorkOutcomeForAppTurn,
   turnLocalWorkOutcomeStatusNote,
 } from "./turn-local-work-outcome.ts";
@@ -283,14 +273,9 @@ import {
   sanitizeAppTransportFinalText,
 } from "./app-transport-projection.ts";
 import {
-  classifyMessageFileKind,
-  MESSAGE_FILE_ID_PATTERN,
-  MESSAGE_FILE_MAX_ATTACHMENTS,
-  MESSAGE_FILE_MAX_BYTES,
   messageFileContentKey,
   mimeTypeForArtifactPath,
   normalizeAttachmentMimeType,
-  normalizeFileBytes,
   safeAttachmentName,
 } from "./message-file-storage.ts";
 import {
@@ -344,6 +329,25 @@ export {
   AppResponderTimeoutError,
   AppStoreOperationError,
 } from "./app-store-errors.ts";
+import {
+  type AppMessageResponder,
+  type AppMessageResponderFile,
+  type AppMessageResponderInput,
+  type AppMessageResponderResult,
+  type SendMessageOptions,
+} from "./message-responder-contract.ts";
+export type {
+  AppMessageResponder,
+  AppMessageResponderFile,
+  AppMessageResponderInput,
+  AppMessageResponderResult,
+  SendMessageOptions,
+} from "./message-responder-contract.ts";
+import { AppAutomationStore } from "./automation-store.ts";
+import {
+  AppMessageFileStore,
+  type MessageFileRow,
+} from "./message-file-store.ts";
 import { readProjectFolderSelectionToken } from "./project-folder-selection-token.ts";
 export { createProjectFolderSelectionToken } from "./project-folder-selection-token.ts";
 import {
@@ -357,7 +361,7 @@ import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import type { SessionTransportBinding } from "../../test-support/harness/contracts.ts";
 import type { TranscriptEvent } from "../../test-support/harness/transcripts.ts";
-import type { ArtifactRef, AttachmentRef } from "../core/contracts.ts";
+import type { ArtifactRef } from "../core/contracts.ts";
 import {
   type ButlerServiceClient,
   FileQueueButlerServiceClient,
@@ -513,19 +517,6 @@ interface MessageRow {
   retryable: number;
 }
 
-interface MessageFileRow {
-  id: string;
-  owner_session_id: string | null;
-  message_id: string | null;
-  kind: MessageFileKind;
-  mime_type: string;
-  safe_name: string;
-  size_bytes: number;
-  sha256: string;
-  storage_name: string;
-  created_at: string;
-}
-
 interface QueuedMessageRow {
   rowid: number;
   id: string;
@@ -568,59 +559,6 @@ interface SettingRow {
   value_json: string;
 }
 
-interface AutomationRow {
-  id: string;
-  title: string;
-  prompt_body: string;
-  target_kind: ChatKind;
-  target_session_id: string;
-  interval_seconds: number;
-  state: AutomationState;
-  next_run_at: string | null;
-  last_run_at: string | null;
-  last_run_state: AutomationRunState;
-  last_safe_error_code: string | null;
-  run_count: number;
-  consecutive_failure_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
-interface AutomationRunRow {
-  rowid: number;
-  id: string;
-  automation_id: string;
-  target_session_id: string;
-  state: AutomationRunState;
-  trigger: "scheduled" | "run_now";
-  started_at: string;
-  completed_at: string | null;
-  safe_error_code: string | null;
-  queued_message_id: string | null;
-  turn_id: string | null;
-}
-
-interface QueuedAutomationRunRow {
-  run_id: string;
-  automation_id: string;
-  target_session_id: string;
-  trigger: "scheduled" | "run_now";
-  queued_message_id: string | null;
-  title: string;
-  prompt_body: string;
-  target_kind: ChatKind;
-  interval_seconds: number;
-  state: AutomationState;
-  next_run_at: string | null;
-  last_run_at: string | null;
-  last_run_state: AutomationRunState;
-  last_safe_error_code: string | null;
-  run_count: number;
-  consecutive_failure_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface AppServerStoreOptions {
   dbPath?: string;
   projectWorkspaceRoot?: string;
@@ -632,50 +570,6 @@ export interface AppServerStoreOptions {
   serverUrl?: string;
   bridgeMode?: SettingsView["bridge_mode"];
   serviceClient?: ButlerServiceClient;
-}
-
-export interface AppMessageResponderInput {
-  chatId: string;
-  turnId: string;
-  messageId: string;
-  text: string;
-  attachments?: MessageFileRef[];
-  sessionKind: ChatKind;
-  projectId?: string;
-  projectWorkspacePath?: string;
-  model?: string;
-  reasoningEffort?: SettingsView["reasoning_effort"];
-  workerModelRules?: SettingsView["worker_model_rules"];
-  accessMode?: SettingsView["access_mode"];
-  planMode?: boolean;
-  onSessionTitle?: (title: string) => void;
-  onProgress?: (row: ProgressSummaryInput) => void;
-  onTurnEvent?: (event: RuntimeTurnEventInput) => void;
-  signal?: AbortSignal;
-}
-
-export interface AppMessageResponderFile {
-  name: string;
-  mimeType: string;
-  bytes: Uint8Array | ArrayBuffer | string;
-}
-
-export interface AppMessageResponderResult {
-  texts: string[];
-  files?: AppMessageResponderFile[];
-  progress?: ProgressSummaryInput[];
-  delivery?: DeliveryLimitationMetadata;
-}
-
-export type AppMessageResponder = (
-  input: AppMessageResponderInput,
-) => Promise<AppMessageResponderResult> | AppMessageResponderResult;
-
-export interface SendMessageOptions {
-  responderTimeoutMs?: number;
-  controls?: SessionControlState;
-  deferResponderTurns?: boolean;
-  suppressAssistantReplies?: boolean;
 }
 
 interface TranscriptSyncSnapshot {
@@ -721,6 +615,8 @@ export class AppServerStore {
   >();
   private readonly pendingSystemResponderTurns = new Set<string>();
   private readonly activeTurnControllers = new Map<string, AbortController>();
+  private readonly automationStore: AppAutomationStore;
+  private readonly messageFiles: AppMessageFileStore;
 
   constructor(options: AppServerStoreOptions = {}) {
     this.projectWorkspaceRoot = resolve(
@@ -752,6 +648,54 @@ export class AppServerStore {
     this.db = new Database(options.dbPath ?? ":memory:", { create: true });
     this.db.run("PRAGMA journal_mode = WAL");
     this.db.run("PRAGMA foreign_keys = ON");
+    this.messageFiles = new AppMessageFileStore(
+      this.db,
+      this.butlerData,
+      (sessionId) => this.ensureChat(sessionId),
+    );
+    this.automationStore = new AppAutomationStore({
+      db: this.db,
+      sessionLabel: (sessionId) => this.safeSessionLabel(sessionId),
+      targetSession: (sessionId) => this.getSession(sessionId),
+      appendEvent: (type, payload) => {
+        this.appendEvent(type, payload);
+      },
+      dispatchContext: {
+        ensureSession: (sessionId) => this.getSession(sessionId),
+        sessionHasActiveTurn: (sessionId) =>
+          this.sessionHasActiveTurn(sessionId),
+        sendMessage: (input, responder, options) =>
+          this.sendMessage(input, responder, options),
+        createQueuedPromptMessage: (sessionId) =>
+          this.insertMessage(
+            sessionId,
+            "automation",
+            "Automation prompt queued.",
+            "pending",
+          ),
+        markQueuedPromptDispatched: (messageId) => {
+          const updated = this.updateMessage(messageId, {
+            text: "Automation prompt dispatched.",
+            status: "delivered",
+          });
+          this.appendEvent("message.updated", { message: updated });
+          return updated;
+        },
+        markQueuedPromptFailed: (messageId, safeErrorCode) => {
+          const updated = this.updateMessage(messageId, {
+            text: "Automation prompt could not be dispatched.",
+            status: "failed",
+            safeErrorCode,
+            retryable: true,
+          });
+          this.appendEvent("message.updated", { message: updated });
+          return updated;
+        },
+        appendEvent: (type, payload) => {
+          this.appendEvent(type, payload);
+        },
+      },
+    });
     this.migrate();
     this.projectWorkspaceRoot =
       this.readStoredProjectWorkspaceRoot() ?? this.projectWorkspaceRoot;
@@ -2503,7 +2447,7 @@ export class AppServerStore {
       metadata.model_ref,
     ).tokens;
     const artifacts = this.listArtifacts(sessionId);
-    const messageFiles = this.listMessageFilesForSession(sessionId);
+    const messageFiles = this.messageFiles.refsForSession(sessionId);
     const referenceTokens = Math.max(
       0,
       artifacts.length * 48 + messageFiles.length * 24,
@@ -2877,170 +2821,26 @@ export class AppServerStore {
   listAutomations(
     options: { targetSessionId?: string } = {},
   ): AutomationListView {
-    const clauses = ["state != 'deleted'"];
-    const params: string[] = [];
-    if (options.targetSessionId) {
-      clauses.push("target_session_id = ?");
-      params.push(options.targetSessionId);
-    }
-    const rows = this.db
-      .query<AutomationRow, string[]>(
-        `
-      SELECT id, title, prompt_body, target_kind, target_session_id, interval_seconds, state,
-        next_run_at, last_run_at, last_run_state, last_safe_error_code,
-        run_count, consecutive_failure_count, created_at, updated_at
-      FROM app_automations
-      WHERE ${clauses.join(" AND ")}
-      ORDER BY updated_at DESC
-      LIMIT 200
-    `,
-      )
-      .all(...params);
-    return {
-      automations: rows.map((row) =>
-        automationSummaryFromRow(
-          row,
-          this.safeSessionLabel(row.target_session_id),
-        ),
-      ),
-    };
+    return this.automationStore.list(options);
   }
 
   getAutomation(automationId: string): AutomationDetailView {
-    const row = this.getAutomationRow(automationId);
-    if (!row || row.state === "deleted") {
-      throw new AppStoreOperationError(
-        404,
-        "automation_not_found",
-        "Automation not found.",
-      );
-    }
-    return {
-      automation: automationDetailFromRow(
-        row,
-        this.safeSessionLabel(row.target_session_id),
-      ),
-    };
+    return this.automationStore.get(automationId);
   }
 
   createAutomation(input: CreateAutomationRequest): AutomationMutationResult {
-    const title = input.title.trim();
-    const prompt = input.prompt_body.trim();
-    if (!title)
-      throw new AppStoreOperationError(
-        400,
-        "automation_title_required",
-        "Automation title is required.",
-      );
-    if (!prompt)
-      throw new AppStoreOperationError(
-        400,
-        "automation_prompt_required",
-        "Automation prompt is required.",
-      );
-    const session = this.getSession(input.target_session_id.trim());
-    const intervalSeconds = normalizeAutomationInterval(input.interval_seconds);
-    const now = new Date();
-    const id = `automation-${crypto.randomUUID()}`;
-    this.db
-      .query(
-        `
-      INSERT INTO app_automations (
-        id, title, prompt_body, target_kind, target_session_id, interval_seconds, state,
-        next_run_at, last_run_at, last_run_state, last_safe_error_code,
-        run_count, consecutive_failure_count, created_at, updated_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, 'enabled', ?, NULL, 'never_run', NULL, 0, 0, ?, ?)
-    `,
-      )
-      .run(
-        id,
-        title,
-        prompt,
-        session.kind,
-        session.id,
-        intervalSeconds,
-        new Date(now.getTime() + intervalSeconds * 1000).toISOString(),
-        now.toISOString(),
-        now.toISOString(),
-      );
-    const automation = this.getAutomation(id).automation;
-    this.appendEvent("automation.created", {
-      automation: automationSummaryWithoutPrompt(automation),
-    });
-    return { automation };
+    return this.automationStore.create(input);
   }
 
   updateAutomation(
     automationId: string,
     input: UpdateAutomationRequest,
   ): AutomationMutationResult {
-    const row = this.getAutomationRow(automationId);
-    if (!row || row.state === "deleted") {
-      throw new AppStoreOperationError(
-        404,
-        "automation_not_found",
-        "Automation not found.",
-      );
-    }
-    const targetSessionId =
-      input.target_session_id?.trim() || row.target_session_id;
-    const session = this.getSession(targetSessionId);
-    const intervalSeconds =
-      input.interval_seconds === undefined
-        ? row.interval_seconds
-        : normalizeAutomationInterval(input.interval_seconds);
-    const state = input.state ?? row.state;
-    const now = new Date();
-    this.db
-      .query(
-        `
-      UPDATE app_automations
-      SET title = ?, prompt_body = ?, target_kind = ?, target_session_id = ?,
-        interval_seconds = ?, state = ?, next_run_at = ?, updated_at = ?
-      WHERE id = ?
-    `,
-      )
-      .run(
-        input.title?.trim() || row.title,
-        input.prompt_body?.trim() || row.prompt_body,
-        session.kind,
-        session.id,
-        intervalSeconds,
-        state,
-        state === "enabled"
-          ? new Date(now.getTime() + intervalSeconds * 1000).toISOString()
-          : row.next_run_at,
-        now.toISOString(),
-        automationId,
-      );
-    const automation = this.getAutomation(automationId).automation;
-    this.appendEvent("automation.updated", {
-      automation: automationSummaryWithoutPrompt(automation),
-    });
-    return { automation };
+    return this.automationStore.update(automationId, input);
   }
 
   deleteAutomation(automationId: string): AutomationMutationResult {
-    const row = this.getAutomationRow(automationId);
-    if (!row)
-      throw new AppStoreOperationError(
-        404,
-        "automation_not_found",
-        "Automation not found.",
-      );
-    const now = new Date().toISOString();
-    this.db
-      .query(
-        "UPDATE app_automations SET state = 'deleted', next_run_at = NULL, updated_at = ? WHERE id = ?",
-      )
-      .run(now, automationId);
-    const automation = automationSummaryFromRow(
-      { ...row, state: "deleted", next_run_at: null, updated_at: now },
-      this.safeSessionLabel(row.target_session_id),
-    );
-    this.appendEvent("automation.deleted", { automation });
-    return { automation };
+    return this.automationStore.delete(automationId);
   }
 
   pauseAutomation(automationId: string): AutomationMutationResult {
@@ -3057,34 +2857,12 @@ export class AppServerStore {
     options: SendMessageOptions = {},
     trigger: "run_now" | "scheduled" = "run_now",
   ): Promise<AutomationRunResult> {
-    const row = this.getAutomationRow(automationId);
-    if (!row || row.state === "deleted")
-      throw new AppStoreOperationError(
-        404,
-        "automation_not_found",
-        "Automation not found.",
-      );
-    if (trigger === "scheduled" && row.state !== "enabled") {
-      throw new AppStoreOperationError(
-        409,
-        "automation_not_enabled",
-        "Automation is not enabled.",
-      );
-    }
-    const run = await this.executeAutomationRow(
-      row,
-      trigger,
+    return await this.automationStore.runNow(
+      automationId,
       responder,
       options,
+      trigger,
     );
-    const updated = this.getAutomationRow(automationId)!;
-    return {
-      automation: automationSummaryFromRow(
-        updated,
-        this.safeSessionLabel(updated.target_session_id),
-      ),
-      run,
-    };
   }
 
   async dispatchDueAutomations(
@@ -3092,62 +2870,15 @@ export class AppServerStore {
     options: SendMessageOptions = {},
     now = new Date(),
   ): Promise<{ runs: AutomationRunSummary[] }> {
-    const runs = await this.drainQueuedAutomationRuns(responder, options);
-    const rows = this.db
-      .query<AutomationRow, [string]>(
-        `
-      SELECT id, title, prompt_body, target_kind, target_session_id, interval_seconds, state,
-        next_run_at, last_run_at, last_run_state, last_safe_error_code,
-        run_count, consecutive_failure_count, created_at, updated_at
-      FROM app_automations
-      WHERE state = 'enabled' AND next_run_at IS NOT NULL AND next_run_at <= ?
-      ORDER BY next_run_at ASC
-      LIMIT 20
-    `,
-      )
-      .all(now.toISOString());
-    for (const row of rows) {
-      runs.push(
-        await this.executeAutomationRow(
-          row,
-          "scheduled",
-          responder,
-          options,
-          now,
-        ),
-      );
-    }
-    return { runs };
+    return await this.automationStore.dispatchDue(responder, options, now);
   }
 
   listAutomationRuns(automationId: string): AutomationRunListView {
-    const rows = this.db
-      .query<AutomationRunRow, [string]>(
-        `
-      SELECT rowid, id, automation_id, target_session_id, state, trigger, started_at,
-        completed_at, safe_error_code, queued_message_id, turn_id
-      FROM app_automation_runs
-      WHERE automation_id = ?
-      ORDER BY rowid DESC
-      LIMIT 50
-    `,
-      )
-      .all(automationId);
-    return { runs: rows.map(automationRunFromRow) };
+    return this.automationStore.listRuns(automationId);
   }
 
   listAutomationTargets(sessionId: string): AutomationTargetSummary[] {
-    return this.listAutomations({ targetSessionId: sessionId }).automations.map(
-      (automation) => ({
-        automation_id: automation.id,
-        title: automation.title,
-        state: automation.state,
-        interval_label: automation.interval_label,
-        next_run_at: automation.next_run_at,
-        last_run_state: automation.last_run_state,
-        safe_error_code: automation.last_safe_error_code,
-      }),
-    );
+    return this.automationStore.listTargets(sessionId);
   }
 
   private reconcileTurnLocalWorkOutcomeForTurn(turn: TurnRecord): void {
@@ -3652,7 +3383,7 @@ export class AppServerStore {
       )
       .all(chatId, cursor);
     const messages = rows.map((row) =>
-      messageFromRow(row, this.listMessageAttachments(row.id)),
+      messageFromRow(row, this.messageFiles.refsForMessage(row.id)),
     );
     const compactionMessages =
       cursor === 0 ? this.compactionMarkerMessages(chatId, cursor) : [];
@@ -4029,7 +3760,7 @@ export class AppServerStore {
       return false;
     }
 
-    const files = this.createResponderMessageFiles(chatId, artifactFiles);
+    const files = this.messageFiles.createResponderFiles(chatId, artifactFiles);
     if (!this.hasTurnEventKind(turnId, "message.final.started")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "message.final.started",
@@ -4167,7 +3898,7 @@ export class AppServerStore {
     const text = sanitizeAppTransportFinalText(message.text);
     const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
     if (!text && artifacts.length === 0) return false;
-    const files = this.createResponderMessageFiles(
+    const files = this.messageFiles.createResponderFiles(
       chatId,
       this.artifactFilesFromOutbound(chatId, artifacts),
     );
@@ -4306,7 +4037,7 @@ export class AppServerStore {
     const seen = new Set<string>();
     const existingKeys = existingMessageId
       ? new Set(
-          this.listMessageAttachments(existingMessageId).map((file) =>
+          this.messageFiles.refsForMessage(existingMessageId).map((file) =>
             messageFileContentKey(
               file.safe_name,
               file.mime_type,
@@ -4576,110 +4307,14 @@ export class AppServerStore {
     bytes: Uint8Array | ArrayBuffer | string;
     allowGeneric?: boolean;
   }): MessageFileUploadResult {
-    const ownerSessionId = input.ownerSessionId?.trim() || null;
-    if (ownerSessionId) this.ensureChat(ownerSessionId);
-    const bytes = normalizeFileBytes(input.bytes);
-    if (bytes.byteLength === 0) {
-      throw new AppStoreOperationError(
-        400,
-        "message_file_empty",
-        "Attachment file is empty.",
-      );
-    }
-    if (bytes.byteLength > MESSAGE_FILE_MAX_BYTES) {
-      throw new AppStoreOperationError(
-        413,
-        "message_file_too_large",
-        "Attachment file is too large.",
-      );
-    }
-    const safeName = safeAttachmentName(input.name);
-    const mimeType = normalizeAttachmentMimeType(input.mimeType, safeName);
-    const kind = classifyMessageFileKind(
-      mimeType,
-      safeName,
-      Boolean(input.allowGeneric),
-    );
-    if (!kind) {
-      throw new AppStoreOperationError(
-        415,
-        "message_file_unsupported_type",
-        "Attachment file type is not supported.",
-      );
-    }
-    const id = `file-${crypto.randomUUID()}`;
-    const storageName = id;
-    const createdAt = new Date().toISOString();
-    const sha256 = createHash("sha256").update(bytes).digest("hex");
-    mkdirSync(this.messageFileRoot(), { recursive: true });
-    writeFileSync(join(this.messageFileRoot(), storageName), bytes);
-    this.db
-      .query(
-        `
-      INSERT INTO message_files (
-        id, owner_session_id, message_id, kind, mime_type, safe_name,
-        size_bytes, sha256, storage_name, created_at
-      )
-      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
-    `,
-      )
-      .run(
-        id,
-        ownerSessionId,
-        kind,
-        mimeType,
-        safeName,
-        bytes.byteLength,
-        sha256,
-        storageName,
-        createdAt,
-      );
-    const row = this.getMessageFileRow(id);
-    if (!row) throw new Error(`Failed to create message file: ${id}`);
-    return { file: messageFileRefFromRow(row) };
+    return this.messageFiles.create(input);
   }
 
   getMessageFileDownload(fileId: string): {
     file: MessageFileRef;
     bytes: Buffer;
   } {
-    if (!MESSAGE_FILE_ID_PATTERN.test(fileId)) {
-      throw new AppStoreOperationError(
-        404,
-        "message_file_not_found",
-        "Attachment file not found.",
-      );
-    }
-    const row = this.getMessageFileRow(fileId);
-    if (!row)
-      throw new AppStoreOperationError(
-        404,
-        "message_file_not_found",
-        "Attachment file not found.",
-      );
-    if (
-      row.storage_name !== row.id ||
-      !MESSAGE_FILE_ID_PATTERN.test(row.storage_name)
-    ) {
-      throw new AppStoreOperationError(
-        404,
-        "message_file_not_found",
-        "Attachment file not found.",
-      );
-    }
-    const root = this.messageFileRoot();
-    const filePath = resolve(root, row.storage_name);
-    if (!filePath.startsWith(`${root}${sep}`)) {
-      throw new AppStoreOperationError(
-        404,
-        "message_file_not_found",
-        "Attachment file not found.",
-      );
-    }
-    return {
-      file: messageFileRefFromRow(row),
-      bytes: readFileSync(filePath),
-    };
+    return this.messageFiles.download(fileId);
   }
 
   listSessionQueue(sessionId = DEFAULT_CHAT_ID): SessionQueueView {
@@ -4705,7 +4340,7 @@ export class AppServerStore {
     const chatId = input.chat_id?.trim() || DEFAULT_CHAT_ID;
     this.ensureChat(chatId);
     const text = (input.text ?? "").trim();
-    const attachableFiles = this.validateAttachableMessageFiles(
+    const attachableFiles = this.messageFiles.validateAttachable(
       chatId,
       input.attachments ?? [],
     );
@@ -4762,8 +4397,8 @@ export class AppServerStore {
       typeof input.text === "string" ? input.text.trim() : current.text;
     const attachableFiles =
       input.attachments === undefined
-        ? this.queuedMessageFileRows(current)
-        : this.validateAttachableMessageFiles(
+        ? this.messageFiles.queuedRows(current)
+        : this.messageFiles.validateAttachable(
             current.chat_id,
             input.attachments,
           );
@@ -4854,7 +4489,7 @@ export class AppServerStore {
       };
     }
     const text = (input.text ?? "").trim();
-    const attachableFiles = this.validateAttachableMessageFiles(
+    const attachableFiles = this.messageFiles.validateAttachable(
       chatId,
       input.attachments ?? [],
     );
@@ -4977,7 +4612,7 @@ export class AppServerStore {
       cleanupTurnEventSequences: (chatId, turnId) =>
         this.cleanupTurnEventSequences(chatId, turnId),
       createResponderMessageFiles: (chatId, files) =>
-        this.createResponderMessageFiles(chatId, files ?? []),
+        this.messageFiles.createResponderFiles(chatId, files ?? []),
       drainQueuedSessionMessages: (chatId, responder, options) =>
         this.drainQueuedSessionMessages(chatId, responder, options),
       finalizeResponderLimitedDelivery: (chatId, turnId, limitedDelivery) =>
@@ -5080,7 +4715,7 @@ export class AppServerStore {
           senderId: APP_SENDER_ID,
           senderDisplayName: "Butler App",
           projectId: chat?.project_id ?? undefined,
-          attachments: this.listMessageAttachmentsForTransport(input.message.id),
+          attachments: this.messageFiles.attachmentsForTransport(input.message.id),
           rawSource: "app-server",
         },
         {
@@ -5302,7 +4937,7 @@ export class AppServerStore {
           next_cursor: deliveredTurn.cursor,
         };
       }
-      const responderFiles = this.createResponderMessageFiles(
+      const responderFiles = this.messageFiles.createResponderFiles(
         chatId,
         response.files ?? [],
       );
@@ -5362,7 +4997,7 @@ export class AppServerStore {
         const accepted = existingMessage
           ? messageFromRow(
               existingMessage,
-              this.listMessageAttachments(messageId),
+              this.messageFiles.refsForMessage(messageId),
             )
           : ({
               id: messageId,
@@ -5391,7 +5026,7 @@ export class AppServerStore {
         const accepted = existingMessage
           ? messageFromRow(
               existingMessage,
-              this.listMessageAttachments(messageId),
+              this.messageFiles.refsForMessage(messageId),
             )
           : ({
               id: messageId,
@@ -5419,7 +5054,7 @@ export class AppServerStore {
         const accepted = existingMessage
           ? messageFromRow(
               existingMessage,
-              this.listMessageAttachments(messageId),
+              this.messageFiles.refsForMessage(messageId),
             )
           : ({
               id: messageId,
@@ -5553,7 +5188,7 @@ export class AppServerStore {
         turnId,
         message: messageFromRow(
           userMessage,
-          this.listMessageAttachments(userMessage.id),
+          this.messageFiles.refsForMessage(userMessage.id),
         ),
         text: userMessage.text,
         controls: this.getSessionControls(row.chat_id),
@@ -5640,7 +5275,7 @@ export class AppServerStore {
             reasoning_effort: controls.reasoning_effort,
             access_mode: controls.access_mode,
             plan_mode: controls.plan_mode,
-            attachments: this.queuedMessageFileRows(row).map((file) => ({
+            attachments: this.messageFiles.queuedRows(row).map((file) => ({
               file_id: file.id,
             })),
           },
@@ -5720,268 +5355,6 @@ export class AppServerStore {
       replies: [],
       next_cursor: 0,
     };
-  }
-
-  private async executeAutomationRow(
-    row: AutomationRow,
-    trigger: "scheduled" | "run_now",
-    responder?: AppMessageResponder,
-    options: SendMessageOptions = {},
-    now = new Date(),
-  ): Promise<AutomationRunSummary> {
-    let runState: AutomationRunState;
-    let safeErrorCode: string | null = null;
-    let queuedMessageId: string | null = null;
-    let turnId: string | null = null;
-    const runId = `automation-run-${crypto.randomUUID()}`;
-    const startedAt = now.toISOString();
-    this.db
-      .query(
-        `
-      INSERT INTO app_automation_runs (
-        id, automation_id, target_session_id, state, trigger, started_at,
-        completed_at, safe_error_code, queued_message_id, turn_id
-      )
-      VALUES (?, ?, ?, 'running', ?, ?, NULL, NULL, NULL, NULL)
-    `,
-      )
-      .run(runId, row.id, row.target_session_id, trigger, startedAt);
-
-    try {
-      this.getSession(row.target_session_id);
-      if (this.sessionHasActiveTurn(row.target_session_id)) {
-        const queued = this.insertMessage(
-          row.target_session_id,
-          "automation",
-          "Automation prompt queued.",
-          "pending",
-        );
-        queuedMessageId = queued.id;
-        runState = "queued";
-      } else {
-        const result = await this.sendMessage(
-          {
-            chat_id: row.target_session_id,
-            text: row.prompt_body,
-            client_message_id: `automation-${row.id}-${runId}`,
-          },
-          responder,
-          options,
-        );
-        if (!result.turn) {
-          throw new AppStoreOperationError(
-            500,
-            "automation_dispatch_failed",
-            "Automation dispatch did not start a turn.",
-          );
-        }
-        turnId = result.turn.id;
-        runState = "succeeded";
-      }
-    } catch (error) {
-      runState = "failed";
-      safeErrorCode =
-        error instanceof AppStoreOperationError
-          ? error.code
-          : "automation_dispatch_failed";
-    }
-
-    const completedAt = new Date().toISOString();
-    this.db
-      .query(
-        `
-      UPDATE app_automation_runs
-      SET state = ?, completed_at = ?, safe_error_code = ?, queued_message_id = ?, turn_id = ?
-      WHERE id = ?
-    `,
-      )
-      .run(
-        runState,
-        completedAt,
-        safeErrorCode,
-        queuedMessageId,
-        turnId,
-        runId,
-      );
-
-    const nextRunAt =
-      row.state === "enabled" && row.interval_seconds > 0
-        ? new Date(
-            Date.parse(completedAt) + row.interval_seconds * 1000,
-          ).toISOString()
-        : null;
-    this.db
-      .query(
-        `
-      UPDATE app_automations
-      SET next_run_at = ?, last_run_at = ?, last_run_state = ?, last_safe_error_code = ?,
-        run_count = run_count + 1,
-        consecutive_failure_count = ?,
-        updated_at = ?
-      WHERE id = ?
-    `,
-      )
-      .run(
-        row.state === "enabled" ? nextRunAt : row.next_run_at,
-        completedAt,
-        runState,
-        safeErrorCode,
-        runState === "failed" ? row.consecutive_failure_count + 1 : 0,
-        completedAt,
-        row.id,
-      );
-    const run = this.listAutomationRuns(row.id).runs.find(
-      (item) => item.id === runId,
-    )!;
-    this.appendEvent("automation.run", {
-      automation_id: row.id,
-      target_session_id: row.target_session_id,
-      state: run.state,
-      trigger,
-      safe_error_code: run.safe_error_code,
-    });
-    return run;
-  }
-
-  private async drainQueuedAutomationRuns(
-    responder?: AppMessageResponder,
-    options: SendMessageOptions = {},
-  ): Promise<AutomationRunSummary[]> {
-    const rows = this.db
-      .query<QueuedAutomationRunRow, []>(
-        `
-      SELECT
-        r.id AS run_id,
-        r.automation_id,
-        r.target_session_id,
-        r.trigger,
-        r.queued_message_id,
-        a.title,
-        a.prompt_body,
-        a.target_kind,
-        a.interval_seconds,
-        a.state,
-        a.next_run_at,
-        a.last_run_at,
-        a.last_run_state,
-        a.last_safe_error_code,
-        a.run_count,
-        a.consecutive_failure_count,
-        a.created_at,
-        a.updated_at
-      FROM app_automation_runs r
-      JOIN app_automations a ON a.id = r.automation_id
-      WHERE r.state = 'queued' AND a.state != 'deleted'
-      ORDER BY r.rowid ASC
-      LIMIT 20
-    `,
-      )
-      .all();
-    const runs: AutomationRunSummary[] = [];
-    for (const row of rows) {
-      if (this.sessionHasActiveTurn(row.target_session_id)) continue;
-      runs.push(await this.executeQueuedAutomationRun(row, responder, options));
-    }
-    return runs;
-  }
-
-  private async executeQueuedAutomationRun(
-    row: QueuedAutomationRunRow,
-    responder?: AppMessageResponder,
-    options: SendMessageOptions = {},
-  ): Promise<AutomationRunSummary> {
-    let runState: AutomationRunState;
-    let safeErrorCode: string | null = null;
-    let turnId: string | null = null;
-
-    try {
-      this.getSession(row.target_session_id);
-      const result = await this.sendMessage(
-        {
-          chat_id: row.target_session_id,
-          text: row.prompt_body,
-          client_message_id: `automation-${row.automation_id}-${row.run_id}`,
-        },
-        responder,
-        options,
-      );
-      if (!result.turn) {
-        throw new AppStoreOperationError(
-          500,
-          "automation_dispatch_failed",
-          "Automation dispatch did not start a turn.",
-        );
-      }
-      turnId = result.turn.id;
-      runState = "succeeded";
-      if (row.queued_message_id) {
-        const updated = this.updateMessage(row.queued_message_id, {
-          text: "Automation prompt dispatched.",
-          status: "delivered",
-        });
-        this.appendEvent("message.updated", { message: updated });
-      }
-    } catch (error) {
-      runState =
-        error instanceof AppStoreOperationError &&
-        error.code === "session_not_found"
-          ? "skipped_target_unavailable"
-          : "failed";
-      safeErrorCode =
-        error instanceof AppStoreOperationError
-          ? error.code
-          : "automation_dispatch_failed";
-      if (row.queued_message_id) {
-        const updated = this.updateMessage(row.queued_message_id, {
-          text: "Automation prompt could not be dispatched.",
-          status: "failed",
-          safeErrorCode,
-          retryable: true,
-        });
-        this.appendEvent("message.updated", { message: updated });
-      }
-    }
-
-    const completedAt = new Date().toISOString();
-    this.db
-      .query(
-        `
-      UPDATE app_automation_runs
-      SET state = ?, completed_at = ?, safe_error_code = ?, turn_id = ?
-      WHERE id = ?
-    `,
-      )
-      .run(runState, completedAt, safeErrorCode, turnId, row.run_id);
-
-    this.db
-      .query(
-        `
-      UPDATE app_automations
-      SET last_run_at = ?, last_run_state = ?, last_safe_error_code = ?,
-        consecutive_failure_count = ?,
-        updated_at = ?
-      WHERE id = ?
-    `,
-      )
-      .run(
-        completedAt,
-        runState,
-        safeErrorCode,
-        runState === "failed" ? row.consecutive_failure_count + 1 : 0,
-        completedAt,
-        row.automation_id,
-      );
-    const run = this.listAutomationRuns(row.automation_id).runs.find(
-      (item) => item.id === row.run_id,
-    )!;
-    this.appendEvent("automation.run", {
-      automation_id: row.automation_id,
-      target_session_id: row.target_session_id,
-      state: run.state,
-      trigger: row.trigger,
-      safe_error_code: run.safe_error_code,
-    });
-    return run;
   }
 
   private sessionHasActiveTurn(sessionId: string): boolean {
@@ -6403,26 +5776,6 @@ export class AppServerStore {
     return this.getTurn(turnId);
   }
 
-  private messageFileRoot(): string {
-    return resolve(this.butlerData, "app-server", "message-files");
-  }
-
-  private getMessageFileRow(fileId: string): MessageFileRow | null {
-    if (!MESSAGE_FILE_ID_PATTERN.test(fileId)) return null;
-    return (
-      this.db
-        .query<MessageFileRow, [string]>(
-          `
-      SELECT id, owner_session_id, message_id, kind, mime_type, safe_name,
-        size_bytes, sha256, storage_name, created_at
-      FROM message_files
-      WHERE id = ?
-    `,
-        )
-        .get(fileId) ?? null
-    );
-  }
-
   private getQueuedMessageRow(
     queuedMessageId: string,
   ): QueuedMessageRow | null {
@@ -6451,25 +5804,8 @@ export class AppServerStore {
     }
   }
 
-  private queuedMessageFileRows(row: QueuedMessageRow): MessageFileRow[] {
-    let ids: string[] = [];
-    try {
-      const parsed = JSON.parse(row.attachments_json) as unknown;
-      if (Array.isArray(parsed)) {
-        ids = parsed
-          .map((value) => (typeof value === "string" ? value : ""))
-          .filter(Boolean);
-      }
-    } catch {
-      ids = [];
-    }
-    return ids
-      .map((fileId) => this.getMessageFileRow(fileId))
-      .filter((file): file is MessageFileRow => Boolean(file));
-  }
-
   private queuedMessageFromRow(row: QueuedMessageRow): QueuedMessageRecord {
-    const attachments = this.queuedMessageFileRows(row).map(
+    const attachments = this.messageFiles.queuedRows(row).map(
       messageFileRefFromRow,
     );
     const record: QueuedMessageRecord = {
@@ -6488,182 +5824,6 @@ export class AppServerStore {
       record.dispatched_message_id = row.dispatched_message_id;
     if (row.turn_id) record.turn_id = row.turn_id;
     return record;
-  }
-
-  private listMessageAttachments(messageId: string): MessageFileRef[] {
-    const rows = this.db
-      .query<MessageFileRow, [string]>(
-        `
-      SELECT f.id, f.owner_session_id, f.message_id, f.kind, f.mime_type,
-        f.safe_name, f.size_bytes, f.sha256, f.storage_name, f.created_at
-      FROM message_attachments a
-      JOIN message_files f ON f.id = a.file_id
-      WHERE a.message_id = ?
-      ORDER BY a.position ASC
-    `,
-      )
-      .all(messageId);
-    return rows.map(messageFileRefFromRow);
-  }
-
-  private listMessageAttachmentsForTransport(
-    messageId: string,
-  ): AttachmentRef[] {
-    const rows = this.db
-      .query<MessageFileRow, [string]>(
-        `
-      SELECT f.id, f.owner_session_id, f.message_id, f.kind, f.mime_type,
-        f.safe_name, f.size_bytes, f.sha256, f.storage_name, f.created_at
-      FROM message_attachments a
-      JOIN message_files f ON f.id = a.file_id
-      WHERE a.message_id = ?
-      ORDER BY a.position ASC
-    `,
-      )
-      .all(messageId);
-    return rows.map((row) => {
-      const filePath = resolve(this.messageFileRoot(), row.storage_name);
-      return {
-        id: row.id,
-        kind:
-          row.kind === "image"
-            ? "image"
-            : row.kind === "text"
-              ? "document"
-              : "binary",
-        mimeType: row.mime_type,
-        fileName: row.safe_name,
-        sizeBytes: row.size_bytes,
-        localPath: filePath,
-        url: `/message-files/${encodeURIComponent(row.id)}`,
-        metadata: {
-          source: "message-file-store",
-          createdAt: row.created_at,
-        },
-      };
-    });
-  }
-
-  private listMessageFilesForSession(sessionId: string): MessageFileRef[] {
-    const rows = this.db
-      .query<MessageFileRow, [string]>(
-        `
-      SELECT id, owner_session_id, message_id, kind, mime_type, safe_name,
-        size_bytes, sha256, storage_name, created_at
-      FROM message_files
-      WHERE owner_session_id = ?
-      ORDER BY created_at ASC
-    `,
-      )
-      .all(sessionId);
-    return rows.map(messageFileRefFromRow);
-  }
-
-  private validateAttachableMessageFiles(
-    chatId: string,
-    attachments: Array<{ file_id?: string }>,
-  ): MessageFileRow[] {
-    const ids = Array.from(
-      new Set(
-        attachments
-          .map((attachment) => attachment?.file_id?.trim() ?? "")
-          .filter(Boolean),
-      ),
-    );
-    if (ids.length > MESSAGE_FILE_MAX_ATTACHMENTS) {
-      throw new AppStoreOperationError(
-        400,
-        "too_many_attachments",
-        "Too many attachments.",
-      );
-    }
-    return ids.map((fileId) => {
-      const row = this.getMessageFileRow(fileId);
-      if (!row) {
-        throw new AppStoreOperationError(
-          400,
-          "message_file_not_found",
-          "Attachment file not found.",
-        );
-      }
-      if (row.message_id) {
-        throw new AppStoreOperationError(
-          409,
-          "message_file_already_attached",
-          "Attachment file was already sent.",
-        );
-      }
-      if (row.owner_session_id && row.owner_session_id !== chatId) {
-        throw new AppStoreOperationError(
-          403,
-          "message_file_wrong_session",
-          "Attachment file belongs to a different session.",
-        );
-      }
-      return row;
-    });
-  }
-
-  private attachFilesToMessage(
-    chatId: string,
-    messageId: string,
-    files: MessageFileRow[],
-  ): void {
-    files.forEach((file, index) => {
-      this.db
-        .query(
-          `
-        INSERT OR REPLACE INTO message_attachments (message_id, file_id, position)
-        VALUES (?, ?, ?)
-      `,
-        )
-        .run(messageId, file.id, index);
-      this.db
-        .query(
-          `
-        UPDATE message_files
-        SET owner_session_id = ?, message_id = ?
-        WHERE id = ?
-      `,
-        )
-        .run(chatId, messageId, file.id);
-    });
-  }
-
-  private createResponderMessageFiles(
-    chatId: string,
-    files: AppMessageResponderFile[],
-  ): MessageFileRow[] {
-    return files.slice(0, MESSAGE_FILE_MAX_ATTACHMENTS).map((file) => {
-      const bytes = normalizeFileBytes(file.bytes);
-      if (bytes.byteLength === 0) {
-        throw new AppStoreOperationError(
-          400,
-          "message_file_empty",
-          "Attachment file is empty.",
-        );
-      }
-      if (bytes.byteLength > MESSAGE_FILE_MAX_BYTES) {
-        throw new AppStoreOperationError(
-          413,
-          "message_file_too_large",
-          "Attachment file is too large.",
-        );
-      }
-      const created = this.createMessageFile({
-        ownerSessionId: chatId,
-        name: file.name,
-        mimeType: file.mimeType,
-        bytes,
-        allowGeneric: true,
-      });
-      const row = this.getMessageFileRow(created.file.file_id);
-      if (!row)
-        throw new Error(
-          `Failed to load responder file: ${created.file.file_id}`,
-        );
-      return row;
-    });
   }
 
   private insertMessage(
@@ -6707,7 +5867,7 @@ export class AppServerStore {
         options.retryable ? 1 : 0,
       );
     if (options.attachments?.length) {
-      this.attachFilesToMessage(chatId, id, options.attachments);
+      this.messageFiles.attachToMessage(chatId, id, options.attachments);
     }
     const row = this.db
       .query<MessageRow, [string]>(
@@ -6719,7 +5879,7 @@ export class AppServerStore {
       )
       .get(id);
     if (!row) throw new Error(`Failed to insert message: ${id}`);
-    return messageFromRow(row, this.listMessageAttachments(id));
+    return messageFromRow(row, this.messageFiles.refsForMessage(id));
   }
 
   private insertAssistantReplies(
@@ -6782,7 +5942,7 @@ export class AppServerStore {
       retryable: false,
     });
     if (attachFilesToUpdated.length > 0) {
-      this.attachFilesToMessage(chatId, updated.id, attachFilesToUpdated);
+      this.messageFiles.attachToMessage(chatId, updated.id, attachFilesToUpdated);
       updated = this.messageRecordById(updated.id);
     }
     this.appendEvent("message.updated", { message: updated });
@@ -6986,7 +6146,7 @@ export class AppServerStore {
     this.enqueueAppTransportTurn({
       chatId,
       turnId: turn.id,
-      message: messageFromRow(messageRow, this.listMessageAttachments(messageRow.id)),
+      message: messageFromRow(messageRow, this.messageFiles.refsForMessage(messageRow.id)),
       text: messageRow.text,
       controls: this.getSessionControls(chatId),
     });
@@ -7172,7 +6332,7 @@ export class AppServerStore {
       );
     const row = this.getMessageRow(messageId);
     if (!row) throw new Error(`Failed to update message: ${messageId}`);
-    return messageFromRow(row, this.listMessageAttachments(messageId));
+    return messageFromRow(row, this.messageFiles.refsForMessage(messageId));
   }
 
   private async runResponder(
@@ -7203,7 +6363,7 @@ export class AppServerStore {
           turnId,
           messageId,
           text,
-          attachments: this.listMessageAttachments(messageId),
+          attachments: this.messageFiles.refsForMessage(messageId),
           sessionKind: chat?.kind ?? "chat",
           projectId: chat?.project_id ?? undefined,
           projectWorkspacePath: project?.workspace_path,
@@ -7516,22 +6676,6 @@ export class AppServerStore {
     });
   }
 
-  private getAutomationRow(automationId: string): AutomationRow | null {
-    return (
-      this.db
-        .query<AutomationRow, [string]>(
-          `
-      SELECT id, title, prompt_body, target_kind, target_session_id, interval_seconds, state,
-        next_run_at, last_run_at, last_run_state, last_safe_error_code,
-        run_count, consecutive_failure_count, created_at, updated_at
-      FROM app_automations
-      WHERE id = ?
-    `,
-        )
-        .get(automationId) ?? null
-    );
-  }
-
   private readSetting<T>(key: string): T | null {
     const row = this.db
       .query<
@@ -7607,7 +6751,7 @@ export class AppServerStore {
         "message_not_found",
         "Message not found.",
       );
-    return messageFromRow(row, this.listMessageAttachments(messageId));
+    return messageFromRow(row, this.messageFiles.refsForMessage(messageId));
   }
 
   private getLatestAssistantMessageForTurn(turnId: string): MessageRow | null {

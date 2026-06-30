@@ -16,7 +16,7 @@ import type {
   AppMessageResponder,
   AppMessageResponderResult,
   SendMessageOptions,
-} from "./store.ts";
+} from "./message-responder-contract.ts";
 
 type ProgressSummaryInput = Omit<ProgressSummaryRow, "created_at"> & {
   created_at?: string;
