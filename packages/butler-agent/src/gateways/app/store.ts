@@ -47,11 +47,6 @@ import {
   createTurnAcknowledgedPayload,
 } from "../../agent/events/turn-state-contract.ts";
 import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../agent/events/turn-events.ts";
-import {
-  FIRST_VISIBLE_PROGRESS_GATEWAY_NOTE,
-  FIRST_VISIBLE_PROGRESS_GATEWAY_SOURCE,
-  firstVisibleProgressPayload,
-} from "../../agent/events/first-visible-progress.ts";
 import { ensureAppMessageQuerySchema } from "../../agent/cognition/memory/exact-query.ts";
 import {
   PlannedTaskStore,
@@ -624,6 +619,11 @@ interface TranscriptSyncSnapshot {
   trailing: string;
 }
 
+interface PendingAppTurnEventOutbound {
+  chatId: string;
+  event: TranscriptEvent;
+}
+
 export class AppServerStore {
   private static readonly DEFAULT_APP_UPDATE_MANIFEST =
     "https://github.com/Hexpy-Games/butler/releases/latest/download/app-update-manifest.json";
@@ -648,6 +648,10 @@ export class AppServerStore {
   private readonly transcriptSyncSnapshots = new Map<
     string,
     TranscriptSyncSnapshot
+  >();
+  private readonly pendingAppTurnEventOutbounds = new Map<
+    string,
+    PendingAppTurnEventOutbound
   >();
   private readonly pendingSystemResponderTurns = new Set<string>();
   private readonly activeTurnControllers = new Map<string, AbortController>();
@@ -3110,13 +3114,6 @@ export class AppServerStore {
         transport: "app",
       }),
     });
-    this.appendTurnEvent(chatId, turnId, {
-      kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-      payload: firstVisibleProgressPayload({
-        note: FIRST_VISIBLE_PROGRESS_GATEWAY_NOTE,
-        source: FIRST_VISIBLE_PROGRESS_GATEWAY_SOURCE,
-      }),
-    });
   }
 
   private appendTerminalTurnStateChanged(turn: TurnRecord): void {
@@ -3834,8 +3831,12 @@ export class AppServerStore {
     const parsed = readTranscriptEventsFromText(text);
     let applied = 0;
     for (const event of parsed.events) {
-      if (event.kind !== "outbound" || event.transport !== APP_TRANSPORT)
+      if (event.transport !== APP_TRANSPORT) continue;
+      if (event.kind === "delivery") {
+        if (this.projectAppDeliveryEvent(event)) applied += 1;
         continue;
+      }
+      if (event.kind !== "outbound") continue;
       if (this.projectAppOutboundEvent(chatId, event)) applied += 1;
     }
     this.transcriptSyncSnapshots.set(sessionId, {
@@ -3850,6 +3851,7 @@ export class AppServerStore {
   private projectAppOutboundEvent(
     chatId: string,
     event: TranscriptEvent,
+    deliveryState: "pending" | "delivered" = "pending",
   ): boolean {
     const payload = event.payload;
     const actionId = safeOptionalShortText(payload.actionId);
@@ -3863,6 +3865,21 @@ export class AppServerStore {
     if (!actionId || !turnId) return false;
     const turn = this.getTurnRow(turnId);
     if (!turn) return false;
+    const turnEvent = runtimeTurnEventFromAppOutboundMetadata(metadata);
+    if (turnEvent) {
+      if (deliveryState !== "delivered") {
+        this.pendingAppTurnEventOutbounds.set(actionId, { chatId, event });
+        return false;
+      }
+      const alreadyProjectedReceipt =
+        (turnEvent.kind === TURN_ACKNOWLEDGED_EVENT_KIND ||
+          turnEvent.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) &&
+        this.hasTurnEventKind(turnId, turnEvent.kind);
+      if (!alreadyProjectedReceipt) this.appendTurnEvent(chatId, turnId, turnEvent);
+      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      if (!alreadyProjectedReceipt) this.touchChat(chatId);
+      return !alreadyProjectedReceipt;
+    }
     let terminalRecoverableCorrection = false;
     if (isTerminalTurnState(turn.state)) {
       if (
@@ -4107,6 +4124,21 @@ export class AppServerStore {
     this.markProjectedTransportEvent(actionId, event.eventId, chatId);
     this.touchChat(chatId);
     return true;
+  }
+
+  private projectAppDeliveryEvent(event: TranscriptEvent): boolean {
+    const actionId = safeOptionalShortText(event.payload.actionId);
+    if (!actionId) return false;
+    const pending = this.pendingAppTurnEventOutbounds.get(actionId);
+    if (!pending) return false;
+    this.pendingAppTurnEventOutbounds.delete(actionId);
+    if (event.payload.ok !== true) return false;
+    if (this.hasProjectedTransportEvent(actionId)) return false;
+    return this.projectAppOutboundEvent(
+      pending.chatId,
+      pending.event,
+      "delivered",
+    );
   }
 
   private hasProjectedTransportEvent(actionId: string): boolean {
@@ -4801,10 +4833,6 @@ export class AppServerStore {
       cancellable: true,
     });
     this.appendEvent("turn.state_changed", { turn: thinkingTurn });
-    this.appendTurnEvent(chatId, turn.id, {
-      kind: "turn.started",
-      payload: { safeLabel: "Started" },
-    });
 
     if (!responder) {
       const queuedTurn = this.enqueueAppTransportTurn({
@@ -5139,10 +5167,6 @@ export class AppServerStore {
       cancellable: true,
     });
     this.appendEvent("turn.state_changed", { turn: thinkingTurn });
-    this.appendTurnEvent(chatId, turn.id, {
-      kind: "turn.started",
-      payload: { safeLabel: "Started" },
-    });
 
     try {
       const appendProgress = (row: ProgressSummaryInput) =>
@@ -5461,10 +5485,6 @@ export class AppServerStore {
     const retryingTurn = this.claimRetryTurn(turnId, row.attempt + 1);
     this.appendEvent("turn.state_changed", { turn: retryingTurn });
     this.deleteAssistantMessagesForTurn(turnId);
-    this.appendTurnEvent(row.chat_id, turnId, {
-      kind: "turn.started",
-      payload: { safeLabel: "Started" },
-    });
 
     if (!responder) {
       this.enqueueAppTransportTurn({
@@ -10380,6 +10400,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isAppWorkerResultOutbound(metadata: Record<string, unknown>): boolean {
   return metadata.kind === "worker_result" || metadata.type === "worker-result";
+}
+
+function runtimeTurnEventFromAppOutboundMetadata(
+  metadata: Record<string, unknown>,
+): RuntimeTurnEventInput | null {
+  if (metadata.kind !== "turn_event") return null;
+  const event = isRecord(metadata.event) ? metadata.event : null;
+  if (!event) return null;
+  const kind = safeOptionalShortToken(event.kind);
+  if (!kind) return null;
+  return {
+    kind: kind as RuntimeTurnEventInput["kind"],
+    ...(event.visibility === "internal" ? { visibility: "internal" as const } : {}),
+    ...(isRecord(event.payload) ? { payload: event.payload } : {}),
+    ...(safeOptionalShortText(event.createdAt)
+      ? { createdAt: safeOptionalShortText(event.createdAt) }
+      : {}),
+  };
 }
 
 function safeOptionalShortToken(value: unknown): string | undefined {

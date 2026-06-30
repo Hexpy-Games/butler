@@ -39,6 +39,7 @@ export interface SessionLifecycleServiceOptions {
     event: RuntimeTurnEventInput;
   }) => Promise<void>;
   sessionTitleGenerator?: SessionTitleGenerator | false;
+  openingDecisionTimeoutMs?: number;
   now?: () => string;
 }
 
@@ -147,6 +148,7 @@ export class SessionLifecycleService {
             }
           }
         : undefined,
+      openingDecisionTimeoutMs: this.options.openingDecisionTimeoutMs,
       now: this.options.now,
     };
 

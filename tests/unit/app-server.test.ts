@@ -44,11 +44,15 @@ import {
 } from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
 import {
+  TURN_DECISION_EVENT_KIND,
   TURN_ACKNOWLEDGED_EVENT_KIND,
   createRuntimeFaultPayload,
   createTurnAcknowledgedPayload,
 } from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
-import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
+import {
+  FIRST_VISIBLE_PROGRESS_EVENT_KIND,
+  type RuntimeTurnEventInput,
+} from "../../packages/butler-agent/src/agent/events/turn-events.ts";
 import type { ButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
 import type {
   AgentRuntimeAdapter,
@@ -113,6 +117,76 @@ function writeAppUpdateManifest(path: string, version: string): void {
       rollback_policy: "preserve-previous-app-managed-runtime",
     }],
   }), "utf8");
+}
+
+function appendAppTurnEventOutboundForTest(input: {
+  sessionId: string;
+  actionId: string;
+  turnId: string;
+  replyToMessageId: string;
+  event: RuntimeTurnEventInput;
+  delivered?: boolean;
+  includeDelivery?: boolean;
+  timestamp?: string;
+}): void {
+  const timestamp = input.timestamp ?? "2026-05-18T12:00:30.000Z";
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: input.sessionId,
+      kind: "outbound",
+      transport: "app",
+      timestamp,
+      payload: {
+        actionId: input.actionId,
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        message: {
+          text: "",
+          replyToMessageId: input.replyToMessageId,
+        },
+        metadata: {
+          kind: "turn_event",
+          turnId: input.turnId,
+          event: input.event,
+        },
+      },
+    }),
+  );
+  if (input.includeDelivery === false) return;
+  appendAppTurnEventDeliveryForTest({
+    sessionId: input.sessionId,
+    actionId: input.actionId,
+    delivered: input.delivered,
+    timestamp,
+  });
+}
+
+function appendAppTurnEventDeliveryForTest(input: {
+  sessionId: string;
+  actionId: string;
+  delivered?: boolean;
+  timestamp?: string;
+}): void {
+  const delivered = input.delivered ?? true;
+  appendTranscriptEvent(
+    createTranscriptEvent({
+      sessionId: input.sessionId,
+      kind: "delivery",
+      transport: "app",
+      timestamp: input.timestamp ?? "2026-05-18T12:00:30.000Z",
+      payload: {
+        actionId: input.actionId,
+        ok: delivered,
+        transportMessageId: delivered ? `app:${input.actionId}` : null,
+        error: delivered ? null : "delivery failed",
+        raw: null,
+      },
+      metadata: {
+        source: "transport/delivery-guard.ts",
+        attempts: 1,
+      },
+    }),
+  );
 }
 
 function writeServiceUpdateManifest(path: string, version: string): void {
@@ -890,14 +964,143 @@ test("app messages emit canonical turn acknowledgement instead of legacy accepte
       );
 
     expect(turnEvents).toContain(TURN_ACKNOWLEDGED_EVENT_KIND);
-    expect(turnEvents).toContain(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+    expect(turnEvents).not.toContain(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
     expect(turnEvents).not.toContain("turn.accepted");
-    expect(turnEvents.indexOf(TURN_ACKNOWLEDGED_EVENT_KIND)).toBeLessThan(
-      turnEvents.indexOf(FIRST_VISIBLE_PROGRESS_EVENT_KIND),
+    expect(turnEvents).not.toContain("turn.started");
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport sync projects native actor turn event outbounds", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "sync opening decision",
+  });
+  const turnId = result.data.turn.id as string;
+  const userMessageId = result.data.accepted.id as string;
+  const actionId = `app-turn-event:${turnId}:opening`;
+  server.stop();
+
+  appendAppTurnEventOutboundForTest({
+    sessionId: "butler/app-general",
+    actionId,
+    turnId,
+    replyToMessageId: userMessageId,
+    includeDelivery: false,
+    event: {
+      kind: TURN_DECISION_EVENT_KIND,
+      createdAt: "2026-05-18T12:00:30.000Z",
+      payload: {
+        decisionId: "opening-test-decision",
+        role: "opening",
+        source: "model-authored",
+        firstVisible: true,
+        summary: "Orient to the app turn.",
+        rationale: "The native actor emitted a model-authored opening decision.",
+        nextStep: "Continue into the runtime turn.",
+      },
+    },
+  });
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    await getJson(`${server.url}messages?chat_id=general`);
+    let replay = await getJson(`${server.url}events?cursor=0`);
+    expect(
+      replay.data.events.find(
+        (event: { type: string; payload?: { turn_id?: string; event?: { kind?: string } } }) =>
+          event.type === "agent.turn_event" &&
+          event.payload?.turn_id === turnId &&
+          event.payload.event?.kind === TURN_DECISION_EVENT_KIND,
+      ),
+    ).toBeUndefined();
+
+    appendAppTurnEventDeliveryForTest({
+      sessionId: "butler/app-general",
+      actionId,
+    });
+    await getJson(`${server.url}messages?chat_id=general`);
+    replay = await getJson(`${server.url}events?cursor=0`);
+    const turnEventKinds = replay.data.events
+      .filter(
+        (event: { type: string; payload?: { turn_id?: string } }) =>
+          event.type === "agent.turn_event" &&
+          event.payload?.turn_id === turnId,
+      )
+      .map(
+        (event: { payload: { event?: { kind?: string } } }) =>
+          event.payload.event?.kind,
+      );
+    const opening = replay.data.events.find(
+      (event: { type: string; payload?: { turn_id?: string; event?: { kind?: string; payload?: Record<string, unknown> } } }) =>
+        event.type === "agent.turn_event" &&
+        event.payload?.turn_id === turnId &&
+        event.payload.event?.kind === TURN_DECISION_EVENT_KIND,
     );
-    expect(turnEvents.indexOf(FIRST_VISIBLE_PROGRESS_EVENT_KIND)).toBeLessThan(
-      turnEvents.indexOf("turn.started"),
+    expect(opening?.payload?.event?.payload).toMatchObject({
+      decisionId: "opening-test-decision",
+      role: "opening",
+      source: "model-authored",
+      firstVisible: true,
+      summary: "Orient to the app turn.",
+    });
+    expect(turnEventKinds).toContain(TURN_ACKNOWLEDGED_EVENT_KIND);
+    expect(turnEventKinds).toContain(TURN_DECISION_EVENT_KIND);
+    expect(turnEventKinds).not.toContain("turn.started");
+    expect(turnEventKinds.indexOf(TURN_ACKNOWLEDGED_EVENT_KIND)).toBeLessThan(
+      turnEventKinds.indexOf(TURN_DECISION_EVENT_KIND),
     );
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport sync does not project failed native actor turn event delivery", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "sync failed opening decision",
+  });
+  const turnId = result.data.turn.id as string;
+  const userMessageId = result.data.accepted.id as string;
+  server.stop();
+
+  appendAppTurnEventOutboundForTest({
+    sessionId: "butler/app-general",
+    actionId: `app-turn-event:${turnId}:failed-opening`,
+    turnId,
+    replyToMessageId: userMessageId,
+    delivered: false,
+    event: {
+      kind: TURN_DECISION_EVENT_KIND,
+      createdAt: "2026-05-18T12:00:30.000Z",
+      payload: {
+        decisionId: "opening-failed-delivery",
+        role: "opening",
+        source: "model-authored",
+        firstVisible: true,
+        summary: "This must stay private because delivery failed.",
+        rationale: "A failed delivery is not public proof.",
+        nextStep: "Continue without a public fallback.",
+      },
+    },
+  });
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    await getJson(`${server.url}messages?chat_id=general`);
+    const replay = await getJson(`${server.url}events?cursor=0`);
+    const opening = replay.data.events.find(
+      (event: { type: string; payload?: { turn_id?: string; event?: { kind?: string } } }) =>
+        event.type === "agent.turn_event" &&
+        event.payload?.turn_id === turnId &&
+        event.payload.event?.kind === TURN_DECISION_EVENT_KIND,
+    );
+    expect(opening).toBeUndefined();
   } finally {
     server.stop();
   }

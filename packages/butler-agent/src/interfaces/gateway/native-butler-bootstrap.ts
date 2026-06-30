@@ -8,10 +8,14 @@ import type {
   InboundEnvelope,
   ModelProviderAdapter,
   OutboundAction,
+  RuntimeTurnEventInput,
   SessionLifecycleState,
   StoredSessionBinding,
 } from "../../test-support/harness/contracts.ts";
-import { recordSessionLifecycle, recordSystemEvent } from "../../test-support/harness/durable-session-transcript.ts";
+import {
+  recordSessionLifecycle,
+  recordSystemEvent,
+} from "../../test-support/harness/durable-session-transcript.ts";
 import { registerRuntimeSession } from "../../test-support/harness/session-runtime.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import { GatewayRouter } from "../../gateways/core/router.ts";
@@ -23,7 +27,7 @@ import { generateSessionTitleWithProvider } from "../../agent/output/session-tit
 import { NativeToolLoopRuntime } from "../../agent/turn/native-tool-loop.ts";
 import { diagnosticDetails, safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
 import { DeliveryGuard } from "../transport/delivery-guard.ts";
-import { createAppTransportAdapter } from "../transport/app/adapter.ts";
+import { APP_TRANSPORT, createAppTransportAdapter } from "../transport/app/adapter.ts";
 import { createTelegramTransportAdapter } from "../transport/telegram/adapter.ts";
 import { createTelegramLiveGateway } from "../transport/telegram/live-gateway.ts";
 import { runTelegramPolling } from "../transport/telegram/polling-runner.ts";
@@ -132,6 +136,45 @@ export function createNativeButlerDefaultProvider(
       });
       return { text };
     },
+  };
+}
+
+function appTurnEventAction(input: {
+  envelope: InboundEnvelope;
+  event: RuntimeTurnEventInput;
+}): OutboundAction | null {
+  if (input.envelope.transport !== APP_TRANSPORT) return null;
+  const turnId = input.envelope.routingHints?.turnId?.trim();
+  if (!turnId) return null;
+  return {
+    actionId: `app-turn-event:${turnId}:${input.event.kind}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`,
+    transport: APP_TRANSPORT,
+    accountId: input.envelope.accountId,
+    peer: appTurnEventPeer(input.envelope),
+    message: {
+      text: "",
+      replyToMessageId: input.envelope.message.id,
+    },
+    metadata: {
+      kind: "turn_event",
+      turnId,
+      event: input.event,
+      source: "gateway/native-butler-bootstrap.ts#turn-event",
+    },
+  };
+}
+
+function appTurnEventPeer(envelope: InboundEnvelope): OutboundAction["peer"] {
+  if (envelope.peer.kind === "thread") {
+    return {
+      kind: "thread",
+      id: envelope.peer.parentId ?? envelope.peer.id,
+      threadId: envelope.peer.id,
+    };
+  }
+  return {
+    kind: envelope.peer.kind,
+    id: envelope.peer.id,
   };
 }
 
@@ -574,6 +617,21 @@ export async function runNativeButlerMain(
           source: "gateway/native-butler-bootstrap.ts#intermediate",
           ...(metadata ?? {}),
         });
+      },
+      deliverTurnEvent: async ({ binding: activeBinding, envelope, event }) => {
+        const action = appTurnEventAction({
+          envelope,
+          event,
+        });
+        if (!action) return;
+        const delivery = await deliverThroughEnabledGate(activeBinding.sessionId, action, {
+          source: "gateway/native-butler-bootstrap.ts#turn-event",
+          kind: "turn_event",
+          turnId: envelope.routingHints?.turnId,
+        });
+        if (!delivery.ok) {
+          throw new Error(delivery.error || "App turn event delivery failed");
+        }
       },
     });
     await lifecycle.getOrCreate(binding.sessionId, "butler");
