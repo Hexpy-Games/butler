@@ -59,8 +59,6 @@ import {
 import {
   DEFAULT_MODEL_REF,
   DEFAULT_REASONING_EFFORT,
-  defaultWorkerModelRules,
-  listModelMetadata,
   localModelConfigToMetadata,
   modelCatalogView,
   resolveModelMetadata,
@@ -149,7 +147,6 @@ import {
   type PersonalizationProfileMigrationResultView,
   type ProviderCredentialMutationResult,
   type ProviderCredentialUpsertRequest,
-  type ProjectDashboardDocumentType,
   type ProjectDashboardView,
   type LocalModelDiscoveryRequest,
   type LocalModelDiscoveryResult,
@@ -203,21 +200,44 @@ import {
   type WorkerActivityWorkBlock,
   type WorkerActivityPhase,
   type WorkerActivitySummary,
-  type WebSearchProviderSetting,
-  type WebSearchSettingsUpdate,
-  type WebSearchSettingsView,
-  type WorkerModelRule,
 } from "./protocol.ts";
 import { buildNewChatBriefing } from "./new-chat-briefing.ts";
+import { loadProjectDocumentCatalog } from "./project-document-catalog.ts";
+import { isPathInside } from "./path-safety.ts";
+import {
+  readConfigDefaultModel,
+  readConfigUserSettings,
+  writeConfigUserSettings,
+  type ConfigUserSettings,
+} from "./settings-config.ts";
+import {
+  normalizeDesktopNotificationSettings,
+  normalizedMainScreenThemeColorsOrDefault,
+  normalizedMainScreenThemeOrDefault,
+  normalizedMainScreenThemePresetOrDefault,
+  normalizedMultilineSendBehaviorOrDefault,
+  normalizeTimezone,
+  sanitizeSettingsUpdate,
+} from "./settings-preferences.ts";
+import {
+  clampContextWindowTokens,
+  contextWindowTokensForSessionModel,
+  normalizeSessionControls,
+  normalizeWorkerModelRules,
+  rewriteSettingsModelRefs,
+} from "./settings-models.ts";
+import {
+  normalizeWebSearchSettings,
+  readConfigWebSearchSettings,
+  webSearchSettingsPatchFrom,
+  writeConfigWebSearchSettings,
+  writeWebSearchProviderApiKey,
+} from "./web-search-settings.ts";
 import {
   orchestrationActivityPhase,
   orchestrationStatusLine,
   shouldKeepInactiveLinkedReportingWorker,
 } from "./worker-activity-projection.ts";
-import {
-  readPrivateEnv,
-  upsertPrivateEnvValue,
-} from "../../interfaces/cli/private-env.ts";
 import {
   createAgentTurnEvent,
   progressRowFromTurnEvent,
@@ -320,7 +340,6 @@ const SCRATCH_PROJECT_BASE_NAME = "New project";
 const FOLDER_SELECTION_TOKEN_VERSION = "v1";
 const FOLDER_SELECTION_TOKEN_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_PROJECT_WORKSPACE_SETTING_KEY = "default-project-workspace-root";
-const DEFAULT_CONTEXT_WINDOW_TOKENS = 258_000;
 const APP_REPOSITORY_URL = "https://github.com/Hexpy-Games/butler";
 const MESSAGE_FILE_MAX_BYTES = 10 * 1024 * 1024;
 const MESSAGE_FILE_MAX_ATTACHMENTS = 12;
@@ -829,6 +848,12 @@ export class AppServerStore {
         "Project not found.",
       );
     }
+    const projectDocumentCatalog = project
+      ? loadProjectDocumentCatalog({
+          butlerDataRoot: this.butlerData,
+          project,
+        })
+      : null;
     return buildNewChatBriefing({
       butlerData: this.butlerData,
       preferredLocale: configUserSettings.responseLanguage ??
@@ -838,15 +863,7 @@ export class AppServerStore {
         ? {
             id: project.id,
             displayName: project.display_name,
-            documents: readProjectLedgerDocuments(this.butlerData, project).map(
-              (document) => ({
-                title: document.title,
-                category: document.category,
-                status: document.status,
-                safePathLabel: document.safe_path_label,
-                markdown: document.markdown,
-              }),
-            ),
+            documents: projectDocumentCatalog?.briefingDocuments,
           }
         : undefined,
     });
@@ -2344,7 +2361,10 @@ export class AppServerStore {
       projectId,
       recent30Start,
     );
-    const documents = readProjectLedgerDocuments(this.butlerData, row);
+    const projectDocumentCatalog = loadProjectDocumentCatalog({
+      butlerDataRoot: this.butlerData,
+      project: row,
+    });
     return {
       project,
       stats: {
@@ -2353,15 +2373,13 @@ export class AppServerStore {
           .length,
         recent_messages_7d: recentMessages7d,
         recent_messages_30d: recentMessages30d,
-        specs: documents.filter((document) => document.kind === "spec").length,
-        plans: documents.filter(
-          (document) => (document.document_type ?? document.kind) === "plan",
-        ).length,
+        specs: projectDocumentCatalog.stats.specs,
+        plans: projectDocumentCatalog.stats.plans,
       },
       activity: {
         days: activityDays,
       },
-      documents,
+      documents: projectDocumentCatalog.documents,
       generated_at: new Date().toISOString(),
     };
   }
@@ -8080,579 +8098,6 @@ function projectFromRow(
   return project;
 }
 
-function sanitizeSettingsUpdate(
-  input: UpdateSettingsRequest,
-  extraModels: ProviderModelMetadata[] = [],
-): UpdateSettingsRequest {
-  const output: UpdateSettingsRequest = {};
-  if (typeof input.server_url === "string") {
-    const value = input.server_url.trim();
-    if (/^https?:\/\/[^\s]+$/u.test(value)) output.server_url = value;
-  }
-  if (input.language === "en" || input.language === "ko")
-    output.language = input.language;
-  if (typeof input.timezone === "string") {
-    const timezone = normalizeTimezone(input.timezone);
-    if (timezone) output.timezone = timezone;
-  }
-  if (typeof input.model === "string") {
-    const model = normalizeKnownModelRef(input.model, extraModels);
-    if (model) output.model = model;
-  }
-  if (
-    ["none", "low", "medium", "high", "xhigh"].includes(
-      String(input.reasoning_effort),
-    )
-  ) {
-    output.reasoning_effort = input.reasoning_effort;
-  }
-  if (typeof input.consolidation_model === "string") {
-    const model = normalizeConsolidationModelRef(
-      input.consolidation_model,
-      extraModels,
-    );
-    if (model) output.consolidation_model = model;
-  }
-  if (
-    ["none", "low", "medium", "high", "xhigh"].includes(
-      String(input.consolidation_reasoning_effort),
-    )
-  ) {
-    output.consolidation_reasoning_effort =
-      input.consolidation_reasoning_effort;
-  }
-  const contextWindowTokens = positiveTokenCount(input.context_window_tokens);
-  if (contextWindowTokens) output.context_window_tokens = contextWindowTokens;
-  if (Array.isArray(input.worker_model_rules)) {
-    output.worker_model_rules = normalizeWorkerModelRules(
-      input.worker_model_rules,
-      extraModels,
-    );
-  }
-  if (
-    ["full_access", "ask_first", "read_only"].includes(
-      String(input.access_mode),
-    )
-  ) {
-    output.access_mode = input.access_mode;
-  }
-  if (typeof input.plan_mode_default === "boolean")
-    output.plan_mode_default = input.plan_mode_default;
-  if (
-    input.follow_up_behavior === "queue" ||
-    input.follow_up_behavior === "steer"
-  ) {
-    output.follow_up_behavior = input.follow_up_behavior;
-  }
-  {
-    const multilineSendBehavior = normalizeMultilineSendBehavior(
-      input.multiline_send_behavior,
-    );
-    if (multilineSendBehavior)
-      output.multiline_send_behavior = multilineSendBehavior;
-  }
-  if (
-    input.appearance_theme === "system" ||
-    input.appearance_theme === "light" ||
-    input.appearance_theme === "dark"
-  ) {
-    output.appearance_theme = input.appearance_theme;
-  }
-  {
-    const mainScreenTheme = normalizeMainScreenTheme(input.main_screen_theme);
-    if (mainScreenTheme) output.main_screen_theme = mainScreenTheme;
-  }
-  {
-    const preset = normalizeMainScreenThemePreset(
-      input.main_screen_theme_preset,
-    );
-    if (preset) output.main_screen_theme_preset = preset;
-  }
-  {
-    const colors = normalizeMainScreenThemeColors(
-      input.main_screen_theme_custom_colors,
-    );
-    if (colors) output.main_screen_theme_custom_colors = colors;
-  }
-  if (typeof input.translucent_sidebar === "boolean")
-    output.translucent_sidebar = input.translucent_sidebar;
-  if (typeof input.diagnostics_enabled === "boolean")
-    output.diagnostics_enabled = input.diagnostics_enabled;
-  if (input.desktop_notifications && typeof input.desktop_notifications === "object") {
-    const notifications = sanitizeDesktopNotificationSettings(
-      input.desktop_notifications,
-    );
-    if (Object.keys(notifications).length > 0)
-      output.desktop_notifications = notifications;
-  }
-  if (typeof input.desktop_tray_enabled === "boolean")
-    output.desktop_tray_enabled = input.desktop_tray_enabled;
-  if (input.web_search && typeof input.web_search === "object") {
-    const webSearch = sanitizeWebSearchSettingsUpdate(input.web_search);
-    if (Object.keys(webSearch).length > 0) output.web_search = webSearch;
-  }
-  return output;
-}
-
-function sanitizeDesktopNotificationSettings(
-  input: Partial<SettingsView["desktop_notifications"]>,
-): Partial<SettingsView["desktop_notifications"]> {
-  const output: Partial<SettingsView["desktop_notifications"]> = {};
-  if (typeof input.enabled === "boolean") output.enabled = input.enabled;
-  if (typeof input.assistant_messages === "boolean")
-    output.assistant_messages = input.assistant_messages;
-  if (typeof input.task_completions === "boolean")
-    output.task_completions = input.task_completions;
-  return output;
-}
-
-function normalizeDesktopNotificationSettings(
-  input: Partial<SettingsView["desktop_notifications"]> | undefined,
-): SettingsView["desktop_notifications"] {
-  return {
-    enabled: input?.enabled === false ? false : true,
-    assistant_messages:
-      input?.assistant_messages === false ? false : true,
-    task_completions:
-      input?.task_completions === false ? false : true,
-  };
-}
-
-const MAIN_SCREEN_THEME_DEFAULT: SettingsView["main_screen_theme"] = "bloom";
-const MAIN_SCREEN_THEME_PRESET_DEFAULT: SettingsView["main_screen_theme_preset"] =
-  "monochrome";
-const MAIN_SCREEN_THEME_CUSTOM_COLORS_DEFAULT: SettingsView["main_screen_theme_custom_colors"] =
-  ["#32424d", "#555d7c", "#485c70", "#6a7d9a", "#53708d", "#434d70"];
-
-function normalizeMainScreenTheme(
-  input: unknown,
-): SettingsView["main_screen_theme"] | undefined {
-  if (input === "curtain") return "silk";
-  return input === "none" || input === "bloom" || input === "silk"
-    ? input
-    : undefined;
-}
-
-function normalizedMainScreenThemeOrDefault(
-  input: unknown,
-): SettingsView["main_screen_theme"] {
-  return normalizeMainScreenTheme(input) ?? MAIN_SCREEN_THEME_DEFAULT;
-}
-
-function normalizeMainScreenThemePreset(
-  input: unknown,
-): SettingsView["main_screen_theme_preset"] | undefined {
-  return input === "monochrome" ||
-    input === "aurora" ||
-    input === "bloom" ||
-    input === "lavender" ||
-    input === "morning" ||
-    input === "custom"
-    ? input
-    : undefined;
-}
-
-function normalizedMainScreenThemePresetOrDefault(
-  input: unknown,
-  colors: SettingsView["main_screen_theme_custom_colors"] = MAIN_SCREEN_THEME_CUSTOM_COLORS_DEFAULT,
-): SettingsView["main_screen_theme_preset"] {
-  const preset = normalizeMainScreenThemePreset(input);
-  if (preset === "custom" && isMainScreenMonochromeColors(colors)) {
-    return "monochrome";
-  }
-  return preset ?? MAIN_SCREEN_THEME_PRESET_DEFAULT;
-}
-
-function isMainScreenMonochromeColors(
-  colors: SettingsView["main_screen_theme_custom_colors"],
-): boolean {
-  return colors.every(
-    (color, index) => color === MAIN_SCREEN_THEME_CUSTOM_COLORS_DEFAULT[index],
-  );
-}
-
-function normalizeMainScreenThemeColors(
-  input: unknown,
-): SettingsView["main_screen_theme_custom_colors"] | undefined {
-  if (!Array.isArray(input) || input.length !== 6) return undefined;
-  const colors = input.map((value) =>
-    typeof value === "string" && /^#[0-9a-f]{6}$/iu.test(value.trim())
-      ? value.trim().toLocaleLowerCase("en-US")
-      : null,
-  );
-  return colors.every((value) => value !== null)
-    ? (colors as SettingsView["main_screen_theme_custom_colors"])
-    : undefined;
-}
-
-function normalizedMainScreenThemeColorsOrDefault(
-  input: unknown,
-): SettingsView["main_screen_theme_custom_colors"] {
-  return (
-    normalizeMainScreenThemeColors(input) ??
-    MAIN_SCREEN_THEME_CUSTOM_COLORS_DEFAULT
-  );
-}
-
-function sanitizeWebSearchSettingsUpdate(
-  input: WebSearchSettingsUpdate,
-): WebSearchSettingsUpdate {
-  const output: WebSearchSettingsUpdate = {};
-  if (
-    input.provider === "duckduckgo-html" ||
-    input.provider === "auto" ||
-    input.provider === "brave" ||
-    input.provider === "tavily" ||
-    input.provider === "openai-web-search" ||
-    input.provider === "codex-subscription-web-search" ||
-    input.provider === "disabled"
-  )
-    output.provider = input.provider;
-  if (
-    input.reader_backend === "lightweight" ||
-    input.reader_backend === "auto" ||
-    input.reader_backend === "lightpanda" ||
-    input.reader_backend === "jina-hosted" ||
-    input.reader_backend === "disabled"
-  )
-    output.reader_backend = input.reader_backend;
-  if (typeof input.api_key === "string" && input.api_key.trim())
-    output.api_key = input.api_key.trim();
-  if (typeof input.planning_enabled === "boolean")
-    output.planning_enabled = input.planning_enabled;
-  if (
-    input.planning_default_depth === "quick" ||
-    input.planning_default_depth === "balanced" ||
-    input.planning_default_depth === "deep"
-  )
-    output.planning_default_depth = input.planning_default_depth;
-  return output;
-}
-
-function webSearchSettingsPatchFrom(
-  input: WebSearchSettingsUpdate,
-): Partial<WebSearchSettingsView> {
-  const { api_key: _apiKey, ...settings } = input;
-  return settings;
-}
-
-const WEB_SEARCH_API_KEY_ENV: Partial<
-  Record<WebSearchProviderSetting, { primary: string; accepted: string[] }>
-> = {
-  brave: {
-    primary: "BUTLER_BRAVE_SEARCH_API_KEY",
-    accepted: ["BUTLER_BRAVE_SEARCH_API_KEY", "BRAVE_SEARCH_API_KEY"],
-  },
-  tavily: {
-    primary: "BUTLER_TAVILY_API_KEY",
-    accepted: ["BUTLER_TAVILY_API_KEY", "TAVILY_API_KEY"],
-  },
-  "openai-web-search": {
-    primary: "OPENAI_API_KEY",
-    accepted: ["OPENAI_API_KEY"],
-  },
-};
-
-function webSearchProviderApiKeyStatus(
-  butlerData: string,
-  provider: WebSearchProviderSetting,
-): { configured: boolean; envVar: string | null } {
-  const spec = WEB_SEARCH_API_KEY_ENV[provider];
-  if (!spec) return { configured: false, envVar: null };
-  const privateEnv = readPrivateEnv(butlerData);
-  return {
-    configured: spec.accepted.some((key) =>
-      Boolean(process.env[key]?.trim() || privateEnv[key]?.trim()),
-    ),
-    envVar: spec.primary,
-  };
-}
-
-function writeWebSearchProviderApiKey(
-  butlerData: string,
-  provider: WebSearchProviderSetting,
-  apiKey: string,
-): void {
-  const spec = WEB_SEARCH_API_KEY_ENV[provider];
-  const value = apiKey.trim();
-  if (!spec || !value) return;
-  upsertPrivateEnvValue(butlerData, spec.primary, value);
-  process.env[spec.primary] = value;
-}
-
-function normalizeWebSearchSettings(
-  input: Partial<WebSearchSettingsView> = {},
-  butlerData: string,
-): WebSearchSettingsView {
-  const legacyInput = input as Partial<WebSearchSettingsView> & {
-    planning_mode?: string;
-  };
-  const provider =
-    sanitizeWebSearchSettingsUpdate({
-      provider: input.provider,
-    }).provider ?? "duckduckgo-html";
-  const apiKeyStatus = webSearchProviderApiKeyStatus(butlerData, provider);
-  return {
-    provider,
-    reader_backend:
-      sanitizeWebSearchSettingsUpdate({ reader_backend: input.reader_backend })
-        .reader_backend ?? "lightweight",
-    api_key_configured: apiKeyStatus.configured,
-    api_key_env_var: apiKeyStatus.envVar,
-    planning_enabled:
-      legacyInput.planning_mode === "off"
-        ? false
-        : typeof input.planning_enabled === "boolean"
-          ? input.planning_enabled
-          : true,
-    planning_default_depth:
-      input.planning_default_depth === "quick" ||
-      input.planning_default_depth === "deep"
-        ? input.planning_default_depth
-        : "balanced",
-  };
-}
-
-function readConfigWebSearchSettings(
-  butlerData: string,
-): Partial<WebSearchSettingsView> {
-  try {
-    const config = JSON.parse(
-      readFileSync(join(butlerData, "butler.config.json"), "utf8"),
-    ) as Record<string, any>;
-    const webSearch = config.webSearch ?? {};
-    const planning = webSearch.planning ?? {};
-    const settings = sanitizeWebSearchSettingsUpdate({
-      provider: webSearch.provider,
-      reader_backend: webSearch.readerBackend,
-      planning_enabled: planning.enabled,
-      planning_default_depth: planning.defaultDepth,
-    });
-    if (planning.mode === "off") settings.planning_enabled = false;
-    return settings;
-  } catch {
-    return {};
-  }
-}
-
-type AppLanguage = "en" | "ko";
-
-interface ConfigUserSettings {
-  timezone?: string;
-  language?: AppLanguage;
-  responseLanguage?: AppLanguage;
-}
-
-function normalizeAppLanguage(value: unknown): AppLanguage | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim().toLowerCase();
-  if (
-    normalized === "ko" ||
-    normalized === "kr" ||
-    normalized.includes("korean") ||
-    normalized.includes("한국")
-  ) {
-    return "ko";
-  }
-  if (normalized === "en" || normalized.includes("english") || normalized.includes("영어")) {
-    return "en";
-  }
-  return undefined;
-}
-
-function readConfigUserSettings(butlerData: string): ConfigUserSettings {
-  try {
-    const config = JSON.parse(
-      readFileSync(join(butlerData, "butler.config.json"), "utf8"),
-    ) as Record<string, any>;
-    return {
-      timezone: normalizeTimezone(config.user?.timezone) ?? undefined,
-      language: normalizeAppLanguage(config.user?.language),
-      responseLanguage: normalizeAppLanguage(config.user?.responseLanguage),
-    };
-  } catch {
-    return {};
-  }
-}
-
-function readConfigDefaultModel(butlerData: string): string | undefined {
-  try {
-    const config = JSON.parse(
-      readFileSync(join(butlerData, "butler.config.json"), "utf8"),
-    ) as Record<string, any>;
-    const system = safeObject(config.system);
-    return safeString(system.butlerModel) ?? safeString(system.defaultModel);
-  } catch {
-    return undefined;
-  }
-}
-
-function writeConfigUserSettings(
-  butlerData: string,
-  settings: ConfigUserSettings,
-): void {
-  const path = join(butlerData, "butler.config.json");
-  let config: Record<string, any>;
-  try {
-    config = JSON.parse(readFileSync(path, "utf8")) as Record<string, any>;
-  } catch {
-    config = {};
-  }
-  config.user = {
-    ...(config.user && typeof config.user === "object" ? config.user : {}),
-    ...(settings.timezone ? { timezone: settings.timezone } : {}),
-    ...(settings.language ? { language: settings.language } : {}),
-    ...(settings.responseLanguage
-      ? { responseLanguage: settings.responseLanguage }
-      : {}),
-  };
-  mkdirSync(butlerData, { recursive: true, mode: 0o700 });
-  writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-}
-
-function writeConfigWebSearchSettings(
-  butlerData: string,
-  settings: WebSearchSettingsView,
-): void {
-  const path = join(butlerData, "butler.config.json");
-  let config: Record<string, any>;
-  try {
-    config = JSON.parse(readFileSync(path, "utf8")) as Record<string, any>;
-  } catch {
-    config = {};
-  }
-  config.webSearch = {
-    ...(config.webSearch && typeof config.webSearch === "object"
-      ? config.webSearch
-      : {}),
-    provider: settings.provider,
-    readerBackend: settings.reader_backend,
-    planning: {
-      ...(config.webSearch?.planning &&
-      typeof config.webSearch.planning === "object"
-        ? config.webSearch.planning
-        : {}),
-      enabled: settings.planning_enabled,
-      defaultDepth: settings.planning_default_depth,
-    },
-  };
-  delete config.webSearch.planning.mode;
-  delete config.webSearch.planning.allowParallelSearch;
-  delete config.webSearch.planning.disableSmartForWeakModel;
-  mkdirSync(butlerData, { recursive: true, mode: 0o700 });
-  writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-}
-
-function normalizeTimezone(value: unknown): string {
-  const candidate = typeof value === "string" ? value.trim() : "";
-  if (candidate) {
-    try {
-      Intl.DateTimeFormat("en-US", { timeZone: candidate });
-      return candidate;
-    } catch {
-      // Fall through to local timezone or UTC.
-    }
-  }
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {
-    return "UTC";
-  }
-}
-
-function normalizeMultilineSendBehavior(
-  value: unknown,
-): SettingsView["multiline_send_behavior"] | undefined {
-  if (value === "enter_send_shift_enter_newline")
-    return "enter_send_shift_enter_newline";
-  if (
-    value === "modifier_enter_send_enter_newline" ||
-    value === "enter_newline_shift_enter_send"
-  ) {
-    return "modifier_enter_send_enter_newline";
-  }
-  return undefined;
-}
-
-function normalizedMultilineSendBehaviorOrDefault(
-  value: unknown,
-): SettingsView["multiline_send_behavior"] {
-  return (
-    normalizeMultilineSendBehavior(value) ?? "modifier_enter_send_enter_newline"
-  );
-}
-
-function rewriteSettingsModelRefs(
-  input: Partial<SettingsView>,
-  previousModelRef: string,
-  nextModelRef: string,
-): Partial<SettingsView> {
-  return {
-    ...input,
-    model: input.model === previousModelRef ? nextModelRef : input.model,
-    consolidation_model:
-      input.consolidation_model === previousModelRef
-        ? nextModelRef
-        : input.consolidation_model,
-    worker_model_rules: Array.isArray(input.worker_model_rules)
-      ? input.worker_model_rules.map((rule) => ({
-          ...rule,
-          model: rule.model === previousModelRef ? nextModelRef : rule.model,
-        }))
-      : input.worker_model_rules,
-  };
-}
-
-function positiveTokenCount(input: unknown): number | undefined {
-  if (typeof input !== "number" || !Number.isFinite(input)) return undefined;
-  const value = Math.trunc(input);
-  return value > 0 ? value : undefined;
-}
-
-function clampContextWindowTokens(
-  input: unknown,
-  modelMaxTokens: number,
-): number {
-  const modelMax = positiveTokenCount(modelMaxTokens) ?? 200_000;
-  const fallback = Math.min(DEFAULT_CONTEXT_WINDOW_TOKENS, modelMax);
-  const value = positiveTokenCount(input) ?? fallback;
-  return Math.max(1_000, Math.min(value, modelMax));
-}
-
-function contextWindowTokensForSessionModel(
-  settings: Pick<SettingsView, "model" | "context_window_tokens">,
-  metadata: ProviderModelMetadata,
-): number {
-  const configuredForSelectedModel = settings.model === metadata.model_ref;
-  return clampContextWindowTokens(
-    configuredForSelectedModel ? settings.context_window_tokens : undefined,
-    metadata.context_window_tokens,
-  );
-}
-
-function normalizeKnownModelRef(
-  input: string,
-  extraModels: ProviderModelMetadata[] = [],
-): string | undefined {
-  const value = input.trim();
-  if (!value) return undefined;
-  const models = extraModels.length > 0 ? extraModels : listModelMetadata();
-  const match = models
-    .filter((model) => model.runtime_supported)
-    .find((model) => model.model_ref === value || model.model_id === value);
-  return match?.model_ref;
-}
-
-function normalizeConsolidationModelRef(
-  input: string,
-  extraModels: ProviderModelMetadata[] = [],
-): string | undefined {
-  const value = input.trim();
-  if (!value) return undefined;
-  if (value === PROFILE_EXTRACTOR_MODEL_DEFAULT) return value;
-  return normalizeKnownModelRef(value, extraModels);
-}
-
 const SCHEDULER_EVENT_JOBS = [
   ["session-sync", "Session sync"],
   ["context-maintenance", "Context maintenance"],
@@ -8827,136 +8272,12 @@ function eventSortTimestamp(event: SystemEventSummary): string {
   return event.occurred_at ?? event.completed_at ?? event.started_at ?? "";
 }
 
-function normalizeWorkerModelRules(
-  input: unknown,
-  extraModels: ProviderModelMetadata[] = [],
-): WorkerModelRule[] {
-  const fallbackRules = defaultWorkerModelRulesFor(extraModels);
-  const rawRules = Array.isArray(input) ? input : fallbackRules;
-  const normalized = rawRules.slice(0, 12).flatMap((rule, index) => {
-    if (!rule || typeof rule !== "object") return [];
-    const candidate = rule as Partial<WorkerModelRule>;
-    const model =
-      typeof candidate.model === "string"
-        ? normalizeKnownModelRef(candidate.model, extraModels)
-        : undefined;
-    if (!model) return [];
-    const metadata = resolveRegisteredRuntimeModelMetadata(model, extraModels);
-    const requestedReasoning = candidate.reasoning_effort;
-    const reasoning =
-      requestedReasoning &&
-      metadata.reasoning_efforts.includes(requestedReasoning)
-        ? requestedReasoning
-        : metadata.default_reasoning_effort;
-    return [
-      {
-        id: safeWorkerRuleId(candidate.id, index),
-        label: safeWorkerRuleText(
-          candidate.label,
-          index === 0 ? "Deep work" : "Routine work",
-          48,
-        ),
-        condition: safeWorkerRuleText(
-          candidate.condition,
-          "Worker model condition",
-          160,
-        ),
-        model: metadata.model_ref,
-        reasoning_effort: reasoning,
-        enabled: candidate.enabled !== false,
-      },
-    ];
-  });
-  return normalized.length > 0 ? normalized : fallbackRules;
-}
-
-function defaultWorkerModelRulesFor(
-  extraModels: ProviderModelMetadata[] = [],
-): WorkerModelRule[] {
-  if (extraModels.length === 0) return defaultWorkerModelRules();
-  const selectable = extraModels.filter((model) => model.runtime_supported);
-  if (selectable.length === 0) return [];
-  const deepModel = selectable[0]!;
-  const routineModel = selectable[1] ?? deepModel;
-  return [
-    {
-      id: "deep_work",
-      label: "Deep work",
-      condition:
-        "Research, feature-level development, architecture, review, and analysis",
-      model: deepModel.model_ref,
-      reasoning_effort: deepModel.reasoning_efforts.includes("high")
-        ? "high"
-        : deepModel.default_reasoning_effort,
-      enabled: true,
-    },
-    {
-      id: "routine_work",
-      label: "Routine work",
-      condition:
-        "Simple coding, search, local inspection, formatting, and tool calls",
-      model: routineModel.model_ref,
-      reasoning_effort: routineModel.reasoning_efforts.includes("medium")
-        ? "medium"
-        : routineModel.default_reasoning_effort,
-      enabled: true,
-    },
-  ];
-}
-
-function safeWorkerRuleId(input: unknown, index: number): string {
-  const value =
-    typeof input === "string" ? input.trim().toLocaleLowerCase("en-US") : "";
-  const normalized = value
-    .replace(/[^a-z0-9_-]+/gu, "-")
-    .replace(/^-+|-+$/gu, "");
-  return normalized || `worker_rule_${index + 1}`;
-}
-
-function safeWorkerRuleText(
-  input: unknown,
-  fallback: string,
-  maxLength: number,
-): string {
-  const value =
-    typeof input === "string" ? input.replace(/\s+/gu, " ").trim() : "";
-  if (!value) return fallback;
-  return value.length > maxLength
-    ? value.slice(0, maxLength - 1).trimEnd()
-    : value;
-}
-
 function sessionControlsKey(sessionId: string): string {
   return `session-controls:${safeLocalSessionId(sessionId)}`;
 }
 
 function sessionControlsExplicitKey(sessionId: string): string {
   return `session-controls-explicit:${safeLocalSessionId(sessionId)}`;
-}
-
-function normalizeSessionControls(
-  input: Partial<SessionControlState>,
-  extraModels: ProviderModelMetadata[] = [],
-): SessionControlState {
-  const metadata = resolveRegisteredRuntimeModelMetadata(
-    input.model ?? DEFAULT_MODEL_REF,
-    extraModels,
-  );
-  const candidateReasoning = input.reasoning_effort;
-  const reasoning =
-    candidateReasoning &&
-    metadata.reasoning_efforts.includes(candidateReasoning)
-      ? candidateReasoning
-      : metadata.default_reasoning_effort;
-  return {
-    model: metadata.model_ref,
-    reasoning_effort: reasoning,
-    access_mode:
-      input.access_mode === "ask_first" || input.access_mode === "read_only"
-        ? input.access_mode
-        : "full_access",
-    plan_mode: Boolean(input.plan_mode),
-  };
 }
 
 function hasSessionControlInput(input: Partial<SessionControlState>): boolean {
@@ -9837,364 +9158,6 @@ function prunePrivatePersonalizationBackups(
 function startOfUtcDay(value: Date): Date {
   return new Date(
     Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
-  );
-}
-
-type ProjectLedgerDocumentProject = Pick<
-  ProjectRow,
-  "id" | "display_name" | "workspace_path" | "workspace_label" | "safe_path_label"
->;
-
-function readProjectLedgerDocuments(
-  butlerData: string,
-  project: ProjectLedgerDocumentProject,
-): ProjectDashboardView["documents"] {
-  for (const candidate of projectLedgerDataRootCandidates(butlerData, project)) {
-    const dataHomeDocuments = readProjectLedgerDocumentsFromRoot(
-      candidate.root,
-      candidate.safeRootLabel,
-      [{ root: butlerData, label: "butler-data" }],
-    );
-    if (dataHomeDocuments.length > 0) {
-      return sortProjectLedgerDocuments(dataHomeDocuments);
-    }
-  }
-  const workspacePath = project.workspace_path;
-  if (!workspacePath) return [];
-  const workspaceRoot = resolve(workspacePath, ".project-ledger");
-  if (!isPathInside(workspacePath, workspaceRoot)) return [];
-  const workspaceSpecs = readProjectLedgerDocumentsFrom(
-    resolve(workspaceRoot, "specs"),
-    "spec",
-    "workspace/.project-ledger/specs",
-    { redactRoots: [{ root: workspacePath, label: "workspace" }] },
-  );
-  const workspacePlans = readProjectLedgerDocumentsFrom(
-    resolve(workspaceRoot, "plans"),
-    "plan",
-    "workspace/.project-ledger/plans",
-    {
-      documentType: "plan",
-      redactRoots: [{ root: workspacePath, label: "workspace" }],
-    },
-  );
-  const workspaceRoadmaps = readProjectLedgerDocumentsFrom(
-    resolve(workspaceRoot, "roadmaps"),
-    "plan",
-    "workspace/.project-ledger/roadmaps",
-    {
-      category: () => "Roadmap",
-      documentType: "roadmap",
-      redactRoots: [{ root: workspacePath, label: "workspace" }],
-    },
-  );
-  const workspaceWork = readProjectLedgerDocumentsFrom(
-    resolve(workspaceRoot, "work"),
-    "plan",
-    "workspace/.project-ledger/work",
-    {
-      category: (_kind, relativeLabel) =>
-        projectLedgerWorkCategory(relativeLabel),
-      documentType: "work",
-      include: (relativeLabel) => relativeLabel.endsWith("/work.md"),
-      redactRoots: [{ root: workspacePath, label: "workspace" }],
-    },
-  );
-  const workspaceTasks = readProjectLedgerDocumentsFrom(
-    resolve(workspaceRoot, "work"),
-    "plan",
-    "workspace/.project-ledger/work",
-    {
-      category: (_kind, relativeLabel) =>
-        projectLedgerWorkCategory(relativeLabel),
-      documentType: "task",
-      include: isProjectLedgerTaskDocument,
-      redactRoots: [{ root: workspacePath, label: "workspace" }],
-    },
-  );
-  return sortProjectLedgerDocuments([
-    ...workspaceSpecs,
-    ...workspacePlans,
-    ...workspaceRoadmaps,
-    ...workspaceWork,
-    ...workspaceTasks,
-  ]);
-}
-
-function readProjectLedgerDocumentsFromRoot(
-  root: string,
-  safeRootLabel: string,
-  redactRoots: Array<{ root: string; label: string }>,
-): ProjectDashboardView["documents"] {
-  if (!isPathInside(root, resolve(root))) return [];
-  const specs = readProjectLedgerDocumentsFrom(
-    resolve(root, "specs"),
-    "spec",
-    `${safeRootLabel}/specs`,
-    { redactRoots },
-  );
-  const plans = readProjectLedgerDocumentsFrom(
-    resolve(root, "plans"),
-    "plan",
-    `${safeRootLabel}/plans`,
-    {
-      documentType: "plan",
-      redactRoots,
-    },
-  );
-  const roadmaps = readProjectLedgerDocumentsFrom(
-    resolve(root, "roadmaps"),
-    "plan",
-    `${safeRootLabel}/roadmaps`,
-    {
-      category: () => "Roadmap",
-      documentType: "roadmap",
-      redactRoots,
-    },
-  );
-  const work = readProjectLedgerDocumentsFrom(
-    resolve(root, "work"),
-    "plan",
-    `${safeRootLabel}/work`,
-    {
-      category: (_kind, relativeLabel) =>
-        projectLedgerWorkCategory(relativeLabel),
-      documentType: "work",
-      include: (relativeLabel) => relativeLabel.endsWith("/work.md"),
-      redactRoots,
-    },
-  );
-  const tasks = readProjectLedgerDocumentsFrom(
-    resolve(root, "work"),
-    "plan",
-    `${safeRootLabel}/work`,
-    {
-      category: (_kind, relativeLabel) =>
-        projectLedgerWorkCategory(relativeLabel),
-      documentType: "task",
-      include: isProjectLedgerTaskDocument,
-      redactRoots,
-    },
-  );
-  return [...specs, ...plans, ...roadmaps, ...work, ...tasks];
-}
-
-function isProjectLedgerTaskDocument(relativeLabel: string): boolean {
-  return /\/tasks\/(?:[^/]+\.md|[^/]+\/task\.md)$/iu.test(relativeLabel);
-}
-
-function sortProjectLedgerDocuments(
-  documents: ProjectDashboardView["documents"],
-): ProjectDashboardView["documents"] {
-  return documents.sort((left, right) =>
-    right.updated_at.localeCompare(left.updated_at),
-  );
-}
-
-function readProjectLedgerDocumentsFrom(
-  dir: string,
-  kind: ProjectDashboardView["documents"][number]["kind"],
-  safeLabelPrefix: string,
-  options: {
-    category?: (
-      kind: ProjectDashboardView["documents"][number]["kind"],
-      relativeLabel: string,
-    ) => string;
-    documentType?: ProjectDashboardDocumentType;
-    include?: (relativeLabel: string) => boolean;
-    redactRoots?: Array<{ root: string; label: string }>;
-  } = {},
-): ProjectDashboardView["documents"] {
-  if (!existsSync(dir)) return [];
-  const readEntries = (
-    currentDir: string,
-    relativePrefix = "",
-  ): ProjectDashboardView["documents"] =>
-    readdirSync(currentDir, { withFileTypes: true }).flatMap((entry) => {
-      const relativeLabel = relativePrefix
-        ? `${relativePrefix}/${entry.name}`
-        : entry.name;
-      const path = resolve(currentDir, entry.name);
-      if (!isPathInside(dir, path)) return [];
-      if (entry.isDirectory()) return readEntries(path, relativeLabel);
-      if (!entry.isFile() || !entry.name.endsWith(".md")) return [];
-      if (options.include && !options.include(relativeLabel)) return [];
-      try {
-        const stat = statSync(path);
-        if (!stat.isFile()) return [];
-        const documentType = options.documentType ?? kind;
-        const markdown = sanitizeProjectLedgerMarkdown(
-          readFileSync(path, "utf8").slice(0, 60_000),
-          options.redactRoots ?? [],
-        );
-        return [
-          {
-            id: `${documentType}:${relativeLabel}`,
-            kind,
-            document_type: documentType,
-            title: markdownTitle(markdown, entry.name),
-            category:
-              options.category?.(kind, relativeLabel) ??
-              projectLedgerDocumentCategory(kind, relativeLabel),
-            status:
-              sanitizeProjectLedgerMarkdown(
-                frontmatterValue(markdown, "status") ?? "",
-                options.redactRoots ?? [],
-              ) || undefined,
-            safe_path_label: `${safeLabelPrefix}/${relativeLabel}`,
-            markdown,
-            updated_at: stat.mtime.toISOString(),
-          },
-        ];
-      } catch {
-        return [];
-      }
-    });
-  return readEntries(dir);
-}
-
-function sanitizeProjectLedgerMarkdown(
-  text: string,
-  redactRoots: Array<{ root: string; label: string }>,
-): string {
-  let safeText = text;
-  for (const { root, label } of redactRoots) {
-    const normalizedRoot = resolve(root);
-    if (normalizedRoot.length <= 1) continue;
-    safeText = safeText.replace(
-      new RegExp(escapeRegex(normalizedRoot), "gu"),
-      label,
-    );
-  }
-  return safeText;
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-}
-
-function projectLedgerDocumentCategory(
-  kind: ProjectDashboardView["documents"][number]["kind"],
-  relativeLabel: string,
-): string {
-  if (kind === "plan") return "Plans";
-  const first = relativeLabel.split("/")[0] ?? "";
-  const slug = first.replace(/\.md$/iu, "").toLocaleLowerCase("en-US");
-  if (slug === "cli" || slug.startsWith("cli-")) return "CLI";
-  if (slug.startsWith("agentic-core")) return "Agentic Core";
-  if (slug.startsWith("butler-dedicated-client")) return "Dedicated Client";
-  if (slug.startsWith("cognition")) return "Cognition";
-  if (slug.includes("memory")) return "Memory";
-  if (slug.includes("project-ledger")) return "Project Ledger";
-  if (slug.includes("runtime") || slug.includes("provider")) return "Runtime";
-  return "General";
-}
-
-function projectLedgerWorkCategory(relativeLabel: string): string {
-  const first = relativeLabel.split("/")[0]?.trim();
-  return first || "Work";
-}
-
-function frontmatterValue(markdown: string, key: string): string | undefined {
-  const frontmatter = markdown.match(/^---\n([\s\S]*?)\n---/u)?.[1];
-  if (!frontmatter) return undefined;
-  const pattern = new RegExp(
-    `^${key.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\s*:\\s*"?([^"\\n]+)"?\\s*$`,
-    "imu",
-  );
-  return frontmatter.match(pattern)?.[1]?.trim();
-}
-
-function projectLedgerDataRootCandidates(
-  butlerData: string,
-  project: ProjectLedgerDocumentProject,
-): Array<{ root: string; safeRootLabel: string }> {
-  const seen = new Set<string>();
-  return projectLedgerProjectIdCandidates(project).flatMap((candidate) => {
-    const segment = safeProjectLedgerSegment(candidate);
-    if (seen.has(segment)) return [];
-    seen.add(segment);
-    return [
-      {
-        root: resolve(butlerData, "project-ledger", "projects", segment),
-        safeRootLabel: `project-ledger/projects/${segment}`,
-      },
-    ];
-  });
-}
-
-function projectLedgerProjectIdCandidates(
-  project: ProjectLedgerDocumentProject,
-): string[] {
-  const workspacePath = project.workspace_path;
-  return uniqueNonEmptyText([
-    workspacePath
-      ? readProjectJsonString(resolve(workspacePath, "project.json"), "id")
-      : null,
-    workspacePath
-      ? readProjectJsonString(resolve(workspacePath, "package.json"), "name")
-      : null,
-    workspacePath ? basename(workspacePath) : null,
-    project.safe_path_label,
-    project.workspace_label,
-    project.display_name,
-    project.id,
-  ]);
-}
-
-function uniqueNonEmptyText(values: Array<string | null | undefined>): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    const trimmed = value?.trim();
-    if (!trimmed || seen.has(trimmed)) continue;
-    seen.add(trimmed);
-    result.push(trimmed);
-  }
-  return result;
-}
-
-function readProjectJsonString(path: string, key: string): string | null {
-  if (!existsSync(path)) return null;
-  try {
-    const value = JSON.parse(readFileSync(path, "utf8")) as Record<
-      string,
-      unknown
-    >;
-    const candidate = value[key];
-    return typeof candidate === "string" && candidate.trim()
-      ? candidate.trim()
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function safeProjectLedgerSegment(value: string): string {
-  const safe = value
-    .trim()
-    .toLocaleLowerCase("en-US")
-    .replace(/[^a-z0-9._-]+/gu, "-")
-    .replace(/^-+|-+$/gu, "");
-  if (safe) return safe.slice(0, 96);
-  return "project";
-}
-
-function markdownTitle(markdown: string, fallbackFileName: string): string {
-  const heading = markdown.match(/^#\s+(.+)$/mu)?.[1]?.trim();
-  if (heading) return heading.slice(0, 120);
-  return fallbackFileName
-    .replace(/\.md$/iu, "")
-    .replace(/[-_]+/gu, " ")
-    .slice(0, 120);
-}
-
-function isPathInside(root: string, path: string): boolean {
-  const normalizedRoot = resolve(root);
-  const normalizedPath = resolve(path);
-  return (
-    normalizedPath === normalizedRoot ||
-    normalizedPath.startsWith(`${normalizedRoot}${sep}`)
   );
 }
 
