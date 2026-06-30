@@ -14,21 +14,16 @@ import type {
 import type { RuntimeDeliveryClassification } from "../../agent/turn/runtime-delivery-state.ts";
 import {
   TURN_ACKNOWLEDGED_EVENT_KIND,
+  TURN_DECISION_EVENT_KIND,
   createTurnAcknowledgedPayload,
 } from "../../agent/events/turn-state-contract.ts";
-import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../agent/events/turn-events.ts";
-import {
-  FIRST_VISIBLE_PROGRESS_GATEWAY_NOTE,
-  FIRST_VISIBLE_PROGRESS_GATEWAY_SOURCE,
-  firstVisibleProgressPayload,
-} from "../../agent/events/first-visible-progress.ts";
+import { generateOpeningDecisionWithProvider } from "../../agent/output/opening-decision.ts";
 import {
   recordDurableInbound,
   recordDurableOutbound,
   recordSessionLifecycle,
   recordSystemEvent,
 } from "../../test-support/harness/durable-session-transcript.ts";
-import { recordFirstVisibleLatencyMetric } from "../../operations/metrics/first-visible-latency.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import {
   diagnosticDetails,
@@ -84,6 +79,7 @@ interface SessionActorOptions {
     envelope: InboundEnvelope;
     route?: GatewayRoute;
   }) => Promise<string | null>;
+  openingDecisionTimeoutMs?: number;
   now?: () => string;
 }
 
@@ -403,7 +399,6 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     envelope: InboundEnvelope,
     route?: GatewayRoute,
   ): Promise<GatewayActorTurnResult> {
-    const acceptedAtMs = Date.now();
     const turnId = turnIdFromEnvelope(envelope);
     if (this.role === "steward") {
       appendStewardActivityTimelineEvent({
@@ -445,14 +440,22 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     }
 
     try {
+      let openingDecisionId: string | undefined;
       if (!schedulerContinuation) {
-        await this.emitTurnAcknowledged({
+        const acknowledged = await this.emitTurnAcknowledged({
           binding,
           envelope,
           route,
           timestamp,
-          acceptedAtMs,
         });
+        if (acknowledged) {
+          openingDecisionId = await this.emitOpeningDecision({
+            binding,
+            envelope,
+            route,
+            timestamp,
+          });
+        }
       }
       const promptContext = this.options.buildTurnContext?.({
         binding,
@@ -525,6 +528,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             currentUserText: envelope.message.text?.trim() ?? "",
             promptContext,
             turnId: turnIdFromEnvelope(envelope),
+            openingDecisionId,
             schedulerContinuation: schedulerContinuation
               ? {
                 contextAtomId: schedulerContinuation.contextAtomId,
@@ -670,24 +674,15 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     envelope: InboundEnvelope;
     route?: GatewayRoute;
     timestamp: string;
-    acceptedAtMs: number;
-  }): Promise<void> {
-    if (input.envelope.transport !== APP_TRANSPORT) return;
-    if (!this.options.deliverTurnEvent) return;
+  }): Promise<boolean> {
+    if (input.envelope.transport !== APP_TRANSPORT) return false;
+    if (!this.options.deliverTurnEvent) return false;
     const acknowledgedEvent: RuntimeTurnEventInput = {
       kind: TURN_ACKNOWLEDGED_EVENT_KIND,
       createdAt: input.timestamp,
       payload: createTurnAcknowledgedPayload({
         safeLabel: "Request received. Preparing the work.",
         transport: input.envelope.transport,
-      }),
-    };
-    const firstProgressEvent: RuntimeTurnEventInput = {
-      kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-      createdAt: input.timestamp,
-      payload: firstVisibleProgressPayload({
-        note: FIRST_VISIBLE_PROGRESS_GATEWAY_NOTE,
-        source: FIRST_VISIBLE_PROGRESS_GATEWAY_SOURCE,
       }),
     };
     try {
@@ -697,32 +692,89 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         route: input.route,
         event: acknowledgedEvent,
       });
-      await this.options.deliverTurnEvent({
-        binding: input.binding,
-        envelope: input.envelope,
-        route: input.route,
-        event: firstProgressEvent,
-      });
-      recordFirstVisibleLatencyMetric({
-        butlerData: gatewayMetricsButlerData(),
-        durationMs: Date.now() - input.acceptedAtMs,
-        signal: "first_progress",
-        transport: input.envelope.transport,
-        role: input.binding.role,
-        source: "gateway-actor",
-      });
+      return true;
     } catch {
-      recordFirstVisibleLatencyMetric({
-        butlerData: gatewayMetricsButlerData(),
-        durationMs: Date.now() - input.acceptedAtMs,
-        signal: "first_progress",
-        status: "error",
-        transport: input.envelope.transport,
-        role: input.binding.role,
-        source: "gateway-actor",
-      });
       // Acknowledgement is a public latency channel; durable inbound remains authoritative.
+      return false;
     }
+  }
+
+  private async emitOpeningDecision(input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+    route?: GatewayRoute;
+    timestamp: string;
+  }): Promise<string | undefined> {
+    if (input.envelope.transport !== APP_TRANSPORT) return undefined;
+    try {
+      const openingDecision = await generateOpeningDecisionWithProvider(
+        this.options.provider,
+        {
+          userMessage: input.envelope.message.text ?? "",
+          model: input.binding.modelRef,
+          sessionRole: input.binding.role,
+          projectId: input.binding.projectId,
+          signal: input.envelope.signal,
+          timeoutMs: this.options.openingDecisionTimeoutMs,
+        },
+      );
+      if (!openingDecision) {
+        this.recordOpeningDecisionDiagnostic(input, "generation_returned_null");
+        return undefined;
+      }
+      if (!this.options.deliverTurnEvent) {
+        this.recordOpeningDecisionDiagnostic(input, "delivery_failed");
+        return undefined;
+      }
+      try {
+        await this.options.deliverTurnEvent({
+          binding: input.binding,
+          envelope: input.envelope,
+          route: input.route,
+          event: {
+            kind: TURN_DECISION_EVENT_KIND,
+            createdAt: input.timestamp,
+            payload: { ...openingDecision },
+          },
+        });
+      } catch (error) {
+        this.recordOpeningDecisionDiagnostic(
+          input,
+          "delivery_failed",
+          error,
+        );
+        return undefined;
+      }
+      return openingDecision.decisionId;
+    } catch (error) {
+      this.recordOpeningDecisionDiagnostic(input, "generation_threw", error);
+      return undefined;
+    }
+  }
+
+  private recordOpeningDecisionDiagnostic(
+    input: {
+      binding: StoredSessionBinding;
+      envelope: InboundEnvelope;
+      timestamp: string;
+    },
+    reason: "generation_returned_null" | "generation_threw" | "delivery_failed",
+    error?: unknown,
+  ): void {
+    recordSystemEvent({
+      sessionId: input.binding.sessionId,
+      category: "opening_decision",
+      message: "Opening decision was not emitted.",
+      details: {
+        reason,
+        ...(error ? { diagnostics: diagnosticDetails(error) } : {}),
+      },
+      metadata: {
+        source: "gateway-actor#opening-decision",
+        turnId: turnIdFromEnvelope(input.envelope),
+      },
+      timestamp: input.timestamp,
+    });
   }
 
   private async generateSessionTitleBestEffort(

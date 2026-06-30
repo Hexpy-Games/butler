@@ -461,6 +461,7 @@ export const TURN_EVENT_COMPATIBILITY_MAPPINGS = [
 
 function sanitizePublicPayloadValue(value: unknown, key: string): unknown {
   if (key === "retryable" && typeof value === "boolean") return value;
+  if (key === "firstVisible" && typeof value === "boolean") return value;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return sanitizePublicText(value, decisionPayloadKey(key) ? "" : fallbackLabel(key));
   }

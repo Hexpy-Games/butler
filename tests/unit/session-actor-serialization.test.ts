@@ -17,7 +17,10 @@ import type { PromptAssembler } from "../../packages/butler-agent/src/agent/prom
 import { DeliveryGuard } from "../../packages/butler-agent/src/interfaces/transport/delivery-guard.ts";
 import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/mock/adapter.ts";
 import { APP_TRANSPORT } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
-import { TURN_ACKNOWLEDGED_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
+import {
+  TURN_ACKNOWLEDGED_EVENT_KIND,
+  TURN_DECISION_EVENT_KIND,
+} from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
 import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
 import { readFirstVisibleLatencySummary } from "../../packages/butler-agent/src/operations/metrics/first-visible-latency.ts";
 
@@ -119,6 +122,27 @@ const fakeProvider: ModelProviderAdapter = {
     return { text: "unused" };
   },
 };
+
+const openingDecisionText = JSON.stringify({
+  summary: "Start by orienting to the requested session actor change.",
+  rationale: "The user asked for app opening semantics before runtime work.",
+  nextStep: "Emit the opening decision and then run the turn.",
+});
+
+function providerReturningOpening(
+  calls: Array<{ model: string; text: string }> = [],
+): ModelProviderAdapter {
+  return {
+    ...fakeProvider,
+    async invoke(input) {
+      calls.push({
+        model: input.model,
+        text: input.messages.at(-1)?.content ?? "",
+      });
+      return { text: openingDecisionText, raw: { modelCallId: "opening-call-1" } };
+    },
+  };
+}
 
 function inbound(id: string, text: string): InboundEnvelope {
   return {
@@ -546,7 +570,8 @@ test("app session actor emits deterministic acknowledgement before context prepa
   const order: string[] = [];
   const turnEvents: string[] = [];
   const acknowledgedPayloads: Array<Record<string, unknown> | undefined> = [];
-  const firstProgressPayloads: Array<Record<string, unknown> | undefined> = [];
+  const decisionPayloads: Array<Record<string, unknown> | undefined> = [];
+  const openingProviderCalls: Array<{ model: string; text: string }> = [];
   store.upsert({
     sessionId: "butler/main",
     role: "butler",
@@ -565,7 +590,7 @@ test("app session actor emits deterministic acknowledgement before context prepa
   const lifecycle = new SessionLifecycleService({
     store,
     runtime,
-    provider: fakeProvider,
+    provider: providerReturningOpening(openingProviderCalls),
     promptAssembler: {
       buildSystemPrompt: () => ({ systemPrompt: "You are Butler." }),
       buildTurnContext: () => {
@@ -579,8 +604,8 @@ test("app session actor emits deterministic acknowledgement before context prepa
       if (event.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
         acknowledgedPayloads.push(event.payload);
       }
-      if (event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
-        firstProgressPayloads.push(event.payload);
+      if (event.kind === TURN_DECISION_EVENT_KIND) {
+        decisionPayloads.push(event.payload);
       }
     },
   });
@@ -591,40 +616,136 @@ test("app session actor emits deterministic acknowledgement before context prepa
   });
 
   expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
-  expect(turnEvents[1]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  expect(turnEvents[1]).toBe(TURN_DECISION_EVENT_KIND);
+  expect(turnEvents).not.toContain(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
   expect(acknowledgedPayloads[0]).toMatchObject({
     safeLabel: "Request received. Preparing the work.",
     transport: APP_TRANSPORT,
   });
-  expect(firstProgressPayloads[0]).toMatchObject({
-    note: "Request received. Preparing the work.",
-    source: "gateway-accepted",
+  expect(decisionPayloads[0]).toMatchObject({
+    role: "opening",
+    source: "model-authored",
+    firstVisible: true,
+    summary: "Start by orienting to the requested session actor change.",
+    rationale: "The user asked for app opening semantics before runtime work.",
+    nextStep: "Emit the opening decision and then run the turn.",
   });
+  expect(String(decisionPayloads[0]?.decisionId)).toMatch(/^opening-[a-f0-9]{24}$/u);
+  expect(openingProviderCalls).toHaveLength(1);
+  expect(openingProviderCalls[0]).toMatchObject({
+    model: "openai/auto:codex-latest",
+  });
+  expect(openingProviderCalls[0]?.text).toContain("hello");
   expect(order.indexOf(`turnEvent:${TURN_ACKNOWLEDGED_EVENT_KIND}`)).toBeLessThan(
-    order.indexOf("buildTurnContext"),
+    order.indexOf(`turnEvent:${TURN_DECISION_EVENT_KIND}`),
   );
-  expect(order.indexOf(`turnEvent:${FIRST_VISIBLE_PROGRESS_EVENT_KIND}`)).toBeLessThan(
+  expect(order.indexOf(`turnEvent:${TURN_DECISION_EVENT_KIND}`)).toBeLessThan(
     order.indexOf("buildTurnContext"),
   );
   const summary = readFirstVisibleLatencySummary({ butlerData: tempDir });
-  expect(summary).toMatchObject({
-    events: 1,
-    bySignal: {
-      first_progress: 1,
-    },
-    privacy: {
-      rawTextStored: false,
+  expect(summary.events).toBe(0);
+  store.close();
+});
+
+test("app session actor records opening decision id in runtime metadata", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime();
+  runtime.firstTurnRelease.resolve();
+  const decisionPayloads: Array<Record<string, unknown> | undefined> = [];
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: APP_TRANSPORT,
+      accountId: "local",
+      peerId: "butler/main",
+    }],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: providerReturningOpening(),
+    systemPromptFactory: () => "You are Butler.",
+    deliverTurnEvent: async ({ event }) => {
+      if (event.kind === TURN_DECISION_EVENT_KIND) {
+        decisionPayloads.push(event.payload);
+      }
     },
   });
-  expect(summary.latest?.dimensions).toMatchObject({
-    transport: APP_TRANSPORT,
-    role: "butler",
-    source: "gateway-actor",
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(appInbound("opening-metadata", "hello"))).resolves.toMatchObject({
+    text: "reply-1",
+  });
+
+  const decisionId = decisionPayloads[0]?.decisionId;
+  expect(typeof decisionId).toBe("string");
+  expect(runtime.turns[0]?.metadata).toMatchObject({
+    openingDecisionId: decisionId,
   });
   store.close();
 });
 
-test("app session actor acknowledgement does not wait for provider progress generation", async () => {
+test("app session actor omits opening decision metadata when decision delivery fails", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime();
+  runtime.firstTurnRelease.resolve();
+  const turnEvents: string[] = [];
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: APP_TRANSPORT,
+      accountId: "local",
+      peerId: "butler/main",
+    }],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: providerReturningOpening(),
+    systemPromptFactory: () => "You are Butler.",
+    deliverTurnEvent: async ({ event }) => {
+      if (event.kind === TURN_DECISION_EVENT_KIND) {
+        throw new Error("decision event store unavailable");
+      }
+      turnEvents.push(event.kind);
+    },
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(appInbound("opening-delivery-fails", "hello"))).resolves.toMatchObject({
+    text: "reply-1",
+  });
+
+  expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
+  expect(turnEvents).not.toContain(TURN_DECISION_EVENT_KIND);
+  expect(runtime.turns[0]?.metadata?.openingDecisionId).toBeUndefined();
+  expect(readTranscript("butler/main")).toContainEqual(expect.objectContaining({
+    kind: "system",
+    payload: expect.objectContaining({
+      category: "opening_decision",
+      details: expect.objectContaining({
+        reason: "delivery_failed",
+      }),
+    }),
+  }));
+  store.close();
+});
+
+test("app session actor times out failed opening generation without public fallback", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const runtime = new BlockingRuntime();
   const turnEvents: string[] = [];
@@ -658,6 +779,7 @@ test("app session actor acknowledgement does not wait for provider progress gene
     deliverTurnEvent: async ({ event }) => {
       turnEvents.push(event.kind);
     },
+    openingDecisionTimeoutMs: 5,
   });
   const actor = await lifecycle.getOrCreate("butler/main", "butler");
 
@@ -665,8 +787,10 @@ test("app session actor acknowledgement does not wait for provider progress gene
   await runtime.firstTurnStarted.promise;
 
   expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
-  expect(turnEvents[1]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
-  expect(providerInvokeCount).toBe(0);
+  expect(turnEvents).not.toContain(TURN_DECISION_EVENT_KIND);
+  expect(turnEvents).not.toContain(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  expect(providerInvokeCount).toBe(1);
+  expect(runtime.turns[0]?.metadata?.openingDecisionId).toBeUndefined();
   runtime.firstTurnRelease.resolve();
 
   await expect(turn).resolves.toMatchObject({
@@ -674,9 +798,14 @@ test("app session actor acknowledgement does not wait for provider progress gene
   });
 
   expect(turnEvents).toContain("turn.completed");
-  expect(readFirstVisibleLatencySummary({ butlerData: tempDir }).bySignal).toMatchObject({
-    first_progress: 1,
-  });
+  expect(readFirstVisibleLatencySummary({ butlerData: tempDir }).events).toBe(0);
+  expect(readTranscript("butler/main")).toContainEqual(expect.objectContaining({
+    kind: "system",
+    payload: expect.objectContaining({
+      category: "opening_decision",
+      message: "Opening decision was not emitted.",
+    }),
+  }));
   store.close();
 });
 
@@ -796,10 +925,7 @@ test("app session actor treats acknowledgement delivery as best effort", async (
   expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
   expect(turnEvents).toContain("turn.completed");
   const summary = readFirstVisibleLatencySummary({ butlerData: tempDir });
-  expect(summary.bySignal).toMatchObject({
-    first_progress: 1,
-  });
-  expect(summary.latest?.status).toBe("error");
+  expect(summary.events).toBe(0);
   store.close();
 });
 
