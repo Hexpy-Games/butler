@@ -13,25 +13,33 @@ import type {
 } from "../../test-support/harness/contracts.ts";
 import type { RuntimeDeliveryClassification } from "../../agent/turn/runtime-delivery-state.ts";
 import {
-  FIRST_VISIBLE_PROGRESS_ASSISTANT_SOURCE,
-  firstVisibleProgressPayload,
-} from "../../agent/events/first-visible-progress.ts";
-import {
-  FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-} from "../../agent/events/turn-events.ts";
+  TURN_ACKNOWLEDGED_EVENT_KIND,
+  TURN_DECISION_EVENT_KIND,
+  createTurnAcknowledgedPayload,
+} from "../../agent/events/turn-state-contract.ts";
+import { generateOpeningDecisionWithProvider } from "../../agent/output/opening-decision.ts";
 import {
   recordDurableInbound,
   recordDurableOutbound,
   recordSessionLifecycle,
   recordSystemEvent,
 } from "../../test-support/harness/durable-session-transcript.ts";
-import { recordFirstVisibleLatencyMetric } from "../../operations/metrics/first-visible-latency.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import {
   diagnosticDetails,
   safeRuntimeFailure,
 } from "../../integrations/providers/provider-errors.ts";
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
+import {
+  isNonPublicContinuationDeliveryError,
+  isPromptUsageModelCallBudgetError,
+} from "../../agent/turn/recoverable-delivery.ts";
+import {
+  clearTurnContextAtom,
+  createTurnContextAtomId,
+  isTurnSchedulerContinuationYieldError,
+  persistTurnContextAtom,
+} from "../../agent/turn/turn-continuation-context.ts";
 import type {
   GatewayActorTurnResult,
   GatewayDurableRole,
@@ -71,11 +79,7 @@ interface SessionActorOptions {
     envelope: InboundEnvelope;
     route?: GatewayRoute;
   }) => Promise<string | null>;
-  generateFirstVisibleProgress?: (input: {
-    binding: StoredSessionBinding;
-    envelope: InboundEnvelope;
-    route?: GatewayRoute;
-  }) => Promise<string | null>;
+  openingDecisionTimeoutMs?: number;
   now?: () => string;
 }
 
@@ -296,6 +300,20 @@ function stripControlCharacters(value: string): string {
   }).join("");
 }
 
+function dispatchClaimIdFromEnvelope(envelope: InboundEnvelope): string | undefined {
+  const raw = envelope.raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const value = (raw as Record<string, unknown>).dispatchClaimId;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function queueIdFromEnvelope(envelope: InboundEnvelope): string | undefined {
+  const raw = envelope.raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const value = (raw as Record<string, unknown>).queueId;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 function finalResultAction(input: {
   binding: StoredSessionBinding;
   envelope: InboundEnvelope;
@@ -332,6 +350,8 @@ function finalResultAction(input: {
       kind: "final_result",
       turnId: turnIdFromEnvelope(input.envelope),
       sessionId: input.binding.sessionId,
+      queueId: queueIdFromEnvelope(input.envelope),
+      dispatchClaimId: dispatchClaimIdFromEnvelope(input.envelope),
       emptyFinal: !input.text.trim(),
       delivery_state: input.delivery?.delivery_state,
       limitation_codes: input.delivery?.limitation_codes,
@@ -379,7 +399,6 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     envelope: InboundEnvelope,
     route?: GatewayRoute,
   ): Promise<GatewayActorTurnResult> {
-    const acceptedAtMs = Date.now();
     const turnId = turnIdFromEnvelope(envelope);
     if (this.role === "steward") {
       appendStewardActivityTimelineEvent({
@@ -399,32 +418,45 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     const binding = this.requireBinding();
     const timestamp =
       envelope.message.timestamp || this.options.now?.() || defaultNow();
+    const schedulerContinuation = schedulerContinuationMetadata(envelope);
 
-    recordDurableInbound({
-      sessionId: binding.sessionId,
-      envelope,
-      route: route
-        ? {
-            sessionId: route.sessionId,
-            role: route.role,
-            reason: route.reason,
-            projectId: route.projectId ?? null,
-          }
-        : undefined,
-      metadata: {
-        source: "gateway-actor",
-      },
-      timestamp,
-    });
+    if (!schedulerContinuation) {
+      recordDurableInbound({
+        sessionId: binding.sessionId,
+        envelope,
+        route: route
+          ? {
+              sessionId: route.sessionId,
+              role: route.role,
+              reason: route.reason,
+              projectId: route.projectId ?? null,
+            }
+          : undefined,
+        metadata: {
+          source: "gateway-actor",
+        },
+        timestamp,
+      });
+    }
 
     try {
-      await this.emitFirstVisibleProgress({
-        binding,
-        envelope,
-        route,
-        timestamp,
-        acceptedAtMs,
-      });
+      let openingDecisionId: string | undefined;
+      if (!schedulerContinuation) {
+        const acknowledged = await this.emitTurnAcknowledged({
+          binding,
+          envelope,
+          route,
+          timestamp,
+        });
+        if (acknowledged) {
+          openingDecisionId = await this.emitOpeningDecision({
+            binding,
+            envelope,
+            route,
+            timestamp,
+          });
+        }
+      }
       const promptContext = this.options.buildTurnContext?.({
         binding,
         envelope,
@@ -496,8 +528,17 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             currentUserText: envelope.message.text?.trim() ?? "",
             promptContext,
             turnId: turnIdFromEnvelope(envelope),
+            openingDecisionId,
+            schedulerContinuation: schedulerContinuation
+              ? {
+                contextAtomId: schedulerContinuation.contextAtomId,
+                continuationForQueueId: schedulerContinuation.continuationForQueueId,
+              }
+              : undefined,
             runtimePolicy: activeBinding.metadata?.runtimePolicy,
             workerModelRules: activeBinding.metadata?.workerModelRules,
+            reasoning_effort: activeBinding.metadata?.reasoning_effort,
+            reasoningEffort: activeBinding.metadata?.reasoningEffort,
           },
           emitIntermediateDelivery: emitIntermediate,
           emitTurnEvent,
@@ -528,6 +569,14 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           metadata: {
             source: "gateway-actor",
           },
+        });
+      }
+      const turnId = turnIdFromEnvelope(envelope);
+      if (turnId) {
+        clearTurnContextAtom({
+          butlerData: gatewayMetricsButlerData(),
+          sessionId: activeBinding.sessionId,
+          turnId,
         });
       }
       const generatedSessionTitle = await this.generateSessionTitleBestEffort(
@@ -564,10 +613,31 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         runtimeSessionRef: nextHandle.runtimeSessionRef,
         raw: result.raw,
       };
-    } catch (error) {
+      } catch (error) {
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
-      const failureState = safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE
+      const turnId = turnIdFromEnvelope(envelope);
+      const isContinuationFailure =
+        safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
+        isNonPublicContinuationDeliveryError(error) ||
+        isPromptUsageModelCallBudgetError(error) ||
+        isTurnSchedulerContinuationYieldError(error);
+      if (isPromptUsageModelCallBudgetError(error) && turnId) {
+        const contextAtomId = createTurnContextAtomId(binding.sessionId, turnId);
+        persistTurnContextAtom({
+          butlerData: gatewayMetricsButlerData(),
+          sessionId: binding.sessionId,
+          turnId,
+          state: "continuing",
+          sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+          reason: "Continuation checkpoint persisted before internal scheduler rollover.",
+          unresolvedObservations: [{
+            kind: "context_compacted",
+            id: contextAtomId,
+          }],
+        });
+      }
+      const failureState = isContinuationFailure
         ? "active"
         : "crashed";
       this.options.store.updateLifecycleState(binding.sessionId, failureState, timestamp);
@@ -601,64 +671,112 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     }
   }
 
-  private async emitFirstVisibleProgress(input: {
+  private async emitTurnAcknowledged(input: {
     binding: StoredSessionBinding;
     envelope: InboundEnvelope;
     route?: GatewayRoute;
     timestamp: string;
-    acceptedAtMs: number;
-  }): Promise<void> {
-    if (input.envelope.transport !== APP_TRANSPORT) return;
-    if (!this.options.deliverTurnEvent) return;
+  }): Promise<boolean> {
+    if (input.envelope.transport !== APP_TRANSPORT) return false;
+    if (!this.options.deliverTurnEvent) return false;
+    const acknowledgedEvent: RuntimeTurnEventInput = {
+      kind: TURN_ACKNOWLEDGED_EVENT_KIND,
+      createdAt: input.timestamp,
+      payload: createTurnAcknowledgedPayload({
+        safeLabel: "Request received. Preparing the work.",
+        transport: input.envelope.transport,
+      }),
+    };
     try {
-      const note = await this.generateFirstVisibleProgressBestEffort(
-        input.binding,
-        input.envelope,
-        input.route,
-      );
-      if (!note) return;
       await this.options.deliverTurnEvent({
         binding: input.binding,
         envelope: input.envelope,
         route: input.route,
-        event: {
-          kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-          createdAt: input.timestamp,
-          payload: firstVisibleProgressPayload({
-            note,
-            source: FIRST_VISIBLE_PROGRESS_ASSISTANT_SOURCE,
-          }),
-        },
+        event: acknowledgedEvent,
       });
-      recordFirstVisibleLatencyMetric({
-        butlerData: gatewayMetricsButlerData(),
-        durationMs: Date.now() - input.acceptedAtMs,
-        signal: "first_progress",
-        transport: input.envelope.transport,
-        role: input.binding.role,
-        source: "gateway-actor",
-      });
+      return true;
     } catch {
-      // First visible progress is latency UX, not the authoritative turn path.
+      // Acknowledgement is a public latency channel; durable inbound remains authoritative.
+      return false;
     }
   }
 
-  private async generateFirstVisibleProgressBestEffort(
-    binding: StoredSessionBinding,
-    envelope: InboundEnvelope,
-    route?: GatewayRoute,
-  ): Promise<string | null> {
+  private async emitOpeningDecision(input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+    route?: GatewayRoute;
+    timestamp: string;
+  }): Promise<string | undefined> {
+    if (input.envelope.transport !== APP_TRANSPORT) return undefined;
     try {
-      return (
-        (await this.options.generateFirstVisibleProgress?.({
-          binding,
-          envelope,
-          route,
-        })) ?? null
+      const openingDecision = await generateOpeningDecisionWithProvider(
+        this.options.provider,
+        {
+          userMessage: input.envelope.message.text ?? "",
+          model: input.binding.modelRef,
+          sessionRole: input.binding.role,
+          projectId: input.binding.projectId,
+          signal: input.envelope.signal,
+          timeoutMs: this.options.openingDecisionTimeoutMs,
+        },
       );
-    } catch {
-      return null;
+      if (!openingDecision) {
+        this.recordOpeningDecisionDiagnostic(input, "generation_returned_null");
+        return undefined;
+      }
+      if (!this.options.deliverTurnEvent) {
+        this.recordOpeningDecisionDiagnostic(input, "delivery_failed");
+        return undefined;
+      }
+      try {
+        await this.options.deliverTurnEvent({
+          binding: input.binding,
+          envelope: input.envelope,
+          route: input.route,
+          event: {
+            kind: TURN_DECISION_EVENT_KIND,
+            createdAt: input.timestamp,
+            payload: { ...openingDecision },
+          },
+        });
+      } catch (error) {
+        this.recordOpeningDecisionDiagnostic(
+          input,
+          "delivery_failed",
+          error,
+        );
+        return undefined;
+      }
+      return openingDecision.decisionId;
+    } catch (error) {
+      this.recordOpeningDecisionDiagnostic(input, "generation_threw", error);
+      return undefined;
     }
+  }
+
+  private recordOpeningDecisionDiagnostic(
+    input: {
+      binding: StoredSessionBinding;
+      envelope: InboundEnvelope;
+      timestamp: string;
+    },
+    reason: "generation_returned_null" | "generation_threw" | "delivery_failed",
+    error?: unknown,
+  ): void {
+    recordSystemEvent({
+      sessionId: input.binding.sessionId,
+      category: "opening_decision",
+      message: "Opening decision was not emitted.",
+      details: {
+        reason,
+        ...(error ? { diagnostics: diagnosticDetails(error) } : {}),
+      },
+      metadata: {
+        source: "gateway-actor#opening-decision",
+        turnId: turnIdFromEnvelope(input.envelope),
+      },
+      timestamp: input.timestamp,
+    });
   }
 
   private async generateSessionTitleBestEffort(
@@ -931,4 +1049,20 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       lastActiveAt: overrides.lastActiveAt,
     });
   }
+}
+
+function schedulerContinuationMetadata(envelope: InboundEnvelope): {
+  contextAtomId: string;
+  continuationForQueueId?: string;
+} | null {
+  const raw = envelope.raw && typeof envelope.raw === "object"
+    ? envelope.raw as Record<string, unknown>
+    : {};
+  if (raw.sameLogicalTurnContinuation !== true) return null;
+  const contextAtomId = typeof raw.contextAtomId === "string" ? raw.contextAtomId.trim() : "";
+  if (!contextAtomId) return null;
+  const continuationForQueueId = typeof raw.continuationForQueueId === "string"
+    ? raw.continuationForQueueId
+    : undefined;
+  return { contextAtomId, continuationForQueueId };
 }

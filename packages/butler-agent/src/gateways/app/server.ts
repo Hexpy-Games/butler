@@ -91,6 +91,7 @@ import {
   AppStoreOperationError,
   type AppMessageResponder,
 } from "./store.ts";
+import type { ButlerServiceClient } from "../core/client.ts";
 
 export interface CreateAppServerOptions {
   dbPath?: string;
@@ -108,6 +109,7 @@ export interface CreateAppServerOptions {
   devCorsOrigin?: string;
   responder?: AppMessageResponder;
   responderTimeoutMs?: number;
+  serviceClient?: ButlerServiceClient;
   messageRateLimit?: MessageRateLimitOptions;
   automationSchedulerIntervalMs?: number | false;
   localAuth?: {
@@ -191,6 +193,7 @@ export function createAppServer(
     bridgeMode: options.bridgeMode,
     projectWorkspaceRoot: options.projectWorkspaceRoot,
     folderSelectionSecret: options.folderSelectionSecret,
+    serviceClient: options.serviceClient,
   });
   const messageRateLimiter = new FixedWindowRateLimiter(
     options.messageRateLimit,

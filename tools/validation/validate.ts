@@ -31,6 +31,8 @@ const TAIL_LINE_LIMIT = 20;
 const TAIL_CHAR_LIMIT = 1000;
 const CAPTURE_CHAR_LIMIT = 64_000;
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const TIMEOUT_KILL_GRACE_MS = 1000;
+const TIMEOUT_FORCE_RESOLVE_GRACE_MS = 1000;
 
 function parseArgs(): { gate: string; mode: OutputMode; timeout: number } {
   const args = process.argv.slice(2);
@@ -90,6 +92,19 @@ function getTail(text: string, lineLimit: number, charLimit: number, originalLen
   return { tail: result, truncated };
 }
 
+function signalProcessGroup(pid: number | undefined, signal: NodeJS.Signals): boolean {
+  if (!pid) return false;
+
+  try {
+    process.kill(-pid, signal);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ESRCH") return true;
+    return false;
+  }
+}
+
 async function runGate(gate: string, mode: OutputMode, timeout: number): Promise<RunResult> {
   const startTime = Date.now();
   let stdout = "";
@@ -107,13 +122,24 @@ async function runGate(gate: string, mode: OutputMode, timeout: number): Promise
   const child = spawn(bunExecutable, ["run", gate], {
     cwd: process.cwd(),
     env: childEnv,
+    detached: true,
     stdio: mode === "verbose" ? ["inherit", "inherit", "inherit"] : ["ignore", "pipe", "pipe"],
   });
 
   const timeoutHandle = setTimeout(() => {
     timedOut = true;
-    child.kill("SIGTERM");
-    killHandle = setTimeout(() => child.kill("SIGKILL"), 5000);
+    exitCode = 1;
+    if (!signalProcessGroup(child.pid, "SIGTERM")) {
+      child.kill("SIGTERM");
+    }
+    killHandle = setTimeout(() => {
+      if (!signalProcessGroup(child.pid, "SIGKILL")) {
+        child.kill("SIGKILL");
+      }
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      killHandle = undefined;
+    }, TIMEOUT_KILL_GRACE_MS);
   }, timeout);
 
   if (mode !== "verbose") {
@@ -132,16 +158,23 @@ async function runGate(gate: string, mode: OutputMode, timeout: number): Promise
 
   await new Promise<void>((resolve) => {
     let finished = false;
+    let forceResolveHandle: ReturnType<typeof setTimeout> | undefined;
+    let timeoutResolveHandle: ReturnType<typeof setInterval> | undefined;
     const finish = () => {
       if (finished) return;
       finished = true;
       clearTimeout(timeoutHandle);
       if (killHandle) clearTimeout(killHandle);
+      if (forceResolveHandle) clearTimeout(forceResolveHandle);
+      if (timeoutResolveHandle) {
+        clearInterval(timeoutResolveHandle);
+        timeoutResolveHandle = undefined;
+      }
       resolve();
     };
 
     child.on("close", (code) => {
-      exitCode = code ?? 1;
+      exitCode = timedOut ? 1 : code ?? 1;
       finish();
     });
 
@@ -152,6 +185,12 @@ async function runGate(gate: string, mode: OutputMode, timeout: number): Promise
       exitCode = 1;
       finish();
     });
+
+    timeoutResolveHandle = setInterval(() => {
+      if (!timedOut || finished || killHandle) return;
+      if (timeoutResolveHandle) clearInterval(timeoutResolveHandle);
+      forceResolveHandle = setTimeout(finish, TIMEOUT_FORCE_RESOLVE_GRACE_MS);
+    }, 50);
   });
 
   const durationMs = Date.now() - startTime;
@@ -219,7 +258,7 @@ const { gate, mode, timeout } = parseArgs();
 
 const result = await runGate(gate, mode, timeout);
 
-if (result.exitCode === 0) {
+if (result.exitCode === 0 && !result.timedOut) {
   // Success
   if (mode === "verbose") {
     printVerboseSuccess(result);

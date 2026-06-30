@@ -1,9 +1,15 @@
 import { isRuntimeCancellationFailure } from "./runtime-cancellation.ts";
-import { isOperationalFailure, operationalSafeErrorCode } from "./operational-failure.ts";
+import {
+  isExactOrStatusOperationalFailure,
+  isOperationalFailure,
+  operationalSafeErrorCode,
+} from "./operational-failure.ts";
 import {
   INTERNAL_RECOVERY_REQUIRED_CODE,
   isInternalRecoveryFailure as isSharedInternalRecoveryFailure,
+  isToolCallRepairFailure as isSharedToolCallRepairFailure,
   internalRecoveryStateForFailure,
+  toolCallRepairStateForFailure,
 } from "../../runtime/internal-recovery-failure.ts";
 
 export type RuntimeDeliveryState =
@@ -17,7 +23,8 @@ export type RuntimeDeliveryState =
   | "cancelled"
   | "delivered"
   | "delivered_with_limitations"
-  | "failed_system";
+  | "failed_system"
+  | "runtime_fault";
 
 export type RuntimeDeliveryTerminalState =
   | "delivered"
@@ -28,6 +35,8 @@ export type RuntimeDeliveryTerminalState =
 export type RuntimeDeliveryVisibility =
   | "assistant_output"
   | "recovery_progress"
+  | "continuation_progress"
+  | "tool_retry_progress"
   | "user_action_required"
   | "failure_notice"
   | "cancelled_notice";
@@ -35,9 +44,13 @@ export type RuntimeDeliveryVisibility =
 export type RuntimeDeliveryIssueKind =
   | "none"
   | "internal_recovery"
+  | "tool_call_repair"
+  | "completion_continuation"
+  | "runtime_continuation"
   | "limitation"
   | "user_action_blocker"
   | "system_failure"
+  | "runtime_fault"
   | "cancelled";
 
 export interface RuntimeDeliveryFailureInput {
@@ -46,6 +59,7 @@ export interface RuntimeDeliveryFailureInput {
   message?: string;
   statusCode?: number;
   retryable?: boolean;
+  historicalRecoveryState?: boolean;
 }
 
 export interface RuntimeDeliveryClassification {
@@ -83,7 +97,7 @@ export function deliveredWithLimitationsState(input: {
 }
 
 export function recoveringInternalDeliveryState(input: {
-  state: Extract<RuntimeDeliveryState, "recovering_internal" | "needs_tool_surface" | "needs_evidence" | "needs_argument_repair">;
+  state: Extract<RuntimeDeliveryState, "recovering_internal" | "needs_evidence">;
   limitationCodes?: string[];
   limitations?: string[];
 }): RuntimeDeliveryClassification {
@@ -122,16 +136,16 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
       safeErrorCode: "turn_cancelled",
     });
   }
-  if (isInternalRecoveryFailure(failure)) {
-    return classification({
-      deliveryState: recoveryStateForInternalFailure(failure),
-      terminal: false,
-      issueKind: "internal_recovery",
-      visibility: "recovery_progress",
-      limitationCodes: [safeCode(failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE)],
-    });
+  if (isToolCallRepairFailure(failure)) {
+    return historicalRepairDeliveryState(failure);
   }
-  if (isOperationalFailure(failure)) {
+  if (isInternalRecoveryFailure(failure)) {
+    return historicalInternalRecoveryDeliveryState(failure);
+  }
+  if (isRuntimeFaultFailureInput(failure)) {
+    return runtimeFaultDeliveryState(failure);
+  }
+  if (isExactOrStatusOperationalFailure(failure)) {
     return systemFailureDeliveryState(failure);
   }
   if (isUserActionBlocker(failure)) {
@@ -140,7 +154,64 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
       limitations: [safeLimitationText(failure.message, "User action is required before Butler can continue.")],
     });
   }
+  if (isLiveToolObservationGap(failure)) {
+    return liveKernelContinuationState();
+  }
+  if (isLiveKernelContinuationGap(failure)) {
+    return liveKernelContinuationState();
+  }
+  if (isOperationalFailure(failure)) {
+    return systemFailureDeliveryState(failure);
+  }
   return systemFailureDeliveryState(failure);
+}
+
+function liveKernelContinuationState(): RuntimeDeliveryClassification {
+  return classification({
+    deliveryState: "running",
+    terminal: false,
+    issueKind: "none",
+    visibility: "continuation_progress",
+  });
+}
+
+function historicalRepairDeliveryState(
+  failure: RuntimeDeliveryFailureInput,
+): RuntimeDeliveryClassification {
+  return classification({
+    deliveryState: toolCallRepairStateForFailure(failure),
+    terminal: false,
+    issueKind: "tool_call_repair",
+    visibility: "tool_retry_progress",
+    limitationCodes: [safeCode(failure.code ?? "tool_call_repair")],
+  });
+}
+
+function historicalInternalRecoveryDeliveryState(
+  failure: RuntimeDeliveryFailureInput,
+): RuntimeDeliveryClassification {
+  const state = recoveryStateForInternalFailure(failure);
+  return classification({
+    deliveryState: state,
+    terminal: false,
+    issueKind: state === "needs_evidence"
+      ? "completion_continuation"
+      : "runtime_continuation",
+    visibility: "continuation_progress",
+    limitationCodes: [safeCode(failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE)],
+  });
+}
+
+function runtimeFaultDeliveryState(
+  failure: RuntimeDeliveryFailureInput,
+): RuntimeDeliveryClassification {
+  return classification({
+    deliveryState: "runtime_fault",
+    terminal: true,
+    issueKind: "runtime_fault",
+    visibility: "failure_notice",
+    safeErrorCode: safeCode(failure.code ?? "runtime_fault"),
+  });
 }
 
 function systemFailureDeliveryState(failure: RuntimeDeliveryFailureInput): RuntimeDeliveryClassification {
@@ -189,6 +260,7 @@ function normalizeFailureInput(input: RuntimeDeliveryFailureInput | unknown): Ru
       code?: unknown;
       statusCode?: unknown;
       retryable?: unknown;
+      historicalRecoveryState?: unknown;
     };
     return {
       code: typeof record.code === "string" ? record.code : undefined,
@@ -196,6 +268,7 @@ function normalizeFailureInput(input: RuntimeDeliveryFailureInput | unknown): Ru
       message: input.message,
       statusCode: typeof record.statusCode === "number" ? record.statusCode : undefined,
       retryable: typeof record.retryable === "boolean" ? record.retryable : undefined,
+      historicalRecoveryState: record.historicalRecoveryState === true,
     };
   }
   if (input && typeof input === "object") {
@@ -206,6 +279,7 @@ function normalizeFailureInput(input: RuntimeDeliveryFailureInput | unknown): Ru
       message: typeof record.message === "string" ? record.message : undefined,
       statusCode: typeof record.statusCode === "number" ? record.statusCode : undefined,
       retryable: typeof record.retryable === "boolean" ? record.retryable : undefined,
+      historicalRecoveryState: record.historicalRecoveryState === true,
     };
   }
   return {
@@ -221,20 +295,58 @@ function isInternalRecoveryFailure(failure: RuntimeDeliveryFailureInput): boolea
   return isSharedInternalRecoveryFailure(failure);
 }
 
+function isToolCallRepairFailure(failure: RuntimeDeliveryFailureInput): boolean {
+  return isSharedToolCallRepairFailure(failure);
+}
+
+export function isRuntimeFaultFailure(input: unknown): boolean {
+  return isRuntimeFaultFailureInput(normalizeFailureInput(input));
+}
+
+function isRuntimeFaultFailureInput(failure: RuntimeDeliveryFailureInput): boolean {
+  return failure.code === "runtime_fault" ||
+    failure.code === "runtime_invariant_violation" ||
+    failure.name === "RuntimeFaultError";
+}
+
+function isLiveKernelContinuationGap(failure: RuntimeDeliveryFailureInput): boolean {
+  return (
+    failure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
+    failure.code === "goal_completion_incomplete" ||
+    failure.code === "internal_uncertainty" ||
+    failure.code === "completion_gap" ||
+    failure.code === "completion_review_incomplete" ||
+    failure.code === "prompt_usage_model_call_budget_exhausted" ||
+    failure.code === "missing_evidence" ||
+    failure.code === "candidate_only_evidence" ||
+    failure.name === "GoalCompletionIncompleteError" ||
+    failure.name === "PromptUsageModelCallBudgetExhaustedError"
+  );
+}
+
+function isLiveToolObservationGap(failure: RuntimeDeliveryFailureInput): boolean {
+  return (
+    failure.code === "unknown_tool" ||
+    failure.code === "disabled_tool" ||
+    failure.code === "missing_tool_surface" ||
+    failure.code === "invalid_tool_arguments" ||
+    failure.code === "tool_arguments_validation_failed"
+  );
+}
+
 function recoveryStateForInternalFailure(
   failure: RuntimeDeliveryFailureInput,
-): Extract<RuntimeDeliveryState, "recovering_internal" | "needs_tool_surface" | "needs_evidence" | "needs_argument_repair"> {
+): Extract<RuntimeDeliveryState, "recovering_internal" | "needs_evidence"> {
   return internalRecoveryStateForFailure(failure);
 }
 
 function isUserActionBlocker(failure: RuntimeDeliveryFailureInput): boolean {
-  const message = failure.message ?? "";
   return (
     failure.code === "permission_denied" ||
     failure.code === "confirmation_required" ||
     failure.code === "credential_required" ||
-    /permission denied|confirmation required|credential required|captcha|login required|payment required/iu
-      .test(message)
+    failure.code === "captcha_required" ||
+    failure.code === "payment_required"
   );
 }
 

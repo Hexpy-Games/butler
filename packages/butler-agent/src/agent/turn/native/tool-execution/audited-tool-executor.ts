@@ -32,8 +32,14 @@ import {
   evidenceTranscriptErrorMessage,
 } from "../../../output/evidence/transcript-result.ts";
 import {
+  hasCompleteAuthoredPublicDecisionForTool,
   takePublicWorkDecisionForTool,
 } from "../../../output/public-work/decisions.ts";
+import {
+  publicDecisionRequiredObservation,
+  throwIfToolResultNeedsObservation,
+  toolObservationResult,
+} from "./tool-observations.ts";
 import type {
   NativeAuditedToolExecutorInput,
   NativeToolCall,
@@ -62,6 +68,12 @@ export function createAuditedButlerToolExecutor(
     const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
     if (isInternalProgressTool(call.name)) {
       return await internalProgress.run(call, "model");
+    }
+    if (!hasCompleteAuthoredPublicDecisionForTool({
+      pending: input.pendingPublicDecisions,
+      toolName: call.name,
+    })) {
+      return appendPublicDecisionRequiredObservation({ input, call });
     }
     const plannedReviewBlock = applyPlannedReviewToolPolicy({
       plannedReview: input.plannedReview,
@@ -93,6 +105,7 @@ export function createAuditedButlerToolExecutor(
       if (call.name === "tool_describe") {
         input.toolSurfaceController?.recordToolDescriptionResult(result);
       }
+      throwIfToolResultNeedsObservation({ call, result });
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       repeatedToolFamilyGuard.resetAfterStateMutation(call.name, cleanArgs);
       return await handleAuditedToolSuccess({
@@ -123,6 +136,7 @@ export function createAuditedButlerToolExecutor(
   };
   const executeAuditedWithBridge = createAuditedBridgeToolExecutor({
     sessionId: input.sessionId,
+    turnId: input.turnId,
     audit: input.audit,
     turnInput: input.turnInput,
     messageLanguage: input.messageLanguage,
@@ -134,6 +148,29 @@ export function createAuditedButlerToolExecutor(
     executeTarget: executeAuditedTarget,
   });
   return async (call) => await executeAuditedWithBridge(call);
+}
+
+function appendPublicDecisionRequiredObservation(input: {
+  input: NativeAuditedToolExecutorInput;
+  call: NativeToolCall;
+}): ReturnType<typeof toolObservationResult> {
+  const observation = publicDecisionRequiredObservation({
+    turnId: input.input.turnId,
+    call: input.call,
+  });
+  appendTranscriptEvent(createTranscriptEvent({
+    sessionId: input.input.sessionId,
+    kind: "tool_result",
+    payload: {
+      name: input.call.name,
+      ok: false,
+      observation,
+    },
+    metadata: {
+      source: "runtime/native-tool-loop.ts#public-decision-gate",
+    },
+  }));
+  return toolObservationResult(observation);
 }
 
 function throwIfRuntimeTurnAborted(signal?: AbortSignal): void {
@@ -217,7 +254,10 @@ async function prepareAuditedToolExecution(input: {
   const semanticWorkBlock = input.internalProgress.semanticProgressEstablished()
     ? input.internalProgress.currentSemanticWorkBlock()
     : null;
-  const workBlockId = semanticWorkBlock?.id ?? `work-${toolCallId}`;
+  const matchingDecisionWorkBlockId =
+    semanticWorkBlock?.id ??
+    reusableDecisionWorkBlockId(input.input.publicDecisionContext, decision);
+  const workBlockId = matchingDecisionWorkBlockId ?? `work-${toolCallId}`;
   decision.workBlockId = workBlockId;
   decision.toolName = input.call.name;
   const workBlockLabel = semanticWorkBlock?.label ?? decision.summary;
@@ -245,6 +285,32 @@ async function prepareAuditedToolExecution(input: {
     isWorkerStartTool,
     taskSummary: taskSummaryForTool(input.call.name, input.cleanArgs),
   };
+}
+
+function reusableDecisionWorkBlockId(
+  previousDecisions: Array<{ workBlockId?: string; source: string; summary: string; rationale?: string; nextStep?: string }>,
+  decision: { source: string; summary: string; rationale?: string; nextStep?: string },
+): string | null {
+  for (let index = previousDecisions.length - 1; index >= 0; index -= 1) {
+    const previous = previousDecisions[index];
+    if (!previous?.workBlockId) continue;
+    if (samePublicDecisionIntent(previous, decision)) return previous.workBlockId;
+  }
+  return null;
+}
+
+function samePublicDecisionIntent(
+  left: { source: string; summary: string; rationale?: string; nextStep?: string },
+  right: { source: string; summary: string; rationale?: string; nextStep?: string },
+): boolean {
+  return left.source === right.source &&
+    normalizedDecisionText(left.summary) === normalizedDecisionText(right.summary) &&
+    normalizedDecisionText(left.rationale) === normalizedDecisionText(right.rationale) &&
+    normalizedDecisionText(left.nextStep) === normalizedDecisionText(right.nextStep);
+}
+
+function normalizedDecisionText(value?: string): string {
+  return (value ?? "").replace(/\s+/gu, " ").trim();
 }
 
 async function maybeEmitRuntimeProgress(

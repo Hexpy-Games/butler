@@ -109,6 +109,19 @@ test("dedicated client design foundation uses React and Hugeicons", () => {
   expect(rootPackage.scripts["app:client:multiturn:e2e"]).toContain(
     "tests/e2e/app-client-multiturn-e2e.ts",
   );
+  expect(rootPackage.scripts["app:client:btcc-opening-decision:e2e"]).toContain(
+    "BUTLER_APP_CLIENT_E2E_MODE=btcc-opening-decision",
+  );
+  expect(rootPackage.scripts["app:client:btcc-opening-decision:live-llm:e2e"]).toContain(
+    "BUTLER_APP_CLIENT_E2E_MODE=live-llm-btcc-opening-decision BUTLER_APP_CLIENT_E2E_MODEL=openai/gpt-5.5 BUTLER_APP_CLIENT_E2E_REASONING=medium",
+  );
+  expect(rootPackage.scripts["app:client:btcc-opening-decision:live-llm:glm-low:e2e"]).toContain(
+    "BUTLER_APP_CLIENT_E2E_MODE=live-llm-btcc-opening-decision BUTLER_APP_CLIENT_E2E_MODEL=zai/glm-5.2 BUTLER_APP_CLIENT_E2E_REASONING=low",
+  );
+  const appClientMultiturnE2e = read("tests/e2e/app-client-multiturn-e2e.ts");
+  expect(appClientMultiturnE2e).toContain("copyRegisteredHostedModelConfig");
+  expect(appClientMultiturnE2e).toContain("readRegisteredHostedModelConfigs");
+  expect(appClientMultiturnE2e).toContain("resolveProviderCredentialSecret");
   expect(rootPackage.scripts["app:client:multiturn:live-llm:e2e"]).toContain(
     "BUTLER_APP_CLIENT_E2E_MODE=live-llm",
   );
@@ -1200,7 +1213,7 @@ test("electron shell mediates existing-folder project selection without exposing
   expect(preload).not.toContain("fs/promises");
 });
 
-test("conversation UI renders user bubbles and assistant documents with retryable failures", () => {
+test("conversation UI renders user bubbles and assistant documents with runtime-fault retry actions", () => {
   const renderer = readUiSources();
   const messageItem = read(
     "packages/butler-app/client/ui/src/components/conversation/MessageItem.tsx",
@@ -1381,7 +1394,7 @@ test("conversation UI renders user bubbles and assistant documents with retryabl
   expect(renderer).toContain("ConversationShell");
   expect(renderer).toContain('message.role === "assistant"');
   expect(renderer).toContain('message.status === "failed"');
-  expect(renderer).toContain("message.retryable");
+  expect(renderer).toContain("isRuntimeFaultRetryableMessage(message)");
   expect(renderer).toContain("onRetryTurn(turnId)");
   expect(renderer).toContain("eventPollingRef");
   expect(renderer).toContain("function collapseAssistantAttempts");
@@ -1581,7 +1594,8 @@ test("conversation UI renders user bubbles and assistant documents with retryabl
   expect(renderer).toContain("selectedArtifactId");
   expect(renderer).toContain("selectedArtifact");
   expect(renderer).toContain("appCopy.inspector.tabs.summary");
-  expect(renderer).toContain("attachments: fileRefs");
+  expect(renderer).toContain("composerControlsForSubmit");
+  expect(renderer).toContain("attachments,");
   expect(renderer).toContain("file_id: attachment.file_id");
   expect(renderer).toContain('data-picker-filter="all-files"');
   expect(renderer).not.toContain("accept={ATTACHMENT_ACCEPT}");
@@ -2284,7 +2298,9 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("function toolchainLabel");
   expect(renderer).toContain("function toolchainSummaryLabel");
   expect(renderer).toContain("function toolchainGroupLabel");
-  expect(renderer).toContain('label.includes("검증")');
+  expect(renderer).toContain('return row.safe_tool_name ?? row.safe_input_label ?? "Tool"');
+  expect(renderer).not.toContain('label.includes("검증")');
+  expect(renderer).not.toContain('label.includes("review")');
   expect(renderer).toContain("activityLabel");
   expect(renderer).not.toContain("Using web search:");
   expect(renderer).not.toContain("Running command:");

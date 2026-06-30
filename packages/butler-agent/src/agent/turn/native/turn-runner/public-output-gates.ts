@@ -8,7 +8,6 @@ import {
 import {
   containsFinalPublicWorkDecisionLeak,
   containsFinalToolImplementationLeak,
-  finalResultContractRepairPrompt,
   stripLeadingPublicWorkDecisionBlock,
   stripToolImplementationLeakLines,
 } from "../../../output/completion/final-output-contract.ts";
@@ -17,9 +16,7 @@ import { recordIntentGuardMetric } from "./intent-guard-metrics.ts";
 import type { NativeStoredSessionConfig, NativeTurnRunnerDeps } from "./turn-runner-types.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
 
-const FINAL_CONTRACT_REPAIR_MAX_TOOL_ROUNDS = 1;
-
-export async function repairFinalContract(input: {
+export function repairFinalContract(input: {
   turnInput: RuntimeTurnInput;
   session: NativeStoredSessionConfig;
   deps: NativeTurnRunnerDeps;
@@ -28,8 +25,7 @@ export async function repairFinalContract(input: {
   finalText: string;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
-  runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
-}): Promise<string> {
+}): string {
   const successfulToolNames = input.audit.filter((entry) => entry.ok).map((entry) => entry.name);
   const finalContainsDecisionLeak = containsFinalPublicWorkDecisionLeak(input.finalText);
   const finalContainsToolLeak = containsFinalToolImplementationLeak(input.finalText, successfulToolNames);
@@ -38,20 +34,10 @@ export async function repairFinalContract(input: {
   if (!shouldRepairFinalContract) {
     return input.finalText;
   }
-  const repairedFinalText = await input.runToolPrompt(finalResultContractRepairPrompt({
-    prompt: input.prompt,
-    previousAnswer: input.finalText,
-    audit: input.audit,
-    decisions: input.publicDecisionContext,
-  }), FINAL_CONTRACT_REPAIR_MAX_TOOL_ROUNDS, "final_contract_repair");
-  const repairedStillContainsDecisionLeak = containsFinalPublicWorkDecisionLeak(repairedFinalText);
-  const repairedStillContainsToolLeak = containsFinalToolImplementationLeak(repairedFinalText, successfulToolNames);
-  const repairedStillLeaks = repairedStillContainsDecisionLeak || repairedStillContainsToolLeak;
   const strippedFinalText = stripToolImplementationLeakLines(
-    stripLeadingPublicWorkDecisionBlock(repairedFinalText),
+    stripLeadingPublicWorkDecisionBlock(input.finalText),
     successfulToolNames,
   );
-  const metricDetail = repairedStillLeaks ? "fallback" : "repair";
   recordOperationalMetric({
     category: "runtime",
     name: "final_result_contract_guard",
@@ -60,13 +46,10 @@ export async function repairFinalContract(input: {
       role: input.session.init.role,
       runtime: input.deps.runtimeId,
       model: input.turnInput.model,
-      detail: metricDetail,
+      detail: "local_strip",
     },
   }, { butlerData: input.deps.butlerData });
-  if (repairedStillLeaks) {
-    return strippedFinalText || finalContractFallbackText(input.deps.messageLanguage);
-  }
-  return repairedFinalText;
+  return strippedFinalText || finalContractFallbackText(input.deps.messageLanguage);
 }
 
 export function applyPublicOutputGuards(input: {

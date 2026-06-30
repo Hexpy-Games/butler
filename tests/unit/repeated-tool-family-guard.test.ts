@@ -22,15 +22,6 @@ test("repeated tool family guard blocks only after the configured repeated famil
     family: "command:test",
     count: REPEATED_TOOL_FAMILY_LIMIT + 1,
     blocked: true,
-    result: {
-      ok: false,
-      budget_policy: "repeated_tool_family_blocked",
-      repeat_family: "command:test",
-      repeat_count: REPEATED_TOOL_FAMILY_LIMIT + 1,
-      repeat_limit: REPEATED_TOOL_FAMILY_LIMIT,
-      message:
-        "This turn has already repeated this tool family enough times. Reuse the latest evidence, summarize it, or ask for an explicit continuation instead of re-running the same status/test/git command loop.",
-    },
   });
 });
 

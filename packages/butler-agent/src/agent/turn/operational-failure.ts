@@ -1,8 +1,18 @@
 import type { RuntimeDeliveryFailureInput } from "./runtime-delivery-state.ts";
 
 export function isOperationalFailure(failure: RuntimeDeliveryFailureInput): boolean {
-  const code = failure.code ?? "";
   const message = failure.message ?? "";
+  return (
+    isExactOrStatusOperationalFailure(failure) ||
+    /(?:HTTP\s+)?(?:401|403|429|504)\b/iu.test(message) ||
+    /(?:provider|model|service|gateway|storage).*(?:failed|unavailable|timeout|timed out|connection|network)/iu
+      .test(message) ||
+    /policy (?:denied|denial|blocked|rejected)|hard timeout/iu.test(message)
+  );
+}
+
+export function isExactOrStatusOperationalFailure(failure: RuntimeDeliveryFailureInput): boolean {
+  const code = failure.code ?? "";
   return (
     failure.statusCode === 401 ||
     failure.statusCode === 403 ||
@@ -17,11 +27,7 @@ export function isOperationalFailure(failure: RuntimeDeliveryFailureInput): bool
     code === "policy_denied" ||
     code === "policy_denial" ||
     code === "hard_timeout" ||
-    code === "turn_hard_timeout" ||
-    /(?:HTTP\s+)?(?:401|403|429|504)\b/iu.test(message) ||
-    /(?:provider|model|service|gateway|storage).*(?:failed|unavailable|timeout|timed out|connection|network)/iu
-      .test(message) ||
-    /policy (?:denied|denial|blocked|rejected)|hard timeout/iu.test(message)
+    code === "turn_hard_timeout"
   );
 }
 

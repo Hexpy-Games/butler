@@ -3,10 +3,7 @@ import type {
   PublicWorkDecision,
   ToolProgressSummary,
 } from "../../turn/native/output/tool-types.ts";
-import {
-  activityKindForTool,
-  displayToolName,
-} from "../progress/tool-progress.ts";
+import { isAuthoredDecisionSource } from "../../events/turn-state-contract.ts";
 import {
   isUsablePublicDecisionText,
   publicDecisionId,
@@ -39,27 +36,36 @@ export function publicWorkDecisionsFromAssistantText(input: {
   if (structured.length === 0) {
     return [];
   }
-  return input.toolCalls.map((call, index) => {
+  return input.toolCalls.flatMap((call, index) => {
     const indexedDecision = structured[index];
     const sharedDecision = structured[0];
-    const fallback = fallbackDecisionForToolName(call.name, input.language);
     const decisionWasRepaired = indexedDecision?.repaired === true || sharedDecision?.repaired === true;
+    const summary = indexedDecision?.summary ?? sharedDecision?.summary;
+    const rationale = indexedDecision?.rationale ?? sharedDecision?.rationale;
+    const nextStep = indexedDecision?.nextStep ?? sharedDecision?.nextStep;
+    if (
+      decisionWasRepaired ||
+      typeof summary !== "string" ||
+      typeof rationale !== "string" ||
+      typeof nextStep !== "string" ||
+      !isUsablePublicDecisionText(summary ?? "") ||
+      !isUsablePublicDecisionText(rationale ?? "", { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS }) ||
+      !isUsablePublicDecisionText(nextStep ?? "", { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS })
+    ) {
+      return [];
+    }
     return {
       decisionId: publicDecisionId(),
-      summary: indexedDecision?.summary ??
-        sharedDecision?.summary ??
-        fallback.summary,
-      rationale: indexedDecision?.rationale ??
-        sharedDecision?.rationale ??
-        fallback.rationale,
+      summary,
+      rationale,
       evidenceRefs: input.existingDecisions
         .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
         .map((decision) => decision.summary),
-      nextStep: indexedDecision?.nextStep ?? sharedDecision?.nextStep ?? fallback.nextStep,
+      nextStep,
       completionObligations: indexedDecision?.completionObligations ??
         sharedDecision?.completionObligations ??
         [],
-      source: decisionWasRepaired ? "review-repaired" : "assistant-authored",
+      source: "assistant-authored",
       toolName: call.name,
     };
   });
@@ -73,39 +79,27 @@ export function takePublicWorkDecisionForTool(input: {
   previousDecisions: PublicWorkDecision[];
 }): PublicWorkDecision {
   const pending = takePendingDecision(input.pending, input.toolName);
-  if (pending) {
-    const fallback = fallbackDecisionForProgress(input.progress, input.language, input.previousDecisions);
-    const summaryOk = isUsablePublicDecisionText(pending.summary);
-    const rationaleOk = isUsablePublicDecisionText(
-      pending.rationale ?? "",
-      { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS },
-    );
-    const nextStepOk = isUsablePublicDecisionText(
-      pending.nextStep ?? "",
-      { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS },
-    );
-    const hasEvidenceRefs = pending.evidenceRefs.length > 0;
-    const evidenceRefs = hasEvidenceRefs
-      ? pending.evidenceRefs
-      : input.previousDecisions
-        .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
-        .map((decision) => decision.summary);
-    return {
-      ...pending,
-      summary: decisionTextOrFallback(summaryOk, pending.summary, fallback.summary),
-      rationale: decisionTextOrFallback(rationaleOk, pending.rationale, fallback.rationale),
-      nextStep: decisionTextOrFallback(nextStepOk, pending.nextStep, fallback.nextStep),
-      evidenceRefs,
-      source: summaryOk ? pending.source : "review-repaired",
-    };
+  if (!pending || !isCompleteAuthoredDecision(pending)) {
+    throw new Error("Public work decision required before visible tool execution.");
   }
-  const fallback = fallbackDecisionForProgress(input.progress, input.language, input.previousDecisions);
+  const evidenceRefs = pending.evidenceRefs.length > 0
+    ? pending.evidenceRefs
+    : input.previousDecisions
+      .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
+      .map((decision) => decision.summary);
   return {
-    decisionId: publicDecisionId(),
-    ...fallback,
-    source: "runtime-derived",
-    toolName: input.toolName,
+    ...pending,
+    evidenceRefs,
   };
+}
+
+export function hasCompleteAuthoredPublicDecisionForTool(input: {
+  pending: PublicWorkDecision[];
+  toolName: string;
+}): boolean {
+  const decision = input.pending.find((candidate) => candidate.toolName === input.toolName) ??
+    input.pending[0];
+  return Boolean(decision && isCompleteAuthoredDecision(decision));
 }
 
 function takePendingDecision(
@@ -118,17 +112,6 @@ function takePendingDecision(
     return pending.splice(matchingIndex, 1)[0];
   }
   return pending.shift();
-}
-
-function decisionTextOrFallback(
-  useCandidate: boolean,
-  candidate: string | undefined,
-  fallback: string | undefined,
-): string {
-  if (useCandidate && candidate) {
-    return candidate;
-  }
-  return fallback ?? "";
 }
 
 export function annotateToolResultWithDecisionContext(input: {
@@ -155,54 +138,13 @@ export function annotateToolResultWithDecisionContext(input: {
   };
 }
 
-function fallbackDecisionForToolName(
-  toolName: string,
-  language: RuntimeMessageLanguage,
-): Pick<PublicWorkDecision, "summary" | "rationale" | "nextStep" | "evidenceRefs"> {
-  const kind = activityKindForTool(toolName);
-  const toolLabel = displayToolName(toolName, kind);
-  if (language === "ko") {
-    return {
-      summary: `${toolLabel} 작업으로 필요한 근거를 확인합니다.`,
-      rationale: "다음 단계가 추측이 아니라 확인된 작업 결과를 기준으로 이어지도록 하기 위해서입니다.",
-      nextStep: "이 결과를 다음 도구 선택이나 최종 보고의 기준으로 사용합니다.",
-      evidenceRefs: [],
-    };
-  }
-  return {
-    summary: `Checking the needed evidence with ${toolLabel}.`,
-    rationale: "This keeps the next step grounded in observed tool results instead of hidden reasoning.",
-    nextStep: "Use this result to choose the next tool or synthesize the final report.",
-    evidenceRefs: [],
-  };
-}
-
-function fallbackDecisionForProgress(
-  progress: ToolProgressSummary,
-  language: RuntimeMessageLanguage,
-  previousDecisions: PublicWorkDecision[],
-): Pick<PublicWorkDecision, "summary" | "rationale" | "nextStep" | "evidenceRefs"> {
-  const evidenceRefs = previousDecisions
-    .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
-    .map((decision) => decision.summary);
-  if (language === "ko") {
-    const hasPreviousDecisions = previousDecisions.length > 0;
-    return {
-      summary: progress.workBlockLabel,
-      rationale: hasPreviousDecisions
-        ? "앞선 작업에서 확인한 내용을 이어받아 다음 근거를 보강합니다."
-        : "요청을 추측으로 처리하지 않도록 먼저 확인 가능한 근거를 확보합니다.",
-      nextStep: "확인된 결과를 다음 작업 선택과 최종 보고에 반영합니다.",
-      evidenceRefs,
-    };
-  }
-  const hasPreviousDecisions = previousDecisions.length > 0;
-  return {
-    summary: progress.workBlockLabel,
-    rationale: hasPreviousDecisions
-      ? "This continues from earlier work decisions and strengthens the next piece of evidence."
-      : "This gathers observable evidence before making a claim.",
-    nextStep: "Use the result to guide the next tool choice and final report.",
-    evidenceRefs,
-  };
+function isCompleteAuthoredDecision(decision: PublicWorkDecision): boolean {
+  if (!isAuthoredDecisionSource(decision.source)) return false;
+  return isUsablePublicDecisionText(decision.summary) &&
+    isUsablePublicDecisionText(decision.rationale ?? "", {
+      minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS,
+    }) &&
+    isUsablePublicDecisionText(decision.nextStep ?? "", {
+      minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS,
+    });
 }

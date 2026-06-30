@@ -4,7 +4,6 @@ import {
   deliveredDeliveryState,
   deliveredWithLimitationsState,
   isUserFacingFailureDelivery,
-  recoveringInternalDeliveryState,
   waitingUserDeliveryState,
 } from "../../packages/butler-agent/src/agent/turn/runtime-delivery-state.ts";
 import { recoverableLimitedDeliveryForError } from "../../packages/butler-agent/src/agent/turn/recoverable-delivery.ts";
@@ -35,17 +34,17 @@ test("runtime delivery taxonomy maps normal and limited delivery as assistant ou
   expect(isUserFacingFailureDelivery(limited)).toBe(false);
 });
 
-test("runtime delivery taxonomy keeps repairable model and evidence gaps out of failure notices", () => {
+test("runtime delivery taxonomy keeps live completion gaps non-public without classifying tool failures as recovery", () => {
   const goalError = new Error("missing public completion obligation: source_verified");
   goalError.name = "GoalCompletionIncompleteError";
   const goalGap = classifyRuntimeFailureDelivery(goalError);
   expect(goalGap).toMatchObject({
-    delivery_state: "needs_evidence",
+    delivery_state: "running",
     terminal: false,
-    issue_kind: "internal_recovery",
-    visibility: "recovery_progress",
+    issue_kind: "none",
+    visibility: "continuation_progress",
     failure_notice: false,
-    limitation_codes: ["internal_recovery_required"],
+    limitation_codes: [],
   });
 
   const toolSurfaceGap = classifyRuntimeFailureDelivery({
@@ -53,22 +52,24 @@ test("runtime delivery taxonomy keeps repairable model and evidence gaps out of 
     message: "unknown tool web_read; missing tool surface",
   });
   expect(toolSurfaceGap).toMatchObject({
-    delivery_state: "needs_tool_surface",
-    issue_kind: "internal_recovery",
-    visibility: "recovery_progress",
+    delivery_state: "running",
+    terminal: false,
+    issue_kind: "none",
+    visibility: "continuation_progress",
     failure_notice: false,
   });
 
-  const argumentGap = recoveringInternalDeliveryState({
-    state: "needs_argument_repair",
-    limitationCodes: ["invalid_tool_arguments"],
+  const argumentGap = classifyRuntimeFailureDelivery({
+    code: "invalid_tool_arguments",
+    message: "tool arguments failed validation",
   });
   expect(argumentGap).toMatchObject({
-    delivery_state: "needs_argument_repair",
+    delivery_state: "running",
     terminal: false,
-    issue_kind: "internal_recovery",
+    issue_kind: "none",
+    visibility: "continuation_progress",
     failure_notice: false,
-    limitation_codes: ["invalid_tool_arguments"],
+    limitation_codes: [],
   });
 
   const uncertainty = classifyRuntimeFailureDelivery({
@@ -76,12 +77,84 @@ test("runtime delivery taxonomy keeps repairable model and evidence gaps out of 
     message: "uncertain whether the requested goal was completed",
   });
   expect(uncertainty).toMatchObject({
-    delivery_state: "recovering_internal",
+    delivery_state: "running",
     terminal: false,
-    issue_kind: "internal_recovery",
-    visibility: "recovery_progress",
+    issue_kind: "none",
+    visibility: "continuation_progress",
     failure_notice: false,
-    limitation_codes: ["internal_uncertainty"],
+    limitation_codes: [],
+  });
+
+  const normalizedRecovery = classifyRuntimeFailureDelivery({
+    code: "internal_recovery_required",
+    message: "Butler could not verify that the requested goal was completed.",
+    retryable: true,
+  });
+  expect(normalizedRecovery).toMatchObject({
+    delivery_state: "running",
+    terminal: false,
+    issue_kind: "none",
+    visibility: "continuation_progress",
+    failure_notice: false,
+    limitation_codes: [],
+  });
+});
+
+test("runtime delivery taxonomy does not classify live continuation from raw text", () => {
+  for (const message of [
+    "Butler could not verify that the requested goal was completed.",
+    "missing evidence receipt for source_verified",
+    "unknown tool web_read; missing tool surface",
+    "invalid tool arguments failed validation",
+    "Prompt usage model-call budget exhausted before provider request",
+    "repeated tool pressure after too many tool calls",
+  ]) {
+    expect(classifyRuntimeFailureDelivery({ message })).toMatchObject({
+      delivery_state: "failed_system",
+      terminal: true,
+      issue_kind: "system_failure",
+      visibility: "failure_notice",
+    });
+  }
+});
+
+test("runtime delivery taxonomy keeps legacy recovery states diagnostic only", () => {
+  expect(classifyRuntimeFailureDelivery({
+    historicalRecoveryState: true,
+    code: "missing_evidence",
+    message: "missing evidence receipt for source_verified",
+  })).toMatchObject({
+    delivery_state: "needs_evidence",
+    terminal: false,
+    issue_kind: "completion_continuation",
+    visibility: "continuation_progress",
+    limitation_codes: ["missing_evidence"],
+  });
+
+  expect(classifyRuntimeFailureDelivery({
+    historicalRecoveryState: true,
+    code: "invalid_tool_arguments",
+    message: "tool arguments failed validation",
+  })).toMatchObject({
+    delivery_state: "needs_argument_repair",
+    terminal: false,
+    issue_kind: "tool_call_repair",
+    visibility: "tool_retry_progress",
+    limitation_codes: ["invalid_tool_arguments"],
+  });
+});
+
+test("runtime faults are retryable fault taxonomy rather than public recovery", () => {
+  expect(classifyRuntimeFailureDelivery({
+    code: "runtime_fault",
+    message: "runtime process crash",
+    retryable: true,
+  })).toMatchObject({
+    delivery_state: "runtime_fault",
+    terminal: true,
+    issue_kind: "runtime_fault",
+    visibility: "failure_notice",
+    safe_error_code: "runtime_fault",
   });
 });
 
@@ -113,6 +186,52 @@ test("runtime delivery taxonomy separates user blockers from system failures", (
     safe_error_code: "provider_auth_error",
   });
   expect(isUserFacingFailureDelivery(providerAuth)).toBe(true);
+
+  const providerAuthLoginMessage = classifyRuntimeFailureDelivery({
+    code: "provider_auth_error",
+    message: "HTTP 401 login required for provider account.",
+    statusCode: 401,
+  });
+  expect(providerAuthLoginMessage).toMatchObject({
+    delivery_state: "failed_system",
+    terminal: true,
+    issue_kind: "system_failure",
+    visibility: "failure_notice",
+    failure_notice: true,
+    safe_error_code: "provider_auth_error",
+  });
+});
+
+test("completion_review_incomplete stays non-public and never infers user action from message text", () => {
+  const completionReviewGap = classifyRuntimeFailureDelivery({
+    code: "completion_review_incomplete",
+    message: "login required for the private account.",
+    retryable: true,
+  });
+  expect(completionReviewGap).toMatchObject({
+    delivery_state: "running",
+    terminal: false,
+    issue_kind: "none",
+    visibility: "continuation_progress",
+    failure_notice: false,
+    limitation_codes: [],
+  });
+});
+
+test("typed user action blocker waits for user", () => {
+  const credentialBlocker = classifyRuntimeFailureDelivery({
+    code: "credential_required",
+    message: "A private account credential is required before Butler can continue.",
+    retryable: true,
+  });
+  expect(credentialBlocker).toMatchObject({
+    delivery_state: "waiting_user",
+    terminal: false,
+    issue_kind: "user_action_blocker",
+    visibility: "user_action_required",
+    failure_notice: false,
+    safe_error_code: "credential_required",
+  });
 });
 
 test("runtime delivery taxonomy preserves cancellation as terminal cancellation", () => {
@@ -165,18 +284,47 @@ test("recoverable delivery uses progress finalization instead of generic verific
 
   const recovered = recoverableLimitedDeliveryForError(error);
 
+  expect(recovered).toBeNull();
+});
+
+test("recoverable delivery ignores normalized live internal recovery failures", () => {
+  const recovered = recoverableLimitedDeliveryForError({
+    code: "internal_recovery_required",
+    message: "Butler could not verify that the requested goal was completed.",
+    retryable: true,
+  });
+
+  expect(recovered).toBeNull();
+});
+
+test("recoverable delivery never promotes default recovery fallback to public text for live turns", () => {
+  const recovered = recoverableLimitedDeliveryForError({
+    code: "internal_recovery_required",
+    message:
+      "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.",
+    retryable: true,
+  });
+
+  expect(recovered).toBeNull();
+});
+
+test("recoverable delivery remains available for historical repair diagnostics", () => {
+  const recovered = recoverableLimitedDeliveryForError({
+    historicalRecoveryState: true,
+    code: "internal_recovery_required",
+    message: "Butler could not verify that the requested goal was completed.",
+    retryable: true,
+  });
+
   expect(recovered).toMatchObject({
+    text: null,
     delivery: {
-      delivery_state: "delivered_with_limitations",
-      visibility: "assistant_output",
-      failure_notice: false,
+      delivery_state: "recovering_internal",
+      terminal: false,
+      issue_kind: "runtime_continuation",
+      limitation_codes: ["internal_recovery_required"],
     },
   });
-  expect(recovered?.text).toContain("\n\n확인된 진행사항:\n- 파일을 작성했습니다.");
-  expect(recovered?.text).not.toContain("could not verify");
-  expect(JSON.stringify(recovered)).not.toContain("INCOMPLETE");
-  expect(JSON.stringify(recovered)).not.toContain("abc123");
-  expect(JSON.stringify(recovered)).not.toContain("/Users/example");
 });
 
 test("progress finalization renders public tool labels without protocol names", () => {

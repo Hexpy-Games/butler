@@ -3,6 +3,13 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFile
 import { dirname, join } from "path";
 import type { InboundEnvelope } from "./contracts.ts";
 
+export interface InboundProcessingLease {
+  claimId: string;
+  ownerId: string;
+  claimedAt: string;
+  leaseExpiresAt: string;
+}
+
 export interface QueuedInboundEvent {
   version: 1;
   queueId: string;
@@ -10,10 +17,24 @@ export interface QueuedInboundEvent {
   enqueuedAt: string;
   attempts: number;
   metadata: Record<string, unknown>;
+  processing?: InboundProcessingLease;
 }
 
 export interface ClaimedInboundEvent extends QueuedInboundEvent {
   path: string;
+  processing: InboundProcessingLease;
+}
+
+export interface RecoverStaleProcessingOptions {
+  staleAfterMs: number;
+  now?: Date;
+  ownerId?: string;
+  shouldRecover?: (record: QueuedInboundEvent) => boolean;
+}
+
+export interface RecoverStaleProcessingSummary {
+  requeued: number;
+  skipped: number;
 }
 
 let enqueueSequence = 0;
@@ -25,6 +46,10 @@ function safeQueueId(eventId: string): string {
 function sortableQueueIdPrefix(now: Date): string {
   enqueueSequence = (enqueueSequence + 1) % Number.MAX_SAFE_INTEGER;
   return `${now.toISOString().replace(/[-:.]/g, "")}-${String(enqueueSequence).padStart(12, "0")}`;
+}
+
+function processingOwnerId(): string {
+  return `${process.pid}:${randomUUID()}`;
 }
 
 function atomicWriteJson(path: string, value: unknown): void {
@@ -44,6 +69,7 @@ function readJson<T>(path: string): T | null {
 
 export class NativeInboundQueue {
   readonly rootDir: string;
+  private readonly ownerId = processingOwnerId();
 
   constructor(readonly butlerData: string) {
     this.rootDir = join(butlerData, "runtime", "inbound-events");
@@ -78,6 +104,8 @@ export class NativeInboundQueue {
   claimEligible(
     limit = 10,
     isEligible: (event: QueuedInboundEvent) => boolean,
+    now = new Date(),
+    leaseMs = 15 * 60 * 1000,
   ): ClaimedInboundEvent[] {
     const pending = this.dir("pending");
     if (!existsSync(pending)) return [];
@@ -102,11 +130,18 @@ export class NativeInboundQueue {
       const updated: QueuedInboundEvent = {
         ...record,
         attempts: record.attempts + 1,
+        processing: {
+          claimId: randomUUID(),
+          ownerId: this.ownerId,
+          claimedAt: now.toISOString(),
+          leaseExpiresAt: new Date(now.getTime() + Math.max(1, leaseMs)).toISOString(),
+        },
       };
       atomicWriteJson(to, updated);
       claimed.push({
         ...updated,
         path: to,
+        processing: updated.processing!,
       });
     }
     return claimed;
@@ -116,34 +151,117 @@ export class NativeInboundQueue {
     return this.claimEligible(limit, () => true);
   }
 
-  complete(item: ClaimedInboundEvent, metadata: Record<string, unknown> = {}, now = new Date()): void {
+  recoverStaleProcessing(
+    options: RecoverStaleProcessingOptions,
+  ): RecoverStaleProcessingSummary {
+    const summary: RecoverStaleProcessingSummary = { requeued: 0, skipped: 0 };
+    const now = options.now ?? new Date();
+    const nowMs = now.getTime();
+    const processing = this.dir("processing");
+    if (!existsSync(processing)) return summary;
+    mkdirSync(this.dir("pending"), { recursive: true, mode: 0o700 });
+    const entries = readdirSync(processing)
+      .filter((name) => name.endsWith(".json"))
+      .sort((a, b) => a.localeCompare(b));
+    for (const name of entries) {
+      const path = join(processing, name);
+      const record = this.readQueuedRecord(path);
+      if (!record) {
+        summary.skipped += 1;
+        continue;
+      }
+      const leaseExpiresAtMs = Date.parse(record.processing?.leaseExpiresAt ?? "");
+      const leaseExpired =
+        Number.isFinite(leaseExpiresAtMs) && nowMs >= leaseExpiresAtMs;
+      if (!leaseExpired) {
+        summary.skipped += 1;
+        continue;
+      }
+      if (options.shouldRecover && !options.shouldRecover(record)) {
+        summary.skipped += 1;
+        continue;
+      }
+      if (this.hasTerminalRecord(record.queueId)) {
+        summary.skipped += 1;
+        continue;
+      }
+      const pendingPath = join(this.dir("pending"), `${record.queueId}.json`);
+      if (existsSync(pendingPath)) {
+        summary.skipped += 1;
+        continue;
+      }
+      try {
+        renameSync(path, pendingPath);
+      } catch {
+        summary.skipped += 1;
+        continue;
+      }
+      atomicWriteJson(pendingPath, {
+        ...record,
+        processing: undefined,
+        metadata: {
+          ...record.metadata,
+          recoveredFromProcessing: true,
+          recoveryReason: "processing_lease_expired",
+          recoveredAt: now.toISOString(),
+          recoveredBy: options.ownerId ?? this.ownerId,
+          previousProcessing: record.processing,
+        },
+      });
+      summary.requeued += 1;
+    }
+    return summary;
+  }
+
+  complete(item: ClaimedInboundEvent, metadata: Record<string, unknown> = {}, now = new Date()): boolean {
+    if (!this.ownsProcessingClaim(item)) return false;
     atomicWriteJson(join(this.dir("processed"), `${item.queueId}.json`), {
       ...item,
       processedAt: now.toISOString(),
       processingPath: undefined,
+      processing: undefined,
       metadata: {
         ...item.metadata,
         ...metadata,
+        terminalClaimId: item.processing.claimId,
       },
     });
     try {
       renameSync(item.path, `${item.path}.done`);
     } catch {}
+    return true;
   }
 
-  fail(item: ClaimedInboundEvent, error: string, metadata: Record<string, unknown> = {}, now = new Date()): void {
+  fail(item: ClaimedInboundEvent, error: string, metadata: Record<string, unknown> = {}, now = new Date()): boolean {
+    if (!this.ownsProcessingClaim(item)) return false;
     atomicWriteJson(join(this.dir("failed"), `${item.queueId}.json`), {
       ...item,
       failedAt: now.toISOString(),
       processingPath: undefined,
+      processing: undefined,
       error: error.slice(0, 500),
       metadata: {
         ...item.metadata,
         ...metadata,
+        terminalClaimId: item.processing.claimId,
       },
     });
     try {
       renameSync(item.path, `${item.path}.failed`);
     } catch {}
+    return true;
+  }
+
+  private hasTerminalRecord(queueId: string): boolean {
+    return (
+      existsSync(join(this.dir("processed"), `${queueId}.json`)) ||
+      existsSync(join(this.dir("failed"), `${queueId}.json`))
+    );
+  }
+
+  private ownsProcessingClaim(item: ClaimedInboundEvent): boolean {
+    if (!existsSync(item.path)) return false;
+    const current = this.readQueuedRecord(item.path);
+    return current?.processing?.claimId === item.processing.claimId;
   }
 }

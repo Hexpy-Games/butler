@@ -76,8 +76,54 @@ test("agent loop executes model-selected tool call and continues with tool resul
   expect(modelInputs[1]).toContain("hello");
 });
 
-test("agent loop checkpoints large evidence-bearing tool results for model context", async () => {
-  let checkpointMessage = "";
+test("agent loop serializes schema validation failures as structured observations", async () => {
+  const modelInputs: string[] = [];
+  let executed = 0;
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "echo hello" }],
+    tools,
+    maxIterations: 3,
+    callModel: async (input) => {
+      modelInputs.push(input.messages.map((message) => `${message.role}:${message.content}`).join("\n"));
+      if (input.iteration === 0) {
+        return {
+          toolCalls: [{
+            id: "call-missing",
+            name: "echo",
+            arguments: {},
+          }],
+        };
+      }
+      if (input.iteration === 1) {
+        return {
+          toolCalls: [{
+            id: "call-extra",
+            name: "echo",
+            arguments: { message: "hello", extra: true },
+          }],
+        };
+      }
+      return { text: "I can retry with the schema now." };
+    },
+    executeTool: async () => {
+      executed += 1;
+      return { ok: true };
+    },
+  });
+
+  expect(result.finalText).toBe("I can retry with the schema now.");
+  expect(executed).toBe(0);
+  expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(2);
+  const context = modelInputs.slice(1).join("\n");
+  expect(context).toContain("\"observation_kind\":\"tool_invalid_arguments\"");
+  expect(context).toContain("Tool echo requires argument: message");
+  expect(context).toContain("Tool echo received unsupported argument(s): extra");
+  expect(context).toContain("\"model_visible_content\"");
+});
+
+test("agent loop preserves large evidence-bearing tool results for the immediate follow-up", async () => {
+  let immediateMessage = "";
+  let futureMessage = "";
   const result = await runAgentLoop({
     messages: [{ role: "user", content: "read a large source" }],
     tools,
@@ -91,39 +137,56 @@ test("agent loop checkpoints large evidence-bearing tool results for model conte
           }],
         };
       }
-      checkpointMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
+      if (input.iteration === 1) {
+        immediateMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
+        return {
+          toolCalls: [{
+            id: "call-2",
+            name: "echo",
+            arguments: { message: "small follow-up" },
+          }],
+        };
+      }
+      futureMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
       return { text: "checkpoint received" };
     },
-    executeTool: async () => ({
-      ok: true,
-      source_urls: ["https://example.test/source"],
-      evidence_receipts: [{
-        schema: "butler.evidence-receipt.v1",
-        id: "receipt-large-source",
-        producer: { kind: "tool", name: "web_read" },
-        receiptType: "source",
-        verified: true,
-        covers: ["source_verified"],
-        summary: "Large page evidence was read.",
-        references: [{ kind: "url", ref: "https://example.test/source" }],
-        satisfies: ["source_verified"],
-      }],
-      markdown: "Evidence body ".repeat(2_500),
-    }),
+    executeTool: async (call) =>
+      call.id === "call-1"
+        ? {
+            ok: true,
+            source_urls: ["https://example.test/source"],
+            evidence_receipts: [{
+              schema: "butler.evidence-receipt.v1",
+              id: "receipt-large-source",
+              producer: { kind: "tool", name: "web_read" },
+              receiptType: "source",
+              verified: true,
+              covers: ["source_verified"],
+              summary: "Large page evidence was read.",
+              references: [{ kind: "url", ref: "https://example.test/source" }],
+              satisfies: ["source_verified"],
+            }],
+            markdown: "Evidence body ".repeat(2_500),
+          }
+        : { ok: true, small: true },
   });
 
-  const parsed = JSON.parse(checkpointMessage) as Record<string, any>;
+  const immediate = JSON.parse(immediateMessage) as Record<string, any>;
+  const future = JSON.parse(futureMessage) as Record<string, any>;
   expect(result.finalText).toBe("checkpoint received");
-  expect(parsed.output.butler_evidence_checkpoint).toBe(true);
-  expect(parsed.output.evidence_receipts[0].id).toBe("receipt-large-source");
-  expect(parsed.output.source_urls).toEqual(["https://example.test/source"]);
-  expect(parsed.output.raw_estimated_tokens).toBeGreaterThan(6_000);
-  expect(parsed.output.estimated_saved_tokens).toBeGreaterThan(5_000);
-  expect(checkpointMessage).not.toContain("Evidence body Evidence body Evidence body");
+  expect(immediate.output.butler_evidence_checkpoint).toBeUndefined();
+  expect(immediate.output.markdown).toContain("Evidence body Evidence body Evidence body");
+  expect(future.output.butler_evidence_checkpoint).toBe(true);
+  expect(future.output.evidence_receipts[0].id).toBe("receipt-large-source");
+  expect(future.output.source_urls).toEqual(["https://example.test/source"]);
+  expect(future.output.raw_estimated_tokens).toBeGreaterThan(6_000);
+  expect(future.output.estimated_saved_tokens).toBeGreaterThan(5_000);
+  expect(futureMessage).not.toContain("Evidence body Evidence body Evidence body");
 });
 
-test("agent loop compacts large non-evidence tool results for model context", async () => {
-  let compactMessage = "";
+test("agent loop preserves large non-evidence tool results for the immediate follow-up", async () => {
+  let immediateMessage = "";
+  let futureMessage = "";
   const result = await runAgentLoop({
     messages: [{ role: "user", content: "inspect a noisy command" }],
     tools,
@@ -137,31 +200,47 @@ test("agent loop compacts large non-evidence tool results for model context", as
           }],
         };
       }
-      compactMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
+      if (input.iteration === 1) {
+        immediateMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
+        return {
+          toolCalls: [{
+            id: "call-2",
+            name: "echo",
+            arguments: { message: "small follow-up" },
+          }],
+        };
+      }
+      futureMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
       return { text: "compact result received" };
     },
-    executeTool: async () => ({
-      ok: true,
-      title: "Large command output",
-      stdout: [
-        "HEAD_START",
-        "RAW_MIDDLE_SHOULD_BE_COMPACTED ".repeat(3_200),
-        "TAIL_END",
-      ].join("\n"),
-    }),
+    executeTool: async (call) =>
+      call.id === "call-1"
+        ? {
+            ok: true,
+            title: "Large command output",
+            stdout: [
+              "HEAD_START",
+              "RAW_MIDDLE_SHOULD_BE_COMPACTED ".repeat(3_200),
+              "TAIL_END",
+            ].join("\n"),
+          }
+        : { ok: true, small: true },
   });
 
-  const parsed = JSON.parse(compactMessage) as Record<string, any>;
+  const immediate = JSON.parse(immediateMessage) as Record<string, any>;
+  const future = JSON.parse(futureMessage) as Record<string, any>;
   expect(result.finalText).toBe("compact result received");
-  expect(parsed.output.butler_tool_result_compacted).toBe(true);
-  expect(parsed.output.tool_name).toBe("echo");
-  expect(parsed.output.title).toBe("Large command output");
-  expect(parsed.output.raw_estimated_tokens).toBeGreaterThan(6_000);
-  expect(parsed.output.estimated_saved_tokens).toBeGreaterThan(4_000);
-  expect(parsed.output.preview).toContain("HEAD_START");
-  expect(parsed.output.preview).toContain("TAIL_END");
-  expect(parsed.output.preview).toContain("compacted tool result for context budget");
-  expect(compactMessage.length).toBeLessThan(6_000);
+  expect(immediate.output.butler_tool_result_compacted).toBeUndefined();
+  expect(immediate.output.stdout).toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
+  expect(future.output.butler_tool_result_compacted).toBe(true);
+  expect(future.output.tool_name).toBe("echo");
+  expect(future.output.title).toBe("Large command output");
+  expect(future.output.raw_estimated_tokens).toBeGreaterThan(6_000);
+  expect(future.output.estimated_saved_tokens).toBeGreaterThan(4_000);
+  expect(future.output.preview).toContain("HEAD_START");
+  expect(future.output.preview).toContain("TAIL_END");
+  expect(future.output.preview).toContain("compacted tool result for context budget");
+  expect(futureMessage.length).toBeLessThan(6_000);
 });
 
 test("agent loop exposes assistant text before executing selected tools", async () => {
@@ -340,7 +419,7 @@ test("agent loop keeps mixed concurrency-safe and unsafe tool batches serial", a
   ]);
 });
 
-test("agent loop stops repeated identical failed tool calls before loop limit", async () => {
+test("agent loop feeds repeated identical failed tool calls back to the model", async () => {
   let modelCalls = 0;
 
   const result = await runAgentLoop({
@@ -349,6 +428,9 @@ test("agent loop stops repeated identical failed tool calls before loop limit", 
     maxIterations: 8,
     callModel: async (input) => {
       modelCalls += 1;
+      if (input.iteration === 3) {
+        return { text: "I saw the repeated tool failures and can answer normally." };
+      }
       return {
         toolCalls: [{
           id: `call-${input.iteration}`,
@@ -360,14 +442,13 @@ test("agent loop stops repeated identical failed tool calls before loop limit", 
     executeTool: async () => {
       throw new Error("boom");
     },
-    onRepeatedToolFailure: ({ failureCount, toolResult }) =>
-      `Stopped after ${failureCount} repeated failures: ${toolResult.error}`,
   });
 
-  expect(modelCalls).toBe(2);
+  expect(modelCalls).toBe(4);
   expect(result.stoppedByLimit).toBe(false);
-  expect(result.finalText).toBe("Stopped after 2 repeated failures: boom");
-  expect(result.events.map((event) => event.type)).toContain("repeated_tool_failure");
+  expect(result.finalText).toBe("I saw the repeated tool failures and can answer normally.");
+  expect(result.finalText).not.toContain("same tool call failed repeatedly");
+  expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(3);
   expect(result.events.map((event) => event.type)).not.toContain("loop_limit");
 });
 
@@ -406,64 +487,71 @@ test("agent loop records every completed parallel result before terminal finaliz
   ]);
 });
 
-test("agent loop treats the same failed tool call as repeated even when error text changes", async () => {
+test("agent loop does not terminalize repeated failed tool calls when error text changes", async () => {
   let attempts = 0;
 
   const result = await runAgentLoop({
     messages: [{ role: "user", content: "retry same missing file" }],
     tools,
     maxIterations: 8,
-    callModel: async (input) => ({
-      toolCalls: [{
-        id: `call-${input.iteration}`,
-        name: "echo",
-        arguments: { message: "same path" },
-      }],
-    }),
+    callModel: async (input) => {
+      if (input.iteration === 3) {
+        return { text: "I can report the changing failures without synthetic stop text." };
+      }
+      return {
+        toolCalls: [{
+          id: `call-${input.iteration}`,
+          name: "echo",
+          arguments: { message: "same path" },
+        }],
+      };
+    },
     executeTool: async () => {
       attempts += 1;
       throw new Error(`ENOENT attempt ${attempts}`);
     },
   });
 
-  expect(attempts).toBe(2);
+  expect(attempts).toBe(3);
   expect(result.stoppedByLimit).toBe(false);
-  expect(result.finalText).toContain("same tool call failed repeatedly");
-  expect(result.finalText).toContain("ENOENT attempt 2");
-  expect(result.events.map((event) => event.type)).toContain("repeated_tool_failure");
+  expect(result.finalText).toBe("I can report the changing failures without synthetic stop text.");
+  expect(result.finalText).not.toContain("same tool call failed repeatedly");
+  expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(3);
   expect(result.events.map((event) => event.type)).not.toContain("loop_limit");
 });
 
-test("agent loop gives repeated-failure finalizer all completed parallel results", async () => {
+test("agent loop records every repeated parallel failure before continuing", async () => {
   const safeTools: AgentLoopToolDefinition[] = [
     { name: "fail", description: "Failing safe tool.", concurrencySafe: true },
     { name: "other", description: "Other safe tool.", concurrencySafe: true },
   ];
-  let callbackToolResults: string[] = [];
 
   const result = await runAgentLoop({
     messages: [{ role: "user", content: "retry then run another safe check" }],
     tools: safeTools,
-    callModel: async (input) => ({
-      toolCalls: input.iteration === 0
-        ? [{ id: "call-fail-1", name: "fail", arguments: {} }]
-        : [
-            { id: "call-fail-2", name: "fail", arguments: {} },
-            { id: "call-other", name: "other", arguments: {} },
-          ],
-    }),
+    callModel: async (input) => {
+      if (input.iteration === 2) {
+        return { text: "Repeated failure observations stayed in context." };
+      }
+      return {
+        toolCalls: input.iteration === 0
+          ? [{ id: "call-fail-1", name: "fail", arguments: {} }]
+          : [
+              { id: "call-fail-2", name: "fail", arguments: {} },
+              { id: "call-other", name: "other", arguments: {} },
+            ],
+      };
+    },
     executeTool: async (call) => {
       if (call.name === "fail") throw new Error("still failing");
       return { tool: call.name };
     },
-    onRepeatedToolFailure: ({ toolResults }) => {
-      callbackToolResults = toolResults.map((toolResult) => toolResult.name);
-      return "Repeated failure finalizer saw the completed batch.";
-    },
   });
 
-  expect(result.finalText).toBe("Repeated failure finalizer saw the completed batch.");
-  expect(callbackToolResults).toEqual(["fail", "fail", "other"]);
+  expect(result.finalText).toBe("Repeated failure observations stayed in context.");
+  expect(result.messages
+    .filter((message) => message.role === "tool")
+    .map((message) => message.name ?? "")).toEqual(["fail", "fail", "other"]);
   expect(result.events.map((event) => event.type)).toEqual([
     "model_call",
     "model_response",
@@ -475,11 +563,12 @@ test("agent loop gives repeated-failure finalizer all completed parallel results
     "tool_call",
     "tool_result",
     "tool_result",
-    "repeated_tool_failure",
+    "model_call",
+    "model_response",
   ]);
 });
 
-test("agent loop lets model use successful alternate result before default repeated-failure stop", async () => {
+test("agent loop lets model use successful alternate result after repeated failure observations", async () => {
   const safeTools: AgentLoopToolDefinition[] = [
     { name: "fail", description: "Failing safe tool.", concurrencySafe: true },
     { name: "alternate", description: "Alternate safe tool.", concurrencySafe: true },
@@ -514,7 +603,37 @@ test("agent loop lets model use successful alternate result before default repea
 
   expect(modelCalls).toBe(3);
   expect(result.finalText).toBe("Used the successful alternate result.");
-  expect(result.events.map((event) => event.type)).not.toContain("repeated_tool_failure");
+});
+
+test("agent loop keeps repeated invalid schema arguments as structured observations", async () => {
+  const modelInputs: string[] = [];
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "echo with repaired schema" }],
+    tools,
+    maxIterations: 5,
+    callModel: async (input) => {
+      modelInputs.push(input.messages.map((message) => `${message.role}:${message.content}`).join("\n"));
+      if (input.iteration < 3) {
+        return {
+          toolCalls: [{
+            id: `call-invalid-${input.iteration}`,
+            name: "echo",
+            arguments: {},
+          }],
+        };
+      }
+      return { text: "I repaired the arguments after the observations." };
+    },
+    executeTool: async () => {
+      throw new Error("invalid calls should not execute");
+    },
+  });
+
+  expect(result.finalText).toBe("I repaired the arguments after the observations.");
+  expect(result.finalText).not.toContain("same tool call failed repeatedly");
+  expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(3);
+  expect(modelInputs.slice(1).join("\n")).toContain("\"observation_kind\":\"tool_invalid_arguments\"");
+  expect(modelInputs.slice(1).join("\n")).toContain("Tool echo requires argument: message");
 });
 
 test("agent loop produces truthful partial response when loop limit is reached", async () => {

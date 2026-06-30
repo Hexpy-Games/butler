@@ -9,6 +9,7 @@ export const FIRST_VISIBLE_LATENCY_METRIC_NAME = "first_visible_latency";
 export const TURN_PREPARATION_STEP_METRIC_NAME = "turn_preparation_step";
 
 export type FirstVisibleSignal =
+  | "acknowledged"
   | "first_progress"
   | "runtime_preparation"
   | "assistant_before_tools"

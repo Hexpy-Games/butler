@@ -2,7 +2,6 @@ import { safeRuntimeFailure } from "../../integrations/providers/provider-errors
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
 import {
   classifyRuntimeFailureDelivery,
-  deliveredWithLimitationsState,
   safeLimitationText,
   type RuntimeDeliveryClassification,
 } from "./runtime-delivery-state.ts";
@@ -11,29 +10,63 @@ const DEFAULT_LIMITED_DELIVERY_REASON =
   "진행한 내용은 보존했습니다. 다만 마지막 마무리 단계까지 완전히 닫지는 못했습니다.\n\n남은 부분: 완료 보고에 필요한 마지막 결과 정리가 남아 있습니다.\n다음 진행에서는 이 지점부터 이어가면 됩니다.";
 
 export interface RecoverableLimitedDelivery {
-  text: string;
+  text: string | null;
   reason: string;
   delivery: RuntimeDeliveryClassification;
 }
 
 export function recoverableLimitedDeliveryForError(error: unknown): RecoverableLimitedDelivery | null {
   const classified = classifyRuntimeFailureDelivery(error);
-  if (classified.issue_kind !== "internal_recovery") return null;
+  if (!isContinuationDelivery(classified)) return null;
   const failure = safeRuntimeFailure(error);
   const progressText = progressFinalizationTextFromError(error);
-  const reason = safeLimitationText(
-    progressText ?? failure.message,
-    DEFAULT_LIMITED_DELIVERY_REASON,
-  );
-  const text = progressText ?? (isGenericVerificationFailure(reason) ? DEFAULT_LIMITED_DELIVERY_REASON : reason);
+  const failureText = visibleRecoveryTextFromFailureMessage(failure.message);
+  const publicReason = progressText ?? failureText ?? DEFAULT_LIMITED_DELIVERY_REASON;
+  const limitationCode = isPromptUsageModelCallBudget(error)
+    ? INTERNAL_RECOVERY_REQUIRED_CODE
+    : classified.limitation_codes[0] ?? failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE;
   return {
-    text,
-    reason: text,
-    delivery: deliveredWithLimitationsState({
-      limitationCodes: [classified.limitation_codes[0] ?? failure.code ?? INTERNAL_RECOVERY_REQUIRED_CODE],
-      limitations: [text],
-    }),
+    text: null,
+    reason: publicReason,
+    delivery: {
+      ...classified,
+      limitation_codes: [limitationCode],
+      limitations: [],
+    },
   };
+}
+
+export function isNonPublicContinuationDeliveryError(error: unknown): boolean {
+  const classified = classifyRuntimeFailureDelivery(error);
+  return classified.delivery_state === "running" &&
+    classified.terminal === false &&
+    classified.visibility === "continuation_progress" &&
+    classified.issue_kind === "none";
+}
+
+export function isPromptUsageModelCallBudgetError(error: unknown): boolean {
+  return isPromptUsageModelCallBudget(error);
+}
+
+function isContinuationDelivery(classified: RuntimeDeliveryClassification): boolean {
+  return classified.issue_kind === "internal_recovery" ||
+    classified.issue_kind === "tool_call_repair" ||
+    classified.issue_kind === "completion_continuation" ||
+    classified.issue_kind === "runtime_continuation";
+}
+
+function isPromptUsageModelCallBudget(error: unknown): boolean {
+  if (error instanceof Error) {
+    const record = error as Error & { code?: unknown };
+    return record.code === "prompt_usage_model_call_budget_exhausted" ||
+      error.name === "PromptUsageModelCallBudgetExhaustedError";
+  }
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    return record.code === "prompt_usage_model_call_budget_exhausted" ||
+      record.name === "PromptUsageModelCallBudgetExhaustedError";
+  }
+  return false;
 }
 
 function progressFinalizationTextFromError(error: unknown): string | null {
@@ -43,9 +76,20 @@ function progressFinalizationTextFromError(error: unknown): string | null {
   return safeProgressFinalizationText(value);
 }
 
-function isGenericVerificationFailure(value: string): boolean {
+function visibleRecoveryTextFromFailureMessage(message: string): string | null {
+  const text = safeLimitationText(message, "");
+  if (!text || isGenericInternalRecoveryText(text)) return null;
+  return text;
+}
+
+function isGenericInternalRecoveryText(value: string): boolean {
   return /Butler could not verify that the requested goal was completed/iu.test(value) ||
-    /요청한 결과를 완료했는지 확인하지 못했습니다/u.test(value);
+    /요청한 결과를 완료했는지 확인하지 못했습니다/u.test(value) ||
+    /진행한 내용은 보존했습니다/u.test(value) ||
+    /prompt usage model-call budget exhausted/iu.test(value) ||
+    /missing public completion obligation/iu.test(value) ||
+    /unsatisfied public completion obligation/iu.test(value) ||
+    /unresolved public completion obligation/iu.test(value);
 }
 
 function safeProgressFinalizationText(value: string): string | null {

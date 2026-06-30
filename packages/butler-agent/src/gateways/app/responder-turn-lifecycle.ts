@@ -8,8 +8,10 @@ import type {
 import {
   appLimitedDeliveryForError,
   appSafeResponderError,
+  isNonPublicContinuationDeliveryError,
   type AppLimitedDelivery,
 } from "./failure-ux-contract.ts";
+import { publicDeliveryMetadataForProjection } from "./btcc-public-projection.ts";
 import type {
   AppMessageResponder,
   AppMessageResponderResult,
@@ -53,7 +55,11 @@ export interface CompleteResponderTurnContext<FileRecord> {
     chatId: string,
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
-  ): { reply: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
+  ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
+  markResponderNonPublicContinuation(
+    chatId: string,
+    turnId: string,
+  ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
   finalizeCancelledTurn(chatId: string, turnId: string): TurnRecord;
   hasTurnEventKind(turnId: string, kind: string): boolean;
   insertOrReplaceAssistantReplies(
@@ -148,8 +154,11 @@ export async function completeResponderTurn<FileRecord>(
       input.options,
     );
 
-    const projectedReplies = limitedDelivery
-      ? replies.map((reply) => ({ ...reply, ...limitedDelivery }))
+    const publicLimitedDelivery = limitedDelivery
+      ? publicDeliveryMetadataForProjection(limitedDelivery)
+      : null;
+    const projectedReplies = publicLimitedDelivery
+      ? replies.map((reply) => ({ ...reply, ...publicLimitedDelivery }))
       : replies;
     const reply = projectedReplies.at(-1)!;
     return {
@@ -192,7 +201,25 @@ export async function completeResponderTurn<FileRecord>(
         reply: delivered.reply,
         replies: delivered.replies,
         turn: delivered.turn,
-        next_cursor: delivered.reply.cursor,
+        next_cursor: delivered.reply?.cursor ?? delivered.turn.cursor,
+      };
+    }
+    if (isNonPublicContinuationDeliveryError(error)) {
+      const continuation = context.markResponderNonPublicContinuation(
+        input.chatId,
+        input.turnId,
+      );
+      context.touchChat(input.chatId);
+      await context.drainQueuedSessionMessages(
+        input.chatId,
+        input.responder,
+        input.options,
+      );
+      return {
+        reply: continuation.reply,
+        replies: continuation.replies,
+        turn: continuation.turn,
+        next_cursor: continuation.reply?.cursor ?? continuation.turn.cursor,
       };
     }
     const safeError = appSafeResponderError(error);

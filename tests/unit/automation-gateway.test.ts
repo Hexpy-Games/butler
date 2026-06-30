@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type {
@@ -24,6 +24,16 @@ import {
 import { DeliveryGuard } from "../../packages/butler-agent/src/interfaces/transport/delivery-guard.ts";
 import { MockTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/mock/adapter.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { PromptAssembler } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
+import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
+import { normalizeTurnPrompt } from "../../packages/butler-agent/src/agent/turn/native/context/turn-prompt.ts";
+import {
+  createTurnContextAtomId,
+  readTurnContextAtom,
+} from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
+import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
+import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
+import { readTranscript } from "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -60,7 +70,7 @@ class ScriptedRuntime implements AgentRuntimeAdapter {
 }
 
 class PersistenceFailingInboundQueue extends NativeInboundQueue {
-  override fail(): void {
+  override fail(): boolean {
     throw new Error("failed queue persistence unavailable");
   }
 }
@@ -328,6 +338,67 @@ test("queued automation events are consumed by butler-main path and delivered to
   );
 });
 
+test("queued app inbound dispatch preserves selected reasoning effort", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new ScriptedRuntime();
+  store.upsert({
+    sessionId: "butler/app-general",
+    role: "butler",
+    workspacePath: tempDir,
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "zai/glm-5.2",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "general",
+    }],
+    lifecycleState: "active",
+    metadata: {
+      reasoning_effort: "low",
+      runtimePolicy: { completionReview: "disabled" },
+    },
+  });
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue(appEnvelope({
+    eventId: "app:reasoning-low",
+    messageId: "message-reasoning-low",
+    sessionId: "butler/app-general",
+    text: "Use selected GLM low reasoning.",
+  }), { source: "test" });
+
+  const router = new GatewayRouter({ store });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler in an app queue test.",
+  });
+  const server = createGatewayServer({
+    router,
+    handlers: createLifecycleGatewayHandlers(lifecycle),
+  });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server,
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    failed: 0,
+  });
+  expect(runtime.turns[0]?.model).toBe("zai/glm-5.2");
+  expect(runtime.turns[0]?.metadata).toMatchObject({
+    reasoning_effort: "low",
+  });
+});
+
 test("queued inbound skips terminal app turns before dispatch", async () => {
   const queue = new NativeInboundQueue(tempDir);
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
@@ -542,6 +613,138 @@ test("queued inbound dispatcher preserves same-session FIFO eligibility", async 
   store.close();
 });
 
+test("queued inbound dispatcher fails timed out app turns and holds the session slot until quiescence", async () => {
+  const queue = new NativeInboundQueue(tempDir);
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  queue.enqueue(appEnvelope({
+    eventId: "app:timeout",
+    messageId: "message-timeout",
+    sessionId: "butler/app-timeout",
+  }), { source: "test" });
+  queue.enqueue(appEnvelope({
+    eventId: "app:after-timeout",
+    messageId: "message-after-timeout",
+    sessionId: "butler/app-timeout",
+  }), { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const dispatcher = new QueuedInboundDispatcher();
+  const guard = new DeliveryGuard({ adapters: [app] });
+  let sawAbort = false;
+  const releaseTimedOutHandler = deferred<void>();
+
+  const first = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: guard,
+    maxConcurrentSessions: 1,
+    limit: 1,
+    dispatchTimeoutMs: 5,
+    server: {
+      async handleInbound(envelope) {
+        envelope.signal?.addEventListener("abort", () => {
+          sawAbort = true;
+        });
+        await releaseTimedOutHandler.promise;
+        return {
+          status: "handled",
+          route: {
+            sessionId: envelope.routingHints?.sessionId ?? "",
+            role: "butler",
+            reason: "session-hint",
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            metadata: { durableFinalRecorded: true },
+          },
+        };
+      },
+    },
+  });
+  expect(first.claimed).toBe(1);
+  await dispatcher.waitForIdle();
+
+  expect(sawAbort).toBe(true);
+  expect(app.sentActions[0]).toMatchObject({
+    transport: "app",
+    message: {
+      text: "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
+      replyToMessageId: "message-timeout",
+    },
+    metadata: {
+      kind: "turn_failed",
+      turnId: "turn-message-timeout",
+      safeErrorCode: "inbound_dispatch_timeout",
+    },
+  });
+  const failedDir = join(tempDir, "runtime", "inbound-events", "failed");
+  const failedFiles = existsSync(failedDir) ? readdirSync(failedDir) : [];
+  expect(failedFiles).toHaveLength(1);
+  const failedRecord = JSON.parse(readFileSync(join(failedDir, failedFiles[0]!), "utf8"));
+  expect(failedRecord.metadata.terminalClaimId).toBeString();
+
+  const blockedByUnsettledTimeout = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: guard,
+    maxConcurrentSessions: 1,
+    limit: 1,
+    dispatchTimeoutMs: 5,
+    server: {
+      async handleInbound(envelope) {
+        return {
+          status: "handled",
+          route: {
+            sessionId: envelope.routingHints?.sessionId ?? "",
+            role: "butler",
+            reason: "session-hint",
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            metadata: { durableFinalRecorded: true },
+          },
+        };
+      },
+    },
+  });
+  expect(blockedByUnsettledTimeout.claimed).toBe(0);
+
+  releaseTimedOutHandler.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const second = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: guard,
+    maxConcurrentSessions: 1,
+    limit: 1,
+    dispatchTimeoutMs: 5,
+    server: {
+      async handleInbound(envelope) {
+        return {
+          status: "handled",
+          route: {
+            sessionId: envelope.routingHints?.sessionId ?? "",
+            role: "butler",
+            reason: "session-hint",
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            metadata: { durableFinalRecorded: true },
+          },
+        };
+      },
+    },
+  });
+  expect(second.claimed).toBe(1);
+  await dispatcher.waitForIdle();
+  const processedDir = join(tempDir, "runtime", "inbound-events", "processed");
+  expect(existsSync(processedDir) ? readdirSync(processedDir).length : 0).toBe(1);
+  store.close();
+});
+
 test("queued inbound dispatcher contains failure persistence rejections", async () => {
   const queue = new PersistenceFailingInboundQueue(tempDir);
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
@@ -572,6 +775,103 @@ test("queued inbound dispatcher contains failure persistence rejections", async 
     handled: 0,
     delivered: 0,
     failed: 1,
+  });
+  store.close();
+});
+
+test("queued inbound dispatcher does not time out active app turns by default", async () => {
+  const queue = new NativeInboundQueue(tempDir);
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  queue.enqueue(appEnvelope({
+    eventId: "app:long-running-default",
+    messageId: "message-long-running-default",
+    sessionId: "butler/app-long-running-default",
+  }), { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const dispatcher = new QueuedInboundDispatcher();
+  const guard = new DeliveryGuard({ adapters: [app] });
+  const releaseHandler = deferred<void>();
+  store.upsert({
+    sessionId: "butler/app-long-running-default",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: tempDir,
+    runtimeAdapterId: "test-runtime",
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "long-running-default",
+    }],
+    lifecycleState: "active",
+  });
+
+  const first = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: guard,
+    maxConcurrentSessions: 1,
+    limit: 1,
+    processingLeaseMs: 5,
+    server: {
+      async handleInbound(envelope) {
+        await releaseHandler.promise;
+        return {
+          status: "handled",
+          route: {
+            sessionId: envelope.routingHints?.sessionId ?? "",
+            role: "butler",
+            reason: "session-hint",
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            metadata: { text: "done after long work" },
+          },
+        };
+      },
+    },
+  });
+  expect(first.claimed).toBe(1);
+
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  const whileActive = dispatcher.poll({
+    queue,
+    store,
+    deliveryGuard: guard,
+    maxConcurrentSessions: 1,
+    limit: 1,
+    processingLeaseMs: 5,
+    server: {
+      async handleInbound() {
+        throw new Error("active turn should not be reprocessed");
+      },
+    },
+  });
+  expect(whileActive.claimed).toBe(0);
+  expect(app.sentActions).toEqual([]);
+  expect(existsSync(join(tempDir, "runtime", "inbound-events", "pending")) ?
+    readdirSync(join(tempDir, "runtime", "inbound-events", "pending")) :
+    []).toEqual([]);
+  expect(existsSync(join(tempDir, "runtime", "inbound-events", "failed")) ?
+    readdirSync(join(tempDir, "runtime", "inbound-events", "failed")) :
+    []).toEqual([]);
+
+  releaseHandler.resolve();
+  await dispatcher.waitForIdle();
+
+  expect(app.sentActions).toHaveLength(1);
+  expect(app.sentActions[0]).toMatchObject({
+    transport: "app",
+    message: {
+      text: "done after long work",
+      replyToMessageId: "message-long-running-default",
+    },
+    metadata: {
+      kind: "final_result",
+      turnId: "turn-message-long-running-default",
+    },
   });
   store.close();
 });
@@ -775,6 +1075,544 @@ test("queued inbound provider failure preserves safe API diagnostics for app pro
   expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
 });
 
+test("queued inbound schedules same-logical-turn continuation for raw model-call budget exhaustion", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue({
+    eventId: "app:message-budget-failure",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-budget-failure",
+      text: "continue until budget failure",
+      timestamp: "2026-05-18T12:04:30.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-budget-failure",
+    },
+  }, { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        const error = new Error(
+          "Prompt usage model-call budget exhausted before provider request",
+        );
+        error.name = "PromptUsageModelCallBudgetExhaustedError";
+        Object.assign(error, {
+          code: "prompt_usage_model_call_budget_exhausted",
+        });
+        throw error;
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
+  });
+  expect(app.sentActions).toHaveLength(0);
+  const pendingRecords = readdirSync(join(tempDir, "runtime", "inbound-events", "pending"))
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => JSON.parse(readFileSync(join(tempDir, "runtime", "inbound-events", "pending", name), "utf8")));
+  expect(pendingRecords).toHaveLength(1);
+  expect(pendingRecords[0].metadata).toMatchObject({
+    sameLogicalTurnContinuation: true,
+    continuationTurnId: "turn-budget-failure",
+    contextAtomId: createTurnContextAtomId("butler/app-general", "turn-budget-failure"),
+  });
+  const persisted = readTurnContextAtom({
+    butlerData: tempDir,
+    sessionId: "butler/app-general",
+    turnId: "turn-budget-failure",
+  });
+  expect(persisted).toMatchObject({
+    sessionId: "butler/app-general",
+    turnId: "turn-budget-failure",
+    state: "continuing",
+    sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+    reason: "Continuation checkpoint persisted before internal scheduler rollover.",
+    unresolvedObservations: [{
+      kind: "context_compacted",
+      id: createTurnContextAtomId("butler/app-general", "turn-budget-failure"),
+    }],
+  });
+  store.close();
+});
+
+test("scheduler continuation metadata fails closed when its atom is unavailable", () => {
+  expect(() => normalizeTurnPrompt({
+    handle: {
+      sessionId: "butler/app-general",
+      role: "butler",
+      runtimeAdapterId: "native-tool-loop",
+      runtimeSessionRef: "runtime:missing-continuation",
+    },
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: appEnvelope({
+      eventId: "app:missing-continuation",
+      messageId: "client-missing-continuation",
+      sessionId: "butler/app-general",
+      text: "this must not reopen as normal inbound",
+    }),
+    metadata: {
+      turnId: "turn-client-missing-continuation",
+      schedulerContinuation: {
+        contextAtomId: createTurnContextAtomId("butler/app-general", "turn-client-missing-continuation"),
+      },
+    },
+  }, {
+    recentConversationTokenBudget: 1_000,
+    butlerData: tempDir,
+  })).toThrow("Scheduler continuation context atom could not be read");
+});
+
+test("queued inbound completion gap consumes same logical turn continuation without second inbound", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const prompts: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "en",
+    butlerData: tempDir,
+    executeButlerTool: async () => ({
+      ok: true,
+      ...(prompts.length > 1 ? {
+        evidence_capability_receipts: [{
+          receipt_id: "receipt-queued-command",
+          schema_version: "evidence-capability.v1",
+          producer: { kind: "tool", name: "run_command" },
+          capability: "command_executed",
+          evidence_kind: "execution_result",
+          maturity: "verified",
+          confidence: 1,
+          verified: true,
+          summary: "Command execution was verified.",
+          limitations: [],
+          references: [{ task_id: "queued-command" }],
+          satisfies: ["command_executed"],
+          created_at: "2026-06-28T00:00:00.000Z",
+        }],
+      } : {}),
+    }),
+    runFunctionToolPromptText: async (input) => {
+      prompts.push(input.prompt);
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: I am running the requested command.",
+          "rationale: completion requires command evidence.",
+          "next_step: summarize after evidence exists.",
+          "completion_obligations: command_executed",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "pwd" },
+        rawArguments: JSON.stringify({ command: "pwd" }),
+      });
+      return prompts.length === 1
+        ? "I have not captured command evidence yet."
+        : "Command evidence is verified and this is the final result.";
+    },
+  });
+  store.upsert({
+    sessionId: "butler/app-general",
+    role: "butler",
+    workspacePath: tempDir,
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/gpt-5.5",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "general",
+    }],
+  });
+  const router = new GatewayRouter({ store });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler in an automation test.",
+  });
+  const server = createGatewayServer({
+    router,
+    handlers: createLifecycleGatewayHandlers(lifecycle),
+  });
+  let inboundDispatches = 0;
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue({
+    eventId: "app:completion-gap-continuation",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-completion-gap-continuation",
+      text: "Run command and summarize.",
+      timestamp: "2026-06-28T00:00:00.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-completion-gap-continuation",
+    },
+  }, { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound(envelope) {
+        inboundDispatches += 1;
+        return server.handleInbound(envelope);
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    failed: 0,
+  });
+  expect(inboundDispatches).toBe(1);
+  expect(prompts).toHaveLength(2);
+  expect(prompts[1]).toContain("The Turn Kernel recorded a model-visible observation");
+  expect(prompts[1]).toContain("Missing completion evidence for: command_executed");
+  expect(readTurnContextAtom({
+    butlerData: tempDir,
+    sessionId: "butler/app-general",
+    turnId: "turn-completion-gap-continuation",
+  })).toBeNull();
+  expect(JSON.stringify(app.sentActions)).not.toContain("not captured command evidence");
+  store.close();
+});
+
+test("queued inbound consumes normalized live recovery failures without public copy", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue({
+    eventId: "app:message-normalized-internal-recovery",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-normalized-internal-recovery",
+      text: "continue after normalized internal recovery",
+      timestamp: "2026-05-18T12:04:45.000Z",
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-normalized-internal-recovery",
+    },
+  }, { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        throw {
+          code: "internal_recovery_required",
+          message: "Butler could not verify that the requested goal was completed.",
+          retryable: true,
+        };
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
+  });
+  expect(app.sentActions).toHaveLength(0);
+  const processedFiles = readdirSync(join(tempDir, "runtime", "inbound-events", "processed"));
+  const processed = JSON.parse(readFileSync(join(tempDir, "runtime", "inbound-events", "processed", processedFiles[0]!), "utf8"));
+  expect(processed.metadata).toMatchObject({
+    dispatchStatus: "continuing",
+    handled: true,
+    continuationOnly: true,
+  });
+  expect(JSON.stringify(processed)).not.toContain("turn_failed");
+  expect(JSON.stringify(processed)).not.toContain("requested goal was completed");
+  store.close();
+});
+
+test("queued app prompt-budget yield resumes same logical turn from durable W3 todo context", async () => {
+  const butlerHome = join(tempDir, "home");
+  mkdirSync(join(butlerHome, "resources", "prompts"), { recursive: true });
+  mkdirSync(join(tempDir, "personas"), { recursive: true });
+  writeFileSync(join(butlerHome, "resources", "prompts", "runtime-system-contract.md"), "RUNTIME_CONTRACT", "utf8");
+  writeFileSync(join(butlerHome, "resources", "prompts", "butler.md"), "BUTLER_ROLE", "utf8");
+  writeFileSync(join(tempDir, "personas", "active.md"), "PERSONA_BODY", "utf8");
+
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  let promptCallCount = 0;
+  let resumePrompt = "";
+  const turnEvents: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome,
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    runFunctionToolPromptText: async (input) => {
+      promptCallCount += 1;
+      if (promptCallCount === 1) {
+        await input.executeTool({
+          name: "update_todo_list",
+          args: {
+            title: "Sandy style guard validation",
+            todos: [{
+              id: "w3-style-guard",
+              content: "Inspect Sandy style guard validation evidence",
+              active_form: "Inspecting Sandy style guard validation evidence",
+              status: "in_progress",
+              phase: "execution",
+            }, {
+              id: "w4-report",
+              content: "Report Sandy style guard validation result",
+              active_form: "Reporting Sandy style guard validation result",
+              status: "pending",
+              phase: "reporting",
+            }],
+          },
+          rawArguments: JSON.stringify({ title: "Sandy style guard validation" }),
+        });
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: Inspect Sandy style guard validation evidence.",
+            "rationale: The user asked to continue from W3 with durable work state.",
+            "next_step: Capture a small validation receipt before continuing.",
+          ].join("\n"),
+          toolCalls: [{
+            name: "run_command",
+            args: { command: "printf 'w3 evidence\\n'" },
+          }],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: {
+            command: "printf 'w3 evidence\\n'",
+          },
+          rawArguments: JSON.stringify({ command: "printf 'w3 evidence\\n'" }),
+        });
+        const error = new Error("Prompt usage model-call budget exhausted before provider request");
+        error.name = "PromptUsageModelCallBudgetExhaustedError";
+        Object.assign(error, { code: "prompt_usage_model_call_budget_exhausted" });
+        throw error;
+      }
+      resumePrompt = input.prompt;
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          list_id: "main",
+          title: "Sandy style guard validation",
+          todos: [{
+            id: "w3-style-guard",
+            content: "Inspect Sandy style guard validation evidence",
+            active_form: "Inspecting Sandy style guard validation evidence",
+            status: "completed",
+            phase: "execution",
+          }, {
+            id: "w4-report",
+            content: "Report Sandy style guard validation result",
+            active_form: "Reporting Sandy style guard validation result",
+            status: "completed",
+            phase: "reporting",
+          }],
+        },
+        rawArguments: JSON.stringify({ list_id: "main", title: "Sandy style guard validation" }),
+      });
+      return "W3 style guard validation evidence부터 이어서 처리했습니다.";
+    },
+  });
+  const sessionId = "butler/app-general";
+  store.upsert({
+    sessionId,
+    role: "butler",
+    projectId: "sandy",
+    workspacePath: tempDir,
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "general",
+    }],
+    metadata: {
+      runtimePolicy: { completionReview: "disabled" },
+    },
+  });
+  const router = new GatewayRouter({ store });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    promptAssembler: new PromptAssembler({ butlerHome, butlerData: tempDir }),
+    systemPromptFactory: () => "You are Butler in a queued app continuation test.",
+    deliverTurnEvent: async ({ event }) => {
+      turnEvents.push({
+        kind: event.kind,
+        payload: event.payload as Record<string, unknown> | undefined,
+      });
+    },
+  });
+  const server = createGatewayServer({
+    router,
+    handlers: createLifecycleGatewayHandlers(lifecycle),
+    butlerData: tempDir,
+  });
+  const queue = new NativeInboundQueue(tempDir);
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  queue.enqueue(appEnvelope({
+    eventId: "app:w3-budget-first",
+    messageId: "client-w3-budget-first",
+    sessionId,
+    text: "샌디봇 최신세션 W3부터 계속 진행해줘.",
+  }), { source: "test" });
+
+  const first = await processQueuedInboundEvents({
+    queue,
+    server,
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(first).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
+  });
+  expect(app.sentActions).toHaveLength(0);
+  expect(promptCallCount).toBe(1);
+  expect(resumePrompt).toBe("");
+  expect(turnEvents.filter((event) => event.kind === "turn.acknowledged")).toHaveLength(1);
+
+  const persisted = readTurnContextAtom({
+    butlerData: tempDir,
+    sessionId,
+    turnId: "turn-client-w3-budget-first",
+  });
+  expect(persisted).toMatchObject({
+    state: "continuing",
+    unresolvedObservations: [expect.objectContaining({
+      kind: "context_compacted",
+    })],
+    currentTurnWork: [expect.objectContaining({
+      kind: "work_stream",
+    })],
+    currentTurnTodos: expect.arrayContaining([
+      expect.objectContaining({ kind: "todo_list" }),
+      expect.objectContaining({ kind: "todo_item" }),
+    ]),
+    latestAssistantDecision: expect.objectContaining({
+      id: expect.stringContaining("decision-"),
+    }),
+  });
+
+  const streamStore = new WorkStreamStore(tempDir);
+  const streams = streamStore.list({ sessionId, includeTerminal: true });
+  expect(streams).toHaveLength(1);
+  expect(streams[0]).toMatchObject({
+    state: "executing",
+    terminal: false,
+  });
+  const stream = streamStore.read(streams[0].id);
+  const todos = new TodoListStore(tempDir).view(stream!.todo_list_id!, { includeCompleted: true });
+  expect(todos.items).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      id: "w3-style-guard",
+      status: "in_progress",
+      active_form: "Inspecting Sandy style guard validation evidence",
+    }),
+    expect.objectContaining({
+      id: "w4-report",
+      status: "pending",
+    }),
+  ]));
+
+  const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+  expect(readdirSync(pendingDir).filter((name) => name.endsWith(".json"))).toHaveLength(1);
+
+  const second = await processQueuedInboundEvents({
+    queue,
+    server,
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(second).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
+  });
+  expect(promptCallCount).toBe(2);
+  expect(turnEvents.filter((event) => event.kind === "turn.acknowledged")).toHaveLength(1);
+  expect(readTranscript(sessionId).filter((event) => event.kind === "inbound")).toHaveLength(1);
+  expect(resumePrompt).toContain("## Scheduler Continuation Context Atom");
+  expect(resumePrompt.indexOf("## Scheduler Continuation Context Atom"))
+    .toBeLessThan(resumePrompt.indexOf("## Active Work State"));
+  expect(resumePrompt).toContain("Latest Assistant Decision Ref: decision-");
+  expect(resumePrompt.indexOf("Latest Assistant Decision Ref:"))
+    .toBeLessThan(resumePrompt.indexOf("## Active Work State"));
+  expect(resumePrompt).toContain(
+    `Context Atom ID: ${createTurnContextAtomId(sessionId, "turn-client-w3-budget-first")}`,
+  );
+  expect(resumePrompt).toContain("Unresolved Observations:");
+  expect(resumePrompt).toContain("context_compacted:context-atom:");
+  expect(resumePrompt).toContain("Current Turn Work:");
+  expect(resumePrompt).toContain("work_stream:");
+  expect(resumePrompt).toContain("Current Turn Todos:");
+  expect(resumePrompt).toContain("todo_item:");
+  expect(resumePrompt).toContain("## Active Work State");
+  expect(resumePrompt).toContain("w3-style-guard:in_progress:execution:Inspecting Sandy style guard validation evidence");
+  expect(resumePrompt).not.toContain("model-call budget");
+
+  const completedStreams = streamStore.list({ sessionId, includeTerminal: true });
+  expect(completedStreams).toHaveLength(1);
+  expect(completedStreams[0]).toMatchObject({
+    state: "complete",
+    terminal: true,
+  });
+  const completedTodos = new TodoListStore(tempDir).view(stream!.todo_list_id!, { includeCompleted: true });
+  expect(completedTodos.items).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      id: "w3-style-guard",
+      status: "completed",
+      active_form: "Inspecting Sandy style guard validation evidence",
+    }),
+    expect.objectContaining({
+      id: "w4-report",
+      status: "completed",
+    }),
+  ]));
+  store.close();
+});
+
 test("queued inbound goal completion incomplete delivers safe limited result", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
@@ -815,25 +1653,10 @@ test("queued inbound goal completion incomplete delivers safe limited result", a
   expect(summary).toMatchObject({
     claimed: 1,
     handled: 1,
-    delivered: 1,
+    delivered: 0,
     failed: 0,
   });
-  expect(app.sentActions[0]).toMatchObject({
-    message: {
-      text: "확인된 완료 증거가 아직 부족합니다. [redacted]",
-      replyToMessageId: "message-goal-incomplete",
-    },
-    metadata: {
-      kind: "final_result",
-      turnId: "turn-goal-incomplete",
-      deliveryState: "delivered_with_limitations",
-      limitationCodes: ["internal_recovery_required"],
-      limitations: [
-        "확인된 완료 증거가 아직 부족합니다. [redacted]",
-      ],
-    },
-  });
-  expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
+  expect(app.sentActions).toHaveLength(0);
 });
 
 test("queued inbound reactivates hinted crashed app sessions before routing", async () => {

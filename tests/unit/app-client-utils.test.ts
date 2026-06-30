@@ -13,6 +13,8 @@ import {
   groupWorkerActivities,
   hasFollowableWorkerActivity,
   isInternalProgressRow,
+  isRuntimeFaultRetryableMessage,
+  isVisibleToolchainProgressRow,
   mergeMessages,
   mergeTurnProgressFromSummary,
   mergeTurnProgressSnapshotMap,
@@ -26,13 +28,19 @@ import {
   workerActivityDescription,
   workerActivityMeta,
   workerActivityStatusLine,
+  typedUiReadModelsFromProgressRows,
   workBlocksFromProgressRows,
 } from "../../packages/butler-app/client/ui/src/app/utils.ts";
 import {
   browserRandomId,
   browserRandomUUID,
 } from "../../packages/butler-app/client/ui/src/app/id.ts";
+import { getAppCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import { resolveMarkdownImageSource } from "../../packages/butler-app/client/ui/src/components/conversation/messageMedia.ts";
+import {
+  createAgentTurnEvent,
+  progressRowFromTurnEvent as sharedProgressRowFromTurnEvent,
+} from "../../packages/butler-agent/src/agent/events/turn-events.ts";
 import type {
   MessageFileRef,
   MessageRecord,
@@ -81,6 +89,20 @@ test("browser random ids still exist when Web Crypto is unavailable", () => {
 
   expect(id).toMatch(
     /^client-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
+  );
+});
+
+test("work summary copy keeps public progress suffix language-stable", () => {
+  const copy = getAppCopy("en-US").conversation.work;
+
+  expect(copy.collapsedSummary("공개 출처를 확인하는 중", 2)).toBe(
+    "공개 출처를 확인하는 중 외 1개 진행 내역",
+  );
+  expect(copy.expandHistoryLabel("공개 출처를 확인하는 중", 2)).toBe(
+    "공개 출처를 확인하는 중 외 1개 진행 내역 열기",
+  );
+  expect(copy.collapseHistoryLabel("공개 출처를 확인하는 중", 2)).toBe(
+    "공개 출처를 확인하는 중 외 1개 진행 내역 닫기",
   );
 });
 
@@ -279,6 +301,24 @@ test("turn activity remains visible while worker activity exists", () => {
       timelineProgressRowCount: 0,
     }),
   ).toBe(false);
+  expect(
+    shouldShowTurnActivity({
+      activeTurn: true,
+      hasTodoProgress: false,
+      isSending: false,
+      timelineProgressRowCount: 0,
+      turnState: "retrying",
+    }),
+  ).toBe(false);
+  expect(
+    shouldShowTurnActivity({
+      activeTurn: true,
+      hasTodoProgress: false,
+      isSending: false,
+      timelineProgressRowCount: 1,
+      turnState: "retrying",
+    }),
+  ).toBe(true);
 });
 
 test("composer can find the active worker cancel target", () => {
@@ -307,6 +347,8 @@ test("summary progress merging preserves unchanged snapshot references", () => {
         safe_label: "Bash: bun test",
         safe_tool_name: "Bash",
         safe_input_label: "bun test",
+        work_block_id: "work-test",
+        work_block_label: "테스트 실행 중",
       },
     ],
   };
@@ -336,6 +378,8 @@ test("completed assistant messages freeze work blocks onto the message record", 
         safe_label: "Bash: bun test",
         safe_tool_name: "Bash",
         safe_input_label: "bun test",
+        work_block_id: "work-test",
+        work_block_label: "테스트 실행 중",
       },
     ],
   };
@@ -350,9 +394,19 @@ test("completed assistant messages freeze work blocks onto the message record", 
     },
   });
 
-  expect(frozen?.work_blocks?.[0]?.rows[0]).toBe(
-    snapshot.safe_progress_rows[0],
-  );
+  expect(frozen?.work_blocks?.[0]).toMatchObject({
+    id: "work-test",
+    label: "테스트 실행 중",
+  });
+  expect(frozen?.work_blocks?.[0]?.rows[0]).toMatchObject({
+    id: "row-a",
+    kind: "ran_command",
+    safe_label: "Bash: bun test",
+    safe_tool_name: "Bash",
+    safe_input_label: "bun test",
+    work_block_id: "work-test",
+  });
+  expect(frozen?.work_blocks?.[0]?.rows[0]?.work_block_label).toBeUndefined();
   expect(refrozen[0]).toBe(frozen);
 });
 
@@ -368,6 +422,8 @@ test("completed assistant messages keep frozen work blocks when progress is abse
         safe_label: "Bash: bun test",
         safe_tool_name: "Bash",
         safe_input_label: "bun test",
+        work_block_id: "work-test",
+        work_block_label: "테스트 실행 중",
       },
     ],
   };
@@ -379,8 +435,60 @@ test("completed assistant messages keep frozen work blocks when progress is abse
   const refrozen = freezeMessageWorkBlocks([frozen!], {});
 
   expect(refrozen[0]).toBe(frozen);
-  expect(refrozen[0]?.work_blocks?.[0]?.rows[0]).toBe(
-    snapshot.safe_progress_rows[0],
+  expect(refrozen[0]?.work_blocks?.[0]).toMatchObject({
+    id: "work-test",
+    label: "테스트 실행 중",
+  });
+  expect(refrozen[0]?.work_blocks?.[0]?.rows[0]).toMatchObject({
+    id: "row-a",
+    kind: "ran_command",
+    safe_label: "Bash: bun test",
+    safe_tool_name: "Bash",
+    safe_input_label: "bun test",
+    work_block_id: "work-test",
+  });
+  expect(refrozen[0]?.work_blocks?.[0]?.rows[0]?.work_block_label)
+    .toBeUndefined();
+});
+
+test("cancelled assistant messages keep completed work evidence", () => {
+  const snapshot: TurnProgressSnapshot = {
+    turn_id: "turn-cancelled",
+    state: "cancelled",
+    safe_progress_rows: [
+      {
+        id: "row-cancelled",
+        kind: "ran_command",
+        state: "cancelled",
+        safe_label: "Bash: npm test",
+        safe_tool_name: "Bash",
+        safe_input_label: "npm test",
+        work_block_id: "work-cancelled",
+        work_block_label: "검증 중단 전 실행한 작업",
+      },
+    ],
+  };
+  const [frozen] = freezeMessageWorkBlocks(
+    [
+      {
+        ...message("assistant-cancelled", "assistant", 2, "turn-cancelled"),
+        status: "cancelled",
+      },
+    ],
+    { "turn-cancelled": snapshot },
+  );
+
+  expect(frozen?.work_blocks?.[0]).toMatchObject({
+    id: "work-cancelled",
+    label: "검증 중단 전 실행한 작업",
+    state: "cancelled",
+  });
+  expect(frozen?.work_blocks?.[0]?.rows).toContainEqual(
+    expect.objectContaining({
+      id: "row-cancelled",
+      state: "cancelled",
+      safe_tool_name: "Bash",
+    }),
   );
 });
 
@@ -686,6 +794,695 @@ test("accepted real turn removes optimistic client turn progress", () => {
   expect(activeTurnProgressSnapshot(null, state.turnProgress)).toBeNull();
 });
 
+test("message deleted events remove stale assistant rows from the active chat", () => {
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 2,
+        type: "message.deleted",
+        payload: {
+          chat_id: "general",
+          message_id: "assistant-failure",
+          turn_id: "turn-recovered",
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [
+        {
+          id: "user-request",
+          chat_id: "general",
+          turn_id: "turn-recovered",
+          role: "user",
+          text: "continue",
+          status: "sent",
+        },
+        {
+          id: "assistant-failure",
+          chat_id: "general",
+          turn_id: "turn-recovered",
+          role: "assistant",
+          text: "Butler did not finish this queued request before the dispatch lease expired.",
+          status: "failed",
+          retryable: true,
+        },
+      ],
+      summary: null,
+      turnProgress: {},
+    },
+  );
+
+  expect(state.messages.map((message) => message.id)).toEqual(["user-request"]);
+});
+
+test("turn acknowledgements replace optimistic Thinking progress immediately", () => {
+  const clientMessageId = "client-message";
+  const clientTurnId = clientTurnIdFromMessageId(clientMessageId);
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 1,
+            turnSequence: 1,
+            createdAt: "2026-05-19T00:01:01.000Z",
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+      turnProgress: {
+        [clientTurnId]: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+    },
+  );
+
+  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
+  expect(state.summary?.latest_progress?.state).toBe("accepted");
+  expect(
+    state.summary?.latest_progress?.safe_progress_rows.map(
+      (row) => row.safe_label,
+    ),
+  ).toEqual(["Request received. Preparing the work."]);
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toMatchObject({
+    turn_id: "turn-real",
+    state: "accepted",
+  });
+});
+
+test("app server acknowledgement batch replaces existing session optimistic Thinking", () => {
+  const clientMessageId = "client-existing-message";
+  const clientTurnId = clientTurnIdFromMessageId(clientMessageId);
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "message.created",
+        payload: {
+          message: {
+            id: clientMessageId,
+            chat_id: "general",
+            turn_id: "turn-real",
+            role: "user",
+            text: "continue",
+            status: "sent",
+            cursor: 1,
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 2,
+            turnSequence: 1,
+            createdAt: "2026-05-19T00:01:01.000Z",
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+      {
+        id: 3,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-started",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 3,
+            turnSequence: 2,
+            createdAt: "2026-05-19T00:01:02.000Z",
+            kind: "turn.started",
+            visibility: "public",
+            payload: {
+              safeLabel: "Started",
+            },
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+      turnProgress: {
+        [clientTurnId]: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+    },
+  );
+
+  expect(state.turnProgress[clientTurnId]).toBeUndefined();
+  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
+  expect(state.summary?.latest_progress?.state).toBe("thinking");
+  expect(
+    state.summary?.latest_progress?.safe_progress_rows.map((row) => row.safe_label),
+  ).toEqual(["Request received. Preparing the work.", "Working on request"]);
+  expect(activeTurnProgressSnapshot(state.summary, state.turnProgress)).toMatchObject({
+    turn_id: "turn-real",
+    state: "thinking",
+  });
+});
+
+test("session starting progress is replaced by first active server turn", () => {
+  const clientTurnId = clientTurnIdFromMessageId("client-message");
+  const state = applyTimelineEventsToViewState(
+    [progressEvent(1, "turn-real", "Bash: bun test")] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "session_starting",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "session_starting",
+          safe_progress_rows: [],
+        },
+      },
+      turnProgress: {
+        [clientTurnId]: {
+          turn_id: clientTurnId,
+          state: "session_starting",
+          safe_progress_rows: [],
+        },
+      },
+    },
+  );
+
+  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
+  expect(state.summary?.latest_progress?.state).toBe("running");
+  expect(
+    state.summary?.latest_progress?.safe_progress_rows.map(
+      (row) => row.safe_label,
+    ),
+  ).toEqual(["Bash: bun test"]);
+  expect(state.turnProgress[clientTurnId]).toBeUndefined();
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toMatchObject({
+    turn_id: "turn-real",
+    state: "running",
+    safe_progress_rows: [
+      expect.objectContaining({ safe_label: "Bash: bun test" }),
+    ],
+  });
+});
+
+test("non-ack old-turn progress does not replace optimistic Thinking progress", () => {
+  const clientTurnId = clientTurnIdFromMessageId("client-message");
+  const state = applyTimelineEventsToViewState(
+    [progressEvent(1, "turn-old", "Old command")] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+            },
+          ],
+        },
+      },
+      turnProgress: {},
+    },
+  );
+
+  expect(state.summary?.latest_progress?.turn_id).toBe(clientTurnId);
+  expect(state.summary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({ safe_label: "Thinking" }),
+  );
+  expect(state.turnProgress["turn-old"]).toBeUndefined();
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toMatchObject({
+    turn_id: clientTurnId,
+  });
+});
+
+test("turn acknowledgements suppress later stale old-turn rows in the same batch", () => {
+  const clientTurnId = clientTurnIdFromMessageId("client-message");
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 1,
+            turnSequence: 1,
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+      progressEvent(2, "turn-old", "Old command"),
+      {
+        id: 3,
+        type: "message.created",
+        payload: {
+          message: {
+            id: "assistant-final",
+            chat_id: "general",
+            turn_id: "turn-real",
+            role: "assistant",
+            text: "done",
+            status: "delivered",
+            cursor: 2,
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+            },
+          ],
+        },
+      },
+      turnProgress: {
+        [clientTurnId]: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+            },
+          ],
+        },
+      },
+    },
+  );
+
+  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
+  expect(state.summary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "event-ack",
+      safe_label: "Request received. Preparing the work.",
+    }),
+  );
+  expect(state.summary?.latest_progress?.safe_progress_rows).not.toContainEqual(
+    expect.objectContaining({ safe_label: "Old command" }),
+  );
+  expect(state.turnProgress[clientTurnId]).toBeUndefined();
+  expect(state.turnProgress["turn-old"]).toBeUndefined();
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toBeNull();
+});
+
+test("acknowledged client progress cannot revive Thinking after final delivery", () => {
+  const clientTurnId = clientTurnIdFromMessageId("client-message");
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 1,
+            turnSequence: 1,
+            createdAt: "2026-05-19T00:01:01.000Z",
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "message.created",
+        payload: {
+          message: {
+            id: "assistant-final",
+            chat_id: "general",
+            turn_id: "turn-real",
+            role: "assistant",
+            text: "done",
+            status: "delivered",
+            cursor: 2,
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+      turnProgress: {
+        [clientTurnId]: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          updated_at: "2026-05-19T00:01:00.000Z",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+              created_at: "2026-05-19T00:01:00.000Z",
+            },
+          ],
+        },
+      },
+    },
+  );
+
+  expect(state.turnProgress[clientTurnId]).toBeUndefined();
+  expect(state.turnProgress["turn-real"]?.state).toBe("delivered");
+  expect(state.summary?.latest_progress?.state).toBe("delivered");
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toBeNull();
+});
+
+test("dedicated client UX contract projects ack, authored decisions, inactive recovery, and completed evidence", () => {
+  const clientTurnId = clientTurnIdFromMessageId("client-message");
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 1,
+            turnSequence: 1,
+            createdAt: "2026-05-19T00:01:01.000Z",
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-work-start",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 2,
+            turnSequence: 2,
+            createdAt: "2026-05-19T00:01:02.000Z",
+            kind: "work.block.started",
+            visibility: "public",
+            payload: {
+              workBlockId: "work-validation",
+              label: "Validate client turn state",
+              decisionSummary: "Validate client turn state",
+              decisionRationale:
+                "The client must render only authored public decisions.",
+              decisionNextStep: "Run the reducer contract check.",
+              decisionSource: "assistant-authored",
+              decisionEvidenceRefs: ["turn.acknowledged"],
+            },
+          },
+        },
+      },
+      {
+        id: 3,
+        type: "agent.turn_event.progress",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          row: {
+            id: "runtime-fallback",
+            kind: "work_block",
+            state: "running",
+            safe_label: "Runtime fallback",
+            work_block_id: "work-runtime",
+            work_decision_summary: "This must stay hidden.",
+            work_decision_source: "runtime-derived",
+          },
+        },
+      },
+      {
+        id: 4,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-real",
+          event: {
+            id: "event-tool-completed",
+            sessionId: "general",
+            turnId: "turn-real",
+            sessionSequence: 3,
+            turnSequence: 3,
+            createdAt: "2026-05-19T00:01:03.000Z",
+            kind: "tool.completed",
+            visibility: "public",
+            payload: {
+              toolName: "Bash",
+              inputLabel: "bun test tests/unit/app-client-utils.test.ts",
+              safeLabel: "Bash: bun test tests/unit/app-client-utils.test.ts",
+              activityKind: "ran_command",
+              toolCallId: "tool-test",
+              workBlockId: "work-validation",
+              workBlockLabel: "Validate client turn state",
+            },
+          },
+        },
+      },
+      {
+        id: 5,
+        type: "message.created",
+        payload: {
+          message: {
+            id: "assistant-final",
+            chat_id: "general",
+            turn_id: "turn-real",
+            role: "assistant",
+            text: "완료했습니다.",
+            status: "delivered",
+            cursor: 2,
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: clientTurnId,
+          state: "thinking",
+          safe_progress_rows: [
+            {
+              id: "optimistic",
+              kind: "thinking",
+              state: "thinking",
+              safe_label: "Thinking",
+            },
+          ],
+        },
+      },
+      turnProgress: {},
+    },
+  );
+
+  const labels =
+    state.summary?.latest_progress?.safe_progress_rows.map(
+      (row) => row.safe_label,
+    ) ?? [];
+  expect(state.summary?.latest_progress?.turn_id).toBe("turn-real");
+  expect(state.summary?.latest_progress?.state).toBe("delivered");
+  expect(labels).not.toContain("Thinking");
+  expect(labels).toContain("Request received. Preparing the work.");
+  expect(
+    isWorkerVisibleInComposer(
+      worker("recoverable", false, "2026-05-19T00:01:04.000Z"),
+    ),
+  ).toBe(false);
+  expect(
+    activeTurnProgressSnapshot(state.summary, state.turnProgress),
+  ).toBeNull();
+  expect(state.messages[0]?.work_blocks).toEqual([
+    expect.objectContaining({
+      id: "work-validation",
+      label: "Validate client turn state",
+      state: "delivered",
+      decision_summary: "Validate client turn state",
+      decision_rationale:
+        "The client must render only authored public decisions.",
+      decision_next_step: "Run the reducer contract check.",
+      decision_source: "assistant-authored",
+      decision_evidence_refs: ["turn.acknowledged"],
+      rows: [
+        expect.objectContaining({
+          id: "event-tool-completed",
+          state: "delivered",
+          safe_tool_name: "Bash",
+          safe_input_label: "bun test tests/unit/app-client-utils.test.ts",
+        }),
+      ],
+    }),
+  ]);
+  expect(JSON.stringify(state.messages[0]?.work_blocks)).not.toContain(
+    "This must stay hidden.",
+  );
+});
+
 test("delivered assistant message terminalizes active turn progress immediately", () => {
   const state = applyTimelineEventsToViewState(
     [
@@ -745,13 +1542,29 @@ test("delivered assistant message terminalizes active turn progress immediately"
   expect(activeTurnProgressSnapshot(state.summary, state.turnProgress)).toBeNull();
 });
 
-test("retrying assistant message revives failed turn progress for the same turn", () => {
+test("retrying turn deletes the failure message and continues existing work progress", () => {
+  const openingRow = {
+    id: "opening-retry",
+    kind: "decision",
+    state: "running",
+    safe_label: "I will keep the retry on the same turn.",
+    public_decision_role: "opening",
+    public_decision_summary: "I will keep the retry on the same turn.",
+    public_decision_rationale:
+      "Retry must continue existing typed progress instead of cloning blocks.",
+    public_decision_next_step: "Run the retry attempt.",
+    public_decision_source: "model-authored",
+  } as const;
   const failedRow = {
     id: "row-retry",
     kind: "ran_command",
     state: "failed",
     safe_label: "Bash: previous attempt",
     safe_tool_name: "Bash",
+    safe_input_label: "npm test",
+    tool_call_id: "tool-retry",
+    work_block_id: "work-retry",
+    work_block_label: "Fixing the failing test",
   } as const;
   const state = applyTimelineEventsToViewState(
     [
@@ -769,16 +1582,12 @@ test("retrying assistant message revives failed turn progress for the same turn"
       },
       {
         id: 2,
-        type: "message.updated",
+        type: "message.deleted",
         payload: {
-          message: {
-            id: "assistant-failed",
-            chat_id: "general",
-            turn_id: "turn-retry",
-            role: "assistant",
-            text: "Retrying this turn.",
-            status: "retrying",
-          },
+          message_id: "assistant-failed",
+          chat_id: "general",
+          turn_id: "turn-retry",
+          role: "assistant",
         },
       },
       {
@@ -813,28 +1622,37 @@ test("retrying assistant message revives failed turn progress for the same turn"
         latest_progress: {
           turn_id: "turn-retry",
           state: "failed",
-          safe_progress_rows: [failedRow],
+          safe_progress_rows: [openingRow, failedRow],
         },
       },
       turnProgress: {
         "turn-retry": {
           turn_id: "turn-retry",
           state: "failed",
-          safe_progress_rows: [failedRow],
+          safe_progress_rows: [openingRow, failedRow],
         },
       },
     },
   );
 
-  expect(state.messages[0]?.status).toBe("retrying");
+  expect(state.messages).toEqual([]);
   expect(state.turnProgress["turn-retry"]?.state).toBe("thinking");
-  expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toEqual([
+  expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toHaveLength(2);
+  expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "opening-retry",
+      kind: "decision",
+      public_decision_summary: "I will keep the retry on the same turn.",
+    }),
+  );
+  expect(state.turnProgress["turn-retry"]?.safe_progress_rows).toContainEqual(
     expect.objectContaining({
       id: "row-retry",
       state: "thinking",
       safe_label: "Bash: retry attempt",
+      work_block_id: "work-retry",
     }),
-  ]);
+  );
   expect(activeTurnProgressSnapshot(state.summary, state.turnProgress)).toMatchObject({
     turn_id: "turn-retry",
     state: "thinking",
@@ -899,6 +1717,191 @@ test("timeline applies public turn events as progress rows", () => {
     }),
   );
   expect(messages).toEqual([]);
+});
+
+test("delivered terminal progress supersedes same-turn failed terminal rows", () => {
+  let currentSummary: SessionSummaryView | null = {
+    session_id: "general",
+    turn_state: "thinking",
+    latest_progress: {
+      turn_id: "turn-recoverable",
+      state: "thinking",
+      safe_progress_rows: [],
+    },
+  };
+  let turnProgress: Record<string, TurnProgressSnapshot> = {};
+
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-recoverable",
+          event: {
+            id: "event-turn-failed",
+            sessionId: "general",
+            turnId: "turn-recoverable",
+            sessionSequence: 1,
+            turnSequence: 1,
+            kind: "turn.failed",
+            visibility: "public",
+            payload: {
+              safeLabel: "Failed",
+              safeErrorCode: "inbound_dispatch_timeout",
+            },
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-recoverable",
+          event: {
+            id: "event-tool-failed",
+            sessionId: "general",
+            turnId: "turn-recoverable",
+            sessionSequence: 1,
+            turnSequence: 2,
+            kind: "tool.failed",
+            visibility: "public",
+            payload: {
+              activityKind: "ran_command",
+              toolName: "Bash",
+              inputLabel: "bun test",
+              safeLabel: "Bash: bun test",
+            },
+          },
+        },
+      },
+      {
+        id: 3,
+        type: "message.updated",
+        payload: {
+          message: {
+            id: "assistant-recoverable",
+            chat_id: "general",
+            turn_id: "turn-recoverable",
+            role: "assistant",
+            text: "진행한 내용은 보존했습니다.",
+            status: "delivered",
+            retryable: false,
+            cursor: 2,
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: currentSummary,
+      turnProgress,
+    },
+  );
+
+  currentSummary = state.summary;
+  turnProgress = state.turnProgress;
+
+  expect(currentSummary?.latest_progress?.state).toBe("delivered");
+  expect(currentSummary?.latest_progress?.safe_progress_rows).not.toContainEqual(
+    expect.objectContaining({ kind: "turn", state: "failed" }),
+  );
+  expect(currentSummary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "event-tool-failed",
+      kind: "ran_command",
+      state: "failed",
+    }),
+  );
+  expect(turnProgress["turn-recoverable"]?.state).toBe("delivered");
+  expect(turnProgress["turn-recoverable"]?.safe_progress_rows).not.toContainEqual(
+    expect.objectContaining({ kind: "turn", state: "failed" }),
+  );
+  expect(turnProgress["turn-recoverable"]?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "event-tool-failed",
+      kind: "ran_command",
+      state: "failed",
+    }),
+  );
+});
+
+test("delivered terminal progress preserves same-turn cancelled terminal rows", () => {
+  const state = applyTimelineEventsToViewState(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-cancelled-evidence",
+          event: {
+            id: "event-turn-cancelled",
+            sessionId: "general",
+            turnId: "turn-cancelled-evidence",
+            sessionSequence: 1,
+            turnSequence: 1,
+            kind: "turn.cancelled",
+            visibility: "public",
+            payload: {
+              safeLabel: "Cancelled",
+            },
+          },
+        },
+      },
+      {
+        id: 2,
+        type: "message.updated",
+        payload: {
+          message: {
+            id: "assistant-delivered",
+            chat_id: "general",
+            turn_id: "turn-cancelled-evidence",
+            role: "assistant",
+            text: "진행한 내용은 보존했습니다.",
+            status: "delivered",
+            retryable: false,
+            cursor: 2,
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    {
+      messages: [],
+      summary: {
+        session_id: "general",
+        turn_state: "thinking",
+        latest_progress: {
+          turn_id: "turn-cancelled-evidence",
+          state: "thinking",
+          safe_progress_rows: [],
+        },
+      },
+      turnProgress: {},
+    },
+  );
+
+  expect(state.summary?.latest_progress?.state).toBe("delivered");
+  expect(state.summary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "event-turn-cancelled",
+      kind: "turn",
+      state: "cancelled",
+    }),
+  );
+  expect(
+    state.turnProgress["turn-cancelled-evidence"]?.safe_progress_rows,
+  ).toContainEqual(
+    expect.objectContaining({
+      id: "event-turn-cancelled",
+      kind: "turn",
+      state: "cancelled",
+    }),
+  );
 });
 
 test("timeline keeps per-turn progress snapshots separate across live turns", () => {
@@ -1462,9 +2465,468 @@ test("work blocks group chained tools by semantic work block label", () => {
     label: "프로젝트 메타정보와 구조 확인 중",
   });
   expect(blocks[0]?.rows).toHaveLength(2);
+  expect(blocks[0]?.rows[0]).toMatchObject({
+    safe_label: "Bash: pwd",
+    safe_tool_name: "Bash",
+    safe_input_label: "pwd",
+  });
+  expect(blocks[0]?.rows[0]?.work_block_label).toBeUndefined();
+  expect(blocks[0]?.rows[0]?.work_decision_summary).toBeUndefined();
 });
 
-test("timeline applies first visible progress turn events as public progress rows", () => {
+test("work blocks collapse repeated authored decisions with different fallback ids", () => {
+  const decision = {
+    work_decision_summary:
+      "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠습니다.",
+    work_decision_rationale:
+      "실패 테스트명을 먼저 확인해야 불필요한 수정 범위를 줄일 수 있습니다.",
+    work_decision_next_step:
+      "실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠습니다.",
+    work_decision_source: "assistant-authored",
+  };
+  const rows = [
+    {
+      id: "public-note-failure",
+      kind: "message",
+      state: "running",
+      safe_label:
+        "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠습니다.\n실패 테스트명을 확인한 뒤 해당 테스트만 단독 실행해 수정하겠습니다.",
+      work_block_id: "public-note-failure",
+      work_block_label: "검증 실패 지점을 좁히는 중",
+      ...decision,
+    },
+    ...["read-ledger", "grep-failure", "run-single-test"].map((id, index) => ({
+      id,
+      kind: index === 0 ? "read" : index === 1 ? "searched" : "ran_command",
+      state: "running",
+      safe_label:
+        index === 0
+          ? "Read Project Ledger"
+          : index === 1
+            ? "Search failure lines"
+            : "Bash: bun test sandy-decision-single-test",
+      safe_tool_name:
+        index === 0 ? "Read" : index === 1 ? "Search" : "Bash",
+      safe_input_label:
+        index === 0
+          ? "Project Ledger"
+          : index === 1
+            ? "failure lines"
+            : "bun test sandy-decision-single-test",
+      tool_call_id: `tool-${id}`,
+      work_block_id: `work-${id}`,
+      work_block_label: "검증 실패 지점을 좁히는 중",
+      ...decision,
+    })),
+  ];
+
+  const blocks = workBlocksFromProgressRows(rows);
+
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toMatchObject({
+    id: "public-note-failure",
+    label: "검증 실패 지점을 좁히는 중",
+    decision_summary:
+      "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠습니다.",
+  });
+  expect(blocks[0]?.rows).toHaveLength(4);
+  expect(blocks[0]?.rows.map((row) => row.safe_tool_name)).toEqual([
+    undefined,
+    "Read",
+    "Search",
+    "Bash",
+  ]);
+});
+
+test("tool controls use their own input label instead of decision summary", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "tool-sandy",
+      kind: "ran_command",
+      state: "running",
+      safe_label: "Bash: sandbox/run-checks.sh",
+      safe_tool_name: "Bash",
+      safe_input_label: "sandbox/run-checks.sh",
+      tool_call_id: "tool-sandy-run",
+      work_block_id: "work-sandy",
+      work_block_label: "Sandy bot를 통한 실행 검증",
+      work_decision_summary: "Sandy bot 실행 검증 요약",
+      work_decision_source: "assistant-authored",
+    },
+    {
+      id: "work-sandy",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Sandy bot 검증",
+      work_block_id: "work-sandy",
+      work_block_label: "Sandy bot를 통한 실행 검증",
+      work_decision_summary: "Sandy bot 실행 검증 요약",
+      work_decision_source: "assistant-authored",
+    },
+  ]);
+
+  expect(blocks).toHaveLength(1);
+  const toolRow = blocks[0]?.rows[0];
+  expect(toolRow).toMatchObject({
+    safe_tool_name: "Bash",
+    safe_input_label: "sandbox/run-checks.sh",
+    safe_label: "Bash: sandbox/run-checks.sh",
+  });
+  expect(toolRow?.work_decision_summary).toBeUndefined();
+  expect(toolRow?.safe_tool_name).toBe("Bash");
+  expect(toolRow?.safe_input_label).toBe("sandbox/run-checks.sh");
+});
+
+test("tool row safe input labels do not inherit decision summary from missing input", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "work-sandy-2",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Sandy bot를 통한 실행 검증",
+      work_block_id: "work-sandy-2",
+      work_block_label: "Sandy bot를 통한 실행 검증",
+      work_decision_summary: "Sandy bot 실행 검증 요약",
+      work_decision_source: "assistant-authored",
+    },
+    {
+      id: "tool-sandy-2",
+      kind: "ran_command",
+      state: "running",
+      safe_label: "Bash",
+      safe_tool_name: "Bash",
+      tool_call_id: "tool-sandy-run-2",
+      work_block_id: "work-sandy-2",
+      work_block_label: "Sandy bot를 통한 실행 검증",
+      work_decision_summary: "Sandy bot 실행 검증 요약",
+      work_decision_source: "assistant-authored",
+    },
+  ]);
+
+  expect(blocks).toHaveLength(1);
+  const block = blocks[0];
+  expect(block).toMatchObject({
+    id: "work-sandy-2",
+    label: "Sandy bot를 통한 실행 검증",
+    decision_summary: "Sandy bot 실행 검증 요약",
+  });
+  expect(block?.rows).toHaveLength(1);
+  const toolRow = block?.rows[0];
+  expect(toolRow?.safe_input_label).toBeUndefined();
+  expect(toolRow?.safe_label).toBe("Bash");
+  expect(toolRow?.work_decision_summary).toBeUndefined();
+  expect(toolRow?.safe_tool_name).toBe("Bash");
+  expect(JSON.stringify(toolRow)).not.toContain("Sandy bot 실행 검증 요약");
+});
+
+test("work blocks do not synthesize missing workBlockLabel from safe labels", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "work-without-label",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Runtime fallback label",
+      work_block_id: "work-without-label",
+    },
+    {
+      id: "tool-without-work-label",
+      kind: "ran_command",
+      state: "running",
+      safe_label: "Bash: npm test",
+      safe_tool_name: "Bash",
+      safe_input_label: "npm test",
+      tool_call_id: "tool-without-work-label",
+      work_block_id: "work-without-label",
+    },
+  ]);
+
+  expect(blocks).toEqual([]);
+  expect(JSON.stringify(blocks)).not.toContain("Runtime fallback label");
+});
+
+test("work blocks do not project public message rows as tool activity", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "public-note",
+      kind: "message",
+      state: "running",
+      safe_label:
+        "요청하신 공개 출처 확인과 CSV 생성 단계를 먼저 잡겠습니다.",
+      work_block_id: "work-dispatch",
+    },
+    {
+      id: "dispatch-row",
+      kind: "dispatch",
+      state: "delivered",
+      safe_label: "Dispatch: 공개 출처 확인과 CSV 생성",
+      safe_tool_name: "Dispatch",
+      safe_input_label: "공개 출처 확인과 CSV 생성",
+      work_block_id: "work-dispatch",
+      work_block_label: "공개 출처 확인과 CSV 생성 중",
+    },
+  ]);
+
+  expect(blocks).toEqual([]);
+  expect(JSON.stringify(blocks)).not.toContain("Dispatch:");
+});
+
+test("work blocks still keep real dispatch tool evidence", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "dispatch-worker-row",
+      kind: "dispatch",
+      state: "delivered",
+      safe_label: "Dispatch: worker review",
+      safe_tool_name: "Dispatch",
+      safe_input_label: "worker review",
+      tool_call_id: "tool-dispatch-worker",
+      work_block_id: "work-dispatch-worker",
+      work_block_label: "검토 작업을 맡기는 중",
+    },
+  ]);
+
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toMatchObject({
+    id: "work-dispatch-worker",
+    label: "검토 작업을 맡기는 중",
+  });
+  expect(blocks[0]?.rows[0]).toMatchObject({
+    safe_tool_name: "Dispatch",
+    safe_input_label: "worker review",
+    tool_call_id: "tool-dispatch-worker",
+  });
+});
+
+test("typed UI read models keep runtime faults separate from progress rows", () => {
+  const models = typedUiReadModelsFromProgressRows([
+    {
+      id: "fault-row",
+      kind: "runtime_fault",
+      state: "runtime_fault",
+      safe_label: "Runtime interrupted.",
+      runtime_fault_id: "fault-1",
+      runtime_fault_kind: "provider_stream_corruption",
+      runtime_fault_retryable: true,
+      runtime_fault_public_summary: "Runtime interrupted.",
+      runtime_fault_safe_error_code: "runtime_fault",
+    },
+    {
+      id: "tool-row",
+      kind: "ran_command",
+      state: "failed",
+      safe_label: "Bash: npm test",
+      safe_tool_name: "Bash",
+      safe_input_label: "npm test",
+      work_decision_summary: "Decision text must not label the tool.",
+      work_decision_source: "assistant-authored",
+    },
+  ]);
+
+  expect(models).toEqual([
+    {
+      type: "runtime_fault",
+      faultId: "fault-1",
+      kind: "provider_stream_corruption",
+      retryable: true,
+      publicSummary: "Runtime interrupted.",
+      safeErrorCode: "runtime_fault",
+      safeCause: undefined,
+    },
+    {
+      type: "tool_control",
+      toolName: "Bash",
+      inputLabel: "npm test",
+      label: "Bash: npm test",
+      toolCallId: undefined,
+      workBlockId: undefined,
+    },
+  ]);
+});
+
+test("typed UI acknowledged receipt projects as status without decision or work block fallback", () => {
+  const models = typedUiReadModelsFromProgressRows([
+    {
+      id: "ack-row",
+      kind: "turn",
+      state: "accepted",
+      safe_label: "Request received. Preparing the work.",
+      receipt_kind: "turn.acknowledged",
+      work_block_id: "work-ack",
+      work_block_label: "This must not become a work block.",
+      public_decision_summary: "This must not become a decision.",
+      public_decision_source: "assistant-authored",
+    },
+  ]);
+
+  expect(models).toEqual([
+    {
+      type: "receipt",
+      label: "Request received. Preparing the work.",
+      state: "accepted",
+      receiptKind: "turn.acknowledged",
+    },
+  ]);
+});
+
+test("typed UI opening assistant decision does not become a work block or tool control", () => {
+  const models = typedUiReadModelsFromProgressRows([
+    {
+      id: "opening-decision",
+      kind: "decision",
+      state: "running",
+      safe_label: "I will inspect the current app-client readmodel contract.",
+      safe_tool_name: "Bash",
+      safe_input_label: "bun test",
+      tool_call_id: "tool-leak",
+      work_block_id: "work-leak",
+      work_block_label: "This must not become a work block.",
+      public_decision_role: "opening",
+      public_decision_summary:
+        "I will inspect the current app-client readmodel contract.",
+      public_decision_rationale:
+        "The UI must render opening decisions from explicit public decisions.",
+      public_decision_next_step: "Patch only the client readmodel helpers.",
+      public_decision_source: "model-authored",
+      public_decision_evidence_refs: ["turn.acknowledged"],
+    },
+  ]);
+
+  expect(models).toEqual([
+    {
+      type: "decision",
+      summary: "I will inspect the current app-client readmodel contract.",
+      rationale:
+        "The UI must render opening decisions from explicit public decisions.",
+      nextStep: "Patch only the client readmodel helpers.",
+      source: "model-authored",
+      evidenceRefs: ["turn.acknowledged"],
+    },
+  ]);
+});
+
+test("typed UI tool controls use safe tool labels when rows carry opening decision text", () => {
+  const openingText =
+    "I will inspect the current app-client readmodel contract.";
+  const models = typedUiReadModelsFromProgressRows([
+    {
+      id: "tool-row",
+      kind: "ran_command",
+      state: "running",
+      safe_label: openingText,
+      safe_tool_name: "Bash",
+      safe_input_label: "bun test tests/unit/app-client-utils.test.ts",
+      tool_call_id: "tool-test",
+      work_block_id: "work-test",
+      work_block_label: "Run app-client utils tests",
+      work_decision_summary: openingText,
+      work_decision_source: "assistant-authored",
+      public_decision_role: "opening",
+      public_decision_summary: openingText,
+      public_decision_source: "model-authored",
+    },
+  ]);
+
+  expect(models).toEqual([
+    {
+      type: "tool_control",
+      toolName: "Bash",
+      inputLabel: "bun test tests/unit/app-client-utils.test.ts",
+      label: "Bash: bun test tests/unit/app-client-utils.test.ts",
+      toolCallId: "tool-test",
+      workBlockId: "work-test",
+    },
+  ]);
+  expect(JSON.stringify(models)).not.toContain(openingText);
+});
+
+test("work blocks ignore opening decisions and acknowledged receipt rows", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "ack-row",
+      kind: "turn",
+      state: "accepted",
+      safe_label: "Request received. Preparing the work.",
+      receipt_kind: "turn.acknowledged",
+      work_block_id: "work-ack",
+      work_block_label: "Receipt text must not become a block.",
+    },
+    {
+      id: "opening-decision",
+      kind: "decision",
+      state: "running",
+      safe_label: "I will inspect the current app-client readmodel contract.",
+      work_block_id: "work-opening",
+      work_block_label: "Opening text must not become a block.",
+      public_decision_role: "opening",
+      public_decision_summary:
+        "I will inspect the current app-client readmodel contract.",
+      public_decision_source: "model-authored",
+    },
+  ]);
+
+  expect(blocks).toEqual([]);
+  expect(JSON.stringify(blocks)).not.toContain("Request received");
+  expect(JSON.stringify(blocks)).not.toContain("app-client readmodel");
+});
+
+test("retry eligibility requires runtime fault message code", () => {
+  expect(
+    isRuntimeFaultRetryableMessage({
+      retryable: true,
+      safe_error_code: "runtime_fault",
+    }),
+  ).toBe(true);
+  expect(
+    isRuntimeFaultRetryableMessage({
+      retryable: true,
+      safe_error_code: "tool_invalid_arguments",
+    }),
+  ).toBe(false);
+  expect(isRuntimeFaultRetryableMessage({ retryable: true })).toBe(false);
+  expect(
+    isRuntimeFaultRetryableMessage({
+      retryable: false,
+      safe_error_code: "runtime_fault",
+    }),
+  ).toBe(false);
+});
+
+test("production work block projection keeps mixed tool row decisions out of block semantics", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "mixed-tool-row",
+      kind: "ran_command",
+      state: "delivered",
+      safe_label: "Bash: bun test",
+      safe_tool_name: "Bash",
+      safe_input_label: "bun test",
+      tool_call_id: "tool-mixed",
+      work_block_id: "work-mixed",
+      work_block_label: "테스트 실행 중",
+      work_decision_summary: "This decision must not become the work block decision.",
+      work_decision_rationale: "Tool compatibility rows are not decision rows.",
+      work_decision_next_step: "Keep rendering this as a tool row.",
+      work_decision_source: "assistant-authored",
+    },
+  ]);
+
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toMatchObject({
+    id: "work-mixed",
+    label: "테스트 실행 중",
+    rows: [
+      expect.objectContaining({
+        id: "mixed-tool-row",
+        safe_tool_name: "Bash",
+        safe_input_label: "bun test",
+      }),
+    ],
+  });
+  expect(blocks[0]?.decision_summary).toBeUndefined();
+  expect(blocks[0]?.rows[0]?.work_decision_summary).toBeUndefined();
+});
+
+test("timeline applies first visible progress turn events as legacy status rows", () => {
   let messages: MessageRecord[] = [];
   let currentSummary: SessionSummaryView | null = {
     session_id: "general",
@@ -1513,41 +2975,208 @@ test("timeline applies first visible progress turn events as public progress row
   expect(currentSummary?.latest_progress?.safe_progress_rows).toContainEqual(
     expect.objectContaining({
       id: "event-first-progress",
-      kind: "message",
+      kind: "turn",
+      state: "thinking",
       safe_label: "필요한 맥락을 확인하겠습니다.",
-      work_block_id: "first-progress-note",
-      work_block_label: "필요한 맥락을 확인하겠습니다.",
+    }),
+  );
+  const row = currentSummary?.latest_progress?.safe_progress_rows?.find(
+    (item) => item.id === "event-first-progress",
+  );
+  expect(row?.work_block_id).toBeUndefined();
+  expect(row?.work_block_label).toBeUndefined();
+  expect(row?.work_decision_summary).toBeUndefined();
+  expect(messages).toEqual([]);
+});
+
+test("timeline applies turn acknowledgements as accepted progress rows", () => {
+  let messages: MessageRecord[] = [];
+  let currentSummary: SessionSummaryView | null = {
+    session_id: "general",
+    turn_state: "thinking",
+    latest_progress: {
+      turn_id: "turn-ack",
+      safe_progress_rows: [],
+    },
+  };
+
+  applyTimelineEvents(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-ack",
+          event: {
+            id: "event-ack",
+            sessionId: "general",
+            turnId: "turn-ack",
+            sessionSequence: 1,
+            turnSequence: 1,
+            kind: "turn.acknowledged",
+            visibility: "public",
+            payload: {
+              safeLabel: "Request received. Preparing the work.",
+              transport: "app",
+            },
+          },
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    (update) => {
+      messages = update(messages);
+    },
+    (update) => {
+      currentSummary = update(currentSummary);
+      return currentSummary;
+    },
+  );
+
+  expect(currentSummary?.latest_progress?.safe_progress_rows).toContainEqual(
+    expect.objectContaining({
+      id: "event-ack",
+      kind: "turn",
+      state: "accepted",
+      safe_label: "Request received. Preparing the work.",
     }),
   );
   expect(messages).toEqual([]);
 });
 
-test("first visible progress rows become active work blocks", () => {
+test("first visible progress status rows do not render as standalone active work blocks", () => {
   const blocks = workBlocksFromProgressRows([
     {
       id: "event-first-progress",
-      kind: "message",
-      state: "running",
+      kind: "turn",
+      state: "thinking",
       safe_label: "필요한 맥락을 확인하겠습니다.",
-      work_block_id: "first-progress-note",
-      work_block_label: "필요한 맥락을 확인하겠습니다.",
     },
   ]);
 
-  expect(blocks).toEqual([
-    expect.objectContaining({
-      id: "first-progress-note",
-      label: "필요한 맥락을 확인하겠습니다.",
+  expect(blocks).toEqual([]);
+});
+
+test("client and shared first-progress projections stay status-only", () => {
+  const event = createAgentTurnEvent({
+    id: "event-first-progress-shared",
+    sessionId: "general",
+    turnId: "turn-1",
+    sessionSequence: 1,
+    turnSequence: 1,
+    kind: "turn.first_progress",
+    visibility: "public",
+    payload: {
+      note: "필요한 맥락을 확인하겠습니다.",
+      workBlockId: "first-progress-note",
+      workBlockLabel: "필요한 맥락을 확인하겠습니다.",
+      decisionSummary: "This must not project as a decision.",
+      decisionSource: "assistant-authored",
+    },
+  });
+  const sharedRow = sharedProgressRowFromTurnEvent(event);
+  let messages: MessageRecord[] = [];
+  let currentSummary: SessionSummaryView | null = {
+    session_id: "general",
+    turn_state: "thinking",
+    latest_progress: {
+      turn_id: "turn-1",
+      safe_progress_rows: [],
+    },
+  };
+
+  applyTimelineEvents(
+    [
+      {
+        id: 1,
+        type: "agent.turn_event",
+        payload: {
+          session_id: "general",
+          turn_id: "turn-1",
+          event,
+        },
+      },
+    ] satisfies TimelineEvent[],
+    "general",
+    (update) => {
+      messages = update(messages);
+    },
+    (update) => {
+      currentSummary = update(currentSummary);
+      return currentSummary;
+    },
+  );
+
+  const clientRow = currentSummary?.latest_progress?.safe_progress_rows?.find(
+    (item) => item.id === event.id,
+  );
+  if (!sharedRow) {
+    throw new Error("shared first-progress projection must produce a row");
+  }
+  expect(clientRow).toEqual(sharedRow);
+  expect(clientRow).toMatchObject({
+    kind: "turn",
+    state: "thinking",
+    safe_label: "필요한 맥락을 확인하겠습니다.",
+  });
+  expect(clientRow?.work_block_id).toBeUndefined();
+  expect(clientRow?.work_block_label).toBeUndefined();
+  expect(clientRow?.work_decision_summary).toBeUndefined();
+  expect(messages).toEqual([]);
+});
+
+test("work block projection groups decision message rows with their following tool rows", () => {
+  const decision = {
+    work_decision_summary: "저장된 targeted test 로그 파일을 직접 읽겠습니다.",
+    work_decision_rationale: "실패 출력이 압축되어 로그 파일을 읽어야 합니다.",
+    work_decision_next_step: "실패 블록 기준으로 parser repair를 최소 패치하겠습니다.",
+    work_decision_source: "assistant-authored",
+  };
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "event-decision-message",
+      kind: "message",
       state: "running",
-      rows: [
-        expect.objectContaining({
-          id: "event-first-progress",
-          kind: "message",
-          safe_label: "필요한 맥락을 확인하겠습니다.",
-        }),
-      ],
-    }),
+      safe_label:
+        "저장된 targeted test 로그 파일을 직접 읽겠습니다.\n실패 블록 기준으로 parser repair를 최소 패치하겠습니다.",
+      work_block_id: "public-note-decision",
+      work_block_label:
+        "저장된 targeted test 로그 파일을 직접 읽겠습니다.\n실패 블록 기준으로 parser repair를 최소 패치하겠습니다.",
+      ...decision,
+    },
+    {
+      id: "event-tool-read",
+      kind: "read",
+      state: "running",
+      safe_label: "Read: sandy-decision-targeted.log",
+      safe_tool_name: "Read",
+      safe_input_label: "sandy-decision-targeted.log",
+      tool_call_id: "tool-read",
+      work_block_id: "work-todo-decision-judge-closeout",
+      work_block_label: "Decision Judge 변경분을 검증하고 실패를 고쳐 커밋하는 중",
+      ...decision,
+    },
   ]);
+
+  expect(blocks).toHaveLength(1);
+  expect(blocks[0]).toMatchObject({
+    id: "public-note-decision",
+    label:
+      "저장된 targeted test 로그 파일을 직접 읽겠습니다.\n실패 블록 기준으로 parser repair를 최소 패치하겠습니다.",
+    decision_summary: "저장된 targeted test 로그 파일을 직접 읽겠습니다.",
+    rows: [
+      expect.objectContaining({
+        id: "event-decision-message",
+        kind: "message",
+      }),
+      expect.objectContaining({
+        id: "event-tool-read",
+        kind: "read",
+        safe_tool_name: "Read",
+      }),
+    ],
+  });
 });
 
 test("first visible progress stays scoped through failure and ignores other sessions", () => {
@@ -1571,11 +3200,9 @@ test("first visible progress stays scoped through failure and ignores other sess
           turn_id: "turn-first",
           row: {
             id: "row-first-progress",
-            kind: "message",
-            state: "running",
+            kind: "turn",
+            state: "thinking",
             safe_label: "필요한 맥락을 확인하겠습니다.",
-            work_block_id: "first-progress-note",
-            work_block_label: "필요한 맥락을 확인하겠습니다.",
           },
         },
       },
@@ -1646,9 +3273,15 @@ test("first visible progress stays scoped through failure and ignores other sess
     expect.objectContaining({
       id: "row-first-progress",
       safe_label: "필요한 맥락을 확인하겠습니다.",
-      work_block_id: "first-progress-note",
+      kind: "turn",
+      state: "thinking",
     }),
   );
+  const row = currentSummary?.latest_progress?.safe_progress_rows?.find(
+    (item) => item.id === "row-first-progress",
+  );
+  expect(row?.work_block_id).toBeUndefined();
+  expect(row?.work_block_label).toBeUndefined();
   expect(JSON.stringify(currentSummary)).not.toContain("다른 세션 진행입니다.");
   expect(messages).toEqual([]);
 });
@@ -2326,6 +3959,83 @@ test("work blocks group contextual objectives with nested toolchain rows", () =>
   });
 });
 
+test("work blocks ignore unauthorised decision fields when choosing labels and context", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "block-runtime",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Runtime fallback label",
+      work_block_id: "work-runtime",
+      work_block_label: "Explicit work block label",
+      work_decision_summary: "This fallback must not become public context",
+      work_decision_rationale: "Runtime-derived repair text is diagnostic only.",
+      work_decision_next_step: "Do not render this as a decision.",
+      work_decision_source: "runtime-derived",
+    },
+    {
+      id: "tool-runtime",
+      kind: "read",
+      state: "delivered",
+      safe_label: "Read local status",
+      safe_tool_name: "Read",
+      tool_call_id: "tool-runtime",
+      work_block_id: "work-runtime",
+      work_block_label: "Explicit work block label",
+      work_decision_summary: "Tool fallback must not become public context",
+      work_decision_source: "review-repaired",
+    },
+  ]);
+
+  expect(blocks).toEqual([
+    expect.objectContaining({
+      id: "work-runtime",
+      label: "Explicit work block label",
+      state: "delivered",
+      decision_summary: undefined,
+      decision_source: undefined,
+    }),
+  ]);
+});
+
+test("work blocks accept every public decision source from the app contract", () => {
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "block-principal",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Principal decision status",
+      work_block_id: "work-principal",
+      work_block_label: "사용자 결정에 따라 작업합니다.",
+      work_decision_summary: "사용자 지시를 기준으로 작업합니다.",
+      work_decision_rationale: "사용자가 명시한 방향이 현재 작업의 권한입니다.",
+      work_decision_next_step: "명시된 방향에 맞춰 다음 검증을 실행합니다.",
+      work_decision_source: "principal-authored",
+    },
+    {
+      id: "block-model",
+      kind: "work_block",
+      state: "running",
+      safe_label: "Model decision status",
+      work_block_id: "work-model",
+      work_block_label: "모델 판단에 따라 작업합니다.",
+      work_decision_summary: "모델이 선택한 검증 경로를 실행합니다.",
+      work_decision_rationale: "관찰된 증거가 추가 검증을 요구합니다.",
+      work_decision_next_step: "선택한 검증을 실행하고 결과를 반영합니다.",
+      work_decision_source: "model-authored",
+    },
+  ]);
+
+  expect(blocks.map((block) => block.decision_source)).toEqual([
+    "principal-authored",
+    "model-authored",
+  ]);
+  expect(blocks.map((block) => block.decision_summary)).toEqual([
+    "사용자 지시를 기준으로 작업합니다.",
+    "모델이 선택한 검증 경로를 실행합니다.",
+  ]);
+});
+
 test("work blocks do not duplicate todo compatibility rows when a work block exists", () => {
   const blocks = workBlocksFromProgressRows([
     {
@@ -2398,6 +4108,36 @@ test("completed work blocks exclude Delivered and keep only process evidence", (
     "Rendering Project Ledger dashboard view",
   ]);
   expect(JSON.stringify(blocks)).not.toContain("Delivered");
+});
+
+test("toolchain visibility does not render work block titles as tool buttons", () => {
+  const blockLabel = "Inspecting failed validation evidence";
+  expect(
+    isVisibleToolchainProgressRow(
+      {
+        id: "block-title-row",
+        kind: "model",
+        state: "running",
+        safe_label: blockLabel,
+        safe_tool_name: blockLabel,
+      },
+      blockLabel,
+    ),
+  ).toBe(false);
+  expect(
+    isVisibleToolchainProgressRow(
+      {
+        id: "real-tool-row",
+        kind: "ran_command",
+        state: "running",
+        safe_label: "Bash: npm test",
+        safe_tool_name: "Bash",
+        safe_input_label: "npm test",
+        tool_call_id: "tool-test",
+      },
+      blockLabel,
+    ),
+  ).toBe(true);
 });
 
 test("timeline fallback redacts private turn event labels before rendering", () => {

@@ -56,21 +56,14 @@ export function activityIcon(row: ProgressRow): ReactElement {
 }
 
 export function activityLabel(row: ProgressRow): string {
-  if (row.safe_label.includes(":")) return row.safe_label;
-  if (
-    row.safe_tool_name &&
-    row.safe_input_label &&
-    row.safe_label === row.safe_tool_name
-  )
-    return `${row.safe_tool_name}: ${row.safe_input_label}`;
-  return row.safe_label;
+  return toolchainLabel(row);
 }
 
 export function toolchainLabel(row: ProgressRow): string {
   if (row.safe_tool_name && row.safe_input_label) {
     return `${row.safe_tool_name}: ${row.safe_input_label}`;
   }
-  return activityLabel(row);
+  return row.safe_tool_name ?? row.safe_input_label ?? "Tool";
 }
 
 export function toolchainSummaryLabel(row: ProgressRow): string {
@@ -92,24 +85,14 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
 }
 
 export function toolchainGroupLabel(row: ProgressRow): string {
-  const label = row.safe_label.trim().toLocaleLowerCase("ko-KR");
   const toolName = row.safe_tool_name?.trim();
   if (
     row.kind === "searched" ||
-    toolName === "Web search" ||
-    label.includes("search") ||
-    label.includes("검색")
+    toolName === "Web search"
   ) {
     return "검색";
   }
   if (row.kind === "ran_command" || toolName === "Bash") return "Bash";
-  if (
-    label.includes("검증") ||
-    label.includes("최종 응답") ||
-    label.includes("review")
-  ) {
-    return "검토";
-  }
   if (row.kind === "read") return toolName || "읽기";
   if (row.kind === "edited") return "편집";
   if (row.kind === "dispatch") return "작업";

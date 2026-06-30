@@ -12,6 +12,10 @@ import {
   evidenceTranscriptErrorMessage,
 } from "../../../output/evidence/transcript-result.ts";
 import {
+  toolObservationForFailure,
+  toolObservationResult,
+} from "./tool-observations.ts";
+import {
   emitDecisionProgressBestEffort,
   emitTurnEventBestEffort,
 } from "../progress/turn-delivery-events.ts";
@@ -39,6 +43,12 @@ export async function handleAuditedToolFailure(input: {
   isWorkerStartTool: boolean;
 }): Promise<unknown> {
   const message = input.error instanceof Error ? input.error.message : String(input.error);
+  const observation = toolObservationForFailure({
+    turnId: input.executorInput.turnId,
+    call: input.call,
+    error: input.error,
+    toolCallId: input.toolCallId,
+  });
   recordOperationalMetric({
     category: "tool",
     name: input.call.name,
@@ -73,6 +83,7 @@ export async function handleAuditedToolFailure(input: {
       : input.cleanArgs,
     ok: false,
     error: message,
+    observation,
     publicDecision: input.decision,
     bridgeAudit: bridgeAudit ?? undefined,
   });
@@ -116,6 +127,7 @@ export async function handleAuditedToolFailure(input: {
       name: input.call.name,
       ok: false,
       error: evidenceTranscriptErrorMessage(message),
+      observation,
       publicDecision: publicWorkDecisionPayload(input.decision),
     },
     metadata: {
@@ -130,7 +142,7 @@ export async function handleAuditedToolFailure(input: {
     throw input.error;
   }
   return annotateToolResultWithDecisionContext({
-    result: { ok: false, error: message },
+    result: toolObservationResult(observation),
     decision: input.decision,
     decisions: input.executorInput.publicDecisionContext,
   });

@@ -1,11 +1,25 @@
-import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
+import { sanitizePublicText } from "./public-text.ts";
+import {
+  TURN_ACKNOWLEDGED_EVENT_KIND,
+  TURN_DECISION_EVENT_KIND,
+  TURN_STATE_CONTRACT_EVENT_KINDS,
+  isAuthoredDecisionSource,
+  normalizeTurnStateContractPayload,
+} from "./turn-state-contract.ts";
+
+export { isPublicTextSafe, sanitizePublicText } from "./public-text.ts";
 
 export const TURN_EVENT_KINDS = [
-  "turn.accepted",
   "turn.started",
   "turn.first_progress",
   "turn.iteration.started",
+  "assistant.decision.delta",
+  "assistant.decision.completed",
+  "model.stream.text_delta",
+  "model.stream.reasoning_delta",
+  "model.stream.tool_call_delta",
+  "model.stream.completed",
   "work.block.started",
   "work.block.updated",
   "work.block.completed",
@@ -20,13 +34,57 @@ export const TURN_EVENT_KINDS = [
   "message.final.started",
   "message.final.delta",
   "message.final.completed",
+  "turn.observation",
+  "turn.continuation_scheduled",
   "turn.completed",
   "turn.failed",
   "turn.cancelled",
+  ...TURN_STATE_CONTRACT_EVENT_KINDS,
 ] as const;
 
 export type AgentTurnEventKind = typeof TURN_EVENT_KINDS[number];
 export type AgentTurnEventVisibility = "public" | "internal";
+
+export type ProviderStreamEventKind =
+  | "model.stream.text_delta"
+  | "model.stream.reasoning_delta"
+  | "model.stream.tool_call_delta"
+  | "model.stream.completed";
+
+export interface ModelStreamTextDeltaPayload {
+  streamId: string;
+  textDelta: string;
+  target: "opening_decision" | "public_note" | "final_candidate";
+  sequence?: number;
+}
+
+export interface ModelStreamReasoningDeltaPayload {
+  streamId: string;
+  charCount: number;
+  sequence?: number;
+}
+
+export interface ModelStreamToolCallDeltaPayload {
+  streamId: string;
+  callIndex: number;
+  sequence: number;
+  toolCallId?: string;
+  safeToolName?: string;
+  argumentCharCount: number;
+  rawArgumentsDelta?: string;
+  publicState: "generating" | "ready";
+}
+
+export interface ModelStreamCompletedPayload {
+  streamId: string;
+  status: "completed" | "failed" | "aborted";
+}
+
+export type ProviderStreamEventPayload =
+  | ModelStreamTextDeltaPayload
+  | ModelStreamReasoningDeltaPayload
+  | ModelStreamToolCallDeltaPayload
+  | ModelStreamCompletedPayload;
 
 export interface AgentTurnEvent {
   id: string;
@@ -72,6 +130,15 @@ export interface ProgressRowLike {
   safe_path_labels?: string[];
   tool_call_id?: string;
   bridge_phase?: string;
+  receipt_kind?: string;
+  public_decision_role?: string;
+  public_decision_summary?: string;
+  public_decision_rationale?: string;
+  public_decision_next_step?: string;
+  public_decision_source?: string;
+  public_decision_model_call_id?: string;
+  public_decision_latency_ms?: number;
+  public_decision_evidence_refs?: string[];
   work_block_id?: string;
   work_block_label?: string;
   work_decision_summary?: string;
@@ -79,6 +146,12 @@ export interface ProgressRowLike {
   work_decision_next_step?: string;
   work_decision_source?: string;
   work_decision_evidence_refs?: string[];
+  runtime_fault_id?: string;
+  runtime_fault_kind?: string;
+  runtime_fault_retryable?: boolean;
+  runtime_fault_public_summary?: string;
+  runtime_fault_safe_error_code?: string;
+  runtime_fault_safe_cause?: string;
   safe_detail_rows?: Array<{
     id: string;
     kind?: string;
@@ -89,7 +162,6 @@ export interface ProgressRowLike {
 }
 
 const TURN_EVENT_KIND_SET = new Set<string>(TURN_EVENT_KINDS);
-const SAFE_TEXT_MAX = 240;
 export const FIRST_VISIBLE_PROGRESS_EVENT_KIND = "turn.first_progress";
 
 export function createAgentTurnEvent(input: AgentTurnEventInput): AgentTurnEvent {
@@ -113,7 +185,13 @@ export function createAgentTurnEvent(input: AgentTurnEventInput): AgentTurnEvent
     createdAt: input.createdAt || new Date().toISOString(),
     kind: input.kind,
     visibility: input.visibility ?? "public",
-    payload: sanitizeTurnEventPayload(input.payload ?? {}, input.visibility ?? "public"),
+    payload: sanitizeTurnEventPayload(
+      normalizeTurnStateContractPayload(input.kind, input.payload ?? {}) ??
+        normalizeProviderStreamPayload(input.kind, input.payload ?? {}, input.visibility ?? "public") ??
+        input.payload ??
+        {},
+      input.visibility ?? "public",
+    ),
   };
 }
 
@@ -143,6 +221,7 @@ export function sanitizeTurnEventPayload(
   if (visibility === "internal") return jsonSafeRecord(payload);
   const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(payload)) {
+    if (key === "operatorSummary") continue;
     sanitized[key] = sanitizePublicPayloadValue(value, key);
   }
   return sanitized;
@@ -154,31 +233,61 @@ export function publicNotePayload(text: unknown, fallback = "Working"): Record<s
   };
 }
 
-export function isPublicTextSafe(value: unknown): boolean {
-  return sanitizePublicText(value, "") === String(value ?? "").trim().slice(0, SAFE_TEXT_MAX);
-}
-
-export function sanitizePublicText(value: unknown, fallback = "Working"): string {
-  const raw = typeof value === "string"
-    ? value
-    : typeof value === "number" || typeof value === "boolean"
-      ? String(value)
-      : "";
-  const normalized = stripControlCharacters(raw)
-    .replace(secretAssignmentPattern(), "[redacted]")
-    .replace(/\bbearer\s+[\w.~+/=-]+/giu, "Bearer [redacted]")
-    .replace(/\s+/gu, " ")
-    .trim();
-  if (!normalized) return fallback;
-  if (looksPrivateOrInternal(normalized)) return fallback;
-  return normalized.slice(0, SAFE_TEXT_MAX);
+function normalizeProviderStreamPayload(
+  kind: string,
+  payload: Record<string, unknown>,
+  visibility: AgentTurnEventVisibility,
+): Record<string, unknown> | null {
+  if (kind === "model.stream.text_delta") {
+    return {
+      streamId: requiredPayloadText(payload.streamId, "model stream id is required"),
+      textDelta: requiredPayloadText(payload.textDelta, "model stream text delta is required"),
+      target: requiredTextDeltaTarget(payload.target),
+      ...optionalPayloadSequence(payload.sequence),
+    };
+  }
+  if (kind === "model.stream.reasoning_delta") {
+    if (visibility !== "internal") {
+      throw new Error("model stream reasoning deltas must be internal");
+    }
+    return {
+      streamId: requiredPayloadText(payload.streamId, "model stream id is required"),
+      charCount: requiredNonNegativeInteger(payload.charCount, "model stream reasoning charCount must be a non-negative integer"),
+      ...optionalPayloadSequence(payload.sequence),
+    };
+  }
+  if (kind === "model.stream.tool_call_delta") {
+    if (visibility === "public" && payload.rawArgumentsDelta !== undefined) {
+      throw new Error("public model stream tool call deltas must not include rawArgumentsDelta");
+    }
+    return {
+      streamId: requiredPayloadText(payload.streamId, "model stream id is required"),
+      callIndex: requiredNonNegativeInteger(payload.callIndex, "model stream tool call callIndex must be a non-negative integer"),
+      sequence: requiredNonNegativeInteger(payload.sequence, "model stream tool call sequence must be a non-negative integer"),
+      ...optionalPayloadTextField("toolCallId", payload.toolCallId),
+      ...optionalPayloadTextField("safeToolName", payload.safeToolName),
+      argumentCharCount: requiredNonNegativeInteger(
+        payload.argumentCharCount,
+        "model stream tool call argumentCharCount must be a non-negative integer",
+      ),
+      ...(visibility === "internal" ? optionalInternalRawStringField("rawArgumentsDelta", payload.rawArgumentsDelta) : {}),
+      publicState: requiredToolCallPublicState(payload.publicState),
+    };
+  }
+  if (kind === "model.stream.completed") {
+    return {
+      streamId: requiredPayloadText(payload.streamId, "model stream id is required"),
+      status: requiredStreamCompletedStatus(payload.status),
+    };
+  }
+  return null;
 }
 
 export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike | null {
   if (event.visibility !== "public") return null;
   const payload = event.payload;
   const createdAt = event.createdAt;
-  if (event.kind === "assistant.public_note" || event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
+  if (event.kind === "assistant.public_note") {
     const workBlockId = optionalPublicText(payload.workBlockId);
     const note = sanitizePublicText(payload.note, "Working");
     return {
@@ -192,6 +301,39 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       ...publicDecisionFields(payload),
     };
   }
+  if (event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
+    return {
+      id: event.id,
+      kind: "turn",
+      safe_label: sanitizePublicText(payload.note ?? payload.safeLabel, "Working"),
+      state: "thinking",
+      created_at: createdAt,
+    };
+  }
+  if (event.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
+    return {
+      id: event.id,
+      kind: "turn",
+      safe_label: sanitizePublicText(payload.safeLabel, "Request received. Preparing the work."),
+      state: "accepted",
+      receipt_kind: TURN_ACKNOWLEDGED_EVENT_KIND,
+      created_at: createdAt,
+    };
+  }
+  if (event.kind === TURN_DECISION_EVENT_KIND) {
+    const decision = publicDecisionRowFields(payload);
+    if (!decision.public_decision_summary || !decision.public_decision_source) {
+      return null;
+    }
+    return {
+      id: event.id,
+      kind: "decision",
+      safe_label: decision.public_decision_summary,
+      state: "running",
+      created_at: createdAt,
+      ...decision,
+    };
+  }
   if (event.kind === "work.block.started" || event.kind === "work.block.updated" || event.kind === "work.block.completed") {
     const label = sanitizePublicText(payload.label ?? payload.safeLabel, "Working");
     return {
@@ -202,7 +344,7 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       created_at: createdAt,
       work_block_id: optionalPublicText(payload.workBlockId) ?? event.id,
       work_block_label: label,
-      ...publicDecisionFields(payload, label),
+      ...publicDecisionFields(payload),
     };
   }
   if (event.kind === "guard.started" || event.kind === "guard.completed") {
@@ -234,7 +376,7 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       tool_call_id: optionalPublicText(payload.toolCallId),
       bridge_phase: optionalPublicText(payload.bridgePhase),
       work_block_id: optionalPublicText(payload.workBlockId),
-      work_block_label: optionalPublicText(payload.workBlockLabel) ?? safeLabel,
+      work_block_label: optionalPublicText(payload.workBlockLabel),
       ...publicDecisionFields(payload),
       safe_detail_rows: safeDetailRows(payload.detailRows),
     };
@@ -276,6 +418,25 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       safe_label: label,
       state: event.kind === "turn.failed" ? "failed" : "cancelled",
       created_at: createdAt,
+    };
+  }
+  if (event.kind === "runtime.fault") {
+    const publicSummary = sanitizePublicText(
+      payload.publicSummary,
+      "Butler runtime was interrupted before the turn could continue.",
+    );
+    return {
+      id: event.id,
+      kind: "runtime_fault",
+      safe_label: publicSummary,
+      state: "runtime_fault",
+      created_at: createdAt,
+      runtime_fault_id: sanitizePublicText(payload.faultId, event.id),
+      runtime_fault_kind: sanitizePublicText(payload.kind, "runtime_fault"),
+      runtime_fault_retryable: payload.retryable === true,
+      runtime_fault_public_summary: publicSummary,
+      runtime_fault_safe_error_code: optionalPublicText(payload.safeErrorCode),
+      runtime_fault_safe_cause: optionalPublicText(payload.safeCause),
     };
   }
   return null;
@@ -324,6 +485,9 @@ export const TURN_EVENT_COMPATIBILITY_MAPPINGS = [
 ] as const;
 
 function sanitizePublicPayloadValue(value: unknown, key: string): unknown {
+  if (key === "retryable" && typeof value === "boolean") return value;
+  if (key === "firstVisible" && typeof value === "boolean") return value;
+  if (key === "latencyMs") return optionalNonNegativeInteger(value) ?? null;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return sanitizePublicText(value, decisionPayloadKey(key) ? "" : fallbackLabel(key));
   }
@@ -344,45 +508,11 @@ function sanitizePublicPayloadValue(value: unknown, key: string): unknown {
 
 function decisionPayloadKey(key: string): boolean {
   return /^decision(?:Summary|Rationale|NextStep|EvidenceRefs|Source|Id)?$/u.test(key) ||
-    /^(?:summary|rationale|nextStep|evidenceRefs)$/u.test(key);
+    /^(?:summary|rationale|nextStep|evidenceRefs|modelCallId)$/u.test(key);
 }
 
 function jsonSafeRecord(value: Record<string, unknown>): Record<string, unknown> {
   return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
-}
-
-function looksPrivateOrInternal(value: string): boolean {
-  if (looksPrivateOrInternalText(value)) return true;
-  const decoded = decodeBase64Candidate(value);
-  return Boolean(decoded && looksPrivateOrInternalText(decoded));
-}
-
-function looksPrivateOrInternalText(value: string): boolean {
-  return /<\s*\/?\s*(?:think|thinking|reasoning)\b[^>]*>/iu.test(value) ||
-    /<\|?(?:channel|start|message|assistant|analysis|final)[^>]*\|?>/i.test(value) ||
-    /\b(?:hidden reasoning|chain[- ]of[- ]thought|scratchpad|internal plan|let me think|let's think|i need to think|we need to think|step[- ]by[- ]step reasoning)\b/iu.test(value) ||
-    /\b(?:tool_call|tool_result|argumentsJson|raw transcript|sessionId|eventId|FileNotFoundException|root_path|butler-workers|ENOENT)\b/u.test(value) ||
-    /(?:^|[\s"'`:=])\/(?:Users|private|tmp|var\/folders|home|Volumes|opt|usr|etc)\b/u.test(value) ||
-    /(?:^|[\s"'`:=])(?:[A-Za-z]:\\|\\\\[^\s\\]+\\[^\s\\]+)/u.test(value) ||
-    /^\s*[{[]/u.test(value) && /"(?:eventId|sessionId|payload|arguments|tool_call)"/u.test(value);
-}
-
-function decodeBase64Candidate(value: string): string | null {
-  const compact = value.replace(/\s+/gu, "");
-  if (compact.length < 24 || compact.length > 2_048) return null;
-  if (!/^[A-Za-z0-9+/=_-]+$/u.test(compact)) return null;
-  try {
-    const normalized = compact.replace(/-/gu, "+").replace(/_/gu, "/");
-    const decoded = Buffer.from(normalized, "base64").toString("utf8");
-    if (!decoded || decoded.includes("\uFFFD")) return null;
-    return decoded;
-  } catch {
-    return null;
-  }
-}
-
-function secretAssignmentPattern(): RegExp {
-  return /\b(?:api[_-]?key|token|secret|password|database_url|db_url)\s*[:=]\s*\S+|\b(?:auth|authorization)\s*[:=]\s*(?:bearer\s+)?\S+/giu;
 }
 
 function safeProgressKind(value: unknown): string {
@@ -415,14 +545,13 @@ function safeDetailRows(value: unknown): ProgressRowLike["safe_detail_rows"] {
   return rows.length > 0 ? rows : undefined;
 }
 
-function publicDecisionFields(
-  payload: Record<string, unknown>,
-  fallbackSummary?: string,
-): Partial<ProgressRowLike> {
-  const summary = optionalPublicText(payload.decisionSummary ?? payload.summary) ?? fallbackSummary;
+function publicDecisionFields(payload: Record<string, unknown>): Partial<ProgressRowLike> {
+  const source = optionalPublicText(payload.decisionSource ?? payload.source);
+  if (!isAuthoredDecisionSource(source)) return {};
+  const summary = optionalPublicText(payload.decisionSummary ?? payload.summary);
   const rationale = optionalPublicText(payload.decisionRationale ?? payload.rationale);
   const nextStep = optionalPublicText(payload.decisionNextStep ?? payload.nextStep);
-  const source = optionalPublicText(payload.decisionSource ?? payload.source);
+  if (!summary || !rationale || !nextStep) return {};
   const rawEvidenceRefs = payload.decisionEvidenceRefs ?? payload.evidenceRefs;
   const evidenceRefs = Array.isArray(rawEvidenceRefs)
     ? rawEvidenceRefs
@@ -439,16 +568,99 @@ function publicDecisionFields(
   return fields;
 }
 
+function publicDecisionRowFields(payload: Record<string, unknown>): Partial<ProgressRowLike> {
+  const source = optionalPublicText(payload.source);
+  if (!isAuthoredDecisionSource(source)) return {};
+  const fields: Partial<ProgressRowLike> = {};
+  const role = optionalPublicText(payload.role);
+  const summary = optionalPublicText(payload.summary);
+  const rationale = optionalPublicText(payload.rationale);
+  const nextStep = optionalPublicText(payload.nextStep);
+  if (role) fields.public_decision_role = role;
+  if (summary) fields.public_decision_summary = summary;
+  if (rationale) fields.public_decision_rationale = rationale;
+  if (nextStep) fields.public_decision_next_step = nextStep;
+  fields.public_decision_source = source;
+  const modelCallId = optionalPublicText(payload.modelCallId);
+  if (modelCallId) fields.public_decision_model_call_id = modelCallId;
+  const latencyMs = optionalNonNegativeInteger(payload.latencyMs);
+  if (latencyMs !== undefined) fields.public_decision_latency_ms = latencyMs;
+  const rawEvidenceRefs = payload.evidenceRefs;
+  const evidenceRefs = Array.isArray(rawEvidenceRefs)
+    ? rawEvidenceRefs
+        .map((item) => optionalPublicText(item))
+        .filter((item): item is string => Boolean(item))
+        .slice(0, 6)
+    : undefined;
+  if (evidenceRefs && evidenceRefs.length > 0)
+    fields.public_decision_evidence_refs = evidenceRefs;
+  return fields;
+}
+
 function optionalPublicText(value: unknown): string | undefined {
   const text = sanitizePublicText(value, "");
   return text || undefined;
 }
 
-function stripControlCharacters(value: string): string {
-  return Array.from(value, (character) => {
-    const code = character.charCodeAt(0);
-    return code < 32 || code === 127 ? " " : character;
-  }).join("");
+function optionalNonNegativeInteger(value: unknown): number | undefined {
+  const numberValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(numberValue) || numberValue < 0) return undefined;
+  return Math.round(numberValue);
+}
+
+function requiredPayloadText(value: unknown, message: string): string {
+  const text = optionalPublicText(value);
+  if (!text) throw new Error(message);
+  return text;
+}
+
+function optionalPayloadTextField(key: string, value: unknown): Record<string, string> {
+  const text = optionalPublicText(value);
+  return text ? { [key]: text } : {};
+}
+
+function optionalInternalRawStringField(key: string, value: unknown): Record<string, string> {
+  if (value === undefined) return {};
+  if (typeof value !== "string") {
+    throw new Error(`model stream ${key} must be a string`);
+  }
+  return { [key]: JSON.parse(JSON.stringify(value)) as string };
+}
+
+function optionalPayloadSequence(value: unknown): Record<string, number> {
+  if (value === undefined) return {};
+  return {
+    sequence: requiredNonNegativeInteger(value, "model stream sequence must be a non-negative integer"),
+  };
+}
+
+function requiredNonNegativeInteger(value: unknown, message: string): number {
+  if (!Number.isInteger(value) || (value as number) < 0) throw new Error(message);
+  return value as number;
+}
+
+function requiredTextDeltaTarget(value: unknown): ModelStreamTextDeltaPayload["target"] {
+  if (
+    value === "opening_decision" ||
+    value === "public_note" ||
+    value === "final_candidate"
+  ) return value;
+  throw new Error("model stream text delta target is invalid");
+}
+
+function requiredToolCallPublicState(value: unknown): ModelStreamToolCallDeltaPayload["publicState"] {
+  if (value === "generating" || value === "ready") return value;
+  throw new Error("model stream tool call publicState is invalid");
+}
+
+function requiredStreamCompletedStatus(value: unknown): ModelStreamCompletedPayload["status"] {
+  if (value === "completed" || value === "failed" || value === "aborted") return value;
+  throw new Error("model stream completed status is invalid");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

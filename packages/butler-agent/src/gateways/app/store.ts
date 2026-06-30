@@ -36,7 +36,17 @@ import {
 } from "../../personalization/profiling.ts";
 import { readPersonaPresets } from "../../personalization/persona-presets.ts";
 import { TaskStore, type TaskSummary } from "../../agent/work/task-store.ts";
-import { WorkStreamStore } from "../../agent/work/work-stream.ts";
+import {
+  applyTurnLocalWorkOutcomeForSession,
+  workStreamTerminal,
+  WorkStreamStore,
+  type TurnLocalWorkOutcome,
+} from "../../agent/work/work-stream.ts";
+import {
+  TURN_ACKNOWLEDGED_EVENT_KIND,
+  createTurnAcknowledgedPayload,
+} from "../../agent/events/turn-state-contract.ts";
+import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../agent/events/turn-events.ts";
 import { ensureAppMessageQuerySchema } from "../../agent/cognition/memory/exact-query.ts";
 import {
   PlannedTaskStore,
@@ -75,7 +85,15 @@ import {
   type HostedModelProviderId,
 } from "../../integrations/providers/registered-models.ts";
 import { readPromptCacheMetrics } from "../../integrations/providers/prompt-cache-metrics.ts";
+import {
+  getNativeMainStatePath,
+  readNativeMainState,
+} from "../../integrations/providers/native-main-state.ts";
 import { readContextMonitor } from "../../operations/metrics/context-monitor.ts";
+import {
+  isPidRunning,
+  readServiceState,
+} from "../../operations/service/native-service-supervisor.ts";
 import {
   estimateContextTokensForModel,
   evaluateWorkingContextBudget,
@@ -157,7 +175,6 @@ import {
   type SessionView,
   type SessionViewStatus,
   type SessionViewTurn,
-  type SessionViewTurnDeliveryState,
   type SettingsView,
   type SkillImportResult,
   type SkillSettingsView,
@@ -208,7 +225,11 @@ import {
   type AgentTurnEvent,
   type RuntimeTurnEventInput,
 } from "../../agent/events/turn-events.ts";
-import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
+import {
+  deliveredWithLimitationsState,
+  safeLimitationText,
+} from "../../agent/turn/runtime-delivery-state.ts";
+import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import type { SessionTransportBinding } from "../../test-support/harness/contracts.ts";
 import type { TranscriptEvent } from "../../test-support/harness/transcripts.ts";
@@ -225,8 +246,44 @@ import {
 import {
   appLimitedDeliveryForError,
   appSafeResponderError,
+  isNonPublicContinuationDeliveryError,
   type AppLimitedDelivery,
 } from "./failure-ux-contract.ts";
+import {
+  isInternalContinuationProgressEvent,
+  isTerminalProgressState,
+  normalizeProgressSummaryRow,
+  progressMergeState,
+  progressRowsEquivalent,
+  progressRowsForTurnState,
+  progressSummaryStatusLabel,
+  publicProgressRowsForTurn,
+  type ProgressSummaryInput,
+} from "./progress-summary.ts";
+import {
+  continuationDeliveryFromState,
+  isContinuationDeliveryIssue,
+  isContinuationDeliveryState,
+  shouldAutomaticallyRequeueContinuation,
+} from "./continuation-delivery.ts";
+import {
+  APP_TURN_QUEUE_FAILED_CODE,
+  HIDDEN_LEGACY_ASSISTANT_SAFE_ERROR_CODES,
+  isPublicSuppressedInternalContinuationCode,
+  publicAppDeliveryMetadata,
+  publicDeliveryMetadataForProjection,
+  publicDeliveryStateForProjection,
+  publicDeliveryStateForTurnState,
+  publicTurnPayloadRecord,
+  publicTurnRecord,
+  publicTurnStatusLabel,
+  type AppProjectionDeliveryState,
+} from "./btcc-public-projection.ts";
+import {
+  CANCELLED_TURN_ACTIVITY_TEXT,
+  isCancelledTurnActivityCarrier,
+} from "./cancelled-turn-activity.ts";
+import { isPublicDecisionSource } from "./public-decision-source.ts";
 import {
   completeResponderTurn as completeResponderTurnLifecycle,
   isResponderCancelError,
@@ -234,6 +291,7 @@ import {
 import {
   projectSafeTurnFailure,
   safeTurnFailureEventPayload,
+  type ProjectedSafeTurnFailure,
 } from "./turn-failure-projection.ts";
 import {
   applyComponentUpdate,
@@ -270,6 +328,14 @@ const MESSAGE_FILE_ID_PATTERN = /^file-[0-9a-f-]{36}$/iu;
 const BUTLER_FINAL_ANSWER_OPEN = "<butler_final_answer>";
 const BUTLER_FINAL_ANSWER_CLOSE = "</butler_final_answer>";
 
+function visibleMessageSqlPredicate(alias?: string): string {
+  const prefix = alias ? `${alias}.` : "";
+  const codes = HIDDEN_LEGACY_ASSISTANT_SAFE_ERROR_CODES.map(
+    (code) => `'${code}'`,
+  ).join(", ");
+  return `NOT (${prefix}role = 'assistant' AND ${prefix}safe_error_code IS NOT NULL AND ${prefix}safe_error_code IN (${codes}))`;
+}
+
 type CapturedUserFeedback = {
   entry: {
     feedback_id: string;
@@ -291,18 +357,6 @@ const SUPPORTED_IMAGE_MIME_TYPES = new Set([
   "image/jpeg",
   "image/webp",
   "image/gif",
-]);
-const STATUS_ONLY_PROGRESS_LABELS = new Set([
-  "accepted",
-  "started",
-  "thinking",
-  "working on request",
-  "checking response",
-  "response checked",
-  "preparing final answer",
-  "final answer ready",
-  "completed",
-  "delivered",
 ]);
 
 interface ChatRow {
@@ -339,6 +393,7 @@ interface SessionSummaryRow {
   last_message_preview: string | null;
   active_turn_state: TurnState | null;
   safe_status_label: string | null;
+  active_turn_safe_error_code: string | null;
   pinned: number;
   archived: number;
 }
@@ -408,7 +463,7 @@ interface TurnRow {
 }
 
 export interface DeliveryLimitationMetadata {
-  delivery_state: SessionViewTurnDeliveryState;
+  delivery_state: AppProjectionDeliveryState;
   limitation_codes: string[];
   limitations: string[];
 }
@@ -517,10 +572,6 @@ export interface AppMessageResponderResult {
   delivery?: DeliveryLimitationMetadata;
 }
 
-type ProgressSummaryInput = Omit<ProgressSummaryRow, "created_at"> & {
-  created_at?: string;
-};
-
 export type AppMessageResponder = (
   input: AppMessageResponderInput,
 ) => Promise<AppMessageResponderResult> | AppMessageResponderResult;
@@ -568,6 +619,11 @@ interface TranscriptSyncSnapshot {
   trailing: string;
 }
 
+interface PendingAppTurnEventOutbound {
+  chatId: string;
+  event: TranscriptEvent;
+}
+
 export class AppServerStore {
   private static readonly DEFAULT_APP_UPDATE_MANIFEST =
     "https://github.com/Hexpy-Games/butler/releases/latest/download/app-update-manifest.json";
@@ -592,6 +648,10 @@ export class AppServerStore {
   private readonly transcriptSyncSnapshots = new Map<
     string,
     TranscriptSyncSnapshot
+  >();
+  private readonly pendingAppTurnEventOutbounds = new Map<
+    string,
+    PendingAppTurnEventOutbound
   >();
   private readonly pendingSystemResponderTurns = new Set<string>();
   private readonly activeTurnControllers = new Map<string, AbortController>();
@@ -630,6 +690,7 @@ export class AppServerStore {
     this.projectWorkspaceRoot =
       this.readStoredProjectWorkspaceRoot() ?? this.projectWorkspaceRoot;
     this.seedDefaults();
+    this.reconcileCancelledTurnActivityMessages();
   }
 
   close(): void {
@@ -992,6 +1053,7 @@ export class AppServerStore {
           SELECT m.text
           FROM messages m
           WHERE m.chat_id = c.id
+            AND ${visibleMessageSqlPredicate("m")}
           ORDER BY m.rowid DESC
           LIMIT 1
         ) AS last_message_preview,
@@ -1009,6 +1071,13 @@ export class AppServerStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+        (
+          SELECT t.safe_error_code
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS active_turn_safe_error_code,
         c.pinned,
         c.archived
       FROM chats c
@@ -1053,6 +1122,7 @@ export class AppServerStore {
           SELECT m.text
           FROM messages m
           WHERE m.chat_id = c.id
+            AND ${visibleMessageSqlPredicate("m")}
           ORDER BY m.rowid DESC
           LIMIT 1
         ) AS last_message_preview,
@@ -1070,6 +1140,13 @@ export class AppServerStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+        (
+          SELECT t.safe_error_code
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS active_turn_safe_error_code,
         c.pinned,
         c.archived
       FROM chats c
@@ -2163,9 +2240,11 @@ export class AppServerStore {
   getSessionControls(sessionId: string): SessionControlState {
     const settings = this.getSettings();
     const stored =
-      this.readSetting<Partial<SessionControlState>>(
-        sessionControlsKey(sessionId),
-      ) ?? {};
+      this.hasExplicitSessionControls(sessionId)
+        ? this.readSetting<Partial<SessionControlState>>(
+          sessionControlsKey(sessionId),
+        ) ?? {}
+        : {};
     const registeredModels = this.registeredModelMetadata();
     return normalizeSessionControls(
       {
@@ -2188,6 +2267,7 @@ export class AppServerStore {
       this.registeredModelMetadata(),
     );
     this.writeSetting(sessionControlsKey(sessionId), next);
+    this.writeSetting(sessionControlsExplicitKey(sessionId), true);
     this.appendEvent("session.controls_updated", {
       session_id: sessionId,
       model: next.model,
@@ -2196,6 +2276,21 @@ export class AppServerStore {
       plan_mode: next.plan_mode,
     });
     return next;
+  }
+
+  private controlsForMessageSend(
+    sessionId: string,
+    input: Partial<SessionControlState>,
+  ): SessionControlState {
+    return hasSessionControlInput(input)
+      ? this.updateSessionControls(sessionId, input)
+      : this.getSessionControls(sessionId);
+  }
+
+  private hasExplicitSessionControls(sessionId: string): boolean {
+    return (
+      this.readSetting<boolean>(sessionControlsExplicitKey(sessionId)) === true
+    );
   }
 
   getProjectDashboard(projectId: string): ProjectDashboardView {
@@ -2517,6 +2612,9 @@ export class AppServerStore {
           state: "idle" as const,
           safe_progress_rows: [],
         };
+    const activeWorkStreamTurnId = latestTurn && isActiveSessionTurnState(latestTurn.state)
+      ? latestTurn.id
+      : undefined;
     const now = new Date().toISOString();
     return {
       session_id: session.id,
@@ -2541,7 +2639,7 @@ export class AppServerStore {
         sessionId,
         includeHistory: false,
       }).workers.filter(isActiveWorkerActivity),
-      work_streams: this.listActiveWorkStreams(sessionId),
+      work_streams: this.listActiveWorkStreams(sessionId, undefined, activeWorkStreamTurnId),
       staleness: {
         state: "fresh",
         updated_at: now,
@@ -2579,8 +2677,12 @@ export class AppServerStore {
         ? latestTurnView
         : null;
     const runtimeSessionId = sessionHintForRow(sessionId);
-    this.syncLinkedWorkOrchestrationsForSession(sessionId, runtimeSessionId);
-    const workStreams = this.listActiveWorkStreams(sessionId, runtimeSessionId);
+    const activeWorkStreamTurnId = activeTurn?.id;
+    const workStreams = this.listActiveWorkStreams(
+      sessionId,
+      runtimeSessionId,
+      activeWorkStreamTurnId,
+    );
     const now = new Date().toISOString();
     const artifacts = this.listArtifacts(sessionId);
     const context = this.getContextDetails(sessionId);
@@ -2639,16 +2741,20 @@ export class AppServerStore {
   private listActiveWorkStreams(
     sessionId: string,
     runtimeSessionId = sessionHintForRow(sessionId),
+    currentTurnId?: string,
   ): SessionView["work_streams"] {
     const workStreamStore = new WorkStreamStore(this.butlerData);
     const seenWorkStreams = new Set<string>();
     return [
-      ...workStreamStore.list({ sessionId, includeTerminal: false }),
-      ...workStreamStore.list({
+      ...workStreamStore.listActive({ sessionId, currentTurnId }),
+      ...workStreamStore.listActive({
         sessionId: runtimeSessionId,
-        includeTerminal: false,
+        currentTurnId,
       }),
     ]
+      .map((stream) => workStreamStore.read(stream.id))
+      .filter((stream): stream is NonNullable<typeof stream> => Boolean(stream))
+      .filter((stream) => appWorkStreamVisibleInActiveProjection(stream, currentTurnId))
       .filter((stream) => {
         if (seenWorkStreams.has(stream.id)) return false;
         seenWorkStreams.add(stream.id);
@@ -2664,7 +2770,7 @@ export class AppServerStore {
         current_phase: stream.current_phase ?? undefined,
         active_step_id: stream.active_step_id ?? undefined,
         todo_list_id: stream.todo_list_id ?? undefined,
-        terminal: stream.terminal,
+        terminal: workStreamTerminal(stream.state),
         updated_at: stream.updated_at,
       }));
   }
@@ -2984,31 +3090,35 @@ export class AppServerStore {
     );
   }
 
-  private syncLinkedWorkOrchestrationsForSession(
-    sessionId: string,
-    runtimeSessionId = sessionHintForRow(sessionId),
-  ): void {
-    const workStreamStore = new WorkStreamStore(this.butlerData);
-    const orchestrationStore = new WorkOrchestrationStore(this.butlerData);
-    const orchestrationIds = new Set<string>();
-    for (const stream of [
-      ...workStreamStore.list({ sessionId, includeTerminal: false }),
-      ...workStreamStore.list({ sessionId: runtimeSessionId, includeTerminal: false }),
-    ]) {
-      const record = workStreamStore.read(stream.id);
-      for (const orchestrationId of record?.linked_orchestration_ids ?? []) {
-        orchestrationIds.add(orchestrationId);
-      }
+  private reconcileTurnLocalWorkOutcomeForTurn(turn: TurnRecord): void {
+    const outcome = turnLocalWorkOutcomeForAppTurn(turn.state);
+    if (!outcome) return;
+    try {
+      applyTurnLocalWorkOutcomeForSession({
+        butlerData: this.butlerData,
+        sessionId: sessionHintForRow(turn.chat_id),
+        turnId: turn.id,
+        outcome,
+        statusNote: turnLocalWorkOutcomeStatusNote(outcome),
+      });
+    } catch {
+      // Terminal turn projection must stay available even if stale work repair fails.
     }
-    const taskStore = new TaskStore(this.butlerData);
-    for (const orchestrationId of orchestrationIds) {
-      try {
-        orchestrationStore.syncFromTasks(orchestrationId, taskStore);
-      } catch {
-        // Session read routes may project stale linked ids; projection should
-        // remain available even when an old orchestration file was removed.
-      }
-    }
+  }
+
+  private appendTurnAcknowledgedEvent(chatId: string, turnId: string): void {
+    this.appendTurnEvent(chatId, turnId, {
+      kind: TURN_ACKNOWLEDGED_EVENT_KIND,
+      payload: createTurnAcknowledgedPayload({
+        safeLabel: "Request received. Preparing the work.",
+        transport: "app",
+      }),
+    });
+  }
+
+  private appendTerminalTurnStateChanged(turn: TurnRecord): void {
+    this.appendEvent("turn.state_changed", { turn });
+    this.reconcileTurnLocalWorkOutcomeForTurn(turn);
   }
 
   listWorkerActivity(
@@ -3427,6 +3537,7 @@ export class AppServerStore {
           SELECT m.text
           FROM messages m
           WHERE m.chat_id = c.id
+            AND ${visibleMessageSqlPredicate("m")}
           ORDER BY m.rowid DESC
           LIMIT 1
         ) AS last_message_preview,
@@ -3444,6 +3555,13 @@ export class AppServerStore {
           ORDER BY t.rowid DESC
           LIMIT 1
         ) AS safe_status_label,
+        (
+          SELECT t.safe_error_code
+          FROM turns t
+          WHERE t.chat_id = c.id
+          ORDER BY t.rowid DESC
+          LIMIT 1
+        ) AS active_turn_safe_error_code,
         c.pinned,
         c.archived
       FROM chats c
@@ -3467,7 +3585,7 @@ export class AppServerStore {
         `
       SELECT rowid, id, chat_id, turn_id, role, text, status, created_at, updated_at, safe_error_code, retryable
       FROM messages
-      WHERE chat_id = ? AND rowid > ?
+      WHERE chat_id = ? AND rowid > ? AND ${visibleMessageSqlPredicate()}
       ORDER BY rowid ASC
       LIMIT 200
     `,
@@ -3500,7 +3618,7 @@ export class AppServerStore {
     `,
       )
       .all(chatId, cursor);
-    return rows.map(turnFromRow);
+    return rows.map((row) => publicTurnRecord(turnFromRow(row)));
   }
 
   listTurnProgressSnapshotsForMessages(
@@ -3517,16 +3635,35 @@ export class AppServerStore {
     for (const turnId of turnIds) {
       const turn = this.getTurnRow(turnId);
       if (!turn) continue;
+      const publicTurn = publicTurnRecord(turnFromRow(turn));
+      const rows = progressRowsForTurnState(
+        this.listProgressRowsForTurn(turnId),
+        turn.state,
+      );
+      const summary = publicTurnStatusLabel(
+        turn.safe_status_label,
+        turn.state,
+        turn.safe_error_code,
+      );
+      const delivery = isPublicSuppressedInternalContinuationCode(
+        turn.safe_error_code,
+      )
+        ? {
+            delivery_state: publicDeliveryStateForTurnState(publicTurn.state),
+            limitations: [],
+            limitation_codes: [],
+          }
+        : publicDeliveryMetadataForProjection(
+            this.deliveryMetadataForTurnRecord(publicTurn),
+          );
+      const publicDelivery = publicAppDeliveryMetadata(delivery);
       snapshots[turnId] = {
         turn_id: turnId,
-        summary: turn.safe_status_label,
+        ...(summary ? { summary } : {}),
         updated_at: turn.updated_at,
-        state: turn.state,
-        ...this.deliveryMetadataForTurnRecord(turnFromRow(turn)),
-        safe_progress_rows: progressRowsForTurnState(
-          this.listProgressRowsForTurn(turnId),
-          turn.state,
-        ),
+        state: publicTurn.state,
+        ...publicDelivery,
+        safe_progress_rows: rows,
       };
     }
     return snapshots;
@@ -3536,30 +3673,37 @@ export class AppServerStore {
     turn: TurnRecord,
     options: { suppressProgressRows?: boolean } = {},
   ): SessionViewTurn {
-    const delivery = this.deliveryMetadataForTurnRecord(turn);
+    const delivery = publicAppDeliveryMetadata(
+      publicDeliveryMetadataForProjection(this.deliveryMetadataForTurnRecord(turn)),
+    );
+    const progressRows = options.suppressProgressRows
+      ? []
+      : progressRowsForTurnState(
+          this.listProgressRowsForTurn(turn.id),
+          turn.state,
+        );
+    const progressSummary = publicTurnStatusLabel(
+      turn.safe_status_label,
+      turn.state,
+    );
     return {
       id: turn.id,
       state: turn.state,
       delivery_state: delivery.delivery_state,
       limitations: delivery.limitations,
       limitation_codes: delivery.limitation_codes,
-      safe_status_label: turn.safe_status_label,
+      safe_status_label: progressSummary,
       cancellable: turn.cancellable,
       retryable: turn.retryable,
       progress: {
         turn_id: turn.id,
-        summary: turn.safe_status_label,
+        ...(progressSummary ? { summary: progressSummary } : {}),
         updated_at: turn.updated_at,
         state: turn.state,
         delivery_state: delivery.delivery_state,
         limitations: delivery.limitations,
         limitation_codes: delivery.limitation_codes,
-        safe_progress_rows: options.suppressProgressRows
-          ? []
-          : progressRowsForTurnState(
-              this.listProgressRowsForTurn(turn.id),
-              turn.state,
-            ),
+        safe_progress_rows: progressRows,
       },
       created_at: turn.created_at,
       updated_at: turn.updated_at,
@@ -3572,16 +3716,19 @@ export class AppServerStore {
       const turn = this.getTurnRow(message.turn_id);
       if (!turn || !isTerminalProgressState(turn.state)) return message;
       const delivery = this.deliveryLimitationMetadataForTurn(message.turn_id);
+      const publicDelivery = delivery
+        ? publicAppDeliveryMetadata(publicDeliveryMetadataForProjection(delivery))
+        : null;
       const workBlocks = workBlocksFromTerminalProgressRows(
         progressRowsForTurnState(
           this.listProgressRowsForTurn(message.turn_id),
           turn.state,
         ),
       );
-      if (workBlocks.length === 0 && !delivery) return message;
+      if (workBlocks.length === 0 && !publicDelivery) return message;
       return {
         ...message,
-        ...(delivery ?? {}),
+        ...(publicDelivery ?? {}),
         ...(workBlocks.length > 0 ? { work_blocks: workBlocks } : {}),
       };
     });
@@ -3590,19 +3737,18 @@ export class AppServerStore {
   private deliveryLimitationMetadataForTurn(
     turnId: string,
   ): DeliveryLimitationMetadata | null {
-    const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
     const rows = this.db
       .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type = 'agent.turn_event'
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '$.turn_id') = ?
       ORDER BY id DESC
       LIMIT 500
     `,
       )
-      .all(turnPayloadPattern);
+      .all(turnId);
     for (const row of rows) {
       const payload = safeParseRecord(row.payload_json);
       if (payload.turn_id !== turnId) continue;
@@ -3616,7 +3762,7 @@ export class AppServerStore {
 
   private deliveryMetadataForTurnRecord(turn: TurnRecord): DeliveryLimitationMetadata {
     return this.deliveryLimitationMetadataForTurn(turn.id) ?? {
-      delivery_state: deliveryStateForTurnState(turn.state),
+      delivery_state: publicDeliveryStateForTurnState(turn.state),
       limitation_codes: [],
       limitations: [],
     };
@@ -3624,7 +3770,19 @@ export class AppServerStore {
 
   syncAllAppTransportEvents(): number {
     const rows = this.db
-      .query<{ id: string }, []>("SELECT id FROM chats WHERE archived = 0")
+      .query<{ id: string }, []>(
+        `
+      SELECT c.id
+      FROM chats c
+      WHERE c.archived = 0
+        OR EXISTS (
+          SELECT 1
+          FROM turns t
+          WHERE t.chat_id = c.id
+            AND t.state IN ('accepted', 'thinking', 'running', 'waiting_user')
+        )
+    `,
+      )
       .all();
     return rows.reduce(
       (count, row) => count + this.syncAppTransportEventsForChat(row.id),
@@ -3673,8 +3831,12 @@ export class AppServerStore {
     const parsed = readTranscriptEventsFromText(text);
     let applied = 0;
     for (const event of parsed.events) {
-      if (event.kind !== "outbound" || event.transport !== APP_TRANSPORT)
+      if (event.transport !== APP_TRANSPORT) continue;
+      if (event.kind === "delivery") {
+        if (this.projectAppDeliveryEvent(event)) applied += 1;
         continue;
+      }
+      if (event.kind !== "outbound") continue;
       if (this.projectAppOutboundEvent(chatId, event)) applied += 1;
     }
     this.transcriptSyncSnapshots.set(sessionId, {
@@ -3689,6 +3851,7 @@ export class AppServerStore {
   private projectAppOutboundEvent(
     chatId: string,
     event: TranscriptEvent,
+    deliveryState: "pending" | "delivered" = "pending",
   ): boolean {
     const payload = event.payload;
     const actionId = safeOptionalShortText(payload.actionId);
@@ -3702,9 +3865,31 @@ export class AppServerStore {
     if (!actionId || !turnId) return false;
     const turn = this.getTurnRow(turnId);
     if (!turn) return false;
-    if (isTerminalTurnState(turn.state)) {
+    const turnEvent = runtimeTurnEventFromAppOutboundMetadata(metadata);
+    if (turnEvent) {
+      if (deliveryState !== "delivered") {
+        this.pendingAppTurnEventOutbounds.set(actionId, { chatId, event });
+        return false;
+      }
+      const alreadyProjectedReceipt =
+        (turnEvent.kind === TURN_ACKNOWLEDGED_EVENT_KIND ||
+          turnEvent.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) &&
+        this.hasTurnEventKind(turnId, turnEvent.kind);
+      if (!alreadyProjectedReceipt) this.appendTurnEvent(chatId, turnId, turnEvent);
       this.markProjectedTransportEvent(actionId, event.eventId, chatId);
-      return false;
+      if (!alreadyProjectedReceipt) this.touchChat(chatId);
+      return !alreadyProjectedReceipt;
+    }
+    let terminalRecoverableCorrection = false;
+    if (isTerminalTurnState(turn.state)) {
+      if (
+        !shouldProjectRecoverableLimitedFinalOverTerminalTurn(turn, metadata) ||
+        this.recoverableLimitedFinalForFailedQueueDisposition(metadata) !== "accept"
+      ) {
+        this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+        return false;
+      }
+      terminalRecoverableCorrection = true;
     }
 
     const progressRow = progressRowFromAppOutbound(
@@ -3740,11 +3925,33 @@ export class AppServerStore {
     }
 
     if (metadata.kind !== "final_result") return false;
+    const queuedFinalProjection = this.queuedFinalProjectionDisposition(metadata);
+    if (queuedFinalProjection === "reject") {
+      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      return false;
+    }
+    if (queuedFinalProjection === "defer") return false;
     const text = sanitizeAppTransportFinalText(message.text);
     const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
-    if (!text && artifacts.length === 0) return false;
     const delivery = deliveryLimitationMetadataFromRecord(metadata);
     const limitedDelivery = delivery?.delivery_state === "delivered_with_limitations";
+    const noVisibleReply = metadata.noVisibleReply === true ||
+      shouldTreatLimitedFinalAsNoVisible(artifacts, delivery, metadata);
+    if (noVisibleReply && hasUnsupportedNoVisibleDeliveryState(metadata, delivery)) {
+      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      return false;
+    }
+    if (!text && artifacts.length === 0 && !noVisibleReply) return false;
+    if (noVisibleReply) {
+      this.finalizeResponderLimitedDelivery(chatId, turnId, {
+        text: null,
+        reason: delivery?.limitations[0] ?? "Internal recovery required.",
+        delivery: deliveryStateFromProjectedNoVisibleFinal(delivery),
+      });
+      this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+      this.touchChat(chatId);
+      return true;
+    }
 
     const existing = this.getLatestAssistantMessageForTurn(turnId);
     const artifactFiles = this.artifactFilesFromOutbound(
@@ -3780,7 +3987,10 @@ export class AppServerStore {
       text ? [text] : [],
       files,
     );
-    if (!this.hasTurnEventKind(turnId, "message.final.completed")) {
+    if (
+      terminalRecoverableCorrection ||
+      !this.hasTurnEventKind(turnId, "message.final.completed")
+    ) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "message.final.completed",
         payload: {
@@ -3798,8 +4008,11 @@ export class AppServerStore {
       cancellable: false,
       safeErrorCode: null,
     });
-    this.appendEvent("turn.state_changed", { turn: deliveredTurn });
-    if (!this.hasTurnEventKind(turnId, "turn.completed")) {
+    this.appendTerminalTurnStateChanged(deliveredTurn);
+    if (
+      terminalRecoverableCorrection ||
+      !this.hasTurnEventKind(turnId, "turn.completed")
+    ) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "turn.completed",
         payload: {
@@ -3812,6 +4025,62 @@ export class AppServerStore {
     this.touchChat(chatId);
     void this.drainQueuedSessionMessages(chatId).catch(() => undefined);
     return true;
+  }
+
+  private queuedFinalProjectionDisposition(
+    metadata: Record<string, unknown>,
+  ): "accept" | "defer" | "reject" {
+    const queueId = safeInboundQueueId(metadata.queueId);
+    const dispatchClaimId = safeOptionalShortToken(metadata.dispatchClaimId);
+    if (!queueId || !dispatchClaimId) return "accept";
+    const failed = this.readInboundQueueTerminalRecord("failed", queueId);
+    if (failed) {
+      return shouldAcceptRecoverableLimitedFinalForFailedQueue(
+        metadata,
+        failed,
+        dispatchClaimId,
+      )
+        ? "accept"
+        : "reject";
+    }
+    const processed = this.readInboundQueueTerminalRecord("processed", queueId);
+    const processedClaimId = terminalClaimId(processed);
+    if (!processed) return "defer";
+    if (!processedClaimId) return "defer";
+    return processedClaimId === dispatchClaimId ? "accept" : "reject";
+  }
+
+  private recoverableLimitedFinalForFailedQueueDisposition(
+    metadata: Record<string, unknown>,
+  ): "accept" | "reject" {
+    const queueId = safeInboundQueueId(metadata.queueId);
+    const dispatchClaimId = safeOptionalShortToken(metadata.dispatchClaimId);
+    if (!queueId || !dispatchClaimId) return "reject";
+    const failed = this.readInboundQueueTerminalRecord("failed", queueId);
+    if (!failed) return "reject";
+    return shouldAcceptRecoverableLimitedFinalForFailedQueue(
+      metadata,
+      failed,
+      dispatchClaimId,
+    )
+      ? "accept"
+      : "reject";
+  }
+
+  private readInboundQueueTerminalRecord(
+    state: "failed" | "processed",
+    queueId: string,
+  ): Record<string, unknown> | null {
+    try {
+      const text = readFileSync(
+        join(this.butlerData, "runtime", "inbound-events", state, `${queueId}.json`),
+        "utf8",
+      );
+      const parsed = JSON.parse(text);
+      return isRecord(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
   }
 
   private applyGeneratedSessionTitleFromProjection(
@@ -3857,6 +4126,21 @@ export class AppServerStore {
     return true;
   }
 
+  private projectAppDeliveryEvent(event: TranscriptEvent): boolean {
+    const actionId = safeOptionalShortText(event.payload.actionId);
+    if (!actionId) return false;
+    const pending = this.pendingAppTurnEventOutbounds.get(actionId);
+    if (!pending) return false;
+    this.pendingAppTurnEventOutbounds.delete(actionId);
+    if (event.payload.ok !== true) return false;
+    if (this.hasProjectedTransportEvent(actionId)) return false;
+    return this.projectAppOutboundEvent(
+      pending.chatId,
+      pending.event,
+      "delivered",
+    );
+  }
+
   private hasProjectedTransportEvent(actionId: string): boolean {
     const row = this.db
       .query<
@@ -3896,6 +4180,19 @@ export class AppServerStore {
       return false;
     }
     const safeError = projectSafeTurnFailure({ message, metadata });
+    const mayProjectLimitedFailure =
+      turn.state !== "failed" ||
+      turn.safe_error_code === INTERNAL_RECOVERY_REQUIRED_CODE ||
+      turn.safe_error_code === "inbound_dispatch_timeout";
+    const limitedDelivery = mayProjectLimitedFailure
+      ? appLimitedDeliveryForProjectedFailure(safeError)
+      : null;
+    if (limitedDelivery) {
+      this.finalizeResponderLimitedDelivery(chatId, turnId, limitedDelivery);
+      this.touchChat(chatId);
+      void this.drainQueuedSessionMessages(chatId).catch(() => undefined);
+      return true;
+    }
     const existing = this.getLatestAssistantMessageForTurn(turnId);
     if (
       turn.state === "failed" &&
@@ -3907,20 +4204,25 @@ export class AppServerStore {
       return false;
     }
 
-    this.upsertAssistantTurnFailure(chatId, turnId, safeError);
-    if (!this.hasTurnEventKind(turnId, "turn.failed")) {
+    const runtimeFault = this.runtimeFaultRecordForTurn(turnId);
+    const isRuntimeFault = Boolean(runtimeFault);
+    const isRetryableRuntimeFault = runtimeFault?.retryable === true;
+    this.upsertAssistantTurnFailure(chatId, turnId, safeError, {
+      retryable: isRetryableRuntimeFault,
+    });
+    if (!this.hasTurnEventKind(turnId, isRuntimeFault ? "runtime.fault" : "turn.failed")) {
       this.appendTurnEvent(chatId, turnId, {
-        kind: "turn.failed",
-        payload: safeTurnFailureEventPayload(safeError),
+        kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
+        payload: runtimeFault ?? safeTurnFailureEventPayload(safeError),
       });
     }
-    const failedTurn = this.updateTurnState(turnId, "failed", {
-      safeStatusLabel: "Failed",
-      retryable: true,
+    const failedTurn = this.updateTurnState(turnId, isRuntimeFault ? "runtime_fault" : "failed", {
+      safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
+      retryable: isRetryableRuntimeFault,
       cancellable: false,
       safeErrorCode: safeError.code,
     });
-    this.appendEvent("turn.state_changed", { turn: failedTurn });
+    this.appendTerminalTurnStateChanged(failedTurn);
     this.touchChat(chatId);
     void this.drainQueuedSessionMessages(chatId).catch(() => undefined);
     return true;
@@ -4028,7 +4330,10 @@ export class AppServerStore {
       id: row.id,
       type: row.type,
       created_at: row.created_at,
-      payload: JSON.parse(row.payload_json) as Record<string, unknown>,
+      payload: publicAppEventPayload(
+        row.type,
+        JSON.parse(row.payload_json) as Record<string, unknown>,
+      ),
     }));
   }
 
@@ -4082,10 +4387,12 @@ export class AppServerStore {
     });
     const progressRow = progressRowFromTurnEvent(event);
     if (progressRow) {
+      const row = normalizeProgressSummaryRow(progressRow);
+      this.updateActiveTurnProgressSummary(turnId, row);
       this.appendEvent("agent.turn_event.progress", {
         session_id: sessionId,
         turn_id: turnId,
-        row: normalizeProgressSummaryRow(progressRow),
+        row,
         event_id: event.id,
       });
     }
@@ -4099,6 +4406,7 @@ export class AppServerStore {
   ): ProgressSummaryRow {
     const row = normalizeProgressSummaryRow(input);
     if (this.isTerminalTurn(turnId)) return row;
+    this.updateActiveTurnProgressSummary(turnId, row);
     const event = turnEventFromProgressRow({
       sessionId,
       turnId,
@@ -4119,29 +4427,86 @@ export class AppServerStore {
     return row;
   }
 
+  private updateActiveTurnProgressSummary(
+    turnId: string,
+    row: ProgressSummaryRow,
+  ): void {
+    if (isTerminalProgressState(row.state)) return;
+    const label = progressSummaryStatusLabel(row);
+    if (!label) return;
+    this.db
+      .query(
+        `
+      UPDATE turns
+      SET safe_status_label = ?, updated_at = ?
+      WHERE id = ?
+        AND state NOT IN ('delivered', 'failed', 'cancelled')
+    `,
+      )
+      .run(label, row.created_at ?? new Date().toISOString(), turnId);
+  }
+
   private listProgressRowsForTurn(turnId: string): ProgressSummaryRow[] {
-    const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
+    const internalContinuationEventIds =
+      this.internalContinuationProgressEventIds(turnId);
     const rows = this.db
       .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type IN ('progress.summary', 'agent.turn_event.progress')
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '$.turn_id') = ?
       ORDER BY id DESC
       LIMIT 1000
     `,
       )
-      .all(turnPayloadPattern);
+      .all(turnId);
     const progressRows: ProgressSummaryRow[] = [];
     for (const event of rows.reverse()) {
       const payload = safeParseRecord(event.payload_json);
       if (payload.turn_id !== turnId) continue;
+      const eventId = safeOptionalShortToken(payload.event_id);
+      if (
+        event.type === "agent.turn_event.progress" &&
+        eventId &&
+        internalContinuationEventIds.has(eventId)
+      ) {
+        continue;
+      }
       const row = payload.row;
       if (!isRecord(row)) continue;
       progressRows.push(normalizeProgressSummaryRow(row));
     }
-    return dedupeProgressRows(progressRows).filter(isSessionSummaryProgressRow);
+    const turn = this.getTurnRow(turnId);
+    return publicProgressRowsForTurn(progressRows, turn?.state);
+  }
+
+  private internalContinuationProgressEventIds(
+    turnId: string,
+  ): Set<string> {
+    const rows = this.db
+      .query<EventRow, [string]>(
+        `
+      SELECT id, type, payload_json, created_at
+      FROM events
+      WHERE type = 'agent.turn_event'
+        AND json_extract(payload_json, '$.turn_id') = ?
+      ORDER BY id DESC
+      LIMIT 1000
+    `,
+      )
+      .all(turnId);
+    const eventIds = new Set<string>();
+    for (const row of rows) {
+      const payload = safeParseRecord(row.payload_json);
+      if (payload.turn_id !== turnId) continue;
+      const event = isRecord(payload.event) ? payload.event : null;
+      const eventId = safeOptionalShortToken(event?.id);
+      if (eventId && isInternalContinuationProgressEvent(event)) {
+        eventIds.add(eventId);
+      }
+    }
+    return eventIds;
   }
 
   createMessageFile(input: {
@@ -4291,16 +4656,7 @@ export class AppServerStore {
         "Queued message text is required.",
       );
     }
-    const controls = normalizeSessionControls(
-      {
-        ...this.getSessionControls(chatId),
-        model: input.model,
-        reasoning_effort: input.reasoning_effort,
-        access_mode: input.access_mode,
-        plan_mode: input.plan_mode,
-      },
-      this.registeredModelMetadata(),
-    );
+    const controls = this.controlsForMessageSend(chatId, input);
     const now = new Date().toISOString();
     const queuedId = `queued-${crypto.randomUUID()}`;
     this.db
@@ -4442,12 +4798,7 @@ export class AppServerStore {
       chatId,
       input.attachments ?? [],
     );
-    const controls = this.updateSessionControls(chatId, {
-      model: input.model,
-      reasoning_effort: input.reasoning_effort,
-      access_mode: input.access_mode,
-      plan_mode: input.plan_mode,
-    });
+    const controls = this.controlsForMessageSend(chatId, input);
     const turn = this.insertTurn(chatId, "accepted", "Accepted");
     const accepted = this.insertMessage(chatId, "user", text, "sent", {
       clientMessageId: input.client_message_id,
@@ -4476,22 +4827,15 @@ export class AppServerStore {
         },
       });
     }
-    this.appendTurnEvent(chatId, turn.id, {
-      kind: "turn.accepted",
-      payload: { safeLabel: "Accepted" },
-    });
+    this.appendTurnAcknowledgedEvent(chatId, turn.id);
     const thinkingTurn = this.updateTurnState(turn.id, "thinking", {
       safeStatusLabel: "Thinking",
       cancellable: true,
     });
     this.appendEvent("turn.state_changed", { turn: thinkingTurn });
-    this.appendTurnEvent(chatId, turn.id, {
-      kind: "turn.started",
-      payload: { safeLabel: "Started" },
-    });
 
     if (!responder) {
-      this.enqueueAppTransportTurn({
+      const queuedTurn = this.enqueueAppTransportTurn({
         chatId,
         turnId: turn.id,
         message: accepted,
@@ -4501,7 +4845,7 @@ export class AppServerStore {
       return {
         accepted,
         replies: [],
-        turn: thinkingTurn,
+        turn: queuedTurn,
         next_cursor: accepted.cursor,
       };
     }
@@ -4578,6 +4922,8 @@ export class AppServerStore {
         this.drainQueuedSessionMessages(chatId, responder, options),
       finalizeResponderLimitedDelivery: (chatId, turnId, limitedDelivery) =>
         this.finalizeResponderLimitedDelivery(chatId, turnId, limitedDelivery),
+      markResponderNonPublicContinuation: (chatId, turnId) =>
+        this.markResponderNonPublicContinuation(chatId, turnId),
       finalizeCancelledTurn: (chatId, turnId) =>
         this.finalizeCancelledTurn(chatId, turnId),
       hasTurnEventKind: (turnId, kind) => this.hasTurnEventKind(turnId, kind),
@@ -4612,22 +4958,29 @@ export class AppServerStore {
           cancellable: false,
           safeErrorCode: null,
         });
-        this.appendEvent("turn.state_changed", { turn: deliveredTurn });
+        this.appendTerminalTurnStateChanged(deliveredTurn);
         return deliveredTurn;
       },
       updateTurnFailed: (chatId, turnId, safeError) => {
-        this.upsertAssistantTurnFailure(chatId, turnId, safeError);
-        this.appendTurnEvent(chatId, turnId, {
-          kind: "turn.failed",
-          payload: safeTurnFailureEventPayload(safeError),
+        const runtimeFault = this.runtimeFaultRecordForTurn(turnId);
+        const isRuntimeFault = Boolean(runtimeFault);
+        const isRetryableRuntimeFault = runtimeFault?.retryable === true;
+        this.upsertAssistantTurnFailure(chatId, turnId, safeError, {
+          retryable: isRetryableRuntimeFault,
         });
-        const failedTurn = this.updateTurnState(turnId, "failed", {
-          safeStatusLabel: "Failed",
-          retryable: true,
+        if (!this.hasTurnEventKind(turnId, isRuntimeFault ? "runtime.fault" : "turn.failed")) {
+          this.appendTurnEvent(chatId, turnId, {
+            kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
+            payload: runtimeFault ?? safeTurnFailureEventPayload(safeError),
+          });
+        }
+        const failedTurn = this.updateTurnState(turnId, isRuntimeFault ? "runtime_fault" : "failed", {
+          safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
+          retryable: isRetryableRuntimeFault,
           cancellable: false,
           safeErrorCode: safeError.code,
         });
-        this.appendEvent("turn.state_changed", { turn: failedTurn });
+        this.appendTerminalTurnStateChanged(failedTurn);
         return failedTurn;
       },
     });
@@ -4639,46 +4992,108 @@ export class AppServerStore {
     message: MessageRecord;
     text: string;
     controls: SessionControlState;
-  }): void {
-    const chat = this.getChatRow(input.chatId);
-    const project = chat?.project_id
-      ? this.getProjectRow(chat.project_id)
-      : null;
-    const sessionId = sessionHintForRow(input.chatId);
-    this.ensureAppTransportSessionBinding({
-      chatId: input.chatId,
-      sessionId,
-      project,
-      sessionKind: chat?.kind ?? "chat",
-      controls: input.controls,
-    });
-    this.serviceClient.enqueueAppTurn(
-      {
+  }): TurnRecord {
+    try {
+      this.assertAppTransportExecutorReady();
+      const chat = this.getChatRow(input.chatId);
+      const project = chat?.project_id
+        ? this.getProjectRow(chat.project_id)
+        : null;
+      const sessionId = sessionHintForRow(input.chatId);
+      this.ensureAppTransportSessionBinding({
         chatId: input.chatId,
-        messageId: input.message.id,
-        turnId: input.turnId,
-        text: input.text,
-        timestamp: input.message.created_at,
         sessionId,
-        accountId: APP_ACCOUNT,
-        peerKind: "dm",
-        senderId: APP_SENDER_ID,
-        senderDisplayName: "Butler App",
-        projectId: chat?.project_id ?? undefined,
-        attachments: this.listMessageAttachmentsForTransport(input.message.id),
-        rawSource: "app-server",
-      },
-      {
-        source: "app-server",
-        chatId: input.chatId,
-        turnId: input.turnId,
-      },
+        project,
+        sessionKind: chat?.kind ?? "chat",
+        controls: input.controls,
+      });
+      const queued = this.serviceClient.enqueueAppTurn(
+        {
+          chatId: input.chatId,
+          messageId: input.message.id,
+          turnId: input.turnId,
+          text: input.text,
+          timestamp: input.message.created_at,
+          sessionId,
+          accountId: APP_ACCOUNT,
+          peerKind: "dm",
+          senderId: APP_SENDER_ID,
+          senderDisplayName: "Butler App",
+          projectId: chat?.project_id ?? undefined,
+          attachments: this.listMessageAttachmentsForTransport(input.message.id),
+          rawSource: "app-server",
+        },
+        {
+          source: "app-server",
+          chatId: input.chatId,
+          turnId: input.turnId,
+        },
+      );
+      this.appendEvent("turn.queued", {
+        session_id: input.chatId,
+        turn_id: input.turnId,
+        transport: APP_TRANSPORT,
+        queue_id: queued.queueId,
+      });
+      return this.getTurn(input.turnId) ?? this.updateTurnState(input.turnId, "thinking", {
+        safeStatusLabel: "Thinking",
+        cancellable: true,
+      });
+    } catch (error) {
+      return this.failAppTransportQueueHandoff(input, error);
+    }
+  }
+
+  private assertAppTransportExecutorReady(): void {
+    const nativeState = readNativeMainState(
+      getNativeMainStatePath(this.butlerData),
     );
-    this.appendEvent("turn.queued", {
+    if (nativeState && isPidRunning(nativeState.pid)) {
+      return;
+    }
+    const state = readServiceState(this.butlerData, "butler-main");
+    if (state && isPidRunning(state.pid)) {
+      return;
+    }
+    if (nativeState) {
+      throw new Error(`Butler Agent executor is stale (pid ${nativeState.pid}).`);
+    }
+    if (state) {
+      throw new Error(`Butler Agent executor is stale (pid ${state.pid}).`);
+    }
+  }
+
+  private failAppTransportQueueHandoff(
+    input: {
+      chatId: string;
+      turnId: string;
+    },
+    error: unknown,
+  ): TurnRecord {
+    const safeError = appSafeResponderError(error);
+    this.appendTurnEvent(input.chatId, input.turnId, {
+      kind: "turn.failed",
+      payload: safeTurnFailureEventPayload({
+        code: APP_TURN_QUEUE_FAILED_CODE,
+        message:
+          "Butler could not queue this request for execution. Retry the turn.",
+        cause: safeError.cause ?? safeError.message,
+      }),
+    });
+    const failedTurn = this.updateTurnState(input.turnId, "failed", {
+      safeStatusLabel: "Failed",
+      retryable: false,
+      cancellable: false,
+      safeErrorCode: APP_TURN_QUEUE_FAILED_CODE,
+    });
+    this.appendTerminalTurnStateChanged(failedTurn);
+    this.appendEvent("turn.queue_failed", {
       session_id: input.chatId,
       turn_id: input.turnId,
       transport: APP_TRANSPORT,
+      safe_error_code: APP_TURN_QUEUE_FAILED_CODE,
     });
+    return failedTurn;
   }
 
   private ensureAppTransportSessionBinding(input: {
@@ -4731,6 +5146,7 @@ export class AppServerStore {
         required_tools: stringArray(runtimePolicy.required_tools),
         requiredNativeToolProfiles: stringArray(runtimePolicy.requiredNativeToolProfiles),
         runtimePolicy,
+        reasoning_effort: input.controls.reasoning_effort,
         workerModelRules: settings.worker_model_rules,
       },
     });
@@ -4746,19 +5162,12 @@ export class AppServerStore {
     this.ensureChat(chatId);
     const controls = this.getSessionControls(chatId);
     const turn = this.insertTurn(chatId, "accepted", "Accepted");
-    this.appendTurnEvent(chatId, turn.id, {
-      kind: "turn.accepted",
-      payload: { safeLabel: "Accepted" },
-    });
+    this.appendTurnAcknowledgedEvent(chatId, turn.id);
     const thinkingTurn = this.updateTurnState(turn.id, "thinking", {
       safeStatusLabel: "Thinking",
       cancellable: true,
     });
     this.appendEvent("turn.state_changed", { turn: thinkingTurn });
-    this.appendTurnEvent(chatId, turn.id, {
-      kind: "turn.started",
-      payload: { safeLabel: "Started" },
-    });
 
     try {
       const appendProgress = (row: ProgressSummaryInput) =>
@@ -4804,7 +5213,7 @@ export class AppServerStore {
           cancellable: false,
           safeErrorCode: null,
         });
-        this.appendEvent("turn.state_changed", { turn: deliveredTurn });
+        this.appendTerminalTurnStateChanged(deliveredTurn);
         if (!this.hasTurnEventKind(turn.id, "turn.completed")) {
           appendTurnEvent({
             kind: "turn.completed",
@@ -4861,7 +5270,7 @@ export class AppServerStore {
         cancellable: false,
         safeErrorCode: null,
       });
-      this.appendEvent("turn.state_changed", { turn: deliveredTurn });
+      this.appendTerminalTurnStateChanged(deliveredTurn);
       if (!this.hasTurnEventKind(turn.id, "turn.completed")) {
         appendTurnEvent({
           kind: "turn.completed",
@@ -4872,8 +5281,11 @@ export class AppServerStore {
         });
       }
       this.touchChat(chatId);
+      const publicLimitedDelivery = limitedDelivery
+        ? publicDeliveryMetadataForProjection(limitedDelivery)
+        : null;
       const projectedReplies = limitedDelivery
-        ? replies.map((reply) => ({ ...reply, ...limitedDelivery }))
+        ? replies.map((reply) => ({ ...reply, ...publicLimitedDelivery! }))
         : replies;
       const reply = projectedReplies.at(-1)!;
       return {
@@ -4910,6 +5322,36 @@ export class AppServerStore {
           next_cursor: accepted.cursor,
         };
       }
+      if (isNonPublicContinuationDeliveryError(error)) {
+        const continuation = this.markResponderNonPublicContinuation(
+          chatId,
+          turn.id,
+        );
+        const existingMessage = this.getMessageRow(messageId);
+        const accepted = existingMessage
+          ? messageFromRow(
+              existingMessage,
+              this.listMessageAttachments(messageId),
+            )
+          : ({
+              id: messageId,
+              chat_id: chatId,
+              role: "system_event",
+              text: "",
+              status: "delivered",
+              retryable: false,
+              cursor: continuation.turn.cursor,
+              created_at: continuation.turn.updated_at,
+              updated_at: continuation.turn.updated_at,
+            } satisfies MessageRecord);
+        this.touchChat(chatId);
+        return {
+          accepted,
+          replies: [],
+          turn: continuation.turn,
+          next_cursor: continuation.turn.cursor,
+        };
+      }
       const limitedDelivery = appLimitedDeliveryForError(error);
       if (limitedDelivery) {
         const delivered = this.finalizeResponderLimitedDelivery(chatId, turn.id, limitedDelivery);
@@ -4936,25 +5378,32 @@ export class AppServerStore {
           reply: delivered.reply,
           replies: delivered.replies,
           turn: delivered.turn,
-          next_cursor: delivered.reply.cursor,
+          next_cursor: delivered.reply?.cursor ?? delivered.turn.cursor,
         };
       }
       const safeError = appSafeResponderError(error);
-      this.upsertAssistantTurnFailure(chatId, turn.id, safeError);
-      this.appendTurnEvent(chatId, turn.id, {
-        kind: "turn.failed",
-        payload: {
-          safeLabel: safeError.message,
-          safeErrorCode: safeError.code,
-        },
+      const runtimeFault = this.runtimeFaultRecordForTurn(turn.id);
+      const isRuntimeFault = Boolean(runtimeFault);
+      const isRetryableRuntimeFault = runtimeFault?.retryable === true;
+      this.upsertAssistantTurnFailure(chatId, turn.id, safeError, {
+        retryable: isRetryableRuntimeFault,
       });
-      const failedTurn = this.updateTurnState(turn.id, "failed", {
-        safeStatusLabel: "Failed",
-        retryable: true,
+      if (!this.hasTurnEventKind(turn.id, isRuntimeFault ? "runtime.fault" : "turn.failed")) {
+        this.appendTurnEvent(chatId, turn.id, {
+          kind: isRuntimeFault ? "runtime.fault" : "turn.failed",
+          payload: runtimeFault ?? {
+            safeLabel: safeError.message,
+            safeErrorCode: safeError.code,
+          },
+        });
+      }
+      const failedTurn = this.updateTurnState(turn.id, isRuntimeFault ? "runtime_fault" : "failed", {
+        safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
+        retryable: isRetryableRuntimeFault,
         cancellable: false,
         safeErrorCode: safeError.code,
       });
-      this.appendEvent("turn.state_changed", { turn: failedTurn });
+      this.appendTerminalTurnStateChanged(failedTurn);
       this.touchChat(chatId);
       throw error;
     } finally {
@@ -5008,7 +5457,11 @@ export class AppServerStore {
         "turn_not_found",
         "Turn not found.",
       );
-    if (!row.retryable || row.state !== "failed") {
+    if (
+      !row.retryable ||
+      row.state !== "runtime_fault" ||
+      this.runtimeFaultRecordForTurn(turnId)?.retryable !== true
+    ) {
       throw new AppStoreOperationError(
         409,
         "turn_not_retryable",
@@ -5032,11 +5485,7 @@ export class AppServerStore {
 
     const retryingTurn = this.claimRetryTurn(turnId, row.attempt + 1);
     this.appendEvent("turn.state_changed", { turn: retryingTurn });
-    this.markAssistantTurnRetrying(turnId);
-    this.appendTurnEvent(row.chat_id, turnId, {
-      kind: "turn.started",
-      payload: { safeLabel: "Started" },
-    });
+    this.deleteAssistantMessagesForTurn(turnId);
 
     if (!responder) {
       this.enqueueAppTransportTurn({
@@ -5532,6 +5981,30 @@ export class AppServerStore {
       .run(now, sessionId);
   }
 
+  private reconcileCancelledTurnActivityMessages(): void {
+    const rows = this.db
+      .query<{ id: string; chat_id: string }, [string]>(
+        `
+      SELECT turns.id, turns.chat_id
+      FROM turns
+      WHERE turns.state = 'cancelled'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM messages
+          WHERE messages.turn_id = turns.id
+            AND messages.role = 'assistant'
+            AND messages.status = 'cancelled'
+            AND messages.text = ?
+        )
+      ORDER BY turns.rowid ASC
+    `,
+      )
+      .all(CANCELLED_TURN_ACTIVITY_TEXT);
+    for (const row of rows) {
+      this.ensureCancelledTurnActivityMessage(row.chat_id, row.id);
+    }
+  }
+
   private migrate(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS chats (
@@ -5690,8 +6163,20 @@ export class AppServerStore {
       CREATE INDEX IF NOT EXISTS session_queued_messages_session_idx
       ON session_queued_messages(chat_id, state);
 
+      CREATE INDEX IF NOT EXISTS turns_chat_state_idx
+      ON turns(chat_id, state);
+
       CREATE INDEX IF NOT EXISTS events_type_id_idx
       ON events(type, id DESC);
+
+      CREATE INDEX IF NOT EXISTS events_type_turn_id_idx
+      ON events(type, json_extract(payload_json, '$.turn_id'), id DESC);
+
+      CREATE INDEX IF NOT EXISTS events_type_session_id_idx
+      ON events(type, json_extract(payload_json, '$.session_id'), id DESC);
+
+      CREATE INDEX IF NOT EXISTS events_turn_event_kind_idx
+      ON events(type, json_extract(payload_json, '$.turn_id'), json_extract(payload_json, '$.event.kind'), id DESC);
     `);
     ensureAppMessageQuerySchema(this.db);
     this.ensureColumn("chats", "pinned", "INTEGER NOT NULL DEFAULT 0");
@@ -5844,7 +6329,7 @@ export class AppServerStore {
       UPDATE turns
       SET state = 'retrying', safe_status_label = 'Retrying', safe_error_code = NULL,
         retryable = 0, cancellable = 1, attempt = ?, updated_at = ?
-      WHERE id = ? AND state = 'failed' AND retryable = 1
+      WHERE id = ? AND state = 'runtime_fault' AND retryable = 1
     `,
       )
       .run(attempt, now, turnId) as { changes: number };
@@ -6252,9 +6737,19 @@ export class AppServerStore {
     chatId: string,
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
-  ): { reply: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
-    const text = limitedDelivery.text;
-    const deliveryState = limitedDelivery.delivery.delivery_state;
+    options: { allowContinuation?: boolean; visibleNoReplyText?: string } = {},
+  ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
+    if (
+      options.allowContinuation !== false &&
+      isContinuationDeliveryIssue(limitedDelivery.delivery.issue_kind)
+    ) {
+      return this.markResponderContinuation(chatId, turnId, limitedDelivery);
+    }
+    const text = limitedDelivery.text ?? options.visibleNoReplyText ?? null;
+    const noVisibleReply = text === null;
+    const deliveryState = publicDeliveryStateForProjection(
+      limitedDelivery.delivery.delivery_state,
+    );
     const limitations = limitedDelivery.delivery.limitations;
     const limitationCodes = limitedDelivery.delivery.limitation_codes;
     if (!this.hasTurnEventKind(turnId, "message.final.started")) {
@@ -6263,13 +6758,17 @@ export class AppServerStore {
         payload: { safeLabel: "Preparing final answer" },
       });
     }
-    const replies = this.insertOrReplaceAssistantReplies(chatId, turnId, [text]);
-    if (!this.hasTurnEventKind(turnId, "message.final.completed")) {
+    if (text === null) this.deleteAssistantMessagesForTurn(turnId);
+    const replies = text === null
+      ? []
+      : this.insertOrReplaceAssistantReplies(chatId, turnId, [text]);
+    if (noVisibleReply || !this.hasTurnEventKind(turnId, "message.final.completed")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "message.final.completed",
         payload: {
           safeLabel: "Final answer ready with limitations",
-          textChars: text.length,
+          textChars: text?.length ?? 0,
+          noVisibleReply,
           deliveryState,
           delivery_state: deliveryState,
           limitations,
@@ -6284,8 +6783,8 @@ export class AppServerStore {
       cancellable: false,
       safeErrorCode: null,
     });
-    this.appendEvent("turn.state_changed", { turn: deliveredTurn });
-    if (!this.hasTurnEventKind(turnId, "turn.completed")) {
+    this.appendTerminalTurnStateChanged(deliveredTurn);
+    if (noVisibleReply || !this.hasTurnEventKind(turnId, "turn.completed")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "turn.completed",
         payload: {
@@ -6305,16 +6804,178 @@ export class AppServerStore {
       limitation_codes: limitationCodes,
     }));
     return {
-      reply: projectedReplies.at(-1)!,
+      reply: projectedReplies.at(-1),
       replies: projectedReplies,
       turn: deliveredTurn,
     };
+  }
+
+  private markResponderContinuation(
+    chatId: string,
+    turnId: string,
+    limitedDelivery: AppLimitedDelivery,
+  ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
+    this.deleteAssistantMessagesForTurn(turnId);
+    const currentTurn = this.getTurnRow(turnId);
+    const deliveryState = limitedDelivery.delivery.delivery_state;
+    const progressedDuringCurrentQueue =
+      currentTurn && isInternalContinuationTurnState(currentTurn.state)
+        ? this.hasPublicContinuationProgressSinceLatestQueue(turnId)
+        : false;
+    const shouldRequeue =
+      shouldAutomaticallyRequeueContinuation(currentTurn, deliveryState) ||
+      progressedDuringCurrentQueue;
+    if (!shouldRequeue && currentTurn && isInternalContinuationTurnState(currentTurn.state)) {
+      return { replies: [], turn: turnFromRow(currentTurn) };
+    }
+    const attempt = shouldRequeue && currentTurn
+      ? currentTurn.attempt + 1
+      : currentTurn?.attempt;
+    const recoveryTurn = this.updateTurnState(
+      turnId,
+      shouldRequeue ? "retrying" : "waiting_for_tool",
+      {
+        safeStatusLabel: "",
+        retryable: false,
+        cancellable: true,
+        safeErrorCode: null,
+        attempt,
+      },
+    );
+    this.appendEvent("turn.state_changed", { turn: recoveryTurn });
+    if (shouldRequeue) this.requeueRecoverableAppTurn(chatId, recoveryTurn);
+    return {
+      replies: [],
+      turn: recoveryTurn,
+    };
+  }
+
+  private markResponderNonPublicContinuation(
+    chatId: string,
+    turnId: string,
+  ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
+    return this.markResponderContinuation(chatId, turnId, {
+      text: null,
+      reason: "Continuation remains active.",
+      delivery: {
+        delivery_state: "running",
+        issue_kind: "none",
+        visibility: "continuation_progress",
+        terminal: false,
+        failure_notice: false,
+        limitation_codes: [],
+        limitations: [],
+      },
+    });
+  }
+
+  private hasPublicContinuationProgressSinceLatestQueue(turnId: string): boolean {
+    const latestQueue = this.db
+      .query<{ id: number }, [string]>(
+        `
+      SELECT id
+      FROM events
+      WHERE type = 'turn.queued'
+        AND json_extract(payload_json, '$.turn_id') = ?
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+      )
+      .get(turnId);
+    if (!latestQueue) return false;
+    const internalContinuationEventIds =
+      this.internalContinuationProgressEventIds(turnId);
+    const rows = this.db
+      .query<EventRow, [number, string]>(
+        `
+      SELECT id, type, payload_json, created_at
+      FROM events
+      WHERE id > ?
+        AND json_extract(payload_json, '$.turn_id') = ?
+        AND type IN ('progress.summary', 'agent.turn_event.progress')
+      ORDER BY id ASC
+      LIMIT 1000
+    `,
+      )
+      .all(latestQueue.id, turnId);
+    const progressRows: ProgressSummaryRow[] = [];
+    for (const event of rows) {
+      const payload = safeParseRecord(event.payload_json);
+      if (payload.turn_id !== turnId) continue;
+      const eventId = safeOptionalShortToken(payload.event_id);
+      if (
+        event.type === "agent.turn_event.progress" &&
+        eventId &&
+        internalContinuationEventIds.has(eventId)
+      ) {
+        continue;
+      }
+      const row = payload.row;
+      if (!isRecord(row)) continue;
+      progressRows.push(normalizeProgressSummaryRow(row));
+    }
+    const turn = this.getTurnRow(turnId);
+    return publicProgressRowsForTurn(progressRows, turn?.state).length > 0;
+  }
+
+  private requeueRecoverableAppTurn(chatId: string, turn: TurnRecord): void {
+    const row = this.getTurnRow(turn.id);
+    if (!row?.user_message_id) return;
+    const messageRow = this.getMessageRow(row.user_message_id);
+    if (!messageRow) return;
+    this.enqueueAppTransportTurn({
+      chatId,
+      turnId: turn.id,
+      message: messageFromRow(messageRow, this.listMessageAttachments(messageRow.id)),
+      text: messageRow.text,
+      controls: this.getSessionControls(chatId),
+    });
+  }
+
+  private deleteAssistantMessagesForTurn(turnId: string): void {
+    const rows = this.db
+      .query<MessageRow, [string]>(
+        `
+      SELECT rowid, id, chat_id, turn_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+      FROM messages
+      WHERE turn_id = ? AND role = 'assistant'
+      ORDER BY rowid DESC
+    `,
+      )
+      .all(turnId);
+    for (const row of rows) {
+      this.db
+        .query(
+          `
+        UPDATE message_files
+        SET message_id = NULL
+        WHERE message_id = ?
+      `,
+        )
+        .run(row.id);
+      this.db
+        .query(
+          `
+        DELETE FROM message_attachments
+        WHERE message_id = ?
+      `,
+        )
+        .run(row.id);
+      this.db.query("DELETE FROM messages WHERE id = ?").run(row.id);
+      this.appendEvent("message.deleted", {
+        message_id: row.id,
+        chat_id: row.chat_id,
+        turn_id: row.turn_id,
+        role: row.role,
+      });
+    }
   }
 
   private upsertAssistantTurnFailure(
     chatId: string,
     turnId: string,
     safeError: { code: string; message: string },
+    options: { retryable?: boolean } = {},
   ): MessageRecord {
     const existing = this.getLatestAssistantMessageForTurn(turnId);
     if (!existing) {
@@ -6326,7 +6987,7 @@ export class AppServerStore {
         {
           turnId,
           safeErrorCode: safeError.code,
-          retryable: true,
+          retryable: options.retryable ?? false,
         },
       );
       this.appendEvent("message.created", { message: failed });
@@ -6336,44 +6997,78 @@ export class AppServerStore {
       text: safeError.message,
       status: "failed",
       safeErrorCode: safeError.code,
-      retryable: true,
+      retryable: options.retryable ?? false,
     });
     this.appendEvent("message.updated", { message: failed });
     return failed;
   }
 
-  private markAssistantTurnRetrying(turnId: string): MessageRecord | null {
-    const existing = this.getLatestAssistantMessageForTurn(turnId);
-    if (!existing) return null;
-    const retrying = this.updateMessage(existing.id, {
-      text: "Retrying this turn.",
-      status: "retrying",
-      safeErrorCode: null,
-      retryable: false,
-    });
-    this.appendEvent("message.updated", { message: retrying });
-    return retrying;
-  }
-
   private finalizeCancelledTurn(chatId: string, turnId: string): TurnRecord {
     const current = this.getTurnRow(turnId);
-    if (current?.state === "cancelled") return this.getTurn(turnId);
+    if (current?.state === "cancelled") {
+      this.ensureCancelledTurnActivityMessage(chatId, turnId);
+      return this.getTurn(turnId);
+    }
     const cancelledTurn = this.updateTurnState(turnId, "cancelled", {
       safeStatusLabel: "Cancelled",
       retryable: false,
       cancellable: false,
       safeErrorCode: null,
     });
-    this.appendEvent("turn.state_changed", { turn: cancelledTurn });
+    this.appendTerminalTurnStateChanged(cancelledTurn);
     if (!this.hasTurnEventKind(turnId, "turn.cancelled")) {
       this.appendTurnEvent(chatId, turnId, {
         kind: "turn.cancelled",
         payload: { safeLabel: "Cancelled" },
       });
     }
+    this.ensureCancelledTurnActivityMessage(chatId, turnId);
     this.touchChat(chatId);
     void this.drainQueuedSessionMessages(chatId).catch(() => undefined);
     return cancelledTurn;
+  }
+
+  private ensureCancelledTurnActivityMessage(
+    chatId: string,
+    turnId: string,
+  ): MessageRecord | null {
+    const existingAssistant = this.listMessages(chatId).find(
+      (message) => message.role === "assistant" && message.turn_id === turnId,
+    );
+    if (existingAssistant && isCancelledTurnActivityCarrier(existingAssistant)) {
+      return null;
+    }
+    if (existingAssistant) this.deleteAssistantMessagesForTurn(turnId);
+    const message = this.insertMessage(
+      chatId,
+      "assistant",
+      CANCELLED_TURN_ACTIVITY_TEXT,
+      "cancelled",
+      { turnId },
+    );
+    const projected = this.messageWithTerminalWorkBlocks(message, turnId);
+    this.appendEvent("message.created", { message: projected });
+    return projected;
+  }
+
+  private messageWithTerminalWorkBlocks(
+    message: MessageRecord,
+    turnId: string,
+  ): MessageRecord {
+    const turn = this.getTurnRow(turnId);
+    if (!turn || !isTerminalProgressState(turn.state)) return message;
+    const delivery = this.deliveryLimitationMetadataForTurn(turnId);
+    const publicDelivery = delivery
+      ? publicDeliveryMetadataForProjection(delivery)
+      : null;
+    const workBlocks = workBlocksFromTerminalProgressRows(
+      progressRowsForTurnState(this.listProgressRowsForTurn(turnId), turn.state),
+    );
+    return {
+      ...message,
+      ...(publicDelivery ?? {}),
+      ...(workBlocks.length > 0 ? { work_blocks: workBlocks } : {}),
+    };
   }
 
   private updateMessage(
@@ -6552,10 +7247,18 @@ export class AppServerStore {
   }
 
   private shouldPersistRuntimeTurnEvent(turnId: string, kind: string): boolean {
+    if (
+      (kind === TURN_ACKNOWLEDGED_EVENT_KIND ||
+        kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) &&
+      this.hasTurnEventKind(turnId, kind)
+    ) {
+      return false;
+    }
     const turn = this.getTurnRow(turnId);
     if (!turn || !isTerminalTurnState(turn.state)) return true;
     if (turn.state === "cancelled") return kind === "turn.cancelled";
     if (turn.state === "failed") return kind === "turn.failed";
+    if (turn.state === "runtime_fault") return kind === "runtime.fault";
     if (turn.state === "delivered") return kind === "turn.completed";
     return false;
   }
@@ -6588,18 +7291,17 @@ export class AppServerStore {
     input: ProgressSummaryInput,
   ): boolean {
     const incoming = normalizeProgressSummaryRow(input);
-    const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
     const rows = this.db
       .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type IN ('progress.summary', 'agent.turn_event.progress')
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '$.turn_id') = ?
       ORDER BY id DESC
     `,
       )
-      .all(turnPayloadPattern);
+      .all(turnId);
     return rows.some((row) => {
       const payload = safeParseRecord(row.payload_json);
       if (payload.turn_id !== turnId) return false;
@@ -6903,22 +7605,19 @@ export class AppServerStore {
     scope: "session" | "turn",
     id: string,
   ): number {
-    const payloadPattern =
-      scope === "session"
-        ? `%${escapeSqlLike(`"session_id":"${id}"`)}%`
-        : `%${escapeSqlLike(`"turn_id":"${id}"`)}%`;
+    const field = scope === "session" ? "$.session_id" : "$.turn_id";
     const rows = this.db
       .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type = 'agent.turn_event'
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '${field}') = ?
       ORDER BY id DESC
       LIMIT 20
     `,
       )
-      .all(payloadPattern);
+      .all(id);
     for (const row of rows) {
       const payload = safeParseRecord(row.payload_json);
       if (scope === "session" && payload.session_id !== id) continue;
@@ -6937,25 +7636,68 @@ export class AppServerStore {
   }
 
   private hasTurnEventKind(turnId: string, kind: string): boolean {
-    const turnPayloadPattern = `%${escapeSqlLike(`"turn_id":"${turnId}"`)}%`;
-    const rows = this.db
+    const row = this.db
+      .query<{ id: number }, [string, string]>(
+        `
+      SELECT id
+      FROM events
+      WHERE type = 'agent.turn_event'
+        AND json_extract(payload_json, '$.turn_id') = ?
+        AND json_extract(payload_json, '$.event.kind') = ?
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+      )
+      .get(turnId, kind);
+    return Boolean(row);
+  }
+
+  private runtimeFaultRecordForTurn(turnId: string): Record<string, unknown> | null {
+    const row = this.db
       .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type = 'agent.turn_event'
-        AND payload_json LIKE ? ESCAPE '\\'
+        AND json_extract(payload_json, '$.turn_id') = ?
+        AND json_extract(payload_json, '$.event.kind') = 'runtime.fault'
       ORDER BY id DESC
-      LIMIT 500
+      LIMIT 1
     `,
       )
-      .all(turnPayloadPattern);
-    return rows.some((row) => {
-      const payload = safeParseRecord(row.payload_json);
-      if (payload.turn_id !== turnId) return false;
-      const event = isRecord(payload.event) ? payload.event : null;
-      return event?.kind === kind;
-    });
+      .get(turnId);
+    if (!row) return null;
+    const payload = safeParseRecord(row.payload_json);
+    const event = isRecord(payload.event) ? payload.event : null;
+    const fault = event && isRecord(event.payload) ? event.payload : null;
+    if (!fault) return null;
+    const faultId = safeOptionalShortText(fault.faultId);
+    const kind = safeOptionalShortText(fault.kind);
+    const publicSummary = safeOptionalShortText(fault.publicSummary);
+    const retryable = fault.retryable === true;
+    if (!faultId || !kind || !publicSummary) return null;
+    return {
+      faultId,
+      kind,
+      retryable,
+      publicSummary,
+      ...(safeOptionalShortText(fault.sessionId)
+        ? { sessionId: safeOptionalShortText(fault.sessionId) }
+        : {}),
+      ...(safeOptionalShortText(fault.turnId)
+        ? { turnId: safeOptionalShortText(fault.turnId) }
+        : {}),
+      ...(safeOptionalShortText(fault.operatorSummary)
+        ? { operatorSummary: safeOptionalShortText(fault.operatorSummary) }
+        : {}),
+      ...(safeOptionalShortText(fault.safeErrorCode)
+        ? { safeErrorCode: safeOptionalShortText(fault.safeErrorCode) }
+        : {}),
+      ...(safeOptionalShortText(fault.safeCause)
+        ? { safeCause: safeOptionalShortText(fault.safeCause) }
+        : {}),
+      createdAt: safeOptionalShortText(fault.createdAt) ?? row.created_at,
+    };
   }
 
   private appendEvent(
@@ -6963,6 +7705,7 @@ export class AppServerStore {
     payload: Record<string, unknown>,
   ): AppEventEnvelope {
     const createdAt = new Date().toISOString();
+    const publicPayload = publicAppEventPayload(type, payload);
     this.db
       .query(
         `
@@ -6970,7 +7713,7 @@ export class AppServerStore {
       VALUES (?, ?, ?)
     `,
       )
-      .run(type, JSON.stringify(payload), createdAt);
+      .run(type, JSON.stringify(publicPayload), createdAt);
     const inserted = this.db
       .query<{ id: number }, []>("SELECT last_insert_rowid() AS id")
       .get();
@@ -7094,6 +7837,26 @@ export class AppServerStore {
     }
     return `project-${crypto.randomUUID()}`;
   }
+}
+
+function appWorkStreamVisibleInActiveProjection(
+  stream: {
+    last_user_turn_id: string | null;
+    linked_planned_task_ids: string[];
+    linked_orchestration_ids: string[];
+    linked_worker_task_ids: string[];
+  },
+  currentTurnId?: string,
+): boolean {
+  if (
+    stream.linked_planned_task_ids.length > 0 ||
+    stream.linked_orchestration_ids.length > 0 ||
+    stream.linked_worker_task_ids.length > 0
+  ) {
+    return true;
+  }
+  if (!stream.last_user_turn_id) return true;
+  return Boolean(currentTurnId && stream.last_user_turn_id === currentTurnId);
 }
 
 export function createProjectFolderSelectionToken(
@@ -8167,6 +8930,10 @@ function sessionControlsKey(sessionId: string): string {
   return `session-controls:${safeLocalSessionId(sessionId)}`;
 }
 
+function sessionControlsExplicitKey(sessionId: string): string {
+  return `session-controls-explicit:${safeLocalSessionId(sessionId)}`;
+}
+
 function normalizeSessionControls(
   input: Partial<SessionControlState>,
   extraModels: ProviderModelMetadata[] = [],
@@ -8190,6 +8957,15 @@ function normalizeSessionControls(
         : "full_access",
     plan_mode: Boolean(input.plan_mode),
   };
+}
+
+function hasSessionControlInput(input: Partial<SessionControlState>): boolean {
+  return (
+    input.model !== undefined ||
+    input.reasoning_effort !== undefined ||
+    input.access_mode !== undefined ||
+    input.plan_mode !== undefined
+  );
 }
 
 function stringArray(value: unknown): string[] {
@@ -8394,6 +9170,21 @@ function workModeToPhase(mode: string): WorkerActivityPhase {
   if (mode === "cancelled") return "cancelled";
   if (mode === "failed") return "failed";
   return "executing";
+}
+
+function turnLocalWorkOutcomeForAppTurn(state: TurnState): TurnLocalWorkOutcome | null {
+  if (state === "delivered") return "completed";
+  if (state === "failed" || state === "runtime_fault") return "failed";
+  if (state === "cancelled") return "cancelled";
+  return null;
+}
+
+function turnLocalWorkOutcomeStatusNote(outcome: TurnLocalWorkOutcome): string {
+  if (outcome === "completed") return "Reconciled after delivered turn replay.";
+  if (outcome === "failed") return "Reconciled after failed turn replay.";
+  if (outcome === "cancelled") return "Reconciled after cancelled turn replay.";
+  if (outcome === "waiting_user") return "Reconciled waiting turn replay.";
+  return "Reconciled recoverable turn replay.";
 }
 
 function workerActivityFromTaskSummary(
@@ -8701,6 +9492,11 @@ function paginationInput(options: { limit?: number; offset?: number }): {
 }
 
 function sessionFromRow(row: SessionSummaryRow): SessionSummary {
+  const publicStatusLabel = publicTurnStatusLabel(
+    row.safe_status_label,
+    row.active_turn_state,
+    row.active_turn_safe_error_code,
+  );
   return {
     id: row.id,
     kind: row.kind,
@@ -8716,12 +9512,63 @@ function sessionFromRow(row: SessionSummaryRow): SessionSummary {
     last_activity_at: row.updated_at,
     last_message_preview: previewText(row.last_message_preview),
     active_turn_state: row.active_turn_state ?? undefined,
-    safe_status_label: row.safe_status_label ?? undefined,
+    safe_status_label: publicStatusLabel,
     unread_count: 0,
     pinned: row.pinned === 1,
     archived: row.archived === 1,
     automation_target_count: 0,
   };
+}
+
+function publicAppEventPayload(
+  type: string,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (type === "agent.turn_event") return publicAgentTurnEventPayload(payload);
+  if (type !== "turn.state_changed") return payload;
+  const turn = isRecord(payload.turn) ? payload.turn : null;
+  const state = safeOptionalShortToken(payload.state) ??
+    safeOptionalShortToken(turn?.state);
+  const safeErrorCode = safeOptionalShortToken(
+    payload.safe_error_code ?? turn?.safe_error_code,
+  );
+  const label = publicTurnStatusLabel(
+    safeOptionalShortText(payload.safe_status_label ?? turn?.safe_status_label),
+    state,
+    safeErrorCode,
+  );
+  const nextPayload: Record<string, unknown> = { ...payload };
+  if (isPublicSuppressedInternalContinuationCode(safeErrorCode)) {
+    delete nextPayload.safe_error_code;
+    nextPayload.retryable = false;
+  }
+  if (label) nextPayload.safe_status_label = label;
+  else delete nextPayload.safe_status_label;
+  if (turn) {
+    nextPayload.turn = publicTurnPayloadRecord(turn);
+  }
+  return nextPayload;
+}
+
+function publicAgentTurnEventPayload(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const event = isRecord(payload.event) ? payload.event : null;
+  const eventPayload = event && isRecord(event.payload) ? event.payload : null;
+  if (!eventPayload || !("operatorSummary" in eventPayload)) return payload;
+  const nextEventPayload = { ...eventPayload };
+  delete nextEventPayload.operatorSummary;
+  return {
+    ...payload,
+    event: {
+      ...event,
+      payload: nextEventPayload,
+    },
+  };
+}
+
+function isInternalContinuationTurnState(state: string): boolean {
+  return state === "retrying" || state === "waiting_for_tool";
 }
 
 function maxMessageCursor(messages: MessageRecord[]): number {
@@ -8735,20 +9582,26 @@ function workBlocksFromTerminalProgressRows(
   rows: ProgressSummaryRow[],
 ): WorkerActivityWorkBlock[] {
   const blocks = new Map<string, WorkerActivityWorkBlock>();
+  const decisionWorkBlockAliases = new Map<string, string>();
+  const canonicalWorkBlockId = (
+    row: ProgressSummaryRow,
+    fallbackId: string,
+  ) => {
+    const decisionKey = publicDecisionIntentKey(row);
+    if (!decisionKey) return fallbackId;
+    const existing = decisionWorkBlockAliases.get(decisionKey);
+    if (existing) return existing;
+    decisionWorkBlockAliases.set(decisionKey, fallbackId);
+    return fallbackId;
+  };
   const workBlockLabels = new Set(
     rows
       .filter(
         (row) =>
           row.kind === "work_block" ||
-          Boolean(row.work_block_id || row.work_block_label),
+          Boolean(row.work_block_label),
       )
-      .map((row) =>
-        (
-          row.work_block_label ??
-          row.work_decision_summary ??
-          row.safe_label
-        ).trim(),
-      )
+      .map((row) => (row.work_block_label ?? "").trim())
       .filter(Boolean),
   );
   const sortedRows = rows
@@ -8763,18 +9616,19 @@ function workBlocksFromTerminalProgressRows(
     if (!isUserVisibleWorkBlockRow(row)) continue;
     if (row.kind === "todo" && workBlockLabels.has(row.safe_label.trim()))
       continue;
-    const id =
+    const fallbackId =
       row.work_block_id ??
       row.tool_call_id ??
       `work-${row.kind}-${row.id}`.replace(/[^a-zA-Z0-9._:-]/gu, "-");
-    const label =
-      row.work_block_label ??
-      row.work_decision_summary ??
-      row.safe_tool_name ??
-      row.safe_label;
+    const id = canonicalWorkBlockId(row, fallbackId);
+    const label = row.work_block_label ?? "";
+    const decision = isWorkBlockDecisionCarrierRow(row)
+      ? publicDecisionFieldsFromProgressRow(row)
+      : {};
     const previous = blocks.get(id);
+    const blockRow = workBlockToolRow(row);
     if (previous) {
-      if (row.kind !== "work_block") previous.rows.push(row);
+      if (row.kind !== "work_block") previous.rows.push(blockRow);
       previous.state = progressMergeState(previous.state, row.state);
       continue;
     }
@@ -8782,17 +9636,17 @@ function workBlocksFromTerminalProgressRows(
       id,
       label,
       state: row.state,
-      rows: row.kind === "work_block" ? [] : [row],
-      decision_summary: row.work_decision_summary,
-      decision_rationale: row.work_decision_rationale,
-      decision_next_step: row.work_decision_next_step,
-      decision_source: row.work_decision_source,
-      decision_evidence_refs: row.work_decision_evidence_refs,
+      rows: row.kind === "work_block" ? [] : [blockRow],
+      decision_summary: decision.decision_summary,
+      decision_rationale: decision.decision_rationale,
+      decision_next_step: decision.decision_next_step,
+      decision_source: decision.decision_source,
+      decision_evidence_refs: decision.decision_evidence_refs,
       created_at: row.created_at,
     });
   }
   return [...blocks.values()]
-    .filter((block) => block.rows.length > 0)
+    .filter((block) => block.rows.length > 0 && Boolean(block.label.trim()))
     .sort((left, right) => {
       const orderDelta =
         progressRowDisplayOrder(left.rows[0]) -
@@ -8806,6 +9660,20 @@ function workBlocksFromTerminalProgressRows(
     });
 }
 
+function workBlockToolRow(row: ProgressSummaryRow): ProgressSummaryRow {
+  const {
+    work_block_id: _workBlockId,
+    work_block_label: _workBlockLabel,
+    work_decision_summary: _workDecisionSummary,
+    work_decision_rationale: _workDecisionRationale,
+    work_decision_next_step: _workDecisionNextStep,
+    work_decision_source: _workDecisionSource,
+    work_decision_evidence_refs: _workDecisionEvidenceRefs,
+    ...toolRow
+  } = row;
+  return toolRow;
+}
+
 function progressRowDisplayOrder(row?: ProgressSummaryRow): number {
   const order = Number(row?.safe_order);
   return Number.isFinite(order) && order >= 0
@@ -8813,10 +9681,31 @@ function progressRowDisplayOrder(row?: ProgressSummaryRow): number {
     : Number.POSITIVE_INFINITY;
 }
 
+function publicDecisionFieldsFromProgressRow(row: ProgressSummaryRow): Partial<{
+  decision_summary: string;
+  decision_rationale: string;
+  decision_next_step: string;
+  decision_source: string;
+  decision_evidence_refs: string[];
+}> {
+  if (!isPublicDecisionSource(row.work_decision_source)) return {};
+  return {
+    decision_summary: row.work_decision_summary,
+    decision_rationale: row.work_decision_rationale,
+    decision_next_step: row.work_decision_next_step,
+    decision_source: row.work_decision_source,
+    decision_evidence_refs: row.work_decision_evidence_refs,
+  };
+}
+
 function isUserVisibleWorkBlockRow(row: ProgressSummaryRow): boolean {
   if (row.kind === "todo") return false;
-  if (row.kind === "message" || row.kind === "system") return false;
+  if (row.kind === "message") {
+    return Boolean(row.work_block_id && row.work_block_label);
+  }
+  if (row.kind === "system") return false;
   if (row.kind === "thinking" || row.kind === "worked_duration") return false;
+  if (row.kind === "dispatch" && !row.tool_call_id) return false;
   return Boolean(
     row.work_block_id ||
     row.work_block_label ||
@@ -8824,6 +9713,28 @@ function isUserVisibleWorkBlockRow(row: ProgressSummaryRow): boolean {
     row.safe_input_label ||
     row.safe_detail_rows?.length,
   );
+}
+
+function isWorkBlockDecisionCarrierRow(row?: ProgressSummaryRow): boolean {
+  if (!row) return false;
+  return row.kind === "work_block" ||
+    (row.kind === "message" && Boolean(row.work_block_id && row.work_block_label));
+}
+
+function publicDecisionIntentKey(row?: ProgressSummaryRow): string | null {
+  if (!row || !isPublicDecisionSource(row.work_decision_source)) return null;
+  const summary = normalizedDecisionIntentPart(row.work_decision_summary);
+  if (!summary) return null;
+  return JSON.stringify([
+    row.work_decision_source,
+    summary,
+    normalizedDecisionIntentPart(row.work_decision_rationale),
+    normalizedDecisionIntentPart(row.work_decision_next_step),
+  ]);
+}
+
+function normalizedDecisionIntentPart(value?: string): string {
+  return (value ?? "").replace(/\s+/gu, " ").trim();
 }
 
 function isActiveSessionTurnState(state: string): boolean {
@@ -9466,392 +10377,13 @@ function turnFromRow(row: TurnRow): TurnRecord {
   };
 }
 
-function normalizeProgressSummaryRow(
-  input: ProgressSummaryInput | Record<string, unknown>,
-): ProgressSummaryRow {
-  const now = new Date().toISOString();
-  const safeLabel = safeShortText(input.safe_label, "Activity");
-  const kind = safeShortToken(input.kind, "used_tool");
-  const row: ProgressSummaryRow = {
-    id: safeShortToken(input.id, `progress-${crypto.randomUUID()}`),
-    kind,
-    safe_label: safeLabel,
-    state: safeShortToken(input.state, "thinking"),
-    created_at: safeIsoDate(input.created_at, now),
-  };
-  const toolName = safeOptionalShortText(input.safe_tool_name);
-  if (toolName) row.safe_tool_name = toolName;
-  const inputLabel = safeOptionalShortText(input.safe_input_label);
-  if (inputLabel) row.safe_input_label = inputLabel;
-  const toolCallId = safeOptionalShortToken(input.tool_call_id);
-  if (toolCallId) row.tool_call_id = toolCallId;
-  const bridgePhase = safeOptionalShortToken(input.bridge_phase);
-  if (bridgePhase) row.bridge_phase = bridgePhase;
-  const workBlockId = safeOptionalShortToken(input.work_block_id);
-  if (workBlockId) row.work_block_id = workBlockId;
-  const workBlockLabel = safeOptionalShortText(input.work_block_label);
-  if (workBlockLabel) row.work_block_label = workBlockLabel;
-  const decisionSummary = safeOptionalShortText(input.work_decision_summary);
-  if (decisionSummary) row.work_decision_summary = decisionSummary;
-  const decisionRationale = safeOptionalShortText(
-    input.work_decision_rationale,
-  );
-  if (decisionRationale) row.work_decision_rationale = decisionRationale;
-  const decisionNextStep = safeOptionalShortText(input.work_decision_next_step);
-  if (decisionNextStep) row.work_decision_next_step = decisionNextStep;
-  const decisionSource = safeOptionalShortText(input.work_decision_source);
-  if (decisionSource) row.work_decision_source = decisionSource;
-  if (Array.isArray(input.work_decision_evidence_refs)) {
-    const refs = input.work_decision_evidence_refs
-      .map((value) => safeOptionalShortText(value))
-      .filter((value): value is string => Boolean(value))
-      .slice(0, 6);
-    if (refs.length > 0) row.work_decision_evidence_refs = refs;
-  }
-  const safeCount = Number(input.safe_count);
-  if (Number.isFinite(safeCount) && safeCount >= 0)
-    row.safe_count = Math.floor(safeCount);
-  const safeOrder = Number(input.safe_order);
-  if (Number.isFinite(safeOrder) && safeOrder >= 0)
-    row.safe_order = Math.floor(safeOrder);
-  if (Array.isArray(input.safe_path_labels)) {
-    const labels = input.safe_path_labels
-      .map((value) => safeOptionalShortText(value))
-      .filter((value): value is string => Boolean(value))
-      .slice(0, 12);
-    if (labels.length > 0) row.safe_path_labels = labels;
-  }
-  if (Array.isArray(input.safe_detail_rows)) {
-    const details = input.safe_detail_rows
-      .filter(isRecord)
-      .map((detail, index) => ({
-        id: safeShortToken(detail.id, `${row.id}-detail-${index + 1}`),
-        kind: safeOptionalShortToken(detail.kind),
-        safe_label: safeShortText(detail.safe_label, "Detail"),
-        safe_value: safeOptionalShortText(detail.safe_value),
-        state: safeOptionalShortToken(detail.state),
-      }))
-      .slice(0, 20);
-    if (details.length > 0) row.safe_detail_rows = details;
-  }
-  return row;
-}
-
-function dedupeProgressRows(rows: ProgressSummaryRow[]): ProgressSummaryRow[] {
-  const byKey = new Map<string, ProgressSummaryRow>();
-  for (const row of rows) {
-    const directKey = progressRowDirectMergeKey(row);
-    let key = directKey;
-    const sameToolKey = row.tool_call_id
-      ? findProgressRowKey(
-          byKey,
-          (candidate) => candidate.tool_call_id === row.tool_call_id,
-        )
-      : null;
-    if (sameToolKey) {
-      key = sameToolKey;
-    } else if (row.tool_call_id && !byKey.has(directKey)) {
-      const legacyCandidates = findProgressRowKeys(
-        byKey,
-        (candidate) =>
-          !candidate.tool_call_id &&
-          !isTerminalProgressState(candidate.state) &&
-          progressRowsSemanticallyMatch(candidate, row),
-      );
-      if (legacyCandidates.length === 1) key = legacyCandidates[0]!;
-    } else if (!row.tool_call_id && !isTerminalProgressState(row.state)) {
-      const toolCandidates = findProgressRowKeys(
-        byKey,
-        (candidate) =>
-          Boolean(candidate.tool_call_id) &&
-          progressRowsSemanticallyMatch(candidate, row),
-      );
-      if (toolCandidates.length === 1) key = toolCandidates[0]!;
-    }
-    const previous = byKey.get(key);
-    byKey.set(key, previous ? mergeProgressRow(previous, row) : row);
-  }
-  return [...byKey.values()];
-}
-
-function findProgressRowKey(
-  rows: Map<string, ProgressSummaryRow>,
-  predicate: (row: ProgressSummaryRow) => boolean,
-): string | null {
-  for (const [key, row] of rows) {
-    if (predicate(row)) return key;
-  }
-  return null;
-}
-
-function findProgressRowKeys(
-  rows: Map<string, ProgressSummaryRow>,
-  predicate: (row: ProgressSummaryRow) => boolean,
-): string[] {
-  const matches: string[] = [];
-  for (const [key, row] of rows) {
-    if (predicate(row)) matches.push(key);
-  }
-  return matches;
-}
-
-function isSessionSummaryProgressRow(row: ProgressSummaryRow): boolean {
-  if (row.kind === "work_block") return false;
-  if (row.kind === "turn" || row.kind === "thinking") return false;
-  if (row.kind === "message" || row.kind === "system") {
-    return !STATUS_ONLY_PROGRESS_LABELS.has(
-      row.safe_label.trim().toLowerCase(),
-    );
-  }
-  return true;
-}
-
-function progressRowsForTurnState(
-  rows: ProgressSummaryRow[],
-  turnState?: string,
-): ProgressSummaryRow[] {
-  if (!turnState || !isTerminalProgressState(turnState)) return rows;
-  const rowState = progressRowStateForTerminalTurn(turnState);
-  return rows.map((row) => {
-    const safeDetailRows = row.safe_detail_rows?.map((detail) =>
-      detail.state && !isTerminalProgressState(detail.state)
-        ? { ...detail, state: rowState }
-        : detail,
-    );
-    const nextRow = !isTerminalProgressState(row.state)
-      ? { ...row, state: rowState }
-      : row;
-    if (!safeDetailRows) return nextRow;
-    return { ...nextRow, safe_detail_rows: safeDetailRows };
-  });
-}
-
-function progressRowStateForTerminalTurn(turnState: string): string {
-  if (turnState === "failed" || turnState === "cancelled") return turnState;
-  return "delivered";
-}
-
-function progressRowDirectMergeKey(row: ProgressSummaryRow): string {
-  if (row.kind === "work_block" && row.work_block_id)
-    return `work:${row.work_block_id}`;
-  const todoKey = todoProgressMergeKey(row);
-  if (todoKey) return `todo:${todoKey}`;
-  if (row.tool_call_id) return `tool:${row.tool_call_id}`;
-  const semanticKey = progressRowSemanticMergeKey(row);
-  if (semanticKey) return `activity:${semanticKey}:row:${row.id}`;
-  return `row:${row.id}`;
-}
-
-function progressRowSemanticMergeKey(row: ProgressSummaryRow): string | null {
-  if (row.kind === "message" || row.kind === "system") return null;
-  const todoKey = todoProgressMergeKey(row);
-  if (todoKey) return `todo:${todoKey}`;
-  const semanticParts = [
-    row.kind,
-    row.safe_tool_name ?? "",
-    row.safe_input_label ?? "",
-    row.safe_label,
-  ].map((part) => part.trim().toLowerCase());
-  return row.safe_label ? semanticParts.join(":") : null;
-}
-
-function todoProgressMergeKey(row: ProgressSummaryRow): string | null {
-  if (row.kind !== "todo") return null;
-  const stableId = normalizeProgressPart(row.safe_input_label);
-  if (stableId) return `id:${stableId}`;
-  const label = normalizeTodoProgressLabel(row.safe_label);
-  return label ? `label:${label}` : null;
-}
-
-function normalizeTodoProgressLabel(value?: string): string {
-  return normalizeProgressPart(value)
-    .replace(/\s*(?:하는\s*)?중입니다$/u, "")
-    .replace(/\s*(?:하는\s*)?중$/u, "")
-    .trim();
-}
-
-function progressRowsSemanticallyMatch(
-  left: ProgressSummaryRow,
-  right: ProgressSummaryRow,
-): boolean {
-  if (left.kind === "message" || left.kind === "system") return false;
-  if (right.kind === "message" || right.kind === "system") return false;
-  if (left.kind !== right.kind) return false;
-  if (!progressRowsHaveCompatibleEvidence(left, right)) return false;
-  const leftExact = progressRowSemanticMergeKey(left);
-  const rightExact = progressRowSemanticMergeKey(right);
-  if (leftExact && rightExact && leftExact === rightExact) return true;
-
-  const leftLabel = normalizeProgressPart(left.safe_label);
-  const rightLabel = normalizeProgressPart(right.safe_label);
-  if (leftLabel && leftLabel === rightLabel) {
-    const leftTool = normalizeProgressPart(left.safe_tool_name);
-    const rightTool = normalizeProgressPart(right.safe_tool_name);
-    const leftInput = normalizeProgressPart(left.safe_input_label);
-    const rightInput = normalizeProgressPart(right.safe_input_label);
-    const toolsCompatible = !leftTool || !rightTool || leftTool === rightTool;
-    const inputsCompatible =
-      !leftInput || !rightInput || leftInput === rightInput;
-    return toolsCompatible && inputsCompatible;
-  }
-
-  const leftTool = normalizeProgressPart(left.safe_tool_name);
-  const rightTool = normalizeProgressPart(right.safe_tool_name);
-  const leftInput = normalizeProgressPart(left.safe_input_label);
-  const rightInput = normalizeProgressPart(right.safe_input_label);
-  return Boolean(
-    leftTool &&
-    rightTool &&
-    leftInput &&
-    rightInput &&
-    leftTool === rightTool &&
-    leftInput === rightInput,
-  );
-}
-
-function progressRowsHaveCompatibleEvidence(
-  left: ProgressSummaryRow,
-  right: ProgressSummaryRow,
-): boolean {
-  if (
-    left.work_block_id &&
-    right.work_block_id &&
-    left.work_block_id !== right.work_block_id
-  )
-    return false;
-  if (
-    !progressDetailRowsCompatible(left.safe_detail_rows, right.safe_detail_rows)
-  )
-    return false;
-  if (left.safe_path_labels?.length && right.safe_path_labels?.length) {
-    const rightPaths = new Set(
-      right.safe_path_labels.map(normalizeProgressPart),
-    );
-    return left.safe_path_labels.some((pathLabel) =>
-      rightPaths.has(normalizeProgressPart(pathLabel)),
-    );
-  }
-  return true;
-}
-
-function progressDetailRowsCompatible(
-  leftRows?: ProgressSummaryRow["safe_detail_rows"],
-  rightRows?: ProgressSummaryRow["safe_detail_rows"],
-): boolean {
-  if (!leftRows?.length || !rightRows?.length) return true;
-  const rightById = new Map(rightRows.map((row) => [row.id, row]));
-  for (const leftRow of leftRows) {
-    const rightRow = rightById.get(leftRow.id);
-    if (!rightRow) continue;
-    const leftValue = normalizeProgressPart(leftRow.safe_value);
-    const rightValue = normalizeProgressPart(rightRow.safe_value);
-    if (leftValue && rightValue && leftValue !== rightValue) return false;
-  }
-  return true;
-}
-
-function normalizeProgressPart(value?: string): string {
-  return (value ?? "").trim().toLowerCase();
-}
-
-function mergeProgressRow(
-  current: ProgressSummaryRow,
-  incoming: ProgressSummaryRow,
-): ProgressSummaryRow {
-  const incomingWins =
-    progressMergeState(current.state, incoming.state) === incoming.state;
-  const base = incomingWins
-    ? { ...current, ...incoming }
-    : { ...incoming, ...current };
-  return {
-    ...base,
-    state: progressMergeState(current.state, incoming.state),
-    safe_label: base.safe_label || current.safe_label || incoming.safe_label,
-    safe_tool_name:
-      base.safe_tool_name ?? current.safe_tool_name ?? incoming.safe_tool_name,
-    safe_input_label:
-      base.safe_input_label ??
-      current.safe_input_label ??
-      incoming.safe_input_label,
-    safe_detail_rows:
-      base.safe_detail_rows ??
-      current.safe_detail_rows ??
-      incoming.safe_detail_rows,
-    safe_order: base.safe_order ?? current.safe_order ?? incoming.safe_order,
-    safe_path_labels:
-      base.safe_path_labels ??
-      current.safe_path_labels ??
-      incoming.safe_path_labels,
-    tool_call_id:
-      base.tool_call_id ?? current.tool_call_id ?? incoming.tool_call_id,
-    bridge_phase:
-      base.bridge_phase ?? current.bridge_phase ?? incoming.bridge_phase,
-    work_block_id:
-      base.work_block_id ?? current.work_block_id ?? incoming.work_block_id,
-    work_block_label:
-      base.work_block_label ??
-      current.work_block_label ??
-      incoming.work_block_label,
-    work_decision_summary:
-      base.work_decision_summary ??
-      current.work_decision_summary ??
-      incoming.work_decision_summary,
-    work_decision_rationale:
-      base.work_decision_rationale ??
-      current.work_decision_rationale ??
-      incoming.work_decision_rationale,
-    work_decision_next_step:
-      base.work_decision_next_step ??
-      current.work_decision_next_step ??
-      incoming.work_decision_next_step,
-    work_decision_source:
-      base.work_decision_source ??
-      current.work_decision_source ??
-      incoming.work_decision_source,
-    work_decision_evidence_refs:
-      base.work_decision_evidence_refs ??
-      current.work_decision_evidence_refs ??
-      incoming.work_decision_evidence_refs,
-    created_at: current.created_at ?? incoming.created_at,
-  };
-}
-
-function progressRowsEquivalent(
-  left: ProgressSummaryRow,
-  right: ProgressSummaryRow,
-): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function progressMergeState(current: string, incoming: string): string {
-  if (isTerminalProgressState(incoming)) return incoming;
-  if (isTerminalProgressState(current)) return current;
-  return progressStateRank(incoming) >= progressStateRank(current)
-    ? incoming
-    : current;
-}
-
-function isTerminalProgressState(state: string): boolean {
-  return (
-    state === "failed" ||
-    state === "cancelled" ||
-    state === "delivered" ||
-    state === "complete" ||
-    state === "completed"
-  );
-}
-
 function isTerminalTurnState(state: TurnState): boolean {
-  return state === "delivered" || state === "failed" || state === "cancelled";
-}
-
-function progressStateRank(state: string): number {
-  if (state === "failed" || state === "cancelled") return 4;
-  if (state === "delivered" || state === "complete" || state === "completed")
-    return 3;
-  if (state === "running" || state === "streaming") return 2;
-  if (state === "thinking" || state === "accepted") return 1;
-  return 0;
+  return (
+    state === "delivered" ||
+    state === "failed" ||
+    state === "runtime_fault" ||
+    state === "cancelled"
+  );
 }
 
 function safeParseRecord(value: string): Record<string, unknown> {
@@ -9871,15 +10403,41 @@ function isAppWorkerResultOutbound(metadata: Record<string, unknown>): boolean {
   return metadata.kind === "worker_result" || metadata.type === "worker-result";
 }
 
-function safeShortToken(value: unknown, fallback: string): string {
-  const text = typeof value === "string" ? value.trim() : "";
-  return text && /^[\w:./-]+$/u.test(text) ? text.slice(0, 96) : fallback;
+function runtimeTurnEventFromAppOutboundMetadata(
+  metadata: Record<string, unknown>,
+): RuntimeTurnEventInput | null {
+  if (metadata.kind !== "turn_event") return null;
+  const event = isRecord(metadata.event) ? metadata.event : null;
+  if (!event) return null;
+  const kind = safeOptionalShortToken(event.kind);
+  if (!kind) return null;
+  return {
+    kind: kind as RuntimeTurnEventInput["kind"],
+    ...(event.visibility === "internal" ? { visibility: "internal" as const } : {}),
+    ...(isRecord(event.payload) ? { payload: event.payload } : {}),
+    ...(safeOptionalShortText(event.createdAt)
+      ? { createdAt: safeOptionalShortText(event.createdAt) }
+      : {}),
+  };
 }
 
 function safeOptionalShortToken(value: unknown): string | undefined {
   const text = typeof value === "string" ? value.trim() : "";
   if (!text || !/^[\w:./-]+$/u.test(text)) return undefined;
   return text.slice(0, 96);
+}
+
+function safeInboundQueueId(value: unknown): string | undefined {
+  const text = safeOptionalShortToken(value);
+  if (!text || text.includes("..") || text.includes("/") || text.includes("\\")) {
+    return undefined;
+  }
+  return text;
+}
+
+function terminalClaimId(record: Record<string, unknown> | null): string | undefined {
+  const metadata = isRecord(record?.metadata) ? record.metadata : {};
+  return safeOptionalShortToken(metadata.terminalClaimId);
 }
 
 function safeSkillNameList(value: unknown): string[] {
@@ -9922,21 +10480,134 @@ function loadedSkillNamesFromTranscriptEvent(
 
 function deliveryLimitationMetadataFromRecord(
   record: Record<string, unknown>,
+  options: { noVisibleReply?: boolean } = {},
 ): DeliveryLimitationMetadata | null {
   const deliveryState = safeDeliveryState(
     record.delivery_state ?? record.deliveryState,
   );
-  if (deliveryState !== "delivered_with_limitations") return null;
+  if (
+    deliveryState !== "delivered_with_limitations" &&
+    !isContinuationDeliveryState(deliveryState)
+  ) {
+    return null;
+  }
   return {
     delivery_state: deliveryState,
     limitation_codes: safeShortTokenList(
       record.limitation_codes ?? record.limitationCodes,
     ),
-    limitations: safeShortTextList(record.limitations),
+    limitations: options.noVisibleReply ? [] : safeShortTextList(record.limitations),
   };
 }
 
-function safeDeliveryState(value: unknown): SessionViewTurnDeliveryState | null {
+function hasUnsupportedNoVisibleDeliveryState(
+  metadata: Record<string, unknown>,
+  delivery: DeliveryLimitationMetadata | null,
+): boolean {
+  const deliveryState = safeDeliveryState(
+    metadata.delivery_state ?? metadata.deliveryState,
+  );
+  return Boolean(deliveryState && !delivery);
+}
+
+function deliveryStateFromProjectedNoVisibleFinal(
+  delivery: DeliveryLimitationMetadata | null,
+): AppLimitedDelivery["delivery"] {
+  const limitationCodes = delivery?.limitation_codes.length
+    ? delivery.limitation_codes
+    : [INTERNAL_RECOVERY_REQUIRED_CODE];
+  if (delivery && isContinuationDeliveryState(delivery.delivery_state)) {
+    return continuationDeliveryFromState(delivery.delivery_state, limitationCodes);
+  }
+  return deliveredWithLimitationsState({
+    limitationCodes,
+    limitations: [],
+  });
+}
+
+function appLimitedDeliveryForProjectedFailure(
+  safeError: ProjectedSafeTurnFailure,
+): AppLimitedDelivery | null {
+  const classified = appLimitedDeliveryForError({
+    name: "AppTransportTurnFailure",
+    code: safeError.code,
+    message: safeError.message,
+  });
+  if (classified) return classified;
+  if (
+    safeError.code !== INTERNAL_RECOVERY_REQUIRED_CODE &&
+    safeError.code !== "prompt_usage_model_call_budget_exhausted"
+  ) {
+    return null;
+  }
+  return {
+    text: null,
+    reason: "Internal continuation required.",
+    delivery: continuationDeliveryFromState("needs_evidence", [safeError.code]),
+  };
+}
+
+function shouldTreatLimitedFinalAsNoVisible(
+  artifacts: unknown[],
+  delivery: DeliveryLimitationMetadata | null,
+  metadata: Record<string, unknown>,
+): boolean {
+  if (metadata.visibleLimitedReply === true) return false;
+  if (artifacts.length > 0 || !delivery) return false;
+  return delivery.limitation_codes.some((code) =>
+    isPublicSuppressedInternalContinuationCode(code),
+  );
+}
+
+function shouldProjectRecoverableLimitedFinalOverTerminalTurn(
+  turn: TurnRow,
+  metadata: Record<string, unknown>,
+): boolean {
+  if (turn.state !== "failed") return false;
+  const kind = safeOptionalShortToken(metadata.kind);
+  if (kind !== "final_result") return false;
+  const delivery = deliveryLimitationMetadataFromRecord(metadata);
+  if (!delivery) return false;
+  const priorCode = safeOptionalShortToken(turn.safe_error_code);
+  if (
+    priorCode !== "inbound_dispatch_timeout" &&
+    priorCode !== "internal_recovery_required"
+  ) {
+    return false;
+  }
+  return delivery.limitation_codes.some((code) =>
+    code === "internal_recovery_required" ||
+    code === "prompt_usage_model_call_budget_exhausted",
+  );
+}
+
+function shouldAcceptRecoverableLimitedFinalForFailedQueue(
+  metadata: Record<string, unknown>,
+  failedRecord: Record<string, unknown>,
+  dispatchClaimId: string,
+): boolean {
+  const failedClaimId = terminalClaimId(failedRecord);
+  if (!failedClaimId || failedClaimId !== dispatchClaimId) return false;
+  const failure = isRecord(failedRecord.metadata)
+    ? failedRecord.metadata.failure
+    : null;
+  const failureCode = isRecord(failure)
+    ? safeOptionalShortToken(failure.code)
+    : undefined;
+  if (
+    failureCode !== "inbound_dispatch_timeout" &&
+    failureCode !== "internal_recovery_required"
+  ) {
+    return false;
+  }
+  const delivery = deliveryLimitationMetadataFromRecord(metadata);
+  return Boolean(delivery?.limitation_codes.some((code) =>
+    code === "internal_recovery_required" ||
+    code === "prompt_usage_model_call_budget_exhausted",
+  ));
+}
+
+function safeDeliveryState(value: unknown): AppProjectionDeliveryState | null {
   if (typeof value !== "string") return null;
   if (
     value === "running" ||
@@ -9954,17 +10625,6 @@ function safeDeliveryState(value: unknown): SessionViewTurnDeliveryState | null 
     return value;
   }
   return null;
-}
-
-function deliveryStateForTurnState(state: TurnState): SessionViewTurnDeliveryState {
-  if (state === "delivered") return "delivered";
-  if (state === "failed") return "failed_system";
-  if (state === "cancelled") return "cancelled";
-  if (state === "waiting_for_form") return "waiting_user";
-  if (state === "waiting_for_tool" || state === "retrying") {
-    return "recovering_internal";
-  }
-  return "running";
 }
 
 function safeShortTokenList(value: unknown): string[] {
@@ -10035,11 +10695,6 @@ function stripControlCharacters(value: string): string {
     const code = character.charCodeAt(0);
     return code < 32 || code === 127 ? " " : character;
   }).join("");
-}
-
-function safeIsoDate(value: unknown, fallback: string): string {
-  const text = typeof value === "string" ? value : "";
-  return Number.isFinite(Date.parse(text)) ? text : fallback;
 }
 
 function mergeTransportBindings(
@@ -10169,7 +10824,7 @@ function progressRowFromAppOutbound(
     return {
       id: actionId,
       kind: safeOptionalShortToken(metadata.activityKind) ?? "used_tool",
-      state: "running",
+      state: safeOptionalShortToken(metadata.state) ?? "running",
       safe_label: safeShortText(metadata.safeLabel, "Working"),
       safe_tool_name: safeOptionalShortText(metadata.toolName),
       safe_input_label: safeOptionalShortText(metadata.inputLabel),
@@ -10205,6 +10860,29 @@ function progressRowFromAppOutbound(
   }
   const text = typeof message.text === "string" ? message.text.trim() : "";
   if (metadata.kind === "intermediate" && text) {
+    if (metadata.phase === "before_tool_execution") {
+      const label = safeOptionalShortText(metadata.workBlockLabel) ??
+        safeOptionalShortText(text) ??
+        "Working";
+      return {
+        id: actionId,
+        kind: "message",
+        state: "running",
+        safe_label: safeOptionalShortText(text) ?? label,
+        work_block_id: safeOptionalShortToken(metadata.workBlockId) ?? actionId,
+        work_block_label: label,
+        work_decision_summary: safeOptionalShortText(metadata.decisionSummary),
+        work_decision_rationale: safeOptionalShortText(
+          metadata.decisionRationale,
+        ),
+        work_decision_next_step: safeOptionalShortText(metadata.decisionNextStep),
+        work_decision_source: safeOptionalShortText(metadata.decisionSource),
+        work_decision_evidence_refs: Array.isArray(metadata.decisionEvidenceRefs)
+          ? metadata.decisionEvidenceRefs
+          : undefined,
+        created_at: timestamp,
+      };
+    }
     return {
       id: actionId,
       kind: "thinking",
@@ -10338,10 +11016,6 @@ function mimeTypeForArtifactPath(path: string): string {
   if (lower.endsWith(".webp")) return "image/webp";
   if (lower.endsWith(".pdf")) return "application/pdf";
   return "application/octet-stream";
-}
-
-function escapeSqlLike(value: string): string {
-  return value.replace(/[\\%_]/gu, (char) => `\\${char}`);
 }
 
 function timestampBefore(candidate: string, reference: string): boolean {

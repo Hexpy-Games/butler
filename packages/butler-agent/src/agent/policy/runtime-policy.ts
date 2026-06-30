@@ -38,28 +38,6 @@ export function requiredExplicitToolNames(metadata: unknown, availableToolNames:
     .slice(0, 6);
 }
 
-export function explicitToolRequirementRepairPrompt(input: {
-  prompt: string;
-  previousAnswer: string;
-  missingTools: string[];
-}): string {
-  return [
-    "## Explicit Tool Requirement Repair",
-    "The caller supplied structured required native tools that have not all succeeded yet.",
-    "Missing required tools: " + input.missingTools.map((tool) => "`" + tool + "`").join(", "),
-    "Continue the same task, but call only the missing required tools now unless a missing tool itself returns an error requiring another evidence tool.",
-    "Do not produce the final answer until the missing required tools succeed or return a clear tool error.",
-    "For every tool call, write a public work decision with exact protocol keys: `summary:`, `rationale:`, and `next_step:`.",
-    "After the missing tools succeed, synthesize only the outcome. Do not list raw tool logs.",
-    "",
-    "Original request:",
-    input.prompt,
-    "",
-    "Previous incomplete answer:",
-    input.previousAnswer.trim(),
-  ].join("\n");
-}
-
 export function applyCorrectionChallengeGuard(input: {
   userText: string;
   responseText: string;
