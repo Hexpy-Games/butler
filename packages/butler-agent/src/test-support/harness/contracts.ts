@@ -56,6 +56,7 @@ export interface ModelInvocation {
   reasoning?: {
     effort?: "low" | "medium" | "high" | "xhigh";
   };
+  signal?: AbortSignal;
   promptCache?: PromptCacheHint;
   threadRef?: string;
   metadata?: Record<string, unknown>;

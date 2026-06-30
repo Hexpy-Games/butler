@@ -95,7 +95,12 @@ function readButlerConfig(butlerData: string): ButlerConfig {
   }
 }
 
-function defaultProvider(config: ButlerConfig = {}): ModelProviderAdapter {
+type PromptTextRunner = typeof runPromptText;
+
+export function createNativeButlerDefaultProvider(
+  config: ButlerConfig = {},
+  promptRunner: PromptTextRunner = runPromptText,
+): ModelProviderAdapter {
   const configuredModel = config.system?.butlerModel || config.system?.defaultModel || "";
   const providerId = configuredModel.includes("/")
     ? configuredModel.split("/", 1)[0] || "openai"
@@ -117,10 +122,12 @@ function defaultProvider(config: ButlerConfig = {}): ModelProviderAdapter {
       const prompt = input.messages
         .map((message) => `${message.role}: ${message.content}`)
         .join("\n\n");
-      const text = await runPromptText({
+      const text = await promptRunner({
         prompt,
         model: input.model,
         instructions: input.systemPrompt,
+        reasoningEffort: input.reasoning?.effort,
+        signal: input.signal,
         cacheScope: "native-butler-title-provider",
       });
       return { text };
@@ -492,7 +499,7 @@ export async function runNativeButlerMain(
     compatibilityConfig: config as Record<string, any>,
   });
   const runtime = input.runtime ?? new NativeToolLoopRuntime({ butlerHome, butlerData });
-  const provider = input.provider ?? defaultProvider(config);
+  const provider = input.provider ?? createNativeButlerDefaultProvider(config);
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
   const shutdownFlagPath = join(butlerData, "locks", "butler-shutdown");
   const pollMs = input.shutdownPollMs ?? 500;
