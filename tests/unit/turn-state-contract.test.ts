@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   AUTHORED_DECISION_SOURCES,
   COMPLETION_EVIDENCE_KINDS,
+  PUBLIC_DECISION_ROLES,
   RECOVERY_KINDS,
   RUNTIME_FAULT_EVENT_KIND,
   TURN_ACKNOWLEDGED_EVENT_KIND,
@@ -17,6 +18,7 @@ import {
   createTurnDecisionPayload,
   createTurnOutcomePayload,
   isAuthoredDecisionSource,
+  isPublicDecisionRole,
 } from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
 import { createAgentTurnEvent } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
 
@@ -30,6 +32,7 @@ test("turn state contract event kinds are accepted by the canonical event creato
       kind: TURN_DECISION_EVENT_KIND,
       payload: {
         decisionId: "decision-1",
+        role: "tool_intent",
         summary: "Check the projection contract",
         rationale: "The event contract needs the model-authored reason.",
         nextStep: "Use this decision before visible work.",
@@ -95,10 +98,15 @@ test("turn acknowledged payload is deterministic public receipt, not a decision"
 });
 
 test("public decision payloads require authored sources", () => {
+  for (const role of PUBLIC_DECISION_ROLES) {
+    expect(isPublicDecisionRole(role)).toBe(true);
+  }
+
   for (const source of AUTHORED_DECISION_SOURCES) {
     expect(isAuthoredDecisionSource(source)).toBe(true);
     expect(createTurnDecisionPayload({
       decisionId: `decision-${source}`,
+      role: "tool_intent",
       summary: "Check the projection contract",
       rationale: "The next change depends on the source authority boundary.",
       nextStep: "Apply the source gate to projection helpers.",
@@ -114,12 +122,117 @@ test("public decision payloads require authored sources", () => {
     expect(isAuthoredDecisionSource(source)).toBe(false);
     expect(() => createTurnDecisionPayload({
       decisionId: `decision-${source}`,
+      role: "tool_intent",
       summary: "Fallback",
       rationale: "Fallback rationale",
       nextStep: "Fallback next step",
       source,
     })).toThrow("public turn decision source must be authored");
   }
+});
+
+test("public decision payloads require valid explicit roles", () => {
+  expect(() => createTurnDecisionPayload({
+    decisionId: "decision-missing-role",
+    role: undefined,
+    summary: "Check the projection contract",
+    rationale: "The role boundary is part of the public event contract.",
+    nextStep: "Reject legacy decision calls without a role.",
+    source: "assistant-authored",
+  })).toThrow("turn decision role is required");
+
+  expect(() => createTurnDecisionPayload({
+    decisionId: "decision-unknown-role",
+    role: "first_progress",
+    summary: "Check the projection contract",
+    rationale: "Fallback progress is not a public decision role.",
+    nextStep: "Reject unknown decision roles.",
+    source: "assistant-authored",
+  })).toThrow("unknown turn decision role: first_progress");
+});
+
+test("opening decisions require model authored semantic fields and first visible status", () => {
+  expect(createTurnDecisionPayload({
+    decisionId: "decision-opening",
+    role: "opening",
+    summary: "Clarify the requested event contract boundary.",
+    rationale: "The user asked for the contract slice only.",
+    nextStep: "Update the typed payload validation before runtime generation work.",
+    source: "model-authored",
+    firstVisible: true,
+  })).toMatchObject({
+    role: "opening",
+    source: "model-authored",
+    firstVisible: true,
+  });
+
+  expect(() => createTurnDecisionPayload({
+    decisionId: "decision-opening-assistant",
+    role: "opening",
+    summary: "Clarify the requested event contract boundary.",
+    rationale: "The user asked for the contract slice only.",
+    nextStep: "Update the typed payload validation before runtime generation work.",
+    source: "assistant-authored",
+    firstVisible: true,
+  })).toThrow("opening decision source must be model-authored");
+
+  expect(() => createTurnDecisionPayload({
+    decisionId: "decision-opening-hidden",
+    role: "opening",
+    summary: "Clarify the requested event contract boundary.",
+    rationale: "The user asked for the contract slice only.",
+    nextStep: "Update the typed payload validation before runtime generation work.",
+    source: "model-authored",
+    firstVisible: false,
+  })).toThrow("opening decision firstVisible must be true");
+});
+
+test("runtime fallback progress cannot be accepted as an opening decision", () => {
+  const acknowledged = createTurnAcknowledgedPayload({
+    safeLabel: "Request received. Preparing the work.",
+    transport: "app",
+  });
+  expect(acknowledged).toEqual({
+    safeLabel: "Request received. Preparing the work.",
+    transport: "app",
+  });
+
+  expect(() => createTurnDecisionPayload({
+    decisionId: "decision-ack-copy",
+    role: "opening",
+    summary: acknowledged.safeLabel,
+    rationale: "Receipt copy is transport acknowledgement, not model-authored semantics.",
+    nextStep: "Keep acknowledgement outside assistant.decision.",
+    source: "assistant-authored",
+    firstVisible: true,
+  })).toThrow("opening decision source must be model-authored");
+
+  expect(() => createTurnDecisionPayload({
+    decisionId: "decision-runtime-fallback",
+    role: "opening",
+    summary: "Request received. Preparing the work.",
+    rationale: "Gateway fallback text is not model-authored semantic output.",
+    nextStep: "Keep receipt text outside assistant.decision.",
+    source: "runtime-derived",
+    firstVisible: true,
+  })).toThrow("public turn decision source must be authored");
+
+  expect(() => createAgentTurnEvent({
+    sessionId: "session",
+    turnId: "turn",
+    sessionSequence: 1,
+    turnSequence: 1,
+    kind: TURN_DECISION_EVENT_KIND,
+    payload: {
+      decisionId: "decision-first-progress-fallback",
+      role: "opening",
+      summary: "Working",
+      rationale: "First-progress fallback text is runtime policy output.",
+      nextStep: "Do not promote it to an opening decision.",
+      source: "runtime-derived",
+      firstVisible: true,
+    },
+  })).toThrow("public turn decision source must be authored");
 });
 
 test("canonical turn decision events reject unauthorised public decision sources", () => {
@@ -131,7 +244,10 @@ test("canonical turn decision events reject unauthorised public decision sources
     kind: TURN_DECISION_EVENT_KIND,
     payload: {
       decisionId: "decision-runtime",
+      role: "tool_intent",
       summary: "Fallback",
+      rationale: "Runtime text is not authored public decision output.",
+      nextStep: "Reject this payload.",
       source: "runtime-derived",
     },
   })).toThrow("public turn decision source must be authored");

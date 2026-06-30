@@ -1355,10 +1355,7 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
   if (event.visibility === "internal") return null;
   const payload = safeRecordPayload(event.payload);
   const created_at = event.createdAt;
-  if (
-    event.kind === "assistant.public_note" ||
-    event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND
-  ) {
+  if (event.kind === "assistant.public_note") {
     const note = safePublicText(payload.note, "Working");
     const workBlockId = safeOptionalPublicText(payload.workBlockId);
     return {
@@ -1370,6 +1367,15 @@ function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
       work_block_id: workBlockId,
       work_block_label: safeOptionalPublicText(payload.workBlockLabel),
       ...publicDecisionFields(payload),
+    };
+  }
+  if (event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
+    return {
+      id: event.id,
+      kind: "turn",
+      state: "thinking",
+      safe_label: safePublicText(payload.note ?? payload.safeLabel, "Working"),
+      created_at,
     };
   }
   if (event.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {

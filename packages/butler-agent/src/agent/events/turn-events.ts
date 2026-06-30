@@ -10,10 +10,15 @@ import {
 export { isPublicTextSafe, sanitizePublicText } from "./public-text.ts";
 
 export const TURN_EVENT_KINDS = [
-  "turn.accepted",
   "turn.started",
   "turn.first_progress",
   "turn.iteration.started",
+  "assistant.decision.delta",
+  "assistant.decision.completed",
+  "model.stream.text_delta",
+  "model.stream.reasoning_delta",
+  "model.stream.tool_call_delta",
+  "model.stream.completed",
   "work.block.started",
   "work.block.updated",
   "work.block.completed",
@@ -32,13 +37,53 @@ export const TURN_EVENT_KINDS = [
   "turn.continuation_scheduled",
   "turn.completed",
   "turn.failed",
-  "runtime.fault",
   "turn.cancelled",
   ...TURN_STATE_CONTRACT_EVENT_KINDS,
 ] as const;
 
 export type AgentTurnEventKind = typeof TURN_EVENT_KINDS[number];
 export type AgentTurnEventVisibility = "public" | "internal";
+
+export type ProviderStreamEventKind =
+  | "model.stream.text_delta"
+  | "model.stream.reasoning_delta"
+  | "model.stream.tool_call_delta"
+  | "model.stream.completed";
+
+export interface ModelStreamTextDeltaPayload {
+  streamId: string;
+  textDelta: string;
+  target: "opening_decision" | "public_note" | "final_candidate";
+  sequence?: number;
+}
+
+export interface ModelStreamReasoningDeltaPayload {
+  streamId: string;
+  charCount: number;
+  sequence?: number;
+}
+
+export interface ModelStreamToolCallDeltaPayload {
+  streamId: string;
+  callIndex: number;
+  sequence: number;
+  toolCallId?: string;
+  safeToolName?: string;
+  argumentCharCount: number;
+  rawArgumentsDelta?: string;
+  publicState: "generating" | "ready";
+}
+
+export interface ModelStreamCompletedPayload {
+  streamId: string;
+  status: "completed" | "failed" | "aborted";
+}
+
+export type ProviderStreamEventPayload =
+  | ModelStreamTextDeltaPayload
+  | ModelStreamReasoningDeltaPayload
+  | ModelStreamToolCallDeltaPayload
+  | ModelStreamCompletedPayload;
 
 export interface AgentTurnEvent {
   id: string;
@@ -131,7 +176,10 @@ export function createAgentTurnEvent(input: AgentTurnEventInput): AgentTurnEvent
     kind: input.kind,
     visibility: input.visibility ?? "public",
     payload: sanitizeTurnEventPayload(
-      normalizeTurnStateContractPayload(input.kind, input.payload ?? {}) ?? input.payload ?? {},
+      normalizeTurnStateContractPayload(input.kind, input.payload ?? {}) ??
+        normalizeProviderStreamPayload(input.kind, input.payload ?? {}, input.visibility ?? "public") ??
+        input.payload ??
+        {},
       input.visibility ?? "public",
     ),
   };
@@ -175,11 +223,61 @@ export function publicNotePayload(text: unknown, fallback = "Working"): Record<s
   };
 }
 
+function normalizeProviderStreamPayload(
+  kind: string,
+  payload: Record<string, unknown>,
+  visibility: AgentTurnEventVisibility,
+): Record<string, unknown> | null {
+  if (kind === "model.stream.text_delta") {
+    return {
+      streamId: requiredPayloadText(payload.streamId, "model stream id is required"),
+      textDelta: requiredPayloadText(payload.textDelta, "model stream text delta is required"),
+      target: requiredTextDeltaTarget(payload.target),
+      ...optionalPayloadSequence(payload.sequence),
+    };
+  }
+  if (kind === "model.stream.reasoning_delta") {
+    if (visibility !== "internal") {
+      throw new Error("model stream reasoning deltas must be internal");
+    }
+    return {
+      streamId: requiredPayloadText(payload.streamId, "model stream id is required"),
+      charCount: requiredNonNegativeInteger(payload.charCount, "model stream reasoning charCount must be a non-negative integer"),
+      ...optionalPayloadSequence(payload.sequence),
+    };
+  }
+  if (kind === "model.stream.tool_call_delta") {
+    if (visibility === "public" && payload.rawArgumentsDelta !== undefined) {
+      throw new Error("public model stream tool call deltas must not include rawArgumentsDelta");
+    }
+    return {
+      streamId: requiredPayloadText(payload.streamId, "model stream id is required"),
+      callIndex: requiredNonNegativeInteger(payload.callIndex, "model stream tool call callIndex must be a non-negative integer"),
+      sequence: requiredNonNegativeInteger(payload.sequence, "model stream tool call sequence must be a non-negative integer"),
+      ...optionalPayloadTextField("toolCallId", payload.toolCallId),
+      ...optionalPayloadTextField("safeToolName", payload.safeToolName),
+      argumentCharCount: requiredNonNegativeInteger(
+        payload.argumentCharCount,
+        "model stream tool call argumentCharCount must be a non-negative integer",
+      ),
+      ...(visibility === "internal" ? optionalInternalRawStringField("rawArgumentsDelta", payload.rawArgumentsDelta) : {}),
+      publicState: requiredToolCallPublicState(payload.publicState),
+    };
+  }
+  if (kind === "model.stream.completed") {
+    return {
+      streamId: requiredPayloadText(payload.streamId, "model stream id is required"),
+      status: requiredStreamCompletedStatus(payload.status),
+    };
+  }
+  return null;
+}
+
 export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike | null {
   if (event.visibility !== "public") return null;
   const payload = event.payload;
   const createdAt = event.createdAt;
-  if (event.kind === "assistant.public_note" || event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
+  if (event.kind === "assistant.public_note") {
     const workBlockId = optionalPublicText(payload.workBlockId);
     const note = sanitizePublicText(payload.note, "Working");
     return {
@@ -191,6 +289,15 @@ export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike
       work_block_id: workBlockId,
       work_block_label: optionalPublicText(payload.workBlockLabel) ?? (workBlockId ? note : undefined),
       ...publicDecisionFields(payload),
+    };
+  }
+  if (event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
+    return {
+      id: event.id,
+      kind: "turn",
+      safe_label: sanitizePublicText(payload.note ?? payload.safeLabel, "Working"),
+      state: "thinking",
+      created_at: createdAt,
     };
   }
   if (event.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
@@ -437,6 +544,56 @@ function publicDecisionFields(payload: Record<string, unknown>): Partial<Progres
 function optionalPublicText(value: unknown): string | undefined {
   const text = sanitizePublicText(value, "");
   return text || undefined;
+}
+
+function requiredPayloadText(value: unknown, message: string): string {
+  const text = optionalPublicText(value);
+  if (!text) throw new Error(message);
+  return text;
+}
+
+function optionalPayloadTextField(key: string, value: unknown): Record<string, string> {
+  const text = optionalPublicText(value);
+  return text ? { [key]: text } : {};
+}
+
+function optionalInternalRawStringField(key: string, value: unknown): Record<string, string> {
+  if (value === undefined) return {};
+  if (typeof value !== "string") {
+    throw new Error(`model stream ${key} must be a string`);
+  }
+  return { [key]: JSON.parse(JSON.stringify(value)) as string };
+}
+
+function optionalPayloadSequence(value: unknown): Record<string, number> {
+  if (value === undefined) return {};
+  return {
+    sequence: requiredNonNegativeInteger(value, "model stream sequence must be a non-negative integer"),
+  };
+}
+
+function requiredNonNegativeInteger(value: unknown, message: string): number {
+  if (!Number.isInteger(value) || (value as number) < 0) throw new Error(message);
+  return value as number;
+}
+
+function requiredTextDeltaTarget(value: unknown): ModelStreamTextDeltaPayload["target"] {
+  if (
+    value === "opening_decision" ||
+    value === "public_note" ||
+    value === "final_candidate"
+  ) return value;
+  throw new Error("model stream text delta target is invalid");
+}
+
+function requiredToolCallPublicState(value: unknown): ModelStreamToolCallDeltaPayload["publicState"] {
+  if (value === "generating" || value === "ready") return value;
+  throw new Error("model stream tool call publicState is invalid");
+}
+
+function requiredStreamCompletedStatus(value: unknown): ModelStreamCompletedPayload["status"] {
+  if (value === "completed" || value === "failed" || value === "aborted") return value;
+  throw new Error("model stream completed status is invalid");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
