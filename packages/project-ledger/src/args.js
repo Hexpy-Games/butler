@@ -9,6 +9,16 @@ export function parseArgs(argv) {
     const arg = argv[index];
     if (arg.startsWith("--")) {
       const key = arg.slice(2);
+      if (key === "body") {
+        const value = argv[index + 1];
+        if (!value || value.startsWith("--")) {
+          options[key] = true;
+          continue;
+        }
+        options[key] = value;
+        index += 1;
+        continue;
+      }
       if (BOOLEAN_FLAGS.has(key)) {
         options[key] = true;
         continue;

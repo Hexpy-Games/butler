@@ -57,6 +57,7 @@ export const BOOLEAN_FLAGS = new Set([
   "json",
   "write",
   "help",
+  "body",
   "fail-on-error",
   "fail-on-warning",
   "spec-exemption",

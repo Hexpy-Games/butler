@@ -12,6 +12,10 @@ test("native tool instructions preserve capability-selection and recovery guidan
   expect(instructions).toContain("Do not ask the user to name the tool");
   expect(instructions).toContain("do not rely on request-word shortcuts or hardcoded workflow shortcuts");
   expect(instructions).toContain("Do not declare failure from a single weak or inconclusive search");
+  expect(instructions).toContain("Project Ledger records are not ordinary Markdown write targets");
+  expect(instructions).toContain("`write_file` must not create, replace, or edit `.project-ledger/`");
+  expect(instructions).toContain("Shell redirection, heredocs, and ad hoc Python/Node scripts");
+  expect(instructions).toContain("are not accepted Project Ledger mutation paths");
 });
 
 test("role tool policy instructions append worker and steward boundaries only for those roles", () => {

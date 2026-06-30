@@ -90,10 +90,16 @@ export function readRecord(project, filePath) {
     validation: typeof data.validation === "string" ? data.validation : null,
     implementation: typeof data.implementation === "string" ? data.implementation : null,
     mitigation: typeof data.mitigation === "string" ? data.mitigation : null,
+    reason: typeof data.reason === "string" ? data.reason : null,
     updatedAt: String(data.updatedAt ?? new Date(stats.mtimeMs).toISOString()),
     path: relPath,
     sourceMtimeMs: stats.mtimeMs,
   };
+}
+
+export function readRecordBody(filePath) {
+  if (!filePath.endsWith(".md")) return null;
+  return frontmatterBody(readFileSync(filePath, "utf8"));
 }
 
 export function recordFiles(project) {
@@ -164,15 +170,39 @@ function isIgnoredMetadataFile(filePath) {
 }
 
 export function workRecordPath(project, id) {
-  return join(ledgerRoot(project), "work", id, "work.md");
+  return join(ledgerRoot(project), "work", safeRecordId(id), "work.md");
+}
+
+export function topLevelRecordPath(project, kind, id) {
+  const dir = {
+    initiative: "initiatives",
+    decision: "decisions",
+    risk: "risks",
+    spec: "specs",
+    report: "reports",
+    plan: "plans",
+    handoff: "handoffs",
+    reference: "references",
+    roadmap: "roadmaps",
+  }[kind];
+  if (!dir) throw new CliError(`Unsupported top-level record kind: ${kind}`, "invalid_input", 1);
+  return join(ledgerRoot(project), dir, `${safeRecordId(id).toLowerCase()}.md`);
 }
 
 export function taskRecordPath(project, workId, id) {
-  return join(ledgerRoot(project), "work", workId, "tasks", `${id}.md`);
+  return join(ledgerRoot(project), "work", safeRecordId(workId), "tasks", `${safeRecordId(id)}.md`);
 }
 
 export function attemptRecordPath(project, workId, taskId, id) {
-  return join(ledgerRoot(project), "work", workId, "tasks", taskId, "attempts", `${id}.md`);
+  return join(
+    ledgerRoot(project),
+    "work",
+    safeRecordId(workId),
+    "tasks",
+    safeRecordId(taskId),
+    "attempts",
+    `${safeRecordId(id)}.md`,
+  );
 }
 
 export function writeMarkdownRecord(filePath, data, body = null) {
@@ -184,10 +214,10 @@ export function writeMarkdownRecord(filePath, data, body = null) {
   }, text), "utf8");
 }
 
-export function updateMarkdownRecord(filePath, updates) {
+export function updateMarkdownRecord(filePath, updates, bodyOverride = undefined) {
   const existingText = readFileSync(filePath, "utf8");
   const existing = readRecordData(filePath) ?? {};
-  const body = frontmatterBody(existingText) || `# ${updates.title ?? existing.title ?? existing.id}\n`;
+  const body = bodyOverride ?? (frontmatterBody(existingText) || `# ${updates.title ?? existing.title ?? existing.id}\n`);
   writeMarkdownRecord(filePath, { ...existing, ...updates }, body);
 }
 
@@ -213,4 +243,12 @@ function ledgerContentPath(path) {
   const canonicalMatch = normalized.match(/^project-ledger\/projects\/[^/]+(?:\/(.*))?$/u);
   if (canonicalMatch) return canonicalMatch[1] ?? "";
   return normalized;
+}
+
+function safeRecordId(id) {
+  const value = String(id ?? "").trim();
+  if (!value || value === "." || value === ".." || value.includes("/") || value.includes("\\")) {
+    throw new CliError(`Invalid record id: ${value || "(empty)"}`, "invalid_input", 1);
+  }
+  return value;
 }

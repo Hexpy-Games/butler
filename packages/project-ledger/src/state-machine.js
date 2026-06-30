@@ -42,18 +42,89 @@ function transitionMap(kind) {
   return {};
 }
 
-export function assertValidState(kind, status) {
+function lifecycleCommand(kind, id, status, context = {}) {
+  const target = id ?? "<id>";
+  if (context.action === "create") {
+    if (kind === "work") return `project-ledger work create --id ${target} --status ${status}`;
+    if (kind === "task") {
+      return `project-ledger task create --work ${context.workId ?? "<work-id>"} --id ${target} --status ${status}`;
+    }
+  }
+  if (kind === "work" && status === "done") return `project-ledger work complete --id ${target}`;
+  if (kind === "task" && status === "done") return `project-ledger task complete --id ${target}`;
+  if (kind === "attempt" && status === "succeeded") return `project-ledger attempt succeed --id ${target}`;
+  if (kind === "attempt" && status === "failed") return `project-ledger attempt fail --id ${target}`;
+  if (kind === "attempt" && status === "started") {
+    return `project-ledger attempt start --task ${context.taskId ?? "<task-id>"} --id ${target}`;
+  }
+  return `project-ledger ${kind} update --id ${target} --status ${status}`;
+}
+
+function recordDetail(kind, status, id = null) {
+  return [id ? { id, kind, status } : { kind, status }];
+}
+
+export function stateHint(kind, status, context = {}) {
+  return [...validStates(kind)].map((validState) => ({
+    command: lifecycleCommand(kind, context.id, validState, context),
+    reason: `Use a valid ${kind} state instead of ${status}: ${validState}.`,
+  }));
+}
+
+export function transitionHint(kind, from, to, context = {}) {
+  const id = context.id ?? null;
+  const allowed = transitionMap(kind)[from] ?? [];
+  if (kind === "task" && from === "todo" && to === "done") {
+    const target = id ?? "<id>";
+    return [
+      {
+        command: `project-ledger task update --id ${target} --status in_progress`,
+        reason: "Move the task to in_progress first.",
+      },
+      {
+        command: `project-ledger task complete --id ${target}`,
+        reason: "Retry completion after the task is in_progress.",
+      },
+    ];
+  }
+  if (allowed.length > 0) {
+    return allowed.map((status) => ({
+      command: lifecycleCommand(kind, id, status, context),
+      reason: `Transition ${kind} from ${from} to ${status} before retrying ${to}.`,
+    }));
+  }
+  return [{
+    command: kind === "attempt"
+      ? lifecycleCommand(kind, id ?? "<new-id>", "started", context)
+      : `project-ledger ${kind} create --id ${id ?? "<new-id>"}`,
+    reason: `${kind} records in ${from} cannot transition to ${to}; create or choose an active record.`,
+  }];
+}
+
+export function assertValidState(kind, status, context = {}) {
   if (!validStates(kind).has(status)) {
-    throw new CliError(`Invalid ${kind} state: ${status}`, "invalid_state");
+    throw new CliError(
+      `Invalid ${kind} state: ${status}`,
+      "invalid_state",
+      2,
+      recordDetail(kind, status, context.id),
+      stateHint(kind, status, context),
+    );
   }
 }
 
-export function assertTransition(kind, from, to) {
-  assertValidState(kind, to);
+export function assertTransition(kind, from, to, context = {}) {
+  assertValidState(kind, to, context);
   if (!from || from === "unknown" || from === to) return;
   const allowed = transitionMap(kind)[from] ?? [];
   if (!allowed.includes(to)) {
-    throw new CliError(`Invalid ${kind} transition: ${from} -> ${to}`, "invalid_transition");
+    throw new CliError(
+      `Invalid ${kind} transition: ${from} -> ${to}`,
+      "invalid_transition",
+      2,
+      recordDetail(kind, from, context.id),
+      transitionHint(kind, from, to, context),
+    );
   }
 }
 
@@ -70,7 +141,24 @@ export function completionGateIssues(record) {
     code: `missing_${field}`,
     field,
     message: `Completed work is missing ${field} evidence`,
+    next: completionGateNext(field, record.id),
   }));
+}
+
+function completionGateNext(field, id = null) {
+  const target = id ?? "<id>";
+  const flag = {
+    spec: "--spec SPEC-ID or --spec-exemption",
+    acceptance: "--acceptance TEXT or --acceptance-exemption",
+    validation: "--validation TEXT",
+    review: "--review TEXT",
+    report: "--report PATH",
+    codeCommits: "--code-commits JSON or --code-commit auto",
+  }[field] ?? `--${field} VALUE`;
+  return [{
+    command: `project-ledger work complete --id ${target} ${flag}`,
+    reason: `Provide ${field} evidence before completing the work.`,
+  }];
 }
 
 function hasCodeCommitEvidence(value) {

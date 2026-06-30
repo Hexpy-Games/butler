@@ -1,10 +1,11 @@
 export class CliError extends Error {
-  constructor(message, code = "invalid_arguments", exitCode = 2, details = null) {
+  constructor(message, code = "invalid_arguments", exitCode = 2, details = null, next = []) {
     super(message);
     this.name = "CliError";
     this.code = code;
     this.exitCode = exitCode;
     this.details = details;
+    this.next = next;
   }
 }
 

@@ -225,6 +225,7 @@ export function createButlerToolExecutor(input: {
       butlerData: input.butlerData,
     }),
     ...createRunCommandToolHandlers({
+      butlerHome: input.butlerHome,
       butlerData: input.butlerData,
       workspacePath: input.workspacePath ?? input.butlerHome,
     }),

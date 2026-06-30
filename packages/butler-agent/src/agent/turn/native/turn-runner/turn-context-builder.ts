@@ -134,6 +134,7 @@ export async function prepareNativeTurnContext(input: {
   );
   const toolSurfaceController = new ToolSurfacePromptController({
     role: input.session.init.role,
+    message: userText,
     sessionMetadata: input.session.init.metadata,
     turnMetadata: input.turnInput.metadata,
     providerCapabilities: input.turnInput.provider.capabilities,

@@ -32,7 +32,8 @@ export function frontmatterBody(text) {
   if (!text.startsWith("---\n")) return text;
   const end = text.indexOf("\n---", 4);
   if (end < 0) return text;
-  return text.slice(end + 4).replace(/^\n/u, "");
+  const body = text.slice(end + 4);
+  return body.startsWith("\n\n") ? body.slice(2) : body.replace(/^\n/u, "");
 }
 
 export function formatScalar(value) {
@@ -49,5 +50,5 @@ export function formatFrontmatter(data) {
 }
 
 export function markdownWithFrontmatter(data, body) {
-  return `---\n${formatFrontmatter(data)}\n---\n\n${body.trim()}\n`;
+  return `---\n${formatFrontmatter(data)}\n---\n\n${body}`;
 }
