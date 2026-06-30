@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { resolve, sep } from "node:path";
 
 export function isPathInside(root: string, path: string): boolean {
@@ -6,5 +7,17 @@ export function isPathInside(root: string, path: string): boolean {
   return (
     normalizedPath === normalizedRoot ||
     normalizedPath.startsWith(`${normalizedRoot}${sep}`)
+  );
+}
+
+export function isSensitiveProjectFolder(workspacePath: string): boolean {
+  if (workspacePath === resolve("/") || workspacePath === resolve(homedir())) {
+    return true;
+  }
+  const blockedRoots = ["/System", "/etc", "/private/etc", "/bin", "/sbin"].map(
+    (root) => resolve(root),
+  );
+  return blockedRoots.some(
+    (root) => workspacePath === root || workspacePath.startsWith(`${root}/`),
   );
 }

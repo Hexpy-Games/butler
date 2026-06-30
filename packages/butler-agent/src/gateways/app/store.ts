@@ -1,21 +1,15 @@
 import { Database } from "bun:sqlite";
 import {
   accessSync,
-  closeSync,
   constants as fsConstants,
-  copyFileSync,
   existsSync,
   mkdirSync,
-  openSync,
   readFileSync,
-  readSync,
-  readdirSync,
   realpathSync,
   statSync,
-  unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, join, resolve, sep } from "node:path";
 import {
@@ -35,12 +29,11 @@ import {
   setProfilingMode,
 } from "../../personalization/profiling.ts";
 import { readPersonaPresets } from "../../personalization/persona-presets.ts";
-import { TaskStore, type TaskSummary } from "../../agent/work/task-store.ts";
+import { TaskStore } from "../../agent/work/task-store.ts";
 import {
   applyTurnLocalWorkOutcomeForSession,
   workStreamTerminal,
   WorkStreamStore,
-  type TurnLocalWorkOutcome,
 } from "../../agent/work/work-stream.ts";
 import {
   TURN_ACKNOWLEDGED_EVENT_KIND,
@@ -82,12 +75,10 @@ import {
   upsertProviderApiKeyCredential,
   type HostedModelProviderId,
 } from "../../integrations/providers/registered-models.ts";
-import { readPromptCacheMetrics } from "../../integrations/providers/prompt-cache-metrics.ts";
 import {
   getNativeMainStatePath,
   readNativeMainState,
 } from "../../integrations/providers/native-main-state.ts";
-import { readContextMonitor } from "../../operations/metrics/context-monitor.ts";
 import {
   isPidRunning,
   readServiceState,
@@ -104,7 +95,6 @@ import {
   APP_PROTOCOL_VERSION,
   type AppEventEnvelope,
   type AppInfoView,
-  type AutomationDetail,
   type AutomationDetailView,
   type AutomationListView,
   type AutomationMutationResult,
@@ -113,7 +103,6 @@ import {
   type AutomationRunSummary,
   type AutomationRunState,
   type AutomationState,
-  type AutomationSummary,
   type AutomationTargetSummary,
   type ArchiveListView,
   type ChatKind,
@@ -170,13 +159,11 @@ import {
   type SessionQueueView,
   type SessionSummaryView,
   type SessionView,
-  type SessionViewStatus,
   type SessionViewTurn,
   type SettingsView,
   type SkillImportResult,
   type SkillSettingsView,
   type SystemEventListView,
-  type SystemEventSummary,
   type TranscriptExportView,
   type UsageMonitorView,
   type SessionSummary,
@@ -197,13 +184,11 @@ import {
   type WorkerActivityControlRequest,
   type WorkerActivityControlResult,
   type WorkerActivityListView,
-  type WorkerActivityWorkBlock,
-  type WorkerActivityPhase,
   type WorkerActivitySummary,
 } from "./protocol.ts";
 import { buildNewChatBriefing } from "./new-chat-briefing.ts";
 import { loadProjectDocumentCatalog } from "./project-document-catalog.ts";
-import { isPathInside } from "./path-safety.ts";
+import { isPathInside, isSensitiveProjectFolder } from "./path-safety.ts";
 import {
   readConfigDefaultModel,
   readConfigUserSettings,
@@ -234,10 +219,133 @@ import {
   writeWebSearchProviderApiKey,
 } from "./web-search-settings.ts";
 import {
-  orchestrationActivityPhase,
-  orchestrationStatusLine,
   shouldKeepInactiveLinkedReportingWorker,
 } from "./worker-activity-projection.ts";
+import {
+  appWorkStreamVisibleInActiveProjection,
+  isActiveWorkerActivity,
+  orderWorkerActivities,
+  relabelWorkerActivities,
+  synthesizeOrchestrationParentActivities,
+  workerActivityFromTaskSummary,
+} from "./worker-activity-read-model.ts";
+import {
+  isNoSuchProcessError,
+  parsePositiveInteger,
+  readTextFile,
+  workerTaskIdsForPlannedTask,
+  writeWorkerActivityProjection,
+} from "./worker-task-files.ts";
+import {
+  chatFromRow,
+  isActiveSessionTurnState,
+  maxMessageCursor,
+  paginationInput,
+  projectFromRow,
+  safeDisplayName,
+  safeLocalSessionId,
+  safeWorkspaceLabel,
+  sessionFromRow,
+  sessionHintForRow,
+  sessionViewStatus,
+} from "./session-read-model.ts";
+import { systemEventsForButlerData } from "./system-events-read-model.ts";
+import {
+  automationDetailFromRow,
+  automationRunFromRow,
+  automationSummaryFromRow,
+  automationSummaryWithoutPrompt,
+  normalizeAutomationInterval,
+} from "./automation-read-model.ts";
+import {
+  turnLocalWorkOutcomeForAppTurn,
+  turnLocalWorkOutcomeStatusNote,
+} from "./turn-local-work-outcome.ts";
+import {
+  isRecord,
+  safeInboundQueueId,
+  safeOptionalShortText,
+  safeOptionalShortToken,
+  safeParseRecord,
+} from "./projection-safe-values.ts";
+import { workBlocksFromTerminalProgressRows } from "./session-work-blocks.ts";
+import { publicAppEventPayload } from "./public-app-event-payload.ts";
+import {
+  readTranscriptEventsFromText,
+  readTranscriptFromDataHome,
+  readTranscriptTextRange,
+  transcriptPathFromDataHome,
+} from "./transcript-reader.ts";
+import {
+  artifactCandidatePaths,
+  artifactRefsFromOutboundMessage,
+  progressRowFromAppOutbound,
+  sanitizeAppTransportFinalText,
+} from "./app-transport-projection.ts";
+import {
+  classifyMessageFileKind,
+  MESSAGE_FILE_ID_PATTERN,
+  MESSAGE_FILE_MAX_ATTACHMENTS,
+  MESSAGE_FILE_MAX_BYTES,
+  messageFileContentKey,
+  mimeTypeForArtifactPath,
+  normalizeAttachmentMimeType,
+  normalizeFileBytes,
+  safeAttachmentName,
+} from "./message-file-storage.ts";
+import {
+  backupPrivatePersonalizationFile,
+  boundedPrivateText,
+  readPrivateText,
+  startOfUtcDay,
+} from "./personalization-file-storage.ts";
+import { appRuntimePolicy, stringArray } from "./app-runtime-policy.ts";
+export { appRuntimePolicy } from "./app-runtime-policy.ts";
+import {
+  contextCategory,
+  latestLivePromptUsage,
+} from "./context-details-read-model.ts";
+import {
+  isTerminalTurnState,
+  messageFileRefFromRow,
+  messageFromRow,
+  turnFromRow,
+} from "./message-read-model.ts";
+import {
+  appLimitedDeliveryForProjectedFailure,
+  deliveryLimitationMetadataFromRecord,
+  deliveryStateFromProjectedNoVisibleFinal,
+  hasUnsupportedNoVisibleDeliveryState,
+  shouldAcceptRecoverableLimitedFinalForFailedQueue,
+  shouldProjectRecoverableLimitedFinalOverTerminalTurn,
+  shouldTreatLimitedFinalAsNoVisible,
+  terminalClaimId,
+  type DeliveryLimitationMetadata,
+} from "./app-delivery-projection.ts";
+export type { DeliveryLimitationMetadata } from "./app-delivery-projection.ts";
+import {
+  isAppWorkerResultOutbound,
+  isInternalContinuationTurnState,
+  loadedSkillNamesFromTranscriptEvent,
+  mergeTransportBindings,
+  normalizeAppModelRef,
+  normalizeGeneratedSessionTitle,
+  provisionalSessionTitleFromPrompt,
+  runtimeTurnEventFromAppOutboundMetadata,
+  timestampBefore,
+} from "./app-transport-metadata.ts";
+import {
+  AppResponderCancelledError,
+  AppResponderTimeoutError,
+  AppStoreOperationError,
+} from "./app-store-errors.ts";
+export {
+  AppResponderCancelledError,
+  AppResponderTimeoutError,
+  AppStoreOperationError,
+} from "./app-store-errors.ts";
+import { readProjectFolderSelectionToken } from "./project-folder-selection-token.ts";
+export { createProjectFolderSelectionToken } from "./project-folder-selection-token.ts";
 import {
   createAgentTurnEvent,
   progressRowFromTurnEvent,
@@ -245,10 +353,6 @@ import {
   type AgentTurnEvent,
   type RuntimeTurnEventInput,
 } from "../../agent/events/turn-events.ts";
-import {
-  deliveredWithLimitationsState,
-  safeLimitationText,
-} from "../../agent/turn/runtime-delivery-state.ts";
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import type { SessionTransportBinding } from "../../test-support/harness/contracts.ts";
@@ -273,7 +377,6 @@ import {
   isInternalContinuationProgressEvent,
   isTerminalProgressState,
   normalizeProgressSummaryRow,
-  progressMergeState,
   progressRowsEquivalent,
   progressRowsForTurnState,
   progressSummaryStatusLabel,
@@ -281,9 +384,7 @@ import {
   type ProgressSummaryInput,
 } from "./progress-summary.ts";
 import {
-  continuationDeliveryFromState,
   isContinuationDeliveryIssue,
-  isContinuationDeliveryState,
   shouldAutomaticallyRequeueContinuation,
 } from "./continuation-delivery.ts";
 import {
@@ -294,16 +395,13 @@ import {
   publicDeliveryMetadataForProjection,
   publicDeliveryStateForProjection,
   publicDeliveryStateForTurnState,
-  publicTurnPayloadRecord,
   publicTurnRecord,
   publicTurnStatusLabel,
-  type AppProjectionDeliveryState,
 } from "./btcc-public-projection.ts";
 import {
   CANCELLED_TURN_ACTIVITY_TEXT,
   isCancelledTurnActivityCarrier,
 } from "./cancelled-turn-activity.ts";
-import { isPublicDecisionSource } from "./public-decision-source.ts";
 import {
   completeResponderTurn as completeResponderTurnLifecycle,
   isResponderCancelError,
@@ -311,7 +409,6 @@ import {
 import {
   projectSafeTurnFailure,
   safeTurnFailureEventPayload,
-  type ProjectedSafeTurnFailure,
 } from "./turn-failure-projection.ts";
 import {
   applyComponentUpdate,
@@ -337,16 +434,8 @@ const DEFAULT_CHAT_ID = "general";
 const DEFAULT_PROJECT_ID = "butler";
 const DEFAULT_CHAT_TITLE = "Onboarding";
 const SCRATCH_PROJECT_BASE_NAME = "New project";
-const FOLDER_SELECTION_TOKEN_VERSION = "v1";
-const FOLDER_SELECTION_TOKEN_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_PROJECT_WORKSPACE_SETTING_KEY = "default-project-workspace-root";
 const APP_REPOSITORY_URL = "https://github.com/Hexpy-Games/butler";
-const MESSAGE_FILE_MAX_BYTES = 10 * 1024 * 1024;
-const MESSAGE_FILE_MAX_ATTACHMENTS = 12;
-const MESSAGE_FILE_ID_PATTERN = /^file-[0-9a-f-]{36}$/iu;
-const BUTLER_FINAL_ANSWER_OPEN = "<butler_final_answer>";
-const BUTLER_FINAL_ANSWER_CLOSE = "</butler_final_answer>";
-
 function visibleMessageSqlPredicate(alias?: string): string {
   const prefix = alias ? `${alias}.` : "";
   const codes = HIDDEN_LEGACY_ASSISTANT_SAFE_ERROR_CODES.map(
@@ -370,13 +459,6 @@ function captureUserFeedbackFromMessage(
 ): CapturedUserFeedback | null {
   return null;
 }
-
-const SUPPORTED_IMAGE_MIME_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-]);
 
 interface ChatRow {
   id: string;
@@ -479,12 +561,6 @@ interface TurnRow {
   attempt: number;
   created_at: string;
   updated_at: string;
-}
-
-export interface DeliveryLimitationMetadata {
-  delivery_state: AppProjectionDeliveryState;
-  limitation_codes: string[];
-  limitations: string[];
 }
 
 interface SettingRow {
@@ -600,35 +676,6 @@ export interface SendMessageOptions {
   controls?: SessionControlState;
   deferResponderTurns?: boolean;
   suppressAssistantReplies?: boolean;
-}
-
-export class AppResponderTimeoutError extends Error {
-  readonly code = "gateway_timeout";
-
-  constructor(readonly timeoutMs: number) {
-    super("Butler did not finish the turn before the app timeout.");
-    this.name = "AppResponderTimeoutError";
-  }
-}
-
-export class AppResponderCancelledError extends Error {
-  readonly code = "turn_cancelled";
-
-  constructor() {
-    super("Butler turn was cancelled.");
-    this.name = "AppResponderCancelledError";
-  }
-}
-
-export class AppStoreOperationError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "AppStoreOperationError";
-  }
 }
 
 interface TranscriptSyncSnapshot {
@@ -1205,12 +1252,7 @@ export class AppServerStore {
     options: { limit?: number; offset?: number } = {},
   ): SystemEventListView {
     const page = paginationInput(options);
-    const events = [
-      ...schedulerSystemEvents(this.butlerData),
-      ...consolidationSystemEvents(this.butlerData),
-    ].sort((left, right) =>
-      eventSortTimestamp(right).localeCompare(eventSortTimestamp(left)),
-    );
+    const events = systemEventsForButlerData(this.butlerData);
     return {
       events: events.slice(page.offset, page.offset + page.limit),
       pagination: {
@@ -7857,153 +7899,6 @@ export class AppServerStore {
   }
 }
 
-function appWorkStreamVisibleInActiveProjection(
-  stream: {
-    last_user_turn_id: string | null;
-    linked_planned_task_ids: string[];
-    linked_orchestration_ids: string[];
-    linked_worker_task_ids: string[];
-  },
-  currentTurnId?: string,
-): boolean {
-  if (
-    stream.linked_planned_task_ids.length > 0 ||
-    stream.linked_orchestration_ids.length > 0 ||
-    stream.linked_worker_task_ids.length > 0
-  ) {
-    return true;
-  }
-  if (!stream.last_user_turn_id) return true;
-  return Boolean(currentTurnId && stream.last_user_turn_id === currentTurnId);
-}
-
-export function createProjectFolderSelectionToken(
-  folderPath: string,
-  secret: string,
-  options: { nowMs?: number; ttlMs?: number } = {},
-): string {
-  const issuedAt = Number.isFinite(options.nowMs)
-    ? Number(options.nowMs)
-    : Date.now();
-  const ttlMs = Number.isFinite(options.ttlMs)
-    ? Number(options.ttlMs)
-    : FOLDER_SELECTION_TOKEN_TTL_MS;
-  const payload = Buffer.from(
-    JSON.stringify({
-      path: resolve(folderPath),
-      issued_at: issuedAt,
-      expires_at: issuedAt + ttlMs,
-    }),
-    "utf8",
-  ).toString("base64url");
-  return `${FOLDER_SELECTION_TOKEN_VERSION}.${payload}.${signFolderSelectionPayload(payload, secret)}`;
-}
-
-function readProjectFolderSelectionToken(
-  token: string,
-  secret?: string,
-): string {
-  if (!secret) {
-    throw new AppStoreOperationError(
-      403,
-      "folder_selection_unavailable",
-      "Project folder selection is unavailable.",
-    );
-  }
-  const [version, payload, signature] = token.split(".");
-  if (version !== FOLDER_SELECTION_TOKEN_VERSION || !payload || !signature) {
-    throw new AppStoreOperationError(
-      400,
-      "folder_selection_invalid",
-      "Project folder selection is invalid.",
-    );
-  }
-  const expected = signFolderSelectionPayload(payload, secret);
-  if (!safeTokenEqual(signature, expected)) {
-    throw new AppStoreOperationError(
-      400,
-      "folder_selection_invalid",
-      "Project folder selection is invalid.",
-    );
-  }
-  try {
-    const decoded = JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8"),
-    ) as {
-      path?: unknown;
-      expires_at?: unknown;
-    };
-    if (
-      typeof decoded.expires_at === "number" &&
-      Date.now() > decoded.expires_at
-    ) {
-      throw new AppStoreOperationError(
-        400,
-        "folder_selection_expired",
-        "Project folder selection has expired.",
-      );
-    }
-    if (typeof decoded.path !== "string" || decoded.path.trim().length === 0) {
-      throw new Error("missing path");
-    }
-    return resolve(decoded.path);
-  } catch (error) {
-    if (error instanceof AppStoreOperationError) throw error;
-    throw new AppStoreOperationError(
-      400,
-      "folder_selection_invalid",
-      "Project folder selection is invalid.",
-    );
-  }
-}
-
-function readTextFile(path: string): string {
-  try {
-    return readFileSync(path, "utf8").trim();
-  } catch {
-    return "";
-  }
-}
-
-function writeWorkerActivityProjection(
-  taskDir: string,
-  phase: WorkerActivityPhase,
-  statusLine: string,
-): void {
-  mkdirSync(taskDir, { recursive: true });
-  writeFileSync(
-    join(taskDir, "worker_activity.json"),
-    `${JSON.stringify({
-      phase,
-      status_line: statusLine,
-      updated_at: new Date().toISOString(),
-    })}\n`,
-    "utf8",
-  );
-}
-
-function parsePositiveInteger(value: string): number | null {
-  const parsed = Number.parseInt(value.trim(), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function isNoSuchProcessError(error: unknown): boolean {
-  return Boolean(
-    error &&
-    typeof error === "object" &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "ESRCH",
-  );
-}
-
-function workerTaskIdsForPlannedTask(record: PlannedTaskRecord): string[] {
-  return record.attempts
-    .map((attempt) =>
-      readTextFile(join(record.taskDir, "attempts", attempt, "worker-task-id")),
-    )
-    .filter(Boolean);
-}
-
 async function runResponderWithTimeout(
   responder: AppMessageResponder,
   input: Omit<AppMessageResponderInput, "signal">,
@@ -8060,172 +7955,6 @@ async function runResponderWithTimeout(
   }
 }
 
-function chatFromRow(row: ChatRow): ChatSummary {
-  return {
-    id: row.id,
-    title: row.title,
-    kind: row.kind,
-    project_id: row.project_id ?? undefined,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  };
-}
-
-function projectFromRow(
-  row: ProjectRow,
-  sessions?: SessionSummary[],
-): ProjectSummary {
-  const activeSessions = (sessions ?? []).filter(
-    (session) => !session.archived,
-  );
-  const latestSessionAt = activeSessions
-    .map((session) => session.last_activity_at)
-    .sort()
-    .at(-1);
-  const project: ProjectSummary = {
-    id: row.id,
-    display_name: row.display_name,
-    status: row.status,
-    last_activity_at: latestSessionAt ?? row.updated_at,
-    active_session_count: activeSessions.length,
-    pinned: row.pinned === 1,
-    archived: row.archived === 1,
-    error_summary: row.error_summary ?? undefined,
-    workspace_label: row.workspace_label,
-    safe_path_label: row.safe_path_label,
-  };
-  if (sessions) project.sessions = sessions;
-  return project;
-}
-
-const SCHEDULER_EVENT_JOBS = [
-  ["session-sync", "Session sync"],
-  ["context-maintenance", "Context maintenance"],
-  ["consolidation-cycle", "Consolidation cycle"],
-] as const;
-
-function schedulerSystemEvents(butlerData: string): SystemEventSummary[] {
-  return SCHEDULER_EVENT_JOBS.map(([id, title]) => {
-    const state = readJsonFile<Record<string, unknown>>(
-      join(butlerData, "state", "scheduler", `${id}.json`),
-    );
-    const lastRunAt = safeString(state?.lastRunAt);
-    const status = safeString(state?.status) ?? "not_run";
-    return {
-      id: `scheduler:${id}`,
-      kind: "scheduler_job",
-      title,
-      status,
-      occurred_at: lastRunAt,
-      metrics: [
-        ...safeMetric("job_id", id),
-        ...safeMetric("last_run_date", safeString(state?.lastRunDate)),
-      ],
-      raw_text_included: false,
-    };
-  });
-}
-
-function consolidationSystemEvents(butlerData: string): SystemEventSummary[] {
-  const runsDir = join(butlerData, "cognition", "consolidation", "runs");
-  if (!existsSync(runsDir)) return [];
-  return readdirSync(runsDir)
-    .filter((name) => name.endsWith(".json"))
-    .map((name) => {
-      const path = join(runsDir, name);
-      return { path, mtimeMs: statSync(path).mtimeMs };
-    })
-    .sort((left, right) => right.mtimeMs - left.mtimeMs)
-    .slice(0, 8)
-    .flatMap(({ path }) => eventsFromConsolidationRun(path));
-}
-
-function eventsFromConsolidationRun(path: string): SystemEventSummary[] {
-  const run = readJsonFile<StoredConsolidationRun>(path);
-  if (!run?.run_id) return [];
-  const phaseResults = Array.isArray(run.phases) ? run.phases : [];
-  const failedPhaseCount = phaseResults.filter(
-    (phase) => safeString(phase?.status) !== "ok",
-  ).length;
-  const events: SystemEventSummary[] = [
-    {
-      id: `consolidation:${run.run_id}`,
-      kind: "consolidation_run",
-      title: "Consolidation cycle",
-      status: safeString(run.status) ?? "unknown",
-      occurred_at: safeString(run.completed_at) ?? safeString(run.started_at),
-      started_at: safeString(run.started_at),
-      completed_at: safeString(run.completed_at),
-      duration_ms: durationMs(run.started_at, run.completed_at),
-      metrics: [
-        ...safeMetric("phase_count", phaseResults.length),
-        ...safeMetric("failed_phase_count", failedPhaseCount),
-        ...safeMetric("raw_text_included", run.raw_text_included === true),
-      ],
-      raw_text_included: false,
-    },
-  ];
-  const profilePhase = phaseResults.find(
-    (phase) => phase?.phase === "profile_consolidation",
-  );
-  if (profilePhase) {
-    const metrics = safeObject(profilePhase.metrics);
-    events.push({
-      id: `consolidation:${run.run_id}:profile`,
-      kind: "profile_consolidation",
-      title: "Profile consolidation",
-      status:
-        safeString(profilePhase.status) ?? safeString(run.status) ?? "unknown",
-      occurred_at: safeString(run.completed_at) ?? safeString(run.started_at),
-      started_at: safeString(run.started_at),
-      completed_at: safeString(run.completed_at),
-      model_ref: safeString(metrics.transcript_extractor_model),
-      uses_butler_model:
-        typeof metrics.transcript_extractor_uses_butler_model === "boolean"
-          ? metrics.transcript_extractor_uses_butler_model
-          : undefined,
-      duration_ms: durationMs(run.started_at, run.completed_at),
-      metrics: profileConsolidationMetrics(metrics),
-      raw_text_included: false,
-    });
-  }
-  return events;
-}
-
-interface StoredConsolidationRun {
-  run_id?: string;
-  status?: string;
-  started_at?: string;
-  completed_at?: string;
-  raw_text_included?: boolean;
-  phases?: Array<{
-    phase?: string;
-    status?: string;
-    metrics?: Record<string, unknown>;
-  }>;
-}
-
-function profileConsolidationMetrics(
-  metrics: Record<string, unknown>,
-): SystemEventSummary["metrics"] {
-  const keys = [
-    "profiling_enabled",
-    "mode",
-    "candidate_count",
-    "promoted_count",
-    "skipped_count",
-    "stable_entry_count",
-    "projection_written",
-    "transcript_scanned_file_count",
-    "transcript_scanned_event_count",
-    "transcript_captured_candidate_count",
-    "transcript_extractor_model_called",
-    "transcript_extractor_fallback_used",
-    "raw_text_included",
-  ];
-  return keys.flatMap((key) => safeMetric(key, metrics[key]));
-}
-
 function readJsonFile<T>(path: string): T | null {
   try {
     return JSON.parse(readFileSync(path, "utf8")) as T;
@@ -8242,34 +7971,6 @@ function safeObject(value: unknown): Record<string, unknown> {
 
 function safeString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function safeMetric(
-  label: string,
-  value: unknown,
-): SystemEventSummary["metrics"] {
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return [{ label, value }];
-  }
-  return [];
-}
-
-function durationMs(
-  startedAt: unknown,
-  completedAt: unknown,
-): number | undefined {
-  const start = Date.parse(safeString(startedAt) ?? "");
-  const completed = Date.parse(safeString(completedAt) ?? "");
-  if (!Number.isFinite(start) || !Number.isFinite(completed)) return undefined;
-  return Math.max(0, completed - start);
-}
-
-function eventSortTimestamp(event: SystemEventSummary): string {
-  return event.occurred_at ?? event.completed_at ?? event.started_at ?? "";
 }
 
 function sessionControlsKey(sessionId: string): string {
@@ -8289,1701 +7990,6 @@ function hasSessionControlInput(input: Partial<SessionControlState>): boolean {
   );
 }
 
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-      .map((item) => item.trim())
-    : [];
-}
-
-const APP_WORKSPACE_REQUIRED_TOOL_NAMES = new Set([
-  "run_command",
-  "read_tool_output_artifact",
-]);
-
-function requiredToolsForAccessMode(value: unknown, accessMode: SettingsView["access_mode"]): string[] {
-  const names = stringArray(value);
-  return accessMode === "full_access"
-    ? names
-    : names.filter((name) => !APP_WORKSPACE_REQUIRED_TOOL_NAMES.has(name));
-}
-
-export function appRuntimePolicy(input: {
-  existing?: unknown;
-  accessMode: SettingsView["access_mode"];
-}): Record<string, unknown> {
-  const existing = input.existing && typeof input.existing === "object" && !Array.isArray(input.existing)
-    ? input.existing as Record<string, unknown>
-    : {};
-  const requestedProfiles = stringArray(existing.requiredNativeToolProfiles)
-    .filter((profile) => profile !== "workspace");
-
-  if (input.accessMode === "full_access") {
-    requestedProfiles.push("workspace");
-  }
-
-  return {
-    ...existing,
-    accessMode: input.accessMode,
-    requiredNativeTools: requiredToolsForAccessMode(existing.requiredNativeTools, input.accessMode),
-    required_tools: requiredToolsForAccessMode(existing.required_tools, input.accessMode),
-    requiredNativeToolProfiles: [...new Set(requestedProfiles)],
-  };
-}
-
-function contextCategory(
-  id: string,
-  label: string,
-  usedTokens: number,
-  sourceKind: ContextDetailsView["categories"][number]["source_kind"],
-  budgetTokens: number,
-  safeDescription?: string,
-): ContextDetailsView["categories"][number] {
-  return {
-    id,
-    label,
-    used_tokens: usedTokens,
-    budget_tokens: budgetTokens,
-    ratio: usedTokens / budgetTokens,
-    safe_description:
-      safeDescription ?? `${usedTokens.toLocaleString("en-US")} tokens`,
-    source_kind: sourceKind,
-  };
-}
-
-function latestLivePromptUsage(input: {
-  butlerData: string;
-  runtimeSessionId: string;
-  turnId?: string;
-}): { promptTokens: number; source: string; ts: number } | null {
-  const provider = latestProviderPromptUsage(input);
-  const contextMonitor = latestContextMonitorPromptUsage(input);
-  if (!provider) return contextMonitor;
-  if (!contextMonitor) return provider;
-  return contextMonitor.ts > provider.ts ? contextMonitor : provider;
-}
-
-function latestProviderPromptUsage(input: {
-  butlerData: string;
-  turnId?: string;
-}): { promptTokens: number; source: string; ts: number } | null {
-  const turnId = input.turnId?.trim();
-  if (!turnId) return null;
-  let latest: { promptTokens: number; source: string; ts: number } | null = null;
-  for (const event of readPromptCacheMetrics({ butlerData: input.butlerData })) {
-    if (event.turnId !== turnId) continue;
-    if (!Number.isFinite(event.promptTokens) || event.promptTokens <= 0) {
-      continue;
-    }
-    if (!latest || event.ts >= latest.ts) {
-      latest = {
-        promptTokens: Math.max(0, Math.round(event.promptTokens)),
-        source: "provider_prompt_usage",
-        ts: event.ts,
-      };
-    }
-  }
-  return latest;
-}
-
-function latestContextMonitorPromptUsage(input: {
-  butlerData: string;
-  runtimeSessionId: string;
-}): { promptTokens: number; source: string; ts: number } | null {
-  const summary = readContextMonitor({
-    butlerData: input.butlerData,
-    sessionId: input.runtimeSessionId,
-  });
-  const latestTurn = summary.latestTurn;
-  if (!latestTurn || latestTurn.estimatedTokens <= 0) return null;
-  return {
-    promptTokens: Math.max(0, Math.round(latestTurn.estimatedTokens)),
-    source: "context_monitor",
-    ts: latestTurn.ts,
-  };
-}
-
-function normalizeAutomationInterval(value: number): number {
-  const seconds = Math.trunc(value);
-  if (!Number.isFinite(seconds) || seconds < 300 || seconds > 86_400) {
-    throw new AppStoreOperationError(
-      400,
-      "automation_interval_invalid",
-      "Automation interval must be between 5 minutes and 24 hours.",
-    );
-  }
-  return seconds;
-}
-
-function automationIntervalLabel(seconds: number): string {
-  if (seconds === 600) return "10 minutes";
-  if (seconds === 1800) return "30 minutes";
-  if (seconds === 3600) return "1 hour";
-  if (seconds % 3600 === 0) return `${seconds / 3600} hours`;
-  if (seconds % 60 === 0) return `${seconds / 60} minutes`;
-  return `${seconds} seconds`;
-}
-
-function automationSummaryFromRow(
-  row: AutomationRow,
-  targetLabel: string,
-): AutomationSummary {
-  return {
-    id: row.id,
-    title: row.title,
-    state: row.state,
-    target_kind: row.target_kind,
-    target_session_id: row.target_session_id,
-    target_label: targetLabel,
-    interval_seconds: row.interval_seconds,
-    interval_label: automationIntervalLabel(row.interval_seconds),
-    next_run_at: row.next_run_at ?? undefined,
-    last_run_at: row.last_run_at ?? undefined,
-    last_run_state: row.last_run_state,
-    last_safe_error_code: row.last_safe_error_code ?? undefined,
-    run_count: row.run_count,
-    consecutive_failure_count: row.consecutive_failure_count,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  };
-}
-
-function automationDetailFromRow(
-  row: AutomationRow,
-  targetLabel: string,
-): AutomationDetail {
-  return {
-    ...automationSummaryFromRow(row, targetLabel),
-    prompt_body: row.prompt_body,
-  };
-}
-
-function automationSummaryWithoutPrompt(
-  automation: AutomationDetail | AutomationSummary,
-): AutomationSummary {
-  const { prompt_body: _promptBody, ...summary } =
-    automation as AutomationDetail;
-  return summary;
-}
-
-function automationRunFromRow(row: AutomationRunRow): AutomationRunSummary {
-  return {
-    id: row.id,
-    automation_id: row.automation_id,
-    target_session_id: row.target_session_id,
-    state: row.state,
-    trigger: row.trigger,
-    started_at: row.started_at,
-    completed_at: row.completed_at ?? undefined,
-    safe_error_code: row.safe_error_code ?? undefined,
-    queued_message_id: row.queued_message_id ?? undefined,
-    turn_id: row.turn_id ?? undefined,
-  };
-}
-
-function workModeToPhase(mode: string): WorkerActivityPhase {
-  if (mode === "planning") return "planning";
-  if (mode === "reviewing") return "verifying";
-  if (mode === "reporting") return "reporting";
-  if (mode === "repairing") return "recoverable";
-  if (mode === "blocked") return "blocked";
-  if (mode === "complete") return "complete";
-  if (mode === "cancelled") return "cancelled";
-  if (mode === "failed") return "failed";
-  return "executing";
-}
-
-function turnLocalWorkOutcomeForAppTurn(state: TurnState): TurnLocalWorkOutcome | null {
-  if (state === "delivered") return "completed";
-  if (state === "failed" || state === "runtime_fault") return "failed";
-  if (state === "cancelled") return "cancelled";
-  return null;
-}
-
-function turnLocalWorkOutcomeStatusNote(outcome: TurnLocalWorkOutcome): string {
-  if (outcome === "completed") return "Reconciled after delivered turn replay.";
-  if (outcome === "failed") return "Reconciled after failed turn replay.";
-  if (outcome === "cancelled") return "Reconciled after cancelled turn replay.";
-  if (outcome === "waiting_user") return "Reconciled waiting turn replay.";
-  return "Reconciled recoverable turn replay.";
-}
-
-function workerActivityFromTaskSummary(
-  task: TaskSummary,
-  orchestrationId?: string,
-): WorkerActivitySummary {
-  const workModePhase = workModeToPhase(task.work_mode);
-  const phase = (
-    workModePhase === "complete" ||
-    workModePhase === "failed" ||
-    workModePhase === "cancelled"
-  )
-    ? workModePhase
-    : task.activity_phase ?? workModePhase;
-  const terminal =
-    taskStatusIsTerminalForWorkerActivity(task.status) ||
-    ["complete", "failed", "cancelled"].includes(phase);
-  return {
-    worker_id: `worker-${task.task_id}`,
-    activity_kind: task.task_type === "planned" ? "planned" : "worker",
-    worker_label: task.task_type === "planned" ? "Plan" : "Worker",
-    worker_display_name: task.task_type === "planned" ? "Plan" : "Worker",
-    worker_ordinal_label: task.task_type === "planned" ? "Plan" : "Worker",
-    objective: safeWorkerObjective(task),
-    phase,
-    status_line: task.activity_status_line ?? safeWorkerStatusLine(task, phase),
-    current_activity_title: task.activity_current_title ?? undefined,
-    work_blocks:
-      task.activity_work_blocks.length > 0
-        ? task.activity_work_blocks
-        : undefined,
-    session_id: task.origin_session_id ?? undefined,
-    project_id: task.origin_project ?? task.project ?? undefined,
-    task_id: task.task_id,
-    orchestration_id: orchestrationId,
-    terminal,
-    updated_at:
-      task.activity_updated_at ?? task.updated_at ?? new Date().toISOString(),
-    supported_controls: task.can_resume
-      ? ["resume"]
-      : terminal
-        ? []
-        : ["cancel"],
-  };
-}
-
-function taskStatusIsTerminalForWorkerActivity(status: TaskSummary["status"]): boolean {
-  return (
-    status === "DONE" ||
-    status === "REVIEWED" ||
-    status === "FAILED" ||
-    status === "KILLED"
-  );
-}
-
-const INACTIVE_WORKER_ACTIVITY_PHASES = new Set<WorkerActivityPhase>([
-  "blocked",
-  "complete",
-  "failed",
-  "cancelled",
-  "recoverable",
-]);
-
-function isActiveWorkerActivity(worker: WorkerActivitySummary): boolean {
-  return !worker.terminal && !INACTIVE_WORKER_ACTIVITY_PHASES.has(worker.phase);
-}
-
-function relabelWorkerActivities(
-  workers: WorkerActivitySummary[],
-): WorkerActivitySummary[] {
-  const planTotal = workers.filter(
-    (worker) => worker.activity_kind === "planned",
-  ).length;
-  let planIndex = 0;
-  let workerIndex = 0;
-  const usedDisplayNames = new Set<string>();
-  return workers.map((worker) => {
-    if (worker.activity_kind === "planned") {
-      planIndex += 1;
-      return {
-        ...worker,
-        worker_label: planTotal === 1 ? "Plan" : `Plan ${planIndex}`,
-        worker_display_name: planTotal === 1 ? "Plan" : `Plan ${planIndex}`,
-        worker_ordinal_label: planTotal === 1 ? "Plan" : `Plan ${planIndex}`,
-      };
-    }
-    workerIndex += 1;
-    const ordinalLabel = `Worker ${workerIndex}`;
-    const displayName = uniqueWorkerDisplayNameFor(worker.worker_id, usedDisplayNames);
-    return {
-      ...worker,
-      worker_label: ordinalLabel,
-      worker_display_name: displayName,
-      worker_ordinal_label: ordinalLabel,
-    };
-  });
-}
-
-const WORKER_DISPLAY_NAMES = [
-  "Ari",
-  "Mina",
-  "Juno",
-  "Theo",
-  "Nora",
-  "Leo",
-  "Ivy",
-  "Sage",
-  "Kai",
-  "Rina",
-  "Noel",
-  "Yuna",
-] as const;
-
-function uniqueWorkerDisplayNameFor(workerId: string, usedNames: Set<string>): string {
-  const seed = stableNameSeed(workerId);
-  for (let cycle = 0; ; cycle += 1) {
-    for (let offset = 0; offset < WORKER_DISPLAY_NAMES.length; offset += 1) {
-      const baseName = WORKER_DISPLAY_NAMES[(seed + offset) % WORKER_DISPLAY_NAMES.length] ?? "Ari";
-      const candidate = cycle === 0 ? baseName : `${baseName} ${cycle + 1}`;
-      if (usedNames.has(candidate)) continue;
-      usedNames.add(candidate);
-      return candidate;
-    }
-  }
-}
-
-function stableNameSeed(value: string): number {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return hash;
-}
-
-function orderWorkerActivities(
-  workers: WorkerActivitySummary[],
-): WorkerActivitySummary[] {
-  const plannedKeys = new Set(
-    workers
-      .filter((worker) => worker.activity_kind === "planned")
-      .map((worker) => worker.task_id ?? worker.orchestration_id)
-      .filter((key): key is string => Boolean(key)),
-  );
-  const childrenByParent = new Map<string, WorkerActivitySummary[]>();
-  for (const worker of workers) {
-    if (worker.activity_kind === "planned" || !worker.orchestration_id)
-      continue;
-    const children = childrenByParent.get(worker.orchestration_id) ?? [];
-    children.push(worker);
-    childrenByParent.set(worker.orchestration_id, children);
-  }
-
-  const ordered: WorkerActivitySummary[] = [];
-  for (const worker of workers) {
-    if (worker.activity_kind === "planned") {
-      const key = worker.task_id ?? worker.orchestration_id ?? worker.worker_id;
-      ordered.push(worker, ...(childrenByParent.get(key) ?? []));
-      continue;
-    }
-    if (worker.orchestration_id && plannedKeys.has(worker.orchestration_id)) {
-      continue;
-    }
-    ordered.push(worker);
-  }
-  return ordered;
-}
-
-function synthesizeOrchestrationParentActivities(input: {
-  workers: WorkerActivitySummary[];
-  orchestrationStore: WorkOrchestrationStore;
-  sessionId?: string;
-  includeHistory: boolean;
-}): WorkerActivitySummary[] {
-  const plannedKeys = new Set(
-    input.workers
-      .filter((worker) => worker.activity_kind === "planned")
-      .map((worker) => worker.task_id ?? worker.orchestration_id)
-      .filter((key): key is string => Boolean(key)),
-  );
-  const childrenByOrchestration = new Map<string, WorkerActivitySummary[]>();
-  for (const worker of input.workers) {
-    if (worker.activity_kind !== "worker" || !worker.orchestration_id) continue;
-    const children = childrenByOrchestration.get(worker.orchestration_id) ?? [];
-    children.push(worker);
-    childrenByOrchestration.set(worker.orchestration_id, children);
-  }
-  if (childrenByOrchestration.size === 0) return input.workers;
-
-  const syntheticParents: WorkerActivitySummary[] = [];
-  for (const orchestration of input.orchestrationStore.records()) {
-    if (plannedKeys.has(orchestration.id)) continue;
-    const children = childrenByOrchestration.get(orchestration.id) ?? [];
-    if (children.length === 0) continue;
-    if (
-      input.sessionId &&
-      orchestration.origin_session_id &&
-      orchestration.origin_session_id !== input.sessionId &&
-      !children.some((child) => child.session_id === input.sessionId)
-    ) {
-      continue;
-    }
-    const parent = workerActivityFromOrchestration(orchestration, children);
-    if (!input.includeHistory && parent.terminal) continue;
-    syntheticParents.push(parent);
-  }
-  return syntheticParents.length > 0
-    ? [...input.workers, ...syntheticParents]
-    : input.workers;
-}
-
-function workerActivityFromOrchestration(
-  orchestration: WorkOrchestrationRecord,
-  children: WorkerActivitySummary[],
-): WorkerActivitySummary {
-  const phase = orchestrationActivityPhase(orchestration);
-  const terminal = ["complete", "failed", "cancelled"].includes(phase);
-  const latestChild = children
-    .slice()
-    .sort((left, right) => right.updated_at.localeCompare(left.updated_at))[0];
-  return {
-    worker_id: `planned-${orchestration.id}`,
-    activity_kind: "planned",
-    worker_label: "Plan",
-    worker_display_name: "Plan",
-    worker_ordinal_label: "Plan",
-    objective: sanitizeWorkerDisplayText(orchestration.goal) ||
-      sanitizeWorkerDisplayText(orchestration.title) ||
-      "Coordinated worker plan",
-    phase,
-    status_line: orchestrationStatusLine(orchestration, phase),
-    current_activity_title: sanitizeWorkerDisplayText(orchestration.title) ?? undefined,
-    session_id: orchestration.origin_session_id ?? latestChild?.session_id,
-    project_id: latestChild?.project_id,
-    task_id: orchestration.id,
-    orchestration_id: orchestration.id,
-    terminal,
-    updated_at: orchestration.updated_at || latestChild?.updated_at || new Date().toISOString(),
-    supported_controls: terminal ? [] : ["cancel"],
-  };
-}
-
-function safeWorkerObjective(task: TaskSummary): string {
-  return (
-    sanitizeWorkerDisplayText(task.planned_goal ?? task.origin_summary) ??
-    "Background worker task"
-  );
-}
-
-function safeWorkerStatusLine(
-  task: TaskSummary,
-  phase: WorkerActivityPhase,
-): string {
-  const subject = safeWorkerObjective(task);
-  if (subject !== "Background worker task")
-    return `${phaseLabel(phase)}: ${subject}`;
-  if (phase === "executing") return "Worker is still running.";
-  if (phase === "consolidating") return "Worker is consolidating evidence.";
-  if (phase === "reporting") return "Worker is preparing a report.";
-  if (phase === "recoverable") return "Worker can be resumed.";
-  if (phase === "complete") return "Worker completed.";
-  if (phase === "failed")
-    return "Worker failed; details are available in worker history.";
-  if (phase === "cancelled") return "Worker was stopped.";
-  return "Worker status is available.";
-}
-
-function phaseLabel(phase: WorkerActivityPhase): string {
-  if (phase === "orienting") return "Orienting";
-  if (phase === "planning") return "Planning";
-  if (phase === "executing") return "Executing";
-  if (phase === "verifying") return "Verifying";
-  if (phase === "consolidating") return "Consolidating";
-  if (phase === "reporting") return "Reporting";
-  if (phase === "complete") return "Complete";
-  if (phase === "recoverable") return "Recoverable";
-  if (phase === "blocked") return "Blocked";
-  if (phase === "failed") return "Failed";
-  if (phase === "cancelled") return "Cancelled";
-  return "Working";
-}
-
-function sanitizeWorkerDisplayText(value?: string | null): string | null {
-  const text = value
-    ?.replace(/\/Users\/[^\s)]+/gu, "local path")
-    .replace(/\b[A-Za-z]:\\[^\s)]+/gu, "local path")
-    .replace(/\s+/gu, " ")
-    .trim();
-  if (!text) return null;
-  return text.length > 160 ? `${text.slice(0, 157)}...` : text;
-}
-
-function paginationInput(options: { limit?: number; offset?: number }): {
-  limit: number;
-  offset: number;
-} {
-  const requestedLimit = Number.isFinite(options.limit)
-    ? Number(options.limit)
-    : 20;
-  const requestedOffset = Number.isFinite(options.offset)
-    ? Number(options.offset)
-    : 0;
-  const limit = Math.max(1, Math.min(100, Math.floor(requestedLimit)));
-  const offset = Math.max(0, Math.floor(requestedOffset));
-  return { limit, offset };
-}
-
-function sessionFromRow(row: SessionSummaryRow): SessionSummary {
-  const publicStatusLabel = publicTurnStatusLabel(
-    row.safe_status_label,
-    row.active_turn_state,
-    row.active_turn_safe_error_code,
-  );
-  return {
-    id: row.id,
-    kind: row.kind,
-    title: row.title,
-    project_id: row.project_id ?? undefined,
-    project:
-      row.project_id && row.project_display_name
-        ? { id: row.project_id, display_name: row.project_display_name }
-        : undefined,
-    session_hint: sessionHintForRow(row.id),
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    last_activity_at: row.updated_at,
-    last_message_preview: previewText(row.last_message_preview),
-    active_turn_state: row.active_turn_state ?? undefined,
-    safe_status_label: publicStatusLabel,
-    unread_count: 0,
-    pinned: row.pinned === 1,
-    archived: row.archived === 1,
-    automation_target_count: 0,
-  };
-}
-
-function publicAppEventPayload(
-  type: string,
-  payload: Record<string, unknown>,
-): Record<string, unknown> {
-  if (type === "agent.turn_event") return publicAgentTurnEventPayload(payload);
-  if (type !== "turn.state_changed") return payload;
-  const turn = isRecord(payload.turn) ? payload.turn : null;
-  const state = safeOptionalShortToken(payload.state) ??
-    safeOptionalShortToken(turn?.state);
-  const safeErrorCode = safeOptionalShortToken(
-    payload.safe_error_code ?? turn?.safe_error_code,
-  );
-  const label = publicTurnStatusLabel(
-    safeOptionalShortText(payload.safe_status_label ?? turn?.safe_status_label),
-    state,
-    safeErrorCode,
-  );
-  const nextPayload: Record<string, unknown> = { ...payload };
-  if (isPublicSuppressedInternalContinuationCode(safeErrorCode)) {
-    delete nextPayload.safe_error_code;
-    nextPayload.retryable = false;
-  }
-  if (label) nextPayload.safe_status_label = label;
-  else delete nextPayload.safe_status_label;
-  if (turn) {
-    nextPayload.turn = publicTurnPayloadRecord(turn);
-  }
-  return nextPayload;
-}
-
-function publicAgentTurnEventPayload(
-  payload: Record<string, unknown>,
-): Record<string, unknown> {
-  const event = isRecord(payload.event) ? payload.event : null;
-  const eventPayload = event && isRecord(event.payload) ? event.payload : null;
-  if (!eventPayload || !("operatorSummary" in eventPayload)) return payload;
-  const nextEventPayload = { ...eventPayload };
-  delete nextEventPayload.operatorSummary;
-  return {
-    ...payload,
-    event: {
-      ...event,
-      payload: nextEventPayload,
-    },
-  };
-}
-
-function isInternalContinuationTurnState(state: string): boolean {
-  return state === "retrying" || state === "waiting_for_tool";
-}
-
-function maxMessageCursor(messages: MessageRecord[]): number {
-  return messages.reduce((max, message) => {
-    const cursor = Number(message.cursor ?? 0);
-    return Number.isFinite(cursor) && cursor > max ? cursor : max;
-  }, 0);
-}
-
-function workBlocksFromTerminalProgressRows(
-  rows: ProgressSummaryRow[],
-): WorkerActivityWorkBlock[] {
-  const blocks = new Map<string, WorkerActivityWorkBlock>();
-  const decisionWorkBlockAliases = new Map<string, string>();
-  const canonicalWorkBlockId = (
-    row: ProgressSummaryRow,
-    fallbackId: string,
-  ) => {
-    const decisionKey = publicDecisionIntentKey(row);
-    if (!decisionKey) return fallbackId;
-    const existing = decisionWorkBlockAliases.get(decisionKey);
-    if (existing) return existing;
-    decisionWorkBlockAliases.set(decisionKey, fallbackId);
-    return fallbackId;
-  };
-  const workBlockLabels = new Set(
-    rows
-      .filter(
-        (row) =>
-          row.kind === "work_block" ||
-          Boolean(row.work_block_label),
-      )
-      .map((row) => (row.work_block_label ?? "").trim())
-      .filter(Boolean),
-  );
-  const sortedRows = rows
-    .map((row, index) => ({ row, index }))
-    .sort((left, right) => {
-      const orderDelta =
-        progressRowDisplayOrder(left.row) - progressRowDisplayOrder(right.row);
-      return orderDelta || left.index - right.index;
-    })
-    .map(({ row }) => row);
-  for (const row of sortedRows) {
-    if (!isUserVisibleWorkBlockRow(row)) continue;
-    if (row.kind === "todo" && workBlockLabels.has(row.safe_label.trim()))
-      continue;
-    const fallbackId =
-      row.work_block_id ??
-      row.tool_call_id ??
-      `work-${row.kind}-${row.id}`.replace(/[^a-zA-Z0-9._:-]/gu, "-");
-    const id = canonicalWorkBlockId(row, fallbackId);
-    const label = row.work_block_label ?? "";
-    const decision = isWorkBlockDecisionCarrierRow(row)
-      ? publicDecisionFieldsFromProgressRow(row)
-      : {};
-    const previous = blocks.get(id);
-    const blockRow = workBlockToolRow(row);
-    if (previous) {
-      if (row.kind !== "work_block") previous.rows.push(blockRow);
-      previous.state = progressMergeState(previous.state, row.state);
-      continue;
-    }
-    blocks.set(id, {
-      id,
-      label,
-      state: row.state,
-      rows: row.kind === "work_block" ? [] : [blockRow],
-      decision_summary: decision.decision_summary,
-      decision_rationale: decision.decision_rationale,
-      decision_next_step: decision.decision_next_step,
-      decision_source: decision.decision_source,
-      decision_evidence_refs: decision.decision_evidence_refs,
-      created_at: row.created_at,
-    });
-  }
-  return [...blocks.values()]
-    .filter((block) => block.rows.length > 0 && Boolean(block.label.trim()))
-    .sort((left, right) => {
-      const orderDelta =
-        progressRowDisplayOrder(left.rows[0]) -
-        progressRowDisplayOrder(right.rows[0]);
-      return (
-        orderDelta ||
-        String(left.created_at ?? "").localeCompare(
-          String(right.created_at ?? ""),
-        )
-      );
-    });
-}
-
-function workBlockToolRow(row: ProgressSummaryRow): ProgressSummaryRow {
-  const {
-    work_block_id: _workBlockId,
-    work_block_label: _workBlockLabel,
-    work_decision_summary: _workDecisionSummary,
-    work_decision_rationale: _workDecisionRationale,
-    work_decision_next_step: _workDecisionNextStep,
-    work_decision_source: _workDecisionSource,
-    work_decision_evidence_refs: _workDecisionEvidenceRefs,
-    ...toolRow
-  } = row;
-  return toolRow;
-}
-
-function progressRowDisplayOrder(row?: ProgressSummaryRow): number {
-  const order = Number(row?.safe_order);
-  return Number.isFinite(order) && order >= 0
-    ? order
-    : Number.POSITIVE_INFINITY;
-}
-
-function publicDecisionFieldsFromProgressRow(row: ProgressSummaryRow): Partial<{
-  decision_summary: string;
-  decision_rationale: string;
-  decision_next_step: string;
-  decision_source: string;
-  decision_evidence_refs: string[];
-}> {
-  if (!isPublicDecisionSource(row.work_decision_source)) return {};
-  return {
-    decision_summary: row.work_decision_summary,
-    decision_rationale: row.work_decision_rationale,
-    decision_next_step: row.work_decision_next_step,
-    decision_source: row.work_decision_source,
-    decision_evidence_refs: row.work_decision_evidence_refs,
-  };
-}
-
-function isUserVisibleWorkBlockRow(row: ProgressSummaryRow): boolean {
-  if (row.kind === "todo") return false;
-  if (row.kind === "message") {
-    return Boolean(row.work_block_id && row.work_block_label);
-  }
-  if (row.kind === "system") return false;
-  if (row.kind === "thinking" || row.kind === "worked_duration") return false;
-  if (row.kind === "dispatch" && !row.tool_call_id) return false;
-  return Boolean(
-    row.work_block_id ||
-    row.work_block_label ||
-    row.safe_tool_name ||
-    row.safe_input_label ||
-    row.safe_detail_rows?.length,
-  );
-}
-
-function isWorkBlockDecisionCarrierRow(row?: ProgressSummaryRow): boolean {
-  if (!row) return false;
-  return row.kind === "work_block" ||
-    (row.kind === "message" && Boolean(row.work_block_id && row.work_block_label));
-}
-
-function publicDecisionIntentKey(row?: ProgressSummaryRow): string | null {
-  if (!row || !isPublicDecisionSource(row.work_decision_source)) return null;
-  const summary = normalizedDecisionIntentPart(row.work_decision_summary);
-  if (!summary) return null;
-  return JSON.stringify([
-    row.work_decision_source,
-    summary,
-    normalizedDecisionIntentPart(row.work_decision_rationale),
-    normalizedDecisionIntentPart(row.work_decision_next_step),
-  ]);
-}
-
-function normalizedDecisionIntentPart(value?: string): string {
-  return (value ?? "").replace(/\s+/gu, " ").trim();
-}
-
-function isActiveSessionTurnState(state: string): boolean {
-  return (
-    state === "queued" ||
-    state === "accepted" ||
-    state === "thinking" ||
-    state === "streaming" ||
-    state === "waiting_for_form" ||
-    state === "waiting_for_tool" ||
-    state === "cancelling" ||
-    state === "retrying"
-  );
-}
-
-function sessionViewStatus(
-  latestTurnState: TurnState | "idle" | undefined,
-): SessionViewStatus {
-  if (!latestTurnState || latestTurnState === "idle") return "idle";
-  if (isActiveSessionTurnState(latestTurnState)) return "active";
-  if (latestTurnState === "failed") return "failed";
-  if (latestTurnState === "cancelled") return "cancelled";
-  return "delivered";
-}
-
-function previewText(value: string | null): string | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed) return undefined;
-  return trimmed.length > 96 ? `${trimmed.slice(0, 93)}...` : trimmed;
-}
-
-function sessionHintForRow(id: string): string {
-  return `butler/app-${safeLocalSessionId(id)}`;
-}
-
-function safeLocalSessionId(value: string): string {
-  const normalized = value
-    .trim()
-    .toLocaleLowerCase("en-US")
-    .replace(/[^a-z0-9._-]+/gu, "-");
-  return normalized || "session";
-}
-
-function safeDisplayName(value: string | undefined, fallback: string): string {
-  const trimmed = value?.trim() || fallback.trim();
-  return trimmed.slice(0, 80) || "Project";
-}
-
-function safeWorkspaceLabel(workspacePath: string): string {
-  return basename(workspacePath) || "Project";
-}
-
-function readPrivateText(path: string): string {
-  try {
-    return readFileSync(path, "utf8").slice(0, 32_000);
-  } catch {
-    return "";
-  }
-}
-
-function boundedPrivateText(value: string): string {
-  const normalized = value.replace(/\r\n/gu, "\n").trim();
-  return normalized.length > 32_000 ? normalized.slice(0, 32_000) : normalized;
-}
-
-function backupPrivatePersonalizationFile(
-  butlerData: string,
-  sourcePath: string,
-  prefix: string,
-  nextText: string,
-): void {
-  if (!existsSync(sourcePath)) return;
-  const currentText = readPrivateText(sourcePath);
-  if (!currentText || currentText === nextText) return;
-  const backupDir = join(butlerData, "personalization", "backups");
-  mkdirSync(backupDir, { recursive: true, mode: 0o700 });
-  const stamp = new Date().toISOString().replace(/[:.]/gu, "-");
-  const backupPath = join(backupDir, `${prefix}-${stamp}.md`);
-  copyFileSync(sourcePath, backupPath);
-  prunePrivatePersonalizationBackups(backupDir, prefix, 20);
-}
-
-function prunePrivatePersonalizationBackups(
-  backupDir: string,
-  prefix: string,
-  keep: number,
-): void {
-  const entries = readdirSync(backupDir)
-    .filter((name) => name.startsWith(`${prefix}-`) && name.endsWith(".md"))
-    .map((name) => {
-      const path = join(backupDir, name);
-      return { path, mtimeMs: statSync(path).mtimeMs };
-    })
-    .sort((left, right) => right.mtimeMs - left.mtimeMs);
-  for (const entry of entries.slice(keep)) {
-    unlinkSync(entry.path);
-  }
-}
-
-function startOfUtcDay(value: Date): Date {
-  return new Date(
-    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
-  );
-}
-
-function signFolderSelectionPayload(payload: string, secret: string): string {
-  return createHmac("sha256", secret).update(payload).digest("base64url");
-}
-
-function safeTokenEqual(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  if (leftBuffer.length !== rightBuffer.length) return false;
-  return timingSafeEqual(leftBuffer, rightBuffer);
-}
-
-function normalizeFileBytes(bytes: Uint8Array | ArrayBuffer | string): Buffer {
-  if (typeof bytes === "string") return Buffer.from(bytes, "utf8");
-  if (bytes instanceof ArrayBuffer) return Buffer.from(bytes);
-  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-}
-
-function safeAttachmentName(name: string): string {
-  const pathFreeName =
-    (name || "attachment")
-      .split(/[\\/]+/u)
-      .filter(Boolean)
-      .pop() ?? "attachment";
-  const base = basename(pathFreeName)
-    .replace(/[^\p{L}\p{N}_ .@()+\-[\]]+/gu, "_")
-    .trim();
-  const normalized =
-    base && base !== "." && base !== ".." ? base : "attachment";
-  return normalized.slice(0, 120);
-}
-
-function normalizeAttachmentMimeType(
-  mimeType: string | undefined,
-  safeName: string,
-): string {
-  const value =
-    mimeType?.split(";")[0]?.trim().toLocaleLowerCase("en-US") ?? "";
-  if (value) return value;
-  const lower = safeName.toLocaleLowerCase("en-US");
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-  if (lower.endsWith(".webp")) return "image/webp";
-  if (lower.endsWith(".gif")) return "image/gif";
-  if (lower.endsWith(".json")) return "application/json";
-  if (isTextLikeAttachmentName(lower)) return "text/plain";
-  return "application/octet-stream";
-}
-
-function classifyMessageFileKind(
-  mimeType: string,
-  safeName: string,
-  allowGeneric: boolean,
-): MessageFileKind | null {
-  if (SUPPORTED_IMAGE_MIME_TYPES.has(mimeType)) return "image";
-  if (
-    mimeType.startsWith("text/") ||
-    mimeType === "application/json" ||
-    isTextLikeAttachmentName(safeName)
-  )
-    return "text";
-  return allowGeneric ? "generic" : null;
-}
-
-function isTextLikeAttachmentName(name: string): boolean {
-  return /\.(?:txt|md|markdown|json|ya?ml|jsx?|tsx?|css|html?|xml|csv|log|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|sh|zsh|toml|ini)$/iu.test(
-    name,
-  );
-}
-
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === "object" && error !== null && "code" in error;
-}
-
-function isSensitiveProjectFolder(workspacePath: string): boolean {
-  if (workspacePath === resolve("/") || workspacePath === resolve(homedir()))
-    return true;
-  const blockedRoots = ["/System", "/etc", "/private/etc", "/bin", "/sbin"].map(
-    (root) => resolve(root),
-  );
-  return blockedRoots.some(
-    (root) => workspacePath === root || workspacePath.startsWith(`${root}/`),
-  );
-}
-
-function messageFromRow(
-  row: MessageRow,
-  attachments: MessageFileRef[] = [],
-): MessageRecord {
-  const message: MessageRecord = {
-    id: row.id,
-    chat_id: row.chat_id,
-    turn_id: row.turn_id ?? undefined,
-    role: row.role,
-    text: row.text,
-    status: row.status,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    safe_error_code: row.safe_error_code ?? undefined,
-    retryable: row.retryable === 1,
-    cursor: row.rowid,
-  };
-  if (attachments.length > 0) message.attachments = attachments;
-  const artifacts = artifactSummariesFromMessage(row, attachments);
-  if (artifacts.length > 0) message.artifacts = artifacts;
-  return message;
-}
-
-function artifactSummariesFromMessage(
-  row: MessageRow,
-  attachments: MessageFileRef[],
-): SessionArtifactSummary[] {
-  if (row.role !== "assistant" || attachments.length === 0) return [];
-  return attachments.map((attachment) => ({
-    id: `artifact-${attachment.file_id}`,
-    session_id: row.chat_id,
-    message_id: row.id,
-    turn_id: row.turn_id ?? undefined,
-    file_id: attachment.file_id,
-    kind: artifactKindFromMessageFile(attachment),
-    title: attachment.safe_name,
-    safe_path_label: attachment.safe_name,
-    url: attachment.url,
-    size_bytes: attachment.size_bytes,
-    created_at: attachment.created_at,
-    open_action: "route",
-  }));
-}
-
-function artifactKindFromMessageFile(
-  file: MessageFileRef,
-): SessionArtifactSummary["kind"] {
-  const name = file.safe_name.toLocaleLowerCase("en-US");
-  const mime = file.mime_type.toLocaleLowerCase("en-US");
-  if (file.kind === "image") return "image";
-  if (mime === "text/csv" || name.endsWith(".csv")) return "csv_file";
-  if (mime === "text/tab-separated-values" || name.endsWith(".tsv"))
-    return "table_file";
-  if (mime === "application/pdf") return "report";
-  if (file.kind === "text") return "document";
-  if (
-    [".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java", ".kt"].some(
-      (ext) => name.endsWith(ext),
-    )
-  ) {
-    return "code";
-  }
-  return "file";
-}
-
-function messageFileRefFromRow(row: MessageFileRow): MessageFileRef {
-  return {
-    file_id: row.id,
-    kind: row.kind,
-    mime_type: row.mime_type,
-    safe_name: row.safe_name,
-    size_bytes: row.size_bytes,
-    sha256: row.sha256,
-    url: `/message-files/${encodeURIComponent(row.id)}`,
-    created_at: row.created_at,
-  };
-}
-
-function turnFromRow(row: TurnRow): TurnRecord {
-  return {
-    id: row.id,
-    chat_id: row.chat_id,
-    user_message_id: row.user_message_id ?? undefined,
-    state: row.state,
-    safe_status_label: row.safe_status_label,
-    safe_error_code: row.safe_error_code ?? undefined,
-    retryable: row.retryable === 1,
-    cancellable: row.cancellable === 1,
-    attempt: row.attempt,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    cursor: row.rowid,
-  };
-}
-
-function isTerminalTurnState(state: TurnState): boolean {
-  return (
-    state === "delivered" ||
-    state === "failed" ||
-    state === "runtime_fault" ||
-    state === "cancelled"
-  );
-}
-
-function safeParseRecord(value: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(value);
-    return isRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isAppWorkerResultOutbound(metadata: Record<string, unknown>): boolean {
-  return metadata.kind === "worker_result" || metadata.type === "worker-result";
-}
-
-function runtimeTurnEventFromAppOutboundMetadata(
-  metadata: Record<string, unknown>,
-): RuntimeTurnEventInput | null {
-  if (metadata.kind !== "turn_event") return null;
-  const event = isRecord(metadata.event) ? metadata.event : null;
-  if (!event) return null;
-  const kind = safeOptionalShortToken(event.kind);
-  if (!kind) return null;
-  return {
-    kind: kind as RuntimeTurnEventInput["kind"],
-    ...(event.visibility === "internal" ? { visibility: "internal" as const } : {}),
-    ...(isRecord(event.payload) ? { payload: event.payload } : {}),
-    ...(safeOptionalShortText(event.createdAt)
-      ? { createdAt: safeOptionalShortText(event.createdAt) }
-      : {}),
-  };
-}
-
-function safeOptionalShortToken(value: unknown): string | undefined {
-  const text = typeof value === "string" ? value.trim() : "";
-  if (!text || !/^[\w:./-]+$/u.test(text)) return undefined;
-  return text.slice(0, 96);
-}
-
-function safeInboundQueueId(value: unknown): string | undefined {
-  const text = safeOptionalShortToken(value);
-  if (!text || text.includes("..") || text.includes("/") || text.includes("\\")) {
-    return undefined;
-  }
-  return text;
-}
-
-function terminalClaimId(record: Record<string, unknown> | null): string | undefined {
-  const metadata = isRecord(record?.metadata) ? record.metadata : {};
-  return safeOptionalShortToken(metadata.terminalClaimId);
-}
-
-function safeSkillNameList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const seen = new Set<string>();
-  const names: string[] = [];
-  for (const item of value) {
-    const name = safeOptionalShortToken(item);
-    if (!name || seen.has(name)) continue;
-    seen.add(name);
-    names.push(name);
-  }
-  return names.slice(0, 48);
-}
-
-function loadedSkillNamesFromTranscriptEvent(
-  event: TranscriptEvent | undefined,
-  turnId?: string,
-): string[] | null {
-  if (!event) return null;
-  const payload = isRecord(event.payload) ? event.payload : {};
-  if (event.kind === "outbound") {
-    const metadata = isRecord(payload.metadata) ? payload.metadata : {};
-    if (metadata.kind !== "final_result") return null;
-    const eventTurnId = safeOptionalShortToken(metadata.turnId);
-    if (turnId && eventTurnId !== turnId) return null;
-    return safeSkillNameList(metadata.loadedSkillNames);
-  }
-  if (event.kind !== "system" || payload.category !== "context.skills.loaded") {
-    return null;
-  }
-  const details = isRecord(payload.details) ? payload.details : {};
-  const metadata = isRecord(event.metadata) ? event.metadata : {};
-  const eventTurnId =
-    safeOptionalShortToken(details.turnId) ??
-    safeOptionalShortToken(metadata.turnId);
-  if (turnId && eventTurnId !== turnId) return null;
-  return safeSkillNameList(details.skillNames);
-}
-
-function deliveryLimitationMetadataFromRecord(
-  record: Record<string, unknown>,
-  options: { noVisibleReply?: boolean } = {},
-): DeliveryLimitationMetadata | null {
-  const deliveryState = safeDeliveryState(
-    record.delivery_state ?? record.deliveryState,
-  );
-  if (
-    deliveryState !== "delivered_with_limitations" &&
-    !isContinuationDeliveryState(deliveryState)
-  ) {
-    return null;
-  }
-  return {
-    delivery_state: deliveryState,
-    limitation_codes: safeShortTokenList(
-      record.limitation_codes ?? record.limitationCodes,
-    ),
-    limitations: options.noVisibleReply ? [] : safeShortTextList(record.limitations),
-  };
-}
-
-function hasUnsupportedNoVisibleDeliveryState(
-  metadata: Record<string, unknown>,
-  delivery: DeliveryLimitationMetadata | null,
-): boolean {
-  const deliveryState = safeDeliveryState(
-    metadata.delivery_state ?? metadata.deliveryState,
-  );
-  return Boolean(deliveryState && !delivery);
-}
-
-function deliveryStateFromProjectedNoVisibleFinal(
-  delivery: DeliveryLimitationMetadata | null,
-): AppLimitedDelivery["delivery"] {
-  const limitationCodes = delivery?.limitation_codes.length
-    ? delivery.limitation_codes
-    : [INTERNAL_RECOVERY_REQUIRED_CODE];
-  if (delivery && isContinuationDeliveryState(delivery.delivery_state)) {
-    return continuationDeliveryFromState(delivery.delivery_state, limitationCodes);
-  }
-  return deliveredWithLimitationsState({
-    limitationCodes,
-    limitations: [],
-  });
-}
-
-function appLimitedDeliveryForProjectedFailure(
-  safeError: ProjectedSafeTurnFailure,
-): AppLimitedDelivery | null {
-  const classified = appLimitedDeliveryForError({
-    name: "AppTransportTurnFailure",
-    code: safeError.code,
-    message: safeError.message,
-  });
-  if (classified) return classified;
-  if (
-    safeError.code !== INTERNAL_RECOVERY_REQUIRED_CODE &&
-    safeError.code !== "prompt_usage_model_call_budget_exhausted"
-  ) {
-    return null;
-  }
-  return {
-    text: null,
-    reason: "Internal continuation required.",
-    delivery: continuationDeliveryFromState("needs_evidence", [safeError.code]),
-  };
-}
-
-function shouldTreatLimitedFinalAsNoVisible(
-  artifacts: unknown[],
-  delivery: DeliveryLimitationMetadata | null,
-  metadata: Record<string, unknown>,
-): boolean {
-  if (metadata.visibleLimitedReply === true) return false;
-  if (artifacts.length > 0 || !delivery) return false;
-  return delivery.limitation_codes.some((code) =>
-    isPublicSuppressedInternalContinuationCode(code),
-  );
-}
-
-function shouldProjectRecoverableLimitedFinalOverTerminalTurn(
-  turn: TurnRow,
-  metadata: Record<string, unknown>,
-): boolean {
-  if (turn.state !== "failed") return false;
-  const kind = safeOptionalShortToken(metadata.kind);
-  if (kind !== "final_result") return false;
-  const delivery = deliveryLimitationMetadataFromRecord(metadata);
-  if (!delivery) return false;
-  const priorCode = safeOptionalShortToken(turn.safe_error_code);
-  if (
-    priorCode !== "inbound_dispatch_timeout" &&
-    priorCode !== "internal_recovery_required"
-  ) {
-    return false;
-  }
-  return delivery.limitation_codes.some((code) =>
-    code === "internal_recovery_required" ||
-    code === "prompt_usage_model_call_budget_exhausted",
-  );
-}
-
-function shouldAcceptRecoverableLimitedFinalForFailedQueue(
-  metadata: Record<string, unknown>,
-  failedRecord: Record<string, unknown>,
-  dispatchClaimId: string,
-): boolean {
-  const failedClaimId = terminalClaimId(failedRecord);
-  if (!failedClaimId || failedClaimId !== dispatchClaimId) return false;
-  const failure = isRecord(failedRecord.metadata)
-    ? failedRecord.metadata.failure
-    : null;
-  const failureCode = isRecord(failure)
-    ? safeOptionalShortToken(failure.code)
-    : undefined;
-  if (
-    failureCode !== "inbound_dispatch_timeout" &&
-    failureCode !== "internal_recovery_required"
-  ) {
-    return false;
-  }
-  const delivery = deliveryLimitationMetadataFromRecord(metadata);
-  return Boolean(delivery?.limitation_codes.some((code) =>
-    code === "internal_recovery_required" ||
-    code === "prompt_usage_model_call_budget_exhausted",
-  ));
-}
-
-function safeDeliveryState(value: unknown): AppProjectionDeliveryState | null {
-  if (typeof value !== "string") return null;
-  if (
-    value === "running" ||
-    value === "recovering_internal" ||
-    value === "needs_tool_surface" ||
-    value === "needs_evidence" ||
-    value === "needs_argument_repair" ||
-    value === "waiting_user" ||
-    value === "system_error" ||
-    value === "cancelled" ||
-    value === "delivered" ||
-    value === "delivered_with_limitations" ||
-    value === "failed_system"
-  ) {
-    return value;
-  }
-  return null;
-}
-
-function safeShortTokenList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => safeOptionalShortToken(item))
-    .filter((item): item is string => Boolean(item))
-    .slice(0, 8);
-}
-
-function safeShortTextList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => safeLimitationText(item, "A runtime limitation remained."))
-    .filter((item): item is string => Boolean(item))
-    .slice(0, 8);
-}
-
-function safeShortText(value: unknown, fallback: string): string {
-  return safeOptionalShortText(value) ?? fallback;
-}
-
-function safeOptionalShortText(value: unknown): string | undefined {
-  const text =
-    typeof value === "string" ? stripControlCharacters(value).trim() : "";
-  if (!text) return undefined;
-  return text
-    .replace(
-      /\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+/giu,
-      "[redacted]",
-    )
-    .replace(/\s+/gu, " ")
-    .slice(0, 180);
-}
-
-function provisionalSessionTitleFromPrompt(
-  text: string,
-  kind: ChatKind = "chat",
-): string {
-  const firstLine = text.trim().split(/\r?\n/u)[0] ?? "";
-  const collapsed = firstLine.replace(/\s+/gu, " ").trim();
-  if (!collapsed) return kind === "project" ? "New project chat" : "New chat";
-  return collapsed.length > 48 ? `${collapsed.slice(0, 45)}...` : collapsed;
-}
-
-function normalizeGeneratedSessionTitle(value: unknown): string | null {
-  const safe = safeOptionalShortText(value);
-  if (!safe) return null;
-  const unquoted = safe
-    .replace(/^["'`]+/u, "")
-    .replace(/["'`.]+$/u, "")
-    .replace(/^#+\s*/u, "")
-    .trim();
-  if (!unquoted || unquoted === "New chat" || unquoted === "New project chat") {
-    return null;
-  }
-  return unquoted.length > 64 ? `${unquoted.slice(0, 61)}...` : unquoted;
-}
-
-function safeOptionalNumber(value: unknown): number | undefined {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue) || numberValue < 0) return undefined;
-  return Math.floor(numberValue);
-}
-
-function stripControlCharacters(value: string): string {
-  return Array.from(value, (character) => {
-    const code = character.charCodeAt(0);
-    return code < 32 || code === 127 ? " " : character;
-  }).join("");
-}
-
-function mergeTransportBindings(
-  bindings: SessionTransportBinding[],
-): SessionTransportBinding[] {
-  const seen = new Set<string>();
-  const output: SessionTransportBinding[] = [];
-  for (const binding of bindings) {
-    const key = [
-      binding.transport,
-      binding.accountId,
-      binding.peerId,
-      binding.threadId ?? "",
-    ].join("\u0000");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    output.push({
-      transport: binding.transport,
-      accountId: binding.accountId,
-      peerId: binding.peerId,
-      threadId: binding.threadId,
-    });
-  }
-  return output;
-}
-
-function normalizeAppModelRef(value?: string): `${string}/${string}` {
-  const trimmed = value?.trim();
-  if (trimmed && trimmed.includes("/")) return trimmed as `${string}/${string}`;
-  if (trimmed) return `openai/${trimmed}`;
-  return DEFAULT_MODEL_REF;
-}
-
-function readTranscriptFromDataHome(
-  butlerData: string,
-  sessionId: string,
-): TranscriptEvent[] {
-  return readTranscriptFromPath(
-    transcriptPathFromDataHome(butlerData, sessionId),
-  );
-}
-
-function transcriptPathFromDataHome(
-  butlerData: string,
-  sessionId: string,
-): string {
-  return join(
-    butlerData,
-    "transcripts",
-    `${sessionId.replace(/[^A-Za-z0-9._-]/g, "_")}.jsonl`,
-  );
-}
-
-function readTranscriptFromPath(path: string): TranscriptEvent[] {
-  if (!existsSync(path)) return [];
-  const text = readTranscriptTextFromPath(path);
-  return readTranscriptEventsFromText(text).events;
-}
-
-function readTranscriptTextFromPath(path: string): string {
-  return readFileSync(path, "utf8");
-}
-
-function readTranscriptTextRange(
-  path: string,
-  start: number,
-  end?: number,
-): string {
-  const length = Math.max(0, (end ?? statSync(path).size) - start);
-  if (length === 0) return "";
-  const fd = openSync(path, "r");
-  try {
-    const buffer = Buffer.allocUnsafe(length);
-    const bytesRead = readSync(fd, buffer, 0, length, start);
-    return buffer.subarray(0, bytesRead).toString("utf8");
-  } finally {
-    closeSync(fd);
-  }
-}
-
-function readTranscriptEventsFromText(text: string): {
-  events: TranscriptEvent[];
-  trailing: string;
-} {
-  if (!text.trim()) return { events: [], trailing: "" };
-  const lines = text.split("\n");
-  let trailing = "";
-  if (!text.endsWith("\n")) {
-    trailing = lines.pop() ?? "";
-  }
-  const events: TranscriptEvent[] = [];
-  const parseLine = (line: string): boolean => {
-    const trimmed = line.trim();
-    if (!trimmed) return true;
-    try {
-      const parsed = JSON.parse(trimmed) as TranscriptEvent;
-      if (
-        typeof parsed?.sessionId === "string" &&
-        typeof parsed?.kind === "string" &&
-        typeof parsed?.timestamp === "string" &&
-        parsed.payload &&
-        typeof parsed.payload === "object"
-      ) {
-        events.push(parsed);
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  for (const line of lines) {
-    parseLine(line);
-  }
-  if (trailing && parseLine(trailing)) {
-    trailing = "";
-  }
-  return { events, trailing };
-}
-
-function progressRowFromAppOutbound(
-  actionId: string,
-  message: Record<string, unknown>,
-  metadata: Record<string, unknown>,
-  timestamp: string,
-): ProgressSummaryInput | null {
-  if (metadata.kind === "tool_progress") {
-    return {
-      id: actionId,
-      kind: safeOptionalShortToken(metadata.activityKind) ?? "used_tool",
-      state: safeOptionalShortToken(metadata.state) ?? "running",
-      safe_label: safeShortText(metadata.safeLabel, "Working"),
-      safe_tool_name: safeOptionalShortText(metadata.toolName),
-      safe_input_label: safeOptionalShortText(metadata.inputLabel),
-      tool_call_id: safeOptionalShortToken(metadata.toolCallId),
-      work_block_id: safeOptionalShortToken(metadata.workBlockId),
-      work_block_label: safeOptionalShortText(metadata.workBlockLabel),
-      work_decision_summary: safeOptionalShortText(metadata.decisionSummary),
-      work_decision_rationale: safeOptionalShortText(
-        metadata.decisionRationale,
-      ),
-      work_decision_next_step: safeOptionalShortText(metadata.decisionNextStep),
-      work_decision_source: safeOptionalShortText(metadata.decisionSource),
-      work_decision_evidence_refs: Array.isArray(metadata.decisionEvidenceRefs)
-        ? metadata.decisionEvidenceRefs
-        : undefined,
-      safe_detail_rows: Array.isArray(metadata.detailRows)
-        ? metadata.detailRows
-        : undefined,
-      created_at: timestamp,
-    };
-  }
-  if (metadata.kind === "todo_progress") {
-    return {
-      id: safeOptionalShortToken(metadata.todoId) ?? actionId,
-      kind: "todo",
-      state: safeOptionalShortToken(metadata.state) ?? "thinking",
-      safe_label: safeShortText(metadata.safeLabel, "Working"),
-      safe_input_label: safeOptionalShortText(metadata.todoId),
-      safe_order: safeOptionalNumber(metadata.safeOrder),
-      safe_detail_rows: todoProgressDetailRows(metadata),
-      created_at: timestamp,
-    };
-  }
-  const text = typeof message.text === "string" ? message.text.trim() : "";
-  if (metadata.kind === "intermediate" && text) {
-    if (metadata.phase === "before_tool_execution") {
-      const label = safeOptionalShortText(metadata.workBlockLabel) ??
-        safeOptionalShortText(text) ??
-        "Working";
-      return {
-        id: actionId,
-        kind: "message",
-        state: "running",
-        safe_label: safeOptionalShortText(text) ?? label,
-        work_block_id: safeOptionalShortToken(metadata.workBlockId) ?? actionId,
-        work_block_label: label,
-        work_decision_summary: safeOptionalShortText(metadata.decisionSummary),
-        work_decision_rationale: safeOptionalShortText(
-          metadata.decisionRationale,
-        ),
-        work_decision_next_step: safeOptionalShortText(metadata.decisionNextStep),
-        work_decision_source: safeOptionalShortText(metadata.decisionSource),
-        work_decision_evidence_refs: Array.isArray(metadata.decisionEvidenceRefs)
-          ? metadata.decisionEvidenceRefs
-          : undefined,
-        created_at: timestamp,
-      };
-    }
-    return {
-      id: actionId,
-      kind: "thinking",
-      state: "running",
-      safe_label: safeOptionalShortText(text) ?? "Working",
-      created_at: timestamp,
-    };
-  }
-  return null;
-}
-
-function todoProgressDetailRows(
-  metadata: Record<string, unknown>,
-): ProgressSummaryInput["safe_detail_rows"] {
-  const phase = safeOptionalShortText(metadata.phase);
-  if (!phase) return undefined;
-  return [
-    {
-      id: "phase",
-      kind: "phase",
-      safe_label: "Phase",
-      safe_value: todoPhaseLabel(phase),
-      state: safeOptionalShortToken(metadata.state) ?? "thinking",
-    },
-  ];
-}
-
-function todoPhaseLabel(phase: string): string {
-  const normalized = phase.trim().toLowerCase();
-  if (normalized === "orientation") return "구상";
-  if (normalized === "planning") return "계획";
-  if (normalized === "execution") return "실행";
-  if (normalized === "review") return "검토";
-  if (normalized === "consolidation") return "정리";
-  if (normalized === "reporting") return "보고";
-  return phase;
-}
-
-function artifactRefsFromOutboundMessage(value: unknown): ArtifactRef[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is Record<string, unknown> => isRecord(item))
-    .map((item) => ({
-      id: safeShortText(item.id, "artifact"),
-      kind: outboundArtifactKind(item.kind),
-      title: safeShortText(item.title, "Artifact"),
-      safePathLabel: safeOptionalShortText(item.safePathLabel),
-      mimeType: safeOptionalShortText(item.mimeType),
-      localPath: safeOptionalShortText(item.localPath),
-      url: safeOptionalShortText(item.url),
-      sizeBytes:
-        typeof item.sizeBytes === "number" ? item.sizeBytes : undefined,
-      createdAt: safeOptionalShortText(item.createdAt),
-      metadata: isRecord(item.metadata) ? item.metadata : undefined,
-    }));
-}
-
-function outboundArtifactKind(value: unknown): ArtifactRef["kind"] {
-  const kind = typeof value === "string" ? value : "";
-  if (
-    kind === "csv_file" ||
-    kind === "table_file" ||
-    kind === "chart_file" ||
-    kind === "image" ||
-    kind === "document" ||
-    kind === "code" ||
-    kind === "report" ||
-    kind === "file"
-  )
-    return kind;
-  return "unknown";
-}
-
-function artifactCandidatePaths(
-  artifact: ArtifactRef,
-  allowedRoots: string[],
-): string[] {
-  const candidates: string[] = [];
-  const localPath = artifact.localPath?.trim();
-  if (localPath) candidates.push(resolve(localPath));
-
-  const safePathLabel = artifact.safePathLabel?.trim();
-  if (safePathLabel) {
-    for (const root of allowedRoots) {
-      candidates.push(resolve(root, safePathLabel));
-    }
-  }
-
-  return Array.from(new Set(candidates));
-}
-
-function sanitizeAppTransportFinalText(value: unknown): string {
-  const text = typeof value === "string" ? value.trim() : "";
-  if (!text) return "";
-  const openIndex = text.indexOf(BUTLER_FINAL_ANSWER_OPEN);
-  if (openIndex < 0) return text;
-  const bodyStart = openIndex + BUTLER_FINAL_ANSWER_OPEN.length;
-  const closeIndex = text.indexOf(BUTLER_FINAL_ANSWER_CLOSE, bodyStart);
-  if (closeIndex < 0) {
-    return text
-      .replaceAll(BUTLER_FINAL_ANSWER_OPEN, "")
-      .replaceAll(BUTLER_FINAL_ANSWER_CLOSE, "")
-      .trim();
-  }
-
-  const before = text.slice(0, openIndex).trim();
-  const body = text.slice(bodyStart, closeIndex).trim();
-  const after = text
-    .slice(closeIndex + BUTLER_FINAL_ANSWER_CLOSE.length)
-    .trim();
-  if (before) return body || after;
-  return [body, after].filter(Boolean).join("\n\n").trim();
-}
-
-function messageFileContentKey(
-  safeName: string,
-  mimeType: string,
-  sizeBytes: number,
-  sha256: string,
-): string {
-  return `${safeName}\u0000${mimeType}\u0000${sizeBytes}\u0000${sha256}`;
-}
-
-function mimeTypeForArtifactPath(path: string): string {
-  const lower = path.toLocaleLowerCase("en-US");
-  if (lower.endsWith(".md") || lower.endsWith(".txt")) return "text/plain";
-  if (lower.endsWith(".json")) return "application/json";
-  if (lower.endsWith(".csv")) return "text/csv";
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-  if (lower.endsWith(".webp")) return "image/webp";
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  return "application/octet-stream";
-}
-
-function timestampBefore(candidate: string, reference: string): boolean {
-  const candidateMs = Date.parse(candidate);
-  const referenceMs = Date.parse(reference);
-  return Number.isFinite(candidateMs) && Number.isFinite(referenceMs) &&
-    candidateMs < referenceMs;
 }
