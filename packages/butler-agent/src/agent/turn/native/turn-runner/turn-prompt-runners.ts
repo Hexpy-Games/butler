@@ -20,6 +20,8 @@ import {
 import { publicWorkDecisionsFromAssistantText } from "../../../output/public-work/decisions.ts";
 import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
 import { emitAssistantTextBeforeTools } from "./assistant-pretool-progress.ts";
+import { createProviderStreamTurnEventProjector } from "../stream/provider-stream-projector.ts";
+import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
 import type {
   SelectedToolSurfacePromptState,
   ToolSurfacePromptController,
@@ -64,6 +66,13 @@ export function createNativeTurnPromptRunners(input: {
     }),
     promptSections: input.promptSections,
   });
+  const streamProjector = (phase: string) => createProviderStreamTurnEventProjector({
+    turnId: input.turnId,
+    defaultStreamId: `${input.turnId}:${phase}`,
+    emitTurnEvent: async (event) => {
+      await emitTurnEventBestEffort(input.turnInput, event);
+    },
+  });
 
   return {
     runToolPrompt: async (
@@ -74,66 +83,84 @@ export function createNativeTurnPromptRunners(input: {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       const grantedToolRounds = directToolRoundLimit(maxToolRounds);
       async function runPromptWithSelectedSurface(toolSurface: SelectedToolSurfacePromptState): Promise<string> {
-        return await input.deps.toolPromptRunner({
-          prompt: promptText,
-          model: input.turnInput.model,
-          instructions: appendRoleToolPolicyInstructions(
-            input.session.init.role,
-            appendButlerToolInstructions(input.session.init.systemPrompt),
-          ),
-          cacheScope: "session-turn",
-          signal: input.turnInput.signal,
-          attachments: input.attachments,
-          tools: toolSurface.tools,
-          dynamicTools: toolSurface.dynamicTools,
-          maxToolRounds: grantedToolRounds,
-          butlerData: input.deps.butlerData,
-          usageAttribution: usageAttribution(phase),
-          executeTool: input.executor,
-          finalTextFromToolResult: ({ name, output }) => {
-            if (name === "write_planned_public_report") {
-              return publicReportFromToolOutput(output);
-            }
-            if (input.plannedReview) {
-              return plannedReviewTerminalToolText({
-                name,
-                output,
+        const projector = streamProjector(phase);
+        try {
+          const text = await input.deps.toolPromptRunner({
+            prompt: promptText,
+            model: input.turnInput.model,
+            instructions: appendRoleToolPolicyInstructions(
+              input.session.init.role,
+              appendButlerToolInstructions(input.session.init.systemPrompt),
+            ),
+            cacheScope: "session-turn",
+            signal: input.turnInput.signal,
+            attachments: input.attachments,
+            tools: toolSurface.tools,
+            dynamicTools: toolSurface.dynamicTools,
+            maxToolRounds: grantedToolRounds,
+            butlerData: input.deps.butlerData,
+            usageAttribution: usageAttribution(phase),
+            onProviderStreamEvent: projector.project,
+            executeTool: input.executor,
+            finalTextFromToolResult: ({ name, output }) => {
+              if (name === "write_planned_public_report") {
+                return publicReportFromToolOutput(output);
+              }
+              if (input.plannedReview) {
+                return plannedReviewTerminalToolText({
+                  name,
+                  output,
+                  language: input.deps.messageLanguage,
+                });
+              }
+              return null;
+            },
+            onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
+              throwIfRuntimeTurnAborted(input.turnInput.signal);
+              input.markAssistantTextBeforeToolsSeen();
+              input.pendingPublicDecisions.push(...publicWorkDecisionsFromAssistantText({
+                text,
+                toolCalls,
+                language: input.deps.messageLanguage,
+                existingDecisions: input.publicDecisionContext,
+              }));
+              await emitAssistantTextBeforeTools({
+                turnInput: input.turnInput,
+                text,
+                toolCalls,
                 language: input.deps.messageLanguage,
               });
-            }
-            return null;
-          },
-          onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
-            throwIfRuntimeTurnAborted(input.turnInput.signal);
-            input.markAssistantTextBeforeToolsSeen();
-            input.pendingPublicDecisions.push(...publicWorkDecisionsFromAssistantText({
-              text,
-              toolCalls,
-              language: input.deps.messageLanguage,
-              existingDecisions: input.publicDecisionContext,
-            }));
-            await emitAssistantTextBeforeTools({
-              turnInput: input.turnInput,
-              text,
-              toolCalls,
-              language: input.deps.messageLanguage,
-            });
-          },
-        });
+            },
+          });
+          await projector.completeOpenStreams("completed");
+          return text;
+        } catch (error) {
+          await projector.completeOpenStreams(input.turnInput.signal?.aborted ? "aborted" : "failed");
+          throw error;
+        }
       }
       return await input.toolSurfaceController.runWithSelectedSurface(runPromptWithSelectedSurface);
     },
     runTextPrompt: async (promptText: string): Promise<string> => {
-      return await input.deps.promptRunner({
-        prompt: promptText,
-        model: input.turnInput.model,
-        instructions: input.session.init.systemPrompt,
-        cacheScope: "session-turn",
-        signal: input.turnInput.signal,
-        attachments: input.attachments,
-        butlerData: input.deps.butlerData,
-        usageAttribution: usageAttribution("text_prompt", 0),
-      });
+      const projector = streamProjector("text_prompt");
+      try {
+        const text = await input.deps.promptRunner({
+          prompt: promptText,
+          model: input.turnInput.model,
+          instructions: input.session.init.systemPrompt,
+          cacheScope: "session-turn",
+          signal: input.turnInput.signal,
+          attachments: input.attachments,
+          butlerData: input.deps.butlerData,
+          usageAttribution: usageAttribution("text_prompt", 0),
+          onProviderStreamEvent: projector.project,
+        });
+        await projector.completeOpenStreams("completed");
+        return text;
+      } catch (error) {
+        await projector.completeOpenStreams(input.turnInput.signal?.aborted ? "aborted" : "failed");
+        throw error;
+      }
     },
   };
 }

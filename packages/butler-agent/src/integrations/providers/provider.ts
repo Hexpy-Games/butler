@@ -96,6 +96,7 @@ interface PromptOptions {
   attachments?: AttachmentRef[];
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
+  onProviderStreamEvent?: ProviderStreamProjectionHandler;
 }
 
 interface WorkerOptions {
@@ -246,6 +247,7 @@ export interface FunctionToolPromptOptions {
   attachments?: AttachmentRef[];
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
+  onProviderStreamEvent?: ProviderStreamProjectionHandler;
   tools: FunctionToolDefinition[];
   dynamicTools?: () => readonly FunctionToolDefinition[];
   maxToolRounds?: number;
@@ -268,6 +270,48 @@ export interface FunctionToolPromptOptions {
     output: unknown;
   }) => Promise<string | null | undefined> | string | null | undefined;
 }
+
+export type ProviderStreamTextTarget = "opening_decision" | "public_note" | "final_candidate";
+
+export type ProviderStreamProjectionChunk =
+  | {
+      type: "text_delta";
+      streamId?: string;
+      sequence?: number;
+      textDelta: string;
+      target?: ProviderStreamTextTarget;
+      raw?: unknown;
+    }
+  | {
+      type: "reasoning_delta";
+      streamId?: string;
+      sequence?: number;
+      textDelta?: string;
+      charCount?: number;
+      raw?: unknown;
+    }
+  | {
+      type: "tool_call_delta";
+      streamId?: string;
+      callIndex: number;
+      sequence?: number;
+      toolCallId?: string;
+      toolName?: string;
+      argumentsDelta?: string;
+      argumentCharCount?: number;
+      publicState?: "generating" | "ready";
+      raw?: unknown;
+    }
+  | {
+      type: "completed";
+      streamId?: string;
+      status: "completed" | "failed" | "aborted";
+      raw?: unknown;
+    };
+
+export type ProviderStreamProjectionHandler = (
+  chunk: ProviderStreamProjectionChunk,
+) => void | Promise<void>;
 
 interface OpenAIModelResolution {
   model: string;
@@ -820,13 +864,14 @@ async function createOpenAIResponse(
   body: Record<string, any>,
   signal?: AbortSignal,
   authOverride?: OpenAIAuthOverride,
+  onProviderStreamEvent?: ProviderStreamProjectionHandler,
 ): Promise<OpenAIResponse> {
   const attempts = modelApiRetryAttempts();
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       throwIfAborted(signal);
-      return await createOpenAIResponseOnce(body, signal, authOverride);
+      return await createOpenAIResponseOnce(body, signal, authOverride, onProviderStreamEvent);
     } catch (error) {
       lastError = error;
       if (signal?.aborted) throw abortError();
@@ -843,10 +888,11 @@ async function createOpenAIResponseOnce(
   body: Record<string, any>,
   signal?: AbortSignal,
   authOverride?: OpenAIAuthOverride,
+  onProviderStreamEvent?: ProviderStreamProjectionHandler,
 ): Promise<OpenAIResponse> {
   const auth = authOverride ?? await resolveOpenAIAuth();
   if (auth.mode === "codex_subscription" || auth.mode === "codex_oauth") {
-    return await createCodexResponse(body, auth.authorization, signal);
+    return await createCodexResponse(body, auth.authorization, signal, onProviderStreamEvent);
   }
   const { __butler_codex_stateless_input: _codexStatelessInput, ...officialBody } = body;
   const endpoint = safeEndpointLabel(getResponsesUrl());
@@ -980,61 +1026,39 @@ function functionCallContinuationItems(
   }));
 }
 
-function parseSseEvents(text: string): Record<string, any>[] {
-  const events: Record<string, any>[] = [];
-  for (const chunk of text.split(/\r?\n\r?\n/)) {
-    const data = chunk
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).trimStart())
-      .join("\n")
-      .trim();
-    if (!data || data === "[DONE]") continue;
-    try {
-      const parsed = JSON.parse(data);
-      if (parsed && typeof parsed === "object") events.push(parsed);
-    } catch {
-      // Ignore non-JSON keepalive frames.
-    }
-  }
-  return events;
+interface CodexSseAccumulator {
+  output: Array<Record<string, any>>;
+  completed: Record<string, any> | null;
+  fallbackText: string;
+  sequence: number;
+  fallbackStreamId: string;
+  onProviderStreamEvent?: ProviderStreamProjectionHandler;
 }
 
-function codexResponseFromSse(text: string): OpenAIResponse {
-  const output: Array<Record<string, any>> = [];
-  let completed: Record<string, any> | null = null;
-  let fallbackText = "";
-
-  for (const event of parseSseEvents(text)) {
-    if (event.type === "error") {
-      throw new Error(`Codex backend error: ${event.message || event.code || JSON.stringify(event)}`);
-    }
-    if (event.type === "response.failed") {
-      const error = event.response?.error;
-      throw new Error(`Codex backend error: ${error?.message || error?.code || JSON.stringify(event.response)}`);
-    }
-    if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
-      fallbackText += event.delta;
-      continue;
-    }
-    if (event.type === "response.output_item.done" && event.item && typeof event.item === "object") {
-      output.push(event.item);
-      continue;
-    }
-    if (event.type === "response.completed" && event.response && typeof event.response === "object") {
-      completed = event.response;
-    }
-  }
-
-  if (output.length === 0 && Array.isArray(completed?.output)) {
-    output.push(...completed.output);
-  }
-
-  const usage = completed?.usage;
+function createCodexSseAccumulator(
+  onProviderStreamEvent?: ProviderStreamProjectionHandler,
+  fallbackStreamId = `codex-stream-${Date.now()}`,
+): CodexSseAccumulator {
   return {
-    id: typeof completed?.id === "string" ? completed.id : `codex-${Date.now()}`,
-    output,
-    output_text: fallbackText || undefined,
+    output: [],
+    completed: null,
+    fallbackText: "",
+    sequence: 0,
+    fallbackStreamId,
+    onProviderStreamEvent,
+  };
+}
+
+function codexSseResponseFromAccumulator(accumulator: CodexSseAccumulator): OpenAIResponse {
+  if (accumulator.output.length === 0 && Array.isArray(accumulator.completed?.output)) {
+    accumulator.output.push(...accumulator.completed.output);
+  }
+
+  const usage = accumulator.completed?.usage;
+  return {
+    id: typeof accumulator.completed?.id === "string" ? accumulator.completed.id : `codex-${Date.now()}`,
+    output: accumulator.output,
+    output_text: accumulator.fallbackText || undefined,
     usage: usage
       ? {
           input_tokens: usage.input_tokens,
@@ -1048,10 +1072,208 @@ function codexResponseFromSse(text: string): OpenAIResponse {
   };
 }
 
+async function handleCodexSseEvent(
+  accumulator: CodexSseAccumulator,
+  event: Record<string, any>,
+): Promise<void> {
+  const nextSequence = () => {
+    accumulator.sequence += 1;
+    return accumulator.sequence;
+  };
+  const streamIdFor = (input: Record<string, any>): string =>
+    stringFromUnknown(input.response_id) ||
+    stringFromUnknown(input.response?.id) ||
+    stringFromUnknown(input.item_id) ||
+    accumulator.fallbackStreamId;
+
+  if (event.type === "error") {
+    throw new Error(`Codex backend error: ${event.message || event.code || JSON.stringify(event)}`);
+  }
+  if (event.type === "response.failed") {
+    const error = event.response?.error;
+    throw new Error(`Codex backend error: ${error?.message || error?.code || JSON.stringify(event.response)}`);
+  }
+  if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+    accumulator.fallbackText += event.delta;
+    await emitProviderStreamProjectionBestEffort(accumulator, {
+      type: "text_delta",
+      streamId: streamIdFor(event),
+      sequence: nextSequence(),
+      textDelta: event.delta,
+      target: "final_candidate",
+      raw: event,
+    });
+    return;
+  }
+  if (isReasoningDeltaSseEvent(event)) {
+    const delta = typeof event.delta === "string" ? event.delta : "";
+    await emitProviderStreamProjectionBestEffort(accumulator, {
+      type: "reasoning_delta",
+      streamId: streamIdFor(event),
+      sequence: nextSequence(),
+      textDelta: delta,
+      charCount: delta.length,
+      raw: event,
+    });
+    return;
+  }
+  if (event.type === "response.function_call_arguments.delta" && typeof event.delta === "string") {
+    await emitProviderStreamProjectionBestEffort(accumulator, {
+      type: "tool_call_delta",
+      streamId: streamIdFor(event),
+      callIndex: nonNegativeIntegerFromUnknown(event.output_index) ?? 0,
+      sequence: nextSequence(),
+      toolCallId: stringFromUnknown(event.call_id) || stringFromUnknown(event.item_id),
+      argumentsDelta: event.delta,
+      argumentCharCount: event.delta.length,
+      publicState: "generating",
+      raw: event,
+    });
+    return;
+  }
+  if (event.type === "response.output_item.done" && event.item && typeof event.item === "object") {
+    accumulator.output.push(event.item);
+    if (event.item.type === "function_call") {
+      const rawArguments = typeof event.item.arguments === "string" ? event.item.arguments : "";
+      await emitProviderStreamProjectionBestEffort(accumulator, {
+        type: "tool_call_delta",
+        streamId: streamIdFor(event),
+        callIndex: nonNegativeIntegerFromUnknown(event.output_index) ?? 0,
+        sequence: nextSequence(),
+        toolCallId: stringFromUnknown(event.item.call_id),
+        toolName: stringFromUnknown(event.item.name),
+        argumentCharCount: rawArguments.length,
+        publicState: "ready",
+        raw: event,
+      });
+    }
+    return;
+  }
+  if (event.type === "response.completed" && event.response && typeof event.response === "object") {
+    accumulator.completed = event.response;
+    await emitProviderStreamProjectionBestEffort(accumulator, {
+      type: "completed",
+      streamId: streamIdFor(event),
+      status: "completed",
+      raw: event,
+    });
+  }
+}
+
+async function emitProviderStreamProjectionBestEffort(
+  accumulator: CodexSseAccumulator,
+  chunk: ProviderStreamProjectionChunk,
+): Promise<void> {
+  try {
+    await accumulator.onProviderStreamEvent?.(chunk);
+  } catch {
+    // Stream projection is observational only. Provider/model failures still
+    // propagate through the SSE event handlers above, but sink failures must
+    // not abort, retry, or alter final response reconstruction.
+  }
+}
+
+function codexSseEventFromFrame(frame: string): Record<string, any> | null {
+  const data = frame
+    .split(/\r\n|\n|\r/u)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart())
+    .join("\n")
+    .trim();
+  if (!data || data === "[DONE]") return null;
+  try {
+    const parsed = JSON.parse(data);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    // Ignore non-JSON keepalive frames.
+    return null;
+  }
+}
+
+async function consumeCodexSseFrame(
+  accumulator: CodexSseAccumulator,
+  frame: string,
+): Promise<void> {
+  const event = codexSseEventFromFrame(frame);
+  if (event) await handleCodexSseEvent(accumulator, event);
+}
+
+function nextSseFrameBoundary(buffer: string): { index: number; length: number } | null {
+  const candidates = [
+    { index: buffer.indexOf("\r\n\r\n"), length: 4 },
+    { index: buffer.indexOf("\n\n"), length: 2 },
+    { index: buffer.indexOf("\r\r"), length: 2 },
+  ].filter((candidate) => candidate.index >= 0);
+  if (candidates.length === 0) return null;
+  return candidates.reduce((best, candidate) => candidate.index < best.index ? candidate : best);
+}
+
+async function readCodexSseResponse(
+  response: Response,
+  onProviderStreamEvent?: ProviderStreamProjectionHandler,
+): Promise<OpenAIResponse> {
+  const accumulator = createCodexSseAccumulator(onProviderStreamEvent);
+  if (!response.body) {
+    await consumeCodexSseText(await response.text(), accumulator);
+    return codexSseResponseFromAccumulator(accumulator);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    while (true) {
+      const boundary = nextSseFrameBoundary(buffer);
+      if (!boundary) break;
+      const frame = buffer.slice(0, boundary.index);
+      buffer = buffer.slice(boundary.index + boundary.length);
+      await consumeCodexSseFrame(accumulator, frame);
+    }
+    if (done) break;
+  }
+  if (buffer.trim()) {
+    await consumeCodexSseFrame(accumulator, buffer);
+  }
+  return codexSseResponseFromAccumulator(accumulator);
+}
+
+async function consumeCodexSseText(
+  text: string,
+  accumulator: CodexSseAccumulator,
+): Promise<void> {
+  let buffer = text;
+  while (true) {
+    const boundary = nextSseFrameBoundary(buffer);
+    if (!boundary) break;
+    const frame = buffer.slice(0, boundary.index);
+    buffer = buffer.slice(boundary.index + boundary.length);
+    await consumeCodexSseFrame(accumulator, frame);
+  }
+  if (buffer.trim()) {
+    await consumeCodexSseFrame(accumulator, buffer);
+  }
+}
+
+function stringFromUnknown(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function nonNegativeIntegerFromUnknown(value: unknown): number | undefined {
+  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
+}
+
+function isReasoningDeltaSseEvent(event: Record<string, any>): boolean {
+  return typeof event.delta === "string" &&
+    /(?:^|\.)reasoning(?:_summary)?(?:_text)?\.delta$/u.test(String(event.type ?? ""));
+}
+
 async function createCodexResponse(
   body: Record<string, any>,
   authorization: string,
   signal?: AbortSignal,
+  onProviderStreamEvent?: ProviderStreamProjectionHandler,
 ): Promise<OpenAIResponse> {
   const accountId = codexAccountIdFromAuthorization(authorization);
   const endpoint = safeEndpointLabel(getCodexResponsesUrl());
@@ -1082,8 +1304,8 @@ async function createCodexResponse(
     });
   }
 
-  const raw = await response.text();
   if (!response.ok) {
+    const raw = await response.text();
     let detail = raw;
     try {
       const parsed = JSON.parse(raw);
@@ -1099,7 +1321,7 @@ async function createCodexResponse(
     });
   }
 
-  return codexResponseFromSse(raw);
+  return await readCodexSseResponse(response, onProviderStreamEvent);
 }
 
 export function extractResponseText(response: OpenAIResponse): string {
@@ -3601,7 +3823,7 @@ async function runHostedPromptText(
       instructions: options.instructions,
       reasoning: buildReasoningConfig(resolution),
       input: openAIInputWithAttachments(options.prompt, options.attachments),
-    }, options.signal, await openAIAuthOverrideForHosted(config));
+    }, options.signal, await openAIAuthOverrideForHosted(config), options.onProviderStreamEvent);
     afterAttributedModelResponse({
       attribution: options.usageAttribution,
       model,
@@ -3753,7 +3975,7 @@ export async function runPromptTextWithUsage(options: PromptOptions): Promise<Pr
     instructions: options.instructions,
     reasoning: buildReasoningConfig(resolution),
     input: openAIInputWithAttachments(options.prompt, options.attachments),
-  }, options.signal);
+  }, options.signal, undefined, options.onProviderStreamEvent);
   afterAttributedModelResponse({
     attribution: options.usageAttribution,
     model,
@@ -3877,7 +4099,7 @@ async function runOpenAIFunctionToolPromptText(
               input: input.items,
               __butler_codex_stateless_input: codexStatelessInput,
             }),
-      }, options.signal, authOverride);
+      }, options.signal, authOverride, options.onProviderStreamEvent);
       afterAttributedModelResponse({
         attribution: options.usageAttribution,
         model,
@@ -3947,7 +4169,7 @@ async function runOpenAIFunctionToolPromptText(
           previous_response_id: previousResponseId,
           input: pending.items,
           __butler_codex_stateless_input: codexStatelessInput,
-        }, options.signal, authOverride);
+        }, options.signal, authOverride, options.onProviderStreamEvent);
         afterAttributedModelResponse({
           attribution: options.usageAttribution,
           model,

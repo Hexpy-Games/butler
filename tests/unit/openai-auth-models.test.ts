@@ -2669,6 +2669,122 @@ test("Codex subscription profile routes prompts to the Codex backend", async () 
   expect(seenBody.include).toBeUndefined();
 });
 
+test("Codex subscription SSE projects provider chunks before final response resolves", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+  process.env.BUTLER_CODEX_USER_AGENT = "butler-test";
+
+  const encoder = new TextEncoder();
+  let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  globalThis.fetch = (async () => new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+      controller.enqueue(encoder.encode(
+        'data: {"type":"response.output_text.delta","response_id":"resp_live","delta":"hello"}\n\n',
+      ));
+    },
+  }), { status: 200 })) as unknown as typeof fetch;
+
+  let resolved = false;
+  let firstCallbackResolve: (() => void) | null = null;
+  const firstCallback = new Promise<void>((resolve) => {
+    firstCallbackResolve = resolve;
+  });
+  const chunks: Array<Record<string, unknown>> = [];
+  const resultPromise = runPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "hi",
+    onProviderStreamEvent: (chunk) => {
+      chunks.push(chunk);
+      firstCallbackResolve?.();
+    },
+  }).then((result) => {
+    resolved = true;
+    return result;
+  });
+
+  await firstCallback;
+  expect(resolved).toBe(false);
+  expect(chunks[0]).toMatchObject({
+    type: "text_delta",
+    streamId: "resp_live",
+    sequence: 1,
+    textDelta: "hello",
+    target: "final_candidate",
+  });
+
+  streamController!.enqueue(encoder.encode([
+    'data: {"type":"response.completed","response":{"id":"resp_live","status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2,"input_tokens_details":{"cached_tokens":0}}}}',
+    "data: [DONE]",
+  ].join("\n\n") + "\n\n"));
+  streamController!.close();
+
+  await expect(resultPromise).resolves.toBe("hello");
+  expect(resolved).toBe(true);
+  expect(chunks.at(-1)).toMatchObject({
+    type: "completed",
+    streamId: "resp_live",
+    status: "completed",
+  });
+});
+
+test("Codex subscription SSE ignores rejecting stream callbacks without retrying provider call", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+  process.env.BUTLER_CODEX_USER_AGENT = "butler-test";
+
+  let fetchCalls = 0;
+  let callbackCalls = 0;
+  globalThis.fetch = (async () => {
+    fetchCalls += 1;
+    const body = [
+      'data: {"type":"response.output_text.delta","response_id":"resp_reject","delta":"hello"}',
+      "",
+      'data: {"type":"response.reasoning_text.delta","response_id":"resp_reject","delta":"private reasoning"}',
+      "",
+      'data: {"type":"response.completed","response":{"id":"resp_reject","status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2,"input_tokens_details":{"cached_tokens":0}}}}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n");
+    return new Response(body, { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "hi",
+    onProviderStreamEvent: () => {
+      callbackCalls += 1;
+      throw new Error("stream projection sink rejected");
+    },
+  })).resolves.toBe("hello");
+
+  expect(fetchCalls).toBe(1);
+  expect(callbackCalls).toBeGreaterThan(0);
+});
+
 test("Codex subscription tool continuation is sent as stateless input without previous_response_id", async () => {
   const token = fakeJwt({
     "https://api.openai.com/auth": {

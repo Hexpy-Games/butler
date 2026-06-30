@@ -244,6 +244,152 @@ test("native runtime gives worker sessions the execution tool loop and role-limi
   expect(names).not.toContain("write_planned_public_report");
 });
 
+test("native runtime projects provider stream events before final response delivery", async () => {
+  const events: RuntimeTurnEventInput[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    runFunctionToolPromptText: async (input) => {
+      await input.onProviderStreamEvent?.({
+        type: "text_delta",
+        streamId: "mock-stream-1",
+        sequence: 1,
+        textDelta: "Checking the fixture.",
+        target: "public_note",
+      });
+      await input.onProviderStreamEvent?.({
+        type: "reasoning_delta",
+        streamId: "mock-stream-1",
+        sequence: 2,
+        textDelta: "private reasoning text",
+      });
+      await input.onProviderStreamEvent?.({
+        type: "tool_call_delta",
+        streamId: "mock-stream-1",
+        callIndex: 0,
+        sequence: 3,
+        toolCallId: "mock-call-1",
+        toolName: "run_command",
+        argumentsDelta: "{\"command\":\"echo hi\"",
+      });
+      await input.onProviderStreamEvent?.({
+        type: "tool_call_delta",
+        streamId: "mock-stream-1",
+        callIndex: 0,
+        sequence: 3,
+        toolCallId: "mock-call-1",
+        toolName: "run_command",
+        argumentsDelta: "{\"command\":\"echo hi\"",
+      });
+      return "Final answer reconstructed after streaming.";
+    },
+    runPromptText: async () => {
+      throw new Error("tool loop prompt runner should be used");
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/provider-stream-projection",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Exercise provider streaming." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      events.push(event);
+    },
+  });
+
+  expect(result.text).toBe("Final answer reconstructed after streaming.");
+  expect(events[0]).toMatchObject({
+    kind: "turn.first_progress",
+  });
+  const textDeltaIndex = events.findIndex((event) => event.kind === "model.stream.text_delta");
+  const finalCompletedIndex = events.findIndex((event) => event.kind === "message.final.completed");
+  expect(textDeltaIndex).toBeGreaterThanOrEqual(0);
+  expect(finalCompletedIndex).toBeGreaterThan(textDeltaIndex);
+  expect(events[textDeltaIndex]).toMatchObject({
+    visibility: "public",
+    payload: {
+      streamId: "mock-stream-1",
+      textDelta: "Checking the fixture.",
+      target: "public_note",
+      sequence: 1,
+    },
+  });
+  const reasoningEvent = events.find((event) => event.kind === "model.stream.reasoning_delta");
+  expect(reasoningEvent).toMatchObject({
+    visibility: "internal",
+    payload: {
+      streamId: "mock-stream-1",
+      charCount: "private reasoning text".length,
+      sequence: 2,
+    },
+  });
+  expect(JSON.stringify(reasoningEvent)).not.toContain("private reasoning text");
+  const toolDeltaEvents = events.filter((event) => event.kind === "model.stream.tool_call_delta");
+  expect(toolDeltaEvents).toHaveLength(1);
+  expect(toolDeltaEvents[0]).toMatchObject({
+    visibility: "internal",
+    payload: {
+      streamId: "mock-stream-1",
+      callIndex: 0,
+      sequence: 3,
+      toolCallId: "mock-call-1",
+      safeToolName: "run_command",
+      argumentCharCount: "{\"command\":\"echo hi\"".length,
+      rawArgumentsDelta: "{\"command\":\"echo hi\"",
+      publicState: "generating",
+    },
+  });
+  expect(events.some((event) => event.kind === "tool.started")).toBe(false);
+});
+
+test("native runtime treats provider stream projection delivery as best-effort", async () => {
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    runFunctionToolPromptText: async (input) => {
+      await input.onProviderStreamEvent?.({
+        type: "text_delta",
+        streamId: "mock-stream-best-effort",
+        sequence: 1,
+        textDelta: "Visible stream progress.",
+        target: "public_note",
+      });
+      return "Final answer survives stream event delivery failure.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/provider-stream-best-effort",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Exercise best-effort stream event delivery." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      if (event.kind.startsWith("model.stream.")) {
+        throw new Error("stream event sink failed");
+      }
+    },
+  });
+
+  expect(result.text).toBe("Final answer survives stream event delivery failure.");
+});
+
 test("native runtime blocks visible tool execution until an authored public decision is present", async () => {
   let executed = 0;
   const observations: Array<Record<string, unknown>> = [];
