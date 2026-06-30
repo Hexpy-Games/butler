@@ -82,8 +82,18 @@ test("opening decision generator returns canonical payload and low-latency call 
   expect(calls[0]?.metadata).toMatchObject({
     purpose: "app_opening_decision",
   });
+  expect(calls[0]?.responseFormat).toMatchObject({
+    type: "json_schema",
+    name: "butler_opening_decision",
+    strict: true,
+    schema: {
+      additionalProperties: false,
+      required: ["summary", "rationale", "nextStep"],
+    },
+  });
   expect("maxOutputTokens" in (calls[0]?.metadata ?? {})).toBe(false);
   expect(calls[0]?.systemPrompt).toContain("Return only JSON");
+  expect(calls[0]?.systemPrompt).toContain("The first character must be `{`");
   expect(calls[0]?.systemPrompt).toContain("Be brief");
   expect(calls[0]?.systemPrompt).not.toContain("output tokens");
   expect(calls[0]?.messages).toHaveLength(1);
@@ -106,6 +116,19 @@ test("native bootstrap provider forwards low reasoning and cancellation to promp
     toolChoice: "none",
     signal: controller.signal,
     systemPrompt: "Return only JSON.",
+    responseFormat: {
+      type: "json_schema",
+      name: "test_opening_decision",
+      strict: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["summary"],
+        properties: {
+          summary: { type: "string" },
+        },
+      },
+    },
     messages: [{
       role: "user",
       content: "Start T02 only.",
@@ -117,6 +140,11 @@ test("native bootstrap provider forwards low reasoning and cancellation to promp
 
   expect(promptCalls).toHaveLength(1);
   expect(promptCalls[0]?.reasoningEffort).toBe("low");
+  expect(promptCalls[0]?.responseFormat).toMatchObject({
+    type: "json_schema",
+    name: "test_opening_decision",
+    strict: true,
+  });
   expect(promptCalls[0]?.signal).toBe(controller.signal);
   expect("maxOutputTokens" in (promptCalls[0] as unknown as Record<string, unknown>)).toBe(false);
 });
@@ -423,6 +451,23 @@ test("opening decision generator returns null on provider failure", async () => 
     userMessage: "Start T02 only.",
     model: "openai/gpt-5.5-codex",
   })).resolves.toBeNull();
+});
+
+test("opening decision generator has no default wall-clock timeout", async () => {
+  const calls: ModelInvocation[] = [];
+  const provider = providerReturning(
+    new Promise<ModelResult>((resolve) => {
+      setTimeout(() => resolve({ text: validText }), 5);
+    }),
+    calls,
+  );
+  const decision = await generateOpeningDecisionWithProvider(provider, {
+    userMessage: "Start T02 only.",
+    model: "openai/gpt-5.5-codex",
+  });
+
+  expect(decision?.summary).toBe("Clarify the requested opening decision contract.");
+  expect(calls).toHaveLength(1);
 });
 
 test("opening decision generator returns null on timeout without fallback text", async () => {

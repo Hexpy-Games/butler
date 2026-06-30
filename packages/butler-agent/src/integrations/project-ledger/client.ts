@@ -69,7 +69,7 @@ export function projectLedgerRenderedViewEvidence(input: {
   const relativePath = typeof data.path === "string" && data.path.trim()
     ? data.path.trim()
     : fallbackPath;
-  const artifactPath = resolve(input.projectPath, relativePath);
+  const artifactPath = projectLedgerArtifactPath(input.projectPath, relativePath);
   return {
     durable_artifact_created: true,
     artifact_kind: "markdown_file",
@@ -82,6 +82,14 @@ export function projectLedgerRenderedViewEvidence(input: {
       },
     ],
   };
+}
+
+function projectLedgerArtifactPath(projectPath: string, relativePath: string): string {
+  const normalizedRelativePath = relativePath.split("\\").join("/");
+  if (normalizedRelativePath === "project-ledger" || normalizedRelativePath.startsWith("project-ledger/")) {
+    return resolve(projectPath, "..", "..", "..", normalizedRelativePath);
+  }
+  return resolve(projectPath, relativePath);
 }
 
 function safeViewName(view: string): string {

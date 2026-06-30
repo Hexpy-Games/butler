@@ -130,6 +130,7 @@ export function createNativeButlerDefaultProvider(
         prompt,
         model: input.model,
         instructions: input.systemPrompt,
+        responseFormat: input.responseFormat,
         reasoningEffort: input.reasoning?.effort,
         signal: input.signal,
         cacheScope: "native-butler-title-provider",

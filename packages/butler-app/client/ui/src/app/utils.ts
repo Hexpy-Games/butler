@@ -985,7 +985,7 @@ export function completedTurnWorkBlocks(rows: ProgressRow[]): WorkBlockView[] {
 
 export type TypedUiReadModel =
   | { type: "receipt"; label: string; state: string; receiptKind: string }
-  | { type: "decision"; summary: string; rationale?: string; nextStep?: string; source: string; evidenceRefs?: string[] }
+  | { type: "decision"; summary: string; rationale?: string; nextStep?: string; source: string; modelCallId?: string; latencyMs?: number; evidenceRefs?: string[] }
   | { type: "work_block"; id: string; label?: string; state: string }
   | { type: "tool_control"; toolName: string; inputLabel?: string; label: string; toolCallId?: string; workBlockId?: string }
   | { type: "observation"; label: string; detailRows?: ProgressRow["safe_detail_rows"] }
@@ -1023,7 +1023,9 @@ export function typedUiReadModelsFromProgressRows(
         rationale: decision.decision_rationale,
         nextStep: decision.decision_next_step,
         source: decision.decision_source,
-        evidenceRefs: decision.decision_evidence_refs,
+        ...(decision.decision_model_call_id ? { modelCallId: decision.decision_model_call_id } : {}),
+        ...(decision.decision_latency_ms !== undefined ? { latencyMs: decision.decision_latency_ms } : {}),
+        ...(decision.decision_evidence_refs ? { evidenceRefs: decision.decision_evidence_refs } : {}),
       }];
     }
     if (row.kind === WORK_BLOCK_MARKER_KIND && row.work_block_id) {
@@ -1771,6 +1773,10 @@ function explicitPublicDecisionFields(
   const nextStep = safeOptionalPublicText(payload.nextStep);
   if (nextStep) fields.public_decision_next_step = nextStep;
   if (source) fields.public_decision_source = source;
+  const modelCallId = safeOptionalPublicText(payload.modelCallId);
+  if (modelCallId) fields.public_decision_model_call_id = modelCallId;
+  const latencyMs = safeOptionalNumber(payload.latencyMs);
+  if (latencyMs !== undefined) fields.public_decision_latency_ms = latencyMs;
   if (evidenceRefs && evidenceRefs.length > 0)
     fields.public_decision_evidence_refs = evidenceRefs;
   return fields;
@@ -1785,6 +1791,8 @@ function publicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
   decision_rationale: string;
   decision_next_step: string;
   decision_source: string;
+  decision_model_call_id: string;
+  decision_latency_ms: number;
   decision_evidence_refs: string[];
 }> {
   if (!row || !isPublicDecisionSource(row.work_decision_source)) return {};
@@ -1802,6 +1810,8 @@ function explicitPublicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
   decision_rationale: string;
   decision_next_step: string;
   decision_source: string;
+  decision_model_call_id: string;
+  decision_latency_ms: number;
   decision_evidence_refs: string[];
 }> {
   if (
@@ -1816,6 +1826,8 @@ function explicitPublicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
     decision_rationale: row.public_decision_rationale,
     decision_next_step: row.public_decision_next_step,
     decision_source: row.public_decision_source,
+    decision_model_call_id: row.public_decision_model_call_id,
+    decision_latency_ms: row.public_decision_latency_ms,
     decision_evidence_refs: row.public_decision_evidence_refs,
   };
 }

@@ -707,6 +707,8 @@ export interface ProgressRow {
   public_decision_rationale?: string;
   public_decision_next_step?: string;
   public_decision_source?: string;
+  public_decision_model_call_id?: string;
+  public_decision_latency_ms?: number;
   public_decision_evidence_refs?: string[];
   work_block_id?: string;
   work_block_label?: string;

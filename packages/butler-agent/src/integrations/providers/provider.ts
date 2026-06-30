@@ -91,6 +91,12 @@ interface PromptOptions {
   model?: string;
   reasoningEffort?: ReasoningEffort;
   instructions?: string;
+  responseFormat?: {
+    type: "json_schema";
+    name: string;
+    schema: Record<string, unknown>;
+    strict?: boolean;
+  };
   cacheScope?: string;
   signal?: AbortSignal;
   attachments?: AttachmentRef[];
@@ -241,6 +247,7 @@ export interface FunctionToolCall {
 export interface FunctionToolPromptOptions {
   prompt: string;
   model?: string;
+  reasoningEffort?: ReasoningEffort;
   instructions?: string;
   cacheScope?: string;
   signal?: AbortSignal;
@@ -3220,6 +3227,28 @@ function hostedChatTools(tools: FunctionToolDefinition[]): Array<Record<string, 
   }));
 }
 
+function hostedChatResponseFormat(
+  format: PromptOptions["responseFormat"],
+): Record<string, unknown> | undefined {
+  if (!format) return undefined;
+  return {
+    type: format.type,
+    json_schema: {
+      name: format.name,
+      schema: format.schema,
+      ...(format.strict === undefined ? {} : { strict: format.strict }),
+    },
+  };
+}
+
+function hostedChatReasoningParams(
+  config: HostedRuntimeConfig,
+  reasoningEffort?: ReasoningEffort,
+): Record<string, unknown> {
+  if (config.providerId !== "zai" || !reasoningEffort || reasoningEffort === "none") return {};
+  return { reasoning_effort: reasoningEffort };
+}
+
 function hostedChatText(message: any): string {
   const content = message?.content;
   if (typeof content === "string") return sanitizeResponseFinalAnswerText(content);
@@ -3322,9 +3351,12 @@ async function runHostedOpenAICompatiblePromptText(
     messages.push({ role: "system", content: options.instructions.trim() });
   }
   messages.push({ role: "user", content: promptTextForHosted(options) });
+  const responseFormat = hostedChatResponseFormat(options.responseFormat);
   const response = await createHostedChatCompletion(config, {
     messages,
     stream: false,
+    ...hostedChatReasoningParams(config, options.reasoningEffort),
+    ...(responseFormat ? { response_format: responseFormat } : {}),
   }, options.signal);
   const text = hostedChatText(firstHostedChatMessage(response));
   if (!text) {
@@ -3361,6 +3393,7 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
       tools: hostedChatTools(activeTools),
       tool_choice: "auto",
       stream: false,
+      ...hostedChatReasoningParams(config, options.reasoningEffort),
     }, options.signal);
     const assistant = firstHostedChatMessage(response);
     const text = hostedChatText(assistant);
@@ -3431,6 +3464,7 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
   const response = await createHostedChatCompletion(config, {
     messages,
     stream: false,
+    ...hostedChatReasoningParams(config, options.reasoningEffort),
   }, options.signal);
   const text = hostedChatText(firstHostedChatMessage(response));
   if (!text) {
@@ -3821,6 +3855,7 @@ async function runHostedPromptText(
       store: true,
       ...promptCache,
       instructions: options.instructions,
+      ...(options.responseFormat ? { text: { format: options.responseFormat } } : {}),
       reasoning: buildReasoningConfig(resolution),
       input: openAIInputWithAttachments(options.prompt, options.attachments),
     }, options.signal, await openAIAuthOverrideForHosted(config), options.onProviderStreamEvent);
@@ -3973,6 +4008,7 @@ export async function runPromptTextWithUsage(options: PromptOptions): Promise<Pr
     store: true,
     ...promptCache,
     instructions: options.instructions,
+    ...(options.responseFormat ? { text: { format: options.responseFormat } } : {}),
     reasoning: buildReasoningConfig(resolution),
     input: openAIInputWithAttachments(options.prompt, options.attachments),
   }, options.signal, undefined, options.onProviderStreamEvent);
@@ -4045,7 +4081,7 @@ async function runOpenAIFunctionToolPromptText(
   if (getButlerRuntime() !== "codex-api" && !authOverride) {
     throw new Error("runFunctionToolPromptText is only available when BUTLER_RUNTIME=codex-api");
   }
-  const resolution = resolveOpenAIModel(modelOverride ?? options.model);
+  const resolution = resolveOpenAIModel(modelOverride ?? options.model, options.reasoningEffort);
   const model = await resolveDynamicOpenAIModel(resolution.model);
   const reasoning = buildReasoningConfig(resolution);
   const log = options.log ?? (() => {});

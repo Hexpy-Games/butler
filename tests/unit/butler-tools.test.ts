@@ -2836,6 +2836,7 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
   expect(written.durable_artifact_created).toBe(true);
   expect(written.artifact_kind).toBe("markdown_file");
   expect(written.artifact_label).toBe("project-ledger/projects/ledger-demo/views/dashboard.md");
+  expect(written.artifact_path).toBe(join(tempDir, "project-ledger", "projects", "ledger-demo", "views", "dashboard.md"));
   expect(written.verified_output_files).toContainEqual({
     path: "project-ledger/projects/ledger-demo/views/dashboard.md",
     artifact_kind: "markdown_file",

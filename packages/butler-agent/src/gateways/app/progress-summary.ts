@@ -54,6 +54,10 @@ export function normalizeProgressSummaryRow(
     const publicDecisionNextStep = safeOptionalShortText(input.public_decision_next_step);
     if (publicDecisionNextStep) row.public_decision_next_step = publicDecisionNextStep;
     row.public_decision_source = publicDecisionSource;
+    const publicDecisionModelCallId = safeOptionalShortToken(input.public_decision_model_call_id);
+    if (publicDecisionModelCallId) row.public_decision_model_call_id = publicDecisionModelCallId;
+    const publicDecisionLatencyMs = safeOptionalNonNegativeInteger(input.public_decision_latency_ms);
+    if (publicDecisionLatencyMs !== undefined) row.public_decision_latency_ms = publicDecisionLatencyMs;
     if (Array.isArray(input.public_decision_evidence_refs)) {
       const refs = input.public_decision_evidence_refs
         .map((value) => safeOptionalShortText(value))
@@ -466,6 +470,14 @@ function mergeProgressRow(
       base.work_decision_evidence_refs ??
       current.work_decision_evidence_refs ??
       incoming.work_decision_evidence_refs,
+    public_decision_model_call_id:
+      base.public_decision_model_call_id ??
+      current.public_decision_model_call_id ??
+      incoming.public_decision_model_call_id,
+    public_decision_latency_ms:
+      base.public_decision_latency_ms ??
+      current.public_decision_latency_ms ??
+      incoming.public_decision_latency_ms,
     created_at: current.created_at ?? incoming.created_at,
   };
 }
@@ -529,6 +541,17 @@ function safeOptionalShortText(value: unknown): string | undefined {
     )
     .replace(/\s+/gu, " ")
     .slice(0, 180);
+}
+
+function safeOptionalNonNegativeInteger(value: unknown): number | undefined {
+  const numberValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(numberValue) || numberValue < 0) return undefined;
+  return Math.round(numberValue);
 }
 
 function stripControlCharacters(value: string): string {

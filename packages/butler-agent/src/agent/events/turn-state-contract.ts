@@ -114,6 +114,8 @@ export interface TurnDecisionPayloadInput {
   nextStep?: unknown;
   source: unknown;
   firstVisible?: unknown;
+  modelCallId?: unknown;
+  latencyMs?: unknown;
   evidenceRefs?: unknown;
 }
 
@@ -201,6 +203,8 @@ export function createTurnDecisionPayload(input: TurnDecisionPayloadInput): Reco
     }
   }
   const evidenceRefs = safeStringArray(input.evidenceRefs);
+  const modelCallId = optionalSafeText(input.modelCallId);
+  const latencyMs = optionalNonNegativeInteger(input.latencyMs);
   return {
     decisionId,
     role,
@@ -209,6 +213,8 @@ export function createTurnDecisionPayload(input: TurnDecisionPayloadInput): Reco
     nextStep,
     source: input.source,
     ...(input.firstVisible === true ? { firstVisible: true } : {}),
+    ...(modelCallId ? { modelCallId } : {}),
+    ...(latencyMs !== undefined ? { latencyMs } : {}),
     ...(evidenceRefs.length > 0 ? { evidenceRefs } : {}),
   };
 }
@@ -333,6 +339,8 @@ export function normalizeTurnStateContractPayload(
       nextStep: payload.nextStep ?? payload.decisionNextStep,
       source: payload.source ?? payload.decisionSource,
       firstVisible: payload.firstVisible,
+      modelCallId: payload.modelCallId,
+      latencyMs: payload.latencyMs,
       evidenceRefs: payload.evidenceRefs ?? payload.decisionEvidenceRefs,
     });
   }
@@ -404,4 +412,15 @@ function safeStringArray(value: unknown): string[] {
   return value
     .map((item) => optionalSafeText(item))
     .filter((item): item is string => Boolean(item));
+}
+
+function optionalNonNegativeInteger(value: unknown): number | undefined {
+  const numberValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(numberValue) || numberValue < 0) return undefined;
+  return Math.round(numberValue);
 }

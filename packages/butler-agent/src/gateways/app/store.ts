@@ -5146,6 +5146,7 @@ export class AppServerStore {
         required_tools: stringArray(runtimePolicy.required_tools),
         requiredNativeToolProfiles: stringArray(runtimePolicy.requiredNativeToolProfiles),
         runtimePolicy,
+        reasoning_effort: input.controls.reasoning_effort,
         workerModelRules: settings.worker_model_rules,
       },
     });
