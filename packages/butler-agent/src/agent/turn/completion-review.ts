@@ -422,6 +422,15 @@ function isEvidenceCompatible(
     if (evidenceKind === "source_page") {
       return references.some((reference) => Boolean(reference.url && /^https?:\/\//u.test(reference.url)));
     }
+    if (evidenceKind === "review_result") {
+      return references.some((reference) => Boolean(
+        reference.tool_call_id ||
+          reference.artifact_id ||
+          reference.path ||
+          reference.task_id ||
+          (reference.url && /^https?:\/\//u.test(reference.url)),
+      ));
+    }
     return evidenceKind === "workspace_inspection" ||
       evidenceKind === "project_state";
   }
