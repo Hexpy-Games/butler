@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { spawnSync } from "child_process";
@@ -1450,6 +1450,7 @@ test("project-ledger lifecycle errors include concrete JSON next hints for Sandy
     expect(invalidTaskState.status).toBe(2);
     const invalidTaskStateJson = JSON.parse(invalidTaskState.stdout);
     expect(invalidTaskStateJson.error.code).toBe("invalid_state");
+    expect(invalidTaskStateJson.error.details).toEqual([{ id: "T-SPECIFIED", kind: "task", status: "specified" }]);
     expect(invalidTaskStateJson.error.next.map((item: any) => item.command)).toContain(
       "project-ledger task create --work W-SANDY --id T-SPECIFIED --status todo",
     );
@@ -2203,6 +2204,35 @@ test("project-ledger doctor preserves --json envelope behavior", () => {
   }
 });
 
+test("project-ledger doctor failed --json preserves diagnostic issues", () => {
+  const project = tempProject();
+  try {
+    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
+    writeWork(project, "W-0001", {
+      id: "W-0001",
+      kind: "work",
+      title: "Missing spec work",
+      status: "in_progress",
+    });
+
+    const result = runLedger(["doctor", "--project", project, "--fail-on-warning", "--json"]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("");
+    const parsed = JSON.parse(result.stdout);
+    const errorCount = parsed.data.issues.filter((issue: any) => issue.severity === "error").length;
+    const warningCount = parsed.data.issues.filter((issue: any) => issue.severity === "warning").length;
+    expect(parsed.ok).toBe(false);
+    expect(parsed.data.issues.map((issue: any) => issue.code)).toContain("missing_spec");
+    expect(parsed.error.code).toBe("project_ledger_doctor_failed");
+    expect(parsed.error.details).toEqual([{ issueCount: parsed.data.issues.length, errorCount, warningCount }]);
+    expect(parsed.error.next.map((item: any) => item.command)).toContain(
+      `project-ledger doctor --project ${project} --verbose`,
+    );
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test("project-ledger check preserves --json envelope behavior", () => {
   const project = tempProject();
   try {
@@ -2218,9 +2248,87 @@ test("project-ledger check preserves --json envelope behavior", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("");
     const parsed = JSON.parse(result.stdout);
+    const errorCount = parsed.data.issues.filter((issue: any) => issue.severity === "error").length;
+    const warningCount = parsed.data.issues.filter((issue: any) => issue.severity === "warning").length;
     expect(parsed.ok).toBe(false);
-    expect(parsed.data).toBeNull();
+    expect(parsed.data.ok).toBe(false);
+    expect(parsed.data.issues.map((issue: any) => issue.code)).toContain("missing_spec");
     expect(parsed.error.code).toBe("project_ledger_check_failed");
+    expect(parsed.error.details).toEqual([{ issueCount: parsed.data.issues.length, errorCount, warningCount }]);
+    expect(parsed.error.next.map((item: any) => item.command)).toContain(
+      `project-ledger check --project ${project} --verbose`,
+    );
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("project-ledger status query and render rebuild stale task state from source", () => {
+  const project = tempProject();
+  try {
+    runLedgerJson(["init", "--project", project, "--id", "demo", "--name", "Demo Project"]);
+    runLedgerJson([
+      "work",
+      "create",
+      "--project",
+      project,
+      "--id",
+      "W-SANDY-STALE",
+      "--title",
+      "Sandy stale index work",
+      "--status",
+      "specified",
+      "--spec",
+      "SPEC-PROJECT-LEDGER",
+      "--acceptance",
+      "Sandy stale task state is repaired from source",
+    ]);
+    runLedgerJson([
+      "task",
+      "create",
+      "--project",
+      project,
+      "--work",
+      "W-SANDY-STALE",
+      "--id",
+      "T-SANDY-STALE",
+      "--title",
+      "Sandy stale task",
+    ]);
+    runLedgerJson(["index", "--project", project]);
+
+    const indexPath = join(ledgerProjectRoot(project), "index", "project.json");
+    const past = new Date(Date.now() - 5000);
+    utimesSync(indexPath, past, past);
+    writeTask(project, "W-SANDY-STALE", "T-SANDY-STALE", {
+      schema: "project-ledger.task.v1",
+      kind: "task",
+      id: "T-SANDY-STALE",
+      title: "Sandy stale task",
+      status: "done",
+      parentId: "W-SANDY-STALE",
+      validation: "source task is done",
+      review: "source task is done",
+      report: "reports/sandy-stale-task.md",
+    });
+
+    const status = runLedgerJson(["status", "--project", project]);
+    expect(JSON.stringify(status.data.nextActions)).not.toContain("T-SANDY-STALE");
+
+    const todoTasks = runLedgerJson(["query", "--project", project, "--kind", "task", "--status", "todo"]);
+    expect(JSON.stringify(todoTasks.data.results)).not.toContain("T-SANDY-STALE");
+
+    const taskRecords = runLedgerJson(["query", "--project", project, "--kind", "task"]);
+    expect(taskRecords.data.results).toContainEqual(expect.objectContaining({
+      id: "T-SANDY-STALE",
+      status: "done",
+    }));
+
+    const rendered = runLedgerJson(["render", "--project", project, "dashboard", "--write"]);
+    expect(rendered.data.markdown).not.toContain("T-SANDY-STALE [todo]");
+    expect(readFileSync(join(ledgerProjectRoot(project), "views", "dashboard.md"), "utf8")).not.toContain(
+      "T-SANDY-STALE [todo]",
+    );
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
