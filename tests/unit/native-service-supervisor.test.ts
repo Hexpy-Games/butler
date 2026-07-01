@@ -56,7 +56,7 @@ test("native service manifest defines Butler-owned default services", () => {
     const appGateway = specs.find((spec) => spec.id === "app-gateway");
     expect(appGateway?.args).toEqual([
       "run",
-      "/opt/butler/packages/butler-agent/src/gateways/app/cli.ts",
+      "/opt/butler/packages/butler-agent/src/gateways/app/interface/cli/app-gateway-cli.ts",
       "--port=18765",
     ]);
     expect(appGateway?.env).toMatchObject({
@@ -191,7 +191,7 @@ test("App-managed native service manifest resolves from active runtime pointer",
     expect(appGateway?.command).toBe(serviceBun);
     expect(appGateway?.args).toEqual([
       "run",
-      join(runtimeHome, "packages", "butler-agent", "src", "gateways", "app", "cli.ts"),
+      join(runtimeHome, "packages", "butler-agent", "src", "gateways", "app", "interface", "cli", "app-gateway-cli.ts"),
       "--port=19123",
     ]);
     expect(appGateway?.env).toMatchObject({

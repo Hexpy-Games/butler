@@ -14,7 +14,7 @@ import {
 import {
   appLimitedDeliveryForError,
   appSafeResponderError,
-} from "../../packages/butler-agent/src/gateways/app/failure-ux-contract.ts";
+} from "../../packages/butler-agent/src/gateways/app/infrastructure/transport/failure-ux-contract.ts";
 import { recoverableLimitedDeliveryForError } from "../../packages/butler-agent/src/agent/turn/recoverable-delivery.ts";
 
 test("final output contract preserves completion obligation compatibility exports", () => {

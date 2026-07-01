@@ -1694,7 +1694,7 @@ test("electron shell owns only the app gateway process and shuts it down cleanly
   expect(electronMain).toContain('"gateway", "app"');
   expect(electronMain).toContain("process.env.BUTLER_BUN");
   expect(electronMain).not.toContain(
-    "packages/butler-agent/src/gateways/app/cli.ts",
+    "packages/butler-agent/src/gateways/app/interface/cli/app-gateway-cli.ts",
   );
   expect(electronMain).not.toContain("service-control.sh");
   expect(supervisor).toContain("already starting but is not healthy");

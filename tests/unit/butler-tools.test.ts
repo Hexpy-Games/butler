@@ -1822,10 +1822,27 @@ test("run_command verifies structured stdout artifact paths under Butler data", 
 });
 
 test("default app suggestions do not advertise weather workflows", () => {
-  const agentBriefing = readFileSync(
-    join(root, "packages", "butler-agent", "src", "gateways", "app", "new-chat-briefing.ts"),
-    "utf8",
-  );
+  const agentBriefing = [
+    "fallback-copy.ts",
+    "project-fallback-suggestions.ts",
+  ]
+    .map((file) =>
+      readFileSync(
+        join(
+          root,
+          "packages",
+          "butler-agent",
+          "src",
+          "gateways",
+          "app",
+          "domain",
+          "new-chat-briefing",
+          file,
+        ),
+        "utf8",
+      ),
+    )
+    .join("\n");
   const clientSuggestions = readFileSync(
     join(root, "packages", "butler-app", "client", "ui", "src", "components", "conversation", "emptyStateSuggestions.ts"),
     "utf8",

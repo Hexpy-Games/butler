@@ -800,8 +800,8 @@ test("optional external tool probes stay behind selected feature actions", () =>
     "packages/butler-app/client/ui/src/components/first-run/useFirstRunSetupController.ts",
   );
   const api = readRepoFile("packages/butler-app/client/ui/src/app/api.ts");
-  const server = readRepoFile(
-    "packages/butler-agent/src/gateways/app/server.ts",
+  const settingsRoutes = readRepoFile(
+    "packages/butler-agent/src/gateways/app/interface/server/routes/settings-routes.ts",
   );
   const mcpSettings = readRepoFile(
     "packages/butler-app/client/ui/src/components/settings/McpSettings.tsx",
@@ -821,10 +821,10 @@ test("optional external tool probes stay behind selected feature actions", () =>
     "url.pathname.match(/^\\/mcp-servers\\/([^/]+)\\/probe$/u)",
   );
   expect(api).toContain("url.pathname === \"/model-catalog/local/discover\"");
-  expect(server).toContain(
+  expect(settingsRoutes).toContain(
     "url.pathname.match(/^\\/mcp-servers\\/([^/]+)\\/probe$/u)",
   );
-  expect(server).toContain(
+  expect(settingsRoutes).toContain(
     "url.pathname === \"/model-catalog/local/discover\"",
   );
   expect(mcpSettings).toContain("async function probe");
@@ -941,12 +941,12 @@ test("Electron bridge live events subscribe through preload instead of renderer 
 });
 
 test("default app session summaries do not execute host git for branch metadata", () => {
-  const store = readRepoFile(
-    "packages/butler-agent/src/gateways/app/store.ts",
+  const sessionContextHost = readRepoFile(
+    "packages/butler-agent/src/gateways/app/application/kernel-host/session-context-host.ts",
   );
-  const branchInfoStart = store.indexOf("private branchInfoForSession");
-  const branchInfoEnd = store.indexOf("private getMessageRow", branchInfoStart);
-  const branchInfo = store.slice(branchInfoStart, branchInfoEnd);
+  const branchInfoStart = sessionContextHost.indexOf("branchInfoForSession(sessionId)");
+  const branchInfoEnd = sessionContextHost.indexOf("settingsForSession(sessionId)", branchInfoStart);
+  const branchInfo = sessionContextHost.slice(branchInfoStart, branchInfoEnd);
 
   expect(branchInfo).toContain('safe_status: "Project workspace"');
   expect(branchInfo).not.toContain("spawnSync");

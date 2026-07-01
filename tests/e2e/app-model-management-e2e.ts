@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/server.ts";
+import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { appCopy } from "../../packages/butler-app/client/ui/src/app/copy.ts";
 import {
   FIRST_RUN_STORAGE_KEY,

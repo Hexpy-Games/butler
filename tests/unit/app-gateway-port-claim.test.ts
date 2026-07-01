@@ -4,7 +4,7 @@ import {
   reclaimStaleAppGatewayPort,
   type AppGatewayPortClaimDeps,
   type ProcessInspection,
-} from "../../packages/butler-agent/src/gateways/app/port-claim.ts";
+} from "../../packages/butler-agent/src/gateways/app/domain/runtime/port-claim.ts";
 
 function deps(input: {
   listeners: number[];
@@ -30,7 +30,7 @@ function appGatewayProcess(input: {
     command: [
       "/opt/homebrew/bin/bun",
       "run",
-      `${input.butlerHome}/packages/butler-agent/src/gateways/app/cli.ts`,
+      `${input.butlerHome}/packages/butler-agent/src/gateways/app/interface/cli/app-gateway-cli.ts`,
       "--port=18765",
       `BUTLER_HOME=${input.butlerHome}`,
       `BUTLER_DATA=${input.butlerData}`,

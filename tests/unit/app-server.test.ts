@@ -14,14 +14,14 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/server.ts";
+import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
-import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/new-chat-briefing.ts";
+import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/domain/new-chat-briefing/build-new-chat-briefing.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
 import {
   appRuntimePolicy,
   createProjectFolderSelectionToken,
-} from "../../packages/butler-agent/src/gateways/app/store.ts";
+} from "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
 import { compactionPath } from "../../packages/butler-agent/src/agent/context/compaction.ts";
 import { appendRuntimeTurnContextMetric } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
 import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
@@ -807,11 +807,11 @@ test("app server migrates event indexes for bounded app event scans", () => {
 
 test("app server defaults app responder turns to ten minutes", () => {
   const serverSource = readFileSync(
-    join(process.cwd(), "packages/butler-agent/src/gateways/app/server.ts"),
+    join(process.cwd(), "packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts"),
     "utf8",
   );
   const cliSource = readFileSync(
-    join(process.cwd(), "packages/butler-agent/src/gateways/app/cli.ts"),
+    join(process.cwd(), "packages/butler-agent/src/gateways/app/interface/cli/app-gateway-cli.ts"),
     "utf8",
   );
 
@@ -822,7 +822,7 @@ test("app server defaults app responder turns to ten minutes", () => {
 
 test("app server keeps long responder requests within Bun idle timeout", () => {
   const source = readFileSync(
-    join(process.cwd(), "packages/butler-agent/src/gateways/app/server.ts"),
+    join(process.cwd(), "packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts"),
     "utf8",
   );
 

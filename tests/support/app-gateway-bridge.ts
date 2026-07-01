@@ -46,7 +46,7 @@ import type {
   AppMessageResponderInput,
   AppMessageResponderResult,
   DeliveryLimitationMetadata,
-} from "../../packages/butler-agent/src/gateways/app/store.ts";
+} from "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
 
 const APP_SESSION_ID = "butler/app-general";
 

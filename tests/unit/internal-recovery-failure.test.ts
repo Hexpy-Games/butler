@@ -9,7 +9,7 @@ import {
   safeInternalRecoveryMessage,
   toolCallRepairStateForFailure,
 } from "../../packages/butler-agent/src/runtime/internal-recovery-failure.ts";
-import { appSafeResponderError } from "../../packages/butler-agent/src/gateways/app/failure-ux-contract.ts";
+import { appSafeResponderError } from "../../packages/butler-agent/src/gateways/app/infrastructure/transport/failure-ux-contract.ts";
 import { safeRuntimeFailure } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 
 test("internal recovery classifier centralizes goal completion protocol gaps", () => {

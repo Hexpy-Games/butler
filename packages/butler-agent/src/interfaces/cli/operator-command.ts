@@ -969,7 +969,7 @@ function appGatewayCommand(parsed: ParsedCommonOptions): string[] {
   return [
     process.execPath,
     "run",
-    join(parsed.options.home, "packages", "butler-agent", "src", "gateways", "app", "cli.ts"),
+    join(parsed.options.home, "packages", "butler-agent", "src", "gateways", "app", "interface", "cli", "app-gateway-cli.ts"),
     `--port=${app.port}`,
   ];
 }

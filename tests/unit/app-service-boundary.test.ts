@@ -61,9 +61,14 @@ test("temporary service and gateway protocol packages are removed", () => {
 test("Butler Agent owns gateway core and app gateway runtime", () => {
   expect(pathExists("packages/butler-agent/src/gateways/core/contracts.ts")).toBe(true);
   expect(pathExists("packages/butler-agent/src/gateways/core/server.ts")).toBe(true);
-  expect(pathExists("packages/butler-agent/src/gateways/app/server.ts")).toBe(true);
-  expect(pathExists("packages/butler-agent/src/gateways/app/store.ts")).toBe(true);
-  expect(pathExists("packages/butler-agent/src/gateways/app/protocol.ts")).toBe(true);
+  expect(pathExists("packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts")).toBe(true);
+  expect(pathExists("packages/butler-agent/src/gateways/app/application/store/app-server-store.ts")).toBe(true);
+  expect(pathExists("packages/butler-agent/src/gateways/app/interface/protocol/app-protocol.ts")).toBe(true);
+  expect(
+    sourceFiles("packages/butler-agent/src/gateways/app").filter(
+      (file) => file.split("/").length === 6,
+    ),
+  ).toEqual([]);
 });
 
 test("agent-owned gateways do not import app package code", () => {

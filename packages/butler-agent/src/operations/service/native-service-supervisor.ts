@@ -429,7 +429,7 @@ function nativeServiceSpecsForRuntime(
       command: serviceBun,
       args: [
         "run",
-        butlerAgentSourcePath(paths.butlerHome, "gateways", "app", "cli.ts"),
+        butlerAgentSourcePath(paths.butlerHome, "gateways", "app", "interface", "cli", "app-gateway-cli.ts"),
         `--port=${appPort}`,
       ],
       cwd: paths.butlerHome,

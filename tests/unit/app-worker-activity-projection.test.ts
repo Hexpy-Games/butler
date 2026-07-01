@@ -3,8 +3,8 @@ import {
   orchestrationActivityPhase,
   orchestrationStatusLine,
   shouldKeepInactiveLinkedReportingWorker,
-} from "../../packages/butler-agent/src/gateways/app/worker-activity-projection.ts";
-import type { WorkerActivitySummary } from "../../packages/butler-agent/src/gateways/app/protocol.ts";
+} from "../../packages/butler-agent/src/gateways/app/domain/workers/worker-activity-projection.ts";
+import type { WorkerActivitySummary } from "../../packages/butler-agent/src/gateways/app/interface/protocol/app-protocol.ts";
 import type { WorkOrchestrationRecord } from "../../packages/butler-agent/src/agent/work/work-orchestration.ts";
 
 test("worker activity projection keeps terminal linked children only for reporting orchestrations", () => {

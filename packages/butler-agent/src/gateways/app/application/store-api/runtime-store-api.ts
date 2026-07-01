@@ -1,0 +1,98 @@
+import type {
+  AppEventEnvelope,
+  AppInfoView,
+  SystemEventListView,
+  UpdateApplyRequest,
+  UpdateApplyResult,
+  UpdateCheckRequest,
+  UpdateStatusView,
+  UsageMonitorView,
+} from "../../interface/protocol/app-protocol.ts";
+import type {
+  AgentTurnEvent,
+  RuntimeTurnEventInput,
+} from "../../../../agent/events/turn-events.ts";
+import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
+
+export interface AppStoreRuntimeApi {
+  close(): void;
+  butlerDataRoot(): string;
+  getUpdateStatus(): Promise<UpdateStatusView>;
+  checkUpdates(request?: UpdateCheckRequest): Promise<UpdateStatusView>;
+  applyUpdate(request: UpdateApplyRequest): Promise<UpdateApplyResult>;
+  getAppInfo(): AppInfoView;
+  listSystemEvents(options?: {
+    limit?: number;
+    offset?: number;
+  }): SystemEventListView;
+  getUsageMonitor(options?: {
+    sessionId?: string;
+    sinceTs?: number | null;
+  }): UsageMonitorView;
+  syncAllAppTransportEvents(): number;
+  replayEvents(cursor?: number): AppEventEnvelope[];
+  subscribeEvents(listener: (event: AppEventEnvelope) => void): () => void;
+  appendSafeServerEvent(
+    type: string,
+    payload: Record<string, unknown>,
+  ): AppEventEnvelope;
+  appendTurnEvent(
+    sessionId: string,
+    turnId: string,
+    input: RuntimeTurnEventInput,
+  ): AgentTurnEvent;
+}
+
+export function createRuntimeStoreApi(
+  kernel: AppStoreKernel,
+): AppStoreRuntimeApi {
+  return {
+    close() {
+      if (kernel.closed) return;
+      try {
+        kernel.db.query("PRAGMA wal_checkpoint(TRUNCATE)").all();
+      } finally {
+        kernel.sessionBindingStore.close();
+        kernel.db.close();
+        kernel.closed = true;
+      }
+    },
+    butlerDataRoot() {
+      return kernel.butlerData;
+    },
+    async getUpdateStatus() {
+      return await kernel.runtimeInfo.getUpdateStatus();
+    },
+    async checkUpdates(request = {}) {
+      return await kernel.runtimeInfo.checkUpdates(request);
+    },
+    async applyUpdate(request) {
+      return await kernel.runtimeInfo.applyUpdate(request);
+    },
+    getAppInfo() {
+      return kernel.runtimeInfo.getAppInfo();
+    },
+    listSystemEvents(options = {}) {
+      return kernel.systemMonitor.listSystemEvents(options);
+    },
+    getUsageMonitor(options = {}) {
+      return kernel.systemMonitor.getUsageMonitor(options);
+    },
+    syncAllAppTransportEvents() {
+      return kernel.transportProjection.syncAll();
+    },
+    replayEvents(cursor = 0) {
+      kernel.transportProjection.syncAll();
+      return kernel.events.replay(cursor);
+    },
+    subscribeEvents(listener) {
+      return kernel.events.subscribe(listener);
+    },
+    appendSafeServerEvent(type, payload) {
+      return kernel.appendEvent(type, payload);
+    },
+    appendTurnEvent(sessionId, turnId, input) {
+      return kernel.turnProgress.appendTurnEvent(sessionId, turnId, input);
+    },
+  };
+}

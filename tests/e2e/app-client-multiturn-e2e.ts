@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/server.ts";
+import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
 import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
