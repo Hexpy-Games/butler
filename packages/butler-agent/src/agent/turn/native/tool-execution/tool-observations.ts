@@ -1,10 +1,10 @@
 import { randomUUID } from "crypto";
 import {
-  safeOptionalPublicText,
   safePublicText,
 } from "../../../output/evidence/transcript-sanitizers.ts";
 import type { ObservationKind, TurnObservation } from "../../turn-kernel.ts";
 import type { NativeToolCall } from "./audited-executor-types.ts";
+import { summarizedToolResultForObservation } from "./tool-result-observation-summary.ts";
 
 const MODEL_VISIBLE_OUTPUT_LIMIT = 2_400;
 const TOOL_FAILURE_FALLBACK = "Tool execution failed with redacted private details.";
@@ -188,31 +188,12 @@ function modelVisibleFailureContent(input: {
     `Tool: ${input.toolName}`,
     `Observation: ${input.message}`,
   ];
-  const output = summarizedResult(input.result);
+  const output = summarizedToolResultForObservation(input.result);
   if (output) {
     parts.push("Relevant output:", output);
   }
   parts.push("Use this observation to repair arguments, choose a different tool, or continue with a bounded limitation.");
   return parts.join("\n");
-}
-
-function summarizedResult(result: unknown): string {
-  if (!result || typeof result !== "object" || Array.isArray(result)) return "";
-  const record = result as Record<string, unknown>;
-  const fields = ["stderr", "stdout", "error", "message", "validation"];
-  const lines: string[] = [];
-  for (const field of fields) {
-    const value = record[field];
-    if (typeof value === "string" && value.trim()) {
-      const safeValue = safeOptionalPublicText(value);
-      if (safeValue) {
-        lines.push(`${field}: ${safeValue}`);
-      }
-    }
-  }
-  const exitCode = record.exit_code;
-  if (typeof exitCode === "number") lines.unshift(`exit_code: ${exitCode}`);
-  return limitModelVisibleContent(lines.join("\n"));
 }
 
 function valueAt(result: unknown, key: string): string | null {
