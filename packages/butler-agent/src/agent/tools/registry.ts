@@ -9,6 +9,7 @@ import { inspectProjectStatusToolDefinition, inspectProjectStatusToolMetadata } 
 import { queryProjectWorkToolDefinition, queryProjectWorkToolMetadata } from "./project-ledger/query_project_work/index.ts";
 import { renderProjectDashboardToolDefinition, renderProjectDashboardToolMetadata } from "./project-ledger/render_project_dashboard/index.ts";
 import { completeProjectWorkToolDefinition, completeProjectWorkToolMetadata } from "./project-ledger/complete_project_work/index.ts";
+import { projectLedgerNativeToolDefinitions, projectLedgerNativeToolMetadata } from "./project-ledger/native.ts";
 import { getContextMonitorToolDefinition, getContextMonitorToolMetadata } from "./monitoring/get_context_monitor/index.ts";
 import { readToolOutputArtifactToolDefinition, readToolOutputArtifactToolMetadata } from "./monitoring/read_tool_output_artifact/index.ts";
 import { getUsageMonitorToolDefinition, getUsageMonitorToolMetadata } from "./monitoring/get_usage_monitor/index.ts";
@@ -60,6 +61,7 @@ export const CORE_BUTLER_TOOLS = [
   readFileToolDefinition,
   writeFileToolDefinition,
   grepFilesToolDefinition,
+  ...projectLedgerNativeToolDefinitions,
   getWorkDashboardToolDefinition,
   inspectProjectStatusToolDefinition,
   queryProjectWorkToolDefinition,
@@ -119,6 +121,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [readFileToolDefinition.name]: readFileToolMetadata,
   [writeFileToolDefinition.name]: writeFileToolMetadata,
   [grepFilesToolDefinition.name]: grepFilesToolMetadata,
+  ...projectLedgerNativeToolMetadata,
   [getWorkDashboardToolDefinition.name]: getWorkDashboardToolMetadata,
   [inspectProjectStatusToolDefinition.name]: inspectProjectStatusToolMetadata,
   [queryProjectWorkToolDefinition.name]: queryProjectWorkToolMetadata,

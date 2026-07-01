@@ -8,6 +8,7 @@ import {
   buildNativeToolCatalog,
   schemaDigest,
 } from "../../packages/butler-agent/src/agent/tools/progressive-catalog.ts";
+import { createToolSearchToolHandler } from "../../packages/butler-agent/src/agent/tools/tool-bridge/tool_search/executor.ts";
 
 test("native progressive catalog exposes compact stable metadata without raw schemas", () => {
   const catalog = buildNativeToolCatalog({
@@ -77,6 +78,43 @@ test("native progressive catalog assigns conservative risk levels from real tool
   }));
   expect(byName.get("read_file")?.riskLevel).toBe("medium");
   expect(byName.get("list_tool_capabilities")?.riskLevel).toBe("low");
+});
+
+test("Project Ledger mutation tools are discoverable in the progressive native catalog", async () => {
+  const catalog = buildNativeToolCatalog({
+    tools: BUTLER_TOOLS,
+    metadata: TOOL_CAPABILITY_METADATA,
+  });
+  const byName = new Map(catalog.map((entry) => [entry.name, entry]));
+
+  expect(byName.get("project_ledger_task_complete")).toEqual(expect.objectContaining({
+    id: "native:project_ledger_task_complete",
+    category: "project",
+    riskLevel: "high",
+    enabled: true,
+    tags: expect.arrayContaining([
+      "project-ledger",
+      "task",
+      "state transition",
+      "complete",
+    ]),
+  }));
+
+  const search = createToolSearchToolHandler({
+    butlerData: "/tmp/butler-test",
+    currentToolNames: ["tool_search", "tool_describe", "tool_call", "project_ledger_status"],
+  });
+  const result = await search({ args: { query: "project ledger task complete", provider: "native" } }) as {
+    ok: boolean;
+    results: Array<{ name: string; enabled: boolean; id: string }>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.results).toContainEqual(expect.objectContaining({
+    id: "native:project_ledger_task_complete",
+    name: "project_ledger_task_complete",
+    enabled: true,
+  }));
 });
 
 test("native progressive catalog requires metadata for every native tool", () => {

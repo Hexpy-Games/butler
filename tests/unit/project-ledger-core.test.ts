@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { pathToFileURL } from "url";
@@ -71,6 +71,112 @@ test("Project Ledger core modules can be imported and used without spawning the 
     expect(status.counts.work).toBe(1);
     expect(queryIndex(loadIndex(project), "recent-completed").map((item: any) => item.id)).toContain("W-CORE");
     expect(existsSync(join(ledgerProjectRoot(project), "work", "W-CORE", "work.md"))).toBe(true);
+  } finally {
+    restoreButlerData();
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("Project Ledger core record commands create show and update generic records", async () => {
+  const project = tempProject();
+  const restoreButlerData = useTestButlerData(project);
+  try {
+    const { handle } = await importModule("commands.js");
+
+    handle("init", [], { project, id: "demo", name: "Demo Project" });
+    const created = handle("record", ["create"], {
+      project,
+      kind: "reference",
+      id: "REF-CORE",
+      title: "Core Reference",
+    });
+    expect(created.kind).toBe("reference");
+    expect(created.id).toBe("REF-CORE");
+
+    const referencePath = join(ledgerProjectRoot(project), "references", "ref-core.md");
+    expect(readFileSync(referencePath, "utf8")).toContain("# Core Reference");
+    writeFileSync(
+      referencePath,
+      readFileSync(referencePath, "utf8").replace('kind: "reference"', 'kind: "reference"\nowner: "ledger"'),
+      "utf8",
+    );
+
+    const updated = handle("record", ["update"], {
+      project,
+      kind: "reference",
+      id: "REF-CORE",
+      title: "Updated Core Reference",
+      validation: "core test",
+    });
+    expect(updated.title).toBe("Updated Core Reference");
+    expect(updated.validation).toBe("core test");
+
+    const text = readFileSync(referencePath, "utf8");
+    expect(text).toContain('owner: "ledger"');
+    expect(text).toContain("# Core Reference");
+
+    const shown = handle("record", ["show"], {
+      project,
+      kind: "reference",
+      id: "REF-CORE",
+      body: true,
+    });
+    expect(shown.body).toContain("# Core Reference");
+    expect(readFileSync(join(ledgerProjectRoot(project), "ledger.jsonl"), "utf8")).toContain("reference_updated");
+  } finally {
+    restoreButlerData();
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("Project Ledger core generic lifecycle update validates transitions and completion gates", async () => {
+  const project = tempProject();
+  const restoreButlerData = useTestButlerData(project);
+  try {
+    const { handle } = await importModule("commands.js");
+
+    handle("init", [], { project, id: "demo", name: "Demo Project" });
+    handle("work", ["create"], {
+      project,
+      id: "W-LIFECYCLE-CORE",
+      title: "Core lifecycle work",
+      spec: "SPEC-LIFECYCLE-CORE",
+      acceptance: "Core lifecycle validation works",
+    });
+    expect(handle("record", ["update"], {
+      project,
+      kind: "work",
+      id: "W-LIFECYCLE-CORE",
+      status: "scoped",
+    }).status).toBe("scoped");
+
+    expect(() => handle("record", ["update"], {
+      project,
+      kind: "work",
+      id: "W-LIFECYCLE-CORE",
+      status: "done",
+    })).toThrow("Invalid work transition: scoped -> done");
+
+    handle("record", ["update"], { project, kind: "work", id: "W-LIFECYCLE-CORE", status: "specified" });
+    handle("record", ["update"], { project, kind: "work", id: "W-LIFECYCLE-CORE", status: "in_progress" });
+    handle("record", ["update"], { project, kind: "work", id: "W-LIFECYCLE-CORE", status: "review" });
+
+    expect(() => handle("record", ["update"], {
+      project,
+      kind: "work",
+      id: "W-LIFECYCLE-CORE",
+      status: "done",
+    })).toThrow("Work completion gate failed: validation, review, report");
+
+    expect(handle("record", ["update"], {
+      project,
+      kind: "work",
+      id: "W-LIFECYCLE-CORE",
+      status: "done",
+      validation: "validated",
+      review: "reviewed",
+      report: "reports/core-lifecycle.md",
+    }).status).toBe("done");
   } finally {
     restoreButlerData();
     rmSync(project, { recursive: true, force: true });

@@ -3,7 +3,10 @@ import { resolveWorkspacePathGuard } from "../shared/workspace-path-guard.ts";
 import { fileToolCapabilityReceipt, fileToolEvidenceReceipt, sha256Hex } from "../shared/evidence.ts";
 import { getWorkspaceRoot, tryParseToolArgs } from "../shared/args.ts";
 
-export interface FileToolExecutionContext { workspacePath?: string; }
+export interface FileToolExecutionContext {
+  workspacePath?: string;
+  protectedProjectLedgerRoots?: string[];
+}
 
 function isBinary(buf: Buffer): boolean {
   const n = Math.min(buf.length, 4096);

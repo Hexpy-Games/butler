@@ -9,15 +9,23 @@ import {
   type CommandArtifactEvidence,
   type CommandValidationEvidence,
 } from "./evidence.ts";
+import { projectLedgerCommandMutationGuard } from "./project-ledger-command-guard.ts";
+import {
+  cleanupProjectLedgerMutationSnapshot,
+  createProjectLedgerMutationSnapshot,
+  restoreProjectLedgerMutationIfChanged,
+} from "./project-ledger-mutation-snapshot.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 
 export function createRunCommandToolHandlers(input: {
+  butlerHome: string;
   butlerData: string;
   workspacePath: string;
 }) {
   return {
     "run_command": async (call: ToolCall) => await runCommandTool({
+      butlerHome: input.butlerHome,
       butlerData: input.butlerData,
       workspacePath: input.workspacePath,
       args: call.args,
@@ -608,6 +616,7 @@ function boundOutputOnFailure(output: string, maxLines: number = 20, maxChars: n
 }
 
 export async function runCommandTool(input: {
+  butlerHome?: string;
   butlerData: string;
   workspacePath: string;
   args: Record<string, unknown>;
@@ -634,15 +643,73 @@ export async function runCommandTool(input: {
     : "auto";
 
   const workspace = resolve(input.workspacePath);
+  const projectLedgerGuard = projectLedgerCommandMutationGuard({
+    command,
+    cwd,
+    workspacePath: workspace,
+    butlerData: input.butlerData,
+    butlerHome: input.butlerHome,
+  });
+  if (projectLedgerGuard) {
+    return {
+      ok: false,
+      command,
+      cwd,
+      exit_code: 1,
+      timed_out: false,
+      stdout: "",
+      stderr: projectLedgerGuard.message,
+      error: projectLedgerGuard.error,
+      protected_path: projectLedgerGuard.protected_path,
+      next: projectLedgerGuard.next,
+      evidence_receipts: commandEvidenceReceipts({ success: false, artifacts: [] }),
+      evidence_capability_receipts: commandEvidenceCapabilityReceipts({
+        exitCode: 1,
+        timedOut: false,
+        outputSuppressed: false,
+        outputBudgeted: false,
+      }),
+    };
+  }
   const gitStatusBeforeCommand = gitWorkspaceStatusSnapshot(workspace);
   const commandStartedAtMs = Date.now();
   mkdirSync(commandGeneratedArtifactRoot(input.butlerData), { recursive: true });
+  const projectLedgerSnapshot = createProjectLedgerMutationSnapshot({
+    command,
+    cwd,
+    workspacePath: workspace,
+    butlerData: input.butlerData,
+    butlerHome: input.butlerHome,
+  });
   const raw = await executeBashCommand({
     command,
     cwd,
     timeoutMs,
     butlerData: input.butlerData,
   });
+  const projectLedgerMutation = restoreProjectLedgerMutationIfChanged(projectLedgerSnapshot);
+  cleanupProjectLedgerMutationSnapshot(projectLedgerSnapshot);
+  if (projectLedgerMutation) {
+    return {
+      ok: false,
+      command,
+      cwd,
+      exit_code: 1,
+      timed_out: false,
+      stdout: "",
+      stderr: projectLedgerMutation.message,
+      error: projectLedgerMutation.error,
+      protected_path: projectLedgerMutation.protected_path,
+      next: projectLedgerMutation.next,
+      evidence_receipts: commandEvidenceReceipts({ success: false, artifacts: [] }),
+      evidence_capability_receipts: commandEvidenceCapabilityReceipts({
+        exitCode: 1,
+        timedOut: false,
+        outputSuppressed: false,
+        outputBudgeted: false,
+      }),
+    };
+  }
 
   const success = raw.exit_code === 0 && raw.timed_out === false;
   const shouldSuppressOutput = success && (

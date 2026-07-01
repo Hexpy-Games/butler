@@ -121,10 +121,10 @@ test("initial surface selection uses structured controller state without prompt 
     "read_file",
     "write_file",
     "grep_files",
+    "project_ledger_status",
     "inspect_project_status",
     "query_project_work",
     "render_project_dashboard",
-    "complete_project_work",
     "get_context_monitor",
     "read_tool_output_artifact",
     "list_tool_capabilities",
@@ -135,6 +135,24 @@ test("initial surface selection uses structured controller state without prompt 
     "list_todo_list",
     "read_conversation_context",
   ]);
+});
+
+test("initial surface selection exposes Project Ledger tools when the turn asks for ledger work", () => {
+  const selection = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "Project Ledger 상태를 확인하고 dashboard를 렌더해줘.",
+    sessionMetadata: {},
+    turnMetadata: {},
+    providerCapabilities: { supportsToolCalls: true },
+  });
+
+  expect(selection.state.context.sessionMetadata).toBeUndefined();
+  expect(selection.state.context.turnMetadata).toBeUndefined();
+  expect(Object.keys(selection.state.context)).not.toContain("message");
+  expect(selection.toolNames).toContain("project_ledger_status");
+  expect(selection.toolNames).toContain("inspect_project_status");
+  expect(selection.toolNames).toContain("query_project_work");
+  expect(selection.toolNames).toContain("render_project_dashboard");
 });
 
 test("controller advances through discovered, described, promoted, and invoked states", () => {

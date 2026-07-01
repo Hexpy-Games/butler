@@ -154,8 +154,24 @@ export function sortRecords(records) {
   });
 }
 
-export function queryIndex(index, kind) {
+export function queryIndex(index, kind, options = {}) {
   const records = index.records.filter((record) => record.kind !== "project");
+  const status = typeof options.status === "string" && options.status.trim() ? options.status.trim() : null;
+  const recordKinds = new Set([
+    "all",
+    "initiative",
+    "decision",
+    "risk",
+    "spec",
+    "report",
+    "plan",
+    "handoff",
+    "reference",
+    "roadmap",
+    "work",
+    "task",
+    "attempt",
+  ]);
   if (kind === "next-actions") {
     return sortRecords(records.filter((record) =>
       ["work", "task"].includes(record.kind) &&
@@ -213,6 +229,12 @@ export function queryIndex(index, kind) {
   if (kind === "recent-completed") {
     return sortRecords(records.filter((record) => record.status === "done"))
       .map((record) => recordReference(record, "recent_completed"));
+  }
+  if (recordKinds.has(kind)) {
+    return sortRecords(records.filter((record) =>
+      (kind === "all" || record.kind === kind) &&
+      (status === null || record.status === status),
+    )).map((record) => recordReference(record));
   }
   throw new CliError(`Unsupported query kind: ${kind}`, "invalid_query_kind");
 }

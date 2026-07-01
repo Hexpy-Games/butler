@@ -28,10 +28,10 @@ const STARTUP_TOOL_NAMES = [
 ] as const;
 
 const PROJECT_TOOL_NAMES = [
+  "project_ledger_status",
   "inspect_project_status",
   "query_project_work",
   "render_project_dashboard",
-  "complete_project_work",
 ] as const;
 
 const WORKSPACE_TOOL_NAMES = [
@@ -123,6 +123,9 @@ const WORKER_DEFAULT_TOOL_NAMES = [
   "write_file",
   "grep_files",
   "read_tool_output_artifact",
+  "project_ledger_status",
+  "project_ledger_list",
+  "project_ledger_show",
   "inspect_project_status",
   "query_project_work",
   "render_project_dashboard",
@@ -187,6 +190,11 @@ function hasProjectContext(input: { sessionMetadata?: Record<string, unknown>; t
       runtimePolicy.projectPath ||
       runtimePolicy.project_path,
   );
+}
+
+function mentionsProjectLedger(text: string | undefined): boolean {
+  if (!text) return false;
+  return /\bproject[-\s]?ledger\b|\bledger\b|프로젝트\s*원장|원장/u.test(text.toLowerCase());
 }
 
 function policyArray(metadata: unknown, camelKey: string, snakeKey: string): unknown[] {
@@ -257,7 +265,7 @@ export function selectButlerToolProfiles(input: {
     return ["startup", "project", "workspace", "public-web", "memory-read", "monitoring", "artifact-data"];
   }
   const profiles = new Set<ButlerToolProfile>(["startup"]);
-  if (hasProjectContext(input)) {
+  if (hasProjectContext(input) || mentionsProjectLedger(input.text)) {
     addProfile(profiles, "project");
   }
   for (const profile of requiredToolProfiles(input.sessionMetadata)) addProfile(profiles, profile);

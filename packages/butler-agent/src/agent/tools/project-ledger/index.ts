@@ -3,9 +3,11 @@ import { createInspectProjectStatusToolHandler } from "./inspect_project_status/
 import { createQueryProjectWorkToolHandler } from "./query_project_work/executor.ts";
 import { createRenderProjectDashboardToolHandler } from "./render_project_dashboard/executor.ts";
 import { createCompleteProjectWorkToolHandler } from "./complete_project_work/executor.ts";
+import { createProjectLedgerNativeToolHandlers } from "./native.ts";
 
 export function createProjectLedgerToolHandlers(input: Parameters<typeof createGetWorkDashboardToolHandler>[0]) {
   return {
+    ...createProjectLedgerNativeToolHandlers(input),
     "get_work_dashboard": createGetWorkDashboardToolHandler(input),
     "inspect_project_status": createInspectProjectStatusToolHandler(input),
     "query_project_work": createQueryProjectWorkToolHandler(input),

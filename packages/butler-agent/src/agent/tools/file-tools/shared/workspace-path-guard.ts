@@ -1,11 +1,14 @@
 import { lstat, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, normalize, relative, resolve } from "node:path";
+import { projectLedgerProtectedPath } from "./project-ledger-protection.ts";
 
 export interface WorkspacePathGuardInput {
   workspaceRoot: string;
   relativePath: string;
   allowMissingLeaf?: boolean;
   allowDirectories?: boolean;
+  rejectProtectedProjectLedgerWrites?: boolean;
+  protectedProjectLedgerRoots?: string[];
 }
 
 export interface WorkspacePathGuardResult {
@@ -15,6 +18,9 @@ export interface WorkspacePathGuardResult {
   absolutePath?: string;
   realPath?: string;
   reason?: string;
+  code?: string;
+  message?: string;
+  next?: Array<{ command: string }>;
 }
 
 const SENSITIVE_SEGMENTS = new Set([".git", ".ssh", ".gnupg"]);
@@ -48,6 +54,25 @@ export async function resolveWorkspacePathGuard(input: WorkspacePathGuardInput):
   const rootReal = await realpath(workspaceRoot);
   const absolutePath = resolve(rootReal, requestedPath);
   if (!isInside(rootReal, absolutePath)) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, reason: "path_escape" };
+  if (input.rejectProtectedProjectLedgerWrites) {
+    const protectedPath = projectLedgerProtectedPath({
+      workspaceRoot: rootReal,
+      absolutePath,
+      explicitProjectLedgerRoots: input.protectedProjectLedgerRoots,
+    });
+    if (protectedPath.protected) {
+      return {
+        ok: false,
+        workspaceRoot: rootReal,
+        requestedPath,
+        absolutePath,
+        reason: protectedPath.code,
+        code: protectedPath.code,
+        message: protectedPath.message,
+        next: protectedPath.next,
+      };
+    }
+  }
 
   try {
     const real = await realpath(absolutePath);

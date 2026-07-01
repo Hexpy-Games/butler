@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { spawnSync } from "child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { homedir, tmpdir } from "os";
 import { join } from "path";
@@ -55,6 +56,8 @@ import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-
 
 let tempDir = "";
 let originalButlerData: string | undefined;
+const repoRoot = process.cwd();
+const projectLedgerCli = join(repoRoot, "packages", "project-ledger", "bin", "project-ledger");
 
 function capabilityReceipt(input: {
   id: string;
@@ -1721,10 +1724,10 @@ test("native runtime sends a profiled tool surface for basic project turns", asy
   });
 
   expect(toolNames).toEqual([
+    "project_ledger_status",
     "inspect_project_status",
     "query_project_work",
     "render_project_dashboard",
-    "complete_project_work",
     "get_context_monitor",
     "list_tool_capabilities",
     "tool_search",
@@ -7400,6 +7403,134 @@ test("native runtime unwraps tool_call through audited target dispatch", async (
   )).toBe(true);
   const toolStarts = events.filter((event) => event.kind === "tool.started");
   expect(toolStarts.map((event) => event.payload?.toolName)).toEqual(["Get Context Monitor"]);
+});
+
+test("native runtime discovers and executes Project Ledger mutation through tool bridge in the same turn", async () => {
+  const projectPath = join(tempDir, "project-ledger", "projects", "butler");
+  const runLedger = (args: string[]) => {
+    const result = spawnSync(process.execPath, [projectLedgerCli, ...args, "--project", projectPath, "--json"], {
+      encoding: "utf8",
+      env: { ...process.env, BUTLER_DATA: tempDir },
+    });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  };
+  runLedger(["init", "--id", "butler", "--name", "Butler"]);
+  runLedger(["work", "create", "--id", "W-PTS", "--title", "PTS work", "--spec-exemption", "--acceptance-exemption"]);
+  runLedger(["index"]);
+  runLedger(["task", "create", "--work", "W-PTS", "--id", "T-PTS", "--title", "PTS task"]);
+  runLedger(["index"]);
+  runLedger(["task", "update", "--id", "T-PTS", "--status", "in_progress"]);
+  runLedger(["index"]);
+
+  let describeResult: Record<string, unknown> | null = null;
+  let callResult: Record<string, unknown> | null = null;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    butlerHome: repoRoot,
+    butlerData: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_describe", args: { ids: ["native:project_ledger_task_complete"] } },
+        {
+          summary: "Project Ledger task completion tool schema를 확인합니다.",
+          rationale: "mutation tool이 현재 턴에서 bridge로 실행 가능한지 검증해야 합니다.",
+          nextStep: "설명된 도구를 같은 턴에서 호출합니다.",
+        },
+      );
+      describeResult = await input.executeTool({
+        name: "tool_describe",
+        args: { ids: ["native:project_ledger_task_complete"] },
+        rawArguments: JSON.stringify({ ids: ["native:project_ledger_task_complete"] }),
+      }) as Record<string, unknown>;
+      await authorPublicDecisionForTool(
+        input,
+        {
+          name: "tool_call",
+          args: {
+            id: "native:project_ledger_task_complete",
+            arguments: {
+              project_path: projectPath,
+              id: "T-PTS",
+              validation: "runtime bridge validation",
+              review: "runtime bridge review",
+              report: "reports/runtime-bridge.md",
+            },
+          },
+        },
+        {
+          summary: "설명된 Project Ledger task completion 도구를 호출합니다.",
+          rationale: "PTS-SC11은 discovery 뒤 같은 턴 실행까지 요구합니다.",
+          nextStep: "task 상태와 bridge 감사 이벤트를 검증합니다.",
+        },
+      );
+      callResult = await input.executeTool({
+        name: "tool_call",
+        args: {
+          id: "native:project_ledger_task_complete",
+          arguments: {
+            project_path: projectPath,
+            id: "T-PTS",
+            validation: "runtime bridge validation",
+            review: "runtime bridge review",
+            report: "reports/runtime-bridge.md",
+          },
+        },
+        rawArguments: JSON.stringify({
+          id: "native:project_ledger_task_complete",
+          arguments: {
+            project_path: projectPath,
+            id: "T-PTS",
+            validation: "runtime bridge validation",
+            review: "runtime bridge review",
+            report: "reports/runtime-bridge.md",
+          },
+        }),
+      }) as Record<string, unknown>;
+      return "Project Ledger task를 bridge로 완료했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/project-ledger-bridge-mutation",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+    metadata: { projectId: "butler" },
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "Project Ledger task를 완료해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(describeResult).toMatchObject({
+    ok: true,
+    descriptions: [expect.objectContaining({
+      id: "native:project_ledger_task_complete",
+      enabled: true,
+    })],
+  });
+  expect(callResult).toMatchObject({
+    ok: true,
+    data: { id: "T-PTS", kind: "task", status: "done" },
+    bridge_invocation: {
+      id: "native:project_ledger_task_complete",
+      provider: "native",
+      affordance: "native_tool",
+    },
+  });
+  const transcript = readTranscript("butler/main/project-ledger-bridge-mutation");
+  expect(transcript.some((event) => event.kind === "tool_call" && event.payload.name === "project_ledger_task_complete")).toBe(true);
+  expect(transcript.some((event) => event.kind === "tool_result" && event.payload.name === "project_ledger_task_complete")).toBe(true);
+  expect(transcript.some((event) =>
+    event.kind === "tool_result" &&
+    event.payload.name === "tool_call" &&
+    event.metadata?.tool_surface_transition === "invoked",
+  )).toBe(true);
 });
 
 test("native runtime records bridge audit metadata for bridged target failures", async () => {

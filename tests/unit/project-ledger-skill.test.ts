@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
-import { existsSync, lstatSync, mkdtempSync, rmSync } from "fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { spawnSync } from "child_process";
 
 const root = process.cwd();
 const cliPath = join(root, "packages", "project-ledger", "bin", "project-ledger");
+const skillPath = join(root, "packages", "project-ledger", "SKILL.md");
 
 function tempDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -48,4 +49,23 @@ test("install-skill copy mode creates a portable external copy", () => {
   } finally {
     rmSync(target, { recursive: true, force: true });
   }
+});
+
+test("Project Ledger skill documents bounded start, CLI-only mutation, and sequential closeout", () => {
+  const text = readFileSync(skillPath, "utf8");
+
+  expect(text).toContain("packages/project-ledger/bin/project-ledger status --project \"$PWD\" --json");
+  expect(text).toContain("packages/project-ledger/bin/project-ledger query --project \"$PWD\" --kind next-actions --json");
+  expect(text).toContain("pl status --project \"$PWD\" --json");
+  expect(text).toContain("pl list");
+  expect(text).toContain("Every Project Ledger mutation must go through the Project Ledger CLI or native");
+  expect(text).toContain("Do not create, replace, patch, or edit Project Ledger");
+  expect(text).toContain("source records directly with generic file tools");
+  expect(text).toContain("packages/project-ledger/bin/project-ledger index --project \"$PWD\" --json");
+  expect(text).toContain("packages/project-ledger/bin/project-ledger render dashboard --project \"$PWD\" --write --json");
+  expect(text).toContain("packages/project-ledger/bin/project-ledger render handoff --project \"$PWD\" --write --json");
+  expect(text).toContain("packages/project-ledger/bin/project-ledger render roadmap --project \"$PWD\" --write --json");
+  expect(text).toContain("packages/project-ledger/bin/project-ledger status --project \"$PWD\" --json");
+  expect(text).toContain("packages/project-ledger/bin/project-ledger check --project \"$PWD\" --verbose --json");
+  expect(text).toContain("Run `status` and `check` after index/render, sequentially");
 });

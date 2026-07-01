@@ -1,0 +1,5 @@
+import { createProjectLedgerNativeToolHandler } from "../native.ts";
+
+export function createProjectLedgerAttemptFailToolHandler(input: Parameters<typeof createProjectLedgerNativeToolHandler>[0]) {
+  return createProjectLedgerNativeToolHandler(input, "project_ledger_attempt_fail");
+}

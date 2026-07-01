@@ -45,7 +45,13 @@ export async function executeWriteFileTool(call: { arguments?: unknown; input?: 
   const createParents = Boolean(a.create_parents);
   const expected = typeof a.expected_sha256 === "string" ? a.expected_sha256 : undefined;
 
-  const guard = await resolveWorkspacePathGuard({ workspaceRoot, relativePath: path, allowMissingLeaf: true });
+  const guard = await resolveWorkspacePathGuard({
+    workspaceRoot,
+    relativePath: path,
+    allowMissingLeaf: true,
+    rejectProtectedProjectLedgerWrites: true,
+    protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
+  });
   if (!guard.ok) return { ok: false, error: guard.reason, path, guard, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: guard.reason }) };
 
   const existing = await inspectExistingTarget(guard.absolutePath!, path);

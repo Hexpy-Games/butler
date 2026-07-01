@@ -25,7 +25,10 @@ function safeProjectSegment(value) {
 
 function butlerDataCandidates() {
   const fallback = join(homedir(), ".butler");
-  return [...new Set([process.env.BUTLER_DATA, fallback].filter(Boolean))];
+  const configured = typeof process.env.BUTLER_DATA === "string" && process.env.BUTLER_DATA.trim()
+    ? process.env.BUTLER_DATA.trim()
+    : null;
+  return configured ? [configured] : [fallback];
 }
 
 function externalLedgerRepoCandidates() {
@@ -45,6 +48,14 @@ function readProjectId(root) {
   } catch {
     return null;
   }
+}
+
+function repoLocalLedgerRoot(project) {
+  return join(project, ".project-ledger");
+}
+
+function readRepoLocalProjectId(project) {
+  return readProjectId(repoLocalLedgerRoot(project));
 }
 
 function readPackageProjectId(project) {
@@ -70,13 +81,14 @@ function isPathInside(root, path) {
 function projectIdCandidates(project) {
   return [
     readProjectId(project),
+    readRepoLocalProjectId(project),
     readPackageProjectId(project),
     basename(project),
   ].filter((value, index, values) => value && values.indexOf(value) === index);
 }
 
-function externalLedgerRoot(project) {
-  for (const id of projectIdCandidates(project)) {
+function externalLedgerRoot(project, ids = projectIdCandidates(project)) {
+  for (const id of ids) {
     for (const ledgerRepo of externalLedgerRepoCandidates()) {
       const candidate = join(ledgerRepo, "projects", safeProjectSegment(id));
       if (isLedgerRoot(candidate)) return candidate;
@@ -96,7 +108,11 @@ function externalLedgerRootFromProjectPath(project) {
 }
 
 function defaultLedgerRoot(project) {
-  const [butlerData] = butlerDataCandidates().map((candidate) => resolve(String(candidate)));
+  const configured = typeof process.env.BUTLER_DATA === "string" && process.env.BUTLER_DATA.trim()
+    ? resolve(process.env.BUTLER_DATA.trim())
+    : null;
+  if (!configured) return repoLocalLedgerRoot(project);
+  const butlerData = configured;
   const [id] = projectIdCandidates(project);
   return join(butlerData, "project-ledger", "projects", safeProjectSegment(id));
 }
@@ -106,12 +122,22 @@ export function ledgerRoot(project) {
   if (isLedgerRoot(resolvedProject)) return resolvedProject;
   const externalFromPath = externalLedgerRootFromProjectPath(resolvedProject);
   if (externalFromPath) return externalFromPath;
-  return externalLedgerRoot(resolvedProject) ?? defaultLedgerRoot(resolvedProject);
+  const repoLocal = repoLocalLedgerRoot(resolvedProject);
+  if (isLedgerRoot(repoLocal)) {
+    const repoLocalId = readProjectId(repoLocal);
+    const matchingExternal = repoLocalId ? externalLedgerRoot(resolvedProject, [repoLocalId]) : null;
+    return matchingExternal ?? repoLocal;
+  }
+  const external = externalLedgerRoot(resolvedProject);
+  if (external) return external;
+  return defaultLedgerRoot(resolvedProject);
 }
 
 export function ledgerDisplayPrefix(project) {
   const resolvedProject = resolve(project);
   const root = ledgerRoot(resolvedProject);
+  const repoLocal = repoLocalLedgerRoot(resolvedProject);
+  if (root === repoLocal) return ".project-ledger";
 
   for (const butlerData of butlerDataCandidates().map((candidate) => resolve(String(candidate)))) {
     if (isPathInside(butlerData, root)) {

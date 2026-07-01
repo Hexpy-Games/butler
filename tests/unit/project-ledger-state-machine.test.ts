@@ -30,6 +30,17 @@ test("state-machine module rejects invalid transitions and validates completion 
   const { assertTransition, completionGateIssues } = await import(stateMachineUrl) as any;
 
   expect(() => assertTransition("work", "proposed", "done")).toThrow("Invalid work transition");
+  try {
+    assertTransition("task", "todo", "done", { id: "T-SANDY" });
+    throw new Error("Expected invalid transition");
+  } catch (error: any) {
+    expect(error.code).toBe("invalid_transition");
+    expect(error.details).toEqual([{ id: "T-SANDY", kind: "task", status: "todo" }]);
+    expect(error.next.map((item: any) => item.command)).toEqual([
+      "project-ledger task update --id T-SANDY --status in_progress",
+      "project-ledger task complete --id T-SANDY",
+    ]);
+  }
   expect(() => assertTransition("work", "review", "done")).not.toThrow();
   expect(completionGateIssues({
     kind: "work",
@@ -95,6 +106,18 @@ test("work task and attempt commands enforce state transitions and completion ga
     const missingEvidence = runLedgerJson(["work", "complete", "--project", project, "--id", "W-STATE"]);
     expect(missingEvidence.status).toBe(1);
     expect(missingEvidence.json.error.code).toBe("completion_gate_failed");
+    const updateBypass = runLedgerJson([
+      "work",
+      "update",
+      "--project",
+      project,
+      "--id",
+      "W-STATE",
+      "--status",
+      "done",
+    ]);
+    expect(updateBypass.status).toBe(1);
+    expect(updateBypass.json.error.code).toBe("completion_gate_failed");
 
     expect(runLedgerJson([
       "work",

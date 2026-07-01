@@ -12,6 +12,7 @@ type InitialState = ReturnType<typeof createInitialToolSurfaceControllerState>;
 
 export interface InitialToolSurfaceSelectionInput {
   role: string;
+  message?: string;
   sessionMetadata?: Record<string, unknown>;
   turnMetadata?: Record<string, unknown>;
   providerCapabilities?: Readonly<{
@@ -43,6 +44,7 @@ export function selectInitialToolsFromSurfaceController(
   });
   const tools = selectButlerToolsForTurn({
     role: state.context.role,
+    text: input.message,
     sessionMetadata: state.context.sessionMetadata,
     turnMetadata: state.context.turnMetadata,
     tools: input.tools ?? BUTLER_TOOLS,
