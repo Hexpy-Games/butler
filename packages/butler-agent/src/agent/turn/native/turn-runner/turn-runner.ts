@@ -46,6 +46,7 @@ import {
 } from "../../turn-kernel.ts";
 import {
   finalDeliveryBlockerForOpenDirectWork,
+  finalDeliveryBlockerForOpenProjectLedgerTaskRefs,
   openDirectWorkContinuationPrompt,
 } from "../../direct-work-continuation.ts";
 
@@ -193,6 +194,54 @@ export async function runNativeToolTurn({
             audit,
             blocker: directWorkBlocker,
           }), undefined, "direct_work_completion_gap_continuation");
+          throwIfRuntimeTurnAborted(input.signal);
+          turnKernel.transitionTo("continuing");
+          turnKernel.transitionTo("model_deciding");
+          turnKernel.transitionTo("observing_tools");
+          continue;
+        }
+        const projectLedgerBlocker = session.init.role === "butler" && projectId(session)
+          ? finalDeliveryBlockerForOpenProjectLedgerTaskRefs({
+            butlerData: deps.butlerData,
+            butlerHome: deps.butlerHome,
+            workspacePath: session.init.workspacePath,
+            candidateText: deliveryOutcome.text,
+          })
+          : null;
+        if (projectLedgerBlocker) {
+          const publicSummary = projectLedgerBlocker.activeItems.at(0)
+            ? `Project Ledger work remains incomplete: ${projectLedgerBlocker.activeItems.at(0)?.label}`
+            : "Project Ledger work remains incomplete.";
+          const observation = {
+            kind: "completion_gap",
+            summary: publicSummary,
+            modelVisibleContent: [
+              "The final answer references incomplete Project Ledger work.",
+              "Continue the remaining Project Ledger task before finalizing the turn.",
+              publicSummary,
+            ].join("\n"),
+            refs: [{ kind: "project_ledger_work", id: projectLedgerBlocker.id }],
+          };
+          await persistCompletionGapContinuation({
+            turnInput: input,
+            deps,
+            turnId,
+            audit,
+            publicDecisionContext,
+            observation,
+          });
+          if (!hasDirectTurnModelRequestReserve(context.turnBudget, 3)) {
+            throw new TurnSchedulerContinuationYieldError(
+              input.handle.sessionId,
+              context.turnId,
+              createTurnContextAtomId(input.handle.sessionId, context.turnId),
+            );
+          }
+          candidateText = await runKernelToolPrompt(openDirectWorkContinuationPrompt({
+            objective: context.userText,
+            audit,
+            blocker: projectLedgerBlocker,
+          }), undefined, "project_ledger_completion_gap_continuation");
           throwIfRuntimeTurnAborted(input.signal);
           turnKernel.transitionTo("continuing");
           turnKernel.transitionTo("model_deciding");

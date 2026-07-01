@@ -1,4 +1,7 @@
 import { sanitizePublicText } from "../events/turn-events.ts";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
+import { projectLedgerProjectPath } from "../../integrations/project-ledger/client.ts";
 import { TodoListStore } from "../work/todo-list.ts";
 import {
   type WorkStreamState,
@@ -54,6 +57,15 @@ const CONTINUATION_NEXT_ACTION_LINES = [
   "  reaches reporting/waiting_user/paused/recoverable with evidence,",
   "  or is linked to an async worker/planned/orchestration stream.",
 ];
+const PROJECT_LEDGER_TASK_ID_PATTERN = /\b[A-Z][A-Z0-9_-]*-\d{2,}(?:-[A-Z0-9_-]+)*\b/gu;
+const TERMINAL_PROJECT_LEDGER_STATUSES = new Set([
+  "done",
+  "complete",
+  "completed",
+  "cancelled",
+  "canceled",
+  "succeeded",
+]);
 
 export function activeDirectWorkProgressSnapshot(input: {
   butlerData: string;
@@ -174,6 +186,58 @@ export function finalDeliveryBlockerForOpenDirectWork(input: {
   };
 }
 
+export function finalDeliveryBlockerForOpenProjectLedgerTaskRefs(input: {
+  butlerData: string;
+  butlerHome: string;
+  workspacePath?: string | null;
+  candidateText: string;
+}): OpenDirectWorkBlocker | null {
+  const taskIds = [...new Set(input.candidateText.match(PROJECT_LEDGER_TASK_ID_PATTERN) ?? [])];
+  if (taskIds.length === 0) return null;
+
+  const projectPath = projectLedgerProjectPath(
+    { butlerHome: input.butlerHome, butlerData: input.butlerData },
+    { project_path: input.workspacePath ?? input.butlerHome },
+  );
+  const records = readProjectLedgerIndexRecords(projectPath);
+  if (records.length === 0) return null;
+
+  const recordsById = new Map(records.map((record) => [record.id, record]));
+  const openMentionedTasks = taskIds
+    .map((id) => recordsById.get(id))
+    .filter((record): record is ProjectLedgerIndexRecord =>
+      Boolean(record && record.kind === "task" && !projectLedgerRecordTerminal(record)),
+    );
+  if (openMentionedTasks.length === 0) return null;
+
+  const primary = openMentionedTasks[0]!;
+  const parentWork = primary.parentId ? recordsById.get(primary.parentId) : null;
+  const siblingTasks = primary.parentId
+    ? records.filter((record) =>
+      record.kind === "task" &&
+      record.parentId === primary.parentId &&
+      !projectLedgerRecordTerminal(record),
+    )
+    : openMentionedTasks;
+  const activeItems = (siblingTasks.length ? siblingTasks : openMentionedTasks)
+    .slice(0, 8)
+    .map((record) => ({
+      id: record.id,
+      label: record.title || record.id,
+      status: record.status || "open",
+      phase: "project-ledger",
+    }));
+
+  return {
+    id: parentWork?.id ?? primary.parentId ?? primary.id,
+    title: parentWork?.title ?? primary.title ?? "Project Ledger work",
+    state: parentWork?.status ?? "open",
+    phase: "project-ledger",
+    listId: null,
+    activeItems,
+  };
+}
+
 function activeDirectWorkStream(input: {
   butlerData: string;
   sessionId: string;
@@ -185,6 +249,51 @@ function activeDirectWorkStream(input: {
   return store.listActive({ sessionId: input.sessionId })
     .map((stream) => store.read(stream.id))
     .find((stream) => Boolean(stream && directWorkStreamBelongsToTurn(stream, turnId))) ?? null;
+}
+
+interface ProjectLedgerIndexRecord {
+  id: string;
+  kind: string;
+  title: string;
+  status: string;
+  parentId: string | null;
+}
+
+function readProjectLedgerIndexRecords(projectPath: string): ProjectLedgerIndexRecord[] {
+  const path = join(projectPath, "index", "project.json");
+  if (!existsSync(path)) return [];
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf8")) as { records?: unknown };
+    if (!Array.isArray(raw.records)) return [];
+    return raw.records
+      .map(projectLedgerIndexRecord)
+      .filter((record): record is ProjectLedgerIndexRecord => record !== null);
+  } catch {
+    return [];
+  }
+}
+
+function projectLedgerIndexRecord(value: unknown): ProjectLedgerIndexRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const id = safeRecordString(record.id);
+  const kind = safeRecordString(record.kind);
+  if (!id || !kind) return null;
+  return {
+    id,
+    kind,
+    title: safeRecordString(record.title) ?? id,
+    status: safeRecordString(record.status) ?? "unknown",
+    parentId: safeRecordString(record.parentId),
+  };
+}
+
+function projectLedgerRecordTerminal(record: Pick<ProjectLedgerIndexRecord, "status">): boolean {
+  return TERMINAL_PROJECT_LEDGER_STATUSES.has(record.status.trim().toLocaleLowerCase("en-US"));
+}
+
+function safeRecordString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function directWorkStreamBelongsToTurn(

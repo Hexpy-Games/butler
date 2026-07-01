@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
   activeDirectWorkProgressSnapshot,
   directWorkSemanticProgressAdvanced,
   finalDeliveryBlockerForOpenDirectWork,
+  finalDeliveryBlockerForOpenProjectLedgerTaskRefs,
   openDirectWorkContinuationPrompt,
   RUNTIME_SEMANTIC_TODO_LIST_ID,
   turnAdvancedDuringToolPrompt,
@@ -77,6 +78,56 @@ test("direct work blocker returns active direct todo steps and clears when deliv
   expect(activeDirectWorkProgressSnapshot({ butlerData, sessionId: "session" })).toEqual({
     kind: "none",
   });
+});
+
+test("Project Ledger task refs in final text block delivery while referenced work remains open", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-direct-work-"));
+  const workspacePath = join(mkdtempSync(join(tmpdir(), "sandy-bot-")), "workspace");
+  mkdirSync(workspacePath, { recursive: true });
+  writeFileSync(join(workspacePath, "package.json"), JSON.stringify({ name: "sandy-bot" }), "utf8");
+  writeProjectLedgerIndex(butlerData, "sandy-bot", [
+    ledgerRecord("W-SANDY-MEMORY-CHUNK-CHECKPOINT", "work", "Sandy message chunk and checkpoint model", "specified"),
+    ledgerRecord("T-SANDY-050-CHECKPOINT-STORE", "task", "Add checkpoint store", "done", "W-SANDY-MEMORY-CHUNK-CHECKPOINT"),
+    ledgerRecord("T-SANDY-051-CHUNK-SELECTION", "task", "Add chunk selection", "done", "W-SANDY-MEMORY-CHUNK-CHECKPOINT"),
+    ledgerRecord("T-SANDY-052-CHUNK-CHECKPOINT-TESTS", "task", "Add chunk/checkpoint integration tests", "todo", "W-SANDY-MEMORY-CHUNK-CHECKPOINT"),
+  ]);
+
+  const blocker = finalDeliveryBlockerForOpenProjectLedgerTaskRefs({
+    butlerData,
+    butlerHome: workspacePath,
+    workspacePath,
+    candidateText: "T-SANDY-051 is done. Next start point is `T-SANDY-052-CHUNK-CHECKPOINT-TESTS`.",
+  });
+
+  expect(blocker).toEqual(expect.objectContaining({
+    id: "W-SANDY-MEMORY-CHUNK-CHECKPOINT",
+    title: "Sandy message chunk and checkpoint model",
+    phase: "project-ledger",
+    activeItems: [
+      expect.objectContaining({
+        id: "T-SANDY-052-CHUNK-CHECKPOINT-TESTS",
+        status: "todo",
+      }),
+    ],
+  }));
+});
+
+test("Project Ledger task refs do not block delivery after referenced tasks are terminal", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-direct-work-"));
+  const workspacePath = join(mkdtempSync(join(tmpdir(), "sandy-bot-")), "workspace");
+  mkdirSync(workspacePath, { recursive: true });
+  writeFileSync(join(workspacePath, "package.json"), JSON.stringify({ name: "sandy-bot" }), "utf8");
+  writeProjectLedgerIndex(butlerData, "sandy-bot", [
+    ledgerRecord("W-SANDY-MEMORY-CHUNK-CHECKPOINT", "work", "Sandy message chunk and checkpoint model", "specified"),
+    ledgerRecord("T-SANDY-052-CHUNK-CHECKPOINT-TESTS", "task", "Add chunk/checkpoint integration tests", "done", "W-SANDY-MEMORY-CHUNK-CHECKPOINT"),
+  ]);
+
+  expect(finalDeliveryBlockerForOpenProjectLedgerTaskRefs({
+    butlerData,
+    butlerHome: workspacePath,
+    workspacePath,
+    candidateText: "T-SANDY-052-CHUNK-CHECKPOINT-TESTS is complete.",
+  })).toBeNull();
 });
 
 test("direct work progress requires semantic workstream advancement before tool counts", () => {
@@ -182,6 +233,30 @@ function createStream(inputButlerData: string, input: {
       workerTaskIds: input.workerTaskIds,
     });
   }
+}
+
+function ledgerRecord(
+  id: string,
+  kind: string,
+  title: string,
+  status: string,
+  parentId: string | null = null,
+) {
+  return { id, kind, title, status, parentId };
+}
+
+function writeProjectLedgerIndex(
+  butlerData: string,
+  projectId: string,
+  records: Array<ReturnType<typeof ledgerRecord>>,
+): void {
+  const indexDir = join(butlerData, "project-ledger", "projects", projectId, "index");
+  mkdirSync(indexDir, { recursive: true });
+  writeFileSync(
+    join(indexDir, "project.json"),
+    JSON.stringify({ schema: "project-ledger.index.v1", records }, null, 2),
+    "utf8",
+  );
 }
 
 function todo(
