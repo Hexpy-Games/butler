@@ -5135,6 +5135,205 @@ test("native runtime skips completion review when evidence receipts satisfy the 
   expect(result.text).toContain("https://example.test/population");
 });
 
+test("native runtime accepts model-reviewed run_command output for assistant-authored source verification", async () => {
+  const attempts: string[] = [];
+  const executedTools: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    executeButlerTool: async (call) => {
+      executedTools.push(call.name);
+      return {
+        ok: true,
+        command: call.args.command,
+        exit_code: 0,
+        timed_out: false,
+        stdout: [
+          "Showing 5 of 25 open issues",
+          "#52  Harden semantic source evidence review",
+          "#28  Finish tool-runtime recovery plan",
+        ].join("\n"),
+        stderr: "",
+        evidence_capability_receipts: [{
+          receipt_id: "ecr-gh-command-executed",
+          schema_version: "evidence-capability.v1",
+          producer: { kind: "tool", name: "run_command" },
+          capability: "command_executed",
+          evidence_kind: "execution_result",
+          maturity: "verified",
+          confidence: 1,
+          verified: true,
+          summary: "Command execution succeeded with issue list output.",
+          references: [],
+          satisfies: ["command_executed"],
+          limitations: [],
+          created_at: "2026-07-01T12:00:00.000Z",
+        }],
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      attempts.push(input.prompt);
+      if (attempts.length > 1) {
+        throw new Error("completion review should not loop after model-reviewed command output");
+      }
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: gh CLI로 열린 이슈 목록을 확인합니다.",
+          "rationale: 실제 저장소 상태를 근거로 답해야 합니다.",
+          "next_step: 확인한 이슈 목록을 요약합니다.",
+          "completion_obligations: source_verified, command_executed",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "gh issue list --state open" } }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "gh issue list --state open" },
+        rawArguments: JSON.stringify({ command: "gh issue list --state open" }),
+      });
+      return "gh issue list 결과를 확인했습니다. 열린 이슈에는 #52와 #28이 포함됩니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/model-reviewed-cli-source",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "gh issue list --state open 결과를 확인해서 열린 이슈를 알려줘." },
+  });
+
+  expect(executedTools).toEqual(["run_command"]);
+  expect(attempts).toHaveLength(1);
+  expect(result.text).toContain("#52");
+});
+
+test("completion gap continuation includes bounded evidence bundle and advisory for repeated same result", async () => {
+  const attempts: string[] = [];
+  const executedTools: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    executeButlerTool: async (call) => {
+      executedTools.push(call.name);
+      if (call.name === "web_read") {
+        return {
+          ok: true,
+          source_url: "https://example.test/issues",
+          evidence_capability_receipts: [{
+            receipt_id: "ecr-source-after-gap",
+            schema_version: "evidence-capability.v1",
+            producer: { kind: "tool", name: "web_read" },
+            capability: "source_verified",
+            evidence_kind: "source_page",
+            maturity: "verified",
+            confidence: 1,
+            verified: true,
+            summary: "Source page was verified after the continuation gap.",
+            references: [{ url: "https://example.test/issues" }],
+            satisfies: ["source_verified"],
+            limitations: [],
+            created_at: "2026-07-02T00:00:00.000Z",
+          }],
+        };
+      }
+      return {
+        ok: true,
+        command: call.args.command,
+        exit_code: 0,
+        timed_out: false,
+        stdout: "Showing 5 of 25 open issues\n#52  Harden semantic source evidence review",
+        stderr: "",
+        evidence_capability_receipts: [{
+          receipt_id: `ecr-blocker-${executedTools.length}`,
+          schema_version: "evidence-capability.v1",
+          producer: { kind: "runtime", name: "completion-review-test" },
+          capability: "explicit_blocker",
+          evidence_kind: "blocker",
+          maturity: "verified",
+          confidence: 1,
+          verified: true,
+          summary: "A formal source verification blocker remains active.",
+          references: [],
+          limitations: [],
+          created_at: "2026-07-01T12:00:00.000Z",
+        }],
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      attempts.push(input.prompt);
+      if (attempts.length === 1) {
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: gh CLI 결과를 확인합니다.",
+            "rationale: 반복되는 source evidence gap을 재현합니다.",
+            "next_step: 확인한 결과로 답합니다.",
+            "completion_obligations: source_verified",
+          ].join("\n"),
+          toolCalls: [
+            { name: "run_command", args: { command: "gh issue list --state open" } },
+            { name: "run_command", args: { command: "gh issue list --state open" } },
+          ],
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "gh issue list --state open" },
+          rawArguments: JSON.stringify({ command: "gh issue list --state open" }),
+        });
+        await input.executeTool({
+          name: "run_command",
+          args: { command: "gh issue list --state open" },
+          rawArguments: JSON.stringify({ command: "gh issue list --state open" }),
+        });
+        return "CLI 결과를 확인했습니다.";
+      }
+      if (attempts.length === 2) {
+        expect(input.prompt).toContain("recent-reviewable-evidence:");
+        expect(input.prompt).toContain("Showing 5 of 25 open issues");
+        expect(input.prompt).toContain("stagnation-advisory:");
+        expect(input.prompt).toContain("advisory only");
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "summary: formal source blocker를 해소하기 위해 원문을 확인합니다.",
+            "rationale: continuation이 다른 evidence path를 요구했습니다.",
+            "next_step: 확인한 source로 답합니다.",
+            "completion_obligations: source_verified",
+          ].join("\n"),
+          toolCalls: [{ name: "web_read", args: { url: "https://example.test/issues" } }],
+        });
+        await input.executeTool({
+          name: "web_read",
+          args: { url: "https://example.test/issues" },
+          rawArguments: JSON.stringify({ url: "https://example.test/issues" }),
+        });
+        return "source를 확인했고 #52가 열린 상태입니다.";
+      }
+      expect.unreachable("Should not require another completion-gap continuation");
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/completion-gap-evidence-bundle",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/auto:codex-latest",
+    input: { text: "열린 이슈를 확인해줘." },
+  });
+
+  expect(executedTools).toEqual(["run_command", "run_command", "web_read"]);
+  expect(attempts).toHaveLength(2);
+  expect(result.text).toContain("#52");
+});
+
 test("tool result transcript projection keeps replayable evidence and drops private raw payloads", () => {
   const projection = evidenceTranscriptToolResultProjection({
     ok: true,
