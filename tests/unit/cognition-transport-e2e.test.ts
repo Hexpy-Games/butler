@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/server.ts";
+import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
 import { listFeedbackEntries } from "../../packages/butler-agent/src/agent/cognition/feedback/buffer.ts";
 import type {

@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AppServerStore } from "../../packages/butler-agent/src/gateways/app/store.ts";
+import { AppServerStore } from "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
 
 const root = process.cwd();
 

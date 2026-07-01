@@ -32,7 +32,7 @@
     "cognition:memory:import-legacy": "${BUTLER_BUN:-bun} run packages/butler-agent/src/agent/cognition/memory/scripts/import-legacy-memory.ts",
     "cognition:memory:query-index": "${BUTLER_BUN:-bun} run packages/butler-agent/src/agent/cognition/memory/scripts/build-query-index.ts",
     "smoke:live-codex": "${BUTLER_BUN:-bun} run tests/smoke/live-codex-conversation-smoke.ts",
-    "app:server": "${BUTLER_BUN:-bun} run packages/butler-agent/src/gateways/app/cli.ts",
+    "app:server": "${BUTLER_BUN:-bun} run packages/butler-agent/src/gateways/app/interface/cli/app-gateway-cli.ts",
     "app:web": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run app:server",
     "app:ui:install": "npm --prefix packages/butler-app/client/ui install",
     "app:ui:build": "npm --prefix packages/butler-app/client/ui run build",
