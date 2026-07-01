@@ -5,14 +5,14 @@ import {
   requiredExplicitToolNames,
   shouldEnforceGrounding,
 } from "../../../policy/runtime-policy.ts";
-import { evaluateCompletionReviewOutcome } from "../../completion-review.ts";
+import { evaluateCompletionReviewOutcome, type CompletionReviewOutcome } from "../../completion-review.ts";
 import { requiredCompletionObligations } from "../../../output/completion/obligation-review.ts";
 import {
   hasGoalCompletionReviewSkipTool,
 } from "../policy/turn-evidence-gates.ts";
 import { shouldRunGoalCompletionReview } from "../policy/turn-metadata-policy.ts";
 import type { NativeStoredSessionConfig, NativeTurnRunnerDeps } from "./turn-runner-types.ts";
-import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
+import type { PublicWorkDecision, PublicWorkObligationKind, ToolAuditEntry } from "../output/tool-types.ts";
 import type { ToolSurfacePromptController } from "../../tool-surface-prompt-controller.ts";
 import {
   applyPublicOutputGuards,
@@ -158,14 +158,31 @@ async function runGoalCompletionReviews(input: {
       reviewedText: input.initialText,
     };
   }
+  const requiredObligations = requiredCompletionObligations(input.publicDecisionContext);
   const outcome = evaluateCompletionReviewOutcome({
     requestText: input.prompt,
     candidateText: input.initialText,
-    evidenceReceipts: evidenceCapabilityReceiptsFromAudit(input.audit),
-    requiredObligations: requiredCompletionObligations(input.publicDecisionContext),
+    evidenceReceipts: [
+      ...evidenceCapabilityReceiptsFromAudit(input.audit),
+      ...modelReviewedSourceEvidenceReceipts({
+        audit: input.audit,
+        requiredObligations,
+        publicDecisionContext: input.publicDecisionContext,
+        candidateText: input.initialText,
+      }),
+    ],
+    requiredObligations,
     observations: observationsFromAudit(input.audit),
   });
-  return { outcome, reviewedText: input.initialText };
+  return {
+    outcome: outcome.status === "gap"
+      ? withCompletionGapEvidenceBundle({
+        outcome,
+        audit: input.audit,
+      })
+      : outcome,
+    reviewedText: input.initialText,
+  };
 }
 
 function shouldRunCompletionReview(
@@ -194,6 +211,215 @@ function evidenceCapabilityReceiptsFromAudit(audit: ToolAuditEntry[]): unknown[]
     ...legacyEvidenceReceiptsAsCapabilityReceipts(entry),
     ...satisfiedObligationsAsCapabilityReceipts(entry),
   ]);
+}
+
+function modelReviewedSourceEvidenceReceipts(input: {
+  audit: ToolAuditEntry[];
+  requiredObligations: PublicWorkObligationKind[];
+  publicDecisionContext: PublicWorkDecision[];
+  candidateText: string;
+}): unknown[] {
+  if (!input.requiredObligations.includes("source_verified")) return [];
+  if (!input.candidateText.trim()) return [];
+  if (hasPrincipalAuthoredSourceRequirement(input.publicDecisionContext)) return [];
+  const summaries = reviewableSourceEvidenceSummaries(input.audit);
+  if (summaries.length === 0) return [];
+  return [{
+    receipt_id: `runtime:model-reviewed-source:${stableTextHash(summaries.map((summary) => summary.fingerprint).join("|"))}`,
+    schema_version: "evidence-capability.v1",
+    producer: { kind: "runtime", name: "completion-review" },
+    capability: "source_verified",
+    evidence_kind: "review_result",
+    maturity: "verified",
+    confidence: 0.75,
+    verified: true,
+    summary: "The final candidate was reviewed against bounded source evidence from observed tool results.",
+    references: summaries.slice(0, 6).map((summary) => ({ tool_call_id: summary.id })),
+    satisfies: ["source_verified"],
+    limitations: summaries.some((summary) => summary.truncated)
+      ? ["One or more source evidence previews were bounded before review."]
+      : [],
+    created_at: new Date(0).toISOString(),
+  }];
+}
+
+function hasPrincipalAuthoredSourceRequirement(decisions: PublicWorkDecision[]): boolean {
+  return decisions.some((decision) =>
+    decision.source === "principal-authored" &&
+    (decision.completionObligations ?? []).includes("source_verified"));
+}
+
+function withCompletionGapEvidenceBundle(input: {
+  outcome: CompletionReviewOutcome;
+  audit: ToolAuditEntry[];
+}): CompletionReviewOutcome {
+  if (input.outcome.status !== "gap") return input.outcome;
+  const bundle = completionGapEvidenceBundle(input.audit);
+  if (!bundle) return input.outcome;
+  const instructions = [
+    "",
+    "recent-reviewable-evidence:",
+    bundle,
+    ...completionGapStagnationAdvisory(input.audit),
+    "",
+    "review-guidance:",
+    "- source_verified is a semantic obligation. If the bounded evidence above contains the source facts needed for the answer, use it and finalize the turn.",
+    "- If the evidence is insufficient, choose a tool or artifact path that can add different evidence. Repeating the same call is useful only when the underlying state is expected to change.",
+    "- If no available tool can advance the missing evidence, answer with INCOMPLETE and a concise limitation.",
+  ];
+  return {
+    ...input.outcome,
+    observation: {
+      ...input.outcome.observation,
+      modelVisibleContent: [
+        input.outcome.observation.modelVisibleContent,
+        ...instructions,
+      ].join("\n"),
+    },
+  };
+}
+
+interface ReviewableSourceEvidenceSummary {
+  id: string;
+  fingerprint: string;
+  line: string;
+  truncated: boolean;
+}
+
+function completionGapEvidenceBundle(audit: ToolAuditEntry[]): string | null {
+  const summaries = reviewableSourceEvidenceSummaries(audit);
+  if (summaries.length === 0) return null;
+  return summaries
+    .slice(-4)
+    .map((summary) => `- ${summary.line}`)
+    .join("\n");
+}
+
+function reviewableSourceEvidenceSummaries(audit: ToolAuditEntry[]): ReviewableSourceEvidenceSummary[] {
+  return audit
+    .map((entry, index) => reviewableSourceEvidenceSummary(entry, index))
+    .filter((summary): summary is ReviewableSourceEvidenceSummary => Boolean(summary));
+}
+
+function reviewableSourceEvidenceSummary(
+  entry: ToolAuditEntry,
+  index: number,
+): ReviewableSourceEvidenceSummary | null {
+  if (!entry.ok) return null;
+  if (entry.name === "web_search") return null;
+  const preview = sourceEvidencePreview(entry.result);
+  if (!preview) return null;
+  const id = `audit:${index + 1}:${entry.name}`;
+  const args = boundedJson(entry.args, 240);
+  const fingerprint = stableTextHash(`${entry.name}\n${args}\n${preview.text}`);
+  return {
+    id,
+    fingerprint,
+    truncated: preview.truncated,
+    line: [
+      `${id}`,
+      `tool=${entry.name}`,
+      `args=${args}`,
+      `preview=${preview.text}`,
+      preview.truncated ? "(bounded)" : "",
+    ].filter(Boolean).join(" "),
+  };
+}
+
+function sourceEvidencePreview(result: unknown): { text: string; truncated: boolean } | null {
+  const record = recordValue(result);
+  if (!record) return null;
+  const textParts = [
+    stringValue(record.stdout),
+    stringValue(record.stderr),
+    stringValue(record.content),
+    stringValue(record.text),
+    stringValue(record.body),
+    stringValue(record.summary),
+  ].filter((value): value is string => Boolean(value));
+  const artifactParts = [
+    ...artifactPreviewValues(record.butler_tool_artifact),
+    ...artifactPreviewValues(record.verified_output_files),
+    ...artifactPreviewValues(record.written_files),
+    ...artifactPreviewValues(record.artifact_labels),
+  ];
+  const combined = [...textParts, ...artifactParts.map((artifact) => `artifact:${artifact}`)]
+    .map((value) => value.replace(/\s+/gu, " ").trim())
+    .filter(Boolean)
+    .join(" | ");
+  if (!combined) return null;
+  return boundedText(safePublicText(combined, "Tool output contained private details."), 900);
+}
+
+function artifactPreviewValues(value: unknown): string[] {
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  if (Array.isArray(value)) return value.flatMap((item) => artifactPreviewValues(item));
+  const record = recordValue(value);
+  if (!record) return [];
+  return [
+    stringValue(record.path),
+    stringValue(record.label),
+    stringValue(record.artifact_label),
+    stringValue(record.artifact_id),
+  ].filter((item): item is string => Boolean(item));
+}
+
+function completionGapStagnationAdvisory(audit: ToolAuditEntry[]): string[] {
+  const groups = new Map<string, { count: number; latestTool: string }>();
+  for (const entry of audit) {
+    if (!entry.ok) continue;
+    const preview = sourceEvidencePreview(entry.result);
+    if (!preview) continue;
+    const key = `${entry.name}\n${boundedJson(entry.args, 400)}\n${preview.text}`;
+    const current = groups.get(key) ?? { count: 0, latestTool: entry.name };
+    current.count += 1;
+    current.latestTool = entry.name;
+    groups.set(key, current);
+  }
+  const repeated = [...groups.values()].filter((group) => group.count >= 2);
+  if (repeated.length === 0) return [];
+  return [
+    "",
+    "stagnation-advisory:",
+    ...repeated.slice(-3).map((group) =>
+      `- ${group.latestTool} returned the same relevant evidence ${group.count} times in this turn. This is advisory only; repeat it only if the underlying state is expected to change.`,
+    ),
+  ];
+}
+
+function boundedText(value: string, maxChars: number): { text: string; truncated: boolean } {
+  const chars = Array.from(value);
+  if (chars.length <= maxChars) return { text: value, truncated: false };
+  return {
+    text: `...${chars.slice(-maxChars).join("")}`,
+    truncated: true,
+  };
+}
+
+function boundedJson(value: unknown, maxChars: number): string {
+  try {
+    return boundedText(JSON.stringify(value) ?? "{}", maxChars).text;
+  } catch {
+    return "{}";
+  }
+}
+
+function stableTextHash(value: string): string {
+  let hash = 5381;
+  for (const char of value) {
+    hash = ((hash << 5) + hash + char.charCodeAt(0)) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function legacyEvidenceReceiptsAsCapabilityReceipts(entry: ToolAuditEntry): unknown[] {
