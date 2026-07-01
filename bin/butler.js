@@ -481,7 +481,7 @@ function gatewayCommand(args, common) {
   if (gatewayName === "app") {
     runBun([
       "run",
-      resolve(root, "packages", "butler-agent", "src", "gateways", "app", "cli.ts"),
+      resolve(root, "packages", "butler-agent", "src", "gateways", "app", "interface", "cli", "app-gateway-cli.ts"),
       ...scriptArgs(gatewayArgs, common),
     ], common);
     return;
@@ -489,7 +489,7 @@ function gatewayCommand(args, common) {
   if (gatewayName === "run" && gatewayArgs[0] === "app") {
     runBun([
       "run",
-      resolve(root, "packages", "butler-agent", "src", "gateways", "app", "cli.ts"),
+      resolve(root, "packages", "butler-agent", "src", "gateways", "app", "interface", "cli", "app-gateway-cli.ts"),
       ...scriptArgs(gatewayArgs.slice(1), common),
     ], common);
     return;

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { chromium, type Locator, type Page } from "playwright";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/server.ts";
+import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 
 const root = process.cwd();
 const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");

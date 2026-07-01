@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { appSafeResponderError } from "../../packages/butler-agent/src/gateways/app/failure-ux-contract.ts";
+import { appSafeResponderError } from "../../packages/butler-agent/src/gateways/app/infrastructure/transport/failure-ux-contract.ts";
 
 test("app failure UX contract does not expose raw timeout diagnostics", () => {
   const timeout = new Error(

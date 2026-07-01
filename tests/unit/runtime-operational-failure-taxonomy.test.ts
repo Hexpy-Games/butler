@@ -4,7 +4,7 @@ import {
   classifyRuntimeFailureDelivery,
   isUserFacingFailureDelivery,
 } from "../../packages/butler-agent/src/agent/turn/runtime-delivery-state.ts";
-import { appSafeResponderError } from "../../packages/butler-agent/src/gateways/app/failure-ux-contract.ts";
+import { appSafeResponderError } from "../../packages/butler-agent/src/gateways/app/infrastructure/transport/failure-ux-contract.ts";
 import {
   providerHttpError,
   providerNetworkError,
