@@ -82,6 +82,36 @@ function printJson(input) {
   process.stdout.write(`${JSON.stringify(input, null, 2)}\n`);
 }
 
+function issueFailureError(command, options, data) {
+  const issues = Array.isArray(data?.issues) ? data.issues : [];
+  const errorCount = issues.filter((issue) => issue.severity === "error").length;
+  const warningCount = issues.filter((issue) => issue.severity === "warning").length;
+  const issueCount = issues.length;
+  const projectFlag = options.project ? ` --project ${options.project}` : "";
+  const commandLabel = command === "doctor" ? "doctor" : "check";
+  return {
+    code: command === "doctor" ? "project_ledger_doctor_failed" : "project_ledger_check_failed",
+    message: `Project Ledger ${commandLabel} failed with ${issueCount} issue${issueCount === 1 ? "" : "s"}`,
+    details: [{ issueCount, errorCount, warningCount }],
+    next: [
+      {
+        command: `project-ledger ${commandLabel}${projectFlag} --verbose`,
+        reason: "Inspect the full issue list before retrying.",
+      },
+      {
+        command: `project-ledger index${projectFlag}`,
+        reason: "Refresh the derived index after source-record repairs.",
+      },
+    ],
+  };
+}
+
+function createCommandEnvelope({ ok, command, data, error }) {
+  const envelope = createEnvelope({ ok, command, data, error });
+  if (!ok) envelope.data = data;
+  return envelope;
+}
+
 function formatDoctorOutput(data, verbose) {
   if (data.issues.length > 0 && !verbose) {
     const errorCount = data.issues.filter((issue) => issue.severity === "error").length;
@@ -148,11 +178,11 @@ export function main(argv, executableName = "project-ledger") {
       return;
     }
     if (jsonRequested || options.json) {
-      printJson(createEnvelope({
+      printJson(createCommandEnvelope({
         ok: !failed,
         command: `${normalized.short ? "pl" : "project-ledger"} ${command}`,
         data,
-        error: failed ? { code: "project_ledger_check_failed", message: "Project Ledger check failed" } : null,
+        error: failed ? issueFailureError(command, options, data) : null,
       }));
       if (failed) process.exitCode = 1;
       return;

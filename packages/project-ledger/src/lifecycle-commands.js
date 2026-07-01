@@ -21,6 +21,7 @@ import {
   writeAndReturn,
 } from "./record-commands.js";
 import { assertTransition, assertValidState, completionGateIssues } from "./state-machine.js";
+import { refreshDerivedIndexAfterMutation } from "./indexer.js";
 
 function baseRecord(kind, options, defaults = {}) {
   return {
@@ -88,7 +89,7 @@ export function updateWork(project, options) {
   }
   updateMarkdownRecord(filePath, updates, readBodyInput(options));
   appendLedgerEvent(project, { type: "work_updated", id, source: "project-ledger" });
-  return readRecord(project, filePath);
+  return refreshDerivedIndexAfterMutation(project, readRecord(project, filePath));
 }
 
 export function completeWork(project, options) {
@@ -111,7 +112,7 @@ export function completeWork(project, options) {
     report: candidate.report,
     source: "project-ledger",
   });
-  return readRecord(project, filePath);
+  return refreshDerivedIndexAfterMutation(project, readRecord(project, filePath));
 }
 
 function assertWorkCompletionGate(current, updates) {
@@ -180,7 +181,7 @@ export function updateTask(project, options, forcedStatus = null) {
   }
   updateMarkdownRecord(filePath, updates, readBodyInput(options));
   appendLedgerEvent(project, { type: "task_updated", id, source: "project-ledger" });
-  return readRecord(project, filePath);
+  return refreshDerivedIndexAfterMutation(project, readRecord(project, filePath));
 }
 
 export function createAttempt(project, options) {
@@ -217,7 +218,7 @@ export function updateAttempt(project, options, forcedStatus) {
     ...optionUpdates(options, ["validation", "review", "report"]),
   }, readBodyInput(options));
   appendLedgerEvent(project, { type: `attempt_${forcedStatus}`, id, source: "project-ledger" });
-  return readRecord(project, filePath);
+  return refreshDerivedIndexAfterMutation(project, readRecord(project, filePath));
 }
 
 function requireLifecycleKind(record, allowed, action) {

@@ -44,6 +44,7 @@ const startupOnlyToolNames: string[] = [
   "read_conversation_context",
 ];
 const projectLedgerToolNames: string[] = [
+  "project_ledger_index",
   "project_ledger_status",
   "project_ledger_list",
   "project_ledger_show",
@@ -150,7 +151,7 @@ function runProjectLedger(args: string[], projectPath: string): void {
 test("Project Ledger native tools route task completion through task handlers", async () => {
   const projectPath = join(tempDir, "project-ledger", "projects", "butler");
   runProjectLedger(["init", "--id", "butler", "--name", "Butler"], projectPath);
-  runProjectLedger(["work", "create", "--id", "W-SANDY", "--title", "Sandy work", "--spec-exemption", "--acceptance-exemption"], projectPath);
+  runProjectLedger(["work", "create", "--id", "W-SANDY", "--title", "Sandy work", "--status", "specified", "--spec-exemption", "--acceptance-exemption"], projectPath);
   runProjectLedger(["index"], projectPath);
   runProjectLedger(["task", "create", "--work", "W-SANDY", "--id", "T-SANDY", "--title", "Sandy task"], projectPath);
   runProjectLedger(["index"], projectPath);
@@ -203,11 +204,55 @@ test("Project Ledger native tools route task completion through task handlers", 
       title: "Missing parent task",
     },
     rawArguments: "{}",
-  }) as { ok: boolean; recoverable?: boolean; error?: { code?: string; next?: string[] } };
+  }) as {
+    ok: boolean;
+    recoverable?: boolean;
+    error?: { code?: string; next?: string[]; native_next?: Array<{ tool?: string; reason?: string }> };
+  };
   expect(missingParent.ok).toBe(false);
   expect(missingParent.recoverable).toBe(true);
   expect(missingParent.error?.code).toBe("invalid_arguments");
-  expect(JSON.stringify(missingParent.error?.next)).toContain("Correct the required arguments");
+  expect(JSON.stringify(missingParent.error?.native_next)).toContain("Correct required Project Ledger");
+
+  const startedWork = await executor({
+    name: "project_ledger_work_update",
+    args: {
+      project_path: projectPath,
+      id: "W-SANDY",
+      status: "in_progress",
+    },
+    rawArguments: "{}",
+  }) as { ok: boolean; data?: { id?: string; kind?: string; status?: string } };
+  expect(startedWork.ok).toBe(true);
+  expect(startedWork.data).toMatchObject({ id: "W-SANDY", kind: "work", status: "in_progress" });
+
+  const prematureWorkComplete = await executor({
+    name: "project_ledger_work_complete",
+    args: {
+      project_path: projectPath,
+      id: "W-SANDY",
+      validation: "validation evidence",
+      review: "review evidence",
+      report: "reports/sandy.md",
+    },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    recoverable?: boolean;
+    error?: {
+      code?: string;
+      next?: Array<{ command?: string }>;
+      native_next?: Array<{ tool?: string; args?: Record<string, string> }>;
+    };
+  };
+  expect(prematureWorkComplete.ok).toBe(false);
+  expect(prematureWorkComplete.recoverable).toBe(true);
+  expect(prematureWorkComplete.error?.code).toBe("invalid_transition");
+  expect(JSON.stringify(prematureWorkComplete.error?.next)).toContain("project-ledger work update");
+  expect(prematureWorkComplete.error?.native_next).toContainEqual(expect.objectContaining({
+    tool: "project_ledger_work_update",
+    args: expect.objectContaining({ id: "W-SANDY", status: "review" }),
+  }));
 
   const started = await executor({
     name: "project_ledger_task_update",
@@ -304,6 +349,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_status")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_list")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_show")?.concurrencySafe).toBe(true);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_index")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_create")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_update")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_work_complete")?.concurrencySafe).toBe(false);
@@ -2216,6 +2262,7 @@ test("work dashboard tool schemas expose status and control contracts", () => {
 
 test("Project Ledger tool schemas expose bounded project management wrappers", () => {
   const nativeStatus = BUTLER_TOOLS.find((item) => item.name === "project_ledger_status");
+  const nativeIndex = BUTLER_TOOLS.find((item) => item.name === "project_ledger_index");
   const nativeList = BUTLER_TOOLS.find((item) => item.name === "project_ledger_list");
   const nativeCreate = BUTLER_TOOLS.find((item) => item.name === "project_ledger_create");
   const nativeTaskComplete = BUTLER_TOOLS.find((item) => item.name === "project_ledger_task_complete");
@@ -2226,6 +2273,8 @@ test("Project Ledger tool schemas expose bounded project management wrappers", (
 
   expect(nativeStatus?.parameters.required).toEqual([]);
   expect(Object.keys(nativeStatus?.parameters.properties ?? {})).toEqual(["project_path"]);
+  expect(nativeIndex?.parameters.required).toEqual([]);
+  expect(Object.keys(nativeIndex?.parameters.properties ?? {})).toEqual(["project_path"]);
   expect(nativeList?.parameters.required).toEqual(["kind"]);
   expect(Object.keys(nativeList?.parameters.properties ?? {})).toEqual(["project_path", "kind", "status", "query", "limit"]);
   expect(nativeCreate?.parameters.required).toEqual(["kind", "id", "title"]);
@@ -3664,6 +3713,27 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
     rawArguments: "{}",
   }) as Record<string, any>;
   expect(nativeShownUpdatedTask.data.body).toContain("Updated through project_ledger_task_update.");
+
+  const staleCheck = await execute({
+    name: "project_ledger_check",
+    args: { project_path: projectPath, verbose: true },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(staleCheck.ok).toBe(false);
+  expect(staleCheck.recoverable).toBe(true);
+  expect(JSON.stringify(staleCheck.error.next)).toContain("project-ledger index");
+  expect(staleCheck.error.native_next).toContainEqual(expect.objectContaining({
+    tool: "project_ledger_index",
+    args: {},
+  }));
+
+  const nativeIndexed = await execute({
+    name: "project_ledger_index",
+    args: { project_path: projectPath },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(nativeIndexed.ok).toBe(true);
+  expect(nativeIndexed.data.index.path).toBe("project-ledger/projects/ledger-demo/index/project.json");
 
   const rendered = await execute({
     name: "render_project_dashboard",

@@ -12,6 +12,7 @@ import {
 } from "./records.js";
 import { gitCommitEvidence } from "./git-evidence.js";
 import { assertTransition, completionGateIssues } from "./state-machine.js";
+import { refreshDerivedIndexAfterMutation } from "./indexer.js";
 
 export const TOP_LEVEL_RECORD_KINDS = new Set([
   "initiative",
@@ -184,7 +185,7 @@ export function writeAndReturn(project, filePath, data, body = null, eventType =
     path: projectRelative(project, filePath),
     source: "project-ledger",
   });
-  return record;
+  return refreshDerivedIndexAfterMutation(project, record);
 }
 
 export function createRecord(project, options) {
@@ -243,5 +244,5 @@ export function updateRecord(project, options) {
     path: projectRelative(project, filePath),
     source: "project-ledger",
   });
-  return readRecord(project, filePath);
+  return refreshDerivedIndexAfterMutation(project, readRecord(project, filePath));
 }

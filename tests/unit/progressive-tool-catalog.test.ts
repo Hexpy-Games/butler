@@ -99,6 +99,16 @@ test("Project Ledger mutation tools are discoverable in the progressive native c
       "complete",
     ]),
   }));
+  expect(byName.get("project_ledger_index")).toEqual(expect.objectContaining({
+    id: "native:project_ledger_index",
+    category: "project",
+    riskLevel: "high",
+    enabled: true,
+    tags: expect.arrayContaining([
+      "project-ledger",
+      "native",
+    ]),
+  }));
 
   const search = createToolSearchToolHandler({
     butlerData: "/tmp/butler-test",
@@ -113,6 +123,18 @@ test("Project Ledger mutation tools are discoverable in the progressive native c
   expect(result.results).toContainEqual(expect.objectContaining({
     id: "native:project_ledger_task_complete",
     name: "project_ledger_task_complete",
+    enabled: true,
+  }));
+
+  const indexResult = await search({ args: { query: "project ledger index", provider: "native" } }) as {
+    ok: boolean;
+    results: Array<{ name: string; enabled: boolean; id: string }>;
+  };
+
+  expect(indexResult.ok).toBe(true);
+  expect(indexResult.results).toContainEqual(expect.objectContaining({
+    id: "native:project_ledger_index",
+    name: "project_ledger_index",
     enabled: true,
   }));
 });

@@ -7,6 +7,7 @@ import {
   projectLedgerRenderedViewEvidence,
   runProjectLedgerTool,
 } from "../../../integrations/project-ledger/client.ts";
+import { projectLedgerNativeNextHints } from "./recovery-hints.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type ProjectLedgerExecutorInput = {
@@ -47,6 +48,7 @@ const recordFields = {
 } satisfies Record<string, Record<string, unknown>>;
 
 const toolSpecs = [
+  { name: "project_ledger_index", description: "Rebuild the Project Ledger compact index for the resolved project path.", properties: { project_path: recordFields.project_path }, mutates: true },
   { name: "project_ledger_status", description: "Return canonical Project Ledger project summary, stale state, and next actions.", properties: { project_path: recordFields.project_path }, mutates: false },
   { name: "project_ledger_list", description: "List bounded Project Ledger records by kind with optional status and text filtering.", required: ["kind"], properties: { project_path: recordFields.project_path, kind: recordFields.kind, status: recordFields.status, query: recordFields.query, limit: recordFields.limit }, mutates: false },
   { name: "project_ledger_show", description: "Show one Project Ledger record summary, optionally including its Markdown body.", required: ["id"], properties: { project_path: recordFields.project_path, kind: recordFields.kind, id: recordFields.id, include_body: recordFields.include_body }, mutates: false },
@@ -89,6 +91,7 @@ const projectLedgerTags = [
   "state transition",
   "closeout",
   "complete",
+  "index",
   "render",
   "check",
   "native",
@@ -153,6 +156,7 @@ function runProjectLedgerNativeTool(
 
 function commandForTool(toolName: string, args: Record<string, unknown>, projectPath: string): string[] {
   const project = ["--project", projectPath];
+  if (toolName === "project_ledger_index") return ["index", ...project];
   if (toolName === "project_ledger_status") return ["status", ...project];
   if (toolName === "project_ledger_list") return ["query", ...project, "--kind", requireString(args, "kind")];
   if (toolName === "project_ledger_show") return ["record", "show", ...project, ...recordIdentityArgs(args), ...booleanFlag(args, "include_body", "body")];
@@ -250,28 +254,14 @@ function applyListBounds(result: Record<string, unknown>, args: Record<string, u
 function withRecoverableProjectLedgerError(result: Record<string, unknown>): Record<string, unknown> {
   if (result.ok !== false || !result.error || typeof result.error !== "object" || Array.isArray(result.error)) return result;
   const error = result.error as Record<string, unknown>;
-  const code = typeof error.code === "string" ? error.code : "";
-  const next = recoverableNextHints(code);
-  if (next.length === 0) return result;
+  const nativeNext = projectLedgerNativeNextHints(error);
+  if (nativeNext.length === 0) return result;
   return {
     ...result,
     recoverable: true,
     error: {
       ...error,
-      next: Array.isArray(error.next) && error.next.length > 0 ? error.next : next,
+      native_next: nativeNext,
     },
   };
-}
-
-function recoverableNextHints(code: string): string[] {
-  if (code === "record_not_found") return ["Run project_ledger_list with the expected kind, then retry with the exact id."];
-  if (code === "ambiguous_record") return ["Retry with the kind field so Project Ledger can resolve the intended record."];
-  if (code === "invalid_state") return ["Inspect the record with project_ledger_show and choose a valid state for its kind."];
-  if (code === "invalid_transition") return ["Use the kind-specific update or complete tool and transition through the next valid lifecycle state."];
-  if (code === "completion_gate_failed") return ["Add the missing completion evidence fields, then retry project_ledger_work_complete."];
-  if (code === "project_ledger_check_failed") return ["Review data.issues, fix the reported Project Ledger records, then rerun project_ledger_check."];
-  if (code === "invalid_input" || code === "invalid_arguments") {
-    return ["Correct the required arguments or metadata fields and retry the same Project Ledger tool."];
-  }
-  return [];
 }
