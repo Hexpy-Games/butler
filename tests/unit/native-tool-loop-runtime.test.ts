@@ -145,6 +145,29 @@ function readOnlyPersistedTurnContextAtom(): Record<string, unknown> | null {
   return JSON.parse(readFileSync(join(dir, files[0]), "utf8")) as Record<string, unknown>;
 }
 
+function runtimeLedgerRecord(
+  id: string,
+  kind: string,
+  title: string,
+  status: string,
+  parentId: string | null = null,
+) {
+  return { id, kind, title, status, parentId };
+}
+
+function writeRuntimeProjectLedgerIndex(
+  projectId: string,
+  records: Array<ReturnType<typeof runtimeLedgerRecord>>,
+): void {
+  const indexDir = join(tempDir, "project-ledger", "projects", projectId, "index");
+  mkdirSync(indexDir, { recursive: true });
+  writeFileSync(
+    join(indexDir, "project.json"),
+    JSON.stringify({ schema: "project-ledger.index.v1", records }, null, 2),
+    "utf8",
+  );
+}
+
 test("native runtime injects Project Ledger Runtime Context only for project-origin sessions", async () => {
   const prompts: string[] = [];
   const runtime = new NativeToolLoopRuntime({
@@ -9073,6 +9096,62 @@ test("native runtime continues instead of delivering while direct todo work is u
   });
   expect(streams).toHaveLength(1);
   expect(streams[0].state).toBe("complete");
+});
+
+test("native runtime blocks final delivery when Project Ledger task refs remain open", async () => {
+  writeFileSync(join(tempDir, "package.json"), JSON.stringify({ name: "sandy-bot" }), "utf8");
+  writeRuntimeProjectLedgerIndex("sandy-bot", [
+    runtimeLedgerRecord("W-SANDY-MEMORY-CHUNK-CHECKPOINT", "work", "Sandy message chunk and checkpoint model", "specified"),
+    runtimeLedgerRecord(
+      "T-SANDY-052-CHUNK-CHECKPOINT-TESTS",
+      "task",
+      "Add chunk/checkpoint integration tests",
+      "todo",
+      "W-SANDY-MEMORY-CHUNK-CHECKPOINT",
+    ),
+  ]);
+
+  const prompts: string[] = [];
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      prompts.push(input.prompt);
+      if (prompts.length === 1) {
+        return "T-SANDY-051까지 완료했습니다. 다음 시작점은 `T-SANDY-052-CHUNK-CHECKPOINT-TESTS`입니다.";
+      }
+      return "통합 테스트 구현과 검증까지 완료했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/project-ledger-final-guard",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+    metadata: { projectId: "sandy-bot" },
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "중간에 턴 종료하지말고 모든 작업이 끝날때까지 계속 이어서해." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload as Record<string, unknown> | undefined });
+    },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(prompts).toHaveLength(2);
+  expect(prompts[1]).toContain("Direct Work Continuation");
+  expect(prompts[1]).toContain("Add chunk/checkpoint integration tests");
+  expect(result.text).toBe("통합 테스트 구현과 검증까지 완료했습니다.");
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.find((event) => event.kind === "turn.observation")?.payload)
+    .toMatchObject({ kind: "completion_gap" });
 });
 
 test("native runtime does not keep extending direct work from finalization", async () => {
