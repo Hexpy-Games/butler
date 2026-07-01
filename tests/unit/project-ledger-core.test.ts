@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { pathToFileURL } from "url";
@@ -27,6 +27,22 @@ function testButlerData(project: string): string {
 
 function ledgerProjectRoot(project: string, id = "demo"): string {
   return join(testButlerData(project), "project-ledger", "projects", id);
+}
+
+function writeWork(project: string, id: string, frontmatter: Record<string, string>): string {
+  const dir = join(ledgerProjectRoot(project), "work", id);
+  mkdirSync(dir, { recursive: true });
+  const body = [
+    "---",
+    ...Object.entries(frontmatter).map(([key, value]) => `${key}: ${value}`),
+    "---",
+    "",
+    `# ${frontmatter.title ?? id}`,
+    "",
+  ].join("\n");
+  const path = join(dir, "work.md");
+  writeFileSync(path, body, "utf8");
+  return path;
 }
 
 function useTestButlerData(project: string): () => void {
@@ -288,6 +304,118 @@ test("Project Ledger status refreshes stored view freshness after render", async
 
     expect(handle("check", [], { project }).ok).toBe(true);
     expect(handle("status", [], { project }).staleViews).toEqual([]);
+  } finally {
+    restoreButlerData();
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("Project Ledger mutations refresh the compact index before returning", async () => {
+  const project = tempProject();
+  const restoreButlerData = useTestButlerData(project);
+  try {
+    const { handle } = await importModule("commands.js");
+
+    handle("init", [], { project, id: "demo", name: "Demo Project" });
+    const created = handle("work", ["create"], {
+      project,
+      id: "W-MUTATION-REFRESH",
+      title: "Mutation refresh test",
+      spec: "docs/specs/project-ledger.md",
+      acceptance: "Mutation commands refresh compact index",
+      status: "proposed",
+    });
+
+    expect(created.derived.index_refresh.ok).toBe(true);
+    const indexPath = join(ledgerProjectRoot(project), "index", "project.json");
+    expect(existsSync(indexPath)).toBe(true);
+    expect(JSON.parse(readFileSync(indexPath, "utf8")).records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "W-MUTATION-REFRESH", status: "proposed" }),
+      ]),
+    );
+
+    handle("work", ["update"], {
+      project,
+      id: "W-MUTATION-REFRESH",
+      status: "scoped",
+    });
+    expect(JSON.parse(readFileSync(indexPath, "utf8")).records).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "W-MUTATION-REFRESH", status: "scoped" }),
+      ]),
+    );
+  } finally {
+    restoreButlerData();
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("Project Ledger reads rebuild from source when the compact index is stale", async () => {
+  const project = tempProject();
+  const restoreButlerData = useTestButlerData(project);
+  try {
+    const { handle } = await importModule("commands.js");
+    const { loadIndex, queryIndex, readIndex } = await importModule("indexer.js");
+
+    handle("init", [], { project, id: "demo", name: "Demo Project" });
+    handle("work", ["create"], {
+      project,
+      id: "W-STALE-BASE",
+      title: "Base indexed work",
+      spec: "docs/specs/project-ledger.md",
+      acceptance: "Initial index exists",
+      status: "proposed",
+    });
+    handle("index", [], { project });
+
+    const indexPath = join(ledgerProjectRoot(project), "index", "project.json");
+    const past = new Date(Date.now() - 5000);
+    utimesSync(indexPath, past, past);
+
+    writeWork(project, "W-STALE-SOURCE", {
+      schema: "project-ledger.work.v1",
+      kind: "work",
+      id: "W-STALE-SOURCE",
+      title: "Manual source truth",
+      status: "specified",
+      spec: "docs/specs/project-ledger.md",
+      acceptance: "Reads must trust source over stale cache",
+    });
+
+    expect(readIndex(project).index.stale).toBe(true);
+    const nextActions = queryIndex(loadIndex(project), "next-actions").map((item: any) => item.id);
+    expect(nextActions).toContain("W-STALE-SOURCE");
+    expect(readIndex(project).index.stale).toBe(false);
+  } finally {
+    restoreButlerData();
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("Project Ledger reads answer from source when the compact index cannot be rewritten", async () => {
+  const project = tempProject();
+  const restoreButlerData = useTestButlerData(project);
+  try {
+    const { handle } = await importModule("commands.js");
+    const { loadIndex, queryIndex } = await importModule("indexer.js");
+
+    handle("init", [], { project, id: "demo", name: "Demo Project" });
+    handle("work", ["create"], {
+      project,
+      id: "W-READ-FALLBACK",
+      title: "Read fallback work",
+      spec: "docs/specs/project-ledger.md",
+      acceptance: "Reads use source truth when cache writes fail",
+      status: "specified",
+    });
+
+    const indexPath = join(ledgerProjectRoot(project), "index", "project.json");
+    rmSync(indexPath, { force: true });
+    mkdirSync(indexPath, { recursive: true });
+
+    expect(handle("status", [], { project }).nextActions.map((item: any) => item.id)).toContain("W-READ-FALLBACK");
+    expect(queryIndex(loadIndex(project), "next-actions").map((item: any) => item.id)).toContain("W-READ-FALLBACK");
   } finally {
     restoreButlerData();
     rmSync(project, { recursive: true, force: true });
