@@ -5,6 +5,7 @@ import {
 } from "../../../integrations/project-ledger/client.ts";
 import { createEvidenceCapabilityReceipt } from "../../output/evidence/ledger.ts";
 import { createWorkDashboard } from "../../work/work-dashboard.ts";
+import { createProjectLedgerNativeToolHandler } from "./native.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type ProjectLedgerExecutorInput = {
@@ -82,28 +83,8 @@ export function createProjectLedgerToolHandlers(input: ProjectLedgerExecutorInpu
       };
     },
     "complete_project_work": async (call: ToolCall) => {
-      const id = typeof call.args.id === "string" ? call.args.id.trim() : "";
-      const validation = typeof call.args.validation === "string" ? call.args.validation.trim() : "";
-      const review = typeof call.args.review === "string" ? call.args.review.trim() : "";
-      const report = typeof call.args.report === "string" ? call.args.report.trim() : "";
-      if (!id) throw new Error("complete_project_work requires id");
-      if (!validation || !review || !report) {
-        throw new Error("complete_project_work requires validation review and report");
-      }
-      return runProjectLedgerTool(input, [
-        "work",
-        "complete",
-        "--project",
-        projectLedgerProjectPath(input, call.args),
-        "--id",
-        id,
-        "--validation",
-        validation,
-        "--review",
-        review,
-        "--report",
-        report,
-      ]);
+      const handler = createProjectLedgerNativeToolHandler(input, "project_ledger_work_complete");
+      return handler(call);
     },
   };
 }

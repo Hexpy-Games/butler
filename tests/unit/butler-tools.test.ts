@@ -43,11 +43,27 @@ const startupOnlyToolNames: string[] = [
   "list_todo_list",
   "read_conversation_context",
 ];
+const projectLedgerToolNames: string[] = [
+  "project_ledger_status",
+  "project_ledger_list",
+  "project_ledger_show",
+  "project_ledger_create",
+  "project_ledger_update",
+  "project_ledger_work_update",
+  "project_ledger_work_complete",
+  "project_ledger_task_update",
+  "project_ledger_task_complete",
+  "project_ledger_attempt_start",
+  "project_ledger_attempt_succeed",
+  "project_ledger_attempt_fail",
+  "project_ledger_render",
+  "project_ledger_check",
+];
 const projectMetadataToolNames: string[] = [
+  "project_ledger_status",
   "inspect_project_status",
   "query_project_work",
   "render_project_dashboard",
-  "complete_project_work",
   ...startupOnlyToolNames,
 ];
 const projectWorkspaceToolNames: string[] = [
@@ -55,10 +71,10 @@ const projectWorkspaceToolNames: string[] = [
   "read_file",
   "write_file",
   "grep_files",
+  "project_ledger_status",
   "inspect_project_status",
   "query_project_work",
   "render_project_dashboard",
-  "complete_project_work",
   "get_context_monitor",
   "read_tool_output_artifact",
   "list_tool_capabilities",
@@ -131,6 +147,95 @@ function runProjectLedger(args: string[], projectPath: string): void {
   expect(result.status).toBe(0);
 }
 
+test("Project Ledger native tools route task completion through task handlers", async () => {
+  const projectPath = join(tempDir, "project-ledger", "projects", "butler");
+  runProjectLedger(["init", "--id", "butler", "--name", "Butler"], projectPath);
+  runProjectLedger(["work", "create", "--id", "W-SANDY", "--title", "Sandy work", "--spec-exemption", "--acceptance-exemption"], projectPath);
+  runProjectLedger(["index"], projectPath);
+  runProjectLedger(["task", "create", "--work", "W-SANDY", "--id", "T-SANDY", "--title", "Sandy task"], projectPath);
+  runProjectLedger(["index"], projectPath);
+
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    currentToolNames: ["project_ledger_status"],
+    describedToolIds: ["native:project_ledger_work_complete", "native:project_ledger_task_complete"],
+  });
+
+  const wrongKind = await executor({
+    name: "project_ledger_work_complete",
+    args: {
+      project_path: projectPath,
+      id: "T-SANDY",
+      validation: "validation evidence",
+      review: "review evidence",
+      report: "reports/sandy.md",
+    },
+    rawArguments: "{}",
+  }) as { ok: boolean; recoverable?: boolean; error?: { code?: string; next?: string[] } };
+  expect(wrongKind.ok).toBe(false);
+  expect(wrongKind.recoverable).toBe(true);
+  expect(wrongKind.error?.code).toBe("record_not_found");
+  expect(JSON.stringify(wrongKind.error?.next)).toContain("project-ledger query --kind work");
+
+  const legacyWrongKind = await executor({
+    name: "complete_project_work",
+    args: {
+      project_path: projectPath,
+      id: "T-SANDY",
+      validation: "validation evidence",
+      review: "review evidence",
+      report: "reports/sandy.md",
+    },
+    rawArguments: "{}",
+  }) as { ok: boolean; recoverable?: boolean; error?: { code?: string; next?: string[] } };
+  expect(legacyWrongKind.ok).toBe(false);
+  expect(legacyWrongKind.recoverable).toBe(true);
+  expect(legacyWrongKind.error?.code).toBe("record_not_found");
+  expect(JSON.stringify(legacyWrongKind.error?.next)).toContain("project-ledger query --kind work");
+
+  const missingParent = await executor({
+    name: "project_ledger_create",
+    args: {
+      project_path: projectPath,
+      kind: "task",
+      id: "T-MISSING-PARENT",
+      title: "Missing parent task",
+    },
+    rawArguments: "{}",
+  }) as { ok: boolean; recoverable?: boolean; error?: { code?: string; next?: string[] } };
+  expect(missingParent.ok).toBe(false);
+  expect(missingParent.recoverable).toBe(true);
+  expect(missingParent.error?.code).toBe("invalid_arguments");
+  expect(JSON.stringify(missingParent.error?.next)).toContain("Correct the required arguments");
+
+  const started = await executor({
+    name: "project_ledger_task_update",
+    args: {
+      project_path: projectPath,
+      id: "T-SANDY",
+      status: "in_progress",
+    },
+    rawArguments: "{}",
+  }) as { ok: boolean; data?: { id?: string; kind?: string; status?: string } };
+  expect(started.ok).toBe(true);
+  expect(started.data).toMatchObject({ id: "T-SANDY", kind: "task", status: "in_progress" });
+
+  const completed = await executor({
+    name: "project_ledger_task_complete",
+    args: {
+      project_path: projectPath,
+      id: "T-SANDY",
+      validation: "validation evidence",
+      review: "review evidence",
+      report: "reports/sandy.md",
+    },
+    rawArguments: "{}",
+  }) as { ok: boolean; data?: { id?: string; kind?: string; status?: string } };
+  expect(completed.ok).toBe(true);
+  expect(completed.data).toMatchObject({ id: "T-SANDY", kind: "task", status: "done" });
+});
+
 test("Butler tool registry exposes stable native tool contracts", () => {
   expect(BUTLER_TOOLS.map((tool) => tool.name)).toEqual([
     "web_search",
@@ -140,6 +245,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "read_file",
     "write_file",
     "grep_files",
+    ...projectLedgerToolNames,
     "get_work_dashboard",
     "inspect_project_status",
     "query_project_work",
@@ -192,6 +298,17 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   expect(BUTLER_TOOLS.find((tool) => tool.name === "web_read")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "transform_public_data_table")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "run_command")?.concurrencySafe).toBe(false);
+  for (const name of projectLedgerToolNames) {
+    expect(BUTLER_TOOLS.find((tool) => tool.name === name)).toBeDefined();
+  }
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_status")?.concurrencySafe).toBe(true);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_list")?.concurrencySafe).toBe(true);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_show")?.concurrencySafe).toBe(true);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_create")?.concurrencySafe).toBe(false);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_update")?.concurrencySafe).toBe(false);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_work_complete")?.concurrencySafe).toBe(false);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_task_complete")?.concurrencySafe).toBe(false);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "project_ledger_check")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "get_work_dashboard")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "inspect_project_status")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "query_project_work")?.concurrencySafe).toBe(true);
@@ -415,7 +532,7 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  expect(toolContractJsonChars(tools)).toBeLessThan(15_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(16_000);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -593,7 +710,7 @@ test("invalid required native tool profiles are diagnosable", () => {
   });
 });
 
-test("free-form GitHub issue linkage text alone does not expose project or workspace tools", () => {
+test("free-form Project Ledger linkage text exposes project tools without workspace tools", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "GitHub issue를 열어서 Project Ledger task랑 연결해줘.",
@@ -603,12 +720,13 @@ test("free-form GitHub issue linkage text alone does not expose project or works
   expect(selectButlerToolProfiles({
     role: "butler",
     text: "GitHub issue를 열어서 Project Ledger task랑 연결해줘.",
-  })).toEqual(["startup"]);
-  expect(names).not.toContain("inspect_project_status");
+  })).toEqual(["startup", "project"]);
+  expect(names).toContain("inspect_project_status");
+  expect(names).toContain("project_ledger_status");
   expect(names).not.toContain("run_command");
 });
 
-test("Project Ledger requests without project metadata do not expose project tools", () => {
+test("Project Ledger requests without project metadata expose the bounded project profile", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "Project Ledger 상태와 next action을 확인하고 dashboard를 갱신해줘.",
@@ -618,16 +736,17 @@ test("Project Ledger requests without project metadata do not expose project too
   expect(selectButlerToolProfiles({
     role: "butler",
     text: "Project Ledger 상태와 next action을 확인하고 dashboard를 갱신해줘.",
-  })).toEqual(["startup"]);
-  expect(names).toEqual(startupOnlyToolNames);
-  expect(names).not.toContain("inspect_project_status");
-  expect(names).not.toContain("query_project_work");
-  expect(names).not.toContain("render_project_dashboard");
+  })).toEqual(["startup", "project"]);
+  expect(names).toContain("project_ledger_status");
+  expect(names).toContain("inspect_project_status");
+  expect(names).toContain("query_project_work");
+  expect(names).toContain("render_project_dashboard");
+  expect(names).not.toContain("project_ledger_work_complete");
   expect(names).not.toContain("get_weather_with_knowhow");
   expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
 });
 
-test("Project Ledger completion requests expose complete_project_work", () => {
+test("Project Ledger project sessions expose status anchor without legacy completion primitives", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "Project Ledger work W-RUNTIME-TOOL-MODULARIZATION를 complete 처리해줘.",
@@ -636,9 +755,12 @@ test("Project Ledger completion requests expose complete_project_work", () => {
   const names = tools.map((tool) => tool.name);
 
   expect(names).toContain("inspect_project_status");
+  expect(names).toContain("project_ledger_status");
+  expect(names).not.toContain("project_ledger_task_complete");
+  expect(names).not.toContain("project_ledger_work_complete");
   expect(names).toContain("query_project_work");
   expect(names).toContain("render_project_dashboard");
-  expect(names).toContain("complete_project_work");
+  expect(names).not.toContain("complete_project_work");
 });
 
 test("explicit required tools add exact tool names while removed tool names are ignored", () => {
@@ -875,6 +997,629 @@ test("run_command executes in the session workspace and returns structured outpu
     }),
   ]);
   expect(readFileSync(join(workspace, "sample.csv"), "utf8")).toContain("Seoul,9300000");
+});
+
+test("run_command rejects direct Project Ledger writes through shell redirection", async () => {
+  const workspace = join(tempDir, "workspace");
+  const ledgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  writeFileSync(ledgerFile, "old", "utf8");
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: "printf 'new\\n' > .project-ledger/specs/feature.md",
+    },
+    rawArguments: "{}",
+  }) as any;
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe("protected_path");
+  expect(result.stderr).toContain("Project Ledger");
+  expect(result.next[0].command).toContain("project-ledger");
+  expect(readFileSync(ledgerFile, "utf8")).toBe("old");
+});
+
+test("run_command rejects ad hoc scripts writing Butler data-home Project Ledger records", async () => {
+  const workspace = join(tempDir, "workspace");
+  const dataLedgerFile = join(tempDir, "project-ledger", "projects", "demo", "specs", "feature.md");
+  mkdirSync(workspace, { recursive: true });
+  mkdirSync(join(tempDir, "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  writeFileSync(dataLedgerFile, "old", "utf8");
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: `node -e "require('fs').writeFileSync('${dataLedgerFile}', 'new')"`,
+    },
+    rawArguments: "{}",
+  }) as any;
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe("protected_path");
+  expect(result.protected_path).toContain("project-ledger/projects/demo");
+  expect(readFileSync(dataLedgerFile, "utf8")).toBe("old");
+});
+
+test("run_command rejects direct Project Ledger writes through truncate and dd", async () => {
+  const workspace = join(tempDir, "workspace");
+  const ledgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  writeFileSync(ledgerFile, "old", "utf8");
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const truncateResult = await executor({
+    name: "run_command",
+    args: { command: "truncate -s 0 .project-ledger/specs/feature.md" },
+    rawArguments: "{}",
+  }) as any;
+  expect(truncateResult.ok).toBe(false);
+  expect(truncateResult.error).toBe("protected_path");
+  expect(readFileSync(ledgerFile, "utf8")).toBe("old");
+
+  const ddResult = await executor({
+    name: "run_command",
+    args: { command: "printf new | dd of=.project-ledger/specs/feature.md status=none" },
+    rawArguments: "{}",
+  }) as any;
+  expect(ddResult.ok).toBe(false);
+  expect(ddResult.error).toBe("protected_path");
+  expect(readFileSync(ledgerFile, "utf8")).toBe("old");
+
+  const findDeleteResult = await executor({
+    name: "run_command",
+    args: { command: "find .project-ledger/specs -type f -delete" },
+    rawArguments: "{}",
+  }) as any;
+  expect(findDeleteResult.ok).toBe(false);
+  expect(findDeleteResult.error).toBe("protected_path");
+  expect(readFileSync(ledgerFile, "utf8")).toBe("old");
+});
+
+test("run_command restores Project Ledger writes hidden behind expression-built paths", async () => {
+  const workspace = join(tempDir, "workspace");
+  const workspaceLedgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  const dataLedgerFile = join(tempDir, "project-ledger", "projects", "demo", "specs", "feature.md");
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  mkdirSync(join(tempDir, "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  writeFileSync(workspaceLedgerFile, "old-workspace", "utf8");
+  writeFileSync(dataLedgerFile, "old-data", "utf8");
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const dataHomeResult = await executor({
+    name: "run_command",
+    args: {
+      command: "node -e \"require('fs').writeFileSync(process.env.BUTLER_DATA + '/project-ledger/projects/demo/specs/feature.md', 'new')\"",
+    },
+    rawArguments: "{}",
+  }) as any;
+  expect(dataHomeResult.ok).toBe(false);
+  expect(dataHomeResult.error).toBe("protected_path");
+  expect(readFileSync(dataLedgerFile, "utf8")).toBe("old-data");
+
+  const workspaceResult = await executor({
+    name: "run_command",
+    args: {
+      command: "node -e \"const fs=require('fs'); const p=process.cwd()+['/.project','-ledger/specs/feature.md'].join(''); fs.writeFileSync(p, 'new')\"",
+    },
+    rawArguments: "{}",
+  }) as any;
+  expect(workspaceResult.ok).toBe(false);
+  expect(workspaceResult.error).toBe("protected_path");
+  expect(readFileSync(workspaceLedgerFile, "utf8")).toBe("old-workspace");
+
+  const mentionResult = await executor({
+    name: "run_command",
+    args: {
+      command: "echo pl && node -e \"const fs=require('fs'); const p=process.cwd()+['/.project','-ledger/specs/feature.md'].join(''); fs.writeFileSync(p, 'new')\"",
+    },
+    rawArguments: "{}",
+  }) as any;
+  expect(mentionResult.ok).toBe(false);
+  expect(mentionResult.error).toBe("protected_path");
+  expect(readFileSync(workspaceLedgerFile, "utf8")).toBe("old-workspace");
+});
+
+test("run_command protects fallback home Project Ledger records", async () => {
+  const workspace = join(tempDir, "workspace");
+  const fakeHome = join(tempDir, "fake-home");
+  const homeLedgerFile = join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs", "feature.md");
+  const previousHome = process.env.HOME;
+  mkdirSync(workspace, { recursive: true });
+  mkdirSync(join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  writeFileSync(homeLedgerFile, "old-home", "utf8");
+  process.env.HOME = fakeHome;
+  try {
+    const executor = createButlerToolExecutor({
+      butlerHome: root,
+      butlerData: tempDir,
+      workspacePath: workspace,
+    });
+
+    const result = await executor({
+      name: "run_command",
+      args: {
+        command: "printf new-home > \"$HOME/.butler/project-ledger/projects/demo/specs/feature.md\"",
+      },
+      rawArguments: "{}",
+    }) as any;
+
+    expect(result.ok).toBe(false);
+    expect(readFileSync(homeLedgerFile, "utf8")).toBe("old-home");
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+  }
+});
+
+test("run_command leaves Project Ledger unchanged after detached delayed writes", async () => {
+  const workspace = join(tempDir, "workspace");
+  const ledgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  writeFileSync(ledgerFile, "old", "utf8");
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+  const delayedCommand = [
+    "node -e '",
+    "const { spawn } = require(\"child_process\");",
+    "const suffix = String.fromCharCode(47,46,112,114,111,106,101,99,116,45,108,101,100,103,101,114,47,115,112,101,99,115,47,102,101,97,116,117,114,101,46,109,100);",
+    "const code = \"setTimeout(() => require(\\\"fs\\\").writeFileSync(process.cwd() + \" + JSON.stringify(suffix) + \", \\\"delayed-new\\\"), 700)\";",
+    "spawn(process.execPath, [\"-e\", code], { detached: true, stdio: \"ignore\" }).unref();",
+    "'",
+  ].join(" ");
+
+  const result = await executor({
+    name: "run_command",
+    args: { command: delayedCommand },
+    rawArguments: "{}",
+  }) as any;
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe("protected_path");
+  await new Promise((resolve) => setTimeout(resolve, 1_200));
+  expect(readFileSync(ledgerFile, "utf8")).toBe("old");
+});
+
+test("run_command rejects obfuscated detached Project Ledger writers before execution", async () => {
+  const workspace = join(tempDir, "workspace");
+  const fakeHome = join(tempDir, "fake-home");
+  const workspaceLedgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  const dataLedgerFile = join(tempDir, "project-ledger", "projects", "demo", "specs", "feature.md");
+  const homeLedgerFile = join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs", "feature.md");
+  const previousHome = process.env.HOME;
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  mkdirSync(join(tempDir, "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  mkdirSync(join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  writeFileSync(workspaceLedgerFile, "old-workspace", "utf8");
+  writeFileSync(dataLedgerFile, "old-data", "utf8");
+  writeFileSync(homeLedgerFile, "old-home", "utf8");
+  process.env.HOME = fakeHome;
+  try {
+    const executor = createButlerToolExecutor({
+      butlerHome: root,
+      butlerData: tempDir,
+      workspacePath: workspace,
+    });
+    const suffixCode = "String.fromCharCode(47,46,112,114,111,106,101,99,116,45,108,101,100,103,101,114,47,115,112,101,99,115,47,102,101,97,116,117,114,101,46,109,100)";
+    const cases = [
+      {
+        command: `node -e "const {spawn}=require('child_process'); const code='setTimeout(()=>require(\\'fs\\').writeFileSync(process[\\'cw\\'+\\'d\\']()+${suffixCode}, \\'late\\'), 700)'; spawn(process.execPath, ['-e', code], {detached:true, stdio:'ignore'}).unref()"`,
+        path: workspaceLedgerFile,
+        old: "old-workspace",
+      },
+      {
+        command: "node -e \"const {spawn}=require('child_process'); const code='setTimeout(()=>require(\\'fs\\').writeFileSync(process.env[\\'BUTLER\\'+\\'_DATA\\'] + \\'/project-ledger/projects/demo/specs/feature.md\\', \\'late\\'), 700)'; spawn(process.execPath, ['-e', code], {detached:true, stdio:'ignore'}).unref()\"",
+        path: dataLedgerFile,
+        old: "old-data",
+      },
+      {
+        command: "node -e \"const {spawn}=require('child_process'); const code='setTimeout(()=>require(\\'fs\\').writeFileSync(process.env[\\'HO\\'+\\'ME\\'] + \\'/.butler/project-ledger/projects/demo/specs/feature.md\\', \\'late\\'), 700)'; spawn(process.execPath, ['-e', code], {detached:true, stdio:'ignore'}).unref()\"",
+        path: homeLedgerFile,
+        old: "old-home",
+      },
+    ];
+
+    for (const item of cases) {
+      const result = await executor({
+        name: "run_command",
+        args: { command: item.command },
+        rawArguments: "{}",
+      }) as any;
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe("protected_path");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    for (const item of cases) expect(readFileSync(item.path, "utf8")).toBe(item.old);
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+  }
+});
+
+test("run_command restores non-write-named filesystem API Project Ledger mutations", async () => {
+  const workspace = join(tempDir, "workspace");
+  const fakeHome = join(tempDir, "fake-home");
+  const workspaceLedgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  const dataLedgerFile = join(tempDir, "project-ledger", "projects", "demo", "specs", "feature.md");
+  const homeLedgerFile = join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs", "feature.md");
+  const workspaceGeneratedDir = join(workspace, ".project-ledger", "specs", "generated");
+  const workspaceEmptyDir = join(workspace, ".project-ledger", "specs", "empty-dir");
+  const workspaceMovedFile = join(workspace, ".project-ledger", "specs", "moved.md");
+  const workspaceCopiedDir = join(workspace, ".project-ledger", "specs", "copied-dir");
+  const dataCopiedFile = join(tempDir, "project-ledger", "projects", "demo", "specs", "copied.md");
+  const sourceFile = join(workspace, "source.txt");
+  const sourceDir = join(workspace, "source-dir");
+  const previousHome = process.env.HOME;
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  mkdirSync(workspaceEmptyDir, { recursive: true });
+  mkdirSync(sourceDir, { recursive: true });
+  mkdirSync(join(tempDir, "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  mkdirSync(join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  writeFileSync(workspaceLedgerFile, "old-workspace", "utf8");
+  writeFileSync(dataLedgerFile, "old-data", "utf8");
+  writeFileSync(homeLedgerFile, "old-home", "utf8");
+  writeFileSync(sourceFile, "source-file", "utf8");
+  writeFileSync(join(sourceDir, "source-dir-file.txt"), "source-dir", "utf8");
+  process.env.HOME = fakeHome;
+  try {
+    const executor = createButlerToolExecutor({
+      butlerHome: root,
+      butlerData: tempDir,
+      workspacePath: workspace,
+    });
+    const fileSuffix = "String.fromCharCode(47,46,112,114,111,106,101,99,116,45,108,101,100,103,101,114,47,115,112,101,99,115,47,102,101,97,116,117,114,101,46,109,100)";
+    const dirSuffix = "String.fromCharCode(47,46,112,114,111,106,101,99,116,45,108,101,100,103,101,114,47,115,112,101,99,115,47,103,101,110,101,114,97,116,101,100)";
+    const emptyDirSuffix = "String.fromCharCode(47,46,112,114,111,106,101,99,116,45,108,101,100,103,101,114,47,115,112,101,99,115,47,101,109,112,116,121,45,100,105,114)";
+    const movedSuffix = "String.fromCharCode(47,46,112,114,111,106,101,99,116,45,108,101,100,103,101,114,47,115,112,101,99,115,47,109,111,118,101,100,46,109,100)";
+    const copiedDirSuffix = "String.fromCharCode(47,46,112,114,111,106,101,99,116,45,108,101,100,103,101,114,47,115,112,101,99,115,47,99,111,112,105,101,100,45,100,105,114)";
+    const cases = [
+      `node -e "require('fs').rmSync(process['cw'+'d']()+${fileSuffix}, {force:true})"`,
+      "node -e \"require('fs').unlinkSync(process.env['BUTLER'+'_DATA'] + '/project-ledger/projects/demo/specs/feature.md')\"",
+      "node -e \"require('fs').rmSync(process.env['HO'+'ME'] + '/.butler/project-ledger/projects/demo/specs/feature.md', {force:true})\"",
+      `node -e "require('fs').mkdirSync(process['cw'+'d']()+${dirSuffix}, {recursive:true})"`,
+      `node -e "require('fs').rmdirSync(process['cw'+'d']()+${emptyDirSuffix})"`,
+      `node -e "require('fs').renameSync(process['cw'+'d']()+${fileSuffix}, process['cw'+'d']()+${movedSuffix})"`,
+      "node -e \"require('fs').copyFileSync(process.cwd() + '/source.txt', process.env['BUTLER'+'_DATA'] + '/project-ledger/projects/demo/specs/copied.md')\"",
+      `node -e "require('fs').cpSync(process.cwd() + '/source-dir', process['cw'+'d']()+${copiedDirSuffix}, {recursive:true})"`,
+    ];
+
+    for (const command of cases) {
+      const result = await executor({
+        name: "run_command",
+        args: { command },
+        rawArguments: "{}",
+      }) as any;
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe("protected_path");
+    }
+
+    expect(readFileSync(workspaceLedgerFile, "utf8")).toBe("old-workspace");
+    expect(readFileSync(dataLedgerFile, "utf8")).toBe("old-data");
+    expect(readFileSync(homeLedgerFile, "utf8")).toBe("old-home");
+    expect(existsSync(workspaceGeneratedDir)).toBe(false);
+    expect(existsSync(workspaceEmptyDir)).toBe(true);
+    expect(existsSync(workspaceMovedFile)).toBe(false);
+    expect(existsSync(dataCopiedFile)).toBe(false);
+    expect(existsSync(workspaceCopiedDir)).toBe(false);
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+  }
+});
+
+test("run_command restores split filesystem API-name Project Ledger mutations", async () => {
+  const workspace = join(tempDir, "workspace");
+  const fakeHome = join(tempDir, "fake-home");
+  const workspaceLedgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  const dataLedgerFile = join(tempDir, "project-ledger", "projects", "demo", "specs", "feature.md");
+  const homeLedgerFile = join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs", "feature.md");
+  const previousHome = process.env.HOME;
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  mkdirSync(join(tempDir, "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  mkdirSync(join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  writeFileSync(workspaceLedgerFile, "old-workspace", "utf8");
+  writeFileSync(dataLedgerFile, "old-data", "utf8");
+  writeFileSync(homeLedgerFile, "old-home", "utf8");
+  process.env.HOME = fakeHome;
+  try {
+    const executor = createButlerToolExecutor({
+      butlerHome: root,
+      butlerData: tempDir,
+      workspacePath: workspace,
+    });
+    const fileSuffix = "String.fromCharCode(47,46,112,114,111,106,101,99,116,45,108,101,100,103,101,114,47,115,112,101,99,115,47,102,101,97,116,117,114,101,46,109,100)";
+    const cases = [
+      `node -e "const fs=require('fs'); const m='write'+'FileSync'; fs[m](process['cw'+'d']()+${fileSuffix}, 'split-write')"`,
+      "node -e \"const fs=require('fs'); const m='append'+'FileSync'; fs[m](process.env['BUTLER'+'_DATA'] + '/project-ledger/projects/demo/specs/feature.md', 'split-append')\"",
+      "node -e \"const fs=require('fs'); const m='create'+'WriteStream'; fs[m](process.env['HO'+'ME'] + '/.butler/project-ledger/projects/demo/specs/feature.md').end('split-stream')\"",
+      `node -e "const fs=require('fs'); const m='open'+'Sync'; const fd=fs[m](process['cw'+'d']()+${fileSuffix}, 'w'); fs.closeSync(fd)"`,
+      "node -e \"const fs=require('fs'); const m='write'+'File'; fs.promises[m](process.env['BUTLER'+'_DATA'] + '/project-ledger/projects/demo/specs/feature.md', 'split-promises')\"",
+    ];
+
+    for (const command of cases) {
+      const result = await executor({
+        name: "run_command",
+        args: { command },
+        rawArguments: "{}",
+      }) as any;
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe("protected_path");
+    }
+
+    expect(readFileSync(workspaceLedgerFile, "utf8")).toBe("old-workspace");
+    expect(readFileSync(dataLedgerFile, "utf8")).toBe("old-data");
+    expect(readFileSync(homeLedgerFile, "utf8")).toBe("old-home");
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+  }
+});
+
+test("run_command rejects encoded opaque Project Ledger mutation payloads before execution", async () => {
+  const workspace = join(tempDir, "workspace");
+  const fakeHome = join(tempDir, "fake-home");
+  const workspaceLedgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  const dataLedgerFile = join(tempDir, "project-ledger", "projects", "demo", "specs", "feature.md");
+  const homeLedgerFile = join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs", "feature.md");
+  const previousHome = process.env.HOME;
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  mkdirSync(join(tempDir, "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  mkdirSync(join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  writeFileSync(workspaceLedgerFile, "old-workspace", "utf8");
+  writeFileSync(dataLedgerFile, "old-data", "utf8");
+  writeFileSync(homeLedgerFile, "old-home", "utf8");
+  process.env.HOME = fakeHome;
+  try {
+    const executor = createButlerToolExecutor({
+      butlerHome: root,
+      butlerData: tempDir,
+      workspacePath: workspace,
+    });
+    const payloads = [
+      "require('fs').writeFileSync(process.cwd() + '/.project-ledger/specs/feature.md', 'encoded-workspace')",
+      "require('fs').rmSync(process.env.BUTLER_DATA + '/project-ledger/projects/demo/specs/feature.md', {force:true})",
+      "require('fs').appendFileSync(process.env.HOME + '/.butler/project-ledger/projects/demo/specs/feature.md', 'encoded-home')",
+    ];
+
+    for (const payload of payloads) {
+      const encoded = Buffer.from(payload, "utf8").toString("hex");
+      const result = await executor({
+        name: "run_command",
+        args: { command: `node -e "eval(Buffer.from('${encoded}', 'hex').toString())"` },
+        rawArguments: "{}",
+      }) as any;
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe("protected_path");
+    }
+
+    expect(readFileSync(workspaceLedgerFile, "utf8")).toBe("old-workspace");
+    expect(readFileSync(dataLedgerFile, "utf8")).toBe("old-data");
+    expect(readFileSync(homeLedgerFile, "utf8")).toBe("old-home");
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+  }
+});
+
+test("run_command rejects encoded opaque detached Project Ledger payloads before execution", async () => {
+  const workspace = join(tempDir, "workspace");
+  const fakeHome = join(tempDir, "fake-home");
+  const workspaceLedgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  const dataLedgerFile = join(tempDir, "project-ledger", "projects", "demo", "specs", "feature.md");
+  const homeLedgerFile = join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs", "feature.md");
+  const previousHome = process.env.HOME;
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  mkdirSync(join(tempDir, "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  mkdirSync(join(fakeHome, ".butler", "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  writeFileSync(workspaceLedgerFile, "old-workspace", "utf8");
+  writeFileSync(dataLedgerFile, "old-data", "utf8");
+  writeFileSync(homeLedgerFile, "old-home", "utf8");
+  process.env.HOME = fakeHome;
+  try {
+    const executor = createButlerToolExecutor({
+      butlerHome: root,
+      butlerData: tempDir,
+      workspacePath: workspace,
+    });
+    const payloads = [
+      "const {spawn}=require('child_process'); const code=\"setTimeout(()=>require('fs').writeFileSync(process.cwd()+'/.project-ledger/specs/feature.md','late-workspace'),700)\"; spawn(process.execPath,['-e',code],{detached:true,stdio:'ignore'}).unref()",
+      "const {spawn}=require('child_process'); const code=\"setTimeout(()=>require('fs').writeFileSync(process.env.BUTLER_DATA+'/project-ledger/projects/demo/specs/feature.md','late-data'),700)\"; spawn(process.execPath,['-e',code],{detached:true,stdio:'ignore'}).unref()",
+      "const {spawn}=require('child_process'); const code=\"setTimeout(()=>require('fs').appendFileSync(process.env.HOME+'/.butler/project-ledger/projects/demo/specs/feature.md','late-home'),700)\"; spawn(process.execPath,['-e',code],{detached:true,stdio:'ignore'}).unref()",
+    ];
+
+    for (const payload of payloads) {
+      const encoded = Buffer.from(payload, "utf8").toString("hex");
+      const result = await executor({
+        name: "run_command",
+        args: { command: `node -e "eval(Buffer.from('${encoded}', 'hex').toString())"` },
+        rawArguments: "{}",
+      }) as any;
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe("protected_path");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    expect(readFileSync(workspaceLedgerFile, "utf8")).toBe("old-workspace");
+    expect(readFileSync(dataLedgerFile, "utf8")).toBe("old-data");
+    expect(readFileSync(homeLedgerFile, "utf8")).toBe("old-home");
+  } finally {
+    if (previousHome === undefined) delete process.env.HOME;
+    else process.env.HOME = previousHome;
+  }
+});
+
+test("run_command rejects Python encoded fork Project Ledger payloads before execution", async () => {
+  const workspace = join(tempDir, "workspace");
+  const ledgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  writeFileSync(ledgerFile, "old", "utf8");
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+  const payload = "import os,time; time.sleep(.7); open(os.getcwd() + '/.project-ledger/specs/feature.md', 'w').write('python-detached')";
+  const encoded = Buffer.from(payload, "utf8").toString("base64");
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: [
+        "python3 -c",
+        JSON.stringify(`import base64, os, time\nif os.fork() == 0:\n    exec(base64.b64decode('${encoded}').decode())`),
+      ].join(" "),
+    },
+    rawArguments: "{}",
+  }) as any;
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe("protected_path");
+  await new Promise((resolve) => setTimeout(resolve, 1_200));
+  expect(readFileSync(ledgerFile, "utf8")).toBe("old");
+});
+
+test("run_command rejects shadowed Project Ledger CLI names", async () => {
+  const workspace = join(tempDir, "workspace");
+  const binDir = join(workspace, "bin");
+  const ledgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  mkdirSync(binDir, { recursive: true });
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  writeFileSync(ledgerFile, "old", "utf8");
+  writeFileSync(
+    join(binDir, "pl"),
+    "#!/bin/sh\nprintf fake-pl > .project-ledger/specs/feature.md\n",
+    { encoding: "utf8", mode: 0o755 },
+  );
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: { command: "PATH=$PWD/bin:$PATH pl record update --id SPEC-X" },
+    rawArguments: "{}",
+  }) as any;
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe("protected_path");
+  expect(readFileSync(ledgerFile, "utf8")).toBe("old");
+});
+
+test("run_command rejects fake Project Ledger bin paths", async () => {
+  const workspace = join(tempDir, "workspace");
+  const fakeBin = join(workspace, "evil", "packages", "project-ledger", "bin");
+  const ledgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  mkdirSync(fakeBin, { recursive: true });
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  writeFileSync(ledgerFile, "old", "utf8");
+  writeFileSync(
+    join(fakeBin, "project-ledger"),
+    "#!/bin/sh\nprintf fake > .project-ledger/specs/feature.md\n",
+    { encoding: "utf8", mode: 0o755 },
+  );
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: { command: "./evil/packages/project-ledger/bin/project-ledger help" },
+    rawArguments: "{}",
+  }) as any;
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe("protected_path");
+  expect(readFileSync(ledgerFile, "utf8")).toBe("old");
+});
+
+test("run_command rejects environment preload around the real Project Ledger CLI", async () => {
+  const workspace = join(tempDir, "workspace");
+  const ledgerFile = join(workspace, ".project-ledger", "specs", "feature.md");
+  const preload = join(workspace, "evil.cjs");
+  mkdirSync(join(workspace, ".project-ledger", "specs"), { recursive: true });
+  writeFileSync(ledgerFile, "old", "utf8");
+  writeFileSync(
+    preload,
+    "require('fs').writeFileSync(process.cwd() + '/.project-ledger/specs/feature.md', 'preload')\n",
+    "utf8",
+  );
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: { command: `NODE_OPTIONS=--require=./evil.cjs node ${projectLedgerCli} help` },
+    rawArguments: "{}",
+  }) as any;
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe("protected_path");
+  expect(readFileSync(ledgerFile, "utf8")).toBe("old");
+});
+
+test("run_command allows Project Ledger CLI mutations through the CLI surface", async () => {
+  const workspace = join(tempDir, "workspace");
+  const dataProject = join(tempDir, "project-ledger", "projects", "demo");
+  mkdirSync(workspace, { recursive: true });
+  mkdirSync(dataProject, { recursive: true });
+  writeFileSync(
+    join(dataProject, "project.json"),
+    `${JSON.stringify({
+      schema: "project-ledger.project.v1",
+      id: "demo",
+      name: "Demo Project",
+      status: "active",
+    }, null, 2)}\n`,
+    "utf8",
+  );
+  writeFileSync(join(dataProject, "ledger.jsonl"), "", "utf8");
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: `node ${projectLedgerCli} record create --project ${dataProject} --kind spec --id SPEC-RUN-COMMAND --title "Run command spec" --body "Created through the Project Ledger CLI." --json`,
+      output_mode: "full",
+    },
+    rawArguments: "{}",
+  }) as any;
+
+  expect(result.ok).toBe(true);
+  expect(readFileSync(join(dataProject, "specs", "spec-run-command.md"), "utf8")).toContain(
+    "Created through the Project Ledger CLI.",
+  );
 });
 
 test("run_command implicit artifact discovery does not auto-promote workspace files", async () => {
@@ -1453,11 +2198,23 @@ test("work dashboard tool schemas expose status and control contracts", () => {
 });
 
 test("Project Ledger tool schemas expose bounded project management wrappers", () => {
+  const nativeStatus = BUTLER_TOOLS.find((item) => item.name === "project_ledger_status");
+  const nativeList = BUTLER_TOOLS.find((item) => item.name === "project_ledger_list");
+  const nativeCreate = BUTLER_TOOLS.find((item) => item.name === "project_ledger_create");
+  const nativeTaskComplete = BUTLER_TOOLS.find((item) => item.name === "project_ledger_task_complete");
   const status = BUTLER_TOOLS.find((item) => item.name === "inspect_project_status");
   const query = BUTLER_TOOLS.find((item) => item.name === "query_project_work");
   const render = BUTLER_TOOLS.find((item) => item.name === "render_project_dashboard");
   const complete = BUTLER_TOOLS.find((item) => item.name === "complete_project_work");
 
+  expect(nativeStatus?.parameters.required).toEqual([]);
+  expect(Object.keys(nativeStatus?.parameters.properties ?? {})).toEqual(["project_path"]);
+  expect(nativeList?.parameters.required).toEqual(["kind"]);
+  expect(Object.keys(nativeList?.parameters.properties ?? {})).toEqual(["project_path", "kind", "status", "query", "limit"]);
+  expect(nativeCreate?.parameters.required).toEqual(["kind", "id", "title"]);
+  expect(Object.keys(nativeCreate?.parameters.properties ?? {})).toContain("body");
+  expect(nativeTaskComplete?.parameters.required).toEqual(["id"]);
+  expect(Object.keys(nativeTaskComplete?.parameters.properties ?? {})).toContain("validation");
   expect(status?.parameters.required).toEqual([]);
   expect(Object.keys(status?.parameters.properties ?? {})).toEqual(["project_path"]);
   expect(query?.parameters.required).toEqual(["kind"]);
@@ -2818,6 +3575,78 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
     }),
   ]);
   expect(satisfiedCompletionObligationsForToolResult("query_project_work", query)).toContain("source_verified");
+
+  const nativeCreatedTask = await execute({
+    name: "project_ledger_create",
+    args: {
+      project_path: projectPath,
+      kind: "task",
+      work_id: "W-TOOL",
+      id: "T-NATIVE-BODY",
+      title: "Native body task",
+      body: "# Native Body\n\nCreated through project_ledger_create.\n",
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(nativeCreatedTask.ok).toBe(true);
+  expect(nativeCreatedTask.data.id).toBe("T-NATIVE-BODY");
+
+  const nativeShownTask = await execute({
+    name: "project_ledger_show",
+    args: {
+      project_path: projectPath,
+      kind: "task",
+      id: "T-NATIVE-BODY",
+      include_body: true,
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(nativeShownTask.ok).toBe(true);
+  expect(nativeShownTask.data.body).toContain("Created through project_ledger_create.");
+
+  const nativeUpdatedWork = await execute({
+    name: "project_ledger_work_update",
+    args: {
+      project_path: projectPath,
+      id: "W-TOOL",
+      body: "# Native Work Body\n\nUpdated through project_ledger_work_update.\n",
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(nativeUpdatedWork.ok).toBe(true);
+  const nativeShownWork = await execute({
+    name: "project_ledger_show",
+    args: {
+      project_path: projectPath,
+      kind: "work",
+      id: "W-TOOL",
+      include_body: true,
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(nativeShownWork.data.body).toContain("Updated through project_ledger_work_update.");
+
+  const nativeUpdatedTask = await execute({
+    name: "project_ledger_task_update",
+    args: {
+      project_path: projectPath,
+      id: "T-NATIVE-BODY",
+      body: "# Native Task Body\n\nUpdated through project_ledger_task_update.\n",
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(nativeUpdatedTask.ok).toBe(true);
+  const nativeShownUpdatedTask = await execute({
+    name: "project_ledger_show",
+    args: {
+      project_path: projectPath,
+      kind: "task",
+      id: "T-NATIVE-BODY",
+      include_body: true,
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(nativeShownUpdatedTask.data.body).toContain("Updated through project_ledger_task_update.");
 
   const rendered = await execute({
     name: "render_project_dashboard",

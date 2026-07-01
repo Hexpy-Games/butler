@@ -6,6 +6,7 @@ import {
 
 export interface ToolSurfacePromptControllerInput {
   role: string;
+  message?: string;
   sessionMetadata?: Record<string, unknown>;
   turnMetadata?: Record<string, unknown>;
   providerCapabilities?: InitialToolSurfaceSelectionInput["providerCapabilities"];
@@ -64,6 +65,7 @@ export class ToolSurfacePromptController {
   private selectInitialSurface() {
     return selectInitialToolsFromSurfaceController({
       role: this.input.role,
+      message: this.input.message,
       sessionMetadata: this.input.sessionMetadata,
       turnMetadata: this.input.turnMetadata,
       providerCapabilities: this.input.providerCapabilities,

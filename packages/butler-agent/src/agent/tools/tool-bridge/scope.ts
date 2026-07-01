@@ -17,6 +17,7 @@ export function canBridgeNativeTool(input: {
   if (BRIDGE_TOOL_NAMES.has(input.toolName)) return false;
   const currentToolNames = new Set(currentToolNamesFromInput(input.currentToolNames));
   if (currentToolNames.has(input.toolName)) return true;
+  if (input.metadata.tags.includes("project-ledger") && currentToolNames.has("project_ledger_status")) return true;
   return ALWAYS_DISCOVERABLE_NATIVE_CATEGORIES.has(input.metadata.category);
 }
 
