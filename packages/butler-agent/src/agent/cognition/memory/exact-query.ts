@@ -98,6 +98,8 @@ interface SourceQueryResult {
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 const MAX_TEXT_CHARS = 900;
+const CONVERSATION_STORE_SCAN_PAGE_SIZE = 1000;
+const MAX_CONVERSATION_STORE_SCAN_MESSAGES = 50000;
 const APP_MESSAGE_DB_RELATIVE = ["app-server", "butler-client.sqlite"];
 const TRANSCRIPT_QUERY_DB_RELATIVE = ["cognition", "memory", "query", "messages.sqlite"];
 
@@ -427,6 +429,12 @@ function hasIndex(db: Database, table: string, index: string): boolean {
     .some((row) => row.name === index);
 }
 
+function hasColumn(db: Database, table: string, column: string): boolean {
+  return db.query<{ name: string }, []>(`PRAGMA table_info(${table})`)
+    .all()
+    .some((row) => row.name === column);
+}
+
 function placeholders(count: number): string {
   return Array.from({ length: count }, (_, index) => `$role${index}`).join(", ");
 }
@@ -443,6 +451,7 @@ function queryAppMessages(input: {
   limit: number;
   dateFrom: string | null;
   dateTo: string | null;
+  excludeConversationMessageIds?: Set<string>;
 }): SourceQueryResult {
   if (!existsSync(input.dbPath)) {
     return { source: "app-projection-compat", skipped: "app message db missing", total: 0, rows: [], diagnostics: [] };
@@ -487,12 +496,25 @@ function queryAppMessages(input: {
       clauses.push("m.created_at < $date_to");
       params.$date_to = input.dateTo;
     }
+    const hasConversationMessageId = hasColumn(db, "messages", "conversation_message_id");
+    const excludedConversationIds = [...(input.excludeConversationMessageIds ?? [])]
+      .filter((id) => id.trim());
+    if (hasConversationMessageId && excludedConversationIds.length > 0) {
+      const exclusionPlaceholders = excludedConversationIds
+        .map((_, index) => `$excluded_cm_${index}`)
+        .join(", ");
+      clauses.push(`(m.conversation_message_id IS NULL OR m.conversation_message_id NOT IN (${exclusionPlaceholders}))`);
+      excludedConversationIds.forEach((id, index) => {
+        params[`$excluded_cm_${index}`] = id;
+      });
+    }
     if (fts) {
       clauses.push("m.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH $fts)");
       params.$fts = fts;
     }
     const where = clauses.join(" AND ");
     const order = input.order === "latest" ? "DESC" : "ASC";
+    const conversationMessageIdColumn = hasConversationMessageId ? "m.conversation_message_id" : "NULL";
     const count = db.query<{ count: number }, Record<string, string | number>>(
       `SELECT COUNT(*) AS count FROM messages m WHERE ${where}`,
     ).get(params)?.count ?? 0;
@@ -502,8 +524,15 @@ function queryAppMessages(input: {
       role: "user" | "assistant";
       text: string;
       created_at: string;
+      conversation_message_id: string | null;
     }, Record<string, string | number>>(`
-      SELECT m.id AS event_id, m.chat_id, m.role, m.text, m.created_at
+      SELECT
+        m.id AS event_id,
+        m.chat_id,
+        m.role,
+        m.text,
+        m.created_at,
+        ${conversationMessageIdColumn} AS conversation_message_id
       FROM messages m
       WHERE ${where}
       ORDER BY m.created_at ${order}, m.id ${order}
@@ -519,7 +548,7 @@ function queryAppMessages(input: {
         text: row.text,
         created_at: row.created_at,
         source: "app-projection-compat" as const,
-        conversation_message_id: null,
+        conversation_message_id: row.conversation_message_id ?? null,
         transcript_file: null,
       })),
       diagnostics: [],
@@ -545,19 +574,34 @@ function queryConversationStore(input: {
   if (!existsSync(conversationStorePath(input.butlerData))) {
     return { source: "conversation-store", skipped: "conversation store missing", total: 0, rows: [], diagnostics: [] };
   }
-  const observations = readConversationObservations({
-    butlerData: input.butlerData,
-    sessionId: input.scope === "session" ? input.sessionId : undefined,
-    roles: observationRoleFilter(input.speaker, input.eventKind),
-    since: input.dateFrom,
-    includeCompacted: true,
-    order: input.order === "latest" ? "desc" : "asc",
-    maxMessages: 5000,
-  }).filter((observation) => {
-    if (input.dateTo && observation.created_at >= input.dateTo) return false;
-    if (!input.query) return true;
-    return matchedTerms(observation.text, input.query, input.matchMode).length > 0;
-  });
+  const observations: ReturnType<typeof readConversationObservations> = [];
+  const diagnostics: string[] = [];
+  let scanned = 0;
+  while (scanned < MAX_CONVERSATION_STORE_SCAN_MESSAGES) {
+    const page = readConversationObservations({
+      butlerData: input.butlerData,
+      sessionId: input.scope === "session" ? input.sessionId : undefined,
+      roles: observationRoleFilter(input.speaker, input.eventKind),
+      since: input.dateFrom,
+      includeCompacted: true,
+      order: input.order === "latest" ? "desc" : "asc",
+      limit: CONVERSATION_STORE_SCAN_PAGE_SIZE,
+      offset: scanned,
+    });
+    scanned += page.length;
+    for (const observation of page) {
+      if (input.dateTo && observation.created_at >= input.dateTo) continue;
+      if (!input.query || matchedTerms(observation.text, input.query, input.matchMode).length > 0) {
+        observations.push(observation);
+      }
+    }
+    if (page.length < CONVERSATION_STORE_SCAN_PAGE_SIZE) break;
+  }
+  if (scanned >= MAX_CONVERSATION_STORE_SCAN_MESSAGES) {
+    diagnostics.push(
+      `conversation-store scan reached ${MAX_CONVERSATION_STORE_SCAN_MESSAGES} messages; results may be incomplete`,
+    );
+  }
   return {
     source: "conversation-store",
     total: observations.length,
@@ -571,7 +615,7 @@ function queryConversationStore(input: {
       conversation_message_id: observation.conversation_message_id,
       transcript_file: null,
     })),
-    diagnostics: [],
+    diagnostics,
   };
 }
 
@@ -761,6 +805,9 @@ export function queryMemory(input: QueryMemoryInput): QueryMemoryResult {
         limit,
         dateFrom,
         dateTo,
+        excludeConversationMessageIds: new Set(
+          conversation.rows.flatMap((row) => row.conversation_message_id ? [row.conversation_message_id] : []),
+        ),
       });
   const transcript = input.includeTranscriptRecovery
     ? queryTranscriptIndex({

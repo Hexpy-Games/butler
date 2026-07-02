@@ -10,7 +10,10 @@ import {
   queryMemory,
   transcriptQueryDbPath,
 } from "../../packages/butler-agent/src/agent/cognition/memory/exact-query.ts";
-import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import {
+  AgentConversationStore,
+  conversationStorePath,
+} from "../../packages/butler-agent/src/agent/conversation/store.ts";
 
 let tempDir = "";
 let appDb = "";
@@ -114,6 +117,55 @@ function insertConversationMessages(input: {
   }
 }
 
+function insertManyConversationMessages(input: {
+  sessionId: string;
+  count: number;
+  targetIndex: number;
+  targetText: string;
+}): void {
+  const store = new AgentConversationStore({ butlerData: tempDir });
+  store.close();
+  const db = new Database(conversationStorePath(tempDir));
+  try {
+    const now = "2026-04-24T12:00:00.000Z";
+    db.query(`
+      INSERT INTO conversation_sessions (
+        id, workspace_id, project_id, gateway_origin, created_at, updated_at, status, schema_version
+      ) VALUES (?, NULL, NULL, 'test', ?, ?, 'active', 1)
+    `).run(input.sessionId, now, now);
+    db.query(`
+      INSERT INTO conversation_turns (
+        id, session_id, seq, actor, status, request_id, started_at, completed_at
+      ) VALUES ('ct-many', ?, 1, 'user', 'complete', NULL, ?, ?)
+    `).run(input.sessionId, now, now);
+    const insertMessage = db.query(`
+      INSERT INTO conversation_messages (
+        id, session_id, turn_id, seq, role, status, visibility, provenance,
+        created_at, compacted_by_summary_id, source_gateway, source_ref
+      ) VALUES (?, ?, 'ct-many', ?, 'user', 'complete', 'model', 'trusted', ?, NULL, 'test', ?)
+    `);
+    const insertPart = db.query(`
+      INSERT INTO conversation_parts (
+        id, message_id, part_index, kind, content_json,
+        tool_call_id, parent_tool_call_id, provider_shape, status
+      ) VALUES (?, ?, 0, 'text', ?, NULL, NULL, NULL, 'complete')
+    `);
+    const insertMany = db.transaction(() => {
+      const base = Date.parse(now);
+      for (let index = 1; index <= input.count; index += 1) {
+        const messageId = `cm_many_${index}`;
+        const createdAt = new Date(base + index * 1000).toISOString();
+        const text = index === input.targetIndex ? input.targetText : `ordinary canonical message ${index}`;
+        insertMessage.run(messageId, input.sessionId, index, createdAt, messageId);
+        insertPart.run(`cp_many_${index}`, messageId, JSON.stringify({ text }));
+      }
+    });
+    insertMany();
+  } finally {
+    db.close();
+  }
+}
+
 function transcriptLine(input: {
   eventId: string;
   sessionId: string;
@@ -186,6 +238,82 @@ test("queryMemory searches canonical conversation store before compatibility sou
     session_id: "cs_memory_query",
     source: "conversation-store",
   });
+});
+
+test("queryMemory excludes app projection duplicates for canonical conversation messages", () => {
+  insertConversationMessages({
+    sessionId: "cs_projected_query",
+    messages: [
+      {
+        id: "cm-shared-user",
+        role: "user",
+        text: FIRST_USER_TEXT,
+        createdAt: "2026-04-24T12:05:00.000Z",
+      },
+    ],
+  });
+  const db = createAppDb();
+  insertChat(db, "general");
+  db.exec("ALTER TABLE messages ADD COLUMN conversation_message_id TEXT");
+  db.query(`
+    INSERT INTO messages (
+      id, chat_id, conversation_message_id, role, text, status, created_at, updated_at
+    )
+    VALUES (
+      'app-projection-cm-shared-user',
+      'general',
+      'cm-shared-user',
+      'user',
+      ?,
+      'sent',
+      '2026-04-24T12:04:00.000Z',
+      '2026-04-24T12:04:00.000Z'
+    )
+  `).run(FIRST_USER_TEXT);
+  db.close();
+
+  const result = queryMemory({
+    butlerData: tempDir,
+    query: FIRST_USER_TEXT,
+    speaker: "user",
+    order: "earliest",
+    limit: 5,
+  });
+
+  expect(result.total_matches).toBe(1);
+  expect(result.results.map((item) => item.source)).toEqual(["conversation-store"]);
+  expect(result.results[0]).toMatchObject({
+    event_id: "cm-shared-user",
+    conversation_message_id: "cm-shared-user",
+  });
+});
+
+test("queryMemory pages canonical conversation store instead of stopping at the first scan window", () => {
+  const targetText = "SYNTHETIC_CANONICAL_AFTER_FIRST_SCAN_WINDOW";
+  insertManyConversationMessages({
+    sessionId: "cs_large_query",
+    count: 5005,
+    targetIndex: 5001,
+    targetText,
+  });
+
+  const result = queryMemory({
+    butlerData: tempDir,
+    query: targetText,
+    scope: "session",
+    sessionId: "cs_large_query",
+    speaker: "user",
+    order: "earliest",
+    limit: 1,
+  });
+
+  expect(result.total_matches).toBe(1);
+  expect(result.results[0]).toMatchObject({
+    event_id: "cm_many_5001",
+    conversation_message_id: "cm_many_5001",
+    source: "conversation-store",
+  });
+  expect(result.diagnostics.join("\n")).not.toContain("results may be incomplete");
 });
 
 test("queryMemory uses indexed app messages for earliest user evidence", () => {

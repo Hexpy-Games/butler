@@ -182,6 +182,7 @@ export interface ReadCognitionMessagesInput {
   roles?: ConversationRole[];
   since?: string | null;
   limit?: number;
+  offset?: number;
   includeCompacted?: boolean;
   order?: "asc" | "desc";
 }

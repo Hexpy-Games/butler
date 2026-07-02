@@ -223,9 +223,11 @@ export class AgentConversationStore {
 
   readCognitionMessages(input: ReadCognitionMessagesInput = {}): ConversationMessageWithParts[] {
     const capped = normalizeLimit(input.limit ?? 1000, 1000, 5000);
+    const offset = Number.isFinite(input.offset) ? Math.max(0, Math.floor(input.offset!)) : 0;
     const order = input.order === "desc" ? "DESC" : "ASC";
     const params: Record<string, string | number> = {
       $limit: capped,
+      $offset: offset,
     };
     const clauses: string[] = [];
     if (input.sessionId?.trim()) {
@@ -255,6 +257,7 @@ export class AgentConversationStore {
       ${where}
       ORDER BY created_at ${order}, seq ${order}, id ${order}
       LIMIT $limit
+      OFFSET $offset
     `).all(params);
     return rows.map((row) => this.internals.hydrateMessage(row));
   }

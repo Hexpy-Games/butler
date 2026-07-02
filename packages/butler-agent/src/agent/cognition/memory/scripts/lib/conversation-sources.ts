@@ -33,6 +33,7 @@ export interface ReadConversationObservationsInput {
   roles?: ConversationObservationRole[];
   since?: string | null;
   limit?: number;
+  offset?: number;
   maxMessages?: number;
   includeCompacted?: boolean;
   order?: "asc" | "desc";
@@ -217,6 +218,7 @@ export function readConversationObservations(
       roles: storeRolesForObservationRoles(input.roles),
       since: input.since,
       limit: input.maxMessages ?? input.limit ?? DEFAULT_OBSERVATION_LIMIT,
+      offset: input.offset,
       includeCompacted: input.includeCompacted,
       order: input.order,
     });
