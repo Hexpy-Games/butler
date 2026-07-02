@@ -11,6 +11,7 @@ export interface ChatRow {
   title: string;
   kind: ChatKind;
   project_id: string | null;
+  conversation_session_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +35,7 @@ export interface SessionSummaryRow {
   kind: ChatKind;
   title: string;
   project_id: string | null;
+  conversation_session_id?: string | null;
   project_display_name?: string | null;
   created_at: string;
   updated_at: string;
@@ -50,6 +52,9 @@ export interface MessageRow {
   id: string;
   chat_id: string;
   turn_id: string | null;
+  conversation_session_id: string | null;
+  conversation_turn_id: string | null;
+  conversation_message_id: string | null;
   role: MessageRole;
   text: string;
   status: MessageStatus;

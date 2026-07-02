@@ -12,6 +12,7 @@ export function migrateAppStoreSchema(db: Database): void {
       title TEXT NOT NULL,
       kind TEXT NOT NULL,
       project_id TEXT,
+      conversation_session_id TEXT,
       pinned INTEGER NOT NULL DEFAULT 0,
       archived INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
@@ -36,6 +37,9 @@ export function migrateAppStoreSchema(db: Database): void {
       id TEXT PRIMARY KEY,
       chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
       turn_id TEXT,
+      conversation_session_id TEXT,
+      conversation_turn_id TEXT,
+      conversation_message_id TEXT,
       role TEXT NOT NULL,
       text TEXT NOT NULL,
       status TEXT NOT NULL,
@@ -105,6 +109,14 @@ export function migrateAppStoreSchema(db: Database): void {
       event_id TEXT NOT NULL,
       chat_id TEXT NOT NULL,
       created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS app_conversation_projection_state (
+      gateway TEXT PRIMARY KEY,
+      last_outbox_id TEXT,
+      updated_at TEXT NOT NULL,
+      pending_count INTEGER NOT NULL DEFAULT 0,
+      safe_error_code TEXT
     );
 
     CREATE TABLE IF NOT EXISTS app_settings (
@@ -177,14 +189,30 @@ export function migrateAppStoreSchema(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS events_turn_event_kind_idx
     ON events(type, json_extract(payload_json, '$.turn_id'), json_extract(payload_json, '$.event.kind'), id DESC);
+
   `);
   ensureAppMessageQuerySchema(db);
+  ensureColumn(db, "chats", "conversation_session_id", "TEXT");
   ensureColumn(db, "chats", "pinned", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "chats", "archived", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "messages", "turn_id", "TEXT");
+  ensureColumn(db, "messages", "conversation_session_id", "TEXT");
+  ensureColumn(db, "messages", "conversation_turn_id", "TEXT");
+  ensureColumn(db, "messages", "conversation_message_id", "TEXT");
   ensureColumn(db, "messages", "updated_at", "TEXT");
   ensureColumn(db, "messages", "safe_error_code", "TEXT");
   ensureColumn(db, "messages", "retryable", "INTEGER NOT NULL DEFAULT 0");
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS messages_conversation_message_idx
+    ON messages(conversation_message_id)
+    WHERE conversation_message_id IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS messages_conversation_session_idx
+    ON messages(conversation_session_id, conversation_turn_id);
+
+    CREATE INDEX IF NOT EXISTS chats_conversation_session_idx
+    ON chats(conversation_session_id);
+  `);
   db.query("UPDATE chats SET kind = 'chat' WHERE kind = 'general'").run();
   db.query("UPDATE messages SET updated_at = created_at WHERE updated_at IS NULL").run();
 }

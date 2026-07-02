@@ -1,4 +1,11 @@
 import type {
+  AppConversationProjectionRebuildResult,
+  AppConversationProjectionReplayResult,
+  AppConversationProjectionStatus,
+  AppConversationProjectionActivityState,
+  AppConversationProjectionBindingRef,
+} from "../../domain/projections/app-conversation-projection-store.ts";
+import type {
   ContextDetailsView,
   MessageFileRef,
   MessageFileUploadResult,
@@ -40,6 +47,13 @@ export interface AppStoreSessionApi {
   getContextDetails(sessionId: string): ContextDetailsView;
   getSessionSummary(sessionId: string): SessionSummaryView;
   refreshSessionProjection(sessionId: string): number;
+  getConversationProjectionStatus(): AppConversationProjectionStatus;
+  replayConversationProjection(input?: { limit?: number }): AppConversationProjectionReplayResult;
+  rebuildConversationProjection(conversationSessionId: string): AppConversationProjectionRebuildResult;
+  getConversationProjectionBinding(conversationSessionId: string): AppConversationProjectionBindingRef | null;
+  getConversationProjectionSessionView(conversationSessionId: string): SessionView | null;
+  listConversationProjectionMessages(conversationSessionId: string, cursor?: number): MessageRecord[];
+  getConversationProjectionActivityState(conversationSessionId: string): AppConversationProjectionActivityState;
   getSessionView(sessionId: string): SessionView;
   listArtifacts(sessionId: string): SessionArtifactSummary[];
   exportTranscript(sessionId: string): TranscriptExportView;
@@ -103,8 +117,36 @@ export function createSessionStoreApi(
       return kernel.sessionViews.getSessionSummary(sessionId);
     },
     refreshSessionProjection(sessionId) {
+      kernel.conversationProjection.replayOutbox();
       kernel.reconcileDeliveredSystemResponderTurns(sessionId);
       return kernel.syncAppTransportEventsForChat(sessionId);
+    },
+    getConversationProjectionStatus() {
+      return kernel.conversationProjection.status();
+    },
+    replayConversationProjection(input = {}) {
+      return kernel.conversationProjection.replayOutbox(input);
+    },
+    rebuildConversationProjection(conversationSessionId) {
+      return kernel.conversationProjection.rebuildSession(conversationSessionId);
+    },
+    getConversationProjectionBinding(conversationSessionId) {
+      return kernel.conversationProjection.readConversationBinding(conversationSessionId);
+    },
+    getConversationProjectionSessionView(conversationSessionId) {
+      const appSessionId = kernel.conversationProjection
+        .appSessionIdForConversation(conversationSessionId);
+      return appSessionId ? kernel.sessionViews.getSessionView(appSessionId) : null;
+    },
+    listConversationProjectionMessages(conversationSessionId, cursor = 0) {
+      return kernel.conversationProjection.listMessageProjection(
+        conversationSessionId,
+        cursor,
+        (messageId) => kernel.messageFiles.refsForMessage(messageId),
+      );
+    },
+    getConversationProjectionActivityState(conversationSessionId) {
+      return kernel.conversationProjection.readActivityState(conversationSessionId);
     },
     getSessionView(sessionId) {
       return kernel.sessionViews.getSessionView(sessionId);

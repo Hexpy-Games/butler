@@ -14,6 +14,7 @@ export interface ChatReadModelRow {
   title: string;
   kind: ChatSummary["kind"];
   project_id: string | null;
+  conversation_session_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -37,6 +38,7 @@ export interface SessionSummaryReadModelRow {
   title: string;
   kind: ChatSummary["kind"];
   project_id: string | null;
+  conversation_session_id?: string | null;
   project_display_name?: string | null;
   pinned: number;
   archived: number;

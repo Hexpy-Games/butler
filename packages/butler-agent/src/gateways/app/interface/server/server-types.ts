@@ -1,4 +1,5 @@
 import type { ButlerServiceClient } from "../../../core/client.ts";
+import type { ConversationProjectionReader } from "../../../../agent/conversation/types.ts";
 import type {
   AppMessageResponder,
   AppServerStore,
@@ -23,6 +24,7 @@ export interface CreateAppServerOptions {
   responder?: AppMessageResponder;
   responderTimeoutMs?: number;
   serviceClient?: ButlerServiceClient;
+  conversationProjectionReader?: ConversationProjectionReader;
   messageRateLimit?: MessageRateLimitOptions;
   automationSchedulerIntervalMs?: number | false;
   localAuth?: {
