@@ -208,6 +208,19 @@ export class AgentConversationStore {
     return row ? this.internals.hydrateMessage(row) : null;
   }
 
+  readMessageBySourceRefAnySession(sourceRef: string): ConversationMessageWithParts | null {
+    const trimmed = sourceRef.trim();
+    if (!trimmed) return null;
+    const row = this.db.query<MessageRow, [string]>(`
+      SELECT *
+      FROM conversation_messages
+      WHERE source_ref = ?
+      ORDER BY created_at ASC, session_id ASC, seq ASC
+      LIMIT 1
+    `).get(trimmed);
+    return row ? this.internals.hydrateMessage(row) : null;
+  }
+
   readMessages(input: ReadMessagesInput): ConversationMessageWithParts[] {
     const capped = normalizeLimit(input.limit ?? 500, 500, 5000);
     const compacted = input.includeCompacted ? "" : "AND compacted_by_summary_id IS NULL AND status != 'compacted'";
