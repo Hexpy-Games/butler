@@ -257,6 +257,29 @@ test("public provider stream tool call deltas reject raw argument fragments", ()
   expect(event.payload).not.toHaveProperty("rawArgumentsDelta");
 });
 
+test("public payload counter-like keys stay textual outside provider stream events", () => {
+  const event = createAgentTurnEvent({
+    sessionId: "general",
+    turnId: "turn-1",
+    sessionSequence: 1,
+    turnSequence: 1,
+    kind: "assistant.public_note",
+    visibility: "public",
+    payload: {
+      note: "Working through a sequence.",
+      sequence: "1",
+      charCount: "many",
+      callIndex: "first",
+      argumentCharCount: "hidden",
+    },
+  });
+
+  expect(event.payload.sequence).toBe("1");
+  expect(event.payload.charCount).toBe("many");
+  expect(event.payload.callIndex).toBe("first");
+  expect(event.payload.argumentCharCount).toBe("hidden");
+});
+
 test("turn event privacy fixtures keep public labels and suppress private protocol text", () => {
   const positive = [
     "Reading project ledger",
