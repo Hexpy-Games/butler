@@ -3,14 +3,14 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const queryMemoryToolDefinition = {
   type: "function",
   name: "query_memory",
-  description: "Query durable Butler conversation transcripts for exact memory/history evidence such as dates, counts, first/last, earliest/latest, speaker-specific, or text-filtered transcript facts. Use when exact transcript evidence is needed. Returns conversational inbound/outbound text only, never tool payloads.",
+  description: "Query durable Butler conversation history for exact memory/history evidence such as dates, counts, first/last, earliest/latest, speaker-specific, or text-filtered conversation facts. Uses canonical conversation messages by default. Returns conversational inbound/outbound text only, never tool payloads.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
       query: {
         type: "string",
-        description: "Optional exact text or terms to match in conversational transcript text. Omit to inspect all matching conversation events.",
+        description: "Optional exact text or terms to match in canonical conversation text. Omit to inspect all matching conversation events.",
       },
       scope: {
         type: "string",
@@ -57,11 +57,11 @@ export const queryMemoryToolDefinition = {
           "all",
           "phrase",
         ],
-        description: "How query terms should match transcript text.",
+        description: "How query terms should match conversation text.",
       },
       limit: {
         type: "integer",
-        description: "Maximum number of exact transcript matches to return.",
+        description: "Maximum number of exact conversation matches to return.",
       },
       date_from: {
         type: "string",
@@ -73,11 +73,15 @@ export const queryMemoryToolDefinition = {
       },
       include_internal: {
         type: "boolean",
-        description: "Include internal steward/session events. Defaults to false for user-facing memory queries.",
+        description: "Include internal recovered events when transcript recovery is explicitly requested. Defaults to false.",
       },
       include_placeholders: {
         type: "boolean",
-        description: "Include mock or epoch placeholder transcript events. Defaults to false.",
+        description: "Include mock or epoch placeholder recovery events when transcript recovery is explicitly requested. Defaults to false.",
+      },
+      include_transcript_recovery: {
+        type: "boolean",
+        description: "Explicitly include the migration-only transcript recovery index after canonical and app compatibility sources.",
       },
     },
     required: [],
@@ -92,14 +96,14 @@ export const queryMemoryToolMetadata = {
   tags: [
     "memory",
     "query",
-    "transcript",
+    "conversation",
     "exact",
     "date",
     "earliest",
     "latest",
   ],
   safetyNotes: [
-    "Use for exact transcript/history dates, counts, earliest/latest evidence, not associative recall.",
+    "Use for exact conversation/history dates, counts, earliest/latest evidence, not associative recall.",
   ],
   satisfiesCompletionObligations: [
     "source_verified",

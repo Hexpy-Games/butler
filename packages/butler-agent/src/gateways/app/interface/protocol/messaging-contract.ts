@@ -17,6 +17,9 @@ export interface MessageRecord {
   id: string;
   chat_id: string;
   turn_id?: string;
+  conversation_session_id?: string;
+  conversation_turn_id?: string;
+  conversation_message_id?: string;
   role: MessageRole;
   text: string;
   status: MessageStatus;

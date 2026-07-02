@@ -22,6 +22,8 @@ import { GatewayRouter } from "../../gateways/core/router.ts";
 import { createGatewayServer } from "../../gateways/core/server.ts";
 import { PolicyEngine, type PolicyApprovalMode } from "../../agent/policy/policy-engine.ts";
 import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
+import { AgentConversationStore } from "../../agent/conversation/store.ts";
+import { createAgentTurnEvent } from "../../agent/events/turn-events.ts";
 import { createLifecycleGatewayHandlers, SessionLifecycleService } from "./session-lifecycle.ts";
 import { generateSessionTitleWithProvider } from "../../agent/output/session-title.ts";
 import { NativeToolLoopRuntime } from "../../agent/turn/native-tool-loop.ts";
@@ -140,7 +142,8 @@ export function createNativeButlerDefaultProvider(
   };
 }
 
-function appTurnEventAction(input: {
+export function appTurnEventAction(input: {
+  sessionId: string;
   envelope: InboundEnvelope;
   event: RuntimeTurnEventInput;
 }): OutboundAction | null {
@@ -159,9 +162,36 @@ function appTurnEventAction(input: {
     metadata: {
       kind: "turn_event",
       turnId,
-      event: input.event,
+      event: appPublicTurnEvent({
+        sessionId: input.sessionId,
+        turnId,
+        event: input.event,
+      }),
       source: "gateway/native-butler-bootstrap.ts#turn-event",
     },
+  };
+}
+
+function appPublicTurnEvent(input: {
+  sessionId: string;
+  turnId: string;
+  event: RuntimeTurnEventInput;
+}): RuntimeTurnEventInput {
+  const normalized = createAgentTurnEvent({
+    sessionId: input.sessionId,
+    turnId: input.turnId,
+    sessionSequence: 1,
+    turnSequence: 1,
+    kind: input.event.kind,
+    visibility: input.event.visibility ?? "public",
+    payload: input.event.payload ?? {},
+    createdAt: input.event.createdAt,
+  });
+  return {
+    kind: normalized.kind,
+    visibility: normalized.visibility,
+    createdAt: normalized.createdAt,
+    payload: normalized.payload,
   };
 }
 
@@ -585,6 +615,7 @@ export async function runNativeButlerMain(
       sendTelegram: input.sendTelegram,
     });
     const appAdapter = createAppTransportAdapter();
+    const conversationWriter = new AgentConversationStore({ butlerData });
     const deliveryGuard = new DeliveryGuard({
       adapters: [telegramAdapter, appAdapter],
     });
@@ -613,6 +644,8 @@ export async function runNativeButlerMain(
       sessionTitleGenerator: (titleInput) =>
         generateSessionTitleWithProvider(provider, titleInput),
       approvalMode: input.approvalMode ?? "default",
+      conversationWriter,
+      conversationMetricsButlerData: butlerData,
       deliverIntermediate: async ({ binding: activeBinding, action, metadata }) => {
         await deliverThroughEnabledGate(activeBinding.sessionId, action, {
           source: "gateway/native-butler-bootstrap.ts#intermediate",
@@ -621,6 +654,7 @@ export async function runNativeButlerMain(
       },
       deliverTurnEvent: async ({ binding: activeBinding, envelope, event }) => {
         const action = appTurnEventAction({
+          sessionId: activeBinding.sessionId,
           envelope,
           event,
         });

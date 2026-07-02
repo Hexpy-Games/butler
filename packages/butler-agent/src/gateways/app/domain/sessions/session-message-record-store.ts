@@ -28,7 +28,8 @@ export class AppSessionMessageRecordStore {
     const rows = this.db
       .query<MessageRow, [string, number]>(
         `
-      SELECT rowid, id, chat_id, turn_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+      SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
+        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
       FROM messages
       WHERE chat_id = ? AND rowid > ? AND ${visibleMessageSqlPredicate()}
       ORDER BY rowid ASC
@@ -54,7 +55,8 @@ export class AppSessionMessageRecordStore {
       this.db
         .query<MessageRow, [string]>(
           `
-      SELECT rowid, id, chat_id, turn_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+      SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
+        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
       FROM messages
       WHERE id = ?
     `,
@@ -80,7 +82,8 @@ export class AppSessionMessageRecordStore {
       this.db
         .query<MessageRow, [string]>(
           `
-      SELECT rowid, id, chat_id, turn_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+      SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
+        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
       FROM messages
       WHERE turn_id = ? AND role = 'assistant'
       ORDER BY rowid DESC
@@ -102,6 +105,9 @@ export class AppSessionMessageRecordStore {
       safeErrorCode?: string;
       retryable?: boolean;
       attachments?: MessageFileRow[];
+      conversationSessionId?: string | null;
+      conversationTurnId?: string | null;
+      conversationMessageId?: string | null;
     } = {},
   ): MessageRecord {
     const safeClientId = options.clientMessageId?.trim();
@@ -115,14 +121,21 @@ export class AppSessionMessageRecordStore {
     this.db
       .query(
         `
-      INSERT INTO messages (id, chat_id, turn_id, role, text, status, created_at, updated_at, safe_error_code, retryable)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (
+        id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
+        conversation_message_id, role, text, status, created_at, updated_at,
+        safe_error_code, retryable
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .run(
         id,
         chatId,
         options.turnId ?? null,
+        options.conversationSessionId ?? null,
+        options.conversationTurnId ?? null,
+        options.conversationMessageId ?? null,
         role,
         text,
         status,
