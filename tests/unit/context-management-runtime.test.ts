@@ -13,6 +13,8 @@ import { readContextMetrics } from "../../packages/butler-agent/src/operations/m
 import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
 import { estimateContextTokens } from "../../packages/butler-agent/src/agent/context/budget.ts";
 import { budgetToolOutput } from "../../packages/butler-agent/src/agent/context/tool-output-budgeter.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { conversationSessionIdForDurableSession } from "../../packages/butler-agent/src/agent/conversation/session-admission.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -82,28 +84,54 @@ function writePromptFixture(root: string): {
 }
 
 function appendLongTranscript(turns: number): void {
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const canonicalSessionId = conversationSessionIdForDurableSession("butler/main");
+  conversationStore.beginTurn({
+    gateway: "app",
+    externalSessionId: "butler/main",
+    sessionId: canonicalSessionId,
+    actor: "user",
+    turnId: "long-context-seed",
+  });
   for (let index = 0; index < turns; index += 1) {
+    const userText = `A주제 결정 ${index}: 이전 맥락을 유지해야 합니다. ${"상세 ".repeat(80)}`;
+    const assistantText = `보고 ${index}: 나중에 요약과 회상으로 복구되어야 합니다. ${"응답 ".repeat(80)}`;
     appendTranscriptEvent(createTranscriptEvent({
       sessionId: "butler/main",
       eventId: `long-u-${index}`,
       kind: "inbound",
       payload: {
         message: {
-          text: `A주제 결정 ${index}: 이전 맥락을 유지해야 합니다. ${"상세 ".repeat(80)}`,
+          text: userText,
         },
       },
     }));
+    conversationStore.appendUserMessage({
+      sessionId: canonicalSessionId,
+      turnId: "long-context-seed",
+      text: userText,
+      sourceGateway: "app",
+      sourceRef: `long-u-${index}`,
+    });
     appendTranscriptEvent(createTranscriptEvent({
       sessionId: "butler/main",
       eventId: `long-a-${index}`,
       kind: "outbound",
       payload: {
         message: {
-          text: `보고 ${index}: 나중에 요약과 회상으로 복구되어야 합니다. ${"응답 ".repeat(80)}`,
+          text: assistantText,
         },
       },
     }));
+    conversationStore.appendAssistantMessage({
+      sessionId: canonicalSessionId,
+      turnId: "long-context-seed",
+      text: assistantText,
+      sourceGateway: "app",
+      sourceRef: `long-a-${index}`,
+    });
   }
+  conversationStore.close();
 }
 
 function legacyRecentConversationTokens(): number {
@@ -185,11 +213,12 @@ test("runtime compacts long transcript and reduces recent-context prompt tokens"
   });
 
   const promptTokens = estimateContextTokens(capturedPrompt);
-  const recentSection = capturedPrompt.split("## Recent Conversation")[1]?.split("## Associative Recall Context")[0] ?? "";
+  const recentSection = /## Recent Conversation\n[\s\S]*?(?=\n## |$)/u.exec(capturedPrompt)?.[0] ?? "";
   const newRecentTokens = estimateContextTokens(recentSection);
 
-  expect(capturedPrompt).toContain("## Compaction Summary");
+  expect(capturedPrompt).not.toContain("## Compaction Summary");
   expect(capturedPrompt).toContain("## Recent Conversation");
+  expect(recentSection).toContain("summary ");
   expect(newRecentTokens).toBeLessThanOrEqual(230);
   expect(newRecentTokens).toBeLessThan(legacyRecentTokens);
   expect(promptTokens).toBeLessThan(legacyRecentTokens + 1_000);

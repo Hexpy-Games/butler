@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CONVERSATION_STORE_SCHEMA_VERSION } from "./schema.ts";
@@ -31,6 +32,7 @@ import type {
   PromptMaterial,
   PromptMaterialInput,
   ReadAroundInput,
+  ReadMessagesInput,
 } from "./types.ts";
 
 export function conversationStorePath(butlerData: string): string {
@@ -192,6 +194,32 @@ export class AgentConversationStore {
     return row ? this.internals.hydrateMessage(row) : null;
   }
 
+  readMessageBySourceRef(sessionId: string, sourceRef: string): ConversationMessageWithParts | null {
+    const trimmed = sourceRef.trim();
+    if (!trimmed) return null;
+    const row = this.db.query<MessageRow, [string, string]>(`
+      SELECT *
+      FROM conversation_messages
+      WHERE session_id = ? AND source_ref = ?
+      ORDER BY seq ASC
+      LIMIT 1
+    `).get(sessionId, trimmed);
+    return row ? this.internals.hydrateMessage(row) : null;
+  }
+
+  readMessages(input: ReadMessagesInput): ConversationMessageWithParts[] {
+    const capped = normalizeLimit(input.limit ?? 500, 500, 5000);
+    const compacted = input.includeCompacted ? "" : "AND compacted_by_summary_id IS NULL AND status != 'compacted'";
+    const rows = this.db.query<MessageRow, [string, number]>(`
+      SELECT *
+      FROM conversation_messages
+      WHERE session_id = ? ${compacted}
+      ORDER BY seq ASC
+      LIMIT ?
+    `).all(input.sessionId, capped);
+    return rows.map((row) => this.internals.hydrateMessage(row));
+  }
+
   readProjectionMessages(
     sessionId: string,
     input: { afterSeq?: number; limit?: number } = {},
@@ -242,6 +270,7 @@ export class AgentConversationStore {
   }
 
   readSummaries(sessionId: string): ConversationSummary[] {
+    this.invalidateStaleSummaries(sessionId);
     return this.db.query<ConversationSummary, [string]>(`
       SELECT *
       FROM conversation_summaries
@@ -345,4 +374,76 @@ export class AgentConversationStore {
       source_ref: input.sourceRef ?? null,
     };
   }
+
+  private invalidateStaleSummaries(sessionId: string): void {
+    const summaries = this.db.query<ConversationSummary, [string]>(`
+      SELECT *
+      FROM conversation_summaries
+      WHERE session_id = ? AND invalidated_at IS NULL
+      ORDER BY covers_from_seq ASC, covers_to_seq ASC
+    `).all(sessionId);
+    if (summaries.length === 0) return;
+    const stale = summaries.filter((summary) => {
+      const messages = this.readMessagesInSeqRange(
+        summary.session_id,
+        summary.covers_from_seq,
+        summary.covers_to_seq,
+      );
+      return conversationMessagesSourceHash(messages) !== summary.source_hash;
+    });
+    if (stale.length === 0) return;
+    const now = isoNow();
+    const tx = this.db.transaction(() => {
+      for (const summary of stale) {
+        this.db.query("UPDATE conversation_summaries SET invalidated_at = ? WHERE id = ?")
+          .run(now, summary.id);
+        this.db.query(`
+          UPDATE conversation_messages
+          SET status = 'complete', compacted_by_summary_id = NULL
+          WHERE session_id = ? AND compacted_by_summary_id = ?
+        `).run(summary.session_id, summary.id);
+      }
+    });
+    tx();
+  }
+
+  private readMessagesInSeqRange(
+    sessionId: string,
+    fromSeq: number,
+    toSeq: number,
+  ): ConversationMessageWithParts[] {
+    const rows = this.db.query<MessageRow, [string, number, number]>(`
+      SELECT *
+      FROM conversation_messages
+      WHERE session_id = ? AND seq BETWEEN ? AND ?
+      ORDER BY seq ASC
+    `).all(sessionId, fromSeq, toSeq);
+    return rows.map((row) => this.internals.hydrateMessage(row));
+  }
+}
+
+export function conversationMessagesSourceHash(messages: ConversationMessageWithParts[]): string {
+  const payload = messages.map((message) => ({
+    id: message.id,
+    session_id: message.session_id,
+    turn_id: message.turn_id,
+    seq: message.seq,
+    role: message.role,
+    visibility: message.visibility,
+    provenance: message.provenance,
+    created_at: message.created_at,
+    source_gateway: message.source_gateway,
+    source_ref: message.source_ref,
+    parts: message.parts.map((part) => ({
+      id: part.id,
+      part_index: part.part_index,
+      kind: part.kind,
+      content_json: part.content_json,
+      tool_call_id: part.tool_call_id,
+      parent_tool_call_id: part.parent_tool_call_id,
+      provider_shape: part.provider_shape,
+      status: part.status,
+    })),
+  }));
+  return `sha256:${createHash("sha256").update(JSON.stringify(payload)).digest("hex")}`;
 }
