@@ -12,6 +12,8 @@ import {
 import {
   pruneContextMetricFiles,
 } from "../../packages/butler-agent/src/agent/context/metrics-retention.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { conversationSessionIdForDurableSession } from "../../packages/butler-agent/src/agent/conversation/session-admission.ts";
 
 function tempRoot(): string {
   const root = join(tmpdir(), `butler-context-monitor-${Date.now()}-${Math.random()}`);
@@ -118,6 +120,7 @@ test("context monitor summarizes runtime turn sizes and transcript growth safely
       conversationEvents: 2,
       latestTimestamp: "2026-04-27T00:00:01.000Z",
     });
+    expect(JSON.stringify(summary)).not.toContain(butlerData);
     expect(summary.pressure.level).toBe("low");
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -170,6 +173,59 @@ test("context monitor computes pressure from combined prompt and turn sizes", ()
       totalChars: 400_000,
       estimatedTokens: 100_000,
     });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("context monitor separates semantic pressure from audit transcript growth", () => {
+  const root = tempRoot();
+  const butlerData = join(root, "data");
+  const canonicalSessionId = conversationSessionIdForDurableSession("butler/main");
+  mkdirSync(join(butlerData, "transcripts"), { recursive: true });
+  writeFileSync(
+    join(butlerData, "transcripts", "butler_main.jsonl"),
+    Array.from({ length: 200 }, (_, index) => JSON.stringify({
+      eventId: `audit-${index}`,
+      sessionId: "butler/main",
+      kind: "turn.progress",
+      timestamp: "2026-04-27T00:00:00.000Z",
+      payload: { note: "AUDIT_ONLY ".repeat(100) },
+    })).join("\n"),
+    "utf8",
+  );
+
+  const store = new AgentConversationStore({ butlerData });
+  try {
+    const turn = store.beginTurn({
+      gateway: "app",
+      externalSessionId: "butler/main",
+      sessionId: canonicalSessionId,
+      actor: "user",
+    });
+    store.appendUserMessage({
+      sessionId: canonicalSessionId,
+      turnId: turn.id,
+      text: "semantic pressure only",
+    });
+  } finally {
+    store.close();
+  }
+
+  try {
+    const summary = readContextMonitor({ butlerData, sessionId: "butler/main" });
+
+    expect(summary.transcript.events).toBe(200);
+    expect(summary.transcript.conversationEvents).toBe(0);
+    expect(summary.conversation).toMatchObject({
+      exists: true,
+      sessionId: canonicalSessionId,
+      semanticMessages: 1,
+      summaries: 0,
+    });
+    expect(summary.pressure.contributors.transcriptBytes).toBeGreaterThan(10_000);
+    expect(summary.pressure.contributors.semanticPromptTokens).toBeGreaterThan(0);
+    expect(summary.pressure.estimatedTokens).toBe(summary.conversation.promptTokenEstimate);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

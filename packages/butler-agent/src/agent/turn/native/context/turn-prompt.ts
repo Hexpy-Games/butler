@@ -4,11 +4,11 @@ import type {
   RuntimeTurnInput,
 } from "../../../../test-support/harness/contracts.ts";
 import {
-  readTranscript,
-  type TranscriptEvent,
-} from "../../../../test-support/harness/transcripts.ts";
-import { renderAttachmentContext } from "../../../context/attachment-context.ts";
-import { takeLinesFromEndWithinBudget } from "../../../context/budget.ts";
+  canonicalConversationSessionId,
+  renderPromptMaterial,
+  withConversationReader,
+  type ConversationContextReader,
+} from "../../../context/conversation-context.ts";
 import {
   createTurnContextAtomId,
   readTurnContextAtom,
@@ -81,6 +81,7 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
   runtimePolicyContext?: string;
   recentConversationTokenBudget: number;
   butlerData: string;
+  conversationReader?: ConversationContextReader;
 }): NormalizedTurnPrompt {
   const parts: string[] = [];
   const schedulerContinuationRequested = hasSchedulerContinuationMetadata(input);
@@ -108,6 +109,7 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
     input,
     options.recentConversationTokenBudget,
     options.butlerData,
+    options.conversationReader,
   );
   if (recentConversation) parts.push(recentConversation);
 
@@ -257,44 +259,33 @@ function renderAtomRefs(
   ].join("\n");
 }
 
-function transcriptLines(event: TranscriptEvent, butlerData: string): string[] {
-  const payload = event.payload as Record<string, any>;
-  const message = payload.message as Record<string, any> | undefined;
-  const attachments = Array.isArray(message?.attachments) ? message.attachments : [];
-  const attachmentContext = renderAttachmentContext(attachments, {
+function buildRecentConversation(
+  input: RuntimeTurnInput,
+  maxTokens: number,
+  butlerData: string,
+  conversationReader?: ConversationContextReader,
+): string {
+  return withConversationReader({
     butlerData,
-    title: event.kind === "inbound" ? "User Attachments" : "Butler Attachments",
-    includeTextContent: false,
+    reader: conversationReader,
+    fn: (reader) => {
+      const canonicalSessionId = canonicalConversationSessionId({
+        reader,
+        runtimeSessionId: input.handle.sessionId,
+        gateway: "text" in input.input ? null : input.input.transport,
+      });
+      return renderPromptMaterial(
+        reader.readPromptMaterial({
+          sessionId: canonicalSessionId,
+          tailLimit: 80,
+        }),
+        {
+          maxTokens,
+          excludeSourceRef: currentInboundEventId(input),
+        },
+      );
+    },
   });
-  if (event.kind === "inbound") {
-    const text = message?.text;
-    return [
-      typeof text === "string" && text.trim() ? `user: ${text.trim()}` : "",
-      attachmentContext,
-    ].filter((line) => line.trim());
-  }
-  if (event.kind === "outbound") {
-    const text = message?.text;
-    return [
-      typeof text === "string" && text.trim() ? `butler: ${text.trim()}` : "",
-      attachmentContext,
-    ].filter((line) => line.trim());
-  }
-  return [];
-}
-
-function buildRecentConversation(input: RuntimeTurnInput, maxTokens: number, butlerData: string): string {
-  const currentEventId = currentInboundEventId(input);
-  const lines = readTranscript(input.handle.sessionId)
-    .filter((event) =>
-      event.eventId !== currentEventId &&
-      (event.payload as Record<string, any>)?.eventId !== currentEventId)
-    .flatMap((event) => transcriptLines(event, butlerData))
-    .filter((line) => line.trim());
-
-  const selected = takeLinesFromEndWithinBudget(lines, maxTokens);
-  if (selected.length === 0) return "";
-  return ["## Recent Conversation", ...selected].join("\n");
 }
 
 function removePromptContextSection(promptContext: string, title: string): string {

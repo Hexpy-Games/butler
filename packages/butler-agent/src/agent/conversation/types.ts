@@ -171,6 +171,12 @@ export interface ReadAroundInput {
   includeCompacted?: boolean;
 }
 
+export interface ReadMessagesInput {
+  sessionId: string;
+  limit?: number;
+  includeCompacted?: boolean;
+}
+
 export interface PromptMaterialInput {
   sessionId: string;
   tailLimit?: number;
@@ -196,4 +202,15 @@ export interface ConversationProjectionReader {
     sessionId: string,
     input?: { afterSeq?: number; limit?: number },
   ): ConversationMessageWithParts[];
+}
+
+export interface ConversationContextStoreReader {
+  getSession(sessionId: string): ConversationSession | null;
+  getSessionByGatewayBinding(gateway: string, externalSessionId: string): ConversationSession | null;
+  readMessageById(messageId: string): ConversationMessageWithParts | null;
+  readMessageBySourceRef(sessionId: string, sourceRef: string): ConversationMessageWithParts | null;
+  readMessages(input: ReadMessagesInput): ConversationMessageWithParts[];
+  readMessagesAround(input: ReadAroundInput): ConversationMessageWithParts[];
+  readSummaries(sessionId: string): ConversationSummary[];
+  readPromptMaterial(input: PromptMaterialInput): PromptMaterial;
 }
