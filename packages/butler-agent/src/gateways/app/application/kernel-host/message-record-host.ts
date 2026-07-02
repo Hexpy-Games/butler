@@ -38,6 +38,9 @@ export interface AppStoreKernelMessageRecordHost {
       safeErrorCode?: string;
       retryable?: boolean;
       attachments?: MessageFileRow[];
+      conversationSessionId?: string | null;
+      conversationTurnId?: string | null;
+      conversationMessageId?: string | null;
     },
   ): MessageRecord;
   insertAssistantReplies(

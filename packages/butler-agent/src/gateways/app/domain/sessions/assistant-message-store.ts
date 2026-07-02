@@ -111,7 +111,8 @@ export class AppAssistantMessageStore {
     const rows = this.input.db
       .query<MessageRow, [string]>(
         `
-      SELECT rowid, id, chat_id, turn_id, role, text, status, created_at, updated_at, safe_error_code, retryable
+      SELECT rowid, id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
+        conversation_message_id, role, text, status, created_at, updated_at, safe_error_code, retryable
       FROM messages
       WHERE turn_id = ? AND role = 'assistant'
       ORDER BY rowid DESC
