@@ -9,8 +9,11 @@ import type {
   MessageRole,
   MessageStatus,
 } from "../../interface/protocol/app-protocol.ts";
+import { appChatIdForConversationExternalSession } from "./app-conversation-session-id.ts";
 
 export class AppConversationMessageProjector {
+  private readonly appChatIdByExternalSessionId = new Map<string, string>();
+
   constructor(
     private readonly input: {
       db: Database;
@@ -37,9 +40,11 @@ export class AppConversationMessageProjector {
     if (!session) {
       throw new Error(`Conversation session missing: ${message.session_id}`);
     }
-    this.ensureProjectionChat(binding.external_session_id, session);
+    const chatId = this.appChatIdForExternalSession(binding.external_session_id);
+    this.ensureProjectionChat(chatId, session);
+    this.detachShadowHintChat(binding.external_session_id, chatId, session.id);
     const messageId = this.existingProjectionMessageId(
-      binding.external_session_id,
+      chatId,
       message,
       text,
     ) ?? `app-projection-${message.id}`;
@@ -65,7 +70,7 @@ export class AppConversationMessageProjector {
         retryable = 0
     `).run(
       messageId,
-      binding.external_session_id,
+      chatId,
       message.turn_id,
       message.session_id,
       message.turn_id,
@@ -77,7 +82,7 @@ export class AppConversationMessageProjector {
       now,
     );
     this.input.db.query("UPDATE chats SET updated_at = ? WHERE id = ?")
-      .run(now, binding.external_session_id);
+      .run(now, chatId);
     return 1;
   }
 
@@ -105,6 +110,31 @@ export class AppConversationMessageProjector {
           AND conversation_session_id IS NULL
       `).run(session.id, chatId);
     }
+  }
+
+  appChatIdForExternalSession(externalSessionId: string): string {
+    const cached = this.appChatIdByExternalSessionId.get(externalSessionId);
+    if (cached) return cached;
+    const chatId = appChatIdForConversationExternalSession(
+      this.input.db,
+      externalSessionId,
+    );
+    this.appChatIdByExternalSessionId.set(externalSessionId, chatId);
+    return chatId;
+  }
+
+  private detachShadowHintChat(
+    externalSessionId: string,
+    chatId: string,
+    conversationSessionId: string,
+  ): void {
+    if (externalSessionId === chatId) return;
+    this.input.db.query(`
+      UPDATE chats
+      SET conversation_session_id = NULL
+      WHERE id = ?
+        AND conversation_session_id = ?
+    `).run(externalSessionId, conversationSessionId);
   }
 
   private existingProjectionMessageId(
