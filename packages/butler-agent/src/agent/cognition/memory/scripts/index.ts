@@ -46,6 +46,21 @@ export function extractTextFromJsonl(jsonl: string): string {
   return lines.join("\n\n");
 }
 
+export function extractSourceMessageIdsFromJsonl(jsonl: string): string[] {
+  const ids: string[] = [];
+  for (const line of jsonl.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let obj: any;
+    try { obj = JSON.parse(trimmed); } catch { continue; }
+    if (!Array.isArray(obj?.source_message_ids)) continue;
+    for (const id of obj.source_message_ids) {
+      if (typeof id === "string" && id.trim()) ids.push(id.trim());
+    }
+  }
+  return [...new Set(ids)];
+}
+
 // Chunk by ~2000 chars (~500 tokens for mixed Korean/English) with 50-char overlap.
 export function chunkText(text: string, size = 2000, overlap = 50): string[] {
   if (!text.trim()) return [];
@@ -79,6 +94,7 @@ if (import.meta.main) {
   const now = Math.floor(Date.now() / 1000);
 
   const text = plainText ? raw.trim() : extractTextFromJsonl(raw);
+  const sourceMessageIds = plainText ? [] : extractSourceMessageIdsFromJsonl(raw);
   const chunks = chunkText(text);
 
   if (chunks.length === 0) {
@@ -181,6 +197,7 @@ if (import.meta.main) {
     project,
     source,
     topic: topic ?? null,
+    source_message_ids: sourceMessageIds,
     indexed_at: indexedAt,
     chunk_count: chunks.length,
   })}\n`, "utf8");
@@ -192,6 +209,7 @@ if (import.meta.main) {
     updated_at: indexedAt,
     last_session_id: sessionId,
     last_source_session_id: sourceSessionId,
+    last_source_message_ids: sourceMessageIds,
     last_chunk_count: chunks.length,
   });
 

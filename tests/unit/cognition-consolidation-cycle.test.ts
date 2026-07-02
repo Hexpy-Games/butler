@@ -14,10 +14,44 @@ import {
 } from "../../packages/butler-agent/src/personalization/profiling.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
 import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 function tempData(): string {
   return mkdtempSync(join(tmpdir(), "butler-consolidation-cycle-"));
+}
+
+function writeConversationProfileMessages(
+  butlerData: string,
+  messages: Array<{ id: string; timestamp: string; text: string }>,
+): void {
+  let next = 0;
+  const store = new AgentConversationStore({
+    butlerData,
+    idFactory: (prefix) => `${prefix}_consolidation_${++next}`,
+  });
+  try {
+    const turn = store.beginTurn({
+      gateway: "app",
+      externalSessionId: "general",
+      sessionId: "cs_profile",
+      actor: "user",
+      now: messages[0]?.timestamp ?? "2026-05-17T00:00:00.000Z",
+    });
+    for (const message of messages) {
+      store.appendUserMessage({
+        sessionId: "cs_profile",
+        turnId: turn.id,
+        messageId: `cm_${message.id}`,
+        text: message.text,
+        sourceGateway: "app",
+        sourceRef: message.id,
+        now: message.timestamp,
+      });
+    }
+  } finally {
+    store.close();
+  }
 }
 
 const fakeProvider: ModelProviderAdapter = {
@@ -165,20 +199,18 @@ test("consolidation cycle does not promote free-form profile feedback heuristica
   }
 });
 
-test("consolidation cycle extracts profile candidates from consented transcripts", async () => {
+test("consolidation cycle extracts profile candidates from consented conversations", async () => {
   const butlerData = tempData();
   try {
     writeProfilingConsentSnapshot(butlerData, {
       mode: "deep",
       consented_at: "2026-05-17T00:00:00.000Z",
     });
-    const transcriptDir = join(butlerData, "transcripts");
-    mkdirSync(transcriptDir, { recursive: true });
-    writeFileSync(join(transcriptDir, "butler_app-general.jsonl"), [
-      transcriptEvent("evt_t1", "2026-05-17T00:01:00.000Z", "버틀러는 워커 오케스트레이션과 프로파일링이 실제로 작동하는지 검증해야 해."),
-      transcriptEvent("evt_t2", "2026-05-17T00:02:00.000Z", "고쳤다고 말하기 전에 재현하고 확인까지 해야 해. 임시방편 말고 구조적으로 고쳐."),
-      transcriptEvent("evt_t3", "2026-05-17T00:03:00.000Z", "프로파일링은 동의 기반 로컬 블랙박스로 두고 원시 로그는 노출하지 마."),
-    ].join("\n") + "\n", "utf8");
+    writeConversationProfileMessages(butlerData, [
+      { id: "evt_t1", timestamp: "2026-05-17T00:01:00.000Z", text: "버틀러는 워커 오케스트레이션과 프로파일링이 실제로 작동하는지 검증해야 해." },
+      { id: "evt_t2", timestamp: "2026-05-17T00:02:00.000Z", text: "고쳤다고 말하기 전에 재현하고 확인까지 해야 해. 임시방편 말고 구조적으로 고쳐." },
+      { id: "evt_t3", timestamp: "2026-05-17T00:03:00.000Z", text: "프로파일링은 동의 기반 로컬 블랙박스로 두고 원시 로그는 노출하지 마." },
+    ]);
 
     const result = await runCognitionConsolidationCycle({
       butlerData,
@@ -191,8 +223,8 @@ test("consolidation cycle extracts profile candidates from consented transcripts
             source_type: "repeated_observation",
             confidence: "medium",
             evidence_refs: [
-              "transcript:butler_app-general:evt_t1",
-              "transcript:butler_app-general:evt_t2",
+              "conversation:cm_evt_t1",
+              "conversation:cm_evt_t2",
             ],
             sensitive_domain: false,
             expires_or_decay: "decay",
@@ -202,7 +234,7 @@ test("consolidation cycle extracts profile candidates from consented transcripts
             summary: "Treat profiling as consent-gated local black-box data and avoid raw log exposure.",
             source_type: "explicit",
             confidence: "high",
-            evidence_refs: ["transcript:butler_app-general:evt_t3"],
+            evidence_refs: ["conversation:cm_evt_t3"],
             sensitive_domain: false,
             expires_or_decay: "decay",
           },
@@ -214,14 +246,16 @@ test("consolidation cycle extracts profile candidates from consented transcripts
     const profilePhase = result.phases.find((phase) => phase.phase === "profile_consolidation");
     expect(profilePhase?.metrics).toMatchObject({
       profiling_enabled: true,
-      transcript_scanned_file_count: 1,
-      transcript_scanned_event_count: 3,
+      semantic_scanned_session_count: 1,
+      semantic_scanned_message_count: 3,
+      audit_transcript_scanned_file_count: 0,
+      audit_transcript_scanned_event_count: 0,
       transcript_extractor_model_called: true,
       transcript_extractor_fallback_used: false,
       projection_written: true,
       raw_text_included: false,
     });
-    expect(Number(profilePhase?.metrics.transcript_captured_candidate_count)).toBe(2);
+    expect(Number(profilePhase?.metrics.semantic_captured_candidate_count)).toBe(2);
     expect(readRuntimeProfileProjection(butlerData)?.current_attention.join(" ")).toContain("Butler");
     expect(readFileSync(result.summary_path, "utf8")).not.toContain("원시 로그는 노출하지 마");
   } finally {
@@ -229,19 +263,17 @@ test("consolidation cycle extracts profile candidates from consented transcripts
   }
 });
 
-test("profile consolidation uses the previous completed run as transcript watermark", async () => {
+test("profile consolidation uses the previous completed run as semantic watermark", async () => {
   const butlerData = tempData();
   try {
     writeProfilingConsentSnapshot(butlerData, {
       mode: "deep",
       consented_at: "2026-05-17T00:00:00.000Z",
     });
-    const transcriptDir = join(butlerData, "transcripts");
-    mkdirSync(transcriptDir, { recursive: true });
-    writeFileSync(join(transcriptDir, "butler_app-general.jsonl"), [
-      transcriptEvent("evt_old", "2026-05-28T19:00:00.000Z", "OLD_PROFILE_TEXT should not be reprocessed."),
-      transcriptEvent("evt_new", "2026-05-28T19:07:00.000Z", "NEW_PROFILE_TEXT should be extracted."),
-    ].join("\n") + "\n", "utf8");
+    writeConversationProfileMessages(butlerData, [
+      { id: "evt_old", timestamp: "2026-05-28T19:00:00.000Z", text: "OLD_PROFILE_TEXT should not be reprocessed." },
+      { id: "evt_new", timestamp: "2026-05-28T19:07:00.000Z", text: "NEW_PROFILE_TEXT should be extracted." },
+    ]);
     const runsDir = join(butlerData, "cognition", "consolidation", "runs");
     mkdirSync(runsDir, { recursive: true });
     writeFileSync(join(runsDir, "cr_previous.json"), JSON.stringify({
@@ -266,7 +298,7 @@ test("profile consolidation uses the previous completed run as transcript waterm
             summary: "Currently cares about the new profile text.",
             source_type: "explicit",
             confidence: "high",
-            evidence_refs: ["transcript:butler_app-general:evt_new"],
+            evidence_refs: ["conversation:cm_evt_new"],
             sensitive_domain: false,
             expires_or_decay: "decay",
           }],
@@ -279,8 +311,9 @@ test("profile consolidation uses the previous completed run as transcript waterm
     const profilePhase = result.phases.find((phase) => phase.phase === "profile_consolidation");
     expect(profilePhase?.metrics).toMatchObject({
       transcript_since: "2026-05-28T19:06:50.238Z",
-      transcript_scanned_event_count: 1,
-      transcript_captured_candidate_count: 1,
+      semantic_scanned_message_count: 1,
+      semantic_captured_candidate_count: 1,
+      audit_transcript_scanned_event_count: 0,
       transcript_extractor_model_called: true,
       raw_text_included: false,
     });
@@ -323,11 +356,9 @@ test("consolidation cycle writes generated new chat briefing artifacts and usage
       mode: "deep",
       consented_at: "2026-05-28T00:00:00.000Z",
     });
-    const transcriptDir = join(butlerData, "transcripts");
-    mkdirSync(transcriptDir, { recursive: true });
-    writeFileSync(join(transcriptDir, "butler_app-general.jsonl"), [
-      transcriptEvent("evt_topic", "2026-05-28T00:01:00.000Z", "충주 냉면과 저녁에 볼 anime 추천도 궁금해."),
-    ].join("\n") + "\n", "utf8");
+    writeConversationProfileMessages(butlerData, [
+      { id: "evt_topic", timestamp: "2026-05-28T00:01:00.000Z", text: "충주 냉면과 저녁에 볼 anime 추천도 궁금해." },
+    ]);
 
     const result = await runCognitionConsolidationCycle({
       butlerData,
@@ -340,7 +371,7 @@ test("consolidation cycle writes generated new chat briefing artifacts and usage
             summary: "The user is currently asking about 충주 냉면 and anime recommendations.",
             source_type: "explicit",
             confidence: "high",
-            evidence_refs: ["transcript:butler_app-general:evt_topic"],
+            evidence_refs: ["conversation:cm_evt_topic"],
             sensitive_domain: false,
             expires_or_decay: "decay",
           },
@@ -575,16 +606,6 @@ test("consolidation cycle pauses on mid-run rate limit and resumes from checkpoi
     rmSync(butlerData, { recursive: true, force: true });
   }
 });
-
-function transcriptEvent(eventId: string, timestamp: string, text: string): string {
-  return JSON.stringify({
-    eventId,
-    sessionId: "butler_app-general",
-    kind: "inbound",
-    timestamp,
-    payload: { message: { text } },
-  });
-}
 
 test("consolidation cycle prunes only expired unpinned box-owned content", async () => {
   const butlerData = tempData();

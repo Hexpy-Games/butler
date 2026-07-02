@@ -32,6 +32,7 @@ import type {
   PromptMaterial,
   PromptMaterialInput,
   ReadAroundInput,
+  ReadCognitionMessagesInput,
   ReadMessagesInput,
 } from "./types.ts";
 
@@ -217,6 +218,44 @@ export class AgentConversationStore {
       ORDER BY seq ASC
       LIMIT ?
     `).all(input.sessionId, capped);
+    return rows.map((row) => this.internals.hydrateMessage(row));
+  }
+
+  readCognitionMessages(input: ReadCognitionMessagesInput = {}): ConversationMessageWithParts[] {
+    const capped = normalizeLimit(input.limit ?? 1000, 1000, 5000);
+    const order = input.order === "desc" ? "DESC" : "ASC";
+    const params: Record<string, string | number> = {
+      $limit: capped,
+    };
+    const clauses: string[] = [];
+    if (input.sessionId?.trim()) {
+      clauses.push("session_id = $session_id");
+      params.$session_id = input.sessionId.trim();
+    }
+    if (input.roles && input.roles.length > 0) {
+      const roles = [...new Set(input.roles)];
+      clauses.push(`role IN (${roles.map((_, index) => `$role${index}`).join(", ")})`);
+      roles.forEach((role, index) => {
+        params[`$role${index}`] = role;
+      });
+    }
+    if (input.since?.trim()) {
+      clauses.push("created_at >= $since");
+      params.$since = input.since.trim();
+    }
+    clauses.push("visibility = 'model'");
+    if (!input.includeCompacted) {
+      clauses.push("compacted_by_summary_id IS NULL");
+      clauses.push("status != 'compacted'");
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+    const rows = this.db.query<MessageRow, Record<string, string | number>>(`
+      SELECT *
+      FROM conversation_messages
+      ${where}
+      ORDER BY created_at ${order}, seq ${order}, id ${order}
+      LIMIT $limit
+    `).all(params);
     return rows.map((row) => this.internals.hydrateMessage(row));
   }
 

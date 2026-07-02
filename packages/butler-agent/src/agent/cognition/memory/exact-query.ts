@@ -1,12 +1,18 @@
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
+import {
+  readConversationObservations,
+  type ConversationObservationRole,
+} from "./scripts/lib/conversation-sources.ts";
+import { conversationStorePath } from "../../conversation/store.ts";
 
 export type MemoryQueryScope = "all_sessions" | "session";
 export type MemoryQuerySpeaker = "any" | "user" | "butler";
 export type MemoryQueryEventKind = "any" | "inbound" | "outbound";
 export type MemoryQueryOrder = "earliest" | "latest";
 export type MemoryQueryMatchMode = "any" | "all" | "phrase";
+export type ExactQuerySource = "conversation-store" | "app-projection-compat" | "transcript-recovery-index";
 
 export interface QueryMemoryInput {
   butlerData: string;
@@ -23,6 +29,7 @@ export interface QueryMemoryInput {
   dateTo?: string;
   includeInternal?: boolean;
   includePlaceholders?: boolean;
+  includeTranscriptRecovery?: boolean;
 }
 
 export interface QueryMemoryMatch {
@@ -34,7 +41,8 @@ export interface QueryMemoryMatch {
   speaker: Exclude<MemoryQuerySpeaker, "any">;
   kind: Exclude<MemoryQueryEventKind, "any">;
   text: string;
-  source: "app-message-db" | "transcript-query-index";
+  source: ExactQuerySource;
+  conversation_message_id: string | null;
   transcript_file: string | null;
   matched_terms: string[];
 }
@@ -75,6 +83,7 @@ interface IndexedRow {
   text: string;
   created_at: string;
   source: QueryMemoryMatch["source"];
+  conversation_message_id: string | null;
   transcript_file: string | null;
 }
 
@@ -379,6 +388,13 @@ function roleFilter(speaker: MemoryQuerySpeaker, eventKind: MemoryQueryEventKind
   return ["user", "assistant"];
 }
 
+function observationRoleFilter(
+  speaker: MemoryQuerySpeaker,
+  eventKind: MemoryQueryEventKind,
+): ConversationObservationRole[] {
+  return roleFilter(speaker, eventKind) as ConversationObservationRole[];
+}
+
 function appSessionId(chatId: string): string {
   return chatId === "general" ? "butler/app-general" : `butler/app-${safeSessionSegment(chatId)}`;
 }
@@ -429,18 +445,18 @@ function queryAppMessages(input: {
   dateTo: string | null;
 }): SourceQueryResult {
   if (!existsSync(input.dbPath)) {
-    return { source: "app-message-db", skipped: "app message db missing", total: 0, rows: [], diagnostics: [] };
+    return { source: "app-projection-compat", skipped: "app message db missing", total: 0, rows: [], diagnostics: [] };
   }
   const db = new Database(input.dbPath, { readonly: true });
   try {
     if (!hasTable(db, "messages")) {
-      return { source: "app-message-db", skipped: "messages table missing", total: 0, rows: [], diagnostics: [] };
+      return { source: "app-projection-compat", skipped: "messages table missing", total: 0, rows: [], diagnostics: [] };
     }
     const needsSessionIndex = input.scope === "session";
     const requiredIndex = needsSessionIndex ? "messages_chat_role_created_idx" : "messages_role_created_idx";
     if (!hasIndex(db, "messages", requiredIndex)) {
       return {
-        source: "app-message-db",
+        source: "app-projection-compat",
         skipped: `${requiredIndex} missing; refusing full message scan`,
         total: 0,
         rows: [],
@@ -449,7 +465,7 @@ function queryAppMessages(input: {
     }
     const fts = input.query ? ftsQuery(input.query, input.matchMode) : null;
     if (input.query && (!fts || !hasTable(db, "messages_fts"))) {
-      return { source: "app-message-db", skipped: "messages_fts missing; refusing LIKE scan", total: 0, rows: [], diagnostics: [] };
+      return { source: "app-projection-compat", skipped: "messages_fts missing; refusing LIKE scan", total: 0, rows: [], diagnostics: [] };
     }
     const roles = roleFilter(input.speaker, input.eventKind);
     const params: Record<string, string | number> = {
@@ -494,7 +510,7 @@ function queryAppMessages(input: {
       LIMIT $limit
     `).all(params);
     return {
-      source: "app-message-db",
+      source: "app-projection-compat",
       total: Number(count),
       rows: rows.map((row) => ({
         event_id: row.event_id,
@@ -502,7 +518,8 @@ function queryAppMessages(input: {
         role: row.role,
         text: row.text,
         created_at: row.created_at,
-        source: "app-message-db" as const,
+        source: "app-projection-compat" as const,
+        conversation_message_id: null,
         transcript_file: null,
       })),
       diagnostics: [],
@@ -510,6 +527,52 @@ function queryAppMessages(input: {
   } finally {
     db.close();
   }
+}
+
+function queryConversationStore(input: {
+  butlerData: string;
+  query: string;
+  scope: MemoryQueryScope;
+  sessionId: string;
+  speaker: MemoryQuerySpeaker;
+  eventKind: MemoryQueryEventKind;
+  order: MemoryQueryOrder;
+  matchMode: MemoryQueryMatchMode;
+  limit: number;
+  dateFrom: string | null;
+  dateTo: string | null;
+}): SourceQueryResult {
+  if (!existsSync(conversationStorePath(input.butlerData))) {
+    return { source: "conversation-store", skipped: "conversation store missing", total: 0, rows: [], diagnostics: [] };
+  }
+  const observations = readConversationObservations({
+    butlerData: input.butlerData,
+    sessionId: input.scope === "session" ? input.sessionId : undefined,
+    roles: observationRoleFilter(input.speaker, input.eventKind),
+    since: input.dateFrom,
+    includeCompacted: true,
+    order: input.order === "latest" ? "desc" : "asc",
+    maxMessages: 5000,
+  }).filter((observation) => {
+    if (input.dateTo && observation.created_at >= input.dateTo) return false;
+    if (!input.query) return true;
+    return matchedTerms(observation.text, input.query, input.matchMode).length > 0;
+  });
+  return {
+    source: "conversation-store",
+    total: observations.length,
+    rows: observations.slice(0, input.limit).map((observation) => ({
+      event_id: observation.conversation_message_id,
+      session_id: observation.conversation_session_id,
+      role: observation.role === "assistant" ? "assistant" : "user",
+      text: observation.text,
+      created_at: observation.created_at,
+      source: "conversation-store",
+      conversation_message_id: observation.conversation_message_id,
+      transcript_file: null,
+    })),
+    diagnostics: [],
+  };
 }
 
 function queryTranscriptIndex(input: {
@@ -529,12 +592,12 @@ function queryTranscriptIndex(input: {
   excludeAppSessions: boolean;
 }): SourceQueryResult {
   if (!existsSync(input.dbPath)) {
-    return { source: "transcript-query-index", skipped: "transcript query index missing", total: 0, rows: [], diagnostics: [] };
+    return { source: "transcript-recovery-index", skipped: "transcript query index missing", total: 0, rows: [], diagnostics: [] };
   }
   const db = new Database(input.dbPath, { readonly: true });
   try {
     if (!hasTable(db, "conversation_messages")) {
-      return { source: "transcript-query-index", skipped: "conversation_messages table missing", total: 0, rows: [], diagnostics: [] };
+      return { source: "transcript-recovery-index", skipped: "conversation_messages table missing", total: 0, rows: [], diagnostics: [] };
     }
     const needsSessionIndex = input.scope === "session";
     const requiredIndex = needsSessionIndex
@@ -542,7 +605,7 @@ function queryTranscriptIndex(input: {
       : "conversation_messages_role_created_idx";
     if (!hasIndex(db, "conversation_messages", requiredIndex)) {
       return {
-        source: "transcript-query-index",
+        source: "transcript-recovery-index",
         skipped: `${requiredIndex} missing; refusing full transcript index scan`,
         total: 0,
         rows: [],
@@ -551,7 +614,7 @@ function queryTranscriptIndex(input: {
     }
     if (input.excludeAppSessions && input.scope === "session" && isAppSessionId(input.sessionId)) {
       return {
-        source: "transcript-query-index",
+        source: "transcript-recovery-index",
         skipped: "app session covered by app message db",
         total: 0,
         rows: [],
@@ -561,7 +624,7 @@ function queryTranscriptIndex(input: {
     const fts = input.query ? ftsQuery(input.query, input.matchMode) : null;
     if (input.query && (!fts || !hasTable(db, "conversation_messages_fts"))) {
       return {
-        source: "transcript-query-index",
+        source: "transcript-recovery-index",
         skipped: "conversation_messages_fts missing; refusing LIKE scan",
         total: 0,
         rows: [],
@@ -608,7 +671,8 @@ function queryTranscriptIndex(input: {
         m.role,
         m.text,
         m.created_at,
-        'transcript-query-index' AS source,
+        'transcript-recovery-index' AS source,
+        NULL AS conversation_message_id,
         m.transcript_file
       FROM conversation_messages m
       WHERE ${where}
@@ -616,7 +680,7 @@ function queryTranscriptIndex(input: {
       LIMIT $limit
     `).all(params);
     return {
-      source: "transcript-query-index",
+      source: "transcript-recovery-index",
       total: Number(count),
       rows,
       diagnostics: [],
@@ -655,16 +719,17 @@ export function queryMemory(input: QueryMemoryInput): QueryMemoryResult {
       returned: 0,
       inspected_sources: [],
       skipped_sources: [
-        "app-message-db: session scope missing session_id",
-        "transcript-query-index: session scope missing session_id",
+        "conversation-store: session scope missing session_id",
+        "app-projection-compat: session scope missing session_id",
+        "transcript-recovery-index: session scope missing session_id",
       ],
       results: [],
       diagnostics,
     };
   }
 
-  const app = queryAppMessages({
-    dbPath: input.appMessageDbPath ?? appMessageDbPath(input.butlerData),
+  const conversation = queryConversationStore({
+    butlerData: input.butlerData,
     query,
     scope,
     sessionId,
@@ -676,24 +741,53 @@ export function queryMemory(input: QueryMemoryInput): QueryMemoryResult {
     dateFrom,
     dateTo,
   });
-  const transcript = queryTranscriptIndex({
-    dbPath: transcriptQueryDbPath(input.butlerData),
-    query,
-    scope,
-    sessionId,
-    speaker,
-    eventKind,
-    order,
-    matchMode,
-    limit,
-    dateFrom,
-    dateTo,
-    includeInternal: input.includeInternal === true,
-    includePlaceholders: input.includePlaceholders === true,
-    excludeAppSessions: !app.skipped,
-  });
+  const app = scope === "session" && conversation.total > 0
+    ? {
+        source: "app-projection-compat",
+        skipped: "conversation store covers session",
+        total: 0,
+        rows: [],
+        diagnostics: [],
+      }
+    : queryAppMessages({
+        dbPath: input.appMessageDbPath ?? appMessageDbPath(input.butlerData),
+        query,
+        scope,
+        sessionId,
+        speaker,
+        eventKind,
+        order,
+        matchMode,
+        limit,
+        dateFrom,
+        dateTo,
+      });
+  const transcript = input.includeTranscriptRecovery
+    ? queryTranscriptIndex({
+        dbPath: transcriptQueryDbPath(input.butlerData),
+        query,
+        scope,
+        sessionId,
+        speaker,
+        eventKind,
+        order,
+        matchMode,
+        limit,
+        dateFrom,
+        dateTo,
+        includeInternal: input.includeInternal === true,
+        includePlaceholders: input.includePlaceholders === true,
+        excludeAppSessions: !app.skipped,
+      })
+    : {
+        source: "transcript-recovery-index",
+        skipped: "transcript recovery source not requested",
+        total: 0,
+        rows: [],
+        diagnostics: [],
+      };
 
-  const sourceResults = [app, transcript];
+  const sourceResults = [conversation, app, transcript];
   const inspectedSources = sourceResults.filter((item) => !item.skipped).map((item) => item.source);
   const skippedSources = sourceResults.flatMap((item) => item.skipped ? [`${item.source}: ${item.skipped}`] : []);
   diagnostics.push(...sourceResults.flatMap((item) => item.diagnostics));
@@ -721,6 +815,7 @@ export function queryMemory(input: QueryMemoryInput): QueryMemoryResult {
       kind: row.role === "user" ? "inbound" as const : "outbound" as const,
       text: compactText(row.text),
       source: row.source,
+      conversation_message_id: row.conversation_message_id,
       transcript_file: row.transcript_file,
       matched_terms: query ? matchedTerms(row.text, query, matchMode) : [],
     };

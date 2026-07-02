@@ -170,12 +170,13 @@ test("shadow baseline keeps exact transcript lookup on queryMemory", () => {
       order: "earliest",
       matchMode: "all",
       limit: 1,
+      includeTranscriptRecovery: true,
     });
 
     expect(exact.total_matches).toBe(1);
     expect(exact.results[0]).toMatchObject({
       event_id: "turn-1",
-      source: "transcript-query-index",
+      source: "transcript-recovery-index",
       speaker: "user",
       kind: "inbound",
     });

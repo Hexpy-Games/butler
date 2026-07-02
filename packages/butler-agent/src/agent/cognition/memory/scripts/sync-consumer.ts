@@ -21,7 +21,11 @@ import { dirname, join } from "path";
 import { homedir } from "os";
 import { spawnSync, type SpawnSyncReturns } from "child_process";
 import { consolidationLockPath, inspectConsolidationLock } from "./lib/lock.ts";
-import { buildMemoryTranscriptPayload } from "./lib/ingestion.ts";
+import {
+  buildMemoryConversationObservationPayload,
+  buildMemoryTranscriptPayload,
+  type MemoryTranscriptPayload,
+} from "./lib/ingestion.ts";
 import { transcriptFileNameForSessionId } from "./lib/session-id.ts";
 import { cognitionMemoryRoot } from "../../paths.ts";
 import { indexTranscriptLinesForQuery } from "../exact-query.ts";
@@ -309,47 +313,17 @@ export function processEntry(
     return { dequeue: true, failCount: readFailCounter(counterFile), reason };
   }
 
-  // 1. Resolve transcript path for --file argument to index.ts
-  const filePath = resolve(entry.session_id);
-  if (!filePath) {
-    const reason = "transcript_not_resolved";
-    const expectedLocalPath = join(
-        butlerData,
-      "transcripts",
-      transcriptFileNameForSessionId(entry.session_id),
-    );
-    appendDLQ(
-      {
-        timestamp: new Date().toISOString(),
-        session_id: entry.session_id,
-        project: entry.project,
-        reason,
-        exit_code: null,
-        stderr_tail: `no local transcript found for session ${entry.session_id} at ${expectedLocalPath}`,
-      },
-      dlqFile,
-    );
-    log(`  transcript not found for ${entry.session_id} — routed to DLQ`);
-    // Unrecoverable for this entry; dequeue so we don't block the queue.
-    return { dequeue: true, failCount: readFailCounter(counterFile), reason };
-  }
-
-  const rawLines = readFileSync(filePath, "utf8")
-    .split("\n")
-    .filter((line) => line.trim());
-  const payload = buildMemoryTranscriptPayload({
-    lines: rawLines,
-    sourceSessionId: entry.session_id,
-    chunkByGap: false,
-  });
-  indexTranscriptLinesForQuery({
+  const payload = resolveMemoryPayload({
+    entry,
     butlerData,
-    lines: rawLines,
-    transcriptFile: filePath,
+    resolve,
+    dlqFile,
+    counterFile,
   });
+  if ("result" in payload) return payload.result;
   const chunk = payload.chunks[0];
   if (!chunk) {
-    const reason = "transcript_empty_or_unparseable";
+    const reason = "conversation_empty_or_unparseable";
     appendDLQ(
       {
         timestamp: new Date().toISOString(),
@@ -357,11 +331,11 @@ export function processEntry(
         project: entry.project,
         reason,
         exit_code: null,
-        stderr_tail: `no indexable user/assistant text found in ${filePath}`,
+        stderr_tail: `no indexable canonical conversation text found for ${entry.session_id}`,
       },
       dlqFile,
     );
-    log(`  transcript contained no indexable text for ${entry.session_id} — routed to DLQ`);
+    log(`  conversation contained no indexable text for ${entry.session_id} — routed to DLQ`);
     return { dequeue: true, failCount: readFailCounter(counterFile), reason };
   }
 
@@ -491,6 +465,64 @@ export function processEntry(
     onAlert(n);
   }
   return { dequeue: false, failCount: n, reason: "index_nonzero_exit" };
+}
+
+function resolveMemoryPayload(input: {
+  entry: SyncRequest;
+  butlerData: string;
+  resolve: (sessionId: string) => string | null;
+  dlqFile: string;
+  counterFile: string;
+}): MemoryTranscriptPayload | { result: ProcessResult } {
+  const canonical = buildMemoryConversationObservationPayload({
+    butlerData: input.butlerData,
+    sourceSessionId: input.entry.session_id,
+    chunkByGap: false,
+  });
+  if (canonical.chunks.length > 0) {
+    return {
+      sourceSessionId: canonical.conversationSessionId ?? input.entry.session_id,
+      chunks: canonical.chunks,
+      messageCount: canonical.messageCount,
+    };
+  }
+
+  const filePath = input.resolve(input.entry.session_id);
+  if (!filePath) {
+    const reason = "transcript_not_resolved";
+    const expectedLocalPath = join(
+      input.butlerData,
+      "transcripts",
+      transcriptFileNameForSessionId(input.entry.session_id),
+    );
+    appendDLQ(
+      {
+        timestamp: new Date().toISOString(),
+        session_id: input.entry.session_id,
+        project: input.entry.project,
+        reason,
+        exit_code: null,
+        stderr_tail: `no canonical conversation or local transcript found for session ${input.entry.session_id} at ${expectedLocalPath}`,
+      },
+      input.dlqFile,
+    );
+    log(`  conversation/transcript not found for ${input.entry.session_id} — routed to DLQ`);
+    return { result: { dequeue: true, failCount: readFailCounter(input.counterFile), reason } };
+  }
+
+  const rawLines = readFileSync(filePath, "utf8")
+    .split("\n")
+    .filter((line) => line.trim());
+  indexTranscriptLinesForQuery({
+    butlerData: input.butlerData,
+    lines: rawLines,
+    transcriptFile: filePath,
+  });
+  return buildMemoryTranscriptPayload({
+    lines: rawLines,
+    sourceSessionId: input.entry.session_id,
+    chunkByGap: false,
+  });
 }
 
 // Small delay between entries to avoid starving the queue file

@@ -12,6 +12,7 @@ import {
   refreshWorkingMemoryFromTranscript,
   readWorkingMemoryDiagnostics,
   readWorkingMemorySnapshot,
+  renderWorkingMemoryContext,
   workingMemoryPath,
 } from "../../packages/butler-agent/src/agent/context/working-memory.ts";
 import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
@@ -106,6 +107,28 @@ test("working memory leaves negated and positive prose to model-owned memory too
     .map((fact) => `${fact.category}:${fact.text}`);
 
   expect(facts).toEqual([]);
+});
+
+test("working memory renders canonical conversation message provenance", () => {
+  const rendered = renderWorkingMemoryContext({
+    schema: "butler.context.working-memory.v1",
+    sessionId: "butler/main",
+    updatedAt: "2026-07-02T00:00:00.000Z",
+    facts: [{
+      id: "preference:fixture",
+      category: "preference",
+      text: "Prefer canonical provenance.",
+      sourceEventId: "evt-legacy",
+      sourceMessageId: "cm_canonical_1",
+      sourceConversationMessageId: "cm_canonical_1",
+      sourceTimestamp: "2026-07-02T00:00:00.000Z",
+      lastSeenAt: "2026-07-02T00:00:00.000Z",
+    }],
+  });
+
+  expect(rendered).toContain("conversation_message=cm_canonical_1");
+  expect(rendered).not.toContain("event=evt-legacy");
+  expect(rendered).not.toContain("transcript-backed");
 });
 
 test("runtime does not inject heuristic working memory before model-owned memory tools", async () => {
