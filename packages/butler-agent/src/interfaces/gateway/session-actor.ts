@@ -48,6 +48,7 @@ import type {
 } from "../../gateways/core/contracts.ts";
 import { APP_TRANSPORT } from "../../gateways/core/app-transport.ts";
 import { ConversationAdmissionTurn } from "../../agent/conversation/session-admission.ts";
+import { INTERNAL_CONVERSATION_TURN_EVENT_KINDS } from "../../agent/conversation/admission-kinds.ts";
 import type { ConversationWriter } from "../../agent/conversation/types.ts";
 
 interface SessionActorOptions {
@@ -515,7 +516,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       const emitTurnEvent = this.options.deliverTurnEvent || conversationAdmission
         ? async (event: RuntimeTurnEventInput) => {
             conversationAdmission?.admitTurnEvent(event);
-            if (event.visibility === "internal") return;
+            if (event.visibility === "internal" || INTERNAL_CONVERSATION_TURN_EVENT_KINDS.has(event.kind)) return;
             await this.options.deliverTurnEvent?.({
               binding: activeBinding,
               envelope,

@@ -113,6 +113,7 @@ test("finalized tool results fail closed unless a finalized tool call is known",
   const started = classifyForConversation({
     source: "runtime_turn_event",
     kind: "tool_call.finalized",
+    visibility: "internal",
     payload: {
       toolCallId: "tool-1",
       toolName: "Read File",
@@ -122,6 +123,7 @@ test("finalized tool results fail closed unless a finalized tool call is known",
   const orphan = classifyForConversation({
     source: "runtime_turn_event",
     kind: "tool_result.finalized",
+    visibility: "internal",
     payload: {
       toolCallId: "tool-1",
       toolName: "Read File",
@@ -132,6 +134,7 @@ test("finalized tool results fail closed unless a finalized tool call is known",
   const known = classifyForConversation({
     source: "runtime_turn_event",
     kind: "tool_result.finalized",
+    visibility: "internal",
     payload: {
       toolCallId: "tool-1",
       toolName: "Read File",
@@ -153,5 +156,19 @@ test("finalized tool results fail closed unless a finalized tool call is known",
     admitted: true,
     className: "semantic_tool_result",
     operation: { kind: "append_tool_result", toolCallId: "tool-1" },
+  });
+});
+
+test("finalized tool events without internal visibility fail closed", () => {
+  expect(classifyForConversation({
+    source: "runtime_turn_event",
+    kind: "tool_call.finalized",
+    payload: {
+      toolCallId: "tool-1",
+      contentJson: { rawArguments: "{\"secret\":true}" },
+    },
+  })).toMatchObject({
+    admitted: false,
+    reason: "finalized_tool_event_not_internal",
   });
 });

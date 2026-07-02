@@ -8,6 +8,7 @@ import type {
 import {
   ACTIVITY_TURN_EVENT_KINDS,
   GATEWAY_PROJECTION_TRANSCRIPT_KINDS,
+  INTERNAL_CONVERSATION_TURN_EVENT_KINDS,
   TELEMETRY_TURN_EVENT_KINDS,
   TRANSCRIPT_TOP_LEVEL_EVENT_KINDS,
 } from "./admission-kinds.ts";
@@ -104,6 +105,9 @@ function classifyGatewayEvent(input: ConversationAdmissionInput): AdmissionDecis
 }
 
 function classifyRuntimeTurnEvent(input: ConversationAdmissionInput): AdmissionDecision {
+  if (INTERNAL_CONVERSATION_TURN_EVENT_KINDS.has(input.kind) && input.visibility !== "internal") {
+    return deny(input, "audit_event", "finalized_tool_event_not_internal");
+  }
   if (input.kind === "tool_call.finalized") return semanticToolCall(input);
   if (input.kind === "tool_result.finalized") return semanticToolResult(input, "complete");
   if (input.kind === "tool_result.failed") return semanticToolResult(input, "failed");

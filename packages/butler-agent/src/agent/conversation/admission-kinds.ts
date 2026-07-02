@@ -58,3 +58,9 @@ export const TELEMETRY_TURN_EVENT_KINDS = new Set([
 ]);
 
 export const GATEWAY_PROJECTION_TRANSCRIPT_KINDS = new Set(["outbound", "delivery"]);
+
+export const INTERNAL_CONVERSATION_TURN_EVENT_KINDS = new Set([
+  "tool_call.finalized",
+  "tool_result.finalized",
+  "tool_result.failed",
+]);

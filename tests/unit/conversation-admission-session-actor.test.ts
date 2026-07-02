@@ -147,6 +147,37 @@ class FinalizedToolRuntime implements AgentRuntimeAdapter {
   }
 }
 
+class UnsafeFinalizedToolRuntime implements AgentRuntimeAdapter {
+  readonly id = "unsafe-finalized-tool-runtime";
+  readonly capabilities = {
+    supportsSessionResume: false,
+    supportsCompaction: false,
+    supportsToolStreaming: true,
+    supportsParallelToolCalls: false,
+  } as const;
+
+  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
+    return {
+      sessionId: input.sessionId,
+      role: input.role,
+      runtimeAdapterId: this.id,
+    };
+  }
+
+  async runTurn(input: RuntimeTurnInput) {
+    await input.emitTurnEvent?.({
+      kind: "tool_call.finalized",
+      payload: {
+        toolCallId: "tool-unsafe-1",
+        contentJson: {
+          rawArguments: "{\"secret\":true}",
+        },
+      },
+    });
+    return { text: "final without unsafe tool admission" };
+  }
+}
+
 function inbound(
   id: string,
   text: string,
@@ -278,6 +309,38 @@ test("session actor admits finalized tool events without projecting internal pay
     result: { text: "done" },
   });
   expect(deliveredKinds).toEqual(["tool.started", "tool.completed"]);
+
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("session actor blocks finalized tool events when internal visibility is omitted", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const deliveredKinds: string[] = [];
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
+    runtime: new UnsafeFinalizedToolRuntime(),
+    deliverTurnEvent: async ({ event }) => {
+      deliveredKinds.push(event.kind);
+    },
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await actor.handleInbound(inbound("unsafe-finalized-tool", "use unsafe tool"));
+
+  const session = conversationStore.getSessionByGatewayBinding("mock", "butler/main");
+  const semanticTail = conversationStore.readSemanticTail(session!.id, 10);
+  expect(semanticTail.map((message) => message.role)).toEqual([
+    "user",
+    "assistant",
+  ]);
+  expect(semanticTail.flatMap((message) => message.parts.map((part) => part.kind))).toEqual([
+    "text",
+    "text",
+  ]);
+  expect(deliveredKinds).toEqual([]);
 
   conversationStore.close();
   bindingStore.close();
