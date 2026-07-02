@@ -8,6 +8,7 @@ import { AboutSettings } from "./AboutSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { ArchivesSettings } from "./ArchivesSettings";
 import { GeneralSettings } from "./GeneralSettings";
+import { DeveloperLogsSettings } from "./DeveloperLogsSettings";
 import { McpSettings } from "./McpSettings";
 import { ModelsSettings } from "./ModelsSettings";
 import { PersonalizationSettings } from "./PersonalizationSettings";
@@ -21,6 +22,7 @@ import { SettingsDetailHeader } from "./SettingsDetailHeader";
 import { ModelSettingsTitle } from "./ModelSettingsTitle";
 import { SettingsSidebar } from "./SettingsSidebar";
 import { createSettingsSections } from "./settingsSections";
+import { useDeveloperLogsAvailability } from "./useDeveloperLogsAvailability";
 import { SettingsShell } from "@/butler-ds";
 
 interface SettingsViewProps {
@@ -29,20 +31,14 @@ interface SettingsViewProps {
   isActive?: boolean;
 }
 
-export function SettingsView({
-  initialSection,
-  onClose,
-  isActive = false,
-}: SettingsViewProps = {}) {
+export function SettingsView({ initialSection, onClose, isActive = false }: SettingsViewProps = {}) {
   const settings = useButlerStore((state) => state.settings);
   const closeSettings = useButlerStore((state) => state.closeSettings);
   const setView = useButlerStore((state) => state.setView);
   const storeView = useButlerStore((state) => state.view);
 
   const activeSection = useSettingsUIStore((state) => state.activeSection);
-  const setActiveSection = useSettingsUIStore(
-    (state) => state.setActiveSection,
-  );
+  const setActiveSection = useSettingsUIStore((state) => state.setActiveSection);
   const modelRoute = useSettingsUIStore((state) => state.modelRoute);
   const backModelRoute = useSettingsUIStore((state) => state.backModelRoute);
   const resetModelRoute = useSettingsUIStore((state) => state.resetModelRoute);
@@ -75,7 +71,8 @@ export function SettingsView({
   }, [closeView]);
 
   const settingsCopy = appCopy.settings;
-  const sections = createSettingsSections(settingsCopy);
+  const developerModeEnabled = useDeveloperLogsAvailability(settings.diagnostics_enabled === true);
+  const sections = createSettingsSections(settingsCopy, developerModeEnabled);
   const title =
     sections.find((item) => item.id === activeSection)?.label ??
     settingsCopy.title;
@@ -87,6 +84,20 @@ export function SettingsView({
       setView({ kind: "settings", section });
     }
   };
+
+  useEffect(() => {
+    if (activeSection !== "logs" || developerModeEnabled) return;
+    setActiveSection("about");
+    if (storeView.kind === "settings") {
+      setView({ kind: "settings", section: "about" });
+    }
+  }, [
+    activeSection,
+    developerModeEnabled,
+    setActiveSection,
+    setView,
+    storeView.kind,
+  ]);
   const titleNode = title;
   const titleSecondary =
     activeSection === "models" ? (
@@ -128,6 +139,7 @@ export function SettingsView({
           {activeSection === "mcp" && <McpSettings />}
           {activeSection === "skills" && <SkillsSettings />}
           {activeSection === "usage" && <UsageSettings />}
+          {activeSection === "logs" && developerModeEnabled && <DeveloperLogsSettings />}
           {activeSection === "privacy" && <PrivacySettings />}
           {activeSection === "system" && <SystemEventsSettings />}
           {activeSection === "archives" && <ArchivesSettings />}
