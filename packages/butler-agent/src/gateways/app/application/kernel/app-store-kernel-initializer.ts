@@ -19,6 +19,7 @@ import { AppProjectFolderStore } from "../../domain/projects/project-folder-stor
 import { AppProjectStore } from "../../domain/projects/project-store.ts";
 import { AppRuntimeInfoStore } from "../../domain/runtime/runtime-info-store.ts";
 import { AppSystemMonitorStore } from "../../domain/runtime/system-monitor-store.ts";
+import { DeveloperLogStore } from "../../../../operations/diagnostics/developer-log-store.ts";
 import { AppNavigationStore } from "../../domain/sessions/navigation-store.ts";
 import { AppNewChatBriefingStore } from "../../domain/sessions/new-chat-briefing-store.ts";
 import { AppConversationProjectionStore } from "../../domain/projections/app-conversation-projection-store.ts";
@@ -72,8 +73,10 @@ export function initializeAppStoreKernel(
     kernel.butlerData,
     kernel.appVersion,
     kernel.appUpdateManifest,
+    () => kernel.preferences?.getSettings().diagnostics_enabled === true,
   );
   kernel.systemMonitor = new AppSystemMonitorStore(kernel.butlerData);
+  kernel.developerLogs = new DeveloperLogStore({ butlerData: kernel.butlerData });
   kernel.db = new Database(options.dbPath ?? ":memory:", { create: true });
   kernel.db.run("PRAGMA journal_mode = WAL");
   kernel.db.run("PRAGMA foreign_keys = ON");

@@ -27,6 +27,7 @@ import type { AppTransportModuleGraph } from "../../infrastructure/transport/tra
 import type { AppWorkerActivityStore } from "../../domain/workers/worker-activity-store.ts";
 import type { AppWorkerControlStore } from "../../domain/workers/worker-control-store.ts";
 import type { SettingsView } from "../../interface/protocol/app-protocol.ts";
+import type { DeveloperLogStore } from "../../../../operations/diagnostics/developer-log-store.ts";
 
 export interface AppStoreKernelState {
   db: Database;
@@ -43,6 +44,7 @@ export interface AppStoreKernelState {
   sessionBindingStore: SessionBindingStore;
   runtimeInfo: AppRuntimeInfoStore;
   systemMonitor: AppSystemMonitorStore;
+  developerLogs: DeveloperLogStore;
   settingsPersistence: AppSettingsPersistence;
   modelSettingsPolicy: AppModelSettingsPolicy;
   modelRegistry: AppModelRegistryStore;

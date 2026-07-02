@@ -1,5 +1,6 @@
 import type {
   AppEventEnvelope,
+  DeveloperLogListView,
   AppInfoView,
   SystemEventListView,
   UpdateApplyRequest,
@@ -25,6 +26,14 @@ export interface AppStoreRuntimeApi {
     limit?: number;
     offset?: number;
   }): SystemEventListView;
+  listDeveloperLogs(options?: {
+    limit?: number;
+    offset?: number;
+    sessionId?: string;
+    turnId?: string;
+    kind?: "model_turn";
+    query?: string;
+  }): DeveloperLogListView;
   getUsageMonitor(options?: {
     sessionId?: string;
     sinceTs?: number | null;
@@ -74,6 +83,21 @@ export function createRuntimeStoreApi(
     },
     listSystemEvents(options = {}) {
       return kernel.systemMonitor.listSystemEvents(options);
+    },
+    listDeveloperLogs(options = {}) {
+      const result = kernel.developerLogs.list(options);
+      return {
+        developer_mode_enabled: true,
+        entries: result.entries,
+        pagination: {
+          limit: result.limit,
+          offset: result.offset,
+          total: result.total,
+          has_more: result.offset + result.entries.length < result.total,
+        },
+        generated_at: new Date().toISOString(),
+        raw_text_included: true,
+      };
     },
     getUsageMonitor(options = {}) {
       return kernel.systemMonitor.getUsageMonitor(options);
