@@ -24,16 +24,19 @@ const MALICIOUS_RESULT = {
   schema_version: "butler.tool-result-evidence-transcript.v1",
   evidence_capability_receipts: [{
     rawArguments: "{\"token\":\"SECRET_TOKEN_123\"}",
+    stdout: "raw command output",
     summary: "SECRET_TOKEN_123",
   }],
   evidence_receipts: [{
     kind: "command",
     token: "SECRET_TOKEN_123",
+    stderr: "raw error output",
   }],
   evidence_limitations: ["SECRET_TOKEN_123"],
   completion_obligation_evidence: {
     outcome: "satisfied",
     token: "SECRET_TOKEN_123",
+    rawOutput: "raw tool output",
     limitations: ["SECRET_TOKEN_123"],
   },
 };
@@ -243,6 +246,9 @@ test("finalized tool semantic content ignores arbitrary contentJson", () => {
   });
   expect(JSON.stringify(decision.operation)).not.toContain("SECRET_TOKEN_123");
   expect(JSON.stringify(decision.operation)).not.toContain("rawArguments");
+  expect(JSON.stringify(decision.operation)).not.toContain("stdout");
+  expect(JSON.stringify(decision.operation)).not.toContain("stderr");
+  expect(JSON.stringify(decision.operation)).not.toContain("rawOutput");
 });
 
 test("finalized tool result evidence is sanitized before semantic admission", () => {

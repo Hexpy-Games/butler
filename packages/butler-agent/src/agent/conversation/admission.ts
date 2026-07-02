@@ -98,7 +98,7 @@ const SAFE_TOOL_RESULT_EVIDENCE_SCHEMA = "butler.tool-result-evidence-transcript
 const EVIDENCE_JSON_MAX_DEPTH = 6;
 const EVIDENCE_JSON_MAX_ARRAY_ITEMS = 48;
 const EVIDENCE_JSON_MAX_OBJECT_ENTRIES = 48;
-const UNSAFE_TOOL_CONTENT_KEY = /\b(?:raw[_-]?arguments(?:[_-]?delta)?|api[_-]?key|token|secret|password|passphrase|authorization|credential|credentials|access[_-]?token|refresh[_-]?token|private[_-]?key|session[_-]?key|cookie|set-cookie)\b/iu;
+const UNSAFE_TOOL_CONTENT_KEY = /\b(?:raw[_-]?(?:arguments(?:[_-]?delta)?|output|stdout|stderr)|stdout|stderr|api[_-]?key|token|secret|password|passphrase|authorization|credential|credentials|access[_-]?token|refresh[_-]?token|private[_-]?key|session[_-]?key|cookie|set-cookie)\b/iu;
 
 export function classifyForConversation(input: ConversationAdmissionInput): AdmissionDecision {
   if (input.source === "gateway") return classifyGatewayEvent(input);
