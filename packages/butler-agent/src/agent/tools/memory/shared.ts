@@ -211,13 +211,18 @@ export function createMemoryToolHandlers(input: {
         : undefined;
       return readConversationContext({
         sessionId: input.sessionId ?? "butler/main",
+        butlerData: input.butlerData,
         query: typeof call.args.query === "string" ? call.args.query : undefined,
+        anchorMessageId: typeof call.args.anchor_message_id === "string"
+          ? call.args.anchor_message_id
+          : undefined,
         anchorEventId: typeof call.args.anchor_event_id === "string"
           ? call.args.anchor_event_id
           : undefined,
         direction,
         limit: typeof call.args.limit === "number" ? call.args.limit : undefined,
         maxChars: typeof call.args.max_chars === "number" ? call.args.max_chars : undefined,
+        includeTools: call.args.include_tools === true,
       });
     },
     "update_explicit_memory": async (call: ToolCall) => {

@@ -6,6 +6,8 @@ import {
   evaluateContextBudget,
   type ContextThresholdState,
 } from "../../agent/context/budget.ts";
+import { AgentConversationStore, conversationStorePath } from "../../agent/conversation/store.ts";
+import { conversationSessionIdForDurableSession } from "../../agent/conversation/session-admission.ts";
 
 export type ContextPressureLevel = "low" | "medium" | "high";
 
@@ -51,11 +53,19 @@ export interface ContextMonitorSummary {
   latestTurn: (RuntimeTurnContextMetric & { estimatedTokens: number }) | null;
   transcript: {
     exists: boolean;
-    path: string;
     bytes: number;
     events: number;
     conversationEvents: number;
     latestTimestamp: string | null;
+  };
+  conversation: {
+    exists: boolean;
+    sessionId: string;
+    semanticMessages: number;
+    compactedMessages: number;
+    summaries: number;
+    latestMessageTimestamp: string | null;
+    promptTokenEstimate: number;
   };
   pressure: {
     level: ContextPressureLevel;
@@ -71,6 +81,7 @@ export interface ContextMonitorSummary {
     contributors: {
       systemPromptChars: number;
       turnPromptChars: number;
+      semanticPromptTokens: number;
       transcriptBytes: number;
     };
   };
@@ -193,7 +204,6 @@ function readTranscriptStats(butlerData: string, sessionId: string): ContextMoni
   if (!existsSync(path)) {
     return {
       exists: false,
-      path,
       bytes: 0,
       events: 0,
       conversationEvents: 0,
@@ -222,12 +232,61 @@ function readTranscriptStats(butlerData: string, sessionId: string): ContextMoni
   }
   return {
     exists: true,
-    path,
     bytes: statSync(path).size,
     events,
     conversationEvents,
     latestTimestamp,
   };
+}
+
+function readConversationStats(butlerData: string, runtimeSessionId: string): ContextMonitorSummary["conversation"] {
+  const fallbackSessionId = conversationSessionIdForDurableSession(runtimeSessionId);
+  if (!existsSync(conversationStorePath(butlerData))) {
+    return {
+      exists: false,
+      sessionId: fallbackSessionId,
+      semanticMessages: 0,
+      compactedMessages: 0,
+      summaries: 0,
+      latestMessageTimestamp: null,
+      promptTokenEstimate: 0,
+    };
+  }
+  const store = new AgentConversationStore({ butlerData });
+  try {
+    const canonicalSessionId = store.getSession(runtimeSessionId)
+      ? runtimeSessionId
+      : fallbackSessionId;
+    const session = store.getSession(canonicalSessionId);
+    const activeMessages = store.readMessages({
+      sessionId: canonicalSessionId,
+      includeCompacted: false,
+      limit: 5000,
+    });
+    const allMessages = store.readMessages({
+      sessionId: canonicalSessionId,
+      includeCompacted: true,
+      limit: 5000,
+    });
+    const summaries = store.readSummaries(canonicalSessionId);
+    const material = store.readPromptMaterial({
+      sessionId: canonicalSessionId,
+      tailLimit: 200,
+    });
+    return {
+      exists: Boolean(session),
+      sessionId: canonicalSessionId,
+      semanticMessages: activeMessages.length,
+      compactedMessages: allMessages.filter((message) =>
+        message.status === "compacted" || message.compacted_by_summary_id !== null,
+      ).length,
+      summaries: summaries.length,
+      latestMessageTimestamp: allMessages.at(-1)?.created_at ?? null,
+      promptTokenEstimate: material.token_estimate,
+    };
+  } finally {
+    store.close();
+  }
 }
 
 export function readContextMonitor(input: {
@@ -245,10 +304,12 @@ export function readContextMonitor(input: {
   const latestTurn = [...events].reverse()
     .find((event): event is RuntimeTurnContextMetric => event.kind === "runtime_turn") ?? null;
   const transcript = readTranscriptStats(input.butlerData, sessionId);
+  const conversation = readConversationStats(input.butlerData, sessionId);
   const systemPromptChars = latestPrompt?.totalChars ?? 0;
   const turnPromptChars = latestTurn?.totalPromptChars ?? 0;
   const totalChars = systemPromptChars + turnPromptChars;
-  const estimatedTokens = estimateContextTokens(totalChars);
+  const telemetryTokens = estimateContextTokens(totalChars);
+  const estimatedTokens = Math.max(telemetryTokens, conversation.promptTokenEstimate);
   const budget = evaluateContextBudget({
     modelRef: latestTurn?.model ?? undefined,
     inputTokens: estimatedTokens,
@@ -273,6 +334,7 @@ export function readContextMonitor(input: {
         }
       : null,
     transcript,
+    conversation,
     pressure: {
       level: budget.pressureLevel,
       thresholdState: budget.thresholdState,
@@ -287,6 +349,7 @@ export function readContextMonitor(input: {
       contributors: {
         systemPromptChars,
         turnPromptChars,
+        semanticPromptTokens: conversation.promptTokenEstimate,
         transcriptBytes: transcript.bytes,
       },
     },
