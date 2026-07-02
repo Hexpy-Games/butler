@@ -106,12 +106,14 @@ export async function handleAuditedToolFailure(input: {
     visibility: "internal",
     payload: {
       toolCallId: input.toolCallId,
-      contentJson: {
-        name: input.call.name,
-        ok: false,
-        error: evidenceTranscriptErrorMessage(message),
-        observation,
-      },
+      toolName: input.call.name,
+      inputLabel: input.progress.inputLabel,
+      safeLabel: input.progress.safeLabel,
+      workBlockId: input.workBlockId,
+      workBlockLabel: input.workBlockLabel,
+      ok: false,
+      safeError: evidenceTranscriptErrorMessage(message),
+      safeObservation: observation,
     },
   });
   if (!input.semanticProgressEstablished && !input.isWorkerStartTool) {

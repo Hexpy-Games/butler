@@ -206,11 +206,13 @@ async function emitCompletedToolProgress(
     visibility: "internal",
     payload: {
       toolCallId: input.toolCallId,
-      contentJson: {
-        name: input.call.name,
-        ok: true,
-        result: evidenceTranscriptToolResultProjection(input.result),
-      },
+      toolName: input.call.name,
+      inputLabel: completedProgress.inputLabel,
+      safeLabel: completedProgress.safeLabel,
+      workBlockId: input.workBlockId,
+      workBlockLabel: input.workBlockLabel,
+      ok: true,
+      result: evidenceTranscriptToolResultProjection(input.result),
     },
   });
   if (

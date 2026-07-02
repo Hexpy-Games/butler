@@ -55,11 +55,12 @@ export async function emitStartedProgress(input: {
     visibility: "internal",
     payload: {
       toolCallId: input.toolCallId,
-      contentJson: {
-        name: input.call.name,
-        arguments: evidenceTranscriptToolCallArgumentsProjection(input.cleanArgs),
-        rawArguments: input.call.rawArguments,
-      },
+      toolName: input.call.name,
+      inputLabel: input.progress.inputLabel,
+      safeLabel: input.progress.safeLabel,
+      workBlockId: input.workBlockId,
+      workBlockLabel: input.workBlockLabel,
+      arguments: evidenceTranscriptToolCallArgumentsProjection(input.cleanArgs),
     },
   });
   if (!input.semanticProgressEstablished && !input.isWorkerStartTool) {

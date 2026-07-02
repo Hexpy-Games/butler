@@ -86,6 +86,9 @@ export interface AdmissionDecision {
   operation?: ConversationAdmissionOperation;
 }
 
+const SAFE_TOOL_CALL_ARGUMENTS_SCHEMA = "butler.tool-call-arguments-transcript.v1";
+const SAFE_TOOL_RESULT_EVIDENCE_SCHEMA = "butler.tool-result-evidence-transcript.v1";
+
 export function classifyForConversation(input: ConversationAdmissionInput): AdmissionDecision {
   if (input.source === "gateway") return classifyGatewayEvent(input);
   if (input.source === "runtime_turn_event") return classifyRuntimeTurnEvent(input);
@@ -225,22 +228,92 @@ function semanticToolResult(
 }
 
 function safeToolContent(payload: Record<string, unknown> | undefined, eventKind: string): Record<string, unknown> {
-  const contentJson = recordPayload(payload?.contentJson);
-  if (contentJson) return contentJson;
-  return {
+  const isToolCall = eventKind === "tool_call.finalized";
+  const isToolResult = eventKind === "tool_result.finalized" || eventKind === "tool_result.failed";
+  return compactToolContent({
     eventKind,
     toolCallId: stringPayload(payload?.toolCallId),
-    safeToolName: stringPayload(payload?.toolName) ?? stringPayload(payload?.safeToolName),
+    safeToolName: stringPayload(payload?.safeToolName) ?? stringPayload(payload?.toolName),
     safeLabel: stringPayload(payload?.safeLabel),
     safeInputLabel: stringPayload(payload?.inputLabel),
     workBlockId: stringPayload(payload?.workBlockId),
     workBlockLabel: stringPayload(payload?.workBlockLabel),
     status: stringPayload(payload?.status),
-  };
+    ...(isToolCall
+      ? { arguments: safeToolArguments(payload?.arguments) }
+      : {}),
+    ...(isToolResult
+      ? {
+        ok: booleanPayload(payload?.ok),
+        result: safeToolResultEvidence(payload?.result),
+        error: stringPayload(payload?.safeError),
+        observation: safeToolObservation(payload?.safeObservation),
+      }
+      : {}),
+  });
 }
 
 function recordPayload(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function safeToolArguments(value: unknown): Record<string, unknown> | null {
+  const record = recordPayload(value);
+  if (record?.schema_version !== SAFE_TOOL_CALL_ARGUMENTS_SCHEMA) return null;
+  return compactToolContent({
+    schema_version: SAFE_TOOL_CALL_ARGUMENTS_SCHEMA,
+    argument_keys: stringArrayPayload(record.argument_keys),
+    safe_arguments: recordPayload(record.safe_arguments) ?? {},
+  });
+}
+
+function safeToolResultEvidence(value: unknown): Record<string, unknown> | null {
+  const record = recordPayload(value);
+  if (record?.schema_version !== SAFE_TOOL_RESULT_EVIDENCE_SCHEMA) return null;
+  return compactToolContent({
+    schema_version: SAFE_TOOL_RESULT_EVIDENCE_SCHEMA,
+    evidence_capability_receipts: arrayPayload(record.evidence_capability_receipts),
+    evidence_receipts: arrayPayload(record.evidence_receipts),
+    evidence_limitations: stringArrayPayload(record.evidence_limitations),
+    completion_obligation_evidence: recordPayload(record.completion_obligation_evidence),
+    rejected_evidence_capability_receipts: arrayPayload(record.rejected_evidence_capability_receipts),
+  });
+}
+
+function safeToolObservation(value: unknown): Record<string, unknown> | null {
+  const record = recordPayload(value);
+  if (!record) return null;
+  return compactToolContent({
+    observationId: stringPayload(record.observationId),
+    kind: stringPayload(record.kind),
+    visibility: record.visibility === "model" ? "model" : null,
+    summary: stringPayload(record.summary),
+    modelVisibleContent: stringPayload(record.modelVisibleContent),
+    causedByToolCallId: stringPayload(record.causedByToolCallId),
+    createdAt: stringPayload(record.createdAt),
+  });
+}
+
+function compactToolContent(input: Record<string, unknown>): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value === null || value === undefined) continue;
+    output[key] = value;
+  }
+  return output;
+}
+
+function arrayPayload(value: unknown): unknown[] | null {
+  return Array.isArray(value) ? value : null;
+}
+
+function stringArrayPayload(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function booleanPayload(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
 }
 
 function deny(input: ConversationAdmissionInput, className: Exclude<AdmissionClass, `semantic_${string}`>, reason: string): AdmissionDecision {

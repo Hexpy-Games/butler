@@ -35,6 +35,26 @@ const provider: ModelProviderAdapter = {
   },
 };
 
+const SAFE_ARGUMENTS = {
+  schema_version: "butler.tool-call-arguments-transcript.v1",
+  argument_keys: ["path"],
+  safe_arguments: { path: "README.md" },
+};
+
+const SAFE_RESULT = {
+  schema_version: "butler.tool-result-evidence-transcript.v1",
+  evidence_capability_receipts: [],
+  evidence_receipts: [],
+  evidence_limitations: [],
+  completion_obligation_evidence: {
+    outcome: "satisfied",
+    satisfied: [],
+    missing_critical: [],
+    missing_non_critical: [],
+    limitations: [],
+  },
+};
+
 class AdmissionRuntime implements AgentRuntimeAdapter {
   readonly id = "admission-runtime";
   readonly capabilities = {
@@ -108,10 +128,12 @@ class FinalizedToolRuntime implements AgentRuntimeAdapter {
       visibility: "internal",
       payload: {
         toolCallId: "tool-finalized-1",
+        toolName: "read_file",
+        arguments: SAFE_ARGUMENTS,
         contentJson: {
-          name: "read_file",
-          arguments: { path: "README.md" },
-          rawArguments: "{\"path\":\"README.md\"}",
+          name: "SECRET_TOKEN_123",
+          arguments: { token: "SECRET_TOKEN_123" },
+          rawArguments: "{\"token\":\"SECRET_TOKEN_123\"}",
         },
       },
     });
@@ -136,10 +158,12 @@ class FinalizedToolRuntime implements AgentRuntimeAdapter {
       visibility: "internal",
       payload: {
         toolCallId: "tool-finalized-1",
+        toolName: "read_file",
+        ok: true,
+        result: SAFE_RESULT,
         contentJson: {
-          name: "read_file",
-          ok: true,
-          result: { text: "done" },
+          name: "SECRET_TOKEN_123",
+          result: { text: "SECRET_TOKEN_123" },
         },
       },
     });
@@ -299,15 +323,21 @@ test("session actor admits finalized tool events without projecting internal pay
     "tool_result",
   ]);
   expect(semanticTail[1]?.parts[0]?.content_json).toEqual({
-    name: "read_file",
-    arguments: { path: "README.md" },
-    rawArguments: "{\"path\":\"README.md\"}",
+    eventKind: "tool_call.finalized",
+    toolCallId: "tool-finalized-1",
+    safeToolName: "read_file",
+    arguments: SAFE_ARGUMENTS,
   });
   expect(semanticTail[1]?.parts[1]?.content_json).toEqual({
-    name: "read_file",
+    eventKind: "tool_result.finalized",
+    toolCallId: "tool-finalized-1",
+    safeToolName: "read_file",
     ok: true,
-    result: { text: "done" },
+    result: SAFE_RESULT,
   });
+  const promptMaterial = conversationStore.readPromptMaterial({ sessionId: session!.id });
+  expect(JSON.stringify(promptMaterial)).not.toContain("SECRET_TOKEN_123");
+  expect(JSON.stringify(promptMaterial)).not.toContain("rawArguments");
   expect(deliveredKinds).toEqual(["tool.started", "tool.completed"]);
 
   conversationStore.close();

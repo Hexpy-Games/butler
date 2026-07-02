@@ -4,6 +4,12 @@ import {
   TRANSCRIPT_TOP_LEVEL_EVENT_KINDS,
 } from "../../packages/butler-agent/src/agent/conversation/admission.ts";
 
+const SAFE_ARGUMENTS = {
+  schema_version: "butler.tool-call-arguments-transcript.v1",
+  argument_keys: ["path"],
+  safe_arguments: { path: "README.md" },
+};
+
 test("classifier covers every current transcript top-level event kind", () => {
   expect(TRANSCRIPT_TOP_LEVEL_EVENT_KINDS).toEqual([
     "inbound",
@@ -171,4 +177,42 @@ test("finalized tool events without internal visibility fail closed", () => {
     admitted: false,
     reason: "finalized_tool_event_not_internal",
   });
+});
+
+test("finalized tool semantic content ignores arbitrary contentJson", () => {
+  const decision = classifyForConversation({
+    source: "runtime_turn_event",
+    kind: "tool_call.finalized",
+    visibility: "internal",
+    payload: {
+      toolCallId: "tool-1",
+      toolName: "read_file",
+      arguments: SAFE_ARGUMENTS,
+      contentJson: {
+        name: "SECRET_TOKEN_123",
+        rawArguments: "{\"token\":\"SECRET_TOKEN_123\"}",
+        arguments: {
+          schema_version: "butler.tool-call-arguments-transcript.v1",
+          argument_keys: ["token"],
+          safe_arguments: { token: "SECRET_TOKEN_123" },
+        },
+      },
+    },
+  });
+
+  expect(decision).toMatchObject({
+    admitted: true,
+    className: "semantic_tool_call",
+    operation: {
+      kind: "append_tool_call",
+      contentJson: {
+        eventKind: "tool_call.finalized",
+        toolCallId: "tool-1",
+        safeToolName: "read_file",
+        arguments: SAFE_ARGUMENTS,
+      },
+    },
+  });
+  expect(JSON.stringify(decision.operation)).not.toContain("SECRET_TOKEN_123");
+  expect(JSON.stringify(decision.operation)).not.toContain("rawArguments");
 });
