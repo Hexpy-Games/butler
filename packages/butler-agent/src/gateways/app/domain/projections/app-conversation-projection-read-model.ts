@@ -13,6 +13,7 @@ import type {
   AppConversationProjectionBindingRef,
   AppConversationProjectionStatus,
 } from "./app-conversation-projection-types.ts";
+import { appChatIdForConversationExternalSession } from "./app-conversation-session-id.ts";
 
 export class AppConversationProjectionReadModel {
   constructor(
@@ -31,15 +32,18 @@ export class AppConversationProjectionReadModel {
   readConversationBinding(
     conversationSessionId: string,
   ): AppConversationProjectionBindingRef | null {
-    const fromChat = this.input.db.query<{
+    const fromChatRows = this.input.db.query<{
       id: string;
       conversation_session_id: string;
     }, [string]>(`
       SELECT id, conversation_session_id
       FROM chats
       WHERE conversation_session_id = ?
-      LIMIT 1
-    `).get(conversationSessionId);
+      ORDER BY rowid ASC
+    `).all(conversationSessionId);
+    const fromChat = fromChatRows.find((row) =>
+      appChatIdForConversationExternalSession(this.input.db, row.id) === row.id,
+    );
     if (fromChat) {
       return {
         gateway: this.input.gateway(),
@@ -50,9 +54,13 @@ export class AppConversationProjectionReadModel {
     const binding = this.input.conversationReader
       ?.getGatewayBindingForConversation(conversationSessionId, this.input.gateway());
     if (!binding) return null;
+    const appChatId = appChatIdForConversationExternalSession(
+      this.input.db,
+      binding.external_session_id,
+    );
     return {
       gateway: binding.gateway,
-      external_session_id: binding.external_session_id,
+      external_session_id: appChatId,
       conversation_session_id: binding.conversation_session_id,
     };
   }
