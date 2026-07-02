@@ -50,6 +50,18 @@ export async function emitStartedProgress(input: {
   isWorkerStartTool: boolean;
   semanticProgressEstablished: boolean;
 }): Promise<void> {
+  await emitTurnEventBestEffort(input.input.turnInput, {
+    kind: "tool_call.finalized",
+    visibility: "internal",
+    payload: {
+      toolCallId: input.toolCallId,
+      contentJson: {
+        name: input.call.name,
+        arguments: evidenceTranscriptToolCallArgumentsProjection(input.cleanArgs),
+        rawArguments: input.call.rawArguments,
+      },
+    },
+  });
   if (!input.semanticProgressEstablished && !input.isWorkerStartTool) {
     await emitDecisionProgressBestEffort({
       turnInput: input.input.turnInput,

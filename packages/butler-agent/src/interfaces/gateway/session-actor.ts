@@ -514,13 +514,14 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         : undefined;
       const emitTurnEvent = this.options.deliverTurnEvent || conversationAdmission
         ? async (event: RuntimeTurnEventInput) => {
+            conversationAdmission?.admitTurnEvent(event);
+            if (event.visibility === "internal") return;
             await this.options.deliverTurnEvent?.({
               binding: activeBinding,
               envelope,
               route,
               event,
             });
-            conversationAdmission?.admitTurnEvent(event);
           }
         : undefined;
       const stopPresence = this.startTypingPresence({

@@ -175,6 +175,7 @@ async function emitCompletedToolProgress(
   input: {
     executorInput: NativeAuditedToolExecutorInput;
     call: NativeToolCall;
+    result: unknown;
     startedAt: number;
     toolCallId: string;
     workBlockId: string;
@@ -198,6 +199,18 @@ async function emitCompletedToolProgress(
       ...publicWorkDecisionPayload(input.decision),
       detailRows: completedProgress.detailRows,
       durationMs: Date.now() - input.startedAt,
+    },
+  });
+  await emitTurnEventBestEffort(input.executorInput.turnInput, {
+    kind: "tool_result.finalized",
+    visibility: "internal",
+    payload: {
+      toolCallId: input.toolCallId,
+      contentJson: {
+        name: input.call.name,
+        ok: true,
+        result: evidenceTranscriptToolResultProjection(input.result),
+      },
     },
   });
   if (

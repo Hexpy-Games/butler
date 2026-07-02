@@ -12,6 +12,7 @@ import type {
   ModelProviderAdapter,
   RuntimeSessionHandle,
   RuntimeSessionInit,
+  RuntimeTurnEventInput,
   RuntimeTurnInput,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
@@ -84,6 +85,68 @@ class AdmissionRuntime implements AgentRuntimeAdapter {
   }
 }
 
+class FinalizedToolRuntime implements AgentRuntimeAdapter {
+  readonly id = "finalized-tool-runtime";
+  readonly capabilities = {
+    supportsSessionResume: false,
+    supportsCompaction: false,
+    supportsToolStreaming: true,
+    supportsParallelToolCalls: false,
+  } as const;
+
+  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
+    return {
+      sessionId: input.sessionId,
+      role: input.role,
+      runtimeAdapterId: this.id,
+    };
+  }
+
+  async runTurn(input: RuntimeTurnInput) {
+    await input.emitTurnEvent?.({
+      kind: "tool_call.finalized",
+      visibility: "internal",
+      payload: {
+        toolCallId: "tool-finalized-1",
+        contentJson: {
+          name: "read_file",
+          arguments: { path: "README.md" },
+          rawArguments: "{\"path\":\"README.md\"}",
+        },
+      },
+    });
+    await input.emitTurnEvent?.({
+      kind: "tool.started",
+      payload: {
+        toolCallId: "tool-finalized-1",
+        toolName: "Read File",
+        safeLabel: "Reading file",
+      },
+    });
+    await input.emitTurnEvent?.({
+      kind: "tool.completed",
+      payload: {
+        toolCallId: "tool-finalized-1",
+        toolName: "Read File",
+        safeLabel: "Read complete",
+      },
+    });
+    await input.emitTurnEvent?.({
+      kind: "tool_result.finalized",
+      visibility: "internal",
+      payload: {
+        toolCallId: "tool-finalized-1",
+        contentJson: {
+          name: "read_file",
+          ok: true,
+          result: { text: "done" },
+        },
+      },
+    });
+    return { text: "final with tool" };
+  }
+}
+
 function inbound(
   id: string,
   text: string,
@@ -125,6 +188,7 @@ function createLifecycle(input: {
   runtime?: AgentRuntimeAdapter;
   conversationStore: AgentConversationStore;
   bindingStore: SessionBindingStore;
+  deliverTurnEvent?: (input: { event: RuntimeTurnEventInput }) => Promise<void>;
 }): SessionLifecycleService {
   input.bindingStore.upsert({
     sessionId: "butler/main",
@@ -143,6 +207,7 @@ function createLifecycle(input: {
     systemPromptFactory: () => "You are Butler.",
     conversationWriter: input.conversationStore,
     conversationMetricsButlerData: tempDir,
+    deliverTurnEvent: input.deliverTurnEvent,
   });
 }
 
@@ -170,6 +235,49 @@ test("session actor admits user and final assistant while stream and progress au
   expect(semanticTail[0]?.parts[0]?.content_json).toEqual({ text: "hello" });
   expect(semanticTail[1]?.parts[0]?.content_json).toEqual({ text: "final answer" });
   expect(readTranscript("butler/main").length).toBeGreaterThan(semanticTail.length);
+
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("session actor admits finalized tool events without projecting internal payloads", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const deliveredKinds: string[] = [];
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
+    runtime: new FinalizedToolRuntime(),
+    deliverTurnEvent: async ({ event }) => {
+      deliveredKinds.push(event.kind);
+    },
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await actor.handleInbound(inbound("finalized-tool", "use a tool"));
+
+  const session = conversationStore.getSessionByGatewayBinding("mock", "butler/main");
+  const semanticTail = conversationStore.readSemanticTail(session!.id, 10);
+  expect(semanticTail.map((message) => message.role)).toEqual([
+    "user",
+    "assistant",
+    "assistant",
+  ]);
+  expect(semanticTail[1]?.parts.map((part) => part.kind)).toEqual([
+    "tool_call",
+    "tool_result",
+  ]);
+  expect(semanticTail[1]?.parts[0]?.content_json).toEqual({
+    name: "read_file",
+    arguments: { path: "README.md" },
+    rawArguments: "{\"path\":\"README.md\"}",
+  });
+  expect(semanticTail[1]?.parts[1]?.content_json).toEqual({
+    name: "read_file",
+    ok: true,
+    result: { text: "done" },
+  });
+  expect(deliveredKinds).toEqual(["tool.started", "tool.completed"]);
 
   conversationStore.close();
   bindingStore.close();

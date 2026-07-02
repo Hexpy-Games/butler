@@ -221,6 +221,8 @@ function semanticToolResult(
 }
 
 function safeToolContent(payload: Record<string, unknown> | undefined, eventKind: string): Record<string, unknown> {
+  const contentJson = recordPayload(payload?.contentJson);
+  if (contentJson) return contentJson;
   return {
     eventKind,
     toolCallId: stringPayload(payload?.toolCallId),
@@ -231,6 +233,10 @@ function safeToolContent(payload: Record<string, unknown> | undefined, eventKind
     workBlockLabel: stringPayload(payload?.workBlockLabel),
     status: stringPayload(payload?.status),
   };
+}
+
+function recordPayload(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
 function deny(input: ConversationAdmissionInput, className: Exclude<AdmissionClass, `semantic_${string}`>, reason: string): AdmissionDecision {
