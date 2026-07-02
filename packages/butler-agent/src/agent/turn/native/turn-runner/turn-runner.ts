@@ -15,7 +15,7 @@ import {
   persistTurnContextAtom,
   TurnSchedulerContinuationYieldError,
 } from "../../turn-continuation-context.ts";
-import { hasDirectTurnModelRequestReserve } from "../../direct-turn-budget.ts";
+import { snapshotDirectTurnBudget, type DirectTurnBudget } from "../../direct-turn-budget.ts";
 import { safeRuntimeFailure } from "../../../../integrations/providers/provider-errors.ts";
 import {
   cancelActiveWorkStreamBestEffort,
@@ -44,10 +44,7 @@ import {
   createTurnKernelController,
   type TurnKernelController,
 } from "../../turn-kernel.ts";
-import {
-  finalDeliveryBlockerForOpenDirectWork,
-  openDirectWorkContinuationPrompt,
-} from "../../direct-work-continuation.ts";
+import { closeDirectWork } from "./direct-work-finalizer.ts";
 
 export async function runNativeToolTurn({
   input,
@@ -64,6 +61,7 @@ export async function runNativeToolTurn({
     const publicDecisionContext: PublicWorkDecision[] = [];
     const pendingPublicDecisions: PublicWorkDecision[] = [];
     let assistantTextBeforeToolsSeen = false;
+    let finalDeliveryOverride: RuntimeTurnResult["delivery"] | undefined;
     const earlyProgressEmitted = useTools
       ? await emitEarlyRuntimePreparationProgress({
           input,
@@ -116,6 +114,7 @@ export async function runNativeToolTurn({
           input,
           deps,
           turnId: context.turnId,
+          turnBudget: context.turnBudget,
           audit,
           publicDecisionContext,
           error,
@@ -149,57 +148,19 @@ export async function runNativeToolTurn({
         turnBudget: context.turnBudget,
       });
       if (deliveryOutcome.kind === "final") {
-        const directWorkBlocker = session.init.role === "butler"
-          ? finalDeliveryBlockerForOpenDirectWork({
-            butlerData: deps.butlerData,
-            sessionId: input.handle.sessionId,
-            turnId,
-          })
-          : null;
-        if (directWorkBlocker) {
-          const publicSummary = directWorkBlocker.activeItems.at(0)
-            ? `Direct work remains incomplete: ${directWorkBlocker.activeItems.at(0)?.label}`
-            : "Direct work remains incomplete.";
-          const observation = {
-            kind: "completion_gap",
-            summary: publicSummary,
-            modelVisibleContent: [
-              "Direct work is still open in the same logical turn.",
-              "Continue the remaining WorkStream steps instead of finalizing the turn.",
-              publicSummary,
-            ].join("\n"),
-            refs: [
-              { kind: "work_stream", id: directWorkBlocker.id },
-              ...(directWorkBlocker.listId ? [{ kind: "todo_list", id: directWorkBlocker.listId }] : []),
-            ],
-          };
-          await persistCompletionGapContinuation({
-            turnInput: input,
-            deps,
-            turnId,
-            audit,
-            publicDecisionContext,
-            observation,
-          });
-          if (!hasDirectTurnModelRequestReserve(context.turnBudget, 3)) {
-            throw new TurnSchedulerContinuationYieldError(
-              input.handle.sessionId,
-              context.turnId,
-              createTurnContextAtomId(input.handle.sessionId, context.turnId),
-            );
-          }
-          candidateText = await runKernelToolPrompt(openDirectWorkContinuationPrompt({
-            objective: context.userText,
-            audit,
-            blocker: directWorkBlocker,
-          }), undefined, "direct_work_completion_gap_continuation");
-          throwIfRuntimeTurnAborted(input.signal);
-          turnKernel.transitionTo("continuing");
-          turnKernel.transitionTo("model_deciding");
-          turnKernel.transitionTo("observing_tools");
-          continue;
-        }
-        decisionCheckedText = deliveryOutcome.text;
+        const directWorkResult = await closeDirectWork({
+          turnInput: input,
+          deps,
+          useTools: session.init.role === "butler",
+          turnId,
+          turnBudget: context.turnBudget,
+          userText: context.userText,
+          finalText: deliveryOutcome.text,
+          audit,
+          runToolPrompt: runKernelToolPrompt,
+        });
+        decisionCheckedText = directWorkResult.text;
+        finalDeliveryOverride = directWorkResult.delivery;
         break;
       }
       await persistCompletionGapContinuation({
@@ -245,7 +206,7 @@ export async function runNativeToolTurn({
         audit,
       });
     }
-    const delivery = deliveryForFinalAudit(audit);
+    const delivery = finalDeliveryOverride ?? deliveryForFinalAudit(audit);
     await emitFinalEvents(input, decisionCheckedText, audit, turnKernel, delivery, turnId);
     recordTurnMetric({
       status: "ok",
@@ -334,6 +295,7 @@ async function persistSchedulerContinuation(input: {
   input: NativeTurnRunnerInput["input"];
   deps: NativeTurnRunnerInput["deps"];
   turnId: string;
+  turnBudget: DirectTurnBudget;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
   error: unknown;
@@ -358,6 +320,7 @@ async function persistSchedulerContinuation(input: {
       id: currentUserMessageRef(input.input),
     },
     ...refs,
+    budgetSnapshot: snapshotDirectTurnBudget(input.turnBudget),
     unresolvedObservations: [{
       kind: "context_compacted",
       id: `context-atom:${contextAtomId}`,
@@ -453,7 +416,7 @@ async function emitFinalEvents(
   delivery?: RuntimeTurnResult["delivery"],
   turnId?: string,
 ): Promise<void> {
-  const limitedDelivery = delivery?.delivery_state === "delivered_with_limitations";
+  const limitedDelivery = isLimitedFinalDelivery(delivery);
   await emitSuccessfulTurnOutcome({
     turnInput: input,
     audit,
@@ -480,6 +443,13 @@ async function emitFinalEvents(
       ...(delivery ?? {}),
     },
   });
+}
+
+function isLimitedFinalDelivery(
+  delivery: RuntimeTurnResult["delivery"] | undefined,
+): boolean {
+  return delivery?.delivery_state === "delivered_with_limitations" ||
+    delivery?.delivery_state === "delivered_with_continuation";
 }
 
 function recordTurnMetric(input: {

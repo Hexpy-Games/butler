@@ -24,6 +24,19 @@ export interface DirectTurnBudget {
   maxTotalTokens: number;
 }
 
+export interface DirectTurnBudgetSnapshot {
+  turnId: string;
+  modelRequestsUsed: number;
+  promptTokens: number;
+  cachedTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  maxModelCalls: number;
+  maxPromptTokens: number;
+  maxOutputTokens: number;
+  maxTotalTokens: number;
+}
+
 export interface DirectTurnPromptUsageInput {
   promptContextChars: number;
   compactionContextChars: number;
@@ -47,6 +60,42 @@ export function createDirectTurnBudget(turnId: string): DirectTurnBudget {
     maxOutputTokens: DIRECT_TURN_OUTPUT_TOKEN_BUDGET,
     maxTotalTokens: DIRECT_TURN_TOTAL_TOKEN_BUDGET,
   };
+}
+
+export function snapshotDirectTurnBudget(budget: DirectTurnBudget): DirectTurnBudgetSnapshot {
+  return {
+    turnId: budget.turnId,
+    modelRequestsUsed: budget.modelRequestsUsed,
+    promptTokens: budget.promptTokens,
+    cachedTokens: budget.cachedTokens,
+    outputTokens: budget.outputTokens,
+    totalTokens: budget.totalTokens,
+    maxModelCalls: budget.maxModelCalls,
+    maxPromptTokens: budget.maxPromptTokens,
+    maxOutputTokens: budget.maxOutputTokens,
+    maxTotalTokens: budget.maxTotalTokens,
+  };
+}
+
+export function hydrateDirectTurnBudget(
+  turnId: string,
+  snapshot?: DirectTurnBudgetSnapshot | null,
+): DirectTurnBudget {
+  const budget = createDirectTurnBudget(turnId);
+  if (!snapshot || typeof snapshot !== "object") return budget;
+  budget.modelRequestsUsed = finiteNonNegativeInteger(snapshot.modelRequestsUsed);
+  budget.promptTokens = finiteNonNegativeInteger(snapshot.promptTokens);
+  budget.cachedTokens = Math.min(
+    finiteNonNegativeInteger(snapshot.cachedTokens),
+    budget.promptTokens,
+  );
+  budget.outputTokens = finiteNonNegativeInteger(snapshot.outputTokens);
+  budget.totalTokens = finiteNonNegativeInteger(snapshot.totalTokens);
+  budget.maxModelCalls = finitePositiveInteger(snapshot.maxModelCalls, budget.maxModelCalls);
+  budget.maxPromptTokens = finitePositiveInteger(snapshot.maxPromptTokens, budget.maxPromptTokens);
+  budget.maxOutputTokens = finitePositiveInteger(snapshot.maxOutputTokens, budget.maxOutputTokens);
+  budget.maxTotalTokens = finitePositiveInteger(snapshot.maxTotalTokens, budget.maxTotalTokens);
+  return budget;
 }
 
 export function directTurnBudgetState(budget: DirectTurnBudget): PromptUsageBudgetState {
@@ -148,4 +197,12 @@ function directTurnBudgetStatus(budget: DirectTurnBudget): PromptUsageBudgetStat
     return "warning";
   }
   return "ok";
+}
+
+function finiteNonNegativeInteger(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function finitePositiveInteger(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }

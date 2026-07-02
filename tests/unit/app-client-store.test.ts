@@ -3435,6 +3435,73 @@ test("session-view stores delivered_with_limitations as delivered content metada
   expect(state.summary?.latest_progress?.safe_progress_rows).toEqual([]);
 });
 
+test("session-view stores delivered_with_continuation as delivered content metadata", () => {
+  const assistant = {
+    ...messageRecord(
+      "assistant-continuation",
+      "session-continuation",
+      "assistant",
+      "Visible progress while Butler continues the remaining work.",
+      2,
+      "turn-continuation",
+    ),
+    delivery_state: "delivered_with_continuation" as const,
+    limitation_codes: ["direct_work_continuation"],
+    limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+  };
+  const view = sessionView("session-continuation", {
+    messages: [
+      messageRecord(
+        "user-continuation",
+        "session-continuation",
+        "user",
+        "continue the long task",
+        1,
+        "turn-continuation",
+      ),
+      assistant,
+    ],
+    turnState: "delivered",
+    latestProgress: {
+      turn_id: "turn-continuation",
+      state: "delivered",
+      delivery_state: "delivered_with_continuation",
+      limitation_codes: ["direct_work_continuation"],
+      limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+      safe_progress_rows: [],
+    },
+  });
+  view.latest_turn = view.latest_turn
+    ? {
+        ...view.latest_turn,
+        safe_status_label: "Delivered with limitations",
+        delivery_state: "delivered_with_continuation",
+        limitation_codes: ["direct_work_continuation"],
+        limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+      }
+    : null;
+
+  useButlerStore.setState({
+    activeChatId: "session-continuation",
+    messages: [],
+    sessionView: null,
+    summary: null,
+  });
+  useButlerStore.getState().setSessionView(view);
+
+  const state = useButlerStore.getState();
+  expect(state.messages.at(-1)).toMatchObject({
+    role: "assistant",
+    status: "delivered",
+    delivery_state: "delivered_with_continuation",
+    limitation_codes: ["direct_work_continuation"],
+    limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+  });
+  expect(state.summary?.turn_state).toBe("delivered");
+  expect(state.summary?.latest_progress?.delivery_state).toBe("delivered_with_continuation");
+  expect(state.summary?.latest_progress?.safe_progress_rows).toEqual([]);
+});
+
 test("session-view hydration updates existing message limitation metadata", () => {
   const plainAssistant = messageRecord(
     "assistant-limited",

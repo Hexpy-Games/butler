@@ -23,12 +23,14 @@ export type RuntimeDeliveryState =
   | "cancelled"
   | "delivered"
   | "delivered_with_limitations"
+  | "delivered_with_continuation"
   | "failed_system"
   | "runtime_fault";
 
 export type RuntimeDeliveryTerminalState =
   | "delivered"
   | "delivered_with_limitations"
+  | "delivered_with_continuation"
   | "failed_system"
   | "cancelled";
 
@@ -90,6 +92,20 @@ export function deliveredWithLimitationsState(input: {
     deliveryState: "delivered_with_limitations",
     terminal: true,
     issueKind: "limitation",
+    visibility: "assistant_output",
+    limitationCodes: input.limitationCodes,
+    limitations: input.limitations,
+  });
+}
+
+export function deliveredWithContinuationState(input: {
+  limitationCodes?: string[];
+  limitations?: string[];
+}): RuntimeDeliveryClassification {
+  return classification({
+    deliveryState: "delivered_with_continuation",
+    terminal: true,
+    issueKind: "runtime_continuation",
     visibility: "assistant_output",
     limitationCodes: input.limitationCodes,
     limitations: input.limitations,
