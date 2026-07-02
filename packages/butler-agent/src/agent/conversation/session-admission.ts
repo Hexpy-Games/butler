@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { RuntimeTurnEventInput, StoredSessionBinding } from "../../test-support/harness/contracts.ts";
 import type { InboundEnvelope } from "../../gateways/core/contracts.ts";
 import {
@@ -35,10 +36,11 @@ export class ConversationAdmissionTurn {
       input.envelope.transport,
       input.binding.sessionId,
     );
+    const sessionId = existing?.id ?? conversationSessionIdForDurableSession(input.binding.sessionId);
     const turn = input.writer.beginTurn({
       gateway: input.envelope.transport,
       externalSessionId: input.binding.sessionId,
-      sessionId: existing?.id,
+      sessionId,
       workspaceId: null,
       projectId: input.binding.projectId ?? null,
       actor: "user",
@@ -188,4 +190,9 @@ export class ConversationAdmissionTurn {
       decision,
     });
   }
+}
+
+export function conversationSessionIdForDurableSession(sessionId: string): string {
+  const hash = createHash("sha256").update(sessionId).digest("hex").slice(0, 32);
+  return `cs_${hash}`;
 }

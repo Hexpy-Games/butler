@@ -426,6 +426,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     let conversationAdmission: ConversationAdmissionTurn | null = null;
 
     try {
+      const admitsSemanticConversation = this.shouldAdmitSemanticConversation(envelope);
       if (!schedulerContinuation) {
         recordDurableInbound({
           sessionId: binding.sessionId,
@@ -443,13 +444,15 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           },
           timestamp,
         });
+      }
+      if (admitsSemanticConversation) {
         conversationAdmission = this.beginConversationAdmissionTurn({
           binding,
           envelope,
           turnId,
           timestamp,
         });
-        conversationAdmission?.admitInbound();
+        if (!schedulerContinuation) conversationAdmission?.admitInbound();
       }
 
       let openingDecisionId: string | undefined;
@@ -702,6 +705,10 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       timestamp: input.timestamp,
       butlerData: this.options.conversationMetricsButlerData,
     });
+  }
+
+  private shouldAdmitSemanticConversation(envelope: InboundEnvelope): boolean {
+    return envelope.transport !== "system";
   }
 
   private finalizeConversationAdmissionFailure(

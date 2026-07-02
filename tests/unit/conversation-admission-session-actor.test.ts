@@ -84,19 +84,28 @@ class AdmissionRuntime implements AgentRuntimeAdapter {
   }
 }
 
-function inbound(id: string, text: string): InboundEnvelope {
+function inbound(
+  id: string,
+  text: string,
+  input: {
+    transport?: string;
+    senderId?: string;
+    raw?: Record<string, unknown>;
+  } = {},
+): InboundEnvelope {
   return {
     eventId: `mock:${id}`,
-    transport: "mock",
+    transport: input.transport ?? "mock",
     accountId: "default",
     peer: { kind: "dm", id: "peer-1" },
-    sender: { id: "user-1" },
+    sender: { id: input.senderId ?? "user-1" },
     message: {
       id,
       text,
       timestamp: "2026-07-02T00:00:00.000Z",
     },
     routingHints: { turnId: `turn-${id}` },
+    raw: input.raw,
   };
 }
 
@@ -112,26 +121,37 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
 
-test("session actor admits semantic rows while stream and progress audit rows stay non-semantic", async () => {
-  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
-  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
-  bindingStore.upsert({
+function createLifecycle(input: {
+  runtime?: AgentRuntimeAdapter;
+  conversationStore: AgentConversationStore;
+  bindingStore: SessionBindingStore;
+}): SessionLifecycleService {
+  input.bindingStore.upsert({
     sessionId: "butler/main",
     role: "butler",
     projectId: "butler",
     workspacePath: "fixtures/butler-project",
-    runtimeAdapterId: "admission-runtime",
+    runtimeAdapterId: input.runtime?.id ?? "admission-runtime",
     modelProviderId: provider.id,
     modelRef: "openai/auto:codex-latest",
     transportBindings: [],
   });
-  const lifecycle = new SessionLifecycleService({
-    store: bindingStore,
-    runtime: new AdmissionRuntime(),
+  return new SessionLifecycleService({
+    store: input.bindingStore,
+    runtime: input.runtime ?? new AdmissionRuntime(),
     provider,
     systemPromptFactory: () => "You are Butler.",
-    conversationWriter: conversationStore,
+    conversationWriter: input.conversationStore,
     conversationMetricsButlerData: tempDir,
+  });
+}
+
+test("session actor admits user and final assistant while stream and progress audit rows stay non-semantic", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
   });
 
   const actor = await lifecycle.getOrCreate("butler/main", "butler");
@@ -146,15 +166,82 @@ test("session actor admits semantic rows while stream and progress audit rows st
   expect(semanticTail.map((message) => message.role)).toEqual([
     "user",
     "assistant",
-    "assistant",
   ]);
   expect(semanticTail[0]?.parts[0]?.content_json).toEqual({ text: "hello" });
-  expect(semanticTail[1]?.parts.map((part) => part.kind)).toEqual([
-    "tool_call",
-    "tool_result",
-  ]);
-  expect(semanticTail[2]?.parts[0]?.content_json).toEqual({ text: "final answer" });
+  expect(semanticTail[1]?.parts[0]?.content_json).toEqual({ text: "final answer" });
   expect(readTranscript("butler/main").length).toBeGreaterThan(semanticTail.length);
+
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("cross-gateway turns share one canonical conversation session", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const lifecycle = createLifecycle({ bindingStore, conversationStore });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await actor.handleInbound(inbound("app", "from app", { transport: "app" }));
+  await actor.handleInbound(inbound("telegram", "from telegram", { transport: "telegram" }));
+
+  const appSession = conversationStore.getSessionByGatewayBinding("app", "butler/main");
+  const telegramSession = conversationStore.getSessionByGatewayBinding("telegram", "butler/main");
+  expect(appSession?.id).toBeTruthy();
+  expect(telegramSession?.id).toBe(appSession?.id);
+  expect(conversationStore.readSemanticTail(appSession!.id, 10).map((message) => message.role)).toEqual([
+    "user",
+    "assistant",
+    "user",
+    "assistant",
+  ]);
+
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("system worker completion envelopes remain audit-only", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const lifecycle = createLifecycle({ bindingStore, conversationStore });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await actor.handleInbound(inbound("worker-complete", [
+    "System event: a background worker task completed.",
+    "This is not a user request to start new work.",
+    "Worker result: internal text",
+  ].join("\n"), {
+    transport: "system",
+    senderId: "butler-worker-monitor",
+  }));
+
+  expect(conversationStore.getSessionByGatewayBinding("system", "butler/main")).toBeNull();
+  expect(readTranscript("butler/main").length).toBeGreaterThan(0);
+
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("same-logical-turn continuation can still admit final assistant output", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const lifecycle = createLifecycle({ bindingStore, conversationStore });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await actor.handleInbound(inbound("continuation", "continue", {
+    raw: {
+      sameLogicalTurnContinuation: true,
+      contextAtomId: "turn-context-1",
+    },
+  }));
+
+  const session = conversationStore.getSessionByGatewayBinding("mock", "butler/main");
+  expect(session?.id).toBeTruthy();
+  expect(conversationStore.readSemanticTail(session!.id, 10).map((message) => message.role)).toEqual([
+    "assistant",
+  ]);
+  expect(conversationStore.readSemanticTail(session!.id, 10)[0]?.parts[0]?.content_json).toEqual({
+    text: "final answer",
+  });
 
   conversationStore.close();
   bindingStore.close();

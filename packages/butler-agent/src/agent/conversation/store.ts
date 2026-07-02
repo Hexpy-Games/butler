@@ -73,6 +73,8 @@ export class AgentConversationStore {
       });
       this.internals.upsertBinding(input.gateway, input.externalSessionId, sessionId, now);
       this.internals.enqueueProjection(sessionId, 0, "conversation.session_bound", sessionId, now);
+      const existingTurn = this.internals.getTurn(turnId);
+      if (existingTurn) return existingTurn;
       const turn = this.internals.insertTurn({
         id: turnId,
         session_id: sessionId,

@@ -30,31 +30,31 @@ test("classifier covers every current transcript top-level event kind", () => {
   expect(decisions.every((decision) => decision.admitted === false)).toBe(true);
 });
 
-test("classifier admits only canonical inbound and final outbound shapes from transcript rows", () => {
+test("classifier admits only canonical gateway inbound and final outbound shapes", () => {
   const inbound = classifyForConversation({
+    source: "gateway",
+    kind: "inbound.accepted",
+    role: "user",
+    text: "hello",
+    sourceGateway: "app",
+    sourceRef: "event-1",
+  });
+  const final = classifyForConversation({
+    source: "gateway",
+    kind: "outbound.final",
+    role: "assistant",
+    text: "answer",
+    sourceGateway: "app",
+    sourceRef: "runtime-final:turn-1",
+  });
+  const transcriptText = classifyForConversation({
     source: "transcript",
     kind: "inbound",
     payload: {
       eventId: "event-1",
-      message: { text: "hello" },
+      message: { text: "do not parse transcript payload text" },
     },
     metadata: { source: "gateway-actor" },
-  });
-  const final = classifyForConversation({
-    source: "transcript",
-    kind: "outbound",
-    payload: {
-      actionId: "runtime-final:turn-1",
-      message: { text: "answer" },
-      metadata: { kind: "final_result" },
-    },
-    metadata: { source: "gateway-actor#runtime-result" },
-  });
-  const arbitrary = classifyForConversation({
-    source: "transcript",
-    kind: "system",
-    payload: { message: { text: "do not parse arbitrary payload text" } },
-    metadata: { source: "unknown" },
   });
 
   expect(inbound).toMatchObject({
@@ -67,7 +67,7 @@ test("classifier admits only canonical inbound and final outbound shapes from tr
     className: "semantic_message",
     operation: { kind: "append_message", role: "assistant", text: "answer" },
   });
-  expect(arbitrary).toMatchObject({
+  expect(transcriptText).toMatchObject({
     admitted: false,
     className: "audit_event",
   });
@@ -92,6 +92,14 @@ test("streaming and unknown runtime events are non-semantic by default", () => {
   });
   expect(classifyForConversation({
     source: "runtime_turn_event",
+    kind: "tool.started",
+    payload: { toolCallId: "tool-1", safeLabel: "Reading" },
+  })).toMatchObject({
+    admitted: false,
+    className: "activity_state",
+  });
+  expect(classifyForConversation({
+    source: "runtime_turn_event",
     kind: "runtime.future_event",
     payload: { message: { text: "not semantic" } },
   })).toMatchObject({
@@ -101,10 +109,10 @@ test("streaming and unknown runtime events are non-semantic by default", () => {
   });
 });
 
-test("tool results fail closed unless a tool call is known", () => {
+test("finalized tool results fail closed unless a finalized tool call is known", () => {
   const started = classifyForConversation({
     source: "runtime_turn_event",
-    kind: "tool.started",
+    kind: "tool_call.finalized",
     payload: {
       toolCallId: "tool-1",
       toolName: "Read File",
@@ -113,7 +121,7 @@ test("tool results fail closed unless a tool call is known", () => {
   });
   const orphan = classifyForConversation({
     source: "runtime_turn_event",
-    kind: "tool.completed",
+    kind: "tool_result.finalized",
     payload: {
       toolCallId: "tool-1",
       toolName: "Read File",
@@ -123,7 +131,7 @@ test("tool results fail closed unless a tool call is known", () => {
   });
   const known = classifyForConversation({
     source: "runtime_turn_event",
-    kind: "tool.completed",
+    kind: "tool_result.finalized",
     payload: {
       toolCallId: "tool-1",
       toolName: "Read File",

@@ -104,9 +104,9 @@ function classifyGatewayEvent(input: ConversationAdmissionInput): AdmissionDecis
 }
 
 function classifyRuntimeTurnEvent(input: ConversationAdmissionInput): AdmissionDecision {
-  if (input.kind === "tool.started") return semanticToolCall(input);
-  if (input.kind === "tool.completed") return semanticToolResult(input, "complete");
-  if (input.kind === "tool.failed") return semanticToolResult(input, "failed");
+  if (input.kind === "tool_call.finalized") return semanticToolCall(input);
+  if (input.kind === "tool_result.finalized") return semanticToolResult(input, "complete");
+  if (input.kind === "tool_result.failed") return semanticToolResult(input, "failed");
   if (TELEMETRY_TURN_EVENT_KINDS.has(input.kind)) {
     return deny(input, "discarded_telemetry", "telemetry_not_semantic");
   }
@@ -145,32 +145,6 @@ function classifyConversationEvent(input: ConversationAdmissionInput): Admission
 }
 
 function classifyTranscriptEvent(input: ConversationAdmissionInput): AdmissionDecision {
-  if (input.kind === "inbound" && input.metadata?.source === "gateway-actor") {
-    const message = recordPayload(input.payload?.message);
-    return semanticMessage({
-      ...input,
-      role: "user",
-      text: stringPayload(message.text),
-      sourceRef: stringPayload(input.payload?.eventId),
-    }, "user", "classified_inbound_transcript");
-  }
-  if (input.kind === "outbound") {
-    const metadata = recordPayload(input.payload?.metadata);
-    const message = recordPayload(input.payload?.message);
-    if (
-      input.metadata?.source === "gateway-actor#runtime-result" &&
-      metadata.kind === "final_result"
-    ) {
-      return semanticMessage({
-        ...input,
-        role: "assistant",
-        text: stringPayload(message.text),
-        sourceRef: stringPayload(input.payload?.actionId),
-      }, "assistant", "classified_final_transcript");
-    }
-  }
-  if (input.kind === "tool_call") return semanticToolCall(input);
-  if (input.kind === "tool_result") return semanticToolResult(input, "complete");
   if (GATEWAY_PROJECTION_TRANSCRIPT_KINDS.has(input.kind)) {
     return deny(input, "gateway_projection", "gateway_projection_not_semantic");
   }
@@ -270,10 +244,6 @@ function deny(input: ConversationAdmissionInput, className: Exclude<AdmissionCla
 
 function trimmed(value: string | null | undefined): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function recordPayload(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function stringPayload(value: unknown): string | null {
