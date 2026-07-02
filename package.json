@@ -64,6 +64,7 @@
     "e2e:gncc-context:live-llm": "BUTLER_GNCC_CONTEXT_E2E_MODEL=openai/gpt-5.5 BUTLER_GNCC_CONTEXT_E2E_REASONING=low ${BUTLER_BUN:-bun} run tests/e2e/gateway-neutral-conversation-context-live-e2e.ts",
     "e2e:gncc-cognition:live-llm": "BUTLER_GNCC_COGNITION_E2E_MODEL=openai/gpt-5.5 BUTLER_GNCC_COGNITION_E2E_REASONING=low ${BUTLER_BUN:-bun} run tests/e2e/gateway-neutral-cognition-sources-live-e2e.ts",
     "e2e:gncc-recovery:live-llm": "BUTLER_GNCC_RECOVERY_E2E_MODEL=openai/gpt-5.5 BUTLER_GNCC_RECOVERY_E2E_REASONING=low ${BUTLER_BUN:-bun} run tests/e2e/gateway-neutral-historical-recovery-live-e2e.ts",
+    "e2e:gncc-closeout:live-llm": "BUTLER_GNCC_CLOSEOUT_E2E_MODEL=openai/gpt-5.5 BUTLER_GNCC_CLOSEOUT_E2E_REASONING=low ${BUTLER_BUN:-bun} run tests/e2e/gateway-neutral-conversation-core-closeout-live-e2e.ts",
     "e2e:memory-quality-ab": "${BUTLER_BUN:-bun} run tests/e2e/butler-memory-quality-ab.ts",
     "live:decision-context:medium": "${BUTLER_BUN:-bun} run tests/live/decision-context-medium-task.ts",
     "live:direct-work:semantic-progress": "${BUTLER_BUN:-bun} run tests/live/direct-work-semantic-progress.ts",
