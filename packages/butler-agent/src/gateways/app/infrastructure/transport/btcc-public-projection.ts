@@ -67,6 +67,7 @@ export function publicDeliveryStateForProjection(
     state === "cancelled" ||
     state === "delivered" ||
     state === "delivered_with_limitations" ||
+    state === "delivered_with_continuation" ||
     state === "failed_system"
   ) {
     return state;

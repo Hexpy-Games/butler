@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   classifyRuntimeFailureDelivery,
   deliveredDeliveryState,
+  deliveredWithContinuationState,
   deliveredWithLimitationsState,
   isUserFacingFailureDelivery,
   waitingUserDeliveryState,
@@ -32,6 +33,21 @@ test("runtime delivery taxonomy maps normal and limited delivery as assistant ou
     limitations: ["Only candidate evidence was available."],
   });
   expect(isUserFacingFailureDelivery(limited)).toBe(false);
+
+  const withContinuation = deliveredWithContinuationState({
+    limitationCodes: ["direct_work_continuation"],
+    limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+  });
+  expect(withContinuation).toMatchObject({
+    delivery_state: "delivered_with_continuation",
+    terminal: true,
+    issue_kind: "runtime_continuation",
+    visibility: "assistant_output",
+    failure_notice: false,
+    limitation_codes: ["direct_work_continuation"],
+    limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+  });
+  expect(isUserFacingFailureDelivery(withContinuation)).toBe(false);
 });
 
 test("runtime delivery taxonomy keeps live completion gaps non-public without classifying tool failures as recovery", () => {
