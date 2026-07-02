@@ -606,6 +606,17 @@ const butlerApp = Object.freeze({
     const query = params.toString();
     return requestJson(query ? `/system-events?${query}` : "/system-events");
   },
+  listDeveloperLogs: ({ limit, offset, sessionId, turnId, kind, query: search } = {}) => {
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.set("limit", String(limit));
+    if (offset !== undefined) params.set("offset", String(offset));
+    if (sessionId) params.set("session_id", sessionId);
+    if (turnId) params.set("turn_id", turnId);
+    if (kind) params.set("kind", kind);
+    if (search) params.set("query", search);
+    const query = params.toString();
+    return requestJson(query ? `/developer-logs?${query}` : "/developer-logs");
+  },
   getUsageMonitor: ({ sessionId, sinceHours } = {}) => {
     const params = new URLSearchParams();
     if (sessionId) params.set("session_id", sessionId);

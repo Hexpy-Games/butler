@@ -769,7 +769,10 @@ export class PromptAssembler {
     envelope: InboundEnvelope;
     route?: GatewayRoute;
   }): string {
-    const assembly = this.buildContextAssembly(input);
+    return this.renderTurnContext(this.buildContextAssembly(input));
+  }
+
+  renderTurnContext(assembly: ContextAssembly): string {
     const dynamicSections = [
       ...assembly.liveConfiguration,
       ...assembly.runtimeState,

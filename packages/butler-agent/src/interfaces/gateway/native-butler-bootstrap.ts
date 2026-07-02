@@ -27,6 +27,8 @@ import { createAgentTurnEvent } from "../../agent/events/turn-events.ts";
 import { createLifecycleGatewayHandlers, SessionLifecycleService } from "./session-lifecycle.ts";
 import { generateSessionTitleWithProvider } from "../../agent/output/session-title.ts";
 import { NativeToolLoopRuntime } from "../../agent/turn/native-tool-loop.ts";
+import { DeveloperLogStore } from "../../operations/diagnostics/developer-log-store.ts";
+import { readDeveloperDiagnosticsEnabled } from "../../operations/diagnostics/developer-log-settings.ts";
 import { diagnosticDetails, safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
 import { DeliveryGuard } from "../transport/delivery-guard.ts";
 import { APP_TRANSPORT, createAppTransportAdapter } from "../transport/app/adapter.ts";
@@ -574,6 +576,7 @@ export async function runNativeButlerMain(
   });
   const runtime = input.runtime ?? new NativeToolLoopRuntime({ butlerHome, butlerData });
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
+  const developerLogStore = new DeveloperLogStore({ butlerData });
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
   const shutdownFlagPath = join(butlerData, "locks", "butler-shutdown");
   const pollMs = input.shutdownPollMs ?? 500;
@@ -646,6 +649,11 @@ export async function runNativeButlerMain(
       approvalMode: input.approvalMode ?? "default",
       conversationWriter,
       conversationMetricsButlerData: butlerData,
+      developerLogStore,
+      developerDiagnosticsEnabled: () =>
+        readDeveloperDiagnosticsEnabled({
+          dbPath: appTurnStateDbPath(butlerData),
+        }),
       deliverIntermediate: async ({ binding: activeBinding, action, metadata }) => {
         await deliverThroughEnabledGate(activeBinding.sessionId, action, {
           source: "gateway/native-butler-bootstrap.ts#intermediate",
