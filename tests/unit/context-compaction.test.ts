@@ -3,10 +3,6 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
-  appendTranscriptEvent,
-  createTranscriptEvent,
-} from "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
-import {
   compactTranscript,
   compactionMetricsPath,
   compactionPath,
@@ -16,9 +12,13 @@ import {
   renderCompactionContext,
   writeFailedCompactionDiagnostic,
 } from "../../packages/butler-agent/src/agent/context/compaction.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { conversationSessionIdForDurableSession } from "../../packages/butler-agent/src/agent/conversation/session-admission.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
+const runtimeSessionId = "butler/main";
+const canonicalSessionId = conversationSessionIdForDurableSession(runtimeSessionId);
 
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "butler-context-compaction-"));
@@ -33,30 +33,45 @@ afterEach(() => {
 });
 
 function appendConversation(count: number): void {
+  const store = new AgentConversationStore({ butlerData: tempDir });
+  store.beginTurn({
+    gateway: "app",
+    externalSessionId: runtimeSessionId,
+    sessionId: canonicalSessionId,
+    actor: "user",
+    turnId: "context-compaction-seed",
+  });
   for (let index = 0; index < count; index += 1) {
-    appendTranscriptEvent(createTranscriptEvent({
-      sessionId: "butler/main",
-      eventId: `u-${index}`,
-      kind: "inbound",
-      timestamp: new Date(index * 1_000).toISOString(),
-      payload: {
-        message: {
-          text: `사용자 목표 ${index}: 프로젝트 결정을 기억하고 worker 상태를 유지해야 합니다. ${"맥락 ".repeat(30)}`,
-        },
-      },
-    }));
-    appendTranscriptEvent(createTranscriptEvent({
-      sessionId: "butler/main",
-      eventId: `a-${index}`,
-      kind: "outbound",
-      timestamp: new Date(index * 1_000 + 1).toISOString(),
-      payload: {
-        message: {
-          text: `결정 ${index}: 이 선택은 나중에 회상되어야 합니다. ${"세부사항 ".repeat(30)}`,
-        },
-      },
-    }));
+    store.appendUserMessage({
+      sessionId: canonicalSessionId,
+      turnId: "context-compaction-seed",
+      text: `사용자 목표 ${index}: 프로젝트 결정을 기억하고 worker 상태를 유지해야 합니다. ${"맥락 ".repeat(30)}`,
+      sourceGateway: "app",
+      sourceRef: `u-${index}`,
+      now: new Date(index * 1_000).toISOString(),
+    });
+    store.appendAssistantMessage({
+      sessionId: canonicalSessionId,
+      turnId: "context-compaction-seed",
+      text: `결정 ${index}: 이 선택은 나중에 회상되어야 합니다. ${"세부사항 ".repeat(30)}`,
+      sourceGateway: "app",
+      sourceRef: `a-${index}`,
+      now: new Date(index * 1_000 + 1).toISOString(),
+    });
   }
+  store.close();
+}
+
+function appendFollowUp(text: string): void {
+  const store = new AgentConversationStore({ butlerData: tempDir });
+  store.appendUserMessage({
+    sessionId: canonicalSessionId,
+    text,
+    sourceGateway: "app",
+    sourceRef: "follow-up-after-compaction",
+    now: new Date(99_000).toISOString(),
+  });
+  store.close();
 }
 
 test("compaction writes provenance snapshots and preserves suffix ids", async () => {
@@ -76,12 +91,14 @@ test("compaction writes provenance snapshots and preserves suffix ids", async ()
   });
 
   expect(snapshot.status).toBe("ok");
-  expect(snapshot.summary).toContain("Events summarized");
+  expect(snapshot.summary).toContain("Canonical messages summarized");
   expect(snapshot.summarized_event_range.event_count).toBeGreaterThan(0);
   expect(snapshot.preserved_suffix_event_ids).toHaveLength(4);
+  expect(snapshot.preserved_suffix_message_ids).toHaveLength(4);
+  expect(snapshot.source_hash).toStartWith("sha256:");
   expect(snapshot.provenance.length).toBeGreaterThan(0);
   expect(snapshot.post_estimated_tokens).toBeLessThan(snapshot.pre_estimated_tokens);
-  expect(existsSync(compactionPath(tempDir, "butler/main"))).toBe(true);
+  expect(existsSync(compactionPath(tempDir, canonicalSessionId))).toBe(true);
 
   const rendered = renderCompactionContext(readLatestCompactionSnapshot({
     butlerData: tempDir,
@@ -125,17 +142,7 @@ test("auto compaction pressure uses effective post-compaction context instead of
   });
   expect(first?.trigger).toBe("auto");
 
-  appendTranscriptEvent(createTranscriptEvent({
-    sessionId: "butler/main",
-    eventId: "follow-up-after-compaction",
-    kind: "inbound",
-    timestamp: new Date(99_000).toISOString(),
-    payload: {
-      message: {
-        text: "짧은 후속 질문입니다.",
-      },
-    },
-  }));
+  appendFollowUp("짧은 후속 질문입니다.");
 
   const second = await maybeAutoCompactSession({
     butlerData: tempDir,
@@ -165,11 +172,164 @@ test("concurrent compactions serialize through one append-only snapshot log", as
     }),
   ]);
 
-  const raw = readFileSync(compactionPath(tempDir, "butler/main"), "utf8")
+  const raw = readFileSync(compactionPath(tempDir, canonicalSessionId), "utf8")
     .trim()
     .split("\n");
   expect(raw).toHaveLength(2);
   expect(raw.every((line) => JSON.parse(line).status === "ok")).toBe(true);
+});
+
+test("semantic compaction preserves tool call result adjacency at the tail boundary", async () => {
+  const store = new AgentConversationStore({ butlerData: tempDir });
+  store.beginTurn({
+    gateway: "app",
+    externalSessionId: runtimeSessionId,
+    sessionId: canonicalSessionId,
+    actor: "user",
+    turnId: "tool-boundary-seed",
+  });
+  store.appendUserMessage({
+    sessionId: canonicalSessionId,
+    turnId: "tool-boundary-seed",
+    text: "도구를 써서 확인해줘.",
+    sourceRef: "tool-u-1",
+  });
+  const toolCall = store.appendAssistantMessage({
+    sessionId: canonicalSessionId,
+    turnId: "tool-boundary-seed",
+    text: "",
+    parts: [{
+      kind: "tool_call",
+      contentJson: { name: "read_file", arguments: { path: "README.md" } },
+      toolCallId: "call-boundary",
+      providerShape: "openai",
+    }],
+    sourceRef: "tool-call",
+  });
+  const toolResult = store.appendAssistantMessage({
+    sessionId: canonicalSessionId,
+    turnId: "tool-boundary-seed",
+    text: "",
+    parts: [{
+      kind: "tool_result",
+      contentJson: { ok: true, text: "done" },
+      toolCallId: "call-boundary",
+      parentToolCallId: "call-boundary",
+      providerShape: "openai",
+    }],
+    sourceRef: "tool-result",
+  });
+  store.close();
+
+  await compactTranscript({
+    butlerData: tempDir,
+    sessionId: runtimeSessionId,
+    trigger: "manual",
+    preserveLastMessages: 1,
+  });
+
+  const reopened = new AgentConversationStore({ butlerData: tempDir });
+  const tail = reopened.readSemanticTail(canonicalSessionId, 10);
+  reopened.close();
+  expect(tail.map((message) => message.id)).toEqual([toolCall.id, toolResult.id]);
+});
+
+test("semantic compaction summarizes completed tool groups before the tail boundary", async () => {
+  const store = new AgentConversationStore({ butlerData: tempDir });
+  store.beginTurn({
+    gateway: "app",
+    externalSessionId: runtimeSessionId,
+    sessionId: canonicalSessionId,
+    actor: "user",
+    turnId: "tool-complete-before-tail",
+  });
+  const toolCall = store.appendAssistantMessage({
+    sessionId: canonicalSessionId,
+    turnId: "tool-complete-before-tail",
+    text: "",
+    parts: [{
+      kind: "tool_call",
+      contentJson: { name: "read_file" },
+      toolCallId: "call-complete-before-tail",
+    }],
+  });
+  const toolResult = store.appendAssistantMessage({
+    sessionId: canonicalSessionId,
+    turnId: "tool-complete-before-tail",
+    text: "",
+    parts: [{
+      kind: "tool_result",
+      contentJson: { ok: true },
+      toolCallId: "call-complete-before-tail",
+      parentToolCallId: "call-complete-before-tail",
+    }],
+  });
+  const suffix = Array.from({ length: 5 }, (_, index) =>
+    store.appendUserMessage({
+      sessionId: canonicalSessionId,
+      turnId: "tool-complete-before-tail",
+      text: `suffix ${index}`,
+    }),
+  );
+  store.close();
+
+  await compactTranscript({
+    butlerData: tempDir,
+    sessionId: runtimeSessionId,
+    trigger: "manual",
+    preserveLastMessages: 2,
+  });
+
+  const reopened = new AgentConversationStore({ butlerData: tempDir });
+  const tail = reopened.readSemanticTail(canonicalSessionId, 10);
+  reopened.close();
+  expect(tail.map((message) => message.id)).toEqual(suffix.slice(-2).map((message) => message.id));
+  expect(tail.map((message) => message.id)).not.toContain(toolCall.id);
+  expect(tail.map((message) => message.id)).not.toContain(toolResult.id);
+});
+
+test("semantic compaction preserves open tool calls before the tail boundary", async () => {
+  const store = new AgentConversationStore({ butlerData: tempDir });
+  store.beginTurn({
+    gateway: "app",
+    externalSessionId: runtimeSessionId,
+    sessionId: canonicalSessionId,
+    actor: "user",
+    turnId: "tool-open-before-tail",
+  });
+  const toolCall = store.appendAssistantMessage({
+    sessionId: canonicalSessionId,
+    turnId: "tool-open-before-tail",
+    text: "",
+    parts: [{
+      kind: "tool_call",
+      contentJson: { name: "read_file" },
+      toolCallId: "call-open-before-tail",
+    }],
+  });
+  const suffix = Array.from({ length: 4 }, (_, index) =>
+    store.appendUserMessage({
+      sessionId: canonicalSessionId,
+      turnId: "tool-open-before-tail",
+      text: `open suffix ${index}`,
+    }),
+  );
+  store.close();
+
+  await compactTranscript({
+    butlerData: tempDir,
+    sessionId: runtimeSessionId,
+    trigger: "manual",
+    preserveLastMessages: 2,
+  });
+
+  const reopened = new AgentConversationStore({ butlerData: tempDir });
+  const tail = reopened.readSemanticTail(canonicalSessionId, 10);
+  reopened.close();
+  expect(tail.map((message) => message.id)).toEqual([
+    toolCall.id,
+    ...suffix.map((message) => message.id),
+  ]);
 });
 
 test("compaction writes raw-text-free success and failure telemetry", async () => {
@@ -189,21 +349,21 @@ test("compaction writes raw-text-free success and failure telemetry", async () =
   });
   writeFailedCompactionDiagnostic({
     butlerData: tempDir,
-    sessionId: "butler/main",
+    sessionId: canonicalSessionId,
     modelRef: "openai/test",
     reason: "SECRET raw diagnostic with user text",
   });
 
   const metrics = readCompactionMetrics({
     butlerData: tempDir,
-    sessionId: "butler/main",
+    sessionId: canonicalSessionId,
   });
   const rawMetrics = readFileSync(compactionMetricsPath(tempDir), "utf8");
 
   expect(metrics).toHaveLength(2);
   expect(metrics[0]).toMatchObject({
     schema: "butler.context-compaction-metric.v1",
-    sessionId: "butler/main",
+    sessionId: canonicalSessionId,
     trigger: "manual",
     status: "ok",
     snapshotId: snapshot.snapshot_id,

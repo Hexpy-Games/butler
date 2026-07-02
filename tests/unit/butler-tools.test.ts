@@ -2304,16 +2304,18 @@ test("context monitor tool schema exposes safe session lookup", () => {
   expect(Object.keys(tool?.parameters.properties ?? {})).toEqual(["session_id"]);
 });
 
-test("conversation context tool schema exposes bounded transcript lookup controls", () => {
+test("conversation context tool schema exposes bounded canonical lookup controls", () => {
   const tool = BUTLER_TOOLS.find((item) => item.name === "read_conversation_context");
 
   expect(tool?.parameters.required).toEqual([]);
   expect(Object.keys(tool?.parameters.properties ?? {})).toEqual([
     "query",
+    "anchor_message_id",
     "anchor_event_id",
     "direction",
     "limit",
     "max_chars",
+    "include_tools",
   ]);
 });
 

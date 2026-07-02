@@ -18,6 +18,8 @@ import {
   NativeToolLoopRuntime,
   recentConversationBudgetForTurn,
 } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { conversationSessionIdForDurableSession } from "../../packages/butler-agent/src/agent/conversation/session-admission.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { readContextMonitor } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
@@ -143,6 +145,45 @@ function readOnlyPersistedTurnContextAtom(): Record<string, unknown> | null {
   if (files.length === 0) return null;
   expect(files).toHaveLength(1);
   return JSON.parse(readFileSync(join(dir, files[0]), "utf8")) as Record<string, unknown>;
+}
+
+function seedCanonicalConversation(input: {
+  runtimeSessionId?: string;
+  messages: Array<{
+    role: "user" | "assistant";
+    text: string;
+    sourceRef?: string;
+    parts?: Parameters<AgentConversationStore["appendUserMessage"]>[0]["parts"];
+  }>;
+}): void {
+  const runtimeSessionId = input.runtimeSessionId ?? "butler/main";
+  const canonicalSessionId = conversationSessionIdForDurableSession(runtimeSessionId);
+  const store = new AgentConversationStore({ butlerData: tempDir });
+  try {
+    store.beginTurn({
+      gateway: "app",
+      externalSessionId: runtimeSessionId,
+      sessionId: canonicalSessionId,
+      actor: "user",
+      turnId: `turn-seed-${Math.random().toString(36).slice(2)}`,
+      now: "2026-07-02T00:00:00.000Z",
+    });
+    for (const [index, message] of input.messages.entries()) {
+      const payload = {
+        sessionId: canonicalSessionId,
+        turnId: undefined,
+        text: message.text,
+        sourceGateway: "app",
+        sourceRef: message.sourceRef ?? `seed-${index}`,
+        now: `2026-07-02T00:00:${String(index).padStart(2, "0")}.000Z`,
+        parts: message.parts,
+      };
+      if (message.role === "user") store.appendUserMessage(payload);
+      else store.appendAssistantMessage(payload);
+    }
+  } finally {
+    store.close();
+  }
 }
 
 test("native runtime injects Project Ledger Runtime Context only for project-origin sessions", async () => {
@@ -1094,30 +1135,13 @@ test("native runtime emits immediate preparation progress without auxiliary orie
   ).toBe(false);
 });
 
-test("native runtime injects recent transcript context and excludes current inbound event", async () => {
-  appendTranscriptEvent(createTranscriptEvent({
-    sessionId: "butler/main",
-    kind: "inbound",
-    payload: {
-      eventId: "telegram:1:main:10",
-      message: { text: "내 이름은 테스트 사용자입니다" },
-    },
-  }));
-  appendTranscriptEvent(createTranscriptEvent({
-    sessionId: "butler/main",
-    kind: "outbound",
-    payload: {
-      message: { text: "네, 테스트 사용자님으로 기억하겠습니다." },
-    },
-  }));
-  appendTranscriptEvent(createTranscriptEvent({
-    sessionId: "butler/main",
-    kind: "inbound",
-    payload: {
-      eventId: "telegram:1:main:11",
-      message: { text: "방금 말한 내 이름이 뭐야?" },
-    },
-  }));
+test("native runtime injects recent canonical conversation context and excludes current inbound event", async () => {
+  seedCanonicalConversation({
+    messages: [
+      { role: "user", text: "내 이름은 테스트 사용자입니다", sourceRef: "telegram:1:main:10" },
+      { role: "assistant", text: "네, 테스트 사용자님으로 기억하겠습니다.", sourceRef: "assistant:10" },
+    ],
+  });
 
   let capturedPrompt = "";
   const runtime = new NativeToolLoopRuntime({
@@ -1180,23 +1204,26 @@ test("native runtime keeps prior attachment content out of recent conversation w
     join(tempDir, "app-server", "message-files", fileId),
     "# Latest Draft\n\nUnique latest attached draft body.",
   );
-  appendTranscriptEvent(createTranscriptEvent({
-    sessionId: "butler/main",
-    kind: "inbound",
-    payload: {
-      eventId: "app:previous",
-      message: {
-        text: "다시 보내줄게.",
-        attachments: [{
-          id: fileId,
-          kind: "document",
-          mimeType: "text/markdown",
-          fileName: "index.md",
-          sizeBytes: 45,
-        }],
-      },
-    },
-  }));
+  seedCanonicalConversation({
+    messages: [{
+      role: "user",
+      text: "다시 보내줄게.",
+      sourceRef: "app:previous",
+      parts: [
+        { kind: "text", contentJson: { text: "다시 보내줄게." } },
+        {
+          kind: "attachment_ref",
+          contentJson: {
+            id: fileId,
+            kind: "document",
+            mimeType: "text/markdown",
+            fileName: "index.md",
+            sizeBytes: 45,
+          },
+        },
+      ],
+    }],
+  });
 
   let capturedPrompt = "";
   const runtime = new NativeToolLoopRuntime({
@@ -6349,30 +6376,20 @@ test("native runtime leaves CSV public-data tool choice to the model unless expl
 });
 
 test("native runtime lets the model expand local conversation context when the model selects the tool", async () => {
-  appendTranscriptEvent(createTranscriptEvent({
-    sessionId: "butler/main",
-    kind: "inbound",
-    eventId: "event-old-1",
-    payload: {
-      message: { text: "처음에 항목A는 2단계이고 항목B은 기본이라고 말했어요." },
-    },
-  }));
-  appendTranscriptEvent(createTranscriptEvent({
-    sessionId: "butler/main",
-    kind: "outbound",
-    eventId: "event-old-2",
-    payload: {
-      message: { text: "네, 항목A 2단계과 항목B 기본으로 기억하겠습니다." },
-    },
-  }));
-  appendTranscriptEvent(createTranscriptEvent({
-    sessionId: "butler/main",
-    kind: "inbound",
-    eventId: "event-current",
-    payload: {
-      message: { text: "위에서 항목A 몇 돌이라고 했지?" },
-    },
-  }));
+  seedCanonicalConversation({
+    messages: [
+      {
+        role: "user",
+        text: "처음에 항목A는 2단계이고 항목B은 기본이라고 말했어요.",
+        sourceRef: "event-old-1",
+      },
+      {
+        role: "assistant",
+        text: "네, 항목A 2단계과 항목B 기본으로 기억하겠습니다.",
+        sourceRef: "event-old-2",
+      },
+    ],
+  });
 
   let capturedPrompt = "";
   const runtime = new NativeToolLoopRuntime({
@@ -6393,8 +6410,11 @@ test("native runtime lets the model expand local conversation context when the m
         name: "read_conversation_context",
         args: { query: "항목A", limit: 4 },
         rawArguments: "{\"query\":\"항목A\",\"limit\":4}",
-      }) as { events: Array<{ text: string }> };
-      expect(context.events.some((event) => event.text.includes("항목A는 2단계"))).toBe(true);
+      }) as { messages: Array<{ text: string; conversation_message_id: string }> };
+      expect(context.messages.some((message) =>
+        message.conversation_message_id.startsWith("cm_") &&
+        message.text.includes("항목A는 2단계"),
+      )).toBe(true);
       return "항목A는 2단계이라고 말씀하셨습니다.";
     },
   });

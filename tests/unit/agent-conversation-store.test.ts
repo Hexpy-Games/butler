@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   AgentConversationStore,
   conversationStorePath,
+  conversationMessagesSourceHash,
 } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import type { ConversationIdFactory } from "../../packages/butler-agent/src/agent/conversation/ids.ts";
 
@@ -188,7 +189,7 @@ test("summaries compact covered messages and prompt material keeps canonical pro
     sessionId: "cs_summary",
     coversFromSeq: first.seq,
     coversToSeq: first.seq,
-    sourceHash: "sha256:first",
+    sourceHash: conversationMessagesSourceHash([first]),
     model: "test-model",
     summaryText: "first summarized",
   });
@@ -200,6 +201,89 @@ test("summaries compact covered messages and prompt material keeps canonical pro
     { kind: "summary", id: summary.id },
     { kind: "message", id: second.id },
   ]);
+  store.close();
+});
+
+test("summary reads invalidate stale source hashes after semantic mutation", () => {
+  const store = createStore();
+  const turn = store.beginTurn({
+    gateway: "app",
+    externalSessionId: "chat-stale",
+    sessionId: "cs_stale_summary",
+    actor: "user",
+  });
+  const message = store.appendUserMessage({
+    sessionId: "cs_stale_summary",
+    turnId: turn.id,
+    text: "original",
+  });
+  store.writeSummary({
+    sessionId: "cs_stale_summary",
+    coversFromSeq: message.seq,
+    coversToSeq: message.seq,
+    sourceHash: conversationMessagesSourceHash([message]),
+    summaryText: "original summary",
+    summaryId: "csm_stale",
+  });
+  store.close();
+
+  const db = new Database(conversationStorePath(tempDir));
+  try {
+    db.query("UPDATE conversation_parts SET content_json = ? WHERE message_id = ?")
+      .run(JSON.stringify({ text: "mutated" }), message.id);
+  } finally {
+    db.close();
+  }
+
+  const reopened = createStore();
+  expect(reopened.readSummaries("cs_stale_summary")).toEqual([]);
+  const tail = reopened.readSemanticTail("cs_stale_summary", 10);
+  expect(tail.map((message) => ({
+    id: message.id,
+    status: message.status,
+    compactedBy: message.compacted_by_summary_id,
+    text: message.parts[0]?.content_json,
+  }))).toEqual([{
+    id: message.id,
+    status: "complete",
+    compactedBy: null,
+    text: { text: "mutated" },
+  }]);
+  const prompt = reopened.readPromptMaterial({ sessionId: "cs_stale_summary" });
+  expect(prompt.summaries).toEqual([]);
+  expect(prompt.semantic_tail.map((message) => message.id)).toEqual([message.id]);
+  reopened.close();
+});
+
+test("summary write rolls back message compaction when the summary insert fails", () => {
+  const store = createStore();
+  const turn = store.beginTurn({
+    gateway: "app",
+    externalSessionId: "chat-summary-rollback",
+    sessionId: "cs_summary_rollback",
+    actor: "user",
+  });
+  const first = store.appendUserMessage({ sessionId: "cs_summary_rollback", turnId: turn.id, text: "first" });
+  const second = store.appendAssistantMessage({ sessionId: "cs_summary_rollback", turnId: turn.id, text: "second" });
+  store.writeSummary({
+    sessionId: "cs_summary_rollback",
+    coversFromSeq: first.seq,
+    coversToSeq: first.seq,
+    sourceHash: conversationMessagesSourceHash([first]),
+    summaryText: "first summary",
+    summaryId: "csm_duplicate",
+  });
+
+  expect(() => store.writeSummary({
+    sessionId: "cs_summary_rollback",
+    coversFromSeq: second.seq,
+    coversToSeq: second.seq,
+    sourceHash: conversationMessagesSourceHash([second]),
+    summaryText: "second summary",
+    summaryId: "csm_duplicate",
+  })).toThrow();
+
+  expect(store.readSemanticTail("cs_summary_rollback", 10).map((message) => message.id)).toEqual([second.id]);
   store.close();
 });
 

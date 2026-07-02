@@ -32,8 +32,6 @@ import {
 import { renderAttachmentContext } from "../../../context/attachment-context.ts";
 import {
   maybeAutoCompactSession,
-  readLatestCompactionSnapshot,
-  renderCompactionContext,
 } from "../../../context/compaction.ts";
 import {
   refreshWorkingMemoryFromTranscript,
@@ -84,10 +82,7 @@ export async function prepareNativeTurnContext(input: {
   const recallContext = await maybeRecall(input, userText);
   const compactionContext = measureTurnPreparationStepSync(
     preparationMetricInput(input, "compaction_context"),
-    () => renderCompactionContext(readLatestCompactionSnapshot({
-      butlerData: input.deps.butlerData,
-      sessionId: input.turnInput.handle.sessionId,
-    })),
+    () => "",
   );
   const turnId = currentRuntimeTurnId(input.turnInput) ?? `turn-${randomUUID().slice(0, 12)}`;
   const turnBudget = createDirectTurnBudget(turnId);

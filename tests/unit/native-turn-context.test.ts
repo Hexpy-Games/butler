@@ -2,14 +2,12 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import {
-  appendTranscriptEvent,
-  createTranscriptEvent,
-} from "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
 import type {
   InboundEnvelope,
   RuntimeTurnInput,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { conversationSessionIdForDurableSession } from "../../packages/butler-agent/src/agent/conversation/session-admission.ts";
 import {
   currentRuntimeTurnId,
   currentUserText,
@@ -31,16 +29,26 @@ test("native turn context normalizes prompt sections and structured current inpu
   const butlerData = mkdtempSync(join(tmpdir(), "butler-native-turn-context-"));
   process.env.BUTLER_DATA = butlerData;
   try {
-    appendTranscriptEvent(createTranscriptEvent({
-      sessionId: "turn-context-session",
-      kind: "outbound",
-      payload: {
-        message: {
-          text: "previous answer",
-          attachments: [],
-        },
-      },
-    }));
+    const store = new AgentConversationStore({ butlerData });
+    try {
+      const sessionId = conversationSessionIdForDurableSession("turn-context-session");
+      store.beginTurn({
+        gateway: "app",
+        externalSessionId: "turn-context-session",
+        sessionId,
+        actor: "user",
+        turnId: "turn-context-seed",
+      });
+      store.appendAssistantMessage({
+        sessionId,
+        turnId: "turn-context-seed",
+        text: "previous answer",
+        sourceGateway: "app",
+        sourceRef: "previous-answer",
+      });
+    } finally {
+      store.close();
+    }
 
     const input = textTurnInput("current raw", {
       promptContext: [
