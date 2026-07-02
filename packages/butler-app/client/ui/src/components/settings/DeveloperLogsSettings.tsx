@@ -10,12 +10,13 @@ import { SettingsSection } from "./SettingsSection";
 import styles from "./DeveloperLogsSettings.module.css";
 
 const PAGE_SIZE = 30;
+type DeveloperLogKindFilter = "all" | "model_turn" | "model_turn_error";
 
 export function DeveloperLogsSettings() {
   const [view, setView] = useState<DeveloperLogListView | null>(null);
   const [query, setQuery] = useState("");
   const [sessionId, setSessionId] = useState("");
-  const [kind, setKind] = useState<"all" | "model_turn">("all");
+  const [kind, setKind] = useState<DeveloperLogKindFilter>("all");
   const [openId, setOpenId] = useState<string | null>(null);
   const [tab, setTab] = useState<DeveloperLogTab>("context");
   const [loading, setLoading] = useState(false);
@@ -97,11 +98,13 @@ export function DeveloperLogsSettings() {
             placeholder={copy.placeholders.developerLogSession}
             onChange={(event) => setSessionId(event.currentTarget.value)}
           />
-          <NativeSelect value={kind} size="sm" onChange={(event) =>
-            setKind(event.currentTarget.value === "model_turn" ? "model_turn" : "all")
-          }>
+          <NativeSelect value={kind} size="sm" onChange={(event) => {
+            const value = event.currentTarget.value;
+            setKind(value === "model_turn" || value === "model_turn_error" ? value : "all");
+          }}>
             <option value="all">{logCopy.filters.allKinds}</option>
             <option value="model_turn">{logCopy.filters.modelTurn}</option>
+            <option value="model_turn_error">{logCopy.filters.modelTurnError}</option>
           </NativeSelect>
           <Button
             type="button"

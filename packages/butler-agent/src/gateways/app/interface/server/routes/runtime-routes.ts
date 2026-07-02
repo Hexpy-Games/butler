@@ -115,15 +115,17 @@ function developerLogsFromSearchParams(searchParams: URLSearchParams): {
   offset?: number;
   sessionId?: string;
   turnId?: string;
-  kind?: "model_turn";
+  kind?: "model_turn" | "model_turn_error";
   query?: string;
 } {
   const kind = searchParams.get("kind");
+  const normalizedKind =
+    kind === "model_turn" || kind === "model_turn_error" ? kind : undefined;
   return {
     ...paginationFromSearchParams(searchParams),
     sessionId: searchParams.get("session_id") ?? undefined,
     turnId: searchParams.get("turn_id") ?? undefined,
-    kind: kind === "model_turn" ? kind : undefined,
+    kind: normalizedKind,
     query: searchParams.get("query") ?? undefined,
   };
 }

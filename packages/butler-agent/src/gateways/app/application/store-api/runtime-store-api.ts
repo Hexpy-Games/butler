@@ -31,7 +31,7 @@ export interface AppStoreRuntimeApi {
     offset?: number;
     sessionId?: string;
     turnId?: string;
-    kind?: "model_turn";
+    kind?: "model_turn" | "model_turn_error";
     query?: string;
   }): DeveloperLogListView;
   getUsageMonitor(options?: {

@@ -398,6 +398,7 @@ export interface AppCopy {
       filters: {
         allKinds: string;
         modelTurn: string;
+        modelTurnError: string;
       };
       tabs: {
         context: string;
@@ -1072,6 +1073,7 @@ const koKrCopy: AppCopy = {
       filters: {
         allKinds: "전체",
         modelTurn: "모델 턴",
+        modelTurnError: "실패한 모델 턴",
       },
       tabs: {
         context: "컨텍스트",
@@ -1770,6 +1772,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       filters: {
         allKinds: "All",
         modelTurn: "Model turn",
+        modelTurnError: "Failed model turn",
       },
       tabs: {
         context: "Context",

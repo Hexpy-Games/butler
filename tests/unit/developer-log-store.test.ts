@@ -97,6 +97,89 @@ test("developer log store redacts obvious secrets and filters entries", () => {
   expect(statSync(join(tempDir, "app", "developer-logs")).mode & 0o777).toBe(0o700);
 });
 
+test("developer log store appends failed model turns with safe diagnostics", () => {
+  const store = createStore();
+  store.appendModelTurnError({
+    kind: "model_turn_error",
+    binding: {
+      sessionId: "session-error",
+      role: "butler",
+      workspacePath: process.cwd(),
+      runtimeAdapterId: "runtime",
+      modelProviderId: "provider",
+      modelRef: "provider/model",
+      transportBindings: [],
+      lifecycleState: "active",
+      createdAt: "2026-07-02T00:00:00.000Z",
+      updatedAt: "2026-07-02T00:00:00.000Z",
+    },
+    envelope: {
+      eventId: "event-error",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "general" },
+      sender: { id: "user" },
+      message: {
+        id: "message-error",
+        text: "hello api_key=secret",
+        timestamp: "2026-07-02T00:00:00.000Z",
+      },
+      routingHints: { turnId: "turn-error" },
+    },
+    contextAssembly: {
+      staticContext: [],
+      liveConfiguration: [],
+      runtimeState: [{
+        id: "runtime-state",
+        title: "Runtime State",
+        region: "runtime_state",
+        content: "Authorization: Bearer hidden",
+      }],
+      workingContext: [],
+      retrievedContext: [],
+      currentInput: [],
+      references: [],
+      liveConfigHash: "hash-error",
+    },
+    promptContext: "Authorization: Bearer hidden",
+    failure: {
+      code: "provider_rate_limited",
+      message: "Provider returned HTTP 429",
+      statusCode: 429,
+      retryable: true,
+      cause: "OPENAI_API_KEY=secret",
+    },
+    diagnostics: {
+      api_key: "secret",
+    },
+    timestamp: "2026-07-02T00:00:02.000Z",
+  });
+
+  const result = store.list({ kind: "model_turn_error", query: "provider_rate_limited" });
+  expect(result.total).toBe(1);
+  expect(result.entries[0]).toMatchObject({
+    kind: "model_turn_error",
+    session_id: "session-error",
+    turn_id: "turn-error",
+    response: {
+      text: "Provider returned HTTP 429",
+      raw: {
+        failure: {
+          code: "provider_rate_limited",
+          statusCode: 429,
+          retryable: true,
+        },
+        diagnostics: {
+          api_key: "[REDACTED]",
+        },
+      },
+    },
+  });
+  expect(result.entries[0]?.request.input_text).toContain("[REDACTED]");
+  expect(result.entries[0]?.context.prompt_context).toContain("[REDACTED]");
+  expect(JSON.stringify(result.entries[0]?.response.raw)).not.toContain("secret");
+});
+
 test("developer log store skips corrupt lines and keeps newest bounded entries", () => {
   const store = createStore();
   const path = join(tempDir, "app", "developer-logs", "model-turns.jsonl");

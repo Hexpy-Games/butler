@@ -13,6 +13,7 @@ import type {
   RuntimeTurnResult,
   StoredSessionBinding,
 } from "../../test-support/harness/contracts.ts";
+import type { RuntimeFailureDiagnostic } from "../../integrations/providers/provider-errors.ts";
 import type {
   ContextAssembly,
   ContextReference,
@@ -32,7 +33,7 @@ export const DEVELOPER_LOG_REGION_ORDER = [
   "current_input",
 ] as const satisfies readonly ContextRegion[];
 
-export type DeveloperLogKind = "model_turn";
+export type DeveloperLogKind = "model_turn" | "model_turn_error";
 
 export interface DeveloperLogSection {
   id: string;
@@ -101,6 +102,7 @@ export interface DeveloperLogListResult {
 }
 
 export interface DeveloperLogTurnCaptureInput {
+  kind?: "model_turn";
   binding: StoredSessionBinding;
   envelope: InboundEnvelope;
   route?: GatewayRoute;
@@ -110,6 +112,23 @@ export interface DeveloperLogTurnCaptureInput {
   timestamp: string;
   metadata?: Record<string, unknown>;
 }
+
+export interface DeveloperLogTurnErrorCaptureInput {
+  kind: "model_turn_error";
+  binding: StoredSessionBinding;
+  envelope: InboundEnvelope;
+  route?: GatewayRoute;
+  contextAssembly?: ContextAssembly;
+  promptContext?: string;
+  failure: RuntimeFailureDiagnostic;
+  diagnostics?: Record<string, unknown>;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type DeveloperLogCaptureInput =
+  | DeveloperLogTurnCaptureInput
+  | DeveloperLogTurnErrorCaptureInput;
 
 const SECRET_FIELD_PATTERN = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|password|secret|authorization|credential|session[_-]?key)/iu;
 const BEARER_PATTERN = /\bbearer\s+[\w.~+/=-]+/giu;
@@ -221,6 +240,7 @@ function searchableText(entry: DeveloperLogEntry): string {
     entry.route.reason,
     entry.route.project_id,
     entry.response.text,
+    JSON.stringify(entry.response.raw),
     ...entry.context.sections.flatMap((section) => [
       section.id,
       section.title,
@@ -251,7 +271,12 @@ function parseEntry(line: string): DeveloperLogEntry | null {
 
 function isDeveloperLogEntry(value: unknown): value is DeveloperLogEntry {
   if (!isRecord(value)) return false;
-  if (value.schema !== DEVELOPER_LOG_SCHEMA || value.kind !== "model_turn") return false;
+  if (
+    value.schema !== DEVELOPER_LOG_SCHEMA ||
+    (value.kind !== "model_turn" && value.kind !== "model_turn_error")
+  ) {
+    return false;
+  }
   return (
     typeof value.id === "string" &&
     typeof value.created_at === "string" &&
@@ -375,11 +400,55 @@ export class DeveloperLogStore {
       },
     };
 
-    mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
-    appendFileSync(this.path, `${JSON.stringify(entry)}\n`, "utf8");
-    this.secureFileMode();
-    this.enforceRetention();
-    return entry;
+    return this.appendEntry(entry);
+  }
+
+  appendModelTurnError(input: DeveloperLogTurnErrorCaptureInput): DeveloperLogEntry {
+    const entry: DeveloperLogEntry = {
+      schema: DEVELOPER_LOG_SCHEMA,
+      id: `devlog-${randomUUID()}`,
+      kind: "model_turn_error",
+      created_at: input.timestamp,
+      session_id: input.binding.sessionId,
+      turn_id: turnIdFromEnvelope(input.envelope),
+      role: input.binding.role,
+      transport: input.envelope.transport,
+      route: routeSummary(input.route),
+      model: {
+        requested_model_ref: input.binding.modelRef,
+        provider_id: input.binding.modelProviderId ?? null,
+        runtime_adapter_id: input.binding.runtimeAdapterId ?? null,
+      },
+      context: {
+        live_config_hash: input.contextAssembly?.liveConfigHash ?? null,
+        region_order: DEVELOPER_LOG_REGION_ORDER,
+        sections: sectionsFromAssembly(input.contextAssembly),
+        references: redactedReferences(input.contextAssembly?.references),
+        prompt_context: redactedString(input.promptContext ?? ""),
+      },
+      request: {
+        input_text: redactedString(input.envelope.message.text?.trim() ?? ""),
+        metadata: safeRecord({
+          ...input.metadata,
+          failure_code: input.failure.code,
+          retryable: input.failure.retryable ?? false,
+        }),
+      },
+      response: {
+        text: redactedString(input.failure.message),
+        raw: redactedJsonValue({
+          failure: input.failure,
+          diagnostics: input.diagnostics ?? null,
+        }),
+      },
+      privacy: {
+        raw_text_included: true,
+        secrets_redacted: true,
+        local_only: true,
+      },
+    };
+
+    return this.appendEntry(entry);
   }
 
   list(options: DeveloperLogListOptions = {}): DeveloperLogListResult {
@@ -404,6 +473,14 @@ export class DeveloperLogStore {
       .filter(Boolean)
       .map(parseEntry)
       .filter((entry): entry is DeveloperLogEntry => Boolean(entry));
+  }
+
+  private appendEntry(entry: DeveloperLogEntry): DeveloperLogEntry {
+    mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 });
+    appendFileSync(this.path, `${JSON.stringify(entry)}\n`, "utf8");
+    this.secureFileMode();
+    this.enforceRetention();
+    return entry;
   }
 
   private enforceRetention(): void {
