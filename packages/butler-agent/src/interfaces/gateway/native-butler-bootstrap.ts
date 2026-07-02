@@ -22,6 +22,7 @@ import { GatewayRouter } from "../../gateways/core/router.ts";
 import { createGatewayServer } from "../../gateways/core/server.ts";
 import { PolicyEngine, type PolicyApprovalMode } from "../../agent/policy/policy-engine.ts";
 import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
+import { AgentConversationStore } from "../../agent/conversation/store.ts";
 import { createLifecycleGatewayHandlers, SessionLifecycleService } from "./session-lifecycle.ts";
 import { generateSessionTitleWithProvider } from "../../agent/output/session-title.ts";
 import { NativeToolLoopRuntime } from "../../agent/turn/native-tool-loop.ts";
@@ -585,6 +586,7 @@ export async function runNativeButlerMain(
       sendTelegram: input.sendTelegram,
     });
     const appAdapter = createAppTransportAdapter();
+    const conversationWriter = new AgentConversationStore({ butlerData });
     const deliveryGuard = new DeliveryGuard({
       adapters: [telegramAdapter, appAdapter],
     });
@@ -613,6 +615,8 @@ export async function runNativeButlerMain(
       sessionTitleGenerator: (titleInput) =>
         generateSessionTitleWithProvider(provider, titleInput),
       approvalMode: input.approvalMode ?? "default",
+      conversationWriter,
+      conversationMetricsButlerData: butlerData,
       deliverIntermediate: async ({ binding: activeBinding, action, metadata }) => {
         await deliverThroughEnabledGate(activeBinding.sessionId, action, {
           source: "gateway/native-butler-bootstrap.ts#intermediate",

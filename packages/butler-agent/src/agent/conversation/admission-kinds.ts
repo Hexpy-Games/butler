@@ -1,0 +1,57 @@
+export const TRANSCRIPT_TOP_LEVEL_EVENT_KINDS = [
+  "inbound",
+  "outbound",
+  "delivery",
+  "turn",
+  "tool_call",
+  "tool_result",
+  "worker_status",
+  "session_status",
+  "memory_note",
+  "system",
+] as const;
+
+export const ACTIVITY_TURN_EVENT_KINDS = new Set([
+  "turn.started",
+  "turn.first_progress",
+  "turn.iteration.started",
+  "assistant.decision.delta",
+  "assistant.decision.completed",
+  "model.stream.text_delta",
+  "model.stream.tool_call_delta",
+  "model.stream.completed",
+  "work.block.started",
+  "work.block.updated",
+  "work.block.completed",
+  "assistant.public_note",
+  "tool.progress",
+  "guard.started",
+  "guard.completed",
+  "cognition.feedback.captured",
+  "message.final.started",
+  "message.final.delta",
+  "message.final.completed",
+  "turn.observation",
+  "turn.continuation_scheduled",
+  "turn.completed",
+  "turn.failed",
+  "turn.cancelled",
+  "turn.acknowledged",
+  "turn.accepted",
+  "turn.state_changed",
+  "assistant.decision",
+  "tool.invocation.started",
+  "tool.observation.recorded",
+  "completion.evidence.recorded",
+  "completion.reviewed",
+  "turn.outcome",
+  "runtime.fault",
+  "recovery.recorded",
+  "diagnostic.invariant_violation",
+]);
+
+export const TELEMETRY_TURN_EVENT_KINDS = new Set([
+  "model.stream.reasoning_delta",
+]);
+
+export const GATEWAY_PROJECTION_TRANSCRIPT_KINDS = new Set(["outbound", "delivery"]);

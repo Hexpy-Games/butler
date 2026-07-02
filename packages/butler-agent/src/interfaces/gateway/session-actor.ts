@@ -47,6 +47,8 @@ import type {
   GatewaySessionActor,
 } from "../../gateways/core/contracts.ts";
 import { APP_TRANSPORT } from "../../gateways/core/app-transport.ts";
+import { ConversationAdmissionTurn } from "../../agent/conversation/session-admission.ts";
+import type { ConversationWriter } from "../../agent/conversation/types.ts";
 
 interface SessionActorOptions {
   sessionId: string;
@@ -79,6 +81,8 @@ interface SessionActorOptions {
     envelope: InboundEnvelope;
     route?: GatewayRoute;
   }) => Promise<string | null>;
+  conversationWriter?: ConversationWriter;
+  conversationMetricsButlerData?: string;
   openingDecisionTimeoutMs?: number;
   now?: () => string;
 }
@@ -419,27 +423,35 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     const timestamp =
       envelope.message.timestamp || this.options.now?.() || defaultNow();
     const schedulerContinuation = schedulerContinuationMetadata(envelope);
-
-    if (!schedulerContinuation) {
-      recordDurableInbound({
-        sessionId: binding.sessionId,
-        envelope,
-        route: route
-          ? {
-              sessionId: route.sessionId,
-              role: route.role,
-              reason: route.reason,
-              projectId: route.projectId ?? null,
-            }
-          : undefined,
-        metadata: {
-          source: "gateway-actor",
-        },
-        timestamp,
-      });
-    }
+    let conversationAdmission: ConversationAdmissionTurn | null = null;
 
     try {
+      if (!schedulerContinuation) {
+        recordDurableInbound({
+          sessionId: binding.sessionId,
+          envelope,
+          route: route
+            ? {
+                sessionId: route.sessionId,
+                role: route.role,
+                reason: route.reason,
+                projectId: route.projectId ?? null,
+              }
+            : undefined,
+          metadata: {
+            source: "gateway-actor",
+          },
+          timestamp,
+        });
+        conversationAdmission = this.beginConversationAdmissionTurn({
+          binding,
+          envelope,
+          turnId,
+          timestamp,
+        });
+        conversationAdmission?.admitInbound();
+      }
+
       let openingDecisionId: string | undefined;
       if (!schedulerContinuation) {
         const acknowledged = await this.emitTurnAcknowledged({
@@ -497,7 +509,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             });
           }
         : undefined;
-      const emitTurnEvent = this.options.deliverTurnEvent
+      const emitTurnEvent = this.options.deliverTurnEvent || conversationAdmission
         ? async (event: RuntimeTurnEventInput) => {
             await this.options.deliverTurnEvent?.({
               binding: activeBinding,
@@ -505,6 +517,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
               route,
               event,
             });
+            conversationAdmission?.admitTurnEvent(event);
           }
         : undefined;
       const stopPresence = this.startTypingPresence({
@@ -571,7 +584,6 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           },
         });
       }
-      const turnId = turnIdFromEnvelope(envelope);
       if (turnId) {
         clearTurnContextAtom({
           butlerData: gatewayMetricsButlerData(),
@@ -584,23 +596,26 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         envelope,
         route,
       );
+      const finalAction = finalResultAction({
+        binding: activeBinding,
+        envelope,
+        text: result.text,
+        artifacts: result.artifacts,
+        delivery: result.delivery,
+        generatedSessionTitle,
+        loadedSkillNames,
+      });
       recordDurableOutbound({
         sessionId: activeBinding.sessionId,
-        action: finalResultAction({
-          binding: activeBinding,
-          envelope,
-          text: result.text,
-          artifacts: result.artifacts,
-          delivery: result.delivery,
-          generatedSessionTitle,
-          loadedSkillNames,
-        }),
+        action: finalAction,
         timestamp,
         metadata: {
           source: "gateway-actor#runtime-result",
           turnId: turnIdFromEnvelope(envelope),
         },
       });
+      conversationAdmission?.admitFinalAssistant(result.text, finalAction.actionId);
+      conversationAdmission?.finalize("complete", timestamp);
 
       return {
         text: result.text,
@@ -617,6 +632,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
       const turnId = turnIdFromEnvelope(envelope);
+      this.finalizeConversationAdmissionFailure(conversationAdmission, timestamp, error);
       const isContinuationFailure =
         safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
         isNonPublicContinuationDeliveryError(error) ||
@@ -668,6 +684,44 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         timestamp,
       });
       throw err;
+    }
+  }
+
+  private beginConversationAdmissionTurn(input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+    turnId: string;
+    timestamp: string;
+  }): ConversationAdmissionTurn | null {
+    if (!this.options.conversationWriter) return null;
+    return ConversationAdmissionTurn.begin({
+      writer: this.options.conversationWriter,
+      binding: input.binding,
+      envelope: input.envelope,
+      turnId: input.turnId,
+      timestamp: input.timestamp,
+      butlerData: this.options.conversationMetricsButlerData,
+    });
+  }
+
+  private finalizeConversationAdmissionFailure(
+    admission: ConversationAdmissionTurn | null,
+    timestamp: string,
+    cause: unknown,
+  ): void {
+    if (!admission) return;
+    try {
+      admission.finalize("failed", timestamp);
+    } catch {
+      recordSystemEvent({
+        sessionId: this.sessionId,
+        category: "conversation.admission.finalize_failed",
+        message: safeRuntimeFailure(cause).message,
+        metadata: {
+          source: "gateway-actor",
+        },
+        timestamp,
+      });
     }
   }
 
