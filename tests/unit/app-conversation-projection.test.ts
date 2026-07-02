@@ -276,7 +276,7 @@ test("app conversation projection resolves app runtime session hints to existing
   appStore.db.close();
 });
 
-test("app conversation projection repairs existing runtime hint shadow rows", () => {
+test("app conversation projection prunes empty runtime hint shadow rows after repair", () => {
   const conversationStore = createConversationStore();
   const appStore = new AppServerStore({
     dbPath: join(tempDir, "app.sqlite"),
@@ -311,6 +311,12 @@ test("app conversation projection repairs existing runtime hint shadow rows", ()
     text: "moved",
     now: "2026-07-02T00:00:02.000Z",
   });
+  const appUser = appStore.insertMessage(appChatId, "user", "move me", "sent", {
+    turnId: turn.id,
+  });
+  const appAssistant = appStore.insertMessage(appChatId, "assistant", "moved", "delivered", {
+    turnId: turn.id,
+  });
   appStore.db.query(`
     INSERT INTO chats (
       id, title, kind, project_id, conversation_session_id, pinned, archived, created_at, updated_at
@@ -333,6 +339,22 @@ test("app conversation projection repairs existing runtime hint shadow rows", ()
     now,
     now,
   );
+  appStore.db.query(`
+    INSERT INTO messages (
+      id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
+      conversation_message_id, role, text, status, created_at, updated_at,
+      safe_error_code, retryable
+    )
+    VALUES (?, ?, ?, 'cs_shadow_repair', ?, ?, 'user', 'move me', 'sent', ?, ?, NULL, 0)
+  `).run(
+    `app-projection-${user.id}`,
+    runtimeSessionId,
+    turn.id,
+    turn.id,
+    user.id,
+    now,
+    now,
+  );
 
   const replay = appStore.replayConversationProjection();
 
@@ -349,20 +371,24 @@ test("app conversation projection repairs existing runtime hint shadow rows", ()
     ok: true,
     projected_messages: 2,
   });
-  expect(shadowChat?.conversation_session_id).toBeNull();
+  expect(shadowChat).toBeNull();
   expect(shadowMessageCount?.count).toBe(0);
+  expect(appStore.listSessions().sessions.some((session) =>
+    session.id === runtimeSessionId,
+  )).toBe(false);
   expect(appStore.getConversationProjectionBinding("cs_shadow_repair")).toEqual({
     gateway: "app",
     external_session_id: appChatId,
     conversation_session_id: "cs_shadow_repair",
   });
   expect(appStore.listConversationProjectionMessages("cs_shadow_repair").map((message) => ({
+    id: message.id,
     chat_id: message.chat_id,
     conversation_message_id: message.conversation_message_id,
-  }))).toEqual(expect.arrayContaining([
-    { chat_id: appChatId, conversation_message_id: user.id },
-    { chat_id: appChatId, conversation_message_id: assistant.id },
-  ]));
+  }))).toEqual([
+    { id: appUser.id, chat_id: appChatId, conversation_message_id: user.id },
+    { id: appAssistant.id, chat_id: appChatId, conversation_message_id: assistant.id },
+  ]);
 
   conversationStore.close();
   appStore.db.close();
