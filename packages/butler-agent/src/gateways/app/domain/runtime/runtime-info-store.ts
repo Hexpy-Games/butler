@@ -21,6 +21,7 @@ export class AppRuntimeInfoStore {
     private readonly butlerData: string,
     private readonly appVersion: string | undefined,
     private readonly appUpdateManifest: string,
+    private readonly developerModeEnabled: () => boolean = () => false,
     private readonly defaultAppName = "Butler",
   ) {}
 
@@ -80,8 +81,8 @@ export class AppRuntimeInfoStore {
       version: safeString(pkg.version) || "0.0.0",
       repository_url: APP_REPOSITORY_URL,
       protocol_version: APP_PROTOCOL_VERSION,
-      developer_mode_available: false,
-      developer_mode_enabled: false,
+      developer_mode_available: true,
+      developer_mode_enabled: this.developerModeEnabled(),
     };
   }
 }

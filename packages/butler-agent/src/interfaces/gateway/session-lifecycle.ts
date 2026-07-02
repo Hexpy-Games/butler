@@ -16,6 +16,10 @@ import { normalizeModelRef, type SessionTitleGenerator } from "../../agent/outpu
 import { StewardSessionActor } from "./steward-session.ts";
 import { recordSystemEvent } from "../../test-support/harness/durable-session-transcript.ts";
 import type { ConversationWriter } from "../../agent/conversation/types.ts";
+import type {
+  DeveloperLogStore,
+  DeveloperLogTurnCaptureInput,
+} from "../../operations/diagnostics/developer-log-store.ts";
 
 export interface SessionLifecycleServiceOptions {
   store: SessionBindingStore;
@@ -43,6 +47,8 @@ export interface SessionLifecycleServiceOptions {
   conversationMetricsButlerData?: string;
   sessionTitleGenerator?: SessionTitleGenerator | false;
   openingDecisionTimeoutMs?: number;
+  developerLogStore?: DeveloperLogStore;
+  developerDiagnosticsEnabled?: () => boolean;
   now?: () => string;
 }
 
@@ -123,12 +129,39 @@ export class SessionLifecycleService {
             })
           : undefined,
       buildTurnContext: this.options.promptAssembler
-        ? (input: { binding: StoredSessionBinding; envelope: InboundEnvelope; route?: GatewayRoute }) =>
-            this.options.promptAssembler?.buildTurnContext({
+        ? (input: { binding: StoredSessionBinding; envelope: InboundEnvelope; route?: GatewayRoute }) => {
+            const promptAssembler = this.options.promptAssembler;
+            const canBuildAssembly =
+              typeof promptAssembler?.buildContextAssembly === "function" &&
+              typeof promptAssembler?.renderTurnContext === "function";
+            if (!canBuildAssembly) {
+              const promptContext = promptAssembler?.buildTurnContext?.({
+                binding: input.binding,
+                envelope: input.envelope,
+                route: input.route,
+              });
+              return typeof promptContext === "string"
+                ? { promptContext }
+                : undefined;
+            }
+            const assembly = promptAssembler.buildContextAssembly({
               binding: input.binding,
               envelope: input.envelope,
               route: input.route,
-            })
+            });
+            return assembly
+              ? {
+                  contextAssembly: assembly,
+                  promptContext: promptAssembler.renderTurnContext(assembly),
+                }
+              : undefined;
+          }
+        : undefined,
+      captureDeveloperModelTurn: this.options.developerLogStore
+        ? (input: DeveloperLogTurnCaptureInput) => {
+            if (this.options.developerDiagnosticsEnabled?.() !== true) return;
+            this.options.developerLogStore?.appendModelTurn(input);
+          }
         : undefined,
       deliverIntermediate: this.options.deliverIntermediate,
       deliverTurnEvent: this.options.deliverTurnEvent,

@@ -50,6 +50,8 @@ import { APP_TRANSPORT } from "../../gateways/core/app-transport.ts";
 import { ConversationAdmissionTurn } from "../../agent/conversation/session-admission.ts";
 import { INTERNAL_CONVERSATION_TURN_EVENT_KINDS } from "../../agent/conversation/admission-kinds.ts";
 import type { ConversationWriter } from "../../agent/conversation/types.ts";
+import type { ContextAssembly } from "../../agent/prompt/prompt-assembler.ts";
+import type { DeveloperLogTurnCaptureInput } from "../../operations/diagnostics/developer-log-store.ts";
 
 interface SessionActorOptions {
   sessionId: string;
@@ -63,7 +65,13 @@ interface SessionActorOptions {
     binding: StoredSessionBinding;
     envelope: InboundEnvelope;
     route?: GatewayRoute;
-  }) => string | undefined;
+  }) => string | {
+    promptContext?: string;
+    contextAssembly?: ContextAssembly;
+  } | undefined;
+  captureDeveloperModelTurn?: (
+    input: DeveloperLogTurnCaptureInput,
+  ) => void;
   deliverIntermediate?: (input: {
     binding: StoredSessionBinding;
     envelope: InboundEnvelope;
@@ -473,11 +481,19 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           });
         }
       }
-      const promptContext = this.options.buildTurnContext?.({
+      const turnContext = this.options.buildTurnContext?.({
         binding,
         envelope,
         route,
       });
+      const promptContext =
+        typeof turnContext === "string"
+          ? turnContext
+          : turnContext?.promptContext;
+      const contextAssembly =
+        typeof turnContext === "string"
+          ? undefined
+          : turnContext?.contextAssembly;
       const loadedSkillNames = loadedSkillNamesFromPromptContext(promptContext);
       recordSystemEvent({
         sessionId: binding.sessionId,
@@ -621,6 +637,25 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       });
       conversationAdmission?.admitFinalAssistant(result.text, finalAction.actionId);
       conversationAdmission?.finalize("complete", timestamp);
+      this.captureDeveloperModelTurn({
+        binding: activeBinding,
+        envelope,
+        route,
+        contextAssembly,
+        promptContext,
+        result,
+        timestamp,
+        metadata: {
+          source: "gateway-actor",
+          openingDecisionId,
+          schedulerContinuation: schedulerContinuation
+            ? {
+              contextAtomId: schedulerContinuation.contextAtomId,
+              continuationForQueueId: schedulerContinuation.continuationForQueueId,
+            }
+            : undefined,
+        },
+      });
 
       return {
         text: result.text,
@@ -731,6 +766,14 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         },
         timestamp,
       });
+    }
+  }
+
+  private captureDeveloperModelTurn(input: DeveloperLogTurnCaptureInput): void {
+    try {
+      this.options.captureDeveloperModelTurn?.(input);
+    } catch {
+      // Developer diagnostics must never affect the user turn.
     }
   }
 

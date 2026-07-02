@@ -1,6 +1,7 @@
 import {
   APP_PROTOCOL_VERSION,
   apiEnvelope,
+  type DeveloperLogListView,
   isUpdateApplyRequest,
   isUpdateCheckRequest,
   type AppInfoView,
@@ -65,6 +66,20 @@ export async function handleRuntimeRoutes(
       ),
     );
   }
+  if (input.request.method === "GET" && url.pathname === "/developer-logs") {
+    if (!input.store.getAppInfo().developer_mode_enabled) {
+      throw new RequestError(
+        403,
+        "developer_mode_required",
+        "Developer mode is required to view model diagnostics.",
+      );
+    }
+    return json(
+      apiEnvelope<DeveloperLogListView>(
+        input.store.listDeveloperLogs(developerLogsFromSearchParams(url.searchParams)),
+      ),
+    );
+  }
   if (input.request.method === "GET" && url.pathname === "/usage-monitor") {
     return json(
       apiEnvelope<UsageMonitorView>(
@@ -93,4 +108,22 @@ export async function handleRuntimeRoutes(
     );
   }
   return null;
+}
+
+function developerLogsFromSearchParams(searchParams: URLSearchParams): {
+  limit?: number;
+  offset?: number;
+  sessionId?: string;
+  turnId?: string;
+  kind?: "model_turn";
+  query?: string;
+} {
+  const kind = searchParams.get("kind");
+  return {
+    ...paginationFromSearchParams(searchParams),
+    sessionId: searchParams.get("session_id") ?? undefined,
+    turnId: searchParams.get("turn_id") ?? undefined,
+    kind: kind === "model_turn" ? kind : undefined,
+    query: searchParams.get("query") ?? undefined,
+  };
 }

@@ -23,6 +23,7 @@ import {
 } from "../../packages/butler-agent/src/agent/events/turn-state-contract.ts";
 import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
 import { readFirstVisibleLatencySummary } from "../../packages/butler-agent/src/operations/metrics/first-visible-latency.ts";
+import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-store.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -290,6 +291,71 @@ test("session actor records prompt-loaded skill names on final results", async (
     loadedSkillNames: ["status", "project-ledger"],
   });
 
+  store.close();
+});
+
+test("session actor captures developer model logs after successful turns", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime(() => "developer log reply");
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [],
+  });
+  const promptAssembler = {
+    buildSystemPrompt: () => ({ systemPrompt: "You are Butler.", sections: [] }),
+    buildContextAssembly: () => ({
+      staticContext: [],
+      liveConfiguration: [],
+      runtimeState: [{
+        id: "runtime-state",
+        title: "Runtime State",
+        region: "runtime_state",
+        content: "Session ID: butler/main",
+      }],
+      workingContext: [],
+      retrievedContext: [],
+      currentInput: [{
+        id: "inbound-message",
+        title: "Current User Input",
+        region: "current_input",
+        content: "Message Text: inspect logs",
+      }],
+      references: [],
+      liveConfigHash: "devlog-hash",
+    }),
+    renderTurnContext: () => "Live Configuration Hash: devlog-hash\n\n## Current User Input\n\nMessage Text: inspect logs",
+  } as unknown as PromptAssembler;
+  const developerLogStore = new DeveloperLogStore({ butlerData: tempDir });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    promptAssembler,
+    developerLogStore,
+    developerDiagnosticsEnabled: () => true,
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+  const turn = actor.handleInbound(inbound("devlog", "inspect logs"));
+  await runtime.firstTurnStarted.promise;
+  runtime.firstTurnRelease.resolve();
+  await expect(turn).resolves.toMatchObject({ text: "developer log reply" });
+
+  const logs = developerLogStore.list();
+  expect(logs.total).toBe(1);
+  expect(logs.entries[0]).toMatchObject({
+    session_id: "butler/main",
+    model: { requested_model_ref: "openai/auto:codex-latest" },
+    context: { live_config_hash: "devlog-hash" },
+    response: { text: "developer log reply" },
+  });
+  expect(logs.entries[0]?.context.prompt_context).toContain("Current User Input");
+  expect(logs.entries[0]?.context.sections.map((section) => section.id)).toContain("runtime-state");
   store.close();
 });
 

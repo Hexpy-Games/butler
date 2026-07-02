@@ -210,6 +210,7 @@ export interface AppCopy {
       mcp: string;
       skills: string;
       usage: string;
+      logs: string;
       personalization: string;
       privacy: string;
       system: string;
@@ -224,6 +225,7 @@ export interface AppCopy {
       mcpServers: string;
       skills: string;
       usageMonitor: string;
+      developerLogs: string;
       privacyDiagnostics: string;
       systemEvents: string;
       archives: string;
@@ -378,6 +380,8 @@ export interface AppCopy {
       skills: string;
       usageMonitor: string;
       usageMonitorEmpty: string;
+      developerLogs: string;
+      developerLogsEmpty: string;
       searchSettings: string;
       searchProvider: string;
       searchProviderApiKey: (envVar: string) => string;
@@ -389,6 +393,42 @@ export interface AppCopy {
       desktopNotificationTaskCompletions: string;
       desktopTray: string;
       developerMode: string;
+    };
+    developerLogViewer: {
+      filters: {
+        allKinds: string;
+        modelTurn: string;
+      };
+      tabs: {
+        context: string;
+        request: string;
+        response: string;
+        metadata: string;
+      };
+      labels: {
+        sections: (count: number) => string;
+        contextChars: (count: string) => string;
+        responseChars: (count: string) => string;
+        liveConfig: string;
+        sectionCount: string;
+        references: string;
+        promptChars: string;
+        renderedPromptContext: string;
+        input: string;
+        text: string;
+        raw: string;
+        provider: string;
+        runtime: string;
+        routeReason: string;
+        project: string;
+        rawText: string;
+        secrets: string;
+        route: string;
+        included: string;
+        excluded: string;
+        redacted: string;
+        notRedacted: string;
+      };
     };
     nativeNotifications: {
       status: {
@@ -467,6 +507,8 @@ export interface AppCopy {
       mcpArgs: string;
       mcpEnv: string;
       mcpHeaders: string;
+      developerLogSearch: string;
+      developerLogSession: string;
     };
     errors: {
       loadPersonalization: string;
@@ -481,6 +523,7 @@ export interface AppCopy {
       loadUpdates: string;
       checkUpdates: string;
       applyUpdate: string;
+      loadDeveloperLogs: string;
     };
     localModels: {
       title: string;
@@ -804,6 +847,7 @@ const koKrCopy: AppCopy = {
       mcp: "MCP",
       skills: "스킬",
       usage: "사용량",
+      logs: "로그",
       personalization: "개인화",
       privacy: "개인정보",
       system: "시스템 이벤트",
@@ -818,6 +862,7 @@ const koKrCopy: AppCopy = {
       mcpServers: "MCP 서버",
       skills: "스킬",
       usageMonitor: "사용량",
+      developerLogs: "개발자 로그",
       privacyDiagnostics: "개인정보 / 진단",
       systemEvents: "시스템 이벤트",
       archives: "아카이브",
@@ -998,6 +1043,9 @@ const koKrCopy: AppCopy = {
       usageMonitor:
         "모델 토큰, 프롬프트 캐시, 웹 검색, 도구 호출을 확인합니다. 컨텍스트 창 용량과는 별도로 기록됩니다.",
       usageMonitorEmpty: "아직 표시할 사용량 기록이 없습니다.",
+      developerLogs:
+        "개발자 모드에서 모델 요청 컨텍스트 조립 결과와 raw 응답을 확인합니다.",
+      developerLogsEmpty: "아직 표시할 개발자 로그가 없습니다.",
       searchSettings:
         "웹 검색 제공자와 검색 전 계획 방식을 설정합니다. 키가 필요한 제공자는 이 화면에서 비밀값으로 저장할 수 있습니다.",
       searchProvider:
@@ -1019,6 +1067,42 @@ const koKrCopy: AppCopy = {
         "켜면 창을 닫아도 앱이 트레이 또는 메뉴바에 남고, 메뉴에서 새 대화와 최근 대화를 열 수 있습니다.",
       developerMode:
         "켜면 이 데스크톱 앱 창에서 Chrome DevTools를 열 수 있습니다. 끄면 Electron 기본 메뉴와 DevTools 단축키가 차단됩니다.",
+    },
+    developerLogViewer: {
+      filters: {
+        allKinds: "전체",
+        modelTurn: "모델 턴",
+      },
+      tabs: {
+        context: "컨텍스트",
+        request: "요청",
+        response: "응답",
+        metadata: "메타데이터",
+      },
+      labels: {
+        sections: (count) => `섹션 ${count}개`,
+        contextChars: (count) => `컨텍스트 ${count}자`,
+        responseChars: (count) => `응답 ${count}자`,
+        liveConfig: "라이브 설정",
+        sectionCount: "섹션",
+        references: "참조",
+        promptChars: "프롬프트 글자 수",
+        renderedPromptContext: "조립된 프롬프트 컨텍스트",
+        input: "입력",
+        text: "텍스트",
+        raw: "Raw",
+        provider: "제공자",
+        runtime: "런타임",
+        routeReason: "라우팅 사유",
+        project: "프로젝트",
+        rawText: "원문 텍스트",
+        secrets: "비밀값",
+        route: "라우트",
+        included: "포함됨",
+        excluded: "제외됨",
+        redacted: "마스킹됨",
+        notRedacted: "마스킹 안 됨",
+      },
     },
     nativeNotifications: {
       status: {
@@ -1120,6 +1204,8 @@ const koKrCopy: AppCopy = {
       mcpEnv: "OPENAI_API_KEY=env:OPENAI_API_KEY 또는 TOKEN=literal-value",
       mcpHeaders:
         "Authorization=env:MCP_AUTH_HEADER 또는 Authorization=Bearer ...",
+      developerLogSearch: "모델, 세션, 섹션, 응답 검색",
+      developerLogSession: "세션 ID 필터",
     },
     errors: {
       loadPersonalization: "개인화 불러오기 실패",
@@ -1135,6 +1221,7 @@ const koKrCopy: AppCopy = {
       loadUpdates: "업데이트 정보 불러오기 실패",
       checkUpdates: "업데이트 확인 실패",
       applyUpdate: "업데이트 적용 실패",
+      loadDeveloperLogs: "개발자 로그 불러오기 실패",
     },
     localModels: {
       title: "로컬 모델",
@@ -1474,6 +1561,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       mcp: "MCP",
       skills: "Skills",
       usage: "Usage",
+      logs: "Logs",
       personalization: "Personalization",
       privacy: "Privacy",
       system: "System events",
@@ -1488,6 +1576,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       mcpServers: "MCP servers",
       skills: "Skills",
       usageMonitor: "Usage",
+      developerLogs: "Developer logs",
       privacyDiagnostics: "Privacy / Diagnostics",
       systemEvents: "System events",
       archives: "Archives",
@@ -1652,6 +1741,9 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       usageMonitor:
         "Review model tokens, prompt cache, web search, and tool calls. This is tracked separately from context window capacity.",
       usageMonitorEmpty: "No usage records to show yet.",
+      developerLogs:
+        "Inspect developer-mode model request context assembly and raw responses.",
+      developerLogsEmpty: "No developer logs to show yet.",
       searchSettings:
         "Configure web search providers and pre-search planning. Providers that need keys can store secrets here.",
       searchProvider:
@@ -1673,6 +1765,42 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
         "Keep the app in the tray or menu bar when the window is closed, with quick access to new and recent chats.",
       developerMode:
         "Allows Chrome DevTools in this desktop window. When off, Electron menus and DevTools shortcuts are blocked.",
+    },
+    developerLogViewer: {
+      filters: {
+        allKinds: "All",
+        modelTurn: "Model turn",
+      },
+      tabs: {
+        context: "Context",
+        request: "Request",
+        response: "Response",
+        metadata: "Metadata",
+      },
+      labels: {
+        sections: (count) => `${count} sections`,
+        contextChars: (count) => `${count} context chars`,
+        responseChars: (count) => `${count} response chars`,
+        liveConfig: "Live config",
+        sectionCount: "Sections",
+        references: "References",
+        promptChars: "Prompt chars",
+        renderedPromptContext: "Rendered prompt context",
+        input: "Input",
+        text: "Text",
+        raw: "Raw",
+        provider: "Provider",
+        runtime: "Runtime",
+        routeReason: "Route reason",
+        project: "Project",
+        rawText: "Raw text",
+        secrets: "Secrets",
+        route: "Route",
+        included: "included",
+        excluded: "excluded",
+        redacted: "redacted",
+        notRedacted: "not redacted",
+      },
     },
     nativeNotifications: {
       status: {
@@ -1774,6 +1902,8 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       mcpEnv: "OPENAI_API_KEY=env:OPENAI_API_KEY or TOKEN=literal-value",
       mcpHeaders:
         "Authorization=env:MCP_AUTH_HEADER or Authorization=Bearer ...",
+      developerLogSearch: "Search model, session, section, or response",
+      developerLogSession: "Filter by session ID",
     },
     errors: {
       loadPersonalization: "Failed to load personalization",
@@ -1789,6 +1919,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       loadUpdates: "Failed to load update info",
       checkUpdates: "Failed to check updates",
       applyUpdate: "Failed to apply update",
+      loadDeveloperLogs: "Failed to load developer logs",
     },
     localModels: {
       title: "Local models",
