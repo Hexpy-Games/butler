@@ -101,6 +101,15 @@ ON conversation_turns(session_id, seq);
 CREATE INDEX IF NOT EXISTS conversation_messages_session_seq_idx
 ON conversation_messages(session_id, seq);
 
+CREATE INDEX IF NOT EXISTS conversation_messages_role_created_idx
+ON conversation_messages(role, created_at, id);
+
+CREATE INDEX IF NOT EXISTS conversation_messages_session_role_created_idx
+ON conversation_messages(session_id, role, created_at, id);
+
+CREATE INDEX IF NOT EXISTS conversation_messages_created_idx
+ON conversation_messages(created_at, id);
+
 CREATE INDEX IF NOT EXISTS conversation_parts_message_part_idx
 ON conversation_parts(message_id, part_index);
 

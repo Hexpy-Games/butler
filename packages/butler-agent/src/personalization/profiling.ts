@@ -12,6 +12,7 @@ import {
   runPromptTextWithUsage,
   type PromptUsageReport,
 } from "../integrations/providers/provider.ts";
+import { readConversationObservations } from "../agent/cognition/memory/scripts/lib/conversation-sources.ts";
 
 export type ProfilingMode = "off" | "basic" | "deep";
 export type ProfileCandidateCategory =
@@ -284,6 +285,10 @@ export interface ProfileTranscriptCaptureResult {
   mode: ProfilingMode;
   scanned_file_count: number;
   scanned_event_count: number;
+  semantic_scanned_session_count: number;
+  semantic_scanned_message_count: number;
+  audit_transcript_scanned_file_count: number;
+  audit_transcript_scanned_event_count: number;
   captured_candidate_count: number;
   raw_text_included: false;
 }
@@ -922,18 +927,26 @@ export function captureProfileCandidatesFromTranscripts(
       mode: "off",
       scanned_file_count: 0,
       scanned_event_count: 0,
+      semantic_scanned_session_count: 0,
+      semantic_scanned_message_count: 0,
+      audit_transcript_scanned_file_count: 0,
+      audit_transcript_scanned_event_count: 0,
       captured_candidate_count: 0,
       raw_text_included: false,
     };
   }
 
-  const transcriptRead = readTranscriptTextObservations(butlerData, consent, options);
+  const transcriptRead = readProfileConversationObservations(butlerData, consent, options);
 
   return {
     profiling_enabled: true,
     mode: consent.mode,
     scanned_file_count: transcriptRead.scanned_file_count,
     scanned_event_count: transcriptRead.scanned_event_count,
+    semantic_scanned_session_count: transcriptRead.semantic_scanned_session_count,
+    semantic_scanned_message_count: transcriptRead.semantic_scanned_message_count,
+    audit_transcript_scanned_file_count: transcriptRead.audit_transcript_scanned_file_count,
+    audit_transcript_scanned_event_count: transcriptRead.audit_transcript_scanned_event_count,
     captured_candidate_count: 0,
     raw_text_included: false,
   };
@@ -951,6 +964,10 @@ export async function captureProfileCandidatesFromTranscriptsWithModel(
       mode: "off",
       scanned_file_count: 0,
       scanned_event_count: 0,
+      semantic_scanned_session_count: 0,
+      semantic_scanned_message_count: 0,
+      audit_transcript_scanned_file_count: 0,
+      audit_transcript_scanned_event_count: 0,
       captured_candidate_count: 0,
       raw_text_included: false,
       extractor_model: extractorModel,
@@ -960,13 +977,17 @@ export async function captureProfileCandidatesFromTranscriptsWithModel(
     };
   }
 
-  const transcriptRead = readTranscriptTextObservations(butlerData, consent, options);
+  const transcriptRead = readProfileConversationObservations(butlerData, consent, options);
   if (transcriptRead.observations.length === 0) {
     return {
       profiling_enabled: true,
       mode: consent.mode,
       scanned_file_count: transcriptRead.scanned_file_count,
       scanned_event_count: transcriptRead.scanned_event_count,
+      semantic_scanned_session_count: transcriptRead.semantic_scanned_session_count,
+      semantic_scanned_message_count: transcriptRead.semantic_scanned_message_count,
+      audit_transcript_scanned_file_count: transcriptRead.audit_transcript_scanned_file_count,
+      audit_transcript_scanned_event_count: transcriptRead.audit_transcript_scanned_event_count,
       captured_candidate_count: 0,
       raw_text_included: false,
       extractor_model: extractorModel,
@@ -1034,6 +1055,10 @@ export async function captureProfileCandidatesFromTranscriptsWithModel(
       mode: consent.mode,
       scanned_file_count: transcriptRead.scanned_file_count,
       scanned_event_count: transcriptRead.scanned_event_count,
+      semantic_scanned_session_count: transcriptRead.semantic_scanned_session_count,
+      semantic_scanned_message_count: transcriptRead.semantic_scanned_message_count,
+      audit_transcript_scanned_file_count: transcriptRead.audit_transcript_scanned_file_count,
+      audit_transcript_scanned_event_count: transcriptRead.audit_transcript_scanned_event_count,
       captured_candidate_count: capturedCandidateIds.size,
       raw_text_included: false,
       extractor_model: { ...extractorModel, effective_model: model },
@@ -1047,6 +1072,10 @@ export async function captureProfileCandidatesFromTranscriptsWithModel(
       mode: consent.mode,
       scanned_file_count: transcriptRead.scanned_file_count,
       scanned_event_count: transcriptRead.scanned_event_count,
+      semantic_scanned_session_count: transcriptRead.semantic_scanned_session_count,
+      semantic_scanned_message_count: transcriptRead.semantic_scanned_message_count,
+      audit_transcript_scanned_file_count: transcriptRead.audit_transcript_scanned_file_count,
+      audit_transcript_scanned_event_count: transcriptRead.audit_transcript_scanned_event_count,
       captured_candidate_count: 0,
       raw_text_included: false,
       extractor_model: { ...extractorModel, effective_model: model },
@@ -1076,6 +1105,10 @@ interface TranscriptTextObservation {
 interface TranscriptTextObservationRead {
   scanned_file_count: number;
   scanned_event_count: number;
+  semantic_scanned_session_count: number;
+  semantic_scanned_message_count: number;
+  audit_transcript_scanned_file_count: number;
+  audit_transcript_scanned_event_count: number;
   observations: TranscriptTextObservation[];
 }
 
@@ -1098,14 +1131,58 @@ interface ExtractedProfileCandidate {
   expires_or_decay: "expires" | "decay" | null;
 }
 
-function readTranscriptTextObservations(
+function readProfileConversationObservations(
+  butlerData: string,
+  consent: ProfilingConsentSnapshot,
+  options: ProfileTranscriptCaptureOptions,
+): TranscriptTextObservationRead {
+  const maxUserMessages = Math.max(
+    1,
+    Math.min(options.maxUserMessages ?? DEFAULT_PROFILE_TRANSCRIPT_MAX_USER_MESSAGES, MAX_PROFILE_TRANSCRIPT_USER_MESSAGES),
+  );
+  const sinceMs = profileTranscriptSinceMs(options.since, consent.consented_at);
+  const since = Number.isFinite(sinceMs) ? new Date(sinceMs).toISOString() : null;
+  const observations = readConversationObservations({
+    butlerData,
+    roles: ["user"],
+    since,
+    includeCompacted: true,
+    maxMessages: maxUserMessages,
+    order: "desc",
+  });
+  const sessions = new Set(observations.map((observation) => observation.conversation_session_id));
+  return {
+    scanned_file_count: sessions.size,
+    scanned_event_count: observations.length,
+    semantic_scanned_session_count: sessions.size,
+    semantic_scanned_message_count: observations.length,
+    audit_transcript_scanned_file_count: 0,
+    audit_transcript_scanned_event_count: 0,
+    observations: observations.map((observation) => ({
+      text: observation.text,
+      evidence_ref: `conversation:${observation.conversation_message_id}`,
+      timestamp: observation.created_at,
+      now: new Date(observation.created_at),
+    })),
+  };
+}
+
+function _readTranscriptTextObservations(
   butlerData: string,
   consent: ProfilingConsentSnapshot,
   options: ProfileTranscriptCaptureOptions,
 ): TranscriptTextObservationRead {
   const transcriptDir = join(butlerData, "transcripts");
   if (!existsSync(transcriptDir)) {
-    return { scanned_file_count: 0, scanned_event_count: 0, observations: [] };
+    return {
+      scanned_file_count: 0,
+      scanned_event_count: 0,
+      semantic_scanned_session_count: 0,
+      semantic_scanned_message_count: 0,
+      audit_transcript_scanned_file_count: 0,
+      audit_transcript_scanned_event_count: 0,
+      observations: [],
+    };
   }
 
   const maxFiles = Math.max(
@@ -1158,6 +1235,10 @@ function readTranscriptTextObservations(
   return {
     scanned_file_count: files.length,
     scanned_event_count: scannedEvents,
+    semantic_scanned_session_count: 0,
+    semantic_scanned_message_count: 0,
+    audit_transcript_scanned_file_count: files.length,
+    audit_transcript_scanned_event_count: scannedEvents,
     observations: observations
       .sort((left, right) => timestampSortValue(right.timestamp) - timestampSortValue(left.timestamp))
       .slice(0, maxUserMessages),
@@ -1249,7 +1330,7 @@ function profileExtractorInstructions(mode: Exclude<ProfilingMode, "off">): stri
     ];
   return [
     "You are Butler's consent-gated user profile extractor.",
-    "Extract durable profile candidates from user-authored transcript observations using a philosophical user-profile template.",
+    "Extract durable profile candidates from user-authored canonical conversation observations using a philosophical user-profile template.",
     "Do not summarize the conversation. Do not include raw user text in the output.",
     "Only return candidates that can improve future personalization for the user.",
     `Allowed categories: ${allowed.join(", ")}.`,
@@ -1268,7 +1349,7 @@ function profileExtractorInstructions(mode: Exclude<ProfilingMode, "off">): stri
     "Set temporal_scope to transient, active, or durable. Set decay_policy to days_7, days_30, reinforce_or_decay, or never_without_consent.",
     "Set sensitivity to normal, sensitive, or restricted.",
     "Return strict JSON only, with this shape:",
-    '{"candidates":[{"layer":"current_attention","category":"cares","facet":"current_interests","summary":"short durable candidate, no raw quote","applies_when":["casual_chat"],"butler_should":["adapt examples to this interest when relevant"],"butler_should_not":["overfit unrelated answers to this topic"],"temporal_scope":"active","decay_policy":"days_30","source_type":"explicit","confidence":"medium","evidence_refs":["transcript:session:event"],"sensitive_domain":false,"sensitivity":"normal","expires_or_decay":"decay"}]}',
+    '{"candidates":[{"layer":"current_attention","category":"cares","facet":"current_interests","summary":"short durable candidate, no raw quote","applies_when":["casual_chat"],"butler_should":["adapt examples to this interest when relevant"],"butler_should_not":["overfit unrelated answers to this topic"],"temporal_scope":"active","decay_policy":"days_30","source_type":"explicit","confidence":"medium","evidence_refs":["conversation:cm_..."],"sensitive_domain":false,"sensitivity":"normal","expires_or_decay":"decay"}]}',
   ].join("\n");
 }
 

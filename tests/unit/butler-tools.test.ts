@@ -28,7 +28,7 @@ import { DisabledWebSearchProvider, MockWebSearchProvider, readWebSearchMetrics 
 import { appendRuntimeTurnContextMetric } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
 import { budgetToolOutput } from "../../packages/butler-agent/src/agent/context/tool-output-budgeter.ts";
-import { indexTranscriptLinesForQuery } from "../../packages/butler-agent/src/agent/cognition/memory/exact-query.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 
 let tempDir = "";
 const root = process.cwd();
@@ -2567,7 +2567,7 @@ test("memory quality tool schemas expose health ingestion recall and explicit up
     "exact memory/history evidence",
   );
   expect(BUTLER_TOOLS.find((item) => item.name === "query_memory")?.description).toContain(
-    "exact transcript evidence is needed",
+    "Uses canonical conversation messages by default",
   );
   expect(Object.keys(BUTLER_TOOLS.find((item) => item.name === "query_memory")?.parameters.properties ?? {})).toEqual([
     "query",
@@ -2582,6 +2582,7 @@ test("memory quality tool schemas expose health ingestion recall and explicit up
     "date_to",
     "include_internal",
     "include_placeholders",
+    "include_transcript_recovery",
   ]);
   expect(BUTLER_TOOLS.find((item) => item.name === "update_explicit_memory")?.parameters.required).toEqual([
     "kind",
@@ -4278,26 +4279,27 @@ test("memory quality tools ingest task outcomes and recall local memory", async 
   writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
   writeFileSync(join(taskDir, "request.md"), "remember source-backed reports\n", "utf8");
   writeFileSync(join(taskDir, "result.md"), "Source-backed report workflow was completed.\n", "utf8");
-  indexTranscriptLinesForQuery({
-    butlerData: tempDir,
-    transcriptFile: "synthetic-butler-tools.jsonl",
-    lines: [
-      JSON.stringify({
-        eventId: "first-user",
-        sessionId: "butler/main",
-        kind: "inbound",
-        timestamp: "2026-04-24T12:05:34.000Z",
-        payload: { message: { text: "SYNTHETIC_FIRST_USER_CHECKPOINT" } },
-      }),
-      JSON.stringify({
-        eventId: "tool-result",
-        sessionId: "butler/main",
-        kind: "tool_result",
-        timestamp: "2026-04-24T12:00:00.000Z",
-        payload: { name: "run_command", result: "ignore me" },
-      }),
-    ],
-  });
+  const conversation = new AgentConversationStore({ butlerData: tempDir });
+  try {
+    const turn = conversation.beginTurn({
+      gateway: "test",
+      externalSessionId: "butler/main",
+      sessionId: "cs_memory_tool",
+      actor: "user",
+      now: "2026-04-24T12:05:00.000Z",
+    });
+    conversation.appendUserMessage({
+      sessionId: "cs_memory_tool",
+      turnId: turn.id,
+      messageId: "cm_first_user",
+      text: "SYNTHETIC_FIRST_USER_CHECKPOINT",
+      sourceGateway: "test",
+      sourceRef: "first-user",
+      now: "2026-04-24T12:05:34.000Z",
+    });
+  } finally {
+    conversation.close();
+  }
   const execute = createButlerToolExecutor({
     butlerHome: tempDir,
     butlerData: tempDir,
@@ -4350,9 +4352,11 @@ test("memory quality tools ingest task outcomes and recall local memory", async 
     ok: true,
     total_matches: 1,
     results: [expect.objectContaining({
-      event_id: "first-user",
+      event_id: "cm_first_user",
+      conversation_message_id: "cm_first_user",
       timestamp: "2026-04-24T12:05:34.000Z",
       speaker: "user",
+      source: "conversation-store",
     })],
   });
   expect(await execute({

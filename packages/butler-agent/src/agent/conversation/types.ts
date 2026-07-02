@@ -177,6 +177,16 @@ export interface ReadMessagesInput {
   includeCompacted?: boolean;
 }
 
+export interface ReadCognitionMessagesInput {
+  sessionId?: string | null;
+  roles?: ConversationRole[];
+  since?: string | null;
+  limit?: number;
+  offset?: number;
+  includeCompacted?: boolean;
+  order?: "asc" | "desc";
+}
+
 export interface PromptMaterialInput {
   sessionId: string;
   tailLimit?: number;

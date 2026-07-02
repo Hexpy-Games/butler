@@ -53,41 +53,31 @@ const implementationTasks = [
   "T-GNCC-07-E2E-CLOSEOUT",
 ];
 
-const currentDefaultSourceMigrationTargets = [
-  {
-    task: "T-GNCC-04-CONTEXT-COMPACTION",
-    path: "packages/butler-agent/src/agent/context/conversation-context.ts",
-    snippets: ["readTranscript(input.sessionId)", "anchorEventId", "events: ConversationContextLine[]"],
-  },
-  {
-    task: "T-GNCC-04-CONTEXT-COMPACTION",
-    path: "packages/butler-agent/src/agent/context/compaction.ts",
-    snippets: ["compactTranscript", "readTranscript(options.sessionId)", "summarized_event_range"],
-  },
+const migratedDefaultSourceTargets = [
   {
     task: "T-GNCC-05-COGNITION-SOURCES",
     path: "packages/butler-agent/src/agent/context/working-memory.ts",
-    snippets: ["refreshWorkingMemoryFromTranscript", "sourceEventId", "compact transcript-backed continuity notes"],
+    snippets: ["readTranscript(input.sessionId)", "compact transcript-backed continuity notes"],
   },
   {
     task: "T-GNCC-05-COGNITION-SOURCES",
     path: "packages/butler-agent/src/agent/cognition/memory/exact-query.ts",
-    snippets: ['source: "app-message-db" | "transcript-query-index"', "queryAppMessages", "queryTranscriptIndex"],
+    snippets: ['source: "app-message-db" | "transcript-query-index"'],
   },
   {
     task: "T-GNCC-05-COGNITION-SOURCES",
     path: "packages/butler-agent/src/agent/cognition/memory/scripts/lib/conversation-sources.ts",
-    snippets: ["parseButlerTranscriptLines", 'format: "butler-transcript"', "TranscriptEvent"],
+    snippets: ["readTranscript(input.sessionId)"],
   },
   {
     task: "T-GNCC-05-COGNITION-SOURCES",
     path: "packages/butler-agent/src/personalization/profiling.ts",
-    snippets: ["captureProfileCandidatesFromTranscriptsWithModel", "readTranscriptTextObservations", "evidence_ref: `transcript:"],
+    snippets: ["const transcriptRead = readTranscriptTextObservations"],
   },
   {
     task: "T-GNCC-05-COGNITION-SOURCES",
     path: "packages/butler-agent/src/agent/cognition/consolidation/cycle.ts",
-    snippets: ["captureProfileCandidatesFromTranscriptsWithModel", "transcript_scanned_event_count", "transcript_captured_candidate_count"],
+    snippets: ["transcript_scanned_event_count: transcriptCapture.scanned_event_count"],
   },
 ];
 
@@ -173,20 +163,20 @@ test("repo-local planning/spec Markdown artifacts are not reintroduced", () => {
   expect(collectRepoLocalPlanningDocs(process.cwd())).toEqual([]);
 });
 
-test("current default-source migration targets are explicitly inventoried", () => {
+test("migrated default-source targets no longer use transcript as the cognition default", () => {
   const work = readRepoOrLedgerFile(
     "project-ledger/projects/butler/work/W-GATEWAY-NEUTRAL-CONVERSATION-CORE/work.md",
   );
 
-  for (const target of currentDefaultSourceMigrationTargets) {
+  for (const target of migratedDefaultSourceTargets) {
     expect(work).toContain(target.task);
     const source = readRepoOrLedgerFile(target.path);
-    for (const snippet of target.snippets) expect(source).toContain(snippet);
+    for (const snippet of target.snippets) expect(source).not.toContain(snippet);
   }
 });
 
 test("audit transcript surfaces stay separate from default-source migration targets", () => {
-  const migrationPaths = new Set(currentDefaultSourceMigrationTargets.map((target) => target.path));
+  const migrationPaths = new Set(migratedDefaultSourceTargets.map((target) => target.path));
 
   for (const path of allowedAuditTranscriptSurfaces) {
     expect(migrationPaths.has(path), path).toBe(false);
