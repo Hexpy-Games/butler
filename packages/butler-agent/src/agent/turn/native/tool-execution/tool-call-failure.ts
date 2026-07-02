@@ -12,6 +12,11 @@ import {
   evidenceTranscriptErrorMessage,
 } from "../../../output/evidence/transcript-result.ts";
 import {
+  evidenceCapabilityReceiptsFromResult,
+  evidenceReceiptsFromResult,
+} from "../../../output/evidence/receipts.ts";
+import {
+  ToolObservationError,
   toolObservationForFailure,
   toolObservationResult,
 } from "./tool-observations.ts";
@@ -85,6 +90,8 @@ export async function handleAuditedToolFailure(input: {
     error: message,
     observation,
     publicDecision: input.decision,
+    evidenceReceipts: evidenceReceiptsFromFailure(input.error),
+    evidenceCapabilityReceipts: evidenceCapabilityReceiptsFromFailure(input.error),
     bridgeAudit: bridgeAudit ?? undefined,
   });
   await emitTurnEventBestEffort(input.executorInput.turnInput, {
@@ -161,4 +168,14 @@ export async function handleAuditedToolFailure(input: {
     decision: input.decision,
     decisions: input.executorInput.publicDecisionContext,
   });
+}
+
+function evidenceReceiptsFromFailure(error: unknown) {
+  if (!(error instanceof ToolObservationError)) return [];
+  return evidenceReceiptsFromResult(error.toolResult);
+}
+
+function evidenceCapabilityReceiptsFromFailure(error: unknown) {
+  if (!(error instanceof ToolObservationError)) return [];
+  return evidenceCapabilityReceiptsFromResult(error.toolResult);
 }

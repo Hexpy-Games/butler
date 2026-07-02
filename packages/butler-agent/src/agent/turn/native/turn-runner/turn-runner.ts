@@ -206,7 +206,7 @@ export async function runNativeToolTurn({
         audit,
       });
     }
-    const delivery = finalDeliveryOverride ?? deliveryForFinalAudit(audit);
+    const delivery = mergedFinalDelivery(finalDeliveryOverride, deliveryForFinalAudit(audit));
     await emitFinalEvents(input, decisionCheckedText, audit, turnKernel, delivery, turnId);
     recordTurnMetric({
       status: "ok",
@@ -406,6 +406,36 @@ function deliveryForFinalAudit(audit: ToolAuditEntry[]): RuntimeTurnResult["deli
     limitationCodes: ["validation_failed"],
     limitations: [limitation],
   });
+}
+
+function mergedFinalDelivery(
+  primary: RuntimeTurnResult["delivery"] | undefined,
+  secondary: RuntimeTurnResult["delivery"] | undefined,
+): RuntimeTurnResult["delivery"] | undefined {
+  if (!primary) return secondary;
+  if (!secondary) return primary;
+  return {
+    ...primary,
+    limitation_codes: uniqueOrdered([
+      ...primary.limitation_codes,
+      ...secondary.limitation_codes,
+    ]),
+    limitations: uniqueOrdered([
+      ...primary.limitations,
+      ...secondary.limitations,
+    ]),
+  };
+}
+
+function uniqueOrdered(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    result.push(value);
+  }
+  return result;
 }
 
 async function emitFinalEvents(
