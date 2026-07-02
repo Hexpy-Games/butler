@@ -10,6 +10,10 @@ import {
   queryMemory,
   transcriptQueryDbPath,
 } from "../../packages/butler-agent/src/agent/cognition/memory/exact-query.ts";
+import {
+  AgentConversationStore,
+  conversationStorePath,
+} from "../../packages/butler-agent/src/agent/conversation/store.ts";
 
 let tempDir = "";
 let appDb = "";
@@ -73,6 +77,95 @@ function insertMessage(db: Database, input: {
   `).run(input.id, input.chatId, input.role, input.text, input.createdAt, input.createdAt);
 }
 
+function insertConversationMessages(input: {
+  sessionId: string;
+  externalSessionId?: string;
+  messages: Array<{
+    id: string;
+    role: "user" | "assistant";
+    text: string;
+    createdAt: string;
+  }>;
+}): void {
+  let next = 0;
+  const store = new AgentConversationStore({
+    butlerData: tempDir,
+    idFactory: (prefix) => `${prefix}_query_${++next}`,
+  });
+  try {
+    const turn = store.beginTurn({
+      gateway: "test",
+      externalSessionId: input.externalSessionId ?? input.sessionId,
+      sessionId: input.sessionId,
+      actor: "user",
+      now: input.messages[0]?.createdAt ?? "2026-04-24T00:00:00.000Z",
+    });
+    for (const message of input.messages) {
+      const append = message.role === "user" ? store.appendUserMessage.bind(store) : store.appendAssistantMessage.bind(store);
+      append({
+        sessionId: input.sessionId,
+        turnId: turn.id,
+        messageId: message.id,
+        text: message.text,
+        sourceGateway: "test",
+        sourceRef: message.id,
+        now: message.createdAt,
+      });
+    }
+  } finally {
+    store.close();
+  }
+}
+
+function insertManyConversationMessages(input: {
+  sessionId: string;
+  count: number;
+  targetIndex: number;
+  targetText: string;
+}): void {
+  const store = new AgentConversationStore({ butlerData: tempDir });
+  store.close();
+  const db = new Database(conversationStorePath(tempDir));
+  try {
+    const now = "2026-04-24T12:00:00.000Z";
+    db.query(`
+      INSERT INTO conversation_sessions (
+        id, workspace_id, project_id, gateway_origin, created_at, updated_at, status, schema_version
+      ) VALUES (?, NULL, NULL, 'test', ?, ?, 'active', 1)
+    `).run(input.sessionId, now, now);
+    db.query(`
+      INSERT INTO conversation_turns (
+        id, session_id, seq, actor, status, request_id, started_at, completed_at
+      ) VALUES ('ct-many', ?, 1, 'user', 'complete', NULL, ?, ?)
+    `).run(input.sessionId, now, now);
+    const insertMessage = db.query(`
+      INSERT INTO conversation_messages (
+        id, session_id, turn_id, seq, role, status, visibility, provenance,
+        created_at, compacted_by_summary_id, source_gateway, source_ref
+      ) VALUES (?, ?, 'ct-many', ?, 'user', 'complete', 'model', 'trusted', ?, NULL, 'test', ?)
+    `);
+    const insertPart = db.query(`
+      INSERT INTO conversation_parts (
+        id, message_id, part_index, kind, content_json,
+        tool_call_id, parent_tool_call_id, provider_shape, status
+      ) VALUES (?, ?, 0, 'text', ?, NULL, NULL, NULL, 'complete')
+    `);
+    const insertMany = db.transaction(() => {
+      const base = Date.parse(now);
+      for (let index = 1; index <= input.count; index += 1) {
+        const messageId = `cm_many_${index}`;
+        const createdAt = new Date(base + index * 1000).toISOString();
+        const text = index === input.targetIndex ? input.targetText : `ordinary canonical message ${index}`;
+        insertMessage.run(messageId, input.sessionId, index, createdAt, messageId);
+        insertPart.run(`cp_many_${index}`, messageId, JSON.stringify({ text }));
+      }
+    });
+    insertMany();
+  } finally {
+    db.close();
+  }
+}
+
 function transcriptLine(input: {
   eventId: string;
   sessionId: string;
@@ -99,6 +192,129 @@ function transcriptLine(input: {
     payload,
   });
 }
+
+test("queryMemory searches canonical conversation store before compatibility sources", () => {
+  insertConversationMessages({
+    sessionId: "cs_memory_query",
+    messages: [
+      {
+        id: "cm-first-user",
+        role: "user",
+        text: FIRST_USER_TEXT,
+        createdAt: "2026-04-24T12:05:00.000Z",
+      },
+      {
+        id: "cm-second-user",
+        role: "user",
+        text: SECOND_USER_TEXT,
+        createdAt: "2026-04-24T12:06:00.000Z",
+      },
+    ],
+  });
+  const db = createAppDb();
+  insertChat(db, "general");
+  insertMessage(db, {
+    id: "app-first-user",
+    chatId: "general",
+    role: "user",
+    text: "APP_COMPAT_SHOULD_NOT_WIN",
+    createdAt: "2026-04-24T12:04:00.000Z",
+  });
+  db.close();
+
+  const result = queryMemory({
+    butlerData: tempDir,
+    query: FIRST_USER_TEXT,
+    speaker: "user",
+    order: "earliest",
+    limit: 1,
+  });
+
+  expect(result.inspected_sources[0]).toBe("conversation-store");
+  expect(result.skipped_sources).toContain("transcript-recovery-index: transcript recovery source not requested");
+  expect(result.results[0]).toMatchObject({
+    event_id: "cm-first-user",
+    conversation_message_id: "cm-first-user",
+    session_id: "cs_memory_query",
+    source: "conversation-store",
+  });
+});
+
+test("queryMemory excludes app projection duplicates for canonical conversation messages", () => {
+  insertConversationMessages({
+    sessionId: "cs_projected_query",
+    messages: [
+      {
+        id: "cm-shared-user",
+        role: "user",
+        text: FIRST_USER_TEXT,
+        createdAt: "2026-04-24T12:05:00.000Z",
+      },
+    ],
+  });
+  const db = createAppDb();
+  insertChat(db, "general");
+  db.exec("ALTER TABLE messages ADD COLUMN conversation_message_id TEXT");
+  db.query(`
+    INSERT INTO messages (
+      id, chat_id, conversation_message_id, role, text, status, created_at, updated_at
+    )
+    VALUES (
+      'app-projection-cm-shared-user',
+      'general',
+      'cm-shared-user',
+      'user',
+      ?,
+      'sent',
+      '2026-04-24T12:04:00.000Z',
+      '2026-04-24T12:04:00.000Z'
+    )
+  `).run(FIRST_USER_TEXT);
+  db.close();
+
+  const result = queryMemory({
+    butlerData: tempDir,
+    query: FIRST_USER_TEXT,
+    speaker: "user",
+    order: "earliest",
+    limit: 5,
+  });
+
+  expect(result.total_matches).toBe(1);
+  expect(result.results.map((item) => item.source)).toEqual(["conversation-store"]);
+  expect(result.results[0]).toMatchObject({
+    event_id: "cm-shared-user",
+    conversation_message_id: "cm-shared-user",
+  });
+});
+
+test("queryMemory pages canonical conversation store instead of stopping at the first scan window", () => {
+  const targetText = "SYNTHETIC_CANONICAL_AFTER_FIRST_SCAN_WINDOW";
+  insertManyConversationMessages({
+    sessionId: "cs_large_query",
+    count: 5005,
+    targetIndex: 5001,
+    targetText,
+  });
+
+  const result = queryMemory({
+    butlerData: tempDir,
+    query: targetText,
+    scope: "session",
+    sessionId: "cs_large_query",
+    speaker: "user",
+    order: "earliest",
+    limit: 1,
+  });
+
+  expect(result.total_matches).toBe(1);
+  expect(result.results[0]).toMatchObject({
+    event_id: "cm_many_5001",
+    conversation_message_id: "cm_many_5001",
+    source: "conversation-store",
+  });
+  expect(result.diagnostics.join("\n")).not.toContain("results may be incomplete");
+});
 
 test("queryMemory uses indexed app messages for earliest user evidence", () => {
   const db = createAppDb();
@@ -133,7 +349,8 @@ test("queryMemory uses indexed app messages for earliest user evidence", () => {
     limit: 1,
   });
 
-  expect(result.skipped_sources).toContain("transcript-query-index: transcript query index missing");
+  expect(result.skipped_sources).toContain("conversation-store: conversation store missing");
+  expect(result.skipped_sources).toContain("transcript-recovery-index: transcript recovery source not requested");
   expect(result).toMatchObject({
     query: null,
     speaker: "user",
@@ -148,7 +365,7 @@ test("queryMemory uses indexed app messages for earliest user evidence", () => {
     speaker: "user",
     kind: "inbound",
     text: FIRST_USER_TEXT,
-    source: "app-message-db",
+    source: "app-projection-compat",
     transcript_file: null,
   });
 });
@@ -190,6 +407,7 @@ test("queryMemory treats indexed app db as authoritative for app sessions", () =
     speaker: "user",
     order: "earliest",
     limit: 10,
+    includeTranscriptRecovery: true,
   });
 
   expect(result.total_matches).toBe(2);
@@ -205,10 +423,11 @@ test("queryMemory treats indexed app db as authoritative for app sessions", () =
     speaker: "user",
     order: "earliest",
     limit: 10,
+    includeTranscriptRecovery: true,
   });
   expect(appSession.total_matches).toBe(1);
   expect(appSession.skipped_sources).toContain(
-    "transcript-query-index: app session covered by app message db",
+    "transcript-recovery-index: app session covered by app message db",
   );
 });
 
@@ -236,7 +455,7 @@ test("queryMemory refuses app message scans when required date indexes are missi
 
   expect(result.returned).toBe(0);
   expect(result.skipped_sources).toContain(
-    "app-message-db: messages_role_created_idx missing; refusing full message scan",
+    "app-projection-compat: messages_role_created_idx missing; refusing full message scan",
   );
 });
 
@@ -263,7 +482,7 @@ test("queryMemory does not widen missing session scope into all sessions", () =>
   expect(result.returned).toBe(0);
   expect(result.total_matches).toBe(0);
   expect(result.diagnostics).toContain("session scope requested without session_id");
-  expect(result.skipped_sources).toContain("app-message-db: session scope missing session_id");
+  expect(result.skipped_sources).toContain("app-projection-compat: session scope missing session_id");
 });
 
 test("queryMemory can filter indexed transcript text and excludes internal placeholders", () => {
@@ -313,9 +532,10 @@ test("queryMemory can filter indexed transcript text and excludes internal place
     speaker: "user",
     order: "earliest",
     limit: 5,
+    includeTranscriptRecovery: true,
   });
 
-  expect(result.skipped_sources).toContain("app-message-db: app message db missing");
+  expect(result.skipped_sources).toContain("app-projection-compat: app message db missing");
   expect(result).toMatchObject({
     query: "자기소개",
     scope: "session",
@@ -324,7 +544,7 @@ test("queryMemory can filter indexed transcript text and excludes internal place
     returned: 1,
   });
   expect(result.results[0]?.event_id).toBe("other-intro");
-  expect(result.results[0]?.source).toBe("transcript-query-index");
+  expect(result.results[0]?.source).toBe("transcript-recovery-index");
   expect(result.results[0]?.matched_terms).toContain("자기소개");
 
   const earliest = queryMemory({
@@ -332,6 +552,7 @@ test("queryMemory can filter indexed transcript text and excludes internal place
     speaker: "user",
     order: "earliest",
     limit: 1,
+    includeTranscriptRecovery: true,
   });
   expect(earliest.results[0]?.event_id).toBe("main-intro");
   expect(JSON.stringify(earliest.results)).not.toContain("tool-payload");

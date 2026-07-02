@@ -1,6 +1,43 @@
+import { existsSync } from "node:fs";
 import type { TranscriptEvent } from "../../../../../test-support/harness/transcripts.ts";
+import { AgentConversationStore, conversationStorePath } from "../../../../conversation/store.ts";
+import { conversationSessionIdForDurableSession } from "../../../../conversation/session-admission.ts";
+import type {
+  ConversationMessageWithParts,
+  ConversationPart,
+  ConversationProvenance,
+  ConversationRole as StoreConversationRole,
+} from "../../../../conversation/types.ts";
+import { textForMessage } from "../../../../context/conversation-context-format.ts";
 
 export type ConversationRole = "human" | "assistant" | "channel";
+export type ConversationObservationRole = "user" | "assistant" | "system" | "tool";
+
+export interface ConversationObservation {
+  conversation_session_id: string;
+  conversation_turn_id: string | null;
+  conversation_message_id: string;
+  role: ConversationObservationRole;
+  created_at: string;
+  project_id: string | null;
+  workspace_id: string | null;
+  text: string;
+  part_refs: Array<{ kind: "attachment" | "artifact" | "tool_result" | "summary"; id: string }>;
+  provenance: ConversationProvenance;
+  audit_refs: string[];
+}
+
+export interface ReadConversationObservationsInput {
+  butlerData: string;
+  sessionId?: string | null;
+  roles?: ConversationObservationRole[];
+  since?: string | null;
+  limit?: number;
+  offset?: number;
+  maxMessages?: number;
+  includeCompacted?: boolean;
+  order?: "asc" | "desc";
+}
 
 export interface ConversationMessage {
   role: ConversationRole;
@@ -23,6 +60,7 @@ export interface ParsedConversationLog {
 }
 
 const THIRTY_MIN_MS = 30 * 60 * 1000;
+const DEFAULT_OBSERVATION_LIMIT = 1000;
 
 function parseJsonLine(line: string): any | null {
   try {
@@ -166,6 +204,162 @@ export function buildIndexInputFromMessages(messages: ConversationMessage[]): st
           },
     ))
     .join("\n");
+}
+
+export function readConversationObservations(
+  input: ReadConversationObservationsInput,
+): ConversationObservation[] {
+  if (!existsSync(conversationStorePath(input.butlerData))) return [];
+  const store = new AgentConversationStore({ butlerData: input.butlerData });
+  try {
+    const sessionId = resolveConversationObservationSessionId(store, input.sessionId ?? null);
+    const messages = store.readCognitionMessages({
+      sessionId,
+      roles: storeRolesForObservationRoles(input.roles),
+      since: input.since,
+      limit: input.maxMessages ?? input.limit ?? DEFAULT_OBSERVATION_LIMIT,
+      offset: input.offset,
+      includeCompacted: input.includeCompacted,
+      order: input.order,
+    });
+    const sessions = new Map<string, { project_id: string | null; workspace_id: string | null }>();
+    return messages
+      .map((message) => {
+        let session = sessions.get(message.session_id);
+        if (!session) {
+          const row = store.getSession(message.session_id);
+          session = {
+            project_id: row?.project_id ?? null,
+            workspace_id: row?.workspace_id ?? null,
+          };
+          sessions.set(message.session_id, session);
+        }
+        return observationFromMessage(message, session);
+      })
+      .filter((observation) => observation.text.trim());
+  } finally {
+    store.close();
+  }
+}
+
+export function buildIndexInputFromObservations(observations: ConversationObservation[]): string {
+  return observations
+    .map((observation) => JSON.stringify(
+      observation.role === "assistant"
+        ? {
+            type: "assistant",
+            timestamp: observation.created_at,
+            source_message_ids: [observation.conversation_message_id],
+            message: {
+              role: "assistant",
+              content: [
+                {
+                  type: "text",
+                  text: observation.text,
+                },
+              ],
+            },
+          }
+        : {
+            type: observation.role === "user" ? "user" : observation.role,
+            timestamp: observation.created_at,
+            source_message_ids: [observation.conversation_message_id],
+            message: {
+              role: observation.role,
+              content: observation.text,
+            },
+          },
+    ))
+    .join("\n");
+}
+
+function resolveConversationObservationSessionId(
+  store: AgentConversationStore,
+  sessionId: string | null,
+): string | undefined {
+  const trimmed = sessionId?.trim();
+  if (!trimmed) return undefined;
+  if (store.getSession(trimmed)) return trimmed;
+  const durable = conversationSessionIdForDurableSession(trimmed);
+  if (store.getSession(durable)) return durable;
+  return trimmed;
+}
+
+function storeRolesForObservationRoles(
+  roles: ConversationObservationRole[] | undefined,
+): StoreConversationRole[] | undefined {
+  if (!roles || roles.length === 0) return undefined;
+  const mapped = new Set<StoreConversationRole>();
+  for (const role of roles) {
+    if (role === "system") {
+      mapped.add("system");
+      mapped.add("developer");
+      continue;
+    }
+    mapped.add(role);
+  }
+  return [...mapped];
+}
+
+function observationRole(role: StoreConversationRole): ConversationObservationRole {
+  if (role === "developer") return "system";
+  if (role === "user" || role === "assistant" || role === "system" || role === "tool") return role;
+  return "system";
+}
+
+function observationFromMessage(
+  message: ConversationMessageWithParts,
+  session: { project_id: string | null; workspace_id: string | null },
+): ConversationObservation {
+  return {
+    conversation_session_id: message.session_id,
+    conversation_turn_id: message.turn_id,
+    conversation_message_id: message.id,
+    role: observationRole(message.role),
+    created_at: message.created_at,
+    project_id: session.project_id,
+    workspace_id: session.workspace_id,
+    text: textForMessage(message, true),
+    part_refs: message.parts.flatMap(partRef),
+    provenance: message.provenance,
+    audit_refs: auditRefs(message),
+  };
+}
+
+function partRef(part: ConversationPart): ConversationObservation["part_refs"] {
+  const content = part.content_json;
+  if (part.kind === "attachment_ref") {
+    return [
+      { kind: "attachment", id: objectString(content, "id") ?? objectString(content, "fileName") ?? part.id },
+    ];
+  }
+  if (part.kind === "tool_result") {
+    return [
+      { kind: "tool_result", id: part.parent_tool_call_id ?? part.tool_call_id ?? part.id },
+    ];
+  }
+  if (part.kind === "summary_ref") {
+    return [
+      { kind: "summary", id: objectString(content, "summary_id") ?? part.id },
+    ];
+  }
+  const artifactId = objectString(content, "artifact_id") ?? objectString(content, "artifactId");
+  return artifactId ? [{ kind: "artifact", id: artifactId }] : [];
+}
+
+function auditRefs(message: ConversationMessageWithParts): string[] {
+  const sourceRef = message.source_ref?.trim();
+  if (!sourceRef) return [];
+  const refs = [sourceRef];
+  if (message.source_gateway?.trim()) refs.push(`${message.source_gateway.trim()}:${sourceRef}`);
+  if (sourceRef.startsWith("transcript:")) refs.push(sourceRef);
+  return [...new Set(refs)];
+}
+
+function objectString(value: unknown, key: string): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = (value as Record<string, unknown>)[key];
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
 }
 
 export function chunkConversationByGap(

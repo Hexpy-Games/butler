@@ -13,6 +13,7 @@ import { getStewardSessionPointer, registerRuntimeSession } from "../../test-sup
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import { PolicyEngine, type PolicyApprovalMode, type PolicyToolDefinition } from "../../agent/policy/policy-engine.ts";
 import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
+import { AgentConversationStore } from "../../agent/conversation/store.ts";
 import { SessionLifecycleService } from "./session-lifecycle.ts";
 import { NativeToolLoopRuntime } from "../../agent/turn/native-tool-loop.ts";
 import { DeliveryGuard } from "../transport/delivery-guard.ts";
@@ -209,6 +210,7 @@ export async function handleNativeStewardTelegramTurn(
   const runtime = input.runtime ?? new NativeToolLoopRuntime();
   const provider = input.provider ?? defaultProvider();
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
+  const conversationWriter = new AgentConversationStore({ butlerData });
 
   try {
     const sessionId = resolveSessionId(store, butlerData, input.projectName);
@@ -234,6 +236,8 @@ export async function handleNativeStewardTelegramTurn(
       policyEngine: new PolicyEngine(),
       tools: STEWARD_NATIVE_TOOLS,
       approvalMode: input.approvalMode ?? "default",
+      conversationWriter,
+      conversationMetricsButlerData: butlerData,
     });
 
     const actor = await lifecycle.getOrCreate(sessionId, "steward");
@@ -290,6 +294,7 @@ export async function handleNativeStewardTelegramTurn(
       delivery,
     };
   } finally {
+    conversationWriter.close();
     store.close();
   }
 }

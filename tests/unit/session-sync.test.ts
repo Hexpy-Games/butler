@@ -7,8 +7,11 @@ import {
   prepareTempIndexInputPath,
 } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/session-sync.ts";
 import {
+  buildMemoryConversationObservationPayload,
   buildMemoryTranscriptPayload,
 } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/lib/ingestion.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { extractSourceMessageIdsFromJsonl } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/index.ts";
 import {
   normalizeSessionIdForStorage,
   transcriptFileNameForSessionId,
@@ -51,6 +54,67 @@ test("native transcript normalization preserves original session id and stores s
   expect(payload.chunks[0]?.indexJsonl).toContain("\"type\":\"user\"");
   expect(normalizeSessionIdForStorage("butler/main")).toBe("butler_main");
   expect(transcriptFileNameForSessionId("butler/main")).toBe("butler_main.jsonl");
+});
+
+test("canonical conversation observation payload carries source message ids", () => {
+  const butlerData = join(tmpdir(), `butler-session-sync-canonical-${Date.now()}-${Math.random()}`);
+  let next = 0;
+  const store = new AgentConversationStore({
+    butlerData,
+    idFactory: (prefix) => `${prefix}_sync_${++next}`,
+  });
+  try {
+    const turn = store.beginTurn({
+      gateway: "app",
+      externalSessionId: "general",
+      sessionId: "cs_sync",
+      actor: "user",
+      now: "2026-07-02T00:00:00.000Z",
+    });
+    store.appendUserMessage({
+      sessionId: "cs_sync",
+      turnId: turn.id,
+      messageId: "cm_sync_user",
+      text: "canonical user text",
+      now: "2026-07-02T00:00:01.000Z",
+    });
+    store.appendAssistantMessage({
+      sessionId: "cs_sync",
+      turnId: turn.id,
+      messageId: "cm_sync_assistant",
+      text: "canonical assistant text",
+      now: "2026-07-02T00:00:02.000Z",
+    });
+  } finally {
+    store.close();
+  }
+
+  try {
+    const payload = buildMemoryConversationObservationPayload({
+      butlerData,
+      sourceSessionId: "cs_sync",
+    });
+
+    expect(payload).toMatchObject({
+      sourceSessionId: "cs_sync",
+      conversationSessionId: "cs_sync",
+      messageCount: 2,
+    });
+    expect(payload.chunks[0]?.sourceMessageIds).toEqual(["cm_sync_user", "cm_sync_assistant"]);
+    expect(payload.chunks[0]?.conversationText).toContain("user: canonical user text");
+    expect(payload.chunks[0]?.indexJsonl).toContain("\"source_message_ids\":[\"cm_sync_user\"]");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("memory index input exposes canonical source message ids for provenance", () => {
+  const jsonl = [
+    JSON.stringify({ type: "user", source_message_ids: ["cm_a", "cm_b"], message: { role: "user", content: "a" } }),
+    JSON.stringify({ type: "assistant", source_message_ids: ["cm_b", "cm_c"], message: { role: "assistant", content: [{ type: "text", text: "b" }] } }),
+  ].join("\n");
+
+  expect(extractSourceMessageIdsFromJsonl(jsonl)).toEqual(["cm_a", "cm_b", "cm_c"]);
 });
 
 test("session sync records diagnostics for non-indexable transcript lines", () => {

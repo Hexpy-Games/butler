@@ -17,6 +17,7 @@ import type { AppNavigationStore } from "../../domain/sessions/navigation-store.
 import type { AppNewChatBriefingStore } from "../../domain/sessions/new-chat-briefing-store.ts";
 import type { AppSessionCatalogStore } from "../../domain/sessions/session-catalog-store.ts";
 import type { AppSessionControlsStore } from "../../domain/sessions/session-controls-store.ts";
+import type { AppConversationProjectionStore } from "../../domain/projections/app-conversation-projection-store.ts";
 import type { AppSessionModuleGraph } from "../../domain/sessions/session-module-graph.ts";
 import type { AppTurnRecordStore } from "../../domain/sessions/turn-record-store.ts";
 import type { AppPersonalizationStore } from "../../domain/settings/personalization-store.ts";
@@ -48,6 +49,7 @@ export interface AppStoreKernelState {
   preferences: AppPreferencesStore;
   personalization: AppPersonalizationStore;
   sessionControls: AppSessionControlsStore;
+  conversationProjection: AppConversationProjectionStore;
   projectFolders: AppProjectFolderStore;
   projects: AppProjectStore;
   sessionCatalog: AppSessionCatalogStore;

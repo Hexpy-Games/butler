@@ -1,7 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { createHash } from "crypto";
-import { readTranscript, type TranscriptEvent } from "../../test-support/harness/transcripts.ts";
+import {
+  readConversationObservations,
+  type ConversationObservation,
+} from "../cognition/memory/scripts/lib/conversation-sources.ts";
 
 export type WorkingMemoryFactCategory =
   | "holding"
@@ -14,8 +17,9 @@ export interface WorkingMemoryFact {
   id: string;
   category: WorkingMemoryFactCategory;
   text: string;
-  sourceEventId: string;
+  sourceEventId?: string;
   sourceMessageId?: string;
+  sourceConversationMessageId: string;
   sourceTimestamp?: string;
   lastSeenAt: string;
 }
@@ -76,43 +80,33 @@ export function extractWorkingMemoryFacts(text: string): Array<Pick<WorkingMemor
   return [];
 }
 
-function inboundText(event: TranscriptEvent): string {
-  if (event.kind !== "inbound") return "";
-  const payload = event.payload as Record<string, any>;
-  const text = payload.message?.text;
-  return typeof text === "string" ? text : "";
-}
-
-function messageId(event: TranscriptEvent): string | undefined {
-  const payload = event.payload as Record<string, any>;
-  const id = payload.message?.id;
-  return typeof id === "string" ? id : undefined;
-}
-
-export function refreshWorkingMemoryFromTranscript(input: {
+export function refreshWorkingMemoryFromConversation(input: {
   butlerData: string;
   sessionId: string;
   excludeEventId?: string | null;
+  excludeConversationMessageId?: string | null;
   now?: string;
 }): WorkingMemorySnapshot {
   const now = input.now ?? new Date().toISOString();
   const bySubject = new Map<string, WorkingMemoryFact>();
 
-  for (const event of readTranscript(input.sessionId)) {
-    if (event.eventId === input.excludeEventId) continue;
-    const payload = event.payload as Record<string, any>;
-    if (typeof payload.eventId === "string" && payload.eventId === input.excludeEventId) continue;
-    const text = inboundText(event);
-    if (!text.trim()) continue;
-    for (const fact of extractWorkingMemoryFacts(text)) {
+  for (const observation of readConversationObservations({
+    butlerData: input.butlerData,
+    sessionId: input.sessionId,
+    roles: ["user", "assistant"],
+    limit: MAX_FACTS * 8,
+  })) {
+    if (shouldExcludeObservation(observation, input)) continue;
+    for (const fact of extractWorkingMemoryFacts(observation.text)) {
       const id = stableFactId(fact.category, fact.text);
       bySubject.set(factSubjectKey(fact.category, fact.text), {
         id,
         category: fact.category,
         text: fact.text,
-        sourceEventId: event.eventId,
-        sourceMessageId: messageId(event),
-        sourceTimestamp: event.timestamp,
+        sourceEventId: primaryAuditRef(observation),
+        sourceMessageId: observation.conversation_message_id,
+        sourceConversationMessageId: observation.conversation_message_id,
+        sourceTimestamp: observation.created_at,
         lastSeenAt: now,
       });
     }
@@ -140,6 +134,34 @@ export function refreshWorkingMemoryFromTranscript(input: {
     // block the active user turn. The in-memory snapshot is still injected.
   }
   return snapshot;
+}
+
+export function refreshWorkingMemoryFromTranscript(input: {
+  butlerData: string;
+  sessionId: string;
+  excludeEventId?: string | null;
+  now?: string;
+}): WorkingMemorySnapshot {
+  return refreshWorkingMemoryFromConversation(input);
+}
+
+function shouldExcludeObservation(
+  observation: ConversationObservation,
+  input: {
+    excludeEventId?: string | null;
+    excludeConversationMessageId?: string | null;
+  },
+): boolean {
+  if (input.excludeConversationMessageId && observation.conversation_message_id === input.excludeConversationMessageId) {
+    return true;
+  }
+  const eventId = input.excludeEventId?.trim();
+  if (!eventId) return false;
+  return observation.audit_refs.some((ref) => ref === eventId || ref.endsWith(`:${eventId}`));
+}
+
+function primaryAuditRef(observation: ConversationObservation): string | undefined {
+  return observation.audit_refs[0];
 }
 
 export function readWorkingMemorySnapshot(input: {
@@ -201,10 +223,10 @@ export function renderWorkingMemoryContext(snapshot: WorkingMemorySnapshot | nul
   if (facts.length === 0) return "";
   const lines = [
     "## Working Memory",
-    "Use these active-session facts before asking the user to repeat themselves. Treat them as compact transcript-backed continuity notes.",
+    "Use these active-session facts before asking the user to repeat themselves. Treat them as compact conversation-backed continuity notes.",
   ];
   for (const fact of facts.slice(0, MAX_RENDERED_FACTS)) {
-    const source = fact.sourceMessageId ? `message=${fact.sourceMessageId}` : `event=${fact.sourceEventId}`;
+    const source = `conversation_message=${fact.sourceConversationMessageId}`;
     lines.push(`- [${fact.category}] ${fact.text} (${source})`);
   }
   return lines.join("\n");
