@@ -175,6 +175,7 @@ export function createMemoryToolHandlers(input: {
           dateTo: typeof call.args.date_to === "string" ? call.args.date_to : undefined,
           includeInternal: call.args.include_internal === true,
           includePlaceholders: call.args.include_placeholders === true,
+          includeTranscriptRecovery: call.args.include_transcript_recovery === true,
         }),
       };
     },

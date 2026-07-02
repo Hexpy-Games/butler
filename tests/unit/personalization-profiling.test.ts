@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import {
   captureProfileCandidatesFromFeedback,
   captureProfileCandidatesFromTranscripts,
@@ -22,6 +23,39 @@ import {
   writeProfilingConsentSnapshot,
   writeRuntimeProfileProjection,
 } from "../../packages/butler-agent/src/personalization/profiling.ts";
+
+function writeConversationProfileMessages(
+  butlerData: string,
+  messages: Array<{ id: string; timestamp: string; text: string }>,
+): void {
+  let next = 0;
+  const store = new AgentConversationStore({
+    butlerData,
+    idFactory: (prefix) => `${prefix}_profile_${++next}`,
+  });
+  try {
+    const turn = store.beginTurn({
+      gateway: "app",
+      externalSessionId: "general",
+      sessionId: "cs_profile",
+      actor: "user",
+      now: messages[0]?.timestamp ?? "2026-05-17T00:00:00.000Z",
+    });
+    for (const message of messages) {
+      store.appendUserMessage({
+        sessionId: "cs_profile",
+        turnId: turn.id,
+        messageId: `cm_${message.id}`,
+        text: message.text,
+        sourceGateway: "app",
+        sourceRef: message.id,
+        now: message.timestamp,
+      });
+    }
+  } finally {
+    store.close();
+  }
+}
 
 test("profiling black box uses sqlite and renders only runtime projection hints", () => {
   const butlerData = join(tmpdir(), `butler-profile-${Date.now()}-${Math.random()}`);
@@ -74,20 +108,18 @@ test("profiling black box uses sqlite and renders only runtime projection hints"
   }
 });
 
-test("non-model profiling transcript capture scans without heuristic candidates", () => {
+test("non-model profiling conversation capture scans without heuristic candidates", () => {
   const butlerData = join(tmpdir(), `butler-profile-${Date.now()}-${Math.random()}`);
   try {
     writeProfilingConsentSnapshot(butlerData, {
       mode: "deep",
       consented_at: "2026-05-17T00:00:00.000Z",
     });
-    const transcriptDir = join(butlerData, "transcripts");
-    mkdirSync(transcriptDir, { recursive: true });
-    writeFileSync(join(transcriptDir, "butler_app-general.jsonl"), [
-      transcriptEvent("evt_1", "2026-05-17T00:01:00.000Z", "버틀러는 임시방편보다 구조적으로 고쳐야 해. 실제로 재현하고 확인까지 해야 해."),
-      transcriptEvent("evt_2", "2026-05-17T00:02:00.000Z", "프로파일링과 페르소나는 동의 기반으로 로컬에 두고, 원시 프롬프트나 세부 로그는 노출하지 마."),
-      transcriptEvent("evt_3", "2026-05-17T00:03:00.000Z", "버틀러의 워커 오케스트레이션은 실제 대화 유즈케이스에서 작동하는지 검증해야 해."),
-    ].join("\n") + "\n", "utf8");
+    writeConversationProfileMessages(butlerData, [
+      { id: "evt_1", timestamp: "2026-05-17T00:01:00.000Z", text: "버틀러는 임시방편보다 구조적으로 고쳐야 해. 실제로 재현하고 확인까지 해야 해." },
+      { id: "evt_2", timestamp: "2026-05-17T00:02:00.000Z", text: "프로파일링과 페르소나는 동의 기반으로 로컬에 두고, 원시 프롬프트나 세부 로그는 노출하지 마." },
+      { id: "evt_3", timestamp: "2026-05-17T00:03:00.000Z", text: "버틀러의 워커 오케스트레이션은 실제 대화 유즈케이스에서 작동하는지 검증해야 해." },
+    ]);
 
     const capture = captureProfileCandidatesFromTranscripts(butlerData);
     expect(capture).toMatchObject({
@@ -95,6 +127,10 @@ test("non-model profiling transcript capture scans without heuristic candidates"
       mode: "deep",
       scanned_file_count: 1,
       scanned_event_count: 3,
+      semantic_scanned_session_count: 1,
+      semantic_scanned_message_count: 3,
+      audit_transcript_scanned_file_count: 0,
+      audit_transcript_scanned_event_count: 0,
       raw_text_included: false,
     });
     expect(capture.captured_candidate_count).toBe(0);
@@ -123,12 +159,10 @@ test("profiling extractor uses the configured model without heuristic fallback",
       mode: "deep",
       consented_at: "2026-05-17T00:00:00.000Z",
     });
-    const transcriptDir = join(butlerData, "transcripts");
-    mkdirSync(transcriptDir, { recursive: true });
-    writeFileSync(join(transcriptDir, "butler_app-general.jsonl"), [
-      transcriptEvent("evt_1", "2026-05-17T00:01:00.000Z", "임시방편보다 구조를 먼저 고쳐줘."),
-      transcriptEvent("evt_2", "2026-05-17T00:02:00.000Z", "고쳤다고 말하기 전에 실제로 재현하고 검증해줘."),
-    ].join("\n") + "\n", "utf8");
+    writeConversationProfileMessages(butlerData, [
+      { id: "evt_1", timestamp: "2026-05-17T00:01:00.000Z", text: "임시방편보다 구조를 먼저 고쳐줘." },
+      { id: "evt_2", timestamp: "2026-05-17T00:02:00.000Z", text: "고쳤다고 말하기 전에 실제로 재현하고 검증해줘." },
+    ]);
 
     expect(readProfilingExtractorModelConfig(butlerData)).toMatchObject({
       configured_model: null,
@@ -139,7 +173,7 @@ test("profiling extractor uses the configured model without heuristic fallback",
     const capture = await captureProfileCandidatesFromTranscriptsWithModel(butlerData, {
       modelRunner: async (input) => {
         expect(input.model).toBe("openai/gpt-5.4");
-        expect(input.prompt).toContain("ref=transcript:butler_app-general:evt_1");
+        expect(input.prompt).toContain("ref=conversation:cm_evt_1");
         return JSON.stringify({
           candidates: [{
             category: "epistemic_style",
@@ -147,8 +181,8 @@ test("profiling extractor uses the configured model without heuristic fallback",
             source_type: "repeated_observation",
             confidence: "medium",
             evidence_refs: [
-              "transcript:butler_app-general:evt_1",
-              "transcript:butler_app-general:evt_2",
+              "conversation:cm_evt_1",
+              "conversation:cm_evt_2",
             ],
             sensitive_domain: false,
             expires_or_decay: "decay",
@@ -162,6 +196,10 @@ test("profiling extractor uses the configured model without heuristic fallback",
       mode: "deep",
       scanned_file_count: 1,
       scanned_event_count: 2,
+      semantic_scanned_session_count: 1,
+      semantic_scanned_message_count: 2,
+      audit_transcript_scanned_file_count: 0,
+      audit_transcript_scanned_event_count: 0,
       captured_candidate_count: 1,
       model_called: true,
       fallback_used: false,
@@ -191,12 +229,10 @@ test("profiling extractor preserves philosophical profile facets", async () => {
       mode: "deep",
       consented_at: "2026-05-17T00:00:00.000Z",
     });
-    const transcriptDir = join(butlerData, "transcripts");
-    mkdirSync(transcriptDir, { recursive: true });
-    writeFileSync(join(transcriptDir, "butler_app-general.jsonl"), [
-      transcriptEvent("evt_interest", "2026-05-17T00:01:00.000Z", "최근에는 버틀러의 프로파일링과 페르소나 완성도가 제일 중요해."),
-      transcriptEvent("evt_event", "2026-05-17T00:02:00.000Z", "실제 세션에서 모델 호출 없이 프로파일이 만들어진 걸 보고 방향을 다시 잡았어."),
-    ].join("\n") + "\n", "utf8");
+    writeConversationProfileMessages(butlerData, [
+      { id: "evt_interest", timestamp: "2026-05-17T00:01:00.000Z", text: "최근에는 버틀러의 프로파일링과 페르소나 완성도가 제일 중요해." },
+      { id: "evt_event", timestamp: "2026-05-17T00:02:00.000Z", text: "실제 세션에서 모델 호출 없이 프로파일이 만들어진 걸 보고 방향을 다시 잡았어." },
+    ]);
 
     await captureProfileCandidatesFromTranscriptsWithModel(butlerData, {
       modelRunner: async (input) => {
@@ -210,7 +246,7 @@ test("profiling extractor preserves philosophical profile facets", async () => {
               summary: "Recently focuses on Butler profiling and persona quality.",
               source_type: "explicit",
               confidence: "high",
-              evidence_refs: ["transcript:butler_app-general:evt_interest"],
+              evidence_refs: ["conversation:cm_evt_interest"],
               sensitive_domain: false,
               expires_or_decay: "decay",
             },
@@ -220,7 +256,7 @@ test("profiling extractor preserves philosophical profile facets", async () => {
               summary: "Changed direction after seeing a mechanical non-model profile extraction result.",
               source_type: "explicit",
               confidence: "high",
-              evidence_refs: ["transcript:butler_app-general:evt_event"],
+              evidence_refs: ["conversation:cm_evt_event"],
               sensitive_domain: false,
               expires_or_decay: "decay",
             },
@@ -251,26 +287,23 @@ test("profiling extractor preserves philosophical profile facets", async () => {
   }
 });
 
-test("profiling extractor backfills historical interests across long transcript batches", async () => {
+test("profiling extractor backfills historical interests across long conversation batches", async () => {
   const butlerData = join(tmpdir(), `butler-profile-${Date.now()}-${Math.random()}`);
   try {
     writeProfilingConsentSnapshot(butlerData, {
       mode: "deep",
       consented_at: "2026-05-17T00:00:00.000Z",
     });
-    const transcriptDir = join(butlerData, "transcripts");
-    mkdirSync(transcriptDir, { recursive: true });
-    const lines = [
-      transcriptEvent("evt_hsr", "2026-05-06T11:57:47.758Z", "스타레일은 새로운 떡밥 올라온거 없어?"),
+    writeConversationProfileMessages(butlerData, [
+      { id: "evt_hsr", timestamp: "2026-05-06T11:57:47.758Z", text: "스타레일은 새로운 떡밥 올라온거 없어?" },
       ...Array.from({ length: 230 }, (_, index) =>
-        transcriptEvent(
-          `evt_recent_${index}`,
-          `2026-05-17T00:${String(index % 60).padStart(2, "0")}:00.000Z`,
-          `최근 버틀러 프로파일링 점검 메시지 ${index}`,
-        ),
+        ({
+          id: `evt_recent_${index}`,
+          timestamp: `2026-05-17T00:${String(index % 60).padStart(2, "0")}:00.000Z`,
+          text: `최근 버틀러 프로파일링 점검 메시지 ${index}`,
+        }),
       ),
-    ];
-    writeFileSync(join(transcriptDir, "butler_app-general.jsonl"), lines.join("\n") + "\n", "utf8");
+    ]);
 
     let sawHistoricalInterest = false;
     const capture = await captureProfileCandidatesFromTranscriptsWithModel(butlerData, {
@@ -285,7 +318,7 @@ test("profiling extractor backfills historical interests across long transcript 
             summary: "Recently shows interest in Honkai: Star Rail story updates.",
             source_type: "explicit",
             confidence: "medium",
-            evidence_refs: ["transcript:butler_app-general:evt_hsr"],
+            evidence_refs: ["conversation:cm_evt_hsr"],
             sensitive_domain: false,
             expires_or_decay: "decay",
           }],
@@ -562,16 +595,6 @@ test("basic profile migration filters strict sensitive imports while applying sa
     rmSync(butlerData, { recursive: true, force: true });
   }
 });
-
-function transcriptEvent(eventId: string, timestamp: string, text: string): string {
-  return JSON.stringify({
-    eventId,
-    sessionId: "butler_app-general",
-    kind: "inbound",
-    timestamp,
-    payload: { message: { text } },
-  });
-}
 
 test("free-form feedback profiling capture does not create heuristic candidates", () => {
   const butlerData = join(tmpdir(), `butler-profile-${Date.now()}-${Math.random()}`);
