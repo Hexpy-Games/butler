@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { DirectTurnBudgetSnapshot } from "./direct-turn-budget.ts";
 import { isTerminalTurnState, type TurnState } from "./turn-kernel.ts";
 
 export interface TurnContextObservationRef {
@@ -21,6 +22,7 @@ export interface TurnContextAtom {
   latestCompletionReview?: { status: string; observationId?: string };
   currentTurnWork: TurnContextObservationRef[];
   currentTurnTodos: TurnContextObservationRef[];
+  budgetSnapshot?: DirectTurnBudgetSnapshot;
   terminalOutcome?: { id: string; state: string };
   createdAt: string;
 }
@@ -75,6 +77,7 @@ export function persistTurnContextAtom(input: {
   latestCompletionReview?: { status: string; observationId?: string };
   currentTurnWork?: TurnContextObservationRef[];
   currentTurnTodos?: TurnContextObservationRef[];
+  budgetSnapshot?: DirectTurnBudgetSnapshot;
   terminalOutcome?: { id: string; state: string };
 }): void {
   if (isTerminalTurnState(input.state)) return;
@@ -92,6 +95,7 @@ export function persistTurnContextAtom(input: {
     ...(input.latestCompletionReview ? { latestCompletionReview: input.latestCompletionReview } : {}),
     currentTurnWork: input.currentTurnWork ?? [],
     currentTurnTodos: input.currentTurnTodos ?? [],
+    ...(input.budgetSnapshot ? { budgetSnapshot: sanitizeBudgetSnapshot(input.budgetSnapshot) } : {}),
     ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
     createdAt: new Date().toISOString(),
   };
@@ -136,4 +140,27 @@ function safeIdSegment(value: string): string {
 
 function safeRefId(value: string): string {
   return value.replace(/[^\S\n]+/gu, " ").replace(/[\r\n]+/gu, " ").trim().slice(0, 160) || "unknown";
+}
+
+function sanitizeBudgetSnapshot(snapshot: DirectTurnBudgetSnapshot): DirectTurnBudgetSnapshot {
+  return {
+    turnId: safeRefId(snapshot.turnId),
+    modelRequestsUsed: finiteNonNegativeInteger(snapshot.modelRequestsUsed),
+    promptTokens: finiteNonNegativeInteger(snapshot.promptTokens),
+    cachedTokens: finiteNonNegativeInteger(snapshot.cachedTokens),
+    outputTokens: finiteNonNegativeInteger(snapshot.outputTokens),
+    totalTokens: finiteNonNegativeInteger(snapshot.totalTokens),
+    maxModelCalls: finitePositiveInteger(snapshot.maxModelCalls),
+    maxPromptTokens: finitePositiveInteger(snapshot.maxPromptTokens),
+    maxOutputTokens: finitePositiveInteger(snapshot.maxOutputTokens),
+    maxTotalTokens: finitePositiveInteger(snapshot.maxTotalTokens),
+  };
+}
+
+function finiteNonNegativeInteger(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function finitePositiveInteger(value: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
 }

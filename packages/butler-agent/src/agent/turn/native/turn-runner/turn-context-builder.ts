@@ -5,9 +5,14 @@ import { ToolSurfacePromptController } from "../../tool-surface-prompt-controlle
 import {
   createDirectTurnBudget,
   directTurnBudgetState,
+  hydrateDirectTurnBudget,
   promptUsageSectionsFromPrompt,
   recentConversationBudgetForTurn,
 } from "../../direct-turn-budget.ts";
+import {
+  createTurnContextAtomId,
+  readTurnContextAtom,
+} from "../../turn-continuation-context.ts";
 import { RUNTIME_SEMANTIC_TODO_LIST_ID } from "../../direct-work-continuation.ts";
 import { plannedReviewTurnContext } from "../context/planned-review-context.ts";
 import { renderRecallContext, shouldAttemptAutomaticRecall } from "../context/recall-context.ts";
@@ -85,7 +90,6 @@ export async function prepareNativeTurnContext(input: {
     () => "",
   );
   const turnId = currentRuntimeTurnId(input.turnInput) ?? `turn-${randomUUID().slice(0, 12)}`;
-  const turnBudget = createDirectTurnBudget(turnId);
   const feedbackContext = measureTurnPreparationStepSync(
     preparationMetricInput(input, "feedback_buffer"),
     () => feedbackBufferContext(input, compactionContext),
@@ -118,6 +122,12 @@ export async function prepareNativeTurnContext(input: {
     }),
   );
   const attachments = inboundAttachments(input.turnInput);
+  const turnBudget = budgetForTurn({
+    butlerData: input.deps.butlerData,
+    sessionId: input.turnInput.handle.sessionId,
+    turnId,
+    turnInput: input.turnInput,
+  });
   const currentAttachmentContext = measureTurnPreparationStepSync(
     preparationMetricInput(input, "attachment_context"),
     () => renderAttachmentContext(attachments, {
@@ -201,6 +211,37 @@ export async function prepareNativeTurnContext(input: {
     executor,
     semanticProgressSafetyNet,
   };
+}
+
+function budgetForTurn(input: {
+  butlerData: string;
+  sessionId: string;
+  turnId: string;
+  turnInput: RuntimeTurnInput;
+}) {
+  if (!hasSchedulerContinuationMetadata(input.turnInput, input.sessionId, input.turnId)) {
+    return createDirectTurnBudget(input.turnId);
+  }
+  const atom = readTurnContextAtom({
+    butlerData: input.butlerData,
+    sessionId: input.sessionId,
+    turnId: input.turnId,
+  });
+  return hydrateDirectTurnBudget(input.turnId, atom?.budgetSnapshot);
+}
+
+function hasSchedulerContinuationMetadata(
+  input: RuntimeTurnInput,
+  sessionId: string,
+  turnId: string,
+): boolean {
+  const metadata = input.metadata && typeof input.metadata === "object"
+    ? input.metadata as Record<string, unknown>
+    : {};
+  const schedulerContinuation = metadata.schedulerContinuation;
+  if (!schedulerContinuation || typeof schedulerContinuation !== "object") return false;
+  const contextAtomId = (schedulerContinuation as { contextAtomId?: unknown }).contextAtomId;
+  return contextAtomId === createTurnContextAtomId(sessionId, turnId);
 }
 
 function semanticProgressSafetyNetFor(language: NativeTurnRunnerDeps["messageLanguage"]):

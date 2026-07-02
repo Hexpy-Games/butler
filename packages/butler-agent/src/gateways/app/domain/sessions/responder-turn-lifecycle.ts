@@ -110,7 +110,8 @@ export async function completeResponderTurn<FileRecord>(
       input.chatId,
       response.files ?? [],
     );
-    const limitedDelivery = response.delivery?.delivery_state === "delivered_with_limitations"
+    const limitedDelivery = response.delivery?.delivery_state === "delivered_with_limitations" ||
+      response.delivery?.delivery_state === "delivered_with_continuation"
       ? response.delivery
       : null;
     if (!context.hasTurnEventKind(input.turnId, "message.final.started")) {

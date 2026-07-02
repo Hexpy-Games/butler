@@ -37,7 +37,8 @@ export class AppSystemResponderCompletionProjector {
     for (const row of response.progress ?? []) appendProgress(row);
     this.ensureFinalStarted(input.turn.id, appendTurnEvent);
     const limitedDelivery =
-      response.delivery?.delivery_state === "delivered_with_limitations"
+      response.delivery?.delivery_state === "delivered_with_limitations" ||
+      response.delivery?.delivery_state === "delivered_with_continuation"
         ? response.delivery
         : null;
     return input.options.suppressAssistantReplies

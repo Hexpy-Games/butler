@@ -7,6 +7,10 @@ import {
   openDirectWorkContinuationPrompt,
 } from "../../direct-work-continuation.ts";
 import type { RuntimeMessageLanguage } from "../../../output/messages.ts";
+import {
+  deliveredWithContinuationState,
+  type RuntimeDeliveryClassification,
+} from "../../runtime-delivery-state.ts";
 import { promptContextSection } from "../context/turn-prompt.ts";
 import { directWorkContinuationAttempts } from "../policy/turn-errors.ts";
 import type { NativeTurnRunnerDeps } from "./turn-runner-types.ts";
@@ -21,6 +25,12 @@ import {
 const DIRECT_WORK_FINALIZATION_MODEL_REQUEST_RESERVE = 2;
 const DIRECT_WORK_FINALIZATION_SYNTHESIS_REQUEST_ALLOWANCE = 1;
 const DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS = 8;
+const DIRECT_WORK_CONTINUATION_LIMITATION_CODE = "direct_work_continuation";
+
+export interface DirectWorkFinalizationResult {
+  text: string;
+  delivery?: RuntimeDeliveryClassification;
+}
 
 export async function closeDirectWork(input: {
   turnInput: RuntimeTurnInput;
@@ -32,8 +42,8 @@ export async function closeDirectWork(input: {
   finalText: string;
   audit: ToolAuditEntry[];
   runToolPrompt(promptText: string, maxToolRounds?: number, phase?: string): Promise<string>;
-}): Promise<string> {
-  if (!input.useTools) return input.finalText;
+}): Promise<DirectWorkFinalizationResult> {
+  if (!input.useTools) return { text: input.finalText };
   let finalText = input.finalText;
   const maxDirectWorkContinuations = directWorkContinuationAttempts();
   for (let repairAttempt = 0; repairAttempt < maxDirectWorkContinuations; repairAttempt += 1) {
@@ -83,13 +93,22 @@ export async function closeDirectWork(input: {
       sessionId: input.turnInput.handle.sessionId,
       blocker: remainingBlocker,
     });
-    return recoverableDirectWorkDeliveryText({
-      blocker: remainingBlocker,
-      finalText,
-      language: input.deps.messageLanguage,
-    });
+    return {
+      text: recoverableDirectWorkDeliveryText({
+        blocker: remainingBlocker,
+        finalText,
+        language: input.deps.messageLanguage,
+      }),
+      delivery: deliveredWithContinuationState({
+        limitationCodes: [DIRECT_WORK_CONTINUATION_LIMITATION_CODE],
+        limitations: [directWorkContinuationLimitationText({
+          blocker: remainingBlocker,
+          language: input.deps.messageLanguage,
+        })],
+      }),
+    };
   }
-  return finalText;
+  return { text: finalText };
 }
 
 function directWorkFinalizationRepairRounds(
@@ -143,6 +162,21 @@ function recoverableDirectWorkDeliveryText(input: {
     "",
     compactPriorText(input.finalText),
   ].filter(Boolean).join("\n");
+}
+
+function directWorkContinuationLimitationText(input: {
+  blocker: OpenDirectWorkBlocker;
+  language: RuntimeMessageLanguage;
+}): string {
+  const active = input.blocker.activeItems.at(0);
+  if (input.language === "ko") {
+    return active
+      ? `남은 직접 작업은 recoverable continuation으로 보존되었습니다: ${active.label}`
+      : "남은 직접 작업은 recoverable continuation으로 보존되었습니다.";
+  }
+  return active
+    ? `Remaining direct work was preserved as a recoverable continuation: ${active.label}`
+    : "Remaining direct work was preserved as a recoverable continuation.";
 }
 
 function compactPriorText(value: string): string {

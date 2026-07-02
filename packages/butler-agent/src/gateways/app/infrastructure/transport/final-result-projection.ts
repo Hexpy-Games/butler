@@ -53,8 +53,7 @@ export function projectAppFinalResult(input: {
   const text = sanitizeAppTransportFinalText(message.text);
   const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
   const delivery = deliveryLimitationMetadataFromRecord(metadata);
-  const limitedDelivery =
-    delivery?.delivery_state === "delivered_with_limitations";
+  const limitedDelivery = Boolean(delivery);
   const noVisibleReply =
     metadata.noVisibleReply === true ||
     shouldTreatLimitedFinalAsNoVisible(artifacts, delivery, metadata);
@@ -123,9 +122,9 @@ export function projectAppFinalResult(input: {
   ) {
     options.appendTurnEvent(chatId, turnId, {
       kind: "message.final.completed",
-      payload: {
-        safeLabel: limitedDelivery
-          ? "Final answer ready with limitations"
+    payload: {
+      safeLabel: limitedDelivery
+        ? "Final answer ready with limitations"
           : "Final answer ready",
         textChars: text.length,
         ...(delivery ?? {}),
