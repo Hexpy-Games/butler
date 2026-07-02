@@ -9665,6 +9665,60 @@ test("app transport progress projection stays idempotent after a large event bac
   }
 });
 
+test("navigation sync tolerates replayed model stream sequence strings", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const result = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "stream replay sequence string",
+  });
+  const turnId = result.data.turn.id;
+  const userMessageId = result.data.accepted.id;
+  server.stop();
+
+  appendAppTurnEventOutboundForTest({
+    sessionId: "butler/app-general",
+    actionId: `app-turn-event:${turnId}:model.stream.text_delta:string-sequence`,
+    turnId,
+    replyToMessageId: userMessageId,
+    event: {
+      kind: "model.stream.text_delta",
+      visibility: "public",
+      payload: {
+        streamId: "stream-string-sequence",
+        textDelta: "Readable replay",
+        target: "final_candidate",
+        sequence: "1" as unknown as number,
+      },
+    },
+  });
+
+  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const navigation = await getJson(`${server.url}navigation`);
+    expect(navigation.data.chats.length).toBeGreaterThan(0);
+
+    const replay = await getJson(`${server.url}events?cursor=0`);
+    expect(replay.data.events).toContainEqual(
+      expect.objectContaining({
+        type: "agent.turn_event",
+        payload: expect.objectContaining({
+          turn_id: turnId,
+          event: expect.objectContaining({
+            kind: "model.stream.text_delta",
+            payload: expect.objectContaining({
+              sequence: 1,
+              textDelta: "Readable replay",
+            }),
+          }),
+        }),
+      }),
+    );
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport sync skips unchanged transcript snapshots", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
