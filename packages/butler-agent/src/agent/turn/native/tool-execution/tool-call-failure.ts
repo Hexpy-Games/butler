@@ -101,6 +101,21 @@ export async function handleAuditedToolFailure(input: {
       durationMs: Date.now() - input.startedAt,
     },
   });
+  await emitTurnEventBestEffort(input.executorInput.turnInput, {
+    kind: "tool_result.failed",
+    visibility: "internal",
+    payload: {
+      toolCallId: input.toolCallId,
+      toolName: input.call.name,
+      inputLabel: input.progress.inputLabel,
+      safeLabel: input.progress.safeLabel,
+      workBlockId: input.workBlockId,
+      workBlockLabel: input.workBlockLabel,
+      ok: false,
+      safeError: evidenceTranscriptErrorMessage(message),
+      safeObservation: observation,
+    },
+  });
   if (!input.semanticProgressEstablished && !input.isWorkerStartTool) {
     await emitDecisionProgressBestEffort({
       turnInput: input.executorInput.turnInput,
