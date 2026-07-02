@@ -17,8 +17,8 @@ import { StewardSessionActor } from "./steward-session.ts";
 import { recordSystemEvent } from "../../test-support/harness/durable-session-transcript.ts";
 import type { ConversationWriter } from "../../agent/conversation/types.ts";
 import type {
+  DeveloperLogCaptureInput,
   DeveloperLogStore,
-  DeveloperLogTurnCaptureInput,
 } from "../../operations/diagnostics/developer-log-store.ts";
 
 export interface SessionLifecycleServiceOptions {
@@ -158,8 +158,12 @@ export class SessionLifecycleService {
           }
         : undefined,
       captureDeveloperModelTurn: this.options.developerLogStore
-        ? (input: DeveloperLogTurnCaptureInput) => {
+        ? (input: DeveloperLogCaptureInput) => {
             if (this.options.developerDiagnosticsEnabled?.() !== true) return;
+            if (input.kind === "model_turn_error") {
+              this.options.developerLogStore?.appendModelTurnError(input);
+              return;
+            }
             this.options.developerLogStore?.appendModelTurn(input);
           }
         : undefined,

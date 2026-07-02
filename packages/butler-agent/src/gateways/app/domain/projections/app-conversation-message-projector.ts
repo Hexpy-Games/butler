@@ -9,8 +9,11 @@ import type {
   MessageRole,
   MessageStatus,
 } from "../../interface/protocol/app-protocol.ts";
+import { appChatIdForConversationExternalSession } from "./app-conversation-session-id.ts";
 
 export class AppConversationMessageProjector {
+  private readonly appChatIdByExternalSessionId = new Map<string, string>();
+
   constructor(
     private readonly input: {
       db: Database;
@@ -37,9 +40,10 @@ export class AppConversationMessageProjector {
     if (!session) {
       throw new Error(`Conversation session missing: ${message.session_id}`);
     }
-    this.ensureProjectionChat(binding.external_session_id, session);
+    const chatId = this.appChatIdForExternalSession(binding.external_session_id);
+    this.ensureProjectionChat(chatId, session);
     const messageId = this.existingProjectionMessageId(
-      binding.external_session_id,
+      chatId,
       message,
       text,
     ) ?? `app-projection-${message.id}`;
@@ -65,7 +69,7 @@ export class AppConversationMessageProjector {
         retryable = 0
     `).run(
       messageId,
-      binding.external_session_id,
+      chatId,
       message.turn_id,
       message.session_id,
       message.turn_id,
@@ -77,7 +81,8 @@ export class AppConversationMessageProjector {
       now,
     );
     this.input.db.query("UPDATE chats SET updated_at = ? WHERE id = ?")
-      .run(now, binding.external_session_id);
+      .run(now, chatId);
+    this.pruneShadowHintChat(binding.external_session_id, chatId, session.id);
     return 1;
   }
 
@@ -107,18 +112,74 @@ export class AppConversationMessageProjector {
     }
   }
 
+  appChatIdForExternalSession(externalSessionId: string): string {
+    const cached = this.appChatIdByExternalSessionId.get(externalSessionId);
+    if (cached) return cached;
+    const chatId = appChatIdForConversationExternalSession(
+      this.input.db,
+      externalSessionId,
+    );
+    this.appChatIdByExternalSessionId.set(externalSessionId, chatId);
+    return chatId;
+  }
+
+  private pruneShadowHintChat(
+    externalSessionId: string,
+    chatId: string,
+    conversationSessionId: string,
+  ): void {
+    if (externalSessionId === chatId) return;
+    this.input.db.query(`
+      UPDATE chats
+      SET conversation_session_id = NULL
+      WHERE id = ?
+        AND conversation_session_id = ?
+    `).run(externalSessionId, conversationSessionId);
+    this.input.db.query(`
+      DELETE FROM chats
+      WHERE id = ?
+        AND title = 'Projected conversation'
+        AND conversation_session_id IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM messages
+          WHERE messages.chat_id = chats.id
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM turns
+          WHERE turns.chat_id = chats.id
+        )
+    `).run(externalSessionId);
+  }
+
   private existingProjectionMessageId(
     chatId: string,
     message: ConversationMessageWithParts,
     text: string,
   ): string | null {
+    const matchingAppRow = this.existingUnboundAppMessageId(chatId, message, text);
     const byConversationId = this.input.db.query<{ id: string }, [string]>(`
       SELECT id
       FROM messages
       WHERE conversation_message_id = ?
       LIMIT 1
     `).get(message.id);
+    if (matchingAppRow) {
+      if (byConversationId && byConversationId.id !== matchingAppRow) {
+        this.removeDuplicateProjectionMessage(byConversationId.id, matchingAppRow);
+      }
+      return matchingAppRow;
+    }
     if (byConversationId) return byConversationId.id;
+    return null;
+  }
+
+  private existingUnboundAppMessageId(
+    chatId: string,
+    message: ConversationMessageWithParts,
+    text: string,
+  ): string | null {
     if (!message.turn_id) return null;
     return this.input.db.query<{ id: string }, [string, string, string, string]>(`
       SELECT id
@@ -136,6 +197,25 @@ export class AppConversationMessageProjector {
       appRoleForConversationRole(message.role),
       text,
     )?.id ?? null;
+  }
+
+  private removeDuplicateProjectionMessage(
+    duplicateMessageId: string,
+    targetMessageId: string,
+  ): void {
+    this.input.db.query(`
+      INSERT OR IGNORE INTO message_attachments (message_id, file_id, position)
+      SELECT ?, file_id, position
+      FROM message_attachments
+      WHERE message_id = ?
+    `).run(targetMessageId, duplicateMessageId);
+    this.input.db.query(`
+      UPDATE message_files
+      SET message_id = ?
+      WHERE message_id = ?
+    `).run(targetMessageId, duplicateMessageId);
+    this.input.db.query("DELETE FROM messages WHERE id = ?")
+      .run(duplicateMessageId);
   }
 }
 

@@ -13,6 +13,7 @@ import type {
   ConversationProjectionReader,
 } from "../../packages/butler-agent/src/agent/conversation/types.ts";
 import { AppServerStore } from "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
+import { sessionHintForRow } from "../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
 
 let tempDir = "";
 
@@ -162,6 +163,232 @@ test("app conversation projection replays canonical messages with refs idempoten
   });
   expect(userRowAfterRebuild?.conversation_message_id).toBe(user.id);
   expect(turnRowAfterRebuild?.user_message_id).toBe(existingUser.id);
+
+  conversationStore.close();
+  appStore.db.close();
+});
+
+test("app conversation projection resolves app runtime session hints to existing chats", () => {
+  const conversationStore = createConversationStore();
+  const appStore = new AppServerStore({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    conversationProjectionReader: conversationStore,
+  });
+  const appChatId = "project-sandy-bot-session";
+  const runtimeSessionId = sessionHintForRow(appChatId);
+  appStore.createSession({
+    kind: "chat",
+    title: "Sandy bot",
+    session_hint: appChatId,
+  });
+  const turn = conversationStore.beginTurn({
+    gateway: "app",
+    externalSessionId: runtimeSessionId,
+    sessionId: "cs_app_hint",
+    actor: "user",
+    turnId: "turn-hint",
+    now: "2026-07-02T00:00:00.000Z",
+  });
+  const existingUser = appStore.insertMessage(appChatId, "user", "hello sandy", "sent", {
+    turnId: turn.id,
+  });
+  appStore.db.query(`
+    INSERT INTO turns (
+      id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
+      retryable, cancellable, attempt, created_at, updated_at
+    )
+    VALUES (?, ?, ?, 'delivered', 'Delivered', NULL, 0, 0, 1, ?, ?)
+  `).run(
+    turn.id,
+    appChatId,
+    existingUser.id,
+    "2026-07-02T00:00:00.000Z",
+    "2026-07-02T00:00:00.000Z",
+  );
+  const user = conversationStore.appendUserMessage({
+    sessionId: "cs_app_hint",
+    turnId: turn.id,
+    text: "hello sandy",
+    now: "2026-07-02T00:00:01.000Z",
+  });
+  const assistant = conversationStore.appendAssistantMessage({
+    sessionId: "cs_app_hint",
+    turnId: turn.id,
+    text: "hi sandy",
+    now: "2026-07-02T00:00:02.000Z",
+  });
+
+  const replay = appStore.replayConversationProjection();
+  const runtimeChat = appStore.db.query<{ id: string }, [string]>(
+    "SELECT id FROM chats WHERE id = ?",
+  ).get(runtimeSessionId);
+  const chatRef = appStore.db.query<{ conversation_session_id: string | null }, [string]>(
+    "SELECT conversation_session_id FROM chats WHERE id = ?",
+  ).get(appChatId);
+
+  expect(replay).toMatchObject({
+    ok: true,
+    projected_messages: 2,
+    pending_count: 0,
+  });
+  expect(runtimeChat).toBeNull();
+  expect(chatRef?.conversation_session_id).toBe("cs_app_hint");
+  expect(appStore.listMessages(appChatId).map((message) => ({
+    id: message.id,
+    chat_id: message.chat_id,
+    conversation_message_id: message.conversation_message_id,
+  }))).toEqual([
+    {
+      id: existingUser.id,
+      chat_id: appChatId,
+      conversation_message_id: user.id,
+    },
+    {
+      id: `app-projection-${assistant.id}`,
+      chat_id: appChatId,
+      conversation_message_id: assistant.id,
+    },
+  ]);
+  expect(appStore.getConversationProjectionSessionView("cs_app_hint")?.session_id)
+    .toBe(appChatId);
+  expect(appStore.getConversationProjectionBinding("cs_app_hint")).toEqual({
+    gateway: "app",
+    external_session_id: appChatId,
+    conversation_session_id: "cs_app_hint",
+  });
+  expect(appStore.getConversationProjectionActivityState("cs_app_hint")).toMatchObject({
+    conversation_session_id: "cs_app_hint",
+    app_session_id: appChatId,
+    latest_turn_state: "delivered",
+  });
+
+  const rebuilt = appStore.rebuildConversationProjection("cs_app_hint");
+  expect(rebuilt).toMatchObject({
+    ok: true,
+    projected_messages: 2,
+  });
+  expect(appStore.db.query<{ id: string }, [string]>(
+    "SELECT id FROM chats WHERE id = ?",
+  ).get(runtimeSessionId)).toBeNull();
+
+  conversationStore.close();
+  appStore.db.close();
+});
+
+test("app conversation projection prunes empty runtime hint shadow rows after repair", () => {
+  const conversationStore = createConversationStore();
+  const appStore = new AppServerStore({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    conversationProjectionReader: conversationStore,
+  });
+  const appChatId = "project-existing-shadow";
+  const runtimeSessionId = sessionHintForRow(appChatId);
+  const now = "2026-07-02T00:00:00.000Z";
+  appStore.createSession({
+    kind: "chat",
+    title: "Shadow owner",
+    session_hint: appChatId,
+  });
+  const turn = conversationStore.beginTurn({
+    gateway: "app",
+    externalSessionId: runtimeSessionId,
+    sessionId: "cs_shadow_repair",
+    actor: "user",
+    turnId: "turn-shadow",
+    now,
+  });
+  const user = conversationStore.appendUserMessage({
+    sessionId: "cs_shadow_repair",
+    turnId: turn.id,
+    text: "move me",
+    now: "2026-07-02T00:00:01.000Z",
+  });
+  const assistant = conversationStore.appendAssistantMessage({
+    sessionId: "cs_shadow_repair",
+    turnId: turn.id,
+    text: "moved",
+    now: "2026-07-02T00:00:02.000Z",
+  });
+  const appUser = appStore.insertMessage(appChatId, "user", "move me", "sent", {
+    turnId: turn.id,
+  });
+  const appAssistant = appStore.insertMessage(appChatId, "assistant", "moved", "delivered", {
+    turnId: turn.id,
+  });
+  appStore.db.query(`
+    INSERT INTO chats (
+      id, title, kind, project_id, conversation_session_id, pinned, archived, created_at, updated_at
+    )
+    VALUES (?, 'Projected conversation', 'chat', NULL, 'cs_shadow_repair', 0, 0, ?, ?)
+  `).run(runtimeSessionId, now, now);
+  appStore.db.query(`
+    INSERT INTO messages (
+      id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
+      conversation_message_id, role, text, status, created_at, updated_at,
+      safe_error_code, retryable
+    )
+    VALUES (?, ?, ?, 'cs_shadow_repair', ?, ?, 'assistant', 'moved', 'delivered', ?, ?, NULL, 0)
+  `).run(
+    `app-projection-${assistant.id}`,
+    runtimeSessionId,
+    turn.id,
+    turn.id,
+    assistant.id,
+    now,
+    now,
+  );
+  appStore.db.query(`
+    INSERT INTO messages (
+      id, chat_id, turn_id, conversation_session_id, conversation_turn_id,
+      conversation_message_id, role, text, status, created_at, updated_at,
+      safe_error_code, retryable
+    )
+    VALUES (?, ?, ?, 'cs_shadow_repair', ?, ?, 'user', 'move me', 'sent', ?, ?, NULL, 0)
+  `).run(
+    `app-projection-${user.id}`,
+    runtimeSessionId,
+    turn.id,
+    turn.id,
+    user.id,
+    now,
+    now,
+  );
+
+  const replay = appStore.replayConversationProjection();
+
+  const shadowChat = appStore.db.query<{ conversation_session_id: string | null }, [string]>(
+    "SELECT conversation_session_id FROM chats WHERE id = ?",
+  ).get(runtimeSessionId);
+  const shadowMessageCount = appStore.db.query<{ count: number }, [string]>(`
+    SELECT COUNT(*) AS count
+    FROM messages
+    WHERE chat_id = ?
+      AND conversation_session_id = 'cs_shadow_repair'
+  `).get(runtimeSessionId);
+  expect(replay).toMatchObject({
+    ok: true,
+    projected_messages: 2,
+  });
+  expect(shadowChat).toBeNull();
+  expect(shadowMessageCount?.count).toBe(0);
+  expect(appStore.listSessions().sessions.some((session) =>
+    session.id === runtimeSessionId,
+  )).toBe(false);
+  expect(appStore.getConversationProjectionBinding("cs_shadow_repair")).toEqual({
+    gateway: "app",
+    external_session_id: appChatId,
+    conversation_session_id: "cs_shadow_repair",
+  });
+  expect(appStore.listConversationProjectionMessages("cs_shadow_repair").map((message) => ({
+    id: message.id,
+    chat_id: message.chat_id,
+    conversation_message_id: message.conversation_message_id,
+  }))).toEqual([
+    { id: appUser.id, chat_id: appChatId, conversation_message_id: user.id },
+    { id: appAssistant.id, chat_id: appChatId, conversation_message_id: assistant.id },
+  ]);
 
   conversationStore.close();
   appStore.db.close();

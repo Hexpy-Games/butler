@@ -48,7 +48,7 @@ export interface DeveloperLogSectionView {
 export interface DeveloperLogEntryView {
   schema: "butler.developer-log.v1";
   id: string;
-  kind: "model_turn";
+  kind: "model_turn" | "model_turn_error";
   created_at: string;
   session_id: string;
   turn_id: string | null;

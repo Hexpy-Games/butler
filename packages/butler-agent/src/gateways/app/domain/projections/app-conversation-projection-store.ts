@@ -78,11 +78,12 @@ export class AppConversationProjectionStore {
     let state = this.readState();
     const limit = normalizedLimit(input.limit);
     const events = reader.readProjectionBatch(state.last_outbox_id, limit);
+    const projector = this.messageProjector(reader);
     let processed = 0;
     let projectedMessages = 0;
     for (const event of events) {
       try {
-        projectedMessages += this.projectOutboxEvent(event);
+        projectedMessages += this.projectOutboxEvent(event, projector);
         processed += 1;
         state = this.writeState({
           lastOutboxId: event.outbox_id,
@@ -122,12 +123,15 @@ export class AppConversationProjectionStore {
     };
   }
 
-  projectOutboxEvent(event: ConversationProjectionEvent): number {
+  projectOutboxEvent(
+    event: ConversationProjectionEvent,
+    projector: AppConversationMessageProjector | null = null,
+  ): number {
     if (event.kind !== "conversation.message_committed") return 0;
     const reader = this.requireReader();
     const message = reader.readMessageById(event.payload_ref);
     if (!message) throw new Error(`Conversation message not found: ${event.payload_ref}`);
-    return this.messageProjector(reader).project(message);
+    return (projector ?? this.messageProjector(reader)).project(message);
   }
 
   rebuildSession(conversationSessionId: string): AppConversationProjectionRebuildResult {
@@ -159,7 +163,10 @@ export class AppConversationProjectionStore {
       this.input.db,
       conversationSessionId,
     );
-    projector.ensureProjectionChat(binding.external_session_id, session);
+    projector.ensureProjectionChat(
+      projector.appChatIdForExternalSession(binding.external_session_id),
+      session,
+    );
     let projectedMessages = 0;
     let afterSeq = 0;
     const projectedConversationMessageIds = new Set<string>();
