@@ -13,6 +13,7 @@ export type SettingsSectionId =
   | "mcp"
   | "skills"
   | "usage"
+  | "logs"
   | "personalization"
   | "privacy"
   | "system"
@@ -389,6 +390,69 @@ export interface AppInfoView {
   protocol_version: string;
   developer_mode_available: boolean;
   developer_mode_enabled: boolean;
+}
+
+export interface DeveloperLogSectionView {
+  id: string;
+  title: string;
+  region: string;
+  char_count: number;
+  content: string;
+}
+
+export interface DeveloperLogEntryView {
+  schema: "butler.developer-log.v1";
+  id: string;
+  kind: "model_turn";
+  created_at: string;
+  session_id: string;
+  turn_id: string | null;
+  role: string;
+  transport: string;
+  route: {
+    session_id: string | null;
+    role: string | null;
+    reason: string | null;
+    project_id: string | null;
+  };
+  model: {
+    requested_model_ref: string;
+    provider_id: string | null;
+    runtime_adapter_id: string | null;
+  };
+  context: {
+    live_config_hash: string | null;
+    region_order: readonly string[];
+    sections: DeveloperLogSectionView[];
+    references: Array<{
+      kind: string;
+      id: string;
+      label?: string;
+      metadata?: Record<string, unknown>;
+    }>;
+    prompt_context: string;
+  };
+  request: {
+    input_text: string;
+    metadata: Record<string, unknown>;
+  };
+  response: {
+    text: string;
+    raw: unknown;
+  };
+  privacy: {
+    raw_text_included: true;
+    secrets_redacted: true;
+    local_only: true;
+  };
+}
+
+export interface DeveloperLogListView {
+  developer_mode_enabled: true;
+  entries: DeveloperLogEntryView[];
+  pagination: PaginationView;
+  generated_at: string;
+  raw_text_included: true;
 }
 
 export interface SettingsView {

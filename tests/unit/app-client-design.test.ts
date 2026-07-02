@@ -732,6 +732,8 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(preload).toContain('ipcRenderer.invoke("butler:save-message-file"');
   expect(preload).toContain("getContextDetails:");
   expect(preload).toContain("getUsageMonitor:");
+  expect(preload).toContain("listDeveloperLogs:");
+  expect(preload).toContain('"/developer-logs"');
   expect(preload).toContain("exportTranscript:");
   expect(preload).toContain("listAutomations:");
   expect(preload).toContain("createAutomation:");

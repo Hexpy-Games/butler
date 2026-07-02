@@ -2,7 +2,8 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { api, setDeveloperMode } from "@/app/api.ts";
 import { appCopy } from "@/app/copy.ts";
 import { notifyError, notifyStatus } from "@/app/notifications.ts";
-import type { AppInfoView } from "@/app/types.ts";
+import { useButlerStore } from "@/app/store.ts";
+import type { AppInfoView, SettingsView } from "@/app/types.ts";
 import { SettingsField, Switch, Typo } from "@/butler-ds";
 import { SettingsSection } from "./SettingsFormComponents";
 
@@ -14,6 +15,7 @@ const readOnlyValueStyle: CSSProperties = {
 export function AboutSettings() {
   const [info, setInfo] = useState<AppInfoView | null>(null);
   const [saving, setSaving] = useState(false);
+  const setSettings = useButlerStore((state) => state.setSettings);
   const settingsCopy = appCopy.settings;
 
   useEffect(() => {
@@ -38,14 +40,31 @@ export function AboutSettings() {
 
   async function updateDeveloperMode(enabled: boolean) {
     setSaving(true);
+    let nativeApplied = false;
     try {
-      const next = await setDeveloperMode(enabled);
-      setInfo(next);
+      await setDeveloperMode(enabled);
+      nativeApplied = true;
+      const updatedSettings = await api<SettingsView>("/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ diagnostics_enabled: enabled }),
+      });
+      const refreshedInfo = await api<AppInfoView>("/app-info");
+      setInfo(refreshedInfo);
+      setSettings(updatedSettings);
       notifyStatus(settingsCopy.saved, {
         id: "developer-mode",
         tone: "ok",
       });
     } catch (error) {
+      if (nativeApplied) {
+        try {
+          const rolledBackInfo = await setDeveloperMode(!enabled);
+          setInfo(rolledBackInfo);
+        } catch {
+          const refreshedInfo = await api<AppInfoView>("/app-info").catch(() => null);
+          if (refreshedInfo) setInfo(refreshedInfo);
+        }
+      }
       notifyError(error, settingsCopy.errors.updateDeveloperMode, {
         id: "developer-mode",
       });
