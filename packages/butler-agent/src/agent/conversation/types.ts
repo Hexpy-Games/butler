@@ -175,3 +175,14 @@ export interface PromptMaterialInput {
   sessionId: string;
   tailLimit?: number;
 }
+
+export interface ConversationWriter {
+  beginTurn(input: BeginTurnInput): ConversationTurn;
+  appendUserMessage(input: Omit<AppendMessageInput, "role">): ConversationMessageWithParts;
+  appendAssistantMessage(input: Omit<AppendMessageInput, "role">): ConversationMessageWithParts;
+  appendToolCall(input: AppendToolPartInput): ConversationPart;
+  appendToolResult(input: AppendToolPartInput): ConversationPart;
+  finalizeTurn(input: FinalizeTurnInput): ConversationTurn;
+  writeSummary(input: ConversationSummaryInput): ConversationSummary;
+  getSessionByGatewayBinding(gateway: string, externalSessionId: string): ConversationSession | null;
+}

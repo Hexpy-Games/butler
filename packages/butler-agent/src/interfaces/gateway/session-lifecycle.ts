@@ -15,6 +15,7 @@ import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
 import { normalizeModelRef, type SessionTitleGenerator } from "../../agent/output/session-title.ts";
 import { StewardSessionActor } from "./steward-session.ts";
 import { recordSystemEvent } from "../../test-support/harness/durable-session-transcript.ts";
+import type { ConversationWriter } from "../../agent/conversation/types.ts";
 
 export interface SessionLifecycleServiceOptions {
   store: SessionBindingStore;
@@ -38,6 +39,8 @@ export interface SessionLifecycleServiceOptions {
     route?: GatewayRoute;
     event: RuntimeTurnEventInput;
   }) => Promise<void>;
+  conversationWriter?: ConversationWriter;
+  conversationMetricsButlerData?: string;
   sessionTitleGenerator?: SessionTitleGenerator | false;
   openingDecisionTimeoutMs?: number;
   now?: () => string;
@@ -129,6 +132,8 @@ export class SessionLifecycleService {
         : undefined,
       deliverIntermediate: this.options.deliverIntermediate,
       deliverTurnEvent: this.options.deliverTurnEvent,
+      conversationWriter: this.options.conversationWriter,
+      conversationMetricsButlerData: this.options.conversationMetricsButlerData,
       generateSessionTitle: this.options.sessionTitleGenerator
         ? async ({ binding, envelope }: {
             binding: StoredSessionBinding;
