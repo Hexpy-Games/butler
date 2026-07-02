@@ -14,6 +14,9 @@ export interface MessageReadModelRow {
   id: string;
   chat_id: string;
   turn_id: string | null;
+  conversation_session_id: string | null;
+  conversation_turn_id: string | null;
+  conversation_message_id: string | null;
   role: MessageRole;
   text: string;
   status: MessageStatus;
@@ -58,6 +61,9 @@ export function messageFromRow(
     id: row.id,
     chat_id: row.chat_id,
     turn_id: row.turn_id ?? undefined,
+    conversation_session_id: row.conversation_session_id ?? undefined,
+    conversation_turn_id: row.conversation_turn_id ?? undefined,
+    conversation_message_id: row.conversation_message_id ?? undefined,
     role: row.role,
     text: row.text,
     status: row.status,

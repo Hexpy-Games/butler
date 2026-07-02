@@ -21,6 +21,7 @@ import { AppRuntimeInfoStore } from "../../domain/runtime/runtime-info-store.ts"
 import { AppSystemMonitorStore } from "../../domain/runtime/system-monitor-store.ts";
 import { AppNavigationStore } from "../../domain/sessions/navigation-store.ts";
 import { AppNewChatBriefingStore } from "../../domain/sessions/new-chat-briefing-store.ts";
+import { AppConversationProjectionStore } from "../../domain/projections/app-conversation-projection-store.ts";
 import { AppSessionCatalogStore } from "../../domain/sessions/session-catalog-store.ts";
 import { AppSessionControlsStore } from "../../domain/sessions/session-controls-store.ts";
 import { createAppSessionModuleGraph } from "../../domain/sessions/session-module-graph.ts";
@@ -268,6 +269,10 @@ export function initializeAppStoreKernel(
     },
   });
   migrateAppStoreSchema(kernel.db);
+  kernel.conversationProjection = new AppConversationProjectionStore({
+    db: kernel.db,
+    conversationReader: options.conversationProjectionReader,
+  });
   kernel.projectWorkspaceRoot =
     kernel.settingsPersistence.readStoredProjectWorkspaceRoot() ??
     kernel.projectWorkspaceRoot;

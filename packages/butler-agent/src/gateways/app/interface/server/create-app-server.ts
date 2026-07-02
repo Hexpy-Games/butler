@@ -1,6 +1,10 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  createConversationProjectionReader,
+  type ManagedConversationProjectionReader,
+} from "../../../../agent/conversation/projection-reader.ts";
+import {
   AppResponderTimeoutError,
   AppServerStore,
   AppStoreOperationError,
@@ -34,7 +38,11 @@ const MAX_BUN_IDLE_TIMEOUT_SECONDS = 255;
 export function createAppServer(
   options: CreateAppServerOptions = {},
 ): AppServerHandle {
-  const store = createStore(options);
+  const ownedConversationReader = createOwnedConversationReader(options);
+  const store = createStore(
+    options,
+    options.conversationProjectionReader ?? ownedConversationReader?.reader,
+  );
   const messageRateLimiter = new FixedWindowRateLimiter(
     options.messageRateLimit,
   );
@@ -89,11 +97,15 @@ export function createAppServer(
       if (automationScheduler) clearInterval(automationScheduler);
       server.stop();
       store.close();
+      ownedConversationReader?.close();
     },
   };
 }
 
-function createStore(options: CreateAppServerOptions): AppServerStore {
+function createStore(
+  options: CreateAppServerOptions,
+  conversationProjectionReader?: CreateAppServerOptions["conversationProjectionReader"],
+): AppServerStore {
   return new AppServerStore({
     dbPath: options.dbPath,
     butlerData: options.butlerData,
@@ -105,7 +117,15 @@ function createStore(options: CreateAppServerOptions): AppServerStore {
     projectWorkspaceRoot: options.projectWorkspaceRoot,
     folderSelectionSecret: options.folderSelectionSecret,
     serviceClient: options.serviceClient,
+    conversationProjectionReader,
   });
+}
+
+function createOwnedConversationReader(
+  options: CreateAppServerOptions,
+): ManagedConversationProjectionReader | null {
+  if (options.conversationProjectionReader || !options.butlerData) return null;
+  return createConversationProjectionReader({ butlerData: options.butlerData });
 }
 
 function resolveUiRoot(options: CreateAppServerOptions): string {

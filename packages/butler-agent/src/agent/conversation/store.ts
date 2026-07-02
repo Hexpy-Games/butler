@@ -20,6 +20,7 @@ import type {
   ConversationMessage,
   ConversationMessageWithParts,
   ConversationPart,
+  ConversationBinding,
   ConversationProjectionEvent,
   ConversationRole,
   ConversationSession,
@@ -166,6 +167,50 @@ export class AgentConversationStore {
       WHERE b.gateway = ? AND b.external_session_id = ?
       LIMIT 1
     `).get(gateway, externalSessionId) ?? null;
+  }
+
+  getSession(sessionId: string): ConversationSession | null {
+    return this.db.query<ConversationSession, [string]>(`
+      SELECT *
+      FROM conversation_sessions
+      WHERE id = ?
+      LIMIT 1
+    `).get(sessionId) ?? null;
+  }
+
+  getGatewayBindingForConversation(sessionId: string, gateway: string): ConversationBinding | null {
+    return this.db.query<ConversationBinding, [string, string]>(`
+      SELECT gateway, external_session_id, conversation_session_id, created_at
+      FROM conversation_bindings
+      WHERE conversation_session_id = ? AND gateway = ?
+      LIMIT 1
+    `).get(sessionId, gateway) ?? null;
+  }
+
+  readMessageById(messageId: string): ConversationMessageWithParts | null {
+    const row = this.internals.messageById(messageId);
+    return row ? this.internals.hydrateMessage(row) : null;
+  }
+
+  readProjectionMessages(
+    sessionId: string,
+    input: { afterSeq?: number; limit?: number } = {},
+  ): ConversationMessageWithParts[] {
+    const capped = normalizeLimit(input.limit ?? 500, 500, 1000);
+    const afterSeq = Number.isFinite(input.afterSeq)
+      ? Math.max(0, Math.floor(input.afterSeq!))
+      : 0;
+    const rows = this.db.query<MessageRow, [string, number, number]>(`
+      SELECT *
+      FROM conversation_messages
+      WHERE session_id = ?
+        AND seq > ?
+        AND compacted_by_summary_id IS NULL
+        AND status != 'compacted'
+      ORDER BY seq ASC
+      LIMIT ?
+    `).all(sessionId, afterSeq, capped);
+    return rows.map((row) => this.internals.hydrateMessage(row));
   }
 
   readSemanticTail(sessionId: string, limit = 20): ConversationMessageWithParts[] {
