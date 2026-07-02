@@ -30,11 +30,40 @@ export function runtimeTurnEventFromAppOutboundMetadata(
   return {
     kind: kind as RuntimeTurnEventInput["kind"],
     ...(event.visibility === "internal" ? { visibility: "internal" as const } : {}),
-    ...(isRecord(event.payload) ? { payload: event.payload } : {}),
+    ...(isRecord(event.payload)
+      ? { payload: normalizeReplayTurnEventPayload(kind, event.payload) }
+      : {}),
     ...(safeOptionalShortText(event.createdAt)
       ? { createdAt: safeOptionalShortText(event.createdAt) }
       : {}),
   };
+}
+
+function normalizeReplayTurnEventPayload(
+  kind: string,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!kind.startsWith("model.stream.")) return payload;
+  const normalized = { ...payload };
+  coerceNonNegativeIntegerField(normalized, "sequence");
+  if (kind === "model.stream.reasoning_delta") {
+    coerceNonNegativeIntegerField(normalized, "charCount");
+  }
+  if (kind === "model.stream.tool_call_delta") {
+    coerceNonNegativeIntegerField(normalized, "callIndex");
+    coerceNonNegativeIntegerField(normalized, "argumentCharCount");
+  }
+  return normalized;
+}
+
+function coerceNonNegativeIntegerField(
+  payload: Record<string, unknown>,
+  key: string,
+): void {
+  const value = payload[key];
+  if (typeof value !== "string" || !/^\d+$/u.test(value)) return;
+  const parsed = Number(value);
+  if (Number.isSafeInteger(parsed)) payload[key] = parsed;
 }
 
 export function loadedSkillNamesFromTranscriptEvent(
