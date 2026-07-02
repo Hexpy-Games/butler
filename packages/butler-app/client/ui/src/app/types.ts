@@ -27,6 +27,7 @@ export type RuntimeDeliveryState =
   | "cancelled"
   | "delivered"
   | "delivered_with_limitations"
+  | "delivered_with_continuation"
   | "failed_system";
 
 export interface StatusPill {

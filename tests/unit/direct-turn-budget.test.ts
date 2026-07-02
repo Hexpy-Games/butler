@@ -4,8 +4,10 @@ import {
   beforeDirectTurnModelRequest,
   createDirectTurnBudget,
   directTurnBudgetState,
+  hydrateDirectTurnBudget,
   promptUsageSectionsFromPrompt,
   recentConversationBudgetForTurn,
+  snapshotDirectTurnBudget,
 } from "../../packages/butler-agent/src/agent/turn/direct-turn-budget.ts";
 
 test("direct turn budget starts with the runtime request and token limits", () => {
@@ -53,6 +55,34 @@ test("direct turn budget reports warning and exhaustion from real usage mutation
   }
 
   expect(directTurnBudgetState(budget).status).toBe("exhausted");
+});
+
+test("direct turn budget hydrates from a continuation snapshot", () => {
+  const budget = createDirectTurnBudget("turn-budget-snapshot");
+  for (let index = 0; index < 3; index += 1) {
+    beforeDirectTurnModelRequest(budget);
+  }
+  addDirectTurnUsage({
+    budget,
+    promptTokens: 1000,
+    cachedTokens: 800,
+    outputTokens: 120,
+    totalTokens: 1120,
+  });
+
+  const hydrated = hydrateDirectTurnBudget(
+    "turn-budget-snapshot",
+    snapshotDirectTurnBudget(budget),
+  );
+
+  expect(directTurnBudgetState(hydrated)).toMatchObject({
+    requestCount: 3,
+    promptTokens: 1000,
+    cachedTokens: 800,
+    outputTokens: 120,
+    totalTokens: 1120,
+    maxRequests: 32,
+  });
 });
 
 test("prompt usage attribution keeps only populated prompt sections", () => {

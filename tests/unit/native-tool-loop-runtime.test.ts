@@ -54,6 +54,7 @@ import {
   evidenceTranscriptToolCallArgumentsProjection,
   evidenceTranscriptToolResultProjection,
 } from "../../packages/butler-agent/src/agent/output/evidence/transcript-result.ts";
+import { createTurnContextAtomId } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 let tempDir = "";
@@ -9080,9 +9081,9 @@ test("native runtime continues instead of delivering while direct todo work is u
   expect(continuationPrompt.toLowerCase()).not.toContain("interruption");
   expect(result.text).not.toContain("Direct work remains incomplete");
   expect(result.text).toContain("검토 완료");
-  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
-  expect(events.find((event) => event.kind === "turn.observation")?.payload)
-    .toMatchObject({ kind: "completion_gap" });
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
+  expect(events.find((event) => event.kind === "turn.observation")).toBeUndefined();
   const toolCalls = readTranscript("butler/main/open-direct-work-final-guard")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
@@ -9095,7 +9096,7 @@ test("native runtime continues instead of delivering while direct todo work is u
   expect(streams[0].state).toBe("complete");
 });
 
-test("native runtime does not keep extending direct work from finalization", async () => {
+test("native runtime yields recoverable progress instead of extending direct work from finalization", async () => {
   let promptCalls = 0;
   const continuationPrompts: string[] = [];
   const todoForStage = (stage: number) => [
@@ -9194,19 +9195,17 @@ test("native runtime does not keep extending direct work from finalization", asy
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(promptCalls).toBe(4);
-  expect(continuationPrompts).toHaveLength(3);
+  expect(promptCalls).toBe(2);
+  expect(continuationPrompts).toHaveLength(1);
   expect(continuationPrompts[0]).toContain("Direct Work Continuation");
   expect(result.text).not.toContain("Direct work remains incomplete");
-  expect(result.text).toContain("완료했습니다");
+  expect(result.text).toContain("WATL 직접 구현");
+  expect(result.text).toContain("recoverable로 저장했습니다");
+  expect(result.delivery?.delivery_state).toBe("delivered_with_continuation");
   const toolCalls = readTranscript("butler/main/open-direct-work-multi-continuation")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
   expect(toolCalls).toEqual([
-    "update_todo_list",
-    "run_command",
-    "update_todo_list",
-    "run_command",
     "update_todo_list",
     "run_command",
     "update_todo_list",
@@ -9216,10 +9215,10 @@ test("native runtime does not keep extending direct work from finalization", asy
     includeTerminal: true,
   });
   expect(streams).toHaveLength(1);
-  expect(streams[0].state).toBe("complete");
+  expect(streams[0].state).toBe("recoverable");
 });
 
-test("native runtime skips direct work finalization when model request reserve is exhausted", async () => {
+test("native runtime delivers recoverable direct work progress when model request reserve is exhausted", async () => {
   let promptCalls = 0;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
@@ -9268,7 +9267,7 @@ test("native runtime skips direct work finalization when model request reserve i
   });
 
   const events: Array<{ kind: string }> = [];
-  await expect(runtime.runTurn({
+  const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-test",
@@ -9277,11 +9276,111 @@ test("native runtime skips direct work finalization when model request reserve i
       events.push({ kind: event.kind });
     },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
-  })).rejects.toThrow("Turn scheduler yielded");
+  });
 
   expect(promptCalls).toBe(1);
-  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
-  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+  expect(result.text).toContain("예산 경계 직접 작업");
+  expect(result.text).toContain("recoverable로 저장했습니다");
+  expect(result.delivery?.delivery_state).toBe("delivered_with_continuation");
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).toContain("message.final.completed");
+  expect(readOnlyPersistedTurnContextAtom()).toBeNull();
+  const streams = new WorkStreamStore(tempDir).list({
+    sessionId: "butler/main/open-direct-work-budget-reserve",
+    includeTerminal: true,
+  });
+  expect(streams).toHaveLength(1);
+  expect(streams[0].state).toBe("recoverable");
+});
+
+test("native runtime preserves validation limitation when direct work is delivered recoverable", async () => {
+  let promptCalls = 0;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      promptCalls += 1;
+      if (promptCalls !== 1) {
+        throw new Error("direct work finalization should not consume another model request in this test");
+      }
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          title: "검증 실패 직접 작업",
+          todos: [{
+            id: "fix-validation",
+            content: "검증 실패 원인 수정",
+            active_form: "검증 실패 원인 수정 중",
+            status: "in_progress",
+            phase: "execution",
+          }],
+        },
+        rawArguments: JSON.stringify({ title: "검증 실패 직접 작업" }),
+      });
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: 직접 작업의 검증 실패를 확인합니다.",
+          "rationale: 최종 delivery가 검증 실패와 남은 직접 작업을 함께 보존해야 합니다.",
+          "next_step: 실패하는 검증 명령을 실행하고 남은 작업을 recoverable로 남깁니다.",
+        ].join("\n"),
+        toolCalls: [{
+          name: "run_command",
+          args: {
+            command: "printf 'direct validation failed\\n' >&2; exit 1",
+            validation_suite: "direct-validation",
+          },
+        }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: {
+          command: "printf 'direct validation failed\\n' >&2; exit 1",
+          validation_suite: "direct-validation",
+        },
+        rawArguments: JSON.stringify({
+          command: "printf 'direct validation failed\\n' >&2; exit 1",
+          validation_suite: "direct-validation",
+        }),
+      });
+      for (let index = 0; index < 29; index += 1) {
+        input.usageAttribution?.beforeModelRequest?.({ roundIndex: index });
+      }
+      return "검증은 실패했고 직접 작업이 아직 남아 있습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/direct-work-validation-limitation",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "검증 실패까지 포함해 직접 작업 상태를 정리해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(promptCalls).toBe(1);
+  expect(result.delivery?.delivery_state).toBe("delivered_with_continuation");
+  expect(result.delivery?.limitation_codes).toEqual(expect.arrayContaining([
+    "direct_work_continuation",
+    "validation_failed",
+  ]));
+  expect(result.delivery?.limitations).toEqual(expect.arrayContaining([
+    expect.stringContaining("검증 실패 원인 수정"),
+    expect.stringContaining("direct-validation"),
+  ]));
+  const streams = new WorkStreamStore(tempDir).list({
+    sessionId: "butler/main/direct-work-validation-limitation",
+    includeTerminal: true,
+  });
+  expect(streams).toHaveLength(1);
+  expect(streams[0].state).toBe("recoverable");
 });
 
 test("native runtime stops direct work continuation when tools do not make semantic progress", async () => {
@@ -9344,7 +9443,7 @@ test("native runtime stops direct work continuation when tools do not make seman
     });
 
     const events: Array<{ kind: string }> = [];
-    await expect(runtime.runTurn({
+    const result = await runtime.runTurn({
       handle,
       provider: fakeProvider,
       model: "local/gemma-test",
@@ -9353,24 +9452,27 @@ test("native runtime stops direct work continuation when tools do not make seman
         events.push({ kind: event.kind });
       },
       metadata: { runtimePolicy: { completionReview: "disabled" } },
-    })).rejects.toThrow("Turn scheduler yielded");
+    });
 
     expect(promptCalls).toBe(2);
     expect(executedCommands).toEqual(["git status --short"]);
-    expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
-    expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+    expect(result.text).toContain("Issue #2 direct work");
+    expect(result.text).toContain("recoverable로 저장했습니다");
+    expect(result.delivery?.delivery_state).toBe("delivered_with_continuation");
+    expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
+    expect(events.map((event) => event.kind)).toContain("message.final.completed");
     const streams = new WorkStreamStore(tempDir).list({
       sessionId: "butler/main/open-direct-work-no-semantic-progress",
       includeTerminal: true,
     });
-    expect(streams[0]!.state).toBe("executing");
+    expect(streams[0]!.state).toBe("recoverable");
   } finally {
     if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
     else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;
   }
 });
 
-test("native runtime accepts WorkStream FSM transitions as direct work semantic progress", async () => {
+test("native runtime bounds direct work finalization after WorkStream FSM progress", async () => {
   const originalLimit = process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
   process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = "3";
   let promptCalls = 0;
@@ -9510,7 +9612,7 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
     });
 
     const events: Array<{ kind: string }> = [];
-    await expect(runtime.runTurn({
+    const result = await runtime.runTurn({
       handle,
       provider: fakeProvider,
       model: "local/gemma-test",
@@ -9519,25 +9621,27 @@ test("native runtime accepts WorkStream FSM transitions as direct work semantic 
         events.push({ kind: event.kind });
       },
       metadata: { runtimePolicy: { completionReview: "disabled" } },
-    })).rejects.toThrow("Turn scheduler yielded");
+    });
 
-    expect(promptCalls).toBe(3);
-    expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
-    expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+    expect(promptCalls).toBe(2);
+    expect(result.text).toContain("FSM direct work");
+    expect(result.text).toContain("recoverable로 저장했습니다");
+    expect(result.delivery?.delivery_state).toBe("delivered_with_continuation");
+    expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
+    expect(events.map((event) => event.kind)).toContain("message.final.completed");
     const toolCalls = readTranscript("butler/main/open-direct-work-fsm-progress")
       .filter((event) => event.kind === "tool_call")
       .map((event) => event.payload.name);
     expect(toolCalls).toEqual([
       "update_todo_list",
       "update_work_stream_state",
-      "update_todo_list",
     ]);
     const streams = new WorkStreamStore(tempDir).list({
       sessionId: "butler/main/open-direct-work-fsm-progress",
       includeTerminal: true,
     });
     expect(streams).toHaveLength(1);
-    expect(streams[0].state).toBe("reviewing");
+    expect(streams[0].state).toBe("recoverable");
   } finally {
     if (originalLimit === undefined) delete process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
     else process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = originalLimit;
@@ -9721,6 +9825,7 @@ test("native runtime marks interrupted direct WorkStreams recoverable", async ()
 test("native runtime resumes prompt-budget interrupted WorkStreams from durable todo state", async () => {
   const sessionId = "butler/main/prompt-budget-continuation";
   let callCount = 0;
+  let continuationBudgetAtStart: { requestCount: number; maxRequests: number } | undefined;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -9749,11 +9854,15 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
           },
           rawArguments: JSON.stringify({ title: "Sandy style guard validation" }),
         });
+        input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+        input.usageAttribution?.beforeModelRequest?.({ roundIndex: 1 });
         const error = new Error("Prompt usage model-call budget exhausted before provider request");
         error.name = "PromptUsageModelCallBudgetExhaustedError";
         Object.assign(error, { code: "prompt_usage_model_call_budget_exhausted" });
         throw error;
       }
+      continuationBudgetAtStart = input.usageAttribution?.getBudgetState?.() ??
+        input.usageAttribution?.budgetState;
       await input.executeTool({
         name: "update_todo_list",
         args: {
@@ -9814,6 +9923,10 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
   const atom = readOnlyPersistedTurnContextAtom();
   expect(atom).toMatchObject({
     state: "continuing",
+    budgetSnapshot: expect.objectContaining({
+      modelRequestsUsed: 2,
+      maxModelCalls: 32,
+    }),
     unresolvedObservations: [expect.objectContaining({
       kind: "context_compacted",
     })],
@@ -9841,6 +9954,29 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
         status: "pending",
       }),
     ]));
+
+  const turnId = typeof atom?.turnId === "string" ? atom.turnId : "missing-turn-id";
+  const contextAtomId = createTurnContextAtomId(sessionId, turnId);
+  const continuationResult = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "샌디봇 최신세션 W3부터 계속 진행해줘." },
+    metadata: {
+      turnId,
+      schedulerContinuation: {
+        contextAtomId,
+      },
+      runtimePolicy: { completionReview: "disabled" },
+    },
+  });
+
+  expect(callCount).toBe(2);
+  expect(continuationBudgetAtStart).toMatchObject({
+    requestCount: 2,
+    maxRequests: 32,
+  });
+  expect(continuationResult.text).toContain("보존된 W3 작업 상태부터 이어서 검증했습니다");
 });
 
 test("native runtime synthesizes durable WorkStream progress when a compound tool turn skips todo setup", async () => {

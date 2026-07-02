@@ -73,7 +73,8 @@ export class AppUserMessageResponderTurn {
       touchChat: (chatId) => this.input.touchChat(chatId),
       updateTurnDelivered: (turnId, delivery) => {
         const limitedDelivery =
-          delivery?.delivery_state === "delivered_with_limitations";
+          delivery?.delivery_state === "delivered_with_limitations" ||
+          delivery?.delivery_state === "delivered_with_continuation";
         const deliveredTurn = this.input.updateTurnState(turnId, "delivered", {
           safeStatusLabel: limitedDelivery
             ? "Delivered with limitations"

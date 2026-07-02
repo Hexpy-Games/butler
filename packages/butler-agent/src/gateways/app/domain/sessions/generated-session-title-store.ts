@@ -48,7 +48,7 @@ export class AppGeneratedSessionTitleStore {
     `,
       )
       .get(chatId);
-    if (!counts || counts.user_count > 1 || counts.assistant_count > 0) {
+    if (!counts || counts.user_count > 1 || counts.assistant_count > 1) {
       return false;
     }
     const currentTitle = chat.title.trim();

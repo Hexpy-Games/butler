@@ -35,6 +35,7 @@ export function deliveryLimitationMetadataFromRecord(
   );
   if (
     deliveryState !== "delivered_with_limitations" &&
+    deliveryState !== "delivered_with_continuation" &&
     !isContinuationDeliveryState(deliveryState)
   ) {
     return null;
@@ -175,6 +176,7 @@ function safeDeliveryState(value: unknown): AppProjectionDeliveryState | null {
     value === "cancelled" ||
     value === "delivered" ||
     value === "delivered_with_limitations" ||
+    value === "delivered_with_continuation" ||
     value === "failed_system"
   ) {
     return value;
