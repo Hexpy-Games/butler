@@ -9293,6 +9293,96 @@ test("native runtime delivers recoverable direct work progress when model reques
   expect(streams[0].state).toBe("recoverable");
 });
 
+test("native runtime preserves validation limitation when direct work is delivered recoverable", async () => {
+  let promptCalls = 0;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      promptCalls += 1;
+      if (promptCalls !== 1) {
+        throw new Error("direct work finalization should not consume another model request in this test");
+      }
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          title: "검증 실패 직접 작업",
+          todos: [{
+            id: "fix-validation",
+            content: "검증 실패 원인 수정",
+            active_form: "검증 실패 원인 수정 중",
+            status: "in_progress",
+            phase: "execution",
+          }],
+        },
+        rawArguments: JSON.stringify({ title: "검증 실패 직접 작업" }),
+      });
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: 직접 작업의 검증 실패를 확인합니다.",
+          "rationale: 최종 delivery가 검증 실패와 남은 직접 작업을 함께 보존해야 합니다.",
+          "next_step: 실패하는 검증 명령을 실행하고 남은 작업을 recoverable로 남깁니다.",
+        ].join("\n"),
+        toolCalls: [{
+          name: "run_command",
+          args: {
+            command: "printf 'direct validation failed\\n' >&2; exit 1",
+            validation_suite: "direct-validation",
+          },
+        }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: {
+          command: "printf 'direct validation failed\\n' >&2; exit 1",
+          validation_suite: "direct-validation",
+        },
+        rawArguments: JSON.stringify({
+          command: "printf 'direct validation failed\\n' >&2; exit 1",
+          validation_suite: "direct-validation",
+        }),
+      });
+      for (let index = 0; index < 29; index += 1) {
+        input.usageAttribution?.beforeModelRequest?.({ roundIndex: index });
+      }
+      return "검증은 실패했고 직접 작업이 아직 남아 있습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/main/direct-work-validation-limitation",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "검증 실패까지 포함해 직접 작업 상태를 정리해줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(promptCalls).toBe(1);
+  expect(result.delivery?.delivery_state).toBe("delivered_with_continuation");
+  expect(result.delivery?.limitation_codes).toEqual(expect.arrayContaining([
+    "direct_work_continuation",
+    "validation_failed",
+  ]));
+  expect(result.delivery?.limitations).toEqual(expect.arrayContaining([
+    expect.stringContaining("검증 실패 원인 수정"),
+    expect.stringContaining("direct-validation"),
+  ]));
+  const streams = new WorkStreamStore(tempDir).list({
+    sessionId: "butler/main/direct-work-validation-limitation",
+    includeTerminal: true,
+  });
+  expect(streams).toHaveLength(1);
+  expect(streams[0].state).toBe("recoverable");
+});
+
 test("native runtime stops direct work continuation when tools do not make semantic progress", async () => {
   const originalLimit = process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS;
   process.env.BUTLER_DIRECT_WORK_CONTINUATION_ATTEMPTS = "3";
