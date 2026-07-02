@@ -915,6 +915,30 @@ test("app session actor keeps acknowledgement when runtime fails", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const runtime = new FailingRuntime();
   const turnEvents: string[] = [];
+  const developerLogStore = new DeveloperLogStore({ butlerData: tempDir });
+  const promptAssembler = {
+    buildContextAssembly: () => ({
+      staticContext: [],
+      liveConfiguration: [],
+      runtimeState: [{
+        id: "runtime-state",
+        title: "Runtime State",
+        region: "runtime_state",
+        content: "Session ID: butler/main",
+      }],
+      workingContext: [],
+      retrievedContext: [],
+      currentInput: [{
+        id: "inbound-message",
+        title: "Current User Input",
+        region: "current_input",
+        content: "Message Text: hello",
+      }],
+      references: [],
+      liveConfigHash: "failed-devlog-hash",
+    }),
+    renderTurnContext: () => "Live Configuration Hash: failed-devlog-hash\n\nMessage Text: hello",
+  } as unknown as PromptAssembler;
   store.upsert({
     sessionId: "butler/main",
     role: "butler",
@@ -935,6 +959,9 @@ test("app session actor keeps acknowledgement when runtime fails", async () => {
     runtime,
     provider: fakeProvider,
     systemPromptFactory: () => "You are Butler.",
+    promptAssembler,
+    developerLogStore,
+    developerDiagnosticsEnabled: () => true,
     deliverTurnEvent: async ({ event }) => {
       turnEvents.push(event.kind);
     },
@@ -947,6 +974,24 @@ test("app session actor keeps acknowledgement when runtime fails", async () => {
 
   expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
   expect(store.getBySessionId("butler/main")?.lifecycleState).toBe("crashed");
+  const logs = developerLogStore.list({ kind: "model_turn_error" });
+  expect(logs.total).toBe(1);
+  expect(logs.entries[0]).toMatchObject({
+    kind: "model_turn_error",
+    session_id: "butler/main",
+    turn_id: "turn-runtime-fails",
+    context: { live_config_hash: "failed-devlog-hash" },
+    response: {
+      text: "Butler could not complete this turn.",
+      raw: {
+        failure: {
+          code: "gateway_failed",
+          message: "Butler could not complete this turn.",
+        },
+      },
+    },
+  });
+  expect(logs.entries[0]?.context.prompt_context).toContain("Message Text: hello");
   store.close();
 });
 
