@@ -38,6 +38,7 @@ import { WorkOrchestrationStore } from "../../packages/butler-agent/src/agent/wo
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { deliveredWithLimitationsState } from "../../packages/butler-agent/src/agent/turn/runtime-delivery-state.ts";
+import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-store.ts";
 import {
   discoverLocalModels,
   upsertLocalModelConfig,
@@ -469,9 +470,83 @@ test("app server exposes app info metadata", async () => {
       version: packageVersion,
       repository_url: "https://github.com/Hexpy-Games/butler",
       protocol_version: "butler.app.v1",
-      developer_mode_available: false,
+      developer_mode_available: true,
       developer_mode_enabled: false,
     });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app server gates developer model logs behind developer mode", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    butlerHome: process.cwd(),
+    port: 0,
+  });
+  try {
+    const disabled = await fetch(`${server.url}developer-logs`);
+    expect(disabled.status).toBe(403);
+    const disabledBody = await disabled.json();
+    expect(disabledBody.error.code).toBe("developer_mode_required");
+
+    await patchJson(`${server.url}settings`, { diagnostics_enabled: true });
+    const store = new DeveloperLogStore({ butlerData: tempDir });
+    store.appendModelTurn({
+      binding: {
+        sessionId: "session-devlog",
+        role: "butler",
+        workspacePath: process.cwd(),
+        runtimeAdapterId: "runtime-test",
+        modelProviderId: "provider-test",
+        modelRef: "provider-test/model-a",
+        transportBindings: [],
+        lifecycleState: "active",
+        createdAt: "2026-07-02T00:00:00.000Z",
+        updatedAt: "2026-07-02T00:00:00.000Z",
+      },
+      envelope: {
+        eventId: "event-devlog",
+        transport: "app",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        sender: { id: "user-devlog" },
+        message: {
+          id: "msg-devlog",
+          text: "hello OPENAI_API_KEY=secret-value",
+          timestamp: "2026-07-02T00:00:00.000Z",
+        },
+        routingHints: { turnId: "turn-devlog" },
+      },
+      contextAssembly: {
+        staticContext: [],
+        liveConfiguration: [],
+        runtimeState: [{
+          id: "runtime-state",
+          title: "Runtime State",
+          region: "runtime_state",
+          content: "Authorization: Bearer abc123",
+        }],
+        workingContext: [],
+        retrievedContext: [],
+        currentInput: [],
+        references: [],
+        liveConfigHash: "hash-devlog",
+      },
+      promptContext: "Authorization: Bearer abc123",
+      result: {
+        text: "done",
+        raw: { api_key: "secret-value", ok: true },
+      },
+      timestamp: "2026-07-02T00:00:01.000Z",
+    });
+
+    const logs = await getJson(`${server.url}developer-logs?query=model-a`);
+    expect(logs.data.entries).toHaveLength(1);
+    expect(logs.data.entries[0].turn_id).toBe("turn-devlog");
+    expect(logs.data.entries[0].context.prompt_context).toContain("[REDACTED]");
+    expect(logs.data.entries[0].response.raw.api_key).toBe("[REDACTED]");
   } finally {
     server.stop();
   }
