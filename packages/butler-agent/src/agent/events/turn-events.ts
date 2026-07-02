@@ -194,6 +194,7 @@ export function createAgentTurnEvent(input: AgentTurnEventInput): AgentTurnEvent
         input.payload ??
         {},
       input.visibility ?? "public",
+      input.kind,
     ),
   };
 }
@@ -220,12 +221,14 @@ export function normalizeAgentTurnEvent(value: unknown): AgentTurnEvent | null {
 export function sanitizeTurnEventPayload(
   payload: Record<string, unknown>,
   visibility: AgentTurnEventVisibility = "public",
+  kind?: string,
 ): Record<string, unknown> {
   if (visibility === "internal") return jsonSafeRecord(payload);
+  const preserveProviderStreamNumbers = kind?.startsWith("model.stream.") === true;
   const sanitized: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(payload)) {
     if (key === "operatorSummary") continue;
-    sanitized[key] = sanitizePublicPayloadValue(value, key);
+    sanitized[key] = sanitizePublicPayloadValue(value, key, preserveProviderStreamNumbers);
   }
   return sanitized;
 }
@@ -487,22 +490,38 @@ export const TURN_EVENT_COMPATIBILITY_MAPPINGS = [
   { source: "message.created assistant", target: "message.final.completed plus canonical message record" },
 ] as const;
 
-function sanitizePublicPayloadValue(value: unknown, key: string): unknown {
+function sanitizePublicPayloadValue(
+  value: unknown,
+  key: string,
+  preserveProviderStreamNumbers = false,
+): unknown {
   if (key === "retryable" && typeof value === "boolean") return value;
   if (key === "firstVisible" && typeof value === "boolean") return value;
   if (key === "latencyMs") return optionalNonNegativeInteger(value) ?? null;
+  if (preserveProviderStreamNumbers && (
+    key === "sequence" ||
+    key === "charCount" ||
+    key === "callIndex" ||
+    key === "argumentCharCount"
+  )) {
+    return optionalNonNegativeInteger(value) ?? null;
+  }
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return sanitizePublicText(value, decisionPayloadKey(key) ? "" : fallbackLabel(key));
   }
   if (Array.isArray(value)) {
     return value.slice(0, 12).map((item, index) =>
-      sanitizePublicPayloadValue(item, `${key}_${index}`),
+      sanitizePublicPayloadValue(item, `${key}_${index}`, preserveProviderStreamNumbers),
     );
   }
   if (isRecord(value)) {
     const sanitized: Record<string, unknown> = {};
     for (const [childKey, childValue] of Object.entries(value)) {
-      sanitized[childKey] = sanitizePublicPayloadValue(childValue, childKey);
+      sanitized[childKey] = sanitizePublicPayloadValue(
+        childValue,
+        childKey,
+        preserveProviderStreamNumbers,
+      );
     }
     return sanitized;
   }
