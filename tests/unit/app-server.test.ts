@@ -541,12 +541,57 @@ test("app server gates developer model logs behind developer mode", async () => 
       },
       timestamp: "2026-07-02T00:00:01.000Z",
     });
+    store.appendModelTurnError({
+      kind: "model_turn_error",
+      binding: {
+        sessionId: "session-devlog",
+        role: "butler",
+        workspacePath: process.cwd(),
+        runtimeAdapterId: "runtime-test",
+        modelProviderId: "provider-test",
+        modelRef: "provider-test/model-a",
+        transportBindings: [],
+        lifecycleState: "active",
+        createdAt: "2026-07-02T00:00:00.000Z",
+        updatedAt: "2026-07-02T00:00:00.000Z",
+      },
+      envelope: {
+        eventId: "event-devlog-error",
+        transport: "app",
+        accountId: "local",
+        peer: { kind: "dm", id: "general" },
+        sender: { id: "user-devlog" },
+        message: {
+          id: "msg-devlog-error",
+          text: "hello",
+          timestamp: "2026-07-02T00:00:00.000Z",
+        },
+        routingHints: { turnId: "turn-devlog-error" },
+      },
+      promptContext: "prompt for failed turn",
+      failure: {
+        code: "provider_rate_limited",
+        message: "Provider returned HTTP 429",
+        statusCode: 429,
+        retryable: true,
+      },
+      diagnostics: {
+        code: "provider_rate_limited",
+      },
+      timestamp: "2026-07-02T00:00:02.000Z",
+    });
 
-    const logs = await getJson(`${server.url}developer-logs?query=model-a`);
+    const logs = await getJson(`${server.url}developer-logs?kind=model_turn&query=model-a`);
     expect(logs.data.entries).toHaveLength(1);
     expect(logs.data.entries[0].turn_id).toBe("turn-devlog");
     expect(logs.data.entries[0].context.prompt_context).toContain("[REDACTED]");
     expect(logs.data.entries[0].response.raw.api_key).toBe("[REDACTED]");
+    const errorLogs = await getJson(
+      `${server.url}developer-logs?kind=model_turn_error&query=provider_rate_limited`,
+    );
+    expect(errorLogs.data.entries).toHaveLength(1);
+    expect(errorLogs.data.entries[0].kind).toBe("model_turn_error");
+    expect(errorLogs.data.entries[0].turn_id).toBe("turn-devlog-error");
   } finally {
     server.stop();
   }

@@ -51,7 +51,9 @@ import { ConversationAdmissionTurn } from "../../agent/conversation/session-admi
 import { INTERNAL_CONVERSATION_TURN_EVENT_KINDS } from "../../agent/conversation/admission-kinds.ts";
 import type { ConversationWriter } from "../../agent/conversation/types.ts";
 import type { ContextAssembly } from "../../agent/prompt/prompt-assembler.ts";
-import type { DeveloperLogTurnCaptureInput } from "../../operations/diagnostics/developer-log-store.ts";
+import type {
+  DeveloperLogCaptureInput,
+} from "../../operations/diagnostics/developer-log-store.ts";
 
 interface SessionActorOptions {
   sessionId: string;
@@ -69,9 +71,7 @@ interface SessionActorOptions {
     promptContext?: string;
     contextAssembly?: ContextAssembly;
   } | undefined;
-  captureDeveloperModelTurn?: (
-    input: DeveloperLogTurnCaptureInput,
-  ) => void;
+  captureDeveloperModelTurn?: (input: DeveloperLogCaptureInput) => void;
   deliverIntermediate?: (input: {
     binding: StoredSessionBinding;
     envelope: InboundEnvelope;
@@ -433,6 +433,10 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       envelope.message.timestamp || this.options.now?.() || defaultNow();
     const schedulerContinuation = schedulerContinuationMetadata(envelope);
     let conversationAdmission: ConversationAdmissionTurn | null = null;
+    let openingDecisionId: string | undefined;
+    let promptContext: string | undefined;
+    let contextAssembly: ContextAssembly | undefined;
+    let developerLogBinding = binding;
 
     try {
       const admitsSemanticConversation = this.shouldAdmitSemanticConversation(envelope);
@@ -464,7 +468,6 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         if (!schedulerContinuation) conversationAdmission?.admitInbound();
       }
 
-      let openingDecisionId: string | undefined;
       if (!schedulerContinuation) {
         const acknowledged = await this.emitTurnAcknowledged({
           binding,
@@ -486,11 +489,11 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         envelope,
         route,
       });
-      const promptContext =
+      promptContext =
         typeof turnContext === "string"
           ? turnContext
           : turnContext?.promptContext;
-      const contextAssembly =
+      contextAssembly =
         typeof turnContext === "string"
           ? undefined
           : turnContext?.contextAssembly;
@@ -514,6 +517,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         promptContext,
       );
       const activeBinding = this.requireBinding();
+      developerLogBinding = activeBinding;
       const handle = await this.ensureRuntimeHandle(activeBinding, timestamp);
       const emitIntermediate = this.options.deliverIntermediate
         ? async (
@@ -673,6 +677,27 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       const safeFailure = safeRuntimeFailure(error);
       const turnId = turnIdFromEnvelope(envelope);
       this.finalizeConversationAdmissionFailure(conversationAdmission, timestamp, error);
+      this.captureDeveloperModelTurn({
+        kind: "model_turn_error",
+        binding: developerLogBinding,
+        envelope,
+        route,
+        contextAssembly,
+        promptContext,
+        failure: safeFailure,
+        diagnostics: diagnosticDetails(error),
+        timestamp,
+        metadata: {
+          source: "gateway-actor",
+          openingDecisionId,
+          schedulerContinuation: schedulerContinuation
+            ? {
+              contextAtomId: schedulerContinuation.contextAtomId,
+              continuationForQueueId: schedulerContinuation.continuationForQueueId,
+            }
+            : undefined,
+        },
+      });
       const isContinuationFailure =
         safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
         isNonPublicContinuationDeliveryError(error) ||
@@ -769,7 +794,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     }
   }
 
-  private captureDeveloperModelTurn(input: DeveloperLogTurnCaptureInput): void {
+  private captureDeveloperModelTurn(input: DeveloperLogCaptureInput): void {
     try {
       this.options.captureDeveloperModelTurn?.(input);
     } catch {
