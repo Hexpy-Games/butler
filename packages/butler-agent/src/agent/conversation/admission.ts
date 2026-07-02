@@ -1,4 +1,11 @@
 import type { AgentTurnEventVisibility } from "../events/turn-events.ts";
+import {
+  safeIdentifier,
+  safeOptionalPublicText,
+  safePublicText,
+  safeToolArgumentKeys,
+  safeToolArgumentRecord,
+} from "../output/evidence/transcript-sanitizers.ts";
 import type {
   ConversationProviderShape,
   ConversationRole,
@@ -88,6 +95,10 @@ export interface AdmissionDecision {
 
 const SAFE_TOOL_CALL_ARGUMENTS_SCHEMA = "butler.tool-call-arguments-transcript.v1";
 const SAFE_TOOL_RESULT_EVIDENCE_SCHEMA = "butler.tool-result-evidence-transcript.v1";
+const EVIDENCE_JSON_MAX_DEPTH = 6;
+const EVIDENCE_JSON_MAX_ARRAY_ITEMS = 48;
+const EVIDENCE_JSON_MAX_OBJECT_ENTRIES = 48;
+const UNSAFE_TOOL_CONTENT_KEY = /\b(?:raw[_-]?arguments(?:[_-]?delta)?|api[_-]?key|token|secret|password|passphrase|authorization|credential|credentials|access[_-]?token|refresh[_-]?token|private[_-]?key|session[_-]?key|cookie|set-cookie)\b/iu;
 
 export function classifyForConversation(input: ConversationAdmissionInput): AdmissionDecision {
   if (input.source === "gateway") return classifyGatewayEvent(input);
@@ -233,12 +244,12 @@ function safeToolContent(payload: Record<string, unknown> | undefined, eventKind
   return compactToolContent({
     eventKind,
     toolCallId: stringPayload(payload?.toolCallId),
-    safeToolName: stringPayload(payload?.safeToolName) ?? stringPayload(payload?.toolName),
-    safeLabel: stringPayload(payload?.safeLabel),
-    safeInputLabel: stringPayload(payload?.inputLabel),
+    safeToolName: safeOptionalPublicText(payload?.safeToolName) ?? safeOptionalPublicText(payload?.toolName),
+    safeLabel: safeOptionalPublicText(payload?.safeLabel),
+    safeInputLabel: safeOptionalPublicText(payload?.inputLabel),
     workBlockId: stringPayload(payload?.workBlockId),
-    workBlockLabel: stringPayload(payload?.workBlockLabel),
-    status: stringPayload(payload?.status),
+    workBlockLabel: safeOptionalPublicText(payload?.workBlockLabel),
+    status: safeOptionalPublicText(payload?.status),
     ...(isToolCall
       ? { arguments: safeToolArguments(payload?.arguments) }
       : {}),
@@ -246,7 +257,7 @@ function safeToolContent(payload: Record<string, unknown> | undefined, eventKind
       ? {
         ok: booleanPayload(payload?.ok),
         result: safeToolResultEvidence(payload?.result),
-        error: stringPayload(payload?.safeError),
+        error: safeOptionalPublicText(payload?.safeError),
         observation: safeToolObservation(payload?.safeObservation),
       }
       : {}),
@@ -260,10 +271,11 @@ function recordPayload(value: unknown): Record<string, unknown> | null {
 function safeToolArguments(value: unknown): Record<string, unknown> | null {
   const record = recordPayload(value);
   if (record?.schema_version !== SAFE_TOOL_CALL_ARGUMENTS_SCHEMA) return null;
+  const safeArguments = recordPayload(removeUnsafeToolContent(record.safe_arguments)) ?? {};
   return compactToolContent({
     schema_version: SAFE_TOOL_CALL_ARGUMENTS_SCHEMA,
-    argument_keys: stringArrayPayload(record.argument_keys),
-    safe_arguments: recordPayload(record.safe_arguments) ?? {},
+    argument_keys: safeToolArgumentKeys(safeArguments),
+    safe_arguments: safeToolArgumentRecord(safeArguments),
   });
 }
 
@@ -272,11 +284,11 @@ function safeToolResultEvidence(value: unknown): Record<string, unknown> | null 
   if (record?.schema_version !== SAFE_TOOL_RESULT_EVIDENCE_SCHEMA) return null;
   return compactToolContent({
     schema_version: SAFE_TOOL_RESULT_EVIDENCE_SCHEMA,
-    evidence_capability_receipts: arrayPayload(record.evidence_capability_receipts),
-    evidence_receipts: arrayPayload(record.evidence_receipts),
-    evidence_limitations: stringArrayPayload(record.evidence_limitations),
-    completion_obligation_evidence: recordPayload(record.completion_obligation_evidence),
-    rejected_evidence_capability_receipts: arrayPayload(record.rejected_evidence_capability_receipts),
+    evidence_capability_receipts: safeEvidenceArray(record.evidence_capability_receipts),
+    evidence_receipts: safeEvidenceArray(record.evidence_receipts),
+    evidence_limitations: safePublicTextArray(record.evidence_limitations),
+    completion_obligation_evidence: safeEvidenceRecord(record.completion_obligation_evidence),
+    rejected_evidence_capability_receipts: safeEvidenceArray(record.rejected_evidence_capability_receipts),
   });
 }
 
@@ -285,13 +297,64 @@ function safeToolObservation(value: unknown): Record<string, unknown> | null {
   if (!record) return null;
   return compactToolContent({
     observationId: stringPayload(record.observationId),
-    kind: stringPayload(record.kind),
+    kind: safeOptionalPublicText(record.kind),
     visibility: record.visibility === "model" ? "model" : null,
-    summary: stringPayload(record.summary),
-    modelVisibleContent: stringPayload(record.modelVisibleContent),
+    summary: safeOptionalPublicText(record.summary),
+    modelVisibleContent: safeOptionalPublicText(record.modelVisibleContent),
     causedByToolCallId: stringPayload(record.causedByToolCallId),
     createdAt: stringPayload(record.createdAt),
   });
+}
+
+function safeEvidenceArray(value: unknown): unknown[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.slice(0, EVIDENCE_JSON_MAX_ARRAY_ITEMS)
+    .map((item) => safeEvidenceJson(item, 0))
+    .filter((item) => item !== null);
+}
+
+function safeEvidenceRecord(value: unknown): Record<string, unknown> | null {
+  const record = safeEvidenceJson(value, 0);
+  return recordPayload(record);
+}
+
+function safeEvidenceJson(value: unknown, depth: number): unknown {
+  if (depth > EVIDENCE_JSON_MAX_DEPTH) return "[redacted]";
+  if (typeof value === "string") return safePublicText(value, "[redacted]");
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) {
+    return value.slice(0, EVIDENCE_JSON_MAX_ARRAY_ITEMS)
+      .map((item) => safeEvidenceJson(item, depth + 1))
+      .filter((item) => item !== null);
+  }
+  const record = recordPayload(value);
+  if (!record) return null;
+  const output: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record).slice(0, EVIDENCE_JSON_MAX_OBJECT_ENTRIES)) {
+    if (isUnsafeToolContentKey(key)) continue;
+    output[safeIdentifier(key, "field")] = safeEvidenceJson(child, depth + 1);
+  }
+  return output;
+}
+
+function safePublicTextArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  return value
+    .map((item) => safeOptionalPublicText(item))
+    .filter((item): item is string => Boolean(item));
+}
+
+function removeUnsafeToolContent(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(removeUnsafeToolContent);
+  const record = recordPayload(value);
+  if (!record) return value;
+  const output: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (isUnsafeToolContentKey(key)) continue;
+    output[key] = removeUnsafeToolContent(child);
+  }
+  return output;
 }
 
 function compactToolContent(input: Record<string, unknown>): Record<string, unknown> {
@@ -303,17 +366,12 @@ function compactToolContent(input: Record<string, unknown>): Record<string, unkn
   return output;
 }
 
-function arrayPayload(value: unknown): unknown[] | null {
-  return Array.isArray(value) ? value : null;
-}
-
-function stringArrayPayload(value: unknown): string[] | null {
-  if (!Array.isArray(value)) return null;
-  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-}
-
 function booleanPayload(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
+}
+
+function isUnsafeToolContentKey(key: string): boolean {
+  return UNSAFE_TOOL_CONTENT_KEY.test(key);
 }
 
 function deny(input: ConversationAdmissionInput, className: Exclude<AdmissionClass, `semantic_${string}`>, reason: string): AdmissionDecision {

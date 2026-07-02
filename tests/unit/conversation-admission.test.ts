@@ -10,6 +10,34 @@ const SAFE_ARGUMENTS = {
   safe_arguments: { path: "README.md" },
 };
 
+const MALICIOUS_ARGUMENTS = {
+  schema_version: "butler.tool-call-arguments-transcript.v1",
+  argument_keys: ["path", "token", "rawArguments"],
+  safe_arguments: {
+    path: "README.md",
+    token: "SECRET_TOKEN_123",
+    rawArguments: "{\"token\":\"SECRET_TOKEN_123\"}",
+  },
+};
+
+const MALICIOUS_RESULT = {
+  schema_version: "butler.tool-result-evidence-transcript.v1",
+  evidence_capability_receipts: [{
+    rawArguments: "{\"token\":\"SECRET_TOKEN_123\"}",
+    summary: "SECRET_TOKEN_123",
+  }],
+  evidence_receipts: [{
+    kind: "command",
+    token: "SECRET_TOKEN_123",
+  }],
+  evidence_limitations: ["SECRET_TOKEN_123"],
+  completion_obligation_evidence: {
+    outcome: "satisfied",
+    token: "SECRET_TOKEN_123",
+    limitations: ["SECRET_TOKEN_123"],
+  },
+};
+
 test("classifier covers every current transcript top-level event kind", () => {
   expect(TRANSCRIPT_TOP_LEVEL_EVENT_KINDS).toEqual([
     "inbound",
@@ -187,7 +215,7 @@ test("finalized tool semantic content ignores arbitrary contentJson", () => {
     payload: {
       toolCallId: "tool-1",
       toolName: "read_file",
-      arguments: SAFE_ARGUMENTS,
+      arguments: MALICIOUS_ARGUMENTS,
       contentJson: {
         name: "SECRET_TOKEN_123",
         rawArguments: "{\"token\":\"SECRET_TOKEN_123\"}",
@@ -210,6 +238,46 @@ test("finalized tool semantic content ignores arbitrary contentJson", () => {
         toolCallId: "tool-1",
         safeToolName: "read_file",
         arguments: SAFE_ARGUMENTS,
+      },
+    },
+  });
+  expect(JSON.stringify(decision.operation)).not.toContain("SECRET_TOKEN_123");
+  expect(JSON.stringify(decision.operation)).not.toContain("rawArguments");
+});
+
+test("finalized tool result evidence is sanitized before semantic admission", () => {
+  const decision = classifyForConversation({
+    source: "runtime_turn_event",
+    kind: "tool_result.finalized",
+    visibility: "internal",
+    payload: {
+      toolCallId: "tool-1",
+      toolName: "read_file",
+      ok: true,
+      result: MALICIOUS_RESULT,
+      safeError: "SECRET_TOKEN_123",
+      safeObservation: {
+        observationId: "obs-1",
+        kind: "validation_failed",
+        visibility: "model",
+        summary: "SECRET_TOKEN_123",
+        modelVisibleContent: "SECRET_TOKEN_123",
+        rawArguments: "{\"token\":\"SECRET_TOKEN_123\"}",
+      },
+    },
+    knownToolCallIds: new Set(["tool-1"]),
+  });
+
+  expect(decision).toMatchObject({
+    admitted: true,
+    className: "semantic_tool_result",
+    operation: {
+      kind: "append_tool_result",
+      contentJson: {
+        eventKind: "tool_result.finalized",
+        toolCallId: "tool-1",
+        safeToolName: "read_file",
+        ok: true,
       },
     },
   });
