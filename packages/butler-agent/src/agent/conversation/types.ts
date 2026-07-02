@@ -186,3 +186,14 @@ export interface ConversationWriter {
   writeSummary(input: ConversationSummaryInput): ConversationSummary;
   getSessionByGatewayBinding(gateway: string, externalSessionId: string): ConversationSession | null;
 }
+
+export interface ConversationProjectionReader {
+  readProjectionBatch(afterOutboxId: string | null, limit?: number): ConversationProjectionEvent[];
+  getSession(sessionId: string): ConversationSession | null;
+  getGatewayBindingForConversation(sessionId: string, gateway: string): ConversationBinding | null;
+  readMessageById(messageId: string): ConversationMessageWithParts | null;
+  readProjectionMessages(
+    sessionId: string,
+    input?: { afterSeq?: number; limit?: number },
+  ): ConversationMessageWithParts[];
+}

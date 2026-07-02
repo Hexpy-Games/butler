@@ -212,7 +212,7 @@ export class AppSessionRecordStore {
       this.db
         .query<ChatRow, [string]>(
           `
-      SELECT id, title, kind, project_id, created_at, updated_at
+      SELECT id, title, kind, project_id, conversation_session_id, created_at, updated_at
       FROM chats
       WHERE id = ?
     `,
@@ -248,6 +248,9 @@ export class AppSessionRecordStore {
       safeErrorCode?: string;
       retryable?: boolean;
       attachments?: MessageFileRow[];
+      conversationSessionId?: string | null;
+      conversationTurnId?: string | null;
+      conversationMessageId?: string | null;
     } = {},
   ): MessageRecord {
     return this.messages.insertMessage(chatId, role, text, status, options);
