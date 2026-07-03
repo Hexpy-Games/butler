@@ -107,6 +107,30 @@ test("tool_search can exclude disabled tools and reject invalid filters", async 
   expect(invalid.results).toEqual([]);
 });
 
+test("tool_search normalizes common execution category aliases", async () => {
+  const execute = createToolSearchToolHandler({
+    butlerData: tempDir,
+    currentToolNames: ["tool_search", "tool_describe", "tool_call", "run_command"],
+  });
+
+  const shell = await execute({
+    args: { category: "shell", query: "run command", provider: "native" },
+  }) as { ok: boolean; results: Array<{ name: string; category: string }> };
+  expect(shell.ok).toBe(true);
+  expect(shell.results).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: "run_command", category: "command" }),
+  ]));
+
+  const workspace = await execute({
+    args: { category: "workspace", query: "run command", provider: "native" },
+  }) as { ok: boolean; error: { code: string }; valid_categories: string[]; results: unknown[] };
+  expect(workspace.ok).toBe(false);
+  expect(workspace.error.code).toBe("invalid_tool_category");
+  expect(workspace.valid_categories).toContain("command");
+  expect(workspace.valid_categories).toContain("file");
+  expect(workspace.results).toEqual([]);
+});
+
 test("tool_search native provider does not wait on configured MCP probes", async () => {
   upsertMcpServer(tempDir, {
     id: "slow-fixture",

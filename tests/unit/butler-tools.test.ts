@@ -2394,6 +2394,8 @@ test("tool capability schema exposes discovery without deterministic selection",
 
   expect(list?.parameters.required).toEqual([]);
   expect(Object.keys(list?.parameters.properties ?? {})).toEqual(["category", "include_disabled"]);
+  expect((list?.parameters.properties as any)?.category?.enum).toContain("file");
+  expect((list?.parameters.properties as any)?.category?.enum).toContain("command");
   expect(BUTLER_TOOLS.find((item) => item.name === "select_tool_capability")).toBeUndefined();
 });
 
@@ -2409,6 +2411,8 @@ test("tool_search schema exposes compact model-selected catalog search", () => {
     "include_disabled",
     "limit",
   ]);
+  expect((search?.parameters.properties as any)?.category?.enum).toContain("file");
+  expect((search?.parameters.properties as any)?.category?.enum).toContain("command");
 });
 
 test("tool_describe schema exposes explicit catalog id description", () => {
@@ -2494,6 +2498,45 @@ test("tool capability discovery marks tools callable when the current profile ex
     current_turn_callable: true,
     omitted_by_profile: false,
     availability_scope: "current_turn",
+  }));
+});
+
+test("tool capability discovery supports file category and execution aliases", async () => {
+  const execute = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: tempDir,
+    currentToolNames: ["list_tool_capabilities", "run_command", "read_file", "write_file", "grep_files"],
+  });
+
+  const files = await execute({
+    name: "list_tool_capabilities",
+    args: { category: "file" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    capabilities: Array<{ name: string; category: string; current_turn_callable: boolean | null }>;
+  };
+  expect(files.ok).toBe(true);
+  expect(files.capabilities).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: "read_file", category: "file", current_turn_callable: true }),
+    expect.objectContaining({ name: "write_file", category: "file", current_turn_callable: true }),
+    expect.objectContaining({ name: "grep_files", category: "file", current_turn_callable: true }),
+  ]));
+
+  const shell = await execute({
+    name: "list_tool_capabilities",
+    args: { category: "shell" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    capabilities: Array<{ name: string; category: string; current_turn_callable: boolean | null }>;
+  };
+  expect(shell.ok).toBe(true);
+  expect(shell.capabilities).toContainEqual(expect.objectContaining({
+    name: "run_command",
+    category: "command",
+    current_turn_callable: true,
   }));
 });
 
