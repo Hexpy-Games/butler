@@ -4,6 +4,7 @@ import type {
   WorkStreamResumeCheckpoint,
   WorkStreamResumeSelection,
 } from "./workstream-checkpoint-resume-types.ts";
+import { checkpointNeedsWorkspaceProfile } from "./workstream-resume-tool-policy.ts";
 import type { ButlerToolProfile } from "../tools/profiles.ts";
 
 export interface FocusedResumeEnvelope {
@@ -201,12 +202,7 @@ function requiredProfilesForCheckpoint(
 ): ButlerToolProfile[] {
   const profiles = new Set<ButlerToolProfile>();
   if (checkpoint.projectId) profiles.add("project");
-  if (
-    checkpoint.currentPhase === "execution" ||
-    checkpoint.currentPhase === "review" ||
-    checkpoint.currentPhase === "consolidation" ||
-    checkpoint.currentPhase === "reporting"
-  ) {
+  if (checkpointNeedsWorkspaceProfile(checkpoint)) {
     profiles.add("workspace");
   }
   return [...profiles];

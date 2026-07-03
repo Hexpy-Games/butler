@@ -43,6 +43,8 @@ export function directToolRoundLimit(requestedRounds: number): number {
 }
 
 export function repeatedToolFamilyKey(name: string, args: Record<string, unknown>): string | null {
+  if (name === "tool_search") return discoveryToolFamilyKey("tool-search", args);
+  if (name === "list_tool_capabilities") return discoveryToolFamilyKey("tool-capabilities", args);
   if (name === "inspect_project_status" || name === "project_ledger_status") return "project-ledger:status";
   if (name === "project_ledger_check") return "project-ledger:check";
   if (name === "query_project_work" || name === "project_ledger_list") {
@@ -72,6 +74,18 @@ export function repeatedToolFamilyKey(name: string, args: Record<string, unknown
   if (/^git\s+status\b/u.test(command)) return "command:git-status";
   if (/^git\s+diff\b/u.test(command)) return "command:git-diff";
   return null;
+}
+
+function discoveryToolFamilyKey(prefix: string, args: Record<string, unknown>): string {
+  const category = normalizedArg(args.category) ?? "any";
+  const provider = normalizedArg(args.provider) ?? "any";
+  const capability = normalizedArg(args.capability) ?? "any";
+  const query = normalizedArg(args.query) ?? "any";
+  return `${prefix}:${provider}:${category}:${capability}:${query}`;
+}
+
+function normalizedArg(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim().toLowerCase() : null;
 }
 
 function projectLedgerLifecycleFamilyKey(name: string, args: Record<string, unknown>): string | null {
