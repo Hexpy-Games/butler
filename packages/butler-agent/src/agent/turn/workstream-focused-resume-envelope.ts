@@ -7,6 +7,16 @@ import type {
 import { checkpointNeedsWorkspaceProfile } from "./workstream-resume-tool-policy.ts";
 import type { ButlerToolProfile } from "../tools/profiles.ts";
 
+const PROJECT_LEDGER_LIFECYCLE_TOOLS = new Set([
+  "project_ledger_work_update",
+  "project_ledger_work_complete",
+  "project_ledger_task_update",
+  "project_ledger_task_complete",
+  "project_ledger_attempt_start",
+  "project_ledger_attempt_succeed",
+  "project_ledger_attempt_fail",
+]);
+
 export interface FocusedResumeEnvelope {
   prompt: string;
   requiredNativeTools: string[];
@@ -56,23 +66,37 @@ export function turnMetadataWithFocusedResumePolicy(
   envelope: FocusedResumeEnvelope | null,
 ): Record<string, unknown> | undefined {
   if (!envelope) return metadata;
+  const localTracking = envelope.checkpoint.trackingMode === "local" || envelope.checkpoint.trackingMode === "none";
+  const requiredNativeTools = mergeStringArrays(
+    stringArray(metadata?.requiredNativeTools),
+    stringArray(metadata?.required_tools),
+    envelope.requiredNativeTools,
+  ).filter((tool) => !localTracking || !PROJECT_LEDGER_LIFECYCLE_TOOLS.has(tool));
+  const requiredNativeToolProfiles = mergeStringArrays(
+    stringArray(metadata?.requiredNativeToolProfiles),
+    stringArray(metadata?.required_tool_profiles),
+    envelope.requiredNativeToolProfiles,
+  ).filter((profile) => !localTracking || profile !== "project-lifecycle");
   return {
     ...(metadata ?? {}),
-    requiredNativeTools: mergeStringArrays(
-      stringArray(metadata?.requiredNativeTools),
-      stringArray(metadata?.required_tools),
-      envelope.requiredNativeTools,
-    ),
-    requiredNativeToolProfiles: mergeStringArrays(
-      stringArray(metadata?.requiredNativeToolProfiles),
-      stringArray(metadata?.required_tool_profiles),
-      envelope.requiredNativeToolProfiles,
-    ),
+    trackingMode: envelope.checkpoint.trackingMode,
+    tracking_mode: envelope.checkpoint.trackingMode,
+    closeoutStrategy: envelope.checkpoint.closeoutStrategy,
+    closeout_strategy: envelope.checkpoint.closeoutStrategy,
+    runtimePolicy: {
+      ...objectRecord(metadata?.runtimePolicy),
+      tracking_mode: envelope.checkpoint.trackingMode,
+      closeout_strategy: envelope.checkpoint.closeoutStrategy,
+    },
+    requiredNativeTools,
+    requiredNativeToolProfiles,
     focusedResume: {
       checkpointId: envelope.checkpoint.checkpointId,
       workStreamId: envelope.checkpoint.workStreamId,
       state: envelope.checkpoint.state,
       phase: envelope.checkpoint.currentPhase,
+      trackingMode: envelope.checkpoint.trackingMode,
+      closeoutStrategy: envelope.checkpoint.closeoutStrategy,
     },
   };
 }
@@ -96,6 +120,8 @@ function renderFocusedResumeEnvelope(input: {
     `WorkStream Title: ${checkpoint.title}`,
     `WorkStream State: ${checkpoint.state}`,
     `WorkStream Phase: ${checkpoint.currentPhase ?? "none"}`,
+    `Tracking Mode: ${checkpoint.trackingMode}`,
+    `Closeout Strategy: ${checkpoint.closeoutStrategy}`,
     `Todo List ID: ${checkpoint.todoListId}`,
     `Active Step ID: ${checkpoint.activeStepId ?? "none"}`,
   ];
@@ -127,7 +153,7 @@ function renderFocusedResumeEnvelope(input: {
       `- ${ref.kind}:${ref.id}`,
     ));
   }
-  if (input.ledgerRecords.length > 0) {
+  if (checkpoint.trackingMode === "ledger" && input.ledgerRecords.length > 0) {
     lines.push("Relevant Project Ledger Records:");
     lines.push(...input.ledgerRecords.map((record) =>
       `- ${record.kind}:${record.id}:${record.status}:${record.title}`,
@@ -150,6 +176,7 @@ function hydrateFocusedProjectLedgerRecords(input: {
   butlerData: string;
   checkpoint: WorkStreamResumeCheckpoint;
 }): FocusedProjectLedgerRecord[] {
+  if (input.checkpoint.trackingMode !== "ledger") return [];
   const projectId = input.checkpoint.projectId?.trim();
   if (!projectId || !/^[A-Za-z0-9._:-]{1,120}$/.test(projectId)) return [];
   const indexPath = join(input.butlerData, "project-ledger", "projects", projectId, "index", "project.json");
@@ -201,7 +228,7 @@ function requiredProfilesForCheckpoint(
   checkpoint: WorkStreamResumeCheckpoint,
 ): ButlerToolProfile[] {
   const profiles = new Set<ButlerToolProfile>();
-  if (checkpoint.projectId) profiles.add("project");
+  if (checkpoint.trackingMode === "ledger") profiles.add("project");
   if (checkpointNeedsWorkspaceProfile(checkpoint)) {
     profiles.add("workspace");
   }
@@ -220,11 +247,15 @@ function requiredToolsForCheckpoint(
     "get_context_monitor",
     "get_usage_monitor",
   ]);
-  if (checkpoint.projectId || ledgerRecords.length > 0) {
+  if (checkpoint.trackingMode === "ledger" || ledgerRecords.length > 0) {
     tools.add("project_ledger_status");
     tools.add("project_ledger_show");
   }
   return [...tools].sort();
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function stringArray(value: unknown): string[] {

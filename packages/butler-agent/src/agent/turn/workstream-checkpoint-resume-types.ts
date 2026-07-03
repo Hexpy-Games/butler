@@ -1,6 +1,9 @@
 import type { WorkStreamState } from "../work/work-stream.ts";
 import type { DirectTurnBudgetSnapshot } from "./direct-turn-budget.ts";
 
+export type RuntimeTrackingMode = "ledger" | "local" | "none";
+export type RuntimeCloseoutStrategy = "ledger" | "local_workstream" | "noop";
+
 export type WorkStreamResumeSelectionState =
   | "fresh_turn"
   | "resume_selected"
@@ -36,6 +39,8 @@ export interface WorkStreamResumeCheckpoint {
   todoListId: string;
   state: WorkStreamState;
   currentPhase: string | null;
+  trackingMode: RuntimeTrackingMode;
+  closeoutStrategy: RuntimeCloseoutStrategy;
   activeStepId: string | null;
   updatedAt: string;
   title: string;

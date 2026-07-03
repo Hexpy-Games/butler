@@ -47,6 +47,19 @@ const PROJECT_LIFECYCLE_TOOL_NAMES = [
 ] as const;
 
 const PROJECT_LEDGER_LIFECYCLE_TOOL_NAME_SET = new Set<string>(PROJECT_LIFECYCLE_TOOL_NAMES);
+const PROJECT_LEDGER_INSPECTION_TOOL_NAMES = new Set<string>([
+  "project_ledger_index",
+  "project_ledger_status",
+  "project_ledger_list",
+  "project_ledger_show",
+  "project_ledger_create",
+  "project_ledger_update",
+  "project_ledger_render",
+  "project_ledger_check",
+  "inspect_project_status",
+  "query_project_work",
+  "render_project_dashboard",
+]);
 const LEDGER_CLOSEOUT_PHASES = new Set(["closeout", "closeout_planned", "closeout_executed"]);
 const LEDGER_VALIDATION_PASSED_STATES = new Set(["validation_passed", "passed"]);
 
@@ -321,7 +334,7 @@ function requiredToolNamesForTurn(input: {
 function policyString(metadata: unknown, camelKey: string, snakeKey: string): string | null {
   const record = recordValue(metadata);
   const runtimePolicy = recordValue(record.runtimePolicy);
-  const raw = record[camelKey] ?? record[snakeKey] ?? runtimePolicy[camelKey] ?? runtimePolicy[snakeKey];
+  const raw = runtimePolicy[camelKey] ?? runtimePolicy[snakeKey] ?? record[camelKey] ?? record[snakeKey];
   return typeof raw === "string" && raw.trim() ? raw.trim() : null;
 }
 
@@ -346,6 +359,14 @@ function projectLedgerLifecycleAllowed(input: {
     Boolean(validationState && LEDGER_VALIDATION_PASSED_STATES.has(validationState));
 }
 
+function projectLedgerInspectionSuppressed(input: {
+  sessionMetadata?: Record<string, unknown>;
+  turnMetadata?: Record<string, unknown>;
+}): boolean {
+  const trackingMode = trackingPolicyString(input, "trackingMode", "tracking_mode");
+  return trackingMode === "local" || trackingMode === "none";
+}
+
 function addProfile(profiles: Set<ButlerToolProfile>, profile: ButlerToolProfile): void {
   profiles.add(profile);
 }
@@ -361,7 +382,8 @@ export function selectButlerToolProfiles(input: {
   }
   const profiles = new Set<ButlerToolProfile>(["startup"]);
   const projectContext = hasProjectContext(input);
-  if (projectContext || mentionsProjectLedger(input.text)) {
+  const suppressProjectLedger = projectLedgerInspectionSuppressed(input);
+  if (!suppressProjectLedger && (projectContext || mentionsProjectLedger(input.text))) {
     addProfile(profiles, "project");
   }
   if (mentionsProjectLedgerLifecycle(input.text) && projectLedgerLifecycleAllowed(input)) {
@@ -370,6 +392,10 @@ export function selectButlerToolProfiles(input: {
   for (const profile of requiredToolProfiles(input.sessionMetadata)) addProfile(profiles, profile);
   for (const profile of requiredToolProfiles(input.turnMetadata)) addProfile(profiles, profile);
   if (!projectLedgerLifecycleAllowed(input)) {
+    profiles.delete("project-lifecycle");
+  }
+  if (suppressProjectLedger) {
+    profiles.delete("project");
     profiles.delete("project-lifecycle");
   }
   return [...profiles];
@@ -396,6 +422,10 @@ export function selectButlerToolsForTurn(input: {
     allowedNames.add(name);
   }
   if (!projectLedgerLifecycleAllowed(input)) {
+    for (const name of PROJECT_LEDGER_LIFECYCLE_TOOL_NAME_SET) allowedNames.delete(name);
+  }
+  if (projectLedgerInspectionSuppressed(input)) {
+    for (const name of PROJECT_LEDGER_INSPECTION_TOOL_NAMES) allowedNames.delete(name);
     for (const name of PROJECT_LEDGER_LIFECYCLE_TOOL_NAME_SET) allowedNames.delete(name);
   }
   return tools.filter((tool) =>
