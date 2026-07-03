@@ -42,6 +42,39 @@ test("provider stream projector emits public text deltas and preserves final rec
   });
 });
 
+test("provider stream projector reports public text delta targets for first-model latency tracking", async () => {
+  const targets: string[] = [];
+  const projector = createProviderStreamTurnEventProjector({
+    turnId: "turn-stream-latency",
+    defaultStreamId: "stream-latency",
+    defaultTextTarget: "final_candidate",
+    onPublicTextDelta: ({ target }) => {
+      targets.push(target);
+    },
+  });
+
+  await projector.project({
+    type: "reasoning_delta",
+    textDelta: "hidden reasoning",
+  });
+  await projector.project({
+    type: "text_delta",
+    textDelta: "   ",
+    target: "public_note",
+  });
+  await projector.project({
+    type: "text_delta",
+    textDelta: "Visible update.",
+  });
+  await projector.project({
+    type: "text_delta",
+    textDelta: "Second visible update.",
+    target: "public_note",
+  });
+
+  expect(targets).toEqual(["final_candidate", "public_note"]);
+});
+
 test("provider stream projector records reasoning as internal counts only", async () => {
   const events: RuntimeTurnEventInput[] = [];
   const projector = createProviderStreamTurnEventProjector({

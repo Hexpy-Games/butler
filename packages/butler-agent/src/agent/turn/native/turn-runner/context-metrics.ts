@@ -22,6 +22,8 @@ export function recordContextMetric(
       recentConversationChars: normalizedPrompt.recentConversationChars,
       recallContextChars: normalizedPrompt.recallContextChars,
       inboundMessageChars: normalizedPrompt.inboundMessageChars,
+      focusedResumeEnvelopeChars: normalizedPrompt.focusedResumeEnvelopeChars,
+      resumeDecisionEnvelopeChars: normalizedPrompt.resumeDecisionEnvelopeChars,
     });
   } catch (error) {
     recordTurnContextBestEffortFailure(input, "turn_context_metric_failed", error);

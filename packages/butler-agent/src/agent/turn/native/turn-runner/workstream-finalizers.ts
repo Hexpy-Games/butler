@@ -102,6 +102,7 @@ function completeResolvedValidationContinuationStreamsBestEffort(input: {
 export function completeRuntimeSemanticWorkStreamBestEffort(input: {
   butlerData: string;
   sessionId: string;
+  originChatId?: string | null;
   projectId?: string;
   tracker: RuntimeSemanticProgressSafetyNet;
   language: RuntimeMessageLanguage;
@@ -122,6 +123,7 @@ export function completeRuntimeSemanticWorkStreamBestEffort(input: {
       });
       const record = new WorkStreamStore(input.butlerData).updateFromTodoList({
         ownerSessionId: input.sessionId,
+        originChatId: input.originChatId,
         projectId: input.projectId,
         listId: input.tracker.listId,
         title: todoView.list.title ?? input.tracker.title,
@@ -145,6 +147,7 @@ export function completeRuntimeSemanticWorkStreamBestEffort(input: {
     });
     new WorkStreamStore(input.butlerData).updateFromTodoList({
       ownerSessionId: input.sessionId,
+      originChatId: input.originChatId,
       projectId: input.projectId,
       listId: input.tracker.listId,
       title: todoView.list.title ?? input.tracker.title,
