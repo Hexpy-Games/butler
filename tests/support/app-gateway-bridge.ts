@@ -47,6 +47,7 @@ import type {
   AppMessageResponderResult,
   DeliveryLimitationMetadata,
 } from "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
+import { appRuntimePolicy } from "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
 
 const APP_SESSION_ID = "butler/app-general";
 
@@ -690,70 +691,18 @@ function policyStringArray(value: unknown): string[] {
     : [];
 }
 
-const APP_BRIDGE_WORKSPACE_REQUIRED_TOOL_NAMES = new Set([
-  "run_command",
-  "read_tool_output_artifact",
-]);
-
-function bridgeRequiredToolsForAccessMode(
-  value: unknown,
-  accessMode: AppMessageResponderInput["accessMode"],
-): string[] {
-  const names = policyStringArray(value);
-  return accessMode === "full_access"
-    ? names
-    : names.filter((name) => !APP_BRIDGE_WORKSPACE_REQUIRED_TOOL_NAMES.has(name));
-}
-
 function appBridgeRuntimePolicy(input: {
   existing?: Record<string, unknown>;
   accessMode?: AppMessageResponderInput["accessMode"];
   projectId?: string | null;
   sessionKind?: string | null;
-}): Record<string, unknown> | undefined {
-  const accessMode = input.accessMode ?? "full_access";
-  const existing = input.existing ?? {};
-  const requestedProfiles = policyStringArray(existing.requiredNativeToolProfiles)
-    .filter((profile) => profile !== "workspace");
-  if (accessMode === "full_access") requestedProfiles.push("workspace");
-  const trackingMode = bridgeTrackingMode({
-    existing,
+}): Record<string, unknown> {
+  return appRuntimePolicy({
+    existing: input.existing,
+    accessMode: input.accessMode ?? "full_access",
     projectId: input.projectId,
     sessionKind: input.sessionKind,
   });
-  const closeoutStrategy = bridgeCloseoutStrategyForTrackingMode(trackingMode);
-  return {
-    ...existing,
-    accessMode,
-    trackingMode,
-    tracking_mode: trackingMode,
-    closeoutStrategy,
-    closeout_strategy: closeoutStrategy,
-    requiredNativeTools: bridgeRequiredToolsForAccessMode(existing.requiredNativeTools, accessMode),
-    required_tools: bridgeRequiredToolsForAccessMode(existing.required_tools, accessMode),
-    requiredNativeToolProfiles: [...new Set(requestedProfiles)],
-  };
-}
-
-function bridgeTrackingMode(input: {
-  existing: Record<string, unknown>;
-  projectId?: string | null;
-  sessionKind?: string | null;
-}): "ledger" | "local" | "none" {
-  const existingMode = bridgeTrackingModeValue(input.existing.tracking_mode ?? input.existing.trackingMode);
-  if (existingMode) return existingMode;
-  if (input.projectId?.trim() || input.sessionKind === "project") return "local";
-  return "none";
-}
-
-function bridgeTrackingModeValue(value: unknown): "ledger" | "local" | "none" | null {
-  return value === "ledger" || value === "local" || value === "none" ? value : null;
-}
-
-function bridgeCloseoutStrategyForTrackingMode(mode: "ledger" | "local" | "none"): "ledger" | "local_workstream" | "noop" {
-  if (mode === "ledger") return "ledger";
-  if (mode === "local") return "local_workstream";
-  return "noop";
 }
 
 function readButlerConfig(butlerData: string): ButlerConfig {

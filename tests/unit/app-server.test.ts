@@ -2125,7 +2125,8 @@ test("app session access mode supplies structured workspace tool policy", async 
     const fullAccessPolicy = runtime.turns.at(-1)?.metadata?.runtimePolicy as Record<string, unknown>;
     expect(fullAccessPolicy).toMatchObject({
       accessMode: "full_access",
-      requiredNativeToolProfiles: ["workspace"],
+      tracking_mode: "ledger",
+      requiredNativeToolProfiles: ["workspace", "project-lifecycle"],
     });
 
     await postJson(`${server.url}messages`, {
@@ -2136,9 +2137,10 @@ test("app session access mode supplies structured workspace tool policy", async 
     const askFirstPolicy = runtime.turns.at(-1)?.metadata?.runtimePolicy as Record<string, unknown>;
     expect(askFirstPolicy).toMatchObject({
       accessMode: "ask_first",
+      tracking_mode: "ledger",
       requiredNativeTools: [],
       required_tools: [],
-      requiredNativeToolProfiles: [],
+      requiredNativeToolProfiles: ["project-lifecycle"],
     });
 
     await postJson(`${server.url}messages`, {
@@ -2149,6 +2151,7 @@ test("app session access mode supplies structured workspace tool policy", async 
     const readOnlyPolicy = runtime.turns.at(-1)?.metadata?.runtimePolicy as Record<string, unknown>;
     expect(readOnlyPolicy).toMatchObject({
       accessMode: "read_only",
+      tracking_mode: "ledger",
       requiredNativeTools: [],
       required_tools: [],
       requiredNativeToolProfiles: [],
@@ -2285,9 +2288,51 @@ test("ordinary app project turns derive Ledger tracking before tool selection", 
   expect(selection.toolNames).toContain("render_project_dashboard");
 });
 
+test("legacy app project local tracking is upgraded to Ledger before tool selection", () => {
+  const runtimePolicy = appRuntimePolicy({
+    existing: {
+      requiredNativeToolProfiles: ["workspace"],
+      trackingMode: "local",
+      tracking_mode: "local",
+      closeoutStrategy: "local_workstream",
+      closeout_strategy: "local_workstream",
+    },
+    accessMode: "full_access",
+    projectId: "project-sandy-bot-35a0e102",
+    sessionKind: "project",
+  });
+  const selection = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "59부터 닫고 남은거 살펴봐줘",
+    sessionMetadata: {
+      projectId: "project-sandy-bot-35a0e102",
+      runtimePolicy,
+    },
+    turnMetadata: {
+      runtimePolicy,
+    },
+    providerCapabilities: { supportsToolCalls: true },
+  });
+
+  expect(runtimePolicy).toMatchObject({
+    trackingMode: "ledger",
+    tracking_mode: "ledger",
+    trackingModeSource: "app_project_default",
+    tracking_mode_source: "app_project_default",
+    closeoutStrategy: "ledger",
+    closeout_strategy: "ledger",
+    requiredNativeToolProfiles: ["workspace", "project-lifecycle"],
+  });
+  expect(selection.toolNames).toContain("project_ledger_status");
+  expect(selection.toolNames).toContain("project_ledger_task_complete");
+  expect(selection.toolNames).toContain("project_ledger_work_complete");
+  expect(selection.toolNames).toContain("project_ledger_attempt_succeed");
+  expect(selection.toolNames).toContain("query_project_work");
+});
+
 test("explicit local app tracking keeps Ledger inspection discoverable but blocks lifecycle", () => {
   const runtimePolicy = appRuntimePolicy({
-    existing: { tracking_mode: "local" },
+    existing: { tracking_mode: "local", tracking_mode_source: "explicit" },
     accessMode: "full_access",
     projectId: "butler",
     sessionKind: "project",
@@ -2307,6 +2352,7 @@ test("explicit local app tracking keeps Ledger inspection discoverable but block
 
   expect(runtimePolicy).toMatchObject({
     tracking_mode: "local",
+    tracking_mode_source: "explicit",
     closeout_strategy: "local_workstream",
   });
   expect(selection.toolNames).toEqual(expect.arrayContaining([
@@ -2360,6 +2406,7 @@ test("app tracking policy treats snake case tracking mode as authoritative", () 
     existing: {
       trackingMode: "ledger",
       tracking_mode: "local",
+      tracking_mode_source: "explicit",
       closeoutStrategy: "ledger",
       closeout_strategy: "local_workstream",
       requiredNativeToolProfiles: ["project-lifecycle"],
@@ -2384,6 +2431,8 @@ test("app tracking policy treats snake case tracking mode as authoritative", () 
   expect(runtimePolicy).toMatchObject({
     trackingMode: "local",
     tracking_mode: "local",
+    trackingModeSource: "explicit",
+    tracking_mode_source: "explicit",
     closeoutStrategy: "local_workstream",
     closeout_strategy: "local_workstream",
   });
