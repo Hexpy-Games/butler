@@ -453,6 +453,40 @@ test("first visible progress event projects as legacy turn status only", () => {
   expect(progressRowFromTurnEvent(event)?.work_decision_summary).toBeUndefined();
 });
 
+test("first visible preparation work block projects without tool or decision metadata", () => {
+  const payload = firstVisibleProgressPayload({
+    note: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+    source: FIRST_VISIBLE_PROGRESS_DEFAULT_SOURCE,
+    safetyStatus: FIRST_VISIBLE_PROGRESS_ACCEPTED_SAFETY_STATUS,
+  });
+  const event = createAgentTurnEvent({
+    sessionId: "general",
+    turnId: "turn-1",
+    sessionSequence: 1,
+    turnSequence: 2,
+    kind: "work.block.started",
+    payload: {
+      workBlockId: payload.workBlockId,
+      label: payload.workBlockLabel,
+      source: payload.source,
+      safetyStatus: payload.safetyStatus,
+    },
+  });
+
+  expect(progressRowFromTurnEvent(event)).toMatchObject({
+    id: event.id,
+    kind: "work_block",
+    state: "running",
+    safe_label: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+    work_block_id: "first-progress-note",
+    work_block_label: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+  });
+  expect(progressRowFromTurnEvent(event)?.safe_tool_name).toBeUndefined();
+  expect(progressRowFromTurnEvent(event)?.tool_call_id).toBeUndefined();
+  expect(progressRowFromTurnEvent(event)?.work_decision_summary).toBeUndefined();
+  expect(progressRowFromTurnEvent(event)?.work_decision_source).toBeUndefined();
+});
+
 test("first visible progress policy repairs unsafe or evidence-claiming notes", () => {
   const unsafePrivate = firstVisibleProgressPayload({
     note: "<think>private chain</think>",

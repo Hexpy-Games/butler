@@ -81,7 +81,7 @@ export function progressRowsForTurnState(
 
 function isFirstVisibleProgressRow(row: ProgressSummaryRow): boolean {
   return (
-    row.kind === "message" &&
+    (row.kind === "message" || row.kind === "work_block") &&
     Boolean(
       row.work_block_id?.startsWith(
         `${FIRST_VISIBLE_PROGRESS_WORK_BLOCK_PREFIX}-`,
@@ -91,7 +91,7 @@ function isFirstVisibleProgressRow(row: ProgressSummaryRow): boolean {
 }
 
 function isSessionSummaryProgressRow(row: ProgressSummaryRow): boolean {
-  if (row.kind === "work_block") return false;
+  if (row.kind === "work_block") return isFirstVisibleProgressRow(row);
   if (row.kind === "turn" || row.kind === "thinking") return false;
   if (row.kind === "message" || row.kind === "system") {
     return !STATUS_ONLY_PROGRESS_LABELS.has(
