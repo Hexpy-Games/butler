@@ -1368,7 +1368,7 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   let promptCallCount = 0;
   let resumePrompt = "";
-  const turnEvents: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const turnEvents: Array<{ kind: string; createdAt?: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     butlerHome,
     butlerData: tempDir,
@@ -1473,6 +1473,7 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
     deliverTurnEvent: async ({ event }) => {
       turnEvents.push({
         kind: event.kind,
+        createdAt: event.createdAt,
         payload: event.payload as Record<string, unknown> | undefined,
       });
     },
@@ -1510,6 +1511,16 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   expect(promptCallCount).toBe(1);
   expect(resumePrompt).toBe("");
   expect(turnEvents.filter((event) => event.kind === "turn.acknowledged")).toHaveLength(1);
+  expect(turnEvents.slice(0, 2).map((event) => event.kind)).toEqual([
+    "turn.acknowledged",
+    "turn.first_progress",
+  ]);
+  expect(turnEvents[1]?.payload).toMatchObject({
+    source: "gateway-accepted",
+    note: "Request received. Preparing the work.",
+  });
+  expect(turnEvents[0]?.createdAt).toBe("2026-06-11T00:00:00.000Z");
+  expect(turnEvents[1]?.createdAt).toBe("2026-06-11T00:00:00.001Z");
 
   const persisted = readTurnContextAtom({
     butlerData: tempDir,
