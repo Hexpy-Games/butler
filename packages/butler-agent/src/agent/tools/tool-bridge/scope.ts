@@ -1,20 +1,8 @@
 import type { ToolCapabilityMetadata } from "../types.ts";
+import { PROJECT_LEDGER_MUTATION_TOOL_NAME_SET } from "../project-ledger/mutation-tools.ts";
 
 const ALWAYS_DISCOVERABLE_NATIVE_CATEGORIES = new Set(["search"]);
 const BRIDGE_TOOL_NAMES = new Set(["tool_search", "tool_describe", "tool_call"]);
-const PROJECT_LEDGER_MUTATION_TOOL_NAMES = new Set([
-  "project_ledger_index",
-  "project_ledger_create",
-  "project_ledger_update",
-  "project_ledger_render",
-  "project_ledger_work_update",
-  "project_ledger_work_complete",
-  "project_ledger_task_update",
-  "project_ledger_task_complete",
-  "project_ledger_attempt_start",
-  "project_ledger_attempt_succeed",
-  "project_ledger_attempt_fail",
-]);
 
 export function currentToolNamesFromInput(
   value: readonly string[] | (() => readonly string[]) | undefined,
@@ -30,7 +18,7 @@ export function canBridgeNativeTool(input: {
   if (BRIDGE_TOOL_NAMES.has(input.toolName)) return false;
   const currentToolNames = new Set(currentToolNamesFromInput(input.currentToolNames));
   if (currentToolNames.has(input.toolName)) return true;
-  if (PROJECT_LEDGER_MUTATION_TOOL_NAMES.has(input.toolName)) return false;
+  if (PROJECT_LEDGER_MUTATION_TOOL_NAME_SET.has(input.toolName)) return false;
   if (input.metadata.tags.includes("project-ledger") && currentToolNames.has("project_ledger_status")) return true;
   return ALWAYS_DISCOVERABLE_NATIVE_CATEGORIES.has(input.metadata.category);
 }

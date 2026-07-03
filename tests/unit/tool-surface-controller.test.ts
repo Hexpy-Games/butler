@@ -10,22 +10,9 @@ import {
   type ToolSurfaceControllerState,
 } from "../../packages/butler-agent/src/agent/tools/tool-surface-controller.ts";
 import { TOOL_CAPABILITY_METADATA } from "../../packages/butler-agent/src/agent/tools/registry.ts";
+import { PROJECT_LEDGER_MUTATION_TOOL_NAMES } from "../../packages/butler-agent/src/agent/tools/project-ledger/mutation-tools.ts";
 import { canBridgeNativeTool } from "../../packages/butler-agent/src/agent/tools/tool-bridge/scope.ts";
 import { selectInitialToolsFromSurfaceController } from "../../packages/butler-agent/src/agent/tools/tool-surface-selection.ts";
-
-const PROJECT_LEDGER_MUTATION_TOOL_NAMES = [
-  "project_ledger_index",
-  "project_ledger_create",
-  "project_ledger_update",
-  "project_ledger_render",
-  "project_ledger_work_update",
-  "project_ledger_work_complete",
-  "project_ledger_task_update",
-  "project_ledger_task_complete",
-  "project_ledger_attempt_start",
-  "project_ledger_attempt_succeed",
-  "project_ledger_attempt_fail",
-] as const;
 
 function createStructuredInitialState(): ToolSurfaceControllerState {
   return createInitialToolSurfaceControllerState({
@@ -208,7 +195,7 @@ test("initial surface selection blocks Ledger mutation tools for failed validati
     turnMetadata: {
       runtimePolicy: {
         requiredNativeToolProfiles: ["project-lifecycle"],
-        requiredNativeTools: ["project_ledger_task_complete", "project_ledger_attempt_succeed"],
+        requiredNativeTools: [...PROJECT_LEDGER_MUTATION_TOOL_NAMES],
         tracking_mode: "ledger",
         runtime_phase: "closeout_planned",
         validation_state: "validation_failed",
