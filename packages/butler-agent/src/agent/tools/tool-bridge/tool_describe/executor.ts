@@ -8,7 +8,7 @@ import {
 import { BUTLER_TOOLS, TOOL_CAPABILITY_METADATA } from "../../registry.ts";
 import { nativeToolAvailability } from "../../tool-availability.ts";
 import { disabledExternalToolDescription } from "../external-description.ts";
-import { canBridgeMcpTool, canBridgeNativeTool, scopedOutDisabledReason } from "../scope.ts";
+import { canBridgeMcpTool, nativeBridgeAvailability, scopedOutDisabledReason } from "../scope.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type PluginToolCatalog =
@@ -85,10 +85,15 @@ function describeNativeTool(
   if (!tool) return null;
   const metadata = TOOL_CAPABILITY_METADATA[tool.name];
   if (!metadata) return null;
-  const scoped = canBridgeNativeTool({ toolName: tool.name, metadata, currentToolNames: input.currentToolNames });
-  const availability = scoped
-    ? nativeToolAvailability(tool, input)
-    : { enabled: false, disabledReason: scopedOutDisabledReason("native") };
+  const bridgeAvailability = nativeBridgeAvailability({
+    toolName: tool.name,
+    metadata,
+    currentToolNames: input.currentToolNames,
+  });
+  const availability: { enabled: boolean; disabledReason: string | null; recoveryHint?: string | null } =
+    bridgeAvailability.enabled
+      ? nativeToolAvailability(tool, input)
+      : bridgeAvailability;
   const schema = sanitizeSchemaForModel(tool.parameters);
   return {
     id,
@@ -98,6 +103,7 @@ function describeNativeTool(
     category: metadata.category,
     enabled: availability.enabled,
     disabled_reason: availability.disabledReason,
+    recovery_hint: availability.enabled ? null : availability.recoveryHint,
     safety_notes: metadata.safetyNotes,
     schema,
     schema_digest: schemaDigest(schema),

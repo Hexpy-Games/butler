@@ -118,7 +118,7 @@ test("Project Ledger mutation tools are discoverable in the progressive native c
   });
   const scopedResult = await scopedSearch({ args: { query: "project ledger task complete", provider: "native" } }) as {
     ok: boolean;
-    results: Array<{ name: string; enabled: boolean; id: string }>;
+    results: Array<{ name: string; enabled: boolean; id: string; disabled_reason: string | null; recovery_hint: string | null }>;
   };
 
   expect(scopedResult.ok).toBe(true);
@@ -126,6 +126,8 @@ test("Project Ledger mutation tools are discoverable in the progressive native c
     id: "native:project_ledger_task_complete",
     name: "project_ledger_task_complete",
     enabled: false,
+    disabled_reason: expect.stringContaining("Ledger-tracked project turn"),
+    recovery_hint: expect.stringContaining("Do not mutate Project Ledger records through run_command or write_file"),
   }));
 
   const closeoutSearch = createToolSearchToolHandler({
@@ -138,7 +140,7 @@ test("Project Ledger mutation tools are discoverable in the progressive native c
       "project_ledger_task_complete",
     ],
   });
-  const closeoutResult = await closeoutSearch({ args: { query: "project ledger task complete", provider: "native" } }) as {
+  const closeoutResult = await closeoutSearch({ args: { query: "project ledger task complete update", provider: "native" } }) as {
     ok: boolean;
     results: Array<{ name: string; enabled: boolean; id: string }>;
   };
@@ -147,6 +149,11 @@ test("Project Ledger mutation tools are discoverable in the progressive native c
   expect(closeoutResult.results).toContainEqual(expect.objectContaining({
     id: "native:project_ledger_task_complete",
     name: "project_ledger_task_complete",
+    enabled: true,
+  }));
+  expect(closeoutResult.results).toContainEqual(expect.objectContaining({
+    id: "native:project_ledger_update",
+    name: "project_ledger_update",
     enabled: true,
   }));
 
@@ -173,7 +180,13 @@ test("Project Ledger mutation cannot bridge from read-only project surface", asy
     args: { ids: ["native:project_ledger_task_complete", "native:project_ledger_update"] },
   }) as {
     ok: boolean;
-    descriptions: Array<{ id: string; enabled: boolean; call_affordance: { type: string } }>;
+    descriptions: Array<{
+      id: string;
+      enabled: boolean;
+      disabled_reason: string | null;
+      recovery_hint: string | null;
+      call_affordance: { type: string };
+    }>;
   };
 
   expect(description.ok).toBe(true);
@@ -181,6 +194,8 @@ test("Project Ledger mutation cannot bridge from read-only project surface", asy
     expect.objectContaining({
       id: "native:project_ledger_task_complete",
       enabled: false,
+      disabled_reason: expect.stringContaining("Ledger-tracked project turn"),
+      recovery_hint: expect.stringContaining("Do not mutate Project Ledger records through run_command or write_file"),
       call_affordance: { type: "disabled", reason: expect.any(String) },
     }),
     expect.objectContaining({

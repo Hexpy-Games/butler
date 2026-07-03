@@ -142,6 +142,9 @@ function parseToolCategory(value: unknown): {
   const normalized = value.trim();
   if (!normalized) return {};
   const lower = normalized.toLowerCase();
+  if (lower === "all" || lower === "any" || lower === "native" || lower === "registry" || lower === "workspace") {
+    return {};
+  }
   if (lower === "shell" || lower === "terminal" || lower === "execution" || lower === "execute") {
     return { category: "command" };
   }

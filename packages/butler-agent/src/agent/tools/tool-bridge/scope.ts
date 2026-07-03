@@ -1,8 +1,12 @@
 import type { ToolCapabilityMetadata } from "../types.ts";
-import { PROJECT_LEDGER_MUTATION_TOOL_NAME_SET } from "../project-ledger/mutation-tools.ts";
+import {
+  PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES,
+  PROJECT_LEDGER_MUTATION_TOOL_NAME_SET,
+} from "../project-ledger/mutation-tools.ts";
 
 const ALWAYS_DISCOVERABLE_NATIVE_CATEGORIES = new Set(["search"]);
 const BRIDGE_TOOL_NAMES = new Set(["tool_search", "tool_describe", "tool_call"]);
+const PROJECT_LEDGER_LIFECYCLE_TOOL_NAME_SET = new Set<string>(PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES);
 
 export function currentToolNamesFromInput(
   value: readonly string[] | (() => readonly string[]) | undefined,
@@ -15,12 +19,53 @@ export function canBridgeNativeTool(input: {
   metadata: ToolCapabilityMetadata;
   currentToolNames?: readonly string[] | (() => readonly string[]);
 }): boolean {
-  if (BRIDGE_TOOL_NAMES.has(input.toolName)) return false;
+  return nativeBridgeAvailability(input).enabled;
+}
+
+export function nativeBridgeAvailability(input: {
+  toolName: string;
+  metadata: ToolCapabilityMetadata;
+  currentToolNames?: readonly string[] | (() => readonly string[]);
+}): { enabled: boolean; disabledReason: string | null; recoveryHint: string | null } {
+  if (BRIDGE_TOOL_NAMES.has(input.toolName)) {
+    return {
+      enabled: false,
+      disabledReason: "Bridge tools cannot be recursively invoked through the bridge.",
+      recoveryHint: "Call the visible bridge tool directly.",
+    };
+  }
   const currentToolNames = new Set(currentToolNamesFromInput(input.currentToolNames));
-  if (currentToolNames.has(input.toolName)) return true;
-  if (PROJECT_LEDGER_MUTATION_TOOL_NAME_SET.has(input.toolName)) return false;
-  if (input.metadata.tags.includes("project-ledger") && currentToolNames.has("project_ledger_status")) return true;
-  return ALWAYS_DISCOVERABLE_NATIVE_CATEGORIES.has(input.metadata.category);
+  if (currentToolNames.has(input.toolName)) {
+    return { enabled: true, disabledReason: null, recoveryHint: null };
+  }
+  if (PROJECT_LEDGER_MUTATION_TOOL_NAME_SET.has(input.toolName)) {
+    if ([...currentToolNames].some((toolName) => PROJECT_LEDGER_LIFECYCLE_TOOL_NAME_SET.has(toolName))) {
+      return { enabled: true, disabledReason: null, recoveryHint: null };
+    }
+    return {
+      enabled: false,
+      disabledReason: "Project Ledger mutation tools require a Ledger-tracked project turn with mutation tools in the current native surface.",
+      recoveryHint: "Use or resume a project turn whose runtime policy has tracking_mode=ledger. Do not mutate Project Ledger records through run_command or write_file.",
+    };
+  }
+  if (input.metadata.tags.includes("project-ledger") && currentToolNames.has("project_ledger_status")) {
+    return { enabled: true, disabledReason: null, recoveryHint: null };
+  }
+  if (input.metadata.tags.includes("project-ledger")) {
+    return {
+      enabled: false,
+      disabledReason: "Project Ledger tools are outside the current turn's project tool surface.",
+      recoveryHint: "Use a project-scoped turn with Project Ledger tools selected, or continue without Ledger closeout when tracking_mode is local or none.",
+    };
+  }
+  if (ALWAYS_DISCOVERABLE_NATIVE_CATEGORIES.has(input.metadata.category)) {
+    return { enabled: true, disabledReason: null, recoveryHint: null };
+  }
+  return {
+    enabled: false,
+    disabledReason: scopedOutDisabledReason("native"),
+    recoveryHint: "Choose a tool already present in the current native surface, or adjust the structured runtime policy that selects tool profiles.",
+  };
 }
 
 export function canBridgeMcpTool(input: {
