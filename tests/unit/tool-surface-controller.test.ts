@@ -156,6 +156,34 @@ test("initial surface selection exposes Project Ledger tools when the turn asks 
   expect(selection.toolNames).toContain("render_project_dashboard");
 });
 
+test("initial surface selection preserves tracking closeout metadata for lifecycle tools", () => {
+  const selection = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "Project Ledger task T-1 complete 처리해줘.",
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata: {
+      runtimePolicy: {
+        requiredNativeToolProfiles: ["project-lifecycle"],
+        tracking_mode: "ledger",
+        runtime_phase: "closeout_planned",
+        validation_state: "validation_passed",
+      },
+    },
+    providerCapabilities: { supportsToolCalls: true },
+  });
+
+  expect(selection.state.context.turnMetadata).toEqual({
+    runtimePolicy: {
+      requiredNativeToolProfiles: ["project-lifecycle"],
+      tracking_mode: "ledger",
+      runtime_phase: "closeout_planned",
+      validation_state: "validation_passed",
+    },
+  });
+  expect(selection.toolNames).toContain("project_ledger_task_complete");
+  expect(selection.toolNames).toContain("project_ledger_attempt_succeed");
+});
+
 test("controller advances through discovered, described, promoted, and invoked states", () => {
   let state = createStructuredInitialState();
 

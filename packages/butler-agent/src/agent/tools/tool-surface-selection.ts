@@ -84,6 +84,13 @@ function surfacePolicyMetadata(
     required_tools: record.required_tools,
     requiredNativeToolProfiles: record.requiredNativeToolProfiles,
     required_tool_profiles: record.required_tool_profiles,
+    trackingMode: record.trackingMode,
+    tracking_mode: record.tracking_mode,
+    runtimePhase: record.runtimePhase,
+    runtime_phase: record.runtime_phase,
+    phase: record.phase,
+    validationState: record.validationState,
+    validation_state: record.validation_state,
     runtimePolicy: surfaceRuntimePolicy(runtimePolicy),
   });
   return Object.keys(filtered).length > 0 ? filtered : undefined;
@@ -99,6 +106,13 @@ function surfaceRuntimePolicy(runtimePolicy: Record<string, unknown>): Record<st
     required_tools: runtimePolicy.required_tools,
     requiredNativeToolProfiles: runtimePolicy.requiredNativeToolProfiles,
     required_tool_profiles: runtimePolicy.required_tool_profiles,
+    trackingMode: runtimePolicy.trackingMode,
+    tracking_mode: runtimePolicy.tracking_mode,
+    runtimePhase: runtimePolicy.runtimePhase,
+    runtime_phase: runtimePolicy.runtime_phase,
+    phase: runtimePolicy.phase,
+    validationState: runtimePolicy.validationState,
+    validation_state: runtimePolicy.validation_state,
   });
   return Object.keys(filtered).length > 0 ? filtered : undefined;
 }

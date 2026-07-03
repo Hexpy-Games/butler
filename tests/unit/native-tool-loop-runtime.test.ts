@@ -7728,7 +7728,15 @@ test("native runtime discovers and executes Project Ledger mutation through tool
     provider: fakeProvider,
     model: "openai/auto:codex-latest",
     input: { text: "Project Ledger task를 완료해줘." },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    metadata: {
+      runtimePolicy: {
+        completionReview: "disabled",
+        requiredNativeToolProfiles: ["project-lifecycle"],
+        tracking_mode: "ledger",
+        runtime_phase: "closeout_planned",
+        validation_state: "validation_passed",
+      },
+    },
   });
 
   expect(describeResult).toMatchObject({

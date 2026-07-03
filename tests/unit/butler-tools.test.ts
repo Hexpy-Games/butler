@@ -60,6 +60,15 @@ const projectLedgerToolNames: string[] = [
   "project_ledger_render",
   "project_ledger_check",
 ];
+const projectLedgerLifecycleToolNames = [
+  "project_ledger_work_update",
+  "project_ledger_work_complete",
+  "project_ledger_task_update",
+  "project_ledger_task_complete",
+  "project_ledger_attempt_start",
+  "project_ledger_attempt_succeed",
+  "project_ledger_attempt_fail",
+] as const;
 const projectMetadataToolNames: string[] = [
   "project_ledger_status",
   "project_ledger_check",
@@ -78,6 +87,9 @@ const projectLifecycleWorkspaceToolNames: string[] = [
   "project_ledger_work_complete",
   "project_ledger_task_update",
   "project_ledger_task_complete",
+  "project_ledger_attempt_start",
+  "project_ledger_attempt_succeed",
+  "project_ledger_attempt_fail",
   "project_ledger_check",
   "inspect_project_status",
   "query_project_work",
@@ -604,7 +616,14 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
     role: "butler",
     text,
     sessionMetadata: { projectId: "butler" },
-    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+    turnMetadata: {
+      runtimePolicy: {
+        requiredNativeToolProfiles: ["workspace", "project-lifecycle"],
+        tracking_mode: "ledger",
+        runtime_phase: "closeout_planned",
+        validation_state: "validation_passed",
+      },
+    },
   });
   const names = tools.map((tool) => tool.name);
 
@@ -612,14 +631,21 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
     role: "butler",
     text,
     sessionMetadata: { projectId: "butler" },
-    turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
+    turnMetadata: {
+      runtimePolicy: {
+        requiredNativeToolProfiles: ["workspace", "project-lifecycle"],
+        tracking_mode: "ledger",
+        runtime_phase: "closeout_planned",
+        validation_state: "validation_passed",
+      },
+    },
   })).toEqual(["startup", "project", "project-lifecycle", "workspace"]);
   expect(names).toEqual(projectLifecycleWorkspaceToolNames);
   expect(names).not.toContain("web_search");
   expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  expect(toolContractJsonChars(tools)).toBeLessThan(18_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(24_000);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -838,11 +864,19 @@ test("Project Ledger requests without project metadata expose the bounded projec
   expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
 });
 
-test("Project Ledger project sessions expose lifecycle closeout tools without discovery detours", () => {
+test("Project Ledger project sessions expose lifecycle closeout tools only after structured closeout gate", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "Project Ledger work W-RUNTIME-TOOL-MODULARIZATION를 complete 처리해줘.",
     sessionMetadata: { projectId: "butler" },
+    turnMetadata: {
+      runtimePolicy: {
+        requiredNativeToolProfiles: ["project-lifecycle"],
+        tracking_mode: "ledger",
+        runtime_phase: "closeout_planned",
+        validation_state: "validation_passed",
+      },
+    },
   });
   const names = tools.map((tool) => tool.name);
 
@@ -852,10 +886,71 @@ test("Project Ledger project sessions expose lifecycle closeout tools without di
   expect(names).toContain("project_ledger_task_complete");
   expect(names).toContain("project_ledger_work_update");
   expect(names).toContain("project_ledger_work_complete");
+  expect(names).toContain("project_ledger_attempt_start");
+  expect(names).toContain("project_ledger_attempt_succeed");
+  expect(names).toContain("project_ledger_attempt_fail");
   expect(names).toContain("project_ledger_check");
   expect(names).toContain("query_project_work");
   expect(names).toContain("render_project_dashboard");
   expect(names).not.toContain("complete_project_work");
+});
+
+test("Project Ledger lifecycle tools stay hidden in local and none tracking modes", () => {
+  for (const trackingMode of ["local", "none"]) {
+    const tools = selectButlerToolsForTurn({
+      role: "butler",
+      text: "Project Ledger task T-1 complete 처리해줘.",
+      sessionMetadata: { projectId: "butler" },
+      turnMetadata: {
+        runtimePolicy: {
+          requiredNativeToolProfiles: ["project-lifecycle"],
+          requiredNativeTools: [
+            "project_ledger_task_complete",
+            "project_ledger_attempt_succeed",
+          ],
+          tracking_mode: trackingMode,
+          runtime_phase: "closeout_planned",
+          validation_state: "validation_passed",
+        },
+      },
+    });
+    const names = tools.map((tool) => tool.name);
+
+    expect(names).toContain("project_ledger_status");
+    expect(names).toContain("query_project_work");
+    for (const toolName of projectLedgerLifecycleToolNames) {
+      expect(names).not.toContain(toolName);
+    }
+  }
+});
+
+test("Project Ledger lifecycle tools stay hidden until validation passes and closeout starts", () => {
+  const blockedPolicies = [
+    { runtime_phase: "validation", validation_state: "validation_passed" },
+    { runtime_phase: "closeout_planned", validation_state: "validation_repair" },
+    { runtime_phase: "closeout_planned", validation_state: "validation_failed" },
+  ];
+
+  for (const runtimePolicy of blockedPolicies) {
+    const tools = selectButlerToolsForTurn({
+      role: "butler",
+      text: "Project Ledger task T-1 complete 처리해줘.",
+      sessionMetadata: { projectId: "butler" },
+      turnMetadata: {
+        runtimePolicy: {
+          requiredNativeToolProfiles: ["project-lifecycle"],
+          requiredNativeTools: ["project_ledger_task_complete"],
+          tracking_mode: "ledger",
+          ...runtimePolicy,
+        },
+      },
+    });
+
+    const names = tools.map((tool) => tool.name);
+    for (const toolName of projectLedgerLifecycleToolNames) {
+      expect(names).not.toContain(toolName);
+    }
+  }
 });
 
 test("explicit required tools add exact tool names while removed tool names are ignored", () => {
