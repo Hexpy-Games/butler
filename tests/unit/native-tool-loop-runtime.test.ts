@@ -10003,6 +10003,7 @@ test("focused WorkStream resume hydrates logical-turn budget from checkpoint wit
   });
   new WorkStreamStore(tempDir).updateFromTodoList({
     ownerSessionId: sessionId,
+    originChatId: sessionId,
     listId: todoView.list.list_id,
     title: "Focused resume budget snapshot",
     items: todoView.list.items,
@@ -10106,6 +10107,7 @@ test("focused WorkStream resume yields before consuming the global model request
   });
   const stream = new WorkStreamStore(tempDir).updateFromTodoList({
     ownerSessionId: sessionId,
+    originChatId: sessionId,
     listId: todoView.list.list_id,
     title: "Focused resume phase budget",
     items: todoView.list.items,
@@ -10198,6 +10200,7 @@ test("focused WorkStream validation repair does not repeat an unchanged completi
   });
   new WorkStreamStore(tempDir).updateFromTodoList({
     ownerSessionId: sessionId,
+    originChatId: sessionId,
     listId: todoView.list.list_id,
     title: "Focused repeated completion gap",
     items: todoView.list.items,
@@ -10279,6 +10282,7 @@ test("focused WorkStream resume records tool calls by phase", async () => {
   });
   new WorkStreamStore(tempDir).updateFromTodoList({
     ownerSessionId: sessionId,
+    originChatId: sessionId,
     listId: todoView.list.list_id,
     title: "Focused resume tool metrics",
     items: todoView.list.items,
@@ -10381,6 +10385,7 @@ test("focused WorkStream resume yields before executing an oversized tool-call b
   });
   new WorkStreamStore(tempDir).updateFromTodoList({
     ownerSessionId: sessionId,
+    originChatId: sessionId,
     listId: todoView.list.list_id,
     title: "Focused resume tool call cap",
     items: todoView.list.items,

@@ -166,7 +166,6 @@ function scanCandidates(input: {
   for (const record of records) {
     const checkpoint = checkpointForRecord({
       butlerData: input.butlerData,
-      chatId: input.chatId,
       record,
     });
     if (!checkpoint.ok) {
@@ -203,7 +202,8 @@ function workStreamChatMatches(
 ): boolean {
   const currentChatId = chatId?.trim();
   const originChatId = record.origin_chat_id?.trim();
-  return !currentChatId || !originChatId || originChatId === currentChatId;
+  if (!currentChatId) return true;
+  return originChatId === currentChatId;
 }
 
 function structuredResumeControl(

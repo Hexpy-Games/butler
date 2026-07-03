@@ -278,6 +278,35 @@ test("checkpoint resume rejects WorkStreams created for another chat in the same
   });
 });
 
+test("checkpoint resume rejects unknown-origin WorkStreams when the current chat is known", () => {
+  const unknownOrigin = createRecoverableStream({
+    sessionId: "butler/shared-session",
+    listId: "unknown-origin-work",
+    now: "2026-07-03T00:00:00.000Z",
+    recoverableAt: "2026-07-03T00:01:00.000Z",
+  });
+
+  expect(selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/shared-session",
+    chatId: "chat-b",
+  })).toMatchObject({
+    state: "fresh_turn",
+    reason: "no_candidates",
+    candidates: [],
+  });
+  expect(selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/shared-session",
+    chatId: "chat-b",
+    turnMetadata: { workstreamResume: { action: "resume", workStreamId: unknownOrigin.id } },
+  })).toMatchObject({
+    state: "resume_conflict",
+    reason: "explicit_target_missing",
+    candidates: [],
+  });
+});
+
 test("checkpoint resume blocks waiting-user WorkStreams until structured user action is supplied", () => {
   const waiting = createStream({
     sessionId: "butler/session",

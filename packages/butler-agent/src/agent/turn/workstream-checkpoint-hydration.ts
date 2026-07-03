@@ -16,7 +16,6 @@ import type {
 
 export function checkpointForRecord(input: {
   butlerData: string;
-  chatId?: string | null;
   record: WorkStreamRecord;
 }): { ok: true; value: WorkStreamResumeCheckpoint } | { ok: false; code: WorkStreamResumeIssue["code"] } {
   const record = input.record;
@@ -47,7 +46,7 @@ export function checkpointForRecord(input: {
       checkpointId: `workstream:${record.id}:${record.updated_at}`,
       workStreamId: record.id,
       sessionId: record.owner_session_id ?? "",
-      chatId: safeCheckpointId(record.origin_chat_id) ?? safeCheckpointId(input.chatId) ?? safeCheckpointId(record.owner_session_id),
+      chatId: safeCheckpointId(record.origin_chat_id),
       originatingTurnId: safeCheckpointId(record.last_user_turn_id),
       userMessageId: safeCheckpointId(atom?.userRequest.id),
       projectId: record.project_id,
