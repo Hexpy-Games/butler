@@ -8,6 +8,8 @@ const APP_WORKSPACE_REQUIRED_TOOL_NAMES = new Set([
 export function appRuntimePolicy(input: {
   existing?: unknown;
   accessMode: SettingsView["access_mode"];
+  projectId?: string | null;
+  sessionKind?: string | null;
 }): Record<string, unknown> {
   const existing = input.existing &&
       typeof input.existing === "object" &&
@@ -20,10 +22,20 @@ export function appRuntimePolicy(input: {
   if (input.accessMode === "full_access") {
     requestedProfiles.push("workspace");
   }
+  const trackingMode = runtimeTrackingMode({
+    existing,
+    projectId: input.projectId,
+    sessionKind: input.sessionKind,
+  });
+  const closeoutStrategy = closeoutStrategyForTrackingMode(trackingMode);
 
   return {
     ...existing,
     accessMode: input.accessMode,
+    trackingMode,
+    tracking_mode: trackingMode,
+    closeoutStrategy,
+    closeout_strategy: closeoutStrategy,
     requiredNativeTools: requiredToolsForAccessMode(
       existing.requiredNativeTools,
       input.accessMode,
@@ -53,4 +65,25 @@ function requiredToolsForAccessMode(
   return accessMode === "full_access"
     ? names
     : names.filter((name) => !APP_WORKSPACE_REQUIRED_TOOL_NAMES.has(name));
+}
+
+function runtimeTrackingMode(input: {
+  existing: Record<string, unknown>;
+  projectId?: string | null;
+  sessionKind?: string | null;
+}): "ledger" | "local" | "none" {
+  const existingMode = trackingModeValue(input.existing.tracking_mode ?? input.existing.trackingMode);
+  if (existingMode) return existingMode;
+  if (input.projectId?.trim() || input.sessionKind === "project") return "local";
+  return "none";
+}
+
+function trackingModeValue(value: unknown): "ledger" | "local" | "none" | null {
+  return value === "ledger" || value === "local" || value === "none" ? value : null;
+}
+
+function closeoutStrategyForTrackingMode(mode: "ledger" | "local" | "none"): "ledger" | "local_workstream" | "noop" {
+  if (mode === "ledger") return "ledger";
+  if (mode === "local") return "local_workstream";
+  return "noop";
 }

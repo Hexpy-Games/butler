@@ -52,7 +52,9 @@ export function turnMetadataWithResumeDecisionPolicy(
     closeout_strategy: closeoutStrategy,
     runtimePolicy: {
       ...objectRecord(metadata?.runtimePolicy),
+      trackingMode,
       tracking_mode: trackingMode,
+      closeoutStrategy,
       closeout_strategy: closeoutStrategy,
     },
     requiredNativeTools: mergeStringArrays(

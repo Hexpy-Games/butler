@@ -85,7 +85,9 @@ export function turnMetadataWithFocusedResumePolicy(
     closeout_strategy: envelope.checkpoint.closeoutStrategy,
     runtimePolicy: {
       ...objectRecord(metadata?.runtimePolicy),
+      trackingMode: envelope.checkpoint.trackingMode,
       tracking_mode: envelope.checkpoint.trackingMode,
+      closeoutStrategy: envelope.checkpoint.closeoutStrategy,
       closeout_strategy: envelope.checkpoint.closeoutStrategy,
     },
     requiredNativeTools,
