@@ -7,6 +7,11 @@ import {
   projectLedgerRenderedViewEvidence,
   runProjectLedgerTool,
 } from "../../../integrations/project-ledger/client.ts";
+import {
+  applyProjectLedgerLifecycleCloseout,
+  needsProjectLedgerLifecycleCloseout,
+  runProjectLedgerLifecycleCloseout,
+} from "./closeout.ts";
 import { projectLedgerNativeNextHints } from "./recovery-hints.ts";
 
 type ToolCall = { args: Record<string, unknown> };
@@ -26,26 +31,42 @@ type ToolSpec = {
 };
 
 const recordFields = {
-  project_path: { type: "string", description: "Workspace/project path used to resolve the canonical Project Ledger project." },
-  kind: { type: "string", description: "Project Ledger source record kind." },
-  id: { type: "string", description: "Project Ledger record id." },
+  project_path: { type: "string", description: "Project path." },
+  kind: { type: "string", description: "Record kind." },
+  id: { type: "string", description: "Record id." },
   title: { type: "string", description: "Record title." },
-  status: { type: "string", description: "Lifecycle/status value accepted by Project Ledger for this record kind." },
-  body: { type: "string", description: "Markdown body to write through Project Ledger CLI/core behavior." },
-  validation: { type: "string", description: "Validation evidence summary or path." },
-  review: { type: "string", description: "Review evidence summary or path." },
-  report: { type: "string", description: "Report or handoff path." },
-  spec: { type: "string", description: "Linked spec id or path." },
-  acceptance: { type: "string", description: "Acceptance evidence summary or path." },
-  implementation: { type: "string", description: "Implementation evidence summary or path." },
-  mitigation: { type: "string", description: "Mitigation evidence summary or path." },
-  priority: { type: "number", description: "Project Ledger priority value." },
-  work_id: { type: "string", description: "Parent work id for task creation." },
-  task_id: { type: "string", description: "Parent task id for attempt creation." },
-  include_body: { type: "boolean", description: "Include the Markdown body in the result." },
-  limit: { type: "number", description: "Maximum number of list results to return after CLI/core query." },
-  query: { type: "string", description: "Case-insensitive text filter applied to CLI/core query results." },
+  status: { type: "string", description: "Lifecycle status." },
+  body: { type: "string", description: "Markdown body." },
+  validation: { type: "string", description: "Validation evidence." },
+  review: { type: "string", description: "Review evidence." },
+  report: { type: "string", description: "Report path or summary." },
+  spec: { type: "string", description: "Linked spec." },
+  acceptance: { type: "string", description: "Acceptance evidence." },
+  implementation: { type: "string", description: "Implementation evidence." },
+  mitigation: { type: "string", description: "Mitigation evidence." },
+  priority: { type: "number", description: "Priority." },
+  work_id: { type: "string", description: "Parent work id." },
+  task_id: { type: "string", description: "Parent task id." },
+  include_body: { type: "boolean", description: "Include body." },
+  limit: { type: "number", description: "Result limit." },
+  query: { type: "string", description: "Text filter." },
 } satisfies Record<string, Record<string, unknown>>;
+
+const lifecycleUpdateFields = {
+  project_path: recordFields.project_path,
+  id: recordFields.id,
+  status: recordFields.status,
+  body: recordFields.body,
+  spec: recordFields.spec,
+};
+
+const lifecycleCompleteFields = {
+  project_path: recordFields.project_path,
+  id: recordFields.id,
+  validation: recordFields.validation,
+  review: recordFields.review,
+  report: recordFields.report,
+};
 
 const toolSpecs = [
   { name: "project_ledger_index", description: "Rebuild the Project Ledger compact index for the resolved project path.", properties: { project_path: recordFields.project_path }, mutates: true },
@@ -54,10 +75,10 @@ const toolSpecs = [
   { name: "project_ledger_show", description: "Show one Project Ledger record summary, optionally including its Markdown body.", required: ["id"], properties: { project_path: recordFields.project_path, kind: recordFields.kind, id: recordFields.id, include_body: recordFields.include_body }, mutates: false },
   { name: "project_ledger_create", description: "Create a modeled Project Ledger source record through CLI/core behavior.", required: ["kind", "id", "title"], properties: recordFields, mutates: true },
   { name: "project_ledger_update", description: "Update frontmatter and/or body for a modeled Project Ledger source record through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
-  { name: "project_ledger_work_update", description: "Update or transition a Project Ledger work record through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
-  { name: "project_ledger_work_complete", description: "Complete Project Ledger work with CLI/core completion gates and actionable failure details.", required: ["id"], properties: recordFields, mutates: true },
-  { name: "project_ledger_task_update", description: "Update or transition a Project Ledger task record through task-specific CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
-  { name: "project_ledger_task_complete", description: "Complete a Project Ledger task through task-specific CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
+  { name: "project_ledger_work_update", description: "Update or transition Project Ledger work.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
+  { name: "project_ledger_work_complete", description: "Complete Project Ledger work.", required: ["id"], properties: lifecycleCompleteFields, mutates: true },
+  { name: "project_ledger_task_update", description: "Update or transition a Project Ledger task.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
+  { name: "project_ledger_task_complete", description: "Complete a Project Ledger task.", required: ["id"], properties: lifecycleCompleteFields, mutates: true },
   { name: "project_ledger_attempt_start", description: "Create a started Project Ledger attempt under a task.", required: ["task_id"], properties: recordFields, mutates: true },
   { name: "project_ledger_attempt_succeed", description: "Mark a Project Ledger attempt succeeded through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
   { name: "project_ledger_attempt_fail", description: "Mark a Project Ledger attempt failed through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
@@ -139,6 +160,15 @@ function runProjectLedgerNativeTool(
   const projectPath = projectLedgerProjectPath(input, args);
   const cliArgs = commandForTool(toolName, args, projectPath);
   const result = withRecoverableProjectLedgerError(runProjectLedgerTool(input, cliArgs));
+  if (needsProjectLedgerLifecycleCloseout(toolName, result)) {
+    return applyProjectLedgerLifecycleCloseout(
+      result,
+      runProjectLedgerLifecycleCloseout({
+        executor: input,
+        projectPath,
+      }),
+    );
+  }
   if (toolName === "project_ledger_render") {
     return {
       ...result,

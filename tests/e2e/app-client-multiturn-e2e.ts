@@ -1910,19 +1910,7 @@ async function readBtccTypedProjection(): Promise<{ rows: BtccProgressRow[]; mod
 }
 
 async function replayAgentProgressRows(): Promise<BtccProgressRow[]> {
-  const response = await fetch(`${server.url}events?cursor=0`);
-  assert(response.ok, `event replay failed with HTTP ${response.status}`);
-  const body = await response.json() as {
-    data?: {
-      events?: Array<{
-        type?: string;
-        payload?: {
-          row?: BtccProgressRow;
-        };
-      }>;
-    };
-  };
-  return (body.data?.events ?? [])
+  return (await replayTimelineEvents())
     .filter((event) => event.type === "agent.turn_event.progress" && event.payload?.row)
     .map((event) => event.payload!.row!);
 }
@@ -3457,28 +3445,48 @@ async function replayAgentTurnEvents(): Promise<Array<{
   visibility?: string;
   payload?: Record<string, unknown>;
 }>> {
-  const response = await fetch(`${server.url}events?cursor=0`);
-  assert(response.ok, `event replay failed with HTTP ${response.status}`);
-  const body = await response.json() as {
-    data?: {
-      events?: Array<{
-        type?: string;
-        payload?: {
-          event?: {
-            kind?: string;
-            visibility?: string;
-            payload?: Record<string, unknown>;
-          };
-        };
-      }>;
-    };
-  };
-  return (body.data?.events ?? [])
+  return (await replayTimelineEvents())
     .filter((event) => event.type === "agent.turn_event")
     .map((event) => event.payload?.event)
     .filter((event): event is { kind: string; visibility?: string } =>
       Boolean(event?.kind && event.visibility !== "internal"),
     );
+}
+
+type ReplayTimelineEvent = {
+  id?: number;
+  type?: string;
+  payload?: {
+    row?: BtccProgressRow;
+    event?: {
+      kind?: string;
+      visibility?: string;
+      payload?: Record<string, unknown>;
+    };
+  };
+};
+
+async function replayTimelineEvents(): Promise<ReplayTimelineEvent[]> {
+  const events: ReplayTimelineEvent[] = [];
+  let cursor = 0;
+  for (let page = 0; page < 20; page += 1) {
+    const response = await fetch(`${server.url}events?cursor=${cursor}`);
+    assert(response.ok, `event replay failed with HTTP ${response.status}`);
+    const body = await response.json() as {
+      data?: {
+        events?: ReplayTimelineEvent[];
+        next_cursor?: number;
+      };
+    };
+    const pageEvents = body.data?.events ?? [];
+    events.push(...pageEvents);
+    const nextCursor = body.data?.next_cursor;
+    if (!pageEvents.length || typeof nextCursor !== "number" || nextCursor <= cursor) {
+      return events;
+    }
+    cursor = nextCursor;
+  }
+  throw new Error("event replay pagination exceeded 20 pages.");
 }
 
 async function fetchJson(url: string): Promise<Record<string, unknown>> {

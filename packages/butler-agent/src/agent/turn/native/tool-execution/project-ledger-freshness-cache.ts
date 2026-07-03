@@ -3,6 +3,20 @@ import { stableJsonForCache } from "../context/turn-prompt.ts";
 
 type ToolCall = Parameters<FunctionToolPromptOptions["executeTool"]>[0];
 
+const PROJECT_LEDGER_MUTATION_TOOLS = new Set([
+  "complete_project_work",
+  "project_ledger_index",
+  "project_ledger_create",
+  "project_ledger_update",
+  "project_ledger_work_update",
+  "project_ledger_work_complete",
+  "project_ledger_task_update",
+  "project_ledger_task_complete",
+  "project_ledger_attempt_start",
+  "project_ledger_attempt_succeed",
+  "project_ledger_attempt_fail",
+]);
+
 export interface ProjectLedgerFreshnessCache {
   execute: FunctionToolPromptOptions["executeTool"];
   invalidateAfterTool(call: ToolCall): void;
@@ -39,11 +53,14 @@ function invalidateProjectLedgerFreshnessAfterTool(
     cache.clear();
     return;
   }
-  if (call.name === "complete_project_work") {
+  if (PROJECT_LEDGER_MUTATION_TOOLS.has(call.name)) {
     cache.clear();
     return;
   }
-  if (call.name === "render_project_dashboard" && call.args.write === true) {
+  if (
+    (call.name === "render_project_dashboard" || call.name === "project_ledger_render") &&
+    call.args.write === true
+  ) {
     cache.clear();
   }
 }

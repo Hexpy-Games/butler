@@ -1,4 +1,5 @@
 import { spawnSync } from "child_process";
+import { randomUUID } from "crypto";
 import { existsSync, readFileSync } from "fs";
 import { basename, isAbsolute, join, relative, resolve } from "path";
 import { butlerAgentResourcesPath } from "../../runtime/paths.ts";
@@ -65,16 +66,35 @@ export function projectLedgerRenderedViewEvidence(input: {
   const data = input.result.data && typeof input.result.data === "object" && !Array.isArray(input.result.data)
     ? input.result.data as Record<string, unknown>
     : {};
-  const fallbackPath = `project-ledger/views/${safeViewName(input.view)}.md`;
-  const relativePath = typeof data.path === "string" && data.path.trim()
-    ? data.path.trim()
-    : fallbackPath;
+  if (data.written !== true || typeof data.path !== "string" || !data.path.trim()) return {};
+  const relativePath = data.path.trim();
   const artifactPath = projectLedgerArtifactPath(input.projectPath, relativePath);
   return {
     durable_artifact_created: true,
     artifact_kind: "markdown_file",
     artifact_label: relativePath,
     artifact_path: artifactPath,
+    evidence_receipts: [
+      {
+        schema: "butler.evidence-receipt.v1",
+        id: `receipt-render_project_dashboard-${randomUUID()}`,
+        producer: { kind: "tool", name: "render_project_dashboard" },
+        receiptType: "artifact",
+        verified: true,
+        covers: ["project_ledger_view", "durable_artifact"],
+        summary: "Project Ledger generated view was written as a durable markdown artifact.",
+        references: [{ kind: "project_document", ref: relativePath, label: basename(relativePath) }],
+        artifacts: [
+          {
+            label: relativePath,
+            path: artifactPath,
+            mediaType: "text/markdown",
+            role: "project_ledger_view",
+          },
+        ],
+        satisfies: ["durable_artifact"],
+      },
+    ],
     verified_output_files: [
       {
         path: relativePath,
@@ -90,10 +110,6 @@ function projectLedgerArtifactPath(projectPath: string, relativePath: string): s
     return resolve(projectPath, "..", "..", "..", normalizedRelativePath);
   }
   return resolve(projectPath, relativePath);
-}
-
-function safeViewName(view: string): string {
-  return view.replace(/[^a-zA-Z0-9_-]/gu, "-").replace(/-+/gu, "-") || "view";
 }
 
 function canonicalProjectLedgerProjectPath(butlerData: string | undefined, projectPath: string): string | null {

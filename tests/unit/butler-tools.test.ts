@@ -62,17 +62,23 @@ const projectLedgerToolNames: string[] = [
 ];
 const projectMetadataToolNames: string[] = [
   "project_ledger_status",
+  "project_ledger_check",
   "inspect_project_status",
   "query_project_work",
   "render_project_dashboard",
   ...startupOnlyToolNames,
 ];
-const projectWorkspaceToolNames: string[] = [
+const projectLifecycleWorkspaceToolNames: string[] = [
   "run_command",
   "read_file",
   "write_file",
   "grep_files",
   "project_ledger_status",
+  "project_ledger_work_update",
+  "project_ledger_work_complete",
+  "project_ledger_task_update",
+  "project_ledger_task_complete",
+  "project_ledger_check",
   "inspect_project_status",
   "query_project_work",
   "render_project_dashboard",
@@ -554,7 +560,42 @@ test("project sessions expose bounded project tools without workspace escalation
   expect(names).not.toContain("call_mcp_tool");
   expect(names).not.toContain("create_planned_task");
   expect(names).not.toContain("create_work_orchestration");
-  expect(toolContractJsonChars(tools)).toBeLessThan(10_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(11_000);
+});
+
+test("project sessions keep Project Ledger lifecycle tools hidden for status-only wording", () => {
+  const prompts = [
+    "Project Ledger 처리 현황만 확인해줘.",
+    "Project Ledger update status만 확인해줘.",
+    "코드 수정 방향만 검토해줘.",
+    [
+      "Local private Butler workspace E2E toolchain check.",
+      "Complete the work in one turn. Use the available local Butler tools; do not ask the user a follow-up question.",
+      "1. Inspect local Project Ledger status for workspace path: /tmp/project",
+      "2. Query local Project Ledger work with kind: next-actions for workspace path: /tmp/project",
+      "3. Render the local Project Ledger dashboard with view: dashboard, write: true, workspace path: /tmp/project",
+    ].join("\n"),
+  ];
+
+  for (const text of prompts) {
+    const tools = selectButlerToolsForTurn({
+      role: "butler",
+      text,
+      sessionMetadata: { projectId: "butler" },
+    });
+    const names = tools.map((tool) => tool.name);
+
+    expect(selectButlerToolProfiles({
+      role: "butler",
+      text,
+      sessionMetadata: { projectId: "butler" },
+    })).not.toContain("project-lifecycle");
+    expect(names).toContain("project_ledger_status");
+    expect(names).not.toContain("project_ledger_work_update");
+    expect(names).not.toContain("project_ledger_work_complete");
+    expect(names).not.toContain("project_ledger_task_update");
+    expect(names).not.toContain("project_ledger_task_complete");
+  }
 });
 
 test("Korean Project Ledger registration prompts require explicit workspace policy", () => {
@@ -572,13 +613,13 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
     text,
     sessionMetadata: { projectId: "butler" },
     turnMetadata: { runtimePolicy: { requiredNativeToolProfiles: ["workspace"] } },
-  })).toEqual(["startup", "project", "workspace"]);
-  expect(names).toEqual(projectWorkspaceToolNames);
+  })).toEqual(["startup", "project", "project-lifecycle", "workspace"]);
+  expect(names).toEqual(projectLifecycleWorkspaceToolNames);
   expect(names).not.toContain("web_search");
   expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  expect(toolContractJsonChars(tools)).toBeLessThan(16_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(18_000);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -787,12 +828,17 @@ test("Project Ledger requests without project metadata expose the bounded projec
   expect(names).toContain("inspect_project_status");
   expect(names).toContain("query_project_work");
   expect(names).toContain("render_project_dashboard");
+  expect(names).toContain("project_ledger_check");
+  expect(names).not.toContain("project_ledger_work_update");
   expect(names).not.toContain("project_ledger_work_complete");
+  expect(names).not.toContain("project_ledger_task_update");
+  expect(names).not.toContain("project_ledger_task_complete");
+  expect(names).not.toContain("project_ledger_create");
   expect(names).not.toContain("get_weather_with_knowhow");
   expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
 });
 
-test("Project Ledger project sessions expose status anchor without legacy completion primitives", () => {
+test("Project Ledger project sessions expose lifecycle closeout tools without discovery detours", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "Project Ledger work W-RUNTIME-TOOL-MODULARIZATION를 complete 처리해줘.",
@@ -802,8 +848,11 @@ test("Project Ledger project sessions expose status anchor without legacy comple
 
   expect(names).toContain("inspect_project_status");
   expect(names).toContain("project_ledger_status");
-  expect(names).not.toContain("project_ledger_task_complete");
-  expect(names).not.toContain("project_ledger_work_complete");
+  expect(names).toContain("project_ledger_task_update");
+  expect(names).toContain("project_ledger_task_complete");
+  expect(names).toContain("project_ledger_work_update");
+  expect(names).toContain("project_ledger_work_complete");
+  expect(names).toContain("project_ledger_check");
   expect(names).toContain("query_project_work");
   expect(names).toContain("render_project_dashboard");
   expect(names).not.toContain("complete_project_work");
@@ -3700,11 +3749,23 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
     args: {
       project_path: projectPath,
       id: "T-NATIVE-BODY",
+      status: "in_progress",
       body: "# Native Task Body\n\nUpdated through project_ledger_task_update.\n",
     },
     rawArguments: "{}",
   }) as Record<string, any>;
   expect(nativeUpdatedTask.ok).toBe(true);
+  expect(nativeUpdatedTask.project_ledger_closeout).toEqual(expect.objectContaining({
+    ok: true,
+    check_ok: true,
+    issue_count: 0,
+    rendered_views: expect.arrayContaining([
+      expect.objectContaining({ view: "dashboard", ok: true, written: true }),
+      expect.objectContaining({ view: "handoff", ok: true, written: true }),
+      expect.objectContaining({ view: "roadmap", ok: true, written: true }),
+    ]),
+  }));
+  expect(JSON.stringify(nativeUpdatedTask.project_ledger_closeout)).not.toContain("Project Ledger Dashboard");
   const nativeShownUpdatedTask = await execute({
     name: "project_ledger_show",
     args: {
@@ -3717,17 +3778,28 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
   }) as Record<string, any>;
   expect(nativeShownUpdatedTask.data.body).toContain("Updated through project_ledger_task_update.");
 
-  const staleCheck = await execute({
+  const cleanCheckAfterTaskUpdate = await execute({
     name: "project_ledger_check",
     args: { project_path: projectPath, verbose: true },
     rawArguments: "{}",
   }) as Record<string, any>;
-  expect(staleCheck.ok).toBe(false);
-  expect(staleCheck.recoverable).toBe(true);
-  expect(JSON.stringify(staleCheck.error.next)).toContain("project-ledger index");
-  expect(staleCheck.error.native_next).toContainEqual(expect.objectContaining({
-    tool: "project_ledger_index",
-    args: {},
+  expect(cleanCheckAfterTaskUpdate.ok).toBe(true);
+
+  const nativeCompletedTask = await execute({
+    name: "project_ledger_task_complete",
+    args: {
+      project_path: projectPath,
+      id: "T-NATIVE-BODY",
+      validation: "Validated through native Project Ledger closeout test.",
+      review: "Reviewed for lifecycle closeout hygiene.",
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(nativeCompletedTask.ok).toBe(true);
+  expect(nativeCompletedTask.project_ledger_closeout).toEqual(expect.objectContaining({
+    ok: true,
+    check_ok: true,
+    issue_count: 0,
   }));
 
   const nativeIndexed = await execute({
@@ -3760,6 +3832,7 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
     path: "project-ledger/projects/ledger-demo/views/dashboard.md",
     artifact_kind: "markdown_file",
   });
+  expect(satisfiedCompletionObligationsForToolResult("render_project_dashboard", written)).toContain("durable_artifact");
 });
 
 test("Project Ledger tools do not verify source evidence when the CLI did not return state", async () => {
