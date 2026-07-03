@@ -9,7 +9,23 @@ import {
   type ToolSurfaceControllerInput,
   type ToolSurfaceControllerState,
 } from "../../packages/butler-agent/src/agent/tools/tool-surface-controller.ts";
+import { TOOL_CAPABILITY_METADATA } from "../../packages/butler-agent/src/agent/tools/registry.ts";
+import { canBridgeNativeTool } from "../../packages/butler-agent/src/agent/tools/tool-bridge/scope.ts";
 import { selectInitialToolsFromSurfaceController } from "../../packages/butler-agent/src/agent/tools/tool-surface-selection.ts";
+
+const PROJECT_LEDGER_MUTATION_TOOL_NAMES = [
+  "project_ledger_index",
+  "project_ledger_create",
+  "project_ledger_update",
+  "project_ledger_render",
+  "project_ledger_work_update",
+  "project_ledger_work_complete",
+  "project_ledger_task_update",
+  "project_ledger_task_complete",
+  "project_ledger_attempt_start",
+  "project_ledger_attempt_succeed",
+  "project_ledger_attempt_fail",
+] as const;
 
 function createStructuredInitialState(): ToolSurfaceControllerState {
   return createInitialToolSurfaceControllerState({
@@ -182,6 +198,37 @@ test("initial surface selection preserves tracking closeout metadata for lifecyc
   });
   expect(selection.toolNames).toContain("project_ledger_task_complete");
   expect(selection.toolNames).toContain("project_ledger_attempt_succeed");
+});
+
+test("initial surface selection blocks Ledger mutation tools for failed validation", () => {
+  const selection = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "Project Ledger task T-1 complete 처리해줘.",
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata: {
+      runtimePolicy: {
+        requiredNativeToolProfiles: ["project-lifecycle"],
+        requiredNativeTools: ["project_ledger_task_complete", "project_ledger_attempt_succeed"],
+        tracking_mode: "ledger",
+        runtime_phase: "closeout_planned",
+        validation_state: "validation_failed",
+      },
+    },
+    providerCapabilities: { supportsToolCalls: true },
+  });
+
+  expect(selection.toolNames).toContain("project_ledger_status");
+  expect(selection.toolNames).toContain("query_project_work");
+  expect(selection.toolNames).toContain("tool_describe");
+  expect(selection.toolNames).toContain("tool_call");
+  for (const toolName of PROJECT_LEDGER_MUTATION_TOOL_NAMES) {
+    expect(selection.toolNames).not.toContain(toolName);
+    expect(canBridgeNativeTool({
+      toolName,
+      metadata: TOOL_CAPABILITY_METADATA[toolName],
+      currentToolNames: selection.toolNames,
+    })).toBe(false);
+  }
 });
 
 test("controller advances through discovered, described, promoted, and invoked states", () => {
