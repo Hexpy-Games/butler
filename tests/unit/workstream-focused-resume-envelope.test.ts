@@ -9,6 +9,10 @@ import {
   buildFocusedResumeEnvelope,
   turnMetadataWithFocusedResumePolicy,
 } from "../../packages/butler-agent/src/agent/turn/workstream-focused-resume-envelope.ts";
+import {
+  buildWorkStreamResumeDecisionEnvelope,
+  turnMetadataWithResumeDecisionPolicy,
+} from "../../packages/butler-agent/src/agent/turn/workstream-resume-decision-envelope.ts";
 import { WorkStreamStore, type WorkStreamRecord } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { TodoListStore, type TodoItemInput } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { selectInitialToolsFromSurfaceController } from "../../packages/butler-agent/src/agent/tools/tool-surface-selection.ts";
@@ -56,6 +60,7 @@ test("focused resume envelope hydrates only selected checkpoint and relevant Pro
     sessionId: "butler/session",
     projectId: "butler",
     userText: "개석해",
+    turnMetadata: { workstreamResume: { action: "resume", workStreamId: stream.id } },
   });
   const envelope = buildFocusedResumeEnvelope({
     butlerData: tempDir,
@@ -96,6 +101,52 @@ test("focused resume envelope hydrates only selected checkpoint and relevant Pro
   expect(toolNames).not.toContain("create_work_orchestration");
 });
 
+test("ordinary user turns get a model decision envelope instead of focused resume", () => {
+  const stream = createRecoverableStream();
+  const selection = selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/session",
+    projectId: "butler",
+    userText: "완전히 다른 작업을 해줘",
+  });
+  const focused = buildFocusedResumeEnvelope({
+    butlerData: tempDir,
+    selection,
+    currentUserText: "완전히 다른 작업을 해줘",
+  });
+  const decision = buildWorkStreamResumeDecisionEnvelope({
+    selection,
+    currentUserText: "완전히 다른 작업을 해줘",
+  });
+  const turnMetadata = turnMetadataWithResumeDecisionPolicy({}, decision);
+  const toolNames = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "완전히 다른 작업을 해줘",
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata,
+    providerCapabilities: {
+      supportsToolCalls: true,
+      supportsStreaming: true,
+    },
+  }).toolNames;
+
+  expect(selection).toMatchObject({
+    state: "resume_candidate_presented",
+    reason: "model_decision_required",
+    candidates: [expect.objectContaining({ id: stream.id })],
+  });
+  expect(focused).toBeNull();
+  expect(decision?.prompt).toContain("## WorkStream Continuation Decision Envelope");
+  expect(decision?.prompt).toContain("Current User Instruction:\n완전히 다른 작업을 해줘");
+  expect(decision?.prompt).toContain("If the current instruction asks for unrelated work");
+  expect(decision?.prompt).not.toContain("Continue this selected WorkStream before broad validation");
+  expect(toolNames).toEqual(expect.arrayContaining([
+    "list_work_streams",
+    "update_work_stream_state",
+    "update_todo_list",
+  ]));
+});
+
 test("focused resume prompt excludes broad recent conversation and prompt-context work sections", () => {
   const selection = selectWorkStreamCheckpointResume({
     butlerData: tempDir,
@@ -104,12 +155,13 @@ test("focused resume prompt excludes broad recent conversation and prompt-contex
   });
   expect(selection.state).toBe("fresh_turn");
 
-  createRecoverableStream();
+  const stream = createRecoverableStream();
   const resumed = selectWorkStreamCheckpointResume({
     butlerData: tempDir,
     sessionId: "butler/session",
     projectId: "butler",
     userText: "ㅇㅇ",
+    turnMetadata: { workstreamResume: { action: "resume", workStreamId: stream.id } },
   });
   const envelope = buildFocusedResumeEnvelope({
     butlerData: tempDir,
@@ -146,8 +198,56 @@ test("focused resume prompt excludes broad recent conversation and prompt-contex
   expect(normalized.prompt).not.toContain("## Recent Conversation");
   expect(normalized.recentConversationChars).toBe(0);
   expect(normalized.focusedResumeEnvelopeChars).toBeGreaterThan(0);
+  expect(normalized.resumeDecisionEnvelopeChars).toBe(0);
   expect(sections).toEqual(expect.arrayContaining([
     expect.objectContaining({ id: "focused_resume_envelope" }),
+  ]));
+});
+
+test("model decision prompt keeps recent conversation and tracks decision-envelope usage", () => {
+  const selection = selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/session",
+    projectId: "butler",
+    userText: "다른 작업을 시작해줘",
+  });
+  expect(selection.state).toBe("fresh_turn");
+
+  createRecoverableStream();
+  const candidateSelection = selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/session",
+    projectId: "butler",
+    userText: "다른 작업을 시작해줘",
+  });
+  const decision = buildWorkStreamResumeDecisionEnvelope({
+    selection: candidateSelection,
+    currentUserText: "다른 작업을 시작해줘",
+  });
+  expect(decision).not.toBeNull();
+
+  const normalized = normalizeTurnPrompt(runtimeTurnInput({
+    promptContext: [
+      "## Stable Context",
+      "KEEP_CONTEXT_SENTINEL",
+      "## Active Work State",
+      "ACTIVE_WORK_CONTEXT_SENTINEL",
+    ].join("\n"),
+    text: "다른 작업을 시작해줘",
+  }), {
+    butlerData: tempDir,
+    recentConversationTokenBudget: 1_000,
+    resumeDecisionEnvelope: decision!.prompt,
+    conversationReader: emptyConversationReader(),
+  });
+  const sections = promptUsageSectionsFromPrompt(normalized);
+
+  expect(normalized.prompt).toContain("## WorkStream Continuation Decision Envelope");
+  expect(normalized.prompt).toContain("ACTIVE_WORK_CONTEXT_SENTINEL");
+  expect(normalized.focusedResumeEnvelopeChars).toBe(0);
+  expect(normalized.resumeDecisionEnvelopeChars).toBeGreaterThan(0);
+  expect(sections).toEqual(expect.arrayContaining([
+    expect.objectContaining({ id: "resume_decision_envelope" }),
   ]));
 });
 
@@ -260,6 +360,23 @@ function throwingConversationReader(): any {
   return {
     getSession() {
       throw new Error("recent conversation should be skipped");
+    },
+  };
+}
+
+function emptyConversationReader(): any {
+  return {
+    getSession() {
+      return { id: "butler/session" };
+    },
+    getSessionByGatewayBinding() {
+      return null;
+    },
+    readPromptMaterial() {
+      return {
+        summaries: [],
+        semantic_tail: [],
+      };
     },
   };
 }

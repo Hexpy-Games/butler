@@ -25,6 +25,7 @@ export interface NormalizedTurnPrompt {
   recallContextChars: number;
   inboundMessageChars: number;
   focusedResumeEnvelopeChars: number;
+  resumeDecisionEnvelopeChars: number;
 }
 
 export function currentInboundEventId(input: RuntimeTurnInput): string | null {
@@ -81,6 +82,7 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
   workingMemoryContext?: string;
   runtimePolicyContext?: string;
   focusedResumeEnvelope?: string;
+  resumeDecisionEnvelope?: string;
   removePromptContextSections?: string[];
   skipRecentConversation?: boolean;
   recentConversationTokenBudget: number;
@@ -106,6 +108,9 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
 
   const focusedResumeEnvelope = options.focusedResumeEnvelope?.trim() ?? "";
   if (focusedResumeEnvelope) parts.push(focusedResumeEnvelope);
+
+  const resumeDecisionEnvelope = options.resumeDecisionEnvelope?.trim() ?? "";
+  if (resumeDecisionEnvelope) parts.push(resumeDecisionEnvelope);
 
   const compactionContext = options.compactionContext?.trim() ?? "";
   if (compactionContext) parts.push(compactionContext);
@@ -169,6 +174,7 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
     recallContextChars: recallContext.length,
     inboundMessageChars,
     focusedResumeEnvelopeChars: focusedResumeEnvelope.length,
+    resumeDecisionEnvelopeChars: resumeDecisionEnvelope.length,
   };
 }
 

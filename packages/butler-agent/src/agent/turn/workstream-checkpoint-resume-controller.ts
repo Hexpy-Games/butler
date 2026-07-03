@@ -47,13 +47,14 @@ export function selectWorkStreamCheckpointResume(input: {
   if (control?.action === "new_objective") {
     return emptySelection("cancel_selected", "explicit_new_objective");
   }
+  const forceRuntimeResume = shouldForceRuntimeResume(input.turnMetadata, control);
 
   const scanned = scanCandidates({
     butlerData: input.butlerData,
     sessionId: input.sessionId,
     chatId: input.chatId,
     projectId: input.projectId,
-    includeWaitingUser: control?.userActionSupplied === true,
+    includeWaitingUser: forceRuntimeResume ? control?.userActionSupplied === true : true,
   });
   const candidates = scanned.candidates;
 
@@ -115,6 +116,10 @@ export function selectWorkStreamCheckpointResume(input: {
       blockers: [],
       issues: scanned.issues,
     };
+  }
+
+  if (!forceRuntimeResume) {
+    return candidateSelection(candidates, scanned);
   }
 
   if (candidates.length === 1) {
@@ -229,6 +234,17 @@ function structuredResumeControl(
   };
 }
 
+function shouldForceRuntimeResume(
+  metadata: Record<string, unknown> | undefined,
+  control: StructuredResumeControl | null,
+): boolean {
+  if (control?.action === "resume" || control?.action === "user_action_supplied") {
+    return true;
+  }
+  const schedulerContinuation = metadata?.schedulerContinuation;
+  return Boolean(schedulerContinuation && typeof schedulerContinuation === "object");
+}
+
 function safeStructuredId(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -251,6 +267,19 @@ function selectedSelection(
     state: "resume_selected",
     reason,
     selected,
+    candidates,
+    blockers: scanned.blockers,
+    issues: scanned.issues,
+  };
+}
+
+function candidateSelection(
+  candidates: WorkStreamResumeCandidate[],
+  scanned: { blockers: WorkStreamResumeCandidate[]; issues: WorkStreamResumeIssue[] },
+): WorkStreamResumeSelection {
+  return {
+    state: "resume_candidate_presented",
+    reason: "model_decision_required",
     candidates,
     blockers: scanned.blockers,
     issues: scanned.issues,
