@@ -895,7 +895,7 @@ test("Project Ledger project sessions expose lifecycle closeout tools only after
   expect(names).not.toContain("complete_project_work");
 });
 
-test("Project Ledger lifecycle tools stay hidden in local and none tracking modes", () => {
+test("Project Ledger tools stay hidden in local and none tracking modes", () => {
   for (const trackingMode of ["local", "none"]) {
     const tools = selectButlerToolsForTurn({
       role: "butler",
@@ -916,8 +916,10 @@ test("Project Ledger lifecycle tools stay hidden in local and none tracking mode
     });
     const names = tools.map((tool) => tool.name);
 
-    expect(names).toContain("project_ledger_status");
-    expect(names).toContain("query_project_work");
+    expect(names.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+    expect(names).not.toContain("query_project_work");
+    expect(names).not.toContain("inspect_project_status");
+    expect(names).not.toContain("render_project_dashboard");
     for (const toolName of projectLedgerLifecycleToolNames) {
       expect(names).not.toContain(toolName);
     }

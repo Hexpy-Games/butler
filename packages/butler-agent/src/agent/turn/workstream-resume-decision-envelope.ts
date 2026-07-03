@@ -40,8 +40,21 @@ export function turnMetadataWithResumeDecisionPolicy(
   envelope: WorkStreamResumeDecisionEnvelope | null,
 ): Record<string, unknown> | undefined {
   if (!envelope) return metadata;
+  const trackingMode = envelope.candidates.some((candidate) => candidate.checkpoint.trackingMode === "ledger")
+    ? "ledger"
+    : "local";
+  const closeoutStrategy = trackingMode === "ledger" ? "ledger" : "local_workstream";
   return {
     ...(metadata ?? {}),
+    trackingMode,
+    tracking_mode: trackingMode,
+    closeoutStrategy,
+    closeout_strategy: closeoutStrategy,
+    runtimePolicy: {
+      ...objectRecord(metadata?.runtimePolicy),
+      tracking_mode: trackingMode,
+      closeout_strategy: closeoutStrategy,
+    },
     requiredNativeTools: mergeStringArrays(
       stringArray(metadata?.requiredNativeTools),
       stringArray(metadata?.required_tools),
@@ -55,6 +68,8 @@ export function turnMetadataWithResumeDecisionPolicy(
     workStreamResumeDecision: {
       candidateCount: envelope.candidates.length,
       candidateIds: envelope.candidates.map((candidate) => candidate.id),
+      trackingMode,
+      closeoutStrategy,
     },
   };
 }
@@ -89,6 +104,8 @@ function renderCandidate(candidate: WorkStreamResumeCandidate): string[] {
     `  Title: ${checkpoint.title}`,
     `  State: ${checkpoint.state}`,
     `  Phase: ${checkpoint.currentPhase ?? "none"}`,
+    `  Tracking Mode: ${checkpoint.trackingMode}`,
+    `  Closeout Strategy: ${checkpoint.closeoutStrategy}`,
     `  Todo List ID: ${checkpoint.todoListId}`,
     `  Active Step ID: ${checkpoint.activeStepId ?? "none"}`,
   ];
@@ -118,7 +135,7 @@ function appendRefs(
 
 function requiredProfilesForCandidates(candidates: WorkStreamResumeCandidate[]): ButlerToolProfile[] {
   const profiles = new Set<ButlerToolProfile>();
-  if (candidates.some((candidate) => candidate.projectId)) profiles.add("project");
+  if (candidates.some((candidate) => candidate.checkpoint.trackingMode === "ledger")) profiles.add("project");
   if (candidates.some((candidate) => workspaceProfileNeeded(candidate.checkpoint))) {
     profiles.add("workspace");
   }
@@ -133,7 +150,7 @@ function requiredToolsForCandidates(candidates: WorkStreamResumeCandidate[]): st
     "update_work_stream_state",
     "get_context_monitor",
   ]);
-  if (candidates.some((candidate) => candidate.projectId)) {
+  if (candidates.some((candidate) => candidate.checkpoint.trackingMode === "ledger")) {
     tools.add("project_ledger_status");
     tools.add("project_ledger_show");
   }
@@ -152,4 +169,8 @@ function stringArray(value: unknown): string[] {
 
 function mergeStringArrays(...values: string[][]): string[] {
   return [...new Set(values.flat().map((value) => value.trim()).filter(Boolean))];
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }

@@ -8,6 +8,8 @@ import {
   type TurnContextObservationRef,
 } from "./turn-continuation-context.ts";
 import type {
+  RuntimeCloseoutStrategy,
+  RuntimeTrackingMode,
   WorkStreamResumeBlocker,
   WorkStreamResumeCheckpoint,
   WorkStreamResumeIssue,
@@ -39,6 +41,7 @@ export function checkpointForRecord(input: {
     sessionId: record.owner_session_id,
     turnId: record.last_user_turn_id,
   });
+  const trackingMode = trackingModeForRecord(record);
 
   return {
     ok: true,
@@ -53,6 +56,8 @@ export function checkpointForRecord(input: {
       todoListId: record.todo_list_id,
       state: record.state,
       currentPhase: record.current_phase,
+      trackingMode,
+      closeoutStrategy: closeoutStrategyForTrackingMode(trackingMode),
       activeStepId: record.active_step_id,
       updatedAt: record.updated_at,
       title: record.title,
@@ -69,6 +74,18 @@ export function checkpointForRecord(input: {
       activeItems,
     },
   };
+}
+
+function trackingModeForRecord(record: WorkStreamRecord): RuntimeTrackingMode {
+  if (record.project_id && record.linked_planned_task_ids.length > 0) return "ledger";
+  if (record.todo_list_id) return "local";
+  return "none";
+}
+
+function closeoutStrategyForTrackingMode(mode: RuntimeTrackingMode): RuntimeCloseoutStrategy {
+  if (mode === "ledger") return "ledger";
+  if (mode === "local") return "local_workstream";
+  return "noop";
 }
 
 function activeCheckpointItems(items: TodoItem[]): WorkStreamResumeCheckpoint["activeItems"] {

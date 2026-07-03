@@ -52,6 +52,8 @@ test("checkpoint resume presents ordinary user turns to the model without readin
     checkpoint: {
       workStreamId: stream.id,
       todoListId: "recoverable-main",
+      trackingMode: "local",
+      closeoutStrategy: "local_workstream",
     },
   });
   expect(typoResume.candidates[0]!.checkpoint.activeItems).toEqual(expect.arrayContaining([
@@ -121,6 +123,8 @@ test("checkpoint resume hydrates origin turn, validation, evidence, and budget r
         chatId: "app-chat",
         originatingTurnId: "turn-origin",
         userMessageId: "msg-origin",
+        trackingMode: "ledger",
+        closeoutStrategy: "ledger",
         blocker: { kind: "budget", reason: "prompt_usage_model_call_budget_exhausted" },
         budgetSnapshot: expect.objectContaining({
           turnId: "turn-origin",

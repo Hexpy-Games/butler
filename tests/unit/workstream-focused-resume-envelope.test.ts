@@ -35,6 +35,11 @@ afterEach(() => {
 
 test("focused resume envelope hydrates only selected checkpoint and relevant Project Ledger records", () => {
   const stream = createRecoverableStream();
+  new WorkStreamStore(tempDir).link({
+    id: stream.id,
+    plannedTaskIds: ["execute"],
+    now: new Date("2026-07-03T00:02:00.000Z"),
+  });
   writeProjectLedgerIndex({
     projectId: "butler",
     records: [
@@ -84,6 +89,8 @@ test("focused resume envelope hydrates only selected checkpoint and relevant Pro
   expect(selection.selected?.id).toBe(stream.id);
   expect(envelope?.prompt).toContain("## Focused WorkStream Resume Envelope");
   expect(envelope?.prompt).toContain("WorkStream State: recoverable");
+  expect(envelope?.prompt).toContain("Tracking Mode: ledger");
+  expect(envelope?.prompt).toContain("Closeout Strategy: ledger");
   expect(envelope?.prompt).toContain("task:execute:in_progress:Execute selected repair");
   expect(envelope?.prompt).not.toContain("UNRELATED-LEDGER-RECORD");
   expect(toolNames).toEqual(expect.arrayContaining([
@@ -99,6 +106,77 @@ test("focused resume envelope hydrates only selected checkpoint and relevant Pro
   expect(toolNames).not.toContain("web_search");
   expect(toolNames).not.toContain("create_planned_task");
   expect(toolNames).not.toContain("create_work_orchestration");
+});
+
+test("focused resume envelope treats unlinked project WorkStreams as local tracking", () => {
+  const stream = createRecoverableStream();
+  writeProjectLedgerIndex({
+    projectId: "butler",
+    records: [
+      {
+        id: "execute",
+        kind: "task",
+        title: "Ledger record should not hydrate without a link",
+        status: "in_progress",
+        path: "project-ledger/projects/butler/work/W/tasks/execute.md",
+      },
+    ],
+  });
+
+  const selection = selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/session",
+    projectId: "butler",
+    turnMetadata: { workstreamResume: { action: "resume", workStreamId: stream.id } },
+  });
+  const envelope = buildFocusedResumeEnvelope({
+    butlerData: tempDir,
+    selection,
+    currentUserText: "계속 진행해",
+  });
+  const turnMetadata = turnMetadataWithFocusedResumePolicy({
+    tracking_mode: "ledger",
+    runtime_phase: "closeout_planned",
+    validation_state: "validation_passed",
+    requiredNativeTools: ["project_ledger_task_complete"],
+    requiredNativeToolProfiles: ["project-lifecycle"],
+  }, envelope);
+  const toolNames = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "계속 진행해",
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata,
+    providerCapabilities: {
+      supportsToolCalls: true,
+      supportsStreaming: true,
+    },
+  }).toolNames;
+
+  expect(envelope?.checkpoint.trackingMode).toBe("local");
+  expect(envelope?.checkpoint.closeoutStrategy).toBe("local_workstream");
+  expect(envelope?.prompt).toContain("Tracking Mode: local");
+  expect(envelope?.prompt).toContain("Closeout Strategy: local_workstream");
+  expect(envelope?.prompt).not.toContain("Relevant Project Ledger Records:");
+  expect(envelope?.requiredNativeTools).not.toContain("project_ledger_status");
+  expect(envelope?.requiredNativeTools).not.toContain("project_ledger_show");
+  expect(turnMetadata).toMatchObject({
+    tracking_mode: "local",
+    closeout_strategy: "local_workstream",
+    runtimePolicy: {
+      tracking_mode: "local",
+      closeout_strategy: "local_workstream",
+    },
+    focusedResume: {
+      trackingMode: "local",
+      closeoutStrategy: "local_workstream",
+    },
+  });
+  expect(turnMetadata?.requiredNativeTools).not.toContain("project_ledger_task_complete");
+  expect(turnMetadata?.requiredNativeToolProfiles).not.toContain("project-lifecycle");
+  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(toolNames).not.toContain("inspect_project_status");
+  expect(toolNames).not.toContain("query_project_work");
+  expect(toolNames).not.toContain("render_project_dashboard");
 });
 
 test("ordinary user turns get a model decision envelope instead of focused resume", () => {
@@ -138,8 +216,12 @@ test("ordinary user turns get a model decision envelope instead of focused resum
   expect(focused).toBeNull();
   expect(decision?.prompt).toContain("## WorkStream Continuation Decision Envelope");
   expect(decision?.prompt).toContain("Current User Instruction:\n완전히 다른 작업을 해줘");
+  expect(decision?.prompt).toContain("Tracking Mode: local");
   expect(decision?.prompt).toContain("If the current instruction asks for unrelated work");
   expect(decision?.prompt).not.toContain("Continue this selected WorkStream before broad validation");
+  expect(decision?.requiredNativeToolProfiles).not.toContain("project");
+  expect(decision?.requiredNativeTools).not.toContain("project_ledger_status");
+  expect(decision?.requiredNativeTools).not.toContain("project_ledger_show");
   expect(toolNames).toEqual(expect.arrayContaining([
     "list_work_streams",
     "update_work_stream_state",
@@ -148,6 +230,10 @@ test("ordinary user turns get a model decision envelope instead of focused resum
     "read_file",
     "write_file",
   ]));
+  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(toolNames).not.toContain("query_project_work");
+  expect(toolNames).not.toContain("inspect_project_status");
+  expect(toolNames).not.toContain("render_project_dashboard");
 });
 
 test("candidate decision envelope keeps workspace tools for planning-phase work with executable pending todos", () => {
@@ -187,16 +273,17 @@ test("candidate decision envelope keeps workspace tools for planning-phase work 
       }),
     })],
   });
-  expect(decision?.requiredNativeToolProfiles).toEqual(expect.arrayContaining(["project", "workspace"]));
+  expect(decision?.requiredNativeToolProfiles).toEqual(expect.arrayContaining(["workspace"]));
+  expect(decision?.requiredNativeToolProfiles).not.toContain("project");
   expect(toolNames).toEqual(expect.arrayContaining([
-    "project_ledger_status",
-    "query_project_work",
     "run_command",
     "read_file",
     "write_file",
     "grep_files",
     "read_tool_output_artifact",
   ]));
+  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(toolNames).not.toContain("query_project_work");
 });
 
 test("candidate decision envelope sees executable pending todos beyond active item preview", () => {
@@ -233,13 +320,15 @@ test("candidate decision envelope sees executable pending todos beyond active it
   const activeItems = checkpoint?.activeItems ?? [];
   expect(activeItems).toHaveLength(8);
   expect(activeItems.map((item) => item.id)).not.toContain("execute-after-preview");
-  expect(decision?.requiredNativeToolProfiles).toEqual(expect.arrayContaining(["project", "workspace"]));
+  expect(decision?.requiredNativeToolProfiles).toEqual(expect.arrayContaining(["workspace"]));
+  expect(decision?.requiredNativeToolProfiles).not.toContain("project");
   expect(toolNames).toEqual(expect.arrayContaining([
     "run_command",
     "read_file",
     "write_file",
     "grep_files",
   ]));
+  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
 });
 
 test("focused resume prompt excludes broad recent conversation and prompt-context work sections", () => {

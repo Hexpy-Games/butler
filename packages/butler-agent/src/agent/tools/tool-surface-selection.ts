@@ -91,6 +91,8 @@ function surfacePolicyMetadata(
     phase: record.phase,
     validationState: record.validationState,
     validation_state: record.validation_state,
+    closeoutStrategy: record.closeoutStrategy,
+    closeout_strategy: record.closeout_strategy,
     runtimePolicy: surfaceRuntimePolicy(runtimePolicy),
   });
   return Object.keys(filtered).length > 0 ? filtered : undefined;
@@ -113,6 +115,8 @@ function surfaceRuntimePolicy(runtimePolicy: Record<string, unknown>): Record<st
     phase: runtimePolicy.phase,
     validationState: runtimePolicy.validationState,
     validation_state: runtimePolicy.validation_state,
+    closeoutStrategy: runtimePolicy.closeoutStrategy,
+    closeout_strategy: runtimePolicy.closeout_strategy,
   });
   return Object.keys(filtered).length > 0 ? filtered : undefined;
 }
