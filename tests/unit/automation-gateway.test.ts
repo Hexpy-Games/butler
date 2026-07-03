@@ -1574,11 +1574,12 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   expect(turnEvents.filter((event) => event.kind === "turn.acknowledged")).toHaveLength(1);
   expect(readTranscript(sessionId).filter((event) => event.kind === "inbound")).toHaveLength(1);
   expect(resumePrompt).toContain("## Scheduler Continuation Context Atom");
+  expect(resumePrompt).toContain("## Focused WorkStream Resume Envelope");
   expect(resumePrompt.indexOf("## Scheduler Continuation Context Atom"))
-    .toBeLessThan(resumePrompt.indexOf("## Active Work State"));
+    .toBeLessThan(resumePrompt.indexOf("## Focused WorkStream Resume Envelope"));
   expect(resumePrompt).toContain("Latest Assistant Decision Ref: decision-");
   expect(resumePrompt.indexOf("Latest Assistant Decision Ref:"))
-    .toBeLessThan(resumePrompt.indexOf("## Active Work State"));
+    .toBeLessThan(resumePrompt.indexOf("## Focused WorkStream Resume Envelope"));
   expect(resumePrompt).toContain(
     `Context Atom ID: ${createTurnContextAtomId(sessionId, "turn-client-w3-budget-first")}`,
   );
@@ -1588,8 +1589,8 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   expect(resumePrompt).toContain("work_stream:");
   expect(resumePrompt).toContain("Current Turn Todos:");
   expect(resumePrompt).toContain("todo_item:");
-  expect(resumePrompt).toContain("## Active Work State");
-  expect(resumePrompt).toContain("w3-style-guard:in_progress:execution:Inspecting Sandy style guard validation evidence");
+  expect(resumePrompt).not.toContain("## Active Work State");
+  expect(resumePrompt).toContain("- w3-style-guard:in_progress:execution:Inspecting Sandy style guard validation evidence");
   expect(resumePrompt).not.toContain("model-call budget");
 
   const completedStreams = streamStore.list({ sessionId, includeTerminal: true });

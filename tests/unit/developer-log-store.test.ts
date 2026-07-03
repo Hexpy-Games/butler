@@ -53,7 +53,7 @@ function appendSample(store: DeveloperLogStore, index = 0) {
         id: "runtime-state",
         title: "Runtime State",
         region: "runtime_state",
-        content: `Authorization: Bearer token-${index}\npassword=hunter-${index}`,
+        content: `Authorization: Bearer opaque-${index}\npassword=hunter-${index}`,
       }],
       workingContext: [],
       retrievedContext: [],

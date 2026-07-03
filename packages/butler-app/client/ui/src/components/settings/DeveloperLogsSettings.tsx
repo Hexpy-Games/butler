@@ -7,7 +7,6 @@ import { Button, Input, NativeSelect, Stack, Typo } from "@/butler-ds";
 import { DeveloperLogRow } from "./DeveloperLogRow";
 import type { DeveloperLogTab } from "./developerLogViewerTypes";
 import { SettingsSection } from "./SettingsSection";
-import styles from "./DeveloperLogsSettings.module.css";
 
 const PAGE_SIZE = 30;
 type DeveloperLogKindFilter = "all" | "model_turn" | "model_turn_error";
@@ -87,7 +86,7 @@ export function DeveloperLogsSettings() {
       description={copy.descriptions.developerLogs}
     >
       <Stack gap="md">
-        <div className={styles.toolbar}>
+        <Stack align="row" gap="sm" wrap>
           <Input
             value={query}
             placeholder={copy.placeholders.developerLogSearch}
@@ -115,12 +114,12 @@ export function DeveloperLogsSettings() {
           >
             {appCopy.common.refresh}
           </Button>
-        </div>
+        </Stack>
 
         {entries.length === 0 ? (
           <Typo.Body>{copy.descriptions.developerLogsEmpty}</Typo.Body>
         ) : (
-          <div className={styles.list}>
+          <Stack gap="sm">
             {entries.map((entry) => (
               <DeveloperLogRow
                 key={entry.id}
@@ -132,7 +131,7 @@ export function DeveloperLogsSettings() {
                 onToggle={() => setOpenId((current) => current === entry.id ? null : entry.id)}
               />
             ))}
-          </div>
+          </Stack>
         )}
 
         {view?.pagination.has_more && (

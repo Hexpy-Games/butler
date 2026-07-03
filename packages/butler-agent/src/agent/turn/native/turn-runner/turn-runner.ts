@@ -45,6 +45,12 @@ import {
   type TurnKernelController,
 } from "../../turn-kernel.ts";
 import { closeDirectWork } from "./direct-work-finalizer.ts";
+import { installTurnLatencyTracker } from "../metrics/turn-latency-tracker.ts";
+import {
+  completionGapFingerprint,
+  createWorkStreamPhaseBudgetController,
+  promptUsageModelCallBudgetExhaustedError,
+} from "../../workstream-phase-budget.ts";
 
 export async function runNativeToolTurn({
   input,
@@ -83,6 +89,21 @@ export async function runNativeToolTurn({
       skipRuntimePreparationProgress: earlyProgressEmitted,
     });
     turnId = context.turnId;
+    const latencyTracker = installTurnLatencyTracker({
+      turnInput: input,
+      butlerData: deps.butlerData,
+      startedAt,
+      role: session.init.role,
+      runtime: deps.runtimeId,
+      model: input.model,
+    });
+    const phaseBudgetController = createWorkStreamPhaseBudgetController({
+      butlerData: deps.butlerData,
+      resumeSelection: context.resumeSelection,
+      role: session.init.role,
+      runtime: deps.runtimeId,
+      model: input.model,
+    });
     turnKernel.transitionTo("model_deciding");
     const { runToolPrompt, runTextPrompt } = createNativeTurnPromptRunners({
       turnInput: input,
@@ -100,6 +121,8 @@ export async function runNativeToolTurn({
       markAssistantTextBeforeToolsSeen: () => {
         assistantTextBeforeToolsSeen = true;
       },
+      latencyTracker,
+      phaseBudgetController,
     });
     const runKernelToolPrompt = async (
       promptText: string,
@@ -126,8 +149,10 @@ export async function runNativeToolTurn({
         );
       }
     };
+    const completionGapFingerprints = new Set<string>();
+    const initialPromptPhase = phaseBudgetController?.initialPromptPhase() ?? "initial_tool_loop";
     let candidateText = useTools
-      ? await runKernelToolPrompt(context.prompt, undefined, "initial_tool_loop")
+      ? await runKernelToolPrompt(context.prompt, undefined, initialPromptPhase)
       : await runTextPrompt(context.prompt);
     throwIfRuntimeTurnAborted(input.signal);
     turnKernel.transitionTo("observing_tools");
@@ -163,6 +188,10 @@ export async function runNativeToolTurn({
         finalDeliveryOverride = directWorkResult.delivery;
         break;
       }
+      const gapPhase = phaseBudgetController?.completionGapPhase() ?? "completion_gap_continuation";
+      const gapFingerprint = completionGapFingerprint(deliveryOutcome.observation);
+      const repeatedGap = phaseBudgetController !== null && completionGapFingerprints.has(gapFingerprint);
+      completionGapFingerprints.add(gapFingerprint);
       await persistCompletionGapContinuation({
         turnInput: input,
         deps,
@@ -171,10 +200,30 @@ export async function runNativeToolTurn({
         publicDecisionContext,
         observation: deliveryOutcome.observation,
       });
+      if (repeatedGap) {
+        phaseBudgetController.recordPhaseBudgetExhausted({
+          phase: gapPhase,
+          reason: "repeated_completion_gap",
+        });
+        const contextAtomId = await persistSchedulerContinuation({
+          input,
+          deps,
+          turnId: context.turnId,
+          turnBudget: context.turnBudget,
+          audit,
+          publicDecisionContext,
+          error: promptUsageModelCallBudgetExhaustedError(),
+        });
+        throw new TurnSchedulerContinuationYieldError(
+          input.handle.sessionId,
+          context.turnId,
+          contextAtomId,
+        );
+      }
       candidateText = await runKernelToolPrompt(completionGapContinuationPrompt({
         observationSummary: deliveryOutcome.observation.summary,
         modelVisibleContent: deliveryOutcome.observation.modelVisibleContent,
-      }), undefined, "completion_gap_continuation");
+      }), undefined, gapPhase);
       throwIfRuntimeTurnAborted(input.signal);
       turnKernel.transitionTo("continuing");
       turnKernel.transitionTo("model_deciding");
@@ -221,6 +270,7 @@ export async function runNativeToolTurn({
       recallContextChars: context.normalizedPrompt.recallContextChars,
       compactionContextChars: context.normalizedPrompt.compactionContextChars,
       workingMemoryContextChars: context.normalizedPrompt.workingMemoryContextChars,
+      resumeSelectionState: context.resumeSelection.state,
     });
     return {
       text: decisionCheckedText,
@@ -495,6 +545,7 @@ function recordTurnMetric(input: {
   recallContextChars?: number;
   compactionContextChars?: number;
   workingMemoryContextChars?: number;
+  resumeSelectionState?: string;
   errorName?: string;
 }): void {
   recordOperationalMetric({
@@ -518,6 +569,7 @@ function recordTurnMetric(input: {
         compactionContextChars: input.compactionContextChars ?? 0,
         workingMemoryContextChars: input.workingMemoryContextChars ?? 0,
         promptChars: input.promptChars ?? 0,
+        resumeSelectionState: input.resumeSelectionState,
       }),
     },
   }, { butlerData: input.deps.butlerData });
