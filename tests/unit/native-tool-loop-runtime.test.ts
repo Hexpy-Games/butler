@@ -1132,6 +1132,20 @@ test("native runtime emits immediate preparation progress without auxiliary orie
       workBlockLabel: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
     },
   });
+  expect(turnEvents[1]).toMatchObject({
+    kind: "work.block.started",
+    payload: {
+      workBlockId: "first-progress-note",
+      label: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+      source: "runtime-derived",
+      safetyStatus: "accepted",
+    },
+  });
+  const preparationBlockPayload = turnEvents[1]?.payload as Record<string, unknown> | undefined;
+  expect(preparationBlockPayload?.toolCallId).toBeUndefined();
+  expect(preparationBlockPayload?.toolName).toBeUndefined();
+  expect(preparationBlockPayload?.activityKind).toBeUndefined();
+  expect(preparationBlockPayload?.decisionSummary).toBeUndefined();
   expect(
     intermediate.some((action) => action.metadata?.kind === "tool_progress"),
   ).toBe(false);
@@ -1562,18 +1576,36 @@ test("native runtime emits first progress note before the first model response",
   const preparationProgress = turnEvents.find((event) =>
     event.kind === "turn.first_progress",
   );
+  const preparationBlock = turnEvents.find((event) =>
+    event.kind === "work.block.started" &&
+      String(event.payload?.workBlockId ?? "").startsWith("first-progress-"),
+  );
   expect(preparationProgress?.payload).toMatchObject({
     note: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
     source: "runtime-derived",
     workBlockLabel: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
   });
+  expect(preparationBlock?.payload).toMatchObject({
+    label: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+    source: "runtime-derived",
+    safetyStatus: "accepted",
+  });
+  expect(preparationBlock?.payload?.toolCallId).toBeUndefined();
+  expect(preparationBlock?.payload?.toolName).toBeUndefined();
+  expect(preparationBlock?.payload?.decisionSummary).toBeUndefined();
   expect(progressActions).toEqual([]);
   const serialized = JSON.stringify(preparationProgress);
+  const serializedBlock = JSON.stringify(preparationBlock);
   expect(serialized).not.toContain("gpt-5.5");
   expect(serialized).not.toContain("도구 루프");
   expect(serialized).not.toContain("tool loop");
   expect(serialized).not.toContain("/Users/example/private");
   expect(serialized).not.toContain("Runtime visibility spec fixture");
+  expect(serializedBlock).not.toContain("gpt-5.5");
+  expect(serializedBlock).not.toContain("도구 루프");
+  expect(serializedBlock).not.toContain("tool loop");
+  expect(serializedBlock).not.toContain("/Users/example/private");
+  expect(serializedBlock).not.toContain("Runtime visibility spec fixture");
   expect(turnEvents.find((event) =>
     event.kind === "tool.progress" && event.payload?.activityKind === "model",
   )?.payload?.safeLabel).toBe(preparationProgress?.safeLabel);
