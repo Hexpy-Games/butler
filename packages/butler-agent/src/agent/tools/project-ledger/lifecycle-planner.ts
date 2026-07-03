@@ -7,6 +7,9 @@ type ProjectLedgerExecutorInput = {
   sessionId?: string;
   projectId?: string;
 };
+type ProjectLedgerToolRunner = typeof runProjectLedgerTool;
+
+const MAX_REPLAN_REFRESHES = 1;
 
 export function runProjectLedgerPlannedLifecycleMutation(input: {
   executor: ProjectLedgerExecutorInput;
@@ -14,14 +17,27 @@ export function runProjectLedgerPlannedLifecycleMutation(input: {
   args: Record<string, unknown>;
   projectPath: string;
   finalCliArgs: string[];
+  runTool?: ProjectLedgerToolRunner;
 }): Record<string, unknown> | null {
+  const runTool = input.runTool ?? runProjectLedgerTool;
   if (input.toolName === "project_ledger_task_complete") {
-    return runPlannedTaskComplete(input.executor, input.args, input.projectPath, input.finalCliArgs);
+    return runWithBoundedReplan((refreshes) =>
+      runPlannedTaskComplete(input.executor, input.args, input.projectPath, input.finalCliArgs, runTool, refreshes));
   }
   if (input.toolName === "project_ledger_work_complete") {
-    return runPlannedWorkComplete(input.executor, input.args, input.projectPath, input.finalCliArgs);
+    return runWithBoundedReplan((refreshes) =>
+      runPlannedWorkComplete(input.executor, input.args, input.projectPath, input.finalCliArgs, runTool, refreshes));
   }
   return null;
+}
+
+function runWithBoundedReplan(plan: (refreshes: number) => Record<string, unknown>): Record<string, unknown> {
+  for (let refreshes = 0; refreshes <= MAX_REPLAN_REFRESHES; refreshes += 1) {
+    const result = plan(refreshes);
+    if (refreshes < MAX_REPLAN_REFRESHES && errorCode(result) === "invalid_transition") continue;
+    return withTransitionRefreshes(result, refreshes);
+  }
+  return plan(MAX_REPLAN_REFRESHES);
 }
 
 function runPlannedTaskComplete(
@@ -29,20 +45,24 @@ function runPlannedTaskComplete(
   args: Record<string, unknown>,
   projectPath: string,
   finalCliArgs: string[],
+  runTool: ProjectLedgerToolRunner,
+  refreshes: number,
 ): Record<string, unknown> {
   const id = requireString(args, "id");
   const project = ["--project", projectPath];
-  const current = showProjectLedgerRecord(input, projectPath, "task", id);
+  const current = showProjectLedgerRecord(input, projectPath, "task", id, runTool);
   if (current.ok !== true) return current;
   const status = recordStatus(current);
+  if (status === "done") return completedRecordResult("project_ledger_task_complete", current, args, refreshes);
+  const plannedStatuses = plannedTaskStatuses(status);
   const executed: string[][] = [];
-  if (status === "todo") {
-    const transition = runProjectLedgerTool(input, ["task", "update", ...project, "--id", id, "--status", "in_progress"]);
-    executed.push(["task", "update", "--id", id, "--status", "in_progress"]);
-    if (transition.ok !== true) return withRecoverableProjectLedgerError(withTransitionPlan(transition, executed));
+  for (const nextStatus of plannedStatuses) {
+    const transition = runTool(input, ["task", "update", ...project, "--id", id, "--status", nextStatus]);
+    executed.push(["task", "update", "--id", id, "--status", nextStatus]);
+    if (transition.ok !== true) return withRecoverableProjectLedgerError(withTransitionPlan(transition, executed, refreshes));
   }
-  const result = withRecoverableProjectLedgerError(runProjectLedgerTool(input, finalCliArgs));
-  return withTransitionPlan(result, [...executed, lifecycleCommandSummary(finalCliArgs)]);
+  const result = withRecoverableProjectLedgerError(runTool(input, finalCliArgs));
+  return withTransitionPlan(result, [...executed, lifecycleCommandSummary(finalCliArgs)], refreshes);
 }
 
 function runPlannedWorkComplete(
@@ -50,23 +70,26 @@ function runPlannedWorkComplete(
   args: Record<string, unknown>,
   projectPath: string,
   finalCliArgs: string[],
+  runTool: ProjectLedgerToolRunner,
+  refreshes: number,
 ): Record<string, unknown> {
   const id = requireString(args, "id");
   const project = ["--project", projectPath];
-  const current = showProjectLedgerRecord(input, projectPath, "work", id);
+  const current = showProjectLedgerRecord(input, projectPath, "work", id, runTool);
   if (current.ok !== true) return current;
+  const status = recordStatus(current);
+  if (status === "done") return completedRecordResult("project_ledger_work_complete", current, args, refreshes);
   const missing = missingWorkCompletionEvidence(current, args);
   if (missing.length > 0) return workCompletionGateFailure(id, missing);
-  const status = recordStatus(current);
   const plannedStatuses = plannedWorkStatuses(status);
   const executed: string[][] = [];
   for (const nextStatus of plannedStatuses) {
-    const transition = runProjectLedgerTool(input, ["work", "update", ...project, "--id", id, "--status", nextStatus]);
+    const transition = runTool(input, ["work", "update", ...project, "--id", id, "--status", nextStatus]);
     executed.push(["work", "update", "--id", id, "--status", nextStatus]);
-    if (transition.ok !== true) return withRecoverableProjectLedgerError(withTransitionPlan(transition, executed));
+    if (transition.ok !== true) return withRecoverableProjectLedgerError(withTransitionPlan(transition, executed, refreshes));
   }
-  const result = withRecoverableProjectLedgerError(runProjectLedgerTool(input, finalCliArgs));
-  return withTransitionPlan(result, [...executed, lifecycleCommandSummary(finalCliArgs)]);
+  const result = withRecoverableProjectLedgerError(runTool(input, finalCliArgs));
+  return withTransitionPlan(result, [...executed, lifecycleCommandSummary(finalCliArgs)], refreshes);
 }
 
 function showProjectLedgerRecord(
@@ -74,8 +97,9 @@ function showProjectLedgerRecord(
   projectPath: string,
   kind: "task" | "work",
   id: string,
+  runTool: ProjectLedgerToolRunner,
 ): Record<string, unknown> {
-  return withRecoverableProjectLedgerError(runProjectLedgerTool(input, [
+  return withRecoverableProjectLedgerError(runTool(input, [
     "record",
     "show",
     "--project",
@@ -149,11 +173,86 @@ function plannedWorkStatuses(status: string): string[] {
   return [];
 }
 
-function withTransitionPlan(result: Record<string, unknown>, commands: readonly string[][]): Record<string, unknown> {
+function plannedTaskStatuses(status: string): string[] {
+  if (status === "todo" || status === "blocked" || status === "failed") return ["in_progress"];
+  return [];
+}
+
+function completedRecordResult(
+  toolName: string,
+  current: Record<string, unknown>,
+  args: Record<string, unknown>,
+  refreshes: number,
+): Record<string, unknown> {
+  if (suppliedMetadataMatches(current, args, toolName)) return withTransitionPlan(current, [], refreshes);
+  const id = requireString(args, "id");
+  return withTransitionPlan({
+    ok: false,
+    recoverable: true,
+    error: {
+      code: "already_completed",
+      message: "Project Ledger record is already completed and supplied closeout evidence does not match the current record.",
+      details: [{ id, tool: toolName, status: "done" }],
+      native_next: [{
+        tool: "project_ledger_show",
+        args: { id },
+        reason: "Inspect the completed record before deciding whether a metadata update is required.",
+      }],
+    },
+  }, [], refreshes);
+}
+
+function suppliedMetadataMatches(
+  current: Record<string, unknown>,
+  args: Record<string, unknown>,
+  toolName: string,
+): boolean {
+  const data = current.data && typeof current.data === "object" && !Array.isArray(current.data)
+    ? current.data as Record<string, unknown>
+    : {};
+  for (const field of ["validation", "review", "report"] as const) {
+    if (!stringValue(args[field]) || stringValue(args[field]) !== stringValue(data[field])) return false;
+  }
+  if (
+    toolName === "project_ledger_work_complete" &&
+    data.requiresCommitEvidence === true &&
+    (!stringValue(args.code_commits) || stringValue(args.code_commits) !== stringValue(data.codeCommits))
+  ) {
+    return false;
+  }
+  const fields = [
+    ["code_commits", "codeCommits"],
+    ["ledger_commits", "ledgerCommits"],
+  ] as const;
+  if (stringValue(args.body) || stringValue(args.code_commit)) return false;
+  return fields.every(([argKey, dataKey]) => !stringValue(args[argKey]) || stringValue(args[argKey]) === stringValue(data[dataKey]));
+}
+
+function withTransitionPlan(
+  result: Record<string, unknown>,
+  commands: readonly string[][],
+  refreshes: number,
+): Record<string, unknown> {
   return {
     ...result,
     project_ledger_transition_plan: {
       executed: commands.map((command) => ({ command: command.join(" ") })),
+      refreshes,
+    },
+  };
+}
+
+function withTransitionRefreshes(result: Record<string, unknown>, refreshes: number): Record<string, unknown> {
+  const plan = result.project_ledger_transition_plan &&
+    typeof result.project_ledger_transition_plan === "object" &&
+    !Array.isArray(result.project_ledger_transition_plan)
+    ? result.project_ledger_transition_plan as Record<string, unknown>
+    : {};
+  return {
+    ...result,
+    project_ledger_transition_plan: {
+      ...plan,
+      refreshes,
     },
   };
 }
@@ -183,6 +282,13 @@ function withRecoverableProjectLedgerError(result: Record<string, unknown>): Rec
       native_next: nativeNext,
     },
   };
+}
+
+function errorCode(result: Record<string, unknown>): string {
+  const error = result.error && typeof result.error === "object" && !Array.isArray(result.error)
+    ? result.error as Record<string, unknown>
+    : {};
+  return stringValue(error.code);
 }
 
 function requireString(args: Record<string, unknown>, key: string): string {
