@@ -68,14 +68,15 @@ export async function runNativeToolTurn({
     const pendingPublicDecisions: PublicWorkDecision[] = [];
     let assistantTextBeforeToolsSeen = false;
     let finalDeliveryOverride: RuntimeTurnResult["delivery"] | undefined;
-    const earlyProgressEmitted = useTools
+    const gatewayProgressEmitted = gatewayFirstVisibleProgressEmitted(input.metadata);
+    const earlyProgressEmitted = useTools && !gatewayProgressEmitted
       ? await emitEarlyRuntimePreparationProgress({
-          input,
-          deps,
-          session,
-          startedAt,
-        })
-      : false;
+        input,
+        deps,
+        session,
+        startedAt,
+      })
+      : gatewayProgressEmitted;
     const context = await prepareNativeTurnContext({
       turnInput: input,
       session,
@@ -448,6 +449,10 @@ async function emitEarlyRuntimePreparationProgress(input: {
   } catch {
     return false;
   }
+}
+
+function gatewayFirstVisibleProgressEmitted(metadata: Record<string, unknown> | undefined): boolean {
+  return metadata?.gatewayFirstVisibleProgressEmitted === true;
 }
 
 function deliveryForFinalAudit(audit: ToolAuditEntry[]): RuntimeTurnResult["delivery"] {

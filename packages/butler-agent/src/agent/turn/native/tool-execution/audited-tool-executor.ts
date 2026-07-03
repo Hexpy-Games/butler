@@ -36,6 +36,10 @@ import {
   takePublicWorkDecisionForTool,
 } from "../../../output/public-work/decisions.ts";
 import {
+  allowsProjectLedgerPreflightDecision,
+  createProjectLedgerPreflightDecision,
+} from "./project-ledger-preflight-decision.ts";
+import {
   publicDecisionRequiredObservation,
   throwIfToolResultNeedsObservation,
   toolObservationResult,
@@ -69,9 +73,24 @@ export function createAuditedButlerToolExecutor(
     if (isInternalProgressTool(call.name)) {
       return await internalProgress.run(call, "model");
     }
+    const allowRuntimePreflightDecision = allowsProjectLedgerPreflightDecision({
+      executorInput: input,
+      call,
+    });
+    if (
+      allowRuntimePreflightDecision &&
+      !hasCompleteAuthoredPublicDecisionForTool({
+        pending: input.pendingPublicDecisions,
+        toolName: call.name,
+        allowRuntimeDerived: true,
+      })
+    ) {
+      input.pendingPublicDecisions.push(createProjectLedgerPreflightDecision({ toolName: call.name }));
+    }
     if (!hasCompleteAuthoredPublicDecisionForTool({
       pending: input.pendingPublicDecisions,
       toolName: call.name,
+      allowRuntimeDerived: allowRuntimePreflightDecision,
     })) {
       return appendPublicDecisionRequiredObservation({ input, call });
     }
@@ -247,6 +266,10 @@ async function prepareAuditedToolExecution(input: {
     progress,
     language: input.input.messageLanguage,
     previousDecisions: input.input.publicDecisionContext,
+    allowRuntimeDerived: allowsProjectLedgerPreflightDecision({
+      executorInput: input.input,
+      call: input.call,
+    }),
   });
   await maybeEmitRuntimeProgress(input, decision, progress, isWorkerStartTool);
 
