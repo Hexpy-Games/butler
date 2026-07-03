@@ -228,6 +228,42 @@ test("Project Ledger native tools route task completion through task handlers", 
   expect(missingParent.error?.code).toBe("invalid_arguments");
   expect(JSON.stringify(missingParent.error?.native_next)).toContain("Correct required Project Ledger");
 
+  const plannedTodoTask = await executor({
+    name: "project_ledger_create",
+    args: {
+      project_path: projectPath,
+      kind: "task",
+      work_id: "W-SANDY",
+      id: "T-PLANNED-TODO",
+      title: "Planned todo task",
+    },
+    rawArguments: "{}",
+  }) as { ok: boolean; data?: { id?: string; status?: string } };
+  expect(plannedTodoTask.ok).toBe(true);
+  expect(plannedTodoTask.data).toMatchObject({ id: "T-PLANNED-TODO", status: "todo" });
+
+  const completedTodoTask = await executor({
+    name: "project_ledger_task_complete",
+    args: {
+      project_path: projectPath,
+      id: "T-PLANNED-TODO",
+      validation: "validation evidence",
+      review: "review evidence",
+      report: "reports/planned-todo.md",
+    },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    data?: { id?: string; kind?: string; status?: string };
+    project_ledger_transition_plan?: { executed?: Array<{ command?: string }> };
+  };
+  expect(completedTodoTask.ok).toBe(true);
+  expect(completedTodoTask.data).toMatchObject({ id: "T-PLANNED-TODO", kind: "task", status: "done" });
+  expect(completedTodoTask.project_ledger_transition_plan?.executed).toEqual([
+    { command: "task update --id T-PLANNED-TODO --status in_progress" },
+    expect.objectContaining({ command: expect.stringContaining("task complete") }),
+  ]);
+
   const startedWork = await executor({
     name: "project_ledger_work_update",
     args: {
@@ -240,14 +276,13 @@ test("Project Ledger native tools route task completion through task handlers", 
   expect(startedWork.ok).toBe(true);
   expect(startedWork.data).toMatchObject({ id: "W-SANDY", kind: "work", status: "in_progress" });
 
-  const prematureWorkComplete = await executor({
+  const missingEvidenceWorkComplete = await executor({
     name: "project_ledger_work_complete",
     args: {
       project_path: projectPath,
       id: "W-SANDY",
       validation: "validation evidence",
       review: "review evidence",
-      report: "reports/sandy.md",
     },
     rawArguments: "{}",
   }) as {
@@ -259,14 +294,132 @@ test("Project Ledger native tools route task completion through task handlers", 
       native_next?: Array<{ tool?: string; args?: Record<string, string> }>;
     };
   };
-  expect(prematureWorkComplete.ok).toBe(false);
-  expect(prematureWorkComplete.recoverable).toBe(true);
-  expect(prematureWorkComplete.error?.code).toBe("invalid_transition");
-  expect(JSON.stringify(prematureWorkComplete.error?.next)).toContain("project-ledger work update");
-  expect(prematureWorkComplete.error?.native_next).toContainEqual(expect.objectContaining({
-    tool: "project_ledger_work_update",
-    args: expect.objectContaining({ id: "W-SANDY", status: "review" }),
+  expect(missingEvidenceWorkComplete.ok).toBe(false);
+  expect(missingEvidenceWorkComplete.recoverable).toBe(true);
+  expect(missingEvidenceWorkComplete.error?.code).toBe("completion_gate_failed");
+  expect(JSON.stringify(missingEvidenceWorkComplete.error)).toContain("missing_report");
+  expect(missingEvidenceWorkComplete.error?.native_next).toContainEqual(expect.objectContaining({
+    tool: "project_ledger_work_complete",
   }));
+
+  runProjectLedger([
+    "work",
+    "create",
+    "--id",
+    "W-COMMIT-EVIDENCE",
+    "--title",
+    "Commit evidence work",
+    "--status",
+    "specified",
+    "--spec-exemption",
+    "--acceptance-exemption",
+    "--requires-commit-evidence",
+  ], projectPath);
+  const missingCommitEvidence = await executor({
+    name: "project_ledger_work_complete",
+    args: {
+      project_path: projectPath,
+      id: "W-COMMIT-EVIDENCE",
+      validation: "validation evidence",
+      review: "review evidence",
+      report: "reports/commit-evidence.md",
+    },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    recoverable?: boolean;
+    error?: { code?: string };
+  };
+  expect(missingCommitEvidence.ok).toBe(false);
+  expect(missingCommitEvidence.recoverable).toBe(true);
+  expect(missingCommitEvidence.error?.code).toBe("completion_gate_failed");
+  expect(JSON.stringify(missingCommitEvidence.error)).toContain("missing_codeCommits");
+  const unchangedCommitEvidenceWork = await executor({
+    name: "project_ledger_show",
+    args: {
+      project_path: projectPath,
+      kind: "work",
+      id: "W-COMMIT-EVIDENCE",
+    },
+    rawArguments: "{}",
+  }) as { ok: boolean; data?: { id?: string; status?: string } };
+  expect(unchangedCommitEvidenceWork.ok).toBe(true);
+  expect(unchangedCommitEvidenceWork.data).toMatchObject({ id: "W-COMMIT-EVIDENCE", status: "specified" });
+
+  const codeCommits = JSON.stringify([{ repo: "butler", hash: "abc123", message: "Task commit" }]);
+  const completedCommitEvidenceWork = await executor({
+    name: "project_ledger_work_complete",
+    args: {
+      project_path: projectPath,
+      id: "W-COMMIT-EVIDENCE",
+      validation: "validation evidence",
+      review: "review evidence",
+      report: "reports/commit-evidence.md",
+      code_commits: codeCommits,
+    },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    data?: { id?: string; status?: string; codeCommits?: string };
+    project_ledger_transition_plan?: { executed?: Array<{ command?: string }> };
+  };
+  expect(completedCommitEvidenceWork.ok).toBe(true);
+  expect(completedCommitEvidenceWork.data).toMatchObject({
+    id: "W-COMMIT-EVIDENCE",
+    status: "done",
+    codeCommits,
+  });
+  expect(completedCommitEvidenceWork.project_ledger_transition_plan?.executed).toEqual([
+    { command: "work update --id W-COMMIT-EVIDENCE --status in_progress" },
+    { command: "work update --id W-COMMIT-EVIDENCE --status review" },
+    expect.objectContaining({ command: expect.stringContaining("work complete") }),
+  ]);
+
+  const workCloseoutCases = [
+    { id: "W-LEGAL-PROPOSED", status: "proposed", planned: ["scoped", "in_progress", "review"] },
+    { id: "W-LEGAL-SCOPED", status: "scoped", planned: ["in_progress", "review"] },
+    { id: "W-LEGAL-SPECIFIED", status: "specified", planned: ["in_progress", "review"] },
+    { id: "W-LEGAL-IN-PROGRESS", status: "in_progress", planned: ["review"] },
+    { id: "W-LEGAL-REVIEW", status: "review", planned: [] },
+    { id: "W-LEGAL-BLOCKED", status: "blocked", planned: ["in_progress", "review"] },
+  ];
+  for (const closeoutCase of workCloseoutCases) {
+    runProjectLedger([
+      "work",
+      "create",
+      "--id",
+      closeoutCase.id,
+      "--title",
+      closeoutCase.status,
+      "--status",
+      closeoutCase.status,
+      "--spec-exemption",
+      "--acceptance-exemption",
+    ], projectPath);
+    const plannedWorkComplete = await executor({
+      name: "project_ledger_work_complete",
+      args: {
+        project_path: projectPath,
+        id: closeoutCase.id,
+        validation: "validation evidence",
+        review: "review evidence",
+        report: `reports/${closeoutCase.id}.md`,
+      },
+      rawArguments: "{}",
+    }) as {
+      ok: boolean;
+      data?: { id?: string; kind?: string; status?: string };
+      project_ledger_transition_plan?: { executed?: Array<{ command?: string }> };
+    };
+    expect(plannedWorkComplete.ok).toBe(true);
+    expect(plannedWorkComplete.data).toMatchObject({ id: closeoutCase.id, kind: "work", status: "done" });
+    expect(plannedWorkComplete.project_ledger_transition_plan?.executed).toEqual([
+      ...closeoutCase.planned.map((status) => ({
+        command: `work update --id ${closeoutCase.id} --status ${status}`,
+      })),
+      expect.objectContaining({ command: expect.stringContaining("work complete") }),
+    ]);
+  }
 
   const started = await executor({
     name: "project_ledger_task_update",
