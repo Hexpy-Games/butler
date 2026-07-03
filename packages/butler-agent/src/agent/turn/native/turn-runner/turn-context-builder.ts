@@ -66,6 +66,15 @@ import {
 } from "../../preparation-metrics.ts";
 import type { FunctionToolPromptOptions } from "../../../../integrations/providers/provider.ts";
 import { WORK_TRACKING_TOOL_NAMES } from "../../../tools/work-tracking/shared.ts";
+import { selectWorkStreamCheckpointResume } from "../../workstream-checkpoint-resume-controller.ts";
+import {
+  buildFocusedResumeEnvelope,
+  turnMetadataWithFocusedResumePolicy,
+} from "../../workstream-focused-resume-envelope.ts";
+import {
+  buildWorkStreamResumeDecisionEnvelope,
+  turnMetadataWithResumeDecisionPolicy,
+} from "../../workstream-resume-decision-envelope.ts";
 
 const TURN_SCOPED_WORK_TRACKING_TOOLS = new Set<string>(WORK_TRACKING_TOOL_NAMES);
 
@@ -84,12 +93,40 @@ export async function prepareNativeTurnContext(input: {
   const userText = currentUserText(input.turnInput);
   const plannedReview = plannedReviewTurnContext(input.turnInput);
   await maybeCompact(input);
-  const recallContext = await maybeRecall(input, userText);
+  const turnId = currentRuntimeTurnId(input.turnInput) ?? `turn-${randomUUID().slice(0, 12)}`;
+  const chatId = currentChatId(input.turnInput);
+  const resumeSelection = selectWorkStreamCheckpointResume({
+    butlerData: input.deps.butlerData,
+    sessionId: input.turnInput.handle.sessionId,
+    chatId,
+    projectId: projectId(input.session),
+    currentTurnId: turnId,
+    turnMetadata: input.turnInput.metadata,
+    userText,
+  });
+  const focusedResumeEnvelope = buildFocusedResumeEnvelope({
+    butlerData: input.deps.butlerData,
+    selection: resumeSelection,
+    currentUserText: userText,
+  });
+  const resumeDecisionEnvelope = buildWorkStreamResumeDecisionEnvelope({
+    selection: resumeSelection,
+    currentUserText: userText,
+  });
+  const effectiveTurnMetadata = turnMetadataWithResumeDecisionPolicy(
+    turnMetadataWithFocusedResumePolicy(
+      input.turnInput.metadata,
+      focusedResumeEnvelope,
+    ),
+    resumeDecisionEnvelope,
+  );
+  const recallContext = focusedResumeEnvelope
+    ? skipAutomaticRecallForFocusedResume(input)
+    : await maybeRecall(input, userText);
   const compactionContext = measureTurnPreparationStepSync(
     preparationMetricInput(input, "compaction_context"),
     () => "",
   );
-  const turnId = currentRuntimeTurnId(input.turnInput) ?? `turn-${randomUUID().slice(0, 12)}`;
   const feedbackContext = measureTurnPreparationStepSync(
     preparationMetricInput(input, "feedback_buffer"),
     () => feedbackBufferContext(input, compactionContext),
@@ -113,6 +150,12 @@ export async function prepareNativeTurnContext(input: {
       feedbackBufferContext: feedbackContext,
       workingMemoryContext: memoryContext,
       runtimePolicyContext,
+      focusedResumeEnvelope: focusedResumeEnvelope?.prompt,
+      resumeDecisionEnvelope: resumeDecisionEnvelope?.prompt,
+      removePromptContextSections: focusedResumeEnvelope
+        ? ["Active Work State", "Project Ledger Runtime Context"]
+        : [],
+      skipRecentConversation: Boolean(focusedResumeEnvelope),
       recentConversationTokenBudget: recentConversationBudgetForTurn({
         configuredBudget: input.deps.recentConversationTokenBudget ??
           defaultRecentConversationTokenBudget(input.turnInput.model),
@@ -127,6 +170,7 @@ export async function prepareNativeTurnContext(input: {
     sessionId: input.turnInput.handle.sessionId,
     turnId,
     turnInput: input.turnInput,
+    resumeSelection,
   });
   const currentAttachmentContext = measureTurnPreparationStepSync(
     preparationMetricInput(input, "attachment_context"),
@@ -141,7 +185,7 @@ export async function prepareNativeTurnContext(input: {
     role: input.session.init.role,
     message: userText,
     sessionMetadata: input.session.init.metadata,
-    turnMetadata: input.turnInput.metadata,
+    turnMetadata: effectiveTurnMetadata,
     providerCapabilities: input.turnInput.provider.capabilities,
     tools: BUTLER_TOOLS,
     providerSupportsSchemaPromotion:
@@ -155,6 +199,7 @@ export async function prepareNativeTurnContext(input: {
     appMessageDbPath: input.deps.appMessageDbPath,
     workspacePath: input.session.init.workspacePath,
     sessionId: input.turnInput.handle.sessionId,
+    originChatId: chatId ?? undefined,
     projectId: projectId(input.session),
     turnId,
     workerModel: input.turnInput.model,
@@ -162,7 +207,7 @@ export async function prepareNativeTurnContext(input: {
     searchPlannerModel: input.turnInput.model,
     searchPlannerOriginalRequest: userText,
     workerModelRules: workerModelRulesFromMetadata(
-      input.turnInput.metadata?.workerModelRules ?? input.session.init.metadata?.workerModelRules,
+      effectiveTurnMetadata?.workerModelRules ?? input.session.init.metadata?.workerModelRules,
     ),
     turnContext: [prompt, currentAttachmentContext].filter(Boolean).join("\n\n"),
     currentToolNames: () => toolSurfaceController.currentToolNames(),
@@ -201,6 +246,7 @@ export async function prepareNativeTurnContext(input: {
   return {
     userText,
     plannedReview,
+    chatId,
     turnId,
     turnBudget,
     prompt,
@@ -210,7 +256,22 @@ export async function prepareNativeTurnContext(input: {
     toolSurfaceController,
     executor,
     semanticProgressSafetyNet,
+    resumeSelection,
+    focusedResumeEnvelope,
+    resumeDecisionEnvelope,
   };
+}
+
+function skipAutomaticRecallForFocusedResume(input: {
+  turnInput: RuntimeTurnInput;
+  session: NativeStoredSessionConfig;
+  deps: NativeTurnRunnerDeps;
+}): string {
+  recordTurnPreparationStepSkipped({
+    ...preparationMetricInput(input, "automatic_recall"),
+    skippedReason: "focused_resume",
+  });
+  return "";
 }
 
 function budgetForTurn(input: {
@@ -218,9 +279,13 @@ function budgetForTurn(input: {
   sessionId: string;
   turnId: string;
   turnInput: RuntimeTurnInput;
+  resumeSelection: ReturnType<typeof selectWorkStreamCheckpointResume>;
 }) {
   if (!hasSchedulerContinuationMetadata(input.turnInput, input.sessionId, input.turnId)) {
-    return createDirectTurnBudget(input.turnId);
+    return hydrateDirectTurnBudget(
+      input.turnId,
+      input.resumeSelection.selected?.checkpoint.budgetSnapshot,
+    );
   }
   const atom = readTurnContextAtom({
     butlerData: input.butlerData,
@@ -228,6 +293,15 @@ function budgetForTurn(input: {
     turnId: input.turnId,
   });
   return hydrateDirectTurnBudget(input.turnId, atom?.budgetSnapshot);
+}
+
+function currentChatId(input: RuntimeTurnInput): string | null {
+  const envelope = input.input;
+  if (!("eventId" in envelope)) return input.handle.sessionId;
+  if (envelope.peer.kind === "thread") {
+    return envelope.peer.parentId?.trim() || envelope.peer.id;
+  }
+  return envelope.peer.id;
 }
 
 function hasSchedulerContinuationMetadata(

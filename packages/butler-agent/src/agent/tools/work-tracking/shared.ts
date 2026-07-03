@@ -16,6 +16,7 @@ export const WORK_TRACKING_TOOL_NAMES = [
 export function createWorkTrackingToolHandlers(input: {
   butlerData: string;
   sessionId?: string;
+  originChatId?: string;
   projectId?: string;
   turnId?: string;
   todoListStore: TodoListStore;
@@ -28,6 +29,7 @@ export function createWorkTrackingToolHandlers(input: {
       const completedReplay = completedSameTurnWorkStreamForList({
         workStreamStore: input.workStreamStore,
         sessionId: input.sessionId,
+        originChatId: input.originChatId,
         projectId: input.projectId,
         listId,
         turnId: input.turnId,
@@ -53,6 +55,7 @@ export function createWorkTrackingToolHandlers(input: {
       });
       const workStream = input.workStreamStore.updateFromTodoList({
         ownerSessionId: input.sessionId ?? null,
+        originChatId: input.originChatId ?? null,
         projectId: input.projectId ?? null,
         listId,
         title: view.list.title ?? undefined,
@@ -142,6 +145,7 @@ export function createWorkTrackingToolHandlers(input: {
 function completedSameTurnWorkStreamForList(input: {
   workStreamStore: WorkStreamStore;
   sessionId?: string;
+  originChatId?: string;
   projectId?: string;
   listId: string;
   turnId?: string;
@@ -151,6 +155,7 @@ function completedSameTurnWorkStreamForList(input: {
   if (!turnId || !hasUnfinishedTodo(input.items)) return null;
   for (const summary of input.workStreamStore.list({
     sessionId: input.sessionId,
+    originChatId: input.originChatId,
     projectId: input.projectId,
     includeTerminal: true,
   })) {
@@ -177,6 +182,7 @@ function resolvedTodoListId(
   rawListId: unknown,
   input: {
     sessionId?: string;
+    originChatId?: string;
     projectId?: string;
     turnId?: string;
     todoListStore: TodoListStore;
@@ -186,6 +192,7 @@ function resolvedTodoListId(
 ): string {
   const explicitListId = explicitTodoListId(rawListId);
   const continuation = input.workStreamStore.latestResumableForSession(input.sessionId, {
+    originChatId: input.originChatId,
     projectId: input.projectId,
     excludeTodoListIds: [RUNTIME_SEMANTIC_TODO_LIST_ID],
   });

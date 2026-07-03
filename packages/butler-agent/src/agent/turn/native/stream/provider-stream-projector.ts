@@ -19,6 +19,9 @@ export function createProviderStreamTurnEventProjector(input: {
   defaultStreamId: string;
   defaultTextTarget?: ProviderStreamTextTarget;
   emitTurnEvent?: (event: RuntimeTurnEventInput) => Promise<void> | void;
+  onPublicTextDelta?: (input: {
+    target: ProviderStreamTextTarget;
+  }) => void;
 }): ProviderStreamTurnEventProjector {
   const seen = new Set<string>();
   const openStreams = new Set<string>();
@@ -65,6 +68,8 @@ export function createProviderStreamTurnEventProjector(input: {
           chunk.sequence,
           () => nextSequence(`${streamId}:model.stream.text_delta`),
         );
+        const target = chunk.target ?? input.defaultTextTarget ?? "final_candidate";
+        input.onPublicTextDelta?.({ target });
         await emit(
           "model.stream.text_delta",
           "public",
@@ -72,7 +77,7 @@ export function createProviderStreamTurnEventProjector(input: {
           {
             streamId,
             textDelta,
-            target: chunk.target ?? input.defaultTextTarget ?? "final_candidate",
+            target,
             sequence,
           },
           sequence,

@@ -38,6 +38,7 @@ export interface WorkStreamRecord {
   id: string;
   title: string;
   owner_session_id: string | null;
+  origin_chat_id?: string | null;
   project_id: string | null;
   intent_summary: string | null;
   role_hint: string | null;
@@ -171,11 +172,12 @@ function safeText(value: string | null | undefined, limit: number): string | nul
 
 function stableStreamId(input: {
   ownerSessionId?: string | null;
+  originChatId?: string | null;
   projectId?: string | null;
   listId?: string | null;
 }): string {
   const digest = createHash("sha1")
-    .update(`${input.ownerSessionId ?? ""}\n${input.projectId ?? ""}\n${input.listId ?? "main"}`)
+    .update(`${input.ownerSessionId ?? ""}\n${input.originChatId ?? ""}\n${input.projectId ?? ""}\n${input.listId ?? "main"}`)
     .digest("hex")
     .slice(0, 16);
   return `ws-${digest}`;
@@ -448,18 +450,21 @@ export class WorkStreamStore {
 
   private activeForScope(input: {
     ownerSessionId?: string | null;
+    originChatId?: string | null;
     projectId?: string | null;
     listId?: string | null;
     excludeId?: string | null;
     currentTurnId?: string | null;
   }): WorkStreamRecord | null {
     const ownerSessionId = input.ownerSessionId?.trim() || null;
+    const originChatId = input.originChatId?.trim() || null;
     const projectId = input.projectId?.trim() || null;
     const listId = input.listId?.trim() || null;
     return this.records()
       .filter((record) => record.id !== input.excludeId)
       .filter((record) => workStreamActive(record, { currentTurnId: input.currentTurnId }))
       .filter((record) => !ownerSessionId || record.owner_session_id === ownerSessionId)
+      .filter((record) => !originChatId || !record.origin_chat_id || record.origin_chat_id === originChatId)
       .filter((record) => !projectId || record.project_id === projectId)
       .filter((record) => !listId || record.todo_list_id === listId)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
@@ -468,11 +473,14 @@ export class WorkStreamStore {
 
   list(options: {
     sessionId?: string | null;
+    originChatId?: string | null;
     projectId?: string | null;
     includeTerminal?: boolean;
   } = {}): WorkStreamSummary[] {
+    const originChatId = options.originChatId?.trim();
     return this.records()
       .filter((record) => !options.sessionId || record.owner_session_id === options.sessionId)
+      .filter((record) => !originChatId || !record.origin_chat_id || record.origin_chat_id === originChatId)
       .filter((record) => !options.projectId || record.project_id === options.projectId)
       .filter((record) => options.includeTerminal === true || !workStreamTerminal(record.state))
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
@@ -601,13 +609,15 @@ export class WorkStreamStore {
 
   latestResumableForSession(
     sessionId?: string | null,
-    options: { projectId?: string | null; excludeTodoListIds?: string[] } = {},
+    options: { originChatId?: string | null; projectId?: string | null; excludeTodoListIds?: string[] } = {},
   ): WorkStreamRecord | null {
     if (!sessionId) return null;
+    const originChatId = options.originChatId?.trim();
     const projectId = options.projectId?.trim();
     const excludedTodoListIds = new Set(options.excludeTodoListIds ?? []);
     const resumable = this.records()
       .filter((record) => record.owner_session_id === sessionId)
+      .filter((record) => !originChatId || !record.origin_chat_id || record.origin_chat_id === originChatId)
       .filter((record) => !projectId || record.project_id === projectId)
       .filter((record) => workStreamResumable(record))
       .filter((record) => !record.todo_list_id || !excludedTodoListIds.has(record.todo_list_id))
@@ -669,6 +679,7 @@ export class WorkStreamStore {
   updateFromTodoList(input: {
     id?: string;
     ownerSessionId?: string | null;
+    originChatId?: string | null;
     projectId?: string | null;
     listId?: string | null;
     title?: string | null;
@@ -682,6 +693,7 @@ export class WorkStreamStore {
     const now = (input.now ?? new Date()).toISOString();
     const baseId = safeId(input.id?.trim() || stableStreamId({
       ownerSessionId: input.ownerSessionId,
+      originChatId: input.originChatId,
       projectId: input.projectId,
       listId: input.listId,
     }));
@@ -692,6 +704,7 @@ export class WorkStreamStore {
     if (prior && workStreamTerminal(prior.state) && !workStreamTerminal(target.state) && !input.id?.trim()) {
       activePrior = this.activeForScope({
         ownerSessionId: input.ownerSessionId ?? prior.owner_session_id,
+        originChatId: input.originChatId ?? prior.origin_chat_id,
         projectId: input.projectId ?? prior.project_id,
         listId: input.listId ?? prior.todo_list_id,
         excludeId: baseId,
@@ -710,6 +723,7 @@ export class WorkStreamStore {
       id,
       title: safeText(input.title, 120) ?? activePrior?.title ?? prior?.title ?? "Butler work stream",
       owner_session_id: input.ownerSessionId?.trim() || activePrior?.owner_session_id || prior?.owner_session_id || null,
+      origin_chat_id: input.originChatId?.trim() || activePrior?.origin_chat_id || prior?.origin_chat_id || null,
       project_id: input.projectId?.trim() || activePrior?.project_id || prior?.project_id || null,
       intent_summary: safeText(input.intentSummary, 600) ?? activePrior?.intent_summary ?? prior?.intent_summary ?? null,
       role_hint: safeText(input.roleHint, 240) ?? activePrior?.role_hint ?? prior?.role_hint ?? null,
