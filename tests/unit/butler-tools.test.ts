@@ -264,6 +264,84 @@ test("Project Ledger native tools route task completion through task handlers", 
     expect.objectContaining({ command: expect.stringContaining("task complete") }),
   ]);
 
+  for (const status of ["blocked", "failed"] as const) {
+    const id = `T-PLANNED-${status.toUpperCase()}`;
+    const plannedTask = await executor({
+      name: "project_ledger_create",
+      args: {
+        project_path: projectPath,
+        kind: "task",
+        work_id: "W-SANDY",
+        id,
+        title: `Planned ${status} task`,
+        status,
+      },
+      rawArguments: "{}",
+    }) as { ok: boolean; data?: { id?: string; status?: string } };
+    expect(plannedTask.ok).toBe(true);
+    expect(plannedTask.data).toMatchObject({ id, status });
+
+    const completedTask = await executor({
+      name: "project_ledger_task_complete",
+      args: {
+        project_path: projectPath,
+        id,
+        validation: "validation evidence",
+        review: "review evidence",
+        report: `reports/${id}.md`,
+      },
+      rawArguments: "{}",
+    }) as {
+      ok: boolean;
+      data?: { id?: string; kind?: string; status?: string };
+      project_ledger_transition_plan?: { executed?: Array<{ command?: string }> };
+    };
+    expect(completedTask.ok).toBe(true);
+    expect(completedTask.data).toMatchObject({ id, kind: "task", status: "done" });
+    expect(completedTask.project_ledger_transition_plan?.executed).toEqual([
+      { command: `task update --id ${id} --status in_progress` },
+      expect.objectContaining({ command: expect.stringContaining("task complete") }),
+    ]);
+  }
+
+  const cancelledTask = await executor({
+    name: "project_ledger_create",
+    args: {
+      project_path: projectPath,
+      kind: "task",
+      work_id: "W-SANDY",
+      id: "T-PLANNED-CANCELLED",
+      title: "Planned cancelled task",
+      status: "cancelled",
+    },
+    rawArguments: "{}",
+  }) as { ok: boolean; data?: { id?: string; status?: string } };
+  expect(cancelledTask.ok).toBe(true);
+  expect(cancelledTask.data).toMatchObject({ id: "T-PLANNED-CANCELLED", status: "cancelled" });
+  const cancelledComplete = await executor({
+    name: "project_ledger_task_complete",
+    args: {
+      project_path: projectPath,
+      id: "T-PLANNED-CANCELLED",
+      validation: "validation evidence",
+      review: "review evidence",
+      report: "reports/cancelled.md",
+    },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    recoverable?: boolean;
+    error?: { code?: string };
+    project_ledger_transition_plan?: { refreshes?: number; executed?: Array<{ command?: string }> };
+  };
+  expect(cancelledComplete.ok).toBe(false);
+  expect(cancelledComplete.recoverable).toBe(true);
+  expect(cancelledComplete.error?.code).toBe("invalid_transition");
+  expect(cancelledComplete.project_ledger_transition_plan).toMatchObject({
+    refreshes: 1,
+    executed: [expect.objectContaining({ command: expect.stringContaining("task complete") })],
+  });
+
   const startedWork = await executor({
     name: "project_ledger_work_update",
     args: {
