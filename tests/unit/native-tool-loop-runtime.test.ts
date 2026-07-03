@@ -54,7 +54,10 @@ import {
   evidenceTranscriptToolCallArgumentsProjection,
   evidenceTranscriptToolResultProjection,
 } from "../../packages/butler-agent/src/agent/output/evidence/transcript-result.ts";
-import { createTurnContextAtomId } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
+import {
+  createTurnContextAtomId,
+  persistTurnContextAtom,
+} from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 let tempDir = "";
@@ -9977,6 +9980,109 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
     maxRequests: 32,
   });
   expect(continuationResult.text).toContain("보존된 W3 작업 상태부터 이어서 검증했습니다");
+});
+
+test("focused WorkStream resume hydrates logical-turn budget from checkpoint without scheduler metadata", async () => {
+  const sessionId = "butler/main/focused-resume-budget-snapshot";
+  const todoView = new TodoListStore(tempDir).update({
+    listId: "focused-budget-snapshot",
+    title: "Focused resume budget snapshot",
+    items: [{
+      id: "inspect",
+      content: "Inspect checkpoint budget hydration",
+      active_form: "Inspecting checkpoint budget hydration",
+      status: "in_progress",
+      phase: "execution",
+    }, {
+      id: "report",
+      content: "Report checkpoint budget hydration",
+      active_form: "Reporting checkpoint budget hydration",
+      status: "pending",
+      phase: "reporting",
+    }],
+  });
+  new WorkStreamStore(tempDir).updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: todoView.list.list_id,
+    title: "Focused resume budget snapshot",
+    items: todoView.list.items,
+    lastUserTurnId: "turn-origin-budget",
+  });
+  persistTurnContextAtom({
+    butlerData: tempDir,
+    sessionId,
+    turnId: "turn-origin-budget",
+    state: "continuing",
+    sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+    reason: "budget",
+    userRequest: { id: "msg-origin-budget" },
+    budgetSnapshot: {
+      turnId: "turn-origin-budget",
+      modelRequestsUsed: 5,
+      promptTokens: 100,
+      cachedTokens: 25,
+      outputTokens: 40,
+      totalTokens: 140,
+      maxModelCalls: 32,
+      maxPromptTokens: 220000,
+      maxOutputTokens: 80000,
+      maxTotalTokens: 300000,
+    },
+  });
+
+  let budgetAtStart: { requestCount: number; maxRequests: number } | undefined;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      budgetAtStart = input.usageAttribution?.getBudgetState?.() ??
+        input.usageAttribution?.budgetState;
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          title: "Focused resume budget snapshot",
+          todos: [{
+            id: "inspect",
+            content: "Inspect checkpoint budget hydration",
+            active_form: "Inspecting checkpoint budget hydration",
+            status: "completed",
+            phase: "execution",
+          }, {
+            id: "report",
+            content: "Report checkpoint budget hydration",
+            active_form: "Reporting checkpoint budget hydration",
+            status: "completed",
+            phase: "reporting",
+          }],
+        },
+        rawArguments: JSON.stringify({ title: "Focused resume budget snapshot" }),
+      });
+      return "checkpoint budget snapshot을 이어받아 완료했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "이어 해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toContain("완료했습니다");
+  expect(budgetAtStart).toMatchObject({
+    requestCount: 5,
+    maxRequests: 32,
+  });
 });
 
 test("focused WorkStream resume yields before consuming the global model request cap", async () => {

@@ -158,6 +158,7 @@ function scanCandidates(input: {
     projectId: input.projectId,
   }).map((summary) => store.read(summary.id))
     .filter((record): record is WorkStreamRecord => Boolean(record))
+    .filter((record) => workStreamChatMatches(record, input.chatId))
     .filter((record) => workStreamResumable(record));
   const candidates: WorkStreamResumeCandidate[] = [];
   const blockers: WorkStreamResumeCandidate[] = [];
@@ -194,6 +195,15 @@ function scanCandidates(input: {
     blockers: sortCandidates(blockers),
     issues,
   };
+}
+
+function workStreamChatMatches(
+  record: WorkStreamRecord,
+  chatId?: string | null,
+): boolean {
+  const currentChatId = chatId?.trim();
+  const originChatId = record.origin_chat_id?.trim();
+  return !currentChatId || !originChatId || originChatId === currentChatId;
 }
 
 function structuredResumeControl(

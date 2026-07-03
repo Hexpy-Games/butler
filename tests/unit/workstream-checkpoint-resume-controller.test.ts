@@ -64,6 +64,7 @@ test("checkpoint resume selects the sole recoverable WorkStream without reading 
 test("checkpoint resume hydrates origin turn, validation, evidence, and budget refs", () => {
   const stream = createStream({
     sessionId: "butler/session",
+    originChatId: "app-chat",
     listId: "recoverable-with-origin",
     now: "2026-07-03T00:00:00.000Z",
     lastUserTurnId: "turn-origin",
@@ -247,6 +248,36 @@ test("checkpoint resume treats explicit targets outside the current session as c
   });
 });
 
+test("checkpoint resume rejects WorkStreams created for another chat in the same session", () => {
+  const otherChat = createRecoverableStream({
+    sessionId: "butler/shared-session",
+    originChatId: "chat-a",
+    listId: "chat-a-work",
+    now: "2026-07-03T00:00:00.000Z",
+    recoverableAt: "2026-07-03T00:01:00.000Z",
+  });
+
+  expect(selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/shared-session",
+    chatId: "chat-b",
+  })).toMatchObject({
+    state: "fresh_turn",
+    reason: "no_candidates",
+    candidates: [],
+  });
+  expect(selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/shared-session",
+    chatId: "chat-b",
+    turnMetadata: { workstreamResume: { action: "resume", workStreamId: otherChat.id } },
+  })).toMatchObject({
+    state: "resume_conflict",
+    reason: "explicit_target_missing",
+    candidates: [],
+  });
+});
+
 test("checkpoint resume blocks waiting-user WorkStreams until structured user action is supplied", () => {
   const waiting = createStream({
     sessionId: "butler/session",
@@ -333,6 +364,7 @@ test("checkpoint resume blocks ledger-governed WorkStreams when linked ledger re
 
 function createRecoverableStream(input: {
   sessionId: string;
+  originChatId?: string;
   listId: string;
   now: string;
   recoverableAt: string;
@@ -347,6 +379,7 @@ function createRecoverableStream(input: {
 
 function createStream(input: {
   sessionId: string;
+  originChatId?: string;
   listId: string;
   now: string;
   lastUserTurnId?: string;
@@ -363,6 +396,7 @@ function createStream(input: {
   });
   return new WorkStreamStore(tempDir).updateFromTodoList({
     ownerSessionId: input.sessionId,
+    originChatId: input.originChatId,
     projectId: "butler",
     listId: input.listId,
     title: "Resume direct work",

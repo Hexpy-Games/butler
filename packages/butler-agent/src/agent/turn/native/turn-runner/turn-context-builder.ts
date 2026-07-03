@@ -90,10 +90,11 @@ export async function prepareNativeTurnContext(input: {
   const plannedReview = plannedReviewTurnContext(input.turnInput);
   await maybeCompact(input);
   const turnId = currentRuntimeTurnId(input.turnInput) ?? `turn-${randomUUID().slice(0, 12)}`;
+  const chatId = currentChatId(input.turnInput);
   const resumeSelection = selectWorkStreamCheckpointResume({
     butlerData: input.deps.butlerData,
     sessionId: input.turnInput.handle.sessionId,
-    chatId: currentChatId(input.turnInput),
+    chatId,
     projectId: projectId(input.session),
     currentTurnId: turnId,
     turnMetadata: input.turnInput.metadata,
@@ -157,6 +158,7 @@ export async function prepareNativeTurnContext(input: {
     sessionId: input.turnInput.handle.sessionId,
     turnId,
     turnInput: input.turnInput,
+    resumeSelection,
   });
   const currentAttachmentContext = measureTurnPreparationStepSync(
     preparationMetricInput(input, "attachment_context"),
@@ -185,6 +187,7 @@ export async function prepareNativeTurnContext(input: {
     appMessageDbPath: input.deps.appMessageDbPath,
     workspacePath: input.session.init.workspacePath,
     sessionId: input.turnInput.handle.sessionId,
+    originChatId: chatId ?? undefined,
     projectId: projectId(input.session),
     turnId,
     workerModel: input.turnInput.model,
@@ -231,6 +234,7 @@ export async function prepareNativeTurnContext(input: {
   return {
     userText,
     plannedReview,
+    chatId,
     turnId,
     turnBudget,
     prompt,
@@ -262,9 +266,13 @@ function budgetForTurn(input: {
   sessionId: string;
   turnId: string;
   turnInput: RuntimeTurnInput;
+  resumeSelection: ReturnType<typeof selectWorkStreamCheckpointResume>;
 }) {
   if (!hasSchedulerContinuationMetadata(input.turnInput, input.sessionId, input.turnId)) {
-    return createDirectTurnBudget(input.turnId);
+    return hydrateDirectTurnBudget(
+      input.turnId,
+      input.resumeSelection.selected?.checkpoint.budgetSnapshot,
+    );
   }
   const atom = readTurnContextAtom({
     butlerData: input.butlerData,

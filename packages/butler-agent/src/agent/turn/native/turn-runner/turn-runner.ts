@@ -243,6 +243,7 @@ export async function runNativeToolTurn({
       completeRuntimeSemanticWorkStreamBestEffort({
         butlerData: deps.butlerData,
         sessionId: input.handle.sessionId,
+        originChatId: context.chatId,
         projectId: projectId(session),
         tracker: context.semanticProgressSafetyNet,
         language: deps.messageLanguage,

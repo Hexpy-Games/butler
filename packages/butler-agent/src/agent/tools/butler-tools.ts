@@ -121,9 +121,8 @@ export function createButlerToolExecutor(input: {
   butlerData: string;
   appMessageDbPath?: string;
   workspacePath?: string;
-  sessionId?: string;
-  projectId?: string;
-  turnId?: string;
+  sessionId?: string; originChatId?: string;
+  projectId?: string; turnId?: string;
   turnContext?: string;
   searchPlannerOriginalRequest?: string;
   workerModel?: string;
@@ -184,6 +183,7 @@ export function createButlerToolExecutor(input: {
     ...createWorkTrackingToolHandlers({
       butlerData: input.butlerData,
       sessionId: input.sessionId,
+      originChatId: input.originChatId,
       projectId: input.projectId,
       turnId: input.turnId,
       todoListStore,
@@ -274,6 +274,5 @@ export function createButlerToolExecutor(input: {
     }),
   });
   toolExecutorRef.current = toolExecutors;
-
   return async (call) => executeRegisteredButlerTool(toolExecutors, call);
 }
