@@ -10,7 +10,23 @@ export const listToolCapabilitiesToolDefinition = {
     properties: {
       category: {
         type: "string",
-        description: "Optional category filter.",
+        enum: [
+          "search",
+          "data",
+          "command",
+          "file",
+          "work",
+          "monitoring",
+          "automation",
+          "todo",
+          "memory",
+          "project",
+          "skill",
+          "mcp",
+          "dispatch",
+          "control",
+        ],
+        description: "Optional category filter. Use command for shell/terminal execution tools and file for filesystem tools.",
       },
       include_disabled: {
         type: "boolean",

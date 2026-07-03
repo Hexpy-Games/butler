@@ -30,6 +30,7 @@ export function createToolSearchToolHandler(input: {
         },
         invalid_category: category.invalid ?? null,
         invalid_provider: provider.invalid ?? null,
+        valid_categories: category.invalid ? [...VALID_CATEGORIES] : undefined,
         results: [],
       };
     }
@@ -81,6 +82,12 @@ function parseCategory(value: unknown): { value?: ToolCapabilityCategory; invali
   const normalized = stringArg(value);
   if (!normalized) return {};
   const lower = normalized.toLowerCase();
+  if (lower === "shell" || lower === "terminal" || lower === "execution" || lower === "execute") {
+    return { value: "command" };
+  }
+  if (lower === "filesystem" || lower === "files") {
+    return { value: "file" };
+  }
   if (VALID_CATEGORIES.includes(lower as ToolCapabilityCategory)) {
     return { value: lower as ToolCapabilityCategory };
   }
