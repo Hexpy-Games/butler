@@ -11,12 +11,13 @@ import {
   Typo,
 } from "@/butler-ds";
 import { formatCount, formatJson, formatTimestamp } from "./developerLogFormat";
-import { ContextPanel, MetadataPanel, RawBlock } from "./DeveloperLogPanels";
+import { ContextPanel } from "./DeveloperLogContextPanel";
+import { MetadataPanel } from "./DeveloperLogMetadataPanel";
+import { RawBlock } from "./DeveloperLogRawBlock";
 import type {
   DeveloperLogTab,
   DeveloperLogViewerCopy,
 } from "./developerLogViewerTypes";
-import styles from "./DeveloperLogsSettings.module.css";
 
 export function DeveloperLogRow({
   entry,
@@ -37,23 +38,22 @@ export function DeveloperLogRow({
   const responseChars = entry.response.text.length;
   return (
     <DisclosureRow
-      className={styles.row}
       controlsId={`developer-log-${entry.id}`}
       description={<DeveloperLogRowDescription entry={entry} copy={copy} />}
       meta={
-        <span className={styles.rowStats}>
+        <Typo.Caption as="span">
           {copy.labels.sections(entry.context.sections.length)}
           {" / "}
           {copy.labels.contextChars(formatCount(promptChars))}
           {" / "}
           {copy.labels.responseChars(formatCount(responseChars))}
-        </span>
+        </Typo.Caption>
       }
       open={open}
       title={entry.model.requested_model_ref}
       onToggle={onToggle}
     >
-      <SurfacePanel elevation="none" className={styles.panel}>
+      <SurfacePanel elevation="none">
           <Tabs value={tab} onValueChange={(value) => onTabChange(value as DeveloperLogTab)}>
             <TabsList variant="line">
               <TabsTrigger value="context">{copy.tabs.context}</TabsTrigger>
@@ -90,18 +90,18 @@ function DeveloperLogRowDescription({
 }) {
   return (
     <Stack gap="xs">
-      <span className={styles.rowMeta}>
+      <Stack align="row" gap="xs" wrap>
         <Tag>{entry.kind}</Tag>
         <Tag>{entry.transport}</Tag>
         {entry.route.reason && <Tag>{entry.route.reason}</Tag>}
         <Tag>{copy.labels.secrets}: {copy.labels.redacted}</Tag>
         <Tag>{copy.labels.rawText}: {copy.labels.included}</Tag>
-      </span>
-      <span className={styles.rowMeta}>
+      </Stack>
+      <Stack align="row" gap="xs" wrap>
         <Typo.Caption>{formatTimestamp(entry.created_at)}</Typo.Caption>
         <Typo.Caption>{entry.session_id}</Typo.Caption>
         {entry.turn_id && <Typo.Caption>{entry.turn_id}</Typo.Caption>}
-      </span>
+      </Stack>
     </Stack>
   );
 }

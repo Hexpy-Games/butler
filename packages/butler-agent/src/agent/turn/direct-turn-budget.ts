@@ -45,6 +45,7 @@ export interface DirectTurnPromptUsageInput {
   recentConversationChars: number;
   recallContextChars: number;
   inboundMessageChars: number;
+  focusedResumeEnvelopeChars?: number;
 }
 
 export function createDirectTurnBudget(turnId: string): DirectTurnBudget {
@@ -164,6 +165,7 @@ export function promptUsageSectionsFromPrompt(
     ["recent_conversation", input.recentConversationChars],
     ["recall_context", input.recallContextChars],
     ["inbound_message", input.inboundMessageChars],
+    ["focused_resume_envelope", input.focusedResumeEnvelopeChars ?? 0],
   ] as const;
   return sections
     .filter(([, chars]) => chars > 0)

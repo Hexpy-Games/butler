@@ -39,6 +39,7 @@ export interface RuntimeTurnContextMetric {
   recentConversationChars: number;
   recallContextChars: number;
   inboundMessageChars: number;
+  focusedResumeEnvelopeChars?: number;
 }
 
 export type ContextMetricEvent = PromptAssemblyContextMetric | RuntimeTurnContextMetric;
@@ -143,6 +144,7 @@ export function appendRuntimeTurnContextMetric(input: {
   recentConversationChars: number;
   recallContextChars: number;
   inboundMessageChars: number;
+  focusedResumeEnvelopeChars?: number;
   now?: number;
 }): void {
   appendContextMetric(input.butlerData, {
@@ -158,6 +160,7 @@ export function appendRuntimeTurnContextMetric(input: {
     recentConversationChars: input.recentConversationChars,
     recallContextChars: input.recallContextChars,
     inboundMessageChars: input.inboundMessageChars,
+    focusedResumeEnvelopeChars: input.focusedResumeEnvelopeChars,
   });
 }
 

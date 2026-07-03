@@ -24,6 +24,7 @@ export interface NormalizedTurnPrompt {
   recentConversationChars: number;
   recallContextChars: number;
   inboundMessageChars: number;
+  focusedResumeEnvelopeChars: number;
 }
 
 export function currentInboundEventId(input: RuntimeTurnInput): string | null {
@@ -79,6 +80,9 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
   feedbackBufferContext?: string;
   workingMemoryContext?: string;
   runtimePolicyContext?: string;
+  focusedResumeEnvelope?: string;
+  removePromptContextSections?: string[];
+  skipRecentConversation?: boolean;
   recentConversationTokenBudget: number;
   butlerData: string;
   conversationReader?: ConversationContextReader;
@@ -94,7 +98,14 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
   const promptContext = structuredCurrentText
     ? removePromptContextSection(rawPromptContext, "Current User Input")
     : rawPromptContext;
-  if (promptContext) parts.push(promptContext);
+  const filteredPromptContext = removePromptContextSections(
+    promptContext,
+    options.removePromptContextSections ?? [],
+  );
+  if (filteredPromptContext) parts.push(filteredPromptContext);
+
+  const focusedResumeEnvelope = options.focusedResumeEnvelope?.trim() ?? "";
+  if (focusedResumeEnvelope) parts.push(focusedResumeEnvelope);
 
   const compactionContext = options.compactionContext?.trim() ?? "";
   if (compactionContext) parts.push(compactionContext);
@@ -105,12 +116,14 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
   const workingMemoryContext = options.workingMemoryContext?.trim() ?? "";
   if (workingMemoryContext) parts.push(workingMemoryContext);
 
-  const recentConversation = buildRecentConversation(
-    input,
-    options.recentConversationTokenBudget,
-    options.butlerData,
-    options.conversationReader,
-  );
+  const recentConversation = options.skipRecentConversation === true
+    ? ""
+    : buildRecentConversation(
+        input,
+        options.recentConversationTokenBudget,
+        options.butlerData,
+        options.conversationReader,
+      );
   if (recentConversation) parts.push(recentConversation);
 
   const recallContext = options.recallContext?.trim() ?? "";
@@ -148,13 +161,14 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
   const prompt = parts.filter(Boolean).join("\n");
   return {
     prompt,
-    promptContextChars: promptContext.length,
+    promptContextChars: filteredPromptContext.length,
     compactionContextChars: compactionContext.length,
     feedbackBufferContextChars: feedbackBufferContext.length,
     workingMemoryContextChars: workingMemoryContext.length,
     recentConversationChars: recentConversation.length,
     recallContextChars: recallContext.length,
     inboundMessageChars,
+    focusedResumeEnvelopeChars: focusedResumeEnvelope.length,
   };
 }
 
@@ -292,6 +306,10 @@ function removePromptContextSection(promptContext: string, title: string): strin
   if (!promptContext.trim()) return "";
   const section = new RegExp(`(?:^|\\n)## ${escapeRegExp(title)}\\n[\\s\\S]*?(?=\\n## |$)`, "u");
   return promptContext.replace(section, "").trim();
+}
+
+function removePromptContextSections(promptContext: string, titles: string[]): string {
+  return titles.reduce((current, title) => removePromptContextSection(current, title), promptContext);
 }
 
 function escapeRegExp(value: string): string {

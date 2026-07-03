@@ -15,6 +15,7 @@ import {
   emitIntermediateBestEffort,
   emitTurnEventBestEffort,
 } from "../progress/turn-delivery-events.ts";
+import { recordFirstToolEventFromTurnInput } from "../metrics/turn-latency-tracker.ts";
 import type {
   NativeAuditedToolExecutorInput,
   NativeToolCall,
@@ -79,6 +80,7 @@ export async function emitStartedProgress(input: {
       ...publicWorkDecisionPayload(input.decision),
     },
   });
+  recordFirstToolEventFromTurnInput(input.input.turnInput, "work.block.started");
   await emitTurnEventBestEffort(input.input.turnInput, {
     kind: "tool.started",
     payload: {

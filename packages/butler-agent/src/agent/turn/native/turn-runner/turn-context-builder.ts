@@ -66,6 +66,11 @@ import {
 } from "../../preparation-metrics.ts";
 import type { FunctionToolPromptOptions } from "../../../../integrations/providers/provider.ts";
 import { WORK_TRACKING_TOOL_NAMES } from "../../../tools/work-tracking/shared.ts";
+import { selectWorkStreamCheckpointResume } from "../../workstream-checkpoint-resume-controller.ts";
+import {
+  buildFocusedResumeEnvelope,
+  turnMetadataWithFocusedResumePolicy,
+} from "../../workstream-focused-resume-envelope.ts";
 
 const TURN_SCOPED_WORK_TRACKING_TOOLS = new Set<string>(WORK_TRACKING_TOOL_NAMES);
 
@@ -84,12 +89,31 @@ export async function prepareNativeTurnContext(input: {
   const userText = currentUserText(input.turnInput);
   const plannedReview = plannedReviewTurnContext(input.turnInput);
   await maybeCompact(input);
-  const recallContext = await maybeRecall(input, userText);
+  const turnId = currentRuntimeTurnId(input.turnInput) ?? `turn-${randomUUID().slice(0, 12)}`;
+  const resumeSelection = selectWorkStreamCheckpointResume({
+    butlerData: input.deps.butlerData,
+    sessionId: input.turnInput.handle.sessionId,
+    projectId: projectId(input.session),
+    currentTurnId: turnId,
+    turnMetadata: input.turnInput.metadata,
+    userText,
+  });
+  const focusedResumeEnvelope = buildFocusedResumeEnvelope({
+    butlerData: input.deps.butlerData,
+    selection: resumeSelection,
+    currentUserText: userText,
+  });
+  const effectiveTurnMetadata = turnMetadataWithFocusedResumePolicy(
+    input.turnInput.metadata,
+    focusedResumeEnvelope,
+  );
+  const recallContext = focusedResumeEnvelope
+    ? skipAutomaticRecallForFocusedResume(input)
+    : await maybeRecall(input, userText);
   const compactionContext = measureTurnPreparationStepSync(
     preparationMetricInput(input, "compaction_context"),
     () => "",
   );
-  const turnId = currentRuntimeTurnId(input.turnInput) ?? `turn-${randomUUID().slice(0, 12)}`;
   const feedbackContext = measureTurnPreparationStepSync(
     preparationMetricInput(input, "feedback_buffer"),
     () => feedbackBufferContext(input, compactionContext),
@@ -113,6 +137,11 @@ export async function prepareNativeTurnContext(input: {
       feedbackBufferContext: feedbackContext,
       workingMemoryContext: memoryContext,
       runtimePolicyContext,
+      focusedResumeEnvelope: focusedResumeEnvelope?.prompt,
+      removePromptContextSections: focusedResumeEnvelope
+        ? ["Active Work State", "Project Ledger Runtime Context"]
+        : [],
+      skipRecentConversation: Boolean(focusedResumeEnvelope),
       recentConversationTokenBudget: recentConversationBudgetForTurn({
         configuredBudget: input.deps.recentConversationTokenBudget ??
           defaultRecentConversationTokenBudget(input.turnInput.model),
@@ -141,7 +170,7 @@ export async function prepareNativeTurnContext(input: {
     role: input.session.init.role,
     message: userText,
     sessionMetadata: input.session.init.metadata,
-    turnMetadata: input.turnInput.metadata,
+    turnMetadata: effectiveTurnMetadata,
     providerCapabilities: input.turnInput.provider.capabilities,
     tools: BUTLER_TOOLS,
     providerSupportsSchemaPromotion:
@@ -162,7 +191,7 @@ export async function prepareNativeTurnContext(input: {
     searchPlannerModel: input.turnInput.model,
     searchPlannerOriginalRequest: userText,
     workerModelRules: workerModelRulesFromMetadata(
-      input.turnInput.metadata?.workerModelRules ?? input.session.init.metadata?.workerModelRules,
+      effectiveTurnMetadata?.workerModelRules ?? input.session.init.metadata?.workerModelRules,
     ),
     turnContext: [prompt, currentAttachmentContext].filter(Boolean).join("\n\n"),
     currentToolNames: () => toolSurfaceController.currentToolNames(),
@@ -210,7 +239,21 @@ export async function prepareNativeTurnContext(input: {
     toolSurfaceController,
     executor,
     semanticProgressSafetyNet,
+    resumeSelection,
+    focusedResumeEnvelope,
   };
+}
+
+function skipAutomaticRecallForFocusedResume(input: {
+  turnInput: RuntimeTurnInput;
+  session: NativeStoredSessionConfig;
+  deps: NativeTurnRunnerDeps;
+}): string {
+  recordTurnPreparationStepSkipped({
+    ...preparationMetricInput(input, "automatic_recall"),
+    skippedReason: "focused_resume",
+  });
+  return "";
 }
 
 function budgetForTurn(input: {

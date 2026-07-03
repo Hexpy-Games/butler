@@ -27,6 +27,7 @@ import { metadataPolicyValue } from "../policy/turn-metadata-policy.ts";
 import { emitAssistantTextBeforeTools } from "./assistant-pretool-progress.ts";
 import { createProviderStreamTurnEventProjector } from "../stream/provider-stream-projector.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
+import type { TurnLatencyMetricRecorder } from "../../../../operations/metrics/turn-latency.ts";
 import type {
   SelectedToolSurfacePromptState,
   ToolSurfacePromptController,
@@ -39,6 +40,7 @@ import type {
   createDirectTurnBudget,
   promptUsageSectionsFromPrompt,
 } from "../../direct-turn-budget.ts";
+import type { WorkStreamPhaseBudgetController } from "../../workstream-phase-budget.ts";
 
 const REASONING_EFFORT_VALUES = new Set<ReasoningEffort>([
   "none",
@@ -74,6 +76,8 @@ export function createNativeTurnPromptRunners(input: {
   publicDecisionContext: PublicWorkDecision[];
   pendingPublicDecisions: PublicWorkDecision[];
   markAssistantTextBeforeToolsSeen: () => void;
+  latencyTracker?: TurnLatencyMetricRecorder;
+  phaseBudgetController?: WorkStreamPhaseBudgetController | null;
 }) {
   const usageAttribution = (phase: string, roundIndex?: number): PromptUsageAttribution => ({
     turnId: input.turnId,
@@ -81,14 +85,38 @@ export function createNativeTurnPromptRunners(input: {
     ...(roundIndex === undefined ? {} : { roundIndex }),
     budgetState: directTurnBudgetState(input.turnBudget),
     getBudgetState: () => directTurnBudgetState(input.turnBudget),
-    beforeModelRequest: () => beforeDirectTurnModelRequest(input.turnBudget),
-    afterModelResponseUsage: (usage) => addDirectTurnUsage({
-      budget: input.turnBudget,
-      promptTokens: usage.promptTokens,
-      cachedTokens: usage.cachedTokens,
-      outputTokens: usage.outputTokens,
-      totalTokens: usage.totalTokens,
-    }),
+    beforeModelRequest: (request) => {
+      input.phaseBudgetController?.beforeModelRequest({
+        phase,
+        roundIndex: request.roundIndex,
+        globalBudgetState: directTurnBudgetState(input.turnBudget),
+      });
+      beforeDirectTurnModelRequest(input.turnBudget);
+      const budgetState = directTurnBudgetState(input.turnBudget);
+      input.latencyTracker?.recordModelRequest({
+        phase,
+        roundIndex: request.roundIndex,
+        budgetState,
+      });
+    },
+    afterModelResponseUsage: (usage) => {
+      addDirectTurnUsage({
+        budget: input.turnBudget,
+        promptTokens: usage.promptTokens,
+        cachedTokens: usage.cachedTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+      });
+      input.latencyTracker?.recordModelResponseUsage({
+        phase,
+        roundIndex: usage.roundIndex,
+        promptTokens: usage.promptTokens,
+        cachedTokens: usage.cachedTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+        budgetState: directTurnBudgetState(input.turnBudget),
+      });
+    },
     promptSections: input.promptSections,
   });
   const streamProjector = (phase: string) => createProviderStreamTurnEventProjector({
@@ -96,6 +124,12 @@ export function createNativeTurnPromptRunners(input: {
     defaultStreamId: `${input.turnId}:${phase}`,
     emitTurnEvent: async (event) => {
       await emitTurnEventBestEffort(input.turnInput, event);
+    },
+    onPublicTextDelta: ({ target }) => {
+      input.latencyTracker?.recordFirstModelDelta({
+        phase,
+        target,
+      });
     },
   });
   const reasoningEffort = selectedReasoningEffort(input.turnInput);
@@ -107,10 +141,21 @@ export function createNativeTurnPromptRunners(input: {
       phase = "tool_loop",
     ): Promise<string> => {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
-      const grantedToolRounds = directToolRoundLimit(maxToolRounds);
+      const phaseMaxToolRounds = input.phaseBudgetController?.maxToolRoundsForPhase(
+        phase,
+        maxToolRounds,
+      ) ?? maxToolRounds;
+      const grantedToolRounds = directToolRoundLimit(phaseMaxToolRounds);
       async function runPromptWithSelectedSurface(toolSurface: SelectedToolSurfacePromptState): Promise<string> {
         const projector = streamProjector(phase);
         try {
+          const executeTool: FunctionToolPromptOptions["executeTool"] = async (call) => {
+            input.phaseBudgetController?.recordToolCall({
+              phase,
+              toolName: call.name,
+            });
+            return await input.executor(call);
+          };
           const text = await input.deps.toolPromptRunner({
             prompt: promptText,
             model: input.turnInput.model,
@@ -128,7 +173,7 @@ export function createNativeTurnPromptRunners(input: {
             butlerData: input.deps.butlerData,
             usageAttribution: usageAttribution(phase),
             onProviderStreamEvent: projector.project,
-            executeTool: input.executor,
+            executeTool,
             finalTextFromToolResult: ({ name, output }) => {
               if (name === "write_planned_public_report") {
                 return publicReportFromToolOutput(output);

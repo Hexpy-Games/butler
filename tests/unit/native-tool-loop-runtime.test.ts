@@ -9979,6 +9979,280 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
   expect(continuationResult.text).toContain("보존된 W3 작업 상태부터 이어서 검증했습니다");
 });
 
+test("focused WorkStream resume yields before consuming the global model request cap", async () => {
+  const sessionId = "butler/main/focused-resume-phase-budget";
+  const todoView = new TodoListStore(tempDir).update({
+    listId: "focused-phase-budget",
+    title: "Focused resume phase budget",
+    items: [{
+      id: "inspect",
+      content: "Inspect focused resume evidence",
+      active_form: "Inspecting focused resume evidence",
+      status: "in_progress",
+      phase: "execution",
+    }, {
+      id: "report",
+      content: "Report focused resume result",
+      active_form: "Reporting focused resume result",
+      status: "pending",
+      phase: "reporting",
+    }],
+  });
+  const stream = new WorkStreamStore(tempDir).updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: todoView.list.list_id,
+    title: "Focused resume phase budget",
+    items: todoView.list.items,
+    lastUserTurnId: "turn-previous",
+  });
+  expect(stream.state).toBe("executing");
+
+  let promptCalls = 0;
+  let capturedPhase = "";
+  let capturedMaxToolRounds = 0;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      promptCalls += 1;
+      capturedPhase = input.usageAttribution?.phase ?? "";
+      capturedMaxToolRounds = input.maxToolRounds ?? 0;
+      for (let index = 0; index < 7; index += 1) {
+        input.usageAttribution?.beforeModelRequest?.({ roundIndex: index });
+      }
+      return "phase budget should stop before this text is delivered.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+  const events: Array<{ kind: string }> = [];
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "개석해" },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
+    metadata: {
+      turnId: "turn-focused-phase-budget",
+      runtimePolicy: { completionReview: "disabled" },
+    },
+  })).rejects.toThrow("Turn scheduler yielded");
+
+  expect(promptCalls).toBe(1);
+  expect(capturedPhase).toBe("phase_execution");
+  expect(capturedMaxToolRounds).toBe(6);
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
+  expect(readOnlyPersistedTurnContextAtom()).toMatchObject({
+    state: "continuing",
+    budgetSnapshot: expect.objectContaining({
+      modelRequestsUsed: 6,
+      maxModelCalls: 32,
+    }),
+  });
+
+  const metrics = readOperationalMetricEvents({ butlerData: tempDir });
+  expect(metrics.filter((event) =>
+    event.name === "model_request_count_by_phase" &&
+    event.dimensions?.phase === "phase_execution",
+  )).toHaveLength(6);
+  expect(metrics).toContainEqual(expect.objectContaining({
+    name: "phase_budget_exhausted",
+    status: "error",
+    dimensions: expect.objectContaining({
+      phase: "phase_execution",
+      reason: "phase_model_budget_exhausted",
+      modelRequestsUsed: 6,
+      maxModelRequests: 6,
+    }),
+  }));
+});
+
+test("focused WorkStream validation repair does not repeat an unchanged completion gap", async () => {
+  const sessionId = "butler/main/focused-resume-repeated-gap";
+  const todoView = new TodoListStore(tempDir).update({
+    listId: "focused-repeated-gap",
+    title: "Focused repeated completion gap",
+    items: [{
+      id: "validate",
+      content: "Run required validation evidence",
+      active_form: "Running required validation evidence",
+      status: "in_progress",
+      phase: "review",
+    }],
+  });
+  new WorkStreamStore(tempDir).updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: todoView.list.list_id,
+    title: "Focused repeated completion gap",
+    items: todoView.list.items,
+    lastUserTurnId: "turn-previous",
+  });
+
+  const phases: string[] = [];
+  const maxRounds: number[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      phases.push(input.usageAttribution?.phase ?? "");
+      maxRounds.push(input.maxToolRounds ?? 0);
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      return "필수 도구 실행 없이 같은 completion gap을 유지합니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "계속 진행해" },
+    metadata: {
+      turnId: "turn-focused-repeated-gap",
+      runtimePolicy: {
+        requiredNativeTools: ["run_command"],
+      },
+    },
+  })).rejects.toThrow("Turn scheduler yielded");
+
+  expect(phases).toEqual(["phase_execution", "validation_repair"]);
+  expect(maxRounds).toEqual([6, 2]);
+  expect(readOnlyPersistedTurnContextAtom()).toMatchObject({
+    state: "continuing",
+    budgetSnapshot: expect.objectContaining({
+      modelRequestsUsed: 2,
+      maxModelCalls: 32,
+    }),
+  });
+  expect(readOperationalMetricEvents({ butlerData: tempDir })).toContainEqual(expect.objectContaining({
+    name: "phase_budget_exhausted",
+    status: "error",
+    dimensions: expect.objectContaining({
+      phase: "validation_repair",
+      reason: "repeated_completion_gap",
+    }),
+  }));
+});
+
+test("focused WorkStream resume records tool calls by phase", async () => {
+  const sessionId = "butler/main/focused-resume-tool-metrics";
+  const openTodos = [{
+    id: "inspect",
+    content: "Inspect focused resume tool evidence",
+    active_form: "Inspecting focused resume tool evidence",
+    status: "in_progress" as const,
+    phase: "execution" as const,
+  }, {
+    id: "report",
+    content: "Report focused resume tool evidence",
+    active_form: "Reporting focused resume tool evidence",
+    status: "pending" as const,
+    phase: "reporting" as const,
+  }];
+  const todoView = new TodoListStore(tempDir).update({
+    listId: "focused-tool-metrics",
+    title: "Focused resume tool metrics",
+    items: openTodos,
+  });
+  new WorkStreamStore(tempDir).updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: todoView.list.list_id,
+    title: "Focused resume tool metrics",
+    items: todoView.list.items,
+    lastUserTurnId: "turn-previous",
+  });
+
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    executeButlerTool: async () => ({
+      ok: true,
+      stdout: "focused evidence\n",
+      stderr: "",
+      exit_code: 0,
+      timed_out: false,
+    }),
+    runFunctionToolPromptText: async (input) => {
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command: "printf 'focused evidence\\n'" } },
+        {
+          summary: "focused resume evidence를 확인합니다.",
+          rationale: "선택된 WorkStream 단계의 근거가 필요합니다.",
+          nextStep: "근거 확인 후 todo를 완료합니다.",
+        },
+      );
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "printf 'focused evidence\\n'" },
+        rawArguments: JSON.stringify({ command: "printf 'focused evidence\\n'" }),
+      });
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          title: "Focused resume tool metrics",
+          todos: [
+            { ...openTodos[0], status: "completed" },
+            { ...openTodos[1], status: "completed" },
+          ],
+        },
+        rawArguments: JSON.stringify({ title: "Focused resume tool metrics" }),
+      });
+      return "focused resume tool evidence를 확인하고 완료했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "이어 해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toContain("완료했습니다");
+  const metrics = readOperationalMetricEvents({ butlerData: tempDir });
+  expect(metrics.filter((event) =>
+    event.name === "tool_call_count_by_phase" &&
+    event.dimensions?.phase === "phase_execution",
+  )).toHaveLength(2);
+  expect(metrics).toContainEqual(expect.objectContaining({
+    name: "tool_call_count_by_phase",
+    dimensions: expect.objectContaining({
+      phase: "phase_execution",
+      toolName: "run_command",
+      toolCallCount: 1,
+      maxToolCalls: 24,
+    }),
+  }));
+});
+
 test("native runtime synthesizes durable WorkStream progress when a compound tool turn skips todo setup", async () => {
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
