@@ -159,18 +159,18 @@ test("Project Ledger mutation tools are discoverable in the progressive native c
   expect(indexResult.results).toContainEqual(expect.objectContaining({
     id: "native:project_ledger_index",
     name: "project_ledger_index",
-    enabled: true,
+    enabled: false,
   }));
 });
 
-test("Project Ledger lifecycle mutation cannot bridge from read-only project surface", async () => {
+test("Project Ledger mutation cannot bridge from read-only project surface", async () => {
   const currentToolNames = ["tool_search", "tool_describe", "tool_call", "project_ledger_status"];
   const describe = createToolDescribeToolHandler({
     butlerData: "/tmp/butler-test",
     currentToolNames,
   });
   const description = await describe({
-    args: { ids: ["native:project_ledger_task_complete"] },
+    args: { ids: ["native:project_ledger_task_complete", "native:project_ledger_update"] },
   }) as {
     ok: boolean;
     descriptions: Array<{ id: string; enabled: boolean; call_affordance: { type: string } }>;
@@ -180,6 +180,11 @@ test("Project Ledger lifecycle mutation cannot bridge from read-only project sur
   expect(description.descriptions).toEqual([
     expect.objectContaining({
       id: "native:project_ledger_task_complete",
+      enabled: false,
+      call_affordance: { type: "disabled", reason: expect.any(String) },
+    }),
+    expect.objectContaining({
+      id: "native:project_ledger_update",
       enabled: false,
       call_affordance: { type: "disabled", reason: expect.any(String) },
     }),
@@ -199,6 +204,13 @@ test("Project Ledger lifecycle mutation cannot bridge from read-only project sur
 
   expect(result.ok).toBe(false);
   expect(result.error.code).toBe("disabled_tool");
+
+  const updateResult = await call({
+    args: { id: "native:project_ledger_update", arguments: { id: "T-1", status: "done" } },
+  }) as { ok: boolean; error: { code: string } };
+
+  expect(updateResult.ok).toBe(false);
+  expect(updateResult.error.code).toBe("disabled_tool");
 });
 
 test("native progressive catalog requires metadata for every native tool", () => {
