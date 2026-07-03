@@ -10001,7 +10001,7 @@ test("focused WorkStream resume hydrates logical-turn budget from checkpoint wit
       phase: "reporting",
     }],
   });
-  new WorkStreamStore(tempDir).updateFromTodoList({
+  const stream = new WorkStreamStore(tempDir).updateFromTodoList({
     ownerSessionId: sessionId,
     originChatId: sessionId,
     listId: todoView.list.list_id,
@@ -10076,7 +10076,10 @@ test("focused WorkStream resume hydrates logical-turn budget from checkpoint wit
     provider: fakeProvider,
     model: "local/gemma-test",
     input: { text: "이어 해줘" },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    metadata: {
+      workstreamResume: { action: "resume", workStreamId: stream.id },
+      runtimePolicy: { completionReview: "disabled" },
+    },
   });
 
   expect(result.text).toContain("완료했습니다");
@@ -10084,6 +10087,72 @@ test("focused WorkStream resume hydrates logical-turn budget from checkpoint wit
     requestCount: 5,
     maxRequests: 32,
   });
+});
+
+test("ordinary user turn with unfinished WorkStream lets the first model decide continuation", async () => {
+  const sessionId = "butler/main/model-decided-workstream-candidate";
+  const todoView = new TodoListStore(tempDir).update({
+    listId: "model-decided-candidate",
+    title: "Model-decided candidate",
+    items: [{
+      id: "inspect",
+      content: "Inspect prior candidate",
+      active_form: "Inspecting prior candidate",
+      status: "in_progress",
+      phase: "execution",
+    }, {
+      id: "report",
+      content: "Report prior candidate",
+      active_form: "Reporting prior candidate",
+      status: "pending",
+      phase: "reporting",
+    }],
+  });
+  const stream = new WorkStreamStore(tempDir).updateFromTodoList({
+    ownerSessionId: sessionId,
+    originChatId: sessionId,
+    listId: todoView.list.list_id,
+    title: "Model-decided candidate",
+    items: todoView.list.items,
+    lastUserTurnId: "turn-prior-candidate",
+  });
+
+  let capturedPrompt = "";
+  let capturedPhase = "";
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    runFunctionToolPromptText: async (input) => {
+      capturedPrompt = input.prompt;
+      capturedPhase = input.usageAttribution?.phase ?? "";
+      return "새 사용자 지시를 우선해서 처리했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "이전 건 말고 새로운 점검을 시작해줘" },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  });
+
+  expect(result.text).toContain("새 사용자 지시");
+  expect(capturedPhase).toBe("initial_tool_loop");
+  expect(capturedPrompt).toContain("## WorkStream Continuation Decision Envelope");
+  expect(capturedPrompt).toContain("Decision Authority: the current user instruction is authoritative");
+  expect(capturedPrompt).toContain("Current User Instruction:\n이전 건 말고 새로운 점검을 시작해줘");
+  expect(capturedPrompt).toContain(`- WorkStream ID: ${stream.id}`);
+  expect(capturedPrompt).not.toContain("## Focused WorkStream Resume Envelope");
+  expect(capturedPrompt).not.toContain("Continue this selected WorkStream before broad validation");
 });
 
 test("focused WorkStream resume yields before consuming the global model request cap", async () => {
@@ -10151,6 +10220,7 @@ test("focused WorkStream resume yields before consuming the global model request
     },
     metadata: {
       turnId: "turn-focused-phase-budget",
+      workstreamResume: { action: "resume", workStreamId: stream.id },
       runtimePolicy: { completionReview: "disabled" },
     },
   })).rejects.toThrow("Turn scheduler yielded");
@@ -10198,7 +10268,7 @@ test("focused WorkStream validation repair does not repeat an unchanged completi
       phase: "review",
     }],
   });
-  new WorkStreamStore(tempDir).updateFromTodoList({
+  const stream = new WorkStreamStore(tempDir).updateFromTodoList({
     ownerSessionId: sessionId,
     originChatId: sessionId,
     listId: todoView.list.list_id,
@@ -10235,6 +10305,7 @@ test("focused WorkStream validation repair does not repeat an unchanged completi
     input: { text: "계속 진행해" },
     metadata: {
       turnId: "turn-focused-repeated-gap",
+      workstreamResume: { action: "resume", workStreamId: stream.id },
       runtimePolicy: {
         requiredNativeTools: ["run_command"],
       },
@@ -10280,7 +10351,7 @@ test("focused WorkStream resume records tool calls by phase", async () => {
     title: "Focused resume tool metrics",
     items: openTodos,
   });
-  new WorkStreamStore(tempDir).updateFromTodoList({
+  const stream = new WorkStreamStore(tempDir).updateFromTodoList({
     ownerSessionId: sessionId,
     originChatId: sessionId,
     listId: todoView.list.list_id,
@@ -10343,7 +10414,10 @@ test("focused WorkStream resume records tool calls by phase", async () => {
     provider: fakeProvider,
     model: "local/gemma-test",
     input: { text: "이어 해줘" },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    metadata: {
+      workstreamResume: { action: "resume", workStreamId: stream.id },
+      runtimePolicy: { completionReview: "disabled" },
+    },
   });
 
   expect(result.text).toContain("완료했습니다");
@@ -10383,7 +10457,7 @@ test("focused WorkStream resume yields before executing an oversized tool-call b
       phase: "execution",
     }],
   });
-  new WorkStreamStore(tempDir).updateFromTodoList({
+  const stream = new WorkStreamStore(tempDir).updateFromTodoList({
     ownerSessionId: sessionId,
     originChatId: sessionId,
     listId: todoView.list.list_id,
@@ -10432,7 +10506,10 @@ test("focused WorkStream resume yields before executing an oversized tool-call b
     emitTurnEvent: (event) => {
       events.push({ kind: event.kind });
     },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    metadata: {
+      workstreamResume: { action: "resume", workStreamId: stream.id },
+      runtimePolicy: { completionReview: "disabled" },
+    },
   })).rejects.toThrow("Turn scheduler yielded");
 
   expect(promptCalls).toBe(1);

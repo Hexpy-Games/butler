@@ -71,6 +71,10 @@ import {
   buildFocusedResumeEnvelope,
   turnMetadataWithFocusedResumePolicy,
 } from "../../workstream-focused-resume-envelope.ts";
+import {
+  buildWorkStreamResumeDecisionEnvelope,
+  turnMetadataWithResumeDecisionPolicy,
+} from "../../workstream-resume-decision-envelope.ts";
 
 const TURN_SCOPED_WORK_TRACKING_TOOLS = new Set<string>(WORK_TRACKING_TOOL_NAMES);
 
@@ -105,9 +109,16 @@ export async function prepareNativeTurnContext(input: {
     selection: resumeSelection,
     currentUserText: userText,
   });
-  const effectiveTurnMetadata = turnMetadataWithFocusedResumePolicy(
-    input.turnInput.metadata,
-    focusedResumeEnvelope,
+  const resumeDecisionEnvelope = buildWorkStreamResumeDecisionEnvelope({
+    selection: resumeSelection,
+    currentUserText: userText,
+  });
+  const effectiveTurnMetadata = turnMetadataWithResumeDecisionPolicy(
+    turnMetadataWithFocusedResumePolicy(
+      input.turnInput.metadata,
+      focusedResumeEnvelope,
+    ),
+    resumeDecisionEnvelope,
   );
   const recallContext = focusedResumeEnvelope
     ? skipAutomaticRecallForFocusedResume(input)
@@ -140,6 +151,7 @@ export async function prepareNativeTurnContext(input: {
       workingMemoryContext: memoryContext,
       runtimePolicyContext,
       focusedResumeEnvelope: focusedResumeEnvelope?.prompt,
+      resumeDecisionEnvelope: resumeDecisionEnvelope?.prompt,
       removePromptContextSections: focusedResumeEnvelope
         ? ["Active Work State", "Project Ledger Runtime Context"]
         : [],
@@ -246,6 +258,7 @@ export async function prepareNativeTurnContext(input: {
     semanticProgressSafetyNet,
     resumeSelection,
     focusedResumeEnvelope,
+    resumeDecisionEnvelope,
   };
 }
 

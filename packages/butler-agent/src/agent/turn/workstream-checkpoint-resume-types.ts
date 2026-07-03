@@ -4,6 +4,7 @@ import type { DirectTurnBudgetSnapshot } from "./direct-turn-budget.ts";
 export type WorkStreamResumeSelectionState =
   | "fresh_turn"
   | "resume_selected"
+  | "resume_candidate_presented"
   | "resume_conflict"
   | "resume_blocked_user_action"
   | "resume_blocked_system"
@@ -15,6 +16,7 @@ export type WorkStreamResumeSelectionReason =
   | "explicit_cancel"
   | "explicit_new_objective"
   | "explicit_target"
+  | "model_decision_required"
   | "sole_candidate"
   | "current_active_workstream"
   | "latest_updated_at"

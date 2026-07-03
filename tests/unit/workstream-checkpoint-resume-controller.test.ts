@@ -21,7 +21,7 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
 
-test("checkpoint resume selects the sole recoverable WorkStream without reading continuation text", () => {
+test("checkpoint resume presents ordinary user turns to the model without reading continuation text", () => {
   const stream = createStream({
     sessionId: "butler/session",
     listId: "recoverable-main",
@@ -44,21 +44,23 @@ test("checkpoint resume selects the sole recoverable WorkStream without reading 
     userText: "완전히 다른 문장이어도 structured state만 봅니다",
   });
 
-  expect(typoResume).toMatchObject({
-    state: "resume_selected",
-    reason: "sole_candidate",
-    selected: {
-      id: stream.id,
-      checkpoint: {
-        workStreamId: stream.id,
-        todoListId: "recoverable-main",
-        activeItems: expect.arrayContaining([
-          expect.objectContaining({ id: "execute", status: "in_progress" }),
-        ]),
-      },
+  expect(typoResume.state).toBe("resume_candidate_presented");
+  expect(typoResume.reason).toBe("model_decision_required");
+  expect(typoResume.candidates).toHaveLength(1);
+  expect(typoResume.candidates[0]).toMatchObject({
+    id: stream.id,
+    checkpoint: {
+      workStreamId: stream.id,
+      todoListId: "recoverable-main",
     },
   });
-  expect(unrelatedText.selected?.id).toBe(stream.id);
+  expect(typoResume.candidates[0]!.checkpoint.activeItems).toEqual(expect.arrayContaining([
+    expect.objectContaining({ id: "execute", status: "in_progress" }),
+  ]));
+  expect(typoResume.selected).toBeUndefined();
+  expect(unrelatedText.state).toBe("resume_candidate_presented");
+  expect(unrelatedText.candidates.map((candidate) => candidate.id)).toEqual([stream.id]);
+  expect(unrelatedText.selected).toBeUndefined();
 });
 
 test("checkpoint resume hydrates origin turn, validation, evidence, and budget refs", () => {
@@ -109,6 +111,7 @@ test("checkpoint resume hydrates origin turn, validation, evidence, and budget r
     butlerData: tempDir,
     sessionId: "butler/session",
     chatId: "app-chat",
+    turnMetadata: { workstreamResume: { action: "resume", workStreamId: stream.id } },
   });
 
   expect(selection).toMatchObject({
@@ -149,7 +152,7 @@ test("checkpoint resume honors structured cancel and new-objective actions only 
     butlerData: tempDir,
     sessionId: "butler/session",
     userText: "cancel이라는 단어만으로는 cancel_selected가 되면 안 됩니다",
-  }).state).toBe("resume_selected");
+  }).state).toBe("resume_candidate_presented");
 
   expect(selectWorkStreamCheckpointResume({
     butlerData: tempDir,
@@ -187,6 +190,18 @@ test("checkpoint resume resolves multiple candidates by structured target or lat
     butlerData: tempDir,
     sessionId: "butler/session",
   })).toMatchObject({
+    state: "resume_candidate_presented",
+    reason: "model_decision_required",
+    candidates: [
+      expect.objectContaining({ id: newer.id }),
+      expect.objectContaining({ id: older.id }),
+    ],
+  });
+  expect(selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/session",
+    turnMetadata: { schedulerContinuation: { contextAtomId: "test-atom" } },
+  })).toMatchObject({
     state: "resume_selected",
     reason: "latest_updated_at",
     selected: { id: newer.id },
@@ -202,14 +217,14 @@ test("checkpoint resume resolves multiple candidates by structured target or lat
   });
 });
 
-test("checkpoint resume ignores task-id and final-answer prose when candidates have equal priority", () => {
+test("checkpoint resume presents equal-priority candidates to the model without prose heuristics", () => {
   const first = createRecoverableStream({
     sessionId: "butler/session",
     listId: "equal-a",
     now: "2026-07-03T00:00:00.000Z",
     recoverableAt: "2026-07-03T00:03:00.000Z",
   });
-  createRecoverableStream({
+  const second = createRecoverableStream({
     sessionId: "butler/session",
     listId: "equal-b",
     now: "2026-07-03T00:01:00.000Z",
@@ -222,10 +237,12 @@ test("checkpoint resume ignores task-id and final-answer prose when candidates h
     userText: `최종 답변에서 ${first.id} 완료라 했으니 그걸 이어서 처리해줘`,
   });
 
-  expect(selection).toMatchObject({
-    state: "resume_conflict",
-    reason: "equal_priority_candidates",
-  });
+  expect(selection.state).toBe("resume_candidate_presented");
+  expect(selection.reason).toBe("model_decision_required");
+  expect(selection.candidates.map((candidate) => candidate.id).sort()).toEqual([
+    first.id,
+    second.id,
+  ].sort());
   expect(selection.selected).toBeUndefined();
 });
 
@@ -307,7 +324,7 @@ test("checkpoint resume rejects unknown-origin WorkStreams when the current chat
   });
 });
 
-test("checkpoint resume blocks waiting-user WorkStreams until structured user action is supplied", () => {
+test("checkpoint resume presents waiting-user WorkStreams for ordinary model decision and forces structured user action", () => {
   const waiting = createStream({
     sessionId: "butler/session",
     listId: "waiting",
@@ -323,9 +340,14 @@ test("checkpoint resume blocks waiting-user WorkStreams until structured user ac
     butlerData: tempDir,
     sessionId: "butler/session",
   })).toMatchObject({
-    state: "resume_blocked_user_action",
-    reason: "waiting_user_action_required",
-    blockers: [expect.objectContaining({ id: waiting.id })],
+    state: "resume_candidate_presented",
+    reason: "model_decision_required",
+    candidates: [expect.objectContaining({
+      id: waiting.id,
+      checkpoint: expect.objectContaining({
+        blocker: { kind: "user_action", reason: "waiting_user" },
+      }),
+    })],
   });
   expect(selectWorkStreamCheckpointResume({
     butlerData: tempDir,
