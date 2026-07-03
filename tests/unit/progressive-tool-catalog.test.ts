@@ -8,6 +8,8 @@ import {
   buildNativeToolCatalog,
   schemaDigest,
 } from "../../packages/butler-agent/src/agent/tools/progressive-catalog.ts";
+import { createToolCallToolHandler } from "../../packages/butler-agent/src/agent/tools/tool-bridge/tool_call/executor.ts";
+import { createToolDescribeToolHandler } from "../../packages/butler-agent/src/agent/tools/tool-bridge/tool_describe/executor.ts";
 import { createToolSearchToolHandler } from "../../packages/butler-agent/src/agent/tools/tool-bridge/tool_search/executor.ts";
 
 test("native progressive catalog exposes compact stable metadata without raw schemas", () => {
@@ -110,23 +112,45 @@ test("Project Ledger mutation tools are discoverable in the progressive native c
     ]),
   }));
 
-  const search = createToolSearchToolHandler({
+  const scopedSearch = createToolSearchToolHandler({
     butlerData: "/tmp/butler-test",
     currentToolNames: ["tool_search", "tool_describe", "tool_call", "project_ledger_status"],
   });
-  const result = await search({ args: { query: "project ledger task complete", provider: "native" } }) as {
+  const scopedResult = await scopedSearch({ args: { query: "project ledger task complete", provider: "native" } }) as {
     ok: boolean;
     results: Array<{ name: string; enabled: boolean; id: string }>;
   };
 
-  expect(result.ok).toBe(true);
-  expect(result.results).toContainEqual(expect.objectContaining({
+  expect(scopedResult.ok).toBe(true);
+  expect(scopedResult.results).toContainEqual(expect.objectContaining({
+    id: "native:project_ledger_task_complete",
+    name: "project_ledger_task_complete",
+    enabled: false,
+  }));
+
+  const closeoutSearch = createToolSearchToolHandler({
+    butlerData: "/tmp/butler-test",
+    currentToolNames: [
+      "tool_search",
+      "tool_describe",
+      "tool_call",
+      "project_ledger_status",
+      "project_ledger_task_complete",
+    ],
+  });
+  const closeoutResult = await closeoutSearch({ args: { query: "project ledger task complete", provider: "native" } }) as {
+    ok: boolean;
+    results: Array<{ name: string; enabled: boolean; id: string }>;
+  };
+
+  expect(closeoutResult.ok).toBe(true);
+  expect(closeoutResult.results).toContainEqual(expect.objectContaining({
     id: "native:project_ledger_task_complete",
     name: "project_ledger_task_complete",
     enabled: true,
   }));
 
-  const indexResult = await search({ args: { query: "project ledger index", provider: "native" } }) as {
+  const indexResult = await scopedSearch({ args: { query: "project ledger index", provider: "native" } }) as {
     ok: boolean;
     results: Array<{ name: string; enabled: boolean; id: string }>;
   };
@@ -137,6 +161,44 @@ test("Project Ledger mutation tools are discoverable in the progressive native c
     name: "project_ledger_index",
     enabled: true,
   }));
+});
+
+test("Project Ledger lifecycle mutation cannot bridge from read-only project surface", async () => {
+  const currentToolNames = ["tool_search", "tool_describe", "tool_call", "project_ledger_status"];
+  const describe = createToolDescribeToolHandler({
+    butlerData: "/tmp/butler-test",
+    currentToolNames,
+  });
+  const description = await describe({
+    args: { ids: ["native:project_ledger_task_complete"] },
+  }) as {
+    ok: boolean;
+    descriptions: Array<{ id: string; enabled: boolean; call_affordance: { type: string } }>;
+  };
+
+  expect(description.ok).toBe(true);
+  expect(description.descriptions).toEqual([
+    expect.objectContaining({
+      id: "native:project_ledger_task_complete",
+      enabled: false,
+      call_affordance: { type: "disabled", reason: expect.any(String) },
+    }),
+  ]);
+
+  const call = createToolCallToolHandler({
+    butlerData: "/tmp/butler-test",
+    currentToolNames,
+    describedToolIds: ["native:project_ledger_task_complete"],
+    dispatchTool: async () => {
+      throw new Error("disabled lifecycle bridge must not dispatch");
+    },
+  });
+  const result = await call({
+    args: { id: "native:project_ledger_task_complete", arguments: { id: "T-1" } },
+  }) as { ok: boolean; error: { code: string } };
+
+  expect(result.ok).toBe(false);
+  expect(result.error.code).toBe("disabled_tool");
 });
 
 test("native progressive catalog requires metadata for every native tool", () => {
