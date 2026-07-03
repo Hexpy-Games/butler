@@ -156,13 +156,25 @@ export async function emitDecisionProgressBestEffort(input: {
 export async function emitRuntimePreparationProgressBestEffort(input: {
   turnInput: RuntimeTurnInput;
   progress: ToolProgressSummary;
+  emitPreparationWorkBlock?: boolean;
 }): Promise<void> {
+  const payload = firstVisibleProgressPayload({
+    note: input.progress.safeLabel,
+    source: "runtime-derived",
+  });
   await emitTurnEventBestEffort(input.turnInput, {
     kind: FIRST_VISIBLE_PROGRESS_EVENT_KIND,
-    payload: firstVisibleProgressPayload({
-      note: input.progress.safeLabel,
+    payload,
+  });
+  if (!input.emitPreparationWorkBlock || !isAppOriginTurn(input.turnInput)) return;
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: "work.block.started",
+    payload: {
+      workBlockId: safeString(payload.workBlockId, "first-progress-note"),
+      label: safeString(payload.workBlockLabel ?? payload.note, "Preparing to work on this."),
       source: "runtime-derived",
-    }),
+      safetyStatus: safeString(payload.safetyStatus, "accepted"),
+    },
   });
 }
 
@@ -178,4 +190,13 @@ function peerForOutbound(envelope: InboundEnvelope): OutboundAction["peer"] {
     kind: envelope.peer.kind,
     id: envelope.peer.id,
   };
+}
+
+function isAppOriginTurn(turnInput: RuntimeTurnInput): boolean {
+  const inbound = "eventId" in turnInput.input ? turnInput.input : null;
+  return inbound?.transport === "app";
+}
+
+function safeString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() ? value : fallback;
 }

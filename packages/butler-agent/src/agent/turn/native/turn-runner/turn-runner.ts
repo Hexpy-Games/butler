@@ -433,6 +433,7 @@ async function emitEarlyRuntimePreparationProgress(input: {
         useTools: true,
         userText: currentUserText(input.input),
       }),
+      emitPreparationWorkBlock: true,
     });
     recordFirstVisibleLatencyMetric({
       butlerData: input.deps.butlerData,
