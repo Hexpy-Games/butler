@@ -198,6 +198,8 @@ export class AppTransportQueueStore {
     const runtimePolicy = appRuntimePolicy({
       existing: existing?.metadata?.runtimePolicy,
       accessMode: input.controls.access_mode,
+      projectId: input.project?.id ?? existing?.projectId,
+      sessionKind: input.sessionKind,
     });
     this.sessionBindingStore.upsert({
       sessionId: input.sessionId,
