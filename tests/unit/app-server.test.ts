@@ -33,6 +33,7 @@ import {
 import { PlannedTaskStore } from "../../packages/butler-agent/src/agent/work/planned-task.ts";
 import { buildTaskOriginContext } from "../../packages/butler-agent/src/agent/work/task-origin.ts";
 import { TaskStore } from "../../packages/butler-agent/src/agent/work/task-store.ts";
+import { selectInitialToolsFromSurfaceController } from "../../packages/butler-agent/src/agent/tools/tool-surface-selection.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { WorkOrchestrationStore } from "../../packages/butler-agent/src/agent/work/work-orchestration.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
@@ -2204,8 +2205,12 @@ test("app runtime policy strips stale workspace required tools outside full acce
       requiredNativeToolProfiles: ["workspace", "public-web"],
     },
     accessMode: "ask_first",
+    projectId: "butler",
+    sessionKind: "project",
   })).toMatchObject({
     accessMode: "ask_first",
+    tracking_mode: "local",
+    closeout_strategy: "local_workstream",
     requiredNativeTools: ["web_search"],
     required_tools: ["web_read"],
     requiredNativeToolProfiles: ["public-web"],
@@ -2217,8 +2222,11 @@ test("app runtime policy strips stale workspace required tools outside full acce
       requiredNativeToolProfiles: ["workspace"],
     },
     accessMode: "read_only",
+    sessionKind: "chat",
   })).toMatchObject({
     accessMode: "read_only",
+    tracking_mode: "none",
+    closeout_strategy: "noop",
     requiredNativeTools: [],
     required_tools: [],
     requiredNativeToolProfiles: [],
@@ -2228,14 +2236,148 @@ test("app runtime policy strips stale workspace required tools outside full acce
       requiredNativeTools: ["run_command"],
       required_tools: ["read_tool_output_artifact"],
       requiredNativeToolProfiles: ["workspace"],
+      tracking_mode: "ledger",
     },
     accessMode: "full_access",
+    projectId: "butler",
+    sessionKind: "project",
   })).toMatchObject({
     accessMode: "full_access",
+    tracking_mode: "ledger",
+    closeout_strategy: "ledger",
     requiredNativeTools: ["run_command"],
     required_tools: ["read_tool_output_artifact"],
     requiredNativeToolProfiles: ["workspace"],
   });
+});
+
+test("ordinary app project turns derive local tracking before tool selection", () => {
+  const runtimePolicy = appRuntimePolicy({
+    existing: {},
+    accessMode: "full_access",
+    projectId: "butler",
+    sessionKind: "project",
+  });
+  const selection = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "코드 수정 방향만 검토해줘.",
+    sessionMetadata: {
+      projectId: "butler",
+      runtimePolicy,
+    },
+    turnMetadata: {
+      runtimePolicy,
+    },
+    providerCapabilities: { supportsToolCalls: true },
+  });
+
+  expect(runtimePolicy).toMatchObject({
+    tracking_mode: "local",
+    closeout_strategy: "local_workstream",
+  });
+  expect(selection.toolNames).toContain("run_command");
+  expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(selection.toolNames).not.toContain("inspect_project_status");
+  expect(selection.toolNames).not.toContain("query_project_work");
+  expect(selection.toolNames).not.toContain("render_project_dashboard");
+});
+
+test("explicit Project Ledger inspection stays available under local app tracking", () => {
+  const runtimePolicy = appRuntimePolicy({
+    existing: {},
+    accessMode: "full_access",
+    projectId: "butler",
+    sessionKind: "project",
+  });
+  const selection = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "Project Ledger 상태 확인하고 dashboard 렌더해줘.",
+    sessionMetadata: {
+      projectId: "butler",
+      runtimePolicy,
+    },
+    turnMetadata: {
+      runtimePolicy,
+    },
+    providerCapabilities: { supportsToolCalls: true },
+  });
+
+  expect(runtimePolicy).toMatchObject({
+    tracking_mode: "local",
+    closeout_strategy: "local_workstream",
+  });
+  expect(selection.toolNames).toEqual(expect.arrayContaining([
+    "project_ledger_status",
+    "project_ledger_check",
+    "inspect_project_status",
+    "query_project_work",
+    "render_project_dashboard",
+  ]));
+  expect(selection.toolNames).not.toContain("project_ledger_task_complete");
+  expect(selection.toolNames).not.toContain("project_ledger_work_complete");
+  expect(selection.toolNames).not.toContain("project_ledger_attempt_succeed");
+});
+
+test("app tracking policy treats snake case tracking mode as authoritative", () => {
+  const runtimePolicy = appRuntimePolicy({
+    existing: {
+      trackingMode: "ledger",
+      tracking_mode: "local",
+      closeoutStrategy: "ledger",
+      closeout_strategy: "local_workstream",
+      requiredNativeToolProfiles: ["project-lifecycle"],
+    },
+    accessMode: "full_access",
+    projectId: "butler",
+    sessionKind: "project",
+  });
+  const selection = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "Project Ledger task T-1 complete 처리해줘.",
+    sessionMetadata: {
+      projectId: "butler",
+      runtimePolicy,
+    },
+    turnMetadata: {
+      runtimePolicy,
+    },
+    providerCapabilities: { supportsToolCalls: true },
+  });
+
+  expect(runtimePolicy).toMatchObject({
+    trackingMode: "local",
+    tracking_mode: "local",
+    closeoutStrategy: "local_workstream",
+    closeout_strategy: "local_workstream",
+  });
+  expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(selection.toolNames).not.toContain("query_project_work");
+  expect(selection.toolNames).not.toContain("inspect_project_status");
+  expect(selection.toolNames).not.toContain("render_project_dashboard");
+});
+
+test("ordinary app chat turns derive none tracking before tool selection", () => {
+  const runtimePolicy = appRuntimePolicy({
+    existing: {},
+    accessMode: "full_access",
+    sessionKind: "chat",
+  });
+  const selection = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "오늘 할 일 세 가지로 정리해줘.",
+    sessionMetadata: { runtimePolicy },
+    turnMetadata: { runtimePolicy },
+    providerCapabilities: { supportsToolCalls: true },
+  });
+
+  expect(runtimePolicy).toMatchObject({
+    tracking_mode: "none",
+    closeout_strategy: "noop",
+  });
+  expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(selection.toolNames).not.toContain("inspect_project_status");
+  expect(selection.toolNames).not.toContain("query_project_work");
+  expect(selection.toolNames).not.toContain("render_project_dashboard");
 });
 
 test("project session hints are normalized before becoming local ids", async () => {
