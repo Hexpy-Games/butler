@@ -115,6 +115,45 @@ test("Project Ledger freshness cache de-duplicates reads and invalidates after m
   })).resolves.toEqual({ ok: true, count: 3 });
 });
 
+test("Project Ledger freshness cache invalidates after native lifecycle mutations", async () => {
+  const calls: string[] = [];
+  const cache = createProjectLedgerFreshnessCache(async (call) => {
+    calls.push(call.name);
+    return { ok: true, count: calls.length };
+  });
+
+  await expect(cache.execute({
+    name: "query_project_work",
+    args: { project_path: "/tmp/project", kind: "task" },
+    rawArguments: "{}",
+  })).resolves.toEqual({ ok: true, count: 1 });
+  await expect(cache.execute({
+    name: "query_project_work",
+    args: { project_path: "/tmp/project", kind: "task" },
+    rawArguments: "{}",
+  })).resolves.toEqual({ ok: true, count: 1 });
+  await cache.execute({
+    name: "project_ledger_task_update",
+    args: { project_path: "/tmp/project", id: "T-LEDGER", status: "in_progress" },
+    rawArguments: "{}",
+  });
+  await expect(cache.execute({
+    name: "query_project_work",
+    args: { project_path: "/tmp/project", kind: "task" },
+    rawArguments: "{}",
+  })).resolves.toEqual({ ok: true, count: 3 });
+  await cache.execute({
+    name: "project_ledger_render",
+    args: { project_path: "/tmp/project", view: "dashboard", write: true },
+    rawArguments: "{}",
+  });
+  await expect(cache.execute({
+    name: "query_project_work",
+    args: { project_path: "/tmp/project", kind: "task" },
+    rawArguments: "{}",
+  })).resolves.toEqual({ ok: true, count: 5 });
+});
+
 test("completed tool progress projects smart web search planned queries", () => {
   const progress = completedToolProgressSummary({
     kind: "searched",

@@ -43,15 +43,22 @@ export function directToolRoundLimit(requestedRounds: number): number {
 }
 
 export function repeatedToolFamilyKey(name: string, args: Record<string, unknown>): string | null {
-  if (name === "inspect_project_status") return "project-ledger:status";
-  if (name === "query_project_work") {
+  if (name === "inspect_project_status" || name === "project_ledger_status") return "project-ledger:status";
+  if (name === "project_ledger_check") return "project-ledger:check";
+  if (name === "query_project_work" || name === "project_ledger_list") {
     const kind = typeof args.kind === "string" && args.kind.trim() ? args.kind.trim() : "query";
     return `project-ledger:query:${kind}`;
   }
-  if (name === "render_project_dashboard") {
+  if (name === "project_ledger_show") {
+    const id = typeof args.id === "string" && args.id.trim() ? args.id.trim() : "unknown";
+    return `project-ledger:show:${id}`;
+  }
+  if (name === "render_project_dashboard" || name === "project_ledger_render") {
     const view = typeof args.view === "string" && args.view.trim() ? args.view.trim() : "dashboard";
     return `project-ledger:render:${view}`;
   }
+  const lifecycle = projectLedgerLifecycleFamilyKey(name, args);
+  if (lifecycle) return lifecycle;
   if (name !== "run_command") return null;
   const command = typeof args.command === "string" ? args.command.trim() : "";
   if (!command) return null;
@@ -67,12 +74,39 @@ export function repeatedToolFamilyKey(name: string, args: Record<string, unknown
   return null;
 }
 
+function projectLedgerLifecycleFamilyKey(name: string, args: Record<string, unknown>): string | null {
+  const id = typeof args.id === "string" && args.id.trim() ? args.id.trim() : "unknown";
+  const kind = typeof args.kind === "string" && args.kind.trim() ? args.kind.trim() : "record";
+  const taskId = typeof args.task_id === "string" && args.task_id.trim()
+    ? args.task_id.trim()
+    : typeof args.task === "string" && args.task.trim()
+    ? args.task.trim()
+    : "unknown";
+  if (name === "project_ledger_create") return `project-ledger:lifecycle:create:${kind}:${id}`;
+  if (name === "project_ledger_update") return `project-ledger:lifecycle:update:${kind}:${id}`;
+  if (name === "project_ledger_work_update") return `project-ledger:lifecycle:work:update:${id}`;
+  if (name === "project_ledger_work_complete") return `project-ledger:lifecycle:work:complete:${id}`;
+  if (name === "project_ledger_task_update") return `project-ledger:lifecycle:task:update:${id}`;
+  if (name === "project_ledger_task_complete") return `project-ledger:lifecycle:task:complete:${id}`;
+  if (name === "project_ledger_attempt_start") return `project-ledger:lifecycle:attempt:start:${taskId}`;
+  if (name === "project_ledger_attempt_succeed") return `project-ledger:lifecycle:attempt:succeed:${id}`;
+  if (name === "project_ledger_attempt_fail") return `project-ledger:lifecycle:attempt:fail:${id}`;
+  if (name === "project_ledger_index") return "project-ledger:index";
+  return null;
+}
+
 export function isStateMutatingToolCall(name: string, args: Record<string, unknown>): boolean {
   if (name !== "run_command") {
+    if (name === "render_project_dashboard" || name === "project_ledger_render") {
+      return args.write === true;
+    }
     return ![
       "inspect_project_status",
       "query_project_work",
-      "render_project_dashboard",
+      "project_ledger_status",
+      "project_ledger_list",
+      "project_ledger_show",
+      "project_ledger_check",
       "web_search",
       "web_read",
       "read_tool_output_artifact",

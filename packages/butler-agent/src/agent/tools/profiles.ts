@@ -4,6 +4,7 @@ import { BUTLER_TOOLS } from "./butler-tools.ts";
 export type ButlerToolProfile =
   | "startup"
   | "project"
+  | "project-lifecycle"
   | "workspace"
   | "public-web"
   | "memory-read"
@@ -29,9 +30,17 @@ const STARTUP_TOOL_NAMES = [
 
 const PROJECT_TOOL_NAMES = [
   "project_ledger_status",
+  "project_ledger_check",
   "inspect_project_status",
   "query_project_work",
   "render_project_dashboard",
+] as const;
+
+const PROJECT_LIFECYCLE_TOOL_NAMES = [
+  "project_ledger_work_update",
+  "project_ledger_work_complete",
+  "project_ledger_task_update",
+  "project_ledger_task_complete",
 ] as const;
 
 const WORKSPACE_TOOL_NAMES = [
@@ -97,10 +106,25 @@ const ORCHESTRATION_TOOL_NAMES = [
 ] as const;
 
 const ARTIFACT_DATA_TOOL_NAMES = ["transform_public_data_table"] as const;
+const PROJECT_LEDGER_LIFECYCLE_TARGET_PATTERNS = [
+  /\b(?:work|task|attempt)\s+[a-z][a-z0-9._-]*\b/u,
+  /\b(?:work|task|attempt)\b.*\b(?:complete|completed|completion|closeout|transition|mutate|create|register)\b/u,
+  /\b(?:complete|completed|completion|closeout|transition|mutate|create|register)\b.*\b(?:work|task|attempt)\b/u,
+  /\b(?:work|task|attempt)\b.*(?:완료|완결|마감|전이|등록)/u,
+  /(?:완료|완결|마감|전이|등록).*\b(?:work|task|attempt)\b/u,
+  /작업\s+[A-Za-z0-9._-]+/u,
+  /태스크\s+[A-Za-z0-9._-]+/u,
+  /시도\s+[A-Za-z0-9._-]+/u,
+  /작업.*(?:완료|완결|마감|전이|등록)/u,
+  /태스크.*(?:완료|완결|마감|전이|등록)/u,
+  /시도.*(?:완료|완결|마감|전이|등록)/u,
+  /(?:완료|완결|마감|전이|등록).*(?:작업|태스크|시도)/u,
+] as const;
 
 const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
   startup: STARTUP_TOOL_NAMES,
   project: PROJECT_TOOL_NAMES,
+  "project-lifecycle": PROJECT_LIFECYCLE_TOOL_NAMES,
   workspace: WORKSPACE_TOOL_NAMES,
   "public-web": PUBLIC_WEB_TOOL_NAMES,
   "memory-read": MEMORY_READ_TOOL_NAMES,
@@ -197,6 +221,42 @@ function mentionsProjectLedger(text: string | undefined): boolean {
   return /\bproject[-\s]?ledger\b|\bledger\b|프로젝트\s*원장|원장/u.test(text.toLowerCase());
 }
 
+function mentionsProjectLedgerLifecycle(text: string | undefined): boolean {
+  if (!mentionsProjectLedger(text)) return false;
+  const normalized = text?.toLowerCase() ?? "";
+  if (mentionsLifecycleRegistration(normalized) && mentionsProjectLedgerLifecycleTarget(normalized)) {
+    return true;
+  }
+  return projectLedgerLifecycleSegments(normalized).some((segment) =>
+    mentionsProjectLedger(segment) &&
+    mentionsLifecycleMutation(segment) &&
+    mentionsProjectLedgerLifecycleTarget(segment),
+  );
+}
+
+function mentionsLifecycleMutation(text: string | undefined): boolean {
+  if (!text) return false;
+  return /\b(?:complete|completed|completion|closeout|transition|mutate|create|register)\b|완료|완결|마감|전이|등록/u.test(text.toLowerCase());
+}
+
+function mentionsLifecycleRegistration(text: string | undefined): boolean {
+  if (!text) return false;
+  return /\b(?:create|register)\b|등록/u.test(text.toLowerCase());
+}
+
+function projectLedgerLifecycleSegments(text: string): string[] {
+  return text
+    .split(/[\n.!?。！？]+/u)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function mentionsProjectLedgerLifecycleTarget(text: string | undefined): boolean {
+  if (!text) return false;
+  const normalized = text.toLowerCase();
+  return PROJECT_LEDGER_LIFECYCLE_TARGET_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 function policyArray(metadata: unknown, camelKey: string, snakeKey: string): unknown[] {
   const record = recordValue(metadata);
   const runtimePolicy = recordValue(record.runtimePolicy);
@@ -265,8 +325,12 @@ export function selectButlerToolProfiles(input: {
     return ["startup", "project", "workspace", "public-web", "memory-read", "monitoring", "artifact-data"];
   }
   const profiles = new Set<ButlerToolProfile>(["startup"]);
-  if (hasProjectContext(input) || mentionsProjectLedger(input.text)) {
+  const projectContext = hasProjectContext(input);
+  if (projectContext || mentionsProjectLedger(input.text)) {
     addProfile(profiles, "project");
+  }
+  if (mentionsProjectLedgerLifecycle(input.text)) {
+    addProfile(profiles, "project-lifecycle");
   }
   for (const profile of requiredToolProfiles(input.sessionMetadata)) addProfile(profiles, profile);
   for (const profile of requiredToolProfiles(input.turnMetadata)) addProfile(profiles, profile);
