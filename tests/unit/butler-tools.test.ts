@@ -16,6 +16,11 @@ import {
   selectButlerToolsForTurn,
   toolContractJsonChars,
 } from "../../packages/butler-agent/src/agent/tools/profiles.ts";
+import {
+  PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES,
+  PROJECT_LEDGER_MUTATION_TOOL_NAMES,
+} from "../../packages/butler-agent/src/agent/tools/project-ledger/mutation-tools.ts";
+import { projectLedgerNativeToolDefinitions } from "../../packages/butler-agent/src/agent/tools/project-ledger/native.ts";
 import { TaskStore } from "../../packages/butler-agent/src/agent/work/task-store.ts";
 import { PlannedTaskStore } from "../../packages/butler-agent/src/agent/work/planned-task.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
@@ -60,15 +65,6 @@ const projectLedgerToolNames: string[] = [
   "project_ledger_render",
   "project_ledger_check",
 ];
-const projectLedgerLifecycleToolNames = [
-  "project_ledger_work_update",
-  "project_ledger_work_complete",
-  "project_ledger_task_update",
-  "project_ledger_task_complete",
-  "project_ledger_attempt_start",
-  "project_ledger_attempt_succeed",
-  "project_ledger_attempt_fail",
-] as const;
 const projectMetadataToolNames: string[] = [
   "project_ledger_status",
   "project_ledger_check",
@@ -297,6 +293,16 @@ test("Project Ledger native tools route task completion through task handlers", 
   }) as { ok: boolean; data?: { id?: string; kind?: string; status?: string } };
   expect(completed.ok).toBe(true);
   expect(completed.data).toMatchObject({ id: "T-SANDY", kind: "task", status: "done" });
+});
+
+test("Project Ledger mutation policy covers every mutating native Project Ledger tool", () => {
+  const mutatingNativeLedgerTools = projectLedgerNativeToolDefinitions
+    .filter((tool) => !tool.concurrencySafe)
+    .map((tool) => tool.name)
+    .sort();
+
+  const expectedMutationTools: string[] = [...PROJECT_LEDGER_MUTATION_TOOL_NAMES].sort();
+  expect(expectedMutationTools).toEqual(mutatingNativeLedgerTools);
 });
 
 test("Butler tool registry exposes stable native tool contracts", () => {
@@ -920,7 +926,7 @@ test("Project Ledger tools stay hidden in local and none tracking modes", () => 
     expect(names).not.toContain("query_project_work");
     expect(names).not.toContain("inspect_project_status");
     expect(names).not.toContain("render_project_dashboard");
-    for (const toolName of projectLedgerLifecycleToolNames) {
+    for (const toolName of PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES) {
       expect(names).not.toContain(toolName);
     }
   }
@@ -941,7 +947,7 @@ test("Project Ledger lifecycle tools stay hidden until validation passes and clo
       turnMetadata: {
         runtimePolicy: {
           requiredNativeToolProfiles: ["project-lifecycle"],
-          requiredNativeTools: ["project_ledger_task_complete"],
+          requiredNativeTools: [...PROJECT_LEDGER_MUTATION_TOOL_NAMES],
           tracking_mode: "ledger",
           ...runtimePolicy,
         },
@@ -949,10 +955,35 @@ test("Project Ledger lifecycle tools stay hidden until validation passes and clo
     });
 
     const names = tools.map((tool) => tool.name);
-    for (const toolName of projectLedgerLifecycleToolNames) {
+    for (const toolName of PROJECT_LEDGER_MUTATION_TOOL_NAMES) {
       expect(names).not.toContain(toolName);
     }
   }
+});
+
+test("Project Ledger generic mutation tools require the same structured closeout gate", () => {
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "Project Ledger task T-1 상태를 정리하고 렌더해줘.",
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata: {
+      runtimePolicy: {
+        requiredNativeTools: [
+          "project_ledger_index",
+          "project_ledger_update",
+          "project_ledger_render",
+        ],
+        tracking_mode: "ledger",
+        runtime_phase: "closeout_planned",
+        validation_state: "validation_passed",
+      },
+    },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(names).toContain("project_ledger_index");
+  expect(names).toContain("project_ledger_update");
+  expect(names).toContain("project_ledger_render");
 });
 
 test("explicit required tools add exact tool names while removed tool names are ignored", () => {

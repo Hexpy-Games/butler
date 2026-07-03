@@ -1,5 +1,9 @@
 import type { FunctionToolDefinition } from "../../integrations/providers/provider.ts";
 import { BUTLER_TOOLS } from "./butler-tools.ts";
+import {
+  PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES,
+  PROJECT_LEDGER_MUTATION_TOOL_NAME_SET,
+} from "./project-ledger/mutation-tools.ts";
 
 export type ButlerToolProfile =
   | "startup"
@@ -36,17 +40,6 @@ const PROJECT_TOOL_NAMES = [
   "render_project_dashboard",
 ] as const;
 
-const PROJECT_LIFECYCLE_TOOL_NAMES = [
-  "project_ledger_work_update",
-  "project_ledger_work_complete",
-  "project_ledger_task_update",
-  "project_ledger_task_complete",
-  "project_ledger_attempt_start",
-  "project_ledger_attempt_succeed",
-  "project_ledger_attempt_fail",
-] as const;
-
-const PROJECT_LEDGER_LIFECYCLE_TOOL_NAME_SET = new Set<string>(PROJECT_LIFECYCLE_TOOL_NAMES);
 const PROJECT_LEDGER_INSPECTION_TOOL_NAMES = new Set<string>([
   "project_ledger_index",
   "project_ledger_status",
@@ -144,7 +137,7 @@ const PROJECT_LEDGER_LIFECYCLE_TARGET_PATTERNS = [
 const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
   startup: STARTUP_TOOL_NAMES,
   project: PROJECT_TOOL_NAMES,
-  "project-lifecycle": PROJECT_LIFECYCLE_TOOL_NAMES,
+  "project-lifecycle": PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES,
   workspace: WORKSPACE_TOOL_NAMES,
   "public-web": PUBLIC_WEB_TOOL_NAMES,
   "memory-read": MEMORY_READ_TOOL_NAMES,
@@ -422,11 +415,11 @@ export function selectButlerToolsForTurn(input: {
     allowedNames.add(name);
   }
   if (!projectLedgerLifecycleAllowed(input)) {
-    for (const name of PROJECT_LEDGER_LIFECYCLE_TOOL_NAME_SET) allowedNames.delete(name);
+    for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) allowedNames.delete(name);
   }
   if (projectLedgerInspectionSuppressed(input)) {
     for (const name of PROJECT_LEDGER_INSPECTION_TOOL_NAMES) allowedNames.delete(name);
-    for (const name of PROJECT_LEDGER_LIFECYCLE_TOOL_NAME_SET) allowedNames.delete(name);
+    for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) allowedNames.delete(name);
   }
   return tools.filter((tool) =>
     allowedNames.has(tool.name) &&
