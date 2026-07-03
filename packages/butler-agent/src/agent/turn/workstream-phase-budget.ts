@@ -31,6 +31,10 @@ export interface WorkStreamPhaseBudgetController {
     roundIndex: number;
     globalBudgetState: PromptUsageBudgetState;
   }): void;
+  beforeToolCallBatch(input: {
+    phase: string;
+    toolNames: string[];
+  }): void;
   recordToolCall(input: {
     phase: string;
     toolName: string;
@@ -38,6 +42,7 @@ export interface WorkStreamPhaseBudgetController {
   recordPhaseBudgetExhausted(input: {
     phase: string;
     reason: string;
+    attemptedToolCalls?: number;
   }): void;
 }
 
@@ -125,6 +130,20 @@ export function createWorkStreamPhaseBudgetController(input: {
       count.modelRequests += 1;
     },
 
+    beforeToolCallBatch({ phase, toolNames }): void {
+      const budget = PHASE_BUDGETS[phase];
+      if (!budget || toolNames.length === 0) return;
+      const count = phaseCounts(counts, phase);
+      const projectedToolCalls = count.toolCalls + toolNames.length;
+      if (projectedToolCalls <= budget.maxToolCalls) return;
+      controller.recordPhaseBudgetExhausted({
+        phase,
+        reason: "phase_tool_call_budget_exhausted",
+        attemptedToolCalls: projectedToolCalls,
+      });
+      throw promptUsageModelCallBudgetExhaustedError();
+    },
+
     recordToolCall({ phase, toolName }): void {
       const budget = PHASE_BUDGETS[phase];
       const count = phaseCounts(counts, phase);
@@ -154,7 +173,7 @@ export function createWorkStreamPhaseBudgetController(input: {
       }, { butlerData: input.butlerData });
     },
 
-    recordPhaseBudgetExhausted({ phase, reason }): void {
+    recordPhaseBudgetExhausted({ phase, reason, attemptedToolCalls }): void {
       const key = `${phase}:${reason}`;
       if (exhaustedRecorded.has(key)) return;
       exhaustedRecorded.add(key);
@@ -174,6 +193,7 @@ export function createWorkStreamPhaseBudgetController(input: {
           maxModelRequests: budget?.maxModelRequests,
           toolCallsUsed: count.toolCalls,
           maxToolCalls: budget?.maxToolCalls,
+          attemptedToolCalls,
           resumeSelectionState: input.resumeSelection.state,
           workStreamId: safeDimensionIdentifier(selected.id),
         },

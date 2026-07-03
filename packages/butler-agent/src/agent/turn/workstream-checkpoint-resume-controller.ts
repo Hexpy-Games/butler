@@ -1,13 +1,12 @@
-import { TodoListStore, type TodoItem } from "../work/todo-list.ts";
 import {
   WorkStreamStore,
   type WorkStreamRecord,
   type WorkStreamState,
   workStreamResumable,
 } from "../work/work-stream.ts";
+import { checkpointForRecord } from "./workstream-checkpoint-hydration.ts";
 import type {
   WorkStreamResumeCandidate,
-  WorkStreamResumeCheckpoint,
   WorkStreamResumeIssue,
   WorkStreamResumeSelection,
   WorkStreamResumeSelectionReason,
@@ -33,12 +32,14 @@ const ACTIVE_SELECTION_STATES = new Set<WorkStreamState>([
 export function selectWorkStreamCheckpointResume(input: {
   butlerData: string;
   sessionId: string;
+  chatId?: string | null;
   projectId?: string | null;
   currentTurnId?: string | null;
   turnMetadata?: Record<string, unknown>;
   userText?: string;
 }): WorkStreamResumeSelection {
   void input.userText;
+  void input.currentTurnId;
   const control = structuredResumeControl(input.turnMetadata);
   if (control?.action === "cancel") {
     return emptySelection("cancel_selected", "explicit_cancel");
@@ -50,6 +51,7 @@ export function selectWorkStreamCheckpointResume(input: {
   const scanned = scanCandidates({
     butlerData: input.butlerData,
     sessionId: input.sessionId,
+    chatId: input.chatId,
     projectId: input.projectId,
     includeWaitingUser: control?.userActionSupplied === true,
   });
@@ -97,9 +99,18 @@ export function selectWorkStreamCheckpointResume(input: {
         issues: scanned.issues,
       };
     }
+    if (scanned.issues.length > 0) {
+      return {
+        state: "resume_blocked_system",
+        reason: "no_valid_checkpoint",
+        candidates,
+        blockers: [],
+        issues: scanned.issues,
+      };
+    }
     return {
       state: "fresh_turn",
-      reason: scanned.issues.length > 0 ? "no_valid_checkpoint" : "no_candidates",
+      reason: "no_candidates",
       candidates,
       blockers: [],
       issues: scanned.issues,
@@ -133,6 +144,7 @@ export function selectWorkStreamCheckpointResume(input: {
 function scanCandidates(input: {
   butlerData: string;
   sessionId: string;
+  chatId?: string | null;
   projectId?: string | null;
   includeWaitingUser: boolean;
 }): {
@@ -151,7 +163,11 @@ function scanCandidates(input: {
   const blockers: WorkStreamResumeCandidate[] = [];
   const issues: WorkStreamResumeIssue[] = [];
   for (const record of records) {
-    const checkpoint = checkpointForRecord(input.butlerData, record);
+    const checkpoint = checkpointForRecord({
+      butlerData: input.butlerData,
+      chatId: input.chatId,
+      record,
+    });
     if (!checkpoint.ok) {
       issues.push({
         workStreamId: record.id,
@@ -178,51 +194,6 @@ function scanCandidates(input: {
     blockers: sortCandidates(blockers),
     issues,
   };
-}
-
-function checkpointForRecord(
-  butlerData: string,
-  record: WorkStreamRecord,
-): { ok: true; value: WorkStreamResumeCheckpoint } | { ok: false; code: WorkStreamResumeIssue["code"] } {
-  if (!record.todo_list_id) return { ok: false, code: "missing_todo_list" };
-  const todo = new TodoListStore(butlerData).read(record.todo_list_id);
-  if (!todo) return { ok: false, code: "missing_todo_record" };
-  const activeItems = activeCheckpointItems(todo.items);
-  if (activeItems.length === 0 && record.state !== "reporting") {
-    return { ok: false, code: "no_active_todo_items" };
-  }
-  return {
-    ok: true,
-    value: {
-      checkpointId: `workstream:${record.id}:${record.updated_at}`,
-      workStreamId: record.id,
-      sessionId: record.owner_session_id ?? "",
-      projectId: record.project_id,
-      todoListId: record.todo_list_id,
-      state: record.state,
-      currentPhase: record.current_phase,
-      activeStepId: record.active_step_id,
-      updatedAt: record.updated_at,
-      title: record.title,
-      statusNote: record.status_note,
-      linkedPlannedTaskIds: record.linked_planned_task_ids,
-      linkedOrchestrationIds: record.linked_orchestration_ids,
-      linkedWorkerTaskIds: record.linked_worker_task_ids,
-      activeItems,
-    },
-  };
-}
-
-function activeCheckpointItems(items: TodoItem[]): WorkStreamResumeCheckpoint["activeItems"] {
-  return items
-    .filter((item) => item.status === "pending" || item.status === "in_progress")
-    .slice(0, 8)
-    .map((item) => ({
-      id: item.id,
-      label: item.status === "in_progress" ? item.active_form : item.content,
-      status: item.status,
-      phase: item.phase,
-    }));
 }
 
 function structuredResumeControl(

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, rmSync } from "fs";
+import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { persistTurnContextAtom } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { selectWorkStreamCheckpointResume } from "../../packages/butler-agent/src/agent/turn/workstream-checkpoint-resume-controller.ts";
 import { WorkStreamStore, type WorkStreamRecord } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import {
@@ -58,6 +59,82 @@ test("checkpoint resume selects the sole recoverable WorkStream without reading 
     },
   });
   expect(unrelatedText.selected?.id).toBe(stream.id);
+});
+
+test("checkpoint resume hydrates origin turn, validation, evidence, and budget refs", () => {
+  const stream = createStream({
+    sessionId: "butler/session",
+    listId: "recoverable-with-origin",
+    now: "2026-07-03T00:00:00.000Z",
+    lastUserTurnId: "turn-origin",
+  });
+  new WorkStreamStore(tempDir).link({
+    id: stream.id,
+    plannedTaskIds: ["T-WCRC-VALIDATED"],
+    now: new Date("2026-07-03T00:01:00.000Z"),
+  });
+  writeProjectLedgerIndex({
+    projectId: "butler",
+    records: [{ id: "T-WCRC-VALIDATED", kind: "task", title: "Validated task", status: "in_progress" }],
+  });
+  persistTurnContextAtom({
+    butlerData: tempDir,
+    sessionId: "butler/session",
+    turnId: "turn-origin",
+    state: "continuing",
+    sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+    reason: "budget",
+    userRequest: { id: "msg-origin" },
+    openToolPairs: [{ kind: "tool_result", id: "run-command-1" }],
+    currentTurnWork: [{ kind: "workstream", id: stream.id }],
+    currentTurnTodos: [{ kind: "todo_item", id: "execute" }],
+    latestCompletionReview: { status: "gap", observationId: "review-gap-1" },
+    unresolvedObservations: [{ kind: "validation_failure", id: "unit-gate" }],
+    budgetSnapshot: {
+      turnId: "turn-origin",
+      modelRequestsUsed: 6,
+      promptTokens: 100,
+      cachedTokens: 20,
+      outputTokens: 40,
+      totalTokens: 140,
+      maxModelCalls: 32,
+      maxPromptTokens: 220000,
+      maxOutputTokens: 80000,
+      maxTotalTokens: 300000,
+    },
+  });
+
+  const selection = selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/session",
+    chatId: "app-chat",
+  });
+
+  expect(selection).toMatchObject({
+    state: "resume_selected",
+    selected: {
+      checkpoint: {
+        chatId: "app-chat",
+        originatingTurnId: "turn-origin",
+        userMessageId: "msg-origin",
+        blocker: { kind: "budget", reason: "prompt_usage_model_call_budget_exhausted" },
+        budgetSnapshot: expect.objectContaining({
+          turnId: "turn-origin",
+          modelRequestsUsed: 6,
+          maxModelCalls: 32,
+        }),
+        latestCompletionReview: { status: "gap", observationId: "review-gap-1" },
+        evidenceRefs: expect.arrayContaining([
+          expect.objectContaining({ kind: "project_ledger_task", id: "T-WCRC-VALIDATED" }),
+          expect.objectContaining({ kind: "tool_result", id: "run-command-1" }),
+        ]),
+        validationRefs: expect.arrayContaining([
+          expect.objectContaining({ kind: "completion_review", id: "review-gap-1" }),
+          expect.objectContaining({ kind: "validation_failure", id: "unit-gate" }),
+        ]),
+      },
+    },
+  });
 });
 
 test("checkpoint resume honors structured cancel and new-objective actions only from metadata", () => {
@@ -124,6 +201,52 @@ test("checkpoint resume resolves multiple candidates by structured target or lat
   });
 });
 
+test("checkpoint resume ignores task-id and final-answer prose when candidates have equal priority", () => {
+  const first = createRecoverableStream({
+    sessionId: "butler/session",
+    listId: "equal-a",
+    now: "2026-07-03T00:00:00.000Z",
+    recoverableAt: "2026-07-03T00:03:00.000Z",
+  });
+  createRecoverableStream({
+    sessionId: "butler/session",
+    listId: "equal-b",
+    now: "2026-07-03T00:01:00.000Z",
+    recoverableAt: "2026-07-03T00:03:00.000Z",
+  });
+
+  const selection = selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/session",
+    userText: `최종 답변에서 ${first.id} 완료라 했으니 그걸 이어서 처리해줘`,
+  });
+
+  expect(selection).toMatchObject({
+    state: "resume_conflict",
+    reason: "equal_priority_candidates",
+  });
+  expect(selection.selected).toBeUndefined();
+});
+
+test("checkpoint resume treats explicit targets outside the current session as conflicts", () => {
+  const otherSession = createRecoverableStream({
+    sessionId: "butler/other-session",
+    listId: "other-session",
+    now: "2026-07-03T00:00:00.000Z",
+    recoverableAt: "2026-07-03T00:01:00.000Z",
+  });
+
+  expect(selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/current-session",
+    turnMetadata: { workstreamResume: { action: "resume", workStreamId: otherSession.id } },
+  })).toMatchObject({
+    state: "resume_conflict",
+    reason: "explicit_target_missing",
+    candidates: [],
+  });
+});
+
 test("checkpoint resume blocks waiting-user WorkStreams until structured user action is supplied", () => {
   const waiting = createStream({
     sessionId: "butler/session",
@@ -160,7 +283,7 @@ test("checkpoint resume blocks waiting-user WorkStreams until structured user ac
   });
 });
 
-test("checkpoint resume falls back when a durable checkpoint is corrupted", () => {
+test("checkpoint resume blocks the system path when a durable checkpoint is corrupted", () => {
   const corrupted = createStream({
     sessionId: "butler/session",
     listId: "missing-todo",
@@ -172,7 +295,7 @@ test("checkpoint resume falls back when a durable checkpoint is corrupted", () =
     butlerData: tempDir,
     sessionId: "butler/session",
   })).toMatchObject({
-    state: "fresh_turn",
+    state: "resume_blocked_system",
     reason: "no_valid_checkpoint",
     issues: [{ workStreamId: corrupted.id, code: "missing_todo_record" }],
   });
@@ -183,6 +306,28 @@ test("checkpoint resume falls back when a durable checkpoint is corrupted", () =
   })).toMatchObject({
     state: "resume_blocked_system",
     reason: "explicit_target_corrupted",
+  });
+});
+
+test("checkpoint resume blocks ledger-governed WorkStreams when linked ledger records cannot hydrate", () => {
+  const stream = createStream({
+    sessionId: "butler/session",
+    listId: "ledger-missing",
+    now: "2026-07-03T00:00:00.000Z",
+  });
+  const linked = new WorkStreamStore(tempDir).link({
+    id: stream.id,
+    plannedTaskIds: ["T-MISSING-LEDGER"],
+    now: new Date("2026-07-03T00:01:00.000Z"),
+  });
+
+  expect(selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/session",
+  })).toMatchObject({
+    state: "resume_blocked_system",
+    reason: "no_valid_checkpoint",
+    issues: [{ workStreamId: linked!.id, code: "ledger_index_missing" }],
   });
 });
 
@@ -204,6 +349,7 @@ function createStream(input: {
   sessionId: string;
   listId: string;
   now: string;
+  lastUserTurnId?: string;
 }): WorkStreamRecord {
   const todoView = new TodoListStore(tempDir).update({
     listId: input.listId,
@@ -222,6 +368,7 @@ function createStream(input: {
     title: "Resume direct work",
     items: todoView.list.items,
     now: new Date(input.now),
+    lastUserTurnId: input.lastUserTurnId,
   });
 }
 
@@ -241,4 +388,16 @@ function todo(input: {
     priority: input.priority ?? "normal",
     blocked_by: input.blocked_by ?? [],
   };
+}
+
+function writeProjectLedgerIndex(input: {
+  projectId: string;
+  records: Array<Record<string, unknown>>;
+}): void {
+  const indexDir = join(tempDir, "project-ledger", "projects", input.projectId, "index");
+  mkdirSync(indexDir, { recursive: true });
+  writeFileSync(join(indexDir, "project.json"), JSON.stringify({
+    schema: "project-ledger.index.v1",
+    records: input.records,
+  }), "utf8");
 }

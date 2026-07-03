@@ -1,4 +1,5 @@
 import type { WorkStreamState } from "../work/work-stream.ts";
+import type { DirectTurnBudgetSnapshot } from "./direct-turn-budget.ts";
 
 export type WorkStreamResumeSelectionState =
   | "fresh_turn"
@@ -26,6 +27,9 @@ export interface WorkStreamResumeCheckpoint {
   checkpointId: string;
   workStreamId: string;
   sessionId: string;
+  chatId: string | null;
+  originatingTurnId: string | null;
+  userMessageId: string | null;
   projectId: string | null;
   todoListId: string;
   state: WorkStreamState;
@@ -37,12 +41,31 @@ export interface WorkStreamResumeCheckpoint {
   linkedPlannedTaskIds: string[];
   linkedOrchestrationIds: string[];
   linkedWorkerTaskIds: string[];
+  evidenceRefs: WorkStreamResumeRef[];
+  validationRefs: WorkStreamResumeRef[];
+  blocker: WorkStreamResumeBlocker | null;
+  budgetSnapshot: DirectTurnBudgetSnapshot | null;
+  latestCompletionReview: {
+    status: string;
+    observationId?: string;
+  } | null;
   activeItems: Array<{
     id: string;
     label: string;
     status: string;
     phase: string | null;
   }>;
+}
+
+export interface WorkStreamResumeRef {
+  kind: string;
+  id: string;
+  path?: string;
+}
+
+export interface WorkStreamResumeBlocker {
+  kind: "user_action" | "system" | "completion_gap" | "budget";
+  reason: string;
 }
 
 export interface WorkStreamResumeCandidate {
@@ -56,7 +79,13 @@ export interface WorkStreamResumeCandidate {
 
 export interface WorkStreamResumeIssue {
   workStreamId: string;
-  code: "missing_todo_list" | "missing_todo_record" | "no_active_todo_items";
+  code:
+    | "missing_todo_list"
+    | "missing_todo_record"
+    | "no_active_todo_items"
+    | "ledger_index_missing"
+    | "ledger_index_invalid"
+    | "ledger_linked_record_missing";
 }
 
 export interface WorkStreamResumeSelection {

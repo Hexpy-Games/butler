@@ -94,8 +94,12 @@ function DeveloperLogRowDescription({
         <Tag>{entry.kind}</Tag>
         <Tag>{entry.transport}</Tag>
         {entry.route.reason && <Tag>{entry.route.reason}</Tag>}
-        <Tag>{copy.labels.secrets}: {copy.labels.redacted}</Tag>
-        <Tag>{copy.labels.rawText}: {copy.labels.included}</Tag>
+        <Tag>
+          {copy.labels.secrets}: {entry.privacy.secrets_redacted ? copy.labels.redacted : copy.labels.included}
+        </Tag>
+        <Tag>
+          {copy.labels.rawText}: {entry.privacy.raw_text_included ? copy.labels.included : copy.labels.excluded}
+        </Tag>
       </Stack>
       <Stack align="row" gap="xs" wrap>
         <Typo.Caption>{formatTimestamp(entry.created_at)}</Typo.Caption>

@@ -10251,6 +10251,105 @@ test("focused WorkStream resume records tool calls by phase", async () => {
       maxToolCalls: 24,
     }),
   }));
+  expect(metrics).toContainEqual(expect.objectContaining({
+    name: "first_model_delta_latency_ms",
+    dimensions: expect.objectContaining({
+      phase: "phase_execution",
+      target: "final_candidate",
+    }),
+  }));
+});
+
+test("focused WorkStream resume yields before executing an oversized tool-call batch", async () => {
+  const sessionId = "butler/main/focused-resume-tool-call-cap";
+  const todoView = new TodoListStore(tempDir).update({
+    listId: "focused-tool-call-cap",
+    title: "Focused resume tool call cap",
+    items: [{
+      id: "inspect",
+      content: "Inspect oversized tool batch behavior",
+      active_form: "Inspecting oversized tool batch behavior",
+      status: "in_progress",
+      phase: "execution",
+    }],
+  });
+  new WorkStreamStore(tempDir).updateFromTodoList({
+    ownerSessionId: sessionId,
+    listId: todoView.list.list_id,
+    title: "Focused resume tool call cap",
+    items: todoView.list.items,
+    lastUserTurnId: "turn-previous",
+  });
+
+  let promptCalls = 0;
+  let executed = 0;
+  const runtime = new NativeToolLoopRuntime({
+    disableAutomaticRecall: true,
+    messageLanguage: "ko",
+    butlerData: tempDir,
+    butlerHome: tempDir,
+    executeButlerTool: async () => {
+      executed += 1;
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      promptCalls += 1;
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      await input.onAssistantTextBeforeTools?.({
+        text: "summary: 너무 많은 도구 호출을 한 번에 실행하려 합니다.",
+        toolCalls: Array.from({ length: 25 }, (_, index) => ({
+          name: "run_command",
+          args: { command: `printf '${index}'` },
+        })),
+      });
+      throw new Error("oversized tool batch should yield before this point");
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+  const events: Array<{ kind: string }> = [];
+
+  await expect(runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "local/gemma-test",
+    input: { text: "이어 해줘" },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+  })).rejects.toThrow("Turn scheduler yielded");
+
+  expect(promptCalls).toBe(1);
+  expect(executed).toBe(0);
+  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(readOnlyPersistedTurnContextAtom()).toMatchObject({
+    state: "continuing",
+    budgetSnapshot: expect.objectContaining({
+      modelRequestsUsed: 1,
+      maxModelCalls: 32,
+    }),
+  });
+  const metrics = readOperationalMetricEvents({ butlerData: tempDir });
+  expect(metrics).toContainEqual(expect.objectContaining({
+    name: "phase_budget_exhausted",
+    status: "error",
+    dimensions: expect.objectContaining({
+      phase: "phase_execution",
+      reason: "phase_tool_call_budget_exhausted",
+      toolCallsUsed: 0,
+      maxToolCalls: 24,
+      attemptedToolCalls: 25,
+    }),
+  }));
+  expect(metrics.filter((event) =>
+    event.name === "tool_call_count_by_phase" &&
+    event.dimensions?.phase === "phase_execution",
+  )).toHaveLength(0);
 });
 
 test("native runtime synthesizes durable WorkStream progress when a compound tool turn skips todo setup", async () => {

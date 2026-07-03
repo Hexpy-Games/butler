@@ -93,6 +93,7 @@ export async function prepareNativeTurnContext(input: {
   const resumeSelection = selectWorkStreamCheckpointResume({
     butlerData: input.deps.butlerData,
     sessionId: input.turnInput.handle.sessionId,
+    chatId: currentChatId(input.turnInput),
     projectId: projectId(input.session),
     currentTurnId: turnId,
     turnMetadata: input.turnInput.metadata,
@@ -271,6 +272,15 @@ function budgetForTurn(input: {
     turnId: input.turnId,
   });
   return hydrateDirectTurnBudget(input.turnId, atom?.budgetSnapshot);
+}
+
+function currentChatId(input: RuntimeTurnInput): string | null {
+  const envelope = input.input;
+  if (!("eventId" in envelope)) return input.handle.sessionId;
+  if (envelope.peer.kind === "thread") {
+    return envelope.peer.parentId?.trim() || envelope.peer.id;
+  }
+  return envelope.peer.id;
 }
 
 function hasSchedulerContinuationMetadata(
