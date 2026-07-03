@@ -45,7 +45,20 @@ test("repeated tool family guard resets after a state-mutating tool call", () =>
 
 test("repeated tool family helpers classify read-only and state-mutating calls", () => {
   expect(repeatedToolFamilyKey("inspect_project_status", {})).toBe("project-ledger:status");
+  expect(repeatedToolFamilyKey("project_ledger_status", {})).toBe("project-ledger:status");
+  expect(repeatedToolFamilyKey("project_ledger_check", {})).toBe("project-ledger:check");
+  expect(repeatedToolFamilyKey("project_ledger_create", { kind: "task", id: "T-LEDGER" })).toBe("project-ledger:lifecycle:create:task:T-LEDGER");
+  expect(repeatedToolFamilyKey("project_ledger_update", { kind: "work", id: "W-LEDGER" })).toBe("project-ledger:lifecycle:update:work:W-LEDGER");
+  expect(repeatedToolFamilyKey("project_ledger_task_update", { id: "T-LEDGER" })).toBe("project-ledger:lifecycle:task:update:T-LEDGER");
+  expect(repeatedToolFamilyKey("project_ledger_work_complete", { id: "W-LEDGER" })).toBe("project-ledger:lifecycle:work:complete:W-LEDGER");
+  expect(repeatedToolFamilyKey("project_ledger_attempt_start", { task_id: "T-LEDGER" })).toBe("project-ledger:lifecycle:attempt:start:T-LEDGER");
+  expect(repeatedToolFamilyKey("project_ledger_attempt_succeed", { id: "A-LEDGER" })).toBe("project-ledger:lifecycle:attempt:succeed:A-LEDGER");
+  expect(repeatedToolFamilyKey("project_ledger_attempt_fail", { id: "A-LEDGER" })).toBe("project-ledger:lifecycle:attempt:fail:A-LEDGER");
+  expect(repeatedToolFamilyKey("project_ledger_render", { view: "handoff", write: true })).toBe("project-ledger:render:handoff");
   expect(repeatedToolFamilyKey("run_command", { command: "git diff -- packages/butler-agent" })).toBe("command:git-diff");
   expect(isStateMutatingToolCall("web_search", { query: "Butler" })).toBe(false);
+  expect(isStateMutatingToolCall("project_ledger_check", {})).toBe(false);
+  expect(isStateMutatingToolCall("project_ledger_render", { view: "dashboard" })).toBe(false);
+  expect(isStateMutatingToolCall("project_ledger_render", { view: "dashboard", write: true })).toBe(true);
   expect(isStateMutatingToolCall("run_command", { command: "project-ledger render dashboard --write" })).toBe(true);
 });

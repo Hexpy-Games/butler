@@ -90,3 +90,48 @@ test("tool result observation summary redacts sensitive native-next argument val
   expect(summary).not.toContain("sk_secret");
   expect(summary).not.toContain("db_secret");
 });
+
+test("tool result observation summary exposes Project Ledger closeout failure repair hints", () => {
+  const summary = summarizedToolResultForObservation({
+    ok: false,
+    recoverable: true,
+    observation_kind: "validation_failed",
+    error: {
+      code: "project_ledger_closeout_failed",
+      message: "Project Ledger lifecycle closeout failed after a successful mutation.",
+      details: [
+        {
+          code: "render_failed",
+          kind: "project_ledger_closeout",
+          id: "handoff",
+          status: "failed",
+          message: "Project Ledger generated view render failed.",
+        },
+        {
+          code: "check_failed",
+          kind: "project_ledger_closeout",
+          status: "failed",
+          message: "Project Ledger check failed.",
+        },
+      ],
+      native_next: [
+        {
+          tool: "project_ledger_render",
+          args: { view: "handoff", write: true },
+          reason: "Rewrite the failed generated Project Ledger view after index succeeds.",
+        },
+        {
+          tool: "project_ledger_check",
+          args: {},
+          reason: "Review issues, repair source records, and rerun strict validation.",
+        },
+      ],
+    },
+  });
+
+  expect(summary).toContain("error.code: project_ledger_closeout_failed");
+  expect(summary).toContain("detail: code: render_failed, message: Project Ledger generated view render failed., id: handoff, kind: project_ledger_closeout, status: failed");
+  expect(summary).toContain("native_next: project_ledger_render");
+  expect(summary).toContain("view: handoff");
+  expect(summary).toContain("native_next: project_ledger_check");
+});
