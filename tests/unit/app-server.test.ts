@@ -7975,6 +7975,99 @@ test("app transport no-visible limited final closes queued turns without assista
   }
 });
 
+test("session summary keeps first visible preparation work block from progress read model", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  const server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "show preparation work block immediately",
+      client_message_id: "client-first-prep-work-block",
+    });
+    const turnId = result.data.turn.id as string;
+    const createdAt = "2026-07-04T08:10:00.000Z";
+    const storeDb = (
+      server.store as unknown as {
+        db: Database;
+      }
+    ).db;
+    storeDb.query(
+      `
+        INSERT INTO events (type, payload_json, created_at)
+        VALUES ('agent.turn_event.progress', ?, ?)
+      `,
+    ).run(
+      JSON.stringify({
+        session_id: "general",
+        turn_id: turnId,
+        event_id: "event-first-preparation-work-block",
+        row: {
+          id: "event-first-preparation-work-block",
+          kind: "work_block",
+          state: "running",
+          safe_label: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+          created_at: createdAt,
+          work_block_id: "first-progress-note",
+          work_block_label:
+            "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+        },
+      }),
+      createdAt,
+    );
+    storeDb.query(
+      `
+        INSERT INTO events (type, payload_json, created_at)
+        VALUES ('agent.turn_event.progress', ?, ?)
+      `,
+    ).run(
+      JSON.stringify({
+        session_id: "general",
+        turn_id: turnId,
+        event_id: "event-ordinary-work-block",
+        row: {
+          id: "event-ordinary-work-block",
+          kind: "work_block",
+          state: "running",
+          safe_label: "Checking files",
+          created_at: createdAt,
+          work_block_id: "work-file-check",
+          work_block_label: "Checking files",
+        },
+      }),
+      createdAt,
+    );
+
+    const summary = await getJson(
+      `${server.url}session-summary?session_id=general`,
+    );
+    expect(summary.data.latest_progress.safe_progress_rows).toContainEqual(
+      expect.objectContaining({
+        kind: "work_block",
+        state: "running",
+        safe_label: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+        work_block_id: "first-progress-note",
+        work_block_label:
+          "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+      }),
+    );
+    expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
+      "work-file-check",
+    );
+
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(sessionView.data.active_turn.progress.safe_progress_rows).toContainEqual(
+      expect.objectContaining({
+        kind: "work_block",
+        work_block_id: "first-progress-note",
+      }),
+    );
+  } finally {
+    server.stop();
+  }
+});
+
 test("app transport live generic internal verification text is hidden unless marked public progress", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });

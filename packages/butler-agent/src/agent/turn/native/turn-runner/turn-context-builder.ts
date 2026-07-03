@@ -454,6 +454,7 @@ async function emitStartedAndPreparation(input: {
           useTools: input.useTools,
           userText: input.userText,
         }),
+        emitPreparationWorkBlock: input.useTools,
       });
     },
   );
