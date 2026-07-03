@@ -1,6 +1,3 @@
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
 import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../types.ts";
 import {
   projectLedgerProjectPath,
@@ -12,6 +9,8 @@ import {
   needsProjectLedgerLifecycleCloseout,
   runProjectLedgerLifecycleCloseout,
 } from "./closeout.ts";
+import { commandForProjectLedgerNativeTool } from "./command.ts";
+import { runProjectLedgerPlannedLifecycleMutation } from "./lifecycle-planner.ts";
 import { projectLedgerNativeNextHints } from "./recovery-hints.ts";
 
 type ToolCall = { args: Record<string, unknown> };
@@ -40,6 +39,10 @@ const recordFields = {
   validation: { type: "string", description: "Validation evidence." },
   review: { type: "string", description: "Review evidence." },
   report: { type: "string", description: "Report path or summary." },
+  code_commits: { type: "string", description: "JSON array of code commit evidence." },
+  code_commit: { type: "string", description: "Set to auto to collect the current git HEAD as code commit evidence." },
+  ledger_commits: { type: "string", description: "JSON array of ledger commit evidence." },
+  requires_commit_evidence: { type: "boolean", description: "Require code commit evidence before completing work." },
   spec: { type: "string", description: "Linked spec." },
   acceptance: { type: "string", description: "Acceptance evidence." },
   implementation: { type: "string", description: "Implementation evidence." },
@@ -66,6 +69,8 @@ const lifecycleCompleteFields = {
   validation: recordFields.validation,
   review: recordFields.review,
   report: recordFields.report,
+  code_commits: recordFields.code_commits,
+  code_commit: recordFields.code_commit,
 };
 
 const toolSpecs = [
@@ -158,8 +163,15 @@ function runProjectLedgerNativeTool(
   args: Record<string, unknown>,
 ): Record<string, unknown> {
   const projectPath = projectLedgerProjectPath(input, args);
-  const cliArgs = commandForTool(toolName, args, projectPath);
-  const result = withRecoverableProjectLedgerError(runProjectLedgerTool(input, cliArgs));
+  const cliArgs = commandForProjectLedgerNativeTool(toolName, args, projectPath);
+  const plannedResult = runProjectLedgerPlannedLifecycleMutation({
+    executor: input,
+    toolName,
+    args,
+    projectPath,
+    finalCliArgs: cliArgs,
+  });
+  const result = plannedResult ?? withRecoverableProjectLedgerError(runProjectLedgerTool(input, cliArgs));
   if (needsProjectLedgerLifecycleCloseout(toolName, result)) {
     return applyProjectLedgerLifecycleCloseout(
       result,
@@ -182,85 +194,6 @@ function runProjectLedgerNativeTool(
   }
   if (toolName === "project_ledger_list") return applyListBounds(result, args);
   return result;
-}
-
-function commandForTool(toolName: string, args: Record<string, unknown>, projectPath: string): string[] {
-  const project = ["--project", projectPath];
-  if (toolName === "project_ledger_index") return ["index", ...project];
-  if (toolName === "project_ledger_status") return ["status", ...project];
-  if (toolName === "project_ledger_list") return ["query", ...project, "--kind", requireString(args, "kind")];
-  if (toolName === "project_ledger_show") return ["record", "show", ...project, ...recordIdentityArgs(args), ...booleanFlag(args, "include_body", "body")];
-  if (toolName === "project_ledger_create") return createArgs(args, project);
-  if (toolName === "project_ledger_update") return withBodyFile(args, ["record", "update", ...project, ...recordIdentityArgs(args), ...metadataArgs(args)]);
-  if (toolName === "project_ledger_work_update") return withBodyFile(args, ["work", "update", ...project, "--id", requireString(args, "id"), ...metadataArgs(args)]);
-  if (toolName === "project_ledger_work_complete") return withBodyFile(args, ["work", "complete", ...project, "--id", requireString(args, "id"), ...metadataArgs(args)]);
-  if (toolName === "project_ledger_task_update") return withBodyFile(args, ["task", "update", ...project, "--id", requireString(args, "id"), ...metadataArgs(args)]);
-  if (toolName === "project_ledger_task_complete") return withBodyFile(args, ["task", "complete", ...project, "--id", requireString(args, "id"), ...metadataArgs(args)]);
-  if (toolName === "project_ledger_attempt_start") return withBodyFile(args, ["attempt", "start", ...project, "--task", requireString(args, "task_id"), ...optionalIdArgs(args), ...metadataArgs(args)]);
-  if (toolName === "project_ledger_attempt_succeed") return withBodyFile(args, ["attempt", "succeed", ...project, "--id", requireString(args, "id"), ...metadataArgs(args)]);
-  if (toolName === "project_ledger_attempt_fail") return withBodyFile(args, ["attempt", "fail", ...project, "--id", requireString(args, "id"), ...metadataArgs(args)]);
-  if (toolName === "project_ledger_render") return ["render", ...project, requireString(args, "view"), ...booleanFlag(args, "write", "write")];
-  if (toolName === "project_ledger_check") return ["check", ...project, ...booleanFlag(args, "verbose", "verbose")];
-  throw new Error(`Unknown Project Ledger tool: ${toolName}`);
-}
-
-function createArgs(args: Record<string, unknown>, project: string[]): string[] {
-  const kind = requireString(args, "kind");
-  if (kind === "work") return withBodyFile(args, ["work", "create", ...project, "--id", requireString(args, "id"), "--title", requireString(args, "title"), ...metadataArgs(args)]);
-  if (kind === "task") return withBodyFile(args, ["task", "create", ...project, "--work", requireString(args, "work_id"), "--id", requireString(args, "id"), "--title", requireString(args, "title"), ...metadataArgs(args)]);
-  if (kind === "attempt") return withBodyFile(args, ["attempt", "start", ...project, "--task", requireString(args, "task_id"), "--id", requireString(args, "id"), "--title", requireString(args, "title"), ...metadataArgs(args)]);
-  return withBodyFile(args, ["record", "create", ...project, "--kind", kind, "--id", requireString(args, "id"), "--title", requireString(args, "title"), ...metadataArgs(args)]);
-}
-
-function withBodyFile(args: Record<string, unknown>, cliArgs: string[]): string[] {
-  const body = stringArg(args, "body");
-  if (!body) return cliArgs;
-  const dir = mkdtempSync(join(tmpdir(), "butler-project-ledger-tool-"));
-  const path = join(dir, "body.md");
-  writeFileSync(path, body, "utf8");
-  process.once("exit", () => rmSync(dir, { recursive: true, force: true }));
-  return [...cliArgs, "--from", path];
-}
-
-function recordIdentityArgs(args: Record<string, unknown>): string[] {
-  return ["--id", requireString(args, "id"), ...stringFlag(args, "kind", "kind")];
-}
-
-function optionalIdArgs(args: Record<string, unknown>): string[] {
-  return stringFlag(args, "id", "id");
-}
-
-function metadataArgs(args: Record<string, unknown>): string[] {
-  return [
-    ...stringFlag(args, "title", "title"),
-    ...stringFlag(args, "status", "status"),
-    ...stringFlag(args, "spec", "spec"),
-    ...stringFlag(args, "validation", "validation"),
-    ...stringFlag(args, "review", "review"),
-    ...stringFlag(args, "report", "report"),
-    ...stringFlag(args, "acceptance", "acceptance"),
-    ...stringFlag(args, "implementation", "implementation"),
-    ...stringFlag(args, "mitigation", "mitigation"),
-    ...numberFlag(args, "priority", "priority"),
-  ];
-}
-
-function stringFlag(args: Record<string, unknown>, key: string, flag: string): string[] {
-  const value = stringArg(args, key);
-  return value ? [`--${flag}`, value] : [];
-}
-
-function numberFlag(args: Record<string, unknown>, key: string, flag: string): string[] {
-  const value = args[key];
-  return typeof value === "number" && Number.isFinite(value) ? [`--${flag}`, String(value)] : [];
-}
-
-function booleanFlag(args: Record<string, unknown>, key: string, flag: string): string[] {
-  return args[key] === true ? [`--${flag}`] : [];
-}
-
-function requireString(args: Record<string, unknown>, key: string): string {
-  return stringArg(args, key);
 }
 
 function stringArg(args: Record<string, unknown>, key: string): string {
