@@ -234,6 +234,12 @@ function mentionsProjectLedger(text: string | undefined): boolean {
   return /\bproject[-\s]?ledger\b|\bledger\b|프로젝트\s*원장|원장/u.test(text.toLowerCase());
 }
 
+function mentionsProjectLedgerInspection(text: string | undefined): boolean {
+  if (!mentionsProjectLedger(text)) return false;
+  return /\b(?:status|check|inspect|query|show|read|render|dashboard|view|list)\b|상태|확인|조회|보기|읽|렌더|대시보드|목록/u
+    .test(text?.toLowerCase() ?? "");
+}
+
 function mentionsProjectLedgerLifecycle(text: string | undefined): boolean {
   if (!mentionsProjectLedger(text)) return false;
   const normalized = text?.toLowerCase() ?? "";
@@ -327,7 +333,7 @@ function requiredToolNamesForTurn(input: {
 function policyString(metadata: unknown, camelKey: string, snakeKey: string): string | null {
   const record = recordValue(metadata);
   const runtimePolicy = recordValue(record.runtimePolicy);
-  const raw = runtimePolicy[camelKey] ?? runtimePolicy[snakeKey] ?? record[camelKey] ?? record[snakeKey];
+  const raw = record[snakeKey] ?? runtimePolicy[snakeKey] ?? record[camelKey] ?? runtimePolicy[camelKey];
   return typeof raw === "string" && raw.trim() ? raw.trim() : null;
 }
 
@@ -355,9 +361,11 @@ function projectLedgerLifecycleAllowed(input: {
 function projectLedgerInspectionSuppressed(input: {
   sessionMetadata?: Record<string, unknown>;
   turnMetadata?: Record<string, unknown>;
+  text?: string;
 }): boolean {
   const trackingMode = trackingPolicyString(input, "trackingMode", "tracking_mode");
-  return trackingMode === "local" || trackingMode === "none";
+  return (trackingMode === "local" || trackingMode === "none") &&
+    !mentionsProjectLedgerInspection(input.text);
 }
 
 function addProfile(profiles: Set<ButlerToolProfile>, profile: ButlerToolProfile): void {

@@ -224,6 +224,8 @@ export class AppGatewayBridge {
     const runtimePolicy = appBridgeRuntimePolicy({
       existing: this.runtimePolicy,
       accessMode: input?.accessMode,
+      projectId,
+      sessionKind: input?.sessionKind ?? "chat",
     });
     return this.store.upsert({
       sessionId,
@@ -706,19 +708,52 @@ function bridgeRequiredToolsForAccessMode(
 function appBridgeRuntimePolicy(input: {
   existing?: Record<string, unknown>;
   accessMode?: AppMessageResponderInput["accessMode"];
+  projectId?: string | null;
+  sessionKind?: string | null;
 }): Record<string, unknown> | undefined {
   const accessMode = input.accessMode ?? "full_access";
   const existing = input.existing ?? {};
   const requestedProfiles = policyStringArray(existing.requiredNativeToolProfiles)
     .filter((profile) => profile !== "workspace");
   if (accessMode === "full_access") requestedProfiles.push("workspace");
+  const trackingMode = bridgeTrackingMode({
+    existing,
+    projectId: input.projectId,
+    sessionKind: input.sessionKind,
+  });
+  const closeoutStrategy = bridgeCloseoutStrategyForTrackingMode(trackingMode);
   return {
     ...existing,
     accessMode,
+    trackingMode,
+    tracking_mode: trackingMode,
+    closeoutStrategy,
+    closeout_strategy: closeoutStrategy,
     requiredNativeTools: bridgeRequiredToolsForAccessMode(existing.requiredNativeTools, accessMode),
     required_tools: bridgeRequiredToolsForAccessMode(existing.required_tools, accessMode),
     requiredNativeToolProfiles: [...new Set(requestedProfiles)],
   };
+}
+
+function bridgeTrackingMode(input: {
+  existing: Record<string, unknown>;
+  projectId?: string | null;
+  sessionKind?: string | null;
+}): "ledger" | "local" | "none" {
+  const existingMode = bridgeTrackingModeValue(input.existing.tracking_mode ?? input.existing.trackingMode);
+  if (existingMode) return existingMode;
+  if (input.projectId?.trim() || input.sessionKind === "project") return "local";
+  return "none";
+}
+
+function bridgeTrackingModeValue(value: unknown): "ledger" | "local" | "none" | null {
+  return value === "ledger" || value === "local" || value === "none" ? value : null;
+}
+
+function bridgeCloseoutStrategyForTrackingMode(mode: "ledger" | "local" | "none"): "ledger" | "local_workstream" | "noop" {
+  if (mode === "ledger") return "ledger";
+  if (mode === "local") return "local_workstream";
+  return "noop";
 }
 
 function readButlerConfig(butlerData: string): ButlerConfig {
