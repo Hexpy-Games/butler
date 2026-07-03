@@ -2209,11 +2209,11 @@ test("app runtime policy strips stale workspace required tools outside full acce
     sessionKind: "project",
   })).toMatchObject({
     accessMode: "ask_first",
-    tracking_mode: "local",
-    closeout_strategy: "local_workstream",
+    tracking_mode: "ledger",
+    closeout_strategy: "ledger",
     requiredNativeTools: ["web_search"],
     required_tools: ["web_read"],
-    requiredNativeToolProfiles: ["public-web"],
+    requiredNativeToolProfiles: ["public-web", "project-lifecycle"],
   });
   expect(appRuntimePolicy({
     existing: {
@@ -2247,11 +2247,11 @@ test("app runtime policy strips stale workspace required tools outside full acce
     closeout_strategy: "ledger",
     requiredNativeTools: ["run_command"],
     required_tools: ["read_tool_output_artifact"],
-    requiredNativeToolProfiles: ["workspace"],
+    requiredNativeToolProfiles: ["workspace", "project-lifecycle"],
   });
 });
 
-test("ordinary app project turns derive local tracking before tool selection", () => {
+test("ordinary app project turns derive Ledger tracking before tool selection", () => {
   const runtimePolicy = appRuntimePolicy({
     existing: {},
     accessMode: "full_access",
@@ -2272,19 +2272,22 @@ test("ordinary app project turns derive local tracking before tool selection", (
   });
 
   expect(runtimePolicy).toMatchObject({
-    tracking_mode: "local",
-    closeout_strategy: "local_workstream",
+    tracking_mode: "ledger",
+    closeout_strategy: "ledger",
   });
   expect(selection.toolNames).toContain("run_command");
-  expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
-  expect(selection.toolNames).not.toContain("inspect_project_status");
-  expect(selection.toolNames).not.toContain("query_project_work");
-  expect(selection.toolNames).not.toContain("render_project_dashboard");
+  expect(selection.toolNames).toContain("project_ledger_status");
+  expect(selection.toolNames).toContain("project_ledger_task_complete");
+  expect(selection.toolNames).toContain("project_ledger_work_complete");
+  expect(selection.toolNames).toContain("project_ledger_attempt_succeed");
+  expect(selection.toolNames).toContain("inspect_project_status");
+  expect(selection.toolNames).toContain("query_project_work");
+  expect(selection.toolNames).toContain("render_project_dashboard");
 });
 
-test("explicit Project Ledger inspection stays available under local app tracking", () => {
+test("explicit local app tracking keeps Ledger inspection discoverable but blocks lifecycle", () => {
   const runtimePolicy = appRuntimePolicy({
-    existing: {},
+    existing: { tracking_mode: "local" },
     accessMode: "full_access",
     projectId: "butler",
     sessionKind: "project",
@@ -2313,6 +2316,40 @@ test("explicit Project Ledger inspection stays available under local app trackin
     "query_project_work",
     "render_project_dashboard",
   ]));
+  expect(selection.toolNames).not.toContain("project_ledger_task_complete");
+  expect(selection.toolNames).not.toContain("project_ledger_work_complete");
+  expect(selection.toolNames).not.toContain("project_ledger_attempt_succeed");
+});
+
+test("read-only app project tracking keeps Ledger mutation markers out of the surface", () => {
+  const runtimePolicy = appRuntimePolicy({
+    existing: {},
+    accessMode: "read_only",
+    projectId: "butler",
+    sessionKind: "project",
+  });
+  const selection = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "Project Ledger 상태만 읽어줘.",
+    sessionMetadata: {
+      projectId: "butler",
+      runtimePolicy,
+    },
+    turnMetadata: {
+      runtimePolicy,
+    },
+    providerCapabilities: { supportsToolCalls: true },
+  });
+
+  expect(runtimePolicy).toMatchObject({
+    accessMode: "read_only",
+    tracking_mode: "ledger",
+    requiredNativeToolProfiles: [],
+  });
+  expect(selection.toolNames).toContain("project_ledger_status");
+  expect(selection.toolNames).toContain("project_ledger_check");
+  expect(selection.toolNames).toContain("inspect_project_status");
+  expect(selection.toolNames).toContain("query_project_work");
   expect(selection.toolNames).not.toContain("project_ledger_task_complete");
   expect(selection.toolNames).not.toContain("project_ledger_work_complete");
   expect(selection.toolNames).not.toContain("project_ledger_attempt_succeed");

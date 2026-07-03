@@ -187,18 +187,16 @@ test("initial surface selection preserves tracking closeout metadata for lifecyc
   expect(selection.toolNames).toContain("project_ledger_attempt_succeed");
 });
 
-test("initial surface selection blocks Ledger mutation tools for failed validation", () => {
+test("initial surface selection keeps Ledger mutation tools visible for Ledger mode", () => {
   const selection = selectInitialToolsFromSurfaceController({
     role: "butler",
-    message: "Project Ledger task T-1 complete 처리해줘.",
+    message: "이어서 계속 진행해줘.",
     sessionMetadata: { projectId: "butler" },
     turnMetadata: {
       runtimePolicy: {
         requiredNativeToolProfiles: ["project-lifecycle"],
         requiredNativeTools: [...PROJECT_LEDGER_MUTATION_TOOL_NAMES],
         tracking_mode: "ledger",
-        runtime_phase: "closeout_planned",
-        validation_state: "validation_failed",
       },
     },
     providerCapabilities: { supportsToolCalls: true },
@@ -209,12 +207,12 @@ test("initial surface selection blocks Ledger mutation tools for failed validati
   expect(selection.toolNames).toContain("tool_describe");
   expect(selection.toolNames).toContain("tool_call");
   for (const toolName of PROJECT_LEDGER_MUTATION_TOOL_NAMES) {
-    expect(selection.toolNames).not.toContain(toolName);
+    expect(selection.toolNames).toContain(toolName);
     expect(canBridgeNativeTool({
       toolName,
       metadata: TOOL_CAPABILITY_METADATA[toolName],
       currentToolNames: selection.toolNames,
-    })).toBe(false);
+    })).toBe(true);
   }
 });
 

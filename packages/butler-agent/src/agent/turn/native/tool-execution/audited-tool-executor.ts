@@ -257,7 +257,10 @@ async function prepareAuditedToolExecution(input: {
   const matchingDecisionWorkBlockId =
     semanticWorkBlock?.id ??
     reusableDecisionWorkBlockId(input.input.publicDecisionContext, decision);
-  const workBlockId = matchingDecisionWorkBlockId ?? `work-${toolCallId}`;
+  const workBlockId = turnScopedWorkBlockId(
+    input.input.turnId,
+    matchingDecisionWorkBlockId ?? `work-${toolCallId}`,
+  );
   decision.workBlockId = workBlockId;
   decision.toolName = input.call.name;
   const workBlockLabel = semanticWorkBlock?.label ?? decision.summary;
@@ -297,6 +300,19 @@ function reusableDecisionWorkBlockId(
     if (samePublicDecisionIntent(previous, decision)) return previous.workBlockId;
   }
   return null;
+}
+
+function turnScopedWorkBlockId(turnId: string, workBlockId: string): string {
+  const normalizedTurnId = normalizedWorkBlockPart(turnId);
+  const normalizedWorkBlockId = normalizedWorkBlockPart(workBlockId);
+  const prefix = `${normalizedTurnId}:`;
+  return normalizedWorkBlockId.startsWith(prefix)
+    ? normalizedWorkBlockId
+    : `${prefix}${normalizedWorkBlockId}`;
+}
+
+function normalizedWorkBlockPart(value: string): string {
+  return value.replace(/\s+/gu, "-").trim();
 }
 
 function samePublicDecisionIntent(

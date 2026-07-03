@@ -27,6 +27,9 @@ export function appRuntimePolicy(input: {
     projectId: input.projectId,
     sessionKind: input.sessionKind,
   });
+  if (trackingMode === "ledger" && input.accessMode !== "read_only") {
+    requestedProfiles.push("project-lifecycle");
+  }
   const closeoutStrategy = closeoutStrategyForTrackingMode(trackingMode);
 
   return {
@@ -74,7 +77,8 @@ function runtimeTrackingMode(input: {
 }): "ledger" | "local" | "none" {
   const existingMode = trackingModeValue(input.existing.tracking_mode ?? input.existing.trackingMode);
   if (existingMode) return existingMode;
-  if (input.projectId?.trim() || input.sessionKind === "project") return "local";
+  if (input.projectId?.trim()) return "ledger";
+  if (input.sessionKind === "project") return "local";
   return "none";
 }
 
