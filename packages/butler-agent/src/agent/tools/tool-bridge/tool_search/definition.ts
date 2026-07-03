@@ -33,8 +33,11 @@ export const toolSearchToolDefinition = {
           "mcp",
           "dispatch",
           "control",
+          "all",
+          "native",
+          "workspace",
         ],
-        description: "Optional exact capability category filter. Use command for shell/terminal execution tools and file for filesystem tools.",
+        description: "Optional category filter. command=shell, file=filesystem; all/native/workspace mean no filter.",
       },
       provider: {
         type: "string",

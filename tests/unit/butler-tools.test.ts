@@ -1101,17 +1101,15 @@ test("Project Ledger requests without project metadata expose the bounded projec
   expect(toolContractJsonChars(tools)).toBeLessThan(toolContractJsonChars(BUTLER_TOOLS));
 });
 
-test("Project Ledger project sessions expose lifecycle closeout tools only after structured closeout gate", () => {
+test("Project Ledger project sessions expose lifecycle tools whenever Ledger tracked", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
-    text: "Project Ledger work W-RUNTIME-TOOL-MODULARIZATION를 complete 처리해줘.",
+    text: "이어서 계속 진행해줘.",
     sessionMetadata: { projectId: "butler" },
     turnMetadata: {
       runtimePolicy: {
         requiredNativeToolProfiles: ["project-lifecycle"],
         tracking_mode: "ledger",
-        runtime_phase: "closeout_planned",
-        validation_state: "validation_passed",
       },
     },
   });
@@ -1163,22 +1161,21 @@ test("Project Ledger tools stay hidden in local and none tracking modes", () => 
   }
 });
 
-test("Project Ledger lifecycle tools stay hidden until validation passes and closeout starts", () => {
-  const blockedPolicies = [
+test("Project Ledger lifecycle tools are not hidden by phase or validation metadata in Ledger mode", () => {
+  const policies = [
     { runtime_phase: "validation", validation_state: "validation_passed" },
     { runtime_phase: "closeout_planned", validation_state: "validation_repair" },
     { runtime_phase: "closeout_planned", validation_state: "validation_failed" },
   ];
 
-  for (const runtimePolicy of blockedPolicies) {
+  for (const runtimePolicy of policies) {
     const tools = selectButlerToolsForTurn({
       role: "butler",
-      text: "Project Ledger task T-1 complete 처리해줘.",
+      text: "이어서 계속 진행해줘.",
       sessionMetadata: { projectId: "butler" },
       turnMetadata: {
         runtimePolicy: {
           requiredNativeToolProfiles: ["project-lifecycle"],
-          requiredNativeTools: [...PROJECT_LEDGER_MUTATION_TOOL_NAMES],
           tracking_mode: "ledger",
           ...runtimePolicy,
         },
@@ -1186,8 +1183,8 @@ test("Project Ledger lifecycle tools stay hidden until validation passes and clo
     });
 
     const names = tools.map((tool) => tool.name);
-    for (const toolName of PROJECT_LEDGER_MUTATION_TOOL_NAMES) {
-      expect(names).not.toContain(toolName);
+    for (const toolName of PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES) {
+      expect(names).toContain(toolName);
     }
   }
 });
@@ -2755,6 +2752,9 @@ test("tool capability schema exposes discovery without deterministic selection",
   expect(Object.keys(list?.parameters.properties ?? {})).toEqual(["category", "include_disabled"]);
   expect((list?.parameters.properties as any)?.category?.enum).toContain("file");
   expect((list?.parameters.properties as any)?.category?.enum).toContain("command");
+  expect((list?.parameters.properties as any)?.category?.enum).toContain("all");
+  expect((list?.parameters.properties as any)?.category?.enum).toContain("native");
+  expect((list?.parameters.properties as any)?.category?.enum).toContain("workspace");
   expect(BUTLER_TOOLS.find((item) => item.name === "select_tool_capability")).toBeUndefined();
 });
 
@@ -2772,6 +2772,9 @@ test("tool_search schema exposes compact model-selected catalog search", () => {
   ]);
   expect((search?.parameters.properties as any)?.category?.enum).toContain("file");
   expect((search?.parameters.properties as any)?.category?.enum).toContain("command");
+  expect((search?.parameters.properties as any)?.category?.enum).toContain("all");
+  expect((search?.parameters.properties as any)?.category?.enum).toContain("native");
+  expect((search?.parameters.properties as any)?.category?.enum).toContain("workspace");
 });
 
 test("tool_describe schema exposes explicit catalog id description", () => {
@@ -2897,6 +2900,31 @@ test("tool capability discovery supports file category and execution aliases", a
     category: "command",
     current_turn_callable: true,
   }));
+
+  const workspace = await execute({
+    name: "list_tool_capabilities",
+    args: { category: "workspace" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    capabilities: Array<{ name: string; category: string; current_turn_callable: boolean | null }>;
+  };
+  expect(workspace.ok).toBe(true);
+  expect(workspace.capabilities).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: "run_command", category: "command", current_turn_callable: true }),
+    expect.objectContaining({ name: "read_file", category: "file", current_turn_callable: true }),
+  ]));
+
+  const all = await execute({
+    name: "list_tool_capabilities",
+    args: { category: "all" },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    capabilities: Array<{ name: string }>;
+  };
+  expect(all.ok).toBe(true);
+  expect(all.capabilities.some((capability) => capability.name === "run_command")).toBe(true);
 });
 
 test("tool capability discovery does not mark disabled selected tools callable", async () => {
