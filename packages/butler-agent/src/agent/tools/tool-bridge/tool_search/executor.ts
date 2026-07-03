@@ -5,7 +5,7 @@ import { buildMcpToolCatalog } from "../../progressive-mcp-catalog.ts";
 import { searchToolCatalog } from "../../progressive-search.ts";
 import { nativeToolAvailability } from "../../tool-availability.ts";
 import type { ToolCapabilityCategory, ToolCatalogProvider } from "../../types.ts";
-import { canBridgeMcpTool, canBridgeNativeTool, scopedOutDisabledReason } from "../scope.ts";
+import { canBridgeMcpTool, nativeBridgeAvailability, scopedOutDisabledReason } from "../scope.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 
@@ -42,8 +42,14 @@ export function createToolSearchToolHandler(input: {
         resolveAvailability: (tool) => {
           const availability = nativeToolAvailability(tool, input);
           const metadata = TOOL_CAPABILITY_METADATA[tool.name];
-          if (!metadata || !canBridgeNativeTool({ toolName: tool.name, metadata, currentToolNames: input.currentToolNames })) {
-            return { enabled: false, disabledReason: scopedOutDisabledReason("native") };
+          if (!metadata) return { enabled: false, disabledReason: scopedOutDisabledReason("native") };
+          const bridgeAvailability = nativeBridgeAvailability({
+            toolName: tool.name,
+            metadata,
+            currentToolNames: input.currentToolNames,
+          });
+          if (!bridgeAvailability.enabled) {
+            return bridgeAvailability;
           }
           return availability;
         },
@@ -82,6 +88,9 @@ function parseCategory(value: unknown): { value?: ToolCapabilityCategory; invali
   const normalized = stringArg(value);
   if (!normalized) return {};
   const lower = normalized.toLowerCase();
+  if (lower === "all" || lower === "any" || lower === "native" || lower === "registry" || lower === "workspace") {
+    return {};
+  }
   if (lower === "shell" || lower === "terminal" || lower === "execution" || lower === "execute") {
     return { value: "command" };
   }

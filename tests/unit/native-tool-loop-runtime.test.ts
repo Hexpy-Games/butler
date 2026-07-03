@@ -59,6 +59,7 @@ import {
   persistTurnContextAtom,
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
+import { appRuntimePolicy } from "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -7647,8 +7648,15 @@ test("native runtime discovers and executes Project Ledger mutation through tool
   runLedger(["task", "update", "--id", "T-PTS", "--status", "in_progress"]);
   runLedger(["index"]);
 
+  let searchResult: Record<string, unknown> | null = null;
   let describeResult: Record<string, unknown> | null = null;
   let callResult: Record<string, unknown> | null = null;
+  const runtimePolicy = appRuntimePolicy({
+    existing: {},
+    accessMode: "full_access",
+    projectId: "butler",
+    sessionKind: "project",
+  });
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     butlerHome: repoRoot,
@@ -7656,7 +7664,21 @@ test("native runtime discovers and executes Project Ledger mutation through tool
     runFunctionToolPromptText: async (input) => {
       await authorPublicDecisionForTool(
         input,
-        { name: "tool_describe", args: { ids: ["native:project_ledger_task_complete"] } },
+        { name: "tool_search", args: { query: "project ledger task complete update", provider: "native" } },
+        {
+          summary: "Project Ledger mutation 도구를 검색합니다.",
+          rationale: "앱 프로젝트 런타임 정책에서 mutation 도구가 disabled로 숨지 않는지 검증해야 합니다.",
+          nextStep: "검색된 도구 설명을 확인합니다.",
+        },
+      );
+      searchResult = await input.executeTool({
+        name: "tool_search",
+        args: { query: "project ledger task complete update", provider: "native" },
+        rawArguments: JSON.stringify({ query: "project ledger task complete update", provider: "native" }),
+      }) as Record<string, unknown>;
+      await authorPublicDecisionForTool(
+        input,
+        { name: "tool_describe", args: { ids: ["native:project_ledger_task_complete", "native:project_ledger_update"] } },
         {
           summary: "Project Ledger task completion tool schema를 확인합니다.",
           rationale: "mutation tool이 현재 턴에서 bridge로 실행 가능한지 검증해야 합니다.",
@@ -7665,8 +7687,8 @@ test("native runtime discovers and executes Project Ledger mutation through tool
       );
       describeResult = await input.executeTool({
         name: "tool_describe",
-        args: { ids: ["native:project_ledger_task_complete"] },
-        rawArguments: JSON.stringify({ ids: ["native:project_ledger_task_complete"] }),
+        args: { ids: ["native:project_ledger_task_complete", "native:project_ledger_update"] },
+        rawArguments: JSON.stringify({ ids: ["native:project_ledger_task_complete", "native:project_ledger_update"] }),
       }) as Record<string, unknown>;
       await authorPublicDecisionForTool(
         input,
@@ -7729,22 +7751,35 @@ test("native runtime discovers and executes Project Ledger mutation through tool
     model: "openai/auto:codex-latest",
     input: { text: "Project Ledger task를 완료해줘." },
     metadata: {
-      runtimePolicy: {
-        completionReview: "disabled",
-        requiredNativeToolProfiles: ["project-lifecycle"],
-        tracking_mode: "ledger",
-        runtime_phase: "closeout_planned",
-        validation_state: "validation_passed",
-      },
+      runtimePolicy: { ...runtimePolicy, completionReview: "disabled" },
     },
   });
 
+  expect(searchResult).toMatchObject({
+    ok: true,
+    results: expect.arrayContaining([
+      expect.objectContaining({
+        id: "native:project_ledger_task_complete",
+        enabled: true,
+      }),
+      expect.objectContaining({
+        id: "native:project_ledger_update",
+        enabled: true,
+      }),
+    ]),
+  });
   expect(describeResult).toMatchObject({
     ok: true,
-    descriptions: [expect.objectContaining({
-      id: "native:project_ledger_task_complete",
-      enabled: true,
-    })],
+    descriptions: expect.arrayContaining([
+      expect.objectContaining({
+        id: "native:project_ledger_task_complete",
+        enabled: true,
+      }),
+      expect.objectContaining({
+        id: "native:project_ledger_update",
+        enabled: true,
+      }),
+    ]),
   });
   expect(callResult).toMatchObject({
     ok: true,
@@ -8728,10 +8763,9 @@ test("native runtime groups chained tools under the active semantic todo work bl
 
   const toolStarts = turnEvents.filter((event) => event.kind === "tool.started");
   expect(toolStarts).toHaveLength(2);
-  expect(toolStarts.map((event) => event.payload.workBlockId)).toEqual([
-    "work-todo-inspect",
-    "work-todo-inspect",
-  ]);
+  const workBlockIds = toolStarts.map((event) => event.payload.workBlockId);
+  expect(workBlockIds[0]).toBe(workBlockIds[1]);
+  expect(workBlockIds[0]).toMatch(/^turn-[^:]+:work-todo-inspect$/u);
   expect(toolStarts.map((event) => event.payload.workBlockLabel)).toEqual([
     "프로젝트 메타정보와 구조 확인 중",
     "프로젝트 메타정보와 구조 확인 중",

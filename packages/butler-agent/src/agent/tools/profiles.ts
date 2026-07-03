@@ -53,8 +53,6 @@ const PROJECT_LEDGER_INSPECTION_TOOL_NAMES = new Set<string>([
   "query_project_work",
   "render_project_dashboard",
 ]);
-const LEDGER_CLOSEOUT_PHASES = new Set(["closeout", "closeout_planned", "closeout_executed"]);
-const LEDGER_VALIDATION_PASSED_STATES = new Set(["validation_passed", "passed"]);
 
 const WORKSPACE_TOOL_NAMES = [
   "run_command",
@@ -350,12 +348,8 @@ function projectLedgerLifecycleAllowed(input: {
   turnMetadata?: Record<string, unknown>;
 }): boolean {
   const trackingMode = trackingPolicyString(input, "trackingMode", "tracking_mode");
-  const runtimePhase = trackingPolicyString(input, "runtimePhase", "runtime_phase") ??
-    trackingPolicyString(input, "phase", "phase");
-  const validationState = trackingPolicyString(input, "validationState", "validation_state");
-  return trackingMode === "ledger" &&
-    Boolean(runtimePhase && LEDGER_CLOSEOUT_PHASES.has(runtimePhase)) &&
-    Boolean(validationState && LEDGER_VALIDATION_PASSED_STATES.has(validationState));
+  const accessMode = trackingPolicyString(input, "accessMode", "access_mode");
+  return trackingMode === "ledger" && accessMode !== "read_only";
 }
 
 function projectLedgerInspectionSuppressed(input: {
@@ -387,7 +381,7 @@ export function selectButlerToolProfiles(input: {
   if (!suppressProjectLedger && (projectContext || mentionsProjectLedger(input.text))) {
     addProfile(profiles, "project");
   }
-  if (mentionsProjectLedgerLifecycle(input.text) && projectLedgerLifecycleAllowed(input)) {
+  if ((projectContext || mentionsProjectLedgerLifecycle(input.text)) && projectLedgerLifecycleAllowed(input)) {
     addProfile(profiles, "project-lifecycle");
   }
   for (const profile of requiredToolProfiles(input.sessionMetadata)) addProfile(profiles, profile);

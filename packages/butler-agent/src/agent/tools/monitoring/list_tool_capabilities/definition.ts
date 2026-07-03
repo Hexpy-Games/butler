@@ -25,8 +25,11 @@ export const listToolCapabilitiesToolDefinition = {
           "mcp",
           "dispatch",
           "control",
+          "all",
+          "native",
+          "workspace",
         ],
-        description: "Optional category filter. Use command for shell/terminal execution tools and file for filesystem tools.",
+        description: "Optional category filter. command=shell, file=filesystem; all/native/workspace mean no filter.",
       },
       include_disabled: {
         type: "boolean",
