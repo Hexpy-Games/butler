@@ -65,6 +65,7 @@ export function checkpointForRecord(input: {
       blocker: blockerFor(record, atom),
       budgetSnapshot: atom?.budgetSnapshot ?? null,
       latestCompletionReview: atom?.latestCompletionReview ?? null,
+      openItemPhaseCounts: openItemPhaseCounts(todo.items),
       activeItems,
     },
   };
@@ -80,6 +81,16 @@ function activeCheckpointItems(items: TodoItem[]): WorkStreamResumeCheckpoint["a
       status: item.status,
       phase: item.phase,
     }));
+}
+
+function openItemPhaseCounts(items: TodoItem[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    if (item.status !== "pending" && item.status !== "in_progress") continue;
+    const phase = item.phase ?? "unspecified";
+    counts[phase] = (counts[phase] ?? 0) + 1;
+  }
+  return counts;
 }
 
 function validateLinkedLedgerRecords(input: {

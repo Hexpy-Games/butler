@@ -36,6 +36,7 @@ const TOOL_CAPABILITY_CATEGORIES = [
   "search",
   "data",
   "command",
+  "file",
   "work",
   "monitoring",
   "automation",
@@ -140,8 +141,15 @@ function parseToolCategory(value: unknown): {
   if (typeof value !== "string") return { invalid: String(value) };
   const normalized = value.trim();
   if (!normalized) return {};
-  if ((TOOL_CAPABILITY_CATEGORIES as readonly string[]).includes(normalized)) {
-    return { category: normalized as ToolCapabilityCategory };
+  const lower = normalized.toLowerCase();
+  if (lower === "shell" || lower === "terminal" || lower === "execution" || lower === "execute") {
+    return { category: "command" };
+  }
+  if (lower === "filesystem" || lower === "files") {
+    return { category: "file" };
+  }
+  if ((TOOL_CAPABILITY_CATEGORIES as readonly string[]).includes(lower)) {
+    return { category: lower as ToolCapabilityCategory };
   }
   return { invalid: normalized };
 }

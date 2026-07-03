@@ -144,6 +144,101 @@ test("ordinary user turns get a model decision envelope instead of focused resum
     "list_work_streams",
     "update_work_stream_state",
     "update_todo_list",
+    "run_command",
+    "read_file",
+    "write_file",
+  ]));
+});
+
+test("candidate decision envelope keeps workspace tools for planning-phase work with executable pending todos", () => {
+  const stream = createPlanningThenExecutableRecoverableStream();
+  const selection = selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/session",
+    projectId: "butler",
+    userText: "계속해서 진행해줄래",
+  });
+  const decision = buildWorkStreamResumeDecisionEnvelope({
+    selection,
+    currentUserText: "계속해서 진행해줄래",
+  });
+  const turnMetadata = turnMetadataWithResumeDecisionPolicy({}, decision);
+  const toolNames = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "계속해서 진행해줄래",
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata,
+    providerCapabilities: {
+      supportsToolCalls: true,
+      supportsStreaming: true,
+    },
+  }).toolNames;
+
+  expect(selection).toMatchObject({
+    state: "resume_candidate_presented",
+    candidates: [expect.objectContaining({
+      id: stream.id,
+      checkpoint: expect.objectContaining({
+        currentPhase: "planning",
+        activeItems: expect.arrayContaining([
+          expect.objectContaining({ id: "select-ledger-task", phase: "planning", status: "in_progress" }),
+          expect.objectContaining({ id: "implement-task", phase: "execution", status: "pending" }),
+        ]),
+      }),
+    })],
+  });
+  expect(decision?.requiredNativeToolProfiles).toEqual(expect.arrayContaining(["project", "workspace"]));
+  expect(toolNames).toEqual(expect.arrayContaining([
+    "project_ledger_status",
+    "query_project_work",
+    "run_command",
+    "read_file",
+    "write_file",
+    "grep_files",
+    "read_tool_output_artifact",
+  ]));
+});
+
+test("candidate decision envelope sees executable pending todos beyond active item preview", () => {
+  const stream = createTruncatedPlanningPreviewRecoverableStream();
+  const selection = selectWorkStreamCheckpointResume({
+    butlerData: tempDir,
+    sessionId: "butler/session",
+    projectId: "butler",
+    userText: "계속해서 진행해줄래",
+  });
+  const decision = buildWorkStreamResumeDecisionEnvelope({
+    selection,
+    currentUserText: "계속해서 진행해줄래",
+  });
+  const turnMetadata = turnMetadataWithResumeDecisionPolicy({}, decision);
+  const toolNames = selectInitialToolsFromSurfaceController({
+    role: "butler",
+    message: "계속해서 진행해줄래",
+    sessionMetadata: { projectId: "butler" },
+    turnMetadata,
+    providerCapabilities: {
+      supportsToolCalls: true,
+      supportsStreaming: true,
+    },
+  }).toolNames;
+
+  expect(selection.state).toBe("resume_candidate_presented");
+  const candidate = selection.candidates[0];
+  expect(candidate).toBeDefined();
+  const checkpoint = candidate?.checkpoint;
+  expect(candidate?.id).toBe(stream.id);
+  expect(checkpoint?.currentPhase).toBe("planning");
+  expect(checkpoint?.openItemPhaseCounts).toEqual(expect.objectContaining({ planning: 8, execution: 1 }));
+  const activeItems = checkpoint?.activeItems ?? [];
+  expect(activeItems).toHaveLength(8);
+  expect(activeItems.map((item) => item.id)).not.toContain("execute-after-preview");
+  expect(decision?.requiredNativeToolProfiles).toEqual(expect.arrayContaining(["project", "workspace"]));
+  expect(toolNames).toEqual(expect.arrayContaining([
+    "run_command",
+    "read_file",
+    "write_file",
+    "grep_files",
   ]));
 });
 
@@ -293,6 +388,66 @@ function createRecoverableStream(): WorkStreamRecord {
   return new WorkStreamStore(tempDir).transition({
     id: stream.id,
     state: "recoverable",
+    now: new Date("2026-07-03T00:01:00.000Z"),
+  });
+}
+
+function createPlanningThenExecutableRecoverableStream(): WorkStreamRecord {
+  const todoView = new TodoListStore(tempDir).update({
+    listId: "sandy-continue-2026-07-03",
+    title: "Sandy remaining Ledger work",
+    items: [
+      todo({ id: "select-ledger-task", content: "Select the next Project Ledger task", status: "in_progress", phase: "planning" }),
+      todo({ id: "implement-task", content: "Implement the selected task", status: "pending", phase: "execution" }),
+      todo({ id: "validate-task", content: "Run validation and review", status: "pending", phase: "review" }),
+      todo({ id: "report-task", content: "Report and close Ledger state", status: "pending", phase: "reporting" }),
+    ],
+    now: new Date("2026-07-03T00:00:00.000Z"),
+  });
+  const stream = new WorkStreamStore(tempDir).updateFromTodoList({
+    ownerSessionId: "butler/session",
+    projectId: "butler",
+    listId: todoView.list.list_id,
+    title: "Sandy remaining Ledger work",
+    items: todoView.list.items,
+    now: new Date("2026-07-03T00:00:00.000Z"),
+  });
+  return new WorkStreamStore(tempDir).transition({
+    id: stream.id,
+    state: "recoverable",
+    statusNote: "Resume from git status and partial changes when workspace tools are callable.",
+    now: new Date("2026-07-03T00:01:00.000Z"),
+  });
+}
+
+function createTruncatedPlanningPreviewRecoverableStream(): WorkStreamRecord {
+  const planningItems = Array.from({ length: 8 }, (_, index) => todo({
+    id: `planning-${index + 1}`,
+    content: `Planning item ${index + 1}`,
+    status: index === 0 ? "in_progress" : "pending",
+    phase: "planning",
+  }));
+  const todoView = new TodoListStore(tempDir).update({
+    listId: "sandy-truncated-preview-2026-07-03",
+    title: "Sandy long planning list",
+    items: [
+      ...planningItems,
+      todo({ id: "execute-after-preview", content: "Execute after preview", status: "pending", phase: "execution" }),
+    ],
+    now: new Date("2026-07-03T00:00:00.000Z"),
+  });
+  const stream = new WorkStreamStore(tempDir).updateFromTodoList({
+    ownerSessionId: "butler/session",
+    projectId: "butler",
+    listId: todoView.list.list_id,
+    title: "Sandy long planning list",
+    items: todoView.list.items,
+    now: new Date("2026-07-03T00:00:00.000Z"),
+  });
+  return new WorkStreamStore(tempDir).transition({
+    id: stream.id,
+    state: "recoverable",
+    statusNote: "Resume long planning list with execution work beyond the checkpoint preview.",
     now: new Date("2026-07-03T00:01:00.000Z"),
   });
 }

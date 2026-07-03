@@ -3,6 +3,7 @@ import type {
   WorkStreamResumeCheckpoint,
   WorkStreamResumeSelection,
 } from "./workstream-checkpoint-resume-types.ts";
+import { checkpointNeedsWorkspaceProfile } from "./workstream-resume-tool-policy.ts";
 import type { ButlerToolProfile } from "../tools/profiles.ts";
 
 export interface WorkStreamResumeDecisionEnvelope {
@@ -140,10 +141,7 @@ function requiredToolsForCandidates(candidates: WorkStreamResumeCandidate[]): st
 }
 
 function workspaceProfileNeeded(checkpoint: WorkStreamResumeCheckpoint): boolean {
-  return checkpoint.currentPhase === "execution" ||
-    checkpoint.currentPhase === "review" ||
-    checkpoint.currentPhase === "consolidation" ||
-    checkpoint.currentPhase === "reporting";
+  return checkpointNeedsWorkspaceProfile(checkpoint);
 }
 
 function stringArray(value: unknown): string[] {

@@ -55,6 +55,8 @@ test("repeated tool family helpers classify read-only and state-mutating calls",
   expect(repeatedToolFamilyKey("project_ledger_attempt_succeed", { id: "A-LEDGER" })).toBe("project-ledger:lifecycle:attempt:succeed:A-LEDGER");
   expect(repeatedToolFamilyKey("project_ledger_attempt_fail", { id: "A-LEDGER" })).toBe("project-ledger:lifecycle:attempt:fail:A-LEDGER");
   expect(repeatedToolFamilyKey("project_ledger_render", { view: "handoff", write: true })).toBe("project-ledger:render:handoff");
+  expect(repeatedToolFamilyKey("tool_search", { provider: "native", category: "workspace", query: "run command" })).toBe("tool-search:native:workspace:any:run command");
+  expect(repeatedToolFamilyKey("list_tool_capabilities", { category: "workspace" })).toBe("tool-capabilities:any:workspace:any:any");
   expect(repeatedToolFamilyKey("run_command", { command: "git diff -- packages/butler-agent" })).toBe("command:git-diff");
   expect(isStateMutatingToolCall("web_search", { query: "Butler" })).toBe(false);
   expect(isStateMutatingToolCall("project_ledger_check", {})).toBe(false);

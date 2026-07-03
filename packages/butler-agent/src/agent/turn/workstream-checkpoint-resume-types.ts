@@ -51,6 +51,7 @@ export interface WorkStreamResumeCheckpoint {
     status: string;
     observationId?: string;
   } | null;
+  openItemPhaseCounts: Record<string, number>;
   activeItems: Array<{
     id: string;
     label: string;
