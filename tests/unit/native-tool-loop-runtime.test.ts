@@ -569,6 +569,126 @@ test("native runtime blocks tool-only visible tool calls without runtime-derived
   )).toBe(false);
 });
 
+test("native runtime permits Ledger preflight inspection tools in ledger-tracked project turns", async () => {
+  let executed = 0;
+  let returnedToolResult: unknown;
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async (call) => {
+      executed += 1;
+      expect(call.name).toBe("project_ledger_status");
+      return {
+        ok: true,
+        summary: "Sandy project Ledger status was inspected.",
+        evidence_capability_receipts: [
+          capabilityReceipt({
+            id: "ledger-status-receipt",
+            producerName: "project_ledger_status",
+            capability: "source_verified",
+            evidenceKind: "project_state",
+            satisfies: ["source_verified"],
+          }),
+        ],
+      };
+    },
+    runFunctionToolPromptText: async (input) => {
+      returnedToolResult = await input.executeTool({
+        name: "project_ledger_status",
+        args: {},
+        rawArguments: "{}",
+      });
+      return "Ledger 상태를 확인했습니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/ledger-preflight-status",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+    metadata: { projectId: "sandy-bot" },
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "in-progress work부터 순서대로 맞춰보자." },
+    metadata: {
+      runtimePolicy: {
+        trackingMode: "ledger",
+        tracking_mode: "ledger",
+        requiredNativeToolProfiles: ["project-lifecycle"],
+        completionReview: "disabled",
+      },
+    },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload });
+    },
+  });
+
+  expect(executed).toBe(1);
+  expect(returnedToolResult).toMatchObject({ ok: true });
+  expect(JSON.stringify(returnedToolResult)).not.toContain("public_decision_required");
+  const workStart = events.find((event) => event.kind === "work.block.started");
+  expect(workStart?.payload).toMatchObject({
+    label: "Project Ledger 상태를 canonical 도구로 확인합니다.",
+    decisionSource: "runtime-derived",
+  });
+});
+
+test("native runtime still blocks workspace shell without authored public decisions in ledger-tracked turns", async () => {
+  let executed = 0;
+  const observations: Array<Record<string, unknown>> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async () => {
+      executed += 1;
+      return { ok: true, stdout: "should not run", exit_code: 0 };
+    },
+    runFunctionToolPromptText: async (input) => {
+      observations.push(await input.executeTool({
+        name: "run_command",
+        args: { command: "ls work null | head -40" },
+        rawArguments: JSON.stringify({ command: "ls work null | head -40" }),
+      }) as Record<string, unknown>);
+      return "I need to use the Ledger tool path.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/ledger-preflight-shell-blocked",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+    metadata: { projectId: "sandy-bot" },
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "in-progress work부터 순서대로 맞춰보자." },
+    metadata: {
+      runtimePolicy: {
+        trackingMode: "ledger",
+        tracking_mode: "ledger",
+        requiredNativeToolProfiles: ["workspace", "project-lifecycle"],
+        completionReview: "disabled",
+      },
+    },
+  });
+
+  expect(executed).toBe(0);
+  expect(observations[0]).toMatchObject({
+    ok: false,
+    observation_kind: "public_decision_required",
+  });
+});
+
 test("native runtime rejects partial public decisions before visible tool execution", async () => {
   let executed = 0;
   const observations: Array<Record<string, unknown>> = [];

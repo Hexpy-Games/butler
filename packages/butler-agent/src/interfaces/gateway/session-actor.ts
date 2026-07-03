@@ -17,6 +17,11 @@ import {
   TURN_DECISION_EVENT_KIND,
   createTurnAcknowledgedPayload,
 } from "../../agent/events/turn-state-contract.ts";
+import {
+  FIRST_VISIBLE_PROGRESS_GATEWAY_NOTE,
+  FIRST_VISIBLE_PROGRESS_GATEWAY_SOURCE,
+  firstVisibleProgressPayload,
+} from "../../agent/events/first-visible-progress.ts";
 import { generateOpeningDecisionWithProvider } from "../../agent/output/opening-decision.ts";
 import {
   recordDurableInbound,
@@ -440,6 +445,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
 
     try {
       const admitsSemanticConversation = this.shouldAdmitSemanticConversation(envelope);
+      let acceptedFirstProgressEmitted = false;
       if (!schedulerContinuation) {
         recordDurableInbound({
           sessionId: binding.sessionId,
@@ -476,6 +482,12 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           timestamp,
         });
         if (acknowledged) {
+          acceptedFirstProgressEmitted = await this.emitAcceptedFirstProgress({
+            binding,
+            envelope,
+            route,
+            timestamp,
+          });
           openingDecisionId = await this.emitOpeningDecision({
             binding,
             envelope,
@@ -566,6 +578,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             currentUserText: envelope.message.text?.trim() ?? "",
             promptContext,
             turnId: turnIdFromEnvelope(envelope),
+            gatewayFirstVisibleProgressEmitted: acceptedFirstProgressEmitted,
             openingDecisionId,
             schedulerContinuation: schedulerContinuation
               ? {
@@ -832,6 +845,36 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     }
   }
 
+  private async emitAcceptedFirstProgress(input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+    route?: GatewayRoute;
+    timestamp: string;
+  }): Promise<boolean> {
+    if (input.envelope.transport !== APP_TRANSPORT) return false;
+    if (!this.options.deliverTurnEvent) return false;
+    const payload = firstVisibleProgressPayload({
+      note: FIRST_VISIBLE_PROGRESS_GATEWAY_NOTE,
+      source: FIRST_VISIBLE_PROGRESS_GATEWAY_SOURCE,
+    });
+    try {
+      await this.options.deliverTurnEvent({
+        binding: input.binding,
+        envelope: input.envelope,
+        route: input.route,
+        event: {
+          kind: "turn.first_progress",
+          createdAt: timestampAfter(input.timestamp, 1),
+          payload,
+        },
+      });
+      return true;
+    } catch {
+      // First progress is a latency channel; durable turn admission remains authoritative.
+      return false;
+    }
+  }
+
   private async emitOpeningDecision(input: {
     binding: StoredSessionBinding;
     envelope: InboundEnvelope;
@@ -866,7 +909,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           route: input.route,
           event: {
             kind: TURN_DECISION_EVENT_KIND,
-            createdAt: input.timestamp,
+            createdAt: timestampAfter(input.timestamp, 2),
             payload: { ...openingDecision },
           },
         });
@@ -1196,4 +1239,10 @@ function schedulerContinuationMetadata(envelope: InboundEnvelope): {
     ? raw.continuationForQueueId
     : undefined;
   return { contextAtomId, continuationForQueueId };
+}
+
+function timestampAfter(timestamp: string, offsetMs: number): string {
+  const time = Date.parse(timestamp);
+  if (!Number.isFinite(time)) return new Date().toISOString();
+  return new Date(time + offsetMs).toISOString();
 }

@@ -77,9 +77,10 @@ export function takePublicWorkDecisionForTool(input: {
   progress: ToolProgressSummary;
   language: RuntimeMessageLanguage;
   previousDecisions: PublicWorkDecision[];
+  allowRuntimeDerived?: boolean;
 }): PublicWorkDecision {
   const pending = takePendingDecision(input.pending, input.toolName);
-  if (!pending || !isCompleteAuthoredDecision(pending)) {
+  if (!pending || !isCompleteVisibleDecision(pending, input.allowRuntimeDerived === true)) {
     throw new Error("Public work decision required before visible tool execution.");
   }
   const evidenceRefs = pending.evidenceRefs.length > 0
@@ -96,10 +97,11 @@ export function takePublicWorkDecisionForTool(input: {
 export function hasCompleteAuthoredPublicDecisionForTool(input: {
   pending: PublicWorkDecision[];
   toolName: string;
+  allowRuntimeDerived?: boolean;
 }): boolean {
   const decision = input.pending.find((candidate) => candidate.toolName === input.toolName) ??
     input.pending[0];
-  return Boolean(decision && isCompleteAuthoredDecision(decision));
+  return Boolean(decision && isCompleteVisibleDecision(decision, input.allowRuntimeDerived === true));
 }
 
 function takePendingDecision(
@@ -138,7 +140,16 @@ export function annotateToolResultWithDecisionContext(input: {
   };
 }
 
-function isCompleteAuthoredDecision(decision: PublicWorkDecision): boolean {
+function isCompleteVisibleDecision(decision: PublicWorkDecision, allowRuntimeDerived: boolean): boolean {
+  if (allowRuntimeDerived && decision.source === "runtime-derived") {
+    return isUsablePublicDecisionText(decision.summary) &&
+      isUsablePublicDecisionText(decision.rationale ?? "", {
+        minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS,
+      }) &&
+      isUsablePublicDecisionText(decision.nextStep ?? "", {
+        minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS,
+      });
+  }
   if (!isAuthoredDecisionSource(decision.source)) return false;
   return isUsablePublicDecisionText(decision.summary) &&
     isUsablePublicDecisionText(decision.rationale ?? "", {
