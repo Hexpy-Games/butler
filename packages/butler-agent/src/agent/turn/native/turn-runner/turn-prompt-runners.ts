@@ -189,6 +189,10 @@ export function createNativeTurnPromptRunners(input: {
             },
             onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
               throwIfRuntimeTurnAborted(input.turnInput.signal);
+              input.phaseBudgetController?.beforeToolCallBatch({
+                phase,
+                toolNames: toolCalls.map((toolCall) => toolCall.name),
+              });
               input.markAssistantTextBeforeToolsSeen();
               input.pendingPublicDecisions.push(...publicWorkDecisionsFromAssistantText({
                 text,
@@ -204,6 +208,12 @@ export function createNativeTurnPromptRunners(input: {
               });
             },
           });
+          if (text.trim()) {
+            input.latencyTracker?.recordFirstModelDelta({
+              phase,
+              target: "final_candidate",
+            });
+          }
           await projector.completeOpenStreams("completed");
           return text;
         } catch (error) {
@@ -228,6 +238,12 @@ export function createNativeTurnPromptRunners(input: {
           usageAttribution: usageAttribution("text_prompt", 0),
           onProviderStreamEvent: projector.project,
         });
+        if (text.trim()) {
+          input.latencyTracker?.recordFirstModelDelta({
+            phase: "text_prompt",
+            target: "final_candidate",
+          });
+        }
         await projector.completeOpenStreams("completed");
         return text;
       } catch (error) {

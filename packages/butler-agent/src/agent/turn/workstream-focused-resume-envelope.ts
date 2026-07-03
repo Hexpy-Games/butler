@@ -89,6 +89,9 @@ function renderFocusedResumeEnvelope(input: {
     "Resume Source: durable WorkStream checkpoint selected before the first model request.",
     `Checkpoint ID: ${checkpoint.checkpointId}`,
     `WorkStream ID: ${checkpoint.workStreamId}`,
+    `Chat ID: ${checkpoint.chatId ?? "none"}`,
+    `Origin Turn ID: ${checkpoint.originatingTurnId ?? "none"}`,
+    `User Message ID: ${checkpoint.userMessageId ?? "none"}`,
     `WorkStream Title: ${checkpoint.title}`,
     `WorkStream State: ${checkpoint.state}`,
     `WorkStream Phase: ${checkpoint.currentPhase ?? "none"}`,
@@ -96,10 +99,33 @@ function renderFocusedResumeEnvelope(input: {
     `Active Step ID: ${checkpoint.activeStepId ?? "none"}`,
   ];
   if (checkpoint.statusNote) lines.push(`Status Note: ${checkpoint.statusNote}`);
+  if (checkpoint.blocker) {
+    lines.push(`Typed Blocker: ${checkpoint.blocker.kind}:${checkpoint.blocker.reason}`);
+  }
+  if (checkpoint.budgetSnapshot) {
+    lines.push(
+      `Logical Turn Budget: model_requests=${checkpoint.budgetSnapshot.modelRequestsUsed}/${checkpoint.budgetSnapshot.maxModelCalls}`,
+    );
+  }
   lines.push("Open Todo Slice:");
   lines.push(...checkpoint.activeItems.map((item) =>
     `- ${item.id}:${item.status}:${item.phase ?? "none"}:${item.label}`,
   ));
+  if (checkpoint.evidenceRefs.length > 0) {
+    lines.push("Checkpoint Evidence Refs:");
+    lines.push(...checkpoint.evidenceRefs.slice(0, 12).map((ref) =>
+      `- ${ref.kind}:${ref.id}`,
+    ));
+  }
+  if (checkpoint.validationRefs.length > 0 || checkpoint.latestCompletionReview) {
+    lines.push("Checkpoint Validation State:");
+    if (checkpoint.latestCompletionReview) {
+      lines.push(`- completion_review:${checkpoint.latestCompletionReview.status}`);
+    }
+    lines.push(...checkpoint.validationRefs.slice(0, 8).map((ref) =>
+      `- ${ref.kind}:${ref.id}`,
+    ));
+  }
   if (input.ledgerRecords.length > 0) {
     lines.push("Relevant Project Ledger Records:");
     lines.push(...input.ledgerRecords.map((record) =>
