@@ -2126,7 +2126,7 @@ test("app session access mode supplies structured workspace tool policy", async 
     expect(fullAccessPolicy).toMatchObject({
       accessMode: "full_access",
       tracking_mode: "ledger",
-      requiredNativeToolProfiles: ["workspace", "project-lifecycle"],
+      requiredNativeToolProfiles: ["workspace", "project", "project-lifecycle"],
     });
 
     await postJson(`${server.url}messages`, {
@@ -2140,7 +2140,7 @@ test("app session access mode supplies structured workspace tool policy", async 
       tracking_mode: "ledger",
       requiredNativeTools: [],
       required_tools: [],
-      requiredNativeToolProfiles: ["project-lifecycle"],
+      requiredNativeToolProfiles: ["project", "project-lifecycle"],
     });
 
     await postJson(`${server.url}messages`, {
@@ -2154,7 +2154,7 @@ test("app session access mode supplies structured workspace tool policy", async 
       tracking_mode: "ledger",
       requiredNativeTools: [],
       required_tools: [],
-      requiredNativeToolProfiles: [],
+      requiredNativeToolProfiles: ["project"],
     });
   } finally {
     server.stop();
@@ -2216,7 +2216,7 @@ test("app runtime policy strips stale workspace required tools outside full acce
     closeout_strategy: "ledger",
     requiredNativeTools: ["web_search"],
     required_tools: ["web_read"],
-    requiredNativeToolProfiles: ["public-web", "project-lifecycle"],
+    requiredNativeToolProfiles: ["public-web", "project", "project-lifecycle"],
   });
   expect(appRuntimePolicy({
     existing: {
@@ -2250,7 +2250,7 @@ test("app runtime policy strips stale workspace required tools outside full acce
     closeout_strategy: "ledger",
     requiredNativeTools: ["run_command"],
     required_tools: ["read_tool_output_artifact"],
-    requiredNativeToolProfiles: ["workspace", "project-lifecycle"],
+    requiredNativeToolProfiles: ["workspace", "project", "project-lifecycle"],
   });
 });
 
@@ -2321,7 +2321,7 @@ test("legacy app project local tracking is upgraded to Ledger before tool select
     tracking_mode_source: "app_project_default",
     closeoutStrategy: "ledger",
     closeout_strategy: "ledger",
-    requiredNativeToolProfiles: ["workspace", "project-lifecycle"],
+    requiredNativeToolProfiles: ["workspace", "project", "project-lifecycle"],
   });
   expect(selection.toolNames).toContain("project_ledger_status");
   expect(selection.toolNames).toContain("project_ledger_task_complete");
@@ -2330,7 +2330,7 @@ test("legacy app project local tracking is upgraded to Ledger before tool select
   expect(selection.toolNames).toContain("query_project_work");
 });
 
-test("explicit local app tracking keeps Ledger inspection discoverable but blocks lifecycle", () => {
+test("explicit local app tracking keeps Ledger tools out of the surface", () => {
   const runtimePolicy = appRuntimePolicy({
     existing: { tracking_mode: "local", tracking_mode_source: "explicit" },
     accessMode: "full_access",
@@ -2354,14 +2354,12 @@ test("explicit local app tracking keeps Ledger inspection discoverable but block
     tracking_mode: "local",
     tracking_mode_source: "explicit",
     closeout_strategy: "local_workstream",
+    requiredNativeToolProfiles: ["workspace"],
   });
-  expect(selection.toolNames).toEqual(expect.arrayContaining([
-    "project_ledger_status",
-    "project_ledger_check",
-    "inspect_project_status",
-    "query_project_work",
-    "render_project_dashboard",
-  ]));
+  expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(selection.toolNames).not.toContain("inspect_project_status");
+  expect(selection.toolNames).not.toContain("query_project_work");
+  expect(selection.toolNames).not.toContain("render_project_dashboard");
   expect(selection.toolNames).not.toContain("project_ledger_task_complete");
   expect(selection.toolNames).not.toContain("project_ledger_work_complete");
   expect(selection.toolNames).not.toContain("project_ledger_attempt_succeed");
@@ -2390,7 +2388,7 @@ test("read-only app project tracking keeps Ledger mutation markers out of the su
   expect(runtimePolicy).toMatchObject({
     accessMode: "read_only",
     tracking_mode: "ledger",
-    requiredNativeToolProfiles: [],
+    requiredNativeToolProfiles: ["project"],
   });
   expect(selection.toolNames).toContain("project_ledger_status");
   expect(selection.toolNames).toContain("project_ledger_check");
@@ -2435,6 +2433,7 @@ test("app tracking policy treats snake case tracking mode as authoritative", () 
     tracking_mode_source: "explicit",
     closeoutStrategy: "local_workstream",
     closeout_strategy: "local_workstream",
+    requiredNativeToolProfiles: ["workspace"],
   });
   expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
   expect(selection.toolNames).not.toContain("query_project_work");

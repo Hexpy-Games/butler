@@ -16,21 +16,17 @@ export function appRuntimePolicy(input: {
       !Array.isArray(input.existing)
     ? input.existing as Record<string, unknown>
     : {};
-  const requestedProfiles = stringArray(existing.requiredNativeToolProfiles)
-    .filter((profile) => profile !== "workspace");
-
-  if (input.accessMode === "full_access") {
-    requestedProfiles.push("workspace");
-  }
   const tracking = runtimeTrackingMode({
     existing,
     projectId: input.projectId,
     sessionKind: input.sessionKind,
   });
   const trackingMode = tracking.mode;
-  if (trackingMode === "ledger" && input.accessMode !== "read_only") {
-    requestedProfiles.push("project-lifecycle");
-  }
+  const requestedProfiles = [
+    ...existingProfilesForTracking(existing.requiredNativeToolProfiles, trackingMode),
+    ...workspaceProfilesForAccessMode(input.accessMode),
+    ...requiredProfilesForTracking(trackingMode, input.accessMode),
+  ];
   const closeoutStrategy = closeoutStrategyForTrackingMode(trackingMode);
 
   return {
@@ -71,6 +67,27 @@ function requiredToolsForAccessMode(
   return accessMode === "full_access"
     ? names
     : names.filter((name) => !APP_WORKSPACE_REQUIRED_TOOL_NAMES.has(name));
+}
+
+function workspaceProfilesForAccessMode(accessMode: SettingsView["access_mode"]): string[] {
+  return accessMode === "full_access" ? ["workspace"] : [];
+}
+
+function existingProfilesForTracking(value: unknown, mode: "ledger" | "local" | "none"): string[] {
+  const dropped = new Set(mode === "ledger"
+    ? ["workspace"]
+    : ["workspace", "project", "project-lifecycle"]);
+  return stringArray(value).filter((profile) => !dropped.has(profile));
+}
+
+function requiredProfilesForTracking(
+  mode: "ledger" | "local" | "none",
+  accessMode: SettingsView["access_mode"],
+): string[] {
+  if (mode !== "ledger") return [];
+  return accessMode === "read_only"
+    ? ["project"]
+    : ["project", "project-lifecycle"];
 }
 
 function runtimeTrackingMode(input: {

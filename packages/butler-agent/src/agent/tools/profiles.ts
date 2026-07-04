@@ -117,20 +117,6 @@ const ORCHESTRATION_TOOL_NAMES = [
 ] as const;
 
 const ARTIFACT_DATA_TOOL_NAMES = ["transform_public_data_table"] as const;
-const PROJECT_LEDGER_LIFECYCLE_TARGET_PATTERNS = [
-  /\b(?:work|task|attempt)\s+[a-z][a-z0-9._-]*\b/u,
-  /\b(?:work|task|attempt)\b.*\b(?:complete|completed|completion|closeout|transition|mutate|create|register)\b/u,
-  /\b(?:complete|completed|completion|closeout|transition|mutate|create|register)\b.*\b(?:work|task|attempt)\b/u,
-  /\b(?:work|task|attempt)\b.*(?:완료|완결|마감|전이|등록)/u,
-  /(?:완료|완결|마감|전이|등록).*\b(?:work|task|attempt)\b/u,
-  /작업\s+[A-Za-z0-9._-]+/u,
-  /태스크\s+[A-Za-z0-9._-]+/u,
-  /시도\s+[A-Za-z0-9._-]+/u,
-  /작업.*(?:완료|완결|마감|전이|등록)/u,
-  /태스크.*(?:완료|완결|마감|전이|등록)/u,
-  /시도.*(?:완료|완결|마감|전이|등록)/u,
-  /(?:완료|완결|마감|전이|등록).*(?:작업|태스크|시도)/u,
-] as const;
 
 const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
   startup: STARTUP_TOOL_NAMES,
@@ -227,53 +213,6 @@ function hasProjectContext(input: { sessionMetadata?: Record<string, unknown>; t
   );
 }
 
-function mentionsProjectLedger(text: string | undefined): boolean {
-  if (!text) return false;
-  return /\bproject[-\s]?ledger\b|\bledger\b|프로젝트\s*원장|원장/u.test(text.toLowerCase());
-}
-
-function mentionsProjectLedgerInspection(text: string | undefined): boolean {
-  if (!mentionsProjectLedger(text)) return false;
-  return /\b(?:status|check|inspect|query|show|read|render|dashboard|view|list)\b|상태|확인|조회|보기|읽|렌더|대시보드|목록/u
-    .test(text?.toLowerCase() ?? "");
-}
-
-function mentionsProjectLedgerLifecycle(text: string | undefined): boolean {
-  if (!mentionsProjectLedger(text)) return false;
-  const normalized = text?.toLowerCase() ?? "";
-  if (mentionsLifecycleRegistration(normalized) && mentionsProjectLedgerLifecycleTarget(normalized)) {
-    return true;
-  }
-  return projectLedgerLifecycleSegments(normalized).some((segment) =>
-    mentionsProjectLedger(segment) &&
-    mentionsLifecycleMutation(segment) &&
-    mentionsProjectLedgerLifecycleTarget(segment),
-  );
-}
-
-function mentionsLifecycleMutation(text: string | undefined): boolean {
-  if (!text) return false;
-  return /\b(?:complete|completed|completion|closeout|transition|mutate|create|register)\b|완료|완결|마감|전이|등록/u.test(text.toLowerCase());
-}
-
-function mentionsLifecycleRegistration(text: string | undefined): boolean {
-  if (!text) return false;
-  return /\b(?:create|register)\b|등록/u.test(text.toLowerCase());
-}
-
-function projectLedgerLifecycleSegments(text: string): string[] {
-  return text
-    .split(/[\n.!?。！？]+/u)
-    .map((segment) => segment.trim())
-    .filter(Boolean);
-}
-
-function mentionsProjectLedgerLifecycleTarget(text: string | undefined): boolean {
-  if (!text) return false;
-  const normalized = text.toLowerCase();
-  return PROJECT_LEDGER_LIFECYCLE_TARGET_PATTERNS.some((pattern) => pattern.test(normalized));
-}
-
 function policyArray(metadata: unknown, camelKey: string, snakeKey: string): unknown[] {
   const record = recordValue(metadata);
   const runtimePolicy = recordValue(record.runtimePolicy);
@@ -352,18 +291,62 @@ function projectLedgerLifecycleAllowed(input: {
   return trackingMode === "ledger" && accessMode !== "read_only";
 }
 
+function projectLedgerTrackingEnabled(input: {
+  sessionMetadata?: Record<string, unknown>;
+  turnMetadata?: Record<string, unknown>;
+}): boolean {
+  return trackingPolicyString(input, "trackingMode", "tracking_mode") === "ledger";
+}
+
 function projectLedgerInspectionSuppressed(input: {
   sessionMetadata?: Record<string, unknown>;
   turnMetadata?: Record<string, unknown>;
-  text?: string;
 }): boolean {
   const trackingMode = trackingPolicyString(input, "trackingMode", "tracking_mode");
-  return (trackingMode === "local" || trackingMode === "none") &&
-    !mentionsProjectLedgerInspection(input.text);
+  return trackingMode === "local" || trackingMode === "none";
 }
 
 function addProfile(profiles: Set<ButlerToolProfile>, profile: ButlerToolProfile): void {
   profiles.add(profile);
+}
+
+function addProfiles(profiles: Set<ButlerToolProfile>, values: ButlerToolProfile[]): void {
+  for (const profile of values) addProfile(profiles, profile);
+}
+
+function inferredProjectLedgerProfiles(input: {
+  sessionMetadata?: Record<string, unknown>;
+  turnMetadata?: Record<string, unknown>;
+}, projectContext: boolean): ButlerToolProfile[] {
+  const profiles: ButlerToolProfile[] = [];
+  if (!projectLedgerInspectionSuppressed(input) && (projectContext || projectLedgerTrackingEnabled(input))) {
+    profiles.push("project");
+  }
+  if (projectContext && projectLedgerLifecycleAllowed(input)) {
+    profiles.push("project-lifecycle");
+  }
+  return profiles;
+}
+
+function normalizeProjectLedgerProfiles(
+  profiles: Set<ButlerToolProfile>,
+  input: {
+    text?: string;
+    sessionMetadata?: Record<string, unknown>;
+    turnMetadata?: Record<string, unknown>;
+  },
+): void {
+  if (projectLedgerInspectionSuppressed(input)) {
+    profiles.delete("project");
+    profiles.delete("project-lifecycle");
+    return;
+  }
+  if (projectLedgerTrackingEnabled(input) || profiles.has("project-lifecycle")) {
+    profiles.add("project");
+  }
+  if (!projectLedgerLifecycleAllowed(input)) {
+    profiles.delete("project-lifecycle");
+  }
 }
 
 export function selectButlerToolProfiles(input: {
@@ -377,22 +360,10 @@ export function selectButlerToolProfiles(input: {
   }
   const profiles = new Set<ButlerToolProfile>(["startup"]);
   const projectContext = hasProjectContext(input);
-  const suppressProjectLedger = projectLedgerInspectionSuppressed(input);
-  if (!suppressProjectLedger && (projectContext || mentionsProjectLedger(input.text))) {
-    addProfile(profiles, "project");
-  }
-  if ((projectContext || mentionsProjectLedgerLifecycle(input.text)) && projectLedgerLifecycleAllowed(input)) {
-    addProfile(profiles, "project-lifecycle");
-  }
-  for (const profile of requiredToolProfiles(input.sessionMetadata)) addProfile(profiles, profile);
-  for (const profile of requiredToolProfiles(input.turnMetadata)) addProfile(profiles, profile);
-  if (!projectLedgerLifecycleAllowed(input)) {
-    profiles.delete("project-lifecycle");
-  }
-  if (suppressProjectLedger) {
-    profiles.delete("project");
-    profiles.delete("project-lifecycle");
-  }
+  addProfiles(profiles, inferredProjectLedgerProfiles(input, projectContext));
+  addProfiles(profiles, requiredToolProfiles(input.sessionMetadata));
+  addProfiles(profiles, requiredToolProfiles(input.turnMetadata));
+  normalizeProjectLedgerProfiles(profiles, input);
   return [...profiles];
 }
 
