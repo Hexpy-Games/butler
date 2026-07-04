@@ -1171,7 +1171,7 @@ test("invalid required native tool profiles are diagnosable", () => {
   });
 });
 
-test("free-form Project Ledger linkage text exposes project tools without workspace tools", () => {
+test("free-form Project Ledger linkage text alone keeps startup-only tools", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
     text: "GitHub issue를 열어서 Project Ledger task랑 연결해줘.",
@@ -1181,22 +1181,24 @@ test("free-form Project Ledger linkage text exposes project tools without worksp
   expect(selectButlerToolProfiles({
     role: "butler",
     text: "GitHub issue를 열어서 Project Ledger task랑 연결해줘.",
-  })).toEqual(["startup", "project"]);
-  expect(names).toContain("inspect_project_status");
-  expect(names).toContain("project_ledger_status");
+  })).toEqual(["startup"]);
+  expect(names).not.toContain("inspect_project_status");
+  expect(names).not.toContain("project_ledger_status");
   expect(names).not.toContain("run_command");
 });
 
-test("Project Ledger requests without project metadata expose the bounded project profile", () => {
+test("Project Ledger runtime metadata exposes the bounded project profile without text matching", () => {
   const tools = selectButlerToolsForTurn({
     role: "butler",
-    text: "Project Ledger 상태와 next action을 확인하고 dashboard를 갱신해줘.",
+    text: "상태와 next action을 확인하고 dashboard를 갱신해줘.",
+    turnMetadata: { runtimePolicy: { tracking_mode: "ledger" } },
   });
   const names = tools.map((tool) => tool.name);
 
   expect(selectButlerToolProfiles({
     role: "butler",
-    text: "Project Ledger 상태와 next action을 확인하고 dashboard를 갱신해줘.",
+    text: "상태와 next action을 확인하고 dashboard를 갱신해줘.",
+    turnMetadata: { runtimePolicy: { tracking_mode: "ledger" } },
   })).toEqual(["startup", "project"]);
   expect(names).toContain("project_ledger_status");
   expect(names).toContain("inspect_project_status");
@@ -1239,6 +1241,52 @@ test("Project Ledger project sessions expose lifecycle tools whenever Ledger tra
   expect(names).toContain("query_project_work");
   expect(names).toContain("render_project_dashboard");
   expect(names).not.toContain("complete_project_work");
+});
+
+test("Ledger-tracked app sessions expose Project Ledger read tools from runtime policy alone", () => {
+  const runtimePolicy = {
+    accessMode: "full_access",
+    trackingMode: "ledger",
+    tracking_mode: "ledger",
+    trackingModeSource: "app_project_default",
+    tracking_mode_source: "app_project_default",
+    closeoutStrategy: "ledger",
+    closeout_strategy: "ledger",
+    requiredNativeTools: [],
+    required_tools: [],
+    requiredNativeToolProfiles: ["project-lifecycle", "workspace"],
+  };
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    text: "진행해",
+    sessionMetadata: {
+      source: "app-server",
+      appSessionKind: "project",
+      accessMode: "full_access",
+      requiredNativeToolProfiles: ["project-lifecycle", "workspace"],
+      runtimePolicy,
+    },
+  });
+  const names = tools.map((tool) => tool.name);
+
+  expect(selectButlerToolProfiles({
+    role: "butler",
+    text: "진행해",
+    sessionMetadata: {
+      source: "app-server",
+      appSessionKind: "project",
+      accessMode: "full_access",
+      requiredNativeToolProfiles: ["project-lifecycle", "workspace"],
+      runtimePolicy,
+    },
+  })).toEqual(["startup", "project", "project-lifecycle", "workspace"]);
+  expect(names).toContain("project_ledger_status");
+  expect(names).toContain("inspect_project_status");
+  expect(names).toContain("query_project_work");
+  expect(names).toContain("project_ledger_work_complete");
+  expect(names).toContain("project_ledger_task_complete");
+  expect(names).toContain("run_command");
+  expect(names).toContain("read_file");
 });
 
 test("Project Ledger tools stay hidden in local and none tracking modes", () => {
