@@ -22,7 +22,11 @@ export interface NativeAuditedToolExecutorInput {
   pendingPublicDecisions: PublicWorkDecision[];
   assistantTextBeforeToolsSeen: () => boolean;
   turnInput: RuntimeTurnInput;
+  butlerHome: string;
   butlerData: string;
+  appMessageDbPath?: string;
+  projectId?: string;
+  workspacePath?: string;
   messageLanguage: RuntimeMessageLanguage;
   plannedReview: PlannedReviewTurnContext | null;
   semanticProgressSafetyNet: RuntimeSemanticProgressSafetyNet;

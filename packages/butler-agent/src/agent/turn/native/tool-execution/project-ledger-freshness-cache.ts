@@ -1,4 +1,5 @@
 import type { FunctionToolPromptOptions } from "../../../../integrations/providers/provider.ts";
+import { projectLedgerProjectPath } from "../../../../integrations/project-ledger/client.ts";
 import { stableJsonForCache } from "../context/turn-prompt.ts";
 
 type ToolCall = Parameters<FunctionToolPromptOptions["executeTool"]>[0];
@@ -24,12 +25,19 @@ export interface ProjectLedgerFreshnessCache {
 
 export function createProjectLedgerFreshnessCache(
   executor: FunctionToolPromptOptions["executeTool"],
+  input: {
+    butlerHome?: string;
+    butlerData?: string;
+    appMessageDbPath?: string;
+    projectId?: string;
+    workspacePath?: string;
+  } = {},
 ): ProjectLedgerFreshnessCache {
   const cache = new Map<string, unknown>();
 
   return {
     execute: async (call: ToolCall): Promise<unknown> => {
-      const cacheKey = projectLedgerFreshnessCacheKey(call);
+      const cacheKey = projectLedgerFreshnessCacheKey(call, input);
       if (cacheKey && cache.has(cacheKey)) return cache.get(cacheKey);
       const result = await executor(call);
       if (cacheKey) {
@@ -65,17 +73,56 @@ function invalidateProjectLedgerFreshnessAfterTool(
   }
 }
 
-function projectLedgerFreshnessCacheKey(call: ToolCall): string | null {
+function projectLedgerFreshnessCacheKey(
+  call: ToolCall,
+  input: {
+    butlerHome?: string;
+    butlerData?: string;
+    appMessageDbPath?: string;
+    projectId?: string;
+    workspacePath?: string;
+  },
+): string | null {
+  const projectPath = resolvedProjectPathForCache(call, input);
   if (call.name === "inspect_project_status") {
     return `inspect_project_status:${stableJsonForCache({
-      project_path: typeof call.args.project_path === "string" ? call.args.project_path.trim() : "",
+      project_path: projectPath,
     })}`;
   }
   if (call.name === "query_project_work") {
     return `query_project_work:${stableJsonForCache({
-      project_path: typeof call.args.project_path === "string" ? call.args.project_path.trim() : "",
+      project_path: projectPath,
       kind: typeof call.args.kind === "string" ? call.args.kind.trim() : "",
     })}`;
   }
   return null;
+}
+
+function resolvedProjectPathForCache(
+  call: ToolCall,
+  input: {
+    butlerHome?: string;
+    butlerData?: string;
+    appMessageDbPath?: string;
+    projectId?: string;
+    workspacePath?: string;
+  },
+): string {
+  if (input.butlerHome && input.butlerData) {
+    try {
+      return projectLedgerProjectPath({
+        butlerHome: input.butlerHome,
+        butlerData: input.butlerData,
+        appMessageDbPath: input.appMessageDbPath,
+        projectId: input.projectId,
+        workspacePath: input.workspacePath,
+      }, call.args);
+    } catch {
+      // Fall through to a stable local key; cache freshness must never break tool execution.
+    }
+  }
+  if (typeof call.args.project_path === "string" && call.args.project_path.trim()) return call.args.project_path.trim();
+  if (typeof input.workspacePath === "string" && input.workspacePath.trim()) return input.workspacePath.trim();
+  if (typeof input.projectId === "string" && input.projectId.trim()) return input.projectId.trim();
+  return "";
 }

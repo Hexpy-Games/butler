@@ -155,8 +155,9 @@ export function createButlerToolExecutor(input: {
     ...createProjectLedgerToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
-      sessionId: input.sessionId,
-      projectId: input.projectId,
+      appMessageDbPath: input.appMessageDbPath,
+      workspacePath: input.workspacePath,
+      sessionId: input.sessionId, projectId: input.projectId,
     }),
     ...createMonitoringToolHandlers({
       butlerData: input.butlerData,
@@ -229,7 +230,7 @@ export function createButlerToolExecutor(input: {
       butlerData: input.butlerData,
       workspacePath: input.workspacePath ?? input.butlerHome,
     }),
-    ...createFileToolHandlers({ workspacePath: input.workspacePath ?? input.butlerHome }),
+    ...createFileToolHandlers({ butlerData: input.butlerData, workspacePath: input.workspacePath ?? input.butlerHome }),
     ...createWorkerToolHandlers({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,

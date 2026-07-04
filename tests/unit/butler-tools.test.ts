@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { spawnSync } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -161,6 +162,116 @@ function runProjectLedger(args: string[], projectPath: string): void {
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
 }
+
+function writeAppProjectDb(path: string, input: {
+  id: string;
+  displayName: string;
+  workspacePath: string;
+}): void {
+  const db = new Database(path);
+  db.run(`
+    CREATE TABLE projects (
+      id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      workspace_path TEXT NOT NULL,
+      workspace_label TEXT NOT NULL,
+      safe_path_label TEXT NOT NULL,
+      archived INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    )
+  `);
+  db.query(`
+    INSERT INTO projects (
+      id, display_name, workspace_path, workspace_label, safe_path_label, archived, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, 0, ?)
+  `).run(input.id, input.displayName, input.workspacePath, input.displayName, input.displayName, new Date().toISOString());
+  db.close(false);
+}
+
+test("Project Ledger tool wrappers inherit the active workspace when project_path is omitted", async () => {
+  const butlerHome = join(tempDir, "butler-home");
+  const butlerData = join(tempDir, "butler-data");
+  const workspacePath = join(tempDir, "workspaces", "sandy-bot");
+  const cliPath = join(butlerHome, "packages", "project-ledger", "bin", "project-ledger");
+  mkdirSync(workspacePath, { recursive: true });
+  mkdirSync(join(butlerHome, "packages", "project-ledger", "bin"), { recursive: true });
+  writeFileSync(join(workspacePath, "package.json"), `${JSON.stringify({ name: "sandy-bot" })}\n`, "utf8");
+  writeFileSync(
+    cliPath,
+    [
+      "const argv = process.argv.slice(2);",
+      "console.log(JSON.stringify({",
+      "  ok: true,",
+      "  command: argv.join(' '),",
+      "  privacy: {},",
+      "  data: { argv, counts: { work: 0 }, results: [] }",
+      "}));",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const execute = createButlerToolExecutor({
+    butlerHome,
+    butlerData,
+    workspacePath,
+  });
+  const result = await execute({
+    name: "inspect_project_status",
+    args: {},
+    rawArguments: "{}",
+  }) as Record<string, any>;
+
+  expect(result.ok).toBe(true);
+  expect(result.data.argv).toEqual([
+    "status",
+    "--project",
+    join(butlerData, "project-ledger", "projects", "sandy-bot"),
+    "--json",
+  ]);
+});
+
+test("Project Ledger tool wrappers resolve active app project id through the app registry", async () => {
+  const butlerHome = join(tempDir, "butler-home");
+  const butlerData = join(tempDir, "butler-data");
+  const workspacePath = join(tempDir, "workspaces", "sandy-folder");
+  const appDbPath = join(tempDir, "butler-client.sqlite");
+  const cliPath = join(butlerHome, "packages", "project-ledger", "bin", "project-ledger");
+  mkdirSync(workspacePath, { recursive: true });
+  mkdirSync(join(butlerHome, "packages", "project-ledger", "bin"), { recursive: true });
+  writeFileSync(join(workspacePath, "package.json"), `${JSON.stringify({ name: "sandy-bot" })}\n`, "utf8");
+  writeAppProjectDb(appDbPath, {
+    id: "project-sandy-bot-35a0e102",
+    displayName: "Sandy Bot",
+    workspacePath,
+  });
+  writeFileSync(
+    cliPath,
+    "console.log(JSON.stringify({ ok: true, command: process.argv.slice(2).join(' '), privacy: {}, data: { argv: process.argv.slice(2) } }));\n",
+    "utf8",
+  );
+
+  const execute = createButlerToolExecutor({
+    butlerHome,
+    butlerData,
+    appMessageDbPath: appDbPath,
+    projectId: "project-sandy-bot-35a0e102",
+  });
+  const result = await execute({
+    name: "inspect_project_status",
+    args: {},
+    rawArguments: "{}",
+  }) as Record<string, any>;
+
+  expect(result.ok).toBe(true);
+  expect(result.data.argv).toEqual([
+    "status",
+    "--project",
+    join(butlerData, "project-ledger", "projects", "sandy-bot"),
+    "--json",
+  ]);
+});
 
 test("Project Ledger native tools route task completion through task handlers", async () => {
   const projectPath = join(tempDir, "project-ledger", "projects", "butler");
@@ -1476,6 +1587,66 @@ test("run_command rejects direct Project Ledger writes through shell redirection
   expect(readFileSync(ledgerFile, "utf8")).toBe("old");
 });
 
+test("run_command rejects raw Project Ledger source inspection", async () => {
+  const workspace = join(tempDir, "workspace");
+  const dataLedgerFile = join(tempDir, "project-ledger", "projects", "demo", "specs", "feature.md");
+  mkdirSync(workspace, { recursive: true });
+  mkdirSync(join(tempDir, "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  writeFileSync(dataLedgerFile, "source", "utf8");
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: "cat \"$BUTLER_DATA/project-ledger/projects/demo/specs/feature.md\"",
+    },
+    rawArguments: "{}",
+  }) as any;
+
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe("protected_path");
+  expect(result.stderr).toContain("Project Ledger");
+});
+
+test("file tools reject raw Butler data Project Ledger source inspection", async () => {
+  const workspace = join(tempDir, "workspace");
+  const dataLedgerFile = join(tempDir, "project-ledger", "projects", "demo", "specs", "feature.md");
+  mkdirSync(workspace, { recursive: true });
+  mkdirSync(join(tempDir, "project-ledger", "projects", "demo", "specs"), { recursive: true });
+  writeFileSync(dataLedgerFile, "source", "utf8");
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const readResult = await executor({
+    name: "read_file",
+    args: {
+      workspace_root: tempDir,
+      path: "project-ledger/projects/demo/specs/feature.md",
+    },
+    rawArguments: "{}",
+  }) as any;
+  expect(readResult.ok).toBe(false);
+  expect(readResult.error).toBe("protected_path");
+
+  const grepResult = await executor({
+    name: "grep_files",
+    args: {
+      workspace_root: tempDir,
+      pattern: "source",
+    },
+    rawArguments: "{}",
+  }) as any;
+  expect(grepResult.ok).toBe(true);
+  expect(grepResult.matches).toEqual([]);
+});
+
 test("run_command rejects ad hoc scripts writing Butler data-home Project Ledger records", async () => {
   const workspace = join(tempDir, "workspace");
   const dataLedgerFile = join(tempDir, "project-ledger", "projects", "demo", "specs", "feature.md");
@@ -2677,24 +2848,24 @@ test("Project Ledger tool schemas expose bounded project management wrappers", (
   const complete = BUTLER_TOOLS.find((item) => item.name === "complete_project_work");
 
   expect(nativeStatus?.parameters.required).toEqual([]);
-  expect(Object.keys(nativeStatus?.parameters.properties ?? {})).toEqual(["project_path"]);
+  expect(Object.keys(nativeStatus?.parameters.properties ?? {})).toEqual(["project_ref"]);
   expect(nativeIndex?.parameters.required).toEqual([]);
-  expect(Object.keys(nativeIndex?.parameters.properties ?? {})).toEqual(["project_path"]);
+  expect(Object.keys(nativeIndex?.parameters.properties ?? {})).toEqual(["project_ref"]);
   expect(nativeList?.parameters.required).toEqual(["kind"]);
-  expect(Object.keys(nativeList?.parameters.properties ?? {})).toEqual(["project_path", "kind", "status", "query", "limit"]);
+  expect(Object.keys(nativeList?.parameters.properties ?? {})).toEqual(["project_ref", "kind", "status", "query", "limit"]);
   expect(nativeCreate?.parameters.required).toEqual(["kind", "id", "title"]);
   expect(Object.keys(nativeCreate?.parameters.properties ?? {})).toContain("body");
   expect(nativeTaskComplete?.parameters.required).toEqual(["id"]);
   expect(Object.keys(nativeTaskComplete?.parameters.properties ?? {})).toContain("validation");
   expect(status?.parameters.required).toEqual([]);
-  expect(Object.keys(status?.parameters.properties ?? {})).toEqual(["project_path"]);
+  expect(Object.keys(status?.parameters.properties ?? {})).toEqual(["project_ref"]);
   expect(query?.parameters.required).toEqual(["kind"]);
-  expect(Object.keys(query?.parameters.properties ?? {})).toEqual(["project_path", "kind"]);
+  expect(Object.keys(query?.parameters.properties ?? {})).toEqual(["project_ref", "kind"]);
   expect(render?.parameters.required).toEqual(["view"]);
-  expect(Object.keys(render?.parameters.properties ?? {})).toEqual(["project_path", "view", "write"]);
+  expect(Object.keys(render?.parameters.properties ?? {})).toEqual(["project_ref", "view", "write"]);
   expect(complete?.parameters.required).toEqual(["id", "validation", "review", "report"]);
   expect(Object.keys(complete?.parameters.properties ?? {})).toEqual([
-    "project_path",
+    "project_ref",
     "id",
     "validation",
     "review",

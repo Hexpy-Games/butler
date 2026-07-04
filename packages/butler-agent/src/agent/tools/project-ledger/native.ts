@@ -17,6 +17,8 @@ type ToolCall = { args: Record<string, unknown> };
 type ProjectLedgerExecutorInput = {
   butlerHome: string;
   butlerData: string;
+  appMessageDbPath?: string;
+  workspacePath?: string;
   sessionId?: string;
   projectId?: string;
 };
@@ -30,7 +32,10 @@ type ToolSpec = {
 };
 
 const recordFields = {
-  project_path: { type: "string", description: "Project path." },
+  project_ref: {
+    type: "string",
+    description: "Project id/name/workspace/canonical root; omit for active project.",
+  },
   kind: { type: "string", description: "Record kind." },
   id: { type: "string", description: "Record id." },
   title: { type: "string", description: "Record title." },
@@ -56,7 +61,7 @@ const recordFields = {
 } satisfies Record<string, Record<string, unknown>>;
 
 const lifecycleUpdateFields = {
-  project_path: recordFields.project_path,
+  project_ref: recordFields.project_ref,
   id: recordFields.id,
   status: recordFields.status,
   body: recordFields.body,
@@ -64,7 +69,7 @@ const lifecycleUpdateFields = {
 };
 
 const lifecycleCompleteFields = {
-  project_path: recordFields.project_path,
+  project_ref: recordFields.project_ref,
   id: recordFields.id,
   validation: recordFields.validation,
   review: recordFields.review,
@@ -74,10 +79,10 @@ const lifecycleCompleteFields = {
 };
 
 const toolSpecs = [
-  { name: "project_ledger_index", description: "Rebuild the Project Ledger compact index for the resolved project path.", properties: { project_path: recordFields.project_path }, mutates: true },
-  { name: "project_ledger_status", description: "Return canonical Project Ledger project summary, stale state, and next actions.", properties: { project_path: recordFields.project_path }, mutates: false },
-  { name: "project_ledger_list", description: "List bounded Project Ledger records by kind with optional status and text filtering.", required: ["kind"], properties: { project_path: recordFields.project_path, kind: recordFields.kind, status: recordFields.status, query: recordFields.query, limit: recordFields.limit }, mutates: false },
-  { name: "project_ledger_show", description: "Show one Project Ledger record summary, optionally including its Markdown body.", required: ["id"], properties: { project_path: recordFields.project_path, kind: recordFields.kind, id: recordFields.id, include_body: recordFields.include_body }, mutates: false },
+  { name: "project_ledger_index", description: "Rebuild the Project Ledger compact index for the resolved project.", properties: { project_ref: recordFields.project_ref }, mutates: true },
+  { name: "project_ledger_status", description: "Return canonical Project Ledger project summary, stale state, and next actions.", properties: { project_ref: recordFields.project_ref }, mutates: false },
+  { name: "project_ledger_list", description: "List bounded Project Ledger records by kind with optional status and text filtering.", required: ["kind"], properties: { project_ref: recordFields.project_ref, kind: recordFields.kind, status: recordFields.status, query: recordFields.query, limit: recordFields.limit }, mutates: false },
+  { name: "project_ledger_show", description: "Show one Project Ledger record summary, optionally including its Markdown body.", required: ["id"], properties: { project_ref: recordFields.project_ref, kind: recordFields.kind, id: recordFields.id, include_body: recordFields.include_body }, mutates: false },
   { name: "project_ledger_create", description: "Create a modeled Project Ledger source record through CLI/core behavior.", required: ["kind", "id", "title"], properties: recordFields, mutates: true },
   { name: "project_ledger_update", description: "Update frontmatter and/or body for a modeled Project Ledger source record through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
   { name: "project_ledger_work_update", description: "Update or transition Project Ledger work.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
@@ -87,8 +92,8 @@ const toolSpecs = [
   { name: "project_ledger_attempt_start", description: "Create a started Project Ledger attempt under a task.", required: ["task_id"], properties: recordFields, mutates: true },
   { name: "project_ledger_attempt_succeed", description: "Mark a Project Ledger attempt succeeded through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
   { name: "project_ledger_attempt_fail", description: "Mark a Project Ledger attempt failed through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
-  { name: "project_ledger_render", description: "Render a Project Ledger generated view, writing only when write is true.", required: ["view"], properties: { project_path: recordFields.project_path, view: { type: "string", description: "Generated view name: dashboard, handoff, or roadmap." }, write: { type: "boolean", description: "Persist the generated view." } }, mutates: true },
-  { name: "project_ledger_check", description: "Run strict Project Ledger validation and return safe issue details.", properties: { project_path: recordFields.project_path, verbose: { type: "boolean", description: "Request verbose check behavior from the CLI where supported." } }, mutates: false },
+  { name: "project_ledger_render", description: "Render a Project Ledger generated view, writing only when write is true.", required: ["view"], properties: { project_ref: recordFields.project_ref, view: { type: "string", description: "Generated view name: dashboard, handoff, or roadmap." }, write: { type: "boolean", description: "Persist the generated view." } }, mutates: true },
+  { name: "project_ledger_check", description: "Run strict Project Ledger validation and return safe issue details.", properties: { project_ref: recordFields.project_ref, verbose: { type: "boolean", description: "Request verbose check behavior from the CLI where supported." } }, mutates: false },
 ] satisfies ToolSpec[];
 
 export const projectLedgerNativeToolDefinitions = toolSpecs.map((spec) => ({

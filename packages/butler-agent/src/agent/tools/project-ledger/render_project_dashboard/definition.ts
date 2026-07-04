@@ -3,14 +3,14 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const renderProjectDashboardToolDefinition = {
   type: "function",
   name: "render_project_dashboard",
-  description: "Render Project Ledger dashboard, handoff, or roadmap views from canonical Butler data-home Project Ledger state.",
+  description: "Render active Project Ledger dashboard, handoff, or roadmap views.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
-      project_path: {
+      project_ref: {
         type: "string",
-        description: "Absolute workspace/project path used to resolve the canonical Project Ledger under BUTLER_DATA/project-ledger/projects. Defaults to the Butler repository.",
+        description: "Project id/name/workspace/canonical root; omit for active project.",
       },
       view: {
         type: "string",

@@ -36,7 +36,12 @@ export async function executeReadFileTool(call: { arguments?: unknown; input?: u
   const maxBytes = Math.max(1, Math.min(Number(a.max_bytes ?? 65536), 1048576));
   const startLineRaw = a.start_line === undefined ? undefined : Math.max(1, Number(a.start_line));
   const limitLinesRaw = a.limit_lines === undefined ? undefined : Math.max(1, Math.min(Number(a.limit_lines), 10000));
-  const guard = await resolveWorkspacePathGuard({ workspaceRoot, relativePath: path });
+  const guard = await resolveWorkspacePathGuard({
+    workspaceRoot,
+    relativePath: path,
+    rejectProtectedProjectLedgerPaths: true,
+    protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
+  });
   if (!guard.ok) return { ok: false, error: guard.reason, path, guard, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "read_file", ok: false, path, error: guard.reason }) };
   const filePath = guard.realPath ?? guard.absolutePath!;
   const st = await stat(filePath);

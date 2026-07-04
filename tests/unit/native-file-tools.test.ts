@@ -37,12 +37,12 @@ describe("read_file", () => {
     expect(((await executeReadFileTool(call({ workspace_root: root, path: "bin.dat" }))) as any).error).toBe("binary_file_not_supported");
   });
 
-  test("allows Project Ledger inspection through read_file", async () => {
+  test("rejects Project Ledger inspection through read_file", async () => {
     await mkdir(join(root, ".project-ledger", "specs"), { recursive: true });
     await writeFile(join(root, ".project-ledger", "specs", "feature.md"), "# Feature\n", "utf8");
     const res = await executeReadFileTool(call({ workspace_root: root, path: ".project-ledger/specs/feature.md" })) as any;
-    expect(res.ok).toBe(true);
-    expect(res.content).toBe("# Feature\n");
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("protected_path");
   });
 });
 

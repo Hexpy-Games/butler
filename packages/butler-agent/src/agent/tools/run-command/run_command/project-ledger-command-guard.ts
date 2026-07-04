@@ -59,7 +59,6 @@ export function projectLedgerCommandMutationGuard(
   if (
     protectedMentions.length > 0
     && !isProjectLedgerCliCommand(input.command, input)
-    && !isReadOnlyLedgerInspection(input.command)
   ) {
     return protectedMentions[0].result;
   }
@@ -283,12 +282,6 @@ function protectedPathResult(
     protected_path: candidate,
     next: protectedPath.next ?? [{ command: "project-ledger record update --id <id> --from FILE|-" }],
   };
-}
-
-function isReadOnlyLedgerInspection(command: string): boolean {
-  if (DIRECT_WRITE_HINTS.some((pattern) => pattern.test(command))) return false;
-  if (/(?:\s-delete(?:\s|$)|\s-exec\s+(?:rm|mv|cp|sh|bash|zsh)\b)/u.test(command)) return false;
-  return /(?:^|[\s;&|])(?:ls|find|cat|grep|rg|wc|stat|head|tail|pwd|realpath|readlink)\b/u.test(command);
 }
 
 function uniqueStrings(values: string[]): string[] {

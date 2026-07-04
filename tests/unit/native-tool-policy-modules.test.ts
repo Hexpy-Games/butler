@@ -115,6 +115,55 @@ test("Project Ledger freshness cache de-duplicates reads and invalidates after m
   })).resolves.toEqual({ ok: true, count: 3 });
 });
 
+test("Project Ledger freshness cache separates omitted project_path by active workspace", async () => {
+  const calls: string[] = [];
+  const executor = async (call: Parameters<ReturnType<typeof createProjectLedgerFreshnessCache>["execute"]>[0]) => {
+    calls.push(`${call.name}:${calls.length + 1}`);
+    return { ok: true, count: calls.length };
+  };
+  const sandyCache = createProjectLedgerFreshnessCache(executor, { workspacePath: "/tmp/sandy-bot" });
+  const butlerCache = createProjectLedgerFreshnessCache(executor, { workspacePath: "/tmp/butler" });
+
+  await expect(sandyCache.execute({
+    name: "inspect_project_status",
+    args: {},
+    rawArguments: "{}",
+  })).resolves.toEqual({ ok: true, count: 1 });
+  await expect(sandyCache.execute({
+    name: "inspect_project_status",
+    args: {},
+    rawArguments: "{}",
+  })).resolves.toEqual({ ok: true, count: 1 });
+  await expect(butlerCache.execute({
+    name: "inspect_project_status",
+    args: {},
+    rawArguments: "{}",
+  })).resolves.toEqual({ ok: true, count: 2 });
+});
+
+test("Project Ledger freshness cache keys equivalent project refs by canonical root", async () => {
+  const calls: string[] = [];
+  const cache = createProjectLedgerFreshnessCache(async (call) => {
+    calls.push(call.name);
+    return { ok: true, count: calls.length };
+  }, {
+    butlerHome: "/repo/butler",
+    butlerData: "/data/butler",
+    workspacePath: "/workspaces/sandy-bot",
+  });
+
+  await expect(cache.execute({
+    name: "inspect_project_status",
+    args: {},
+    rawArguments: "{}",
+  })).resolves.toEqual({ ok: true, count: 1 });
+  await expect(cache.execute({
+    name: "inspect_project_status",
+    args: { project_path: "sandy-bot" },
+    rawArguments: "{\"project_path\":\"sandy-bot\"}",
+  })).resolves.toEqual({ ok: true, count: 1 });
+});
+
 test("Project Ledger freshness cache invalidates after native lifecycle mutations", async () => {
   const calls: string[] = [];
   const cache = createProjectLedgerFreshnessCache(async (call) => {

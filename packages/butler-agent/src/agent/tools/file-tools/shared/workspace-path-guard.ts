@@ -7,6 +7,7 @@ export interface WorkspacePathGuardInput {
   relativePath: string;
   allowMissingLeaf?: boolean;
   allowDirectories?: boolean;
+  rejectProtectedProjectLedgerPaths?: boolean;
   rejectProtectedProjectLedgerWrites?: boolean;
   protectedProjectLedgerRoots?: string[];
 }
@@ -54,7 +55,7 @@ export async function resolveWorkspacePathGuard(input: WorkspacePathGuardInput):
   const rootReal = await realpath(workspaceRoot);
   const absolutePath = resolve(rootReal, requestedPath);
   if (!isInside(rootReal, absolutePath)) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, reason: "path_escape" };
-  if (input.rejectProtectedProjectLedgerWrites) {
+  if (input.rejectProtectedProjectLedgerPaths || input.rejectProtectedProjectLedgerWrites) {
     const protectedPath = projectLedgerProtectedPath({
       workspaceRoot: rootReal,
       absolutePath,
