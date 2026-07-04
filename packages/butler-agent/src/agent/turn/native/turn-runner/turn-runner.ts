@@ -32,6 +32,10 @@ import {
   persistCompletionGapContinuation,
   produceFinalDeliveryOutcome,
 } from "./final-delivery-gates.ts";
+import {
+  applyPublicOutputGuards,
+  repairFinalContract,
+} from "./public-output-gates.ts";
 import { prepareNativeTurnContext } from "./turn-context-builder.ts";
 import { createNativeTurnPromptRunners } from "./turn-prompt-runners.ts";
 import { runtimePreparationProgressSummary } from "./runtime-preparation-progress.ts";
@@ -184,6 +188,36 @@ export async function runNativeToolTurn({
           finalText: deliveryOutcome.text,
           audit,
           runToolPrompt: runKernelToolPrompt,
+          guardFinalText: async (finalText) => {
+            const contractRepairedText = repairFinalContract({
+              turnInput: input,
+              session,
+              deps,
+              useTools,
+              prompt: context.prompt,
+              finalText,
+              audit,
+              publicDecisionContext,
+            });
+            await emitTurnEventBestEffort(input, {
+              kind: "guard.started",
+              payload: { guard: "public_output" },
+            });
+            const guardedText = applyPublicOutputGuards({
+              turnInput: input,
+              session,
+              deps,
+              useTools,
+              userText: context.userText,
+              finalText: contractRepairedText,
+              audit,
+            });
+            await emitTurnEventBestEffort(input, {
+              kind: "guard.completed",
+              payload: { guard: "public_output", status: "approved" },
+            });
+            return guardedText;
+          },
         });
         decisionCheckedText = directWorkResult.text;
         finalDeliveryOverride = directWorkResult.delivery;
