@@ -8,9 +8,9 @@ export const completeProjectWorkToolDefinition = {
     type: "object",
     additionalProperties: false,
     properties: {
-      project_path: {
+      project_ref: {
         type: "string",
-        description: "Absolute workspace/project path used to resolve the canonical Project Ledger under BUTLER_DATA/project-ledger/projects. Defaults to the Butler repository.",
+        description: "Project id/name/workspace/canonical root; omit for active project.",
       },
       id: {
         type: "string",

@@ -5,7 +5,7 @@ import { fileToolCapabilityReceipt, fileToolEvidenceReceipt } from "../shared/ev
 import { getWorkspaceRoot, stringArray, tryParseToolArgs } from "../shared/args.ts";
 import type { FileToolExecutionContext } from "../read_file/executor.ts";
 
-const DEFAULT_EXCLUDED_DIRS = new Set([".git", "node_modules", "dist", "build", ".next", "coverage", ".turbo", "vendor"]);
+const DEFAULT_EXCLUDED_DIRS = new Set([".git", ".project-ledger", "project-ledger", "node_modules", "dist", "build", ".next", "coverage", ".turbo", "vendor"]);
 
 function globToRe(glob: string) {
   let out = "";
@@ -65,7 +65,13 @@ export async function executeGrepFilesTool(call: { arguments?: unknown; input?: 
     timeoutMs: Math.max(50, Math.min(Number(a.timeout_ms ?? 5000), 30000)),
   };
   if (!pattern) return { ok: false, error: "missing_pattern", evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: "missing_pattern" }) };
-  const guard = await resolveWorkspacePathGuard({ workspaceRoot, relativePath: ".", allowDirectories: true });
+  const guard = await resolveWorkspacePathGuard({
+    workspaceRoot,
+    relativePath: ".",
+    allowDirectories: true,
+    rejectProtectedProjectLedgerPaths: true,
+    protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
+  });
   if (!guard.ok) return { ok: false, error: guard.reason, guard, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: guard.reason }) };
   let matcher: RegExp;
   try { matcher = new RegExp(regex ? pattern : escapeRegExp(pattern), caseSensitive ? "" : "i"); } catch (error) { return { ok: false, error: "invalid_pattern", detail: error instanceof Error ? error.message : String(error), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: "invalid_pattern" }) }; }

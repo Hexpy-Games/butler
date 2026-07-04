@@ -3,14 +3,14 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const inspectProjectStatusToolDefinition = {
   type: "function",
   name: "inspect_project_status",
-  description: "Inspect the canonical Butler data-home Project Ledger status summary without reading broad project files.",
+  description: "Inspect active Project Ledger status without broad file reads.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
-      project_path: {
+      project_ref: {
         type: "string",
-        description: "Absolute workspace/project path used to resolve the canonical Project Ledger under BUTLER_DATA/project-ledger/projects. Defaults to the Butler repository.",
+        description: "Project id/name/workspace/canonical root; omit for active project.",
       },
     },
     required: [],
@@ -31,7 +31,7 @@ export const inspectProjectStatusToolMetadata = {
     "handoff",
   ],
   safetyNotes: [
-    "Returns bounded Project Ledger status; read referenced files only when needed.",
+    "Use Ledger list/show/query before broad file reads.",
   ],
   satisfiesCompletionObligations: [
     "source_verified",

@@ -52,7 +52,13 @@ import type {
 export function createAuditedButlerToolExecutor(
   input: NativeAuditedToolExecutorInput,
 ): FunctionToolPromptOptions["executeTool"] {
-  const projectLedgerFreshnessCache = createProjectLedgerFreshnessCache(input.executor);
+  const projectLedgerFreshnessCache = createProjectLedgerFreshnessCache(input.executor, {
+    butlerHome: input.butlerHome,
+    butlerData: input.butlerData,
+    appMessageDbPath: input.appMessageDbPath,
+    projectId: input.projectId,
+    workspacePath: input.workspacePath,
+  });
   const repeatedToolFamilyGuard = new RepeatedToolFamilyGuard();
   const internalProgress = createInternalProgressToolRunner({
     executorInput: input,
