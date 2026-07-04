@@ -33,7 +33,7 @@ function nativeHintFromCliCommand(command: string, reason = ""): NativeNextHint 
     return {
       tool: "project_ledger_index",
       args: {},
-      reason: reason || "Rebuild the compact Project Ledger index with the same project_path.",
+      reason: reason || "Rebuild the compact Project Ledger index for the active project.",
     };
   }
 

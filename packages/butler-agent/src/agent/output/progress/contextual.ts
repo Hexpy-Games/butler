@@ -12,7 +12,7 @@ export function contextualToolProgressSummary(
       safeLabel: "Checking local Project Ledger status",
       inputLabel: "status",
       detailRows: projectLedgerDetailRows([
-        { id: "workspace", label: "Workspace", value: args.project_path },
+        { id: "project", label: "Project", value: projectLedgerReference(args) },
       ]),
     };
   }
@@ -23,7 +23,7 @@ export function contextualToolProgressSummary(
       safeLabel: `Reviewing Project Ledger ${projectLedgerQueryLabel(args.kind)}`,
       inputLabel: projectLedgerQueryLabel(args.kind),
       detailRows: projectLedgerDetailRows([
-        { id: "workspace", label: "Workspace", value: args.project_path },
+        { id: "project", label: "Project", value: projectLedgerReference(args) },
         { id: "query", label: "Query", value: projectLedgerQueryLabel(args.kind) },
       ]),
     };
@@ -63,7 +63,7 @@ export function contextualToolProgressSummary(
       safeLabel: `Rendering Project Ledger ${view} view`,
       inputLabel: `${view} view`,
       detailRows: projectLedgerDetailRows([
-        { id: "workspace", label: "Workspace", value: args.project_path },
+        { id: "project", label: "Project", value: projectLedgerReference(args) },
         { id: "view", label: "View", value: view },
         { id: "output", label: "Output", value: args.write === true ? "writing generated view" : "preview only" },
       ]),
@@ -106,6 +106,12 @@ function projectLedgerQueryLabel(value: unknown): string {
   return kind;
 }
 
+function projectLedgerReference(args: Record<string, unknown>): unknown {
+  if (typeof args.project_ref === "string" && args.project_ref.trim()) return args.project_ref;
+  if (typeof args.project_path === "string" && args.project_path.trim()) return args.project_path;
+  return "active project";
+}
+
 function safeUrlHostLabel(value: unknown): string {
   if (typeof value !== "string" || !value.trim()) return "";
   try {
@@ -121,8 +127,8 @@ function projectLedgerDetailRows(
 ): ToolProgressSummary["detailRows"] {
   return rows
     .map((row) => {
-      const safeValue = row.id === "workspace"
-        ? safePathishValue(row.value, "workspace")
+      const safeValue = row.id === "project"
+        ? safePathishValue(row.value, "active project")
         : safeTextValue(row.value, row.label);
       return {
         id: `project-ledger-${row.id}`,
