@@ -3,14 +3,14 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const queryProjectWorkToolDefinition = {
   type: "function",
   name: "query_project_work",
-  description: "Query the canonical Butler data-home Project Ledger for bounded project-management references such as next actions, blockers, missing specs, risks, and stale views.",
+  description: "Query active Project Ledger next actions, blockers, specs, risks, or stale views.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
-      project_path: {
+      project_ref: {
         type: "string",
-        description: "Absolute workspace/project path used to resolve the canonical Project Ledger under BUTLER_DATA/project-ledger/projects. Defaults to the Butler repository.",
+        description: "Project id/name/workspace/canonical root; omit for active project.",
       },
       kind: {
         type: "string",
@@ -50,7 +50,7 @@ export const queryProjectWorkToolMetadata = {
     "risk",
   ],
   safetyNotes: [
-    "Use bounded query results before broad project-file reads.",
+    "Use Ledger list/show/status before broad file reads.",
   ],
   satisfiesCompletionObligations: [
     "source_verified",
