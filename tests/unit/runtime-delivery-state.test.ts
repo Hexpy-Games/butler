@@ -36,7 +36,7 @@ test("runtime delivery taxonomy maps normal and limited delivery as assistant ou
 
   const withContinuation = deliveredWithContinuationState({
     limitationCodes: ["direct_work_continuation"],
-    limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+    limitations: [],
   });
   expect(withContinuation).toMatchObject({
     delivery_state: "delivered_with_continuation",
@@ -45,7 +45,7 @@ test("runtime delivery taxonomy maps normal and limited delivery as assistant ou
     visibility: "assistant_output",
     failure_notice: false,
     limitation_codes: ["direct_work_continuation"],
-    limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+    limitations: [],
   });
   expect(isUserFacingFailureDelivery(withContinuation)).toBe(false);
 });

@@ -9375,7 +9375,15 @@ test("native runtime yields recoverable progress instead of extending direct wor
       });
       return stage >= 3
         ? "세 번째 continuation에서 남은 WATL 직접 작업까지 완료했습니다."
-        : `stage ${stage} 작업만 완료했습니다.`;
+        : [
+          "`WATL 직접 구현` 작업이 execution 단계에서 아직 완료 조건을 만족하지 못했습니다.",
+          "다음에 이어갈 항목: 다음 WATL 작업 구현 후 커밋",
+          "상태: recoverable로 저장했습니다.",
+          "",
+          "summary: WATL direct work continuation status",
+          "rationale: This is still internal work state.",
+          "next_step: Continue the remaining implementation.",
+        ].join("\n");
     },
   });
   const handle = await runtime.createSession({
@@ -9385,11 +9393,15 @@ test("native runtime yields recoverable progress instead of extending direct wor
     systemPrompt: "You are Butler.",
   });
 
+  const events: Array<{ kind: string; payload?: unknown }> = [];
   const result = await runtime.runTurn({
     handle,
     provider: fakeProvider,
     model: "local/gemma-test",
     input: { text: "WATL 작업을 순서대로 직접 처리하고 각 단계마다 커밋해줘." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload });
+    },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
@@ -9397,9 +9409,29 @@ test("native runtime yields recoverable progress instead of extending direct wor
   expect(continuationPrompts).toHaveLength(1);
   expect(continuationPrompts[0]).toContain("Direct Work Continuation");
   expect(result.text).not.toContain("Direct work remains incomplete");
-  expect(result.text).toContain("WATL 직접 구현");
-  expect(result.text).toContain("recoverable로 저장했습니다");
+  expect(result.text).toBe("첫 변경분부터 진행하겠습니다.");
+  expect(result.text).not.toContain("WATL 직접 구현");
+  expect(result.text).not.toContain("recoverable로 저장했습니다");
+  expect(result.text).not.toContain("완료 조건");
+  expect(result.text).not.toContain("summary:");
+  expect(result.text).not.toContain("rationale:");
+  expect(result.text).not.toContain("next_step:");
   expect(result.delivery?.delivery_state).toBe("delivered_with_continuation");
+  expect(result.delivery?.limitation_codes).toContain("direct_work_continuation");
+  expect(result.delivery?.limitations).toEqual([]);
+  const finalEventPayloads = events
+    .filter((event) => event.kind === "message.final.completed" || event.kind === "turn.completed")
+    .map((event) => event.payload as {
+      delivery_state?: string;
+      limitation_codes?: string[];
+      limitations?: string[];
+    });
+  expect(finalEventPayloads).not.toHaveLength(0);
+  for (const payload of finalEventPayloads) {
+    expect(payload.delivery_state).toBe("delivered_with_continuation");
+    expect(payload.limitation_codes).toEqual(["direct_work_continuation"]);
+    expect(payload.limitations).toEqual([]);
+  }
   const toolCalls = readTranscript("butler/main/open-direct-work-multi-continuation")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name);
@@ -9454,7 +9486,7 @@ test("native runtime delivers recoverable direct work progress when model reques
           }],
         }),
       });
-      return "직접 작업이 아직 남아 있습니다.";
+      return "Project Ledger 전체를 교차 조회한 결과, 현재 in_progress 상태인 work/task는 2건입니다.";
     },
   });
   const handle = await runtime.createSession({
@@ -9477,9 +9509,13 @@ test("native runtime delivers recoverable direct work progress when model reques
   });
 
   expect(promptCalls).toBe(1);
-  expect(result.text).toContain("예산 경계 직접 작업");
-  expect(result.text).toContain("recoverable로 저장했습니다");
+  expect(result.text).toBe("Project Ledger 전체를 교차 조회한 결과, 현재 in_progress 상태인 work/task는 2건입니다.");
+  expect(result.text).not.toContain("예산 경계 직접 작업");
+  expect(result.text).not.toContain("recoverable로 저장했습니다");
+  expect(result.text).not.toContain("완료 조건");
   expect(result.delivery?.delivery_state).toBe("delivered_with_continuation");
+  expect(result.delivery?.limitation_codes).toContain("direct_work_continuation");
+  expect(result.delivery?.limitations).toEqual([]);
   expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).toContain("message.final.completed");
   expect(readOnlyPersistedTurnContextAtom()).toBeNull();
@@ -9569,10 +9605,9 @@ test("native runtime preserves validation limitation when direct work is deliver
     "direct_work_continuation",
     "validation_failed",
   ]));
-  expect(result.delivery?.limitations).toEqual(expect.arrayContaining([
-    expect.stringContaining("검증 실패 원인 수정"),
-    expect.stringContaining("direct-validation"),
-  ]));
+  expect(result.delivery?.limitations).toEqual([
+    "Validation suite failed without a later passing receipt: direct-validation",
+  ]);
   const streams = new WorkStreamStore(tempDir).list({
     sessionId: "butler/main/direct-work-validation-limitation",
     includeTerminal: true,
@@ -9654,9 +9689,13 @@ test("native runtime stops direct work continuation when tools do not make seman
 
     expect(promptCalls).toBe(2);
     expect(executedCommands).toEqual(["git status --short"]);
-    expect(result.text).toContain("Issue #2 direct work");
-    expect(result.text).toContain("recoverable로 저장했습니다");
+    expect(result.text).toBe("write_file 커밋이 아직 남아 있습니다.");
+    expect(result.text).not.toContain("Issue #2 direct work");
+    expect(result.text).not.toContain("recoverable로 저장했습니다");
+    expect(result.text).not.toContain("완료 조건");
     expect(result.delivery?.delivery_state).toBe("delivered_with_continuation");
+    expect(result.delivery?.limitation_codes).toContain("direct_work_continuation");
+    expect(result.delivery?.limitations).toEqual([]);
     expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
     expect(events.map((event) => event.kind)).toContain("message.final.completed");
     const streams = new WorkStreamStore(tempDir).list({
@@ -9822,9 +9861,13 @@ test("native runtime bounds direct work finalization after WorkStream FSM progre
     });
 
     expect(promptCalls).toBe(2);
-    expect(result.text).toContain("FSM direct work");
-    expect(result.text).toContain("recoverable로 저장했습니다");
+    expect(result.text).toBe("구현 근거 확인이 아직 진행 중입니다.");
+    expect(result.text).not.toContain("FSM direct work");
+    expect(result.text).not.toContain("recoverable로 저장했습니다");
+    expect(result.text).not.toContain("완료 조건");
     expect(result.delivery?.delivery_state).toBe("delivered_with_continuation");
+    expect(result.delivery?.limitation_codes).toContain("direct_work_continuation");
+    expect(result.delivery?.limitations).toEqual([]);
     expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
     expect(events.map((event) => event.kind)).toContain("message.final.completed");
     const toolCalls = readTranscript("butler/main/open-direct-work-fsm-progress")

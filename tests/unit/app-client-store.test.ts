@@ -3447,7 +3447,7 @@ test("session-view stores delivered_with_continuation as delivered content metad
     ),
     delivery_state: "delivered_with_continuation" as const,
     limitation_codes: ["direct_work_continuation"],
-    limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+    limitations: [],
   };
   const view = sessionView("session-continuation", {
     messages: [
@@ -3467,7 +3467,7 @@ test("session-view stores delivered_with_continuation as delivered content metad
       state: "delivered",
       delivery_state: "delivered_with_continuation",
       limitation_codes: ["direct_work_continuation"],
-      limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+      limitations: [],
       safe_progress_rows: [],
     },
   });
@@ -3477,7 +3477,7 @@ test("session-view stores delivered_with_continuation as delivered content metad
         safe_status_label: "Delivered with limitations",
         delivery_state: "delivered_with_continuation",
         limitation_codes: ["direct_work_continuation"],
-        limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+        limitations: [],
       }
     : null;
 
@@ -3495,7 +3495,7 @@ test("session-view stores delivered_with_continuation as delivered content metad
     status: "delivered",
     delivery_state: "delivered_with_continuation",
     limitation_codes: ["direct_work_continuation"],
-    limitations: ["Remaining direct work was preserved as a recoverable continuation."],
+    limitations: [],
   });
   expect(state.summary?.turn_state).toBe("delivered");
   expect(state.summary?.latest_progress?.delivery_state).toBe("delivered_with_continuation");
