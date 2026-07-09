@@ -328,13 +328,16 @@ test("native runtime uses app thin first response for direct answers without ent
 
   expect(result.text).toContain("opening decision");
   expect(textPrompts).toHaveLength(1);
-  expect(textPrompts[0]).toContain("## Thin First Response Pass");
+  expect(textPrompts[0]).toContain("## Thin Context-Only Response Pass");
   expect(textPrompts[0]).toContain("## Active Persona Reminder");
+  expect(textPrompts[0]).toContain("explicitly asks for a context-only answer");
+  expect(textPrompts[0]).toContain("Do not return a tool-intent block");
   expect(textPrompts[0]).not.toContain("heavy project memory");
 });
 
 test("native runtime escalates app thin first response tool intent into a normal tool prompt", async () => {
   const toolPrompts: string[] = [];
+  const toolRounds: number[] = [];
   const runtime = new NativeToolLoopRuntime({
     butlerHome: process.cwd(),
     butlerData: tempDir,
@@ -348,6 +351,7 @@ test("native runtime escalates app thin first response tool intent into a normal
     ].join("\n"),
     runFunctionToolPromptText: async (input) => {
       toolPrompts.push(input.prompt);
+      toolRounds.push(input.maxToolRounds ?? 0);
       return "provider.ts의 resolveOpenAIPromptCacheConfig를 확인했습니다.";
     },
   });
@@ -376,9 +380,11 @@ test("native runtime escalates app thin first response tool intent into a normal
 
   expect(result.text).toContain("resolveOpenAIPromptCacheConfig");
   expect(toolPrompts).toHaveLength(1);
+  expect(toolRounds).toEqual([4]);
   expect(toolPrompts[0]).toContain("## Hidden Thin First Response Escalation");
   expect(toolPrompts[0]).toContain("summary: prompt cache 설정 파일을 확인합니다.");
   expect(toolPrompts[0]).toContain("Before the first tool call");
+  expect(toolPrompts[0]).toContain("immediate small step only");
 });
 
 test("native runtime gives worker sessions the execution tool loop and role-limited tool profile", async () => {

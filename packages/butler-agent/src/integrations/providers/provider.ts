@@ -2693,6 +2693,7 @@ const MIN_LOCAL_TOOL_RESULT_AGGRESSIVE_TOTAL_TOKENS = 300;
 const MAX_LOCAL_TOOL_RESULT_AGGRESSIVE_TOTAL_TOKENS = 4_000;
 const LOCAL_TOOL_RESULT_AGGRESSIVE_TOTAL_CONTEXT_RATIO = 0.04;
 const LOCAL_TOOL_RESULT_COMPACT_MARKER = "[...compacted local tool result for context budget...]";
+const HOSTED_TOOL_RESULT_MAX_MODEL_TOKENS = 1_400;
 
 function localToolResultTotalTokenBudget(config: LocalModelConfig, aggressive = false): number {
   const window = Number.isFinite(config.context_window_tokens)
@@ -2738,6 +2739,35 @@ function compactLocalToolResultContent(input: {
   const compact = JSON.stringify(compactPayload);
   input.log(
     `tool ${input.toolName} result compacted for local context: reason=${input.reason} raw_tokens=${rawTokens} compact_tokens=${estimateContextTokens(compact)}`,
+  );
+  return compact;
+}
+
+function hostedToolResultContent(input: {
+  payload: Record<string, unknown>;
+  toolName: string;
+  log: (line: string) => void;
+}): string {
+  const source = JSON.stringify(input.payload);
+  const rawTokens = estimateContextTokens(source);
+  if (rawTokens <= HOSTED_TOOL_RESULT_MAX_MODEL_TOKENS) return source;
+  const preview = trimTextToTokenBudgetBalanced(
+    source,
+    Math.max(200, HOSTED_TOOL_RESULT_MAX_MODEL_TOKENS - 180),
+  );
+  const compact = JSON.stringify({
+    ok: input.payload.ok !== false,
+    output: {
+      butler_tool_result_compacted: true,
+      tool_name: input.toolName,
+      compaction_reason: "hosted_tool_result_budget",
+      raw_estimated_tokens: rawTokens,
+      compact_estimated_tokens: estimateContextTokens(preview),
+      preview,
+    },
+  });
+  input.log(
+    `tool ${input.toolName} result compacted for hosted context: raw_tokens=${rawTokens} compact_tokens=${estimateContextTokens(compact)}`,
   );
   return compact;
 }
@@ -3486,7 +3516,11 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
         role: "tool",
         tool_call_id: call.id,
         name: call.function.name,
-        content: JSON.stringify(payload),
+        content: hostedToolResultContent({
+          payload,
+          toolName: call.function.name,
+          log,
+        }),
       });
     }
   }
