@@ -10,6 +10,7 @@ const THIN_TOOL_INTENT_START = "<butler_tool_intent>";
 const THIN_TOOL_INTENT_END = "</butler_tool_intent>";
 const THIN_RECENT_CONVERSATION_MAX_CHARS = 6_000;
 const THIN_PERSONA_MAX_CHARS = 2_000;
+export const THIN_TOOL_ESCALATION_MAX_ROUNDS = 4;
 
 export interface ThinToolIntent {
   summary: string;
@@ -41,6 +42,7 @@ export function shouldUseThinFirstResponse(input: {
 export function buildThinFirstResponsePrompt(input: {
   fullPrompt: string;
   userText: string;
+  forceDirect?: boolean;
 }): ThinFirstResponsePrompt {
   const persona = takeSection(
     promptContextSection(input.fullPrompt, "Active Persona Reminder"),
@@ -50,11 +52,19 @@ export function buildThinFirstResponsePrompt(input: {
     promptContextSection(input.fullPrompt, "Recent Conversation"),
     THIN_RECENT_CONVERSATION_MAX_CHARS,
   );
-  const instructions = [
+  const instructions = input.forceDirect === true ? [
+    "## Thin Context-Only Response Pass",
+    "The current user request explicitly asks for a context-only answer without inspecting new files, logs, tools, sources, or evidence.",
+    "Answer the user directly in the user's language using only the active persona, recent conversation, and current user request included here.",
+    "Do not return a tool-intent block.",
+    "Do not mention this hidden pass.",
+  ].join("\n") : [
     "## Thin First Response Pass",
     "This hidden pass decides whether the current Butler turn can be answered immediately without tools.",
     "Use only the active persona, recent conversation, and current user request included here.",
     "If those materials are enough, answer the user directly in the user's language.",
+    "If the user explicitly asks not to inspect files, logs, tools, sources, or new evidence, and asks for a design review, explanation, summary, or conceptual answer, answer directly from the provided context.",
+    "Mentions of Butler, a repository, runtime behavior, or previous problems are not enough to require tools when the requested deliverable is explicitly context-only.",
     "If the user is asking for current workspace files, logs, commands, web/current facts, source verification, artifact edits, or durable multi-step work, return only this intent block:",
     THIN_TOOL_INTENT_START,
     "summary: one concise public-facing action summary",
@@ -84,6 +94,20 @@ export function buildThinFirstResponsePrompt(input: {
   };
 }
 
+export function explicitlyRequestsContextOnlyAnswer(userText: string): boolean {
+  const text = userText.replace(/\s+/gu, " ").trim().toLowerCase();
+  if (!text) return false;
+  return [
+    /현재\s*(대화\s*)?맥락만/u,
+    /새로운\s*(조사|검색|확인|검토)\S*\s*(하지\s*말|말고|없이)/u,
+    /(파일|로그|도구|툴|소스|검색|조사)\S*\s*(확인|검토|조회|검색|사용|보지)\S*\s*(마|말고|없이)/u,
+    /\bwithout\s+(tools?|new\s+(research|investigation|evidence|lookup))\b/u,
+    /\bdo\s+not\s+(inspect|check|read|search|use)\b/u,
+    /\bno\s+new\s+(research|investigation|evidence|lookup)\b/u,
+    /\bcontext[- ]only\b/u,
+  ].some((pattern) => pattern.test(text));
+}
+
 export function extractThinToolIntent(text: string): ThinToolIntent | null {
   const raw = intentBody(text);
   if (!raw) return null;
@@ -104,11 +128,12 @@ export function toolEscalationPrompt(input: {
     [
       "## Hidden Thin First Response Escalation",
       "A previous hidden no-tool pass determined that this turn needs tool-backed work.",
-      "Use this as the seed for the next public work decision, then continue through the normal tool path.",
+      "Use this as the seed for the next public work decision, then begin with the immediate small step only.",
       `summary: ${input.intent.summary}`,
       `rationale: ${input.intent.rationale}`,
       `next_step: ${input.intent.nextStep}`,
       "Before the first tool call, emit a fresh public decision for the immediate small step.",
+      "After observing that evidence, emit another fresh public decision before any additional tool batch.",
     ].join("\n"),
   ].join("\n\n");
 }

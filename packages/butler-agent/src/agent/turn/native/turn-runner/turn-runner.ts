@@ -57,7 +57,9 @@ import {
 } from "../../workstream-phase-budget.ts";
 import {
   buildThinFirstResponsePrompt,
+  explicitlyRequestsContextOnlyAnswer,
   extractThinToolIntent,
+  THIN_TOOL_ESCALATION_MAX_ROUNDS,
   shouldUseThinFirstResponse,
   toolEscalationPrompt,
 } from "./thin-first-response.ts";
@@ -170,23 +172,25 @@ export async function runNativeToolTurn({
       session,
       plannedReview: context.plannedReview,
     })) {
+      const forceContextOnlyAnswer = explicitlyRequestsContextOnlyAnswer(context.userText);
       const thinPrompt = buildThinFirstResponsePrompt({
         fullPrompt: context.prompt,
         userText: context.userText,
+        forceDirect: forceContextOnlyAnswer,
       });
       const thinText = await runPrivateTextPrompt(
         thinPrompt.prompt,
-        "thin_first_response",
+        forceContextOnlyAnswer ? "thin_context_only_response" : "thin_first_response",
         thinPrompt.promptSections,
       );
-      const thinIntent = extractThinToolIntent(thinText);
+      const thinIntent = forceContextOnlyAnswer ? null : extractThinToolIntent(thinText);
       candidateText = thinIntent
         ? await runKernelToolPrompt(
           toolEscalationPrompt({
             prompt: context.prompt,
             intent: thinIntent,
           }),
-          undefined,
+          THIN_TOOL_ESCALATION_MAX_ROUNDS,
           initialPromptPhase,
         )
         : thinText;
