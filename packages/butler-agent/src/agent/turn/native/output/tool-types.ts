@@ -131,6 +131,8 @@ export interface PublicWorkDecision {
   completionObligations?: PublicWorkObligationKind[];
   source: "assistant-authored" | "model-authored" | "principal-authored" | "runtime-derived" | "review-repaired";
   toolName?: string;
+  toolCallIndex?: number;
+  claimed?: boolean;
   usageCount?: number;
   usageGroupId?: string;
   providerRound?: number;

@@ -335,7 +335,7 @@ test("tool_call validates array item schemas before dispatch", async () => {
 
   const result = await execute({
     name: "tool_call",
-    args: { id: "native:grep_files", arguments: { include: [123] } },
+    args: { id: "native:grep_files", arguments: { pattern: "needle", include: [123] } },
     rawArguments: "{}",
   }) as { ok: boolean; error: { code: string; path: string } };
 

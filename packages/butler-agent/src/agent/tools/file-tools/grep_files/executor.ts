@@ -50,7 +50,7 @@ export async function executeGrepFilesTool(call: { arguments?: unknown; input?: 
   if (!parsed.ok) return { ok: false, error: parsed.error, detail: parsed.detail, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: parsed.error }) };
   const a = parsed.args;
   const workspaceRoot = getWorkspaceRoot(a, context.workspacePath);
-  const pattern = String(a.pattern ?? a.query ?? "");
+  const pattern = String(a.pattern ?? "").trim();
   const regex = Boolean(a.regex ?? false);
   const caseSensitive = Boolean(a.case_sensitive ?? true);
   const include = stringArray(a.include ?? a.include_globs);

@@ -4967,6 +4967,9 @@ test("native tool loop prompt requires semantic progress first and output path a
   expect(instructions).toContain("Do not let native tool, review, or report formatting instructions erase the persona.");
   expect(instructions).toContain("include `output_paths`");
   expect(instructions).toContain("structured artifact evidence");
+  expect(instructions).toContain("use the required `pattern` field as the only search text field");
+  expect(instructions).toContain("prefer `context_lines: 0` for initial discovery");
+  expect(instructions).toContain("after a large or diffuse result read a specific file/range or narrow the next search");
   expect(instructions).toContain(
     "Use `durable_artifact` only when the immediate tool path will create, update, write, render, or attach a durable deliverable",
   );
@@ -5059,6 +5062,111 @@ test("public work decision selector refuses exhausted authored decision without 
     }),
   ).toThrow("Fresh public work decision continuation needed before visible tool execution.");
   expect(pending[0]!.usageCount).toBe(PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT);
+});
+
+test("public work decision selector consumes same-name tool calls in authored order", () => {
+  const progress = {
+    kind: "searched" as const,
+    toolName: "Search files",
+    safeLabel: "Searching workspace files",
+    workBlockLabel: "Search the next candidate pattern.",
+    inputLabel: "grep_files",
+    detailRows: [],
+  };
+  const pending = publicWorkDecisionsFromAssistantText({
+    text: [
+      "summary: Search the provider settings candidates as one bounded batch.",
+      "rationale: Each search checks a separate public candidate signal before choosing files to read.",
+      "next_step: Search these candidate signals, then read the strongest matching file range.",
+    ].join("\n"),
+    toolCalls: [
+      { name: "grep_files", args: { pattern: "effectiveKey" } },
+      { name: "grep_files", args: { pattern: "retention" } },
+      { name: "grep_files", args: { pattern: "OPENAI_PROMPT" } },
+    ],
+    language: "en",
+    existingDecisions: [],
+  });
+  expect(pending).toHaveLength(3);
+
+  const first = takePublicWorkDecisionForTool({
+    pending,
+    toolName: "grep_files",
+    language: "en",
+    previousDecisions: [],
+    progress,
+    allowRuntimeDerived: false,
+  });
+  const second = takePublicWorkDecisionForTool({
+    pending,
+    toolName: "grep_files",
+    language: "en",
+    previousDecisions: [first],
+    progress,
+    allowRuntimeDerived: false,
+  });
+  const third = takePublicWorkDecisionForTool({
+    pending,
+    toolName: "grep_files",
+    language: "en",
+    previousDecisions: [first, second],
+    progress,
+    allowRuntimeDerived: false,
+  });
+
+  expect(new Set([first.decisionId, second.decisionId, third.decisionId]).size).toBe(3);
+  expect(first.usageGroupId).toBe(second.usageGroupId);
+  expect(second.usageGroupId).toBe(third.usageGroupId);
+  expect(third.usageCount).toBe(3);
+});
+
+test("public work decision selector reuses matching decision before borrowing another tool decision", () => {
+  const progress = {
+    kind: "searched" as const,
+    toolName: "Search files",
+    safeLabel: "Searching workspace files",
+    workBlockLabel: "Search the next candidate pattern.",
+    inputLabel: "grep_files",
+    detailRows: [],
+  };
+  const pending = publicWorkDecisionsFromAssistantText({
+    text: [
+      "summary: Read the candidate file first.",
+      "rationale: The file content may make the later search unnecessary.",
+      "next_step: Read the file and keep the search decision available.",
+      "summary: Search the provider setting marker.",
+      "rationale: The marker search checks the specific setting location.",
+      "next_step: Search the marker and then decide whether to read a file.",
+    ].join("\n"),
+    toolCalls: [
+      { name: "read_file", args: { path: "provider.ts" } },
+      { name: "grep_files", args: { pattern: "OPENAI_PROMPT" } },
+    ],
+    language: "en",
+    existingDecisions: [],
+  });
+
+  const firstSearch = takePublicWorkDecisionForTool({
+    pending,
+    toolName: "grep_files",
+    language: "en",
+    previousDecisions: [],
+    progress,
+    allowRuntimeDerived: false,
+  });
+  const secondSearch = takePublicWorkDecisionForTool({
+    pending,
+    toolName: "grep_files",
+    language: "en",
+    previousDecisions: [firstSearch],
+    progress,
+    allowRuntimeDerived: false,
+  });
+
+  expect(secondSearch.decisionId).toBe(firstSearch.decisionId);
+  expect(firstSearch.summary).toBe("Search the provider setting marker.");
+  expect(secondSearch.summary).toBe("Search the provider setting marker.");
+  expect(pending.find((decision) => decision.toolName === "read_file")?.claimed).not.toBe(true);
 });
 
 test("assistant pre-tool progress emits structured decisions for ordinary tools", async () => {
