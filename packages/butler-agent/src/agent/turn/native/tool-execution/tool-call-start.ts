@@ -64,7 +64,11 @@ export async function emitStartedProgress(input: {
       arguments: evidenceTranscriptToolCallArgumentsProjection(input.cleanArgs),
     },
   });
-  if (!input.semanticProgressEstablished && !input.isWorkerStartTool) {
+  if (
+    !input.semanticProgressEstablished &&
+    !input.isWorkerStartTool &&
+    input.decision.source !== "runtime-derived"
+  ) {
     await emitDecisionProgressBestEffort({
       turnInput: input.input.turnInput,
       decision: input.decision,

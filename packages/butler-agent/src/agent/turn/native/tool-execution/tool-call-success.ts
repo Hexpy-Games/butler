@@ -90,7 +90,11 @@ export async function handleAuditedToolSuccess(input: {
       state: "review",
     });
   }
-  if (!input.semanticProgressEstablished && !input.isWorkerStartTool) {
+  if (
+    !input.semanticProgressEstablished &&
+    !input.isWorkerStartTool &&
+    input.decision.source !== "runtime-derived"
+  ) {
     await emitDecisionProgressBestEffort({
       turnInput: input.executorInput.turnInput,
       decision: input.decision,

@@ -112,6 +112,7 @@ function defaultNow(): string {
 
 const DEFAULT_TYPING_INTERVAL_MS = 4_000;
 const EMPTY_FINAL_DURABLE_TEXT = "[turn completed without public final text]";
+const DEFAULT_OPENING_DECISION_TIMEOUT_MS = 0;
 
 type StewardActivityTimelineEvent = {
   schema: "butler.steward-activity-event.v1";
@@ -882,6 +883,10 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     timestamp: string;
   }): Promise<string | undefined> {
     if (input.envelope.transport !== APP_TRANSPORT) return undefined;
+    const timeoutMs = this.options.openingDecisionTimeoutMs ?? DEFAULT_OPENING_DECISION_TIMEOUT_MS;
+    if (timeoutMs <= 0) {
+      return undefined;
+    }
     try {
       const openingDecision = await generateOpeningDecisionWithProvider(
         this.options.provider,
@@ -891,7 +896,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           sessionRole: input.binding.role,
           projectId: input.binding.projectId,
           signal: input.envelope.signal,
-          timeoutMs: this.options.openingDecisionTimeoutMs,
+          timeoutMs,
         },
       );
       if (!openingDecision) {

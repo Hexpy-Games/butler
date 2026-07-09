@@ -55,6 +55,10 @@ const PUBLIC_DECISION_SOURCES = new Set([
   "model-authored",
   "principal-authored",
 ]);
+const RENDERABLE_WORK_DECISION_SOURCES = new Set([
+  ...PUBLIC_DECISION_SOURCES,
+  "runtime-derived",
+]);
 const INTERNAL_PROGRESS_TOOL_NAMES = new Set([
   "Update Todo List",
   "List Todo List",
@@ -1250,15 +1254,6 @@ function buildWorkBlocks(
     string,
     WorkBlockView & { rowMap: Map<string, ProgressRow> }
   >();
-  const decisionWorkBlockAliases = new Map<string, string>();
-  const canonicalWorkBlockId = (row: ProgressRow, fallbackId: string) => {
-    const decisionKey = publicDecisionIntentKey(row);
-    if (!decisionKey) return fallbackId;
-    const existing = decisionWorkBlockAliases.get(decisionKey);
-    if (existing) return existing;
-    decisionWorkBlockAliases.set(decisionKey, fallbackId);
-    return fallbackId;
-  };
   const ensureBlock = (
     id: string,
     label: string,
@@ -1304,7 +1299,7 @@ function buildWorkBlocks(
   for (const row of sortProgressRowsForDisplay(rows)) {
     if (row.kind === WORK_BLOCK_MARKER_KIND) {
       if (!row.work_block_id) continue;
-      const blockId = canonicalWorkBlockId(row, row.work_block_id);
+      const blockId = row.work_block_id;
       ensureBlock(
         blockId,
         row.work_block_label ?? "",
@@ -1316,7 +1311,7 @@ function buildWorkBlocks(
     }
     if (isStandaloneWorkBlockMessageRow(row)) {
       const fallbackId = row.work_block_id ?? `row-${row.id}`;
-      const blockId = canonicalWorkBlockId(row, fallbackId);
+      const blockId = fallbackId;
       const label = row.work_block_label ?? "";
       const block = ensureBlock(blockId, label, row.state, row.created_at, row);
       block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
@@ -1326,7 +1321,7 @@ function buildWorkBlocks(
     if (row.kind === "todo") continue;
     if (!isWorkBlockToolActivityRow(row)) continue;
     const fallbackId = row.work_block_id ?? `row-${row.id}`;
-    const blockId = canonicalWorkBlockId(row, fallbackId);
+    const blockId = fallbackId;
     const label = row.work_block_label ?? "";
     const block = ensureBlock(blockId, label, row.state, row.created_at, row);
     block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
@@ -1795,7 +1790,7 @@ function publicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
   decision_latency_ms: number;
   decision_evidence_refs: string[];
 }> {
-  if (!row || !isPublicDecisionSource(row.work_decision_source)) return {};
+  if (!row || !isRenderableWorkDecisionSource(row.work_decision_source)) return {};
   return {
     decision_summary: row.work_decision_summary,
     decision_rationale: row.work_decision_rationale,
@@ -1832,20 +1827,8 @@ function explicitPublicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
   };
 }
 
-function publicDecisionIntentKey(row?: ProgressRow): string | null {
-  if (!row || !isPublicDecisionSource(row.work_decision_source)) return null;
-  const summary = normalizedDecisionIntentPart(row.work_decision_summary);
-  if (!summary) return null;
-  return JSON.stringify([
-    row.work_decision_source,
-    summary,
-    normalizedDecisionIntentPart(row.work_decision_rationale),
-    normalizedDecisionIntentPart(row.work_decision_next_step),
-  ]);
-}
-
-function normalizedDecisionIntentPart(value?: string): string {
-  return (value ?? "").replace(/\s+/gu, " ").trim();
+function isRenderableWorkDecisionSource(source: unknown): source is string {
+  return typeof source === "string" && RENDERABLE_WORK_DECISION_SOURCES.has(source);
 }
 
 function safeOptionalPublicText(value: unknown): string | undefined {

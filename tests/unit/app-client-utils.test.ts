@@ -2474,7 +2474,7 @@ test("work blocks group chained tools by semantic work block label", () => {
   expect(blocks[0]?.rows[0]?.work_decision_summary).toBeUndefined();
 });
 
-test("work blocks collapse repeated authored decisions with different fallback ids", () => {
+test("work blocks keep repeated authored decisions with different explicit ids separate", () => {
   const decision = {
     work_decision_summary:
       "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠습니다.",
@@ -2522,19 +2522,26 @@ test("work blocks collapse repeated authored decisions with different fallback i
 
   const blocks = workBlocksFromProgressRows(rows);
 
-  expect(blocks).toHaveLength(1);
-  expect(blocks[0]).toMatchObject({
-    id: "public-note-failure",
-    label: "검증 실패 지점을 좁히는 중",
-    decision_summary:
-      "전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠습니다.",
-  });
-  expect(blocks[0]?.rows).toHaveLength(4);
-  expect(blocks[0]?.rows.map((row) => row.safe_tool_name)).toEqual([
-    undefined,
-    "Read",
-    "Search",
-    "Bash",
+  expect(blocks).toHaveLength(4);
+  expect(blocks.map((block) => block.id)).toEqual([
+    "public-note-failure",
+    "work-read-ledger",
+    "work-grep-failure",
+    "work-run-single-test",
+  ]);
+  expect(blocks.map((block) => block.label)).toEqual([
+    "검증 실패 지점을 좁히는 중",
+    "검증 실패 지점을 좁히는 중",
+    "검증 실패 지점을 좁히는 중",
+    "검증 실패 지점을 좁히는 중",
+  ]);
+  expect(blocks[0]?.decision_summary)
+    .toBe("전체 테스트 exit code가 실패로 확인됐으니, 저장된 요약 파일에서 실패 라인만 검색 도구로 직접 추출하겠습니다.");
+  expect(blocks.map((block) => block.rows.map((row) => row.safe_tool_name))).toEqual([
+    [undefined],
+    ["Read"],
+    ["Search"],
+    ["Bash"],
   ]);
 });
 
@@ -3126,7 +3133,7 @@ test("client and shared first-progress projections stay status-only", () => {
   expect(messages).toEqual([]);
 });
 
-test("work block projection groups decision message rows with their following tool rows", () => {
+test("work block projection keeps decision message rows separate from later explicit tool blocks", () => {
   const decision = {
     work_decision_summary: "저장된 targeted test 로그 파일을 직접 읽겠습니다.",
     work_decision_rationale: "실패 출력이 압축되어 로그 파일을 읽어야 합니다.",
@@ -3159,7 +3166,7 @@ test("work block projection groups decision message rows with their following to
     },
   ]);
 
-  expect(blocks).toHaveLength(1);
+  expect(blocks).toHaveLength(2);
   expect(blocks[0]).toMatchObject({
     id: "public-note-decision",
     label:
@@ -3170,6 +3177,13 @@ test("work block projection groups decision message rows with their following to
         id: "event-decision-message",
         kind: "message",
       }),
+    ],
+  });
+  expect(blocks[1]).toMatchObject({
+    id: "work-todo-decision-judge-closeout",
+    label: "Decision Judge 변경분을 검증하고 실패를 고쳐 커밋하는 중",
+    decision_summary: undefined,
+    rows: [
       expect.objectContaining({
         id: "event-tool-read",
         kind: "read",
@@ -3959,7 +3973,7 @@ test("work blocks group contextual objectives with nested toolchain rows", () =>
   });
 });
 
-test("work blocks ignore unauthorised decision fields when choosing labels and context", () => {
+test("work blocks render runtime-derived intent but ignore non-renderable decision fields", () => {
   const blocks = workBlocksFromProgressRows([
     {
       id: "block-runtime",
@@ -3968,9 +3982,9 @@ test("work blocks ignore unauthorised decision fields when choosing labels and c
       safe_label: "Runtime fallback label",
       work_block_id: "work-runtime",
       work_block_label: "Explicit work block label",
-      work_decision_summary: "This fallback must not become public context",
-      work_decision_rationale: "Runtime-derived repair text is diagnostic only.",
-      work_decision_next_step: "Do not render this as a decision.",
+      work_decision_summary: "Runtime fallback explains the immediate tool step.",
+      work_decision_rationale: "The basic workspace tool can proceed without waiting for another model decision.",
+      work_decision_next_step: "Use the tool result to choose the next visible step.",
       work_decision_source: "runtime-derived",
     },
     {
@@ -3992,9 +4006,87 @@ test("work blocks ignore unauthorised decision fields when choosing labels and c
       id: "work-runtime",
       label: "Explicit work block label",
       state: "delivered",
-      decision_summary: undefined,
-      decision_source: undefined,
+      decision_summary: "Runtime fallback explains the immediate tool step.",
+      decision_rationale: "The basic workspace tool can proceed without waiting for another model decision.",
+      decision_next_step: "Use the tool result to choose the next visible step.",
+      decision_source: "runtime-derived",
     }),
+  ]);
+});
+
+test("runtime-derived work decisions do not alias separate work block ids", () => {
+  const sharedDecision = {
+    work_decision_summary: "기본 작업 도구로 확인 가능한 범위를 바로 처리합니다.",
+    work_decision_rationale: "별도 모델 판단 없이도 현재 파일을 확인할 수 있습니다.",
+    work_decision_next_step: "결과를 바탕으로 다음 단계를 판단합니다.",
+    work_decision_source: "runtime-derived",
+  };
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "block-runtime-a",
+      kind: "work_block",
+      state: "running",
+      safe_label: "첫 번째 파일 확인",
+      work_block_id: "work-runtime-a",
+      work_block_label: "첫 번째 파일 확인",
+      ...sharedDecision,
+    },
+    {
+      id: "block-runtime-b",
+      kind: "work_block",
+      state: "running",
+      safe_label: "두 번째 파일 확인",
+      work_block_id: "work-runtime-b",
+      work_block_label: "두 번째 파일 확인",
+      ...sharedDecision,
+    },
+  ]);
+
+  expect(blocks.map((block) => block.id)).toEqual([
+    "work-runtime-a",
+    "work-runtime-b",
+  ]);
+  expect(blocks.map((block) => block.decision_source)).toEqual([
+    "runtime-derived",
+    "runtime-derived",
+  ]);
+});
+
+test("authored work decisions keep separate explicit work block ids", () => {
+  const sharedDecision = {
+    work_decision_summary: "관련 파일을 확인합니다.",
+    work_decision_rationale: "같은 조사 흐름이지만 각 도구 묶음은 선형 블록으로 남아야 합니다.",
+    work_decision_next_step: "읽은 결과를 바탕으로 다음 블록을 결정합니다.",
+    work_decision_source: "assistant-authored",
+  };
+  const blocks = workBlocksFromProgressRows([
+    {
+      id: "block-a",
+      kind: "work_block",
+      state: "running",
+      safe_label: "첫 번째 파일 확인",
+      work_block_id: "work-authored-a",
+      work_block_label: "첫 번째 파일 확인",
+      ...sharedDecision,
+    },
+    {
+      id: "block-b",
+      kind: "work_block",
+      state: "running",
+      safe_label: "두 번째 파일 확인",
+      work_block_id: "work-authored-b",
+      work_block_label: "두 번째 파일 확인",
+      ...sharedDecision,
+    },
+  ]);
+
+  expect(blocks.map((block) => block.id)).toEqual([
+    "work-authored-a",
+    "work-authored-b",
+  ]);
+  expect(blocks.map((block) => block.label)).toEqual([
+    "첫 번째 파일 확인",
+    "두 번째 파일 확인",
   ]);
 });
 

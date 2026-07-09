@@ -35,6 +35,7 @@ export type ObservationKind =
   | "validation_failed"
   | "completion_gap"
   | "public_decision_required"
+  | "public_decision_continuation"
   | "context_compacted"
   | "user_input"
   | "user_cancelled";

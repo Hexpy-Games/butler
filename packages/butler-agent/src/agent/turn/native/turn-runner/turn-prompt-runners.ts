@@ -1,6 +1,7 @@
 import type {
   FunctionToolPromptOptions,
   PromptUsageAttribution,
+  PromptUsageSectionAttribution,
   ReasoningEffort,
 } from "../../../../integrations/providers/provider.ts";
 import type { RuntimeTurnInput } from "../../../../test-support/harness/contracts.ts";
@@ -79,7 +80,12 @@ export function createNativeTurnPromptRunners(input: {
   latencyTracker?: TurnLatencyMetricRecorder;
   phaseBudgetController?: WorkStreamPhaseBudgetController | null;
 }) {
-  const usageAttribution = (phase: string, roundIndex?: number): PromptUsageAttribution => ({
+  let providerRoundIndex = 0;
+  const usageAttribution = (
+    phase: string,
+    roundIndex?: number,
+    promptSections: PromptUsageSectionAttribution[] = input.promptSections,
+  ): PromptUsageAttribution => ({
     turnId: input.turnId,
     phase,
     ...(roundIndex === undefined ? {} : { roundIndex }),
@@ -117,7 +123,7 @@ export function createNativeTurnPromptRunners(input: {
         budgetState: directTurnBudgetState(input.turnBudget),
       });
     },
-    promptSections: input.promptSections,
+    promptSections,
   });
   const streamProjector = (phase: string) => createProviderStreamTurnEventProjector({
     turnId: input.turnId,
@@ -194,12 +200,20 @@ export function createNativeTurnPromptRunners(input: {
                 toolNames: toolCalls.map((toolCall) => toolCall.name),
               });
               input.markAssistantTextBeforeToolsSeen();
-              input.pendingPublicDecisions.push(...publicWorkDecisionsFromAssistantText({
+              const nextPendingDecisions = publicWorkDecisionsFromAssistantText({
                 text,
                 toolCalls,
                 language: input.deps.messageLanguage,
                 existingDecisions: input.publicDecisionContext,
-              }));
+              });
+              if (nextPendingDecisions.length > 0) {
+                input.pendingPublicDecisions.length = 0;
+                providerRoundIndex += 1;
+                for (const d of nextPendingDecisions) {
+                  d.providerRound = providerRoundIndex;
+                }
+                input.pendingPublicDecisions.push(...nextPendingDecisions);
+              }
               await emitAssistantTextBeforeTools({
                 turnInput: input.turnInput,
                 text,
@@ -250,6 +264,30 @@ export function createNativeTurnPromptRunners(input: {
         await projector.completeOpenStreams(input.turnInput.signal?.aborted ? "aborted" : "failed");
         throw error;
       }
+    },
+    runPrivateTextPrompt: async (
+      promptText: string,
+      phase = "private_text_prompt",
+      promptSections?: PromptUsageSectionAttribution[],
+    ): Promise<string> => {
+      const text = await input.deps.promptRunner({
+        prompt: promptText,
+        model: input.turnInput.model,
+        reasoningEffort,
+        instructions: input.session.init.systemPrompt,
+        cacheScope: "session-turn",
+        signal: input.turnInput.signal,
+        attachments: input.attachments,
+        butlerData: input.deps.butlerData,
+        usageAttribution: usageAttribution(phase, 0, promptSections),
+      });
+      if (text.trim()) {
+        input.latencyTracker?.recordFirstModelDelta({
+          phase,
+          target: "final_candidate",
+        });
+      }
+      return text;
     },
   };
 }

@@ -168,16 +168,14 @@ test("native runtime exposes structured Project Ledger failures in model-visible
   expect(invalidResult).toMatchObject({ ok: false, observation_kind: "validation_failed" });
   expect(completionGateResult).toMatchObject({ ok: false, observation_kind: "validation_failed" });
   const invalidContent = String(invalidResult.model_visible_content ?? "");
-  expect(invalidContent).toContain("invalid_transition");
-  expect(invalidContent).toContain("Invalid work transition: in_progress -> done");
-  expect(invalidContent).toContain("project-ledger work update --id W-INVALID-TRANSITION --status review");
-  expect(invalidContent).toContain("project_ledger_work_update");
-  expect(invalidContent).toContain("status: review");
+  expect(invalidContent).toContain("project_ledger_closeout_failed");
+  expect(invalidContent).toContain("check_failed");
+  expect(invalidContent).toContain("project_ledger_check");
   const gateContent = String(completionGateResult.model_visible_content ?? "");
   expect(gateContent).toContain("completion_gate_failed");
   expect(gateContent).toContain("missing_validation");
   expect(gateContent).toContain("missing_report");
-  expect(gateContent).toContain("project-ledger work complete --id W-COMPLETION-GATE --validation TEXT");
+  expect(gateContent).toContain("native_next: project_ledger_work_complete id: W-COMPLETION-GATE");
   expect(gateContent).toContain("project_ledger_work_complete");
   for (const privateText of [projectPath, tempDir]) {
     expect(invalidContent).not.toContain(privateText);
@@ -191,6 +189,6 @@ test("native runtime exposes structured Project Ledger failures in model-visible
   expect(toolResults).toHaveLength(2);
   const firstObservation = toolResults[0]?.payload.observation as { modelVisibleContent?: unknown } | undefined;
   const secondObservation = toolResults[1]?.payload.observation as { modelVisibleContent?: unknown } | undefined;
-  expect(String(firstObservation?.modelVisibleContent ?? "")).toContain("invalid_transition");
+  expect(String(firstObservation?.modelVisibleContent ?? "")).toContain("project_ledger_closeout_failed");
   expect(String(secondObservation?.modelVisibleContent ?? "")).toContain("completion_gate_failed");
 });

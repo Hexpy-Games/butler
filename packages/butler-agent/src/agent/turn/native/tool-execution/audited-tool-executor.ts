@@ -40,7 +40,7 @@ import {
   createProjectLedgerPreflightDecision,
 } from "./project-ledger-preflight-decision.ts";
 import {
-  publicDecisionRequiredObservation,
+  publicDecisionContinuationObservation,
   throwIfToolResultNeedsObservation,
   toolObservationResult,
 } from "./tool-observations.ts";
@@ -79,10 +79,12 @@ export function createAuditedButlerToolExecutor(
     if (isInternalProgressTool(call.name)) {
       return await internalProgress.run(call, "model");
     }
+
     const allowRuntimePreflightDecision = allowsProjectLedgerPreflightDecision({
       executorInput: input,
       call,
     });
+
     if (
       allowRuntimePreflightDecision &&
       !hasCompleteAuthoredPublicDecisionForTool({
@@ -98,8 +100,9 @@ export function createAuditedButlerToolExecutor(
       toolName: call.name,
       allowRuntimeDerived: allowRuntimePreflightDecision,
     })) {
-      return appendPublicDecisionRequiredObservation({ input, call });
+      return appendPublicDecisionContinuationObservation({ input, call });
     }
+
     const plannedReviewBlock = applyPlannedReviewToolPolicy({
       plannedReview: input.plannedReview,
       toolName: call.name,
@@ -175,11 +178,11 @@ export function createAuditedButlerToolExecutor(
   return async (call) => await executeAuditedWithBridge(call);
 }
 
-function appendPublicDecisionRequiredObservation(input: {
+function appendPublicDecisionContinuationObservation(input: {
   input: NativeAuditedToolExecutorInput;
   call: NativeToolCall;
 }): ReturnType<typeof toolObservationResult> {
-  const observation = publicDecisionRequiredObservation({
+  const observation = publicDecisionContinuationObservation({
     turnId: input.input.turnId,
     call: input.call,
   });
@@ -188,11 +191,12 @@ function appendPublicDecisionRequiredObservation(input: {
     kind: "tool_result",
     payload: {
       name: input.call.name,
-      ok: false,
+      ok: true,
+      continuation_required: true,
       observation,
     },
     metadata: {
-      source: "runtime/native-tool-loop.ts#public-decision-gate",
+      source: "runtime/native-tool-loop.ts#public-decision-continuation",
     },
   }));
   return toolObservationResult(observation);
@@ -266,16 +270,18 @@ async function prepareAuditedToolExecution(input: {
     input.cleanArgs,
     input.input.messageLanguage,
   );
+  const allowRuntimeDerivedDecision =
+    allowsProjectLedgerPreflightDecision({
+      executorInput: input.input,
+      call: input.call,
+    });
   const decision = takePublicWorkDecisionForTool({
     pending: input.input.pendingPublicDecisions,
     toolName: input.call.name,
     progress,
     language: input.input.messageLanguage,
     previousDecisions: input.input.publicDecisionContext,
-    allowRuntimeDerived: allowsProjectLedgerPreflightDecision({
-      executorInput: input.input,
-      call: input.call,
-    }),
+    allowRuntimeDerived: allowRuntimeDerivedDecision,
   });
   await maybeEmitRuntimeProgress(input, decision, progress, isWorkerStartTool);
 
@@ -283,18 +289,21 @@ async function prepareAuditedToolExecution(input: {
   const semanticWorkBlock = input.internalProgress.semanticProgressEstablished()
     ? input.internalProgress.currentSemanticWorkBlock()
     : null;
-  const matchingDecisionWorkBlockId =
-    semanticWorkBlock?.id ??
-    reusableDecisionWorkBlockId(input.input.publicDecisionContext, decision);
+  const matchingDecisionWorkBlockId = reusableDecisionWorkBlockId(
+    input.input.publicDecisionContext,
+    decision,
+  );
   const workBlockId = turnScopedWorkBlockId(
     input.input.turnId,
-    matchingDecisionWorkBlockId ?? `work-${toolCallId}`,
+    matchingDecisionWorkBlockId ?? decisionScopedWorkBlockId(semanticWorkBlock?.id, toolCallId),
   );
   decision.workBlockId = workBlockId;
   decision.toolName = input.call.name;
   const workBlockLabel = semanticWorkBlock?.label ?? decision.summary;
-  input.input.publicDecisionContext.push(decision);
-  appendPublicDecisionTranscript(input.input, decision);
+  if (decision.source !== "runtime-derived") {
+    input.input.publicDecisionContext.push(decision);
+    appendPublicDecisionTranscript(input.input, decision);
+  }
   await emitStartedProgress({
     ...input,
     decision,
@@ -320,15 +329,22 @@ async function prepareAuditedToolExecution(input: {
 }
 
 function reusableDecisionWorkBlockId(
-  previousDecisions: Array<{ workBlockId?: string; source: string; summary: string; rationale?: string; nextStep?: string }>,
-  decision: { source: string; summary: string; rationale?: string; nextStep?: string },
+  previousDecisions: Array<{ workBlockId?: string; providerRound?: number; source: string; summary: string; rationale?: string; nextStep?: string }>,
+  decision: { providerRound?: number; source: string; summary: string; rationale?: string; nextStep?: string },
 ): string | null {
-  for (let index = previousDecisions.length - 1; index >= 0; index -= 1) {
-    const previous = previousDecisions[index];
-    if (!previous?.workBlockId) continue;
-    if (samePublicDecisionIntent(previous, decision)) return previous.workBlockId;
+  if (decision.source !== "assistant-authored") {
+    return null;
   }
-  return null;
+
+  const previous = previousDecisions.at(-1);
+  if (!previous?.workBlockId) return null;
+  if (previous.providerRound !== decision.providerRound) return null;
+  return samePublicDecisionIntent(previous, decision) ? previous.workBlockId : null;
+}
+
+function decisionScopedWorkBlockId(semanticWorkBlockId: string | undefined, toolCallId: string): string {
+  const semanticPrefix = semanticWorkBlockId?.trim();
+  return semanticPrefix ? `${semanticPrefix}-${toolCallId}` : `work-${toolCallId}`;
 }
 
 function turnScopedWorkBlockId(turnId: string, workBlockId: string): string {

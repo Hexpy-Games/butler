@@ -13,6 +13,7 @@ export type CompletionReviewObservationVisibility = "model" | "public" | "operat
 export type CompletionReviewObservationKind =
   | "completion_gap"
   | "public_decision_required"
+  | "public_decision_continuation"
   | "tool_result"
   | "tool_invalid_arguments"
   | "tool_unavailable"
@@ -74,6 +75,7 @@ const TEXT_TRUNCATE = 180;
 const OBSERVATION_KIND_SET = new Set<string>([
   "completion_gap",
   "public_decision_required",
+  "public_decision_continuation",
   "tool_result",
   "tool_invalid_arguments",
   "tool_unavailable",
