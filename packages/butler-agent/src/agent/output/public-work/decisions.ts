@@ -37,9 +37,11 @@ export function publicWorkDecisionsFromAssistantText(input: {
   if (structured.length === 0) {
     return [];
   }
+  const usageGroupIds = structured.map(() => publicDecisionId());
   return input.toolCalls.flatMap((call, index) => {
     const indexedDecision = structured[index];
     const sharedDecision = structured[0];
+    const usageGroupIndex = indexedDecision ? index : 0;
     const decisionWasRepaired = indexedDecision?.repaired === true || sharedDecision?.repaired === true;
     const summary = indexedDecision?.summary ?? sharedDecision?.summary;
     const rationale = indexedDecision?.rationale ?? sharedDecision?.rationale;
@@ -57,6 +59,7 @@ export function publicWorkDecisionsFromAssistantText(input: {
     }
     return {
       decisionId: publicDecisionId(),
+      usageGroupId: usageGroupIds[usageGroupIndex] ?? publicDecisionId(),
       summary,
       rationale,
       evidenceRefs: input.existingDecisions
@@ -109,7 +112,7 @@ export function hasCompleteAuthoredPublicDecisionForTool(input: {
   if (!decision) {
     return false;
   }
-  if ((decision.usageCount ?? 0) >= PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT) {
+  if (!decisionGroupHasRemainingUse(input.pending, decision)) {
     return false;
   }
 
@@ -121,23 +124,60 @@ function takePendingDecision(
   toolName: string,
 ): PublicWorkDecision | undefined {
   const matchingDecision = pending.find((decision) => decision.toolName === toolName);
-  const usageCount = matchingDecision?.usageCount ?? 0;
-  const hasRemainingUseCount = usageCount < PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT;
-
-  if (matchingDecision && hasRemainingUseCount) {
-    matchingDecision.usageCount = usageCount + 1;
+  if (matchingDecision && claimDecisionGroupUse(pending, matchingDecision)) {
     return matchingDecision;
   }
 
   const sharedDecision = pending[0];
-  const sharedDecisionUseCount = sharedDecision?.usageCount ?? 0;
-
-  if (sharedDecision && sharedDecisionUseCount < PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT) {
-    sharedDecision.usageCount = sharedDecisionUseCount + 1;
+  if (sharedDecision && claimDecisionGroupUse(pending, sharedDecision)) {
     return sharedDecision;
   }
 
   return;
+}
+
+function decisionUsageGroupKey(decision: PublicWorkDecision): string {
+  return decision.usageGroupId ?? decision.decisionId;
+}
+
+function decisionGroupHasRemainingUse(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+): boolean {
+  return decisionGroupUsageCount(pending, decision) < PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT;
+}
+
+function claimDecisionGroupUse(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+): boolean {
+  const usageCount = decisionGroupUsageCount(pending, decision);
+  if (usageCount >= PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT) return false;
+  setDecisionGroupUsageCount(pending, decision, usageCount + 1);
+  return true;
+}
+
+function decisionGroupUsageCount(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+): number {
+  const key = decisionUsageGroupKey(decision);
+  return pending
+    .filter((candidate) => decisionUsageGroupKey(candidate) === key)
+    .reduce((max, candidate) => Math.max(max, candidate.usageCount ?? 0), 0);
+}
+
+function setDecisionGroupUsageCount(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+  usageCount: number,
+): void {
+  const key = decisionUsageGroupKey(decision);
+  for (const candidate of pending) {
+    if (decisionUsageGroupKey(candidate) === key) {
+      candidate.usageCount = usageCount;
+    }
+  }
 }
 
 export function annotateToolResultWithDecisionContext(input: {

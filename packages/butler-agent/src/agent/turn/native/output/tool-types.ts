@@ -132,6 +132,7 @@ export interface PublicWorkDecision {
   source: "assistant-authored" | "model-authored" | "principal-authored" | "runtime-derived" | "review-repaired";
   toolName?: string;
   usageCount?: number;
+  usageGroupId?: string;
   providerRound?: number;
 }
 

@@ -781,6 +781,75 @@ test("native runtime requests a fresh authored decision cue after a bounded basi
   expect(orderedWorkBlockIds.some((id) => id.includes(":burst-"))).toBe(false);
 });
 
+test("native runtime counts mixed-tool batches against one authored decision group", async () => {
+  const results: Array<Record<string, unknown>> = [];
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  let executedTools = 0;
+  const calls = [
+    { name: "run_command", args: { command: "pwd" } },
+    { name: "run_command", args: { command: "git status --short" } },
+    { name: "web_search", args: { query: "butler evidence packet" } },
+    { name: "read_file", args: { path: "a.ts" } },
+    { name: "read_file", args: { path: "b.ts" } },
+    { name: "read_file", args: { path: "c.ts" } },
+    { name: "read_file", args: { path: "d.ts" } },
+  ];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async () => {
+      executedTools += 1;
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: Inspect the next bounded evidence slice.",
+          "rationale: The current decision should cover only one small batch before the next decision.",
+          "next_step: Run this mixed tool batch, then choose the next smaller evidence slice from the result.",
+        ].join("\n"),
+        toolCalls: calls,
+      });
+      for (const call of calls) {
+        results.push(await input.executeTool({
+          ...call,
+          rawArguments: JSON.stringify(call.args),
+        }) as Record<string, unknown>);
+      }
+      return "Inspected the bounded slice.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/mixed-tool-batch-continuation",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Inspect a mixed evidence batch." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload });
+    },
+  });
+
+  expect(executedTools).toBe(PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT);
+  expect(results).toHaveLength(calls.length);
+  expect(results[PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT]).toMatchObject({
+    ok: true,
+    continuation_required: true,
+    observation_kind: "public_decision_continuation",
+  });
+  const toolStarts = events.filter((event) => event.kind === "tool.started");
+  expect(toolStarts).toHaveLength(PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT);
+  expect(new Set(toolStarts.map((event) => event.payload?.workBlockId)).size).toBe(1);
+});
+
 test("native runtime permits Ledger preflight inspection tools in ledger-tracked project turns", async () => {
   let executed = 0;
   let returnedToolResult: unknown;
