@@ -38,6 +38,7 @@ const TOOL_PROGRESS_KIND_BY_TOOL_NAME: Record<string, ToolProgressSummary["kind"
   read_conversation_context: "read",
   read_file: "read",
   read_mcp_resource: "read",
+  read_tool_evidence_artifact: "read",
   read_tool_output_artifact: "read",
   recall_memory: "searched",
   repair_planned_task: "dispatch",

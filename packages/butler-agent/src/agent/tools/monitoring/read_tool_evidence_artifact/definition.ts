@@ -1,9 +1,9 @@
 import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.ts";
 
-export const readToolOutputArtifactToolDefinition = {
+export const readToolEvidenceArtifactToolDefinition = {
   type: "function",
-  name: "read_tool_output_artifact",
-  description: "Read a bounded stdout/stderr slice from a Butler tool-output artifact.",
+  name: "read_tool_evidence_artifact",
+  description: "Read a bounded slice from a Butler tool-evidence artifact.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -13,14 +13,6 @@ export const readToolOutputArtifactToolDefinition = {
       },
       path: {
         type: "string",
-      },
-      stream: {
-        type: "string",
-        enum: [
-          "stdout",
-          "stderr",
-          "both",
-        ],
       },
       offset_lines: {
         type: "integer",
@@ -39,18 +31,17 @@ export const readToolOutputArtifactToolDefinition = {
   transcriptVisibility: "visible",
 } satisfies ButlerToolDefinition;
 
-export const readToolOutputArtifactToolMetadata = {
+export const readToolEvidenceArtifactToolMetadata = {
   category: "monitoring",
   tags: [
     "tool",
     "artifact",
-    "stdout",
-    "stderr",
+    "evidence",
     "slice",
     "debug",
   ],
   safetyNotes: [
-    "Reads only bounded slices of Butler-owned tool output.",
+    "Reads only bounded slices of Butler-owned tool evidence.",
   ],
   satisfiesCompletionObligations: [
     "source_verified",

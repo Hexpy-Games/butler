@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -500,6 +500,94 @@ test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
   expect(bodies).toHaveLength(2);
   expect(bodies[0]!.reasoning_effort).toBe("low");
   expect(bodies[1]!.reasoning_effort).toBe("low");
+});
+
+test("registered Z.AI hosted tool result compaction emits rehydratable evidence packet", async () => {
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  const bodies: Record<string, any>[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    bodies.push(body);
+    if (bodies.length === 1) {
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: "call_large",
+              type: "function",
+              function: {
+                name: "lookup",
+                arguments: "{\"query\":\"butler\"}",
+              },
+            }],
+          },
+        }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "tool result used" } }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runFunctionToolPromptText({
+    model: "zai/glm-5.2",
+    reasoningEffort: "low",
+    prompt: "search",
+    butlerData: tempDir,
+    usageAttribution: { turnId: "turn-hosted-evidence" },
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "Look up a term.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    executeTool: async () => ({
+      ok: true,
+      title: "Large hosted tool result",
+      stdout: [
+        "HEAD_START",
+        "A".repeat(16_000),
+        "RAW_MIDDLE_ONLY_IN_HOSTED_ARTIFACT",
+        "B".repeat(16_000),
+        "TAIL_END",
+      ].join("\n"),
+    }),
+  })).resolves.toBe("tool result used");
+
+  expect(bodies).toHaveLength(2);
+  const toolMessage = bodies[1]!.messages.find((message: Record<string, unknown>) => message.role === "tool");
+  const content = String(toolMessage.content);
+  expect(content).not.toContain("RAW_MIDDLE_ONLY_IN_HOSTED_ARTIFACT");
+  const parsed = JSON.parse(content) as Record<string, any>;
+  const packet = parsed.output.butler_evidence_packet;
+  expect(parsed.output.butler_tool_result_compacted).toBe(true);
+  expect(packet).toMatchObject({
+    schema: "butler.evidence-packet.v1",
+    tool_name: "lookup",
+    tool_call_id: "call_large",
+    turn_id: "turn-hosted-evidence",
+    rehydrate: {
+      kind: "tool_evidence_artifact",
+      tool: "read_tool_evidence_artifact",
+    },
+  });
+  expect(existsSync(packet.rehydrate.path)).toBe(true);
+  const artifact = JSON.parse(readFileSync(packet.rehydrate.path, "utf8")) as Record<string, any>;
+  expect(artifact.serialized_text).toContain("RAW_MIDDLE_ONLY_IN_HOSTED_ARTIFACT");
+  expect(artifact.digest).toBe(packet.digest);
 });
 
 test("registered Anthropic and Gemini models use provider-native API keys", async () => {

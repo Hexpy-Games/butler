@@ -33,6 +33,7 @@ import {
 import { DisabledWebSearchProvider, MockWebSearchProvider, readWebSearchMetrics } from "../../packages/butler-agent/src/integrations/search/provider.ts";
 import { appendRuntimeTurnContextMetric } from "../../packages/butler-agent/src/operations/metrics/context-monitor.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
+import { retainToolEvidence } from "../../packages/butler-agent/src/agent/context/tool-evidence-retention.ts";
 import { budgetToolOutput } from "../../packages/butler-agent/src/agent/context/tool-output-budgeter.ts";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 
@@ -41,6 +42,7 @@ const root = process.cwd();
 const projectLedgerCli = join(root, "packages", "project-ledger", "bin", "project-ledger");
 const startupOnlyToolNames: string[] = [
   "get_context_monitor",
+  "read_tool_evidence_artifact",
   "list_tool_capabilities",
   "tool_search",
   "tool_describe",
@@ -92,6 +94,7 @@ const projectLifecycleWorkspaceToolNames: string[] = [
   "query_project_work",
   "render_project_dashboard",
   "get_context_monitor",
+  "read_tool_evidence_artifact",
   "read_tool_output_artifact",
   "list_tool_capabilities",
   "tool_search",
@@ -663,6 +666,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "render_project_dashboard",
     "complete_project_work",
     "get_context_monitor",
+    "read_tool_evidence_artifact",
     "read_tool_output_artifact",
     "get_usage_monitor",
     "list_tool_capabilities",
@@ -727,6 +731,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   expect(BUTLER_TOOLS.find((tool) => tool.name === "render_project_dashboard")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "complete_project_work")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "get_context_monitor")?.concurrencySafe).toBe(true);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "read_tool_evidence_artifact")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "read_tool_output_artifact")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "get_usage_monitor")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "list_tool_capabilities")?.concurrencySafe).toBe(true);
@@ -2957,6 +2962,19 @@ test("tool output artifact reader schema exposes focused recovery controls", () 
   ]);
 });
 
+test("tool evidence artifact reader schema exposes focused recovery controls", () => {
+  const tool = BUTLER_TOOLS.find((item) => item.name === "read_tool_evidence_artifact");
+
+  expect(tool?.parameters.required).toEqual([]);
+  expect(Object.keys(tool?.parameters.properties ?? {})).toEqual([
+    "artifact_id",
+    "path",
+    "offset_lines",
+    "limit_lines",
+    "max_tokens",
+  ]);
+});
+
 test("usage monitor tool schema exposes safe usage lookup", () => {
   const tool = BUTLER_TOOLS.find((item) => item.name === "get_usage_monitor");
 
@@ -4646,6 +4664,60 @@ test("tool output artifact reader executes bounded Butler-owned slices", async (
   expect(result.stderr.text).toContain("stderr row 2");
   expect(result.stderr.text).not.toContain("stderr row 1");
   expect(result.stdout).toBeUndefined();
+});
+
+test("tool evidence artifact reader executes bounded Butler-owned slices", async () => {
+  const retained = retainToolEvidence({
+    context: {
+      butlerData: tempDir,
+      turnId: "turn-evidence",
+      now: new Date("2026-07-09T00:00:00.000Z"),
+    },
+    toolName: "echo",
+    toolCallId: "call-evidence",
+    reason: "unit_test",
+    output: {
+      ok: true,
+      stdout: [
+        "headline",
+        "alpha",
+        "needle evidence row",
+        "omega",
+      ].join("\n"),
+    },
+  });
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    sessionId: "butler/main",
+  });
+
+  const result = await execute({
+    name: "read_tool_evidence_artifact",
+    args: {
+      artifact_id: retained.packet.artifact_id,
+      offset_lines: 8,
+      limit_lines: 1,
+      max_tokens: 80,
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+
+  expect(result).toMatchObject({
+    ok: true,
+    rawTextStored: false,
+    artifact: {
+      id: retained.packet.artifact_id,
+      tool_name: "echo",
+      tool_call_id: "call-evidence",
+      turn_id: "turn-evidence",
+    },
+    text: {
+      start_line: 8,
+      returned_lines: 1,
+    },
+  });
+  expect(result.text.text).toContain("needle evidence row");
 });
 
 test("usage monitor tool returns safe active-session usage summary", async () => {

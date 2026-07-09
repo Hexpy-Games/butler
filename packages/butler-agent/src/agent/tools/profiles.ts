@@ -27,6 +27,7 @@ const STARTUP_TOOL_NAMES = [
   "tool_describe",
   "tool_call",
   "get_context_monitor",
+  "read_tool_evidence_artifact",
   "read_conversation_context",
   "update_todo_list",
   "list_todo_list",
@@ -59,6 +60,7 @@ const WORKSPACE_TOOL_NAMES = [
   "read_file",
   "write_file",
   "grep_files",
+  "read_tool_evidence_artifact",
   "read_tool_output_artifact",
 ] as const;
 
@@ -76,6 +78,7 @@ const MEMORY_WRITE_TOOL_NAMES = [
 const MONITORING_TOOL_NAMES = [
   "get_work_dashboard",
   "get_context_monitor",
+  "read_tool_evidence_artifact",
   "get_usage_monitor",
   "get_memory_health",
 ] as const;
@@ -143,6 +146,7 @@ const WORKER_DEFAULT_TOOL_NAMES = [
   "read_file",
   "write_file",
   "grep_files",
+  "read_tool_evidence_artifact",
   "read_tool_output_artifact",
   "project_ledger_status",
   "project_ledger_list",

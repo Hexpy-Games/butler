@@ -2134,6 +2134,7 @@ test("native runtime sends a profiled tool surface for basic project turns", asy
     "query_project_work",
     "render_project_dashboard",
     "get_context_monitor",
+    "read_tool_evidence_artifact",
     "list_tool_capabilities",
     "tool_search",
     "tool_describe",
@@ -2187,6 +2188,7 @@ test("native runtime exposes workspace tools when structured policy requires the
   expect(toolNames).toEqual(expect.arrayContaining([
     "inspect_project_status",
     "run_command",
+    "read_tool_evidence_artifact",
     "read_tool_output_artifact",
     "list_tool_capabilities",
   ]));

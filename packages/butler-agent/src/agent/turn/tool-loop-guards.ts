@@ -123,6 +123,7 @@ export function isStateMutatingToolCall(name: string, args: Record<string, unkno
       "project_ledger_check",
       "web_search",
       "web_read",
+      "read_tool_evidence_artifact",
       "read_tool_output_artifact",
       "list_todo_list",
     ].includes(name);
