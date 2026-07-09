@@ -4718,6 +4718,9 @@ test("tool evidence artifact reader executes bounded Butler-owned slices", async
     },
   });
   expect(result.text.text).toContain("needle evidence row");
+  expect(satisfiedCompletionObligationsForToolResult("read_tool_evidence_artifact", result)).not.toContain(
+    "source_verified",
+  );
 });
 
 test("usage monitor tool returns safe active-session usage summary", async () => {

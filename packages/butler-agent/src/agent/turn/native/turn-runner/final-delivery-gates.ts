@@ -263,6 +263,7 @@ function withCompletionGapEvidenceBundle(input: {
     ...completionGapStagnationAdvisory(input.audit),
     "",
     "review-guidance:",
+    "- A butler_evidence_packet is a pointer to omitted raw evidence, not itself a final source. If a claim depends on omitted packet evidence, call read_tool_evidence_artifact for an exact bounded slice before finalizing.",
     "- source_verified is a semantic obligation. If the bounded evidence above contains the source facts needed for the answer, use it and finalize the turn.",
     "- If the evidence is insufficient, choose a tool or artifact path that can add different evidence. Repeating the same call is useful only when the underlying state is expected to change.",
     "- If no available tool can advance the missing evidence, answer with INCOMPLETE and a concise limitation.",
