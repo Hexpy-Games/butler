@@ -246,7 +246,7 @@ describe("file tool evidence capability receipts", () => {
     await writeFile(join(workspace, "src/a.txt"), "needle\nneedle\n");
     const result = await executeGrepFilesTool(call({
       workspace_root: workspace,
-      query: "needle",
+      pattern: "needle",
       max_matches: 1,
     }));
     const receipts = (result as Record<string, unknown>).evidence_capability_receipts as unknown[];

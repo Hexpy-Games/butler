@@ -71,6 +71,7 @@ export function publicWorkDecisionsFromAssistantText(input: {
         [],
       source: "assistant-authored",
       toolName: call.name,
+      toolCallIndex: index,
     };
   });
 }
@@ -95,8 +96,11 @@ export function takePublicWorkDecisionForTool(input: {
     : input.previousDecisions
       .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
       .map((decision) => decision.summary);
+  const publicDecision = { ...decision };
+  delete publicDecision.claimed;
+  delete publicDecision.toolCallIndex;
   return {
-    ...decision,
+    ...publicDecision,
     evidenceRefs,
   };
 }
@@ -106,7 +110,9 @@ export function hasCompleteAuthoredPublicDecisionForTool(input: {
   toolName: string;
   allowRuntimeDerived?: boolean;
 }): boolean {
-  const decision = input.pending.find((candidate) => candidate.toolName === input.toolName) ??
+  const decision = input.pending.find((candidate) => candidate.toolName === input.toolName && candidate.claimed !== true) ??
+    input.pending.find((candidate) => candidate.toolName === input.toolName) ??
+    input.pending.find((candidate) => candidate.claimed !== true) ??
     input.pending[0];
 
   if (!decision) {
@@ -123,9 +129,23 @@ function takePendingDecision(
   pending: PublicWorkDecision[],
   toolName: string,
 ): PublicWorkDecision | undefined {
-  const matchingDecision = pending.find((decision) => decision.toolName === toolName);
-  if (matchingDecision && claimDecisionGroupUse(pending, matchingDecision)) {
-    return matchingDecision;
+  const matchingOrderedDecision = pending.find((decision) =>
+    decision.toolName === toolName && decision.claimed !== true,
+  );
+  if (matchingOrderedDecision && claimDecisionGroupUse(pending, matchingOrderedDecision)) {
+    matchingOrderedDecision.claimed = true;
+    return matchingOrderedDecision;
+  }
+
+  const reusableMatchingDecision = pending.find((decision) => decision.toolName === toolName);
+  if (reusableMatchingDecision && claimDecisionGroupUse(pending, reusableMatchingDecision)) {
+    return reusableMatchingDecision;
+  }
+
+  const sharedOrderedDecision = pending.find((decision) => decision.claimed !== true);
+  if (sharedOrderedDecision && claimDecisionGroupUse(pending, sharedOrderedDecision)) {
+    sharedOrderedDecision.claimed = true;
+    return sharedOrderedDecision;
   }
 
   const sharedDecision = pending[0];

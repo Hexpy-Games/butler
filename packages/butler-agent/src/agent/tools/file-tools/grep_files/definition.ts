@@ -3,14 +3,13 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const grepFilesToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "grep_files",
-  description: "Search bounded text files inside the active workspace with include/exclude globs, literal or regex matching, context lines, truncation metadata, and evidence receipts.",
+  description: "Search bounded workspace text files with a required pattern, include/exclude globs, literal or regex matching, context, truncation metadata, and evidence receipts. For discovery, start scoped with context 0 and candidate-sized max_matches before reading files.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
       workspace_root: { type: "string" },
       pattern: { type: "string" },
-      query: { type: "string" },
       regex: { type: "boolean" },
       case_sensitive: { type: "boolean" },
       include: { type: "array", items: { type: "string" } },
@@ -22,7 +21,7 @@ export const grepFilesToolDefinition: ButlerToolDefinition = {
       max_matches: { type: "integer", minimum: 1, maximum: 1000 },
       max_bytes_per_file: { type: "integer", minimum: 1, maximum: 1048576 },
     },
-    required: [],
+    required: ["pattern"],
   },
   concurrencySafe: true,
   interruptBehavior: "continue",
