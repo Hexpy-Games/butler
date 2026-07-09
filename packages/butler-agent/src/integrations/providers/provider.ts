@@ -29,10 +29,11 @@ import {
   type AgentLoopModelResponse,
   type AgentLoopToolDefinition,
 } from "../../agent/turn/agent-loop.ts";
-import {
-  estimateContextTokens,
-} from "../../agent/context/budget.ts";
 import { cognitionMemoryRoot } from "../../agent/cognition/paths.ts";
+import {
+  retainToolEvidence,
+  type ToolEvidenceRetentionContext,
+} from "../../agent/context/tool-evidence-retention.ts";
 import { budgetToolOutput } from "../../agent/context/tool-output-budgeter.ts";
 import type { AttachmentRef } from "../../test-support/harness/contracts.ts";
 import {
@@ -2695,6 +2696,10 @@ const LOCAL_TOOL_RESULT_AGGRESSIVE_TOTAL_CONTEXT_RATIO = 0.04;
 const LOCAL_TOOL_RESULT_COMPACT_MARKER = "[...compacted local tool result for context budget...]";
 const HOSTED_TOOL_RESULT_MAX_MODEL_TOKENS = 1_400;
 
+function estimateToolResultTokens(source: string): number {
+  return Math.ceil(source.length / 4);
+}
+
 function localToolResultTotalTokenBudget(config: LocalModelConfig, aggressive = false): number {
   const window = Number.isFinite(config.context_window_tokens)
     ? Math.max(0, Math.trunc(Number(config.context_window_tokens)))
@@ -2720,7 +2725,7 @@ function compactLocalToolResultContent(input: {
   reason: string;
   ok?: boolean;
 }): string {
-  const rawTokens = estimateContextTokens(input.source);
+  const rawTokens = estimateToolResultTokens(input.source);
   if (rawTokens <= input.maxTokens) return input.source;
 
   const previewTokens = Math.max(40, input.maxTokens - 160);
@@ -2732,13 +2737,13 @@ function compactLocalToolResultContent(input: {
       tool_name: input.toolName,
       compaction_reason: input.reason,
       raw_estimated_tokens: rawTokens,
-      compact_estimated_tokens: estimateContextTokens(preview),
+      compact_estimated_tokens: estimateToolResultTokens(preview),
       preview,
     },
   };
   const compact = JSON.stringify(compactPayload);
   input.log(
-    `tool ${input.toolName} result compacted for local context: reason=${input.reason} raw_tokens=${rawTokens} compact_tokens=${estimateContextTokens(compact)}`,
+    `tool ${input.toolName} result compacted for local context: reason=${input.reason} raw_tokens=${rawTokens} compact_tokens=${estimateToolResultTokens(compact)}`,
   );
   return compact;
 }
@@ -2746,11 +2751,21 @@ function compactLocalToolResultContent(input: {
 function hostedToolResultContent(input: {
   payload: Record<string, unknown>;
   toolName: string;
+  toolCallId?: string;
   log: (line: string) => void;
+  evidenceRetention?: ToolEvidenceRetentionContext;
 }): string {
   const source = JSON.stringify(input.payload);
-  const rawTokens = estimateContextTokens(source);
+  const rawTokens = estimateToolResultTokens(source);
   if (rawTokens <= HOSTED_TOOL_RESULT_MAX_MODEL_TOKENS) return source;
+  const evidence = retainToolEvidence({
+    context: input.evidenceRetention,
+    toolName: input.toolName,
+    toolCallId: input.toolCallId,
+    output: input.payload.ok === true ? input.payload.output : input.payload,
+    reason: "hosted_tool_result_budget",
+    rawTokens,
+  });
   const preview = trimTextToTokenBudgetBalanced(
     source,
     Math.max(200, HOSTED_TOOL_RESULT_MAX_MODEL_TOKENS - 180),
@@ -2762,12 +2777,13 @@ function hostedToolResultContent(input: {
       tool_name: input.toolName,
       compaction_reason: "hosted_tool_result_budget",
       raw_estimated_tokens: rawTokens,
-      compact_estimated_tokens: estimateContextTokens(preview),
+      compact_estimated_tokens: estimateToolResultTokens(preview),
+      butler_evidence_packet: evidence.packet,
       preview,
     },
   });
   input.log(
-    `tool ${input.toolName} result compacted for hosted context: raw_tokens=${rawTokens} compact_tokens=${estimateContextTokens(compact)}`,
+    `tool ${input.toolName} result compacted for hosted context: raw_tokens=${rawTokens} compact_tokens=${estimateToolResultTokens(compact)}`,
   );
   return compact;
 }
@@ -2775,7 +2791,7 @@ function hostedToolResultContent(input: {
 function trimTextToTokenBudgetBalanced(text: string, maxTokens: number): string {
   const trimmed = text.trim();
   if (!trimmed) return "";
-  if (estimateContextTokens(trimmed) <= maxTokens) return trimmed;
+  if (estimateToolResultTokens(trimmed) <= maxTokens) return trimmed;
   const marker = `\n${LOCAL_TOOL_RESULT_COMPACT_MARKER}\n`;
   const maxChars = Math.max(80, Math.trunc(maxTokens) * 4 - marker.length);
   const headChars = Math.max(20, Math.floor(maxChars * 0.55));
@@ -2838,7 +2854,7 @@ function rebudgetLocalToolMessages(input: {
   let changed = false;
   for (const message of toolMessages) {
     const { source, ok } = existingLocalToolContentSource(message.content);
-    if (estimateContextTokens(source) <= perToolBudget) continue;
+    if (estimateToolResultTokens(source) <= perToolBudget) continue;
     message.content = compactLocalToolResultContent({
       source,
       toolName: message.name ?? "tool",
@@ -3519,7 +3535,12 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
         content: hostedToolResultContent({
           payload,
           toolName: call.function.name,
+          toolCallId: call.id,
           log,
+          evidenceRetention: {
+            butlerData: options.butlerData,
+            turnId: options.usageAttribution?.turnId,
+          },
         }),
       });
     }
@@ -4182,6 +4203,10 @@ async function runOpenAIFunctionToolPromptText(
     tools: agentLoopTools,
     maxIterations: maxRounds,
     compactToolResultsBeforeNextModelCall: true,
+    evidenceRetention: {
+      butlerData: options.butlerData,
+      turnId: options.usageAttribution?.turnId,
+    },
     callModel: async ({ messages }) => {
       const activeTools = activeFunctionTools(options);
       const allowedNames = new Set(activeTools.map((tool) => tool.name));

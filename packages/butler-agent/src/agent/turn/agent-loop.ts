@@ -1,3 +1,8 @@
+import {
+  retainToolEvidence,
+  type ToolEvidenceRetentionContext,
+} from "../context/tool-evidence-retention.ts";
+
 export type AgentLoopRole = "system" | "user" | "assistant" | "tool";
 
 export interface AgentLoopMessage {
@@ -63,6 +68,7 @@ export interface AgentLoopInput {
   tools: AgentLoopToolDefinition[];
   maxIterations?: number;
   compactToolResultsBeforeNextModelCall?: boolean;
+  evidenceRetention?: ToolEvidenceRetentionContext;
   callModel: (input: AgentLoopModelInput) => Promise<AgentLoopModelResponse>;
   onAssistantTextBeforeTools?: (input: {
     text: string;
@@ -92,7 +98,7 @@ export interface AgentLoopOutput {
 const DEFAULT_MAX_ITERATIONS = 8;
 const CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS = 6_000;
 const CHECKPOINT_CUMULATIVE_TOOL_RESULT_TOKENS = 30_000;
-const GENERIC_TOOL_RESULT_PREVIEW_TOKENS = 1_200;
+const GENERIC_TOOL_RESULT_PREVIEW_TOKENS = 800;
 const TOOL_RESULT_COMPACT_MARKER = "[...compacted tool result for context budget...]";
 const GENERIC_AGENT_LOOP_TURN_ID = "generic-agent-loop";
 
@@ -162,20 +168,31 @@ function trimTextToTokenBudgetBalanced(text: string, maxTokens: number): string 
 
 function compactGenericToolOutputForModel(input: {
   toolName: string;
+  toolCallId?: string;
   output: unknown;
   reason: string;
   rawTokens: number;
+  evidenceRetention?: ToolEvidenceRetentionContext;
 }): unknown {
   const record = outputRecord(input.output);
   const source = typeof input.output === "string"
     ? input.output
     : JSON.stringify(input.output ?? null);
+  const evidence = retainToolEvidence({
+    context: input.evidenceRetention,
+    toolName: input.toolName,
+    toolCallId: input.toolCallId,
+    output: input.output,
+    reason: input.reason,
+    rawTokens: input.rawTokens,
+  });
   const compact: Record<string, unknown> = {
     ok: record?.ok !== false,
     butler_tool_result_compacted: true,
     checkpoint_reason: input.reason,
     tool_name: input.toolName,
     raw_estimated_tokens: input.rawTokens,
+    butler_evidence_packet: evidence.packet,
     preview: trimTextToTokenBudgetBalanced(source, GENERIC_TOOL_RESULT_PREVIEW_TOKENS),
   };
   for (const key of [
@@ -204,14 +221,24 @@ function compactGenericToolOutputForModel(input: {
 
 function compactToolOutputForModel(input: {
   toolName: string;
+  toolCallId?: string;
   output: unknown;
   reason: string;
   rawTokens: number;
+  evidenceRetention?: ToolEvidenceRetentionContext;
 }): unknown {
   const record = outputRecord(input.output);
   if (!record || !Array.isArray(record.evidence_receipts)) {
     return compactGenericToolOutputForModel(input);
   }
+  const evidence = retainToolEvidence({
+    context: input.evidenceRetention,
+    toolName: input.toolName,
+    toolCallId: input.toolCallId,
+    output: input.output,
+    reason: input.reason,
+    rawTokens: input.rawTokens,
+  });
   const sourceUrls = compactStringList(record.source_urls, 8);
   const recommendedReadUrls = compactStringList(record.recommended_read_urls, 6);
   const artifactLabels = compactStringList(record.artifact_labels, 8);
@@ -221,6 +248,7 @@ function compactToolOutputForModel(input: {
     checkpoint_reason: input.reason,
     tool_name: input.toolName,
     raw_estimated_tokens: input.rawTokens,
+    butler_evidence_packet: evidence.packet,
     evidence_receipts: record.evidence_receipts,
   };
   for (const key of [
@@ -272,6 +300,7 @@ function toolResultToMessage(input: {
 
 function compactObservedToolMessagesForFutureModelCalls(
   messages: AgentLoopMessage[],
+  evidenceRetention?: ToolEvidenceRetentionContext,
 ): number {
   let totalTokens = 0;
   for (const message of messages) {
@@ -287,10 +316,12 @@ function compactObservedToolMessagesForFutureModelCalls(
     const compacted = compactToolMessageContent({
       content: message.content,
       toolName: message.name ?? "tool",
+      toolCallId: message.toolCallId,
       reason: shouldCompactSingle
         ? "single_tool_result_budget"
         : "cumulative_tool_result_budget",
       rawTokens: currentTokens,
+      evidenceRetention,
     });
     message.content = compacted;
     totalTokens += estimateTokens(compacted);
@@ -301,8 +332,10 @@ function compactObservedToolMessagesForFutureModelCalls(
 function compactToolMessageContent(input: {
   content: string;
   toolName: string;
+  toolCallId?: string;
   reason: string;
   rawTokens: number;
+  evidenceRetention?: ToolEvidenceRetentionContext;
 }): string {
   let parsed: Record<string, unknown> | null = null;
   try {
@@ -313,9 +346,11 @@ function compactToolMessageContent(input: {
   if (parsed?.ok !== true) return input.content;
   const output = compactToolOutputForModel({
     toolName: input.toolName,
+    toolCallId: input.toolCallId,
     output: parsed.output,
     reason: input.reason,
     rawTokens: input.rawTokens,
+    evidenceRetention: input.evidenceRetention,
   });
   const outputMetadata = outputRecord(output);
   const compactContent = JSON.stringify({ ok: true, output });
@@ -513,7 +548,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     if (input.compactToolResultsBeforeNextModelCall === true) {
-      compactObservedToolMessagesForFutureModelCalls(messages);
+      compactObservedToolMessagesForFutureModelCalls(messages, input.evidenceRetention);
     }
     emit(events, input.onEvent, { type: "model_call", iteration });
     const response = await input.callModel({
@@ -522,7 +557,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
       iteration,
     });
     if (input.compactToolResultsBeforeNextModelCall !== true) {
-      compactObservedToolMessagesForFutureModelCalls(messages);
+      compactObservedToolMessagesForFutureModelCalls(messages, input.evidenceRetention);
     }
     emit(events, input.onEvent, {
       type: "model_response",

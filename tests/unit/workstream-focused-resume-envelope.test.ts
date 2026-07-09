@@ -288,6 +288,7 @@ test("candidate decision envelope keeps workspace tools for planning-phase work 
     "read_file",
     "write_file",
     "grep_files",
+    "read_tool_evidence_artifact",
     "read_tool_output_artifact",
   ]));
   expect(toolNames).toEqual(expect.arrayContaining([

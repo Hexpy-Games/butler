@@ -18,6 +18,9 @@ retention, quality-retention checks, and large tool-output artifact handling.
   answers as well as the full baseline fixtures.
 - `tool-output-budgeter.ts`: converts large stdout/stderr into bounded model
   views plus recoverable artifacts.
+- `tool-evidence-retention.ts`: stores raw compacted tool results as
+  rehydratable evidence artifacts and returns compact `EvidencePacket` handles
+  for agent-loop context.
 - `metrics-retention.ts`: retention helpers for context metrics.
 
 ## Boundaries
