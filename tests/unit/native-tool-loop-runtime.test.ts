@@ -5738,6 +5738,8 @@ test("completion gap continuation includes bounded evidence bundle and advisory 
         expect(input.prompt).toContain("Showing 5 of 25 open issues");
         expect(input.prompt).toContain("stagnation-advisory:");
         expect(input.prompt).toContain("advisory only");
+        expect(input.prompt).toContain("butler_evidence_packet is a pointer");
+        expect(input.prompt).toContain("read_tool_evidence_artifact");
         await input.onAssistantTextBeforeTools?.({
           text: [
             "summary: formal source blocker를 해소하기 위해 원문을 확인합니다.",

@@ -43,7 +43,4 @@ export const readToolEvidenceArtifactToolMetadata = {
   safetyNotes: [
     "Reads only bounded slices of Butler-owned tool evidence.",
   ],
-  satisfiesCompletionObligations: [
-    "source_verified",
-  ],
 } satisfies ToolCapabilityMetadata;
