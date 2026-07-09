@@ -39,6 +39,10 @@ export interface DirectTurnBudgetSnapshot {
 
 export interface DirectTurnPromptUsageInput {
   promptContextChars: number;
+  promptContextSections?: Array<{
+    id: string;
+    chars: number;
+  }>;
   compactionContextChars: number;
   feedbackBufferContextChars: number;
   workingMemoryContextChars: number;
@@ -158,8 +162,9 @@ export function addDirectTurnUsage(input: {
 export function promptUsageSectionsFromPrompt(
   input: DirectTurnPromptUsageInput,
 ): PromptUsageSectionAttribution[] {
+  const promptContextSections = granularPromptContextSections(input);
   const sections = [
-    ["prompt_context", input.promptContextChars],
+    ...promptContextSections,
     ["compaction_context", input.compactionContextChars],
     ["feedback_buffer", input.feedbackBufferContextChars],
     ["working_memory", input.workingMemoryContextChars],
@@ -176,6 +181,18 @@ export function promptUsageSectionsFromPrompt(
       chars,
       estimatedTokens: estimateContextTokens("x".repeat(Math.min(chars, 200_000))),
     }));
+}
+
+function granularPromptContextSections(input: DirectTurnPromptUsageInput): Array<[string, number]> {
+  const sections = (input.promptContextSections ?? [])
+    .filter((section) => section.id.trim() && section.chars > 0)
+    .map((section) => [section.id.trim(), section.chars] as [string, number]);
+  if (sections.length === 0) return [["prompt_context", input.promptContextChars]];
+  const attributedChars = sections.reduce((sum, [, chars]) => sum + chars, 0);
+  const remainder = Math.max(0, input.promptContextChars - attributedChars);
+  return remainder > 0
+    ? [...sections, ["prompt_context_other", remainder]]
+    : sections;
 }
 
 export function recentConversationBudgetForTurn(input: {

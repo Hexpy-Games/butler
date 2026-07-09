@@ -13,6 +13,7 @@ import {
 
 const PUBLIC_DECISION_EVIDENCE_REF_LIMIT = 2;
 const PUBLIC_DECISION_FALLBACK_MIN_CHARS = 8;
+export const PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT = 6;
 
 export function publicWorkDecisionPayload(decision: PublicWorkDecision): Record<string, unknown> {
   return {
@@ -80,16 +81,19 @@ export function takePublicWorkDecisionForTool(input: {
   allowRuntimeDerived?: boolean;
 }): PublicWorkDecision {
   const pending = takePendingDecision(input.pending, input.toolName);
-  if (!pending || !isCompleteVisibleDecision(pending, input.allowRuntimeDerived === true)) {
-    throw new Error("Public work decision required before visible tool execution.");
+  const decision = pending && isCompleteVisibleDecision(pending, input.allowRuntimeDerived === true)
+    ? pending
+    : undefined;
+  if (!decision || !isCompleteVisibleDecision(decision, input.allowRuntimeDerived === true)) {
+    throw new Error("Fresh public work decision continuation needed before visible tool execution.");
   }
-  const evidenceRefs = pending.evidenceRefs.length > 0
-    ? pending.evidenceRefs
+  const evidenceRefs = decision.evidenceRefs.length > 0
+    ? decision.evidenceRefs
     : input.previousDecisions
       .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
       .map((decision) => decision.summary);
   return {
-    ...pending,
+    ...decision,
     evidenceRefs,
   };
 }
@@ -101,19 +105,39 @@ export function hasCompleteAuthoredPublicDecisionForTool(input: {
 }): boolean {
   const decision = input.pending.find((candidate) => candidate.toolName === input.toolName) ??
     input.pending[0];
-  return Boolean(decision && isCompleteVisibleDecision(decision, input.allowRuntimeDerived === true));
+
+  if (!decision) {
+    return false;
+  }
+  if ((decision.usageCount ?? 0) >= PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT) {
+    return false;
+  }
+
+  return isCompleteVisibleDecision(decision, input.allowRuntimeDerived === true);
 }
 
 function takePendingDecision(
   pending: PublicWorkDecision[],
   toolName: string,
 ): PublicWorkDecision | undefined {
-  const matchingIndex = pending.findIndex((decision) => decision.toolName === toolName);
-  const hasMatchingDecision = matchingIndex >= 0;
-  if (hasMatchingDecision) {
-    return pending.splice(matchingIndex, 1)[0];
+  const matchingDecision = pending.find((decision) => decision.toolName === toolName);
+  const usageCount = matchingDecision?.usageCount ?? 0;
+  const hasRemainingUseCount = usageCount < PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT;
+
+  if (matchingDecision && hasRemainingUseCount) {
+    matchingDecision.usageCount = usageCount + 1;
+    return matchingDecision;
   }
-  return pending.shift();
+
+  const sharedDecision = pending[0];
+  const sharedDecisionUseCount = sharedDecision?.usageCount ?? 0;
+
+  if (sharedDecision && sharedDecisionUseCount < PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT) {
+    sharedDecision.usageCount = sharedDecisionUseCount + 1;
+    return sharedDecision;
+  }
+
+  return;
 }
 
 export function annotateToolResultWithDecisionContext(input: {

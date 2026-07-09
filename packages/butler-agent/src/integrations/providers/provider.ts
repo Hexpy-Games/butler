@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, readFileSync } from "fs";
 import { spawn } from "child_process";
 import { basename, join } from "path";
 import { arch, homedir, platform, release } from "os";
+import { createHash } from "crypto";
 import { appendPromptCacheMetric } from "./prompt-cache-metrics.ts";
 import { readLocalModelConfigs, type LocalModelConfig } from "./local-models.ts";
 import { parseModelRef } from "./model-ref.ts";
@@ -608,15 +609,21 @@ function resolveConfiguredPromptCacheKeyPrefix(): string | null {
     if (normalized) return normalized;
   }
 
-  return null;
+  return defaultPromptCacheKeyPrefix();
 }
 
-function resolveConfiguredPromptCacheRetention(): PromptCacheRetention | null {
+function resolveConfiguredPromptCacheRetention(): PromptCacheRetention {
   const cfg = readConfig();
   const envRetention = normalizePromptCacheRetention(process.env.BUTLER_OPENAI_PROMPT_CACHE_RETENTION);
   if (envRetention) return envRetention;
 
-  return normalizePromptCacheRetention(cfg?.system?.openaiPromptCacheRetention);
+  return normalizePromptCacheRetention(cfg?.system?.openaiPromptCacheRetention) ?? "24h";
+}
+
+function defaultPromptCacheKeyPrefix(): string {
+  const stableInput = [getButlerHome(), getButlerData()].join("|");
+  const digest = createHash("sha256").update(stableInput).digest("hex").slice(0, 12);
+  return `butler:${digest}`;
 }
 
 function mapRequestedOpenAIModel(

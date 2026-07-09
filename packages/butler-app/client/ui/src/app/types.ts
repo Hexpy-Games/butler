@@ -965,6 +965,12 @@ export interface UsageTokenBucketView {
   missingTotalTokenCount: number;
 }
 
+export interface UsageSectionBucketView {
+  requestCount: number;
+  chars: number;
+  estimatedTokens: number;
+}
+
 export interface UsageMonitorView {
   filters: {
     sessionId: string | null;
@@ -975,6 +981,7 @@ export interface UsageMonitorView {
     byScope: Record<string, number>;
     byScopeUsage: Record<string, UsageTokenBucketView>;
     byModel: Record<string, UsageTokenBucketView>;
+    bySection: Record<string, UsageSectionBucketView>;
   };
   webSearch: {
     requestCount: number;

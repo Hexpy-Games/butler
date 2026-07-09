@@ -43,6 +43,7 @@ import {
   satisfiedCompletionObligationsForToolResult,
 } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import {
+  PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT,
   publicWorkDecisionsFromAssistantText,
   takePublicWorkDecisionForTool,
 } from "../../packages/butler-agent/src/agent/output/public-work/decisions.ts";
@@ -281,6 +282,105 @@ test("native runtime forwards turn reasoning metadata to prompt runners", async 
   expect(observedReasoning).toContain("low");
 });
 
+test("native runtime uses app thin first response for direct answers without entering the tool loop", async () => {
+  const textPrompts: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => {
+      textPrompts.push(input.prompt);
+      return "설계 관점에서는 opening decision과 실제 도구 실행 경로가 분리되지 않은 것이 핵심 원인입니다.";
+    },
+    runFunctionToolPromptText: async () => {
+      throw new Error("direct thin first response must not enter the tool loop");
+    },
+  });
+
+  const handle = await runtime.createSession({
+    sessionId: "butler/thin-first-response-direct",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "zai/glm-5.2",
+    input: {
+      text: "지금은 파일을 보지 말고 opening decision 문제를 설계 관점에서만 짧게 검토해줘.",
+    },
+    metadata: {
+      runtimePolicy: {
+        completionReview: "disabled",
+        thinFirstResponse: true,
+        thin_first_response: true,
+      },
+      promptContext: [
+        "## Active Persona Reminder",
+        "한국어로 간결하게 답합니다.",
+        "",
+        "## Project Memory",
+        "This heavy project memory must not be copied into the thin first response prompt.",
+      ].join("\n"),
+    },
+  });
+
+  expect(result.text).toContain("opening decision");
+  expect(textPrompts).toHaveLength(1);
+  expect(textPrompts[0]).toContain("## Thin First Response Pass");
+  expect(textPrompts[0]).toContain("## Active Persona Reminder");
+  expect(textPrompts[0]).not.toContain("heavy project memory");
+});
+
+test("native runtime escalates app thin first response tool intent into a normal tool prompt", async () => {
+  const toolPrompts: string[] = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    runPromptText: async () => [
+      "<butler_tool_intent>",
+      "summary: prompt cache 설정 파일을 확인합니다.",
+      "rationale: 현재 레포 상태는 포함된 대화 맥락만으로 확정할 수 없습니다.",
+      "next_step: 관련 설정 파일과 함수를 찾습니다.",
+      "</butler_tool_intent>",
+    ].join("\n"),
+    runFunctionToolPromptText: async (input) => {
+      toolPrompts.push(input.prompt);
+      return "provider.ts의 resolveOpenAIPromptCacheConfig를 확인했습니다.";
+    },
+  });
+
+  const handle = await runtime.createSession({
+    sessionId: "butler/thin-first-response-escalates",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+  const result = await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "zai/glm-5.2",
+    input: {
+      text: "현재 Butler 레포에서 prompt cache 설정을 읽는 함수명을 실제로 확인해줘.",
+    },
+    metadata: {
+      runtimePolicy: {
+        completionReview: "disabled",
+        thinFirstResponse: true,
+        thin_first_response: true,
+      },
+    },
+  });
+
+  expect(result.text).toContain("resolveOpenAIPromptCacheConfig");
+  expect(toolPrompts).toHaveLength(1);
+  expect(toolPrompts[0]).toContain("## Hidden Thin First Response Escalation");
+  expect(toolPrompts[0]).toContain("summary: prompt cache 설정 파일을 확인합니다.");
+  expect(toolPrompts[0]).toContain("Before the first tool call");
+});
+
 test("native runtime gives worker sessions the execution tool loop and role-limited tool profile", async () => {
   const toolCatalogs: string[][] = [];
   const runtime = new NativeToolLoopRuntime({
@@ -471,32 +571,32 @@ test("native runtime treats provider stream projection delivery as best-effort",
   expect(result.text).toBe("Final answer survives stream event delivery failure.");
 });
 
-test("native runtime blocks visible tool execution until an authored public decision is present", async () => {
+test("native runtime turns basic workspace commands without an authored public decision into a continuation cue", async () => {
   let executed = 0;
-  const observations: Array<Record<string, unknown>> = [];
+  const results: Array<Record<string, unknown>> = [];
   const runtime = new NativeToolLoopRuntime({
     butlerHome: process.cwd(),
     butlerData: tempDir,
     disableAutomaticRecall: true,
     executeButlerTool: async () => {
       executed += 1;
-      return { ok: true, stdout: "should not run", exit_code: 0 };
+      return { ok: true, stdout: "basic command ran", exit_code: 0 };
     },
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: "I will run a command now.",
-        toolCalls: [{ name: "run_command", args: { command: "echo blocked" } }],
+        toolCalls: [{ name: "run_command", args: { command: "echo needs-decision" } }],
       });
-      observations.push(await input.executeTool({
+      results.push(await input.executeTool({
         name: "run_command",
-        args: { command: "echo blocked" },
-        rawArguments: "{\"command\":\"echo blocked\"}",
+        args: { command: "echo needs-decision" },
+        rawArguments: "{\"command\":\"echo needs-decision\"}",
       }) as Record<string, unknown>);
-      return "I need to author the decision first.";
+      return "The basic command received a continuation cue.";
     },
   });
   const handle = await runtime.createSession({
-    sessionId: "butler/public-decision-required",
+    sessionId: "butler/public-decision-continuation",
     role: "butler",
     workspacePath: tempDir,
     systemPrompt: "You are Butler.",
@@ -511,32 +611,47 @@ test("native runtime blocks visible tool execution until an authored public deci
   });
 
   expect(executed).toBe(0);
-  expect(observations[0]).toMatchObject({
-    ok: false,
-    observation_kind: "public_decision_required",
+  expect(results[0]).toMatchObject({
+    ok: true,
+    continuation_required: true,
+    observation_kind: "public_decision_continuation",
   });
-  expect(String(observations[0]?.model_visible_content)).toContain("same assistant response");
+  const payload = JSON.stringify(results[0]);
+  expect(payload).toContain("summary, rationale, and next_step");
+  expect(payload.toLowerCase()).not.toMatch(/\b(blocked|failed|gate|forbidden)\b/);
+  const transcriptPayload = JSON.stringify(readTranscript("butler/public-decision-continuation"));
+  expect(transcriptPayload).toContain("public_decision_continuation");
+  expect(transcriptPayload).not.toContain("runtime-derived");
+  expect(transcriptPayload.toLowerCase()).not.toMatch(/\b(blocked|failed|gate|forbidden)\b/);
 });
 
-test("native runtime blocks tool-only visible tool calls without runtime-derived decisions", async () => {
+test("native runtime executes basic workspace commands only after an authored public decision", async () => {
   let executed = 0;
-  const observations: Array<Record<string, unknown>> = [];
-  const sessionId = "butler/tool-only-public-decision-required";
+  const results: Array<Record<string, unknown>> = [];
+  const sessionId = "butler/tool-only-authored-public-decision";
   const runtime = new NativeToolLoopRuntime({
     butlerHome: process.cwd(),
     butlerData: tempDir,
     disableAutomaticRecall: true,
     executeButlerTool: async () => {
       executed += 1;
-      return { ok: true, stdout: "should not run", exit_code: 0 };
+      return { ok: true, stdout: "basic command ran", exit_code: 0 };
     },
     runFunctionToolPromptText: async (input) => {
-      observations.push(await input.executeTool({
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: Inspect the current workspace with a shell command.",
+          "rationale: The command output is needed before choosing the next implementation step.",
+          "next_step: Run the command and use the result to decide the next small action.",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "echo decided" } }],
+      });
+      results.push(await input.executeTool({
         name: "run_command",
-        args: { command: "echo blocked" },
-        rawArguments: JSON.stringify({ command: "echo blocked" }),
+        args: { command: "echo decided" },
+        rawArguments: JSON.stringify({ command: "echo decided" }),
       }) as Record<string, unknown>);
-      return "I need to author the decision first.";
+      return "The basic command ran.";
     },
   });
   const handle = await runtime.createSession({
@@ -554,19 +669,110 @@ test("native runtime blocks tool-only visible tool calls without runtime-derived
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(executed).toBe(0);
-  expect(observations[0]).toMatchObject({
-    ok: false,
-    observation_kind: "public_decision_required",
+  expect(executed).toBe(1);
+  expect(results[0]).toMatchObject({
+    ok: true,
   });
-  expect(String(observations[0]?.model_visible_content)).toContain("same assistant response");
   const transcript = readTranscript(sessionId);
-  expect(transcript.some((event) => event.kind === "tool_call")).toBe(false);
-  expect(JSON.stringify(transcript)).not.toContain("runtime-derived");
+  expect(transcript.some((event) => event.kind === "tool_call")).toBe(true);
+  expect(JSON.stringify(transcript)).toContain("Inspect the current workspace with a shell command.");
   expect(transcript.some((event) =>
     event.kind === "system" &&
     event.payload.category === "public_work_decision",
-  )).toBe(false);
+  )).toBe(true);
+});
+
+test("native runtime requests a fresh authored decision cue after a bounded basic-tool batch", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const readResults: Array<Record<string, unknown>> = [];
+  let executedReads = 0;
+  let sequenceIssued = false;
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async (call) => {
+      if (call.name === "update_todo_list") return { ok: true };
+      executedReads += 1;
+      return { ok: true, content: "file contents" };
+    },
+    runFunctionToolPromptText: async (input) => {
+      if (sequenceIssued) return "Read the files.";
+      sequenceIssued = true;
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "summary: Read the first group of component files.",
+          "rationale: A bounded set of files is enough to understand the first layout slice.",
+          "next_step: Read these files, then decide the next smaller group from the result.",
+        ].join("\n"),
+        toolCalls: [{ name: "read_file", args: { path: "file-1.md" } }],
+      });
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          list_id: "main",
+          todos: [
+            {
+              id: "inspect",
+              content: "Read the needed files",
+              active_form: "필요한 내용을 읽어 근거를 확인합니다.",
+              status: "in_progress",
+              phase: "execution",
+            },
+          ],
+        },
+        rawArguments: JSON.stringify({ list_id: "main", todos: [] }),
+      });
+      for (let index = 1; index <= PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT + 1; index += 1) {
+        readResults.push(await input.executeTool({
+          name: "read_file",
+          args: { path: `file-${index}.md` },
+          rawArguments: JSON.stringify({ path: `file-${index}.md` }),
+        }) as Record<string, unknown>);
+      }
+      return "Read the files.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/basic-tool-batch-continuation",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Read several files." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload });
+    },
+  });
+
+  const toolWorkBlockIds = events
+    .filter((event) => event.kind === "tool.started")
+    .reduce((byInputLabel, event) => {
+      const inputLabel = String(event.payload?.inputLabel ?? "");
+      if (inputLabel && !byInputLabel.has(inputLabel)) {
+        byInputLabel.set(inputLabel, String(event.payload?.workBlockId ?? ""));
+      }
+      return byInputLabel;
+    }, new Map<string, string>());
+  const orderedWorkBlockIds = Array.from(toolWorkBlockIds.values());
+  expect(executedReads).toBe(PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT);
+  expect(readResults).toHaveLength(PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT + 1);
+  expect(readResults[PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT]).toMatchObject({
+    ok: true,
+    continuation_required: true,
+    observation_kind: "public_decision_continuation",
+  });
+  expect(JSON.stringify(readResults[PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT]).toLowerCase())
+    .not.toMatch(/\b(blocked|failed|gate|forbidden)\b/);
+  expect(orderedWorkBlockIds).toHaveLength(PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT);
+  expect(new Set(orderedWorkBlockIds.slice(0, PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT)).size).toBe(1);
+  expect(orderedWorkBlockIds.some((id) => id.includes(":burst-"))).toBe(false);
 });
 
 test("native runtime permits Ledger preflight inspection tools in ledger-tracked project turns", async () => {
@@ -631,7 +837,7 @@ test("native runtime permits Ledger preflight inspection tools in ledger-tracked
 
   expect(executed).toBe(1);
   expect(returnedToolResult).toMatchObject({ ok: true });
-  expect(JSON.stringify(returnedToolResult)).not.toContain("public_decision_required");
+  expect(JSON.stringify(returnedToolResult)).not.toContain("public_decision_continuation");
   const workStart = events.find((event) => event.kind === "work.block.started");
   expect(workStart?.payload).toMatchObject({
     label: "Project Ledger 상태를 canonical 도구로 확인합니다.",
@@ -639,28 +845,28 @@ test("native runtime permits Ledger preflight inspection tools in ledger-tracked
   });
 });
 
-test("native runtime still blocks workspace shell without authored public decisions in ledger-tracked turns", async () => {
+test("native runtime uses a continuation cue for basic workspace shell in ledger-tracked turns", async () => {
   let executed = 0;
-  const observations: Array<Record<string, unknown>> = [];
+  const results: Array<Record<string, unknown>> = [];
   const runtime = new NativeToolLoopRuntime({
     butlerHome: process.cwd(),
     butlerData: tempDir,
     disableAutomaticRecall: true,
     executeButlerTool: async () => {
       executed += 1;
-      return { ok: true, stdout: "should not run", exit_code: 0 };
+      return { ok: true, stdout: "ledger shell ran", exit_code: 0 };
     },
     runFunctionToolPromptText: async (input) => {
-      observations.push(await input.executeTool({
+      results.push(await input.executeTool({
         name: "run_command",
         args: { command: "ls work null | head -40" },
         rawArguments: JSON.stringify({ command: "ls work null | head -40" }),
       }) as Record<string, unknown>);
-      return "I need to use the Ledger tool path.";
+      return "The shell command received a public decision continuation cue.";
     },
   });
   const handle = await runtime.createSession({
-    sessionId: "butler/ledger-preflight-shell-blocked",
+    sessionId: "butler/ledger-preflight-shell-continuation",
     role: "butler",
     workspacePath: tempDir,
     systemPrompt: "You are Butler.",
@@ -683,38 +889,42 @@ test("native runtime still blocks workspace shell without authored public decisi
   });
 
   expect(executed).toBe(0);
-  expect(observations[0]).toMatchObject({
-    ok: false,
-    observation_kind: "public_decision_required",
+  expect(results[0]).toMatchObject({
+    ok: true,
+    continuation_required: true,
+    observation_kind: "public_decision_continuation",
   });
+  const transcriptPayload = JSON.stringify(readTranscript("butler/ledger-preflight-shell-continuation"));
+  expect(transcriptPayload).toContain("public_decision_continuation");
+  expect(transcriptPayload.toLowerCase()).not.toMatch(/\b(blocked|failed|gate|forbidden)\b/);
 });
 
-test("native runtime rejects partial public decisions before visible tool execution", async () => {
+test("native runtime uses a continuation cue after partial public decisions", async () => {
   let executed = 0;
-  const observations: Array<Record<string, unknown>> = [];
+  const results: Array<Record<string, unknown>> = [];
   const runtime = new NativeToolLoopRuntime({
     butlerHome: process.cwd(),
     butlerData: tempDir,
     disableAutomaticRecall: true,
     executeButlerTool: async () => {
       executed += 1;
-      return { ok: true, stdout: "should not run", exit_code: 0 };
+      return { ok: true, stdout: "partial decision fallback ran", exit_code: 0 };
     },
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: "summary: I will inspect the workspace.",
         toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
       });
-      observations.push(await input.executeTool({
+      results.push(await input.executeTool({
         name: "run_command",
         args: { command: "pwd" },
         rawArguments: JSON.stringify({ command: "pwd" }),
       }) as Record<string, unknown>);
-      return "I need a complete public decision first.";
+      return "The basic command received a continuation cue.";
     },
   });
   const handle = await runtime.createSession({
-    sessionId: "butler/partial-public-decision-required",
+    sessionId: "butler/partial-public-decision-continuation",
     role: "butler",
     workspacePath: tempDir,
     systemPrompt: "You are Butler.",
@@ -729,10 +939,14 @@ test("native runtime rejects partial public decisions before visible tool execut
   });
 
   expect(executed).toBe(0);
-  expect(observations[0]).toMatchObject({
-    ok: false,
-    observation_kind: "public_decision_required",
+  expect(results[0]).toMatchObject({
+    ok: true,
+    continuation_required: true,
+    observation_kind: "public_decision_continuation",
   });
+  const transcriptPayload = JSON.stringify(readTranscript("butler/partial-public-decision-continuation"));
+  expect(transcriptPayload).toContain("public_decision_continuation");
+  expect(transcriptPayload.toLowerCase()).not.toMatch(/\b(blocked|failed|gate|forbidden)\b/);
 });
 
 test("native runtime turns invalid tool arguments into model-visible retry guidance", async () => {
@@ -2038,7 +2252,7 @@ test("native runtime attaches turn budget attribution to direct tool prompts", a
     maxRequests: 32,
   });
   expect(captured[0].usageAttribution?.promptSections?.some((section) =>
-    section.id === "prompt_context" &&
+    section.id === "project_ledger_runtime_context" &&
     section.chars > 0 &&
     section.estimatedTokens > 0,
   )).toBe(true);
@@ -2063,7 +2277,7 @@ test("native runtime returns repeated Project Ledger status pressure as structur
       };
     },
     runFunctionToolPromptText: async (input) => {
-      for (let index = 0; index < 4; index += 1) {
+      for (let index = 0; index < 7; index += 1) {
         await input.onAssistantTextBeforeTools?.({
           text: [
             "summary: Project Ledger 상태를 확인합니다.",
@@ -2102,8 +2316,8 @@ test("native runtime returns repeated Project Ledger status pressure as structur
   });
 
   expect(result.text).toContain("중단했습니다");
-  expect(executed).toHaveLength(3);
-  expect(guardedResults[3]).toMatchObject({
+  expect(executed).toHaveLength(6);
+  expect(guardedResults[6]).toMatchObject({
     ok: false,
     observation_kind: "validation_failed",
     observation: {
@@ -2113,10 +2327,10 @@ test("native runtime returns repeated Project Ledger status pressure as structur
       modelVisibleContent: expect.stringContaining("Tool-family pressure was observed before re-running run_command."),
     },
   });
-  expect(guardedResults[3]).not.toHaveProperty("budget_policy");
-  expect(guardedResults[3]).not.toHaveProperty("repeat_count");
-  expect(JSON.stringify(guardedResults[3])).not.toContain("summarize it");
-  expect(JSON.stringify(guardedResults[3])).not.toContain("ask for an explicit continuation");
+  expect(guardedResults[6]).not.toHaveProperty("budget_policy");
+  expect(guardedResults[6]).not.toHaveProperty("repeat_count");
+  expect(JSON.stringify(guardedResults[6])).not.toContain("summarize it");
+  expect(JSON.stringify(guardedResults[6])).not.toContain("ask for an explicit continuation");
 });
 
 test("native runtime reports high provider usage without stopping the next model call", async () => {
@@ -4732,7 +4946,42 @@ test("public work decision parser rejects non-canonical prose before visible too
         detailRows: [],
       },
     }),
-  ).toThrow("Public work decision required before visible tool execution.");
+  ).toThrow("Fresh public work decision continuation needed before visible tool execution.");
+});
+
+test("public work decision selector refuses exhausted authored decision without a new decision", () => {
+  const progress = {
+    kind: "read" as const,
+    toolName: "Read file",
+    safeLabel: "Reading package.json",
+    workBlockLabel: "Inspect the requested workspace file.",
+    inputLabel: "package.json",
+    detailRows: [],
+  };
+  const pending = publicWorkDecisionsFromAssistantText({
+    text: [
+      "summary: Inspect the requested workspace file.",
+      "rationale: The file contents determine the next implementation step.",
+      "next_step: Read the file and continue from the observed result.",
+    ].join("\n"),
+    toolCalls: [{ name: "read_file", args: { path: "package.json" } }],
+    language: "en",
+    existingDecisions: [],
+  });
+  expect(pending).toHaveLength(1);
+  pending[0]!.usageCount = PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT;
+
+  expect(() =>
+    takePublicWorkDecisionForTool({
+      pending,
+      toolName: "read_file",
+      language: "en",
+      previousDecisions: [],
+      progress,
+      allowRuntimeDerived: false,
+    }),
+  ).toThrow("Fresh public work decision continuation needed before visible tool execution.");
+  expect(pending[0]!.usageCount).toBe(PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT);
 });
 
 test("assistant pre-tool progress emits structured decisions for ordinary tools", async () => {
@@ -7897,15 +8146,20 @@ test("native runtime discovers and executes Project Ledger mutation through tool
     metadata: { projectId: "butler" },
   });
 
-  await runtime.runTurn({
-    handle,
-    provider: fakeProvider,
-    model: "openai/auto:codex-latest",
-    input: { text: "Project Ledger task를 완료해줘." },
-    metadata: {
-      runtimePolicy: { ...runtimePolicy, completionReview: "disabled" },
-    },
-  });
+	  await runtime.runTurn({
+	    handle,
+	    provider: fakeProvider,
+	    model: "openai/auto:codex-latest",
+	    input: { text: "Project Ledger task를 완료해줘." },
+	    metadata: {
+	      runtimePolicy: {
+	        ...runtimePolicy,
+	        completionReview: "disabled",
+	        thinFirstResponse: "disabled",
+	        thin_first_response: "disabled",
+	      },
+	    },
+	  });
 
   expect(searchResult).toMatchObject({
     ok: true,
@@ -8836,7 +9090,7 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
     .map((event) => event.payload.name)).toEqual(["update_todo_list", "update_todo_list"]);
 });
 
-test("native runtime groups chained tools under the active semantic todo work block", async () => {
+test("native runtime emits linear work blocks under the active semantic todo", async () => {
   const turnEvents: any[] = [];
   const todos = [
     {
@@ -8865,7 +9119,7 @@ test("native runtime groups chained tools under the active semantic todo work bl
         {
           summary: "현재 프로젝트 위치를 확인합니다.",
           rationale: "활성 작업 블록 안에서 로컬 상태 확인 명령을 실행해야 합니다.",
-          nextStep: "명령 산출물을 읽어 같은 작업 블록에서 이어갑니다.",
+          nextStep: "명령 산출물을 읽어 다음 선형 작업 블록으로 이어갑니다.",
         },
       );
       await input.executeTool({
@@ -8878,7 +9132,7 @@ test("native runtime groups chained tools under the active semantic todo work bl
         { name: "read_tool_output_artifact", args: { artifact_id: "artifact-1" } },
         {
           summary: "명령 산출물 아티팩트를 읽습니다.",
-          rationale: "같은 작업 블록의 후속 도구가 기존 산출물을 확인해야 합니다.",
+          rationale: "다음 선형 작업 블록의 후속 도구가 기존 산출물을 확인해야 합니다.",
           nextStep: "아티팩트 확인 뒤 작업 항목을 완료 처리합니다.",
         },
       );
@@ -8886,6 +9140,20 @@ test("native runtime groups chained tools under the active semantic todo work bl
         name: "read_tool_output_artifact",
         args: { artifact_id: "artifact-1" },
         rawArguments: "{\"artifact_id\":\"artifact-1\"}",
+      });
+      await authorPublicDecisionForTool(
+        input,
+        { name: "run_command", args: { command: "pwd" } },
+        {
+          summary: "현재 프로젝트 위치를 확인합니다.",
+          rationale: "활성 작업 블록 안에서 로컬 상태 확인 명령을 실행해야 합니다.",
+          nextStep: "명령 산출물을 읽어 다음 선형 작업 블록으로 이어갑니다.",
+        },
+      );
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "pwd" },
+        rawArguments: "{\"command\":\"pwd\"}",
       });
       await input.executeTool({
         name: "update_todo_list",
@@ -8914,14 +9182,19 @@ test("native runtime groups chained tools under the active semantic todo work bl
   });
 
   const toolStarts = turnEvents.filter((event) => event.kind === "tool.started");
-  expect(toolStarts).toHaveLength(2);
+  expect(toolStarts).toHaveLength(3);
   const workBlockIds = toolStarts.map((event) => event.payload.workBlockId);
-  expect(workBlockIds[0]).toBe(workBlockIds[1]);
-  expect(workBlockIds[0]).toMatch(/^turn-[^:]+:work-todo-inspect$/u);
+  expect(new Set(workBlockIds).size).toBe(3);
+  for (const workBlockId of workBlockIds) {
+    expect(workBlockId).toMatch(/^turn-[^:]+:work-todo-inspect-tool-[^-]+$/u);
+  }
   expect(toolStarts.map((event) => event.payload.workBlockLabel)).toEqual([
     "프로젝트 메타정보와 구조 확인 중",
     "프로젝트 메타정보와 구조 확인 중",
+    "프로젝트 메타정보와 구조 확인 중",
   ]);
+  const workBlockStarts = turnEvents.filter((event) => event.kind === "work.block.started");
+  expect(workBlockStarts.map((event) => event.payload.workBlockId)).toEqual(workBlockIds);
   expect(turnEvents.filter((event) => event.kind === "work.block.completed")).toHaveLength(0);
 });
 

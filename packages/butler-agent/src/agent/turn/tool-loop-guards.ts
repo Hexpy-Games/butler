@@ -1,5 +1,5 @@
 export const DIRECT_TOOL_CHAIN_MAX_ROUNDS = 60;
-export const REPEATED_TOOL_FAMILY_LIMIT = 3;
+export const REPEATED_TOOL_FAMILY_LIMIT = 6;
 
 export type RepeatedToolFamilyDecision = {
   family: string;

@@ -25,6 +25,15 @@ test("repeated tool family guard blocks only after the configured repeated famil
   });
 });
 
+test("repeated tool family guard allows a six-call direct validation burst", () => {
+  const guard = new RepeatedToolFamilyGuard();
+  const args = { command: "bun test tests/unit/native-tool-loop-runtime.test.ts" };
+
+  for (let i = 1; i <= 6; i += 1) {
+    expect(guard.record("run_command", args)?.blocked).toBe(false);
+  }
+});
+
 test("repeated tool family guard resets after a state-mutating tool call", () => {
   const guard = new RepeatedToolFamilyGuard(1);
   const testArgs = { command: "bun test tests/unit/native-tool-loop-runtime.test.ts" };

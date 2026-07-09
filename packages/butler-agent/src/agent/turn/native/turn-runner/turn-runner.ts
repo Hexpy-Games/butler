@@ -55,6 +55,12 @@ import {
   createWorkStreamPhaseBudgetController,
   promptUsageModelCallBudgetExhaustedError,
 } from "../../workstream-phase-budget.ts";
+import {
+  buildThinFirstResponsePrompt,
+  extractThinToolIntent,
+  shouldUseThinFirstResponse,
+  toolEscalationPrompt,
+} from "./thin-first-response.ts";
 
 export async function runNativeToolTurn({
   input,
@@ -65,6 +71,7 @@ export async function runNativeToolTurn({
   throwIfRuntimeTurnAborted(input.signal);
   const useTools = ["butler", "steward", "worker"].includes(session.init.role);
   let turnId: string | undefined;
+  let toolLoopUsed = false;
   const turnKernel = createTurnKernelController("accepted");
   try {
     const audit: ToolAuditEntry[] = [];
@@ -110,7 +117,7 @@ export async function runNativeToolTurn({
       model: input.model,
     });
     turnKernel.transitionTo("model_deciding");
-    const { runToolPrompt, runTextPrompt } = createNativeTurnPromptRunners({
+    const { runToolPrompt, runTextPrompt, runPrivateTextPrompt } = createNativeTurnPromptRunners({
       turnInput: input,
       session,
       deps,
@@ -134,6 +141,7 @@ export async function runNativeToolTurn({
       maxToolRounds?: number,
       phase?: string,
     ): Promise<string> => {
+      toolLoopUsed = true;
       try {
         return await runToolPrompt(promptText, maxToolRounds, phase);
       } catch (error) {
@@ -156,9 +164,37 @@ export async function runNativeToolTurn({
     };
     const completionGapFingerprints = new Set<string>();
     const initialPromptPhase = phaseBudgetController?.initialPromptPhase() ?? "initial_tool_loop";
-    let candidateText = useTools
-      ? await runKernelToolPrompt(context.prompt, undefined, initialPromptPhase)
-      : await runTextPrompt(context.prompt);
+    let candidateText: string;
+    if (useTools && shouldUseThinFirstResponse({
+      turnInput: input,
+      session,
+      plannedReview: context.plannedReview,
+    })) {
+      const thinPrompt = buildThinFirstResponsePrompt({
+        fullPrompt: context.prompt,
+        userText: context.userText,
+      });
+      const thinText = await runPrivateTextPrompt(
+        thinPrompt.prompt,
+        "thin_first_response",
+        thinPrompt.promptSections,
+      );
+      const thinIntent = extractThinToolIntent(thinText);
+      candidateText = thinIntent
+        ? await runKernelToolPrompt(
+          toolEscalationPrompt({
+            prompt: context.prompt,
+            intent: thinIntent,
+          }),
+          undefined,
+          initialPromptPhase,
+        )
+        : thinText;
+    } else {
+      candidateText = useTools
+        ? await runKernelToolPrompt(context.prompt, undefined, initialPromptPhase)
+        : await runTextPrompt(context.prompt);
+    }
     throwIfRuntimeTurnAborted(input.signal);
     turnKernel.transitionTo("observing_tools");
     let decisionCheckedText: string | null = null;
@@ -167,7 +203,7 @@ export async function runNativeToolTurn({
         turnInput: input,
         session,
         deps,
-        useTools,
+        useTools: toolLoopUsed,
         prompt: context.prompt,
         userText: context.userText,
         initialText: candidateText,
@@ -181,7 +217,7 @@ export async function runNativeToolTurn({
         const directWorkResult = await closeDirectWork({
           turnInput: input,
           deps,
-          useTools: session.init.role === "butler",
+          useTools: toolLoopUsed && session.init.role === "butler",
           turnId,
           turnBudget: context.turnBudget,
           userText: context.userText,
@@ -193,7 +229,7 @@ export async function runNativeToolTurn({
               turnInput: input,
               session,
               deps,
-              useTools,
+              useTools: toolLoopUsed,
               prompt: context.prompt,
               finalText,
               audit,
@@ -207,7 +243,7 @@ export async function runNativeToolTurn({
               turnInput: input,
               session,
               deps,
-              useTools,
+              useTools: toolLoopUsed,
               userText: context.userText,
               finalText: contractRepairedText,
               audit,
@@ -274,7 +310,7 @@ export async function runNativeToolTurn({
         turnId,
       });
     }
-    if (useTools) {
+    if (toolLoopUsed) {
       completeRuntimeSemanticWorkStreamBestEffort({
         butlerData: deps.butlerData,
         sessionId: input.handle.sessionId,
@@ -299,7 +335,7 @@ export async function runNativeToolTurn({
       session,
       deps,
       startedAt,
-      useTools,
+      useTools: toolLoopUsed,
       audit,
       publicDecisionContext,
       promptChars: context.prompt.length,
@@ -336,7 +372,7 @@ export async function runNativeToolTurn({
         unresolvedObservations: [],
       });
     }
-    if (useTools) {
+    if (toolLoopUsed) {
       if (input.signal?.aborted) {
         cancelActiveWorkStreamBestEffort({
           butlerData: deps.butlerData,
@@ -370,7 +406,7 @@ export async function runNativeToolTurn({
       session,
       deps,
       startedAt,
-      useTools,
+      useTools: toolLoopUsed,
       errorName: error instanceof Error ? error.name : "UnknownError",
     });
     throw error;
