@@ -62,6 +62,7 @@ export interface AgentLoopInput {
   messages: AgentLoopMessage[];
   tools: AgentLoopToolDefinition[];
   maxIterations?: number;
+  compactToolResultsBeforeNextModelCall?: boolean;
   callModel: (input: AgentLoopModelInput) => Promise<AgentLoopModelResponse>;
   onAssistantTextBeforeTools?: (input: {
     text: string;
@@ -511,13 +512,18 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
   };
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
+    if (input.compactToolResultsBeforeNextModelCall === true) {
+      compactObservedToolMessagesForFutureModelCalls(messages);
+    }
     emit(events, input.onEvent, { type: "model_call", iteration });
     const response = await input.callModel({
       messages,
       tools: input.tools,
       iteration,
     });
-    compactObservedToolMessagesForFutureModelCalls(messages);
+    if (input.compactToolResultsBeforeNextModelCall !== true) {
+      compactObservedToolMessagesForFutureModelCalls(messages);
+    }
     emit(events, input.onEvent, {
       type: "model_response",
       iteration,

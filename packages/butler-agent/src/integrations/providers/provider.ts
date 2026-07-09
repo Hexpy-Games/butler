@@ -4181,6 +4181,7 @@ async function runOpenAIFunctionToolPromptText(
     messages: [{ role: "user", content: promptForAgentLoop }],
     tools: agentLoopTools,
     maxIterations: maxRounds,
+    compactToolResultsBeforeNextModelCall: true,
     callModel: async ({ messages }) => {
       const activeTools = activeFunctionTools(options);
       const allowedNames = new Set(activeTools.map((tool) => tool.name));

@@ -243,6 +243,47 @@ test("agent loop preserves large non-evidence tool results for the immediate fol
   expect(futureMessage.length).toBeLessThan(6_000);
 });
 
+test("agent loop can compact large tool results before the immediate follow-up", async () => {
+  let immediateMessage = "";
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "inspect a noisy command compactly" }],
+    tools,
+    compactToolResultsBeforeNextModelCall: true,
+    callModel: async (input) => {
+      if (input.iteration === 0) {
+        return {
+          toolCalls: [{
+            id: "call-1",
+            name: "echo",
+            arguments: { message: "large" },
+          }],
+        };
+      }
+      immediateMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
+      return { text: "compact immediate result received" };
+    },
+    executeTool: async () => ({
+      ok: true,
+      title: "Large immediate command output",
+      stdout: [
+        "HEAD_START",
+        "RAW_MIDDLE_SHOULD_BE_COMPACTED ".repeat(3_200),
+        "TAIL_END",
+      ].join("\n"),
+    }),
+  });
+
+  const immediate = JSON.parse(immediateMessage) as Record<string, any>;
+  expect(result.finalText).toBe("compact immediate result received");
+  expect(immediate.output.butler_tool_result_compacted).toBe(true);
+  expect(immediate.output.title).toBe("Large immediate command output");
+  expect(immediate.output.preview).toContain("HEAD_START");
+  expect(immediate.output.preview).toContain("TAIL_END");
+  expect(immediate.output.raw_estimated_tokens).toBeGreaterThan(6_000);
+  expect(immediate.output.estimated_saved_tokens).toBeGreaterThan(4_000);
+  expect(immediateMessage.length).toBeLessThan(6_000);
+});
+
 test("agent loop exposes assistant text before executing selected tools", async () => {
   const order: string[] = [];
   const result = await runAgentLoop({
