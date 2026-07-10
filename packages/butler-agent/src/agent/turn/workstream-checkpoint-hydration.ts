@@ -166,6 +166,7 @@ function evidenceRefsFor(
     ...record.linked_orchestration_ids.map((id) => ref("orchestration", id)),
     ...record.linked_worker_task_ids.map((id) => ref("worker_task", id)),
     ...(atom?.openToolPairs ?? []).map(refFromObservation),
+    ...(atom?.evidenceCandidates ?? []).map(refFromObservation),
     ...(atom?.currentTurnWork ?? []).map(refFromObservation),
     ...(atom?.currentTurnTodos ?? []).map(refFromObservation),
     atom?.latestAssistantDecision ? ref("assistant_decision", atom.latestAssistantDecision.id) : null,

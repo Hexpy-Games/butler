@@ -53,6 +53,15 @@ test("repeated tool family guard resets after a state-mutating tool call", () =>
 });
 
 test("repeated tool family helpers classify read-only and state-mutating calls", () => {
+  expect(repeatedToolFamilyKey("grep_files", {
+    pattern: "promptCacheKey",
+    include_globs: ["packages/**/*.ts"],
+  })).toBe("workspace-grep:promptCacheKey");
+  expect(repeatedToolFamilyKey("grep_files", {
+    pattern: "promptCacheKey",
+    include_globs: ["tests/**/*.ts"],
+    regex: true,
+  })).toBe("workspace-grep:promptCacheKey");
   expect(repeatedToolFamilyKey("inspect_project_status", {})).toBe("project-ledger:status");
   expect(repeatedToolFamilyKey("project_ledger_status", {})).toBe("project-ledger:status");
   expect(repeatedToolFamilyKey("project_ledger_check", {})).toBe("project-ledger:check");

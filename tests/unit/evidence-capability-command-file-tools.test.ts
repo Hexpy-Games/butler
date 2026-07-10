@@ -256,7 +256,8 @@ describe("file tool evidence capability receipts", () => {
       evidence_kind: "source_candidate",
       maturity: "candidate",
       verified: false,
-      scope: { truncated: true, match_count: 1 },
+      scope: { truncated: true, match_count: 1, candidate_count: 1 },
+      references: [{ path: "src/a.txt", label: "line 1" }],
       limitations: ["Search candidate discovery is not source verification."],
     });
     expect(JSON.stringify(receipts)).not.toContain("needle");

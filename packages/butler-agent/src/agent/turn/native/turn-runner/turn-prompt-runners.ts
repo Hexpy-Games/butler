@@ -22,7 +22,10 @@ import {
   plannedReviewTerminalToolText,
   publicReportFromToolOutput,
 } from "../output/tool-result-text.ts";
-import { publicWorkDecisionsFromAssistantText } from "../../../output/public-work/decisions.ts";
+import {
+  hasCompleteAuthoredPublicDecisionForTool,
+  publicWorkDecisionsFromAssistantText,
+} from "../../../output/public-work/decisions.ts";
 import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
 import { metadataPolicyValue } from "../policy/turn-metadata-policy.ts";
 import { emitAssistantTextBeforeTools } from "./assistant-pretool-progress.ts";
@@ -47,6 +50,7 @@ import {
   runPrivateTurnDecisionPrompt,
   type PrivateTurnDecisionValidation,
 } from "./private-turn-decision-prompt.ts";
+import { createContractContinuationDecision } from "./turn-contract-continuation-decision.ts";
 
 const REASONING_EFFORT_VALUES = new Set<ReasoningEffort>([
   "none",
@@ -144,6 +148,10 @@ export function createNativeTurnPromptRunners(input: {
     },
   });
   const reasoningEffort = selectedReasoningEffort(input.turnInput);
+  const fixedToolSurface = (
+    metadataPolicyValue(input.turnInput.metadata, "toolSurfaceMode") ??
+    metadataPolicyValue(input.turnInput.metadata, "tool_surface_mode")
+  ) === "fixed";
 
   return {
     runToolPrompt: async (
@@ -159,6 +167,7 @@ export function createNativeTurnPromptRunners(input: {
       const grantedToolRounds = directToolRoundLimit(phaseMaxToolRounds);
       async function runPromptWithSelectedSurface(toolSurface: SelectedToolSurfacePromptState): Promise<string> {
         const projector = streamProjector(phase);
+        const providerToolRounds = input.turnContractContext?.current ? 1 : grantedToolRounds;
         try {
           const executeTool: FunctionToolPromptOptions["executeTool"] = async (call) => {
             input.phaseBudgetController?.recordToolCall({
@@ -173,14 +182,19 @@ export function createNativeTurnPromptRunners(input: {
             reasoningEffort,
             instructions: appendRoleToolPolicyInstructions(
               input.session.init.role,
-              appendButlerToolInstructions(input.session.init.systemPrompt),
+              appendButlerToolInstructions(input.session.init.systemPrompt, {
+                availableToolNames: toolSurface.tools.map((tool) => tool.name),
+                fixedSurface: fixedToolSurface ||
+                  input.turnContractContext?.current?.contract.action === "inspect",
+              }),
             ),
             cacheScope: "session-turn",
             signal: input.turnInput.signal,
             attachments: input.attachments,
             tools: toolSurface.tools,
             dynamicTools: toolSurface.dynamicTools,
-            maxToolRounds: grantedToolRounds,
+            maxToolRounds: providerToolRounds,
+            handoffAfterToolBatch: Boolean(input.turnContractContext?.current),
             butlerData: input.deps.butlerData,
             usageAttribution: usageAttribution(phase),
             onProviderStreamEvent: projector.project,
@@ -231,9 +245,25 @@ export function createNativeTurnPromptRunners(input: {
                 }
                 input.pendingPublicDecisions.push(...nextPendingDecisions);
               } else if (input.turnContractContext?.current && toolCalls.length > 0) {
+                const active = input.turnContractContext.current;
+                const hasContractDecision = hasCompleteAuthoredPublicDecisionForTool({
+                  pending: input.pendingPublicDecisions.filter((decision) =>
+                    decision.contractId === active.contract.contract_id,
+                  ),
+                  toolName: toolCalls[0]!.name,
+                });
+                if (!hasContractDecision) {
+                  providerRoundIndex += 1;
+                  input.pendingPublicDecisions.push(createContractContinuationDecision({
+                    active,
+                    toolCalls,
+                    language: input.deps.messageLanguage,
+                    providerRound: providerRoundIndex,
+                  }));
+                }
                 const boundedBatchSize = Math.min(toolCalls.length, 6);
                 for (const decision of input.pendingPublicDecisions) {
-                  if (decision.contractId === input.turnContractContext.current.contract.contract_id) {
+                  if (decision.contractId === active.contract.contract_id) {
                     decision.toolBatchSize = boundedBatchSize;
                   }
                 }
@@ -261,8 +291,8 @@ export function createNativeTurnPromptRunners(input: {
       }
       return await input.toolSurfaceController.runWithSelectedSurface(runPromptWithSelectedSurface);
     },
-    runTextPrompt: async (promptText: string): Promise<string> => {
-      const projector = streamProjector("text_prompt");
+    runTextPrompt: async (promptText: string, phase = "text_prompt"): Promise<string> => {
+      const projector = streamProjector(phase);
       try {
         const text = await input.deps.promptRunner({
           prompt: promptText,
@@ -273,12 +303,12 @@ export function createNativeTurnPromptRunners(input: {
           signal: input.turnInput.signal,
           attachments: input.attachments,
           butlerData: input.deps.butlerData,
-          usageAttribution: usageAttribution("text_prompt", 0),
+          usageAttribution: usageAttribution(phase, 0),
           onProviderStreamEvent: projector.project,
         });
         if (text.trim()) {
           input.latencyTracker?.recordFirstModelDelta({
-            phase: "text_prompt",
+            phase,
             target: "final_candidate",
           });
         }

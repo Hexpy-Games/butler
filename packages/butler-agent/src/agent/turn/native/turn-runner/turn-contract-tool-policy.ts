@@ -8,6 +8,7 @@ export function turnMetadataForContract(
   const profiles = contractProfiles(contract);
   const tools = contractTools(contract);
   const accessMode = contract.action === "inspect" ? "read_only" : "full";
+  const toolSurfaceMode = contract.action === "inspect" ? "fixed" : "adaptive";
   const policy = {
     contractId: contract.contract_id,
     contract_id: contract.contract_id,
@@ -19,6 +20,8 @@ export function turnMetadataForContract(
     closeout_strategy: contract.closeout_strategy,
     accessMode,
     access_mode: accessMode,
+    toolSurfaceMode,
+    tool_surface_mode: toolSurfaceMode,
     requiredNativeToolProfiles: profiles,
     required_tool_profiles: profiles,
     requiredNativeTools: tools,

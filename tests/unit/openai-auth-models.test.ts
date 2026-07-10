@@ -42,6 +42,7 @@ import {
   resolveRuntimeMessageLanguage,
   runtimeMessages,
 } from "../../packages/butler-agent/src/agent/output/messages.ts";
+import { isToolBatchCompletedHandoffText } from "../../packages/butler-agent/src/agent/turn/tool-batch-handoff.ts";
 import {
   isContainerRuntime,
   resolveOAuthListenHost,
@@ -514,6 +515,60 @@ test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
   expect(bodies[1]!.reasoning_effort).toBe("low");
   expect(attributedRequests).toEqual([0, 1]);
   expect(attributedUsage).toEqual([100, 140]);
+});
+
+test("registered Z.AI typed tool batches hand off before hidden final synthesis", async () => {
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  const bodies: Record<string, any>[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    bodies.push(JSON.parse(String(init?.body || "{}")));
+    if (bodies.length > 1) throw new Error("unexpected hidden synthesis request");
+    return new Response(JSON.stringify({
+      choices: [{
+        message: {
+          role: "assistant",
+          content: "summary: 후보를 검색합니다.",
+          tool_calls: [{
+            id: "call_1",
+            type: "function",
+            function: {
+              name: "lookup",
+              arguments: "{\"query\":\"butler\"}",
+            },
+          }],
+        },
+      }],
+      usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const text = await runFunctionToolPromptText({
+    model: "zai/glm-5.2",
+    prompt: "search",
+    maxToolRounds: 1,
+    handoffAfterToolBatch: true,
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "Look up a term.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    executeTool: async () => ({ answer: "found" }),
+  });
+
+  expect(isToolBatchCompletedHandoffText(text)).toBe(true);
+  expect(bodies).toHaveLength(1);
 });
 
 test("registered Z.AI hosted tool result compaction emits rehydratable evidence packet", async () => {
@@ -3208,6 +3263,58 @@ test("Codex subscription tool continuation is sent as stateless input without pr
   ]);
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("large-hidden-reasoning-state");
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("encrypted_content");
+});
+
+test("Codex typed tool batches hand off before a continuation response request", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+
+  const seenBodies: Array<Record<string, any>> = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    seenBodies.push(JSON.parse(String(init?.body || "{}")));
+    if (seenBodies.length > 1) throw new Error("unexpected hidden continuation request");
+    return new Response([
+      'data: {"type":"response.output_item.done","item":{"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{\\"query\\":\\"status\\"}"}}',
+      "",
+      'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":1,"total_tokens":2}}}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n"), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const result = await runFunctionToolPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "check",
+    maxToolRounds: 1,
+    handoffAfterToolBatch: true,
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "lookup status",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    executeTool: async () => ({ ok: true }),
+  });
+
+  expect(isToolBatchCompletedHandoffText(result)).toBe(true);
+  expect(seenBodies).toHaveLength(1);
 });
 
 test("OpenAI function tool prompt reserves budget for final synthesis instead of exceeding request budget", async () => {

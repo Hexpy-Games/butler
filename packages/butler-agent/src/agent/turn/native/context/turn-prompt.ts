@@ -309,6 +309,7 @@ function renderTurnContextAtom(atom: TurnContextAtom, contextAtomId: string): st
   }
   lines.push(renderAtomRefs("Unresolved Observations", atom.unresolvedObservations));
   lines.push(renderAtomRefs("Open Tool Pairs", atom.openToolPairs));
+  lines.push(renderAtomRefs("Evidence Candidates", atom.evidenceCandidates));
   lines.push(renderAtomRefs("Current Turn Work", atom.currentTurnWork));
   lines.push(renderAtomRefs("Current Turn Todos", atom.currentTurnTodos));
   lines.push("Continuation Instruction: resume this same logical turn from the context atom facts before using active WorkStream/Todo fallback.");

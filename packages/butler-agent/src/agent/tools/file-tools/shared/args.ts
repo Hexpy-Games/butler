@@ -28,9 +28,9 @@ export function parseToolArgs(call: { arguments?: unknown; input?: unknown; args
 }
 
 export function getWorkspaceRoot(args: Record<string, unknown>, fallback?: string): string {
+  if (fallback && fallback.trim()) return fallback;
   const explicit = args.workspace_root;
   if (typeof explicit === "string" && explicit.trim()) return explicit;
-  if (fallback && fallback.trim()) return fallback;
   return process.cwd();
 }
 
