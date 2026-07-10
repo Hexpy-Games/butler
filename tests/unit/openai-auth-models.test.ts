@@ -453,6 +453,8 @@ test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
   }, tempDir);
 
   const bodies: Record<string, any>[] = [];
+  const attributedRequests: number[] = [];
+  const attributedUsage: number[] = [];
   globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const body = JSON.parse(String(init?.body || "{}"));
     bodies.push(body);
@@ -472,10 +474,12 @@ test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
             }],
           },
         }],
+        usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
       }), { status: 200 });
     }
     return new Response(JSON.stringify({
       choices: [{ message: { role: "assistant", content: "tool result used" } }],
+      usage: { prompt_tokens: 140, completion_tokens: 10, total_tokens: 150 },
     }), { status: 200 });
   }) as unknown as typeof fetch;
 
@@ -483,6 +487,14 @@ test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
     model: "zai/glm-5.2",
     reasoningEffort: "low",
     prompt: "search",
+    butlerData: tempDir,
+    usageAttribution: {
+      turnId: "turn-zai-tools",
+      phase: "initial_tool_loop",
+      budgetState: { status: "ok", requestCount: 0, maxRequests: 8 },
+      beforeModelRequest: ({ roundIndex }) => attributedRequests.push(roundIndex),
+      afterModelResponseUsage: (usage) => attributedUsage.push(usage.promptTokens ?? 0),
+    },
     tools: [{
       type: "function",
       name: "lookup",
@@ -500,6 +512,8 @@ test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
   expect(bodies).toHaveLength(2);
   expect(bodies[0]!.reasoning_effort).toBe("low");
   expect(bodies[1]!.reasoning_effort).toBe("low");
+  expect(attributedRequests).toEqual([0, 1]);
+  expect(attributedUsage).toEqual([100, 140]);
 });
 
 test("registered Z.AI hosted tool result compaction emits rehydratable evidence packet", async () => {
@@ -658,6 +672,8 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
   }, tempDir);
 
   const calls: Array<{ url: string; authorization: string; body: Record<string, any> }> = [];
+  const attributedRequests: number[] = [];
+  const attributedUsage: unknown[] = [];
   globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     calls.push({
       url: String(input),
@@ -666,6 +682,12 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
     });
     return new Response(JSON.stringify({
       choices: [{ message: { role: "assistant", content: "ok" } }],
+      usage: {
+        prompt_tokens: 120,
+        completion_tokens: 30,
+        total_tokens: 150,
+        prompt_tokens_details: { cached_tokens: 80 },
+      },
     }), { status: 200 });
   }) as unknown as typeof fetch;
 
@@ -691,6 +713,15 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
         required: ["ok"],
         properties: { ok: { type: "string" } },
       },
+    },
+    butlerData: tempDir,
+    cacheScope: "hosted-zai-test",
+    usageAttribution: {
+      turnId: "turn-zai-usage",
+      phase: "typed_turn_decision",
+      budgetState: { status: "ok", requestCount: 0, maxRequests: 8 },
+      beforeModelRequest: ({ roundIndex }) => attributedRequests.push(roundIndex),
+      afterModelResponseUsage: (usage) => attributedUsage.push(usage),
     },
   })).resolves.toBe("ok");
 
@@ -723,6 +754,23 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
       },
     },
   });
+  expect(attributedRequests).toEqual([0]);
+  expect(attributedUsage).toEqual([expect.objectContaining({
+    model: "zai/glm-5.2",
+    promptTokens: 120,
+    cachedTokens: 80,
+    outputTokens: 30,
+    totalTokens: 150,
+    roundIndex: 0,
+  })]);
+  expect(readPromptCacheMetrics({ butlerData: tempDir })).toContainEqual(expect.objectContaining({
+    model: "zai/glm-5.2",
+    scope: "hosted-zai-test",
+    turnId: "turn-zai-usage",
+    phase: "typed_turn_decision",
+    promptTokens: 120,
+    cachedTokens: 80,
+  }));
 });
 
 test("registered OpenCode Go chat-completions models use the hosted OpenAI-compatible endpoint", async () => {

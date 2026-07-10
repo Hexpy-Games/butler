@@ -42,6 +42,7 @@ import type {
   promptUsageSectionsFromPrompt,
 } from "../../direct-turn-budget.ts";
 import type { WorkStreamPhaseBudgetController } from "../../workstream-phase-budget.ts";
+import type { ActiveTurnContract } from "./turn-contract-runtime.ts";
 
 const REASONING_EFFORT_VALUES = new Set<ReasoningEffort>([
   "none",
@@ -79,6 +80,7 @@ export function createNativeTurnPromptRunners(input: {
   markAssistantTextBeforeToolsSeen: () => void;
   latencyTracker?: TurnLatencyMetricRecorder;
   phaseBudgetController?: WorkStreamPhaseBudgetController | null;
+  turnContractContext?: { current: ActiveTurnContract | null };
 }) {
   let providerRoundIndex = 0;
   const usageAttribution = (
@@ -205,6 +207,18 @@ export function createNativeTurnPromptRunners(input: {
                 toolCalls,
                 language: input.deps.messageLanguage,
                 existingDecisions: input.publicDecisionContext,
+                ...(input.turnContractContext?.current
+                  ? {
+                    contractContext: {
+                      contractId: input.turnContractContext.current.contract.contract_id,
+                      ...(input.turnContractContext.current.contract.target_workstream_id
+                        ? { workstreamId: input.turnContractContext.current.contract.target_workstream_id }
+                        : {}),
+                      semanticBlockId: `${input.turnContractContext.current.contract.contract_id}:block:${providerRoundIndex + 1}`,
+                      usageGroupId: `${input.turnContractContext.current.contract.contract_id}:round:${providerRoundIndex + 1}`,
+                    },
+                  }
+                  : {}),
               });
               if (nextPendingDecisions.length > 0) {
                 input.pendingPublicDecisions.length = 0;
@@ -213,6 +227,13 @@ export function createNativeTurnPromptRunners(input: {
                   d.providerRound = providerRoundIndex;
                 }
                 input.pendingPublicDecisions.push(...nextPendingDecisions);
+              } else if (input.turnContractContext?.current && toolCalls.length > 0) {
+                const boundedBatchSize = Math.min(toolCalls.length, 6);
+                for (const decision of input.pendingPublicDecisions) {
+                  if (decision.contractId === input.turnContractContext.current.contract.contract_id) {
+                    decision.toolBatchSize = boundedBatchSize;
+                  }
+                }
               }
               await emitAssistantTextBeforeTools({
                 turnInput: input.turnInput,
@@ -269,6 +290,7 @@ export function createNativeTurnPromptRunners(input: {
       promptText: string,
       phase = "private_text_prompt",
       promptSections?: PromptUsageSectionAttribution[],
+      responseFormat?: Parameters<NativeTurnRunnerDeps["promptRunner"]>[0]["responseFormat"],
     ): Promise<string> => {
       const text = await input.deps.promptRunner({
         prompt: promptText,
@@ -278,6 +300,7 @@ export function createNativeTurnPromptRunners(input: {
         cacheScope: "session-turn",
         signal: input.turnInput.signal,
         attachments: input.attachments,
+        responseFormat,
         butlerData: input.deps.butlerData,
         usageAttribution: usageAttribution(phase, 0, promptSections),
       });

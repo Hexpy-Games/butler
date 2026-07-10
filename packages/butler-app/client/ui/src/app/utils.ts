@@ -1733,7 +1733,7 @@ function publicDecisionFields(
         .filter((item): item is string => Boolean(item))
         .slice(0, 6)
     : undefined;
-  const fields: Partial<ProgressRow> = {};
+  const fields: Partial<ProgressRow> = publicContractFields(payload);
   const summary = safeOptionalPublicText(payload.decisionSummary);
   if (summary) fields.work_decision_summary = summary;
   const rationale = safeOptionalPublicText(payload.decisionRationale);
@@ -1758,7 +1758,7 @@ function explicitPublicDecisionFields(
         .filter((item): item is string => Boolean(item))
         .slice(0, 6)
     : undefined;
-  const fields: Partial<ProgressRow> = {};
+  const fields: Partial<ProgressRow> = publicContractFields(payload);
   const role = safeOptionalPublicText(payload.role);
   if (role) fields.public_decision_role = role;
   const summary = safeOptionalPublicText(payload.summary);
@@ -1774,6 +1774,17 @@ function explicitPublicDecisionFields(
   if (latencyMs !== undefined) fields.public_decision_latency_ms = latencyMs;
   if (evidenceRefs && evidenceRefs.length > 0)
     fields.public_decision_evidence_refs = evidenceRefs;
+  return fields;
+}
+
+function publicContractFields(payload: Record<string, unknown>): Partial<ProgressRow> {
+  const fields: Partial<ProgressRow> = {};
+  const contractId = safeOptionalPublicText(payload.contractId);
+  const workstreamId = safeOptionalPublicText(payload.workstreamId);
+  const semanticBlockId = safeOptionalPublicText(payload.semanticBlockId);
+  if (contractId) fields.work_contract_id = contractId;
+  if (workstreamId) fields.work_stream_id = workstreamId;
+  if (semanticBlockId) fields.semantic_block_id = semanticBlockId;
   return fields;
 }
 
@@ -2170,6 +2181,12 @@ function progressRowsHaveCompatibleEvidence(
   right: ProgressRow,
 ): boolean {
   if (
+    left.semantic_block_id &&
+    right.semantic_block_id &&
+    left.semantic_block_id !== right.semantic_block_id
+  )
+    return false;
+  if (
     left.work_block_id &&
     right.work_block_id &&
     left.work_block_id !== right.work_block_id
@@ -2241,6 +2258,12 @@ function mergeProgressRow(
       incoming.safe_path_labels,
     tool_call_id:
       base.tool_call_id ?? current.tool_call_id ?? incoming.tool_call_id,
+    work_contract_id:
+      base.work_contract_id ?? current.work_contract_id ?? incoming.work_contract_id,
+    work_stream_id:
+      base.work_stream_id ?? current.work_stream_id ?? incoming.work_stream_id,
+    semantic_block_id:
+      base.semantic_block_id ?? current.semantic_block_id ?? incoming.semantic_block_id,
     work_block_id:
       base.work_block_id ?? current.work_block_id ?? incoming.work_block_id,
     work_block_label:
@@ -2385,6 +2408,9 @@ function progressRowEqual(left: ProgressRow, right: ProgressRow): boolean {
     left.safe_input_label === right.safe_input_label &&
     left.safe_order === right.safe_order &&
     left.tool_call_id === right.tool_call_id &&
+    left.work_contract_id === right.work_contract_id &&
+    left.work_stream_id === right.work_stream_id &&
+    left.semantic_block_id === right.semantic_block_id &&
     left.work_block_id === right.work_block_id &&
     left.work_block_label === right.work_block_label &&
     left.work_decision_summary === right.work_decision_summary &&

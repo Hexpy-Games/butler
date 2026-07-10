@@ -169,6 +169,12 @@ function progressRowsHaveCompatibleEvidence(
   right: ProgressSummaryRow,
 ): boolean {
   if (
+    left.semantic_block_id &&
+    right.semantic_block_id &&
+    left.semantic_block_id !== right.semantic_block_id
+  )
+    return false;
+  if (
     left.work_block_id &&
     right.work_block_id &&
     left.work_block_id !== right.work_block_id
@@ -241,6 +247,12 @@ function mergeProgressRow(
       base.tool_call_id ?? current.tool_call_id ?? incoming.tool_call_id,
     bridge_phase:
       base.bridge_phase ?? current.bridge_phase ?? incoming.bridge_phase,
+    work_contract_id:
+      base.work_contract_id ?? current.work_contract_id ?? incoming.work_contract_id,
+    work_stream_id:
+      base.work_stream_id ?? current.work_stream_id ?? incoming.work_stream_id,
+    semantic_block_id:
+      base.semantic_block_id ?? current.semantic_block_id ?? incoming.semantic_block_id,
     work_block_id:
       base.work_block_id ?? current.work_block_id ?? incoming.work_block_id,
     work_block_label:

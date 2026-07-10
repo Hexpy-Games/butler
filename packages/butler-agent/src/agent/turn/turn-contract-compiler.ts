@@ -49,7 +49,8 @@ export function compileTurnContract(input: {
   const requiredEvidence = seeds.map((seed, index) => obligation(contractId, seed, index));
   const deliverables = uniqueDeliverables(requiredEvidence.map((item) => item.deliverable));
   const now = (input.now ?? new Date()).toISOString();
-  const trackingMode = deliverables.some((value) => value.startsWith("ledger_"))
+  const trackingMode = deliverables.some((value) => value.startsWith("ledger_")) ||
+      (input.decision.action === "inspect" && Boolean(input.decision.target_project_id))
     ? "ledger"
     : deliverables.some((value) => EXECUTION_DELIVERABLES.has(value)) ? "local" : "none";
   return {
@@ -64,11 +65,14 @@ export function compileTurnContract(input: {
     deliverables,
     required_evidence: requiredEvidence,
     tracking_mode: trackingMode,
-    closeout_strategy: trackingMode === "ledger" ? "ledger" : trackingMode === "local" ? "local_workstream" : "noop",
+    closeout_strategy: input.decision.action === "inspect"
+      ? "noop"
+      : trackingMode === "ledger" ? "ledger" : trackingMode === "local" ? "local_workstream" : "noop",
     terminal_rule: input.decision.action === "answer" ? "answer" : input.decision.action === "inspect" ? "verified_report" : "deliverables_satisfied",
     state: input.decision.action === "answer" ? "satisfied" : "validated",
     generation: 1,
     evidence_receipt_ids: [],
+    continuation_commit_ids: [],
     terminal_delivery_keys: [],
     created_at: now,
     updated_at: now,

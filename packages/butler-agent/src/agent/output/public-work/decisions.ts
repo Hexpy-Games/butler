@@ -18,6 +18,9 @@ export const PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT = 6;
 export function publicWorkDecisionPayload(decision: PublicWorkDecision): Record<string, unknown> {
   return {
     decisionId: decision.decisionId,
+    contractId: decision.contractId,
+    workstreamId: decision.workstreamId,
+    semanticBlockId: decision.semanticBlockId,
     decisionSummary: decision.summary,
     decisionRationale: decision.rationale,
     decisionNextStep: decision.nextStep,
@@ -32,6 +35,12 @@ export function publicWorkDecisionsFromAssistantText(input: {
   toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
   language: RuntimeMessageLanguage;
   existingDecisions: PublicWorkDecision[];
+  contractContext?: {
+    contractId: string;
+    workstreamId?: string;
+    semanticBlockId: string;
+    usageGroupId: string;
+  };
 }): PublicWorkDecision[] {
   const structured = publicDecisionStructuredFields(input.text);
   if (structured.length === 0) {
@@ -59,7 +68,14 @@ export function publicWorkDecisionsFromAssistantText(input: {
     }
     return {
       decisionId: publicDecisionId(),
-      usageGroupId: usageGroupIds[usageGroupIndex] ?? publicDecisionId(),
+      usageGroupId: input.contractContext?.usageGroupId ?? usageGroupIds[usageGroupIndex] ?? publicDecisionId(),
+      ...(input.contractContext
+        ? {
+          contractId: input.contractContext.contractId,
+          ...(input.contractContext.workstreamId ? { workstreamId: input.contractContext.workstreamId } : {}),
+          semanticBlockId: input.contractContext.semanticBlockId,
+        }
+        : {}),
       summary,
       rationale,
       evidenceRefs: input.existingDecisions
@@ -72,6 +88,7 @@ export function publicWorkDecisionsFromAssistantText(input: {
       source: "assistant-authored",
       toolName: call.name,
       toolCallIndex: index,
+      toolBatchSize: Math.min(input.toolCalls.length, PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT),
     };
   });
 }
@@ -98,7 +115,6 @@ export function takePublicWorkDecisionForTool(input: {
       .map((decision) => decision.summary);
   const publicDecision = { ...decision };
   delete publicDecision.claimed;
-  delete publicDecision.toolCallIndex;
   return {
     ...publicDecision,
     evidenceRefs,
@@ -134,26 +150,37 @@ function takePendingDecision(
   );
   if (matchingOrderedDecision && claimDecisionGroupUse(pending, matchingOrderedDecision)) {
     matchingOrderedDecision.claimed = true;
-    return matchingOrderedDecision;
+    return decisionWithClaimedIndex(pending, matchingOrderedDecision);
   }
 
   const reusableMatchingDecision = pending.find((decision) => decision.toolName === toolName);
   if (reusableMatchingDecision && claimDecisionGroupUse(pending, reusableMatchingDecision)) {
-    return reusableMatchingDecision;
+    return decisionWithClaimedIndex(pending, reusableMatchingDecision);
   }
 
   const sharedOrderedDecision = pending.find((decision) => decision.claimed !== true);
   if (sharedOrderedDecision && claimDecisionGroupUse(pending, sharedOrderedDecision)) {
     sharedOrderedDecision.claimed = true;
-    return sharedOrderedDecision;
+    return decisionWithClaimedIndex(pending, sharedOrderedDecision);
   }
 
   const sharedDecision = pending[0];
   if (sharedDecision && claimDecisionGroupUse(pending, sharedDecision)) {
-    return sharedDecision;
+    return decisionWithClaimedIndex(pending, sharedDecision);
   }
 
   return;
+}
+
+function decisionWithClaimedIndex(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+): PublicWorkDecision {
+  const claimedIndex = Math.max(0, decisionGroupUsageCount(pending, decision) - 1);
+  return {
+    ...decision,
+    toolCallIndex: decision.toolCallIndex ?? claimedIndex,
+  };
 }
 
 function decisionUsageGroupKey(decision: PublicWorkDecision): string {
@@ -164,7 +191,7 @@ function decisionGroupHasRemainingUse(
   pending: PublicWorkDecision[],
   decision: PublicWorkDecision,
 ): boolean {
-  return decisionGroupUsageCount(pending, decision) < PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT;
+  return decisionGroupUsageCount(pending, decision) < decisionGroupUsageLimit(pending, decision);
 }
 
 function claimDecisionGroupUse(
@@ -172,9 +199,26 @@ function claimDecisionGroupUse(
   decision: PublicWorkDecision,
 ): boolean {
   const usageCount = decisionGroupUsageCount(pending, decision);
-  if (usageCount >= PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT) return false;
+  if (usageCount >= decisionGroupUsageLimit(pending, decision)) return false;
   setDecisionGroupUsageCount(pending, decision, usageCount + 1);
   return true;
+}
+
+function decisionGroupUsageLimit(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+): number {
+  const key = decisionUsageGroupKey(decision);
+  const declaredBatchSize = pending
+    .filter((candidate) => decisionUsageGroupKey(candidate) === key)
+    .reduce((max, candidate) => Math.max(max, candidate.toolBatchSize ?? 0), 0);
+  return Math.max(
+    1,
+    Math.min(
+      declaredBatchSize || PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT,
+      PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT,
+    ),
+  );
 }
 
 function decisionGroupUsageCount(

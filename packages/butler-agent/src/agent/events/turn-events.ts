@@ -142,6 +142,9 @@ export interface ProgressRowLike {
   public_decision_model_call_id?: string;
   public_decision_latency_ms?: number;
   public_decision_evidence_refs?: string[];
+  work_contract_id?: string;
+  work_stream_id?: string;
+  semantic_block_id?: string;
   work_block_id?: string;
   work_block_label?: string;
   work_decision_summary?: string;
@@ -472,6 +475,9 @@ export function turnEventFromProgressRow(input: {
       toolCallId: row.tool_call_id,
       workBlockId: row.work_block_id,
       workBlockLabel: row.work_block_label,
+      contractId: row.work_contract_id,
+      workstreamId: row.work_stream_id,
+      semanticBlockId: row.semantic_block_id,
       decisionSummary: row.work_decision_summary,
       decisionRationale: row.work_decision_rationale,
       decisionNextStep: row.work_decision_next_step,
@@ -581,7 +587,7 @@ function publicDecisionFields(payload: Record<string, unknown>): Partial<Progres
         .filter((item): item is string => Boolean(item))
         .slice(0, 6)
     : undefined;
-  const fields: Partial<ProgressRowLike> = {};
+  const fields: Partial<ProgressRowLike> = publicContractFields(payload);
   if (summary) fields.work_decision_summary = summary;
   if (rationale) fields.work_decision_rationale = rationale;
   if (nextStep) fields.work_decision_next_step = nextStep;
@@ -593,7 +599,7 @@ function publicDecisionFields(payload: Record<string, unknown>): Partial<Progres
 function publicDecisionRowFields(payload: Record<string, unknown>): Partial<ProgressRowLike> {
   const source = optionalPublicText(payload.source);
   if (!isAuthoredDecisionSource(source)) return {};
-  const fields: Partial<ProgressRowLike> = {};
+  const fields: Partial<ProgressRowLike> = publicContractFields(payload);
   const role = optionalPublicText(payload.role);
   const summary = optionalPublicText(payload.summary);
   const rationale = optionalPublicText(payload.rationale);
@@ -616,6 +622,17 @@ function publicDecisionRowFields(payload: Record<string, unknown>): Partial<Prog
     : undefined;
   if (evidenceRefs && evidenceRefs.length > 0)
     fields.public_decision_evidence_refs = evidenceRefs;
+  return fields;
+}
+
+function publicContractFields(payload: Record<string, unknown>): Partial<ProgressRowLike> {
+  const fields: Partial<ProgressRowLike> = {};
+  const contractId = optionalPublicText(payload.contractId);
+  const workstreamId = optionalPublicText(payload.workstreamId);
+  const semanticBlockId = optionalPublicText(payload.semanticBlockId);
+  if (contractId) fields.work_contract_id = contractId;
+  if (workstreamId) fields.work_stream_id = workstreamId;
+  if (semanticBlockId) fields.semantic_block_id = semanticBlockId;
   return fields;
 }
 

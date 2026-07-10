@@ -132,6 +132,23 @@ const fakeProvider: ModelProviderAdapter = {
   },
 };
 
+const structuredFakeProvider: ModelProviderAdapter = {
+  ...fakeProvider,
+  capabilities: {
+    ...fakeProvider.capabilities,
+    supportsStructuredOutputs: true,
+  },
+};
+
+function typedDecisionId(responseFormat: { schema: Record<string, unknown> } | undefined): string {
+  const schema = responseFormat?.schema as {
+    properties?: { decision_id?: { const?: unknown } };
+  } | undefined;
+  const value = schema?.properties?.decision_id?.const;
+  if (typeof value !== "string") throw new Error("typed decision id missing");
+  return value;
+}
+
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "butler-native-runtime-"));
   originalButlerData = process.env.BUTLER_DATA;
@@ -282,7 +299,7 @@ test("native runtime forwards turn reasoning metadata to prompt runners", async 
   expect(observedReasoning).toContain("low");
 });
 
-test("native runtime uses app thin first response for direct answers without entering the tool loop", async () => {
+test("native runtime uses the bounded typed first pass for direct answers without entering the tool loop", async () => {
   const textPrompts: string[] = [];
   const runtime = new NativeToolLoopRuntime({
     butlerHome: process.cwd(),
@@ -290,7 +307,18 @@ test("native runtime uses app thin first response for direct answers without ent
     disableAutomaticRecall: true,
     runPromptText: async (input) => {
       textPrompts.push(input.prompt);
-      return "설계 관점에서는 opening decision과 실제 도구 실행 경로가 분리되지 않은 것이 핵심 원인입니다.";
+      return JSON.stringify({
+        schema_version: "butler.turn-contract-decision.v1",
+        decision_id: typedDecisionId(input.responseFormat),
+        action: "answer",
+        target_workstream_id: null,
+        target_project_id: null,
+        blocker_id: null,
+        deliverables: [],
+        answer_text: "설계 관점에서는 opening decision과 실제 도구 실행 경로가 분리되지 않은 것이 핵심 원인입니다.",
+        public_summary: "현재 대화 맥락만으로 설계 검토를 답할 수 있습니다.",
+        immediate_next_step: null,
+      });
     },
     runFunctionToolPromptText: async () => {
       throw new Error("direct thin first response must not enter the tool loop");
@@ -305,7 +333,7 @@ test("native runtime uses app thin first response for direct answers without ent
   });
   const result = await runtime.runTurn({
     handle,
-    provider: fakeProvider,
+    provider: structuredFakeProvider,
     model: "zai/glm-5.2",
     input: {
       text: "지금은 파일을 보지 말고 opening decision 문제를 설계 관점에서만 짧게 검토해줘.",
@@ -328,32 +356,53 @@ test("native runtime uses app thin first response for direct answers without ent
 
   expect(result.text).toContain("opening decision");
   expect(textPrompts).toHaveLength(1);
-  expect(textPrompts[0]).toContain("## Thin Context-Only Response Pass");
+  expect(textPrompts[0]).toContain("## Typed Turn Decision");
   expect(textPrompts[0]).toContain("## Active Persona Reminder");
-  expect(textPrompts[0]).toContain("explicitly asks for a context-only answer");
-  expect(textPrompts[0]).toContain("Do not return a tool-intent block");
+  expect(textPrompts[0]).toContain("Use answer only when the response can be delivered now");
   expect(textPrompts[0]).not.toContain("heavy project memory");
 });
 
-test("native runtime escalates app thin first response tool intent into a normal tool prompt", async () => {
+test("native runtime compiles typed inspection intent into a normal tool prompt", async () => {
   const toolPrompts: string[] = [];
   const toolRounds: number[] = [];
   const runtime = new NativeToolLoopRuntime({
     butlerHome: process.cwd(),
     butlerData: tempDir,
     disableAutomaticRecall: true,
-    runPromptText: async () => [
-      "<butler_tool_intent>",
-      "summary: prompt cache 설정 파일을 확인합니다.",
-      "rationale: 현재 레포 상태는 포함된 대화 맥락만으로 확정할 수 없습니다.",
-      "next_step: 관련 설정 파일과 함수를 찾습니다.",
-      "</butler_tool_intent>",
-    ].join("\n"),
+    runPromptText: async (input) => JSON.stringify({
+      schema_version: "butler.turn-contract-decision.v1",
+      decision_id: typedDecisionId(input.responseFormat),
+      action: "inspect",
+      target_workstream_id: null,
+      target_project_id: null,
+      blocker_id: null,
+      deliverables: ["status_report"],
+      answer_text: null,
+      public_summary: "실제 저장소 상태를 읽어 함수명을 확인해야 합니다.",
+      immediate_next_step: "관련 설정 파일을 한 번 읽고 함수명을 확인합니다.",
+    }),
     runFunctionToolPromptText: async (input) => {
       toolPrompts.push(input.prompt);
       toolRounds.push(input.maxToolRounds ?? 0);
+      const call = { name: "read_file", args: { path: "packages/butler-agent/src/integrations/providers/provider.ts" } };
+      await authorPublicDecisionForTool(input, call, {
+        summary: "prompt cache 설정 파일을 확인합니다.",
+        rationale: "실제 함수 정의를 읽어야 정확한 이름을 확인할 수 있습니다.",
+        nextStep: "provider.ts의 관련 범위를 읽고 함수명을 보고합니다.",
+      });
+      await input.executeTool({ ...call, rawArguments: JSON.stringify(call.args) });
       return "provider.ts의 resolveOpenAIPromptCacheConfig를 확인했습니다.";
     },
+    executeButlerTool: async () => ({
+      ok: true,
+      evidence_capability_receipts: [capabilityReceipt({
+        id: "typed-inspection-source",
+        producerName: "read_file",
+        capability: "source_verified",
+        evidenceKind: "project_state",
+        satisfies: ["source_verified"],
+      })],
+    }),
   });
 
   const handle = await runtime.createSession({
@@ -364,7 +413,7 @@ test("native runtime escalates app thin first response tool intent into a normal
   });
   const result = await runtime.runTurn({
     handle,
-    provider: fakeProvider,
+    provider: structuredFakeProvider,
     model: "zai/glm-5.2",
     input: {
       text: "현재 Butler 레포에서 prompt cache 설정을 읽는 함수명을 실제로 확인해줘.",
@@ -380,11 +429,10 @@ test("native runtime escalates app thin first response tool intent into a normal
 
   expect(result.text).toContain("resolveOpenAIPromptCacheConfig");
   expect(toolPrompts).toHaveLength(1);
-  expect(toolRounds).toEqual([4]);
-  expect(toolPrompts[0]).toContain("## Hidden Thin First Response Escalation");
-  expect(toolPrompts[0]).toContain("summary: prompt cache 설정 파일을 확인합니다.");
-  expect(toolPrompts[0]).toContain("Before the first tool call");
-  expect(toolPrompts[0]).toContain("immediate small step only");
+  expect(toolRounds[0]).toBeGreaterThan(4);
+  expect(toolPrompts[0]).toContain("## Active Typed Turn Contract");
+  expect(toolPrompts[0]).toContain("Action: inspect");
+  expect(toolPrompts[0]).toContain("Execute only the immediate next semantic step");
 });
 
 test("native runtime gives worker sessions the execution tool loop and role-limited tool profile", async () => {
@@ -711,7 +759,10 @@ test("native runtime requests a fresh authored decision cue after a bounded basi
           "rationale: A bounded set of files is enough to understand the first layout slice.",
           "next_step: Read these files, then decide the next smaller group from the result.",
         ].join("\n"),
-        toolCalls: [{ name: "read_file", args: { path: "file-1.md" } }],
+        toolCalls: Array.from(
+          { length: PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT + 1 },
+          (_, index) => ({ name: "read_file", args: { path: `file-${index + 1}.md` } }),
+        ),
       });
       await input.executeTool({
         name: "update_todo_list",

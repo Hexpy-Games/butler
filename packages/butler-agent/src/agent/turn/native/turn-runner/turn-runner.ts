@@ -56,13 +56,17 @@ import {
   promptUsageModelCallBudgetExhaustedError,
 } from "../../workstream-phase-budget.ts";
 import {
-  buildThinFirstResponsePrompt,
-  explicitlyRequestsContextOnlyAnswer,
-  extractThinToolIntent,
-  THIN_TOOL_ESCALATION_MAX_ROUNDS,
-  shouldUseThinFirstResponse,
-  toolEscalationPrompt,
-} from "./thin-first-response.ts";
+  commitTurnContractContinuation,
+  completeTurnContractDelivery,
+  resumeTurnContractExecution,
+  type ActiveTurnContract,
+} from "./turn-contract-runtime.ts";
+import { runTypedTurnEntry } from "./typed-turn-entry.ts";
+import {
+  recordTurnResourceMetrics,
+  turnResourceSnapshot,
+  type TurnResourceSnapshot,
+} from "./turn-resource-metrics.ts";
 
 export async function runNativeToolTurn({
   input,
@@ -71,6 +75,7 @@ export async function runNativeToolTurn({
   startedAt,
 }: NativeTurnRunnerInput): Promise<RuntimeTurnResult> {
   throwIfRuntimeTurnAborted(input.signal);
+  const resourcesAtStart = turnResourceSnapshot();
   const useTools = ["butler", "steward", "worker"].includes(session.init.role);
   let turnId: string | undefined;
   let toolLoopUsed = false;
@@ -118,6 +123,7 @@ export async function runNativeToolTurn({
       runtime: deps.runtimeId,
       model: input.model,
     });
+    const turnContractContext: { current: ActiveTurnContract | null } = { current: null };
     turnKernel.transitionTo("model_deciding");
     const { runToolPrompt, runTextPrompt, runPrivateTextPrompt } = createNativeTurnPromptRunners({
       turnInput: input,
@@ -137,6 +143,7 @@ export async function runNativeToolTurn({
       },
       latencyTracker,
       phaseBudgetController,
+      turnContractContext,
     });
     const runKernelToolPrompt = async (
       promptText: string,
@@ -155,6 +162,9 @@ export async function runNativeToolTurn({
           turnBudget: context.turnBudget,
           audit,
           publicDecisionContext,
+          ...(turnContractContext.current
+            ? { contractId: turnContractContext.current.contract.contract_id }
+            : {}),
           error,
         });
         throw new TurnSchedulerContinuationYieldError(
@@ -167,33 +177,24 @@ export async function runNativeToolTurn({
     const completionGapFingerprints = new Set<string>();
     const initialPromptPhase = phaseBudgetController?.initialPromptPhase() ?? "initial_tool_loop";
     let candidateText: string;
-    if (useTools && shouldUseThinFirstResponse({
-      turnInput: input,
-      session,
-      plannedReview: context.plannedReview,
-    })) {
-      const forceContextOnlyAnswer = explicitlyRequestsContextOnlyAnswer(context.userText);
-      const thinPrompt = buildThinFirstResponsePrompt({
-        fullPrompt: context.prompt,
-        userText: context.userText,
-        forceDirect: forceContextOnlyAnswer,
+    let activeTurnContract: ActiveTurnContract | null = null;
+    if (useTools && session.init.role === "butler" && input.provider.capabilities.supportsStructuredOutputs === true) {
+      const typedEntry = await runTypedTurnEntry({
+        turnInput: input,
+        session,
+        butlerData: deps.butlerData,
+        projectId: projectId(session),
+        context,
+        initialPromptPhase,
+        pendingPublicDecisions,
+        turnContractContext,
+        runPrivateTextPrompt,
+        runKernelToolPrompt,
       });
-      const thinText = await runPrivateTextPrompt(
-        thinPrompt.prompt,
-        forceContextOnlyAnswer ? "thin_context_only_response" : "thin_first_response",
-        thinPrompt.promptSections,
-      );
-      const thinIntent = forceContextOnlyAnswer ? null : extractThinToolIntent(thinText);
-      candidateText = thinIntent
-        ? await runKernelToolPrompt(
-          toolEscalationPrompt({
-            prompt: context.prompt,
-            intent: thinIntent,
-          }),
-          THIN_TOOL_ESCALATION_MAX_ROUNDS,
-          initialPromptPhase,
-        )
-        : thinText;
+      candidateText = typedEntry.candidateText;
+      activeTurnContract = typedEntry.activeTurnContract;
+    } else if (useTools && input.provider.capabilities.supportsStructuredOutputs === false) {
+      throw new Error("provider_capability_missing");
     } else {
       candidateText = useTools
         ? await runKernelToolPrompt(context.prompt, undefined, initialPromptPhase)
@@ -214,6 +215,7 @@ export async function runNativeToolTurn({
         audit,
         publicDecisionContext,
         toolSurfaceController: context.toolSurfaceController,
+        turnContract: activeTurnContract?.contract,
         turnId,
         turnBudget: context.turnBudget,
       });
@@ -273,6 +275,7 @@ export async function runNativeToolTurn({
         turnId,
         audit,
         publicDecisionContext,
+        ...(activeTurnContract ? { contractId: activeTurnContract.contract.contract_id } : {}),
         observation: deliveryOutcome.observation,
       });
       if (repeatedGap) {
@@ -287,6 +290,7 @@ export async function runNativeToolTurn({
           turnBudget: context.turnBudget,
           audit,
           publicDecisionContext,
+          ...(activeTurnContract ? { contractId: activeTurnContract.contract.contract_id } : {}),
           error: promptUsageModelCallBudgetExhaustedError(),
         });
         throw new TurnSchedulerContinuationYieldError(
@@ -294,6 +298,12 @@ export async function runNativeToolTurn({
           context.turnId,
           contextAtomId,
         );
+      }
+      if (activeTurnContract) {
+        activeTurnContract.contract = resumeTurnContractExecution({
+          butlerData: deps.butlerData,
+          active: activeTurnContract,
+        });
       }
       candidateText = await runKernelToolPrompt(completionGapContinuationPrompt({
         observationSummary: deliveryOutcome.observation.summary,
@@ -306,6 +316,12 @@ export async function runNativeToolTurn({
     }
     if (decisionCheckedText === null) {
       throw new Error("completion delivery exited without terminal outcome");
+    }
+    if (activeTurnContract) {
+      activeTurnContract.contract = completeTurnContractDelivery({
+        butlerData: deps.butlerData,
+        active: activeTurnContract,
+      });
     }
     if (turnId) {
       clearTurnContextAtom({
@@ -340,6 +356,7 @@ export async function runNativeToolTurn({
       deps,
       startedAt,
       useTools: toolLoopUsed,
+      resourcesAtStart,
       audit,
       publicDecisionContext,
       promptChars: context.prompt.length,
@@ -411,6 +428,7 @@ export async function runNativeToolTurn({
       deps,
       startedAt,
       useTools: toolLoopUsed,
+      resourcesAtStart,
       errorName: error instanceof Error ? error.name : "UnknownError",
     });
     throw error;
@@ -424,6 +442,7 @@ async function persistSchedulerContinuation(input: {
   turnBudget: DirectTurnBudget;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
+  contractId?: string;
   error: unknown;
 }): Promise<string> {
   const safeFailure = safeRuntimeFailure(input.error);
@@ -435,7 +454,7 @@ async function persistSchedulerContinuation(input: {
     audit: input.audit,
     publicDecisionContext: input.publicDecisionContext,
   });
-  persistTurnContextAtom({
+  const persistedContextAtomId = persistTurnContextAtom({
     butlerData: input.deps.butlerData,
     sessionId: input.input.handle.sessionId,
     turnId: input.turnId,
@@ -452,6 +471,14 @@ async function persistSchedulerContinuation(input: {
       id: `context-atom:${contextAtomId}`,
     }],
   });
+  if (!persistedContextAtomId) throw new Error("turn_continuation_commit_missing");
+  if (input.contractId) {
+    commitTurnContractContinuation({
+      butlerData: input.deps.butlerData,
+      contractId: input.contractId,
+      commitId: persistedContextAtomId,
+    });
+  }
   await emitTurnEventBestEffort(input.input, {
     kind: "turn.observation",
     visibility: "internal",
@@ -620,6 +647,7 @@ function recordTurnMetric(input: {
   deps: NativeTurnRunnerInput["deps"];
   startedAt: number;
   useTools: boolean;
+  resourcesAtStart: TurnResourceSnapshot;
   audit?: ToolAuditEntry[];
   publicDecisionContext?: PublicWorkDecision[];
   promptChars?: number;
@@ -629,11 +657,12 @@ function recordTurnMetric(input: {
   resumeSelectionState?: string;
   errorName?: string;
 }): void {
+  const durationMs = Date.now() - input.startedAt;
   recordOperationalMetric({
     category: "runtime",
     name: "turn",
     status: input.status,
-    durationMs: Date.now() - input.startedAt,
+    durationMs,
     dimensions: {
       role: input.session.init.role,
       runtime: input.deps.runtimeId,
@@ -654,6 +683,15 @@ function recordTurnMetric(input: {
       }),
     },
   }, { butlerData: input.deps.butlerData });
+  recordTurnResourceMetrics({
+    butlerData: input.deps.butlerData,
+    status: input.status,
+    role: input.session.init.role,
+    runtime: input.deps.runtimeId,
+    model: input.input.model,
+    durationMs,
+    start: input.resourcesAtStart,
+  });
 }
 
 function projectId(session: NativeTurnRunnerInput["session"]): string | undefined {

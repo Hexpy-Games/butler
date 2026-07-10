@@ -18,6 +18,13 @@ export type ModelProviderId =
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 export type ProviderAuthMethod = "api_key" | "codex_oauth";
 export type HostedProviderApiShape = "openai_chat_completions" | "anthropic_messages";
+const OPENAI_COMPATIBLE_STRUCTURED_OUTPUT_PROVIDERS = new Set<string>([
+  "openai",
+  "xai",
+  "qwen",
+  "kimi",
+  "zai",
+]);
 export type TokenEstimatorKind =
   | "provider_usage"
   | "openai_tiktoken_o200k"
@@ -236,6 +243,14 @@ export function resolveModelMetadata(
   const providerDefault = models.find((model) => model.provider_id === parsed.providerId && model.status === "latest");
   if (providerDefault) return { ...providerDefault, reasoning_efforts: [...providerDefault.reasoning_efforts] };
   return { ...MODELS[0]!, reasoning_efforts: [...MODELS[0]!.reasoning_efforts] };
+}
+
+export function modelSupportsJsonSchemaResponseFormat(modelRef?: string | null): boolean {
+  const parsed = parseModelRef(modelRef?.trim() || DEFAULT_MODEL_REF);
+  if (OPENAI_COMPATIBLE_STRUCTURED_OUTPUT_PROVIDERS.has(parsed.providerId)) return true;
+  const metadata = resolveModelMetadata(modelRef);
+  return metadata.provider_id === parsed.providerId &&
+    metadata.hosted_api_shape === "openai_chat_completions";
 }
 
 export function resolveRuntimeModelMetadata(

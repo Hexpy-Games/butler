@@ -3429,12 +3429,22 @@ async function runHostedOpenAICompatiblePromptText(
   }
   messages.push({ role: "user", content: promptTextForHosted(options) });
   const responseFormat = hostedChatResponseFormat(options.responseFormat);
+  beforeAttributedModelRequest({
+    attribution: options.usageAttribution,
+    roundIndex: options.usageAttribution?.roundIndex ?? 0,
+  });
   const response = await createHostedChatCompletion(config, {
     messages,
     stream: false,
     ...hostedChatReasoningParams(config, options.reasoningEffort),
     ...(responseFormat ? { response_format: responseFormat } : {}),
   }, options.signal);
+  recordHostedOpenAICompatibleUsage({
+    config,
+    options,
+    response,
+    roundIndex: options.usageAttribution?.roundIndex ?? 0,
+  });
   const text = hostedChatText(firstHostedChatMessage(response));
   if (!text) {
     throw providerEmptyResponseError({
@@ -3465,6 +3475,10 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
   for (let round = 0; round < maxRounds; round += 1) {
     const activeTools = activeFunctionTools(options);
     const allowedNames = new Set(activeTools.map((tool) => tool.name));
+    beforeAttributedModelRequest({
+      attribution: options.usageAttribution,
+      roundIndex: round,
+    });
     const response = await createHostedChatCompletion(config, {
       messages,
       tools: hostedChatTools(activeTools),
@@ -3472,6 +3486,7 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
       stream: false,
       ...hostedChatReasoningParams(config, options.reasoningEffort),
     }, options.signal);
+    recordHostedOpenAICompatibleUsage({ config, options, response, roundIndex: round });
     const assistant = firstHostedChatMessage(response);
     const text = hostedChatText(assistant);
     const toolCalls = extractHostedChatToolCalls(assistant, allowedNames);
@@ -3547,11 +3562,16 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
   }
 
   messages.push({ role: "user", content: finalNoToolInstructions(options.instructions) });
+  beforeAttributedModelRequest({
+    attribution: options.usageAttribution,
+    roundIndex: maxRounds,
+  });
   const response = await createHostedChatCompletion(config, {
     messages,
     stream: false,
     ...hostedChatReasoningParams(config, options.reasoningEffort),
   }, options.signal);
+  recordHostedOpenAICompatibleUsage({ config, options, response, roundIndex: maxRounds });
   const text = hostedChatText(firstHostedChatMessage(response));
   if (!text) {
     throw providerEmptyResponseError({
@@ -3562,6 +3582,32 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
     });
   }
   return text;
+}
+
+function recordHostedOpenAICompatibleUsage(input: {
+  config: HostedRuntimeConfig;
+  options: PromptOptions;
+  response: Record<string, any>;
+  roundIndex: number;
+}): void {
+  const usageResponse = input.response as unknown as OpenAIResponse;
+  afterAttributedModelResponse({
+    attribution: input.options.usageAttribution,
+    model: input.config.modelRef,
+    response: usageResponse,
+    roundIndex: input.roundIndex,
+  });
+  recordPromptCacheMetric(usageResponse, {
+    model: input.config.modelRef,
+    scope: input.options.cacheScope ?? "session-turn",
+    promptCache: {},
+    butlerData: input.options.butlerData,
+    usageAttribution: {
+      ...input.options.usageAttribution,
+      reasoningEffort: input.options.reasoningEffort,
+      roundIndex: input.roundIndex,
+    },
+  });
 }
 
 async function createAnthropicMessage(

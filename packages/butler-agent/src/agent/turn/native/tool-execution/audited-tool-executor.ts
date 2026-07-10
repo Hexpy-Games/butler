@@ -275,7 +275,7 @@ async function prepareAuditedToolExecution(input: {
       executorInput: input.input,
       call: input.call,
     });
-  const decision = takePublicWorkDecisionForTool({
+  const selectedDecision = takePublicWorkDecisionForTool({
     pending: input.input.pendingPublicDecisions,
     toolName: input.call.name,
     progress,
@@ -283,6 +283,7 @@ async function prepareAuditedToolExecution(input: {
     previousDecisions: input.input.publicDecisionContext,
     allowRuntimeDerived: allowRuntimeDerivedDecision,
   });
+  const decision = { ...selectedDecision, toolName: input.call.name };
   await maybeEmitRuntimeProgress(input, decision, progress, isWorkerStartTool);
 
   const toolCallId = `tool-${randomUUID().slice(0, 8)}`;
@@ -295,18 +296,17 @@ async function prepareAuditedToolExecution(input: {
   );
   const workBlockId = turnScopedWorkBlockId(
     input.input.turnId,
-    matchingDecisionWorkBlockId ?? decisionScopedWorkBlockId(semanticWorkBlock?.id, toolCallId),
+    decision.semanticBlockId ?? matchingDecisionWorkBlockId ?? decisionScopedWorkBlockId(semanticWorkBlock?.id, toolCallId),
   );
-  decision.workBlockId = workBlockId;
-  decision.toolName = input.call.name;
+  const publicDecision = { ...decision, workBlockId };
   const workBlockLabel = semanticWorkBlock?.label ?? decision.summary;
-  if (decision.source !== "runtime-derived") {
-    input.input.publicDecisionContext.push(decision);
-    appendPublicDecisionTranscript(input.input, decision);
+  if (publicDecision.source !== "runtime-derived") {
+    input.input.publicDecisionContext.push(publicDecision);
+    appendPublicDecisionTranscript(input.input, publicDecision);
   }
   await emitStartedProgress({
     ...input,
-    decision,
+    decision: publicDecision,
     progress,
     toolCallId,
     workBlockId,
@@ -320,7 +320,7 @@ async function prepareAuditedToolExecution(input: {
     workBlockId,
     workBlockLabel,
     progress,
-    decision,
+    decision: publicDecision,
     usesSemanticWorkBlock: Boolean(semanticWorkBlock),
     semanticProgressEstablished: input.internalProgress.semanticProgressEstablished(),
     isWorkerStartTool,

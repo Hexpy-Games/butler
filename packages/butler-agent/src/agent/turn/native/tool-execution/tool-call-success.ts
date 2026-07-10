@@ -93,7 +93,8 @@ export async function handleAuditedToolSuccess(input: {
   if (
     !input.semanticProgressEstablished &&
     !input.isWorkerStartTool &&
-    input.decision.source !== "runtime-derived"
+    input.decision.source !== "runtime-derived" &&
+    isLastDecisionTool(input.decision)
   ) {
     await emitDecisionProgressBestEffort({
       turnInput: input.executorInput.turnInput,
@@ -101,7 +102,7 @@ export async function handleAuditedToolSuccess(input: {
       state: "delivered",
     });
   }
-  if (!input.usesSemanticWorkBlock) {
+  if (!input.usesSemanticWorkBlock && isLastDecisionTool(input.decision)) {
     await emitTurnEventBestEffort(input.executorInput.turnInput, {
       kind: "work.block.completed",
       payload: {
@@ -119,6 +120,11 @@ export async function handleAuditedToolSuccess(input: {
     decision: input.decision,
     decisions: input.executorInput.publicDecisionContext,
   });
+}
+
+function isLastDecisionTool(decision: PublicWorkDecision): boolean {
+  const size = Math.max(1, decision.toolBatchSize ?? 1);
+  return (decision.toolCallIndex ?? 0) >= size - 1;
 }
 
 function recordSuccessfulToolMetric(input: {
