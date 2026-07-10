@@ -166,6 +166,7 @@ export function useAppBootstrap() {
     const unsubscribe = useButlerStore.subscribe((state, previous) => {
       if (!uiStateHydratedRef.current) return;
       const changed =
+        state.activeChatId !== previous.activeChatId ||
         state.leftOpen !== previous.leftOpen ||
         state.rightOpen !== previous.rightOpen ||
         state.rightTab !== previous.rightTab ||
@@ -180,6 +181,7 @@ export function useAppBootstrap() {
       uiStateTimerRef.current = setTimeout(() => {
         const current = useButlerStore.getState();
         void writeCachedAppUiState({
+          active_session_id: current.activeChatId,
           left_open: current.leftOpen,
           right_open: current.rightOpen,
           right_tab: current.rightTab,

@@ -247,8 +247,15 @@ test("seventy tool rounds survive two process restarts without losing contract p
   expect(prompts).toHaveLength(3);
   expect(prompts[1]).toContain("## Resumed Typed Turn Contract");
   expect(prompts[2]).toContain("## Resumed Typed Turn Contract");
-  expect(prompts[2]).toContain('"sequence": 31');
-  expect(prompts[2]).not.toContain('"sequence": 30');
+  expect(prompts[2]).toContain("Stable Mutation Identities:");
+  const recentJournal = prompts[2]!.split("Recent Round Journal:")[1]!
+    .split("Continuation Instruction:")[0]!;
+  expect(recentJournal).toContain('"sequence": 31');
+  expect(recentJournal).not.toContain('"sequence": 30');
+  const stableIdentities = prompts[2]!.split("Stable Mutation Identities:")[1]!
+    .split("Recent Round Journal:")[0]!;
+  expect(stableIdentities).toContain('"sequence": 30');
+  expect(stableIdentities).not.toContain('"block_title"');
   expect(events.filter((event) =>
     event.kind === "assistant.decision" && event.payload?.role === "opening",
   )).toHaveLength(1);

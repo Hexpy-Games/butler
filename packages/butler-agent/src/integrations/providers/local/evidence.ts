@@ -4,8 +4,6 @@ import { createLocalChatCompletion, firstLocalAssistantMessage } from "./client.
 import { estimateToolResultTokens, finalNoToolInstructions, trimTextToTokenBudgetBalanced } from "../shared/runtime-support.ts";
 import { extractLocalFinalEnvelopeText, type LocalChatMessage, localChatUrl, localReasoningRequestParams } from "./protocol.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
-import { retainToolEvidence, type ToolEvidenceRetentionContext } from "../../../agent/context/tool-evidence-retention.ts";
-import { structuredToolResultModelPreview } from "../../../agent/turn/tool-result-model-preview.ts";
 
 
 
@@ -25,10 +23,6 @@ export const MAX_LOCAL_TOOL_RESULT_AGGRESSIVE_TOTAL_TOKENS = 4_000;
 
 
 export const LOCAL_TOOL_RESULT_AGGRESSIVE_TOTAL_CONTEXT_RATIO = 0.04;
-
-
-export const HOSTED_TOOL_RESULT_MAX_MODEL_TOKENS = 1_400;
-
 
 
 export function localToolResultTotalTokenBudget(config: LocalModelConfig, aggressive = false): number {
@@ -77,54 +71,6 @@ export function compactLocalToolResultContent(input: {
   const compact = JSON.stringify(compactPayload);
   input.log(
     `tool ${input.toolName} result compacted for local context: reason=${input.reason} raw_tokens=${rawTokens} compact_tokens=${estimateToolResultTokens(compact)}`,
-  );
-  return compact;
-}
-
-
-
-export function hostedToolResultContent(input: {
-  payload: Record<string, unknown>;
-  toolName: string;
-  toolCallId?: string;
-  log: (line: string) => void;
-  evidenceRetention?: ToolEvidenceRetentionContext;
-}): string {
-  const source = JSON.stringify(input.payload);
-  const rawTokens = estimateToolResultTokens(source);
-  if (rawTokens <= HOSTED_TOOL_RESULT_MAX_MODEL_TOKENS) return source;
-  const evidence = retainToolEvidence({
-    context: input.evidenceRetention,
-    toolName: input.toolName,
-    toolCallId: input.toolCallId,
-    output: input.payload.ok === true ? input.payload.output : input.payload,
-    reason: "hosted_tool_result_budget",
-    rawTokens,
-  });
-  const structuredPreview = structuredToolResultModelPreview({
-    toolName: input.toolName,
-    output: input.payload.ok === true ? input.payload.output : input.payload,
-  });
-  const preview = structuredPreview
-    ? JSON.stringify(structuredPreview)
-    : trimTextToTokenBudgetBalanced(
-      source,
-      Math.max(200, HOSTED_TOOL_RESULT_MAX_MODEL_TOKENS - 180),
-    );
-  const compact = JSON.stringify({
-    ok: input.payload.ok !== false,
-    output: {
-      butler_tool_result_compacted: true,
-      tool_name: input.toolName,
-      compaction_reason: "hosted_tool_result_budget",
-      raw_estimated_tokens: rawTokens,
-      compact_estimated_tokens: estimateToolResultTokens(preview),
-      butler_evidence_packet: evidence.packet,
-      preview,
-    },
-  });
-  input.log(
-    `tool ${input.toolName} result compacted for hosted context: raw_tokens=${rawTokens} compact_tokens=${estimateToolResultTokens(compact)}`,
   );
   return compact;
 }

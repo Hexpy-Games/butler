@@ -73,6 +73,8 @@ import {
 import { buildDurableTurnRoundJournal } from "./turn-round-journal.ts";
 import { WorkStreamStore } from "../../../work/work-stream.ts";
 import { recordTurnContractAuditEvidence } from "./turn-contract-audit-evidence.ts";
+import type { ObligationToolSurfaceState } from "./obligation-tool-surface.ts";
+import { reviewProviderFinalCandidateInTurn } from "./provider-final-candidate-review.ts";
 
 export async function runNativeToolTurn({
   input,
@@ -94,14 +96,15 @@ export async function runNativeToolTurn({
     let assistantTextBeforeToolsSeen = false;
     let finalDeliveryOverride: RuntimeTurnResult["delivery"] | undefined;
     const gatewayProgressEmitted = gatewayFirstVisibleProgressEmitted(input.metadata);
-    const earlyProgressEmitted = useTools && !gatewayProgressEmitted
+    const continuationProgressAlreadyExists = hasSchedulerContinuationMetadata(input.metadata);
+    const earlyProgressEmitted = continuationProgressAlreadyExists || gatewayProgressEmitted || (useTools
       ? await emitEarlyRuntimePreparationProgress({
         input,
         deps,
         session,
         startedAt,
       })
-      : gatewayProgressEmitted;
+      : false);
     const context = await prepareNativeTurnContext({
       turnInput: input,
       session,
@@ -139,6 +142,8 @@ export async function runNativeToolTurn({
       });
     turnKernel.transitionTo("model_deciding");
     const {
+      obligationToolSurfaceState,
+      nextSemanticBlockSequence,
       runToolPrompt,
       runTextPrompt,
       runPrivateTextPrompt,
@@ -166,6 +171,23 @@ export async function runNativeToolTurn({
         0,
         (context.continuationAtom?.nextSemanticBlockSequence ?? 1) - 1,
       ),
+      initialSemanticBlockSequence: context.continuationAtom?.nextSemanticBlockSequence ?? 0,
+      initialObligationFrontier: context.continuationAtom?.obligationFrontier,
+      reviewFinalCandidate: async ({ text }) => await reviewProviderFinalCandidateInTurn({
+        candidateText: text,
+        turnInput: input,
+        session,
+        deps,
+        useTools: toolLoopUsed,
+        turnId: context.turnId,
+        turnBudget: context.turnBudget,
+        prompt: context.prompt,
+        userText: context.userText,
+        audit,
+        publicDecisionContext,
+        toolSurfaceController: context.toolSurfaceController,
+        activeTurnContract: turnContractContext.current,
+      }),
     });
     const runKernelToolPrompt = async (
       promptText: string,
@@ -186,8 +208,9 @@ export async function runNativeToolTurn({
           publicDecisionContext,
           activeTurnContract: turnContractContext.current,
           expectedGeneration: context.continuationAtom?.generation,
-          nextSemanticBlockSequenceFloor: context.continuationAtom?.nextSemanticBlockSequence,
+          nextSemanticBlockSequenceFloor: nextSemanticBlockSequence(),
           error,
+          obligationFrontier: obligationToolSurfaceState(),
         });
         throw new TurnSchedulerContinuationYieldError(
           input.handle.sessionId,
@@ -215,8 +238,9 @@ export async function runNativeToolTurn({
           publicDecisionContext,
           activeTurnContract: turnContractContext.current,
           expectedGeneration: context.continuationAtom?.generation,
-          nextSemanticBlockSequenceFloor: context.continuationAtom?.nextSemanticBlockSequence,
+          nextSemanticBlockSequenceFloor: nextSemanticBlockSequence(),
           error,
+          obligationFrontier: obligationToolSurfaceState(),
         });
         throw new TurnSchedulerContinuationYieldError(
           input.handle.sessionId,
@@ -273,6 +297,21 @@ export async function runNativeToolTurn({
         turnBudget: context.turnBudget,
       });
       if (deliveryOutcome.kind === "final") {
+        if (activeTurnContract) {
+          activeTurnContract.contract = completeTurnContractDelivery({
+            butlerData: deps.butlerData,
+            active: activeTurnContract,
+            turnId,
+          });
+          completeReportingWorkStreamBestEffort({
+            butlerData: deps.butlerData,
+            sessionId: input.handle.sessionId,
+            turnId,
+            audit,
+          });
+          decisionCheckedText = deliveryOutcome.text;
+          break;
+        }
         const directWorkResult = await closeDirectWork({
           turnInput: input,
           deps,
@@ -363,7 +402,8 @@ export async function runNativeToolTurn({
     if (decisionCheckedText === null) {
       throw new Error("completion delivery exited without terminal outcome");
     }
-    if (activeTurnContract) {
+    if (activeTurnContract && activeTurnContract.contract.state !== "delivered" &&
+      activeTurnContract.contract.state !== "cancelled") {
       activeTurnContract.contract = completeTurnContractDelivery({
         butlerData: deps.butlerData,
         active: activeTurnContract,
@@ -481,6 +521,7 @@ async function persistSchedulerContinuation(input: {
   expectedGeneration?: number;
   nextSemanticBlockSequenceFloor?: number;
   error: unknown;
+  obligationFrontier: ObligationToolSurfaceState;
 }): Promise<{ contextAtomId: string; checkpointId: string; generation: number }> {
   const safeFailure = isPromptUsageModelCallBudgetError(input.error)
     ? {
@@ -530,6 +571,7 @@ async function persistSchedulerContinuation(input: {
       : {}),
     providerAdapterId: input.input.provider.id,
     effectiveModel: input.input.model,
+    obligationFrontier: input.obligationFrontier,
     expectedGeneration: input.expectedGeneration,
     unresolvedObservations: [{
       kind: "context_compacted",
@@ -629,6 +671,10 @@ async function emitEarlyRuntimePreparationProgress(input: {
 
 function gatewayFirstVisibleProgressEmitted(metadata: Record<string, unknown> | undefined): boolean {
   return metadata?.gatewayFirstVisibleProgressEmitted === true;
+}
+
+function hasSchedulerContinuationMetadata(metadata: Record<string, unknown> | undefined): boolean {
+  return Boolean(metadata?.schedulerContinuation && typeof metadata.schedulerContinuation === "object");
 }
 
 function isSchedulerContinuation(

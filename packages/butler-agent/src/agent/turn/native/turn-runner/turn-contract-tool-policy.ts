@@ -5,8 +5,22 @@ export function turnMetadataForContract(
   contract: CompiledTurnContract,
   metadata: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  const profiles = contractProfiles(contract);
-  const tools = contractTools(contract);
+  const preservedProfiles = existingPolicyStrings(
+    metadata,
+    ["requiredNativeToolProfiles", "required_tool_profiles"],
+  ).filter((profile) =>
+    contract.action !== "inspect" ||
+    (profile !== "workspace" && profile !== "project-lifecycle"),
+  );
+  const profiles = unionStrings(
+    preservedProfiles,
+    contractProfiles(contract),
+  );
+  const tools = unionStrings(
+    existingPolicyStrings(metadata, ["requiredNativeTools", "required_tools"]),
+    contractTools(contract),
+  );
+  const trackingMode = effectiveTrackingMode(contract.tracking_mode, metadata);
   const accessMode = contract.action === "inspect" ? "read_only" : "full";
   const toolSurfaceMode = contract.action === "inspect" ? "fixed" : "adaptive";
   const policy = {
@@ -14,8 +28,8 @@ export function turnMetadataForContract(
     contract_id: contract.contract_id,
     workstreamId: contract.target_workstream_id,
     workstream_id: contract.target_workstream_id,
-    trackingMode: contract.tracking_mode,
-    tracking_mode: contract.tracking_mode,
+    trackingMode,
+    tracking_mode: trackingMode,
     closeoutStrategy: contract.closeout_strategy,
     closeout_strategy: contract.closeout_strategy,
     accessMode,
@@ -35,6 +49,45 @@ export function turnMetadataForContract(
       ...policy,
     },
   };
+}
+
+function effectiveTrackingMode(
+  contractMode: CompiledTurnContract["tracking_mode"],
+  metadata: Record<string, unknown> | undefined,
+): CompiledTurnContract["tracking_mode"] {
+  const runtimePolicy = record(metadata?.runtimePolicy);
+  const existing = [
+    metadata?.trackingMode,
+    metadata?.tracking_mode,
+    runtimePolicy.trackingMode,
+    runtimePolicy.tracking_mode,
+  ].find((value) => value === "ledger" || value === "local" || value === "none");
+  const rank = { none: 0, local: 1, ledger: 2 } as const;
+  return existing && rank[existing] > rank[contractMode]
+    ? existing
+    : contractMode;
+}
+
+function existingPolicyStrings(
+  metadata: Record<string, unknown> | undefined,
+  keys: readonly string[],
+): string[] {
+  const runtimePolicy = record(metadata?.runtimePolicy);
+  return unionStrings(
+    ...keys.map((key) => stringArray(metadata?.[key])),
+    ...keys.map((key) => stringArray(runtimePolicy[key])),
+  );
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) =>
+    typeof item === "string" && item.trim() ? [item.trim()] : [],
+  );
+}
+
+function unionStrings(...groups: readonly string[][]): string[] {
+  return [...new Set(groups.flat())];
 }
 
 function contractProfiles(contract: CompiledTurnContract): ButlerToolProfile[] {
@@ -65,6 +118,8 @@ function contractTools(contract: CompiledTurnContract): string[] {
   }
   if (contract.deliverables.some((item) => item.startsWith("ledger_"))) {
     tools.add("project_ledger_status");
+    tools.add("project_ledger_list");
+    tools.add("project_ledger_show");
     tools.add("project_ledger_create");
     tools.add("project_ledger_update");
   }
@@ -72,7 +127,6 @@ function contractTools(contract: CompiledTurnContract): string[] {
     tools.add("list_work_streams");
     tools.add("list_todo_list");
     tools.add("update_todo_list");
-    tools.add("update_work_stream_state");
   }
   return [...tools].sort();
 }

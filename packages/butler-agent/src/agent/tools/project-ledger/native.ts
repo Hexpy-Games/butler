@@ -31,33 +31,53 @@ type ToolSpec = {
   mutates: boolean;
 };
 
+const TOP_LEVEL_LEDGER_RECORD_KINDS = [
+  "initiative",
+  "decision",
+  "risk",
+  "spec",
+  "report",
+  "plan",
+  "handoff",
+  "reference",
+  "roadmap",
+] as const;
+
+const LEDGER_WORK_STATES = [
+  "proposed", "scoped", "specified", "in_progress", "review", "done", "blocked", "cancelled",
+] as const;
+const LEDGER_TASK_STATES = [
+  "todo", "in_progress", "done", "blocked", "failed", "cancelled",
+] as const;
+const LEDGER_ATTEMPT_STATES = ["started", "succeeded", "failed", "interrupted"] as const;
+
 const recordFields = {
   project_ref: {
     type: "string",
-    description: "Project id/name/workspace/canonical root; omit for active project.",
+    description: "Project ref; omit for active project.",
   },
-  kind: { type: "string", description: "Record kind." },
-  id: { type: "string", description: "Record id." },
-  title: { type: "string", description: "Record title." },
-  status: { type: "string", description: "Lifecycle status." },
-  body: { type: "string", description: "Markdown body." },
-  validation: { type: "string", description: "Validation evidence." },
-  review: { type: "string", description: "Review evidence." },
-  report: { type: "string", description: "Report path or summary." },
-  code_commits: { type: "string", description: "JSON array of code commit evidence." },
-  code_commit: { type: "string", description: "Set to auto to collect the current git HEAD as code commit evidence." },
-  ledger_commits: { type: "string", description: "JSON array of ledger commit evidence." },
-  requires_commit_evidence: { type: "boolean", description: "Require code commit evidence before completing work." },
-  spec: { type: "string", description: "Linked spec." },
-  acceptance: { type: "string", description: "Acceptance evidence." },
-  implementation: { type: "string", description: "Implementation evidence." },
-  mitigation: { type: "string", description: "Mitigation evidence." },
-  priority: { type: "number", description: "Priority." },
-  work_id: { type: "string", description: "Parent work id." },
-  task_id: { type: "string", description: "Parent task id." },
-  include_body: { type: "boolean", description: "Include body." },
-  limit: { type: "number", description: "Result limit." },
-  query: { type: "string", description: "Text filter." },
+  kind: { type: "string", description: "Canonical Ledger record kind." },
+  id: { type: "string" },
+  title: { type: "string" },
+  status: { type: "string" },
+  body: { type: "string" },
+  validation: { type: "string" },
+  review: { type: "string" },
+  report: { type: "string" },
+  code_commits: { type: "string" },
+  code_commit: { type: "string" },
+  ledger_commits: { type: "string" },
+  requires_commit_evidence: { type: "boolean" },
+  spec: { type: "string" },
+  acceptance: { type: "string" },
+  implementation: { type: "string" },
+  mitigation: { type: "string" },
+  priority: { type: "number" },
+  work_id: { type: "string" },
+  task_id: { type: "string" },
+  include_body: { type: "boolean" },
+  limit: { type: "number" },
+  query: { type: "string" },
 } satisfies Record<string, Record<string, unknown>>;
 
 const lifecycleUpdateFields = {
@@ -83,12 +103,12 @@ const toolSpecs = [
   { name: "project_ledger_status", description: "Return canonical Project Ledger project summary, stale state, and next actions.", properties: { project_ref: recordFields.project_ref }, mutates: false },
   { name: "project_ledger_list", description: "List bounded Project Ledger records by kind with optional status and text filtering.", required: ["kind"], properties: { project_ref: recordFields.project_ref, kind: recordFields.kind, status: recordFields.status, query: recordFields.query, limit: recordFields.limit }, mutates: false },
   { name: "project_ledger_show", description: "Show one Project Ledger record summary, optionally including its Markdown body.", required: ["id"], properties: { project_ref: recordFields.project_ref, kind: recordFields.kind, id: recordFields.id, include_body: recordFields.include_body }, mutates: false },
-  { name: "project_ledger_create", description: "Create a modeled Project Ledger source record through CLI/core behavior.", required: ["kind", "id", "title"], properties: recordFields, mutates: true },
+  { name: "project_ledger_create", description: "Create one new Ledger record and refresh index/views/check. Do not use this tool to search; use project_ledger_list for existing records. task requires work_id; attempt requires task_id; work/task should include acceptance. Batch independent records.", required: ["kind", "id", "title"], properties: recordFields, mutates: true },
   { name: "project_ledger_update", description: "Update frontmatter and/or body for a modeled Project Ledger source record through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
   { name: "project_ledger_work_update", description: "Update or transition Project Ledger work.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
-  { name: "project_ledger_work_complete", description: "Complete Project Ledger work.", required: ["id"], properties: lifecycleCompleteFields, mutates: true },
+  { name: "project_ledger_work_complete", description: "Complete Project Ledger work with explicit validation, review, and report evidence. These evidence fields are required unless the record already stores matching values.", required: ["id", "validation", "review", "report"], properties: lifecycleCompleteFields, mutates: true },
   { name: "project_ledger_task_update", description: "Update or transition a Project Ledger task.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
-  { name: "project_ledger_task_complete", description: "Complete a Project Ledger task.", required: ["id"], properties: lifecycleCompleteFields, mutates: true },
+  { name: "project_ledger_task_complete", description: "Complete a Project Ledger task with explicit validation, review, and report evidence.", required: ["id", "validation", "review", "report"], properties: lifecycleCompleteFields, mutates: true },
   { name: "project_ledger_attempt_start", description: "Create a started Project Ledger attempt under a task.", required: ["task_id"], properties: recordFields, mutates: true },
   { name: "project_ledger_attempt_succeed", description: "Mark a Project Ledger attempt succeeded through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
   { name: "project_ledger_attempt_fail", description: "Mark a Project Ledger attempt failed through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
@@ -105,6 +125,40 @@ export const projectLedgerNativeToolDefinitions = toolSpecs.map((spec) => ({
     additionalProperties: false,
     properties: spec.properties,
     required: spec.required ?? [],
+    ...(spec.name === "project_ledger_create" ? {
+      oneOf: [
+        {
+          title: "Top-level record",
+          properties: {
+            kind: { type: "string", enum: TOP_LEVEL_LEDGER_RECORD_KINDS },
+          },
+        },
+        {
+          title: "Work",
+          properties: {
+            kind: { type: "string", const: "work" },
+            status: { type: "string", enum: LEDGER_WORK_STATES },
+          },
+          required: ["acceptance"],
+        },
+        {
+          title: "Task",
+          properties: {
+            kind: { type: "string", const: "task" },
+            status: { type: "string", enum: LEDGER_TASK_STATES },
+          },
+          required: ["work_id", "acceptance"],
+        },
+        {
+          title: "Attempt",
+          properties: {
+            kind: { type: "string", const: "attempt" },
+            status: { type: "string", enum: LEDGER_ATTEMPT_STATES },
+          },
+          required: ["task_id"],
+        },
+      ],
+    } : {}),
   },
   concurrencySafe: !spec.mutates,
   interruptBehavior: "continue",
@@ -183,6 +237,7 @@ function runProjectLedgerNativeTool(
       runProjectLedgerLifecycleCloseout({
         executor: input,
         projectPath,
+        refreshedIndex: refreshedProjectLedgerIndexResult(result),
       }),
     );
   }
@@ -199,6 +254,23 @@ function runProjectLedgerNativeTool(
   }
   if (toolName === "project_ledger_list") return applyListBounds(result, args);
   return result;
+}
+
+function refreshedProjectLedgerIndexResult(
+  mutationResult: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const data = recordValue(mutationResult.data);
+  const derived = recordValue(data.derived);
+  const refresh = recordValue(derived.index_refresh);
+  if (refresh.ok !== true) return null;
+  return {
+    ok: true,
+    data: {
+      index: {
+        path: typeof refresh.path === "string" ? refresh.path : null,
+      },
+    },
+  };
 }
 
 function stringArg(args: Record<string, unknown>, key: string): string {
@@ -232,4 +304,10 @@ function withRecoverableProjectLedgerError(result: Record<string, unknown>): Rec
       native_next: nativeNext,
     },
   };
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }

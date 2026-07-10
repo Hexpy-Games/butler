@@ -12,6 +12,7 @@ import {
   blockCapacityToolOutput,
   partitionSemanticToolBatch,
 } from "../../../agent/turn/tool-batch-capacity.ts";
+import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 
 
 
@@ -138,7 +139,13 @@ export async function runLocalFunctionToolPromptTextWithConfig(
     if (toolCalls.length === 0) {
       if (executedToolCalls > 0) {
         const finalText = extractLocalFinalEnvelopeText(assistant);
-        if (finalText) return finalText;
+        if (finalText) {
+          const disposition = await reviewProviderFinalCandidate({ options, text: finalText, roundIndex: round });
+          if (disposition.kind === "final") return disposition.text;
+          messages.push({ role: "assistant", content: assistant.content ?? finalText });
+          messages.push({ role: "user", content: disposition.observation });
+          continue;
+        }
         log(text
           ? "local model returned post-tool draft; requesting final no-tool synthesis"
           : "local model returned no visible post-tool answer; requesting final no-tool synthesis");
@@ -171,7 +178,11 @@ export async function runLocalFunctionToolPromptTextWithConfig(
         log("local model repeated visible tool-call text after required repair; failing closed without displaying pseudo-call");
         throw new Error("Local model failed to use the structured tool-call channel after required repair");
       }
-      return text;
+      const disposition = await reviewProviderFinalCandidate({ options, text, roundIndex: round });
+      if (disposition.kind === "final") return disposition.text;
+      messages.push({ role: "assistant", content: assistant.content ?? text });
+      messages.push({ role: "user", content: disposition.observation });
+      continue;
     }
 
     requiredToolRepairNames = null;

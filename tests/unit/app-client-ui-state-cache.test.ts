@@ -3,6 +3,7 @@ import { snapshotForAppUiState } from "../../packages/butler-app/client/ui/src/a
 
 test("app UI state cache clamps panel widths and deduplicates collapsed groups", () => {
   const snapshot = snapshotForAppUiState({
+    active_session_id: "project-session-a",
     left_open: false,
     right_open: true,
     right_tab: "artifacts",
@@ -14,6 +15,7 @@ test("app UI state cache clamps panel widths and deduplicates collapsed groups",
   });
 
   expect(snapshot.schema).toBe("butler.app-ui-state.v1");
+  expect(snapshot.active_session_id).toBe("project-session-a");
   expect(snapshot.left_open).toBe(false);
   expect(snapshot.right_tab).toBe("artifacts");
   expect(snapshot.left_panel_width).toBe(420);
@@ -29,4 +31,5 @@ test("app UI state cache defaults fresh sidebar state to collapsed", () => {
 
   expect(snapshot.left_open).toBe(false);
   expect(snapshot.right_open).toBe(true);
+  expect(snapshot.active_session_id).toBe("draft:chat");
 });

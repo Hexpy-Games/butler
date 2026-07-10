@@ -47,11 +47,12 @@ export type FinalDeliveryOutcome =
         modelVisibleContent: string;
         nextMode?: "tool_decision" | "final_synthesis";
         refs?: Array<{ kind: string; id: string; path?: string }>;
+        requiredDeliverables?: string[];
       };
       evidenceRefs: string[];
     };
 
-export async function produceFinalDeliveryOutcome(input: {
+type FinalDeliveryReviewInput = {
   turnInput: RuntimeTurnInput;
   session: NativeStoredSessionConfig;
   deps: NativeTurnRunnerDeps;
@@ -65,7 +66,33 @@ export async function produceFinalDeliveryOutcome(input: {
   publicDecisionContext: PublicWorkDecision[];
   toolSurfaceController: ToolSurfacePromptController;
   turnContract?: CompiledTurnContract;
-}): Promise<FinalDeliveryOutcome> {
+};
+
+export type FinalCandidateContinuationReviewOutcome =
+  | { kind: "accepted"; text: string; evidenceRefs: string[] }
+  | Extract<FinalDeliveryOutcome, { kind: "completion_gap" }>;
+
+export async function produceFinalDeliveryOutcome(
+  input: FinalDeliveryReviewInput,
+): Promise<FinalDeliveryOutcome> {
+  const review = await reviewFinalCandidateForContinuation(input);
+  if (review.kind === "completion_gap") return review;
+  const contractRepairedText = repairFinalContract({ ...input, finalText: review.text });
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: "guard.started",
+    payload: { guard: "public_output" },
+  });
+  const checkedText = applyPublicOutputGuards({ ...input, finalText: contractRepairedText });
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: "guard.completed",
+    payload: { guard: "public_output", status: "approved" },
+  });
+  return { kind: "final", text: checkedText, evidenceRefs: review.evidenceRefs };
+}
+
+export async function reviewFinalCandidateForContinuation(
+  input: FinalDeliveryReviewInput,
+): Promise<FinalCandidateContinuationReviewOutcome> {
   const explicitToolGap = explicitToolRequirementGap(input);
   if (explicitToolGap) return explicitToolGap;
   const groundedText = applyGroundingIfNeeded(input, input.initialText);
@@ -83,6 +110,7 @@ export async function produceFinalDeliveryOutcome(input: {
       contract: input.turnContract,
       audit: input.audit,
       finalCandidate: reviewResult.reviewedText,
+      runtimeReviewCompleted: reviewResult.performed,
     });
     const store = new TurnContractStore(input.deps.butlerData);
     const gate = canDeliverTurnContract({
@@ -93,10 +121,11 @@ export async function produceFinalDeliveryOutcome(input: {
         : null,
     });
     if (gate !== "deliver") {
-      const missing = unsatisfiedTurnContractObligations({
+      const unsatisfied = unsatisfiedTurnContractObligations({
         butlerData: input.deps.butlerData,
         contract,
       });
+      const missing = actionableContractObligations(unsatisfied);
       return {
         kind: "completion_gap",
         observation: {
@@ -106,25 +135,28 @@ export async function produceFinalDeliveryOutcome(input: {
             "Continue the same logical turn. The typed turn contract is not complete.",
             "Satisfy these structured deliverables before final delivery:",
             ...missing.map((item) => `- ${item.deliverable}:${item.target_kind}:${item.target_id}`),
+            ...(unsatisfied.some((item) => item.deliverable === "final_report")
+              ? ["The current final candidate already supplies final_report. Do not create a report record or file; submit a new final candidate after the listed non-report work is complete."]
+              : []),
             "Do not ask the user unless a verified user-owned blocker receipt exists.",
           ].join("\n"),
           refs: missing.map((item) => ({ kind: "turn_contract_obligation", id: item.obligation_id })),
+          requiredDeliverables: [...new Set(missing.map((item) => item.deliverable))],
         },
         evidenceRefs: contract.evidence_receipt_ids,
       };
     }
   }
-  const contractRepairedText = repairFinalContract({ ...input, finalText: reviewResult.reviewedText });
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: "guard.started",
-    payload: { guard: "public_output" },
-  });
-  const checkedText = applyPublicOutputGuards({ ...input, finalText: contractRepairedText });
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: "guard.completed",
-    payload: { guard: "public_output", status: "approved" },
-  });
-  return { kind: "final", text: checkedText, evidenceRefs: reviewResult.outcome.evidenceRefs };
+  return {
+    kind: "accepted",
+    text: reviewResult.reviewedText,
+    evidenceRefs: reviewResult.outcome.evidenceRefs,
+  };
+}
+
+function actionableContractObligations<T extends { deliverable: string }>(obligations: T[]): T[] {
+  const withoutFinalReport = obligations.filter((item) => item.deliverable !== "final_report");
+  return withoutFinalReport.length > 0 ? withoutFinalReport : obligations;
 }
 
 function cancellationReceipt(butlerData: string, receiptId: string) {
@@ -166,7 +198,7 @@ function explicitToolRequirementGap(input: {
   useTools: boolean;
   audit: ToolAuditEntry[];
   toolSurfaceController: ToolSurfacePromptController;
-}): FinalDeliveryOutcome | null {
+}): Extract<FinalDeliveryOutcome, { kind: "completion_gap" }> | null {
   if (!input.useTools) {
     return null;
   }
@@ -207,7 +239,11 @@ async function runGoalCompletionReviews(input: {
   initialText: string;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
-}): Promise<{ outcome: ReturnType<typeof evaluateCompletionReviewOutcome>; reviewedText: string }> {
+}): Promise<{
+  outcome: ReturnType<typeof evaluateCompletionReviewOutcome>;
+  reviewedText: string;
+  performed: boolean;
+}> {
   const shouldReview = shouldRunCompletionReview(input);
   if (!shouldReview) {
     return {
@@ -216,6 +252,7 @@ async function runGoalCompletionReviews(input: {
         evidenceRefs: [],
       },
       reviewedText: input.initialText,
+      performed: false,
     };
   }
   const requiredObligations = requiredCompletionObligations(input.publicDecisionContext);
@@ -242,6 +279,7 @@ async function runGoalCompletionReviews(input: {
       })
       : outcome,
     reviewedText: input.initialText,
+    performed: true,
   };
 }
 

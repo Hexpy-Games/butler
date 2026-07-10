@@ -23,6 +23,7 @@ export function recordTurnContractAuditEvidence(input: {
   contract: CompiledTurnContract;
   audit: readonly ToolAuditEntry[];
   finalCandidate: string;
+  runtimeReviewCompleted?: boolean;
 }): CompiledTurnContract {
   const store = new TurnContractStore(input.butlerData);
   let contract = store.read(input.contract.contract_id) ?? input.contract;
@@ -33,6 +34,19 @@ export function recordTurnContractAuditEvidence(input: {
       contract = store.recordEvidence(receipt);
       if (evidenceObligationSatisfied({ contract, obligation, receipts: store.evidenceFor(contract) })) break;
     }
+  }
+  const runtimeReview = contract.required_evidence.find((item) => item.deliverable === "review");
+  if (
+    runtimeReview && input.runtimeReviewCompleted === true &&
+    !evidenceObligationSatisfied({ contract, obligation: runtimeReview, receipts: store.evidenceFor(contract) })
+  ) {
+    contract = store.recordEvidence(receiptFor({
+      contract,
+      obligation: runtimeReview,
+      producer: "review",
+      sourceId: `runtime-review:${hash(input.finalCandidate).slice(0, 16)}`,
+      itemIds: [],
+    }));
   }
   const finalReport = contract.required_evidence.find((item) => item.deliverable === "final_report");
   if (

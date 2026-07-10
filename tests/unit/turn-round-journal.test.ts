@@ -3,6 +3,10 @@ import {
   buildTurnRoundJournal,
   renderTurnRoundJournal,
 } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/turn-round-journal.ts";
+import {
+  recentTurnRoundJournal,
+  stableTurnMutationIdentities,
+} from "../../packages/butler-agent/src/agent/turn/turn-round-journal-contract.ts";
 
 test("round journal retains generic Project Ledger state without raw bodies", () => {
   const entries = buildTurnRoundJournal({
@@ -80,6 +84,33 @@ test("round journal fingerprints ignore volatile timestamps but distinguish muta
   expect(first.result_fingerprint).toBe(second.result_fingerprint);
   expect(first.state_revision).toBe(second.state_revision);
   expect(mutation.observed_delta).toBe("mutation");
+  expect(mutation.call_coordinates).toEqual({ kind: "spec", id: "SPEC-WEB-CAPTURE" });
   expect(mutation.state_revision).not.toBe(first.state_revision);
   expect(renderTurnRoundJournal([first, mutation])).toContain("no-delta broad read");
+});
+
+test("resume journal retains old mutation identities outside the recent round window", () => {
+  const entries = Array.from({ length: 32 }, (_, index) => ({
+    sequence: index + 1,
+    tool: index === 0 ? "project_ledger_create" : "read_file",
+    ok: true,
+    call_identity: `call-${index + 1}`,
+    result_fingerprint: `result-${index + 1}`,
+    state_revision: `revision-${index + 1}`,
+    observed_delta: index === 0 ? "mutation" as const : "evidence" as const,
+    ...(index === 0
+      ? { call_coordinates: { kind: "work", id: "work-web-capture" } }
+      : {}),
+  }));
+
+  const identities = stableTurnMutationIdentities(entries);
+  expect(identities[0]).toMatchObject({
+    sequence: 1,
+    tool: "project_ledger_create",
+    call_coordinates: { kind: "work", id: "work-web-capture" },
+  });
+  expect(identities[0]).not.toHaveProperty("result_fingerprint");
+  const recent = recentTurnRoundJournal(entries);
+  expect(recent[0]?.sequence).toBe(15);
+  expect(recent.at(-1)?.sequence).toBe(32);
 });

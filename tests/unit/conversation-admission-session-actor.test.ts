@@ -606,6 +606,13 @@ test("scheduler yield keeps the conversation turn open until the resumed final",
   await expect(actor.handleInbound(inbound("checkpoint-yield", "continue durable work")))
     .rejects.toThrow("Turn scheduler yielded");
   expect(conversationStore.readTurn("turn-checkpoint-yield")?.status).toBe("running");
+  const yieldEvents = readTranscript("butler/main");
+  expect(yieldEvents.some((event) =>
+    event.kind === "system" && event.payload.category === "runtime_error",
+  )).toBe(false);
+  expect(yieldEvents.some((event) =>
+    event.kind === "session_status" && event.payload.reason === "gateway-turn-continuing",
+  )).toBe(true);
 
   await actor.handleInbound(inbound("checkpoint-yield", "continue durable work", {
     raw: {

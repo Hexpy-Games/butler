@@ -8,8 +8,10 @@ export const grepFilesToolDefinition: ButlerToolDefinition = {
     type: "object",
     additionalProperties: false,
     properties: {
-      workspace_root: { type: "string" },
-      pattern: { type: "string" },
+      pattern: {
+        type: "string",
+        description: "Pattern searched inside the active workspace; paths and globs are workspace-relative.",
+      },
       regex: { type: "boolean" },
       case_sensitive: { type: "boolean" },
       include: { type: "array", items: { type: "string" } },

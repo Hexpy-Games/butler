@@ -2,7 +2,10 @@ import type { FunctionToolPromptOptions, OpenAIResponse, PromptOptions } from ".
 import type { HostedRuntimeConfig } from "./model-routing.ts";
 import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, finalNoToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget } from "./runtime-support.ts";
 import { createHostedChatCompletion, extractHostedChatToolCalls, firstHostedChatMessage, hostedChatCompletionsUrl, type HostedChatMessage, hostedChatReasoningParams, hostedChatResponseFormat, hostedChatText, hostedChatTools, hostedProviderErrorLabel, promptTextForHosted } from "./hosted-chat-client.ts";
-import { hostedToolResultContent } from "../local/runtime.ts";
+import {
+  compactObservedHostedToolMessages,
+  hostedToolResultContent,
+} from "./hosted-tool-result-context.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { recordPromptCacheMetric } from "../openai/runtime.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
@@ -11,6 +14,7 @@ import {
   blockCapacityToolOutput,
   partitionSemanticToolBatch,
 } from "../../../agent/turn/tool-batch-capacity.ts";
+import { reviewProviderFinalCandidate } from "./final-candidate-review.ts";
 
 
 
@@ -97,7 +101,19 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
           model: config.modelId,
         });
       }
-      return text;
+      const disposition = await reviewProviderFinalCandidate({ options, text, roundIndex: round });
+      if (disposition.kind === "final") return disposition.text;
+      messages.push({ role: "assistant", content: text });
+      messages.push({ role: "user", content: disposition.observation });
+      compactObservedHostedToolMessages({
+        messages,
+        log,
+        evidenceRetention: {
+          butlerData: options.butlerData,
+          turnId: options.usageAttribution?.turnId,
+        },
+      });
+      continue;
     }
     const batch = partitionSemanticToolBatch(toolCalls);
     await options.onAssistantTextBeforeTools?.({
@@ -109,6 +125,14 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
           args: args.parsed,
         };
       }),
+    });
+    compactObservedHostedToolMessages({
+      messages,
+      log,
+      evidenceRetention: {
+        butlerData: options.butlerData,
+        turnId: options.usageAttribution?.turnId,
+      },
     });
     messages.push({
       role: "assistant",

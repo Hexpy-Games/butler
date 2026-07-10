@@ -7,6 +7,7 @@ import { promptWithAttachmentContext } from "../../../agent/context/attachment-c
 import { resolveDynamicOpenAIModel } from "./models.ts";
 import { runAgentLoop } from "../../../agent/turn/agent-loop.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
+import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 
 
 
@@ -33,6 +34,7 @@ export async function runOpenAIFunctionToolPromptText(
   const promptForAgentLoop = promptWithAttachmentContext(options.prompt, options.attachments);
   const codexStatelessInput = toCodexStatelessInput(initialPromptInput);
   let modelCallRound = 0;
+  let pendingFinalCandidateObservation: string | null = null;
   const agentLoopTools = activeFunctionTools(options).map(functionToolToAgentTool);
 
   const result = await runAgentLoop({
@@ -52,6 +54,13 @@ export async function runOpenAIFunctionToolPromptText(
         ? newToolMessages(messages, sentToolMessages)
         : { items: initialPromptInput, sentCount: sentToolMessages };
       sentToolMessages = input.sentCount;
+      if (previousResponseId && pendingFinalCandidateObservation && Array.isArray(input.items)) {
+        input.items.push({
+          role: "user",
+          content: [{ type: "input_text", text: pendingFinalCandidateObservation }],
+        });
+        pendingFinalCandidateObservation = null;
+      }
       if (previousResponseId && Array.isArray(input.items)) {
         codexStatelessInput.push(...input.items);
       }
@@ -119,6 +128,18 @@ export async function runOpenAIFunctionToolPromptText(
         args: toolCall.arguments,
         output: toolResult.output,
       }),
+    reviewFinalCandidate: async ({ text, iteration }) => {
+      const disposition = await reviewProviderFinalCandidate({
+        options,
+        text,
+        roundIndex: iteration,
+      });
+      if (disposition.kind === "final") {
+        return { status: "accepted", text: disposition.text };
+      }
+      pendingFinalCandidateObservation = disposition.observation;
+      return { status: "continue", observation: disposition.observation };
+    },
     onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
       await options.onAssistantTextBeforeTools?.({
         text,

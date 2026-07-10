@@ -905,6 +905,11 @@ test("native runtime counts mixed-tool batches against one authored decision gro
   const toolStarts = events.filter((event) => event.kind === "tool.started");
   expect(toolStarts).toHaveLength(PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT);
   expect(new Set(toolStarts.map((event) => event.payload?.workBlockId)).size).toBe(1);
+  const transcriptDecisions = readTranscript("butler/mixed-tool-batch-continuation")
+    .filter((event) =>
+      event.kind === "system" && event.payload.category === "public_work_decision",
+    );
+  expect(transcriptDecisions).toHaveLength(1);
 });
 
 test("native runtime permits Ledger preflight inspection tools in ledger-tracked project turns", async () => {
@@ -2260,6 +2265,8 @@ test("native runtime sends a profiled tool surface for basic project turns", asy
 
   expect(toolNames).toEqual([
     "project_ledger_status",
+    "project_ledger_list",
+    "project_ledger_show",
     "project_ledger_check",
     "inspect_project_status",
     "query_project_work",
@@ -5199,13 +5206,13 @@ test("public work decision selector consumes same-name tool calls in authored or
     allowRuntimeDerived: false,
   });
 
-  expect(new Set([first.decisionId, second.decisionId, third.decisionId]).size).toBe(3);
+  expect(new Set([first.decisionId, second.decisionId, third.decisionId]).size).toBe(1);
   expect(first.usageGroupId).toBe(second.usageGroupId);
   expect(second.usageGroupId).toBe(third.usageGroupId);
   expect(third.usageCount).toBe(3);
 });
 
-test("public work decision selector reuses matching decision before borrowing another tool decision", () => {
+test("public work decision selector binds one envelope to a mixed tool batch", () => {
   const progress = {
     kind: "searched" as const,
     toolName: "Search files",
@@ -5251,8 +5258,8 @@ test("public work decision selector reuses matching decision before borrowing an
   });
 
   expect(secondSearch.decisionId).toBe(firstSearch.decisionId);
-  expect(firstSearch.summary).toBe("Search the provider setting marker.");
-  expect(secondSearch.summary).toBe("Search the provider setting marker.");
+  expect(firstSearch.summary).toBe("Read the candidate file first.");
+  expect(secondSearch.summary).toBe("Read the candidate file first.");
   expect(pending.find((decision) => decision.toolName === "read_file")?.claimed).not.toBe(true);
 });
 

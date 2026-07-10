@@ -15,6 +15,20 @@ export interface TurnContextObservationRef {
   path?: string;
 }
 
+export interface TurnObligationFrontierCheckpoint {
+  gated: boolean;
+  ledgerDiscoveryObserved?: boolean;
+  ledgerDiscoveryCandidateCount?: number;
+  requiredLedgerKinds: Array<"spec" | "work" | "task">;
+  observedLedgerKinds: Array<"spec" | "work" | "task">;
+  ledgerCheckPassed: boolean;
+  workspaceMutationObserved: boolean;
+  validationObserved: boolean;
+  validationFailed: boolean;
+  validationFocused?: boolean;
+  stage: "open" | "ledger" | "workspace_execution" | "workspace_validation" | "workspace_repair" | "closeout";
+}
+
 export interface TurnContextAtom {
   schemaVersion: "butler.turn-continuation.v2";
   generation: number;
@@ -41,6 +55,7 @@ export interface TurnContextAtom {
   nextSemanticBlockSequence?: number;
   providerAdapterId?: string;
   effectiveModel?: string;
+  obligationFrontier?: TurnObligationFrontierCheckpoint;
   terminalOutcome?: { id: string; state: string };
   createdAt: string;
   updatedAt: string;
@@ -109,6 +124,7 @@ export function persistTurnContextAtom(input: {
   nextSemanticBlockSequence?: number;
   providerAdapterId?: string;
   effectiveModel?: string;
+  obligationFrontier?: TurnObligationFrontierCheckpoint;
   expectedGeneration?: number;
 }): string | null {
   if (isTerminalTurnState(input.state)) return null;
@@ -162,6 +178,9 @@ export function persistTurnContextAtom(input: {
           : {}),
         ...(input.providerAdapterId ? { providerAdapterId: safeRefId(input.providerAdapterId) } : {}),
         ...(input.effectiveModel ? { effectiveModel: safeRefId(input.effectiveModel) } : {}),
+        ...(input.obligationFrontier
+          ? { obligationFrontier: sanitizeObligationFrontier(input.obligationFrontier) }
+          : {}),
         ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -221,6 +240,34 @@ function safeIdSegment(value: string): string {
 
 function safeRefId(value: string): string {
   return value.replace(/[^\S\n]+/gu, " ").replace(/[\r\n]+/gu, " ").trim().slice(0, 160) || "unknown";
+}
+
+function sanitizeObligationFrontier(
+  frontier: TurnObligationFrontierCheckpoint,
+): TurnObligationFrontierCheckpoint {
+  const ledgerKinds = new Set(["spec", "work", "task"] as const);
+  const stages = new Set<TurnObligationFrontierCheckpoint["stage"]>([
+    "open", "ledger", "workspace_execution", "workspace_validation", "workspace_repair", "closeout",
+  ]);
+  const kinds = (values: readonly string[]) => [...new Set(values)]
+    .filter((value): value is "spec" | "work" | "task" =>
+      ledgerKinds.has(value as "spec" | "work" | "task"))
+    .sort();
+  return {
+    gated: frontier.gated === true,
+    ledgerDiscoveryObserved: frontier.ledgerDiscoveryObserved === true,
+    ledgerDiscoveryCandidateCount: finiteNonNegativeInteger(
+      frontier.ledgerDiscoveryCandidateCount ?? 0,
+    ),
+    requiredLedgerKinds: kinds(frontier.requiredLedgerKinds),
+    observedLedgerKinds: kinds(frontier.observedLedgerKinds),
+    ledgerCheckPassed: frontier.ledgerCheckPassed === true,
+    workspaceMutationObserved: frontier.workspaceMutationObserved === true,
+    validationObserved: frontier.validationObserved === true,
+    validationFailed: frontier.validationFailed === true,
+    validationFocused: frontier.validationFocused === true,
+    stage: stages.has(frontier.stage) ? frontier.stage : "open",
+  };
 }
 
 function sanitizeBudgetSnapshot(snapshot: DirectTurnBudgetSnapshot): DirectTurnBudgetSnapshot {

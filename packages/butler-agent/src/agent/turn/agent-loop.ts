@@ -85,6 +85,13 @@ export interface AgentLoopInput {
     toolCall: AgentLoopToolCall;
     toolResult: AgentLoopToolResult;
   }) => Promise<string | null | undefined> | string | null | undefined;
+  reviewFinalCandidate?: (input: {
+    text: string;
+    iteration: number;
+  }) => Promise<
+    | { status: "accepted"; text?: string }
+    | { status: "continue"; observation: string }
+  >;
   onEvent?: (event: AgentLoopEvent) => void;
   onLoopLimit?: (input: {
     messages: AgentLoopMessage[];
@@ -580,6 +587,21 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
     const calls = response.toolCalls ?? [];
     if (calls.length === 0) {
       const finalText = response.text?.trim();
+      if (finalText && input.reviewFinalCandidate) {
+        const review = await input.reviewFinalCandidate({ text: finalText, iteration });
+        if (review.status === "continue") {
+          const observation = review.observation.trim();
+          if (!observation) throw new Error("agent_loop_final_candidate_observation_missing");
+          messages.push({ role: "user", content: observation });
+          continue;
+        }
+        return {
+          finalText: review.text?.trim() || finalText,
+          messages,
+          events,
+          stoppedByLimit: false,
+        };
+      }
       return {
         finalText: finalText || "",
         messages,

@@ -132,7 +132,7 @@ export async function runTypedTurnEntry(input: {
   let currentPrompt = decisionPrompt.prompt;
   let active: ActiveTurnContract | null = null;
   let lastError: unknown = null;
-  const repairLimit = decisionTransport === "function_tool" ? 0 : TURN_DECISION_REPAIR_LIMIT;
+  const repairLimit = TURN_DECISION_REPAIR_LIMIT;
   const validateFunctionDecision = (args: Record<string, unknown>) => {
     const canonicalArgs = canonicalFunctionDecisionArgs(args);
     try {
@@ -217,7 +217,11 @@ export async function runTypedTurnEntry(input: {
   });
   input.pendingPublicDecisions.push(active.publicDecision);
   const candidateText = await input.runKernelToolPrompt(
-    contractExecutionPrompt({ basePrompt: input.context.prompt, active }),
+    contractExecutionPrompt({
+      basePrompt: input.context.prompt,
+      active,
+      butlerData: input.butlerData,
+    }),
     undefined,
     input.initialPromptPhase,
   );

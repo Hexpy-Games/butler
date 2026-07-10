@@ -100,6 +100,76 @@ test("every provider family preserves decisions results and usage across native 
   }
 });
 
+test("every provider family continues a rejected final candidate in the same native conversation", async () => {
+  for (const harness of providerHarnesses()) {
+    const operations: string[] = [];
+    const bodies: Array<Record<string, unknown>> = [];
+    let responseRound = 0;
+    globalThis.fetch = (async (_url, init) => {
+      responseRound += 1;
+      operations.push(`model:${responseRound}`);
+      bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      const response = responseRound === 1
+        ? harness.response(1)
+        : responseRound === 2
+        ? prematureFinalResponse(harness.family)
+        : responseRound === 3
+        ? harness.response(2)
+        : harness.response(3);
+      return Response.json(response);
+    }) as typeof fetch;
+
+    const result = await harness.run({
+      prompt: "Complete two evidence steps and report.",
+      instructions: "Use the probe tool and keep the same provider conversation until complete.",
+      model: modelForFamily(harness.family),
+      maxToolRounds: 5,
+      butlerData: makeTempDir(`${harness.family}-candidate-review`),
+      tools: [{
+        type: "function",
+        name: "probe",
+        description: "Produce deterministic evidence for one step.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: { step: { type: "number" } },
+          required: ["step"],
+        },
+      }],
+      reviewFinalCandidate: ({ text }) => {
+        operations.push(`review:${text.startsWith("Premature") ? "continue" : "accept"}`);
+        return text.startsWith("Premature")
+          ? { status: "continue", observation: "Structured completion observation: evidence step 2 is still required." }
+          : { status: "accepted" };
+      },
+      onAssistantTextBeforeTools: ({ toolCalls }) => {
+        operations.push(`decision:${Number(toolCalls[0]?.args.step)}`);
+      },
+      executeTool: async (call) => {
+        const step = Number(call.args.step);
+        operations.push(`tool:${step}`);
+        return { evidence: `evidence-step-${step}` };
+      },
+    });
+
+    expect(result, harness.family).toBe("Provider loop complete.");
+    expect(responseRound, harness.family).toBe(4);
+    expect(operations, harness.family).toEqual([
+      "model:1",
+      "decision:1",
+      "tool:1",
+      "model:2",
+      "review:continue",
+      "model:3",
+      "decision:2",
+      "tool:2",
+      "model:4",
+      "review:accept",
+    ]);
+    expect(JSON.stringify(bodies[2]), harness.family).toContain("Structured completion observation");
+  }
+});
+
 function providerHarnesses(): ProviderHarness[] {
   return [
     {
@@ -239,6 +309,35 @@ function localResponse(round: number): Record<string, unknown> {
   };
 }
 
+function prematureFinalResponse(family: ProviderFamily): Record<string, unknown> {
+  if (family === "openai") {
+    return {
+      id: "response-premature",
+      output: [{ type: "message", content: [{ type: "output_text", text: "Premature final." }] }],
+      usage: { input_tokens: 12, output_tokens: 2, total_tokens: 14 },
+    };
+  }
+  if (family === "anthropic") {
+    return {
+      content: [{ type: "text", text: "Premature final." }],
+      usage: { input_tokens: 12, output_tokens: 2 },
+    };
+  }
+  if (family === "google") {
+    return {
+      candidates: [{ content: { role: "model", parts: [{ text: "Premature final." }] } }],
+      usageMetadata: { promptTokenCount: 12, candidatesTokenCount: 2, totalTokenCount: 14 },
+    };
+  }
+  const content = family === "local"
+    ? "<butler_final_answer>Premature final.</butler_final_answer>"
+    : "Premature final.";
+  return {
+    choices: [{ message: { role: "assistant", content } }],
+    usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+  };
+}
+
 function hostedConfig(
   providerId: "zai" | "anthropic" | "google",
   modelId: string,
@@ -283,7 +382,7 @@ function modelForFamily(family: ProviderFamily): string {
   return "local/conformance";
 }
 
-function makeTempDir(family: ProviderFamily): string {
+function makeTempDir(family: string): string {
   const path = join(tmpdir(), `butler-provider-conformance-${family}-${Date.now()}-${Math.random()}`);
   mkdirSync(path, { recursive: true });
   tempDirs.push(path);

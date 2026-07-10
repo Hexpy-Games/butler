@@ -661,6 +661,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     })),
   hydrateUiState: (uiState) =>
     set({
+      activeChatId: uiState.active_session_id,
+      view: { kind: "session" },
       leftOpen: uiState.left_open,
       rightOpen: uiState.right_open,
       rightTab: uiState.right_tab,

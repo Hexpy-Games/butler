@@ -85,3 +85,30 @@ test("read file model preview keeps location and bounded content", () => {
   });
   expect(String(preview?.content).length).toBeLessThan(5_000);
 });
+
+test("large read previews expose the exact next source line instead of implying the full slice was visible", () => {
+  const content = Array.from({ length: 300 }, (_, index) =>
+    `line ${index + 1}: ${"x".repeat(48)}`).join("\n");
+  const preview = structuredToolResultModelPreview({
+    toolName: "read_file",
+    output: {
+      path: "src/large.ts",
+      start_line: 1,
+      end_line: 300,
+      truncated: true,
+      content,
+    },
+  });
+
+  expect(preview).toMatchObject({
+    preview_content_truncated: true,
+    preview_start_line: 1,
+    omitted_through_line: 300,
+  });
+  expect(preview?.preview_end_line).toBeNumber();
+  expect(preview?.next_start_line).toBe(Number(preview?.preview_end_line) + 1);
+  expect(String(preview?.content)).toContain(
+    `continue with read_file start_line=${String(preview?.next_start_line)}`,
+  );
+  expect(Number(preview?.preview_end_line)).toBeLessThan(300);
+});

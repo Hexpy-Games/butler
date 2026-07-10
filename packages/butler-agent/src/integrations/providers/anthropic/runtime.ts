@@ -1,5 +1,5 @@
 import { anthropicMessagesUrl, hostedProviderErrorLabel, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
-import { createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, type ProviderUsageSample } from "../shared/runtime-support.ts";
+import { activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
@@ -9,6 +9,7 @@ import {
   blockCapacityToolOutput,
   partitionSemanticToolBatch,
 } from "../../../agent/turn/tool-batch-capacity.ts";
+import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 
 
 export async function createAnthropicMessage(
@@ -126,7 +127,6 @@ export async function runAnthropicFunctionToolPromptText(
   options: FunctionToolPromptOptions,
 ): Promise<string> {
   const log = options.log ?? (() => {});
-  const allowedNames = new Set(options.tools.map((tool) => tool.name));
   const maxRounds = modelIterationLimitWithinUsageBudget(
     options.maxToolRounds ?? 8,
     options.usageAttribution,
@@ -137,12 +137,14 @@ export async function runAnthropicFunctionToolPromptText(
   const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   let toolBatchExecuted = false;
   for (let round = 0; round < maxRounds; round += 1) {
+    const activeTools = activeFunctionTools(options);
+    const allowedNames = new Set(activeTools.map((tool) => tool.name));
     const response = await requests.request({
       model: config.modelRef,
       run: async () => await createAnthropicMessage(config, {
         system: localFunctionToolInstructions(options.instructions),
         messages,
-        tools: anthropicTools(options.tools),
+        tools: anthropicTools(activeTools),
         ...(options.toolChoice === "required" ? { tool_choice: { type: "any" } } : {}),
       }, options.signal),
       usage: anthropicUsageSample,
@@ -155,7 +157,13 @@ export async function runAnthropicFunctionToolPromptText(
       return [{ id: part.id as string, name, input: localToolArguments(part.input).parsed }];
     });
     if (toolUses.length === 0) {
-      if (text) return text;
+      if (text) {
+        const disposition = await reviewProviderFinalCandidate({ options, text, roundIndex: round });
+        if (disposition.kind === "final") return disposition.text;
+        messages.push({ role: "assistant", content });
+        messages.push({ role: "user", content: disposition.observation });
+        continue;
+      }
       throw providerEmptyResponseError({
         provider: hostedProviderErrorLabel(config),
         api: "messages",

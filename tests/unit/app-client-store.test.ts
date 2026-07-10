@@ -2734,6 +2734,7 @@ test("hydrateUiState restores sidebar and panel presentation state", () => {
   useButlerStore.getState().hydrateUiState({
     schema: "butler.app-ui-state.v1",
     cached_at: "2026-05-13T10:00:00.000Z",
+    active_session_id: "project-session-restored",
     left_open: false,
     right_open: false,
     right_tab: "context",
@@ -2745,6 +2746,8 @@ test("hydrateUiState restores sidebar and panel presentation state", () => {
   });
 
   expect(useButlerStore.getState()).toMatchObject({
+    activeChatId: "project-session-restored",
+    view: { kind: "session" },
     leftOpen: false,
     rightOpen: false,
     rightTab: "context",

@@ -327,7 +327,10 @@ async function prepareAuditedToolExecution(input: {
   );
   const publicDecision = { ...decision, workBlockId };
   const workBlockLabel = decision.blockTitle ?? progress.workBlockLabel;
-  if (publicDecision.source !== "runtime-derived") {
+  const decisionAlreadyRecorded = input.input.publicDecisionContext.some((candidate) =>
+    candidate.decisionId === publicDecision.decisionId,
+  );
+  if (publicDecision.source !== "runtime-derived" && !decisionAlreadyRecorded) {
     input.input.publicDecisionContext.push(publicDecision);
     appendPublicDecisionTranscript(input.input, publicDecision);
   }

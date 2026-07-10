@@ -14,7 +14,10 @@ import {
   readTurnContextAtom,
   type TurnContextAtom,
 } from "../../turn-continuation-context.ts";
-import { recentTurnRoundJournal } from "../../turn-round-journal-contract.ts";
+import {
+  recentTurnRoundJournal,
+  stableTurnMutationIdentities,
+} from "../../turn-round-journal-contract.ts";
 
 export interface NormalizedTurnPrompt {
   prompt: string;
@@ -331,6 +334,11 @@ function renderTurnContextAtom(atom: TurnContextAtom, contextAtomId: string): st
   lines.push(renderAtomRefs("Current Turn Work", atom.currentTurnWork));
   lines.push(renderAtomRefs("Current Turn Todos", atom.currentTurnTodos));
   if (atom.roundJournal?.length) {
+    const stableIdentities = stableTurnMutationIdentities(atom.roundJournal);
+    if (stableIdentities.length > 0) {
+      lines.push("Stable Mutation Identities:");
+      lines.push(JSON.stringify(stableIdentities, null, 2));
+    }
     lines.push("Recent Round Journal:");
     lines.push(JSON.stringify(recentTurnRoundJournal(atom.roundJournal), null, 2));
   }

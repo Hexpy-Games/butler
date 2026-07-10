@@ -247,14 +247,19 @@ export function activateTurnContract(input: {
 export function contractExecutionPrompt(input: {
   basePrompt: string;
   active: ActiveTurnContract;
+  butlerData: string;
 }): string {
   const { contract, decision } = input.active;
+  const activeTodoListId = contract.target_workstream_id
+    ? new WorkStreamStore(input.butlerData).read(contract.target_workstream_id)?.todo_list_id
+    : null;
   return [
     input.basePrompt,
     "## Active Typed Turn Contract",
     `Contract ID: ${contract.contract_id}`,
     `Action: ${contract.action}`,
     `Target WorkStream: ${contract.target_workstream_id ?? "none"}`,
+    `Active Todo List: ${activeTodoListId ?? "none"}`,
     `Tracking Mode: ${contract.tracking_mode}`,
     `Closeout Strategy: ${contract.closeout_strategy}`,
     `Required Deliverables: ${contract.deliverables.join(", ") || "none"}`,
@@ -262,8 +267,14 @@ export function contractExecutionPrompt(input: {
     `Opening Decision: ${decision.public_summary}`,
     `Immediate Next Step: ${decision.immediate_next_step ?? decision.public_summary}`,
     "The typed opening decision already authorizes the first tool batch. Execute only that immediate step without restating or paraphrasing the opening decision protocol.",
-    "After observing the first batch, every later tool batch must begin with a fresh visible title, summary, rationale, and next_step for the next small step.",
+    activeTodoListId
+      ? `When calling update_todo_list, use list_id ${activeTodoListId} or omit list_id so the active contract binds it automatically.`
+      : "Do not invent a todo-list id.",
+    "After observing the first batch, every later tool batch must begin with one fresh visible title, summary, rationale, next_step, and expected_effect for the next small step.",
+    "When run_work_block is available, place one fresh decision and one to six explicit ordinary calls inside that single wrapper. Do not duplicate the protocol in prose.",
     "A semantic decision block may contain at most six visible tool calls. Continue with a new decision after observing its results.",
+    "The final_report deliverable is the user-facing final candidate unless the user explicitly requested a durable report artifact. Once execution and validation are complete, stop calling tools and emit that final candidate; do not invent a Ledger report record or report file.",
+    "The active typed contract owns its WorkStream lifecycle. Do not call update_work_stream_state for this WorkStream; the runtime completes it after accepting the final candidate.",
     "Do not report completion until the runtime confirms every typed evidence obligation.",
   ].join("\n\n");
 }
@@ -325,6 +336,7 @@ export function contractResumePrompt(input: {
     `Next Semantic Block: ${Math.max(1, Math.floor(input.nextSemanticBlockSequence))}`,
     "The typed opening decision was already emitted before the durable yield. Do not emit or paraphrase it again.",
     "Use the persisted round journal and unresolved obligations to author one fresh title, summary, rationale, and next_step for the next small tool batch.",
+    "When only the user-facing final report remains, emit the final candidate directly instead of creating a report record or file.",
     "Continue the same contract and WorkStream. Do not restart discovery or create a replacement plan.",
   ].join("\n\n");
 }

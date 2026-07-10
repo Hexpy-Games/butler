@@ -15,6 +15,29 @@ const PUBLIC_DECISION_EVIDENCE_REF_LIMIT = 2;
 const PUBLIC_DECISION_FALLBACK_MIN_CHARS = 8;
 export const PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT = 6;
 
+export interface PublicWorkDecisionEnvelope {
+  blockTitle: string;
+  summary: string;
+  rationale: string;
+  nextStep: string;
+  expectedEffect?: string;
+  repeatReason?: PublicWorkDecision["repeatReason"];
+  completionObligations?: PublicWorkDecision["completionObligations"];
+  repaired?: boolean;
+}
+
+interface PublicWorkDecisionBatchInput {
+  envelope: PublicWorkDecisionEnvelope;
+  toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
+  existingDecisions: PublicWorkDecision[];
+  contractContext?: {
+    contractId: string;
+    workstreamId?: string;
+    semanticBlockId: string;
+    usageGroupId: string;
+  };
+}
+
 export function publicWorkDecisionPayload(decision: PublicWorkDecision): Record<string, unknown> {
   return {
     decisionId: decision.decisionId,
@@ -49,18 +72,38 @@ export function publicWorkDecisionsFromAssistantText(input: {
   if (structured.length === 0) {
     return [];
   }
-  const usageGroupIds = structured.map(() => publicDecisionId());
+  const parsed = structured[0]!;
+  return publicWorkDecisionsFromEnvelope({
+    envelope: {
+      blockTitle: parsed.blockTitle ?? "",
+      summary: parsed.summary ?? "",
+      rationale: parsed.rationale ?? "",
+      nextStep: parsed.nextStep ?? "",
+      ...(parsed.expectedEffect ? { expectedEffect: parsed.expectedEffect } : {}),
+      ...(parsed.repeatReason ? { repeatReason: parsed.repeatReason } : {}),
+      completionObligations: parsed.completionObligations ?? [],
+      ...(parsed.repaired === true ? { repaired: true } : {}),
+    },
+    toolCalls: input.toolCalls,
+    existingDecisions: input.existingDecisions,
+    contractContext: input.contractContext,
+  });
+}
+
+export function publicWorkDecisionsFromEnvelope(
+  input: PublicWorkDecisionBatchInput,
+): PublicWorkDecision[] {
+  const envelope = input.envelope;
+  const decisionId = publicDecisionId();
+  const usageGroupId = input.contractContext?.usageGroupId ?? decisionId;
   return input.toolCalls.flatMap((call, index) => {
-    const indexedDecision = structured[index];
-    const sharedDecision = structured[0];
-    const usageGroupIndex = indexedDecision ? index : 0;
-    const decisionWasRepaired = indexedDecision?.repaired === true || sharedDecision?.repaired === true;
-    const blockTitle = indexedDecision?.blockTitle ?? sharedDecision?.blockTitle;
-    const summary = indexedDecision?.summary ?? sharedDecision?.summary;
-    const rationale = indexedDecision?.rationale ?? sharedDecision?.rationale;
-    const nextStep = indexedDecision?.nextStep ?? sharedDecision?.nextStep;
-    const expectedEffect = indexedDecision?.expectedEffect ?? sharedDecision?.expectedEffect;
-    const repeatReason = indexedDecision?.repeatReason ?? sharedDecision?.repeatReason;
+    const decisionWasRepaired = envelope.repaired === true;
+    const blockTitle = envelope.blockTitle;
+    const summary = envelope.summary;
+    const rationale = envelope.rationale;
+    const nextStep = envelope.nextStep;
+    const expectedEffect = envelope.expectedEffect;
+    const repeatReason = envelope.repeatReason;
     if (
       decisionWasRepaired ||
       typeof blockTitle !== "string" ||
@@ -75,8 +118,8 @@ export function publicWorkDecisionsFromAssistantText(input: {
       return [];
     }
     return {
-      decisionId: publicDecisionId(),
-      usageGroupId: input.contractContext?.usageGroupId ?? usageGroupIds[usageGroupIndex] ?? publicDecisionId(),
+      decisionId,
+      usageGroupId,
       ...(input.contractContext
         ? {
           contractId: input.contractContext.contractId,
@@ -93,9 +136,7 @@ export function publicWorkDecisionsFromAssistantText(input: {
       nextStep,
       ...(expectedEffect ? { expectedEffect } : {}),
       ...(repeatReason ? { repeatReason } : {}),
-      completionObligations: indexedDecision?.completionObligations ??
-        sharedDecision?.completionObligations ??
-        [],
+      completionObligations: envelope.completionObligations ?? [],
       source: "assistant-authored",
       toolName: call.name,
       toolCallIndex: index,
