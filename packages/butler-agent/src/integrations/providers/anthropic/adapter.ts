@@ -5,4 +5,24 @@ export const ANTHROPIC_PROVIDER_ADAPTER = defineProviderAdapter({
   providerId: "anthropic",
   catalog: ANTHROPIC_MODELS,
   structuredDecisionTransport: "function_tool",
+  async runPrompt(options) {
+    const [{ requireHostedRuntimeConfig }, { runAnthropicPromptText }] = await Promise.all([
+      import("../shared/model-routing.ts"),
+      import("./runtime.ts"),
+    ]);
+    const config = requireHostedRuntimeConfig(options.model, "anthropic");
+    return {
+      text: await runAnthropicPromptText(config, options),
+      model: config.modelRef,
+      usage: null,
+    };
+  },
+  async runFunctionToolPrompt(options) {
+    const [{ requireHostedRuntimeConfig }, { runAnthropicFunctionToolPromptText }] =
+      await Promise.all([import("../shared/model-routing.ts"), import("./runtime.ts")]);
+    return await runAnthropicFunctionToolPromptText(
+      requireHostedRuntimeConfig(options.model, "anthropic"),
+      options,
+    );
+  },
 });

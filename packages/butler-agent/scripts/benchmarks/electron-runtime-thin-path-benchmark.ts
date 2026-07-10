@@ -19,11 +19,10 @@ import {
   runPromptText,
   type FunctionToolPromptOptions,
 } from "../../src/integrations/providers/provider.ts";
-import { modelStructuredDecisionTransport } from "../../src/integrations/providers/model-catalog.ts";
 import { readPromptCacheMetrics } from "../../src/integrations/providers/prompt-cache-metrics.ts";
 import { readOperationalMetricEvents } from "../../src/operations/metrics/operational-metrics.ts";
 import { loadPrivateEnvIntoProcess } from "../../src/interfaces/cli/private-env.ts";
-import type { ModelProviderAdapter } from "../../src/test-support/harness/contracts.ts";
+import { createNativeButlerDefaultProvider } from "../../src/interfaces/gateway/native-butler-bootstrap.ts";
 import { AppGatewayBridge } from "../../../../tests/support/app-gateway-bridge.ts";
 
 type BenchPromptKind = "review" | "context-answer" | "tool-required";
@@ -157,6 +156,7 @@ const sourceButlerData = resolve(
     join(process.env.HOME || "", ".butler"),
 );
 const model = process.env.BUTLER_THIN_PATH_BENCH_MODEL || "zai/glm-5.2";
+const defaultModel = process.env.BUTLER_THIN_PATH_BENCH_DEFAULT_MODEL || model;
 const reasoningEffort = process.env.BUTLER_THIN_PATH_BENCH_REASONING || "medium";
 const label = process.env.BUTLER_THIN_PATH_BENCH_LABEL || "baseline";
 const perPromptTimeoutMs = positiveInteger(process.env.BUTLER_THIN_PATH_BENCH_TIMEOUT_MS, 120_000);
@@ -192,27 +192,9 @@ const meaningfulProgressSelector = [
 const FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
 
 let activeMetric: PromptMetric | null = null;
-const structuredDecisionTransport = modelStructuredDecisionTransport(model);
-
-const provider: ModelProviderAdapter = {
-  id: model.includes("/") ? model.split("/", 1)[0]! : "zai",
-  capabilities: {
-    supportsStreaming: false,
-    supportsToolCalls: true,
-    supportsImages: false,
-    supportsAudio: false,
-    supportsServerThreads: false,
-    supportsReasoningConfig: true,
-    supportsPromptCaching: true,
-    supportsStructuredOutputs: structuredDecisionTransport !== null,
-    ...(structuredDecisionTransport
-      ? { structuredDecisionTransport }
-      : {}),
-  },
-  async invoke() {
-    return { text: "unused" };
-  },
-};
+const provider = createNativeButlerDefaultProvider({
+  system: { defaultModel },
+});
 
 try {
   assert(existsSync(electronBin), "Electron binary is missing; run npm --prefix packages/butler-app/client/electron install first.");
@@ -240,12 +222,13 @@ try {
     label,
     runId,
     model,
+    defaultModel,
     reasoningEffort,
     perPromptTimeoutMs,
     results,
     summary,
   }, null, 2)}\n`, "utf8");
-  console.log(JSON.stringify({ ok: true, label, runId, model, reasoningEffort, outPath, summary, results }, null, 2));
+  console.log(JSON.stringify({ ok: true, label, runId, model, defaultModel, reasoningEffort, outPath, summary, results }, null, 2));
 } finally {
   globalThis.fetch = originalFetch;
   if (originalButlerData === undefined) delete process.env.BUTLER_DATA;

@@ -125,7 +125,14 @@ test("worker activity heartbeat refreshes durable activity during a pending mode
 });
 
 test("worker runner refreshes activity while waiting on model continuation", () => {
-  const provider = readFileSync(join(root, "packages/butler-agent/src/integrations/providers/provider.ts"), "utf8");
+  const providerRuntimeRoot = join(root, "packages/butler-agent/src/integrations/providers");
+  const provider = [
+    "openai/model-config.ts",
+    "worker/context.ts",
+    "worker/activity-summary.ts",
+    "worker/activity-presentation.ts",
+    "worker/shell.ts",
+  ].map((file) => readFileSync(join(providerRuntimeRoot, file), "utf8")).join("\n");
 
   expect(provider).toContain("withWorkerActivityHeartbeat");
   expect(provider).toContain("WORKER_ACTIVITY_HEARTBEAT_MS");

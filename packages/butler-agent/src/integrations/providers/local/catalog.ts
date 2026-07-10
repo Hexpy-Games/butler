@@ -1,4 +1,4 @@
-import type { LocalModelConfig } from "../local-models.ts";
+import type { LocalModelConfig } from "./models.ts";
 import type { ProviderModelMetadata, ReasoningEffort } from "../model-catalog.ts";
 
 export function localModelConfigToMetadata(model: LocalModelConfig): ProviderModelMetadata {

@@ -1,6 +1,11 @@
 import type { ProviderCapabilities } from "../contracts.ts";
 import { parseModelRef } from "../model-ref.ts";
 import type {
+  FunctionToolPromptOptions,
+  PromptOptions,
+  PromptTextResult,
+} from "../runtime-contracts.ts";
+import type {
   ModelProviderId,
   ProviderModelMetadata,
   StructuredDecisionTransport,
@@ -11,12 +16,16 @@ export interface ProviderAdapterDefinition {
   readonly catalog: readonly ProviderModelMetadata[];
   readonly structuredDecisionTransport: StructuredDecisionTransport | null;
   capabilitiesFor(modelRef: string): ProviderCapabilities;
+  runPrompt(options: PromptOptions): Promise<PromptTextResult>;
+  runFunctionToolPrompt(options: FunctionToolPromptOptions): Promise<string>;
 }
 
 export function defineProviderAdapter(input: {
   providerId: ModelProviderId;
   catalog: readonly ProviderModelMetadata[];
   structuredDecisionTransport: StructuredDecisionTransport | null;
+  runPrompt(options: PromptOptions): Promise<PromptTextResult>;
+  runFunctionToolPrompt(options: FunctionToolPromptOptions): Promise<string>;
 }): ProviderAdapterDefinition {
   return {
     ...input,
@@ -43,4 +52,3 @@ export function defineProviderAdapter(input: {
     },
   };
 }
-

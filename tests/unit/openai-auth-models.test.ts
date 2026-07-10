@@ -9,12 +9,12 @@ import {
   pkceChallenge,
   resolveOpenAIAuth,
   writeButlerOpenAIAuthProfile,
-} from "../../packages/butler-agent/src/integrations/providers/openai-auth.ts";
+} from "../../packages/butler-agent/src/integrations/providers/openai/auth.ts";
 import {
   AUTO_CODEX_LATEST,
   pickLatestCodexModel,
   resolveDynamicOpenAIModel,
-} from "../../packages/butler-agent/src/integrations/providers/openai-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/openai/models.ts";
 import {
   extractResponseText,
   isTransientModelApiError,
@@ -31,10 +31,10 @@ import {
 import {
   normalizeLocalServerUrl,
   safeLocalModelId,
-} from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 import {
   registerHostedModelConfig,
-} from "../../packages/butler-agent/src/integrations/providers/registered-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
 import {
   readPromptCacheMetrics,
 } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";

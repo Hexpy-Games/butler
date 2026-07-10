@@ -10,7 +10,7 @@ import {
   readLocalModelConfigs,
   updateLocalModelConfig,
   upsertLocalModelConfig,
-} from "../../../../integrations/providers/local-models.ts";
+} from "../../../../integrations/providers/local/models.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 import type {
   LocalModelDeletionResult,
