@@ -11,7 +11,7 @@ import {
   OpenAIWebSearchProvider,
   TavilyWebSearchProvider,
 } from "../../packages/butler-agent/src/integrations/search/provider.ts";
-import { writeButlerOpenAIAuthProfile } from "../../packages/butler-agent/src/integrations/providers/openai-auth.ts";
+import { writeButlerOpenAIAuthProfile } from "../../packages/butler-agent/src/integrations/providers/openai/auth.ts";
 
 let tempDir = "";
 let originalFetch: typeof globalThis.fetch;

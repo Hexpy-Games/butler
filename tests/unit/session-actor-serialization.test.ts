@@ -24,6 +24,7 @@ import {
 import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
 import { readFirstVisibleLatencySummary } from "../../packages/butler-agent/src/operations/metrics/first-visible-latency.ts";
 import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-store.ts";
+import { createNativeButlerDefaultProvider } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -785,6 +786,46 @@ test("Butler structured provider skips the duplicate gateway opening model call"
 
   expect(providerCalls).toBe(0);
   expect(runtime.turns[0]?.metadata?.openingDecisionId).toBeUndefined();
+  store.close();
+});
+
+test("session actor binds provider capabilities to the effective session model", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime();
+  runtime.firstTurnRelease.resolve();
+  const provider = createNativeButlerDefaultProvider({
+    system: { defaultModel: "openai/gpt-5.5-codex" },
+  }, async () => openingDecisionText);
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "project-sandy-bot",
+    workspacePath: "fixtures/sandy-bot",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: provider.id,
+    modelRef: "zai/glm-5.2",
+    transportBindings: [{
+      transport: APP_TRANSPORT,
+      accountId: "local",
+      peerId: "butler/main",
+    }],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider,
+    systemPromptFactory: () => "You are Butler.",
+    openingDecisionTimeoutMs: 250,
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+  await actor.handleInbound(appInbound("model-override", "Update the Project Ledger first."));
+
+  expect(runtime.turns[0]?.provider.id).toBe("zai");
+  expect(runtime.turns[0]?.provider.capabilities).toMatchObject({
+    supportsStructuredOutputs: true,
+    structuredDecisionTransport: "function_tool",
+  });
   store.close();
 });
 

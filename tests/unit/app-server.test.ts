@@ -43,7 +43,7 @@ import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/di
 import {
   discoverLocalModels,
   upsertLocalModelConfig,
-} from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
 import {
   TURN_DECISION_EVENT_KIND,

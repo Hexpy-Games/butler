@@ -5,4 +5,10 @@ export const KIMI_PROVIDER_ADAPTER = defineProviderAdapter({
   providerId: "kimi",
   catalog: KIMI_MODELS,
   structuredDecisionTransport: "function_tool",
+  async runPrompt(options) {
+    return await (await import("./runtime.ts")).runKimiPrompt(options);
+  },
+  async runFunctionToolPrompt(options) {
+    return await (await import("./runtime.ts")).runKimiFunctionToolPrompt(options);
+  },
 });

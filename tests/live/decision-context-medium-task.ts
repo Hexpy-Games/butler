@@ -7,7 +7,7 @@ import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/tur
 import {
   readLocalModelConfigs,
   upsertLocalModelConfig,
-} from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 
 const butlerHome = process.env.BUTLER_HOME || process.cwd();
 const sourceButlerData = process.env.BUTLER_LIVE_SOURCE_BUTLER_DATA ||

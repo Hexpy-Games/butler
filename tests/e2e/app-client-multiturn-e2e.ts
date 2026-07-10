@@ -16,12 +16,12 @@ import { runFunctionToolPromptText, runPromptText } from "../../packages/butler-
 import {
   readLocalModelConfigs,
   upsertLocalModelConfig,
-} from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 import {
   readRegisteredHostedModelConfigs,
   registerHostedModelConfig,
   resolveProviderCredentialSecret,
-} from "../../packages/butler-agent/src/integrations/providers/registered-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 const root = process.cwd();

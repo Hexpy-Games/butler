@@ -2,7 +2,7 @@ import { getEncoding, type Tiktoken } from "js-tiktoken";
 import { HOSTED_PROVIDER_MODELS } from "./shared/hosted-models.ts";
 import { localModelConfigToMetadata } from "./local/catalog.ts";
 import { workerModelPresets } from "./shared/worker-presets.ts";
-import { readLocalModelConfigs, type LocalModelApiType, type LocalModelPlatform, type LocalModelSource } from "./local-models.ts";
+import { readLocalModelConfigs, type LocalModelApiType, type LocalModelPlatform, type LocalModelSource } from "./local/models.ts";
 import { parseModelRef, type ParsedModelRef } from "./model-ref.ts";
 
 export type ModelProviderId =

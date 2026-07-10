@@ -1,6 +1,6 @@
 import { homedir } from "os";
 import { join } from "path";
-import { resolveOpenAIAuth } from "./openai-auth.ts";
+import { resolveOpenAIAuth } from "./auth.ts";
 
 export const AUTO_CODEX_LATEST = "auto:codex-latest";
 export const DEFAULT_CODEX_MODEL = "gpt-5.5-codex";

@@ -8,7 +8,7 @@ import {
   type ModelProviderId,
   type ProviderAuthMethod,
   type ProviderModelMetadata,
-} from "./model-catalog.ts";
+} from "../model-catalog.ts";
 
 export type HostedModelProviderId = Exclude<ModelProviderId, "local">;
 
