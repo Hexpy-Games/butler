@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { DirectTurnBudgetSnapshot } from "./direct-turn-budget.ts";
 import { isTerminalTurnState, type TurnState } from "./turn-kernel.ts";
 import { writeJsonFileAtomic } from "../persistence/atomic-json-store.ts";
+import type { DurableTurnRoundJournalEntry } from "./native/turn-runner/turn-round-journal.ts";
 
 export interface TurnContextObservationRef {
   kind: string;
@@ -24,6 +25,7 @@ export interface TurnContextAtom {
   latestCompletionReview?: { status: string; observationId?: string };
   currentTurnWork: TurnContextObservationRef[];
   currentTurnTodos: TurnContextObservationRef[];
+  roundJournal?: DurableTurnRoundJournalEntry[];
   budgetSnapshot?: DirectTurnBudgetSnapshot;
   terminalOutcome?: { id: string; state: string };
   createdAt: string;
@@ -80,6 +82,7 @@ export function persistTurnContextAtom(input: {
   latestCompletionReview?: { status: string; observationId?: string };
   currentTurnWork?: TurnContextObservationRef[];
   currentTurnTodos?: TurnContextObservationRef[];
+  roundJournal?: DurableTurnRoundJournalEntry[];
   budgetSnapshot?: DirectTurnBudgetSnapshot;
   terminalOutcome?: { id: string; state: string };
 }): string | null {
@@ -100,6 +103,7 @@ export function persistTurnContextAtom(input: {
     ...(input.latestCompletionReview ? { latestCompletionReview: input.latestCompletionReview } : {}),
     currentTurnWork: input.currentTurnWork ?? [],
     currentTurnTodos: input.currentTurnTodos ?? [],
+    ...(input.roundJournal ? { roundJournal: input.roundJournal.slice(-18) } : {}),
     ...(input.budgetSnapshot ? { budgetSnapshot: sanitizeBudgetSnapshot(input.budgetSnapshot) } : {}),
     ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
     createdAt: new Date().toISOString(),
@@ -124,6 +128,7 @@ export function readTurnContextAtom(input: {
       evidenceCandidates: Array.isArray(parsed.evidenceCandidates)
         ? parsed.evidenceCandidates
         : [],
+      roundJournal: Array.isArray(parsed.roundJournal) ? parsed.roundJournal.slice(-18) : [],
     };
   } catch {
     return null;

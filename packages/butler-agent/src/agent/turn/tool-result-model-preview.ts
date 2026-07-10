@@ -15,7 +15,51 @@ export function structuredToolResultModelPreview(input: {
     const output = toolPayload(input.output, ["content", "path"]);
     return output ? readFilePreview(output) : null;
   }
-  return null;
+  return genericToolPreview(input.toolName, input.output);
+}
+
+function genericToolPreview(toolName: string, value: unknown): Record<string, unknown> | null {
+  const payload = toolPayload(value, []);
+  if (!payload) return null;
+  const projected = projectGenericRecord(payload, 0);
+  return Object.keys(projected).length > 0
+    ? { tool_name: toolName, ...projected }
+    : { tool_name: toolName };
+}
+
+const GENERIC_SAFE_KEYS = new Set([
+  "ok", "id", "kind", "title", "status", "state", "path", "command", "action", "view",
+  "issueCount", "issue_count", "staleViews", "created", "updated", "ignored", "reason",
+  "list_id", "todo_list_id", "workstream_id", "work_stream_id", "project_id", "record_generation",
+  "generation", "count", "counts", "progress", "results", "records", "nextActions", "next_actions",
+  "items", "issues", "work_stream", "work_streams", "data", "error", "code", "message",
+]);
+
+function projectGenericRecord(value: Record<string, unknown>, depth: number): Record<string, unknown> {
+  if (depth > 3) return {};
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (!GENERIC_SAFE_KEYS.has(key)) continue;
+    const projected = projectGenericValue(item, key, depth + 1);
+    if (projected !== undefined) result[key] = projected;
+  }
+  return result;
+}
+
+function projectGenericValue(value: unknown, key: string, depth: number): unknown {
+  if (value === null || typeof value === "boolean" || typeof value === "number") return value;
+  if (typeof value === "string") {
+    if (key === "path") return boundedText(value, 240);
+    return boundedText(value, 320);
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 12).map((item) => {
+      const itemRecord = record(item);
+      return itemRecord ? projectGenericRecord(itemRecord, depth) : projectGenericValue(item, key, depth);
+    });
+  }
+  const valueRecord = record(value);
+  return valueRecord ? projectGenericRecord(valueRecord, depth) : undefined;
 }
 
 function grepFilesPreview(output: Record<string, unknown>): Record<string, unknown> {

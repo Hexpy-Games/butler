@@ -84,6 +84,19 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
       latestCompletionReview: { status: "gap", observationId: "observation-1" },
       currentTurnWork: [{ kind: "work_stream", id: "work-1" }],
       currentTurnTodos: [{ kind: "todo", id: "todo-1" }],
+      roundJournal: [{
+        sequence: 1,
+        decision_id: "decision-1",
+        semantic_block_id: "contract-1:block:1",
+        block_title: "Ledger 기준점 확인",
+        tool: "project_ledger_status",
+        ok: true,
+        call_identity: "call-fingerprint",
+        result_fingerprint: "result-fingerprint",
+        state_revision: "state-revision",
+        observed_delta: "none",
+        result_preview: { ok: true, issueCount: 0 },
+      }],
       budgetSnapshot: {
         turnId,
         modelRequestsUsed: 7,
@@ -112,6 +125,13 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
       latestCompletionReview: { status: "gap", observationId: "observation-1" },
       currentTurnWork: [{ kind: "work_stream", id: "work-1" }],
       currentTurnTodos: [{ kind: "todo", id: "todo-1" }],
+      roundJournal: [{
+        sequence: 1,
+        decision_id: "decision-1",
+        block_title: "Ledger 기준점 확인",
+        tool: "project_ledger_status",
+        observed_delta: "none",
+      }],
       budgetSnapshot: {
         turnId,
         modelRequestsUsed: 7,

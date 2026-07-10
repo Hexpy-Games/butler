@@ -255,6 +255,7 @@ function publicDecisionForContract(
     summary: decision.public_summary,
     rationale: decision.public_rationale?.trim() || decision.public_summary,
     nextStep,
+    expectedEffect: nextStep,
     evidenceRefs: [],
     completionObligations: [],
     source: "model-authored",

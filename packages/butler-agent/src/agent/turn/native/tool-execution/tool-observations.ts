@@ -45,25 +45,8 @@ export function publicDecisionContinuationObservation(input: {
     modelVisibleContent: [
       "The current visible work step has reached its planned small-batch size.",
       `Next requested tool: ${input.call.name}`,
-      "Continue naturally by authoring summary, rationale, and next_step for the next small objective, then request this tool again.",
+      "Continue naturally by authoring title, summary, rationale, and next_step for the next small objective, then request this tool again.",
       "This is an internal turn-flow cue; keep working in the next assistant step.",
-    ].join("\n"),
-  });
-}
-
-export function repeatedToolFamilyObservation(input: {
-  turnId: string;
-  call: NativeToolCall;
-  family: string;
-}): TurnObservation {
-  return createToolObservation({
-    turnId: input.turnId,
-    kind: "validation_failed",
-    summary: `Repeated ${input.family} tool-family pressure was observed.`,
-    modelVisibleContent: [
-      `Tool-family pressure was observed before re-running ${input.call.name}.`,
-      `Family: ${input.family}`,
-      "Use the latest available evidence, choose a distinct verification path, or continue with a bounded limitation.",
     ].join("\n"),
   });
 }
