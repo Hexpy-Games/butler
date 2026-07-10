@@ -139,6 +139,7 @@ export function createButlerToolExecutor(input: {
   describedToolIds?: readonly string[] | (() => readonly string[]);
   pluginToolCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
   pluginToolDescriber?: (input: { id: string; namespace: string; name: string }) => Promise<ExternalToolCatalogInput | null | undefined>;
+  activeWorkStreamBinding?: () => { contractId: string; workStreamId: string } | null;
 }): ButlerToolExecutor {
   const taskStore = new TaskStore(input.butlerData);
   const plannedTaskStore = new PlannedTaskStore(input.butlerData);
@@ -189,6 +190,7 @@ export function createButlerToolExecutor(input: {
       turnId: input.turnId,
       todoListStore,
       workStreamStore,
+      activeWorkStreamBinding: input.activeWorkStreamBinding,
     }),
     ...createMemoryToolHandlers({
       butlerHome: input.butlerHome,

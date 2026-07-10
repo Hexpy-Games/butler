@@ -120,7 +120,8 @@ export function createInternalProgressToolRunner(input: {
         rawArguments: JSON.stringify(args),
       }, "runtime");
     },
-    semanticProgressEstablished: () => semanticProgressEstablished,
+    semanticProgressEstablished: () =>
+      semanticProgressEstablished || Boolean(input.executorInput.activeWorkStreamBinding?.()),
     currentSemanticWorkBlock: () => currentSemanticWorkBlock,
   };
 }

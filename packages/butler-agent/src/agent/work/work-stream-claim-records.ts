@@ -18,7 +18,7 @@ export function workStreamContractBindingError(input: {
   if (input.contract.target_workstream_id !== input.workstreamId || input.record.id !== input.workstreamId) {
     return "workstream_contract_target_mismatch";
   }
-  if (!input.record.project_id || input.contract.target_project_id !== input.record.project_id) {
+  if ((input.contract.target_project_id ?? null) !== (input.record.project_id ?? null)) {
     return "workstream_contract_project_mismatch";
   }
   return null;
@@ -44,10 +44,11 @@ export function claimedWorkStreamRecord(record: WorkStreamRecord, input: {
 
 export function workStreamProvenanceError(
   record: WorkStreamRecord,
-  input: { sessionId: string; chatId: string; projectId: string },
+  input: { sessionId: string; chatId: string; projectId: string | null },
 ): string | null {
-  if (!record.owner_session_id || !record.origin_chat_id || !record.project_id) return "workstream_provenance_missing";
-  return record.owner_session_id === input.sessionId && record.origin_chat_id === input.chatId && record.project_id === input.projectId
+  if (!record.owner_session_id || !record.origin_chat_id) return "workstream_provenance_missing";
+  return record.owner_session_id === input.sessionId && record.origin_chat_id === input.chatId &&
+      (record.project_id ?? null) === input.projectId
     ? null
     : "workstream_scope_mismatch";
 }

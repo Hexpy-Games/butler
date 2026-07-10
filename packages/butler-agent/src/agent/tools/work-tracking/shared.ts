@@ -2,6 +2,12 @@ import { performWorkControl } from "../../work/work-dashboard.ts";
 import { type TodoItemInput, type TodoPhase, type TodoPriority, type TodoStatus, TodoListStore } from "../../work/todo-list.ts";
 import { type WorkStreamState, WorkStreamStore } from "../../work/work-stream.ts";
 import { RUNTIME_SEMANTIC_TODO_LIST_ID } from "../../turn/direct-work-continuation.ts";
+import {
+  amendBoundWorkStreamPlan,
+  assertBoundWorkStreamId,
+  boundTodoListId,
+  type ActiveWorkStreamBinding,
+} from "./workstream-authority.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 
@@ -21,11 +27,29 @@ export function createWorkTrackingToolHandlers(input: {
   turnId?: string;
   todoListStore: TodoListStore;
   workStreamStore: WorkStreamStore;
+  activeWorkStreamBinding?: () => ActiveWorkStreamBinding | null;
 }) {
   return {
     "update_todo_list": async (call: ToolCall) => {
       const items = todoInputs(call.args.todos);
       const listId = resolvedTodoListId(call.args.list_id, input, items);
+      const boundPlan = amendBoundWorkStreamPlan({
+        ...input,
+        items,
+        title: typeof call.args.title === "string" ? call.args.title : undefined,
+      });
+      if (boundPlan) {
+        return {
+          ok: true,
+          list_id: boundPlan.view.list.list_id,
+          title: boundPlan.view.list.title,
+          items: boundPlan.view.items,
+          progress: boundPlan.view.progress,
+          work_stream: boundPlan.workStream,
+          plan_amendment_receipt: boundPlan.receipt,
+          replayed: boundPlan.replayed,
+        };
+      }
       const completedReplay = completedSameTurnWorkStreamForList({
         workStreamStore: input.workStreamStore,
         sessionId: input.sessionId,
@@ -106,9 +130,10 @@ export function createWorkTrackingToolHandlers(input: {
       const requestedId = typeof call.args.work_stream_id === "string" && call.args.work_stream_id.trim()
         ? call.args.work_stream_id.trim()
         : undefined;
-      const active = requestedId
+      const bound = assertBoundWorkStreamId(requestedId, input);
+      const active = bound ?? (requestedId
         ? input.workStreamStore.read(requestedId)
-        : input.workStreamStore.activeForSession(input.sessionId, { currentTurnId: input.turnId });
+        : input.workStreamStore.activeForSession(input.sessionId, { currentTurnId: input.turnId }));
       if (!active) {
         throw new Error("update_work_stream_state requires an active current-turn work stream or explicit work_stream_id");
       }
@@ -181,15 +206,19 @@ function stringArray(value: unknown): string[] {
 function resolvedTodoListId(
   rawListId: unknown,
   input: {
+    butlerData: string;
     sessionId?: string;
     originChatId?: string;
     projectId?: string;
     turnId?: string;
     todoListStore: TodoListStore;
     workStreamStore: WorkStreamStore;
+    activeWorkStreamBinding?: () => ActiveWorkStreamBinding | null;
   },
   requestedItems?: TodoItemInput[],
 ): string {
+  const boundListId = boundTodoListId(rawListId, input);
+  if (boundListId) return boundListId;
   const explicitListId = explicitTodoListId(rawListId);
   const continuation = input.workStreamStore.latestResumableForSession(input.sessionId, {
     originChatId: input.originChatId,
