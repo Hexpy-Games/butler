@@ -2,6 +2,7 @@ import { test, expect } from "bun:test";
 import {
   listModelMetadata,
   modelSupportsJsonSchemaResponseFormat,
+  modelStructuredDecisionTransport,
   resolveModelMetadata,
   type ModelProviderId,
   type ProviderModelMetadata,
@@ -52,8 +53,12 @@ test("namespaced hosted model metadata resolves duplicate model ids by provider"
 
 test("structured output capability follows the provider call shape", () => {
   expect(modelSupportsJsonSchemaResponseFormat("openai/gpt-5.5")).toBe(true);
-  expect(modelSupportsJsonSchemaResponseFormat("zai/glm-5.2")).toBe(true);
+  expect(modelSupportsJsonSchemaResponseFormat("zai/glm-5.2")).toBe(false);
   expect(modelSupportsJsonSchemaResponseFormat("anthropic/claude-opus-4-6")).toBe(false);
   expect(modelSupportsJsonSchemaResponseFormat("google/gemini-3.1-pro-preview")).toBe(false);
-  expect(modelSupportsJsonSchemaResponseFormat("opencode-go/glm-5.2")).toBe(true);
+  expect(modelSupportsJsonSchemaResponseFormat("opencode-go/glm-5.2")).toBe(false);
+  expect(modelStructuredDecisionTransport("openai/gpt-5.5")).toBe("json_schema");
+  expect(modelStructuredDecisionTransport("zai/glm-5.2")).toBe("function_tool");
+  expect(modelStructuredDecisionTransport("anthropic/claude-opus-4-6")).toBe("function_tool");
+  expect(modelStructuredDecisionTransport("google/gemini-3.1-pro-preview")).toBe("function_tool");
 });

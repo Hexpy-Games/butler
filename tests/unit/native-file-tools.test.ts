@@ -215,5 +215,29 @@ describe("grep_files", () => {
     await mkdir(join(root, "src")); await writeFile(join(root, "src/a.ts"), "before\nneedle\nafter\n"); await writeFile(join(root, "src/a.md"), "needle\n");
     const res = await executeGrepFilesTool(call({ workspace_root: root, pattern: "NEEDLE", case_sensitive: false, include_globs:["src/*.ts"], exclude_globs:["**/*.md"], context_lines:1, max_matches:1 })) as any;
     expect(res.ok).toBe(true); expect(res.matches).toHaveLength(1); expect(res.matches[0].context).toHaveLength(3); expect(res.truncated).toBe(true); expect(res.evidence_receipts[0].producer.name).toBe("grep_files");
+    expect(res.evidence_receipts[0].satisfies).toEqual([]);
+    expect(res.evidence_capability_receipts[0]).toMatchObject({
+      capability: "source_candidate",
+      verified: false,
+    });
+    expect(res.evidence_capability_receipts[0].satisfies).toBeUndefined();
+  });
+
+  test("supports recursive slash-free globs and standard brace expansion", async () => {
+    await mkdir(join(root, "src", "nested"), { recursive: true });
+    await writeFile(join(root, "src", "a.ts"), "prompt_cache_key\n");
+    await writeFile(join(root, "src", "nested", "b.js"), "prompt_cache_key\n");
+    await writeFile(join(root, "src", "nested", "c.md"), "prompt_cache_key\n");
+
+    const res = await executeGrepFilesTool(call({
+      workspace_root: root,
+      pattern: "prompt_cache_key",
+      include_globs: ["*.{ts,js}"],
+    })) as any;
+
+    expect(res.matches.map((match: { path: string }) => match.path)).toEqual([
+      "src/a.ts",
+      "src/nested/b.js",
+    ]);
   });
 });

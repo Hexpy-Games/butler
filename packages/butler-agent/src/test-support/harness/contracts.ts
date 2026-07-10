@@ -32,6 +32,7 @@ export interface ProviderCapabilities {
   supportsPromptCaching: boolean;
   supportsSameTurnToolSchemaPromotion?: boolean;
   supportsStructuredOutputs?: boolean;
+  structuredDecisionTransport?: "json_schema" | "function_tool";
 }
 
 export interface PromptCacheHint {

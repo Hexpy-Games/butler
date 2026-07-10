@@ -91,7 +91,28 @@ export function fileToolCapabilityReceipt(input: {
     return receipts;
   }
 
-  if ((input.toolName === "read_file" || input.toolName === "grep_files") && input.ok) {
+  if (input.toolName === "grep_files" && input.ok) {
+    const truncated = Boolean(input.truncated);
+    return [createEvidenceCapabilityReceipt({
+      producer: { kind: "tool", name: input.toolName },
+      capability: "source_candidate",
+      evidence_kind: "source_candidate",
+      maturity: "candidate",
+      verified: false,
+      confidence: truncated ? 0.35 : 0.5,
+      summary: "Workspace search returned candidate file matches for later verification.",
+      scope: {
+        tool: input.toolName,
+        truncated,
+        files_searched: typeof input.filesSearched === "number" ? input.filesSearched : undefined,
+        files_skipped: typeof input.filesSkipped === "number" ? input.filesSkipped : undefined,
+        match_count: Array.isArray(input.matches) ? input.matches.length : undefined,
+      },
+      limitations: ["Search candidate discovery is not source verification."],
+    })];
+  }
+
+  if (input.toolName === "read_file" && input.ok) {
     const path = safeWorkspacePath(input.path);
     const truncated = Boolean(input.truncated);
     return [createEvidenceCapabilityReceipt({

@@ -13,9 +13,11 @@ import {
 } from "./turn-contract-runtime.ts";
 import {
   compileStructuredTurnDecision,
+  canonicalFunctionDecisionArgs,
   parseStructuredTurnDecision,
   stableTurnDecisionId,
   structuredDecisionRepairPrompt,
+  structuredDecisionRepairGuidance,
   TURN_DECISION_REPAIR_LIMIT,
   turnContractCandidates,
   turnDecisionResponseFormat,
@@ -41,6 +43,7 @@ interface TypedTurnEntryContext {
 }
 
 type StructuredResponseFormat = ReturnType<typeof turnDecisionResponseFormat>;
+type StructuredDecisionTransport = "json_schema" | "function_tool";
 
 export async function runTypedTurnEntry(input: {
   turnInput: RuntimeTurnInput;
@@ -56,6 +59,20 @@ export async function runTypedTurnEntry(input: {
     phase: string,
     sections: PromptUsageSectionAttribution[],
     responseFormat: StructuredResponseFormat,
+  ) => Promise<string>;
+  runPrivateFunctionDecisionPrompt: (
+    prompt: string,
+    phase: string,
+    sections: PromptUsageSectionAttribution[],
+    responseFormat: StructuredResponseFormat,
+    validateDecision: (args: Record<string, unknown>) =>
+      | { ok: true; canonicalArgs: Record<string, unknown> }
+      | {
+        ok: false;
+        errorCode: string;
+        correction: string;
+        canonicalArgs: Record<string, unknown>;
+      },
   ) => Promise<string>;
   runKernelToolPrompt: (
     prompt: string,
@@ -103,41 +120,81 @@ export async function runTypedTurnEntry(input: {
       ?.map((candidate) => candidate.waiting_user_blocker_id)
       .filter((id): id is string => Boolean(id)) ?? [],
   });
+  const decisionTransport: StructuredDecisionTransport =
+    input.turnInput.provider.capabilities.structuredDecisionTransport ?? "json_schema";
   let currentPrompt = decisionPrompt.prompt;
   let active: ActiveTurnContract | null = null;
   let lastError: unknown = null;
-  for (let attempt = 0; attempt <= TURN_DECISION_REPAIR_LIMIT; attempt += 1) {
+  const repairLimit = decisionTransport === "function_tool" ? 0 : TURN_DECISION_REPAIR_LIMIT;
+  const validateFunctionDecision = (args: Record<string, unknown>) => {
+    const canonicalArgs = canonicalFunctionDecisionArgs(args);
     try {
-      const raw = await input.runPrivateTextPrompt(
-        currentPrompt,
-        attempt === 0 ? "typed_turn_decision" : "typed_turn_decision_repair",
-        decisionPrompt.promptSections,
-        responseFormat,
-      );
-      const decision = parseStructuredTurnDecision(raw, decisionId);
-      const contract = compileStructuredTurnDecision({
+      const decision = parseStructuredTurnDecision(JSON.stringify(canonicalArgs), decisionId);
+      compileStructuredTurnDecision({
         decision,
         candidates,
         workspaceId: input.projectId ?? input.turnInput.handle.sessionId,
         projectId: input.projectId,
       });
-      active = activateTurnContract({
-        butlerData: input.butlerData,
-        contract,
+      return { ok: true, canonicalArgs } as const;
+    } catch (error) {
+      const errorCode = error instanceof Error ? error.message : "turn_contract_decision_invalid";
+      return {
+        ok: false,
+        errorCode,
+        correction: structuredDecisionRepairGuidance(errorCode),
+        canonicalArgs,
+      } as const;
+    }
+  };
+  for (let attempt = 0; attempt <= repairLimit; attempt += 1) {
+    const phase = attempt === 0 ? "typed_turn_decision" : "typed_turn_decision_repair";
+    const raw = decisionTransport === "function_tool"
+      ? await input.runPrivateFunctionDecisionPrompt(
+        currentPrompt,
+        phase,
+        decisionPrompt.promptSections,
+        responseFormat,
+        validateFunctionDecision,
+      )
+      : await input.runPrivateTextPrompt(
+        currentPrompt,
+        phase,
+        decisionPrompt.promptSections,
+        responseFormat,
+      );
+    let decision: ReturnType<typeof parseStructuredTurnDecision>;
+    let contract: ReturnType<typeof compileStructuredTurnDecision>;
+    try {
+      decision = parseStructuredTurnDecision(raw, decisionId);
+      contract = compileStructuredTurnDecision({
         decision,
-        sessionId: input.turnInput.handle.sessionId,
-        chatId: input.context.chatId,
+        candidates,
+        workspaceId: input.projectId ?? input.turnInput.handle.sessionId,
         projectId: input.projectId,
-        turnId: input.context.turnId,
-        turnMetadata: input.turnInput.metadata,
-        toolSurfaceController: input.context.toolSurfaceController,
       });
-      break;
     } catch (error) {
       lastError = error;
-      if (attempt >= TURN_DECISION_REPAIR_LIMIT) throw error;
-      currentPrompt = structuredDecisionRepairPrompt({ prompt: decisionPrompt.prompt, error });
+      if (attempt >= repairLimit) throw error;
+      currentPrompt = structuredDecisionRepairPrompt({
+        prompt: decisionPrompt.prompt,
+        error,
+        transport: decisionTransport,
+      });
+      continue;
     }
+    active = activateTurnContract({
+      butlerData: input.butlerData,
+      contract,
+      decision,
+      sessionId: input.turnInput.handle.sessionId,
+      chatId: input.context.chatId,
+      projectId: input.projectId,
+      turnId: input.context.turnId,
+      turnMetadata: input.turnInput.metadata,
+      toolSurfaceController: input.context.toolSurfaceController,
+    });
+    break;
   }
   if (!active) throw lastError ?? new Error("turn_contract_decision_unavailable");
   input.turnContractContext.current = active;

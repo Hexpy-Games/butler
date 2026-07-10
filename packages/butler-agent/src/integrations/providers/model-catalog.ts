@@ -18,12 +18,15 @@ export type ModelProviderId =
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 export type ProviderAuthMethod = "api_key" | "codex_oauth";
 export type HostedProviderApiShape = "openai_chat_completions" | "anthropic_messages";
-const OPENAI_COMPATIBLE_STRUCTURED_OUTPUT_PROVIDERS = new Set<string>([
-  "openai",
+export type StructuredDecisionTransport = "json_schema" | "function_tool";
+const FUNCTION_TOOL_DECISION_PROVIDERS = new Set<string>([
+  "anthropic",
+  "google",
   "xai",
   "qwen",
   "kimi",
   "zai",
+  "opencode-go",
 ]);
 export type TokenEstimatorKind =
   | "provider_usage"
@@ -247,10 +250,16 @@ export function resolveModelMetadata(
 
 export function modelSupportsJsonSchemaResponseFormat(modelRef?: string | null): boolean {
   const parsed = parseModelRef(modelRef?.trim() || DEFAULT_MODEL_REF);
-  if (OPENAI_COMPATIBLE_STRUCTURED_OUTPUT_PROVIDERS.has(parsed.providerId)) return true;
-  const metadata = resolveModelMetadata(modelRef);
-  return metadata.provider_id === parsed.providerId &&
-    metadata.hosted_api_shape === "openai_chat_completions";
+  return parsed.providerId === "openai";
+}
+
+export function modelStructuredDecisionTransport(
+  modelRef?: string | null,
+): StructuredDecisionTransport | null {
+  const parsed = parseModelRef(modelRef?.trim() || DEFAULT_MODEL_REF);
+  if (modelSupportsJsonSchemaResponseFormat(modelRef)) return "json_schema";
+  if (FUNCTION_TOOL_DECISION_PROVIDERS.has(parsed.providerId)) return "function_tool";
+  return null;
 }
 
 export function resolveRuntimeModelMetadata(

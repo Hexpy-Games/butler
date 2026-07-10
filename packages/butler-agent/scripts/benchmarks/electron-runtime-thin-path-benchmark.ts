@@ -19,7 +19,7 @@ import {
   runPromptText,
   type FunctionToolPromptOptions,
 } from "../../src/integrations/providers/provider.ts";
-import { modelSupportsJsonSchemaResponseFormat } from "../../src/integrations/providers/model-catalog.ts";
+import { modelStructuredDecisionTransport } from "../../src/integrations/providers/model-catalog.ts";
 import { readPromptCacheMetrics } from "../../src/integrations/providers/prompt-cache-metrics.ts";
 import { readOperationalMetricEvents } from "../../src/operations/metrics/operational-metrics.ts";
 import { loadPrivateEnvIntoProcess } from "../../src/interfaces/cli/private-env.ts";
@@ -36,6 +36,9 @@ interface BenchPrompt {
 }
 
 interface FetchMetric {
+  requestKind: "structured_decision_json" | "structured_decision_function" | "tool_loop" | "text";
+  promptCacheKeyPresent: boolean;
+  promptCacheRetention: string | null;
   status: number;
   durationMs: number;
   requestBytes: number;
@@ -58,6 +61,12 @@ interface PromptMetric {
   firstMeaningfulMs: number | null;
   textPromptCalls: number;
   toolPromptCalls: number;
+  privateDecisionToolCalls: number;
+  privateDecisionSubmissions: Array<{
+    action: string | null;
+    deliverables: string[];
+    hasAnswerText: boolean;
+  }>;
   toolCalls: number;
   toolNames: Record<string, number>;
   httpRequests: number;
@@ -73,6 +82,12 @@ interface PromptMetric {
   assistantFinalCountBefore: number;
   assistantFinalCountAfter: number;
   screenshot: string | null;
+  mobileScreenshot: string | null;
+  workBlockSignatures: string[];
+  replayWorkBlockSignatures: string[];
+  replayWorkBlocksStable: boolean;
+  mobileWorkBlocksStable: boolean;
+  mobileHorizontalOverflow: boolean;
   fetches: FetchMetric[];
 }
 
@@ -113,6 +128,15 @@ const BENCH_PROMPTS: BenchPrompt[] = [
     ].join("\n"),
   },
 ];
+const requestedPromptIds = new Set(
+  (process.env.BUTLER_THIN_PATH_BENCH_PROMPT_IDS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+);
+const selectedBenchPrompts = requestedPromptIds.size === 0
+  ? BENCH_PROMPTS
+  : BENCH_PROMPTS.filter((prompt) => requestedPromptIds.has(prompt.id));
 
 const root = resolve(process.env.BUTLER_HOME || process.cwd());
 const electronBin = resolve(
@@ -168,6 +192,7 @@ const meaningfulProgressSelector = [
 const FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
 
 let activeMetric: PromptMetric | null = null;
+const structuredDecisionTransport = modelStructuredDecisionTransport(model);
 
 const provider: ModelProviderAdapter = {
   id: model.includes("/") ? model.split("/", 1)[0]! : "zai",
@@ -179,7 +204,10 @@ const provider: ModelProviderAdapter = {
     supportsServerThreads: false,
     supportsReasoningConfig: true,
     supportsPromptCaching: true,
-    supportsStructuredOutputs: modelSupportsJsonSchemaResponseFormat(model),
+    supportsStructuredOutputs: structuredDecisionTransport !== null,
+    ...(structuredDecisionTransport
+      ? { structuredDecisionTransport }
+      : {}),
   },
   async invoke() {
     return { text: "unused" };
@@ -189,6 +217,7 @@ const provider: ModelProviderAdapter = {
 try {
   assert(existsSync(electronBin), "Electron binary is missing; run npm --prefix packages/butler-app/client/electron install first.");
   assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; run npm --prefix packages/butler-app/client/ui run build first.");
+  assert(selectedBenchPrompts.length > 0, "No benchmark prompt matched BUTLER_THIN_PATH_BENCH_PROMPT_IDS.");
   loadPrivateEnvIntoProcess(sourceButlerData);
   process.env.BUTLER_HOME = root;
   process.env.BUTLER_RUNTIME ||= "codex-api";
@@ -197,7 +226,7 @@ try {
   installFetchRecorder();
 
   const results: PromptMetric[] = [];
-  for (const prompt of BENCH_PROMPTS) {
+  for (const prompt of selectedBenchPrompts) {
     console.error(`[bench:${label}] prompt ${prompt.id} start`);
     results.push(await runElectronPrompt(prompt));
     const latest = results.at(-1)!;
@@ -245,6 +274,8 @@ async function runElectronPrompt(prompt: BenchPrompt): Promise<PromptMetric> {
     firstMeaningfulMs: null,
     textPromptCalls: 0,
     toolPromptCalls: 0,
+    privateDecisionToolCalls: 0,
+    privateDecisionSubmissions: [],
     toolCalls: 0,
     toolNames: {},
     httpRequests: 0,
@@ -260,6 +291,12 @@ async function runElectronPrompt(prompt: BenchPrompt): Promise<PromptMetric> {
     assistantFinalCountBefore: 0,
     assistantFinalCountAfter: 0,
     screenshot: null,
+    mobileScreenshot: null,
+    workBlockSignatures: [],
+    replayWorkBlockSignatures: [],
+    replayWorkBlocksStable: true,
+    mobileWorkBlocksStable: true,
+    mobileHorizontalOverflow: false,
     fetches: [],
   };
 
@@ -278,7 +315,17 @@ async function runElectronPrompt(prompt: BenchPrompt): Promise<PromptMetric> {
       return await runFunctionToolPromptText({
         ...options,
         executeTool: async (call) => {
-          metric.toolCalls += 1;
+          if (call.name === "submit_turn_decision") metric.privateDecisionToolCalls += 1;
+          else metric.toolCalls += 1;
+          if (call.name === "submit_turn_decision") {
+            metric.privateDecisionSubmissions.push({
+              action: typeof call.args.action === "string" ? call.args.action : null,
+              deliverables: Array.isArray(call.args.deliverables)
+                ? call.args.deliverables.filter((value): value is string => typeof value === "string")
+                : [],
+              hasAnswerText: typeof call.args.answer_text === "string" && call.args.answer_text.trim().length > 0,
+            });
+          }
           metric.toolNames[call.name] = (metric.toolNames[call.name] || 0) + 1;
           return await options.executeTool(call);
         },
@@ -360,6 +407,39 @@ async function runElectronPrompt(prompt: BenchPrompt): Promise<PromptMetric> {
     if (existsSync(screenshotPath) && statSync(screenshotPath).size > 0) {
       metric.screenshot = screenshotPath;
     }
+    if (prompt.kind === "tool-required") {
+      metric.workBlockSignatures = await workBlockSignatures(cdp);
+      const replaySession = server.store.listSessions({ kind: "chat" }).sessions.at(0);
+      assert(replaySession, "benchmark session missing before replay");
+      await reloadForReplay(cdp, replaySession.title, metric.workBlockSignatures.length);
+      metric.replayWorkBlockSignatures = await workBlockSignatures(cdp);
+      metric.replayWorkBlocksStable = arraysEqual(
+        metric.workBlockSignatures,
+        metric.replayWorkBlockSignatures,
+      );
+      await cdp.send("Emulation.setDeviceMetricsOverride", {
+        width: 390,
+        height: 844,
+        deviceScaleFactor: 1,
+        mobile: true,
+      });
+      await delay(300);
+      const mobileSignatures = await workBlockSignatures(cdp);
+      metric.mobileWorkBlocksStable = arraysEqual(
+        metric.replayWorkBlockSignatures,
+        mobileSignatures,
+      );
+      metric.mobileHorizontalOverflow = await evaluateValue<boolean>(
+        cdp,
+        "document.documentElement.scrollWidth > window.innerWidth + 1",
+      ) === true;
+      const mobileScreenshotPath = join(screenshotDir, `${runId}-${prompt.id}-mobile.png`);
+      await captureScreenshot(cdp, mobileScreenshotPath);
+      if (existsSync(mobileScreenshotPath) && statSync(mobileScreenshotPath).size > 0) {
+        metric.mobileScreenshot = mobileScreenshotPath;
+      }
+      await cdp.send("Emulation.clearDeviceMetricsOverride");
+    }
     metric.ok = true;
     return metric;
   } catch (error) {
@@ -395,7 +475,8 @@ function installFetchRecorder(): void {
     const response = await originalFetch(input, init);
     if (recordProvider && activeMetric) {
       const durationMs = Math.round(performance.now() - started);
-      console.error(`[bench:${label}:${activeMetric.id}] provider fetch done status=${response.status} durationMs=${durationMs}`);
+      const requestKind = providerRequestKind(parsedBody);
+      console.error(`[bench:${label}:${activeMetric.id}] provider fetch done kind=${requestKind} status=${response.status} durationMs=${durationMs}`);
       const parsedResponse = await response.clone().text().then(safeJson).catch(() => null);
       const usage = parsedResponse && typeof parsedResponse === "object" && !Array.isArray(parsedResponse)
         ? (parsedResponse as Record<string, any>).usage
@@ -406,6 +487,11 @@ function installFetchRecorder(): void {
       const toolCount = Array.isArray((parsedBody as any)?.tools) ? (parsedBody as any).tools.length : 0;
       const messageCount = Array.isArray((parsedBody as any)?.messages) ? (parsedBody as any).messages.length : 0;
       activeMetric.fetches.push({
+        requestKind,
+        promptCacheKeyPresent: typeof (parsedBody as any)?.prompt_cache_key === "string",
+        promptCacheRetention: typeof (parsedBody as any)?.prompt_cache_retention === "string"
+          ? (parsedBody as any).prompt_cache_retention
+          : null,
         status: response.status,
         durationMs,
         requestBytes: bodyText.length,
@@ -589,6 +675,71 @@ async function lastAssistantFinalText(client: CdpClient): Promise<string> {
     returnByValue: true,
   });
   return typeof result.result?.value === "string" ? result.result.value : "";
+}
+
+async function workBlockSignatures(client: CdpClient): Promise<string[]> {
+  await expandCompletedWorkBlocks(client);
+  return await evaluateValue<string[]>(client, `(() => {
+    return Array.from(document.querySelectorAll("[data-work-block-id]")).map((element) => {
+      const id = element.getAttribute("data-work-block-id") ?? "";
+      const header = element.querySelector('[data-test-class~="turn-work-block-header"]')?.textContent?.trim() ?? "";
+      const toolRows = element.querySelectorAll('[data-test-class~="turn-work-tool-row"]').length;
+      return [id, header, String(toolRows)].join("|");
+    });
+  })()`) ?? [];
+}
+
+async function expandCompletedWorkBlocks(client: CdpClient): Promise<void> {
+  const expanded = await evaluateValue<number>(client, `(() => {
+    let clicked = 0;
+    for (const section of document.querySelectorAll('[data-test-class~="turn-work-collapsed"]')) {
+      if (section.querySelector('[data-work-block-id]')) continue;
+      const button = section.querySelector('button');
+      if (!(button instanceof HTMLButtonElement)) continue;
+      button.click();
+      clicked += 1;
+    }
+    return clicked;
+  })()`);
+  if (expanded) await delay(100);
+}
+
+async function reloadForReplay(
+  client: CdpClient,
+  sessionTitle: string,
+  expectedWorkBlocks: number,
+): Promise<void> {
+  await client.send("Runtime.evaluate", { expression: "location.reload(); true", returnByValue: true });
+  await waitForVisible(client, composerTextareaSelector, "composer textarea after replay", 30_000);
+  await waitForExpression(
+    client,
+    "Array.from(document.querySelectorAll(\".chat-row\")).some((row) => " +
+      `row.getAttribute("title") === ${JSON.stringify(sessionTitle)})`,
+    "benchmark session in navigation after replay",
+    30_000,
+  );
+  await evaluateBoolean(client, `(() => {
+    const row = Array.from(document.querySelectorAll(".chat-row")).find((candidate) =>
+      candidate.getAttribute("title") === ${JSON.stringify(sessionTitle)}
+    );
+    if (!(row instanceof HTMLElement)) return false;
+    row.click();
+    return true;
+  })()`);
+  await waitForExpression(
+    client,
+    `document.querySelectorAll(${JSON.stringify(assistantFinalMarkdownSelector)}).length > 0`,
+    "assistant final restored after replay",
+    30_000,
+  );
+  if (expectedWorkBlocks <= 0) return;
+  await waitForExpression(
+    client,
+    `document.querySelectorAll("[data-work-block-id]").length >= ${expectedWorkBlocks} || ` +
+      "document.querySelectorAll(\"[data-test-class~='turn-work-collapsed']\").length > 0",
+    "work block history restored after replay",
+    30_000,
+  );
 }
 
 async function waitForVisible(client: CdpClient, selector: string, label: string, timeoutMs = 20_000): Promise<void> {
@@ -783,13 +934,51 @@ function summarize(results: PromptMetric[]) {
     totalFirstMeaningfulMs: results.reduce((sum, result) => sum + (result.firstMeaningfulMs ?? 0), 0),
     totalHttpRequests: results.reduce((sum, result) => sum + result.httpRequests, 0),
     totalToolCalls: results.reduce((sum, result) => sum + result.toolCalls, 0),
+    totalPrivateDecisionToolCalls: results.reduce(
+      (sum, result) => sum + result.privateDecisionToolCalls,
+      0,
+    ),
     totalRequestBytes: results.reduce((sum, result) => sum + result.requestBytes, 0),
     noToolWallMs: noTool.reduce((sum, result) => sum + result.wallMs, 0),
     noToolHttpRequests: noTool.reduce((sum, result) => sum + result.httpRequests, 0),
     noToolToolCalls: noTool.reduce((sum, result) => sum + result.toolCalls, 0),
+    noToolPrivateDecisionToolCalls: noTool.reduce(
+      (sum, result) => sum + result.privateDecisionToolCalls,
+      0,
+    ),
     noToolRequestBytes: noTool.reduce((sum, result) => sum + result.requestBytes, 0),
     maxToolSchemaCount: Math.max(0, ...results.map((result) => result.maxToolSchemaCount)),
   };
+}
+
+function providerRequestKind(
+  body: unknown,
+): FetchMetric["requestKind"] {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return "text";
+  const record = body as Record<string, unknown>;
+  if (record.response_format) return "structured_decision_json";
+  const textConfig = record.text;
+  if (textConfig && typeof textConfig === "object" && !Array.isArray(textConfig)) {
+    const format = (textConfig as Record<string, unknown>).format;
+    if (
+      format && typeof format === "object" && !Array.isArray(format) &&
+      (format as Record<string, unknown>).type === "json_schema"
+    ) return "structured_decision_json";
+  }
+  const tools = Array.isArray(record.tools) ? record.tools : [];
+  const toolNames = tools.flatMap((tool) => {
+    if (!tool || typeof tool !== "object" || Array.isArray(tool)) return [];
+    const entry = tool as Record<string, unknown>;
+    if (typeof entry.name === "string") return [entry.name];
+    const fn = entry.function;
+    if (!fn || typeof fn !== "object" || Array.isArray(fn)) return [];
+    const name = (fn as Record<string, unknown>).name;
+    return typeof name === "string" ? [name] : [];
+  });
+  if (toolNames.length === 1 && toolNames[0] === "submit_turn_decision") {
+    return "structured_decision_function";
+  }
+  return tools.length > 0 ? "tool_loop" : "text";
 }
 
 function safeJson(text: string): unknown {
@@ -808,6 +997,10 @@ function numberOrNull(value: unknown): number | null {
 function sumNullable(left: number | null, right: number | null): number | null {
   if (right === null) return left;
   return (left ?? 0) + right;
+}
+
+function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function positiveInteger(value: string | undefined, fallback: number): number {

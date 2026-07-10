@@ -19,6 +19,9 @@ import {
 const EXECUTION_DELIVERABLES = new Set<TurnDeliverable>([
   "ledger_spec", "ledger_work", "ledger_tasks", "code_change", "validation", "review",
 ]);
+const START_WORK_EXECUTION_DELIVERABLES = new Set<TurnDeliverable>([
+  "ledger_spec", "ledger_work", "ledger_tasks", "code_change", "validation",
+]);
 type NormalizedEvidenceSeed = Omit<RequiredEvidenceObligation, "obligation_id">;
 
 export const TURN_ACTION_DELIVERABLE_MATRIX: Record<TurnContractAction, {
@@ -115,10 +118,18 @@ function validateActionMatrix(decision: TurnContractDecision): void {
   const matrix = TURN_ACTION_DELIVERABLE_MATRIX[decision.action];
   if (decision.deliverables.some((value) => !matrix.allowed.includes(value))) throw new Error("turn_contract_deliverable_not_allowed");
   if (matrix.required.some((value) => !decision.deliverables.includes(value))) throw new Error("turn_contract_required_deliverable_missing");
-  if (matrix.requiresDurableExecution && !decision.deliverables.some((value) => EXECUTION_DELIVERABLES.has(value)) && decision.action === "start_work") {
+  if (
+    matrix.requiresDurableExecution &&
+    !decision.deliverables.some((value) => START_WORK_EXECUTION_DELIVERABLES.has(value)) &&
+    decision.action === "start_work"
+  ) {
     throw new Error("turn_contract_execution_requires_durable_deliverable");
   }
-  if (decision.deliverables.includes("final_report") && !decision.deliverables.some((value) => EXECUTION_DELIVERABLES.has(value)) && decision.action === "start_work") {
+  if (
+    decision.deliverables.includes("final_report") &&
+    !decision.deliverables.some((value) => START_WORK_EXECUTION_DELIVERABLES.has(value)) &&
+    decision.action === "start_work"
+  ) {
     throw new Error("turn_contract_final_report_requires_durable_deliverable");
   }
 }

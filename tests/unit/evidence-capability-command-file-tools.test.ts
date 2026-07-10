@@ -252,11 +252,12 @@ describe("file tool evidence capability receipts", () => {
     const receipts = (result as Record<string, unknown>).evidence_capability_receipts as unknown[];
 
     expect(receipts[0]).toMatchObject({
-      capability: "source_verified",
-      evidence_kind: "workspace_inspection",
-      verified: true,
+      capability: "source_candidate",
+      evidence_kind: "source_candidate",
+      maturity: "candidate",
+      verified: false,
       scope: { truncated: true, match_count: 1 },
-      limitations: ["Result was bounded and may be partial."],
+      limitations: ["Search candidate discovery is not source verification."],
     });
     expect(JSON.stringify(receipts)).not.toContain("needle");
   });

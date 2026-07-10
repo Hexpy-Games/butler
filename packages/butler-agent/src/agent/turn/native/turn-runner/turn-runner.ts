@@ -125,7 +125,12 @@ export async function runNativeToolTurn({
     });
     const turnContractContext: { current: ActiveTurnContract | null } = { current: null };
     turnKernel.transitionTo("model_deciding");
-    const { runToolPrompt, runTextPrompt, runPrivateTextPrompt } = createNativeTurnPromptRunners({
+    const {
+      runToolPrompt,
+      runTextPrompt,
+      runPrivateTextPrompt,
+      runPrivateFunctionDecisionPrompt,
+    } = createNativeTurnPromptRunners({
       turnInput: input,
       session,
       deps,
@@ -189,6 +194,7 @@ export async function runNativeToolTurn({
         pendingPublicDecisions,
         turnContractContext,
         runPrivateTextPrompt,
+        runPrivateFunctionDecisionPrompt,
         runKernelToolPrompt,
       });
       candidateText = typedEntry.candidateText;
@@ -306,6 +312,8 @@ export async function runNativeToolTurn({
         });
       }
       candidateText = await runKernelToolPrompt(completionGapContinuationPrompt({
+        userText: context.userText,
+        activeTurnContract,
         observationSummary: deliveryOutcome.observation.summary,
         modelVisibleContent: deliveryOutcome.observation.modelVisibleContent,
       }), undefined, gapPhase);
@@ -508,14 +516,28 @@ async function persistSchedulerContinuation(input: {
 }
 
 function completionGapContinuationPrompt(input: {
+  userText: string;
+  activeTurnContract: ActiveTurnContract | null;
   observationSummary: string;
   modelVisibleContent: string;
 }): string {
+  const active = input.activeTurnContract;
   return [
     "The Turn Kernel recorded a model-visible observation for this same logical turn.",
     "Do not deliver final text yet. Continue the current work from the observation.",
+    `Current user request: ${input.userText}`,
+    ...(active
+      ? [
+        `Active contract: ${active.contract.contract_id}`,
+        `Action: ${active.contract.action}`,
+        `Required deliverables: ${active.contract.deliverables.join(", ") || "none"}`,
+        `Current objective: ${active.decision.public_summary}`,
+        `Prior next step: ${active.decision.immediate_next_step ?? "none"}`,
+      ]
+      : []),
     `Observation: ${input.observationSummary}`,
     input.modelVisibleContent,
+    "Author one fresh public decision for the next small objective before requesting more tools.",
   ].filter(Boolean).join("\n\n");
 }
 

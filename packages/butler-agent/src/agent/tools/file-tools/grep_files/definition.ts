@@ -3,7 +3,7 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const grepFilesToolDefinition: ButlerToolDefinition = {
   type: "function",
   name: "grep_files",
-  description: "Search bounded workspace text files with a required pattern, include/exclude globs, literal or regex matching, context, truncation metadata, and evidence receipts. For discovery, start scoped with context 0 and candidate-sized max_matches before reading files.",
+  description: "Search bounded workspace text files. Requires pattern; supports literal/regex, context, truncation, include/exclude globs, brace sets (*.{ts,js}), and recursive slash-free filename globs. Use one scoped pattern and candidate-sized max_matches, then read candidates.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -32,5 +32,5 @@ export const grepFilesToolMetadata: ToolCapabilityMetadata = {
   category: "file",
   tags: ["file", "grep", "search", "native"],
   safetyNotes: ["Searches only regular text files inside the workspace path guard."],
-  satisfiesCompletionObligations: ["source_verified"],
+  satisfiesCompletionObligations: [],
 };

@@ -531,6 +531,9 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       );
       const activeBinding = this.requireBinding();
       developerLogBinding = activeBinding;
+      const generatedSessionTitlePromise = schedulerContinuation
+        ? Promise.resolve(null)
+        : this.generateSessionTitleBestEffort(activeBinding, envelope, route);
       const handle = await this.ensureRuntimeHandle(activeBinding, timestamp);
       const emitIntermediate = this.options.deliverIntermediate
         ? async (
@@ -630,11 +633,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           turnId,
         });
       }
-      const generatedSessionTitle = await this.generateSessionTitleBestEffort(
-        activeBinding,
-        envelope,
-        route,
-      );
+      const generatedSessionTitle = await generatedSessionTitlePromise;
       const finalAction = finalResultAction({
         binding: activeBinding,
         envelope,
