@@ -1,7 +1,21 @@
-import { createHash, randomUUID } from "crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { createHash } from "crypto";
+import { existsSync, readFileSync, readdirSync } from "fs";
+import { join } from "path";
 import { TodoListStore, type TodoItem, type TodoItemInput, type TodoPhase, type TodoStatus } from "./todo-list.ts";
+import {
+  commitWorkStreamMutation,
+  type WorkStreamMutationOperation,
+  withWorkStreamMutationAuthority,
+} from "./work-stream-mutation-authority.ts";
+import {
+  deferredWorkStreamProjection,
+  hasDeferredWorkStreamRecovery,
+  reconcilePendingWorkStreamTransactions,
+} from "./work-stream-transaction-recovery.ts";
+import {
+  completeReportingWorkStreamForSessionWithAuthority,
+  type ReportingCompletionFault,
+} from "./work-stream-reporting-store.ts";
 
 export type WorkStreamState =
   | "routing"
@@ -54,6 +68,18 @@ export interface WorkStreamRecord {
   updated_at: string;
   last_user_turn_id: string | null;
   status_note: string | null;
+  /** Optional v1 additions; absent fields are normalized for historical records. */
+  record_generation?: number;
+  active_contract_id?: string | null;
+  claim_generation?: number | null;
+  claim_lease_expires_at?: string | null;
+  active_claim_receipt_id?: string | null;
+  original_claim_receipt_id?: string | null;
+  active_blocker_id?: string | null;
+  active_blocker_evidence_id?: string | null;
+  plan_revision?: number;
+  plan_revision_receipt_id?: string | null;
+  superseded_todo_ids?: string[];
 }
 
 export interface WorkStreamSummary {
@@ -144,13 +170,6 @@ function readJson<T>(path: string): T | null {
   }
 }
 
-function writeJsonAtomic(path: string, value: unknown): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  renameSync(tmp, path);
-}
-
 function safeId(value: string): string {
   const trimmed = value.trim();
   if (!/^[A-Za-z0-9._:-]{1,120}$/.test(trimmed)) {
@@ -235,24 +254,10 @@ export function completeReportingWorkStreamForSession(input: {
   sessionId: string;
   statusNote?: string | null;
   now?: Date;
+  faultAt?: ReportingCompletionFault;
 }): WorkStreamRecord | null {
-  const store = new WorkStreamStore(input.butlerData);
-  const record = store.activeForSession(input.sessionId);
-  if (record?.state !== "reporting") return null;
-  completeReportingTodoStep({
-    butlerData: input.butlerData,
-    listId: record.todo_list_id,
-    activeStepId: record.active_step_id,
-    statusNote: input.statusNote,
-    now: input.now,
-  });
-  return store.transition({
-    id: record.id,
-    state: "complete",
-    activeStepId: null,
-    statusNote: input.statusNote ?? "Final answer delivered.",
-    now: input.now,
-  });
+  reconcilePendingWorkStreamTransactions({ butlerData: input.butlerData });
+  return completeReportingWorkStreamForSessionWithAuthority(input);
 }
 
 export function completeTurnLocalWorkStreamForSession(input: {
@@ -307,7 +312,7 @@ function completeReportingTodoStep(input: {
   now?: Date;
 }): void {
   if (!input.listId) return;
-  const todoStore = new TodoListStore(input.butlerData);
+  const todoStore = new TodoListStore(input.butlerData, { autoRecover: false });
   const record = todoStore.read(input.listId);
   if (!record) return;
   let changed = false;
@@ -427,9 +432,12 @@ function uniqueAppend(existing: string[], values: string[] | undefined): string[
 
 export class WorkStreamStore {
   readonly dir: string;
+  private readonly autoRecover: boolean;
 
-  constructor(readonly butlerData: string) {
+  constructor(readonly butlerData: string, options: { autoRecover?: boolean } = {}) {
     this.dir = join(butlerData, "work-streams");
+    this.autoRecover = options.autoRecover !== false;
+    if (this.autoRecover) reconcilePendingWorkStreamTransactions({ butlerData });
   }
 
   pathFor(id: string): string {
@@ -437,15 +445,39 @@ export class WorkStreamStore {
   }
 
   read(id: string): WorkStreamRecord | null {
-    return readJson<WorkStreamRecord>(this.pathFor(id));
+    if (this.autoRecover) {
+      const recovery = reconcilePendingWorkStreamTransactions({ butlerData: this.butlerData, workstreamId: id });
+      const projection = deferredWorkStreamProjection(recovery, id);
+      if (projection) return normalizeContractFields(projection);
+    }
+    return this.readRaw(id);
+  }
+
+  private readRaw(id: string): WorkStreamRecord | null {
+    const record = readJson<WorkStreamRecord>(this.pathFor(id));
+    return record ? normalizeContractFields(record) : null;
   }
 
   private records(): WorkStreamRecord[] {
+    const recovery = this.autoRecover
+      ? reconcilePendingWorkStreamTransactions({ butlerData: this.butlerData })
+      : [];
+    const deferred = new Map<string, WorkStreamRecord>();
+    for (const result of recovery) {
+      if (result.status !== "deferred" || !result.projection) continue;
+      const record = result.projection.workstream;
+      const prior = deferred.get(record.id);
+      if (!prior || (record.record_generation ?? 1) < (prior.record_generation ?? 1)) {
+        deferred.set(record.id, record);
+      }
+    }
     if (!existsSync(this.dir)) return [];
     return readdirSync(this.dir)
       .filter((entry) => entry.endsWith(".json"))
       .map((entry) => readJson<WorkStreamRecord>(join(this.dir, entry)))
-      .filter((record): record is WorkStreamRecord => Boolean(record));
+      .filter((record): record is WorkStreamRecord => Boolean(record?.version === 1 && record.id))
+      .map((record) => deferred.get(record.id) ?? record)
+      .map(normalizeContractFields);
   }
 
   private activeForScope(input: {
@@ -531,7 +563,7 @@ export class WorkStreamStore {
     if (!sessionId) return [];
     const turnId = input.turnId?.trim();
     const now = input.now ?? new Date();
-    const todoStore = new TodoListStore(this.butlerData);
+    const todoStore = new TodoListStore(this.butlerData, { autoRecover: false });
     return this.records()
       .filter((record) => record.owner_session_id === sessionId)
       .filter((record) => !workStreamTerminal(record.state))
@@ -539,7 +571,10 @@ export class WorkStreamStore {
       .filter((record) => turnLocalOutcomeCanApply(record, input.outcome))
       .filter((record) => turnLocalOutcomeEligible(record))
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-      .map((record) => {
+      .map((candidate) => this.withMutation(candidate.id, "legacy_outcome", (context, record) => {
+        if (!record || workStreamTerminal(record.state) || record.owner_session_id !== sessionId) return null;
+        if (turnId ? record.last_user_turn_id !== turnId : !workStreamActive(record)) return null;
+        if (!turnLocalOutcomeCanApply(record, input.outcome) || !turnLocalOutcomeEligible(record)) return null;
         const todoRecord = record.todo_list_id ? todoStore.read(record.todo_list_id) : null;
         if (todoRecord) {
           todoStore.update({
@@ -555,11 +590,12 @@ export class WorkStreamStore {
           current_phase: turnLocalOutcomeCurrentPhase(record, input.outcome),
           active_step_id: turnLocalOutcomeActiveStepId(record, input.outcome),
           status_note: safeText(input.statusNote, 600) ?? turnLocalOutcomeStatusNote(input.outcome),
+          record_generation: (record.record_generation ?? 1) + 1,
           updated_at: now.toISOString(),
         };
-        writeJsonAtomic(this.pathFor(record.id), updated);
-        return updated;
-      });
+        return commitWorkStreamMutation({ butlerData: this.butlerData, context, record: updated, expectedGeneration: record.record_generation ?? 1 });
+      }))
+      .filter((record): record is WorkStreamRecord => Boolean(record));
   }
 
   cancelLinked(input: {
@@ -584,17 +620,21 @@ export class WorkStreamStore {
     for (const record of linked) records.set(record.id, record);
     const now = (input.now ?? new Date()).toISOString();
     const statusNote = safeText(input.statusNote, 600) ?? "Cancelled by user request.";
-    return Array.from(records.values()).map((record) => {
+    return Array.from(records.values()).flatMap((candidate) => {
+      const committed = this.withMutation(candidate.id, "legacy_cancel", (context, record) => {
+        if (!record || workStreamTerminal(record.state)) return null;
       const updated: WorkStreamRecord = {
         ...record,
         state: "cancelled",
         current_phase: null,
         active_step_id: null,
         status_note: statusNote,
+        record_generation: (record.record_generation ?? 1) + 1,
         updated_at: now,
       };
-      writeJsonAtomic(this.pathFor(record.id), updated);
-      return updated;
+        return commitWorkStreamMutation({ butlerData: this.butlerData, context, record: updated, expectedGeneration: record.record_generation ?? 1 });
+      });
+      return committed ? [committed] : [];
     });
   }
 
@@ -631,49 +671,32 @@ export class WorkStreamStore {
     statusNote?: string | null;
     now?: Date;
   }): WorkStreamRecord | null {
-    const record = this.activeForSession(input.sessionId);
-    if (!record || workStreamTerminal(record.state)) return record;
-    if (record.state === "waiting_user" || record.state === "paused" || record.state === "recoverable") {
-      return record;
-    }
-    if (
-      record.linked_planned_task_ids.length > 0 ||
-      record.linked_orchestration_ids.length > 0 ||
-      record.linked_worker_task_ids.length > 0
-    ) {
-      return record;
-    }
-    const todoRecord = record.todo_list_id
-      ? new TodoListStore(this.butlerData).read(record.todo_list_id)
-      : null;
-    if (!todoRecord && record.state !== "reporting") return record;
-    const unfinishedCount = todoRecord?.items.filter((item) =>
-      item.status === "pending" || item.status === "in_progress",
-    ).length ?? 0;
-    const onlyReportingRemains = todoRecord?.items.every((item) =>
-      item.status === "completed" ||
-      item.status === "cancelled" ||
-      (item.status === "in_progress" && item.phase === "reporting"),
-    ) ?? record.state === "reporting";
-    if (unfinishedCount > 0 && !onlyReportingRemains) return record;
-    if (!transitionPath(record.state, "complete")) return record;
-    completeReportingTodoStep({
-      butlerData: this.butlerData,
-      listId: record.todo_list_id,
-      activeStepId: record.active_step_id,
-      statusNote: input.statusNote,
-      now: input.now,
+    const selected = this.activeForSession(input.sessionId);
+    if (!selected) return null;
+    return this.withMutation(selected.id, "legacy_transition", (context, record) => {
+      if (!record || workStreamTerminal(record.state)) return record;
+      if (record.state === "waiting_user" || record.state === "paused" || record.state === "recoverable") return record;
+      if (record.linked_planned_task_ids.length > 0 || record.linked_orchestration_ids.length > 0 || record.linked_worker_task_ids.length > 0) return record;
+      const todoRecord = record.todo_list_id ? new TodoListStore(this.butlerData, { autoRecover: false }).read(record.todo_list_id) : null;
+      if (!todoRecord && record.state !== "reporting") return record;
+      const unfinishedCount = todoRecord?.items.filter((item) => item.status === "pending" || item.status === "in_progress").length ?? 0;
+      const onlyReportingRemains = todoRecord?.items.every((item) =>
+        item.status === "completed" || item.status === "cancelled" || (item.status === "in_progress" && item.phase === "reporting"),
+      ) ?? record.state === "reporting";
+      if (unfinishedCount > 0 && !onlyReportingRemains) return record;
+      if (!transitionPath(record.state, "complete")) return record;
+      completeReportingTodoStep({ butlerData: this.butlerData, listId: record.todo_list_id, activeStepId: record.active_step_id, statusNote: input.statusNote, now: input.now });
+      const updated: WorkStreamRecord = {
+        ...record,
+        state: "complete",
+        current_phase: null,
+        active_step_id: null,
+        status_note: safeText(input.statusNote, 600) ?? record.status_note,
+        record_generation: (record.record_generation ?? 1) + 1,
+        updated_at: (input.now ?? new Date()).toISOString(),
+      };
+      return commitWorkStreamMutation({ butlerData: this.butlerData, context, record: updated, expectedGeneration: record.record_generation ?? 1 });
     });
-    const updated: WorkStreamRecord = {
-      ...record,
-      state: "complete",
-      current_phase: null,
-      active_step_id: null,
-      status_note: safeText(input.statusNote, 600) ?? record.status_note,
-      updated_at: (input.now ?? new Date()).toISOString(),
-    };
-    writeJsonAtomic(this.pathFor(record.id), updated);
-    return updated;
   }
 
   updateFromTodoList(input: {
@@ -697,51 +720,25 @@ export class WorkStreamStore {
       projectId: input.projectId,
       listId: input.listId,
     }));
-    let id = baseId;
-    const prior = this.read(id);
-    let activePrior = prior;
-    let target = targetFromTodos(input.items, activePrior);
-    if (prior && workStreamTerminal(prior.state) && !workStreamTerminal(target.state) && !input.id?.trim()) {
-      activePrior = this.activeForScope({
-        ownerSessionId: input.ownerSessionId ?? prior.owner_session_id,
-        originChatId: input.originChatId ?? prior.origin_chat_id,
-        projectId: input.projectId ?? prior.project_id,
-        listId: input.listId ?? prior.todo_list_id,
-        excludeId: baseId,
-        currentTurnId: input.lastUserTurnId,
-      });
-      id = activePrior?.id ?? revisionStreamId(baseId, now);
-      target = targetFromTodos(input.items, activePrior);
-    }
-    validateTodoEvidenceForTarget(input.items, target.state);
-    if (activePrior) {
-      const path = transitionPath(activePrior.state, target.state);
-      if (!path) assertWorkStreamTransition(activePrior.state, target.state);
-    }
-    const record: WorkStreamRecord = {
-      version: 1,
-      id,
-      title: safeText(input.title, 120) ?? activePrior?.title ?? prior?.title ?? "Butler work stream",
-      owner_session_id: input.ownerSessionId?.trim() || activePrior?.owner_session_id || prior?.owner_session_id || null,
-      origin_chat_id: input.originChatId?.trim() || activePrior?.origin_chat_id || prior?.origin_chat_id || null,
-      project_id: input.projectId?.trim() || activePrior?.project_id || prior?.project_id || null,
-      intent_summary: safeText(input.intentSummary, 600) ?? activePrior?.intent_summary ?? prior?.intent_summary ?? null,
-      role_hint: safeText(input.roleHint, 240) ?? activePrior?.role_hint ?? prior?.role_hint ?? null,
-      expected_deliverable: safeText(input.expectedDeliverable, 600) ?? activePrior?.expected_deliverable ?? prior?.expected_deliverable ?? null,
-      state: target.state,
-      current_phase: target.phase ?? phaseForState(target.state, activePrior?.current_phase ?? null),
-      active_step_id: target.activeStepId,
-      todo_list_id: input.listId?.trim() || activePrior?.todo_list_id || prior?.todo_list_id || null,
-      linked_planned_task_ids: activePrior?.linked_planned_task_ids ?? prior?.linked_planned_task_ids ?? [],
-      linked_orchestration_ids: activePrior?.linked_orchestration_ids ?? prior?.linked_orchestration_ids ?? [],
-      linked_worker_task_ids: activePrior?.linked_worker_task_ids ?? prior?.linked_worker_task_ids ?? [],
-      created_at: activePrior?.created_at ?? now,
-      updated_at: now,
-      last_user_turn_id: input.lastUserTurnId?.trim() || activePrior?.last_user_turn_id || prior?.last_user_turn_id || null,
-      status_note: target.state === "complete" ? null : activePrior?.status_note ?? null,
-    };
-    writeJsonAtomic(this.pathFor(id), record);
-    return record;
+    const base = this.withMutation(baseId, "legacy_todo_update", (context, current) => {
+      const target = targetFromTodos(input.items, current);
+      if (current && workStreamTerminal(current.state) && !workStreamTerminal(target.state) && !input.id?.trim()) {
+        return { terminal: current } as const;
+      }
+      return { record: this.commitTodoDerived(input, now, baseId, current, current, context) } as const;
+    });
+    if ("record" in base && base.record) return base.record;
+    const active = this.activeForScope({
+      ownerSessionId: input.ownerSessionId ?? base.terminal.owner_session_id,
+      originChatId: input.originChatId ?? base.terminal.origin_chat_id,
+      projectId: input.projectId ?? base.terminal.project_id,
+      listId: input.listId ?? base.terminal.todo_list_id,
+      excludeId: baseId,
+      currentTurnId: input.lastUserTurnId,
+    });
+    const id = active?.id ?? revisionStreamId(baseId, now);
+    return this.withMutation(id, "legacy_todo_update", (context, current) =>
+      this.commitTodoDerived(input, now, id, current, base.terminal, context));
   }
 
   transition(input: {
@@ -751,20 +748,22 @@ export class WorkStreamStore {
     activeStepId?: string | null;
     now?: Date;
   }): WorkStreamRecord {
-    const record = this.read(input.id);
-    if (!record) throw new Error(`work stream ${input.id} not found`);
-    const state = normalizeState(input.state);
-    assertWorkStreamTransition(record.state, state);
-    const updated: WorkStreamRecord = {
-      ...record,
-      state,
-      current_phase: phaseForState(state, record.current_phase),
-      active_step_id: input.activeStepId === undefined ? record.active_step_id : safeOptionalId(input.activeStepId),
-      status_note: safeText(input.statusNote, 600) ?? record.status_note,
-      updated_at: (input.now ?? new Date()).toISOString(),
-    };
-    writeJsonAtomic(this.pathFor(record.id), updated);
-    return updated;
+    return this.withMutation(input.id, "legacy_transition", (context, record) => {
+      if (!record) throw new Error(`work stream ${input.id} not found`);
+      const state = normalizeState(input.state);
+      if (state === "waiting_user" && record.active_contract_id) throw new Error("waiting_user transition requires WorkStreamClaimStore.waitForUser");
+      assertWorkStreamTransition(record.state, state);
+      const updated: WorkStreamRecord = {
+        ...record,
+        state,
+        current_phase: phaseForState(state, record.current_phase),
+        active_step_id: input.activeStepId === undefined ? record.active_step_id : safeOptionalId(input.activeStepId),
+        status_note: safeText(input.statusNote, 600) ?? record.status_note,
+        record_generation: (record.record_generation ?? 1) + 1,
+        updated_at: (input.now ?? new Date()).toISOString(),
+      };
+      return commitWorkStreamMutation({ butlerData: this.butlerData, context, record: updated, expectedGeneration: record.record_generation ?? 1 });
+    });
   }
 
   link(input: {
@@ -775,18 +774,110 @@ export class WorkStreamStore {
     workerTaskIds?: string[];
     now?: Date;
   }): WorkStreamRecord | null {
-    const record = input.id ? this.read(input.id) : this.activeForSession(input.sessionId);
-    if (!record) return null;
-    const updated: WorkStreamRecord = {
-      ...record,
-      linked_planned_task_ids: uniqueAppend(record.linked_planned_task_ids, input.plannedTaskIds),
-      linked_orchestration_ids: uniqueAppend(record.linked_orchestration_ids, input.orchestrationIds),
-      linked_worker_task_ids: uniqueAppend(record.linked_worker_task_ids, input.workerTaskIds),
-      updated_at: (input.now ?? new Date()).toISOString(),
-    };
-    writeJsonAtomic(this.pathFor(record.id), updated);
-    return updated;
+    const selected = input.id ? this.read(input.id) : this.activeForSession(input.sessionId);
+    if (!selected) return null;
+    return this.withMutation(selected.id, "legacy_link", (context, record) => {
+      if (!record) return null;
+      const updated: WorkStreamRecord = {
+        ...record,
+        linked_planned_task_ids: uniqueAppend(record.linked_planned_task_ids, input.plannedTaskIds),
+        linked_orchestration_ids: uniqueAppend(record.linked_orchestration_ids, input.orchestrationIds),
+        linked_worker_task_ids: uniqueAppend(record.linked_worker_task_ids, input.workerTaskIds),
+        record_generation: (record.record_generation ?? 1) + 1,
+        updated_at: (input.now ?? new Date()).toISOString(),
+      };
+      return commitWorkStreamMutation({ butlerData: this.butlerData, context, record: updated, expectedGeneration: record.record_generation ?? 1 });
+    });
   }
+
+  private withMutation<T>(
+    id: string,
+    operation: WorkStreamMutationOperation,
+    action: (context: Parameters<typeof commitWorkStreamMutation>[0]["context"], record: WorkStreamRecord | null) => T,
+  ): T {
+    if (this.autoRecover) {
+      const recovery = reconcilePendingWorkStreamTransactions({ butlerData: this.butlerData, workstreamId: id });
+      if (hasDeferredWorkStreamRecovery(recovery, id)) throw new Error("workstream_recovery_deferred");
+    }
+    const result = withWorkStreamMutationAuthority({
+      butlerData: this.butlerData,
+      workstreamId: id,
+      operation,
+      ownerId: `${operation}:${id}`,
+      action: (context) => ({ value: action(context, this.readRaw(id)) }),
+    });
+    if (!result) throw new Error("workstream_mutation_conflict");
+    return result.value;
+  }
+
+  private commitTodoDerived(
+    input: Parameters<WorkStreamStore["updateFromTodoList"]>[0],
+    now: string,
+    id: string,
+    current: WorkStreamRecord | null,
+    fallback: WorkStreamRecord | null,
+    context: Parameters<typeof commitWorkStreamMutation>[0]["context"],
+  ): WorkStreamRecord {
+    const target = targetFromTodos(input.items, current);
+    validateTodoEvidenceForTarget(input.items, target.state);
+    if (current) {
+      const path = transitionPath(current.state, target.state);
+      if (!path) assertWorkStreamTransition(current.state, target.state);
+    }
+    const source = current ?? fallback;
+    const record: WorkStreamRecord = {
+      version: 1,
+      id,
+      title: safeText(input.title, 120) ?? source?.title ?? "Butler work stream",
+      owner_session_id: input.ownerSessionId?.trim() || source?.owner_session_id || null,
+      origin_chat_id: input.originChatId?.trim() || source?.origin_chat_id || null,
+      project_id: input.projectId?.trim() || source?.project_id || null,
+      intent_summary: safeText(input.intentSummary, 600) ?? source?.intent_summary ?? null,
+      role_hint: safeText(input.roleHint, 240) ?? source?.role_hint ?? null,
+      expected_deliverable: safeText(input.expectedDeliverable, 600) ?? source?.expected_deliverable ?? null,
+      state: target.state,
+      current_phase: target.phase ?? phaseForState(target.state, current?.current_phase ?? null),
+      active_step_id: target.activeStepId,
+      todo_list_id: input.listId?.trim() || source?.todo_list_id || null,
+      linked_planned_task_ids: source?.linked_planned_task_ids ?? [],
+      linked_orchestration_ids: source?.linked_orchestration_ids ?? [],
+      linked_worker_task_ids: source?.linked_worker_task_ids ?? [],
+      created_at: current?.created_at ?? now,
+      updated_at: now,
+      last_user_turn_id: input.lastUserTurnId?.trim() || source?.last_user_turn_id || null,
+      status_note: target.state === "complete" ? null : current?.status_note ?? null,
+      record_generation: (current?.record_generation ?? 0) + 1,
+      active_contract_id: current?.active_contract_id ?? null,
+      claim_generation: current?.claim_generation ?? null,
+      claim_lease_expires_at: current?.claim_lease_expires_at ?? null,
+      active_claim_receipt_id: current?.active_claim_receipt_id ?? null,
+      original_claim_receipt_id: current?.original_claim_receipt_id ?? null,
+      active_blocker_id: current?.active_blocker_id ?? null,
+      active_blocker_evidence_id: current?.active_blocker_evidence_id ?? null,
+      plan_revision: current?.plan_revision ?? 1,
+      plan_revision_receipt_id: current?.plan_revision_receipt_id ?? null,
+      superseded_todo_ids: current?.superseded_todo_ids ?? [],
+    };
+    return commitWorkStreamMutation({ butlerData: this.butlerData, context, record, expectedGeneration: current?.record_generation ?? null });
+  }
+
+}
+
+function normalizeContractFields(record: WorkStreamRecord): WorkStreamRecord {
+  return {
+    ...record,
+    record_generation: record.record_generation ?? 1,
+    active_contract_id: record.active_contract_id ?? null,
+    claim_generation: record.claim_generation ?? null,
+    claim_lease_expires_at: record.claim_lease_expires_at ?? null,
+    active_claim_receipt_id: record.active_claim_receipt_id ?? null,
+    original_claim_receipt_id: record.original_claim_receipt_id ?? null,
+    active_blocker_id: record.active_blocker_id ?? null,
+    active_blocker_evidence_id: record.active_blocker_evidence_id ?? null,
+    plan_revision: record.plan_revision ?? 1,
+    plan_revision_receipt_id: record.plan_revision_receipt_id ?? null,
+    superseded_todo_ids: record.superseded_todo_ids ?? [],
+  };
 }
 
 function turnLocalOutcomeEligible(record: WorkStreamRecord): boolean {

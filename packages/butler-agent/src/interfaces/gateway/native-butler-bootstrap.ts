@@ -26,7 +26,11 @@ import { AgentConversationStore } from "../../agent/conversation/store.ts";
 import { createAgentTurnEvent } from "../../agent/events/turn-events.ts";
 import { createLifecycleGatewayHandlers, SessionLifecycleService } from "./session-lifecycle.ts";
 import { generateSessionTitleWithProvider } from "../../agent/output/session-title.ts";
-import { NativeToolLoopRuntime } from "../../agent/turn/native-tool-loop.ts";
+import {
+  BOOTSTRAP_RECOVERY_DEADLINE_MS,
+  reconcilePendingWorkStreamTransactions,
+} from "../../agent/work/work-stream-transaction-recovery.ts";
+import { NativeToolLoopRuntime, type NativeToolLoopRuntimeOptions } from "../../agent/turn/native-tool-loop.ts";
 import { DeveloperLogStore } from "../../operations/diagnostics/developer-log-store.ts";
 import { readDeveloperDiagnosticsEnabled } from "../../operations/diagnostics/developer-log-settings.ts";
 import { diagnosticDetails, safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
@@ -62,6 +66,7 @@ export interface NativeButlerMainOptions {
   butlerHome?: string;
   butlerData?: string;
   runtime?: AgentRuntimeAdapter;
+  runtimeFactory?: (options: NativeToolLoopRuntimeOptions) => AgentRuntimeAdapter;
   provider?: ModelProviderAdapter;
   sendTelegram?: (input: {
     chatId: string;
@@ -574,7 +579,13 @@ export async function runNativeButlerMain(
     butlerData,
     compatibilityConfig: config as Record<string, any>,
   });
-  const runtime = input.runtime ?? new NativeToolLoopRuntime({ butlerHome, butlerData });
+  const runtimeOptions: NativeToolLoopRuntimeOptions = {
+    butlerHome,
+    butlerData,
+    appMessageDbPath: join(butlerData, "app-server", "butler-client.sqlite"),
+  };
+  reconcilePendingWorkStreamTransactions({ butlerData, maxDurationMs: BOOTSTRAP_RECOVERY_DEADLINE_MS });
+  const runtime = input.runtime ?? input.runtimeFactory?.(runtimeOptions) ?? new NativeToolLoopRuntime(runtimeOptions);
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
   const developerLogStore = new DeveloperLogStore({ butlerData });
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
