@@ -1,10 +1,11 @@
 import type { FunctionToolPromptOptions, PromptOptions } from "../runtime-contracts.ts";
-import { activeFunctionTools, compactTraceValue, finalEnvelopeRetryInstructions, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, localUserContentWithAttachments, modelIterationLimitWithinUsageBudget, throwIfAborted, withoutDynamicTools, writeWorkerTrace } from "../shared/runtime-support.ts";
+import { activeFunctionTools, compactTraceValue, createProviderRequestAttributor, finalEnvelopeRetryInstructions, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, localUserContentWithAttachments, modelIterationLimitWithinUsageBudget, openAICompatibleUsageSample, throwIfAborted, withoutDynamicTools, writeWorkerTrace, type ProviderRequestAttributor } from "../shared/runtime-support.ts";
 import { createLocalChatCompletion, firstLocalAssistantMessage, isLocalContextOverflowError, localCompactEvidenceTools, localToolFallbackInstructions } from "./client.ts";
 import { extractLocalChatText, extractLocalFinalEnvelopeText, extractLocalToolCalls, type LocalChatMessage, localChatTools, localChatUrl, localFunctionToolContractRepairPrompt, localReasoningRequestParams, localToolsForRequiredRepair, standaloneLocalFunctionCallNames } from "./protocol.ts";
 import { localToolResultMessageContent, rebudgetLocalToolMessages, runLocalCompactFinalAnswerText } from "./evidence.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { resolveLocalModelConfig } from "../shared/model-routing.ts";
+import type { LocalModelConfig } from "./models.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
 import {
   blockCapacityObservation,
@@ -16,17 +17,29 @@ import {
 
 export async function runLocalPromptText(options: PromptOptions): Promise<string> {
   const config = resolveLocalModelConfig(options.model);
+  return await runLocalPromptTextWithConfig(
+    config,
+    options,
+    createProviderRequestAttributor({ attribution: options.usageAttribution }),
+  );
+}
+
+export async function runLocalPromptTextWithConfig(
+  config: LocalModelConfig,
+  options: PromptOptions,
+  requests = createProviderRequestAttributor({ attribution: options.usageAttribution }),
+): Promise<string> {
   const messages: LocalChatMessage[] = [];
   if (options.instructions?.trim()) {
     messages.push({ role: "system", content: options.instructions.trim() });
   }
   messages.push({ role: "user", content: localUserContentWithAttachments(options.prompt, options.attachments) });
-  const response = await createLocalChatCompletion(config, {
+  const response = await attributedLocalCompletion(config, options, requests, {
     model: config.model_id,
     messages,
     ...localReasoningRequestParams(config),
     stream: false,
-  }, options.signal);
+  });
   const text = extractLocalChatText(firstLocalAssistantMessage(response));
   if (!text) {
     throw providerEmptyResponseError({
@@ -44,6 +57,18 @@ export async function runLocalPromptText(options: PromptOptions): Promise<string
 
 export async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions): Promise<string> {
   const config = resolveLocalModelConfig(options.model);
+  return await runLocalFunctionToolPromptTextWithConfig(
+    config,
+    options,
+    createProviderRequestAttributor({ attribution: options.usageAttribution }),
+  );
+}
+
+export async function runLocalFunctionToolPromptTextWithConfig(
+  config: LocalModelConfig,
+  options: FunctionToolPromptOptions,
+  requests = createProviderRequestAttributor({ attribution: options.usageAttribution }),
+): Promise<string> {
   const log = options.log ?? (() => {});
   const maxRounds = modelIterationLimitWithinUsageBudget(
     options.maxToolRounds ?? 8,
@@ -61,14 +86,14 @@ export async function runLocalFunctionToolPromptText(options: FunctionToolPrompt
     let response;
     try {
       const requestTools = localToolsForRequiredRepair(activeTools, requiredToolRepairNames);
-      response = await createLocalChatCompletion(config, {
+      response = await attributedLocalCompletion(config, options, requests, {
         model: config.model_id,
         messages,
         tools: localChatTools(requestTools),
         tool_choice: requiredToolRepairNames ? "required" : options.toolChoice ?? "auto",
         ...localReasoningRequestParams(config),
         stream: false,
-      }, options.signal);
+      });
     } catch (error) {
       if (!isLocalContextOverflowError(error)) throw error;
       if (executedToolCalls > 0) {
@@ -80,20 +105,29 @@ export async function runLocalFunctionToolPromptText(options: FunctionToolPrompt
       if (compactTools.length > 0 && compactTools.length < activeTools.length) {
         log("local model tool prompt exceeded context window; retrying with compact evidence tool schemas");
         throwIfAborted(options.signal);
-        return await runLocalFunctionToolPromptText({
-          ...withoutDynamicTools(options),
-          tools: compactTools,
-        });
+        return await runLocalFunctionToolPromptTextWithConfig(
+          config,
+          {
+            ...withoutDynamicTools(options),
+            tools: compactTools,
+          },
+          requests,
+        );
       }
       log("local model tool prompt exceeded context window; retrying without tool schemas");
       throwIfAborted(options.signal);
-      return await runLocalPromptText({
-        prompt: options.prompt,
-        model: options.model,
-        instructions: localToolFallbackInstructions(options.instructions),
-        signal: options.signal,
-        attachments: options.attachments,
-      });
+      return await runLocalPromptTextWithConfig(
+        config,
+        {
+          prompt: options.prompt,
+          model: options.model,
+          instructions: localToolFallbackInstructions(options.instructions),
+          signal: options.signal,
+          attachments: options.attachments,
+          usageAttribution: options.usageAttribution,
+        },
+        requests,
+      );
     }
     if (executedToolCalls > 0) {
       rebudgetLocalToolMessages({ messages, config, log });
@@ -103,6 +137,8 @@ export async function runLocalFunctionToolPromptText(options: FunctionToolPrompt
     const toolCalls = extractLocalToolCalls(assistant, allowedNames);
     if (toolCalls.length === 0) {
       if (executedToolCalls > 0) {
+        const finalText = extractLocalFinalEnvelopeText(assistant);
+        if (finalText) return finalText;
         log(text
           ? "local model returned post-tool draft; requesting final no-tool synthesis"
           : "local model returned no visible post-tool answer; requesting final no-tool synthesis");
@@ -251,27 +287,34 @@ export async function runLocalFunctionToolPromptText(options: FunctionToolPrompt
   });
   let response;
   try {
-    response = await createLocalChatCompletion(config, {
+    response = await attributedLocalCompletion(config, options, requests, {
       model: config.model_id,
       messages,
       ...localReasoningRequestParams(config),
       stream: false,
-    }, options.signal);
+    });
   } catch (error) {
     if (!isLocalContextOverflowError(error)) throw error;
     const compacted = rebudgetLocalToolMessages({ messages, config, log, aggressive: true });
     if (!compacted) throw error;
     log("local model final synthesis exceeded context window; retrying with tighter compacted tool evidence");
     try {
-      response = await createLocalChatCompletion(config, {
+      response = await attributedLocalCompletion(config, options, requests, {
         model: config.model_id,
         messages,
         ...localReasoningRequestParams(config),
         stream: false,
-      }, options.signal);
+      });
     } catch (retryError) {
       if (!isLocalContextOverflowError(retryError)) throw retryError;
-      return await runLocalCompactFinalAnswerText({ config, options, messages, log });
+      return await runLocalCompactFinalAnswerText({
+        config,
+        options,
+        messages,
+        log,
+        requestCompletion: async (body) =>
+          await attributedLocalCompletion(config, options, requests, body),
+      });
     }
   }
   let text = extractLocalFinalEnvelopeText(firstLocalAssistantMessage(response));
@@ -281,27 +324,34 @@ export async function runLocalFunctionToolPromptText(options: FunctionToolPrompt
       content: finalEnvelopeRetryInstructions(),
     });
     try {
-      response = await createLocalChatCompletion(config, {
+      response = await attributedLocalCompletion(config, options, requests, {
         model: config.model_id,
         messages,
         ...localReasoningRequestParams(config),
         stream: false,
-      }, options.signal);
+      });
     } catch (error) {
       if (!isLocalContextOverflowError(error)) throw error;
       const compacted = rebudgetLocalToolMessages({ messages, config, log, aggressive: true });
       if (!compacted) throw error;
       log("local model final envelope retry exceeded context window; retrying with tighter compacted tool evidence");
       try {
-        response = await createLocalChatCompletion(config, {
+        response = await attributedLocalCompletion(config, options, requests, {
           model: config.model_id,
           messages,
           ...localReasoningRequestParams(config),
           stream: false,
-        }, options.signal);
+        });
       } catch (retryError) {
         if (!isLocalContextOverflowError(retryError)) throw retryError;
-        return await runLocalCompactFinalAnswerText({ config, options, messages, log });
+        return await runLocalCompactFinalAnswerText({
+          config,
+          options,
+          messages,
+          log,
+          requestCompletion: async (body) =>
+            await attributedLocalCompletion(config, options, requests, body),
+        });
       }
     }
     text = extractLocalFinalEnvelopeText(firstLocalAssistantMessage(response));
@@ -316,4 +366,17 @@ export async function runLocalFunctionToolPromptText(options: FunctionToolPrompt
     });
   }
   return text;
+}
+
+function attributedLocalCompletion(
+  config: LocalModelConfig,
+  options: PromptOptions,
+  requests: ProviderRequestAttributor,
+  body: Record<string, unknown>,
+): Promise<Record<string, any>> {
+  return requests.request({
+    model: config.model_ref,
+    run: async () => await createLocalChatCompletion(config, body, options.signal),
+    usage: openAICompatibleUsageSample,
+  });
 }

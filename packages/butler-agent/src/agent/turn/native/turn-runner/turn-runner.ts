@@ -70,7 +70,7 @@ import {
   completionGapContinuationPrompt,
   completionGapFinalSynthesisPrompt,
 } from "./turn-continuation-prompts.ts";
-import { buildTurnRoundJournal } from "./turn-round-journal.ts";
+import { buildDurableTurnRoundJournal } from "./turn-round-journal.ts";
 import { WorkStreamStore } from "../../../work/work-stream.ts";
 import { recordTurnContractAuditEvidence } from "./turn-contract-audit-evidence.ts";
 
@@ -128,13 +128,15 @@ export async function runNativeToolTurn({
       runtime: deps.runtimeId,
       model: input.model,
     });
-    const phaseBudgetController = createWorkStreamPhaseBudgetController({
-      butlerData: deps.butlerData,
-      resumeSelection: context.resumeSelection,
-      role: session.init.role,
-      runtime: deps.runtimeId,
-      model: input.model,
-    });
+    const phaseBudgetController = isSchedulerContinuation(input, context.continuationAtom)
+      ? null
+      : createWorkStreamPhaseBudgetController({
+        butlerData: deps.butlerData,
+        resumeSelection: context.resumeSelection,
+        role: session.init.role,
+        runtime: deps.runtimeId,
+        model: input.model,
+      });
     turnKernel.transitionTo("model_deciding");
     const {
       runToolPrompt,
@@ -513,7 +515,7 @@ async function persistSchedulerContinuation(input: {
       id: currentUserMessageRef(input.input),
     },
     ...refs,
-    roundJournal: buildTurnRoundJournal({
+    roundJournal: buildDurableTurnRoundJournal({
       audit: input.audit,
       publicDecisions: input.publicDecisionContext,
     }),
@@ -627,6 +629,17 @@ async function emitEarlyRuntimePreparationProgress(input: {
 
 function gatewayFirstVisibleProgressEmitted(metadata: Record<string, unknown> | undefined): boolean {
   return metadata?.gatewayFirstVisibleProgressEmitted === true;
+}
+
+function isSchedulerContinuation(
+  input: NativeTurnRunnerInput["input"],
+  continuationAtom: ReturnType<typeof readTurnContextAtom>,
+): boolean {
+  return Boolean(
+    continuationAtom &&
+      input.metadata?.schedulerContinuation &&
+      typeof input.metadata.schedulerContinuation === "object",
+  );
 }
 
 async function emitCommittedContinuationScheduledEvent(input: {

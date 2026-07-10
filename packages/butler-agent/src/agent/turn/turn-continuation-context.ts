@@ -6,7 +6,7 @@ import {
   withDurableFileLock,
   writeJsonFileAtomic,
 } from "../persistence/atomic-json-store.ts";
-import type { DurableTurnRoundJournalEntry } from "./native/turn-runner/turn-round-journal.ts";
+import type { DurableTurnRoundJournalEntry } from "./turn-round-journal-contract.ts";
 import type { TurnContractDecision } from "./turn-contract.ts";
 
 export interface TurnContextObservationRef {
@@ -193,7 +193,7 @@ export function readTurnContextAtom(input: {
       evidenceCandidates: Array.isArray(parsed.evidenceCandidates)
         ? parsed.evidenceCandidates
         : [],
-      roundJournal: Array.isArray(parsed.roundJournal) ? parsed.roundJournal.slice(-18) : [],
+      roundJournal: Array.isArray(parsed.roundJournal) ? parsed.roundJournal : [],
       updatedAt: parsed.updatedAt ?? parsed.createdAt,
     };
   } catch {
@@ -266,9 +266,9 @@ function mergeRoundJournal(
   current: DurableTurnRoundJournalEntry[] | undefined,
 ): DurableTurnRoundJournalEntry[] {
   const entries = [...(previous ?? []), ...(current ?? [])];
-  return entries.slice(-18).map((entry, index, bounded) => ({
+  return entries.map((entry, index) => ({
     ...entry,
-    sequence: entries.length - bounded.length + index + 1,
+    sequence: index + 1,
   }));
 }
 

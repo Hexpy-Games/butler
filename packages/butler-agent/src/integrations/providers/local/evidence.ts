@@ -224,11 +224,12 @@ export async function runLocalCompactFinalAnswerText(input: {
   options: FunctionToolPromptOptions;
   messages: LocalChatMessage[];
   log: (line: string) => void;
+  requestCompletion?: (body: Record<string, unknown>) => Promise<Record<string, any>>;
 }): Promise<string> {
   const evidence = localToolEvidenceDigest(input.messages, input.config);
   if (!evidence) throw new Error("Local model API request exceeded context window after tool execution");
   input.log("local model final synthesis exceeded context window after retry; using compact evidence-only final synthesis");
-  const response = await createLocalChatCompletion(input.config, {
+  const body = {
     model: input.config.model_id,
     messages: [
       {
@@ -255,7 +256,10 @@ export async function runLocalCompactFinalAnswerText(input: {
     ],
     ...localReasoningRequestParams(input.config),
     stream: false,
-  }, input.options.signal);
+  };
+  const response = input.requestCompletion
+    ? await input.requestCompletion(body)
+    : await createLocalChatCompletion(input.config, body, input.options.signal);
   const text = extractLocalFinalEnvelopeText(firstLocalAssistantMessage(response));
   if (!text) {
     throw providerEmptyResponseError({

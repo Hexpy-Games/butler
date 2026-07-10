@@ -1,5 +1,5 @@
 import { anthropicMessagesUrl, hostedProviderErrorLabel, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
-import { finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, sanitizeResponseFinalAnswerText } from "../shared/runtime-support.ts";
+import { createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
@@ -70,6 +70,21 @@ export function anthropicText(response: Record<string, any>): string {
   );
 }
 
+export function anthropicUsageSample(
+  response: Record<string, any>,
+): ProviderUsageSample | null {
+  const uncachedTokens = numberOrNull(response.usage?.input_tokens);
+  const cachedTokens = numberOrNull(response.usage?.cache_read_input_tokens) ?? 0;
+  const cacheCreationTokens = numberOrNull(response.usage?.cache_creation_input_tokens) ?? 0;
+  const promptTokens = uncachedTokens === null
+    ? null
+    : uncachedTokens + cachedTokens + cacheCreationTokens;
+  const outputTokens = numberOrNull(response.usage?.output_tokens) ?? 0;
+  const totalTokens = promptTokens === null ? null : promptTokens + outputTokens;
+  if (promptTokens === null && totalTokens === null) return null;
+  return { promptTokens, cachedTokens, outputTokens, totalTokens };
+}
+
 
 export function anthropicTools(tools: FunctionToolDefinition[]): Array<Record<string, unknown>> {
   return tools.map((tool) => ({
@@ -84,10 +99,15 @@ export async function runAnthropicPromptText(
   config: HostedRuntimeConfig,
   options: PromptOptions,
 ): Promise<string> {
-  const response = await createAnthropicMessage(config, {
-    ...(options.instructions?.trim() ? { system: options.instructions.trim() } : {}),
-    messages: [{ role: "user", content: promptTextForHosted(options) }],
-  }, options.signal);
+  const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
+  const response = await requests.request({
+    model: config.modelRef,
+    run: async () => await createAnthropicMessage(config, {
+      ...(options.instructions?.trim() ? { system: options.instructions.trim() } : {}),
+      messages: [{ role: "user", content: promptTextForHosted(options) }],
+    }, options.signal),
+    usage: anthropicUsageSample,
+  });
   const text = anthropicText(response);
   if (!text) {
     throw providerEmptyResponseError({
@@ -114,14 +134,19 @@ export async function runAnthropicFunctionToolPromptText(
   const messages: Array<Record<string, unknown>> = [
     { role: "user", content: promptTextForHosted(options) },
   ];
+  const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   let toolBatchExecuted = false;
   for (let round = 0; round < maxRounds; round += 1) {
-    const response = await createAnthropicMessage(config, {
-      system: localFunctionToolInstructions(options.instructions),
-      messages,
-      tools: anthropicTools(options.tools),
-      ...(options.toolChoice === "required" ? { tool_choice: { type: "any" } } : {}),
-    }, options.signal);
+    const response = await requests.request({
+      model: config.modelRef,
+      run: async () => await createAnthropicMessage(config, {
+        system: localFunctionToolInstructions(options.instructions),
+        messages,
+        tools: anthropicTools(options.tools),
+        ...(options.toolChoice === "required" ? { tool_choice: { type: "any" } } : {}),
+      }, options.signal),
+      usage: anthropicUsageSample,
+    });
     const content = Array.isArray(response.content) ? response.content : [];
     const text = anthropicText(response);
     const toolUses = content.flatMap((part: any) => {
@@ -199,10 +224,14 @@ export async function runAnthropicFunctionToolPromptText(
     return toolBatchCompletedHandoffText();
   }
   messages.push({ role: "user", content: finalNoToolInstructions(options.instructions) });
-  const response = await createAnthropicMessage(config, {
-    system: finalNoToolInstructions(options.instructions),
-    messages,
-  }, options.signal);
+  const response = await requests.request({
+    model: config.modelRef,
+    run: async () => await createAnthropicMessage(config, {
+      system: finalNoToolInstructions(options.instructions),
+      messages,
+    }, options.signal),
+    usage: anthropicUsageSample,
+  });
   const text = anthropicText(response);
   if (!text) {
     throw providerEmptyResponseError({

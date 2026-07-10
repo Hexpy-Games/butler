@@ -158,3 +158,72 @@ export function afterAttributedModelResponse(input: {
     roundIndex: input.roundIndex,
   }));
 }
+
+export interface ProviderUsageSample {
+  promptTokens: number | null;
+  cachedTokens: number;
+  outputTokens: number;
+  totalTokens: number | null;
+}
+
+export interface ProviderRequestAttributor {
+  request<T>(input: {
+    model: string;
+    run: () => Promise<T>;
+    usage?: (response: T) => ProviderUsageSample | null;
+  }): Promise<T>;
+}
+
+export function createProviderRequestAttributor(input: {
+  attribution?: PromptUsageAttribution;
+  startRoundIndex?: number;
+}): ProviderRequestAttributor {
+  let nextRoundIndex = input.startRoundIndex ?? input.attribution?.roundIndex ?? 0;
+  return {
+    async request<T>(requestInput: {
+      model: string;
+      run: () => Promise<T>;
+      usage?: (response: T) => ProviderUsageSample | null;
+    }): Promise<T> {
+      const { model, run, usage } = requestInput;
+      const roundIndex = nextRoundIndex;
+      nextRoundIndex += 1;
+      beforeAttributedModelRequest({
+        attribution: input.attribution,
+        roundIndex,
+      });
+      const response = await run();
+      const sample = usage?.(response) ?? null;
+      if (sample) {
+        input.attribution?.afterModelResponseUsage?.({
+          model,
+          ...sample,
+          roundIndex,
+        });
+      }
+      return response;
+    },
+  };
+}
+
+export function openAICompatibleUsageSample(
+  response: Record<string, any>,
+): ProviderUsageSample | null {
+  const promptTokens = numberOrNull(response.usage?.prompt_tokens) ??
+    numberOrNull(response.usage?.input_tokens);
+  const outputTokens = numberOrNull(response.usage?.completion_tokens) ??
+    numberOrNull(response.usage?.output_tokens) ?? 0;
+  const totalTokens = numberOrNull(response.usage?.total_tokens) ??
+    (promptTokens === null ? null : promptTokens + outputTokens);
+  const cachedTokens = numberOrNull(
+    response.usage?.prompt_tokens_details?.cached_tokens ??
+      response.usage?.input_tokens_details?.cached_tokens,
+  ) ?? 0;
+  if (promptTokens === null && totalTokens === null) return null;
+  return {
+    promptTokens,
+    cachedTokens,
+    outputTokens,
+    totalTokens,
+  };
+}
