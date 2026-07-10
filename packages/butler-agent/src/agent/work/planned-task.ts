@@ -390,22 +390,34 @@ export class PlannedTaskStore {
   }
 
   findByWorkerTaskId(workerTaskId: string): PlannedWorkerAttemptLink | null {
-    if (!workerTaskId.trim() || !existsSync(this.tasksDir)) return null;
+    const normalizedTaskId = workerTaskId.trim();
+    return this.findByWorkerTaskIds(new Set([normalizedTaskId])).get(normalizedTaskId) ?? null;
+  }
+
+  findByWorkerTaskIds(
+    workerTaskIds: ReadonlySet<string>,
+  ): Map<string, PlannedWorkerAttemptLink> {
+    const targets = new Set(
+      [...workerTaskIds].map((taskId) => taskId.trim()).filter(Boolean),
+    );
+    const links = new Map<string, PlannedWorkerAttemptLink>();
+    if (targets.size === 0 || !existsSync(this.tasksDir)) return links;
     for (const taskId of readdirSync(this.tasksDir)) {
       const record = this.read(taskId);
       if (!record) continue;
       for (const attempt of record.attempts) {
         const linkedWorkerTaskId = readText(join(record.taskDir, "attempts", attempt, "worker-task-id"));
-        if (linkedWorkerTaskId === workerTaskId) {
-          return {
+        if (targets.has(linkedWorkerTaskId) && !links.has(linkedWorkerTaskId)) {
+          links.set(linkedWorkerTaskId, {
             record,
             attempt: attemptNumberFromDir(attempt),
-            workerTaskId,
-          };
+            workerTaskId: linkedWorkerTaskId,
+          });
+          if (links.size === targets.size) return links;
         }
       }
     }
-    return null;
+    return links;
   }
 
   transition(taskId: string, next: PlannedTaskStatus): PlannedTaskRecord {

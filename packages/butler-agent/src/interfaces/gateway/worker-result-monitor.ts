@@ -1,10 +1,11 @@
-import { mkdirSync } from "fs";
+import { mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 import type { DeliveryResult, OutboundAction } from "../../test-support/harness/contracts.ts";
 import {
   completionConsumerForTransport,
   completionOwnerForSessionId,
-  routeCompletionNotifications,
+  claimCompletionPromotions,
+  enqueueCompletionNotifications,
   type PlannedWorkerPromotion,
 } from "../../agent/work/completion-router.ts";
 import {
@@ -34,6 +35,51 @@ export type WorkerResultRenderer = (input: {
   notification: TaskNotification;
   task: TaskRecord;
 }) => Promise<string> | string;
+
+export type WorkerResultMonitorAction = "full_scan" | "delivery_only" | "idle";
+
+const DEFAULT_COMPLETION_RECOVERY_SWEEP_MS = 5 * 60_000;
+
+export class WorkerResultMonitorGate {
+  private revision: string | null = null;
+  private lastFullScanAtMs: number | null = null;
+
+  constructor(
+    private readonly recoverySweepMs = DEFAULT_COMPLETION_RECOVERY_SWEEP_MS,
+  ) {}
+
+  nextAction(input: {
+    revision: string;
+    pendingCount: number;
+    nowMs: number;
+  }): WorkerResultMonitorAction {
+    const recoveryDue = this.lastFullScanAtMs !== null &&
+      input.nowMs - this.lastFullScanAtMs >= this.recoverySweepMs;
+    if (this.revision === null || input.revision !== this.revision || recoveryDue) {
+      return "full_scan";
+    }
+    return input.pendingCount > 0 ? "delivery_only" : "idle";
+  }
+
+  recordFullScan(input: { revision: string; nowMs: number }): void {
+    this.revision = input.revision;
+    this.lastFullScanAtMs = input.nowMs;
+  }
+}
+
+export function completionMonitorRevision(butlerData: string): string {
+  const taskStore = new TaskStore(butlerData);
+  return taskStore.taskIds()
+    .sort((a, b) => a.localeCompare(b))
+    .map((taskId) => {
+      try {
+        return `${taskId}:${readFileSync(join(taskStore.taskDir(taskId), "status"), "utf8").trim()}`;
+      } catch {
+        return `${taskId}:missing`;
+      }
+    })
+    .join("\n");
+}
 
 async function withTimeout<T>(input: {
   promise: Promise<T> | T;
@@ -73,6 +119,7 @@ export async function pollWorkerResultsOnce(input: {
   renderNotificationText?: WorkerResultRenderer;
   handlePlannedTaskReadyForReview?: (promotion: PlannedWorkerPromotion) => Promise<void> | void;
   plannedReviewCallbackTimeoutMs?: number;
+  scanCompletions?: boolean;
 }): Promise<number> {
   const chatId = input.chatId?.trim();
   const deliveryTarget = input.deliveryTarget ?? (chatId
@@ -86,22 +133,24 @@ export async function pollWorkerResultsOnce(input: {
   if (!deliveryTarget) return 0;
 
   const consumer = completionConsumerForTransport(deliveryTarget.transport);
-  const { promotions } = routeCompletionNotifications({
-    butlerData: input.butlerData,
-    consumer,
-  });
-  for (const promotion of promotions) {
-    if (!input.handlePlannedTaskReadyForReview) continue;
-    await withTimeout({
-      promise: input.handlePlannedTaskReadyForReview(promotion),
-      ms: input.plannedReviewCallbackTimeoutMs ?? 180_000,
-      label: "planned review callback",
+  if (input.scanCompletions !== false) {
+    const promotions = claimCompletionPromotions({
+      butlerData: input.butlerData,
+      consumer,
+    });
+    for (const promotion of promotions) {
+      if (!input.handlePlannedTaskReadyForReview) continue;
+      await withTimeout({
+        promise: input.handlePlannedTaskReadyForReview(promotion),
+        ms: input.plannedReviewCallbackTimeoutMs ?? 180_000,
+        label: "planned review callback",
+      });
+    }
+    enqueueCompletionNotifications({
+      butlerData: input.butlerData,
+      consumer,
     });
   }
-  routeCompletionNotifications({
-    butlerData: input.butlerData,
-    consumer,
-  });
   const taskStore = new TaskStore(input.butlerData);
   const queue = new TaskNotificationQueue(input.butlerData);
   const guard = input.deliverAction
@@ -244,14 +293,33 @@ export async function runWorkerResultMonitor(input: {
   handlePlannedTaskReadyForReview?: (promotion: PlannedWorkerPromotion) => Promise<void> | void;
   plannedReviewCallbackTimeoutMs?: number;
   log?: (line: string) => void;
+  recoverySweepMs?: number;
 }): Promise<void> {
   mkdirSync(join(input.butlerData, "tasks"), { recursive: true });
   const pollMs = input.pollMs ?? 5_000;
+  const gate = new WorkerResultMonitorGate(input.recoverySweepMs);
   while (!input.shouldStop()) {
     try {
-      const delivered = await pollWorkerResultsOnce(input);
-      if (delivered > 0) {
-        input.log?.(`worker result monitor delivered ${delivered} result(s)`);
+      const nowMs = Date.now();
+      const action = gate.nextAction({
+        revision: completionMonitorRevision(input.butlerData),
+        pendingCount: new TaskNotificationQueue(input.butlerData).pending().length,
+        nowMs,
+      });
+      if (action !== "idle") {
+        const delivered = await pollWorkerResultsOnce({
+          ...input,
+          scanCompletions: action === "full_scan",
+        });
+        if (action === "full_scan") {
+          gate.recordFullScan({
+            revision: completionMonitorRevision(input.butlerData),
+            nowMs,
+          });
+        }
+        if (delivered > 0) {
+          input.log?.(`worker result monitor delivered ${delivered} result(s)`);
+        }
       }
     } catch (error) {
       input.log?.(`worker result monitor error: ${error instanceof Error ? error.message : String(error)}`);
