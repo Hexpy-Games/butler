@@ -53,13 +53,6 @@ import {
   type PrivateTurnDecisionValidation,
 } from "./private-turn-decision-prompt.ts";
 import {
-  parsePublicWorkDecisionRepair,
-  publicWorkDecisionRepairPrompt,
-  publicWorkDecisionRepairResponseFormat,
-  publicWorkDecisionRepairToolName,
-  validatePublicWorkDecisionRepair,
-} from "./public-work-decision-repair.ts";
-import {
   embeddedWorkBlockCalls,
   isWorkBlockTool,
   isWorkBlockToolExecutionResult,
@@ -235,6 +228,16 @@ export function createNativeTurnPromptRunners(input: {
           };
           const executeTool: FunctionToolPromptOptions["executeTool"] = async (call) => {
             if (isWorkBlockTool(call.name)) {
+              const decisionFeedback = pendingDecisionFeedback;
+              pendingDecisionFeedback = undefined;
+              if (decisionFeedback) {
+                return {
+                  butler_work_block_result: true,
+                  decision_feedback: decisionFeedback,
+                  frontier: obligationToolSurface.state(),
+                  results: [],
+                } satisfies WorkBlockToolExecutionResult;
+              }
               const availableTools = currentOrdinaryTools();
               const embeddedCalls = embeddedWorkBlockCalls(call.args, availableTools)
                 .map((embedded) => bindRuntimeOwnedWorkspaceArguments(
@@ -281,11 +284,8 @@ export function createNativeTurnPromptRunners(input: {
                   });
                 }
               }
-              const decisionFeedback = pendingDecisionFeedback;
-              pendingDecisionFeedback = undefined;
               return {
                 butler_work_block_result: true,
-                ...(decisionFeedback ? { decision_feedback: decisionFeedback } : {}),
                 frontier: obligationToolSurface.state(),
                 results,
               } satisfies WorkBlockToolExecutionResult;
@@ -312,6 +312,7 @@ export function createNativeTurnPromptRunners(input: {
                 availableToolNames: ordinaryTools(toolSurface.tools).map((tool) => tool.name),
                 fixedSurface: fixedToolSurface ||
                   input.turnContractContext?.current?.contract.action === "inspect",
+                structuredSurface: Boolean(input.turnContractContext?.current),
               }),
             ),
             cacheScope: "session-turn",
@@ -352,13 +353,6 @@ export function createNativeTurnPromptRunners(input: {
               const visibleToolCalls = wrapperCall
                 ? embeddedWorkBlockCalls(wrapperCall.args, currentOrdinaryTools())
                 : toolCalls;
-              if (visibleToolCalls.length > 0) {
-                input.phaseBudgetController?.beforeToolCallBatch({
-                  phase,
-                  toolNames: visibleToolCalls.map((toolCall) => toolCall.name),
-                });
-              }
-              input.markAssistantTextBeforeToolsSeen();
               const declaredDecisionEnvelope = wrapperCall
                 ? workBlockEnvelope(wrapperCall.args)
                 : null;
@@ -370,9 +364,16 @@ export function createNativeTurnPromptRunners(input: {
                     ? "Keep block_title distinct from objective in the next work block."
                     : validation.correction,
                 };
-              } else {
-                pendingDecisionFeedback = undefined;
+                return;
               }
+              pendingDecisionFeedback = undefined;
+              if (visibleToolCalls.length > 0) {
+                input.phaseBudgetController?.beforeToolCallBatch({
+                  phase,
+                  toolNames: visibleToolCalls.map((toolCall) => toolCall.name),
+                });
+              }
+              input.markAssistantTextBeforeToolsSeen();
               const semanticToolCalls = visibleToolCalls.filter((toolCall) =>
                 !isInternalProgressTool(toolCall.name),
               );
@@ -433,42 +434,6 @@ export function createNativeTurnPromptRunners(input: {
                     ...(contractContext ? { contractContext } : {}),
                   });
                 }
-              }
-              if (!openingDecisionAvailable && active && nextPendingDecisions.length === 0) {
-                const repairPrompt = publicWorkDecisionRepairPrompt({
-                  contractObjective: active.decision.public_summary,
-                  previousDecision: input.publicDecisionContext.at(-1),
-                  toolCalls: semanticToolCalls,
-                });
-                const repairedRaw = await runPrivateTurnDecisionPrompt({
-                  promptText: repairPrompt,
-                  phase: "public_work_decision_repair",
-                  promptSections: [{
-                    id: "public_work_decision_repair",
-                    chars: repairPrompt.length,
-                    estimatedTokens: Math.ceil(repairPrompt.length / 4),
-                  }],
-                  responseFormat: publicWorkDecisionRepairResponseFormat(),
-                  validateDecision: validatePublicWorkDecisionRepair,
-                  toolName: publicWorkDecisionRepairToolName(),
-                  toolDescription: "Submit the visible decision envelope for an already selected semantic tool batch.",
-                  submissionInstruction: `Submit exactly one visible work-block decision through ${publicWorkDecisionRepairToolName()}.`,
-                  model: input.turnInput.model,
-                  reasoningEffort,
-                  systemPrompt: input.session.init.systemPrompt,
-                  signal: input.turnInput.signal,
-                  attachments: input.attachments,
-                  butlerData: input.deps.butlerData,
-                  toolPromptRunner: input.deps.toolPromptRunner,
-                  usageAttribution,
-                  latencyTracker: input.latencyTracker,
-                });
-                nextPendingDecisions = publicWorkDecisionsFromEnvelope({
-                  envelope: parsePublicWorkDecisionRepair(repairedRaw),
-                  toolCalls: semanticToolCalls,
-                  existingDecisions: input.publicDecisionContext,
-                  ...(contractContext ? { contractContext } : {}),
-                });
               }
               if (!openingDecisionAvailable) {
                 input.pendingPublicDecisions.length = 0;

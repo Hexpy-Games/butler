@@ -39,6 +39,7 @@ test("a decision may omit redundant expected_effect without a repair request", (
   const decisionSchema = property(property(wrapper.parameters, "properties"), "decision");
 
   expect(decisionSchema.required).not.toContain("expected_effect");
+  expect(property(decisionSchema, "properties")).not.toHaveProperty("completion_obligations");
   expect(workBlockEnvelope({ decision, args: { path: "src/a.ts" } })).toMatchObject({
     blockTitle: "Read capture sources",
     expectedEffect: decision.next_step,

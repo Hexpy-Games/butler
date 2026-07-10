@@ -1080,6 +1080,30 @@ test("model API calls retry transient backend failures without caller rework", a
   expect(isTransientModelApiError(new Error("OpenAI Responses API error (400): bad request"))).toBe(false);
 });
 
+test("hosted chat adapters use the same transient retry policy", async () => {
+  process.env.BUTLER_MODEL_API_RETRY_ATTEMPTS = "3";
+  process.env.BUTLER_MODEL_API_RETRY_DELAY_MS = "0";
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  let attempts = 0;
+  globalThis.fetch = (async () => {
+    attempts += 1;
+    if (attempts < 3) throw new TypeError("fetch failed: ETIMEDOUT");
+    return Response.json({
+      choices: [{ message: { role: "assistant", content: "hosted recovered" } }],
+    });
+  }) as unknown as typeof fetch;
+
+  await expect(runPromptText({ model: "zai/glm-5.2", prompt: "hi" }))
+    .resolves.toBe("hosted recovered");
+  expect(attempts).toBe(3);
+});
+
 test("provider HTTP failures preserve safe status diagnostics", async () => {
   process.env.OPENAI_API_KEY = "test-key";
   process.env.BUTLER_MODEL_API_RETRY_ATTEMPTS = "1";

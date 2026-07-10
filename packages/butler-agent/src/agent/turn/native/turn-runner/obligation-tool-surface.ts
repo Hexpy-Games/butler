@@ -327,7 +327,7 @@ function ledgerCreationTool(
     description: [
       tool.description,
       `The current typed frontier accepts the remaining dependency chain in this order: ${remainingKinds.join(" -> ")}.`,
-      "One work block may batch that ordered chain and multiple task records. Omit status; Project Ledger owns each valid initial lifecycle state.",
+      "One work block may batch that ordered chain and multiple task records. Choose stable record ids in the calls, and let later calls in the same block reference the earlier chosen spec or work id; execution preserves call order. Omit status; Project Ledger owns each valid initial lifecycle state.",
     ].join(" "),
     parameters: {
       ...parameters,

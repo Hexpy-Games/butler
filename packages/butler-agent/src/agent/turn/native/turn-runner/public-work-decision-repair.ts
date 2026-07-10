@@ -23,22 +23,41 @@ export function publicWorkDecisionRepairResponseFormat(): { schema: Record<strin
       additionalProperties: false,
       required: ["block_title", "objective", "rationale", "next_step"],
       properties: {
-        block_title: { type: "string", minLength: 2, maxLength: 96 },
-        objective: { type: "string", minLength: 8, maxLength: 500 },
-        rationale: { type: "string", minLength: 8, maxLength: 500 },
-        next_step: { type: "string", minLength: 8, maxLength: 500 },
-        expected_effect: { type: "string", minLength: 4, maxLength: 500 },
+        block_title: {
+          type: "string",
+          minLength: 2,
+          maxLength: 96,
+          description: "Concise one-line label for only this immediate batch. It must be shorter than and distinct from objective.",
+        },
+        objective: {
+          type: "string",
+          minLength: 8,
+          maxLength: 500,
+          description: "The concrete result this batch will produce or inspect, not the entire remaining project.",
+        },
+        rationale: {
+          type: "string",
+          minLength: 8,
+          maxLength: 500,
+          description: "Why this exact batch is useful given the latest observed result.",
+        },
+        next_step: {
+          type: "string",
+          minLength: 8,
+          maxLength: 500,
+          description: "How this batch result determines the following action.",
+        },
+        expected_effect: {
+          type: "string",
+          minLength: 4,
+          maxLength: 500,
+          description: "Expected state or evidence change. Omit to reuse next_step.",
+        },
         repeat_reason: {
           anyOf: [
             { type: "string", enum: Array.from(REPEAT_REASONS) },
             { type: "null" },
           ],
-        },
-        completion_obligations: {
-          type: "array",
-          uniqueItems: true,
-          items: { type: "string", enum: Array.from(COMPLETION_OBLIGATIONS) },
-          maxItems: COMPLETION_OBLIGATIONS.size,
         },
       },
     },
@@ -70,6 +89,15 @@ export function validatePublicWorkDecisionRepair(
   args: Record<string, unknown>,
 ): PrivateTurnDecisionValidation {
   const canonicalArgs = canonicalPublicWorkDecisionArgs(args);
+  const correction = publicWorkDecisionCorrection(canonicalArgs);
+  if (correction) {
+    return {
+      ok: false,
+      errorCode: "public_work_decision_invalid",
+      correction,
+      canonicalArgs,
+    };
+  }
   const envelope = publicWorkDecisionEnvelopeFromRecord(canonicalArgs);
   if (!envelope) {
     return {
@@ -80,6 +108,25 @@ export function validatePublicWorkDecisionRepair(
     };
   }
   return { ok: true, canonicalArgs };
+}
+
+function publicWorkDecisionCorrection(value: Record<string, unknown>): string | null {
+  const blockTitle = text(value.block_title);
+  const objective = text(value.objective);
+  const rationale = text(value.rationale);
+  const nextStep = text(value.next_step);
+  const expectedEffect = text(value.expected_effect);
+  if (blockTitle.length < 2 || blockTitle.length > 96) {
+    return "Set block_title to one concise line between 2 and 96 characters.";
+  }
+  if (objective.length < 8) return "State the immediate batch objective in at least 8 characters.";
+  if (rationale.length < 8) return "Explain why this batch is useful now in at least 8 characters.";
+  if (nextStep.length < 8) return "State how this result determines the next step in at least 8 characters.";
+  if (expectedEffect.length < 4) return "State the expected state or evidence change in at least 4 characters.";
+  if (normalized(blockTitle) === normalized(objective)) {
+    return "Keep block_title as a shorter label distinct from objective.";
+  }
+  return null;
 }
 
 export function parsePublicWorkDecisionRepair(raw: string): PublicWorkDecisionEnvelope {

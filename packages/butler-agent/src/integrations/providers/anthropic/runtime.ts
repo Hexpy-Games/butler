@@ -1,5 +1,5 @@
 import { anthropicMessagesUrl, hostedProviderErrorLabel, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
-import { activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, type ProviderUsageSample } from "../shared/runtime-support.ts";
+import { activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
@@ -13,6 +13,18 @@ import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.t
 
 
 export async function createAnthropicMessage(
+  config: HostedRuntimeConfig,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<Record<string, any>> {
+  return await withModelApiRetry(
+    async () => await createAnthropicMessageOnce(config, body, signal),
+    signal,
+  );
+}
+
+
+async function createAnthropicMessageOnce(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,

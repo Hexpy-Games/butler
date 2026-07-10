@@ -14,6 +14,7 @@ import {
   readTurnContextAtom,
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { promptUsageModelCallBudgetExhaustedError } from "../../packages/butler-agent/src/integrations/providers/shared/usage.ts";
+import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 
 let data = "";
 
@@ -259,11 +260,11 @@ test("typed inspect contract exposes read tools and completes from a status rece
   });
 });
 
-test("tool-only provider round repairs one decision and executes the original batch", async () => {
+test("an invalid work-block decision returns feedback without executing its selected calls", async () => {
   const events: RuntimeTurnEventInput[] = [];
   const executedTools: string[] = [];
-  let decisionRepairCalls = 0;
   let mainLoopCalls = 0;
+  let invalidResult: unknown;
   const runtime = new NativeToolLoopRuntime({
     butlerData: data,
     butlerHome: process.cwd(),
@@ -283,42 +284,37 @@ test("tool-only provider round repairs one decision and executes the original ba
       immediate_next_step: "전체 상태를 확인한 뒤 대상 레코드를 읽습니다.",
     }),
     runFunctionToolPromptText: async (input) => {
-      if (input.tools.some((tool) => tool.name === "submit_work_block_decision")) {
-        decisionRepairCalls += 1;
-        const args = {
-          block_title: "대상 Ledger 레코드 확인",
-          objective: "전체 상태에서 확인된 대상 Project Ledger 레코드의 내용을 읽습니다.",
-          rationale: "두 번째 읽기는 첫 상태 조회 결과를 구체적인 레코드 근거로 좁힙니다.",
-          next_step: "레코드 내용을 확인한 뒤 상태 보고를 마무리합니다.",
-          expected_effect: "대상 레코드의 canonical 내용이 source evidence로 추가됩니다.",
-          repeat_reason: null,
-          completion_obligations: ["source_verified"],
-        };
-        const output = await input.executeTool({
-          name: "submit_work_block_decision",
-          args,
-          rawArguments: JSON.stringify(args),
-        });
-        return await input.finalTextFromToolResult?.({
-          name: "submit_work_block_decision",
-          args,
-          output,
-        }) ?? "";
-      }
       mainLoopCalls += 1;
       const openingCall = { name: "project_ledger_status", args: {} };
       await input.onAssistantTextBeforeTools?.({ text: "", toolCalls: [openingCall] });
       await input.executeTool({ ...openingCall, rawArguments: "{}" });
 
-      const selectedWithoutText = {
-        name: "project_ledger_show",
-        args: { id: "SPEC-TURN-KERNEL-FORWARD-PROGRESS-LOOP" },
+      const selectedArgs = { id: "SPEC-TURN-KERNEL-FORWARD-PROGRESS-LOOP" };
+      const invalidBlock = {
+        name: "run_work_block",
+        args: {
+          decision: {
+            block_title: "대상 Project Ledger 레코드의 내용을 읽습니다.",
+            objective: "대상 Project Ledger 레코드의 내용을 읽습니다.",
+            rationale: "첫 상태 조회를 구체적인 레코드 근거로 좁혀야 합니다.",
+            next_step: "레코드 내용을 확인한 뒤 상태 보고를 마무리합니다.",
+          },
+          calls: [{ name: "project_ledger_show", args: selectedArgs }],
+        },
       };
-      await input.onAssistantTextBeforeTools?.({ text: "", toolCalls: [selectedWithoutText] });
-      await input.executeTool({
-        ...selectedWithoutText,
-        rawArguments: JSON.stringify(selectedWithoutText.args),
+      await input.onAssistantTextBeforeTools?.({ text: "", toolCalls: [invalidBlock] });
+      invalidResult = await input.executeTool({
+        ...invalidBlock,
+        rawArguments: JSON.stringify(invalidBlock.args),
       });
+
+      const correctedBlock = testWorkBlock(
+        "대상 Ledger 레코드 확인",
+        "project_ledger_show",
+        selectedArgs,
+      );
+      await input.onAssistantTextBeforeTools?.({ text: "", toolCalls: [correctedBlock] });
+      await input.executeTool({ ...correctedBlock, rawArguments: JSON.stringify(correctedBlock.args) });
       return "Project Ledger 상태와 대상 레코드를 모두 확인했습니다.";
     },
     executeButlerTool: async (call) => {
@@ -354,8 +350,14 @@ test("tool-only provider round repairs one decision and executes the original ba
 
   expect(result.text).toContain("모두 확인");
   expect(mainLoopCalls).toBe(1);
-  expect(decisionRepairCalls).toBe(1);
   expect(executedTools).toEqual(["project_ledger_status", "project_ledger_show"]);
+  expect(invalidResult).toMatchObject({
+    butler_work_block_result: true,
+    decision_feedback: {
+      correction: "Keep block_title as a shorter label distinct from objective.",
+    },
+    results: [],
+  });
   const blocks = events.filter((event) => event.kind === "work.block.started");
   expect(blocks).toHaveLength(2);
   expect(new Set(blocks.map((event) => event.payload?.decisionId)).size).toBe(2);
@@ -1122,6 +1124,69 @@ test("one semantic decision block closes only after its final tool", async () =>
   expect(deliveredContract.target_workstream_id).toBeString();
   const stream = new WorkStreamStore(data).read(String(deliveredContract.target_workstream_id));
   expect(stream).toMatchObject({ active_contract_id: null });
+});
+
+test("retryable provider failures checkpoint the active contract instead of failing the turn", async () => {
+  const turnId = "turn-provider-retry-checkpoint";
+  const sessionId = "butler/provider-retry-checkpoint";
+  const runtime = new NativeToolLoopRuntime({
+    butlerData: data,
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => JSON.stringify({
+      schema_version: "butler.turn-contract-decision.v1",
+      decision_id: decisionIdFromFormat(input.responseFormat),
+      action: "start_work",
+      target_workstream_id: null,
+      target_project_id: "butler",
+      blocker_id: null,
+      deliverables: ["code_change", "validation", "final_report"],
+      answer_text: null,
+      public_title: "공급자 복구 체크포인트",
+      public_summary: "일시적인 공급자 장애 뒤에도 같은 작업 계약을 이어갑니다.",
+      public_rationale: "장시간 작업은 재시도 가능한 네트워크 실패로 종료되면 안 됩니다.",
+      immediate_next_step: "공급자가 복구되면 같은 도구 라운드를 다시 실행합니다.",
+    }),
+    runFunctionToolPromptText: async () => {
+      throw new ModelProviderRequestError({
+        code: "provider_network_error",
+        message: "Model provider API connection failed before a response was received.",
+        provider: "zai",
+        api: "chat_completions",
+        model: "glm-5.2",
+        retryable: true,
+        cause: "The operation timed out.",
+      });
+    },
+    executeButlerTool: async () => ({ ok: true }),
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: data,
+    systemPrompt: "You are Sandy.",
+    metadata: { projectId: "butler" },
+  });
+
+  let yielded: unknown;
+  try {
+    await runtime.runTurn({
+      handle,
+      provider: typedProvider,
+      model: "openai/gpt-5.5",
+      input: { text: "파일을 변경하고 검증해줘." },
+      metadata: { turnId, runtimePolicy: { completionReview: "disabled" } },
+    });
+  } catch (error) {
+    yielded = error;
+  }
+
+  expect(isTurnSchedulerContinuationYieldError(yielded)).toBe(true);
+  expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).toMatchObject({
+    state: "continuing",
+    contractId: expect.stringContaining("contract-"),
+    nextSemanticBlockSequence: 1,
+  });
 });
 
 test("scheduler resume restores one typed contract without another opening decision", async () => {

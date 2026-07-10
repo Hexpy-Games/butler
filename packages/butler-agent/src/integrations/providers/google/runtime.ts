@@ -1,4 +1,4 @@
-import { activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, type ProviderUsageSample } from "../shared/runtime-support.ts";
+import { activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { geminiGenerateContentUrl, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
@@ -13,6 +13,18 @@ import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.t
 
 
 export async function createGeminiContent(
+  config: HostedRuntimeConfig,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<Record<string, any>> {
+  return await withModelApiRetry(
+    async () => await createGeminiContentOnce(config, body, signal),
+    signal,
+  );
+}
+
+
+async function createGeminiContentOnce(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,

@@ -3,6 +3,7 @@ import type { SessionRole } from "../../../../test-support/harness/contracts.ts"
 export interface ButlerToolInstructionOptions {
   availableToolNames?: readonly string[];
   fixedSurface?: boolean;
+  structuredSurface?: boolean;
 }
 
 export function appendButlerToolInstructions(
@@ -11,6 +12,9 @@ export function appendButlerToolInstructions(
 ): string {
   if (options.fixedSurface) {
     return appendFixedToolInstructions(systemPrompt, options.availableToolNames ?? []);
+  }
+  if (options.structuredSurface) {
+    return appendStructuredToolInstructions(systemPrompt, options.availableToolNames ?? []);
   }
   const toolContract = [
     "## Butler Turn Cognition Cycle",
@@ -128,14 +132,34 @@ function appendFixedToolInstructions(
   systemPrompt: string | undefined,
   availableToolNames: readonly string[],
 ): string {
+  return appendScopedToolInstructions(systemPrompt, availableToolNames, "fixed");
+}
+
+function appendStructuredToolInstructions(
+  systemPrompt: string | undefined,
+  availableToolNames: readonly string[],
+): string {
+  return appendScopedToolInstructions(systemPrompt, availableToolNames, "structured");
+}
+
+function appendScopedToolInstructions(
+  systemPrompt: string | undefined,
+  availableToolNames: readonly string[],
+  scope: "fixed" | "structured",
+): string {
   const tools = new Set(availableToolNames);
   const exactSurface = [...tools].sort().map((name) => `\`${name}\``).join(", ");
   const instructions = [
-    "## Fixed Butler Tool Surface",
-    `- The complete tool surface for this turn is: ${exactSurface || "none"}. Plan each next step directly with this surface.`,
+    scope === "fixed" ? "## Fixed Butler Tool Surface" : "## Typed Contract Tool Surface",
+    scope === "fixed"
+      ? `- The complete tool surface for this turn is: ${exactSurface || "none"}. Plan each next step directly with this surface.`
+      : `- The ordinary tools available at the current obligation frontier are: ${exactSurface || "none"}. This surface advances after observed results satisfy the current frontier.`,
     "- Use the smallest useful step. Each assistant tool response is one semantic work block with one fresh public decision and at most six visible tool calls.",
     "- Put independent calls that serve the same immediate decision in one stable-order batch, up to six calls. Start a later decision only when its tool choice depends on results from the current batch.",
+    "- Prefer the smallest coherent implementation slice that satisfies the current contract. When implementation and directly derived tests can be authored from the same observed context, write them in one work block and validate them in the following block.",
     "- When `run_work_block` is present, put one decision and one to six ordinary calls inside it. The calls share that decision and execute in stable order.",
+    "- If a `run_work_block` result contains `decision_feedback`, no embedded call ran. Submit one corrected decision with the still-needed calls in the next response, preserving the same provider conversation.",
+    "- When the frontier reports that the requested workspace mutation and validation are observed, emit the final candidate unless the contract itself still names an unsatisfied deliverable. The runtime owns the bound WorkStream lifecycle; additional tracking-record status transitions are work only when the user or acceptance contract requested them.",
     "- If `run_work_block` is absent, public decision protocol after the opening batch is: `title: <one-line immediate work label>` / `summary: <immediate action>` / `rationale: <why now>` / `next_step: <how the result determines the following step>`.",
     "- For a deliberate unchanged retry, also provide `expected_effect: <concrete expected change>` and `repeat_reason: polling|transient_retry|race_confirmation`.",
     "- When the active typed-turn prompt says the opening decision already authorizes the first batch, call only those first tools without restating the opening protocol. Every later batch must use the complete protocol above.",
@@ -154,6 +178,22 @@ function appendFixedToolInstructions(
       ? [
         "- Use `read_file` to verify the candidate that supports the requested claim; search output alone is not source verification.",
         "- `read_file.path` is the root-relative candidate path exactly as listed by the runtime; the active workspace root is already owned by the session.",
+      ]
+      : []),
+    ...(tools.has("write_file")
+      ? [
+        "- `write_file` creates or completely replaces one text file. Keep generated source focused on the requested slice, preserve observed interfaces, and pair it with directly derived tests when both are already determined.",
+      ]
+      : []),
+    ...(tools.has("run_command")
+      ? [
+        "- Use `run_command` for compact workspace inspection or validation. Batch independent inspection commands with relevant file reads when neither choice depends on the other, then use the combined result for the next decision.",
+        "- When you select a command as the contract's actual validation, set `validation_suite` to a stable descriptive label on that first validation run. Its structured receipt lets a passing result satisfy validation without rerunning the same command after completion review.",
+      ]
+      : []),
+    ...(tools.has("project_ledger_create")
+      ? [
+        "- The Ledger creation schema is the complete dependency contract. Batch the ordered spec, Work, and task records that are already determined in one work block, then use the dedicated check frontier.",
       ]
       : []),
     ...(tools.has("read_tool_evidence_artifact") || tools.has("read_tool_output_artifact")
