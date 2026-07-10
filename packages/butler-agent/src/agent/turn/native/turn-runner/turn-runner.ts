@@ -13,6 +13,7 @@ import {
   createTurnContextAtomId,
   isTurnSchedulerContinuationYieldError,
   persistTurnContextAtom,
+  readTurnContextAtom,
   TurnSchedulerContinuationYieldError,
 } from "../../turn-continuation-context.ts";
 import { snapshotDirectTurnBudget, type DirectTurnBudget } from "../../direct-turn-budget.ts";
@@ -70,6 +71,8 @@ import {
   completionGapFinalSynthesisPrompt,
 } from "./turn-continuation-prompts.ts";
 import { buildTurnRoundJournal } from "./turn-round-journal.ts";
+import { WorkStreamStore } from "../../../work/work-stream.ts";
+import { recordTurnContractAuditEvidence } from "./turn-contract-audit-evidence.ts";
 
 export async function runNativeToolTurn({
   input,
@@ -113,6 +116,10 @@ export async function runNativeToolTurn({
       skipRuntimePreparationProgress: earlyProgressEmitted,
     });
     turnId = context.turnId;
+    await emitCommittedContinuationScheduledEvent({
+      turnInput: input,
+      continuationAtom: context.continuationAtom,
+    });
     const latencyTracker = installTurnLatencyTracker({
       turnInput: input,
       butlerData: deps.butlerData,
@@ -153,6 +160,10 @@ export async function runNativeToolTurn({
       latencyTracker,
       phaseBudgetController,
       turnContractContext,
+      initialProviderRoundIndex: Math.max(
+        0,
+        (context.continuationAtom?.nextSemanticBlockSequence ?? 1) - 1,
+      ),
     });
     const runKernelToolPrompt = async (
       promptText: string,
@@ -164,22 +175,24 @@ export async function runNativeToolTurn({
         return await runToolPrompt(promptText, maxToolRounds, phase);
       } catch (error) {
         if (!isPromptUsageModelCallBudgetError(error)) throw error;
-        const contextAtomId = await persistSchedulerContinuation({
+        const checkpoint = await persistSchedulerContinuation({
           input,
           deps,
           turnId: context.turnId,
           turnBudget: context.turnBudget,
           audit,
           publicDecisionContext,
-          ...(turnContractContext.current
-            ? { contractId: turnContractContext.current.contract.contract_id }
-            : {}),
+          activeTurnContract: turnContractContext.current,
+          expectedGeneration: context.continuationAtom?.generation,
+          nextSemanticBlockSequenceFloor: context.continuationAtom?.nextSemanticBlockSequence,
           error,
         });
         throw new TurnSchedulerContinuationYieldError(
           input.handle.sessionId,
           context.turnId,
-          contextAtomId,
+          checkpoint.contextAtomId,
+          checkpoint.checkpointId,
+          checkpoint.generation,
         );
       }
     };
@@ -191,22 +204,24 @@ export async function runNativeToolTurn({
         return await runTextPrompt(promptText, phase);
       } catch (error) {
         if (!isPromptUsageModelCallBudgetError(error)) throw error;
-        const contextAtomId = await persistSchedulerContinuation({
+        const checkpoint = await persistSchedulerContinuation({
           input,
           deps,
           turnId: context.turnId,
           turnBudget: context.turnBudget,
           audit,
           publicDecisionContext,
-          ...(turnContractContext.current
-            ? { contractId: turnContractContext.current.contract.contract_id }
-            : {}),
+          activeTurnContract: turnContractContext.current,
+          expectedGeneration: context.continuationAtom?.generation,
+          nextSemanticBlockSequenceFloor: context.continuationAtom?.nextSemanticBlockSequence,
           error,
         });
         throw new TurnSchedulerContinuationYieldError(
           input.handle.sessionId,
           context.turnId,
-          contextAtomId,
+          checkpoint.contextAtomId,
+          checkpoint.checkpointId,
+          checkpoint.generation,
         );
       }
     };
@@ -411,18 +426,6 @@ export async function runNativeToolTurn({
     const isSchedulerYield = isTurnSchedulerContinuationYieldError(error);
     const isCompletionIncomplete = error instanceof Error && error.name === "GoalCompletionIncompleteError";
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (isBudgetError && turnId) {
-      const safeFailure = safeRuntimeFailure(error);
-      persistTurnContextAtom({
-        butlerData: deps.butlerData,
-        sessionId: input.handle.sessionId,
-        turnId,
-        state: "continuing",
-        sourceErrorCode: safeFailure.code,
-        reason: safeFailure.message,
-        unresolvedObservations: [],
-      });
-    }
     if (toolLoopUsed) {
       if (input.signal?.aborted) {
         cancelActiveWorkStreamBestEffort({
@@ -472,11 +475,26 @@ async function persistSchedulerContinuation(input: {
   turnBudget: DirectTurnBudget;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
-  contractId?: string;
+  activeTurnContract: ActiveTurnContract | null;
+  expectedGeneration?: number;
+  nextSemanticBlockSequenceFloor?: number;
   error: unknown;
-}): Promise<string> {
-  const safeFailure = safeRuntimeFailure(input.error);
+}): Promise<{ contextAtomId: string; checkpointId: string; generation: number }> {
+  const safeFailure = isPromptUsageModelCallBudgetError(input.error)
+    ? {
+      code: "prompt_usage_model_call_budget_exhausted",
+      message: "Provider request safety window exhausted.",
+    }
+    : safeRuntimeFailure(input.error);
   const contextAtomId = createTurnContextAtomId(input.input.handle.sessionId, input.turnId);
+  if (input.activeTurnContract) {
+    input.activeTurnContract.contract = recordTurnContractAuditEvidence({
+      butlerData: input.deps.butlerData,
+      contract: input.activeTurnContract.contract,
+      audit: input.audit,
+      finalCandidate: "",
+    });
+  }
   const refs = collectTurnContinuationRefs({
     butlerData: input.deps.butlerData,
     sessionId: input.input.handle.sessionId,
@@ -500,17 +518,34 @@ async function persistSchedulerContinuation(input: {
       publicDecisions: input.publicDecisionContext,
     }),
     budgetSnapshot: snapshotDirectTurnBudget(input.turnBudget),
+    ...(input.activeTurnContract
+      ? continuationContractState({
+        butlerData: input.deps.butlerData,
+        active: input.activeTurnContract,
+        publicDecisionContext: input.publicDecisionContext,
+        nextSemanticBlockSequenceFloor: input.nextSemanticBlockSequenceFloor,
+      })
+      : {}),
+    providerAdapterId: input.input.provider.id,
+    effectiveModel: input.input.model,
+    expectedGeneration: input.expectedGeneration,
     unresolvedObservations: [{
       kind: "context_compacted",
       id: `context-atom:${contextAtomId}`,
     }],
   });
   if (!persistedContextAtomId) throw new Error("turn_continuation_commit_missing");
-  if (input.contractId) {
-    commitTurnContractContinuation({
+  const committed = readTurnContextAtom({
+    butlerData: input.deps.butlerData,
+    sessionId: input.input.handle.sessionId,
+    turnId: input.turnId,
+  });
+  if (!committed) throw new Error("turn_continuation_commit_missing");
+  if (input.activeTurnContract) {
+    input.activeTurnContract.contract = commitTurnContractContinuation({
       butlerData: input.deps.butlerData,
-      contractId: input.contractId,
-      commitId: persistedContextAtomId,
+      contractId: input.activeTurnContract.contract.contract_id,
+      commitId: committed.checkpointId,
     });
   }
   await emitTurnEventBestEffort(input.input, {
@@ -526,7 +561,36 @@ async function persistSchedulerContinuation(input: {
       }],
     },
   });
-  return contextAtomId;
+  return {
+    contextAtomId,
+    checkpointId: committed.checkpointId,
+    generation: committed.generation,
+  };
+}
+
+function continuationContractState(input: {
+  butlerData: string;
+  active: ActiveTurnContract;
+  publicDecisionContext: PublicWorkDecision[];
+  nextSemanticBlockSequenceFloor?: number;
+}) {
+  const workStreamId = input.active.contract.target_workstream_id;
+  const stream = workStreamId
+    ? new WorkStreamStore(input.butlerData).read(workStreamId)
+    : null;
+  const providerRounds = input.publicDecisionContext
+    .map((decision) => decision.providerRound)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return {
+    contractId: input.active.contract.contract_id,
+    turnDecision: input.active.decision,
+    ...(workStreamId ? { workStreamId } : {}),
+    ...(stream?.todo_list_id ? { todoListId: stream.todo_list_id } : {}),
+    nextSemanticBlockSequence: Math.max(
+      input.nextSemanticBlockSequenceFloor ?? 1,
+      Math.max(0, ...providerRounds) + 1,
+    ),
+  };
 }
 
 async function emitEarlyRuntimePreparationProgress(input: {
@@ -563,6 +627,33 @@ async function emitEarlyRuntimePreparationProgress(input: {
 
 function gatewayFirstVisibleProgressEmitted(metadata: Record<string, unknown> | undefined): boolean {
   return metadata?.gatewayFirstVisibleProgressEmitted === true;
+}
+
+async function emitCommittedContinuationScheduledEvent(input: {
+  turnInput: NativeTurnRunnerInput["input"];
+  continuationAtom: ReturnType<typeof readTurnContextAtom>;
+}): Promise<void> {
+  const metadata = input.turnInput.metadata?.schedulerContinuation;
+  if (!metadata || typeof metadata !== "object" || !input.continuationAtom) return;
+  const record = metadata as Record<string, unknown>;
+  const checkpointId = typeof record.checkpointId === "string" ? record.checkpointId.trim() : "";
+  const schedulerItemId = typeof record.schedulerItemId === "string" ? record.schedulerItemId.trim() : "";
+  if (!checkpointId || !schedulerItemId) return;
+  if (checkpointId !== input.continuationAtom.checkpointId) {
+    throw new Error("turn_continuation_checkpoint_mismatch");
+  }
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: "turn.continuation_scheduled",
+    payload: {
+      checkpointId,
+      schedulerItemId,
+      contextAtomId: createTurnContextAtomId(
+        input.continuationAtom.sessionId,
+        input.continuationAtom.turnId,
+      ),
+      safeLabel: "Continuation checkpoint scheduled.",
+    },
+  });
 }
 
 function deliveryForFinalAudit(audit: ToolAuditEntry[]): RuntimeTurnResult["delivery"] {

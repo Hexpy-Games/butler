@@ -18,6 +18,7 @@ import type {
   RuntimeTurnEventInput,
   RuntimeTurnInput,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
+import { TurnSchedulerContinuationYieldError } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -225,6 +226,39 @@ class StewardBootstrapRuntime implements AgentRuntimeAdapter {
   async runTurn(input: RuntimeTurnInput) {
     expect(input.handle.role).toBe("steward");
     return { text: "steward final answer" };
+  }
+}
+
+class CheckpointYieldRuntime implements AgentRuntimeAdapter {
+  readonly id = "checkpoint-yield-runtime";
+  readonly capabilities = {
+    supportsSessionResume: false,
+    supportsCompaction: false,
+    supportsToolStreaming: true,
+    supportsParallelToolCalls: false,
+  } as const;
+  private calls = 0;
+
+  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
+    return {
+      sessionId: input.sessionId,
+      role: input.role,
+      runtimeAdapterId: this.id,
+    };
+  }
+
+  async runTurn(input: RuntimeTurnInput) {
+    this.calls += 1;
+    if (this.calls === 1) {
+      throw new TurnSchedulerContinuationYieldError(
+        input.handle.sessionId,
+        "turn-checkpoint-yield",
+        "checkpoint-context.json",
+        "checkpoint-context.json:g1",
+        1,
+      );
+    }
+    return { text: "continued final answer" };
   }
 }
 
@@ -554,6 +588,37 @@ test("same-logical-turn continuation can still admit final assistant output", as
   expect(conversationStore.readSemanticTail(session!.id, 10)[0]?.parts[0]?.content_json).toEqual({
     text: "final answer",
   });
+
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("scheduler yield keeps the conversation turn open until the resumed final", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
+    runtime: new CheckpointYieldRuntime(),
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(inbound("checkpoint-yield", "continue durable work")))
+    .rejects.toThrow("Turn scheduler yielded");
+  expect(conversationStore.readTurn("turn-checkpoint-yield")?.status).toBe("running");
+
+  await actor.handleInbound(inbound("checkpoint-yield", "continue durable work", {
+    raw: {
+      sameLogicalTurnContinuation: true,
+      contextAtomId: "checkpoint-context.json",
+      checkpointId: "checkpoint-context.json:g1",
+      schedulerItemId: "queue-checkpoint-1",
+    },
+  }));
+  expect(conversationStore.readTurn("turn-checkpoint-yield")?.status).toBe("complete");
+  const session = conversationStore.getSessionByGatewayBinding("mock", "butler/main");
+  expect(conversationStore.readSemanticTail(session!.id, 10).map((message) => message.role))
+    .toEqual(["user", "assistant"]);
 
   conversationStore.close();
   bindingStore.close();

@@ -268,17 +268,79 @@ export function contractExecutionPrompt(input: {
   ].join("\n\n");
 }
 
+export function restoreTurnContractExecution(input: {
+  butlerData: string;
+  contractId: string;
+  decision: TurnContractDecision;
+  nextSemanticBlockSequence: number;
+  turnMetadata?: Record<string, unknown>;
+  toolSurfaceController: ToolSurfacePromptController;
+}): ActiveTurnContract {
+  const contracts = new TurnContractStore(input.butlerData);
+  let contract = contracts.read(input.contractId);
+  if (!contract) throw new Error("turn_contract_not_found");
+  if (contract.decision_id !== input.decision.decision_id) {
+    throw new Error("turn_contract_decision_conflict");
+  }
+  if (contract.state === "continuing") {
+    contract = contracts.transitionState({
+      contractId: contract.contract_id,
+      state: "executing",
+      expectedGeneration: contract.generation,
+    });
+  } else if (contract.state !== "executing" && contract.state !== "reviewing") {
+    throw new Error(`turn_contract_resume_state_invalid:${contract.state}`);
+  }
+  if (contract.target_workstream_id) {
+    const stream = new WorkStreamStore(input.butlerData).read(contract.target_workstream_id);
+    if (!stream || stream.active_contract_id !== contract.contract_id) {
+      throw new Error("workstream_contract_claim_missing");
+    }
+  }
+  input.toolSurfaceController.applyTurnMetadata(
+    turnMetadataForContract(contract, input.turnMetadata),
+  );
+  return {
+    contract,
+    decision: input.decision,
+    publicDecision: publicDecisionForContract(
+      contract,
+      input.decision,
+      Math.max(1, Math.floor(input.nextSemanticBlockSequence)),
+    ),
+  };
+}
+
+export function contractResumePrompt(input: {
+  basePrompt: string;
+  active: ActiveTurnContract;
+  nextSemanticBlockSequence: number;
+}): string {
+  return [
+    input.basePrompt,
+    "## Resumed Typed Turn Contract",
+    `Contract ID: ${input.active.contract.contract_id}`,
+    `Action: ${input.active.contract.action}`,
+    `Target WorkStream: ${input.active.contract.target_workstream_id ?? "none"}`,
+    `Next Semantic Block: ${Math.max(1, Math.floor(input.nextSemanticBlockSequence))}`,
+    "The typed opening decision was already emitted before the durable yield. Do not emit or paraphrase it again.",
+    "Use the persisted round journal and unresolved obligations to author one fresh title, summary, rationale, and next_step for the next small tool batch.",
+    "Continue the same contract and WorkStream. Do not restart discovery or create a replacement plan.",
+  ].join("\n\n");
+}
+
 function publicDecisionForContract(
   contract: CompiledTurnContract,
   decision: TurnContractDecision,
+  sequence = 0,
 ): PublicWorkDecision {
   const nextStep = decision.immediate_next_step?.trim() || decision.public_summary.trim();
   return {
     decisionId: decision.decision_id,
-    usageGroupId: `${decision.decision_id}:0`,
+    usageGroupId: `${decision.decision_id}:${sequence}`,
     contractId: contract.contract_id,
     ...(contract.target_workstream_id ? { workstreamId: contract.target_workstream_id } : {}),
-    semanticBlockId: `${contract.contract_id}:block:0`,
+    semanticBlockId: `${contract.contract_id}:block:${sequence}`,
     blockTitle: decision.public_title?.trim() || nextStep.slice(0, 80),
     summary: decision.public_summary,
     rationale: decision.public_rationale?.trim() || decision.public_summary,
@@ -287,7 +349,7 @@ function publicDecisionForContract(
     evidenceRefs: [],
     completionObligations: [],
     source: "model-authored",
-    providerRound: 0,
+    providerRound: sequence,
   };
 }
 

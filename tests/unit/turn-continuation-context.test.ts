@@ -9,6 +9,7 @@ import {
   readTurnContextAtom,
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { isTerminalTurnState } from "../../packages/butler-agent/src/agent/turn/turn-kernel.ts";
+import { TURN_CONTRACT_DECISION_SCHEMA } from "../../packages/butler-agent/src/agent/turn/turn-contract.ts";
 
 function tempWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "butler-turn-kernel-context-"));
@@ -177,3 +178,80 @@ test("turn context atom is not persisted for terminal states", () => {
     rmSync(butlerData, { recursive: true, force: true });
   }
 });
+
+test("turn context checkpoint uses generation CAS and preserves the round journal", () => {
+  const butlerData = tempWorkspace();
+  try {
+    const sessionId = "butler/main/context-cas";
+    const turnId = "turn-context-cas";
+    const base = {
+      butlerData,
+      sessionId,
+      turnId,
+      state: "continuing" as const,
+      sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+      reason: "safety window exhausted",
+      contractId: "contract-cas",
+      workStreamId: "work-cas",
+      todoListId: "todo-cas",
+      nextSemanticBlockSequence: 2,
+      turnDecision: {
+        schema_version: TURN_CONTRACT_DECISION_SCHEMA,
+        decision_id: "decision-cas",
+        action: "resume_work" as const,
+        target_workstream_id: "work-cas",
+        deliverables: ["code_change" as const],
+        public_summary: "기존 작업을 이어갑니다.",
+      },
+    };
+    persistTurnContextAtom({
+      ...base,
+      roundJournal: [journalEntry("call-1", "result-1")],
+    });
+    const first = readTurnContextAtom({ butlerData, sessionId, turnId });
+    expect(first).toMatchObject({
+      schemaVersion: "butler.turn-continuation.v2",
+      generation: 1,
+      checkpointId: expect.stringContaining(":g1"),
+      contractId: "contract-cas",
+      workStreamId: "work-cas",
+      todoListId: "todo-cas",
+      nextSemanticBlockSequence: 2,
+    });
+    expect(() => persistTurnContextAtom({
+      ...base,
+      roundJournal: [journalEntry("call-conflict", "result-conflict")],
+    })).toThrow("turn_continuation_generation_conflict");
+
+    persistTurnContextAtom({
+      ...base,
+      expectedGeneration: 1,
+      nextSemanticBlockSequence: 3,
+      roundJournal: [journalEntry("call-2", "result-2")],
+    });
+    const second = readTurnContextAtom({ butlerData, sessionId, turnId });
+    expect(second).toMatchObject({
+      generation: 2,
+      checkpointId: expect.stringContaining(":g2"),
+      nextSemanticBlockSequence: 3,
+      roundJournal: [
+        { sequence: 1, call_identity: "call-1" },
+        { sequence: 2, call_identity: "call-2" },
+      ],
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+function journalEntry(callIdentity: string, resultFingerprint: string) {
+  return {
+    sequence: 1,
+    tool: "read_file",
+    ok: true,
+    call_identity: callIdentity,
+    result_fingerprint: resultFingerprint,
+    state_revision: resultFingerprint,
+    observed_delta: "evidence" as const,
+  };
+}

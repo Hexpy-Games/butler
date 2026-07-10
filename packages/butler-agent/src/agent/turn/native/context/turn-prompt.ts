@@ -270,6 +270,15 @@ function renderSchedulerContinuationAtomContext(
       "Scheduler continuation context atom could not be read.",
     );
   }
+  const checkpointId = typeof continuation?.checkpointId === "string"
+    ? continuation.checkpointId.trim()
+    : "";
+  if (checkpointId && checkpointId !== atom.checkpointId) {
+    throw schedulerContinuationInvariantFault(
+      "turn_scheduler_continuation_checkpoint_mismatch",
+      "Scheduler continuation metadata referenced a stale checkpoint generation.",
+    );
+  }
   return renderTurnContextAtom(atom, contextAtomId);
 }
 
@@ -291,12 +300,20 @@ function renderTurnContextAtom(atom: TurnContextAtom, contextAtomId: string): st
   const lines = [
     "## Scheduler Continuation Context Atom",
     `Context Atom ID: ${contextAtomId}`,
+    `Checkpoint ID: ${atom.checkpointId}`,
+    `Checkpoint Generation: ${atom.generation}`,
     `Turn ID: ${atom.turnId}`,
     `State: ${atom.state}`,
     `Source Error Code: ${atom.sourceErrorCode}`,
     `Reason: ${atom.reason}`,
     `User Request Ref: ${atom.userRequest.id}`,
   ];
+  if (atom.contractId) lines.push(`Active Contract ID: ${atom.contractId}`);
+  if (atom.workStreamId) lines.push(`Bound WorkStream ID: ${atom.workStreamId}`);
+  if (atom.todoListId) lines.push(`Bound Todo List ID: ${atom.todoListId}`);
+  if (atom.nextSemanticBlockSequence !== undefined) {
+    lines.push(`Next Semantic Block Sequence: ${atom.nextSemanticBlockSequence}`);
+  }
   if (atom.latestAssistantDecision) {
     lines.push(`Latest Assistant Decision Ref: ${atom.latestAssistantDecision.id}`);
   }

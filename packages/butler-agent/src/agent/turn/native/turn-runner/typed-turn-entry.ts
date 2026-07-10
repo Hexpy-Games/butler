@@ -8,7 +8,9 @@ import { buildThinFirstResponsePrompt, shouldUseThinFirstResponse } from "./thin
 import {
   activateTurnContract,
   contractExecutionPrompt,
+  contractResumePrompt,
   openingDecisionPayload,
+  restoreTurnContractExecution,
   type ActiveTurnContract,
 } from "./turn-contract-runtime.ts";
 import {
@@ -25,6 +27,7 @@ import {
 } from "./typed-turn-decision.ts";
 import type { PublicWorkDecision } from "../output/tool-types.ts";
 import type { NativeStoredSessionConfig } from "./turn-runner-types.ts";
+import type { TurnContextAtom } from "../../turn-continuation-context.ts";
 
 interface TypedTurnEntryContext {
   turnId: string;
@@ -40,6 +43,7 @@ interface TypedTurnEntryContext {
   resumeDecisionEnvelope?: { prompt: string } | null;
   focusedResumeEnvelope?: { prompt: string } | null;
   toolSurfaceController: ToolSurfacePromptController;
+  continuationAtom?: TurnContextAtom | null;
 }
 
 type StructuredResponseFormat = ReturnType<typeof turnDecisionResponseFormat>;
@@ -79,6 +83,8 @@ export async function runTypedTurnEntry(input: {
     phase?: string,
   ) => Promise<string>;
 }): Promise<{ candidateText: string; activeTurnContract: ActiveTurnContract }> {
+  const resumed = await resumeTypedTurnEntry(input);
+  if (resumed) return resumed;
   const candidates = turnContractCandidates({
     butlerData: input.butlerData,
     candidates: uniqueResumeCandidates([
@@ -212,6 +218,39 @@ export async function runTypedTurnEntry(input: {
   input.pendingPublicDecisions.push(active.publicDecision);
   const candidateText = await input.runKernelToolPrompt(
     contractExecutionPrompt({ basePrompt: input.context.prompt, active }),
+    undefined,
+    input.initialPromptPhase,
+  );
+  return { candidateText, activeTurnContract: active };
+}
+
+async function resumeTypedTurnEntry(
+  input: Parameters<typeof runTypedTurnEntry>[0],
+): Promise<{ candidateText: string; activeTurnContract: ActiveTurnContract } | null> {
+  const atom = input.context.continuationAtom;
+  if (!atom) return null;
+  if (!atom.contractId || !atom.turnDecision) {
+    throw new Error("turn_continuation_contract_state_missing");
+  }
+  const nextSemanticBlockSequence = atom.nextSemanticBlockSequence ?? 1;
+  const active = restoreTurnContractExecution({
+    butlerData: input.butlerData,
+    contractId: atom.contractId,
+    decision: atom.turnDecision,
+    nextSemanticBlockSequence,
+    turnMetadata: input.turnInput.metadata,
+    toolSurfaceController: input.context.toolSurfaceController,
+  });
+  if (atom.workStreamId && active.contract.target_workstream_id !== atom.workStreamId) {
+    throw new Error("turn_continuation_workstream_conflict");
+  }
+  input.turnContractContext.current = active;
+  const candidateText = await input.runKernelToolPrompt(
+    contractResumePrompt({
+      basePrompt: input.context.prompt,
+      active,
+      nextSemanticBlockSequence,
+    }),
     undefined,
     input.initialPromptPhase,
   );
