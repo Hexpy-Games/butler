@@ -218,6 +218,7 @@ export function createReleaseManifest(root: string): ReleaseManifest {
     "packages/butler-agent/src/test-support",
     "packages/butler-agent/scripts",
     "packages/butler-agent/resources",
+    "packages/butler-progress-projection",
     "packages/project-ledger",
     "VERSION",
     "README.md",

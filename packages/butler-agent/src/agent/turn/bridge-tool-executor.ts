@@ -100,6 +100,10 @@ export function createAuditedBridgeToolExecutor(input: {
   emitIntermediateBestEffort: EmitIntermediateBestEffort;
   emitTurnEventBestEffort: EmitTurnEventBestEffort;
   throwIfAborted: () => void;
+  bindResolvedTargetDecision?: (input: {
+    wrapperToolName: string;
+    targetToolName: string;
+  }) => void;
   executeTarget: (
     call: BridgeToolCall,
     bridgedFrom?: BridgedToolCallAuditContext,
@@ -150,6 +154,10 @@ export function createAuditedBridgeToolExecutor(input: {
         return observationResult;
       }
       const auditStartIndex = input.audit.length;
+      input.bindResolvedTargetDecision?.({
+        wrapperToolName: call.name,
+        targetToolName: resolved.targetCall.name,
+      });
       const result = await executeWithBridge(resolved.targetCall, {
         args: call.args,
         invocation: resolved.bridgeInvocation ?? {},

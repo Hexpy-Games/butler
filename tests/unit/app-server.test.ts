@@ -7974,7 +7974,7 @@ test("app transport no-visible limited final closes queued turns without assista
   }
 });
 
-test("session summary keeps first visible preparation work block from progress read model", async () => {
+test("session summary replaces first visible preparation with the first semantic work block", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   const server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
@@ -8043,14 +8043,13 @@ test("session summary keeps first visible preparation work block from progress r
       expect.objectContaining({
         kind: "work_block",
         state: "running",
-        safe_label: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
-        work_block_id: "first-progress-note",
-        work_block_label:
-          "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+        safe_label: "Checking files",
+        work_block_id: "work-file-check",
+        work_block_label: "Checking files",
       }),
     );
     expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
-      "work-file-check",
+      "first-progress-note",
     );
 
     const sessionView = await getJson(
@@ -8059,7 +8058,7 @@ test("session summary keeps first visible preparation work block from progress r
     expect(sessionView.data.active_turn.progress.safe_progress_rows).toContainEqual(
       expect.objectContaining({
         kind: "work_block",
-        work_block_id: "first-progress-note",
+        work_block_id: "work-file-check",
       }),
     );
   } finally {

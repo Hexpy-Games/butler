@@ -65,7 +65,7 @@ test("search results hand exact candidates to a fresh read decision", () => {
   ]);
 });
 
-test("repeated grep patterns collapse to one bounded frontier", () => {
+test("repeated grep rounds keep distinct evidence in one bounded frontier", () => {
   const evidence = buildTurnContinuationEvidence({
     audit: [1, 2].map((line) => ({
       name: "grep_files",
@@ -83,12 +83,19 @@ test("repeated grep patterns collapse to one bounded frontier", () => {
     publicDecisions: [],
   });
 
-  expect(evidence.modelVisibleContent.match(/"pattern": "cache_key"/g)).toHaveLength(1);
-  expect(evidence.refs).toEqual([{
-    kind: "source_candidate",
-    id: "candidate-1:line-2",
-    path: "packages/butler-agent/src/integrations/providers/provider.ts",
-  }]);
+  expect(evidence.modelVisibleContent.match(/"result_fingerprint":/g)).toHaveLength(2);
+  expect(evidence.refs).toEqual([
+    {
+      kind: "source_candidate",
+      id: "candidate-1:line-1",
+      path: "packages/butler-agent/src/integrations/providers/provider.ts",
+    },
+    {
+      kind: "source_candidate",
+      id: "candidate-2:line-2",
+      path: "packages/butler-agent/src/integrations/providers/provider.ts",
+    },
+  ]);
 });
 
 test("a later verified read advances the frontier to synthesis", () => {

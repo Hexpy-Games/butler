@@ -193,6 +193,13 @@ export function createAuditedButlerToolExecutor(
     emitIntermediateBestEffort,
     emitTurnEventBestEffort,
     throwIfAborted: () => throwIfRuntimeTurnAborted(input.turnInput.signal),
+    bindResolvedTargetDecision: ({ wrapperToolName, targetToolName }) => {
+      const decision = input.pendingPublicDecisions.find(
+        (candidate) => candidate.toolName === wrapperToolName && candidate.claimed !== true,
+      );
+      if (!decision) return;
+      decision.toolName = targetToolName;
+    },
     executeTarget: executeAuditedTarget,
   });
   return async (call) => await executeAuditedWithBridge(call);

@@ -27,9 +27,13 @@ export function publicProgressRowsForTurn(
   rows: ProgressSummaryRow[],
   turnState: TurnState | null | undefined,
 ): ProgressSummaryRow[] {
-  return dedupeProgressRows(rows)
+  const deduped = dedupeProgressRows(rows);
+  const hasSemanticWorkBlock = deduped.some(
+    (row) => row.kind === "work_block" && !isFirstVisibleProgressRow(row),
+  );
+  return deduped
     .filter((row) => !terminalFailureProgressSupersededByTurn(row, turnState))
-    .filter(isSessionSummaryProgressRow);
+    .filter((row) => isSessionSummaryProgressRow(row, hasSemanticWorkBlock));
 }
 
 export function isInternalContinuationProgressEvent(
@@ -90,8 +94,13 @@ function isFirstVisibleProgressRow(row: ProgressSummaryRow): boolean {
   );
 }
 
-function isSessionSummaryProgressRow(row: ProgressSummaryRow): boolean {
-  if (row.kind === "work_block") return isFirstVisibleProgressRow(row);
+function isSessionSummaryProgressRow(
+  row: ProgressSummaryRow,
+  hasSemanticWorkBlock: boolean,
+): boolean {
+  if (row.kind === "work_block") {
+    return !hasSemanticWorkBlock || !isFirstVisibleProgressRow(row);
+  }
   if (row.kind === "turn" || row.kind === "thinking") return false;
   if (row.kind === "message" || row.kind === "system") {
     return !STATUS_ONLY_PROGRESS_LABELS.has(

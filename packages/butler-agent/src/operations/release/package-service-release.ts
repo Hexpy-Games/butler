@@ -51,6 +51,7 @@ export interface ServiceReleasePackageResult {
 }
 
 const SERVICE_WORKSPACES = [
+  "packages/butler-progress-projection",
   "packages/project-ledger",
   "packages/butler-agent/src/interfaces/mcp-server",
   "packages/butler-agent/src/integrations/telegram",

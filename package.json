@@ -9,6 +9,7 @@
   "workspaces": [
     "packages/butler-app/client/electron",
     "packages/butler-app/client/ui",
+    "packages/butler-progress-projection",
     "packages/project-ledger",
     "packages/butler-agent/src/interfaces/mcp-server",
     "packages/butler-agent/src/integrations/telegram"

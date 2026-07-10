@@ -2,7 +2,7 @@ import { safeOptionalPublicText, safeRelativePath } from "../../../output/eviden
 import { structuredToolResultModelPreview } from "../../tool-result-model-preview.ts";
 import type { TurnContextObservationRef } from "../../turn-continuation-context.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
-import { buildTurnRoundJournal, renderTurnRoundJournal } from "./turn-round-journal.ts";
+import { buildTurnRoundJournal } from "./turn-round-journal.ts";
 
 const MAX_SEARCH_FRONTIERS = 3;
 const MAX_CANDIDATES = 12;
@@ -101,7 +101,6 @@ export function buildTurnContinuationEvidence(input: {
       ? [
         "Structured continuation evidence (bounded runtime state):",
         JSON.stringify(payload, null, 2),
-        renderTurnRoundJournal(roundJournal),
         "Continue from this exact frontier when authoring the next small public decision.",
       ].join("\n")
       : "",
@@ -140,11 +139,20 @@ function searchFrontiers(audit: readonly ToolAuditEntry[]): SearchFrontier[] {
         return path ? [{ path }] : [];
       }).slice(0, MAX_CANDIDATES_PER_SEARCH));
     }
+    const previous = byPattern.get(pattern);
+    const mergedCandidates = uniqueCandidates([
+      ...(previous?.candidates ?? []),
+      ...candidates,
+    ]).slice(0, MAX_CANDIDATES_PER_SEARCH);
     byPattern.set(pattern, {
       pattern,
-      matchCount: finiteNonNegativeInteger(preview.match_count) ?? candidates.length,
-      truncated: preview.truncated === true,
-      candidates,
+      matchCount: Math.max(
+        previous?.matchCount ?? 0,
+        finiteNonNegativeInteger(preview.match_count) ?? mergedCandidates.length,
+        mergedCandidates.length,
+      ),
+      truncated: previous?.truncated === true || preview.truncated === true,
+      candidates: mergedCandidates,
       auditIndex,
     });
   });
