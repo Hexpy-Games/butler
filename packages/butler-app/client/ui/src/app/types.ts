@@ -776,6 +776,9 @@ export interface ProgressRow {
   public_decision_model_call_id?: string;
   public_decision_latency_ms?: number;
   public_decision_evidence_refs?: string[];
+  work_contract_id?: string;
+  work_stream_id?: string;
+  semantic_block_id?: string;
   work_block_id?: string;
   work_block_label?: string;
   work_decision_summary?: string;

@@ -124,6 +124,9 @@ export interface EvidenceReceipt {
 export interface PublicWorkDecision {
   decisionId: string;
   workBlockId?: string;
+  contractId?: string;
+  workstreamId?: string;
+  semanticBlockId?: string;
   summary: string;
   rationale?: string;
   evidenceRefs: string[];
@@ -132,6 +135,7 @@ export interface PublicWorkDecision {
   source: "assistant-authored" | "model-authored" | "principal-authored" | "runtime-derived" | "review-repaired";
   toolName?: string;
   toolCallIndex?: number;
+  toolBatchSize?: number;
   claimed?: boolean;
   usageCount?: number;
   usageGroupId?: string;

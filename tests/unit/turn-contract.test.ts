@@ -337,6 +337,44 @@ test("contract store replays evidence and terminal delivery without duplication"
   expect(replay.contract.terminal_delivery_keys).toHaveLength(1);
 });
 
+test("contract state requires a durable continuation commit and satisfies from evidence", () => {
+  const store = new TurnContractStore(tempData());
+  const created = store.create(compileTurnContract({ decision: decision() }));
+  const executing = store.transitionState({
+    contractId: created.contract_id,
+    state: "executing",
+    expectedGeneration: created.generation,
+  });
+  expect(() => store.transitionState({
+    contractId: executing.contract_id,
+    state: "continuing",
+    expectedGeneration: executing.generation,
+  })).toThrow("turn_contract_continuation_commit_required");
+
+  const continuing = store.recordContinuationCommit({
+    contractId: executing.contract_id,
+    commitId: "butler_main-turn_1-continuation.json",
+    expectedGeneration: executing.generation,
+  });
+  expect(continuing).toMatchObject({
+    state: "continuing",
+    continuation_commit_ids: ["butler_main-turn_1-continuation.json"],
+  });
+  expect(store.recordContinuationCommit({
+    contractId: continuing.contract_id,
+    commitId: "butler_main-turn_1-continuation.json",
+    expectedGeneration: executing.generation,
+  }).generation).toBe(continuing.generation);
+
+  const resumed = store.transitionState({
+    contractId: continuing.contract_id,
+    state: "executing",
+    expectedGeneration: continuing.generation,
+  });
+  const satisfied = store.recordEvidence(receipt(resumed, "status_report"));
+  expect(satisfied.state).toBe("satisfied");
+});
+
 test("contract store refuses terminal delivery while an execution obligation is unsatisfied", () => {
   const store = new TurnContractStore(tempData());
   const contract = store.create(compileTurnContract({

@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync, rmSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import type { DirectTurnBudgetSnapshot } from "./direct-turn-budget.ts";
 import { isTerminalTurnState, type TurnState } from "./turn-kernel.ts";
+import { writeJsonFileAtomic } from "../persistence/atomic-json-store.ts";
 
 export interface TurnContextObservationRef {
   kind: string;
@@ -79,9 +80,10 @@ export function persistTurnContextAtom(input: {
   currentTurnTodos?: TurnContextObservationRef[];
   budgetSnapshot?: DirectTurnBudgetSnapshot;
   terminalOutcome?: { id: string; state: string };
-}): void {
-  if (isTerminalTurnState(input.state)) return;
-  const path = continuationPathFor(input.butlerData, createTurnContextAtomId(input.sessionId, input.turnId));
+}): string | null {
+  if (isTerminalTurnState(input.state)) return null;
+  const contextAtomId = createTurnContextAtomId(input.sessionId, input.turnId);
+  const path = continuationPathFor(input.butlerData, contextAtomId);
   const value: TurnContextAtom = {
     sessionId: input.sessionId,
     turnId: input.turnId,
@@ -99,8 +101,8 @@ export function persistTurnContextAtom(input: {
     ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
     createdAt: new Date().toISOString(),
   };
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(value, null, 2), "utf8");
+  writeJsonFileAtomic(path, value);
+  return contextAtomId;
 }
 
 export function readTurnContextAtom(input: {

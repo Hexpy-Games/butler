@@ -31,6 +31,7 @@ export interface ProviderCapabilities {
   supportsReasoningConfig: boolean;
   supportsPromptCaching: boolean;
   supportsSameTurnToolSchemaPromotion?: boolean;
+  supportsStructuredOutputs?: boolean;
 }
 
 export interface PromptCacheHint {

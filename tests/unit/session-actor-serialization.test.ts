@@ -742,6 +742,52 @@ test("app session actor records opening decision id in runtime metadata", async 
   store.close();
 });
 
+test("Butler structured provider skips the duplicate gateway opening model call", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime();
+  runtime.firstTurnRelease.resolve();
+  let providerCalls = 0;
+  const provider: ModelProviderAdapter = {
+    ...providerReturningOpening(),
+    capabilities: {
+      ...fakeProvider.capabilities,
+      supportsStructuredOutputs: true,
+    },
+    async invoke() {
+      providerCalls += 1;
+      return { text: openingDecisionText };
+    },
+  };
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: provider.id,
+    modelRef: "openai/gpt-5.5",
+    transportBindings: [{
+      transport: APP_TRANSPORT,
+      accountId: "local",
+      peerId: "butler/main",
+    }],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider,
+    systemPromptFactory: () => "You are Butler.",
+    openingDecisionTimeoutMs: 250,
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+  await actor.handleInbound(appInbound("typed-opening", "hello"));
+
+  expect(providerCalls).toBe(0);
+  expect(runtime.turns[0]?.metadata?.openingDecisionId).toBeUndefined();
+  store.close();
+});
+
 test("app session actor omits opening decision metadata when decision delivery fails", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const runtime = new BlockingRuntime();

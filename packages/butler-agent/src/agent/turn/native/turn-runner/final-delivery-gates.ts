@@ -1,4 +1,6 @@
 import type { RuntimeTurnInput } from "../../../../test-support/harness/contracts.ts";
+import { join } from "path";
+import { readJsonFile } from "../../../persistence/atomic-json-store.ts";
 import {
   enforceGroundedActionClaims,
   hasSuccessfulTool,
@@ -24,6 +26,17 @@ import type { createDirectTurnBudget } from "../../direct-turn-budget.ts";
 import { WorkStreamStore } from "../../../work/work-stream.ts";
 import { TodoListStore } from "../../../work/todo-list.ts";
 import { safePublicText } from "../../../output/evidence/transcript-sanitizers.ts";
+import {
+  canDeliverTurnContract,
+  TurnContractStore,
+  type CompiledTurnContract,
+  type TurnCancellationReceipt,
+} from "../../turn-contract.ts";
+import {
+  recordTurnContractAuditEvidence,
+  unsatisfiedTurnContractObligations,
+} from "./turn-contract-audit-evidence.ts";
+import { recordTurnContractMetric } from "./turn-contract-metrics.ts";
 
 export const KERNEL_COMPLETION_GAP_CONTINUATION_CODE = "completion_gap_continuation";
 
@@ -53,6 +66,7 @@ export async function produceFinalDeliveryOutcome(input: {
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
   toolSurfaceController: ToolSurfacePromptController;
+  turnContract?: CompiledTurnContract;
 }): Promise<FinalDeliveryOutcome> {
   const explicitToolGap = explicitToolRequirementGap(input);
   if (explicitToolGap) return explicitToolGap;
@@ -65,6 +79,43 @@ export async function produceFinalDeliveryOutcome(input: {
       evidenceRefs: reviewResult.outcome.evidenceRefs,
     };
   }
+  if (input.turnContract) {
+    const contract = recordTurnContractAuditEvidence({
+      butlerData: input.deps.butlerData,
+      contract: input.turnContract,
+      audit: input.audit,
+      finalCandidate: reviewResult.reviewedText,
+    });
+    const store = new TurnContractStore(input.deps.butlerData);
+    const gate = canDeliverTurnContract({
+      contract,
+      evidenceReceipts: store.evidenceFor(contract),
+      cancellationReceipt: contract.cancellation_receipt_id
+        ? cancellationReceipt(input.deps.butlerData, contract.cancellation_receipt_id)
+        : null,
+    });
+    if (gate !== "deliver") {
+      const missing = unsatisfiedTurnContractObligations({
+        butlerData: input.deps.butlerData,
+        contract,
+      });
+      return {
+        kind: "completion_gap",
+        observation: {
+          kind: "turn_contract_incomplete",
+          summary: `Typed turn contract still has ${missing.length} unsatisfied obligation(s).`,
+          modelVisibleContent: [
+            "Continue the same logical turn. The typed turn contract is not complete.",
+            "Satisfy these structured deliverables before final delivery:",
+            ...missing.map((item) => `- ${item.deliverable}:${item.target_kind}:${item.target_id}`),
+            "Do not ask the user unless a verified user-owned blocker receipt exists.",
+          ].join("\n"),
+          refs: missing.map((item) => ({ kind: "turn_contract_obligation", id: item.obligation_id })),
+        },
+        evidenceRefs: contract.evidence_receipt_ids,
+      };
+    }
+  }
   const contractRepairedText = repairFinalContract({ ...input, finalText: reviewResult.reviewedText });
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "guard.started",
@@ -76,6 +127,17 @@ export async function produceFinalDeliveryOutcome(input: {
     payload: { guard: "public_output", status: "approved" },
   });
   return { kind: "final", text: checkedText, evidenceRefs: reviewResult.outcome.evidenceRefs };
+}
+
+function cancellationReceipt(butlerData: string, receiptId: string) {
+  return readJsonFile<TurnCancellationReceipt>(
+    join(butlerData, "workstream-claim-receipts", `${safeContractId(receiptId)}.json`),
+  );
+}
+
+function safeContractId(value: string): string {
+  if (!/^[A-Za-z0-9._:-]{1,160}$/.test(value)) throw new Error("turn_contract_unsafe_receipt_id");
+  return value;
 }
 
 function applyGroundingIfNeeded(
@@ -505,6 +567,7 @@ export async function persistCompletionGapContinuation(input: {
   turnId?: string | null;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
+  contractId?: string;
   observation: {
     kind: string;
     summary: string;
@@ -521,7 +584,7 @@ export async function persistCompletionGapContinuation(input: {
     audit: input.audit,
     publicDecisionContext: input.publicDecisionContext,
   });
-  persistTurnContextAtom({
+  const continuationCommitId = persistTurnContextAtom({
     butlerData: input.deps.butlerData,
     sessionId: input.turnInput.handle.sessionId,
     turnId,
@@ -541,6 +604,22 @@ export async function persistCompletionGapContinuation(input: {
       observationId: `completion-gap:${turnId}`,
     },
   });
+  if (input.contractId && continuationCommitId) {
+    const contracts = new TurnContractStore(input.deps.butlerData);
+    const contract = contracts.read(input.contractId);
+    if (!contract) throw new Error("turn_contract_not_found");
+    const continuing = contracts.recordContinuationCommit({
+      contractId: contract.contract_id,
+      commitId: continuationCommitId,
+      expectedGeneration: contract.generation,
+    });
+    recordTurnContractMetric({
+      butlerData: input.deps.butlerData,
+      name: "continuation",
+      status: "ok",
+      contract: continuing,
+    });
+  }
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "turn.observation",
     visibility: "internal",

@@ -50,6 +50,12 @@ function applyBasicProgressFields(
   if (bridgePhase) row.bridge_phase = bridgePhase;
   const receiptKind = safeOptionalShortToken(input.receipt_kind);
   if (receiptKind) row.receipt_kind = receiptKind;
+  const workContractId = safeOptionalShortToken(input.work_contract_id);
+  if (workContractId) row.work_contract_id = workContractId;
+  const workStreamId = safeOptionalShortToken(input.work_stream_id);
+  if (workStreamId) row.work_stream_id = workStreamId;
+  const semanticBlockId = safeOptionalShortToken(input.semantic_block_id);
+  if (semanticBlockId) row.semantic_block_id = semanticBlockId;
   const workBlockId = safeOptionalShortToken(input.work_block_id);
   if (workBlockId) row.work_block_id = workBlockId;
   const workBlockLabel = safeOptionalShortText(input.work_block_label);

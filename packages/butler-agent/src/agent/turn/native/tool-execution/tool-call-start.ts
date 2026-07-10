@@ -75,16 +75,18 @@ export async function emitStartedProgress(input: {
       state: "running",
     });
   }
-  await emitTurnEventBestEffort(input.input.turnInput, {
-    kind: "work.block.started",
-    payload: {
-      workBlockId: input.workBlockId,
-      label: input.workBlockLabel,
-      activityKind: input.progress.kind,
-      ...publicWorkDecisionPayload(input.decision),
-    },
-  });
-  recordFirstToolEventFromTurnInput(input.input.turnInput, "work.block.started");
+  if (isFirstDecisionTool(input.decision)) {
+    await emitTurnEventBestEffort(input.input.turnInput, {
+      kind: "work.block.started",
+      payload: {
+        workBlockId: input.workBlockId,
+        label: input.workBlockLabel,
+        activityKind: input.progress.kind,
+        ...publicWorkDecisionPayload(input.decision),
+      },
+    });
+    recordFirstToolEventFromTurnInput(input.input.turnInput, "work.block.started");
+  }
   await emitTurnEventBestEffort(input.input.turnInput, {
     kind: "tool.started",
     payload: {
@@ -101,6 +103,10 @@ export async function emitStartedProgress(input: {
   });
   await emitStartedIntermediateProgress(input);
   appendToolCallTranscript(input);
+}
+
+function isFirstDecisionTool(decision: PublicWorkDecision): boolean {
+  return (decision.toolCallIndex ?? 0) === 0;
 }
 
 export function taskSummaryForTool(

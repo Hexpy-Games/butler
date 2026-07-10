@@ -14,6 +14,9 @@ export function workBlocksFromTerminalProgressRows(
     row: ProgressSummaryRow,
     fallbackId: string,
   ) => {
+    if (row.semantic_block_id) {
+      return row.work_block_id ?? row.semantic_block_id;
+    }
     const decisionKey = publicDecisionIntentKey(row);
     if (!decisionKey) return fallbackId;
     const existing = decisionWorkBlockAliases.get(decisionKey);

@@ -883,6 +883,10 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     timestamp: string;
   }): Promise<string | undefined> {
     if (input.envelope.transport !== APP_TRANSPORT) return undefined;
+    if (
+      this.role === "butler" &&
+      this.options.provider.capabilities.supportsStructuredOutputs === true
+    ) return undefined;
     const timeoutMs = this.options.openingDecisionTimeoutMs ?? DEFAULT_OPENING_DECISION_TIMEOUT_MS;
     if (timeoutMs <= 0) {
       return undefined;

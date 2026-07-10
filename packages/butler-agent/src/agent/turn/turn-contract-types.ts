@@ -93,6 +93,7 @@ export interface CompiledTurnContract {
   state: "validated" | "claimed" | "executing" | "reviewing" | "waiting_user" | "continuing" | "satisfied" | "delivered" | "cancelled" | "failed_system";
   generation: number;
   evidence_receipt_ids: string[];
+  continuation_commit_ids: string[];
   terminal_delivery_keys: string[];
   cancellation_receipt_id?: string;
   created_at: string;

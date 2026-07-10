@@ -75,9 +75,55 @@ export class TurnContractStore {
         }
         if (!existingReceipt) writeJsonFileAtomic(this.receiptPath(receipt.receipt_id), receipt);
         if (contract.evidence_receipt_ids.includes(receipt.receipt_id)) return contract;
-        const updated = {
+        const candidate: CompiledTurnContract = {
           ...contract,
           evidence_receipt_ids: [...contract.evidence_receipt_ids, receipt.receipt_id].sort(),
+          generation: contract.generation + 1,
+          updated_at: now.toISOString(),
+        };
+        const updated: CompiledTurnContract = allEvidenceObligationsSatisfied({
+          contract: candidate,
+          receipts: this.evidenceFor(candidate),
+        })
+          ? { ...candidate, state: "satisfied" }
+          : candidate;
+        writeJsonFileAtomic(this.contractPath(contract.contract_id), updated);
+        return updated;
+      },
+    });
+    if (!result) throw new Error("turn_contract_store_conflict");
+    return result;
+  }
+
+  readEvidence(receiptId: string): TurnEvidenceReceipt | null {
+    return readJsonFile<TurnEvidenceReceipt>(this.receiptPath(receiptId));
+  }
+
+  transitionState(input: {
+    contractId: string;
+    state: CompiledTurnContract["state"];
+    expectedGeneration: number;
+    now?: Date;
+  }): CompiledTurnContract {
+    const now = input.now ?? new Date();
+    const result = withDurableFileLock({
+      lockPath: `${this.contractPath(input.contractId)}.lock`,
+      lockRoot: this.butlerData,
+      ownerId: `state:${input.contractId}:${input.state}`,
+      now,
+      action: () => {
+        const contract = this.read(input.contractId);
+        if (!contract) throw new Error("turn_contract_not_found");
+        if (contract.state === input.state) return contract;
+        if (terminalContractState(contract.state)) throw new Error("turn_contract_terminal_immutable");
+        if (contract.generation !== input.expectedGeneration) throw new Error("turn_contract_generation_conflict");
+        if (input.state === "continuing") throw new Error("turn_contract_continuation_commit_required");
+        if (!turnContractStateTransitionAllowed(contract.state, input.state)) {
+          throw new Error(`turn_contract_state_transition_invalid:${contract.state}:${input.state}`);
+        }
+        const updated: CompiledTurnContract = {
+          ...contract,
+          state: input.state,
           generation: contract.generation + 1,
           updated_at: now.toISOString(),
         };
@@ -89,8 +135,41 @@ export class TurnContractStore {
     return result;
   }
 
-  readEvidence(receiptId: string): TurnEvidenceReceipt | null {
-    return readJsonFile<TurnEvidenceReceipt>(this.receiptPath(receiptId));
+  recordContinuationCommit(input: {
+    contractId: string;
+    commitId: string;
+    expectedGeneration: number;
+    now?: Date;
+  }): CompiledTurnContract {
+    const now = input.now ?? new Date();
+    safeId(input.commitId);
+    const result = withDurableFileLock({
+      lockPath: `${this.contractPath(input.contractId)}.lock`,
+      lockRoot: this.butlerData,
+      ownerId: `continuation:${input.commitId}`,
+      now,
+      action: () => {
+        const contract = this.read(input.contractId);
+        if (!contract) throw new Error("turn_contract_not_found");
+        if (contract.continuation_commit_ids.includes(input.commitId)) return contract;
+        if (terminalContractState(contract.state)) throw new Error("turn_contract_terminal_immutable");
+        if (contract.generation !== input.expectedGeneration) throw new Error("turn_contract_generation_conflict");
+        if (!turnContractStateTransitionAllowed(contract.state, "continuing")) {
+          throw new Error(`turn_contract_state_transition_invalid:${contract.state}:continuing`);
+        }
+        const updated: CompiledTurnContract = {
+          ...contract,
+          state: "continuing",
+          continuation_commit_ids: [...contract.continuation_commit_ids, input.commitId].sort(),
+          generation: contract.generation + 1,
+          updated_at: now.toISOString(),
+        };
+        writeJsonFileAtomic(this.contractPath(contract.contract_id), updated);
+        return updated;
+      },
+    });
+    if (!result) throw new Error("turn_contract_store_conflict");
+    return result;
   }
 
   evidenceFor(contract: CompiledTurnContract): TurnEvidenceReceipt[] {
@@ -248,6 +327,7 @@ function normalizeContract(contract: CompiledTurnContract): CompiledTurnContract
     required_evidence: normalizeObligations(contract),
     generation: contract.generation ?? 1,
     evidence_receipt_ids: contract.evidence_receipt_ids ?? [],
+    continuation_commit_ids: contract.continuation_commit_ids ?? [],
     terminal_delivery_keys: contract.terminal_delivery_keys ?? [],
     decision_semantic_fingerprint: contract.decision_semantic_fingerprint ?? immutableContractFingerprint(contract),
   };
@@ -316,6 +396,21 @@ function terminalDeliveryKey(contractId: string, state: string): string {
 
 function terminalContractState(state: CompiledTurnContract["state"]): boolean {
   return state === "delivered" || state === "cancelled" || state === "failed_system";
+}
+
+function turnContractStateTransitionAllowed(
+  current: CompiledTurnContract["state"],
+  next: CompiledTurnContract["state"],
+): boolean {
+  const transitions: Partial<Record<CompiledTurnContract["state"], readonly CompiledTurnContract["state"][]>> = {
+    validated: ["claimed", "executing", "waiting_user", "continuing", "satisfied"],
+    claimed: ["executing", "reviewing", "continuing", "satisfied"],
+    executing: ["reviewing", "continuing", "satisfied"],
+    reviewing: ["executing", "continuing", "satisfied"],
+    waiting_user: ["claimed", "executing", "continuing"],
+    continuing: ["executing", "reviewing", "satisfied"],
+  };
+  return transitions[current]?.includes(next) === true;
 }
 
 function safeId(value: string): string {

@@ -19,6 +19,9 @@ import {
   runPromptText,
   type FunctionToolPromptOptions,
 } from "../../src/integrations/providers/provider.ts";
+import { modelSupportsJsonSchemaResponseFormat } from "../../src/integrations/providers/model-catalog.ts";
+import { readPromptCacheMetrics } from "../../src/integrations/providers/prompt-cache-metrics.ts";
+import { readOperationalMetricEvents } from "../../src/operations/metrics/operational-metrics.ts";
 import { loadPrivateEnvIntoProcess } from "../../src/interfaces/cli/private-env.ts";
 import type { ModelProviderAdapter } from "../../src/test-support/harness/contracts.ts";
 import { AppGatewayBridge } from "../../../../tests/support/app-gateway-bridge.ts";
@@ -52,6 +55,7 @@ interface PromptMetric {
   promptChars: number;
   wallMs: number;
   firstVisibleMs: number | null;
+  firstMeaningfulMs: number | null;
   textPromptCalls: number;
   toolPromptCalls: number;
   toolCalls: number;
@@ -62,6 +66,9 @@ interface PromptMetric {
   promptTokens: number | null;
   cachedTokens: number | null;
   totalTokens: number | null;
+  cpuRatio: number | null;
+  rssBytes: number | null;
+  heapUsedBytes: number | null;
   finalChars: number;
   assistantFinalCountBefore: number;
   assistantFinalCountAfter: number;
@@ -153,6 +160,11 @@ const visibleProgressSelector = [
   "[data-test-class~=\"turn-work-block\"]",
   assistantMessageSelector,
 ].join(", ");
+const meaningfulProgressSelector = [
+  "[data-test-class~=\"turn-decision-row\"]",
+  "[data-test-class~=\"turn-work-block\"]",
+  assistantFinalMarkdownSelector,
+].join(", ");
 const FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
 
 let activeMetric: PromptMetric | null = null;
@@ -166,7 +178,8 @@ const provider: ModelProviderAdapter = {
     supportsAudio: false,
     supportsServerThreads: false,
     supportsReasoningConfig: true,
-    supportsPromptCaching: false,
+    supportsPromptCaching: true,
+    supportsStructuredOutputs: modelSupportsJsonSchemaResponseFormat(model),
   },
   async invoke() {
     return { text: "unused" };
@@ -229,6 +242,7 @@ async function runElectronPrompt(prompt: BenchPrompt): Promise<PromptMetric> {
     promptChars: prompt.text.length,
     wallMs: 0,
     firstVisibleMs: null,
+    firstMeaningfulMs: null,
     textPromptCalls: 0,
     toolPromptCalls: 0,
     toolCalls: 0,
@@ -239,6 +253,9 @@ async function runElectronPrompt(prompt: BenchPrompt): Promise<PromptMetric> {
     promptTokens: null,
     cachedTokens: null,
     totalTokens: null,
+    cpuRatio: null,
+    rssBytes: null,
+    heapUsedBytes: null,
     finalChars: 0,
     assistantFinalCountBefore: 0,
     assistantFinalCountAfter: 0,
@@ -296,7 +313,7 @@ async function runElectronPrompt(prompt: BenchPrompt): Promise<PromptMetric> {
   let cdp: CdpClient | null = null;
   const output: string[] = [];
   activeMetric = metric;
-  const started = performance.now();
+  let started = performance.now();
   try {
     const debugPort = await freePort();
     console.error(`[bench:${label}:${prompt.id}] launch electron`);
@@ -328,6 +345,7 @@ async function runElectronPrompt(prompt: BenchPrompt): Promise<PromptMetric> {
     await waitForComposerModel(cdp, model);
     metric.assistantFinalCountBefore = await assistantFinalCount(cdp);
     console.error(`[bench:${label}:${prompt.id}] send`);
+    started = performance.now();
     await sendComposerTurn(cdp, prompt.text);
 
     console.error(`[bench:${label}:${prompt.id}] wait final`);
@@ -336,6 +354,7 @@ async function runElectronPrompt(prompt: BenchPrompt): Promise<PromptMetric> {
     const finalText = await lastAssistantFinalText(cdp);
     metric.finalChars = finalText.length;
     metric.wallMs = Math.round(performance.now() - started);
+    applyRuntimeMetrics(metric, butlerData);
     const screenshotPath = join(screenshotDir, `${runId}-${prompt.id}.png`);
     await captureScreenshot(cdp, screenshotPath);
     if (existsSync(screenshotPath) && statSync(screenshotPath).size > 0) {
@@ -501,12 +520,48 @@ async function waitForFinalAndFirstVisible(
       const visible = await evaluateValue<boolean>(client, visibleProgressExpression());
       if (visible === true) metric.firstVisibleMs = Math.round(performance.now() - started);
     }
+    if (metric.firstMeaningfulMs === null) {
+      const meaningful = await evaluateValue<boolean>(client, meaningfulProgressExpression());
+      if (meaningful === true) metric.firstMeaningfulMs = Math.round(performance.now() - started);
+    }
     const finalCount = await assistantFinalCount(client);
     if (finalCount > metric.assistantFinalCountBefore) return;
     await delay(150);
   }
   metric.timedOut = true;
   throw new Error(`timed out after ${perPromptTimeoutMs}ms`);
+}
+
+function meaningfulProgressExpression(): string {
+  return `(() => {
+    return Array.from(document.querySelectorAll(${JSON.stringify(meaningfulProgressSelector)})).some((element) => {
+      const style = window.getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+      return box.width > 0 && box.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    });
+  })()`;
+}
+
+function applyRuntimeMetrics(metric: PromptMetric, butlerData: string): void {
+  const promptEvents = readPromptCacheMetrics({ butlerData });
+  if (promptEvents.length > 0) {
+    metric.promptTokens = promptEvents.reduce((sum, event) => sum + event.promptTokens, 0);
+    metric.cachedTokens = promptEvents.reduce((sum, event) => sum + event.cachedTokens, 0);
+    metric.totalTokens = promptEvents.reduce((sum, event) => sum + (event.totalTokens ?? 0), 0);
+  }
+  const processEvents = readOperationalMetricEvents({ butlerData })
+    .filter((event) => event.category === "process");
+  metric.cpuRatio = latestMetricValue(processEvents, "turn_cpu_ratio");
+  metric.rssBytes = latestMetricValue(processEvents, "turn_memory_rss");
+  metric.heapUsedBytes = latestMetricValue(processEvents, "turn_memory_heap_used");
+}
+
+function latestMetricValue(
+  events: ReturnType<typeof readOperationalMetricEvents>,
+  name: string,
+): number | null {
+  const value = events.filter((event) => event.name === name).at(-1)?.value;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 async function assistantFinalCount(client: CdpClient): Promise<number> {
@@ -725,6 +780,7 @@ function summarize(results: PromptMetric[]) {
     okCount: results.filter((result) => result.ok).length,
     timedOutCount: results.filter((result) => result.timedOut).length,
     totalWallMs: results.reduce((sum, result) => sum + result.wallMs, 0),
+    totalFirstMeaningfulMs: results.reduce((sum, result) => sum + (result.firstMeaningfulMs ?? 0), 0),
     totalHttpRequests: results.reduce((sum, result) => sum + result.httpRequests, 0),
     totalToolCalls: results.reduce((sum, result) => sum + result.toolCalls, 0),
     totalRequestBytes: results.reduce((sum, result) => sum + result.requestBytes, 0),

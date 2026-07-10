@@ -41,6 +41,7 @@ import { createTelegramLiveGateway } from "../transport/telegram/live-gateway.ts
 import { runTelegramPolling } from "../transport/telegram/polling-runner.ts";
 import { runWorkerResultMonitor } from "./worker-result-monitor.ts";
 import { runPromptText } from "../../integrations/providers/provider.ts";
+import { modelSupportsJsonSchemaResponseFormat } from "../../integrations/providers/model-catalog.ts";
 import { plannedInternalGoal, PlannedTaskStore } from "../../agent/work/planned-task.ts";
 import type { TaskRecord } from "../../agent/work/task-store.ts";
 import { WorkOrchestrationStore } from "../../agent/work/work-orchestration.ts";
@@ -50,6 +51,7 @@ import {
   resolveTelegramGatewayRuntimeConfig,
 } from "../../operations/gateway/registry.ts";
 import { QueuedInboundDispatcher } from "./queued-inbound.ts";
+import { reconcileNonTerminalTurnContracts } from "../../agent/turn/turn-contract.ts";
 
 interface ButlerConfig {
   system?: {
@@ -118,7 +120,8 @@ export function createNativeButlerDefaultProvider(
   const providerId = configuredModel.includes("/")
     ? configuredModel.split("/", 1)[0] || "openai"
     : "openai";
-  const supportsOpenAIFunctionTools = providerId === "openai";
+  const supportsStructuredOutputs = modelSupportsJsonSchemaResponseFormat(configuredModel);
+  const supportsOpenAIFunctionTools = providerId === "openai" || supportsStructuredOutputs;
   return {
     id: providerId,
     capabilities: {
@@ -130,6 +133,7 @@ export function createNativeButlerDefaultProvider(
       supportsReasoningConfig: true,
       supportsPromptCaching: true,
       supportsSameTurnToolSchemaPromotion: supportsOpenAIFunctionTools,
+      supportsStructuredOutputs,
     },
     async invoke(input) {
       const prompt = input.messages
@@ -585,6 +589,7 @@ export async function runNativeButlerMain(
     appMessageDbPath: join(butlerData, "app-server", "butler-client.sqlite"),
   };
   reconcilePendingWorkStreamTransactions({ butlerData, maxDurationMs: BOOTSTRAP_RECOVERY_DEADLINE_MS });
+  reconcileNonTerminalTurnContracts({ butlerData });
   const runtime = input.runtime ?? input.runtimeFactory?.(runtimeOptions) ?? new NativeToolLoopRuntime(runtimeOptions);
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
   const developerLogStore = new DeveloperLogStore({ butlerData });
