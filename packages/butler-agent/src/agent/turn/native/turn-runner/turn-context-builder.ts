@@ -88,6 +88,7 @@ export async function prepareNativeTurnContext(input: {
   publicDecisionContext: PublicWorkDecision[];
   pendingPublicDecisions: PublicWorkDecision[];
   assistantTextBeforeToolsSeen: () => boolean;
+  activeWorkStreamBinding: () => { contractId: string; workStreamId: string } | null;
   skipRuntimePreparationProgress?: boolean;
 }) {
   const userText = currentUserText(input.turnInput);
@@ -212,6 +213,7 @@ export async function prepareNativeTurnContext(input: {
     turnContext: [prompt, currentAttachmentContext].filter(Boolean).join("\n\n"),
     currentToolNames: () => toolSurfaceController.currentToolNames(),
     describedToolIds: () => toolSurfaceController.describedToolIdList(),
+    activeWorkStreamBinding: input.activeWorkStreamBinding,
   });
   const executor = createAuditedButlerToolExecutor({
     sessionId: input.turnInput.handle.sessionId,
@@ -230,6 +232,7 @@ export async function prepareNativeTurnContext(input: {
     plannedReview,
     semanticProgressSafetyNet,
     toolSurfaceController,
+    activeWorkStreamBinding: input.activeWorkStreamBinding,
     executor: turnScopedExecutor({
       defaultExecutor,
       injectedExecutor: input.deps.butlerToolExecutor,

@@ -31,5 +31,6 @@ export interface NativeAuditedToolExecutorInput {
   plannedReview: PlannedReviewTurnContext | null;
   semanticProgressSafetyNet: RuntimeSemanticProgressSafetyNet;
   toolSurfaceController?: ToolSurfacePromptController;
+  activeWorkStreamBinding?: () => { contractId: string; workStreamId: string } | null;
   executor: FunctionToolPromptOptions["executeTool"];
 }

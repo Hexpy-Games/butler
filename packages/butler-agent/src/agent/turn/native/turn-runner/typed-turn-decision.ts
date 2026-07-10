@@ -181,8 +181,11 @@ export function compileStructuredTurnDecision(input: {
   ) {
     throw new Error("turn_contract_project_target_mismatch");
   }
+  const decision = input.projectId?.trim() && !input.decision.target_project_id && input.decision.action !== "answer"
+    ? { ...input.decision, target_project_id: input.projectId.trim() }
+    : input.decision;
   return compileTurnContract({
-    decision: input.decision,
+    decision,
     candidates: input.candidates,
     obligationRequirements: obligationRequirements(input),
     now: input.now,

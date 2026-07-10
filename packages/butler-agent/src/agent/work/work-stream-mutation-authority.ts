@@ -10,6 +10,7 @@ export type WorkStreamMutationOperation =
   | "claim"
   | "supply_user_action"
   | "renew_claim"
+  | "release_claim"
   | "contract_cancel"
   | "wait_user"
   | "plan_amendment"
@@ -160,6 +161,12 @@ function assertClaimTupleMutation(
       if (
         current.active_contract_id === authorization.releasedContractId && !next.active_contract_id &&
         !next.active_blocker_id && originalPreserved
+      ) return;
+      break;
+    case "release_claim":
+      if (
+        current.active_contract_id === authorization.releasedContractId &&
+        !next.active_contract_id && !next.active_blocker_id && originalPreserved
       ) return;
       break;
     default:

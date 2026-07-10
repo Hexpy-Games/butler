@@ -9,6 +9,7 @@ import { WorkStreamStore } from "../../../work/work-stream.ts";
 import type { PublicWorkDecision } from "../output/tool-types.ts";
 import { turnMetadataForContract } from "./turn-contract-tool-policy.ts";
 import { recordTurnContractMetric } from "./turn-contract-metrics.ts";
+import { prepareStartWorkStreamBinding } from "./start-workstream-binding.ts";
 
 export interface ActiveTurnContract {
   contract: CompiledTurnContract;
@@ -37,6 +38,7 @@ export function openingDecisionPayload(active: ActiveTurnContract): Record<strin
 export function completeTurnContractDelivery(input: {
   butlerData: string;
   active: ActiveTurnContract;
+  turnId?: string;
 }): CompiledTurnContract {
   const store = new TurnContractStore(input.butlerData);
   const contract = store.read(input.active.contract.contract_id) ?? input.active.contract;
@@ -52,6 +54,19 @@ export function completeTurnContractDelivery(input: {
     status: "ok",
     contract: delivered,
   });
+  if (delivered.target_workstream_id && delivered.action !== "cancel_work") {
+    const streams = new WorkStreamStore(input.butlerData);
+    const record = streams.read(delivered.target_workstream_id);
+    if (record?.active_contract_id === delivered.contract_id) {
+      const released = new WorkStreamClaimStore(input.butlerData).release({
+        contractId: delivered.contract_id,
+        workstreamId: record.id,
+        expectedGeneration: record.record_generation ?? 1,
+        turnId: input.turnId ?? record.last_user_turn_id ?? delivered.contract_id,
+      });
+      if (!released.ok) throw new Error(released.code);
+    }
+  }
   return delivered;
 }
 
@@ -103,7 +118,16 @@ export function activateTurnContract(input: {
   toolSurfaceController: ToolSurfacePromptController;
 }): ActiveTurnContract {
   const contracts = new TurnContractStore(input.butlerData);
-  let contract = contracts.create(input.contract);
+  const existing = contracts.read(input.contract.contract_id);
+  let contract = contracts.create(existing ?? prepareStartWorkStreamBinding({
+    butlerData: input.butlerData,
+    contract: input.contract,
+    decision: input.decision,
+    sessionId: input.sessionId,
+    chatId: requiredText(input.chatId ?? input.sessionId, "turn_contract_chat_missing"),
+    projectId: input.projectId,
+    turnId: input.turnId,
+  }));
   recordTurnContractMetric({
     butlerData: input.butlerData,
     name: "compiled",
@@ -111,14 +135,18 @@ export function activateTurnContract(input: {
     contract,
   });
   input.toolSurfaceController.applyTurnMetadata(turnMetadataForContract(contract, input.turnMetadata));
-  if (contract.action === "resume_work" || contract.action === "modify_work") {
+  if (
+    contract.action === "start_work" ||
+    contract.action === "resume_work" ||
+    contract.action === "modify_work"
+  ) {
     const record = requiredTargetRecord(input.butlerData, contract);
     const claim = new WorkStreamClaimStore(input.butlerData).claim({
       contract,
       workstreamId: record.id,
       sessionId: requiredText(input.sessionId, "turn_contract_session_missing"),
       chatId: requiredText(input.chatId ?? record.origin_chat_id, "turn_contract_chat_missing"),
-      projectId: requiredText(input.projectId ?? record.project_id, "turn_contract_project_missing"),
+      projectId: input.projectId ?? record.project_id ?? null,
       turnId: input.turnId,
       expectedGeneration: record.record_generation ?? 1,
     });

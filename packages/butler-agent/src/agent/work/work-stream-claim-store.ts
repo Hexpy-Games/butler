@@ -33,8 +33,8 @@ import {
 export interface WorkStreamClaimReceipt {
   schema_version: "butler.workstream-claim-receipt.v1";
   receipt_id: string;
-  operation: "claim" | "renew" | "cancel" | "wait_user";
-  outcome: "claimed" | "replayed" | "reclaimed" | "renewed" | "cancelled" | "waiting_user";
+  operation: "claim" | "renew" | "release" | "cancel" | "wait_user";
+  outcome: "claimed" | "replayed" | "reclaimed" | "renewed" | "released" | "cancelled" | "waiting_user";
   workstream_id: string;
   contract_id: string;
   turn_id: string;
@@ -68,14 +68,18 @@ export class WorkStreamClaimStore {
     workstreamId: string;
     sessionId: string;
     chatId: string;
-    projectId: string;
+    projectId: string | null;
     turnId: string;
     expectedGeneration: number;
     leaseMs?: number;
     now?: Date;
     faultAfterWorkStreamWrite?: boolean;
   }): WorkStreamClaimResult {
-    if (input.contract.action !== "resume_work" && input.contract.action !== "modify_work") {
+    if (
+      input.contract.action !== "start_work" &&
+      input.contract.action !== "resume_work" &&
+      input.contract.action !== "modify_work"
+    ) {
       return { ok: false, code: "workstream_claim_action_invalid" };
     }
     return this.withLock(input.workstreamId, "claim", input.contract.contract_id, input.now, { contractId: input.contract.contract_id }, (context) => {
@@ -87,7 +91,7 @@ export class WorkStreamClaimStore {
         contract: input.contract,
         record,
         workstreamId: input.workstreamId,
-        allowedActions: ["resume_work", "modify_work"],
+        allowedActions: ["start_work", "resume_work", "modify_work"],
       });
       if (bindingError) return { ok: false, code: bindingError };
       if (record.state === "waiting_user") return { ok: false, code: "workstream_waiting_user_requires_supply" };
@@ -149,6 +153,77 @@ export class WorkStreamClaimStore {
       };
       commitWorkStreamMutation({ butlerData: this.butlerData, context, record: updated, expectedGeneration: record.record_generation ?? 1 });
       const receipt = this.writeReceipt(workStreamClaimReceipt({ operation: "renew", outcome: "renewed", before: record, after: updated, contractId: input.contractId, turnId: input.turnId, now }));
+      return { ok: true, record: updated, receipt, replayed: false };
+    });
+  }
+
+  release(input: {
+    contractId: string;
+    workstreamId: string;
+    expectedGeneration: number;
+    turnId: string;
+    now?: Date;
+  }): WorkStreamClaimResult {
+    return this.withLock(input.workstreamId, "release_claim", input.contractId, input.now, {
+      contractId: input.contractId,
+      releasedContractId: input.contractId,
+    }, (context) => {
+      const record = this.streams.read(input.workstreamId);
+      if (!record) return { ok: false, code: "workstream_not_found" };
+      if (!record.active_contract_id) {
+        const prior = record.active_claim_receipt_id
+          ? this.readReceipt(record.active_claim_receipt_id)
+          : null;
+        return prior?.operation === "release" && prior.contract_id === input.contractId
+          ? { ok: true, record, receipt: prior, replayed: true }
+          : { ok: false, code: "workstream_claim_missing" };
+      }
+      if (record.active_contract_id !== input.contractId) {
+        return { ok: false, code: "workstream_claim_conflict" };
+      }
+      if (record.record_generation !== input.expectedGeneration) {
+        return { ok: false, code: "workstream_claim_generation_conflict" };
+      }
+      const now = input.now ?? new Date();
+      const receiptId = workStreamClaimReceiptId(
+        "release",
+        input.contractId,
+        record.id,
+        record.record_generation ?? 1,
+      );
+      const updated: WorkStreamRecord = {
+        ...record,
+        active_contract_id: null,
+        claim_lease_expires_at: null,
+        active_claim_receipt_id: receiptId,
+        active_blocker_id: null,
+        active_blocker_evidence_id: null,
+        record_generation: (record.record_generation ?? 1) + 1,
+        updated_at: now.toISOString(),
+      };
+      const authorized = authorizeWorkStreamMutation(context, {
+        contractId: input.contractId,
+        releasedContractId: input.contractId,
+      });
+      commitWorkStreamMutation({
+        butlerData: this.butlerData,
+        context: authorized,
+        record: updated,
+        expectedGeneration: record.record_generation ?? 1,
+      });
+      const receipt = this.writeReceipt({
+        ...workStreamClaimReceipt({
+          operation: "release",
+          outcome: "released",
+          before: record,
+          after: updated,
+          contractId: input.contractId,
+          turnId: input.turnId,
+          now,
+        }),
+        receipt_id: receiptId,
+        released_contract_id: input.contractId,
+      });
       return { ok: true, record: updated, receipt, replayed: false };
     });
   }

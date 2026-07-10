@@ -87,6 +87,7 @@ export async function runNativeToolTurn({
     const audit: ToolAuditEntry[] = [];
     const publicDecisionContext: PublicWorkDecision[] = [];
     const pendingPublicDecisions: PublicWorkDecision[] = [];
+    const turnContractContext: { current: ActiveTurnContract | null } = { current: null };
     let assistantTextBeforeToolsSeen = false;
     let finalDeliveryOverride: RuntimeTurnResult["delivery"] | undefined;
     const gatewayProgressEmitted = gatewayFirstVisibleProgressEmitted(input.metadata);
@@ -108,6 +109,7 @@ export async function runNativeToolTurn({
       publicDecisionContext,
       pendingPublicDecisions,
       assistantTextBeforeToolsSeen: () => assistantTextBeforeToolsSeen,
+      activeWorkStreamBinding: () => activeWorkStreamBinding(turnContractContext.current),
       skipRuntimePreparationProgress: earlyProgressEmitted,
     });
     turnId = context.turnId;
@@ -126,7 +128,6 @@ export async function runNativeToolTurn({
       runtime: deps.runtimeId,
       model: input.model,
     });
-    const turnContractContext: { current: ActiveTurnContract | null } = { current: null };
     turnKernel.transitionTo("model_deciding");
     const {
       runToolPrompt,
@@ -349,6 +350,7 @@ export async function runNativeToolTurn({
       activeTurnContract.contract = completeTurnContractDelivery({
         butlerData: deps.butlerData,
         active: activeTurnContract,
+        turnId,
       });
     }
     if (turnId) {
@@ -705,6 +707,15 @@ function projectId(session: NativeTurnRunnerInput["session"]): string | undefine
   return typeof session.init.metadata?.projectId === "string"
     ? session.init.metadata.projectId
     : undefined;
+}
+
+function activeWorkStreamBinding(active: ActiveTurnContract | null) {
+  const workStreamId = active?.contract.target_workstream_id?.trim();
+  if (!active || !workStreamId) return null;
+  return {
+    contractId: active.contract.contract_id,
+    workStreamId,
+  };
 }
 
 function currentUserText(input: NativeTurnRunnerInput["input"]): string {

@@ -7,6 +7,7 @@ import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import type { RuntimeTurnEventInput } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { operationalMetricsPath } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
+import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 
 let data = "";
 
@@ -706,11 +707,15 @@ test("one semantic decision block closes only after its final tool", async () =>
   const firstToolCompleted = events.findIndex((event) => event.kind === "tool.completed");
   const blockCompleted = events.findIndex((event) => event.kind === "work.block.completed");
   expect(blockCompleted).toBeGreaterThan(firstToolCompleted);
-  expect(readOnlyContract()).toMatchObject({
+  const deliveredContract = readOnlyContract();
+  expect(deliveredContract).toMatchObject({
     action: "start_work",
     deliverables: ["code_change", "validation", "final_report"],
     state: "delivered",
   });
+  expect(deliveredContract.target_workstream_id).toBeString();
+  const stream = new WorkStreamStore(data).read(String(deliveredContract.target_workstream_id));
+  expect(stream).toMatchObject({ active_contract_id: null });
 });
 
 function decisionIdFromFormat(format: { schema: Record<string, unknown> } | undefined): string {
