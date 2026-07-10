@@ -43,6 +43,10 @@ import type {
 } from "../../direct-turn-budget.ts";
 import type { WorkStreamPhaseBudgetController } from "../../workstream-phase-budget.ts";
 import type { ActiveTurnContract } from "./turn-contract-runtime.ts";
+import {
+  runPrivateTurnDecisionPrompt,
+  type PrivateTurnDecisionValidation,
+} from "./private-turn-decision-prompt.ts";
 
 const REASONING_EFFORT_VALUES = new Set<ReasoningEffort>([
   "none",
@@ -51,7 +55,6 @@ const REASONING_EFFORT_VALUES = new Set<ReasoningEffort>([
   "high",
   "xhigh",
 ]);
-
 function selectedReasoningEffort(turnInput: RuntimeTurnInput): ReasoningEffort | undefined {
   const snakeCase = metadataPolicyValue(turnInput.metadata, "reasoning_effort");
   const camelCase = metadataPolicyValue(turnInput.metadata, "reasoningEffort");
@@ -312,5 +315,27 @@ export function createNativeTurnPromptRunners(input: {
       }
       return text;
     },
+    runPrivateFunctionDecisionPrompt: async (
+      promptText: string,
+      phase = "private_function_decision",
+      promptSections?: PromptUsageSectionAttribution[],
+      responseFormat?: Parameters<NativeTurnRunnerDeps["promptRunner"]>[0]["responseFormat"],
+      validateDecision?: (args: Record<string, unknown>) => PrivateTurnDecisionValidation,
+    ): Promise<string> => await runPrivateTurnDecisionPrompt({
+        promptText,
+        phase,
+        promptSections,
+        responseFormat,
+        model: input.turnInput.model,
+        reasoningEffort,
+        systemPrompt: input.session.init.systemPrompt,
+        signal: input.turnInput.signal,
+        attachments: input.attachments,
+        butlerData: input.deps.butlerData,
+        toolPromptRunner: input.deps.toolPromptRunner,
+        usageAttribution,
+        latencyTracker: input.latencyTracker,
+        validateDecision,
+      }),
   };
 }

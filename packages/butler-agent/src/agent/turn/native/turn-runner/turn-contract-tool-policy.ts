@@ -54,6 +54,12 @@ function contractTools(contract: CompiledTurnContract): string[] {
     tools.add("project_ledger_status");
     tools.add("project_ledger_show");
   }
+  if (contract.action === "inspect" && !contract.target_project_id) {
+    tools.add("grep_files");
+    tools.add("read_file");
+    tools.add("read_tool_evidence_artifact");
+    tools.add("read_tool_output_artifact");
+  }
   if (contract.deliverables.some((item) => item.startsWith("ledger_"))) {
     tools.add("project_ledger_status");
     tools.add("project_ledger_create");

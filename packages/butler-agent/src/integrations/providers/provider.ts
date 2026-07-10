@@ -29,6 +29,7 @@ import {
   type AgentLoopModelResponse,
   type AgentLoopToolDefinition,
 } from "../../agent/turn/agent-loop.ts";
+import { structuredToolResultModelPreview } from "../../agent/turn/tool-result-model-preview.ts";
 import { cognitionMemoryRoot } from "../../agent/cognition/paths.ts";
 import {
   retainToolEvidence,
@@ -264,6 +265,7 @@ export interface FunctionToolPromptOptions {
   tools: FunctionToolDefinition[];
   dynamicTools?: () => readonly FunctionToolDefinition[];
   maxToolRounds?: number;
+  toolChoice?: "auto" | "required";
   log?: (line: string) => void;
   onAssistantTextBeforeTools?: (input: {
     text: string;
@@ -2766,10 +2768,16 @@ function hostedToolResultContent(input: {
     reason: "hosted_tool_result_budget",
     rawTokens,
   });
-  const preview = trimTextToTokenBudgetBalanced(
-    source,
-    Math.max(200, HOSTED_TOOL_RESULT_MAX_MODEL_TOKENS - 180),
-  );
+  const structuredPreview = structuredToolResultModelPreview({
+    toolName: input.toolName,
+    output: input.payload.ok === true ? input.payload.output : input.payload,
+  });
+  const preview = structuredPreview
+    ? JSON.stringify(structuredPreview)
+    : trimTextToTokenBudgetBalanced(
+      source,
+      Math.max(200, HOSTED_TOOL_RESULT_MAX_MODEL_TOKENS - 180),
+    );
   const compact = JSON.stringify({
     ok: input.payload.ok !== false,
     output: {
@@ -2982,7 +2990,7 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
         model: config.model_id,
         messages,
         tools: localChatTools(requestTools),
-        tool_choice: requiredToolRepairNames ? "required" : "auto",
+        tool_choice: requiredToolRepairNames ? "required" : options.toolChoice ?? "auto",
         ...localReasoningRequestParams(config),
         stream: false,
       }, options.signal);
@@ -3482,7 +3490,7 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
     const response = await createHostedChatCompletion(config, {
       messages,
       tools: hostedChatTools(activeTools),
-      tool_choice: "auto",
+      tool_choice: options.toolChoice ?? "auto",
       stream: false,
       ...hostedChatReasoningParams(config, options.reasoningEffort),
     }, options.signal);
@@ -3714,6 +3722,7 @@ async function runAnthropicFunctionToolPromptText(
       system: localFunctionToolInstructions(options.instructions),
       messages,
       tools: anthropicTools(options.tools),
+      ...(options.toolChoice === "required" ? { tool_choice: { type: "any" } } : {}),
     }, options.signal);
     const content = Array.isArray(response.content) ? response.content : [];
     const text = anthropicText(response);
@@ -3891,6 +3900,9 @@ async function runGeminiFunctionToolPromptText(
       systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
       contents,
       tools: geminiTools(options.tools),
+      ...(options.toolChoice === "required"
+        ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
+        : {}),
     }, options.signal);
     const parts = response.candidates?.[0]?.content?.parts;
     const responseParts = Array.isArray(parts) ? parts : [];
@@ -4275,6 +4287,7 @@ async function runOpenAIFunctionToolPromptText(
         ...promptCache,
         instructions: options.instructions,
         tools: activeTools,
+        tool_choice: options.toolChoice ?? "auto",
         reasoning,
         ...(previousResponseId
           ? {

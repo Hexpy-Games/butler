@@ -2556,7 +2556,7 @@ test("generated session titles do not overwrite manual titles", async () => {
   }
 });
 
-test("session creation generates a title from the initial message before returning", async () => {
+test("session creation does not block runtime admission on model title generation", async () => {
   process.env.OPENAI_API_KEY = "sk-create-title-test";
   writeFileSync(
     join(tempDir, "butler.config.json"),
@@ -2609,10 +2609,10 @@ test("session creation generates a title from the initial message before returni
       session_hint: "create-weather-title",
     });
 
-    expect(sawTitleRequest).toBe(true);
-    expect(session.data.session.title).toBe("오늘 날씨");
+    expect(sawTitleRequest).toBe(false);
+    expect(session.data.session.title).toBe(userText);
     expect(server.store.getSession(session.data.session.id).title).toBe(
-      "오늘 날씨",
+      userText,
     );
   } finally {
     server.stop();

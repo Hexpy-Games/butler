@@ -108,12 +108,20 @@ test("complete action and deliverable matrix is deterministic", () => {
   }
   for (const action of ["start_work", "resume_work", "modify_work"] as const) {
     for (const deliverable of ["ledger_spec", "ledger_work", "ledger_tasks", "code_change", "validation", "review"] as const) {
-      expect(() => compileTurnContract({
+      const invoke = () => compileTurnContract({
         decision: decision({ action, target_workstream_id: action === "start_work" ? undefined : "ws-a", deliverables: [deliverable] }),
         candidates: action === "start_work" ? undefined : candidate(),
-      })).not.toThrow();
+      });
+      if (action === "start_work" && deliverable === "review") {
+        expect(invoke).toThrow("turn_contract_execution_requires_durable_deliverable");
+      } else {
+        expect(invoke).not.toThrow();
+      }
     }
   }
+  expect(() => compileTurnContract({
+    decision: decision({ action: "start_work", deliverables: ["status_report", "review"] }),
+  })).toThrow("turn_contract_execution_requires_durable_deliverable");
 });
 
 test("text-only provider fallback never parses prose into durable intent", () => {

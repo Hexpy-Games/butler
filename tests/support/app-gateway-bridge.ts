@@ -133,7 +133,7 @@ export class AppGatewayBridge {
     };
     input.signal?.addEventListener("abort", abortListener, { once: true });
     try {
-      await this.publishGeneratedSessionTitle(input);
+      void this.publishGeneratedSessionTitle(input);
       const result = await this.server.handleInbound(envelope);
       const intermediate = this.visibleDeliveries.get(envelope.eventId) ?? [];
 

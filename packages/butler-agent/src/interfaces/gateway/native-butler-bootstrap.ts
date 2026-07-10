@@ -41,7 +41,7 @@ import { createTelegramLiveGateway } from "../transport/telegram/live-gateway.ts
 import { runTelegramPolling } from "../transport/telegram/polling-runner.ts";
 import { runWorkerResultMonitor } from "./worker-result-monitor.ts";
 import { runPromptText } from "../../integrations/providers/provider.ts";
-import { modelSupportsJsonSchemaResponseFormat } from "../../integrations/providers/model-catalog.ts";
+import { modelStructuredDecisionTransport } from "../../integrations/providers/model-catalog.ts";
 import { plannedInternalGoal, PlannedTaskStore } from "../../agent/work/planned-task.ts";
 import type { TaskRecord } from "../../agent/work/task-store.ts";
 import { WorkOrchestrationStore } from "../../agent/work/work-orchestration.ts";
@@ -120,20 +120,22 @@ export function createNativeButlerDefaultProvider(
   const providerId = configuredModel.includes("/")
     ? configuredModel.split("/", 1)[0] || "openai"
     : "openai";
-  const supportsStructuredOutputs = modelSupportsJsonSchemaResponseFormat(configuredModel);
-  const supportsOpenAIFunctionTools = providerId === "openai" || supportsStructuredOutputs;
+  const structuredDecisionTransport = modelStructuredDecisionTransport(configuredModel);
+  const supportsStructuredOutputs = structuredDecisionTransport !== null;
+  const supportsModelTools = structuredDecisionTransport !== null;
   return {
     id: providerId,
     capabilities: {
       supportsStreaming: false,
-      supportsToolCalls: supportsOpenAIFunctionTools,
+      supportsToolCalls: supportsModelTools,
       supportsImages: false,
       supportsAudio: false,
       supportsServerThreads: false,
       supportsReasoningConfig: true,
       supportsPromptCaching: true,
-      supportsSameTurnToolSchemaPromotion: supportsOpenAIFunctionTools,
+      supportsSameTurnToolSchemaPromotion: supportsModelTools,
       supportsStructuredOutputs,
+      ...(structuredDecisionTransport ? { structuredDecisionTransport } : {}),
     },
     async invoke(input) {
       const prompt = input.messages

@@ -45,7 +45,10 @@ export function typedTurnDecisionInstructions(input: {
     `decision_id must be ${input.decisionId}.`,
     "This is the first productive pass, not a separate natural-language classifier.",
     "Use answer only when the response can be delivered now without tools or durable work; include the complete answer_text.",
+    "Set answer_text to null for every action except answer. For answer, set it to the complete response.",
     "Use inspect only for a status/report request that does not ask to change or continue work; include status_report only.",
+    "Reading, searching, or reviewing existing files without changing durable state is inspect with status_report, even when tools are required.",
+    "The review deliverable is only for structured review evidence of changed, planned, or inherited work; it is not ordinary source inspection.",
     "Use start_work for new durable work. Use resume_work or modify_work only for a listed compatible WorkStream.",
     "Use cancel_work only for a listed WorkStream. Use supply_user_action only for its listed waiting-user blocker.",
     "For implementation or mutation include the actual durable deliverables, not status_report alone.",
@@ -119,6 +122,17 @@ export function parseStructuredTurnDecision(text: string, expectedDecisionId: st
   });
 }
 
+export function canonicalFunctionDecisionArgs(
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const action = typeof args.action === "string" ? args.action : "";
+  return {
+    ...args,
+    ...(action && action !== "answer" ? { answer_text: null } : {}),
+    ...(action && action !== "supply_user_action" ? { blocker_id: null } : {}),
+  };
+}
+
 export function turnContractCandidates(input: {
   butlerData: string;
   candidates: readonly WorkStreamResumeCandidate[];
@@ -173,14 +187,46 @@ export function compileStructuredTurnDecision(input: {
 export function structuredDecisionRepairPrompt(input: {
   prompt: string;
   error: unknown;
+  transport?: "json_schema" | "function_tool";
 }): string {
   const code = input.error instanceof Error ? input.error.message : "turn_contract_decision_invalid";
   return [
     input.prompt,
     "## Structured Decision Repair",
     `The prior structured value failed validation with code: ${code}.`,
-    "Return one corrected value using the same JSON schema. Do not add prose and do not change the requested objective.",
+    `Required correction: ${structuredDecisionRepairGuidance(code)}`,
+    input.transport === "function_tool"
+      ? "Submit one corrected value through submit_turn_decision using the same schema and requested objective."
+      : "Return one corrected value using the same JSON schema. Do not add prose and do not change the requested objective.",
   ].join("\n\n");
+}
+
+export function structuredDecisionRepairGuidance(code: string): string {
+  switch (code) {
+    case "turn_contract_non_answer_has_answer_text":
+      return "Keep the selected non-answer action and set answer_text to null.";
+    case "turn_contract_invalid_answer":
+      return "For action answer, provide a complete non-empty answer_text and no deliverables.";
+    case "turn_contract_required_deliverable_missing":
+      return "Include every deliverable required by the selected action; inspect requires status_report.";
+    case "turn_contract_duplicate_deliverables":
+      return "Return each deliverable at most once.";
+    case "turn_contract_deliverable_not_allowed":
+      return "Remove deliverables that are not allowed for the selected action.";
+    case "turn_contract_execution_requires_durable_deliverable":
+    case "turn_contract_final_report_requires_durable_deliverable":
+      return "Use inspect with status_report for read-only source inspection; otherwise keep the work action and include a concrete durable execution deliverable other than review.";
+    case "turn_contract_missing_workstream_target":
+    case "turn_contract_incompatible_workstream_target":
+      return "Select one target_workstream_id from the supplied compatible candidates.";
+    case "turn_contract_unexpected_blocker_id":
+      return "Set blocker_id to null unless the action is supply_user_action.";
+    case "turn_contract_supply_blocker_mismatch":
+    case "turn_contract_supply_target_not_waiting":
+      return "Use only the listed waiting-user WorkStream and its exact blocker id.";
+    default:
+      return "Preserve the requested objective and correct the value to satisfy the exact decision schema and action rules.";
+  }
 }
 
 function obligationRequirements(input: {
