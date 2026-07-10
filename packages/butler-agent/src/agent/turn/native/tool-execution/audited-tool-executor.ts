@@ -299,7 +299,7 @@ async function prepareAuditedToolExecution(input: {
     decision.semanticBlockId ?? matchingDecisionWorkBlockId ?? decisionScopedWorkBlockId(semanticWorkBlock?.id, toolCallId),
   );
   const publicDecision = { ...decision, workBlockId };
-  const workBlockLabel = semanticWorkBlock?.label ?? decision.summary;
+  const workBlockLabel = decision.blockTitle ?? progress.workBlockLabel;
   if (publicDecision.source !== "runtime-derived") {
     input.input.publicDecisionContext.push(publicDecision);
     appendPublicDecisionTranscript(input.input, publicDecision);
@@ -329,8 +329,8 @@ async function prepareAuditedToolExecution(input: {
 }
 
 function reusableDecisionWorkBlockId(
-  previousDecisions: Array<{ workBlockId?: string; providerRound?: number; source: string; summary: string; rationale?: string; nextStep?: string }>,
-  decision: { providerRound?: number; source: string; summary: string; rationale?: string; nextStep?: string },
+  previousDecisions: Array<{ workBlockId?: string; providerRound?: number; usageGroupId?: string; source: string }>,
+  decision: { providerRound?: number; usageGroupId?: string; source: string },
 ): string | null {
   if (decision.source !== "assistant-authored") {
     return null;
@@ -339,7 +339,8 @@ function reusableDecisionWorkBlockId(
   const previous = previousDecisions.at(-1);
   if (!previous?.workBlockId) return null;
   if (previous.providerRound !== decision.providerRound) return null;
-  return samePublicDecisionIntent(previous, decision) ? previous.workBlockId : null;
+  if (!previous.usageGroupId || previous.usageGroupId !== decision.usageGroupId) return null;
+  return previous.workBlockId;
 }
 
 function decisionScopedWorkBlockId(semanticWorkBlockId: string | undefined, toolCallId: string): string {
@@ -358,20 +359,6 @@ function turnScopedWorkBlockId(turnId: string, workBlockId: string): string {
 
 function normalizedWorkBlockPart(value: string): string {
   return value.replace(/\s+/gu, "-").trim();
-}
-
-function samePublicDecisionIntent(
-  left: { source: string; summary: string; rationale?: string; nextStep?: string },
-  right: { source: string; summary: string; rationale?: string; nextStep?: string },
-): boolean {
-  return left.source === right.source &&
-    normalizedDecisionText(left.summary) === normalizedDecisionText(right.summary) &&
-    normalizedDecisionText(left.rationale) === normalizedDecisionText(right.rationale) &&
-    normalizedDecisionText(left.nextStep) === normalizedDecisionText(right.nextStep);
-}
-
-function normalizedDecisionText(value?: string): string {
-  return (value ?? "").replace(/\s+/gu, " ").trim();
 }
 
 async function maybeEmitRuntimeProgress(

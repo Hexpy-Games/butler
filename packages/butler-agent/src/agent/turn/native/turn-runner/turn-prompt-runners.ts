@@ -50,7 +50,6 @@ import {
   runPrivateTurnDecisionPrompt,
   type PrivateTurnDecisionValidation,
 } from "./private-turn-decision-prompt.ts";
-import { createContractContinuationDecision } from "./turn-contract-continuation-decision.ts";
 
 const REASONING_EFFORT_VALUES = new Set<ReasoningEffort>([
   "none",
@@ -167,7 +166,6 @@ export function createNativeTurnPromptRunners(input: {
       const grantedToolRounds = directToolRoundLimit(phaseMaxToolRounds);
       async function runPromptWithSelectedSurface(toolSurface: SelectedToolSurfacePromptState): Promise<string> {
         const projector = streamProjector(phase);
-        const providerToolRounds = input.turnContractContext?.current ? 1 : grantedToolRounds;
         try {
           const executeTool: FunctionToolPromptOptions["executeTool"] = async (call) => {
             input.phaseBudgetController?.recordToolCall({
@@ -193,8 +191,8 @@ export function createNativeTurnPromptRunners(input: {
             attachments: input.attachments,
             tools: toolSurface.tools,
             dynamicTools: toolSurface.dynamicTools,
-            maxToolRounds: providerToolRounds,
-            handoffAfterToolBatch: Boolean(input.turnContractContext?.current),
+            maxToolRounds: grantedToolRounds,
+            handoffAfterToolBatch: false,
             butlerData: input.deps.butlerData,
             usageAttribution: usageAttribution(phase),
             onProviderStreamEvent: projector.project,
@@ -219,24 +217,36 @@ export function createNativeTurnPromptRunners(input: {
                 toolNames: toolCalls.map((toolCall) => toolCall.name),
               });
               input.markAssistantTextBeforeToolsSeen();
-              const nextPendingDecisions = publicWorkDecisionsFromAssistantText({
-                text,
-                toolCalls,
-                language: input.deps.messageLanguage,
-                existingDecisions: input.publicDecisionContext,
-                ...(input.turnContractContext?.current
-                  ? {
-                    contractContext: {
-                      contractId: input.turnContractContext.current.contract.contract_id,
-                      ...(input.turnContractContext.current.contract.target_workstream_id
-                        ? { workstreamId: input.turnContractContext.current.contract.target_workstream_id }
-                        : {}),
-                      semanticBlockId: `${input.turnContractContext.current.contract.contract_id}:block:${providerRoundIndex + 1}`,
-                      usageGroupId: `${input.turnContractContext.current.contract.contract_id}:round:${providerRoundIndex + 1}`,
-                    },
-                  }
-                  : {}),
-              });
+              const active = input.turnContractContext?.current;
+              const openingDecisionAvailable = Boolean(
+                active &&
+                providerRoundIndex === 0 &&
+                input.pendingPublicDecisions.some((decision) =>
+                  decision.contractId === active.contract.contract_id &&
+                  decision.providerRound === 0 &&
+                  (decision.usageCount ?? 0) === 0,
+                ),
+              );
+              const nextPendingDecisions = openingDecisionAvailable
+                ? []
+                : publicWorkDecisionsFromAssistantText({
+                  text,
+                  toolCalls,
+                  language: input.deps.messageLanguage,
+                  existingDecisions: input.publicDecisionContext,
+                  ...(active
+                    ? {
+                      contractContext: {
+                        contractId: active.contract.contract_id,
+                        ...(active.contract.target_workstream_id
+                          ? { workstreamId: active.contract.target_workstream_id }
+                          : {}),
+                        semanticBlockId: `${active.contract.contract_id}:block:${providerRoundIndex + 1}`,
+                        usageGroupId: `${active.contract.contract_id}:round:${providerRoundIndex + 1}`,
+                      },
+                    }
+                    : {}),
+                });
               if (nextPendingDecisions.length > 0) {
                 input.pendingPublicDecisions.length = 0;
                 providerRoundIndex += 1;
@@ -244,26 +254,17 @@ export function createNativeTurnPromptRunners(input: {
                   d.providerRound = providerRoundIndex;
                 }
                 input.pendingPublicDecisions.push(...nextPendingDecisions);
-              } else if (input.turnContractContext?.current && toolCalls.length > 0) {
-                const active = input.turnContractContext.current;
+              } else if (active && toolCalls.length > 0) {
                 const hasContractDecision = hasCompleteAuthoredPublicDecisionForTool({
                   pending: input.pendingPublicDecisions.filter((decision) =>
                     decision.contractId === active.contract.contract_id,
                   ),
                   toolName: toolCalls[0]!.name,
                 });
-                if (!hasContractDecision) {
-                  providerRoundIndex += 1;
-                  input.pendingPublicDecisions.push(createContractContinuationDecision({
-                    active,
-                    toolCalls,
-                    language: input.deps.messageLanguage,
-                    providerRound: providerRoundIndex,
-                  }));
-                }
                 const boundedBatchSize = Math.min(toolCalls.length, 6);
-                for (const decision of input.pendingPublicDecisions) {
-                  if (decision.contractId === active.contract.contract_id) {
+                if (hasContractDecision) {
+                  for (const decision of input.pendingPublicDecisions) {
+                    if (decision.contractId !== active.contract.contract_id) continue;
                     decision.toolBatchSize = boundedBatchSize;
                   }
                 }

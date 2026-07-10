@@ -6,6 +6,11 @@ import { localToolResultMessageContent, rebudgetLocalToolMessages, runLocalCompa
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { resolveLocalModelConfig } from "../shared/model-routing.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
+import {
+  blockCapacityObservation,
+  blockCapacityToolOutput,
+  partitionSemanticToolBatch,
+} from "../../../agent/turn/tool-batch-capacity.ts";
 
 
 
@@ -141,9 +146,10 @@ export async function runLocalFunctionToolPromptText(options: FunctionToolPrompt
       tool_names: toolCalls.map((call) => call.function.name),
       executed_tool_calls: executedToolCalls,
     });
+    const batch = partitionSemanticToolBatch(toolCalls);
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: toolCalls.map((call) => {
+      toolCalls: batch.executable.map((call) => {
         const args = localToolArguments(call.function.arguments);
         return {
           name: call.function.name,
@@ -158,7 +164,7 @@ export async function runLocalFunctionToolPromptText(options: FunctionToolPrompt
       tool_calls: toolCalls,
     });
 
-    for (const call of toolCalls) {
+    for (const call of batch.executable) {
       const args = localToolArguments(call.function.arguments);
       log(`tool ${call.function.name}: ${args.raw}`);
       writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.start", {
@@ -209,6 +215,25 @@ export async function runLocalFunctionToolPromptText(options: FunctionToolPrompt
         name: call.function.name,
         content: localToolResultMessageContent({
           payload,
+          toolName: call.function.name,
+          config,
+          log,
+        }),
+      });
+    }
+    for (const call of batch.deferred) {
+      const observation = blockCapacityObservation({
+        toolCallId: call.id,
+        toolName: call.function.name,
+        deferredCount: batch.deferred.length,
+        turnId: options.usageAttribution?.turnId,
+      });
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        name: call.function.name,
+        content: localToolResultMessageContent({
+          payload: { ok: false, output: blockCapacityToolOutput(observation) },
           toolName: call.function.name,
           config,
           log,

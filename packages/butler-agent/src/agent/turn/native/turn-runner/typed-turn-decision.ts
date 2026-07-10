@@ -53,7 +53,8 @@ export function typedTurnDecisionInstructions(input: {
     "Use cancel_work only for a listed WorkStream. Use supply_user_action only for its listed waiting-user blocker.",
     "For implementation or mutation include the actual durable deliverables, not status_report alone.",
     "For mixed status-and-work instructions include status_report plus the execution deliverables.",
-    "public_summary explains why this action satisfies the request. immediate_next_step names only the next small step.",
+    "public_title is one concise line naming the immediate work block. It must not repeat public_summary or immediate_next_step.",
+    "public_summary states what this decision will do. public_rationale explains why this step is useful now. immediate_next_step explains how the result determines the following step.",
     `Active project id: ${input.projectId?.trim() || "none"}.`,
     `Compatible WorkStream ids: ${input.candidateIds.length > 0 ? input.candidateIds.join(", ") : "none"}.`,
     "Do not infer from keyword dictionaries, regexes, or final-answer prose. Do not mention hidden control data.",
@@ -75,7 +76,7 @@ export function turnDecisionResponseFormat(input: {
       additionalProperties: false,
       required: [
         "schema_version", "decision_id", "action", "target_workstream_id", "target_project_id",
-        "blocker_id", "deliverables", "answer_text", "public_summary", "immediate_next_step",
+        "blocker_id", "deliverables", "answer_text", "public_title", "public_summary", "public_rationale", "immediate_next_step",
       ],
       properties: {
         schema_version: { type: "string", const: TURN_CONTRACT_DECISION_SCHEMA },
@@ -89,7 +90,9 @@ export function turnDecisionResponseFormat(input: {
           items: { type: "string", enum: [...TURN_DELIVERABLES] },
         },
         answer_text: { type: ["string", "null"] },
+        public_title: { type: "string", minLength: 2, maxLength: 80 },
         public_summary: { type: "string", minLength: 1, maxLength: 320 },
+        public_rationale: { type: "string", minLength: 1, maxLength: 320 },
         immediate_next_step: { type: ["string", "null"], maxLength: 240 },
       },
     },
@@ -117,7 +120,9 @@ export function parseStructuredTurnDecision(text: string, expectedDecisionId: st
     blocker_id: nullableString(record.blocker_id),
     deliverables: Array.isArray(record.deliverables) ? record.deliverables as TurnDeliverable[] : [],
     answer_text: nullableString(record.answer_text),
+    public_title: nullableString(record.public_title) ?? legacyDecisionTitle(record),
     public_summary: String(record.public_summary ?? ""),
+    public_rationale: nullableString(record.public_rationale) ?? String(record.public_summary ?? ""),
     immediate_next_step: nullableString(record.immediate_next_step),
   });
 }
@@ -285,4 +290,12 @@ function compactOptionalDecisionFields(decision: TurnContractDecision): TurnCont
 
 function nullableString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function legacyDecisionTitle(record: Record<string, unknown>): string | undefined {
+  const source = nullableString(record.immediate_next_step) ?? nullableString(record.public_summary);
+  if (!source) return undefined;
+  const oneLine = source.replace(/\s+/gu, " ").trim();
+  const sentence = oneLine.split(/[.!?。！？]/u)[0]?.trim() || oneLine;
+  return sentence.slice(0, 80);
 }

@@ -21,6 +21,7 @@ export function publicWorkDecisionPayload(decision: PublicWorkDecision): Record<
     contractId: decision.contractId,
     workstreamId: decision.workstreamId,
     semanticBlockId: decision.semanticBlockId,
+    decisionTitle: decision.blockTitle,
     decisionSummary: decision.summary,
     decisionRationale: decision.rationale,
     decisionNextStep: decision.nextStep,
@@ -52,15 +53,18 @@ export function publicWorkDecisionsFromAssistantText(input: {
     const sharedDecision = structured[0];
     const usageGroupIndex = indexedDecision ? index : 0;
     const decisionWasRepaired = indexedDecision?.repaired === true || sharedDecision?.repaired === true;
+    const blockTitle = indexedDecision?.blockTitle ?? sharedDecision?.blockTitle;
     const summary = indexedDecision?.summary ?? sharedDecision?.summary;
     const rationale = indexedDecision?.rationale ?? sharedDecision?.rationale;
     const nextStep = indexedDecision?.nextStep ?? sharedDecision?.nextStep;
     if (
       decisionWasRepaired ||
+      typeof blockTitle !== "string" ||
       typeof summary !== "string" ||
       typeof rationale !== "string" ||
       typeof nextStep !== "string" ||
       !isUsablePublicDecisionText(summary ?? "") ||
+      !isUsablePublicDecisionText(blockTitle ?? "", { minChars: 2 }) ||
       !isUsablePublicDecisionText(rationale ?? "", { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS }) ||
       !isUsablePublicDecisionText(nextStep ?? "", { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS })
     ) {
@@ -76,6 +80,7 @@ export function publicWorkDecisionsFromAssistantText(input: {
           semanticBlockId: input.contractContext.semanticBlockId,
         }
         : {}),
+      blockTitle,
       summary,
       rationale,
       evidenceRefs: input.existingDecisions

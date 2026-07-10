@@ -28,7 +28,7 @@ export function finalResultContractRepairPrompt(input: {
     "## Final Result Contract Repair",
     "The previous final answer exposed public work decision fields as the result.",
     "Then rewrite the final answer as the user-facing outcome report only.",
-    "Do not include public work decision protocol keys (`summary:`, `rationale:`, `next_step:`), legacy `작업/이유/다음` or `Work/Why/Next`, raw tool ids, tool-call order, public_work_decision_context, or raw tool logs.",
+    "Do not include public work decision protocol keys (`title:`, `summary:`, `rationale:`, `next_step:`), legacy `작업/이유/다음` or `Work/Why/Next`, raw tool ids, tool-call order, public_work_decision_context, or raw tool logs.",
     "Preserve the active persona, user language, and any current-turn Active Persona Reminder while rewriting.",
     ...finalResultEvidenceRepairInstructions(),
     "",
