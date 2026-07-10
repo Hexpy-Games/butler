@@ -312,6 +312,10 @@ function renderTurnContextAtom(atom: TurnContextAtom, contextAtomId: string): st
   lines.push(renderAtomRefs("Evidence Candidates", atom.evidenceCandidates));
   lines.push(renderAtomRefs("Current Turn Work", atom.currentTurnWork));
   lines.push(renderAtomRefs("Current Turn Todos", atom.currentTurnTodos));
+  if (atom.roundJournal?.length) {
+    lines.push("Recent Round Journal:");
+    lines.push(JSON.stringify(atom.roundJournal, null, 2));
+  }
   lines.push("Continuation Instruction: resume this same logical turn from the context atom facts before using active WorkStream/Todo fallback.");
   return lines.filter((line) => line.trim()).join("\n");
 }

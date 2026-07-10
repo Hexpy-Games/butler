@@ -2,6 +2,7 @@ import { safeOptionalPublicText, safeRelativePath } from "../../../output/eviden
 import { structuredToolResultModelPreview } from "../../tool-result-model-preview.ts";
 import type { TurnContextObservationRef } from "../../turn-continuation-context.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
+import { buildTurnRoundJournal, renderTurnRoundJournal } from "./turn-round-journal.ts";
 
 const MAX_SEARCH_FRONTIERS = 3;
 const MAX_CANDIDATES = 12;
@@ -64,6 +65,7 @@ export function buildTurnContinuationEvidence(input: {
     }
     : null;
   const latestDecision = input.publicDecisions.at(-1);
+  const roundJournal = buildTurnRoundJournal(input);
   const payload = compactUndefined({
     schema_version: "butler.turn-continuation-evidence.v1",
     latest_public_decision: latestDecision
@@ -73,6 +75,8 @@ export function buildTurnContinuationEvidence(input: {
         summary: boundedPublicText(latestDecision.summary, 360),
         rationale: boundedPublicText(latestDecision.rationale, 360),
         next_step: boundedPublicText(latestDecision.nextStep, 360),
+        expected_effect: boundedPublicText(latestDecision.expectedEffect, 360),
+        repeat_reason: latestDecision.repeatReason,
       })
       : undefined,
     search_frontier: searches.map((search) => ({
@@ -88,14 +92,16 @@ export function buildTurnContinuationEvidence(input: {
       truncated: read.truncated,
       content: read.content,
     })),
+    round_journal: roundJournal,
     suggested_next_step: nextStep,
   });
-  const hasEvidence = searches.length > 0 || reads.length > 0 || latestDecision;
+  const hasEvidence = searches.length > 0 || reads.length > 0 || roundJournal.length > 0 || latestDecision;
   return {
     modelVisibleContent: hasEvidence
       ? [
         "Structured continuation evidence (bounded runtime state):",
         JSON.stringify(payload, null, 2),
+        renderTurnRoundJournal(roundJournal),
         "Continue from this exact frontier when authoring the next small public decision.",
       ].join("\n")
       : "",

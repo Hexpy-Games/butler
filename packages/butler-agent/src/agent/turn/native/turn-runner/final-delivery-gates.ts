@@ -21,7 +21,6 @@ import {
   repairFinalContract,
 } from "./public-output-gates.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
-import { persistTurnContextAtom } from "../../turn-continuation-context.ts";
 import type { createDirectTurnBudget } from "../../direct-turn-budget.ts";
 import { WorkStreamStore } from "../../../work/work-stream.ts";
 import { TodoListStore } from "../../../work/todo-list.ts";
@@ -36,11 +35,7 @@ import {
   recordTurnContractAuditEvidence,
   unsatisfiedTurnContractObligations,
 } from "./turn-contract-audit-evidence.ts";
-import { recordTurnContractMetric } from "./turn-contract-metrics.ts";
 import { buildTurnContinuationEvidence } from "./turn-continuation-evidence.ts";
-import { isToolBatchCompletedHandoffText } from "../../tool-batch-handoff.ts";
-
-export const KERNEL_COMPLETION_GAP_CONTINUATION_CODE = "completion_gap_continuation";
 
 export type FinalDeliveryOutcome =
   | { kind: "final"; text: string; evidenceRefs: string[] }
@@ -73,40 +68,6 @@ export async function produceFinalDeliveryOutcome(input: {
 }): Promise<FinalDeliveryOutcome> {
   const explicitToolGap = explicitToolRequirementGap(input);
   if (explicitToolGap) return explicitToolGap;
-  if (isToolBatchCompletedHandoffText(input.initialText)) {
-    const successfulTools = input.audit.filter((entry) => entry.ok);
-    const latestTool = successfulTools.at(-1)?.name ?? "none";
-    let finalSynthesisReady = false;
-    if (input.turnContract) {
-      const recordedContract = recordTurnContractAuditEvidence({
-        butlerData: input.deps.butlerData,
-        contract: input.turnContract,
-        audit: input.audit,
-        finalCandidate: "",
-      });
-      const missing = unsatisfiedTurnContractObligations({
-        butlerData: input.deps.butlerData,
-        contract: recordedContract,
-      });
-      finalSynthesisReady = missing.length === 0 ||
-        missing.every((obligation) => obligation.deliverable === "final_report");
-    }
-    return {
-      kind: "completion_gap",
-      observation: {
-        kind: "tool_batch_completed",
-        summary: `The bounded tool batch completed with ${successfulTools.length} recorded result(s); latest=${latestTool}.`,
-        nextMode: finalSynthesisReady ? "final_synthesis" : "tool_decision",
-        modelVisibleContent: [
-          "The runtime recorded the completed tool batch for this same logical turn.",
-          finalSynthesisReady
-            ? "All non-report evidence obligations are satisfied; synthesize the requested final answer from the structured frontier."
-            : "Continue from the structured tool frontier in a fresh public decision.",
-        ].join("\n"),
-      },
-      evidenceRefs: [],
-    };
-  }
   const groundedText = applyGroundingIfNeeded(input, input.initialText);
   const reviewResult = await runGoalCompletionReviews({ ...input, initialText: groundedText });
   if (reviewResult.outcome.status === "gap") {
@@ -598,83 +559,6 @@ function observationsFromAudit(audit: ToolAuditEntry[]) {
     });
 }
 
-export async function persistCompletionGapContinuation(input: {
-  turnInput: RuntimeTurnInput;
-  deps: NativeTurnRunnerDeps;
-  turnId?: string | null;
-  audit: ToolAuditEntry[];
-  publicDecisionContext: PublicWorkDecision[];
-  contractId?: string;
-  observation: {
-    kind: string;
-    summary: string;
-    modelVisibleContent: string;
-    refs?: Array<{ kind: string; id: string; path?: string }>;
-  };
-}): Promise<void> {
-  const turnId = input.turnId;
-  if (!turnId) return;
-  const refs = collectTurnContinuationRefs({
-    butlerData: input.deps.butlerData,
-    sessionId: input.turnInput.handle.sessionId,
-    turnId,
-    audit: input.audit,
-    publicDecisionContext: input.publicDecisionContext,
-  });
-  const continuationCommitId = persistTurnContextAtom({
-    butlerData: input.deps.butlerData,
-    sessionId: input.turnInput.handle.sessionId,
-    turnId,
-    state: "continuing",
-    sourceErrorCode: KERNEL_COMPLETION_GAP_CONTINUATION_CODE,
-    reason: input.observation.summary,
-    userRequest: {
-      id: currentUserMessageRef(input.turnInput),
-    },
-    ...refs,
-    unresolvedObservations: [{
-      kind: input.observation.kind,
-      id: `completion-gap:${turnId}`,
-    }, ...(input.observation.refs ?? [])],
-    latestCompletionReview: {
-      status: "gap",
-      observationId: `completion-gap:${turnId}`,
-    },
-  });
-  if (input.contractId && continuationCommitId) {
-    const contracts = new TurnContractStore(input.deps.butlerData);
-    const contract = contracts.read(input.contractId);
-    if (!contract) throw new Error("turn_contract_not_found");
-    const continuing = contracts.recordContinuationCommit({
-      contractId: contract.contract_id,
-      commitId: continuationCommitId,
-      expectedGeneration: contract.generation,
-    });
-    recordTurnContractMetric({
-      butlerData: input.deps.butlerData,
-      name: "continuation",
-      status: "ok",
-      contract: continuing,
-    });
-  }
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: "turn.observation",
-    visibility: "internal",
-    payload: {
-      kind: input.observation.kind,
-      safeLabel: input.observation.summary,
-      modelVisibleContentChars: input.observation.modelVisibleContent.length,
-    },
-  });
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: "turn.continuation_scheduled",
-    payload: {
-      reason: KERNEL_COMPLETION_GAP_CONTINUATION_CODE,
-      safeLabel: "Continuing from completion gap",
-    },
-  });
-}
-
 export function collectTurnContinuationRefs(input: {
   butlerData: string;
   sessionId: string;
@@ -722,11 +606,4 @@ export function collectTurnContinuationRefs(input: {
     currentTurnWork,
     currentTurnTodos,
   };
-}
-
-function currentUserMessageRef(input: RuntimeTurnInput): string {
-  if ("message" in input.input && typeof input.input.message?.id === "string") {
-    return input.input.message.id;
-  }
-  return `turn:${input.handle.sessionId}`;
 }

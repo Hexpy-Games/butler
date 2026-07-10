@@ -5,7 +5,7 @@ import {
   createTranscriptEvent,
 } from "../../../../test-support/harness/transcripts.ts";
 import { createAuditedBridgeToolExecutor } from "../../bridge-tool-executor.ts";
-import { RepeatedToolFamilyGuard } from "../../tool-loop-guards.ts";
+import { isStateMutatingToolCall, ToolStagnationObserver } from "../../tool-loop-guards.ts";
 import { createProjectLedgerFreshnessCache } from "./project-ledger-freshness-cache.ts";
 import { applyPlannedReviewToolPolicy } from "../policy/planned-review-tool-policy.ts";
 import {
@@ -14,7 +14,7 @@ import {
   WORKER_ORCHESTRATION_START_TOOL_SET,
 } from "../progress/runtime-semantic-progress.ts";
 import { createInternalProgressToolRunner } from "./internal-progress-tool.ts";
-import { maybeHandleRepeatedToolFamily } from "./repeated-tool-guard-result.ts";
+import { appendToolStagnationObservation } from "./tool-stagnation-observation.ts";
 import { handleAuditedToolFailure } from "./tool-call-failure.ts";
 import { handleAuditedToolSuccess } from "./tool-call-success.ts";
 import {
@@ -48,6 +48,7 @@ import type {
   NativeAuditedToolExecutorInput,
   NativeToolCall,
 } from "./audited-executor-types.ts";
+import { buildTurnRoundJournal } from "../turn-runner/turn-round-journal.ts";
 
 export function createAuditedButlerToolExecutor(
   input: NativeAuditedToolExecutorInput,
@@ -59,7 +60,7 @@ export function createAuditedButlerToolExecutor(
     projectId: input.projectId,
     workspacePath: input.workspacePath,
   });
-  const repeatedToolFamilyGuard = new RepeatedToolFamilyGuard();
+  const toolStagnationObserver = new ToolStagnationObserver();
   const internalProgress = createInternalProgressToolRunner({
     executorInput: input,
     throwIfAborted: () => throwIfRuntimeTurnAborted(input.turnInput.signal),
@@ -112,15 +113,6 @@ export function createAuditedButlerToolExecutor(
       appendPlannedReviewBlock(input, call, cleanArgs, plannedReviewBlock);
       return plannedReviewBlock.result;
     }
-    const repeatedToolFamilyResult = maybeHandleRepeatedToolFamily({
-      executorInput: input,
-      guard: repeatedToolFamilyGuard,
-      call,
-      cleanArgs,
-      startedAt,
-    });
-    if (repeatedToolFamilyResult) return repeatedToolFamilyResult;
-
     const state = await prepareAuditedToolExecution({
       input,
       call,
@@ -135,13 +127,41 @@ export function createAuditedButlerToolExecutor(
       }
       throwIfToolResultNeedsObservation({ call, result });
       throwIfRuntimeTurnAborted(input.turnInput.signal);
-      repeatedToolFamilyGuard.resetAfterStateMutation(call.name, cleanArgs);
+      const journalEntry = buildTurnRoundJournal({
+        audit: [{
+          name: call.name,
+          args: cleanArgs,
+          ok: true,
+          result,
+          publicDecision: state.decision,
+        }],
+        publicDecisions: [state.decision],
+      })[0];
+      const stagnation = journalEntry
+        ? toolStagnationObserver.observe({
+          name: call.name,
+          args: cleanArgs,
+          resultFingerprint: journalEntry.result_fingerprint,
+          stateRevision: journalEntry.state_revision,
+          mutated: isStateMutatingToolCall(call.name, cleanArgs),
+        })
+        : null;
+      const observedResult = appendToolStagnationObservation({
+        result,
+        decision: stagnation,
+        turnId: input.turnId,
+        toolCallId: state.toolCallId,
+        toolName: call.name,
+        butlerData: input.butlerData,
+        sessionRole: input.turnInput.handle.role ?? "butler",
+        startedAt,
+      });
       return await handleAuditedToolSuccess({
         executorInput: input,
         call,
         cleanArgs,
         bridgedFrom,
-        result,
+        result: observedResult,
         startedAt,
         ...state,
         inboundEnvelope,

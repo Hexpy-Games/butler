@@ -25,6 +25,8 @@ export function publicWorkDecisionPayload(decision: PublicWorkDecision): Record<
     decisionSummary: decision.summary,
     decisionRationale: decision.rationale,
     decisionNextStep: decision.nextStep,
+    decisionExpectedEffect: decision.expectedEffect,
+    decisionRepeatReason: decision.repeatReason,
     decisionSource: decision.source,
     decisionEvidenceRefs: decision.evidenceRefs,
     decisionCompletionObligations: decision.completionObligations ?? [],
@@ -57,6 +59,8 @@ export function publicWorkDecisionsFromAssistantText(input: {
     const summary = indexedDecision?.summary ?? sharedDecision?.summary;
     const rationale = indexedDecision?.rationale ?? sharedDecision?.rationale;
     const nextStep = indexedDecision?.nextStep ?? sharedDecision?.nextStep;
+    const expectedEffect = indexedDecision?.expectedEffect ?? sharedDecision?.expectedEffect;
+    const repeatReason = indexedDecision?.repeatReason ?? sharedDecision?.repeatReason;
     if (
       decisionWasRepaired ||
       typeof blockTitle !== "string" ||
@@ -87,6 +91,8 @@ export function publicWorkDecisionsFromAssistantText(input: {
         .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
         .map((decision) => decision.summary),
       nextStep,
+      ...(expectedEffect ? { expectedEffect } : {}),
+      ...(repeatReason ? { repeatReason } : {}),
       completionObligations: indexedDecision?.completionObligations ??
         sharedDecision?.completionObligations ??
         [],

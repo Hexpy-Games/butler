@@ -101,6 +101,7 @@ async function authorPublicDecisionForTool(
   },
   call: { name: string; args: Record<string, unknown> },
   text: {
+    title?: string;
     summary: string;
     rationale: string;
     nextStep: string;
@@ -108,6 +109,7 @@ async function authorPublicDecisionForTool(
 ): Promise<void> {
   await input.onAssistantTextBeforeTools?.({
     text: [
+      `title: ${text.title ?? text.summary}`,
       `summary: ${text.summary}`,
       `rationale: ${text.rationale}`,
       `next_step: ${text.nextStep}`,
@@ -430,10 +432,10 @@ test("native runtime compiles typed inspection intent into a normal tool prompt"
 
   expect(result.text).toContain("resolveOpenAIPromptCacheConfig");
   expect(toolPrompts).toHaveLength(1);
-  expect(toolRounds[0]).toBe(1);
+  expect(toolRounds[0]).toBe(60);
   expect(toolPrompts[0]).toContain("## Active Typed Turn Contract");
   expect(toolPrompts[0]).toContain("Action: inspect");
-  expect(toolPrompts[0]).toContain("Execute only the immediate next semantic step");
+  expect(toolPrompts[0]).toContain("Execute only that immediate step");
 });
 
 test("native runtime gives worker sessions the execution tool loop and role-limited tool profile", async () => {
@@ -695,6 +697,7 @@ test("native runtime executes basic workspace commands only after an authored pu
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: Inspect the current workspace with a shell command.",
           "rationale: The command output is needed before choosing the next implementation step.",
           "next_step: Run the command and use the result to decide the next small action.",
@@ -756,6 +759,7 @@ test("native runtime requests a fresh authored decision cue after a bounded basi
       sequenceIssued = true;
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: Read the first group of component files.",
           "rationale: A bounded set of files is enough to understand the first layout slice.",
           "next_step: Read these files, then decide the next smaller group from the result.",
@@ -857,6 +861,7 @@ test("native runtime counts mixed-tool batches against one authored decision gro
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: Inspect the next bounded evidence slice.",
           "rationale: The current decision should cover only one small batch before the next decision.",
           "next_step: Run this mixed tool batch, then choose the next smaller evidence slice from the result.",
@@ -967,7 +972,7 @@ test("native runtime permits Ledger preflight inspection tools in ledger-tracked
   expect(JSON.stringify(returnedToolResult)).not.toContain("public_decision_continuation");
   const workStart = events.find((event) => event.kind === "work.block.started");
   expect(workStart?.payload).toMatchObject({
-    label: "Project Ledger 상태를 canonical 도구로 확인합니다.",
+    label: "Project Ledger 상태 확인",
     decisionSource: "runtime-derived",
   });
 });
@@ -1039,7 +1044,7 @@ test("native runtime uses a continuation cue after partial public decisions", as
     },
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: I will inspect the workspace.",
+        text: "title: Inspect workspace\nsummary: I will inspect the workspace.",
         toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
       });
       results.push(await input.executeTool({
@@ -1097,6 +1102,7 @@ test("native runtime turns invalid tool arguments into model-visible retry guida
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: Validate the shell command input before running it.",
           "rationale: The command must be executable so the next step is based on observed output.",
           "next_step: Run the corrected command and use the result in the final answer.",
@@ -1111,6 +1117,7 @@ test("native runtime turns invalid tool arguments into model-visible retry guida
       secondPromptSawObservation = String(first.model_visible_content).includes("required command");
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: Retry run_command with the required command argument.",
           "rationale: The prior observation identified the missing schema field.",
           "next_step: Run the corrected command and report the verified output.",
@@ -1253,6 +1260,7 @@ test("completion review continuation preserves typed failed-tool observations", 
       if (promptCalls === 1) {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Validate the command path before writing the artifact.",
             "rationale: The command output should inform the durable artifact.",
             "next_step: Retry invalid arguments if needed, then create the artifact.",
@@ -1268,6 +1276,7 @@ test("completion review continuation preserves typed failed-tool observations", 
         expect(invalidArgs).toMatchObject({ observation_kind: "tool_invalid_arguments" });
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Check whether the source-reading tool is available.",
             "rationale: Unavailable tools must be observed before choosing a different path.",
             "next_step: Record the unavailable tool observation and continue with command evidence.",
@@ -1283,6 +1292,7 @@ test("completion review continuation preserves typed failed-tool observations", 
         expect(unavailable).toMatchObject({ observation_kind: "tool_unavailable" });
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Try the bridged search with invalid arguments.",
             "rationale: Bridge argument failures must remain typed observations for the continuation.",
             "next_step: Use the bridge observation before choosing a valid tool path.",
@@ -1299,6 +1309,7 @@ test("completion review continuation preserves typed failed-tool observations", 
         expect(bridgeInvalidArgs.observation).toMatchObject({ kind: "tool_invalid_arguments" });
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Try a bridged call to an unavailable catalog id.",
             "rationale: Bridge resolution failures must be model-visible tool observations, not recovery states.",
             "next_step: Use the unavailable observation and continue with another evidence path.",
@@ -1315,6 +1326,7 @@ test("completion review continuation preserves typed failed-tool observations", 
         expect(bridgeUnavailable.observation).toMatchObject({ kind: "tool_unavailable" });
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Try a bridged call to a disabled catalog id.",
             "rationale: Disabled bridge targets must remain typed unavailable observations for continuation.",
             "next_step: Choose another enabled evidence path after recording the disabled tool observation.",
@@ -1331,6 +1343,7 @@ test("completion review continuation preserves typed failed-tool observations", 
         expect(bridgeDisabled.observation).toMatchObject({ kind: "tool_unavailable" });
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Run the validation command and inspect failures.",
             "rationale: Failed tests must remain typed observations for the continuation.",
             "next_step: Use the failure name before selecting the next fix.",
@@ -1346,6 +1359,7 @@ test("completion review continuation preserves typed failed-tool observations", 
         expect(testFailed).toMatchObject({ observation_kind: "test_failed" });
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Run the file inspection command and inspect failures.",
             "rationale: Failed commands must remain typed observations for the continuation.",
             "next_step: Use the command error before selecting the next fix.",
@@ -1361,6 +1375,7 @@ test("completion review continuation preserves typed failed-tool observations", 
         expect(commandFailed).toMatchObject({ observation_kind: "command_failed" });
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Retry the command with valid arguments.",
             "rationale: The previous observation showed the missing command field.",
             "next_step: Use the command result before writing the artifact.",
@@ -1380,6 +1395,7 @@ test("completion review continuation preserves typed failed-tool observations", 
         atomDuringContinuation = readOnlyPersistedTurnContextAtom();
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Create the durable artifact required by the completion gap.",
             "rationale: The kernel preserved the earlier tool observation and now requires artifact evidence.",
             "next_step: Write the artifact and include the evidence in the final answer.",
@@ -1421,14 +1437,7 @@ test("completion review continuation preserves typed failed-tool observations", 
     "write_file",
   ]);
   expect(result.text).toContain("durable artifact");
-  const atomSnapshot = atomDuringContinuation as { unresolvedObservations?: Array<{ kind?: string }> } | null;
-  const unresolved = atomSnapshot?.unresolvedObservations;
-  const unresolvedKinds = unresolved?.map((item) => item.kind) ?? [];
-  expect(unresolved?.map((item) => item.kind)).toContain("completion_gap");
-  expect(unresolvedKinds.filter((kind) => kind === "tool_invalid_arguments").length).toBeGreaterThanOrEqual(2);
-  expect(unresolvedKinds.filter((kind) => kind === "tool_unavailable").length).toBeGreaterThanOrEqual(3);
-  expect(unresolvedKinds).toContain("test_failed");
-  expect(unresolvedKinds).toContain("command_failed");
+  expect(atomDuringContinuation).toBeNull();
 });
 
 test("native runtime summarizes failed command and test output into model context", async () => {
@@ -1480,6 +1489,7 @@ test("native runtime summarizes failed command and test output into model contex
       ]) {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            `title: Run ${toolArgs.command}`,
             `summary: Run ${toolArgs.command} to collect execution evidence.`,
             "rationale: The next model step needs the concrete process result.",
             "next_step: Read the exit status and output before deciding how to continue.",
@@ -2097,7 +2107,7 @@ test("native runtime exposes direct command toolchains to Butler and Steward ses
         sawCommandTool = input.tools.some((tool) => tool.name === "run_command");
         maxToolRounds = input.maxToolRounds;
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 현재 작업공간에서 필요한 데이터를 명령으로 확인합니다.\nrationale: 파일 기반 검증이 필요합니다.\nnext_step: 명령 출력으로 결과를 정리합니다.",
+          text: "title: 작업공간 명령 확인\nsummary: 현재 작업공간에서 필요한 데이터를 명령으로 확인합니다.\nrationale: 파일 기반 검증이 필요합니다.\nnext_step: 명령 출력으로 결과를 정리합니다.",
           toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
         });
         await input.executeTool({
@@ -2160,7 +2170,7 @@ test("native runtime advances durable WorkStreams for Steward non-trivial work",
     executeButlerTool: defaultExecutor,
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: Steward custody turn을 WorkStream으로 정리합니다.\nrationale: 비 trivial steward work도 BTCC 상태로 남아야 합니다.\nnext_step: 생성된 WorkStream을 확인합니다.",
+        text: "title: Steward WorkStream 정리\nsummary: Steward custody turn을 WorkStream으로 정리합니다.\nrationale: 비 trivial steward work도 BTCC 상태로 남아야 합니다.\nnext_step: 생성된 WorkStream을 확인합니다.",
         toolCalls: [{ name: "update_todo_list", args: { title: "Steward custody review", todos: [] } }],
       });
       await input.executeTool({
@@ -2387,7 +2397,7 @@ test("native runtime attaches turn budget attribution to direct tool prompts", a
   )).toBe(true);
 });
 
-test("native runtime returns repeated Project Ledger status pressure as structured observation", async () => {
+test("native runtime executes repeated Project Ledger status reads and annotates no-delta stagnation", async () => {
   const executed: string[] = [];
   const guardedResults: unknown[] = [];
   const runtime = new NativeToolLoopRuntime({
@@ -2409,6 +2419,7 @@ test("native runtime returns repeated Project Ledger status pressure as structur
       for (let index = 0; index < 7; index += 1) {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Project Ledger 상태를 확인합니다.",
             "rationale: 반복 압력 보호가 실제 상태 확인 도구 실행을 기준으로 동작해야 합니다.",
             "next_step: 상태 결과를 보고 반복 실행 허용 여부를 판단합니다.",
@@ -2426,7 +2437,7 @@ test("native runtime returns repeated Project Ledger status pressure as structur
           }),
         }));
       }
-      return "반복 상태 확인을 중단했습니다.";
+      return "요청된 상태 확인을 모두 실행했습니다.";
     },
   });
   const handle = await runtime.createSession({
@@ -2444,21 +2455,19 @@ test("native runtime returns repeated Project Ledger status pressure as structur
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(result.text).toContain("중단했습니다");
-  expect(executed).toHaveLength(6);
-  expect(guardedResults[6]).toMatchObject({
-    ok: false,
-    observation_kind: "validation_failed",
-    observation: {
-      kind: "validation_failed",
+  expect(result.text).toContain("모두 실행했습니다");
+  expect(executed).toHaveLength(7);
+  expect(guardedResults[0]).not.toHaveProperty("butler_stagnation_observation");
+  expect(guardedResults[1]).toMatchObject({
+    ok: true,
+    butler_stagnation_observation: {
+      kind: "stagnation",
       visibility: "model",
-      summary: "Repeated project-ledger:status tool-family pressure was observed.",
-      modelVisibleContent: expect.stringContaining("Tool-family pressure was observed before re-running run_command."),
+      summary: expect.stringContaining("same result without a state revision change"),
+      modelVisibleContent: expect.stringContaining("runtime did not block or fail the tool call"),
     },
   });
-  expect(guardedResults[6]).not.toHaveProperty("budget_policy");
-  expect(guardedResults[6]).not.toHaveProperty("repeat_count");
-  expect(JSON.stringify(guardedResults[6])).not.toContain("summarize it");
+  expect(guardedResults[6]).toMatchObject({ ok: true });
   expect(JSON.stringify(guardedResults[6])).not.toContain("ask for an explicit continuation");
 });
 
@@ -2559,6 +2568,7 @@ test("native runtime allows repeated tests after a state-mutating command resets
       ]) {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: 요청된 테스트 또는 수정 명령을 실행합니다.",
             "rationale: 반복 테스트 보호가 상태 변경 이후 재실행을 허용하는지 확인해야 합니다.",
             "next_step: 실행 결과를 바탕으로 다음 테스트 또는 수정 단계를 이어갑니다.",
@@ -2607,7 +2617,7 @@ test("native runtime can drive the real run_command tool through the default exe
     messageLanguage: "ko",
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 워크스페이스 안에서 검증 파일을 생성합니다.\nrationale: 직접 명령 도구가 실제 파일 작업까지 수행하는지 확인해야 합니다.\nnext_step: 생성된 파일을 근거로 결과를 보고합니다.",
+        text: "title: 검증 파일 생성\nsummary: 워크스페이스 안에서 검증 파일을 생성합니다.\nrationale: 직접 명령 도구가 실제 파일 작업까지 수행하는지 확인해야 합니다.\nnext_step: 생성된 파일을 근거로 결과를 보고합니다.",
         toolCalls: [{
           name: "run_command",
           args: {
@@ -3096,6 +3106,7 @@ test("native runtime uses assistant-authored public decisions as work block cont
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: 충주 행사 공식 출처 확인",
           "summary: 충주 행사 데이터를 공식 출처 위주로 먼저 확인합니다.",
           "rationale: 보고서의 표와 추천이 추측이 아니라 공개 근거에 기대야 하기 때문입니다.",
           "next_step: 확인한 결과를 정제 단계의 입력 후보로 사용합니다.",
@@ -3133,7 +3144,8 @@ test("native runtime uses assistant-authored public decisions as work block cont
   expect(result.text).toContain("공개 출처를 기준으로 확인했습니다.");
   const workStart = events.find((event) => event.kind === "work.block.started");
   expect(workStart?.payload).toMatchObject({
-    label: "충주 행사 데이터를 공식 출처 위주로 먼저 확인합니다.",
+    label: "충주 행사 공식 출처 확인",
+    decisionTitle: "충주 행사 공식 출처 확인",
     decisionSummary: "충주 행사 데이터를 공식 출처 위주로 먼저 확인합니다.",
     decisionRationale: "보고서의 표와 추천이 추측이 아니라 공개 근거에 기대야 하기 때문입니다.",
     decisionNextStep: "확인한 결과를 정제 단계의 입력 후보로 사용합니다.",
@@ -3141,7 +3153,7 @@ test("native runtime uses assistant-authored public decisions as work block cont
   });
   expect(workStart?.payload?.label).not.toBe('공개 웹에서 "충주 행사 2026" 관련 정보를 검색합니다.');
   expect(events.find((event) => event.kind === "tool.started")?.payload?.workBlockLabel)
-    .toBe("충주 행사 데이터를 공식 출처 위주로 먼저 확인합니다.");
+    .toBe("충주 행사 공식 출처 확인");
   expect(JSON.stringify(returnedToolResult)).toContain("public_work_decision_context");
   expect(JSON.stringify(returnedToolResult)).toContain("충주 행사 데이터를 공식 출처 위주로 먼저 확인합니다.");
 });
@@ -3157,6 +3169,7 @@ test("native runtime rejects unsafe assistant-authored public decisions before t
       runFunctionToolPromptText: async (input) => {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: FileNotFoundException own tool output artifact root_path = /tmp/butler-workers/task/result.md not found.",
             "rationale: /Users/example/private/raw-payload.json을 확인해야 합니다.",
           ].join("\n"),
@@ -3212,6 +3225,7 @@ test("native runtime pauses instead of repairing unsafe public decision summarie
       runFunctionToolPromptText: async (input) => {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: FileNotFoundException own tool output artifact root_path = /tmp/butler-workers/task/result.md not found.",
             "rationale: 선택한 공개 출처의 본문 근거를 확인해야 하기 때문입니다.",
             "next_step: 확인한 근거를 표 정제 단계의 입력으로 사용합니다.",
@@ -3307,6 +3321,7 @@ test("native runtime carries public decision context across dependent tool calls
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: 접근 가능한 공개 자료 후보를 먼저 수집합니다.",
           "rationale: 중간 변환에 넣을 원자료가 있어야 보고서가 성립합니다.",
           "next_step: 후보 중 읽을 수 있는 출처를 고릅니다.",
@@ -3322,6 +3337,7 @@ test("native runtime carries public decision context across dependent tool calls
       expect(JSON.stringify(returnedToolResults.at(-1))).toContain("접근 가능한 공개 자료 후보를 먼저 수집합니다.");
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: 첫 자료 후보에서 본문 근거를 읽어 원자료 필드를 확인합니다.",
           "rationale: 검색 요약만으로는 CSV로 정제할 필드가 충분하지 않습니다.",
           "next_step: 읽은 필드를 기준으로 로컬 정제 작업을 수행합니다.",
@@ -3336,6 +3352,7 @@ test("native runtime carries public decision context across dependent tool calls
 
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: 확인된 필드를 작은 CSV 형태로 정제합니다.",
           "rationale: 최종 보고 전에 행과 열을 고정해야 누락을 점검할 수 있습니다.",
           "next_step: 정제된 표를 기준으로 핵심 결과를 보고합니다.",
@@ -3385,6 +3402,7 @@ test("native runtime records decision metrics without storing decision text", as
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: SECRET_DECISION_TEXT 공개 자료 후보를 확인합니다.",
           "rationale: SECRET_DECISION_TEXT 원자료가 있어야 표 정제를 할 수 있습니다.",
           "next_step: SECRET_DECISION_TEXT 확인 결과를 다음 단계 입력으로 씁니다.",
@@ -3446,7 +3464,7 @@ test("native runtime repairs turns that skip explicitly required tools", async (
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 공개 자료 후보를 찾습니다.\nrationale: 표 정제 전 원자료가 필요합니다.\nnext_step: 읽을 출처를 고릅니다.",
+          text: "title: 공개 자료 후보 검색\nsummary: 공개 자료 후보를 찾습니다.\nrationale: 표 정제 전 원자료가 필요합니다.\nnext_step: 읽을 출처를 고릅니다.",
           toolCalls: [{ name: "web_search", args: { query: "한국 도시 인구" } }],
         });
         await input.executeTool({
@@ -3462,7 +3480,7 @@ test("native runtime repairs turns that skip explicitly required tools", async (
         expect(input.prompt).toContain("transform_public_data_table");
         expect(input.prompt).not.toContain("Explicit Tool Requirement Repair");
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 필수 표 정제 단계를 완료합니다.\nrationale: 사용자가 CSV 표 생성을 필수로 요구했습니다.\nnext_step: 정제 표를 기준으로 결과만 보고합니다.",
+          text: "title: 필수 표 정제\nsummary: 필수 표 정제 단계를 완료합니다.\nrationale: 사용자가 CSV 표 생성을 필수로 요구했습니다.\nnext_step: 정제 표를 기준으로 결과만 보고합니다.",
           toolCalls: [{ name: "transform_public_data_table", args: { columns: ["city"], rows: [{ city: "Seoul" }] } }],
         });
         await input.executeTool({
@@ -3528,7 +3546,7 @@ test("native runtime repairs skipped tools required by session metadata", async 
       expect(input.prompt).toContain("run_command");
       expect(input.prompt).not.toContain("Explicit Tool Requirement Repair");
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 필수 명령 실행을 완료합니다.\nrationale: 세션 정책이 run_command를 요구했습니다.\nnext_step: 실행 결과만 요약합니다.",
+        text: "title: 필수 명령 실행\nsummary: 필수 명령 실행을 완료합니다.\nrationale: 세션 정책이 run_command를 요구했습니다.\nnext_step: 실행 결과만 요약합니다.",
         toolCalls: [{ name: "run_command", args: { command: "pwd" } }],
       });
       await input.executeTool({
@@ -3611,7 +3629,7 @@ test("native runtime does not infer semantic workflow tools from natural CSV wor
       expect(input.prompt).not.toContain("Public Data Table Workflow Repair");
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 한국 주요 도시의 공개 인구 통계를 검색합니다.\nrationale: 공개 출처를 먼저 확인해야 합니다.\nnext_step: 읽을 출처를 고릅니다.",
+          text: "title: 도시 인구 통계 검색\nsummary: 한국 주요 도시의 공개 인구 통계를 검색합니다.\nrationale: 공개 출처를 먼저 확인해야 합니다.\nnext_step: 읽을 출처를 고릅니다.",
           toolCalls: [{ name: "web_search", args: { query: "대한민국 주요 도시 인구 통계" } }],
         });
         await input.executeTool({
@@ -3620,7 +3638,7 @@ test("native runtime does not infer semantic workflow tools from natural CSV wor
           rawArguments: JSON.stringify({ query: "대한민국 주요 도시 인구 통계" }),
         });
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 선택한 공개 출처의 내용을 확인합니다.\nrationale: 검색 요약만으로는 행을 확정할 수 없습니다.\nnext_step: 확인한 수치를 최종 보고에 반영합니다.",
+          text: "title: 인구 출처 본문 확인\nsummary: 선택한 공개 출처의 내용을 확인합니다.\nrationale: 검색 요약만으로는 행을 확정할 수 없습니다.\nnext_step: 확인한 수치를 최종 보고에 반영합니다.",
           toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
         });
         await input.executeTool({
@@ -3672,6 +3690,7 @@ test("final result contract detects embedded public work decision leaks", () => 
   expect(containsFinalPublicWorkDecisionLeak([
     "요약 보고서입니다.",
     "",
+    "title: Test decision step",
     "summary: 확인한 공개 자료를 정리합니다.",
     "rationale: 다음 보고의 근거를 남기기 위해서입니다.",
     "next_step: 결과만 요약합니다.",
@@ -3720,11 +3739,13 @@ test("final result contract detects embedded public work decision leaks", () => 
     "현재 브랜치는 main입니다.",
   ].join("\n"), [])).toBe("현재 브랜치는 main입니다.");
   expect(stripLeadingPublicWorkDecisionBlock([
+    "title: Test decision step",
     "summary: 공개 정보를 검색합니다.",
     "rationale: 최신 근거가 필요합니다.",
     "next_step: 검색 결과를 확인합니다.",
   ].join("\n"))).toBe("");
   expect(containsFinalPublicWorkDecisionLeak([
+    "title: Test decision step",
     "summary: 테스트 식당의 인기 메뉴와 냉면 외 특색 있는 메뉴를 조사하겠다냐!",
     "rationale: 테스트 사용자님이 궁금해하시는 가장 맛있다는 메뉴와 별미가 있는지 정확하게 알아봐야 하기 때문이다냐.",
     "",
@@ -3751,6 +3772,7 @@ test("native runtime reviews public work decision finals even before tool eviden
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         return [
+          "title: Test decision step",
           "summary: 테스트 식당의 인기 메뉴를 검색합니다.",
           "rationale: 사용자가 현재 공개 정보를 물었습니다.",
           "",
@@ -3831,7 +3853,7 @@ test("native runtime routes completion review gap to continuation without final 
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 공개 인구 자료를 찾습니다.\nrationale: 산출물의 근거가 필요합니다.\nnext_step: 읽을 출처를 고릅니다.",
+          text: "title: 인구 자료 검색\nsummary: 공개 인구 자료를 찾습니다.\nrationale: 산출물의 근거가 필요합니다.\nnext_step: 읽을 출처를 고릅니다.",
           toolCalls: [{ name: "web_search", args: { query: "한국 주요 도시 인구" } }],
         });
         await input.executeTool({
@@ -3840,7 +3862,7 @@ test("native runtime routes completion review gap to continuation without final 
           rawArguments: JSON.stringify({ query: "한국 주요 도시 인구" }),
         });
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 공개 출처 내용을 확인합니다.\nrationale: 파일 산출물의 행 값을 확정해야 합니다.\nnext_step: 확인한 행을 산출물로 정리합니다.\ncompletion_obligations: durable_artifact",
+          text: "title: 인구 출처 내용 확인\nsummary: 공개 출처 내용을 확인합니다.\nrationale: 파일 산출물의 행 값을 확정해야 합니다.\nnext_step: 확인한 행을 산출물로 정리합니다.\ncompletion_obligations: durable_artifact",
           toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
         });
         await input.executeTool({
@@ -3854,7 +3876,7 @@ test("native runtime routes completion review gap to continuation without final 
         expect(input.prompt).toContain("The Turn Kernel recorded a model-visible observation");
         expect(input.prompt).toContain("Missing completion evidence for: durable_artifact");
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 정제 도구로 CSV 산출물을 생성합니다.\nrationale: 검토 관찰이 durable_artifact 산출물 생성을 요구했습니다.\nnext_step: 생성 결과의 산출물 증거를 최종 답변에 반영합니다.\ncompletion_obligations: durable_artifact",
+          text: "title: CSV 산출물 생성\nsummary: 정제 도구로 CSV 산출물을 생성합니다.\nrationale: 검토 관찰이 durable_artifact 산출물 생성을 요구했습니다.\nnext_step: 생성 결과의 산출물 증거를 최종 답변에 반영합니다.\ncompletion_obligations: durable_artifact",
           toolCalls: [{ name: "transform_public_data_table", args: { format: "csv" } }],
         });
         await input.executeTool({
@@ -3893,7 +3915,7 @@ test("native runtime routes completion review gap to continuation without final 
   expect(events.map((event) => event.kind)).toContain("turn.observation");
   expect(events.find((event) => event.kind === "turn.observation")?.payload)
     .toMatchObject({ kind: "completion_gap" });
-  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).toContain("message.final.completed");
   expect(events.map((event) => event.kind)).toContain("turn.completed");
   expect(readOnlyPersistedTurnContextAtom()).toBeNull();
@@ -3929,6 +3951,7 @@ test("goal completion review gap schedules continuation and does not deliver can
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Riposte 제작 기록을 확인합니다.",
             "rationale: 사용자가 제작 과정을 소개할 글의 근거가 필요합니다.",
             "next_step: 실행 결과를 바탕으로 초안을 작성합니다.",
@@ -3951,6 +3974,7 @@ test("goal completion review gap schedules continuation and does not deliver can
       if (attempts.length === 2) {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: Riposte 제작 기록을 한 번 더 검증합니다.",
             "rationale: 완료 검토가 추가 실행 증거를 요구했습니다.",
             "next_step: 검증 결과를 반영해 초안을 확정합니다.",
@@ -3989,7 +4013,7 @@ test("goal completion review gap schedules continuation and does not deliver can
   expect(executedTools).toContain("run_command");
   expect(result.text).toContain("근거 확인까지 마무리");
   expect(events.map((event) => event.kind)).toContain("turn.observation");
-  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).toContain("message.final.completed");
   expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
   expect(attempts[0]).not.toContain("Goal Completion Review");
@@ -4021,6 +4045,7 @@ test("goal completion gap suppresses public final text and generic verification 
       attempts.push(input.prompt);
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: I am collecting command evidence.",
           "rationale: completion requires command execution evidence.",
           "next_step: I will summarize after command result is ready.",
@@ -4103,7 +4128,7 @@ test("native runtime does not close direct work or recover WorkStreams from comp
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 현재 커밋 상태를 확인합니다.\nrationale: 사용자 요청은 작업 단위 커밋을 요구했습니다.\nnext_step: 검증을 실행한 뒤 결과를 커밋합니다.\ncompletion_obligations: durable_artifact",
+          text: "title: 커밋 상태 확인\nsummary: 현재 커밋 상태를 확인합니다.\nrationale: 사용자 요청은 작업 단위 커밋을 요구했습니다.\nnext_step: 검증을 실행한 뒤 결과를 커밋합니다.\ncompletion_obligations: durable_artifact",
           toolCalls: [{ name: "run_command", args: { command: "git status --short" } }],
         });
         await input.executeTool({
@@ -4115,7 +4140,7 @@ test("native runtime does not close direct work or recover WorkStreams from comp
       }
       if (attempts.length === 2) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 보고 산출물 파일을 작성합니다.\nrationale: 검토 관찰이 durable_artifact 증거를 요구했습니다.\nnext_step: 작성된 파일을 근거로 남은 직접 작업 상태를 판단합니다.\ncompletion_obligations: durable_artifact",
+          text: "title: 보고 산출물 작성\nsummary: 보고 산출물 파일을 작성합니다.\nrationale: 검토 관찰이 durable_artifact 증거를 요구했습니다.\nnext_step: 작성된 파일을 근거로 남은 직접 작업 상태를 판단합니다.\ncompletion_obligations: durable_artifact",
           toolCalls: [{ name: "write_file", args: { path: "report.md", content: "done" } }],
         });
         await input.executeTool({
@@ -4150,7 +4175,7 @@ test("native runtime does not close direct work or recover WorkStreams from comp
   expect(attempts).toHaveLength(2);
   expect(executedCommands).toEqual(["git status --short"]);
   expect(result.text).toContain("산출물을 작성");
-  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
   expect(events.map((event) => event.kind)).toContain("message.final.completed");
 });
@@ -4207,6 +4232,7 @@ test("completion review explicit blocker becomes continuation gap instead of ter
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: I am checking the blocked source.",
             "rationale: user approval is required.",
             "next_step: verify the blocked source.",
@@ -4226,6 +4252,7 @@ test("completion review explicit blocker becomes continuation gap instead of ter
         expect(input.prompt).toContain("Completion is blocked by explicit blocker evidence");
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: I am verifying the source after the completion gap.",
             "rationale: the kernel observation requires source evidence before final delivery.",
             "next_step: include the verified source evidence in the final answer.",
@@ -4268,7 +4295,7 @@ test("completion review explicit blocker becomes continuation gap instead of ter
     .toMatchObject({ outcome: "completed" });
   expect(events.find((event) => event.kind === "turn.observation")?.payload)
     .toMatchObject({ kind: "completion_gap" });
-  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
 });
 
@@ -4330,6 +4357,7 @@ test("completion review ignores failed WorkStream terminal state and continues f
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: I am checking artifact completion.",
             "rationale: durable artifact evidence is required.",
             "next_step: inspect artifact state before final delivery.",
@@ -4349,6 +4377,7 @@ test("completion review ignores failed WorkStream terminal state and continues f
         expect(input.prompt).toContain("Missing completion evidence for: durable_artifact");
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: I am creating the durable artifact required by the completion gap.",
             "rationale: completion review cannot close the turn without artifact evidence.",
             "next_step: report the artifact evidence in the final answer.",
@@ -4402,7 +4431,7 @@ test("completion review ignores failed WorkStream terminal state and continues f
     .toMatchObject({ outcome: "completed" });
   expect(events.find((event) => event.kind === "turn.observation")?.payload)
     .toMatchObject({ kind: "completion_gap" });
-  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
 });
 
@@ -4795,7 +4824,7 @@ test("completion review retries when one search is inconclusive", async () => {
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 2025년 도시 인구 후보를 먼저 검색합니다.\nrationale: 공개 근거가 필요합니다.\nnext_step: 충분한 후보가 없으면 검색 범위를 조정합니다.",
+          text: "title: 도시 인구 후보 검색\nsummary: 2025년 도시 인구 후보를 먼저 검색합니다.\nrationale: 공개 근거가 필요합니다.\nnext_step: 충분한 후보가 없으면 검색 범위를 조정합니다.",
           toolCalls: [{ name: "web_search", args: { query: "2025 주요 도시 인구" } }],
         });
         await input.executeTool({
@@ -4888,7 +4917,7 @@ test("completion review pushes chart requests toward executable artifacts", asyn
       attempts.push(input.prompt);
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 차트에 넣을 공개 자료 본문을 확인합니다.\nrationale: 그래프의 값이 근거를 가져야 합니다.\nnext_step: 확인한 값으로 차트를 생성합니다.\ncompletion_obligations: source_verified, command_executed",
+          text: "title: 차트 원자료 확인\nsummary: 차트에 넣을 공개 자료 본문을 확인합니다.\nrationale: 그래프의 값이 근거를 가져야 합니다.\nnext_step: 확인한 값으로 차트를 생성합니다.\ncompletion_obligations: source_verified, command_executed",
           toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
         });
         await input.executeTool({
@@ -4899,7 +4928,7 @@ test("completion review pushes chart requests toward executable artifacts", asyn
         return "아래 matplotlib 코드를 복사해서 실행하면 됩니다.\n```python\nprint('chart')\n```";
       }
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 확인한 값으로 차트 파일을 생성합니다.\nrationale: 완료 검토가 command_executed 증거를 요구했습니다.\nnext_step: 실행 결과와 산출물 증거를 최종 답변에 반영합니다.\ncompletion_obligations: command_executed, durable_artifact, chart_rendered",
+        text: "title: 차트 파일 생성\nsummary: 확인한 값으로 차트 파일을 생성합니다.\nrationale: 완료 검토가 command_executed 증거를 요구했습니다.\nnext_step: 실행 결과와 산출물 증거를 최종 답변에 반영합니다.\ncompletion_obligations: command_executed, durable_artifact, chart_rendered",
         toolCalls: [{ name: "run_command", args: { command: "python chart.py" } }],
       });
       await input.executeTool({
@@ -4930,7 +4959,7 @@ test("completion review pushes chart requests toward executable artifacts", asyn
 
   expect(executedTools).toEqual(["web_read", "run_command"]);
   expect(result.text).toContain("population-chart.png");
-  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).toContain("message.final.completed");
 });
 
@@ -5034,6 +5063,7 @@ test("native tool loop prompt requires semantic progress first and output path a
 test("public work decision parser carries completion obligations without displaying them as summaries", () => {
   const [decision] = publicWorkDecisionsFromAssistantText({
     text: [
+      "title: 공개 자료 본문 확인",
       "summary: 차트에 넣을 공개 자료 본문을 확인합니다.",
       "rationale: 값이 실제 본문 근거를 가져야 합니다.",
       "next_step: 확인한 값으로 로컬 실행 단계를 이어갑니다.",
@@ -5045,6 +5075,7 @@ test("public work decision parser carries completion obligations without display
   });
 
   expect(decision).toBeDefined();
+  expect(decision!.blockTitle).toBe("공개 자료 본문 확인");
   expect(decision!.summary).toBe("차트에 넣을 공개 자료 본문을 확인합니다.");
   expect(decision!.completionObligations).toEqual([
     "source_verified",
@@ -5092,6 +5123,7 @@ test("public work decision selector refuses exhausted authored decision without 
   };
   const pending = publicWorkDecisionsFromAssistantText({
     text: [
+      "title: 워크스페이스 파일 확인",
       "summary: Inspect the requested workspace file.",
       "rationale: The file contents determine the next implementation step.",
       "next_step: Read the file and continue from the observed result.",
@@ -5127,6 +5159,7 @@ test("public work decision selector consumes same-name tool calls in authored or
   };
   const pending = publicWorkDecisionsFromAssistantText({
     text: [
+      "title: 설정 후보 검색",
       "summary: Search the provider settings candidates as one bounded batch.",
       "rationale: Each search checks a separate public candidate signal before choosing files to read.",
       "next_step: Search these candidate signals, then read the strongest matching file range.",
@@ -5183,9 +5216,11 @@ test("public work decision selector reuses matching decision before borrowing an
   };
   const pending = publicWorkDecisionsFromAssistantText({
     text: [
+      "title: 후보 파일 읽기",
       "summary: Read the candidate file first.",
       "rationale: The file content may make the later search unnecessary.",
       "next_step: Read the file and keep the search decision available.",
+      "title: 설정 마커 검색",
       "summary: Search the provider setting marker.",
       "rationale: The marker search checks the specific setting location.",
       "next_step: Search the marker and then decide whether to read a file.",
@@ -5226,6 +5261,7 @@ test("assistant pre-tool progress emits structured decisions for ordinary tools"
   await emitAssistantTextBeforeTools({
     language: "ko",
     text: [
+      "title: 최신 기상 근거 검색",
       "summary: 최신 기상 근거를 먼저 검색합니다.",
       "rationale: 현재 날씨 원인은 최신 자료 없이는 단정하면 안 됩니다.",
       "next_step: 검색 결과에서 신뢰할 만한 출처를 읽고 답변합니다.",
@@ -5704,6 +5740,7 @@ test("native runtime skips completion review when capability evidence satisfies 
       }
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: Project Ledger 상태를 확인합니다.",
           "rationale: 최종 보고가 추측이 아니라 durable 프로젝트 상태에 근거해야 합니다.",
           "next_step: 확인한 상태를 기준으로 요약합니다.",
@@ -5771,6 +5808,7 @@ test("native runtime skips completion review when evidence receipts satisfy the 
       }
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: 공개 출처 본문을 확인합니다.",
           "rationale: 답변의 근거를 실제 출처에 연결해야 합니다.",
           "next_step: 확인한 출처 기준으로 요약합니다.",
@@ -5849,6 +5887,7 @@ test("native runtime accepts model-reviewed run_command output for assistant-aut
       }
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: gh CLI로 열린 이슈 목록을 확인합니다.",
           "rationale: 실제 저장소 상태를 근거로 답해야 합니다.",
           "next_step: 확인한 이슈 목록을 요약합니다.",
@@ -5940,6 +5979,7 @@ test("completion gap continuation includes bounded evidence bundle and advisory 
       if (attempts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: gh CLI 결과를 확인합니다.",
             "rationale: 반복되는 source evidence gap을 재현합니다.",
             "next_step: 확인한 결과로 답합니다.",
@@ -5971,6 +6011,7 @@ test("completion gap continuation includes bounded evidence bundle and advisory 
         expect(input.prompt).toContain("read_tool_evidence_artifact");
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: formal source blocker를 해소하기 위해 원문을 확인합니다.",
             "rationale: continuation이 다른 evidence path를 요구했습니다.",
             "next_step: 확인한 source로 답합니다.",
@@ -6240,6 +6281,7 @@ test("native runtime redacts raw tool failure errors in durable transcripts", as
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: 공개 페이지 읽기 오류의 redaction 경로를 확인합니다.",
           "rationale: 원시 도구 실패가 transcript와 모델 관찰에 비밀값 없이 남아야 합니다.",
           "next_step: 실패 결과를 검사해 안전한 오류 요약만 보존되는지 확인합니다.",
@@ -6349,6 +6391,7 @@ test("native runtime satisfies source verification from tool capability audit co
       if (prompts.length === 1) {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: 현재 네이티브 툴 카탈로그를 확인합니다.",
             "rationale: 사용자가 실제 보유 툴을 물었기 때문입니다.",
             "next_step: 확인된 카탈로그를 기준으로 답합니다.",
@@ -6735,7 +6778,7 @@ test("native runtime continues artifact review gaps until executable evidence ap
       attempts += 1;
       if (!input.prompt.includes("Goal Completion Review")) {
         await input.onAssistantTextBeforeTools?.({
-          text: "summary: 공개 출처 본문을 확인합니다.\nrationale: 수치가 실제 본문 근거를 가져야 합니다.\nnext_step: 확인한 수치로 CSV 파일과 차트 이미지를 생성합니다.\ncompletion_obligations: source_verified, command_executed",
+          text: "title: 공개 출처 본문 확인\nsummary: 공개 출처 본문을 확인합니다.\nrationale: 수치가 실제 본문 근거를 가져야 합니다.\nnext_step: 확인한 수치로 CSV 파일과 차트 이미지를 생성합니다.\ncompletion_obligations: source_verified, command_executed",
           toolCalls: [{ name: "web_read", args: { url: "https://example.test/population" } }],
         });
         await input.executeTool({
@@ -6831,6 +6874,7 @@ test("native runtime continues executable-code gaps until tool execution evidenc
       if (!input.prompt.includes("Goal Completion Review")) {
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Test decision step",
             "summary: 수집된 인구 데이터를 바탕으로 실제 matplotlib 차트 이미지를 생성하고 CSV 파일로 저장합니다.",
             "rationale: 사용자는 단순히 코드를 받는 것이 아니라 차트를 그린 결과를 요청했습니다.",
             "next_step: 생성된 차트 파일과 CSV 데이터를 바탕으로 최종 보고서를 완성합니다.",
@@ -6977,7 +7021,7 @@ test("native runtime leaves CSV public-data tool choice to the model unless expl
         ].join("\n");
       }
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 공개 인구 데이터의 근거 후보를 확인합니다.\nrationale: 보고서의 숫자 예시는 공개 출처에 기대야 합니다.\nnext_step: 확인한 출처를 기준으로 결과만 요약합니다.",
+        text: "title: 인구 데이터 근거 확인\nsummary: 공개 인구 데이터의 근거 후보를 확인합니다.\nrationale: 보고서의 숫자 예시는 공개 출처에 기대야 합니다.\nnext_step: 확인한 출처를 기준으로 결과만 요약합니다.",
         toolCalls: [{ name: "web_search", args: { query: "대한민국 주요 도시 인구 공개 데이터" } }],
       });
       await input.executeTool({
@@ -7398,7 +7442,7 @@ test("native runtime lets the model choose recall before exact memory query", as
     },
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 이전 대화 단서를 먼저 회상합니다.\nrationale: 모델이 연상 후보가 필요하다고 판단했습니다.\nnext_step: 회상 후보를 정확한 날짜 근거로 검증합니다.",
+        text: "title: 이전 대화 단서 회상\nsummary: 이전 대화 단서를 먼저 회상합니다.\nrationale: 모델이 연상 후보가 필요하다고 판단했습니다.\nnext_step: 회상 후보를 정확한 날짜 근거로 검증합니다.",
         toolCalls: [{
           name: "recall_memory",
           args: { cue: "우리가 처음 대화를 나눈 날에 어떤 이야기를 했는지 기억해?" },
@@ -7410,7 +7454,7 @@ test("native runtime lets the model choose recall before exact memory query", as
         rawArguments: JSON.stringify({ cue: "우리가 처음 대화를 나눈 날에 어떤 이야기를 했는지 기억해?" }),
       });
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 첫 대화 날짜를 정확히 확인합니다.\nrationale: 연상 후보를 날짜 근거로 검증해야 합니다.\nnext_step: 조회 결과로 답합니다.",
+        text: "title: 첫 대화 날짜 확인\nsummary: 첫 대화 날짜를 정확히 확인합니다.\nrationale: 연상 후보를 날짜 근거로 검증해야 합니다.\nnext_step: 조회 결과로 답합니다.",
         toolCalls: [{ name: "query_memory", args: { order: "earliest", limit: 1 } }],
       });
       await input.executeTool({
@@ -9203,7 +9247,7 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
     executeButlerTool: async () => ({ ok: true, updated: true }),
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 진행 단계를 정리합니다.\nrationale: 중형 작업의 현재 단계를 추적해야 합니다.\nnext_step: 수집 단계로 넘어갑니다.",
+        text: "title: 진행 단계 정리\nsummary: 진행 단계를 정리합니다.\nrationale: 중형 작업의 현재 단계를 추적해야 합니다.\nnext_step: 수집 단계로 넘어갑니다.",
         toolCalls: [{
           name: "update_todo_list",
           args: {
@@ -9892,6 +9936,7 @@ test("native runtime yields recoverable progress instead of extending direct wor
           "다음에 이어갈 항목: 다음 WATL 작업 구현 후 커밋",
           "상태: recoverable로 저장했습니다.",
           "",
+          "title: Test decision step",
           "summary: WATL direct work continuation status",
           "rationale: This is still internal work state.",
           "next_step: Continue the remaining implementation.",
@@ -10067,6 +10112,7 @@ test("native runtime preserves validation limitation when direct work is deliver
       });
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Test decision step",
           "summary: 직접 작업의 검증 실패를 확인합니다.",
           "rationale: 최종 delivery가 검증 실패와 남은 직접 작업을 함께 보존해야 합니다.",
           "next_step: 실패하는 검증 명령을 실행하고 남은 작업을 recoverable로 남깁니다.",
@@ -10263,6 +10309,7 @@ test("native runtime bounds direct work finalization after WorkStream FSM progre
           expect(input.prompt).toContain("Direct Work Continuation");
           await input.onAssistantTextBeforeTools?.({
             text: [
+              "title: Test decision step",
               "summary: WorkStream을 검토 단계로 전환합니다.",
               "rationale: 실행 근거가 준비된 뒤 FSM 전환이 직접 작업 진행으로 인정되어야 합니다.",
               "next_step: 전환 결과를 바탕으로 남은 보고 단계를 이어갑니다.",
@@ -10671,7 +10718,7 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
       visibility: "operator",
     },
   });
-  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
   const atom = readOnlyPersistedTurnContextAtom();
   expect(atom).toMatchObject({
@@ -10978,7 +11025,7 @@ test("focused WorkStream resume yields before consuming the global model request
   expect(promptCalls).toBe(1);
   expect(capturedPhase).toBe("phase_execution");
   expect(capturedMaxToolRounds).toBe(6);
-  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
   expect(events.map((event) => event.kind)).not.toContain("message.final.completed");
   expect(readOnlyPersistedTurnContextAtom()).toMatchObject({
     state: "continuing",
@@ -11005,7 +11052,7 @@ test("focused WorkStream resume yields before consuming the global model request
   }));
 });
 
-test("focused WorkStream validation repair does not repeat an unchanged completion gap", async () => {
+test("focused WorkStream validation repair continues unchanged gaps until the phase budget yields", async () => {
   const sessionId = "butler/main/focused-resume-repeated-gap";
   const todoView = new TodoListStore(tempDir).update({
     listId: "focused-repeated-gap",
@@ -11062,12 +11109,17 @@ test("focused WorkStream validation repair does not repeat an unchanged completi
     },
   })).rejects.toThrow("Turn scheduler yielded");
 
-  expect(phases).toEqual(["phase_execution", "validation_repair"]);
-  expect(maxRounds).toEqual([6, 2]);
+  expect(phases).toEqual([
+    "phase_execution",
+    "validation_repair",
+    "validation_repair",
+    "validation_repair",
+  ]);
+  expect(maxRounds).toEqual([6, 2, 2, 2]);
   expect(readOnlyPersistedTurnContextAtom()).toMatchObject({
     state: "continuing",
     budgetSnapshot: expect.objectContaining({
-      modelRequestsUsed: 2,
+      modelRequestsUsed: 3,
       maxModelCalls: 32,
     }),
   });
@@ -11076,7 +11128,7 @@ test("focused WorkStream validation repair does not repeat an unchanged completi
     status: "error",
     dimensions: expect.objectContaining({
       phase: "validation_repair",
-      reason: "repeated_completion_gap",
+      reason: "phase_model_budget_exhausted",
     }),
   }));
 });
@@ -11231,7 +11283,7 @@ test("focused WorkStream resume yields before executing an oversized tool-call b
       promptCalls += 1;
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 너무 많은 도구 호출을 한 번에 실행하려 합니다.",
+        text: "title: 도구 호출 묶음 확인\nsummary: 너무 많은 도구 호출을 한 번에 실행하려 합니다.",
         toolCalls: Array.from({ length: 25 }, (_, index) => ({
           name: "run_command",
           args: { command: `printf '${index}'` },
@@ -11264,7 +11316,7 @@ test("focused WorkStream resume yields before executing an oversized tool-call b
 
   expect(promptCalls).toBe(1);
   expect(executed).toBe(0);
-  expect(events.map((event) => event.kind)).toContain("turn.continuation_scheduled");
+  expect(events.map((event) => event.kind)).not.toContain("turn.continuation_scheduled");
   expect(readOnlyPersistedTurnContextAtom()).toMatchObject({
     state: "continuing",
     budgetSnapshot: expect.objectContaining({
@@ -11299,7 +11351,7 @@ test("native runtime synthesizes durable WorkStream progress when a compound too
     runFunctionToolPromptText: async (input) => {
       const command = "printf 'main\\napp:client:workstream:natural-live-llm:e2e\\n' && true";
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 현재 브랜치와 WorkStream E2E 스크립트를 확인합니다.\nrationale: 요청한 런타임 상태를 근거로 답해야 합니다.\nnext_step: 명령 결과를 검토해 보고합니다.",
+        text: "title: 브랜치와 E2E 스크립트 확인\nsummary: 현재 브랜치와 WorkStream E2E 스크립트를 확인합니다.\nrationale: 요청한 런타임 상태를 근거로 답해야 합니다.\nnext_step: 명령 결과를 검토해 보고합니다.",
         toolCalls: [{
           name: "run_command",
           args: { command },
@@ -11350,7 +11402,7 @@ test("native runtime does not infer compound work from natural-language conjunct
     runFunctionToolPromptText: async (input) => {
       const command = "pwd";
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 현재 위치를 확인합니다.\nrationale: 사용자가 실행 근거를 원했습니다.\nnext_step: 명령 결과를 보고합니다.",
+        text: "title: 현재 위치 확인\nsummary: 현재 위치를 확인합니다.\nrationale: 사용자가 실행 근거를 원했습니다.\nnext_step: 명령 결과를 보고합니다.",
         toolCalls: [{
           name: "run_command",
           args: { command },
@@ -11394,7 +11446,7 @@ test("native runtime emits semantic progress from public decisions when todo set
     }),
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
-        text: "summary: 2025년 인구 통계 후보 출처를 검색합니다.\nrationale: CSV와 차트에 넣을 공개 근거가 필요합니다.\nnext_step: 신뢰할 수 있는 후보를 읽어 수치를 확인합니다.",
+        text: "title: 인구 통계 후보 검색\nsummary: 2025년 인구 통계 후보 출처를 검색합니다.\nrationale: CSV와 차트에 넣을 공개 근거가 필요합니다.\nnext_step: 신뢰할 수 있는 후보를 읽어 수치를 확인합니다.",
         toolCalls: [{
           name: "web_search",
           args: { query: "2025 한국 도시 인구 통계" },

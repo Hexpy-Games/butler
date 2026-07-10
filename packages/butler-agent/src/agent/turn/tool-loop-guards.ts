@@ -1,40 +1,50 @@
 export const DIRECT_TOOL_CHAIN_MAX_ROUNDS = 60;
-export const REPEATED_TOOL_FAMILY_LIMIT = 6;
 
-export type RepeatedToolFamilyDecision = {
+export type ToolStagnationDecision = {
   family: string;
   count: number;
-  blocked: false;
-} | {
-  family: string;
-  count: number;
-  blocked: true;
+  stagnant: boolean;
 };
 
-export class RepeatedToolFamilyGuard {
-  private readonly counts = new Map<string, number>();
+interface ObservedToolState {
+  resultFingerprint: string;
+  stateRevision: string;
+  count: number;
+}
 
-  constructor(private readonly limit = REPEATED_TOOL_FAMILY_LIMIT) {}
+export class ToolStagnationObserver {
+  private readonly observed = new Map<string, ObservedToolState>();
 
-  record(name: string, args: Record<string, unknown>): RepeatedToolFamilyDecision | null {
-    const family = repeatedToolFamilyKey(name, args);
-    if (!family) return null;
-    const count = (this.counts.get(family) ?? 0) + 1;
-    this.counts.set(family, count);
-    if (count <= this.limit) {
-      return { family, count, blocked: false };
+  observe(input: {
+    name: string;
+    args: Record<string, unknown>;
+    resultFingerprint: string;
+    stateRevision: string;
+    mutated: boolean;
+  }): ToolStagnationDecision | null {
+    if (input.mutated) {
+      this.observed.clear();
+      return null;
     }
+    const family = repeatedToolFamilyKey(input.name, input.args);
+    if (!family) return null;
+    const previous = this.observed.get(family);
+    const stagnant = Boolean(
+      previous &&
+      previous.resultFingerprint === input.resultFingerprint &&
+      previous.stateRevision === input.stateRevision,
+    );
+    const count = stagnant ? (previous?.count ?? 1) + 1 : 1;
+    this.observed.set(family, {
+      resultFingerprint: input.resultFingerprint,
+      stateRevision: input.stateRevision,
+      count,
+    });
     return {
       family,
       count,
-      blocked: true,
+      stagnant,
     };
-  }
-
-  resetAfterStateMutation(name: string, args: Record<string, unknown>): void {
-    if (isStateMutatingToolCall(name, args)) {
-      this.counts.clear();
-    }
   }
 }
 

@@ -517,6 +517,90 @@ test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
   expect(attributedUsage).toEqual([100, 140]);
 });
 
+test("registered Z.AI adapter keeps consecutive decisions and tool results in one provider loop", async () => {
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  const bodies: Record<string, any>[] = [];
+  const decisions: string[] = [];
+  const executed: string[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    bodies.push(body);
+    if (bodies.length <= 2) {
+      const index = bodies.length;
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            role: "assistant",
+            content: index === 1
+              ? ""
+              : [
+                "title: 두 번째 상태 확인",
+                "summary: 첫 결과를 바탕으로 두 번째 상태를 확인합니다.",
+                "rationale: 두 상태를 함께 관찰해야 다음 행동을 정할 수 있습니다.",
+                "next_step: 두 결과를 비교해 결론을 작성합니다.",
+              ].join("\n"),
+            tool_calls: [{
+              id: `call_${index}`,
+              type: "function",
+              function: {
+                name: "lookup",
+                arguments: JSON.stringify({ query: `butler-${index}` }),
+              },
+            }],
+          },
+        }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "both results observed" } }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const text = await runFunctionToolPromptText({
+    model: "zai/glm-5.2",
+    prompt: "inspect two states",
+    maxToolRounds: 4,
+    handoffAfterToolBatch: false,
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "Look up a term.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    onAssistantTextBeforeTools: ({ text }) => {
+      decisions.push(text);
+    },
+    executeTool: async (call) => {
+      executed.push(String(call.args.query));
+      return { answer: call.args.query };
+    },
+  });
+
+  expect(text).toBe("both results observed");
+  expect(executed).toEqual(["butler-1", "butler-2"]);
+  expect(decisions).toHaveLength(2);
+  expect(bodies).toHaveLength(3);
+  expect(bodies[1]!.messages).toContainEqual(expect.objectContaining({
+    role: "tool",
+    tool_call_id: "call_1",
+  }));
+  expect(bodies[2]!.messages).toContainEqual(expect.objectContaining({
+    role: "tool",
+    tool_call_id: "call_2",
+  }));
+});
+
 test("registered Z.AI typed tool batches hand off before hidden final synthesis", async () => {
   registerHostedModelConfig({
     providerId: "zai",

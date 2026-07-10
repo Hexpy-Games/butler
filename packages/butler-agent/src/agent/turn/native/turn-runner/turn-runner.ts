@@ -29,7 +29,6 @@ import {
 } from "./turn-outcome-events.ts";
 import {
   collectTurnContinuationRefs,
-  persistCompletionGapContinuation,
   produceFinalDeliveryOutcome,
 } from "./final-delivery-gates.ts";
 import {
@@ -51,9 +50,7 @@ import {
 import { closeDirectWork } from "./direct-work-finalizer.ts";
 import { installTurnLatencyTracker } from "../metrics/turn-latency-tracker.ts";
 import {
-  completionGapFingerprint,
   createWorkStreamPhaseBudgetController,
-  promptUsageModelCallBudgetExhaustedError,
 } from "../../workstream-phase-budget.ts";
 import {
   commitTurnContractContinuation,
@@ -72,6 +69,7 @@ import {
   completionGapContinuationPrompt,
   completionGapFinalSynthesisPrompt,
 } from "./turn-continuation-prompts.ts";
+import { buildTurnRoundJournal } from "./turn-round-journal.ts";
 
 export async function runNativeToolTurn({
   input,
@@ -211,7 +209,6 @@ export async function runNativeToolTurn({
         );
       }
     };
-    const completionGapFingerprints = new Set<string>();
     const initialPromptPhase = phaseBudgetController?.initialPromptPhase() ?? "initial_tool_loop";
     let candidateText: string;
     let activeTurnContract: ActiveTurnContract | null = null;
@@ -304,43 +301,19 @@ export async function runNativeToolTurn({
         break;
       }
       const gapPhase = phaseBudgetController?.completionGapPhase() ?? "completion_gap_continuation";
-      const gapFingerprint = completionGapFingerprint(deliveryOutcome.observation);
-      const repeatedGap = phaseBudgetController !== null && completionGapFingerprints.has(gapFingerprint);
-      completionGapFingerprints.add(gapFingerprint);
       const continuationEvidence = buildTurnContinuationEvidence({
         audit,
         publicDecisions: publicDecisionContext,
       });
-      await persistCompletionGapContinuation({
-        turnInput: input,
-        deps,
-        turnId,
-        audit,
-        publicDecisionContext,
-        ...(activeTurnContract ? { contractId: activeTurnContract.contract.contract_id } : {}),
-        observation: deliveryOutcome.observation,
+      await emitTurnEventBestEffort(input, {
+        kind: "turn.observation",
+        visibility: "internal",
+        payload: {
+          kind: deliveryOutcome.observation.kind,
+          safeLabel: deliveryOutcome.observation.summary,
+          modelVisibleContentChars: deliveryOutcome.observation.modelVisibleContent.length,
+        },
       });
-      if (repeatedGap) {
-        phaseBudgetController.recordPhaseBudgetExhausted({
-          phase: gapPhase,
-          reason: "repeated_completion_gap",
-        });
-        const contextAtomId = await persistSchedulerContinuation({
-          input,
-          deps,
-          turnId: context.turnId,
-          turnBudget: context.turnBudget,
-          audit,
-          publicDecisionContext,
-          ...(activeTurnContract ? { contractId: activeTurnContract.contract.contract_id } : {}),
-          error: promptUsageModelCallBudgetExhaustedError(),
-        });
-        throw new TurnSchedulerContinuationYieldError(
-          input.handle.sessionId,
-          context.turnId,
-          contextAtomId,
-        );
-      }
       if (activeTurnContract && deliveryOutcome.observation.nextMode !== "final_synthesis") {
         activeTurnContract.contract = resumeTurnContractExecution({
           butlerData: deps.butlerData,
@@ -520,6 +493,10 @@ async function persistSchedulerContinuation(input: {
       id: currentUserMessageRef(input.input),
     },
     ...refs,
+    roundJournal: buildTurnRoundJournal({
+      audit: input.audit,
+      publicDecisions: input.publicDecisionContext,
+    }),
     budgetSnapshot: snapshotDirectTurnBudget(input.turnBudget),
     unresolvedObservations: [{
       kind: "context_compacted",
@@ -541,18 +518,6 @@ async function persistSchedulerContinuation(input: {
       kind: "context_compacted",
       visibility: "operator",
       safeLabel: "Continuation context atom persisted.",
-      refs: [{
-        kind: "context_atom",
-        id: contextAtomId,
-      }],
-    },
-  });
-  await emitTurnEventBestEffort(input.input, {
-    kind: "turn.continuation_scheduled",
-    visibility: "internal",
-    payload: {
-      reason: safeFailure.code,
-      safeLabel: "Continuation scheduled.",
       refs: [{
         kind: "context_atom",
         id: contextAtomId,
