@@ -37,6 +37,8 @@ import {
   unsatisfiedTurnContractObligations,
 } from "./turn-contract-audit-evidence.ts";
 import { recordTurnContractMetric } from "./turn-contract-metrics.ts";
+import { buildTurnContinuationEvidence } from "./turn-continuation-evidence.ts";
+import { isToolBatchCompletedHandoffText } from "../../tool-batch-handoff.ts";
 
 export const KERNEL_COMPLETION_GAP_CONTINUATION_CODE = "completion_gap_continuation";
 
@@ -48,6 +50,7 @@ export type FinalDeliveryOutcome =
         kind: string;
         summary: string;
         modelVisibleContent: string;
+        nextMode?: "tool_decision" | "final_synthesis";
         refs?: Array<{ kind: string; id: string; path?: string }>;
       };
       evidenceRefs: string[];
@@ -70,6 +73,40 @@ export async function produceFinalDeliveryOutcome(input: {
 }): Promise<FinalDeliveryOutcome> {
   const explicitToolGap = explicitToolRequirementGap(input);
   if (explicitToolGap) return explicitToolGap;
+  if (isToolBatchCompletedHandoffText(input.initialText)) {
+    const successfulTools = input.audit.filter((entry) => entry.ok);
+    const latestTool = successfulTools.at(-1)?.name ?? "none";
+    let finalSynthesisReady = false;
+    if (input.turnContract) {
+      const recordedContract = recordTurnContractAuditEvidence({
+        butlerData: input.deps.butlerData,
+        contract: input.turnContract,
+        audit: input.audit,
+        finalCandidate: "",
+      });
+      const missing = unsatisfiedTurnContractObligations({
+        butlerData: input.deps.butlerData,
+        contract: recordedContract,
+      });
+      finalSynthesisReady = missing.length === 0 ||
+        missing.every((obligation) => obligation.deliverable === "final_report");
+    }
+    return {
+      kind: "completion_gap",
+      observation: {
+        kind: "tool_batch_completed",
+        summary: `The bounded tool batch completed with ${successfulTools.length} recorded result(s); latest=${latestTool}.`,
+        nextMode: finalSynthesisReady ? "final_synthesis" : "tool_decision",
+        modelVisibleContent: [
+          "The runtime recorded the completed tool batch for this same logical turn.",
+          finalSynthesisReady
+            ? "All non-report evidence obligations are satisfied; synthesize the requested final answer from the structured frontier."
+            : "Continue from the structured tool frontier in a fresh public decision.",
+        ].join("\n"),
+      },
+      evidenceRefs: [],
+    };
+  }
   const groundedText = applyGroundingIfNeeded(input, input.initialText);
   const reviewResult = await runGoalCompletionReviews({ ...input, initialText: groundedText });
   if (reviewResult.outcome.status === "gap") {
@@ -647,6 +684,7 @@ export function collectTurnContinuationRefs(input: {
 }): {
   latestAssistantDecision?: { id: string };
   openToolPairs: Array<{ kind: string; id: string; path?: string }>;
+  evidenceCandidates: Array<{ kind: string; id: string; path?: string }>;
   currentTurnWork: Array<{ kind: string; id: string; path?: string }>;
   currentTurnTodos: Array<{ kind: string; id: string; path?: string }>;
 } {
@@ -673,9 +711,14 @@ export function collectTurnContinuationRefs(input: {
     .filter((entry) => !entry.ok)
     .map((entry, index) => ({ kind: "tool_pair", id: `audit:${index}:${entry.name}` }));
   const latestAssistantDecision = input.publicDecisionContext.at(-1)?.decisionId;
+  const evidenceCandidates = buildTurnContinuationEvidence({
+    audit: input.audit,
+    publicDecisions: input.publicDecisionContext,
+  }).refs;
   return {
     ...(latestAssistantDecision ? { latestAssistantDecision: { id: latestAssistantDecision } } : {}),
     openToolPairs,
+    evidenceCandidates,
     currentTurnWork,
     currentTurnTodos,
   };

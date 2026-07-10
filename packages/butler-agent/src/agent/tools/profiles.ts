@@ -302,6 +302,13 @@ function projectLedgerTrackingEnabled(input: {
   return trackingPolicyString(input, "trackingMode", "tracking_mode") === "ledger";
 }
 
+function fixedToolSurfaceEnabled(input: {
+  sessionMetadata?: Record<string, unknown>;
+  turnMetadata?: Record<string, unknown>;
+}): boolean {
+  return trackingPolicyString(input, "toolSurfaceMode", "tool_surface_mode") === "fixed";
+}
+
 function projectLedgerInspectionSuppressed(input: {
   sessionMetadata?: Record<string, unknown>;
   turnMetadata?: Record<string, unknown>;
@@ -391,6 +398,13 @@ export function selectButlerToolsForTurn(input: {
     if (input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(name)) continue;
     allowedNames.add(name);
   }
+  if (fixedToolSurfaceEnabled(input)) {
+    const fixedNames = new Set(requiredToolNamesForTurn(input));
+    return tools.filter((tool) =>
+      fixedNames.has(tool.name) &&
+      !(input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(tool.name)),
+    ).map(fixedWorkspaceToolDefinition);
+  }
   if (!projectLedgerLifecycleAllowed(input)) {
     for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) allowedNames.delete(name);
   }
@@ -402,6 +416,21 @@ export function selectButlerToolsForTurn(input: {
     allowedNames.has(tool.name) &&
     !(input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(tool.name)),
   );
+}
+
+function fixedWorkspaceToolDefinition(tool: FunctionToolDefinition): FunctionToolDefinition {
+  if (tool.name !== "grep_files" && tool.name !== "read_file") return tool;
+  const parameters = recordValue(tool.parameters);
+  const properties = recordValue(parameters.properties);
+  if (!("workspace_root" in properties)) return tool;
+  const { workspace_root: _runtimeOwnedWorkspaceRoot, ...modelProperties } = properties;
+  return {
+    ...tool,
+    parameters: {
+      ...parameters,
+      properties: modelProperties,
+    },
+  };
 }
 
 export function toolContractJsonChars(tools: readonly FunctionToolDefinition[]): number {

@@ -429,7 +429,7 @@ test("native runtime compiles typed inspection intent into a normal tool prompt"
 
   expect(result.text).toContain("resolveOpenAIPromptCacheConfig");
   expect(toolPrompts).toHaveLength(1);
-  expect(toolRounds[0]).toBeGreaterThan(4);
+  expect(toolRounds[0]).toBe(1);
   expect(toolPrompts[0]).toContain("## Active Typed Turn Contract");
   expect(toolPrompts[0]).toContain("Action: inspect");
   expect(toolPrompts[0]).toContain("Execute only the immediate next semantic step");

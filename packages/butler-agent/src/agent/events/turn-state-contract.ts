@@ -32,6 +32,7 @@ export type TurnStateContractEventKind = typeof TURN_STATE_CONTRACT_EVENT_KINDS[
 
 export const AUTHORED_DECISION_SOURCES = [
   "assistant-authored",
+  "contract-derived",
   "model-authored",
   "principal-authored",
 ] as const;

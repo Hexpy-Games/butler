@@ -67,6 +67,11 @@ import {
   turnResourceSnapshot,
   type TurnResourceSnapshot,
 } from "./turn-resource-metrics.ts";
+import { buildTurnContinuationEvidence } from "./turn-continuation-evidence.ts";
+import {
+  completionGapContinuationPrompt,
+  completionGapFinalSynthesisPrompt,
+} from "./turn-continuation-prompts.ts";
 
 export async function runNativeToolTurn({
   input,
@@ -158,6 +163,33 @@ export async function runNativeToolTurn({
       toolLoopUsed = true;
       try {
         return await runToolPrompt(promptText, maxToolRounds, phase);
+      } catch (error) {
+        if (!isPromptUsageModelCallBudgetError(error)) throw error;
+        const contextAtomId = await persistSchedulerContinuation({
+          input,
+          deps,
+          turnId: context.turnId,
+          turnBudget: context.turnBudget,
+          audit,
+          publicDecisionContext,
+          ...(turnContractContext.current
+            ? { contractId: turnContractContext.current.contract.contract_id }
+            : {}),
+          error,
+        });
+        throw new TurnSchedulerContinuationYieldError(
+          input.handle.sessionId,
+          context.turnId,
+          contextAtomId,
+        );
+      }
+    };
+    const runKernelTextPrompt = async (
+      promptText: string,
+      phase: string,
+    ): Promise<string> => {
+      try {
+        return await runTextPrompt(promptText, phase);
       } catch (error) {
         if (!isPromptUsageModelCallBudgetError(error)) throw error;
         const contextAtomId = await persistSchedulerContinuation({
@@ -275,6 +307,10 @@ export async function runNativeToolTurn({
       const gapFingerprint = completionGapFingerprint(deliveryOutcome.observation);
       const repeatedGap = phaseBudgetController !== null && completionGapFingerprints.has(gapFingerprint);
       completionGapFingerprints.add(gapFingerprint);
+      const continuationEvidence = buildTurnContinuationEvidence({
+        audit,
+        publicDecisions: publicDecisionContext,
+      });
       await persistCompletionGapContinuation({
         turnInput: input,
         deps,
@@ -305,18 +341,29 @@ export async function runNativeToolTurn({
           contextAtomId,
         );
       }
-      if (activeTurnContract) {
+      if (activeTurnContract && deliveryOutcome.observation.nextMode !== "final_synthesis") {
         activeTurnContract.contract = resumeTurnContractExecution({
           butlerData: deps.butlerData,
           active: activeTurnContract,
         });
       }
-      candidateText = await runKernelToolPrompt(completionGapContinuationPrompt({
+      const continuationPromptInput = {
         userText: context.userText,
         activeTurnContract,
         observationSummary: deliveryOutcome.observation.summary,
         modelVisibleContent: deliveryOutcome.observation.modelVisibleContent,
-      }), undefined, gapPhase);
+        continuationEvidence: continuationEvidence.modelVisibleContent,
+      };
+      candidateText = deliveryOutcome.observation.nextMode === "final_synthesis"
+        ? await runKernelTextPrompt(
+          completionGapFinalSynthesisPrompt(continuationPromptInput),
+          "completion_gap_final_synthesis",
+        )
+        : await runKernelToolPrompt(
+          completionGapContinuationPrompt(continuationPromptInput),
+          undefined,
+          gapPhase,
+        );
       throwIfRuntimeTurnAborted(input.signal);
       turnKernel.transitionTo("continuing");
       turnKernel.transitionTo("model_deciding");
@@ -514,33 +561,6 @@ async function persistSchedulerContinuation(input: {
   });
   return contextAtomId;
 }
-
-function completionGapContinuationPrompt(input: {
-  userText: string;
-  activeTurnContract: ActiveTurnContract | null;
-  observationSummary: string;
-  modelVisibleContent: string;
-}): string {
-  const active = input.activeTurnContract;
-  return [
-    "The Turn Kernel recorded a model-visible observation for this same logical turn.",
-    "Do not deliver final text yet. Continue the current work from the observation.",
-    `Current user request: ${input.userText}`,
-    ...(active
-      ? [
-        `Active contract: ${active.contract.contract_id}`,
-        `Action: ${active.contract.action}`,
-        `Required deliverables: ${active.contract.deliverables.join(", ") || "none"}`,
-        `Current objective: ${active.decision.public_summary}`,
-        `Prior next step: ${active.decision.immediate_next_step ?? "none"}`,
-      ]
-      : []),
-    `Observation: ${input.observationSummary}`,
-    input.modelVisibleContent,
-    "Author one fresh public decision for the next small objective before requesting more tools.",
-  ].filter(Boolean).join("\n\n");
-}
-
 
 async function emitEarlyRuntimePreparationProgress(input: {
   input: NativeTurnRunnerInput["input"];

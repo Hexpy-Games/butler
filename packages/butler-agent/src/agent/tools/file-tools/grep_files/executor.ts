@@ -5,7 +5,20 @@ import { fileToolCapabilityReceipt, fileToolEvidenceReceipt } from "../shared/ev
 import { getWorkspaceRoot, stringArray, tryParseToolArgs } from "../shared/args.ts";
 import type { FileToolExecutionContext } from "../read_file/executor.ts";
 
-const DEFAULT_EXCLUDED_DIRS = new Set([".git", ".project-ledger", "project-ledger", "node_modules", "dist", "build", ".next", "coverage", ".turbo", "vendor"]);
+const DEFAULT_EXCLUDED_DIRS = new Set([
+  ".cache",
+  ".git",
+  ".next",
+  ".project-ledger",
+  ".tmp",
+  ".turbo",
+  "build",
+  "coverage",
+  "dist",
+  "node_modules",
+  "project-ledger",
+  "vendor",
+]);
 
 function escapeRegExp(value: string): string { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function isBinary(b: Buffer) { const n = Math.min(b.length, 2048); for (let i = 0; i < n; i += 1) if (b[i] === 0) return true; return false; }
@@ -19,7 +32,8 @@ async function walk(root: string, dir: string, depth: number, out: WalkState, li
   if (depth > limits.maxDepth) { out.truncated = true; out.stoppedBy = "max_depth"; return; }
   out.dirsVisited += 1;
   if (out.dirsVisited > limits.maxDirs) { out.truncated = true; out.stoppedBy = "max_dirs"; return; }
-  const entries = await readdir(dir, { withFileTypes: true });
+  const entries = (await readdir(dir, { withFileTypes: true }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   for (const ent of entries) {
     if (out.truncated) return;
     const abs = join(dir, ent.name);
@@ -69,6 +83,9 @@ export async function executeGrepFilesTool(call: { arguments?: unknown; input?: 
   const exc = exclude.map(workspaceGlobMatcher);
   const walkState: WalkState = { files: [], dirsVisited: 0, truncated: false, startedAt: Date.now() };
   await walk(guard.realPath!, guard.realPath!, 0, walkState, limits);
+  walkState.files.sort((a, b) =>
+    workspaceCandidatePriority(a) - workspaceCandidatePriority(b) || a.localeCompare(b),
+  );
   const matches: Array<{ path: string; line: number; text: string; context: Array<{ line: number; text: string }> }> = [];
   let filesSearched = 0; let filesSkipped = 0; let truncated = walkState.truncated; let stoppedBy = walkState.stoppedBy;
   for (const f of walkState.files) {
@@ -96,4 +113,17 @@ function workspaceGlobMatcher(glob: string): (path: string) => boolean {
   const matcher = new Bun.Glob(glob);
   const matchesBasename = !glob.includes("/");
   return (path) => matcher.match(path) || (matchesBasename && matcher.match(basename(path)));
+}
+
+function workspaceCandidatePriority(path: string): number {
+  const segments = path.split("/");
+  if (segments.includes("src")) return 0;
+  if (
+    segments.some((segment) => ["test", "tests", "fixture", "fixtures"].includes(segment)) ||
+    /\.(?:spec|test)\.[^/]+$/u.test(path)
+  ) return 3;
+  if (segments.some((segment) => ["benchmark", "benchmarks", "example", "examples", "scripts"].includes(segment))) {
+    return 2;
+  }
+  return 1;
 }

@@ -20,6 +20,7 @@ export interface TurnContextAtom {
   latestAssistantDecision?: { id: string };
   unresolvedObservations: TurnContextObservationRef[];
   openToolPairs: TurnContextObservationRef[];
+  evidenceCandidates: TurnContextObservationRef[];
   latestCompletionReview?: { status: string; observationId?: string };
   currentTurnWork: TurnContextObservationRef[];
   currentTurnTodos: TurnContextObservationRef[];
@@ -75,6 +76,7 @@ export function persistTurnContextAtom(input: {
   latestAssistantDecision?: { id: string };
   unresolvedObservations?: TurnContextObservationRef[];
   openToolPairs?: TurnContextObservationRef[];
+  evidenceCandidates?: TurnContextObservationRef[];
   latestCompletionReview?: { status: string; observationId?: string };
   currentTurnWork?: TurnContextObservationRef[];
   currentTurnTodos?: TurnContextObservationRef[];
@@ -94,6 +96,7 @@ export function persistTurnContextAtom(input: {
     ...(input.latestAssistantDecision ? { latestAssistantDecision: input.latestAssistantDecision } : {}),
     unresolvedObservations: input.unresolvedObservations ?? [],
     openToolPairs: input.openToolPairs ?? [],
+    evidenceCandidates: input.evidenceCandidates ?? [],
     ...(input.latestCompletionReview ? { latestCompletionReview: input.latestCompletionReview } : {}),
     currentTurnWork: input.currentTurnWork ?? [],
     currentTurnTodos: input.currentTurnTodos ?? [],
@@ -116,7 +119,12 @@ export function readTurnContextAtom(input: {
     const text = readFileSync(path, "utf8");
     const parsed = JSON.parse(text) as TurnContextAtom;
     if (!parsed || typeof parsed !== "object") return null;
-    return parsed;
+    return {
+      ...parsed,
+      evidenceCandidates: Array.isArray(parsed.evidenceCandidates)
+        ? parsed.evidenceCandidates
+        : [],
+    };
   } catch {
     return null;
   }

@@ -30,6 +30,7 @@ import {
   type AgentLoopToolDefinition,
 } from "../../agent/turn/agent-loop.ts";
 import { structuredToolResultModelPreview } from "../../agent/turn/tool-result-model-preview.ts";
+import { toolBatchCompletedHandoffText } from "../../agent/turn/tool-batch-handoff.ts";
 import { cognitionMemoryRoot } from "../../agent/cognition/paths.ts";
 import {
   retainToolEvidence,
@@ -265,6 +266,7 @@ export interface FunctionToolPromptOptions {
   tools: FunctionToolDefinition[];
   dynamicTools?: () => readonly FunctionToolDefinition[];
   maxToolRounds?: number;
+  handoffAfterToolBatch?: boolean;
   toolChoice?: "auto" | "required";
   log?: (line: string) => void;
   onAssistantTextBeforeTools?: (input: {
@@ -3147,6 +3149,9 @@ async function runLocalFunctionToolPromptText(options: FunctionToolPromptOptions
     }
   }
 
+  if (options.handoffAfterToolBatch && executedToolCalls > 0) {
+    return toolBatchCompletedHandoffText();
+  }
   messages.push({
     role: "user",
     content: finalNoToolInstructions(),
@@ -3479,6 +3484,7 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
     messages.push({ role: "system", content: options.instructions.trim() });
   }
   messages.push({ role: "user", content: promptTextForHosted(options) });
+  let toolBatchExecuted = false;
 
   for (let round = 0; round < maxRounds; round += 1) {
     const activeTools = activeFunctionTools(options);
@@ -3524,6 +3530,7 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
       content: text || null,
       tool_calls: toolCalls,
     });
+    toolBatchExecuted = true;
     for (const call of toolCalls) {
       const args = localToolArguments(call.function.arguments);
       log(`tool ${call.function.name}: ${args.raw}`);
@@ -3569,6 +3576,9 @@ async function runHostedOpenAICompatibleFunctionToolPromptText(
     }
   }
 
+  if (options.handoffAfterToolBatch && toolBatchExecuted) {
+    return toolBatchCompletedHandoffText();
+  }
   messages.push({ role: "user", content: finalNoToolInstructions(options.instructions) });
   beforeAttributedModelRequest({
     attribution: options.usageAttribution,
@@ -3717,6 +3727,7 @@ async function runAnthropicFunctionToolPromptText(
   const messages: Array<Record<string, unknown>> = [
     { role: "user", content: promptTextForHosted(options) },
   ];
+  let toolBatchExecuted = false;
   for (let round = 0; round < maxRounds; round += 1) {
     const response = await createAnthropicMessage(config, {
       system: localFunctionToolInstructions(options.instructions),
@@ -3745,6 +3756,7 @@ async function runAnthropicFunctionToolPromptText(
       toolCalls: toolUses.map((call) => ({ name: call.name, args: call.input })),
     });
     messages.push({ role: "assistant", content });
+    toolBatchExecuted = true;
     for (const call of toolUses) {
       const rawArguments = JSON.stringify(call.input);
       log(`tool ${call.name}: ${rawArguments}`);
@@ -3778,6 +3790,9 @@ async function runAnthropicFunctionToolPromptText(
         }],
       });
     }
+  }
+  if (options.handoffAfterToolBatch && toolBatchExecuted) {
+    return toolBatchCompletedHandoffText();
   }
   messages.push({ role: "user", content: finalNoToolInstructions(options.instructions) });
   const response = await createAnthropicMessage(config, {
@@ -3895,6 +3910,7 @@ async function runGeminiFunctionToolPromptText(
   const contents: Array<Record<string, unknown>> = [
     { role: "user", parts: [{ text: promptTextForHosted(options) }] },
   ];
+  let toolBatchExecuted = false;
   for (let round = 0; round < maxRounds; round += 1) {
     const response = await createGeminiContent(config, {
       systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
@@ -3931,6 +3947,7 @@ async function runGeminiFunctionToolPromptText(
       toolCalls: calls.map((call) => ({ name: call.name, args: call.args })),
     });
     contents.push({ role: "model", parts: responseParts });
+    toolBatchExecuted = true;
     for (const call of calls) {
       log(`tool ${call.name}: ${call.raw}`);
       let payload: Record<string, unknown>;
@@ -3964,6 +3981,9 @@ async function runGeminiFunctionToolPromptText(
         }],
       });
     }
+  }
+  if (options.handoffAfterToolBatch && toolBatchExecuted) {
+    return toolBatchCompletedHandoffText();
   }
   contents.push({ role: "user", parts: [{ text: finalNoToolInstructions(options.instructions) }] });
   const response = await createGeminiContent(config, {
@@ -4350,6 +4370,9 @@ async function runOpenAIFunctionToolPromptText(
       });
     },
     onLoopLimit: async ({ messages }) => {
+      if (options.handoffAfterToolBatch) {
+        return toolBatchCompletedHandoffText();
+      }
       if (!previousResponseId) return "";
       const pending = newToolMessages(messages, sentToolMessages);
       if (pending.items.length === 0) return "";

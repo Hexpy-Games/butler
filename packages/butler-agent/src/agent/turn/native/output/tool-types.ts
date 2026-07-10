@@ -132,7 +132,7 @@ export interface PublicWorkDecision {
   evidenceRefs: string[];
   nextStep?: string;
   completionObligations?: PublicWorkObligationKind[];
-  source: "assistant-authored" | "model-authored" | "principal-authored" | "runtime-derived" | "review-repaired";
+  source: "assistant-authored" | "contract-derived" | "model-authored" | "principal-authored" | "runtime-derived" | "review-repaired";
   toolName?: string;
   toolCallIndex?: number;
   toolBatchSize?: number;

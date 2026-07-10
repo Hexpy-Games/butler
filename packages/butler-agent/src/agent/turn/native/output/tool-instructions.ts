@@ -1,6 +1,17 @@
 import type { SessionRole } from "../../../../test-support/harness/contracts.ts";
 
-export function appendButlerToolInstructions(systemPrompt?: string): string {
+export interface ButlerToolInstructionOptions {
+  availableToolNames?: readonly string[];
+  fixedSurface?: boolean;
+}
+
+export function appendButlerToolInstructions(
+  systemPrompt?: string,
+  options: ButlerToolInstructionOptions = {},
+): string {
+  if (options.fixedSurface) {
+    return appendFixedToolInstructions(systemPrompt, options.availableToolNames ?? []);
+  }
   const toolContract = [
     "## Butler Turn Cognition Cycle",
     "- Every Butler or Steward turn follows this internal work discipline: `구상`, `계획`, `실행`, `검토`, `취합 및 정리`, `보고`. This strengthens work quality but must not expose chain-of-thought, raw prompt text, private memory text, or tool payloads.",
@@ -105,6 +116,45 @@ export function appendButlerToolInstructions(systemPrompt?: string): string {
     "- If worker, review, or planned-dispatch tooling cannot complete, do not expose raw tool errors, worker text, retry-cap text, provider payloads, stack traces, or internal prompts. Summarize what was attempted, what was verified, what blocked completion, and the next useful action.",
   ].join("\n");
   return [systemPrompt?.trim(), toolContract].filter(Boolean).join("\n\n");
+}
+
+function appendFixedToolInstructions(
+  systemPrompt: string | undefined,
+  availableToolNames: readonly string[],
+): string {
+  const tools = new Set(availableToolNames);
+  const exactSurface = [...tools].sort().map((name) => `\`${name}\``).join(", ");
+  const instructions = [
+    "## Fixed Butler Tool Surface",
+    `- The complete tool surface for this turn is: ${exactSurface || "none"}. Plan each next step directly with this surface.`,
+    "- Use the smallest useful step. Each assistant tool response is one semantic work block with one fresh public decision and at most six visible tool calls.",
+    "- Public decision protocol: `summary: <immediate action>` / `rationale: <why now>` / `next_step: <how the result determines the following step>`.",
+    "- Keep the decision specific to the immediate files or evidence. After the bounded batch, synthesize from observed evidence so the runtime can review completion before another block.",
+    "- Preserve the Active Persona, configured response language, and recent conversation context in public decisions and the final answer.",
+    "- Never expose hidden reasoning, raw prompts, private memory text, secrets, or raw tool payloads.",
+    ...(tools.has("grep_files")
+      ? [
+        "- `grep_files.pattern` is the only search-text field and is literal unless `regex=true`; regex operators such as `|` pair with that explicit flag.",
+        "- Code identifiers use their exact source spelling. A prose phrase finds prose, while snake_case or camelCase identifiers find implementation symbols and assignments.",
+        "- Begin with one scoped pattern and root-relative include globs when the subtree is known. The result establishes a candidate frontier; the following block selects and reads a relevant candidate.",
+        "- When the request asks for implementation or function names, prefer candidate anchors containing declarations, calls, or assignments over UI copy, benchmark prompts, and status wrappers.",
+      ]
+      : []),
+    ...(tools.has("read_file")
+      ? [
+        "- Use `read_file` to verify the candidate that supports the requested claim; search output alone is not source verification.",
+        "- `read_file.path` is the root-relative candidate path exactly as listed by the runtime; the active workspace root is already owned by the session.",
+      ]
+      : []),
+    ...(tools.has("read_tool_evidence_artifact") || tools.has("read_tool_output_artifact")
+      ? ["- Read a bounded evidence/output artifact slice only when a compacted result says the omitted raw evidence is needed for the claim."]
+      : []),
+    ...(tools.has("project_ledger_status") || tools.has("project_ledger_show")
+      ? ["- Use the enabled Project Ledger read tools for canonical project state and records; do not inspect Ledger source Markdown as ordinary workspace files."]
+      : []),
+    "- Once the requested claim is verified, synthesize the evidence and finalize the turn.",
+  ].join("\n");
+  return [systemPrompt?.trim(), instructions].filter(Boolean).join("\n\n");
 }
 
 export function appendRoleToolPolicyInstructions(role: SessionRole, systemPrompt: string): string {

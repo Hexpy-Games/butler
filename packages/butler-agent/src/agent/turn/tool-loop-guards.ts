@@ -43,6 +43,10 @@ export function directToolRoundLimit(requestedRounds: number): number {
 }
 
 export function repeatedToolFamilyKey(name: string, args: Record<string, unknown>): string | null {
+  if (name === "grep_files") {
+    const pattern = typeof args.pattern === "string" ? args.pattern.trim() : "";
+    return pattern ? `workspace-grep:${pattern}` : null;
+  }
   if (name === "tool_search") return discoveryToolFamilyKey("tool-search", args);
   if (name === "list_tool_capabilities") return discoveryToolFamilyKey("tool-capabilities", args);
   if (name === "inspect_project_status" || name === "project_ledger_status") return "project-ledger:status";
