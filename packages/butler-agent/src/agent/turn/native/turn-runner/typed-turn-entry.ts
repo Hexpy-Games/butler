@@ -43,7 +43,6 @@ interface TypedTurnEntryContext {
 }
 
 type StructuredResponseFormat = ReturnType<typeof turnDecisionResponseFormat>;
-type StructuredDecisionTransport = "json_schema" | "function_tool";
 
 export async function runTypedTurnEntry(input: {
   turnInput: RuntimeTurnInput;
@@ -120,8 +119,10 @@ export async function runTypedTurnEntry(input: {
       ?.map((candidate) => candidate.waiting_user_blocker_id)
       .filter((id): id is string => Boolean(id)) ?? [],
   });
-  const decisionTransport: StructuredDecisionTransport =
-    input.turnInput.provider.capabilities.structuredDecisionTransport ?? "json_schema";
+  const decisionTransport = input.turnInput.provider.capabilities.structuredDecisionTransport;
+  if (!decisionTransport) {
+    throw new Error("turn_contract_structured_decision_transport_missing");
+  }
   let currentPrompt = decisionPrompt.prompt;
   let active: ActiveTurnContract | null = null;
   let lastError: unknown = null;

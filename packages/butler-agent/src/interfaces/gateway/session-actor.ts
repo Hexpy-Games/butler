@@ -34,6 +34,7 @@ import {
   diagnosticDetails,
   safeRuntimeFailure,
 } from "../../integrations/providers/provider-errors.ts";
+import { bindProviderToModel } from "../../integrations/providers/registry.ts";
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
 import {
   isNonPublicContinuationDeliveryError,
@@ -566,11 +567,12 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         envelope,
         emitIntermediate,
       });
+      const turnProvider = bindProviderToModel(this.options.provider, binding.modelRef);
       let result;
       try {
         result = await this.options.runtime.runTurn({
           handle,
-          provider: this.options.provider,
+          provider: turnProvider,
           model: binding.modelRef,
           input: envelope,
           signal: envelope.signal,
@@ -882,9 +884,10 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     timestamp: string;
   }): Promise<string | undefined> {
     if (input.envelope.transport !== APP_TRANSPORT) return undefined;
+    const turnProvider = bindProviderToModel(this.options.provider, input.binding.modelRef);
     if (
       this.role === "butler" &&
-      this.options.provider.capabilities.supportsStructuredOutputs === true
+      turnProvider.capabilities.supportsStructuredOutputs === true
     ) return undefined;
     const timeoutMs = this.options.openingDecisionTimeoutMs ?? DEFAULT_OPENING_DECISION_TIMEOUT_MS;
     if (timeoutMs <= 0) {
@@ -892,7 +895,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     }
     try {
       const openingDecision = await generateOpeningDecisionWithProvider(
-        this.options.provider,
+        turnProvider,
         {
           userMessage: input.envelope.message.text ?? "",
           model: input.binding.modelRef,

@@ -1,7 +1,7 @@
 import { getEncoding, type Tiktoken } from "js-tiktoken";
-import { HOSTED_PROVIDER_MODELS } from "./model-catalog/hosted-models.ts";
-import { localModelConfigToMetadata } from "./model-catalog/local-metadata.ts";
-import { workerModelPresets } from "./model-catalog/worker-presets.ts";
+import { HOSTED_PROVIDER_MODELS } from "./shared/hosted-models.ts";
+import { localModelConfigToMetadata } from "./local/catalog.ts";
+import { workerModelPresets } from "./shared/worker-presets.ts";
 import { readLocalModelConfigs, type LocalModelApiType, type LocalModelPlatform, type LocalModelSource } from "./local-models.ts";
 import { parseModelRef, type ParsedModelRef } from "./model-ref.ts";
 
@@ -116,8 +116,8 @@ export interface WorkerModelPreset {
 export const DEFAULT_MODEL_REF = "openai/gpt-5.5" as const;
 export const DEFAULT_REASONING_EFFORT: ReasoningEffort = "xhigh";
 
-export { localModelConfigToMetadata } from "./model-catalog/local-metadata.ts";
-export { defaultWorkerModelRules, workerModelPresets } from "./model-catalog/worker-presets.ts";
+export { localModelConfigToMetadata } from "./local/catalog.ts";
+export { defaultWorkerModelRules, workerModelPresets } from "./shared/worker-presets.ts";
 
 const MODELS: readonly ProviderModelMetadata[] = HOSTED_PROVIDER_MODELS;
 let openAIEncoding: Tiktoken | null = null;
