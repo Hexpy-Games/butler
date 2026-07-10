@@ -127,6 +127,7 @@ export interface PublicWorkDecision {
   contractId?: string;
   workstreamId?: string;
   semanticBlockId?: string;
+  blockTitle?: string;
   summary: string;
   rationale?: string;
   evidenceRefs: string[];

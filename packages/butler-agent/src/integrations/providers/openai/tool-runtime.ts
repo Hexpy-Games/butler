@@ -39,7 +39,7 @@ export async function runOpenAIFunctionToolPromptText(
     messages: [{ role: "user", content: promptForAgentLoop }],
     tools: agentLoopTools,
     maxIterations: maxRounds,
-    compactToolResultsBeforeNextModelCall: true,
+    compactToolResultsBeforeNextModelCall: false,
     evidenceRetention: {
       butlerData: options.butlerData,
       turnId: options.usageAttribution?.turnId,

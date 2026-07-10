@@ -7,7 +7,6 @@ import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import type { RuntimeTurnEventInput } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { operationalMetricsPath } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
-import { toolBatchCompletedHandoffText } from "../../packages/butler-agent/src/agent/turn/tool-batch-handoff.ts";
 
 let data = "";
 
@@ -195,7 +194,7 @@ test("typed inspect contract exposes read tools and completes from a status rece
     }),
     runFunctionToolPromptText: async (input) => {
       selectedTools = input.tools.map((tool) => tool.name);
-      expect(input.maxToolRounds).toBe(1);
+      expect(input.maxToolRounds).toBeGreaterThan(1);
       await input.executeTool({ name: "project_ledger_status", args: {}, rawArguments: "{}" });
       return "현재 프로젝트 상태는 정상이며 미해결 Ledger 오류가 없습니다.";
     },
@@ -317,7 +316,7 @@ test("workspace inspect exposes direct read tools without mutation tools", async
     "read_tool_evidence_artifact",
     "read_tool_output_artifact",
   ].sort());
-  expect(selectedMaxToolRounds).toBe(1);
+  expect(selectedMaxToolRounds).toBeGreaterThan(1);
   expect(selectedInstructions).toContain("## Fixed Butler Tool Surface");
   expect(selectedInstructions).not.toContain("`run_command`");
   expect(selectedInstructions).not.toContain("`tool_search`");
@@ -353,8 +352,8 @@ test("workspace search candidates continue into source verification before deliv
       });
     },
     runFunctionToolPromptText: async (input) => {
-      expect(input.maxToolRounds).toBe(1);
-      expect(input.handoffAfterToolBatch).toBe(true);
+      expect(input.maxToolRounds).toBeGreaterThan(1);
+      expect(input.handoffAfterToolBatch).toBe(false);
       expect(input.tools.map((tool) => tool.name).sort()).toEqual([
         "grep_files",
         "read_file",
@@ -362,16 +361,24 @@ test("workspace search candidates continue into source verification before deliv
         "read_tool_output_artifact",
       ].sort());
       toolPrompts.push(input.prompt);
-      const name = toolPrompts.length === 1 ? "grep_files" : "read_file";
-      const args = name === "grep_files"
-        ? { pattern: "prompt_cache" }
-        : { path: "packages/butler-agent/src/integrations/providers/provider.ts" };
+      const grepArgs = { pattern: "prompt_cache" };
       await input.onAssistantTextBeforeTools?.({
         text: "",
-        toolCalls: [{ name, args }],
+        toolCalls: [{ name: "grep_files", args: grepArgs }],
       });
-      await input.executeTool({ name, args, rawArguments: JSON.stringify(args) });
-      return toolBatchCompletedHandoffText();
+      await input.executeTool({ name: "grep_files", args: grepArgs, rawArguments: JSON.stringify(grepArgs) });
+      const readArgs = { path: "packages/butler-agent/src/integrations/providers/provider.ts" };
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "title: 캐시 소스 확인",
+          "summary: 검색 결과에서 캐시 설정 구현을 확인합니다.",
+          "rationale: 실제 함수명을 검증해야 요청에 답할 수 있습니다.",
+          "next_step: 읽은 구현을 근거로 최종 답을 작성합니다.",
+        ].join("\n"),
+        toolCalls: [{ name: "read_file", args: readArgs }],
+      });
+      await input.executeTool({ name: "read_file", args: readArgs, rawArguments: JSON.stringify(readArgs) });
+      return "provider.ts를 읽어 캐시 설정 함수를 확인했습니다.";
     },
     executeButlerTool: async (call) => {
       executedTools.push(call.name);
@@ -427,16 +434,8 @@ test("workspace search candidates continue into source verification before deliv
   });
 
   expect(executedTools).toEqual(["grep_files", "read_file"]);
-  expect(toolPrompts).toHaveLength(2);
-  expect(textPrompts).toHaveLength(1);
-  expect(toolPrompts[1]).toContain("Current user request: 캐시 설정 파일과 함수명을 실제 소스에서 확인해줘.");
-  expect(toolPrompts[1]).toContain("The bounded tool batch completed with 1 recorded result(s); latest=grep_files.");
-  expect(toolPrompts[1]).toContain('"tool": "read_file"');
-  expect(toolPrompts[1]).toContain("packages/butler-agent/src/integrations/providers/provider.ts");
-  expect(toolPrompts[1]).toContain("The previous search block already established concrete source candidates.");
-  expect(textPrompts[0]).toContain("All non-report evidence obligations are satisfied");
-  expect(textPrompts[0]).toContain("A source file has already been read after candidate discovery.");
-  expect(textPrompts[0]).toContain("applyOpenAiPromptCacheConfig");
+  expect(toolPrompts).toHaveLength(1);
+  expect(textPrompts).toHaveLength(0);
   expect(result.text).toContain("provider.ts");
   expect(readOnlyContract()).toMatchObject({ action: "inspect", state: "delivered" });
 });
@@ -645,7 +644,7 @@ test("one semantic decision block closes only after its final tool", async () =>
       immediate_next_step: "대상 파일을 수정하고 검증을 실행합니다.",
     }),
     runFunctionToolPromptText: async (input) => {
-      expect(input.maxToolRounds).toBe(1);
+      expect(input.maxToolRounds).toBeGreaterThan(1);
       selectedTools = input.tools.map((tool) => tool.name);
       const toolCalls = [
         { name: "write_file", args: { path: "fixture.txt", content: "done" } },

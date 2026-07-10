@@ -2,6 +2,11 @@ import {
   retainToolEvidence,
   type ToolEvidenceRetentionContext,
 } from "../context/tool-evidence-retention.ts";
+import {
+  blockCapacityObservation,
+  blockCapacityToolOutput,
+  partitionSemanticToolBatch,
+} from "./tool-batch-capacity.ts";
 
 export type AgentLoopRole = "system" | "user" | "assistant" | "tool";
 
@@ -583,13 +588,36 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
       };
     }
 
+    const batch = partitionSemanticToolBatch(calls);
     await input.onAssistantTextBeforeTools?.({
       text: response.text?.trim() ?? "",
-      toolCalls: calls,
+      toolCalls: batch.executable,
       iteration,
     });
 
-    const preparedCalls = calls.map((call) => prepareToolCall(input, call));
+    const preparedCalls = batch.executable.map((call) => prepareToolCall(input, call));
+    const recordDeferredCalls = async (): Promise<void> => {
+      for (const call of batch.deferred) {
+        const observation = blockCapacityObservation({
+          toolCallId: call.id,
+          toolName: call.name,
+          deferredCount: batch.deferred.length,
+          turnId: input.evidenceRetention?.turnId,
+        });
+        await recordToolResult({
+          call,
+          result: {
+            toolCallId: call.id,
+            name: call.name,
+            ok: false,
+            error: observation.summary,
+            output: blockCapacityToolOutput(observation),
+          },
+          iteration,
+          evaluateStop: false,
+        });
+      }
+    };
     const canRunBatchConcurrently = preparedCalls.length > 1 && preparedCalls.every((prepared) =>
       prepared.validationError === null &&
       prepared.tool?.concurrencySafe === true,
@@ -616,6 +644,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
         });
         if (!stop && candidate) stop = candidate;
       }
+      await recordDeferredCalls();
       if (stop) return finishWithStopCandidate(stop);
       continue;
     }
@@ -634,6 +663,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
       });
       if (stop) return finishWithStopCandidate(stop);
     }
+    await recordDeferredCalls();
   }
 
   emit(events, input.onEvent, {

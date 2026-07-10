@@ -4,6 +4,11 @@ import { providerEmptyResponseError, providerHttpError, providerNetworkError, sa
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
 import { type HostedRuntimeConfig } from "../shared/model-routing.ts";
+import {
+  blockCapacityObservation,
+  blockCapacityToolOutput,
+  partitionSemanticToolBatch,
+} from "../../../agent/turn/tool-batch-capacity.ts";
 
 
 export async function createAnthropicMessage(
@@ -133,13 +138,14 @@ export async function runAnthropicFunctionToolPromptText(
         model: config.modelId,
       });
     }
+    const batch = partitionSemanticToolBatch(toolUses);
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: toolUses.map((call) => ({ name: call.name, args: call.input })),
+      toolCalls: batch.executable.map((call) => ({ name: call.name, args: call.input })),
     });
     messages.push({ role: "assistant", content });
     toolBatchExecuted = true;
-    for (const call of toolUses) {
+    for (const call of batch.executable) {
       const rawArguments = JSON.stringify(call.input);
       log(`tool ${call.name}: ${rawArguments}`);
       let payload: Record<string, unknown>;
@@ -169,6 +175,22 @@ export async function runAnthropicFunctionToolPromptText(
           type: "tool_result",
           tool_use_id: call.id,
           content: JSON.stringify(payload),
+        }],
+      });
+    }
+    for (const call of batch.deferred) {
+      const observation = blockCapacityObservation({
+        toolCallId: call.id,
+        toolName: call.name,
+        deferredCount: batch.deferred.length,
+        turnId: options.usageAttribution?.turnId,
+      });
+      messages.push({
+        role: "user",
+        content: [{
+          type: "tool_result",
+          tool_use_id: call.id,
+          content: JSON.stringify({ ok: false, output: blockCapacityToolOutput(observation) }),
         }],
       });
     }

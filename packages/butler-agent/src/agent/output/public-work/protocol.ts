@@ -12,6 +12,7 @@ const PUBLIC_WORK_DECISION_CONTEXT_REF_LIMIT = 3;
 const PUBLIC_WORK_OBLIGATION_LIMIT = 6;
 
 const PUBLIC_WORK_DECISION_PROTOCOL_FIELDS = {
+  title: "blockTitle",
   summary: "summary",
   rationale: "rationale",
   next_step: "nextStep",
@@ -27,6 +28,7 @@ const PUBLIC_WORK_OBLIGATION_KINDS = new Set<PublicWorkObligationKind>([
 ]);
 
 export interface PublicDecisionStructuredFields {
+  blockTitle?: string;
   summary?: string;
   rationale?: string;
   nextStep?: string;
@@ -61,8 +63,16 @@ export function publicDecisionStructuredFields(value: string): PublicDecisionStr
     if (!parsed) {
       continue;
     }
+    if (parsed.key === "blockTitle") {
+      if (current.blockTitle || current.summary || current.rationale || current.nextStep) {
+        decisions.push(current);
+        current = {};
+      }
+      current = assignProtocolText(current, "blockTitle", parsed.value);
+      continue;
+    }
     if (parsed.key === "summary") {
-      if (current.summary || current.rationale || current.nextStep) {
+      if (current.summary) {
         decisions.push(current);
         current = {};
       }
@@ -84,7 +94,7 @@ export function publicDecisionStructuredFields(value: string): PublicDecisionStr
       current.repaired = true;
     }
   }
-  if (current.summary || current.rationale || current.nextStep) {
+  if (current.blockTitle || current.summary || current.rationale || current.nextStep) {
     decisions.push(current);
   }
   return decisions.slice(0, PUBLIC_DECISION_RECORD_LIMIT);
@@ -107,6 +117,7 @@ export function isUsablePublicDecisionText(
 }
 
 export function renderPublicDecisionContext(input: Array<{
+  blockTitle?: string;
   summary: string;
   rationale?: string;
   nextStep?: string;
@@ -121,7 +132,7 @@ export function renderPublicDecisionContext(input: Array<{
     "## Public Work Decisions",
     ...recent.map((decision, index) => {
       const parts = [
-        `${index + 1}. ${decision.summary}`,
+        `${index + 1}. ${decision.blockTitle ? `[${decision.blockTitle}] ` : ""}${decision.summary}`,
         decision.rationale ? `rationale: ${decision.rationale}` : "",
         decision.nextStep ? `next_step: ${decision.nextStep}` : "",
         decision.completionObligations && decision.completionObligations.length > 0
@@ -138,7 +149,7 @@ export function renderPublicDecisionContext(input: Array<{
 
 function parseDecisionProtocolLine(
   line: string,
-): { key: "summary" | "rationale" | "nextStep" | "completionObligations"; value: string } | null {
+): { key: "blockTitle" | "summary" | "rationale" | "nextStep" | "completionObligations"; value: string } | null {
   const separatorIndex = line.indexOf(":");
   if (separatorIndex < 0) {
     return null;
@@ -156,7 +167,7 @@ function parseDecisionProtocolLine(
   };
 }
 
-function assignProtocolText<T extends "summary" | "rationale" | "nextStep">(
+function assignProtocolText<T extends "blockTitle" | "summary" | "rationale" | "nextStep">(
   current: PublicDecisionStructuredFields,
   key: T,
   value: string,

@@ -112,6 +112,7 @@ export interface TurnDecisionPayloadInput {
   contractId?: unknown;
   workstreamId?: unknown;
   semanticBlockId?: unknown;
+  blockTitle?: unknown;
   role: unknown;
   summary: unknown;
   rationale?: unknown;
@@ -210,6 +211,7 @@ export function createTurnDecisionPayload(input: TurnDecisionPayloadInput): Reco
   const contractId = optionalSafeText(input.contractId);
   const workstreamId = optionalSafeText(input.workstreamId);
   const semanticBlockId = optionalSafeText(input.semanticBlockId);
+  const blockTitle = optionalSafeText(input.blockTitle);
   const modelCallId = optionalSafeText(input.modelCallId);
   const latencyMs = optionalNonNegativeInteger(input.latencyMs);
   return {
@@ -217,6 +219,7 @@ export function createTurnDecisionPayload(input: TurnDecisionPayloadInput): Reco
     ...(contractId ? { contractId } : {}),
     ...(workstreamId ? { workstreamId } : {}),
     ...(semanticBlockId ? { semanticBlockId } : {}),
+    ...(blockTitle ? { blockTitle } : {}),
     role,
     summary,
     rationale,
@@ -346,6 +349,7 @@ export function normalizeTurnStateContractPayload(
       contractId: payload.contractId,
       workstreamId: payload.workstreamId,
       semanticBlockId: payload.semanticBlockId,
+      blockTitle: payload.blockTitle ?? payload.decisionTitle,
       role: payload.role ?? payload.decisionRole,
       summary: payload.summary ?? payload.decisionSummary,
       rationale: payload.rationale ?? payload.decisionRationale,

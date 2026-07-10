@@ -6,6 +6,11 @@ import { hostedToolResultContent } from "../local/runtime.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { recordPromptCacheMetric } from "../openai/runtime.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
+import {
+  blockCapacityObservation,
+  blockCapacityToolOutput,
+  partitionSemanticToolBatch,
+} from "../../../agent/turn/tool-batch-capacity.ts";
 
 
 
@@ -94,9 +99,10 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
       }
       return text;
     }
+    const batch = partitionSemanticToolBatch(toolCalls);
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: toolCalls.map((call) => {
+      toolCalls: batch.executable.map((call) => {
         const args = localToolArguments(call.function.arguments);
         return {
           name: call.function.name,
@@ -110,7 +116,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
       tool_calls: toolCalls,
     });
     toolBatchExecuted = true;
-    for (const call of toolCalls) {
+    for (const call of batch.executable) {
       const args = localToolArguments(call.function.arguments);
       log(`tool ${call.function.name}: ${args.raw}`);
       let payload: Record<string, unknown>;
@@ -143,6 +149,29 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
         name: call.function.name,
         content: hostedToolResultContent({
           payload,
+          toolName: call.function.name,
+          toolCallId: call.id,
+          log,
+          evidenceRetention: {
+            butlerData: options.butlerData,
+            turnId: options.usageAttribution?.turnId,
+          },
+        }),
+      });
+    }
+    for (const call of batch.deferred) {
+      const observation = blockCapacityObservation({
+        toolCallId: call.id,
+        toolName: call.function.name,
+        deferredCount: batch.deferred.length,
+        turnId: options.usageAttribution?.turnId,
+      });
+      messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        name: call.function.name,
+        content: hostedToolResultContent({
+          payload: { ok: false, output: blockCapacityToolOutput(observation) },
           toolName: call.function.name,
           toolCallId: call.id,
           log,

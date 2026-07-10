@@ -4,6 +4,11 @@ import { providerEmptyResponseError, providerHttpError, providerNetworkError, sa
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
 import { type HostedRuntimeConfig } from "../shared/model-routing.ts";
+import {
+  blockCapacityObservation,
+  blockCapacityToolOutput,
+  partitionSemanticToolBatch,
+} from "../../../agent/turn/tool-batch-capacity.ts";
 
 
 export async function createGeminiContent(
@@ -141,13 +146,14 @@ export async function runGeminiFunctionToolPromptText(
         model: config.modelId,
       });
     }
+    const batch = partitionSemanticToolBatch(calls);
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: calls.map((call) => ({ name: call.name, args: call.args })),
+      toolCalls: batch.executable.map((call) => ({ name: call.name, args: call.args })),
     });
     contents.push({ role: "model", parts: responseParts });
     toolBatchExecuted = true;
-    for (const call of calls) {
+    for (const call of batch.executable) {
       log(`tool ${call.name}: ${call.raw}`);
       let payload: Record<string, unknown>;
       try {
@@ -176,6 +182,23 @@ export async function runGeminiFunctionToolPromptText(
           functionResponse: {
             name: call.name,
             response: payload,
+          },
+        }],
+      });
+    }
+    for (const call of batch.deferred) {
+      const observation = blockCapacityObservation({
+        toolCallId: call.id,
+        toolName: call.name,
+        deferredCount: batch.deferred.length,
+        turnId: options.usageAttribution?.turnId,
+      });
+      contents.push({
+        role: "user",
+        parts: [{
+          functionResponse: {
+            name: call.name,
+            response: { ok: false, output: blockCapacityToolOutput(observation) },
           },
         }],
       });

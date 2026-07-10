@@ -42,7 +42,9 @@ export interface TurnContractDecision {
   blocker_id?: string;
   deliverables: TurnDeliverable[];
   answer_text?: string;
+  public_title?: string;
   public_summary: string;
+  public_rationale?: string;
   immediate_next_step?: string;
 }
 
