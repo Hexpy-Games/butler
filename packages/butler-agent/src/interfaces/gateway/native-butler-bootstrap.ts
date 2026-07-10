@@ -41,7 +41,10 @@ import { createTelegramLiveGateway } from "../transport/telegram/live-gateway.ts
 import { runTelegramPolling } from "../transport/telegram/polling-runner.ts";
 import { runWorkerResultMonitor } from "./worker-result-monitor.ts";
 import { runPromptText } from "../../integrations/providers/provider.ts";
-import { modelStructuredDecisionTransport } from "../../integrations/providers/model-catalog.ts";
+import {
+  providerCapabilitiesForModel,
+  resolveProviderAdapterDefinition,
+} from "../../integrations/providers/registry.ts";
 import { plannedInternalGoal, PlannedTaskStore } from "../../agent/work/planned-task.ts";
 import type { TaskRecord } from "../../agent/work/task-store.ts";
 import { WorkOrchestrationStore } from "../../agent/work/work-orchestration.ts";
@@ -117,42 +120,29 @@ export function createNativeButlerDefaultProvider(
   promptRunner: PromptTextRunner = runPromptText,
 ): ModelProviderAdapter {
   const configuredModel = config.system?.butlerModel || config.system?.defaultModel || "";
-  const providerId = configuredModel.includes("/")
-    ? configuredModel.split("/", 1)[0] || "openai"
-    : "openai";
-  const structuredDecisionTransport = modelStructuredDecisionTransport(configuredModel);
-  const supportsStructuredOutputs = structuredDecisionTransport !== null;
-  const supportsModelTools = structuredDecisionTransport !== null;
-  return {
-    id: providerId,
-    capabilities: {
-      supportsStreaming: false,
-      supportsToolCalls: supportsModelTools,
-      supportsImages: false,
-      supportsAudio: false,
-      supportsServerThreads: false,
-      supportsReasoningConfig: true,
-      supportsPromptCaching: true,
-      supportsSameTurnToolSchemaPromotion: supportsModelTools,
-      supportsStructuredOutputs,
-      ...(structuredDecisionTransport ? { structuredDecisionTransport } : {}),
-    },
-    async invoke(input) {
-      const prompt = input.messages
-        .map((message) => `${message.role}: ${message.content}`)
-        .join("\n\n");
-      const text = await promptRunner({
-        prompt,
-        model: input.model,
-        instructions: input.systemPrompt,
-        responseFormat: input.responseFormat,
-        reasoningEffort: input.reasoning?.effort,
-        signal: input.signal,
-        cacheScope: "native-butler-title-provider",
-      });
-      return { text };
-    },
+  const invoke: ModelProviderAdapter["invoke"] = async (input) => {
+    const prompt = input.messages
+      .map((message) => `${message.role}: ${message.content}`)
+      .join("\n\n");
+    const text = await promptRunner({
+      prompt,
+      model: input.model,
+      instructions: input.systemPrompt,
+      responseFormat: input.responseFormat,
+      reasoningEffort: input.reasoning?.effort,
+      signal: input.signal,
+      cacheScope: "native-butler-title-provider",
+    });
+    return { text };
   };
+  const forModel = (model: string): ModelProviderAdapter => ({
+    id: resolveProviderAdapterDefinition(model).providerId,
+    capabilities: providerCapabilitiesForModel(model),
+    capabilitiesFor: providerCapabilitiesForModel,
+    forModel,
+    invoke,
+  });
+  return forModel(configuredModel);
 }
 
 export function appTurnEventAction(input: {

@@ -137,6 +137,7 @@ const structuredFakeProvider: ModelProviderAdapter = {
   capabilities: {
     ...fakeProvider.capabilities,
     supportsStructuredOutputs: true,
+    structuredDecisionTransport: "json_schema",
   },
 };
 

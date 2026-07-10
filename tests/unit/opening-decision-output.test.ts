@@ -149,6 +149,30 @@ test("native bootstrap provider forwards low reasoning and cancellation to promp
   expect("maxOutputTokens" in (promptCalls[0] as unknown as Record<string, unknown>)).toBe(false);
 });
 
+test("native bootstrap provider resolves capabilities from the effective turn model", () => {
+  const openAiDefault = createNativeButlerDefaultProvider({
+    system: { defaultModel: "openai/gpt-5.5-codex" },
+  });
+  const glmDefault = createNativeButlerDefaultProvider({
+    system: { defaultModel: "zai/glm-5.2" },
+  });
+
+  expect(openAiDefault.capabilitiesFor?.("zai/glm-5.2")).toMatchObject({
+    supportsStructuredOutputs: true,
+    structuredDecisionTransport: "function_tool",
+  });
+  expect(glmDefault.capabilitiesFor?.("openai/gpt-5.5-codex")).toMatchObject({
+    supportsStructuredOutputs: true,
+    structuredDecisionTransport: "json_schema",
+  });
+  expect(openAiDefault.forModel?.("zai/glm-5.2").capabilities).toMatchObject({
+    structuredDecisionTransport: "function_tool",
+  });
+  expect(glmDefault.forModel?.("openai/gpt-5.5-codex").capabilities).toMatchObject({
+    structuredDecisionTransport: "json_schema",
+  });
+});
+
 test("opening decision parser rejects missing fields and prose", () => {
   expect(parseOpeningDecisionText("I will check the contract.")).toBeNull();
   expect(parseOpeningDecisionText(JSON.stringify({
