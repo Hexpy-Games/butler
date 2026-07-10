@@ -10773,7 +10773,8 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
 
   expect(callCount).toBe(2);
   expect(continuationBudgetAtStart).toMatchObject({
-    requestCount: 2,
+    requestCount: 0,
+    cumulativeRequestCount: 2,
     maxRequests: 32,
   });
   expect(continuationResult.text).toContain("보존된 W3 작업 상태부터 이어서 검증했습니다");
@@ -10881,7 +10882,8 @@ test("focused WorkStream resume hydrates logical-turn budget from checkpoint wit
 
   expect(result.text).toContain("완료했습니다");
   expect(budgetAtStart).toMatchObject({
-    requestCount: 5,
+    requestCount: 0,
+    cumulativeRequestCount: 5,
     maxRequests: 32,
   });
 });

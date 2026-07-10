@@ -87,8 +87,9 @@ export function createNativeTurnPromptRunners(input: {
   latencyTracker?: TurnLatencyMetricRecorder;
   phaseBudgetController?: WorkStreamPhaseBudgetController | null;
   turnContractContext?: { current: ActiveTurnContract | null };
+  initialProviderRoundIndex?: number;
 }) {
-  let providerRoundIndex = 0;
+  let providerRoundIndex = Math.max(0, Math.floor(input.initialProviderRoundIndex ?? 0));
   const usageAttribution = (
     phase: string,
     roundIndex?: number,

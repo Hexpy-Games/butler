@@ -8,6 +8,12 @@ import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-
 import type { RuntimeTurnEventInput } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { operationalMetricsPath } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
+import {
+  createTurnContextAtomId,
+  isTurnSchedulerContinuationYieldError,
+  readTurnContextAtom,
+} from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
+import { promptUsageModelCallBudgetExhaustedError } from "../../packages/butler-agent/src/integrations/providers/shared/usage.ts";
 
 let data = "";
 
@@ -73,7 +79,7 @@ test("typed first productive pass returns a direct answer without entering the t
   const result = await runtime.runTurn({
     handle,
     provider: typedProvider,
-    model: "openai/gpt-5.5",
+    model: "openai/gpt-5.5" as const,
     input: { text: "방금 말한 설계가 어떤 의미야?" },
     metadata: { thinFirstResponse: "app_default", runtimePolicy: { completionReview: "disabled" } },
     emitTurnEvent: (event) => {
@@ -716,6 +722,166 @@ test("one semantic decision block closes only after its final tool", async () =>
   expect(deliveredContract.target_workstream_id).toBeString();
   const stream = new WorkStreamStore(data).read(String(deliveredContract.target_workstream_id));
   expect(stream).toMatchObject({ active_contract_id: null });
+});
+
+test("scheduler resume restores one typed contract without another opening decision", async () => {
+  const turnId = "turn-typed-checkpoint-resume";
+  const sessionId = "butler/typed-checkpoint-resume";
+  const events: RuntimeTurnEventInput[] = [];
+  const budgetStates: Array<{ requestCount?: number; cumulativeRequestCount?: number }> = [];
+  let typedDecisionCalls = 0;
+  let toolPromptCalls = 0;
+  const runtime = new NativeToolLoopRuntime({
+    butlerData: data,
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => {
+      typedDecisionCalls += 1;
+      return JSON.stringify({
+        schema_version: "butler.turn-contract-decision.v1",
+        decision_id: decisionIdFromFormat(input.responseFormat),
+        action: "start_work",
+        target_workstream_id: null,
+        target_project_id: "butler",
+        blocker_id: null,
+        deliverables: ["code_change", "validation", "final_report"],
+        answer_text: null,
+        public_title: "체크포인트 재개 검증",
+        public_summary: "파일 변경과 검증을 하나의 계약으로 완료합니다.",
+        public_rationale: "강제 yield 뒤에도 같은 작업을 이어가야 합니다.",
+        immediate_next_step: "파일을 변경한 뒤 다음 블록에서 검증합니다.",
+      });
+    },
+    runFunctionToolPromptText: async (input) => {
+      toolPromptCalls += 1;
+      budgetStates.push(input.usageAttribution?.getBudgetState?.() ?? {});
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      if (toolPromptCalls === 1) {
+        await input.executeTool({
+          name: "write_file",
+          args: { path: "checkpoint-proof.txt", content: "changed" },
+          rawArguments: JSON.stringify({ path: "checkpoint-proof.txt", content: "changed" }),
+        });
+        throw promptUsageModelCallBudgetExhaustedError();
+      }
+      expect(input.prompt).toContain("## Resumed Typed Turn Contract");
+      expect(input.prompt).toContain("Recent Round Journal");
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          list_id: "main",
+          title: "체크포인트 재개 검증",
+          todos: [{
+            id: "opening",
+            content: "파일 변경과 검증을 하나의 계약으로 완료합니다.",
+            active_form: "파일을 변경한 뒤 다음 블록에서 검증합니다.",
+            status: "completed",
+            phase: "planning",
+          }],
+        },
+        rawArguments: JSON.stringify({ list_id: "main" }),
+      });
+      const call = { name: "run_command", args: { command: "bun test checkpoint-proof" } };
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "title: 체크포인트 변경 검증",
+          "summary: 이전 블록에서 변경한 파일을 검증합니다.",
+          "rationale: 저장된 code_change 증거에 validation 증거를 더해야 계약이 완료됩니다.",
+          "next_step: 검증이 통과하면 같은 계약의 최종 결과를 보고합니다.",
+        ].join("\n"),
+        toolCalls: [call],
+      });
+      await input.executeTool({ ...call, rawArguments: JSON.stringify(call.args) });
+      return "같은 계약에서 파일 변경과 검증을 완료했습니다.";
+    },
+    executeButlerTool: async (call) => ({
+      ok: true,
+      evidence_capability_receipts: [call.name === "write_file"
+        ? createEvidenceCapabilityReceipt({
+          producer: { kind: "tool", name: "write_file" },
+          capability: "workspace_mutated",
+          evidence_kind: "mutation_result",
+          summary: "Checkpoint fixture was written.",
+        })
+        : createEvidenceCapabilityReceipt({
+          producer: { kind: "tool", name: "run_command" },
+          capability: "validation_passed",
+          evidence_kind: "execution_result",
+          summary: "Checkpoint validation passed.",
+        })],
+    }),
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: data,
+    systemPrompt: "You are Sandy.",
+    metadata: { projectId: "butler" },
+  });
+  const baseTurn = {
+    handle,
+    provider: typedProvider,
+    model: "openai/gpt-5.5" as const,
+    input: { text: "파일을 변경하고 검증까지 완료해줘." },
+    emitTurnEvent: (event: RuntimeTurnEventInput) => {
+      events.push(event);
+    },
+  };
+  let yielded: unknown;
+  try {
+    await runtime.runTurn({
+      ...baseTurn,
+      metadata: { turnId, runtimePolicy: { completionReview: "disabled" } },
+    });
+  } catch (error) {
+    yielded = error;
+  }
+  expect(isTurnSchedulerContinuationYieldError(yielded)).toBe(true);
+  const atom = readTurnContextAtom({ butlerData: data, sessionId, turnId });
+  expect(atom).toMatchObject({
+    generation: 1,
+    contractId: expect.stringContaining("contract-"),
+    workStreamId: expect.stringContaining("work-contract-"),
+    nextSemanticBlockSequence: 1,
+    budgetSnapshot: { modelRequestsUsed: 1 },
+    roundJournal: [expect.objectContaining({ tool: "write_file", observed_delta: "mutation" })],
+  });
+
+  const result = await runtime.runTurn({
+    ...baseTurn,
+    metadata: {
+      turnId,
+      runtimePolicy: { completionReview: "disabled" },
+      schedulerContinuation: {
+        contextAtomId: createTurnContextAtomId(sessionId, turnId),
+        checkpointId: atom!.checkpointId,
+        schedulerItemId: "queue-continuation-1",
+      },
+    },
+  });
+
+  expect(result.text).toContain("완료했습니다");
+  expect(typedDecisionCalls).toBe(1);
+  expect(toolPromptCalls).toBe(2);
+  expect(budgetStates).toEqual([
+    expect.objectContaining({ requestCount: 0, cumulativeRequestCount: 0 }),
+    expect.objectContaining({ requestCount: 0, cumulativeRequestCount: 1 }),
+  ]);
+  expect(events.filter((event) => event.kind === "assistant.decision")).toHaveLength(1);
+  expect(events.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(1);
+  expect(events.find((event) => event.kind === "turn.continuation_scheduled")?.payload)
+    .toMatchObject({
+      checkpointId: atom!.checkpointId,
+      schedulerItemId: "queue-continuation-1",
+    });
+  const blockIds = events
+    .filter((event) => event.kind === "work.block.started")
+    .map((event) => String((event.payload as Record<string, unknown>).semanticBlockId));
+  expect(blockIds).toEqual(expect.arrayContaining([
+    expect.stringContaining(":block:0"),
+    expect.stringContaining(":block:1"),
+  ]));
+  expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).toBeNull();
 });
 
 function decisionIdFromFormat(format: { schema: Record<string, unknown> } | undefined): string {

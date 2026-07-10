@@ -22,6 +22,13 @@ export interface DirectTurnBudget {
   maxPromptTokens: number;
   maxOutputTokens: number;
   maxTotalTokens: number;
+  windowStart: {
+    modelRequests: number;
+    promptTokens: number;
+    cachedTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
 }
 
 export interface DirectTurnBudgetSnapshot {
@@ -65,6 +72,13 @@ export function createDirectTurnBudget(turnId: string): DirectTurnBudget {
     maxPromptTokens: DIRECT_TURN_PROMPT_TOKEN_BUDGET,
     maxOutputTokens: DIRECT_TURN_OUTPUT_TOKEN_BUDGET,
     maxTotalTokens: DIRECT_TURN_TOTAL_TOKEN_BUDGET,
+    windowStart: {
+      modelRequests: 0,
+      promptTokens: 0,
+      cachedTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+    },
   };
 }
 
@@ -101,21 +115,33 @@ export function hydrateDirectTurnBudget(
   budget.maxPromptTokens = finitePositiveInteger(snapshot.maxPromptTokens, budget.maxPromptTokens);
   budget.maxOutputTokens = finitePositiveInteger(snapshot.maxOutputTokens, budget.maxOutputTokens);
   budget.maxTotalTokens = finitePositiveInteger(snapshot.maxTotalTokens, budget.maxTotalTokens);
+  budget.windowStart = {
+    modelRequests: budget.modelRequestsUsed,
+    promptTokens: budget.promptTokens,
+    cachedTokens: budget.cachedTokens,
+    outputTokens: budget.outputTokens,
+    totalTokens: budget.totalTokens,
+  };
   return budget;
 }
 
 export function directTurnBudgetState(budget: DirectTurnBudget): PromptUsageBudgetState {
   return {
     status: directTurnBudgetStatus(budget),
-    requestCount: budget.modelRequestsUsed,
+    requestCount: windowUsage(budget.modelRequestsUsed, budget.windowStart.modelRequests),
     maxRequests: budget.maxModelCalls,
-    promptTokens: budget.promptTokens,
-    cachedTokens: budget.cachedTokens,
-    outputTokens: budget.outputTokens,
-    totalTokens: budget.totalTokens,
+    promptTokens: windowUsage(budget.promptTokens, budget.windowStart.promptTokens),
+    cachedTokens: windowUsage(budget.cachedTokens, budget.windowStart.cachedTokens),
+    outputTokens: windowUsage(budget.outputTokens, budget.windowStart.outputTokens),
+    totalTokens: windowUsage(budget.totalTokens, budget.windowStart.totalTokens),
     maxPromptTokens: budget.maxPromptTokens,
     maxOutputTokens: budget.maxOutputTokens,
     maxTotalTokens: budget.maxTotalTokens,
+    cumulativeRequestCount: budget.modelRequestsUsed,
+    cumulativePromptTokens: budget.promptTokens,
+    cumulativeCachedTokens: budget.cachedTokens,
+    cumulativeOutputTokens: budget.outputTokens,
+    cumulativeTotalTokens: budget.totalTokens,
   };
 }
 
@@ -133,7 +159,10 @@ export function hasDirectTurnModelRequestReserve(
 export function directTurnModelRequestsRemaining(
   budget: DirectTurnBudget,
 ): number {
-  return Math.max(0, budget.maxModelCalls - budget.modelRequestsUsed);
+  return Math.max(
+    0,
+    budget.maxModelCalls - windowUsage(budget.modelRequestsUsed, budget.windowStart.modelRequests),
+  );
 }
 
 export function addDirectTurnUsage(input: {
@@ -206,18 +235,26 @@ export function recentConversationBudgetForTurn(input: {
 }
 
 function directTurnBudgetStatus(budget: DirectTurnBudget): PromptUsageBudgetState["status"] {
-  if (budget.modelRequestsUsed >= budget.maxModelCalls) {
+  const requests = windowUsage(budget.modelRequestsUsed, budget.windowStart.modelRequests);
+  const promptTokens = windowUsage(budget.promptTokens, budget.windowStart.promptTokens);
+  const outputTokens = windowUsage(budget.outputTokens, budget.windowStart.outputTokens);
+  const totalTokens = windowUsage(budget.totalTokens, budget.windowStart.totalTokens);
+  if (requests >= budget.maxModelCalls) {
     return "exhausted";
   }
   if (
-    budget.modelRequestsUsed >= Math.floor(budget.maxModelCalls * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
-    budget.promptTokens >= Math.floor(budget.maxPromptTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
-    budget.outputTokens >= Math.floor(budget.maxOutputTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
-    budget.totalTokens >= Math.floor(budget.maxTotalTokens * DIRECT_TURN_BUDGET_WARNING_RATIO)
+    requests >= Math.floor(budget.maxModelCalls * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
+    promptTokens >= Math.floor(budget.maxPromptTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
+    outputTokens >= Math.floor(budget.maxOutputTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
+    totalTokens >= Math.floor(budget.maxTotalTokens * DIRECT_TURN_BUDGET_WARNING_RATIO)
   ) {
     return "warning";
   }
   return "ok";
+}
+
+function windowUsage(total: number, start: number): number {
+  return Math.max(0, total - start);
 }
 
 function finiteNonNegativeInteger(value: number): number {

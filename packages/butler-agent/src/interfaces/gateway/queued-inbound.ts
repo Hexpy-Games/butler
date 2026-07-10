@@ -8,16 +8,12 @@ import {
 } from "../../integrations/providers/provider-errors.ts";
 import {
   isNonPublicContinuationDeliveryError,
-  isPromptUsageModelCallBudgetError,
   recoverableLimitedDeliveryForError,
 } from "../../agent/turn/recoverable-delivery.ts";
 import {
-  createTurnContextAtomId,
   isTurnSchedulerContinuationYieldError,
-  persistTurnContextAtom,
 } from "../../agent/turn/turn-continuation-context.ts";
 import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
-import { join } from "node:path";
 import type { DeliveryGuard } from "../transport/delivery-guard.ts";
 
 export interface QueuedInboundServer {
@@ -364,10 +360,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function butlerDataPath(): string {
-  return process.env.BUTLER_DATA || join(process.env.HOME || process.cwd(), ".butler");
-}
-
 async function processClaimedQueuedInboundItem(input: {
   item: ClaimedInboundEvent;
   options: ProcessQueuedInboundOptions;
@@ -413,6 +405,8 @@ async function processClaimedQueuedInboundItem(input: {
                   sameLogicalTurnContinuation: true,
                   contextAtomId: item.metadata.contextAtomId,
                   continuationForQueueId: item.metadata.continuationForQueueId,
+                  checkpointId: item.metadata.checkpointId,
+                  schedulerItemId: item.queueId,
                 }
                 : {}),
             },
@@ -478,6 +472,7 @@ async function processClaimedQueuedInboundItem(input: {
         item,
         turnId,
         contextAtomId: error.contextAtomId,
+        checkpointId: error.checkpointId ?? error.contextAtomId,
         now: options.now?.(),
       });
       if (!scheduled) {
@@ -495,54 +490,13 @@ async function processClaimedQueuedInboundItem(input: {
         handled: true,
         continuationScheduled: true,
         contextAtomId: error.contextAtomId,
+        checkpointId: error.checkpointId,
+        schedulerItemId: scheduled.queueId,
       });
       if (!terminalRecorded) return summary;
       summary.handled += 1;
       return summary;
     }
-    const isBudgetError = isPromptUsageModelCallBudgetError(error);
-    if (isBudgetError && sessionId && turnId) {
-      const contextAtomId = createTurnContextAtomId(sessionId, turnId);
-      persistTurnContextAtom({
-        butlerData: butlerDataPath(),
-        sessionId,
-        turnId,
-        state: "continuing",
-        sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
-        reason: "Continuation checkpoint persisted before internal scheduler rollover.",
-        unresolvedObservations: [{
-          kind: "context_compacted",
-          id: contextAtomId,
-        }],
-      });
-      const scheduled = scheduleSameLogicalTurnContinuation({
-        queue: options.queue,
-        item,
-        turnId,
-        contextAtomId,
-        now: options.now?.(),
-      });
-      if (!scheduled) {
-        summary.failed += 1;
-        failQueueClaim(options, item, "Unable to schedule same-logical-turn continuation.", {
-          source: "gateway/queued-inbound.ts#budget-continuation",
-          failure: {
-            code: "turn_scheduler_continuation_schedule_failed",
-          },
-        });
-        return summary;
-      }
-      const terminalRecorded = completeQueueClaim(options, item, {
-        dispatchStatus: "continuing",
-        handled: true,
-        continuationScheduled: true,
-        contextAtomId,
-      });
-      if (!terminalRecorded) return summary;
-      summary.handled += 1;
-      return summary;
-    }
-
     const limitedDelivery = recoverableLimitedDeliveryForError(error);
     if (limitedDelivery && sessionId) {
       const terminalRecorded = completeQueueClaim(options, item, {
@@ -613,10 +567,11 @@ function scheduleSameLogicalTurnContinuation(input: {
   item: ClaimedInboundEvent;
   turnId: string;
   contextAtomId: string;
+  checkpointId: string;
   now?: Date;
-}): boolean {
+}): QueuedInboundEvent | null {
   try {
-    input.queue.enqueue({
+    return input.queue.enqueue({
       ...input.item.envelope,
       routingHints: {
         ...input.item.envelope.routingHints,
@@ -627,11 +582,11 @@ function scheduleSameLogicalTurnContinuation(input: {
       continuationForQueueId: input.item.queueId,
       continuationTurnId: input.turnId,
       contextAtomId: input.contextAtomId,
+      checkpointId: input.checkpointId,
       sameLogicalTurnContinuation: true,
     }, input.now);
-    return true;
   } catch {
-    return false;
+    return null;
   }
 }
 

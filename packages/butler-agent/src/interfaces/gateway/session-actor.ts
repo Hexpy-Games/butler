@@ -42,9 +42,7 @@ import {
 } from "../../agent/turn/recoverable-delivery.ts";
 import {
   clearTurnContextAtom,
-  createTurnContextAtomId,
   isTurnSchedulerContinuationYieldError,
-  persistTurnContextAtom,
 } from "../../agent/turn/turn-continuation-context.ts";
 import type {
   GatewayActorTurnResult,
@@ -590,6 +588,8 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
               ? {
                 contextAtomId: schedulerContinuation.contextAtomId,
                 continuationForQueueId: schedulerContinuation.continuationForQueueId,
+                checkpointId: schedulerContinuation.checkpointId,
+                schedulerItemId: schedulerContinuation.schedulerItemId,
               }
               : undefined,
             runtimePolicy: activeBinding.metadata?.runtimePolicy,
@@ -690,8 +690,14 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       } catch (error) {
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
-      const turnId = turnIdFromEnvelope(envelope);
-      this.finalizeConversationAdmissionFailure(conversationAdmission, timestamp, error);
+      const isContinuationFailure =
+        safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
+        isNonPublicContinuationDeliveryError(error) ||
+        isPromptUsageModelCallBudgetError(error) ||
+        isTurnSchedulerContinuationYieldError(error);
+      if (!isContinuationFailure) {
+        this.finalizeConversationAdmissionFailure(conversationAdmission, timestamp, error);
+      }
       this.captureDeveloperModelTurn({
         kind: "model_turn_error",
         binding: developerLogBinding,
@@ -713,26 +719,6 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             : undefined,
         },
       });
-      const isContinuationFailure =
-        safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
-        isNonPublicContinuationDeliveryError(error) ||
-        isPromptUsageModelCallBudgetError(error) ||
-        isTurnSchedulerContinuationYieldError(error);
-      if (isPromptUsageModelCallBudgetError(error) && turnId) {
-        const contextAtomId = createTurnContextAtomId(binding.sessionId, turnId);
-        persistTurnContextAtom({
-          butlerData: gatewayMetricsButlerData(),
-          sessionId: binding.sessionId,
-          turnId,
-          state: "continuing",
-          sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
-          reason: "Continuation checkpoint persisted before internal scheduler rollover.",
-          unresolvedObservations: [{
-            kind: "context_compacted",
-            id: contextAtomId,
-          }],
-        });
-      }
       const failureState = isContinuationFailure
         ? "active"
         : "crashed";
@@ -1239,6 +1225,8 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
 function schedulerContinuationMetadata(envelope: InboundEnvelope): {
   contextAtomId: string;
   continuationForQueueId?: string;
+  checkpointId?: string;
+  schedulerItemId?: string;
 } | null {
   const raw = envelope.raw && typeof envelope.raw === "object"
     ? envelope.raw as Record<string, unknown>
@@ -1249,7 +1237,9 @@ function schedulerContinuationMetadata(envelope: InboundEnvelope): {
   const continuationForQueueId = typeof raw.continuationForQueueId === "string"
     ? raw.continuationForQueueId
     : undefined;
-  return { contextAtomId, continuationForQueueId };
+  const checkpointId = typeof raw.checkpointId === "string" ? raw.checkpointId.trim() : undefined;
+  const schedulerItemId = typeof raw.schedulerItemId === "string" ? raw.schedulerItemId.trim() : undefined;
+  return { contextAtomId, continuationForQueueId, checkpointId, schedulerItemId };
 }
 
 function timestampAfter(timestamp: string, offsetMs: number): string {

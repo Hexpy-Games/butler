@@ -1075,7 +1075,7 @@ test("queued inbound provider failure preserves safe API diagnostics for app pro
   expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
 });
 
-test("queued inbound schedules same-logical-turn continuation for raw model-call budget exhaustion", async () => {
+test("queued inbound never schedules raw budget exhaustion without an orchestrator checkpoint", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -1125,28 +1125,13 @@ test("queued inbound schedules same-logical-turn continuation for raw model-call
   const pendingRecords = readdirSync(join(tempDir, "runtime", "inbound-events", "pending"))
     .filter((name) => name.endsWith(".json"))
     .map((name) => JSON.parse(readFileSync(join(tempDir, "runtime", "inbound-events", "pending", name), "utf8")));
-  expect(pendingRecords).toHaveLength(1);
-  expect(pendingRecords[0].metadata).toMatchObject({
-    sameLogicalTurnContinuation: true,
-    continuationTurnId: "turn-budget-failure",
-    contextAtomId: createTurnContextAtomId("butler/app-general", "turn-budget-failure"),
-  });
+  expect(pendingRecords).toHaveLength(0);
   const persisted = readTurnContextAtom({
     butlerData: tempDir,
     sessionId: "butler/app-general",
     turnId: "turn-budget-failure",
   });
-  expect(persisted).toMatchObject({
-    sessionId: "butler/app-general",
-    turnId: "turn-budget-failure",
-    state: "continuing",
-    sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
-    reason: "Continuation checkpoint persisted before internal scheduler rollover.",
-    unresolvedObservations: [{
-      kind: "context_compacted",
-      id: createTurnContextAtomId("butler/app-general", "turn-budget-failure"),
-    }],
-  });
+  expect(persisted).toBeNull();
   store.close();
 });
 
@@ -1399,6 +1384,7 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
         });
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Sandy 스타일 가드 증거 확인",
             "summary: Inspect Sandy style guard validation evidence.",
             "rationale: The user asked to continue from W3 with durable work state.",
             "next_step: Capture a small validation receipt before continuing.",
@@ -1566,7 +1552,16 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   ]));
 
   const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
-  expect(readdirSync(pendingDir).filter((name) => name.endsWith(".json"))).toHaveLength(1);
+  const pendingFiles = readdirSync(pendingDir).filter((name) => name.endsWith(".json"));
+  expect(pendingFiles).toHaveLength(1);
+  const scheduledQueueItem = JSON.parse(
+    readFileSync(join(pendingDir, pendingFiles[0]!), "utf8"),
+  ) as { queueId: string; metadata: Record<string, unknown> };
+  expect(scheduledQueueItem.metadata).toMatchObject({
+    sameLogicalTurnContinuation: true,
+    contextAtomId: createTurnContextAtomId(sessionId, "turn-client-w3-budget-first"),
+    checkpointId: persisted!.checkpointId,
+  });
 
   const second = await processQueuedInboundEvents({
     queue,
@@ -1583,6 +1578,12 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   });
   expect(promptCallCount).toBe(2);
   expect(turnEvents.filter((event) => event.kind === "turn.acknowledged")).toHaveLength(1);
+  expect(turnEvents.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(1);
+  expect(turnEvents.find((event) => event.kind === "turn.continuation_scheduled")?.payload)
+    .toMatchObject({
+      checkpointId: persisted!.checkpointId,
+      schedulerItemId: scheduledQueueItem.queueId,
+    });
   expect(readTranscript(sessionId).filter((event) => event.kind === "inbound")).toHaveLength(1);
   expect(resumePrompt).toContain("## Scheduler Continuation Context Atom");
   expect(resumePrompt).toContain("## Focused WorkStream Resume Envelope");

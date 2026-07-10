@@ -28,6 +28,11 @@ export interface PromptUsageBudgetState {
   maxPromptTokens?: number;
   maxOutputTokens?: number;
   maxTotalTokens?: number;
+  cumulativeRequestCount?: number;
+  cumulativePromptTokens?: number;
+  cumulativeCachedTokens?: number;
+  cumulativeOutputTokens?: number;
+  cumulativeTotalTokens?: number;
   stopReason?: string;
 }
 
