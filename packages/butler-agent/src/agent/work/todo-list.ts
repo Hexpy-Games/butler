@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
+import {
+  deferredTodoProjection,
+  hasDeferredTodoRecovery,
+  reconcilePendingWorkStreamTransactions,
+} from "./work-stream-transaction-recovery.ts";
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
 export type TodoPriority = "low" | "normal" | "high";
@@ -231,9 +236,12 @@ export function summarizeTodoProgress(items: TodoItem[]): TodoProgressSummary {
 
 export class TodoListStore {
   readonly todosDir: string;
+  private readonly autoRecover: boolean;
 
-  constructor(readonly butlerData: string) {
+  constructor(readonly butlerData: string, options: { autoRecover?: boolean } = {}) {
     this.todosDir = join(butlerData, "todos");
+    this.autoRecover = options.autoRecover !== false;
+    if (this.autoRecover) reconcilePendingWorkStreamTransactions({ butlerData });
   }
 
   listPath(listId = "main"): string {
@@ -241,6 +249,11 @@ export class TodoListStore {
   }
 
   read(listId = "main"): TodoListRecord | null {
+    if (this.autoRecover) {
+      const recovery = reconcilePendingWorkStreamTransactions({ butlerData: this.butlerData, todoListId: listId });
+      const projection = deferredTodoProjection(recovery, listId);
+      if (projection) return projection;
+    }
     return readJson<TodoListRecord>(this.listPath(listId));
   }
 
@@ -250,6 +263,17 @@ export class TodoListStore {
     items: TodoItemInput[];
     now?: Date;
   }): TodoListView {
+    const record = this.prepareUpdate(input);
+    this.replacePrepared(record);
+    return this.view(record.list_id, { includeCompleted: true });
+  }
+
+  prepareUpdate(input: {
+    listId?: string;
+    title?: string | null;
+    items: TodoItemInput[];
+    now?: Date;
+  }): TodoListRecord {
     const listId = safeListId(input.listId ?? "main");
     const prior = this.read(listId);
     const now = (input.now ?? new Date()).toISOString();
@@ -258,7 +282,7 @@ export class TodoListStore {
       prior,
       items: input.items,
     });
-    const record: TodoListRecord = {
+    return {
       version: 1,
       list_id: listId,
       title: typeof input.title === "string" && input.title.trim()
@@ -268,8 +292,22 @@ export class TodoListStore {
       updated_at: now,
       items,
     };
-    writeJsonAtomic(this.listPath(listId), record);
-    return this.view(listId, { includeCompleted: true });
+  }
+
+  replacePrepared(record: TodoListRecord): void {
+    if (record.version !== 1 || record.list_id !== safeListId(record.list_id)) {
+      throw new Error("invalid prepared todo list record");
+    }
+    if (this.autoRecover) {
+      const recovery = reconcilePendingWorkStreamTransactions({
+        butlerData: this.butlerData,
+        todoListId: record.list_id,
+      });
+      if (hasDeferredTodoRecovery(recovery, record.list_id)) {
+        throw new Error("workstream_recovery_deferred");
+      }
+    }
+    writeJsonAtomic(this.listPath(record.list_id), record);
   }
 
   view(
