@@ -1194,6 +1194,7 @@ test("queued inbound completion gap consumes same logical turn continuation with
       prompts.push(input.prompt);
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Run requested command",
           "summary: I am running the requested command.",
           "rationale: completion requires command evidence.",
           "next_step: summarize after evidence exists.",

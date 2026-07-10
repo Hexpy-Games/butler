@@ -7,7 +7,7 @@ import type { ProgressSummaryRow } from "../../packages/butler-agent/src/gateway
 
 const CREATED_AT = "2026-07-04T08:10:00.000Z";
 
-test("public progress rows keep first visible preparation work block for active turns", () => {
+test("public progress rows replace first visible preparation with semantic work", () => {
   const rows: ProgressSummaryRow[] = [
     {
       id: "turn-first-progress",
@@ -40,13 +40,13 @@ test("public progress rows keep first visible preparation work block for active 
 
   expect(publicProgressRowsForTurn(rows, "thinking")).toEqual([
     {
-      id: "first-work-block",
+      id: "ordinary-work-block",
       kind: "work_block",
       state: "running",
-      safe_label: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+      safe_label: "Checking files",
       created_at: CREATED_AT,
-      work_block_id: "first-progress-note",
-      work_block_label: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+      work_block_id: "work-file-check",
+      work_block_label: "Checking files",
     },
   ]);
 });

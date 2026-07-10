@@ -1,4 +1,17 @@
-export interface ProgressDetailRow {
+export const SHARED_WORK_BLOCK_MARKER_KIND = "work_block" as const;
+
+export type SharedWorkBlockPhase = "started" | "updated" | "completed";
+
+export interface SharedTurnEvent {
+  id: string;
+  turnSequence: number;
+  createdAt?: string;
+  kind: string;
+  visibility?: "public" | "internal";
+  payload?: Record<string, unknown>;
+}
+
+export interface SharedProgressDetailRow {
   id: string;
   kind?: string;
   safe_label: string;
@@ -6,32 +19,18 @@ export interface ProgressDetailRow {
   state?: string;
 }
 
-export interface ProgressSummaryRow {
+export interface SharedProgressRow {
   id: string;
-  kind:
-    | "explored"
-    | "searched"
-    | "read"
-    | "ran_command"
-    | "edited"
-    | "dispatch"
-    | "used_tool"
-    | "context"
-    | "model"
-    | "thinking"
-    | "worked_duration"
-    | "message"
-    | "turn"
-    | "automation"
-    | "worker"
-    | "system"
-    | string;
+  kind?: string;
   safe_label: string;
   state: string;
-  created_at: string;
+  created_at?: string;
   turn_event_sequence?: number;
   safe_tool_name?: string;
   safe_input_label?: string;
+  safe_count?: number;
+  safe_order?: number;
+  safe_path_labels?: string[];
   tool_call_id?: string;
   bridge_phase?: string;
   receipt_kind?: string;
@@ -48,7 +47,7 @@ export interface ProgressSummaryRow {
   semantic_block_id?: string;
   work_block_id?: string;
   work_block_label?: string;
-  work_block_phase?: "started" | "updated" | "completed";
+  work_block_phase?: SharedWorkBlockPhase;
   work_block_sequence?: number;
   work_decision_id?: string;
   work_decision_title?: string;
@@ -63,22 +62,5 @@ export interface ProgressSummaryRow {
   runtime_fault_public_summary?: string;
   runtime_fault_safe_error_code?: string;
   runtime_fault_safe_cause?: string;
-  safe_count?: number;
-  safe_path_labels?: string[];
-  safe_detail_rows?: ProgressDetailRow[];
-  safe_order?: number;
-}
-
-export interface WorkerActivityWorkBlock {
-  id: string;
-  label: string;
-  state: string;
-  rows: ProgressSummaryRow[];
-  decision_title?: string;
-  decision_summary?: string;
-  decision_rationale?: string;
-  decision_next_step?: string;
-  decision_source?: string;
-  decision_evidence_refs?: string[];
-  created_at?: string;
+  safe_detail_rows?: SharedProgressDetailRow[];
 }

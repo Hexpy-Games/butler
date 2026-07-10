@@ -63,6 +63,7 @@ test("mock transport drives NativeToolLoopRuntime through dispatch_worker and ex
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: A 주제 차트 실행 시작",
           "summary: A 주제 차트 생성을 별도 실행 흐름으로 시작합니다.",
           "rationale: 차트 생성은 시간이 걸릴 수 있어 진행 상태를 안전하게 분리해 추적해야 합니다.",
           "next_step: 실행이 시작되면 생성 결과와 확인한 내용을 짧게 보고합니다.",

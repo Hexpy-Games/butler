@@ -60,6 +60,30 @@ function applyBasicProgressFields(
   if (workBlockId) row.work_block_id = workBlockId;
   const workBlockLabel = safeOptionalShortText(input.work_block_label);
   if (workBlockLabel) row.work_block_label = workBlockLabel;
+  const workBlockPhase = safeOptionalShortToken(input.work_block_phase);
+  if (
+    workBlockPhase === "started" ||
+    workBlockPhase === "updated" ||
+    workBlockPhase === "completed"
+  ) {
+    row.work_block_phase = workBlockPhase;
+  }
+  const turnEventSequence = safeOptionalNonNegativeInteger(
+    input.turn_event_sequence,
+  );
+  if (turnEventSequence !== undefined) {
+    row.turn_event_sequence = turnEventSequence;
+  }
+  const workBlockSequence = safeOptionalNonNegativeInteger(
+    input.work_block_sequence,
+  );
+  if (workBlockSequence !== undefined) {
+    row.work_block_sequence = workBlockSequence;
+  }
+  const workDecisionId = safeOptionalShortToken(input.work_decision_id);
+  if (workDecisionId) row.work_decision_id = workDecisionId;
+  const workDecisionTitle = safeOptionalShortText(input.work_decision_title);
+  if (workDecisionTitle) row.work_decision_title = workDecisionTitle;
 }
 
 function applyPublicDecisionFields(

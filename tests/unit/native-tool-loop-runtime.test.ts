@@ -9400,6 +9400,7 @@ test("native runtime emits linear work blocks under the active semantic todo", a
         input,
         { name: "run_command", args: { command: "pwd" } },
         {
+          title: "프로젝트 위치 확인",
           summary: "현재 프로젝트 위치를 확인합니다.",
           rationale: "활성 작업 블록 안에서 로컬 상태 확인 명령을 실행해야 합니다.",
           nextStep: "명령 산출물을 읽어 다음 선형 작업 블록으로 이어갑니다.",
@@ -9414,6 +9415,7 @@ test("native runtime emits linear work blocks under the active semantic todo", a
         input,
         { name: "read_tool_output_artifact", args: { artifact_id: "artifact-1" } },
         {
+          title: "명령 산출물 확인",
           summary: "명령 산출물 아티팩트를 읽습니다.",
           rationale: "다음 선형 작업 블록의 후속 도구가 기존 산출물을 확인해야 합니다.",
           nextStep: "아티팩트 확인 뒤 작업 항목을 완료 처리합니다.",
@@ -9428,6 +9430,7 @@ test("native runtime emits linear work blocks under the active semantic todo", a
         input,
         { name: "run_command", args: { command: "pwd" } },
         {
+          title: "프로젝트 위치 재확인",
           summary: "현재 프로젝트 위치를 확인합니다.",
           rationale: "활성 작업 블록 안에서 로컬 상태 확인 명령을 실행해야 합니다.",
           nextStep: "명령 산출물을 읽어 다음 선형 작업 블록으로 이어갑니다.",
@@ -9472,9 +9475,9 @@ test("native runtime emits linear work blocks under the active semantic todo", a
     expect(workBlockId).toMatch(/^turn-[^:]+:work-todo-inspect-tool-[^-]+$/u);
   }
   expect(toolStarts.map((event) => event.payload.workBlockLabel)).toEqual([
-    "프로젝트 메타정보와 구조 확인 중",
-    "프로젝트 메타정보와 구조 확인 중",
-    "프로젝트 메타정보와 구조 확인 중",
+    "프로젝트 위치 확인",
+    "명령 산출물 확인",
+    "프로젝트 위치 재확인",
   ]);
   const workBlockStarts = turnEvents.filter((event) => event.kind === "work.block.started");
   expect(workBlockStarts.map((event) => event.payload.workBlockId)).toEqual(workBlockIds);
@@ -9898,6 +9901,7 @@ test("native runtime yields recoverable progress instead of extending direct wor
       const stage = promptCalls - 1;
       await input.onAssistantTextBeforeTools?.({
         text: [
+          `title: WATL stage ${stage} 실행`,
           `summary: WATL stage ${stage} 직접 작업을 실행합니다.`,
           "rationale: 각 continuation이 남은 직접 작업을 실제 도구 실행으로 전진시켜야 합니다.",
           "next_step: 명령 결과를 반영해 todo 상태를 다음 단계로 갱신합니다.",

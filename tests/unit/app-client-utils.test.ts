@@ -404,8 +404,8 @@ test("completed assistant messages freeze work blocks onto the message record", 
     safe_label: "Bash: bun test",
     safe_tool_name: "Bash",
     safe_input_label: "bun test",
-    work_block_id: "work-test",
   });
+  expect(frozen?.work_blocks?.[0]?.rows[0]?.work_block_id).toBeUndefined();
   expect(frozen?.work_blocks?.[0]?.rows[0]?.work_block_label).toBeUndefined();
   expect(refrozen[0]).toBe(frozen);
 });
@@ -445,8 +445,8 @@ test("completed assistant messages keep frozen work blocks when progress is abse
     safe_label: "Bash: bun test",
     safe_tool_name: "Bash",
     safe_input_label: "bun test",
-    work_block_id: "work-test",
   });
+  expect(refrozen[0]?.work_blocks?.[0]?.rows[0]?.work_block_id).toBeUndefined();
   expect(refrozen[0]?.work_blocks?.[0]?.rows[0]?.work_block_label)
     .toBeUndefined();
 });

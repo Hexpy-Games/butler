@@ -49,10 +49,11 @@ async function authorPublicDecisionForTool(
     }) => Promise<void> | void;
   },
   call: { name: string; args: Record<string, unknown> },
-  text: { summary: string; rationale: string; nextStep: string },
+  text: { title?: string; summary: string; rationale: string; nextStep: string },
 ): Promise<void> {
   await input.onAssistantTextBeforeTools?.({
     text: [
+      `title: ${text.title ?? "Project Ledger failure check"}`,
       `summary: ${text.summary}`,
       `rationale: ${text.rationale}`,
       `next_step: ${text.nextStep}`,

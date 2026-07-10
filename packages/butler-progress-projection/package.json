@@ -1,0 +1,9 @@
+{
+  "name": "@butler/progress-projection",
+  "version": "0.0.19",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

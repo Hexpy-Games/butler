@@ -1,8 +1,11 @@
 import { ACTIVE_TURN_STATES, EMPTY_MODEL_CATALOG } from "./constants.ts";
 import { appCopy } from "./copy.ts";
+import {
+  progressRowFromSharedTurnEvent,
+  projectSharedWorkBlocks,
+} from "../../../../../butler-progress-projection/src/index.ts";
 import type {
   ActiveChatView,
-  AgentTurnEvent,
   AppModelSummary,
   AppView,
   ContextDetailsView,
@@ -46,7 +49,6 @@ const LIFECYCLE_ACTIVITY_LABELS = new Set([
   "delivered",
 ]);
 const WORK_BLOCK_MARKER_KIND = "work_block";
-const FIRST_VISIBLE_PROGRESS_EVENT_KIND = "turn.first_progress";
 const FIRST_VISIBLE_PROGRESS_WORK_BLOCK_ID_PREFIX = "first-progress-";
 const TURN_ACKNOWLEDGED_EVENT_KIND = "turn.acknowledged";
 const SESSION_STARTING_STATE = "session_starting";
@@ -54,10 +56,6 @@ const PUBLIC_DECISION_SOURCES = new Set([
   "assistant-authored",
   "model-authored",
   "principal-authored",
-]);
-const RENDERABLE_WORK_DECISION_SOURCES = new Set([
-  ...PUBLIC_DECISION_SOURCES,
-  "runtime-derived",
 ]);
 const INTERNAL_PROGRESS_TOOL_NAMES = new Set([
   "Update Todo List",
@@ -543,7 +541,7 @@ function collectTimelineEventPatch(
     if (event.type === "agent.turn_event") {
       const turnEvent = event.payload?.event;
       if (!turnEvent || turnEvent.sessionId !== activeChatId) continue;
-      const row = progressRowFromTurnEvent(turnEvent);
+      const row = progressRowFromSharedTurnEvent(turnEvent);
       if (!row) continue;
       if (turnEvent.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
         progressBucket(turnEvent.turnId).replacesOptimisticClientTurn = true;
@@ -1221,16 +1219,6 @@ function isCompletedTurnWorkActivityRow(row: ProgressRow): boolean {
   return !LIFECYCLE_ACTIVITY_LABELS.has(row.safe_label.trim().toLowerCase());
 }
 
-function isWorkBlockToolActivityRow(row: ProgressRow): boolean {
-  if (row.kind === "message") return false;
-  if (row.kind === "dispatch" && !row.tool_call_id) return false;
-  return isCompletedTurnWorkActivityRow(row);
-}
-
-function isStandaloneWorkBlockMessageRow(row: ProgressRow): boolean {
-  return row.kind === "message" && Boolean(row.work_block_id && row.work_block_label);
-}
-
 function isToolControlReadModelRow(row: ProgressRow): boolean {
   if (row.kind === "decision" || row.kind === WORK_BLOCK_MARKER_KIND) return false;
   return Boolean(row.safe_tool_name || row.safe_input_label || row.tool_call_id);
@@ -1241,331 +1229,11 @@ function isFirstVisibleProgressRow(row: ProgressRow): boolean {
     Boolean(row.work_block_id?.startsWith(FIRST_VISIBLE_PROGRESS_WORK_BLOCK_ID_PREFIX));
 }
 
-function isWorkBlockDecisionCarrierRow(row?: ProgressRow): boolean {
-  if (!row) return false;
-  return row.kind === WORK_BLOCK_MARKER_KIND || isStandaloneWorkBlockMessageRow(row);
-}
-
 function buildWorkBlocks(
   rows: ProgressRow[],
   options: { completedOnly: boolean },
 ): WorkBlockView[] {
-  const blocks = new Map<
-    string,
-    WorkBlockView & { rowMap: Map<string, ProgressRow> }
-  >();
-  const ensureBlock = (
-    id: string,
-    label: string,
-    state: string,
-    created_at?: string,
-    row?: ProgressRow,
-  ) => {
-    const decision = isWorkBlockDecisionCarrierRow(row)
-      ? publicDecisionFieldsFromRow(row)
-      : {};
-    let block = blocks.get(id);
-    if (!block) {
-      block = {
-        id,
-        label,
-        state,
-        rows: [],
-        rowMap: new Map(),
-        created_at,
-        decision_summary: decision.decision_summary,
-        decision_rationale: decision.decision_rationale,
-        decision_next_step: decision.decision_next_step,
-        decision_source: decision.decision_source,
-        decision_evidence_refs: decision.decision_evidence_refs,
-      };
-      blocks.set(id, block);
-      return block;
-    }
-    block.label = block.label || label;
-    block.state = terminalState(block.state, state);
-    block.created_at = block.created_at ?? created_at;
-    block.decision_summary = block.decision_summary ?? decision.decision_summary;
-    block.decision_rationale =
-      block.decision_rationale ?? decision.decision_rationale;
-    block.decision_next_step =
-      block.decision_next_step ?? decision.decision_next_step;
-    block.decision_source = block.decision_source ?? decision.decision_source;
-    block.decision_evidence_refs =
-      block.decision_evidence_refs ?? decision.decision_evidence_refs;
-    return block;
-  };
-
-  for (const row of sortProgressRowsForDisplay(rows)) {
-    if (row.kind === WORK_BLOCK_MARKER_KIND) {
-      if (!row.work_block_id) continue;
-      const blockId = row.work_block_id;
-      ensureBlock(
-        blockId,
-        row.work_block_label ?? "",
-        row.state,
-        row.created_at,
-        row,
-      );
-      continue;
-    }
-    if (isStandaloneWorkBlockMessageRow(row)) {
-      const fallbackId = row.work_block_id ?? `row-${row.id}`;
-      const blockId = fallbackId;
-      const label = row.work_block_label ?? "";
-      const block = ensureBlock(blockId, label, row.state, row.created_at, row);
-      block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
-      block.rows = [...block.rowMap.values()];
-      continue;
-    }
-    if (row.kind === "todo") continue;
-    if (!isWorkBlockToolActivityRow(row)) continue;
-    const fallbackId = row.work_block_id ?? `row-${row.id}`;
-    const blockId = fallbackId;
-    const label = row.work_block_label ?? "";
-    const block = ensureBlock(blockId, label, row.state, row.created_at, row);
-    block.rowMap.set(progressRowMergeKey(row), workBlockToolRow(row));
-    block.rows = [...block.rowMap.values()];
-  }
-
-  return [...blocks.values()]
-    .map(({ rowMap: _rowMap, ...block }) => block)
-    .filter((block) => Boolean(block.label.trim()))
-    .filter((block) =>
-      options.completedOnly
-        ? isTerminalProgressState(block.state) ||
-          block.rows.some((row) => isTerminalProgressState(row.state))
-        : true,
-    );
-}
-
-function workBlockToolRow(row: ProgressRow): ProgressRow {
-  const {
-    work_block_label: _workBlockLabel,
-    work_decision_summary: _workDecisionSummary,
-    work_decision_rationale: _workDecisionRationale,
-    work_decision_next_step: _workDecisionNextStep,
-    work_decision_source: _workDecisionSource,
-    work_decision_evidence_refs: _workDecisionEvidenceRefs,
-    ...toolRow
-  } = row;
-  return toolRow;
-}
-
-function terminalState(current: string, next: string): string {
-  const rank = (state: string) =>
-    state === "failed" || state === "cancelled"
-      ? 3
-      : state === "delivered" || state === "complete" || state === "completed"
-        ? 2
-        : state === "running"
-          ? 1
-          : 0;
-  return rank(next) >= rank(current) ? next : current;
-}
-
-function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRow | null {
-  if (event.visibility === "internal") return null;
-  const payload = safeRecordPayload(event.payload);
-  const created_at = event.createdAt;
-  if (event.kind === "assistant.public_note") {
-    const note = safePublicText(payload.note, "Working");
-    const workBlockId = safeOptionalPublicText(payload.workBlockId);
-    return {
-      id: event.id,
-      kind: "message",
-      state: "running",
-      safe_label: note,
-      created_at,
-      work_block_id: workBlockId,
-      work_block_label: safeOptionalPublicText(payload.workBlockLabel),
-      ...publicDecisionFields(payload),
-    };
-  }
-  if (event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
-    return {
-      id: event.id,
-      kind: "turn",
-      state: "thinking",
-      safe_label: safePublicText(payload.note ?? payload.safeLabel, "Working"),
-      created_at,
-    };
-  }
-  if (event.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
-    return {
-      id: event.id,
-      kind: "turn",
-      state: "accepted",
-      safe_label: safePublicText(
-        payload.safeLabel,
-        "Request received. Preparing the work.",
-      ),
-      receipt_kind: TURN_ACKNOWLEDGED_EVENT_KIND,
-      created_at,
-    };
-  }
-  if (event.kind === "assistant.decision") {
-    const decision = explicitPublicDecisionFields(payload);
-    if (!decision.public_decision_summary || !decision.public_decision_source) {
-      return null;
-    }
-    return {
-      id: event.id,
-      kind: "decision",
-      state: "running",
-      safe_label: decision.public_decision_summary,
-      created_at,
-      ...decision,
-    };
-  }
-  if (
-    event.kind === "work.block.started" ||
-    event.kind === "work.block.updated" ||
-    event.kind === "work.block.completed"
-  ) {
-    const label = safePublicText(payload.label ?? payload.safeLabel, "Working");
-    return {
-      id: event.id,
-      kind: WORK_BLOCK_MARKER_KIND,
-      state: event.kind === "work.block.completed" ? "delivered" : "running",
-      safe_label: label,
-      created_at,
-      work_block_id: safeOptionalPublicText(payload.workBlockId) ?? event.id,
-      work_block_label: label,
-      ...publicDecisionFields(payload),
-    };
-  }
-  if (event.kind === "guard.started" || event.kind === "guard.completed") {
-    return {
-      id: event.id,
-      kind: "system",
-      state: event.kind === "guard.started" ? "running" : "delivered",
-      safe_label:
-        event.kind === "guard.started"
-          ? "Checking response"
-          : "Response checked",
-      created_at,
-    };
-  }
-  if (event.kind.startsWith("tool.")) {
-    if (event.kind === "tool.progress" && payload.activityKind === "todo") {
-      return {
-        id: event.id,
-        kind: "todo",
-        state: safeOptionalPublicText(payload.state) ?? "running",
-        safe_label: safePublicText(payload.safeLabel, "Working step"),
-        safe_detail_rows: safeDetailRows(payload.detailRows),
-        safe_order: safeOptionalNumber(payload.safeOrder),
-        created_at,
-      };
-    }
-    const toolName = safePublicText(payload.toolName, "Tool");
-    if (isInternalProgressToolName(toolName)) return null;
-    const inputLabel = safeOptionalPublicText(payload.inputLabel);
-    const safeLabel = safePublicText(
-      payload.safeLabel,
-      inputLabel ? `${toolName}: ${inputLabel}` : toolName,
-    );
-    return {
-      id: event.id,
-      kind: safeProgressKind(payload.activityKind),
-      state:
-        event.kind === "tool.failed"
-          ? "failed"
-          : event.kind === "tool.completed"
-            ? "delivered"
-            : "running",
-      safe_label: safeLabel,
-      safe_tool_name: toolName,
-      safe_input_label: inputLabel,
-      tool_call_id: safeOptionalPublicText(payload.toolCallId),
-      bridge_phase: safeOptionalPublicText(payload.bridgePhase),
-      work_block_id: safeOptionalPublicText(payload.workBlockId),
-      work_block_label: safeOptionalPublicText(payload.workBlockLabel),
-      ...publicDecisionFields(payload),
-      safe_detail_rows: safeDetailRows(payload.detailRows),
-      created_at,
-    };
-  }
-  if (event.kind === "runtime.fault") {
-    const faultId = safePublicText(payload.faultId, event.id);
-    const kind = safePublicText(payload.kind, "runtime_fault");
-    const publicSummary = safePublicText(
-      payload.publicSummary,
-      "Butler runtime was interrupted before the turn could continue.",
-    );
-    return {
-      id: event.id,
-      kind: "runtime_fault",
-      state: "runtime_fault",
-      safe_label: publicSummary,
-      created_at,
-      runtime_fault_id: faultId,
-      runtime_fault_kind: kind,
-      runtime_fault_retryable: payload.retryable === true,
-      runtime_fault_public_summary: publicSummary,
-      runtime_fault_safe_error_code: safeOptionalPublicText(payload.safeErrorCode),
-      runtime_fault_safe_cause: safeOptionalPublicText(payload.safeCause),
-    };
-  }
-  if (
-    event.kind === "turn.accepted" ||
-    event.kind === "turn.started" ||
-    event.kind === "turn.iteration.started"
-  ) {
-    return {
-      id: event.id,
-      kind: "turn",
-      state: event.kind === "turn.accepted" ? "accepted" : "thinking",
-      safe_label:
-        event.kind === "turn.accepted" ? "Accepted" : "Working on request",
-      created_at,
-    };
-  }
-  if (event.kind === "message.final.started") {
-    return {
-      id: event.id,
-      kind: "message",
-      state: "running",
-      safe_label: "Preparing final answer",
-      created_at,
-    };
-  }
-  if (
-    event.kind === "message.final.completed" ||
-    event.kind === "turn.completed"
-  ) {
-    return {
-      id: event.id,
-      kind: "turn",
-      state: "delivered",
-      safe_label:
-        event.kind === "message.final.completed"
-          ? "Final answer ready"
-          : "Completed",
-      created_at,
-    };
-  }
-  if (event.kind === "turn.failed" || event.kind === "turn.cancelled") {
-    const label =
-      event.kind === "turn.failed"
-        ? safePublicText(payload.safeLabel, "Failed")
-        : "Cancelled";
-    return {
-      id: event.id,
-      kind: "turn",
-      state: event.kind === "turn.failed" ? "failed" : "cancelled",
-      safe_label: label,
-      created_at,
-    };
-  }
-  return null;
-}
-
-function safeRecordPayload(payload: unknown): Record<string, unknown> {
-  return payload && typeof payload === "object" && !Array.isArray(payload)
-    ? (payload as Record<string, unknown>)
-    : {};
+  return projectSharedWorkBlocks(rows, options).blocks;
 }
 
 export function isInternalProgressRow(row: ProgressRow): boolean {
@@ -1686,129 +1354,8 @@ function progressRowFiniteDisplayOrder(row: ProgressRow): number | null {
   return Number.isFinite(order) && order >= 0 ? order : null;
 }
 
-function safeProgressKind(value: unknown): string {
-  const text = safePublicText(value, "used_tool");
-  return [
-    "searched",
-    "read",
-    "ran_command",
-    "edited",
-    "dispatch",
-    "used_tool",
-    "context",
-    "model",
-    "message",
-    "turn",
-    "system",
-    "todo",
-  ].includes(text)
-    ? text
-    : "used_tool";
-}
-
-function safeDetailRows(value: unknown): ProgressRow["safe_detail_rows"] {
-  if (!Array.isArray(value)) return undefined;
-  const rows = value
-    .filter(isPlainRecord)
-    .map((row, index) => ({
-      id: safePublicText(row.id, `detail-${index + 1}`),
-      kind: safeOptionalPublicText(row.kind),
-      safe_label: safePublicText(row.safe_label, "Detail"),
-      safe_value: safeOptionalPublicText(row.safe_value),
-      state: safeOptionalPublicText(row.state),
-    }))
-    .slice(0, 8);
-  return rows.length > 0 ? rows : undefined;
-}
-
-function publicDecisionFields(
-  payload: Record<string, unknown>,
-): Partial<ProgressRow> {
-  const source = safeOptionalPublicText(payload.decisionSource);
-  if (!isPublicDecisionSource(source)) return {};
-  const rawEvidenceRefs = payload.decisionEvidenceRefs ?? payload.evidenceRefs;
-  const evidenceRefs = Array.isArray(rawEvidenceRefs)
-    ? rawEvidenceRefs
-        .map((item) => safeOptionalPublicText(item))
-        .filter((item): item is string => Boolean(item))
-        .slice(0, 6)
-    : undefined;
-  const fields: Partial<ProgressRow> = publicContractFields(payload);
-  const summary = safeOptionalPublicText(payload.decisionSummary);
-  if (summary) fields.work_decision_summary = summary;
-  const rationale = safeOptionalPublicText(payload.decisionRationale);
-  if (rationale) fields.work_decision_rationale = rationale;
-  const nextStep = safeOptionalPublicText(payload.decisionNextStep);
-  if (nextStep) fields.work_decision_next_step = nextStep;
-  if (source) fields.work_decision_source = source;
-  if (evidenceRefs && evidenceRefs.length > 0)
-    fields.work_decision_evidence_refs = evidenceRefs;
-  return fields;
-}
-
-function explicitPublicDecisionFields(
-  payload: Record<string, unknown>,
-): Partial<ProgressRow> {
-  const source = safeOptionalPublicText(payload.source);
-  if (!isPublicDecisionSource(source)) return {};
-  const rawEvidenceRefs = payload.evidenceRefs;
-  const evidenceRefs = Array.isArray(rawEvidenceRefs)
-    ? rawEvidenceRefs
-        .map((item) => safeOptionalPublicText(item))
-        .filter((item): item is string => Boolean(item))
-        .slice(0, 6)
-    : undefined;
-  const fields: Partial<ProgressRow> = publicContractFields(payload);
-  const role = safeOptionalPublicText(payload.role);
-  if (role) fields.public_decision_role = role;
-  const summary = safeOptionalPublicText(payload.summary);
-  if (summary) fields.public_decision_summary = summary;
-  const rationale = safeOptionalPublicText(payload.rationale);
-  if (rationale) fields.public_decision_rationale = rationale;
-  const nextStep = safeOptionalPublicText(payload.nextStep);
-  if (nextStep) fields.public_decision_next_step = nextStep;
-  if (source) fields.public_decision_source = source;
-  const modelCallId = safeOptionalPublicText(payload.modelCallId);
-  if (modelCallId) fields.public_decision_model_call_id = modelCallId;
-  const latencyMs = safeOptionalNumber(payload.latencyMs);
-  if (latencyMs !== undefined) fields.public_decision_latency_ms = latencyMs;
-  if (evidenceRefs && evidenceRefs.length > 0)
-    fields.public_decision_evidence_refs = evidenceRefs;
-  return fields;
-}
-
-function publicContractFields(payload: Record<string, unknown>): Partial<ProgressRow> {
-  const fields: Partial<ProgressRow> = {};
-  const contractId = safeOptionalPublicText(payload.contractId);
-  const workstreamId = safeOptionalPublicText(payload.workstreamId);
-  const semanticBlockId = safeOptionalPublicText(payload.semanticBlockId);
-  if (contractId) fields.work_contract_id = contractId;
-  if (workstreamId) fields.work_stream_id = workstreamId;
-  if (semanticBlockId) fields.semantic_block_id = semanticBlockId;
-  return fields;
-}
-
 function isPublicDecisionSource(source: unknown): source is string {
   return typeof source === "string" && PUBLIC_DECISION_SOURCES.has(source);
-}
-
-function publicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
-  decision_summary: string;
-  decision_rationale: string;
-  decision_next_step: string;
-  decision_source: string;
-  decision_model_call_id: string;
-  decision_latency_ms: number;
-  decision_evidence_refs: string[];
-}> {
-  if (!row || !isRenderableWorkDecisionSource(row.work_decision_source)) return {};
-  return {
-    decision_summary: row.work_decision_summary,
-    decision_rationale: row.work_decision_rationale,
-    decision_next_step: row.work_decision_next_step,
-    decision_source: row.work_decision_source,
-    decision_evidence_refs: row.work_decision_evidence_refs,
-  };
 }
 
 function explicitPublicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
@@ -1836,101 +1383,6 @@ function explicitPublicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
     decision_latency_ms: row.public_decision_latency_ms,
     decision_evidence_refs: row.public_decision_evidence_refs,
   };
-}
-
-function isRenderableWorkDecisionSource(source: unknown): source is string {
-  return typeof source === "string" && RENDERABLE_WORK_DECISION_SOURCES.has(source);
-}
-
-function safeOptionalPublicText(value: unknown): string | undefined {
-  const text = safePublicText(value, "");
-  return text || undefined;
-}
-
-function safeOptionalNumber(value: unknown): number | undefined {
-  const numberValue = Number(value);
-  if (!Number.isFinite(numberValue) || numberValue < 0) return undefined;
-  return Math.floor(numberValue);
-}
-
-function safePublicText(value: unknown, fallback: string): string {
-  const text =
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-      ? String(value)
-      : "";
-  const normalized = stripUnsafeControlCharacters(text)
-    .replace(
-      /\b(?:api[_-]?key|token|secret|password|database_url|db_url)\s*[:=]\s*\S+|\b(?:auth|authorization)\s*[:=]\s*(?:bearer\s+)?\S+/giu,
-      "[redacted]",
-    )
-    .replace(/\bbearer\s+[\w.~+/=-]+/giu, "Bearer [redacted]")
-    .replace(/\s+/gu, " ")
-    .trim();
-  if (!normalized) return fallback;
-  if (looksPrivateOrInternalText(normalized)) return fallback;
-  const decoded = decodeBase64Candidate(normalized);
-  if (decoded && looksPrivateOrInternalText(decoded)) return fallback;
-  return normalized.slice(0, 180);
-}
-
-function looksPrivateOrInternalText(value: string): boolean {
-  if (/<\s*\/?\s*(?:think|thinking|reasoning)\b[^>]*>/iu.test(value))
-    return true;
-  if (
-    /<\|?(?:channel|start|message|assistant|analysis|final)[^>]*\|?>/iu.test(
-      value,
-    )
-  )
-    return true;
-  if (
-    /\b(?:hidden reasoning|chain[- ]of[- ]thought|scratchpad|internal plan|raw transcript|let me think|let's think|i need to think|we need to think|step[- ]by[- ]step reasoning)\b/iu.test(
-      value,
-    )
-  ) {
-    return true;
-  }
-  if (
-    /\b(?:tool_call|tool_result|argumentsJson|sessionId|eventId)\b/u.test(value)
-  )
-    return true;
-  if (
-    /^\s*[{[]/u.test(value) &&
-    /"(?:eventId|sessionId|payload|arguments|tool_call)"/u.test(value)
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function decodeBase64Candidate(value: string): string | null {
-  const compact = value.replace(/\s+/gu, "");
-  if (compact.length < 24 || compact.length > 2_048) return null;
-  if (!/^[A-Za-z0-9+/=_-]+$/u.test(compact)) return null;
-  try {
-    const normalized = compact.replace(/-/gu, "+").replace(/_/gu, "/");
-    return decodeURIComponent(
-      Array.from(
-        atob(normalized),
-        (character) =>
-          `%${character.charCodeAt(0).toString(16).padStart(2, "0")}`,
-      ).join(""),
-    );
-  } catch {
-    return null;
-  }
-}
-
-function stripUnsafeControlCharacters(value: string): string {
-  return Array.from(value, (character) => {
-    const code = character.charCodeAt(0);
-    return code < 32 || code === 127 ? " " : character;
-  }).join("");
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 function systemEventMessageFromEvent(
@@ -2100,7 +1552,7 @@ function progressRowMergeKey(row: ProgressRow): string {
 
 function progressRowDirectMergeKey(row: ProgressRow): string {
   if (row.kind === WORK_BLOCK_MARKER_KIND && row.work_block_id)
-    return `work:${row.work_block_id}`;
+    return `work-event:${row.id}`;
   const todoKey = todoProgressMergeKey(row);
   if (todoKey) return `todo:${todoKey}`;
   if (row.tool_call_id) return `tool:${row.tool_call_id}`;
@@ -2258,6 +1710,10 @@ function mergeProgressRow(
       incoming.safe_path_labels,
     tool_call_id:
       base.tool_call_id ?? current.tool_call_id ?? incoming.tool_call_id,
+    turn_event_sequence: minimumOptionalNumber(
+      current.turn_event_sequence,
+      incoming.turn_event_sequence,
+    ),
     work_contract_id:
       base.work_contract_id ?? current.work_contract_id ?? incoming.work_contract_id,
     work_stream_id:
@@ -2270,9 +1726,34 @@ function mergeProgressRow(
       base.work_block_label ??
       current.work_block_label ??
       incoming.work_block_label,
+    work_block_phase:
+      base.work_block_phase ??
+      current.work_block_phase ??
+      incoming.work_block_phase,
+    work_block_sequence:
+      base.work_block_sequence ??
+      current.work_block_sequence ??
+      incoming.work_block_sequence,
+    work_decision_id:
+      base.work_decision_id ??
+      current.work_decision_id ??
+      incoming.work_decision_id,
+    work_decision_title:
+      base.work_decision_title ??
+      current.work_decision_title ??
+      incoming.work_decision_title,
     created_at: current.created_at ?? incoming.created_at,
   };
   return progressRowEqual(current, next) ? current : next;
+}
+
+function minimumOptionalNumber(
+  left: number | undefined,
+  right: number | undefined,
+): number | undefined {
+  if (left === undefined) return right;
+  if (right === undefined) return left;
+  return Math.min(left, right);
 }
 
 function progressMergeRowState(
@@ -2387,6 +1868,7 @@ function workBlockEqual(left: WorkBlockView, right: WorkBlockView): boolean {
     left.id === right.id &&
     left.label === right.label &&
     left.state === right.state &&
+    left.decision_title === right.decision_title &&
     left.decision_summary === right.decision_summary &&
     left.decision_rationale === right.decision_rationale &&
     left.decision_next_step === right.decision_next_step &&
@@ -2407,12 +1889,17 @@ function progressRowEqual(left: ProgressRow, right: ProgressRow): boolean {
     left.safe_tool_name === right.safe_tool_name &&
     left.safe_input_label === right.safe_input_label &&
     left.safe_order === right.safe_order &&
+    left.turn_event_sequence === right.turn_event_sequence &&
     left.tool_call_id === right.tool_call_id &&
     left.work_contract_id === right.work_contract_id &&
     left.work_stream_id === right.work_stream_id &&
     left.semantic_block_id === right.semantic_block_id &&
     left.work_block_id === right.work_block_id &&
     left.work_block_label === right.work_block_label &&
+    left.work_block_phase === right.work_block_phase &&
+    left.work_block_sequence === right.work_block_sequence &&
+    left.work_decision_id === right.work_decision_id &&
+    left.work_decision_title === right.work_decision_title &&
     left.work_decision_summary === right.work_decision_summary &&
     left.work_decision_rationale === right.work_decision_rationale &&
     left.work_decision_next_step === right.work_decision_next_step &&

@@ -1,12 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { sanitizePublicText } from "./public-text.ts";
 import {
-  TURN_ACKNOWLEDGED_EVENT_KIND,
-  TURN_DECISION_EVENT_KIND,
   TURN_STATE_CONTRACT_EVENT_KINDS,
-  isAuthoredDecisionSource,
   normalizeTurnStateContractPayload,
 } from "./turn-state-contract.ts";
+import { progressRowFromSharedTurnEvent } from "./progress-projection.ts";
 
 export { isPublicTextSafe, sanitizePublicText } from "./public-text.ts";
 
@@ -130,6 +128,7 @@ export interface ProgressRowLike {
   safe_input_label?: string;
   safe_count?: number;
   safe_order?: number;
+  turn_event_sequence?: number;
   safe_path_labels?: string[];
   tool_call_id?: string;
   bridge_phase?: string;
@@ -147,6 +146,10 @@ export interface ProgressRowLike {
   semantic_block_id?: string;
   work_block_id?: string;
   work_block_label?: string;
+  work_block_phase?: "started" | "updated" | "completed";
+  work_block_sequence?: number;
+  work_decision_id?: string;
+  work_decision_title?: string;
   work_decision_summary?: string;
   work_decision_rationale?: string;
   work_decision_next_step?: string;
@@ -293,162 +296,7 @@ function normalizeProviderStreamPayload(
 }
 
 export function progressRowFromTurnEvent(event: AgentTurnEvent): ProgressRowLike | null {
-  if (event.visibility !== "public") return null;
-  const payload = event.payload;
-  const createdAt = event.createdAt;
-  if (event.kind === "assistant.public_note") {
-    const workBlockId = optionalPublicText(payload.workBlockId);
-    const note = sanitizePublicText(payload.note, "Working");
-    return {
-      id: event.id,
-      kind: "message",
-      safe_label: note,
-      state: "running",
-      created_at: createdAt,
-      work_block_id: workBlockId,
-      work_block_label: optionalPublicText(payload.workBlockLabel) ?? (workBlockId ? note : undefined),
-      ...publicDecisionFields(payload),
-    };
-  }
-  if (event.kind === FIRST_VISIBLE_PROGRESS_EVENT_KIND) {
-    return {
-      id: event.id,
-      kind: "turn",
-      safe_label: sanitizePublicText(payload.note ?? payload.safeLabel, "Working"),
-      state: "thinking",
-      created_at: createdAt,
-    };
-  }
-  if (event.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
-    return {
-      id: event.id,
-      kind: "turn",
-      safe_label: sanitizePublicText(payload.safeLabel, "Request received. Preparing the work."),
-      state: "accepted",
-      receipt_kind: TURN_ACKNOWLEDGED_EVENT_KIND,
-      created_at: createdAt,
-    };
-  }
-  if (event.kind === TURN_DECISION_EVENT_KIND) {
-    const decision = publicDecisionRowFields(payload);
-    if (!decision.public_decision_summary || !decision.public_decision_source) {
-      return null;
-    }
-    return {
-      id: event.id,
-      kind: "decision",
-      safe_label: decision.public_decision_summary,
-      state: "running",
-      created_at: createdAt,
-      ...decision,
-    };
-  }
-  if (event.kind === "work.block.started" || event.kind === "work.block.updated" || event.kind === "work.block.completed") {
-    const label = sanitizePublicText(payload.label ?? payload.safeLabel, "Working");
-    return {
-      id: event.id,
-      kind: "work_block",
-      safe_label: label,
-      state: event.kind === "work.block.completed" ? "delivered" : "running",
-      created_at: createdAt,
-      work_block_id: optionalPublicText(payload.workBlockId) ?? event.id,
-      work_block_label: label,
-      ...publicDecisionFields(payload),
-    };
-  }
-  if (event.kind === "guard.started" || event.kind === "guard.completed") {
-    return {
-      id: event.id,
-      kind: "system",
-      safe_label: event.kind === "guard.started" ? "Checking response" : "Response checked",
-      state: event.kind === "guard.started" ? "running" : "delivered",
-      created_at: createdAt,
-    };
-  }
-  if (event.kind.startsWith("tool.")) {
-    const state = event.kind === "tool.failed"
-      ? "failed"
-      : event.kind === "tool.completed"
-        ? "delivered"
-        : "running";
-    const toolName = sanitizePublicText(payload.toolName, "Tool");
-    const inputLabel = optionalPublicText(payload.inputLabel);
-    const safeLabel = sanitizePublicText(payload.safeLabel, inputLabel ? `${toolName}: ${inputLabel}` : toolName);
-    return {
-      id: event.id,
-      kind: safeProgressKind(payload.activityKind),
-      safe_label: safeLabel,
-      state,
-      created_at: createdAt,
-      safe_tool_name: toolName,
-      safe_input_label: inputLabel,
-      tool_call_id: optionalPublicText(payload.toolCallId),
-      bridge_phase: optionalPublicText(payload.bridgePhase),
-      work_block_id: optionalPublicText(payload.workBlockId),
-      work_block_label: optionalPublicText(payload.workBlockLabel),
-      ...publicDecisionFields(payload),
-      safe_detail_rows: safeDetailRows(payload.detailRows),
-    };
-  }
-  if (event.kind === "turn.accepted" || event.kind === "turn.started") {
-    return {
-      id: event.id,
-      kind: "turn",
-      safe_label: event.kind === "turn.accepted" ? "Accepted" : "Started",
-      state: event.kind === "turn.accepted" ? "accepted" : "thinking",
-      created_at: createdAt,
-    };
-  }
-  if (event.kind === "message.final.started") {
-    return {
-      id: event.id,
-      kind: "message",
-      safe_label: "Preparing final answer",
-      state: "running",
-      created_at: createdAt,
-    };
-  }
-  if (event.kind === "message.final.completed" || event.kind === "turn.completed") {
-    return {
-      id: event.id,
-      kind: "turn",
-      safe_label: event.kind === "message.final.completed" ? "Final answer ready" : "Completed",
-      state: "delivered",
-      created_at: createdAt,
-    };
-  }
-  if (event.kind === "turn.failed" || event.kind === "turn.cancelled") {
-    const label = event.kind === "turn.failed"
-      ? sanitizePublicText(payload.safeLabel, "Failed")
-      : "Cancelled";
-    return {
-      id: event.id,
-      kind: "turn",
-      safe_label: label,
-      state: event.kind === "turn.failed" ? "failed" : "cancelled",
-      created_at: createdAt,
-    };
-  }
-  if (event.kind === "runtime.fault") {
-    const publicSummary = sanitizePublicText(
-      payload.publicSummary,
-      "Butler runtime was interrupted before the turn could continue.",
-    );
-    return {
-      id: event.id,
-      kind: "runtime_fault",
-      safe_label: publicSummary,
-      state: "runtime_fault",
-      created_at: createdAt,
-      runtime_fault_id: sanitizePublicText(payload.faultId, event.id),
-      runtime_fault_kind: sanitizePublicText(payload.kind, "runtime_fault"),
-      runtime_fault_retryable: payload.retryable === true,
-      runtime_fault_public_summary: publicSummary,
-      runtime_fault_safe_error_code: optionalPublicText(payload.safeErrorCode),
-      runtime_fault_safe_cause: optionalPublicText(payload.safeCause),
-    };
-  }
-  return null;
+  return progressRowFromSharedTurnEvent(event);
 }
 
 export function turnEventFromProgressRow(input: {
@@ -459,16 +307,20 @@ export function turnEventFromProgressRow(input: {
   turnSequence: number;
 }): AgentTurnEvent {
   const row = input.row;
+  const kind = row.kind === "work_block"
+    ? `work.block.${row.work_block_phase ?? (isTerminalProjectionState(row.state) ? "completed" : "started")}` as AgentTurnEventKind
+    : "tool.progress";
   return createAgentTurnEvent({
     sessionId: input.sessionId,
     turnId: input.turnId,
     sessionSequence: input.sessionSequence,
     turnSequence: input.turnSequence,
-    kind: "tool.progress",
+    kind,
     createdAt: row.created_at,
     payload: {
       activityKind: row.kind,
       state: row.state,
+      status: row.state,
       toolName: row.safe_tool_name,
       inputLabel: row.safe_input_label,
       safeLabel: row.safe_label,
@@ -478,6 +330,9 @@ export function turnEventFromProgressRow(input: {
       contractId: row.work_contract_id,
       workstreamId: row.work_stream_id,
       semanticBlockId: row.semantic_block_id,
+      blockSequence: row.work_block_sequence,
+      decisionId: row.work_decision_id,
+      decisionTitle: row.work_decision_title,
       decisionSummary: row.work_decision_summary,
       decisionRationale: row.work_decision_rationale,
       decisionNextStep: row.work_decision_next_step,
@@ -487,6 +342,10 @@ export function turnEventFromProgressRow(input: {
       safeOrder: row.safe_order,
     },
   });
+}
+
+function isTerminalProjectionState(state: string): boolean {
+  return ["failed", "cancelled", "delivered", "complete", "completed"].includes(state);
 }
 
 export const TURN_EVENT_COMPATIBILITY_MAPPINGS = [
@@ -535,105 +394,12 @@ function sanitizePublicPayloadValue(
 }
 
 function decisionPayloadKey(key: string): boolean {
-  return /^decision(?:Summary|Rationale|NextStep|EvidenceRefs|Source|Id)?$/u.test(key) ||
+  return /^decision(?:Title|Summary|Rationale|NextStep|EvidenceRefs|Source|Id)?$/u.test(key) ||
     /^(?:summary|rationale|nextStep|evidenceRefs|modelCallId)$/u.test(key);
 }
 
 function jsonSafeRecord(value: Record<string, unknown>): Record<string, unknown> {
   return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
-}
-
-function safeProgressKind(value: unknown): string {
-  const text = sanitizePublicText(value, "used_tool");
-  if (
-    text === "searched" ||
-    text === "read" ||
-    text === "ran_command" ||
-    text === "edited" ||
-    text === "dispatch" ||
-    text === "used_tool" ||
-    text === "context" ||
-    text === "model"
-  ) return text;
-  return "used_tool";
-}
-
-function safeDetailRows(value: unknown): ProgressRowLike["safe_detail_rows"] {
-  if (!Array.isArray(value)) return undefined;
-  const rows = value
-    .filter((row): row is Record<string, unknown> => isRecord(row))
-    .map((row, index) => ({
-      id: sanitizePublicText(row.id, `detail-${index + 1}`),
-      kind: optionalPublicText(row.kind),
-      safe_label: sanitizePublicText(row.safe_label, "Detail"),
-      safe_value: optionalPublicText(row.safe_value),
-      state: optionalPublicText(row.state),
-    }))
-    .slice(0, 8);
-  return rows.length > 0 ? rows : undefined;
-}
-
-function publicDecisionFields(payload: Record<string, unknown>): Partial<ProgressRowLike> {
-  const source = optionalPublicText(payload.decisionSource ?? payload.source);
-  if (!isAuthoredDecisionSource(source)) return {};
-  const summary = optionalPublicText(payload.decisionSummary ?? payload.summary);
-  const rationale = optionalPublicText(payload.decisionRationale ?? payload.rationale);
-  const nextStep = optionalPublicText(payload.decisionNextStep ?? payload.nextStep);
-  if (!summary || !rationale || !nextStep) return {};
-  const rawEvidenceRefs = payload.decisionEvidenceRefs ?? payload.evidenceRefs;
-  const evidenceRefs = Array.isArray(rawEvidenceRefs)
-    ? rawEvidenceRefs
-        .map((item) => optionalPublicText(item))
-        .filter((item): item is string => Boolean(item))
-        .slice(0, 6)
-    : undefined;
-  const fields: Partial<ProgressRowLike> = publicContractFields(payload);
-  if (summary) fields.work_decision_summary = summary;
-  if (rationale) fields.work_decision_rationale = rationale;
-  if (nextStep) fields.work_decision_next_step = nextStep;
-  if (source) fields.work_decision_source = source;
-  if (evidenceRefs && evidenceRefs.length > 0) fields.work_decision_evidence_refs = evidenceRefs;
-  return fields;
-}
-
-function publicDecisionRowFields(payload: Record<string, unknown>): Partial<ProgressRowLike> {
-  const source = optionalPublicText(payload.source);
-  if (!isAuthoredDecisionSource(source)) return {};
-  const fields: Partial<ProgressRowLike> = publicContractFields(payload);
-  const role = optionalPublicText(payload.role);
-  const summary = optionalPublicText(payload.summary);
-  const rationale = optionalPublicText(payload.rationale);
-  const nextStep = optionalPublicText(payload.nextStep);
-  if (role) fields.public_decision_role = role;
-  if (summary) fields.public_decision_summary = summary;
-  if (rationale) fields.public_decision_rationale = rationale;
-  if (nextStep) fields.public_decision_next_step = nextStep;
-  fields.public_decision_source = source;
-  const modelCallId = optionalPublicText(payload.modelCallId);
-  if (modelCallId) fields.public_decision_model_call_id = modelCallId;
-  const latencyMs = optionalNonNegativeInteger(payload.latencyMs);
-  if (latencyMs !== undefined) fields.public_decision_latency_ms = latencyMs;
-  const rawEvidenceRefs = payload.evidenceRefs;
-  const evidenceRefs = Array.isArray(rawEvidenceRefs)
-    ? rawEvidenceRefs
-        .map((item) => optionalPublicText(item))
-        .filter((item): item is string => Boolean(item))
-        .slice(0, 6)
-    : undefined;
-  if (evidenceRefs && evidenceRefs.length > 0)
-    fields.public_decision_evidence_refs = evidenceRefs;
-  return fields;
-}
-
-function publicContractFields(payload: Record<string, unknown>): Partial<ProgressRowLike> {
-  const fields: Partial<ProgressRowLike> = {};
-  const contractId = optionalPublicText(payload.contractId);
-  const workstreamId = optionalPublicText(payload.workstreamId);
-  const semanticBlockId = optionalPublicText(payload.semanticBlockId);
-  if (contractId) fields.work_contract_id = contractId;
-  if (workstreamId) fields.work_stream_id = workstreamId;
-  if (semanticBlockId) fields.semantic_block_id = semanticBlockId;
-  return fields;
 }
 
 function optionalPublicText(value: unknown): string | undefined {

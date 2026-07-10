@@ -2632,8 +2632,11 @@ test("completed message work blocks stay frozen across identical progress writes
       safe_label: "Bash: cached",
       safe_tool_name: "Bash",
       safe_input_label: "cached",
-      work_block_id: "work-cached",
     });
+  expect(
+    useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]
+      ?.work_block_id,
+  ).toBeUndefined();
   expect(
     useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]
       ?.work_block_label,
@@ -2713,8 +2716,11 @@ test("active turn summary does not erase frozen work blocks from previous assist
       safe_label: "Web search: previous briefing",
       safe_tool_name: "Web search",
       safe_input_label: "previous briefing",
-      work_block_id: "work-previous-briefing",
     });
+  expect(
+    useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]
+      ?.work_block_id,
+  ).toBeUndefined();
   expect(
     useButlerStore.getState().messages[0]?.work_blocks?.[0]?.rows[0]
       ?.work_block_label,

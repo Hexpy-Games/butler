@@ -87,7 +87,7 @@ function findProgressRowKeys(
 
 function progressRowDirectMergeKey(row: ProgressSummaryRow): string {
   if (row.kind === "work_block" && row.work_block_id) {
-    return `work:${row.work_block_id}`;
+    return `work-event:${row.id}`;
   }
   const todoKey = todoProgressMergeKey(row);
   if (todoKey) return `todo:${todoKey}`;
@@ -247,6 +247,10 @@ function mergeProgressRow(
       base.tool_call_id ?? current.tool_call_id ?? incoming.tool_call_id,
     bridge_phase:
       base.bridge_phase ?? current.bridge_phase ?? incoming.bridge_phase,
+    turn_event_sequence: minimumOptionalNumber(
+      current.turn_event_sequence,
+      incoming.turn_event_sequence,
+    ),
     work_contract_id:
       base.work_contract_id ?? current.work_contract_id ?? incoming.work_contract_id,
     work_stream_id:
@@ -259,6 +263,22 @@ function mergeProgressRow(
       base.work_block_label ??
       current.work_block_label ??
       incoming.work_block_label,
+    work_block_phase:
+      base.work_block_phase ??
+      current.work_block_phase ??
+      incoming.work_block_phase,
+    work_block_sequence:
+      base.work_block_sequence ??
+      current.work_block_sequence ??
+      incoming.work_block_sequence,
+    work_decision_id:
+      base.work_decision_id ??
+      current.work_decision_id ??
+      incoming.work_decision_id,
+    work_decision_title:
+      base.work_decision_title ??
+      current.work_decision_title ??
+      incoming.work_decision_title,
     work_decision_summary:
       base.work_decision_summary ??
       current.work_decision_summary ??
@@ -289,6 +309,15 @@ function mergeProgressRow(
       incoming.public_decision_latency_ms,
     created_at: current.created_at ?? incoming.created_at,
   };
+}
+
+function minimumOptionalNumber(
+  left: number | undefined,
+  right: number | undefined,
+): number | undefined {
+  if (left === undefined) return right;
+  if (right === undefined) return left;
+  return Math.min(left, right);
 }
 
 function progressStateRank(state: string): number {

@@ -45,10 +45,7 @@ import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
 import { createWorkerToolHandlers } from "./worker/index.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
 import type { ExternalToolCatalogInput } from "./progressive-catalog.ts";
-export {
-  BUTLER_TOOLS,
-  CORE_BUTLER_TOOLS,
-} from "./registry.ts";
+export { BUTLER_TOOLS, CORE_BUTLER_TOOLS } from "./registry.ts";
 export type {
   ButlerToolDefinition,
   ToolCapabilityCategory,

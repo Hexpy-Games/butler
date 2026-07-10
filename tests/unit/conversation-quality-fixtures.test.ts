@@ -146,6 +146,7 @@ test("model-selected multilingual tool calls execute without runtime semantic le
       expect(prompt).not.toContain("Freshness evidence required");
       await onAssistantTextBeforeTools?.({
         text: [
+          "title: Search Madrid weather",
           "summary: Search for Madrid weather because the user asked for tomorrow's forecast.",
           "rationale: A current weather answer needs an external source selected by the model.",
           "next_step: Read the most relevant result before answering.",
@@ -162,6 +163,7 @@ test("model-selected multilingual tool calls execute without runtime semantic le
       });
       await onAssistantTextBeforeTools?.({
         text: [
+          "title: Read selected weather source",
           "summary: Read the selected Madrid weather source.",
           "rationale: The final answer should cite the checked source, not runtime keyword rules.",
           "next_step: Use the source text to answer with citations.",

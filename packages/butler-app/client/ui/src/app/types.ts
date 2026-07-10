@@ -763,6 +763,7 @@ export interface ProgressRow {
   kind?: string;
   state: string;
   safe_label: string;
+  turn_event_sequence?: number;
   safe_tool_name?: string;
   safe_input_label?: string;
   tool_call_id?: string;
@@ -781,6 +782,10 @@ export interface ProgressRow {
   semantic_block_id?: string;
   work_block_id?: string;
   work_block_label?: string;
+  work_block_phase?: "started" | "updated" | "completed";
+  work_block_sequence?: number;
+  work_decision_id?: string;
+  work_decision_title?: string;
   work_decision_summary?: string;
   work_decision_rationale?: string;
   work_decision_next_step?: string;
@@ -881,6 +886,7 @@ export interface WorkBlockView {
   label: string;
   state: string;
   rows: ProgressRow[];
+  decision_title?: string;
   decision_summary?: string;
   decision_rationale?: string;
   decision_next_step?: string;
