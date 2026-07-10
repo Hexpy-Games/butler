@@ -112,3 +112,64 @@ test("large read previews expose the exact next source line instead of implying 
   );
   expect(Number(preview?.preview_end_line)).toBeLessThan(300);
 });
+
+test("tool output artifact previews preserve the rehydrated error text", () => {
+  const preview = structuredToolResultModelPreview({
+    toolName: "read_tool_output_artifact",
+    output: {
+      ok: true,
+      artifact: { id: "tool-output-1", command: "bun test", raw_tokens: 2_400 },
+      stdout: {
+        text: "13 pass\n1 fail",
+        start_line: 0,
+        returned_lines: 2,
+        total_lines: 2,
+        truncated_by_lines: false,
+        truncated_by_tokens: false,
+      },
+      stderr: {
+        text: "Expected: angle brackets\nReceived: opening brackets",
+        start_line: 0,
+        returned_lines: 2,
+        total_lines: 2,
+        truncated_by_lines: false,
+        truncated_by_tokens: false,
+      },
+    },
+  });
+
+  expect(preview).toMatchObject({
+    tool_name: "read_tool_output_artifact",
+    artifact: { id: "tool-output-1", command: "bun test" },
+    stdout: { text: "13 pass\n1 fail" },
+    stderr: { text: "Expected: angle brackets\nReceived: opening brackets" },
+  });
+});
+
+test("tool evidence artifact previews preserve the requested bounded text slice", () => {
+  const preview = structuredToolResultModelPreview({
+    toolName: "read_tool_evidence_artifact",
+    output: {
+      ok: true,
+      artifact: { id: "evidence-1", tool_name: "read_file", raw_tokens: 1_900 },
+      text: {
+        text: "line 120: exact source evidence",
+        start_line: 119,
+        returned_lines: 1,
+        total_lines: 300,
+        truncated_by_lines: true,
+        truncated_by_tokens: false,
+      },
+    },
+  });
+
+  expect(preview).toMatchObject({
+    tool_name: "read_tool_evidence_artifact",
+    artifact: { id: "evidence-1", tool_name: "read_file" },
+    text: {
+      text: "line 120: exact source evidence",
+      start_line: 119,
+      truncated_by_lines: true,
+    },
+  });
+});

@@ -2,7 +2,11 @@ import type { FunctionToolDefinition, PromptOptions, ReasoningEffort } from "../
 import type { HostedModelProviderId } from "./registered-models.ts";
 import type { HostedRuntimeConfig } from "./model-routing.ts";
 import { defaultHostedProviderApiBaseUrl, type HostedProviderApiShape } from "../model-catalog.ts";
-import { normalizeLocalTextToolName, sanitizeResponseFinalAnswerText } from "./runtime-support.ts";
+import {
+  normalizeLocalTextToolName,
+  sanitizeResponseFinalAnswerText,
+  withModelApiRetry,
+} from "./runtime-support.ts";
 import { promptWithAttachmentContext } from "../../../agent/context/attachment-context.ts";
 import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 
@@ -199,6 +203,19 @@ export function extractHostedChatToolCalls(message: any, allowedNames: Set<strin
 
 
 export async function createHostedChatCompletion(
+  config: HostedRuntimeConfig,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<Record<string, any>> {
+  return await withModelApiRetry(
+    async () => await createHostedChatCompletionOnce(config, body, signal),
+    signal,
+  );
+}
+
+
+
+async function createHostedChatCompletionOnce(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,

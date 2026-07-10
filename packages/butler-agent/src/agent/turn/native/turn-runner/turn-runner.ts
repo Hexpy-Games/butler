@@ -198,7 +198,9 @@ export async function runNativeToolTurn({
       try {
         return await runToolPrompt(promptText, maxToolRounds, phase);
       } catch (error) {
-        if (!isPromptUsageModelCallBudgetError(error)) throw error;
+        if (!isPromptUsageModelCallBudgetError(error) && !isRetryableProviderFailure(error)) {
+          throw error;
+        }
         const checkpoint = await persistSchedulerContinuation({
           input,
           deps,
@@ -228,7 +230,9 @@ export async function runNativeToolTurn({
       try {
         return await runTextPrompt(promptText, phase);
       } catch (error) {
-        if (!isPromptUsageModelCallBudgetError(error)) throw error;
+        if (!isPromptUsageModelCallBudgetError(error) && !isRetryableProviderFailure(error)) {
+          throw error;
+        }
         const checkpoint = await persistSchedulerContinuation({
           input,
           deps,
@@ -508,6 +512,11 @@ export async function runNativeToolTurn({
     });
     throw error;
   }
+}
+
+function isRetryableProviderFailure(error: unknown): boolean {
+  const failure = safeRuntimeFailure(error);
+  return failure.retryable === true && failure.code.startsWith("provider_");
 }
 
 async function persistSchedulerContinuation(input: {

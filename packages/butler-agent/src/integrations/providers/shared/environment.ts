@@ -172,3 +172,29 @@ export function isTransientModelApiError(error: unknown): boolean {
     /upstream connect error|disconnect\/reset|connection termination|ECONNRESET|ETIMEDOUT|ECONNRESET|fetch failed/i
       .test(message);
 }
+
+
+
+export async function withModelApiRetry<T>(
+  operation: (attempt: number) => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const attempts = modelApiRetryAttempts();
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      throwIfAborted(signal);
+      return await operation(attempt);
+    } catch (error) {
+      lastError = error;
+      if (signal?.aborted) throw abortError();
+      const retryable = isTransientModelApiError(error) && !(
+        error instanceof ModelProviderRequestError &&
+        error.code === "provider_context_limit_exceeded"
+      );
+      if (attempt >= attempts - 1 || !retryable) throw error;
+      await sleep(modelApiRetryDelayMs(attempt), signal);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}

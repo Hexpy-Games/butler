@@ -77,6 +77,42 @@ test("hosted command compaction keeps failure diagnostics from both ends", () =>
   expect(preview.model_visible_content).toContain("Expected article but received main");
 });
 
+test("hosted artifact rehydration compaction keeps the requested output slice", () => {
+  const content = hostedToolResultContent({
+    payload: {
+      ok: true,
+      output: {
+        ok: true,
+        artifact: { id: "tool-output-1", command: "bun test", raw_tokens: 4_000 },
+        stdout: {
+          text: `test prelude\n${"passing case\n".repeat(500)}13 pass\n1 fail`,
+          start_line: 0,
+          returned_lines: 503,
+          total_lines: 503,
+          truncated_by_lines: false,
+          truncated_by_tokens: false,
+        },
+        stderr: {
+          text: "Expected: angle brackets\nReceived: opening brackets",
+          start_line: 0,
+          returned_lines: 2,
+          total_lines: 2,
+          truncated_by_lines: false,
+          truncated_by_tokens: false,
+        },
+      },
+    },
+    toolName: "read_tool_output_artifact",
+    log: () => {},
+  });
+
+  const preview = JSON.parse(content).output.preview;
+  expect(preview.tool_name).toBe("read_tool_output_artifact");
+  expect(preview.stdout.text).toContain("test prelude");
+  expect(preview.stdout.text).toContain("13 pass\n1 fail");
+  expect(preview.stderr.text).toContain("Expected: angle brackets");
+});
+
 test("observed work-block compaction preserves nested continuation coordinates", () => {
   const assistant = {
     role: "assistant",

@@ -1,11 +1,24 @@
 import type { FunctionToolDefinition } from "../runtime-contracts.ts";
 import type { LocalModelConfig } from "./models.ts";
 import { ModelProviderRequestError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
+import { withModelApiRetry } from "../shared/runtime-support.ts";
 import { localChatUrl } from "./protocol.ts";
 
 
 
 export async function createLocalChatCompletion(
+  config: LocalModelConfig,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<Record<string, any>> {
+  return await withModelApiRetry(
+    async () => await createLocalChatCompletionOnce(config, body, signal),
+    signal,
+  );
+}
+
+
+async function createLocalChatCompletionOnce(
   config: LocalModelConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,

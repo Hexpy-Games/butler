@@ -272,9 +272,14 @@ export function contractExecutionPrompt(input: {
       : "Do not invent a todo-list id.",
     "After observing the first batch, every later tool batch must begin with one fresh visible title, summary, rationale, next_step, and expected_effect for the next small step.",
     "When run_work_block is available, place one fresh decision and one to six explicit ordinary calls inside that single wrapper. Do not duplicate the protocol in prose.",
+    "Batch independent inspection calls whose selection does not depend on one another. When a focused implementation and its directly derived tests are both determined by the observed context, author both in one block and validate them in the next block.",
+    "Choose the smallest coherent implementation slice that satisfies the active deliverables; preserve observed interfaces instead of expanding a next-step request into an unrelated subsystem.",
+    "If run_work_block returns decision_feedback, none of its embedded calls ran. Correct the decision fields and resubmit only the still-needed calls in the next response.",
+    "When a selected run_command is the contract's actual validation, include a stable validation_suite label on that first run so its structured receipt can satisfy validation immediately.",
     "A semantic decision block may contain at most six visible tool calls. Continue with a new decision after observing its results.",
     "The final_report deliverable is the user-facing final candidate unless the user explicitly requested a durable report artifact. Once execution and validation are complete, stop calling tools and emit that final candidate; do not invent a Ledger report record or report file.",
     "The active typed contract owns its WorkStream lifecycle. Do not call update_work_stream_state for this WorkStream; the runtime completes it after accepting the final candidate.",
+    "After the requested workspace mutation and passing validation are observed, emit the final candidate unless a named contract deliverable remains unsatisfied. Reserve Project Ledger task or Work status transitions for an explicit requested or acceptance-bound lifecycle change.",
     "Do not report completion until the runtime confirms every typed evidence obligation.",
   ].join("\n\n");
 }

@@ -33,6 +33,21 @@ test("fixed tool instructions advertise only the compiled surface", () => {
   expect(instructions).not.toContain("## Native Butler Tools");
 });
 
+test("typed contract instructions stay bounded to the current obligation surface", () => {
+  const instructions = appendButlerToolInstructions("Persona prompt.", {
+    structuredSurface: true,
+    availableToolNames: ["read_file", "write_file", "run_command"],
+  });
+
+  expect(instructions).toContain("## Typed Contract Tool Surface");
+  expect(instructions).toContain("current obligation frontier");
+  expect(instructions).toContain("smallest coherent implementation slice");
+  expect(instructions).toContain("decision_feedback");
+  expect(instructions).toContain("write them in one work block");
+  expect(instructions).toContain("validation_suite");
+  expect(instructions).not.toContain("## Native Butler Tools");
+});
+
 test("role tool policy instructions append worker and steward boundaries only for those roles", () => {
   const workerInstructions = appendRoleToolPolicyInstructions("worker", "Base.");
   const stewardInstructions = appendRoleToolPolicyInstructions("steward", "Base.");

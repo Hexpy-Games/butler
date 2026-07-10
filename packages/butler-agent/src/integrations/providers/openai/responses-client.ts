@@ -1,5 +1,5 @@
 import type { OpenAIAuthOverride, OpenAIResponse, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
-import { abortError, getFunctionCalls, isTransientModelApiError, modelApiRetryAttempts, modelApiRetryDelayMs, sleep, throwIfAborted } from "../shared/runtime-support.ts";
+import { getFunctionCalls, withModelApiRetry } from "../shared/runtime-support.ts";
 import { createCodexResponse } from "./codex-stream.ts";
 import { getResponsesUrl } from "./config.ts";
 import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
@@ -14,22 +14,10 @@ export async function createOpenAIResponse(
   authOverride?: OpenAIAuthOverride,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
 ): Promise<OpenAIResponse> {
-  const attempts = modelApiRetryAttempts();
-  let lastError: unknown;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      throwIfAborted(signal);
-      return await createOpenAIResponseOnce(body, signal, authOverride, onProviderStreamEvent);
-    } catch (error) {
-      lastError = error;
-      if (signal?.aborted) throw abortError();
-      if (attempt >= attempts - 1 || !isTransientModelApiError(error)) {
-        throw error;
-      }
-      await sleep(modelApiRetryDelayMs(attempt), signal);
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  return await withModelApiRetry(
+    async () => await createOpenAIResponseOnce(body, signal, authOverride, onProviderStreamEvent),
+    signal,
+  );
 }
 
 

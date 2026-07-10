@@ -50,6 +50,7 @@ test("mixed ledger-first contracts expose the next obligation producer instead o
   expect(oneOfBranches(create).map((branch: any) => branch.properties.kind.const)).toEqual([
     "spec", "work", "task",
   ]);
+  expect(create.description).toContain("later calls in the same block reference the earlier chosen spec or work id");
 
   for (const kind of ["spec", "work", "task"] as const) {
     controller.observe({

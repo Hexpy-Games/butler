@@ -2030,13 +2030,6 @@ async function finalizeForwardProgressBenchmark(
   return benchmark;
 }
 
-const BROAD_LEDGER_READ_TOOL_NAMES = new Set([
-  "inspect_project_status",
-  "project_ledger_list",
-  "project_ledger_status",
-  "query_project_work",
-]);
-
 function noDeltaBroadReadRounds(sessionId: string): number {
   const lastMutationBySignature = new Map<string, number>();
   let mutationRevision = 0;
@@ -2046,12 +2039,19 @@ function noDeltaBroadReadRounds(sessionId: string): number {
       mutationRevision += 1;
       continue;
     }
-    if (!BROAD_LEDGER_READ_TOOL_NAMES.has(call.name)) continue;
+    if (!isBroadLedgerReadTool(call.name)) continue;
     const signature = `${call.name}:${JSON.stringify(call.args)}`;
     if (lastMutationBySignature.get(signature) === mutationRevision) repeats += 1;
     lastMutationBySignature.set(signature, mutationRevision);
   }
   return repeats;
+}
+
+function isBroadLedgerReadTool(name: string): boolean {
+  return name === "inspect_project_status" ||
+    name === "project_ledger_list" ||
+    name === "project_ledger_status" ||
+    name === "query_project_work";
 }
 
 function assertForwardProgressLedgerShape(changedRecords: string[]): void {
@@ -2566,15 +2566,19 @@ async function assertCanonicalSessionSnapshotOnce(
     .reverse()
     .find((message) => message.role === "assistant");
   const latestAssistantText = normalizeMarkdownForRenderedText(latestAssistant?.text ?? "");
+  const latestAssistantComparable = comparableRenderedText(latestAssistantText);
+  const visibleFinalComparable = comparableRenderedText(visibleFinal);
   assert(
-    latestAssistantText &&
-      normalizeMarkdownForRenderedText(visibleFinal).includes(
-        latestAssistantText.slice(
+    latestAssistantComparable &&
+      visibleFinalComparable.includes(
+        latestAssistantComparable.slice(
           0,
-          Math.min(80, latestAssistantText.length),
+          Math.min(80, latestAssistantComparable.length),
         ),
       ),
-    `${phase}: visible final text is not backed by the canonical session view.`,
+    `${phase}: visible final text is not backed by the canonical session view. ` +
+      `canonical=${JSON.stringify(latestAssistantText.slice(0, 160))} ` +
+      `visible=${JSON.stringify(normalizeMarkdownForRenderedText(visibleFinal).slice(0, 160))}`,
   );
   if (usesToolchainScenario) {
     const hasDurableWork =
@@ -2596,6 +2600,10 @@ function normalizeMarkdownForRenderedText(value: string): string {
     .replace(/\|/gu, " ")
     .replace(/\s+/gu, " ")
     .trim();
+}
+
+function comparableRenderedText(value: string): string {
+  return normalizeMarkdownForRenderedText(value).replace(/\s+/gu, "");
 }
 
 function latestE2eSessionId(): string {

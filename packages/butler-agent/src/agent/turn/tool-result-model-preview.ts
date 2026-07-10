@@ -20,11 +20,68 @@ export function structuredToolResultModelPreview(input: {
     const output = toolPayload(input.output, ["content", "path"]);
     return output ? readFilePreview(output) : null;
   }
+  if (input.toolName === "read_tool_output_artifact") {
+    const output = toolPayload(input.output, ["stdout", "stderr"]);
+    return output ? toolOutputArtifactPreview(output) : null;
+  }
+  if (input.toolName === "read_tool_evidence_artifact") {
+    const output = toolPayload(input.output, ["text", "artifact"]);
+    return output ? toolEvidenceArtifactPreview(output) : null;
+  }
   if (input.toolName === "run_command") {
     const output = toolPayload(input.output, ["model_visible_content", "exit_code"]);
     return output ? runCommandPreview(output) : null;
   }
   return genericToolPreview(input.toolName, input.output);
+}
+
+function toolOutputArtifactPreview(output: Record<string, unknown>): Record<string, unknown> {
+  return compactUndefined({
+    tool_name: "read_tool_output_artifact",
+    ok: typeof output.ok === "boolean" ? output.ok : undefined,
+    artifact: artifactIdentity(output.artifact),
+    stdout: artifactSlice(output.stdout, 3_600),
+    stderr: artifactSlice(output.stderr, 3_600),
+    error: boundedText(output.error, 320),
+  });
+}
+
+function toolEvidenceArtifactPreview(output: Record<string, unknown>): Record<string, unknown> {
+  return compactUndefined({
+    tool_name: "read_tool_evidence_artifact",
+    ok: typeof output.ok === "boolean" ? output.ok : undefined,
+    artifact: artifactIdentity(output.artifact),
+    text: artifactSlice(output.text, 4_800),
+    error: boundedText(output.error, 320),
+  });
+}
+
+function artifactIdentity(value: unknown): Record<string, unknown> | undefined {
+  const artifact = record(value);
+  if (!artifact) return undefined;
+  return compactUndefined({
+    id: text(artifact.id),
+    tool_name: text(artifact.tool_name),
+    command: boundedText(artifact.command, 320),
+    raw_tokens: finiteNumber(artifact.raw_tokens) ?? undefined,
+  });
+}
+
+function artifactSlice(value: unknown, maxChars: number): Record<string, unknown> | undefined {
+  const slice = record(value);
+  if (!slice) return undefined;
+  return compactUndefined({
+    text: boundedHeadTailText(slice.text, maxChars),
+    start_line: finiteNumber(slice.start_line) ?? undefined,
+    returned_lines: finiteNumber(slice.returned_lines) ?? undefined,
+    total_lines: finiteNumber(slice.total_lines) ?? undefined,
+    truncated_by_lines: typeof slice.truncated_by_lines === "boolean"
+      ? slice.truncated_by_lines
+      : undefined,
+    truncated_by_tokens: typeof slice.truncated_by_tokens === "boolean"
+      ? slice.truncated_by_tokens
+      : undefined,
+  });
 }
 
 function runCommandPreview(output: Record<string, unknown>): Record<string, unknown> {
