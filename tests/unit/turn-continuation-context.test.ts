@@ -110,6 +110,19 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
         maxOutputTokens: 80000,
         maxTotalTokens: 300000,
       },
+      obligationFrontier: {
+        gated: false,
+        ledgerDiscoveryObserved: true,
+        ledgerDiscoveryCandidateCount: 2,
+        requiredLedgerKinds: ["task", "spec", "work"],
+        observedLedgerKinds: ["work", "spec", "task"],
+        ledgerCheckPassed: true,
+        workspaceMutationObserved: true,
+        validationObserved: false,
+        validationFailed: false,
+        validationFocused: true,
+        stage: "workspace_validation",
+      },
     });
     const persisted = readTurnContextAtom({ butlerData, sessionId, turnId });
 
@@ -140,6 +153,17 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
         cachedTokens: 900,
         outputTokens: 80,
         totalTokens: 1280,
+      },
+      obligationFrontier: {
+        ledgerDiscoveryObserved: true,
+        ledgerDiscoveryCandidateCount: 2,
+        requiredLedgerKinds: ["spec", "task", "work"],
+        observedLedgerKinds: ["spec", "task", "work"],
+        ledgerCheckPassed: true,
+        workspaceMutationObserved: true,
+        validationObserved: false,
+        validationFocused: true,
+        stage: "workspace_validation",
       },
     });
     expect(JSON.stringify(persisted)).not.toContain("private raw request");

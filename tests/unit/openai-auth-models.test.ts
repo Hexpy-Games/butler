@@ -743,6 +743,83 @@ test("registered Z.AI hosted tool result compaction emits rehydratable evidence 
   expect(artifact.digest).toBe(packet.digest);
 });
 
+test("registered Z.AI keeps the latest tool batch intact before compacting observed older rounds", async () => {
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  const bodies: Record<string, any>[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    bodies.push(body);
+    if (bodies.length === 1) {
+      return new Response(JSON.stringify({
+        choices: [{ message: {
+          role: "assistant",
+          content: "",
+          tool_calls: Array.from({ length: 5 }, (_, index) => ({
+            id: `call_old_${index}`,
+            type: "function",
+            function: { name: "lookup", arguments: JSON.stringify({ query: `old-${index}` }) },
+          })),
+        } }],
+      }), { status: 200 });
+    }
+    if (bodies.length === 2) {
+      return new Response(JSON.stringify({
+        choices: [{ message: {
+          role: "assistant",
+          content: "",
+          tool_calls: [{
+            id: "call_latest",
+            type: "function",
+            function: { name: "lookup", arguments: "{\"query\":\"latest\"}" },
+          }],
+        } }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "rolling context used" } }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runFunctionToolPromptText({
+    model: "zai/glm-5.2",
+    prompt: "inspect several bounded results",
+    butlerData: tempDir,
+    maxToolRounds: 3,
+    usageAttribution: { turnId: "turn-hosted-rolling-context" },
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "Look up a term.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    executeTool: async (call) => call.args.query === "latest"
+      ? { ok: true, title: "Latest result", message: "LATEST_RAW_RESULT" }
+      : { ok: true, title: String(call.args.query), message: "OLD_RAW_RESULT_".repeat(300) },
+  })).resolves.toBe("rolling context used");
+
+  expect(bodies).toHaveLength(3);
+  const secondRequest = JSON.stringify(bodies[1]!.messages);
+  const thirdRequest = JSON.stringify(bodies[2]!.messages);
+  expect(secondRequest).toContain("OLD_RAW_RESULT_");
+  expect((thirdRequest.match(/OLD_RAW_RESULT_/gu) ?? []).length)
+    .toBeLessThan((secondRequest.match(/OLD_RAW_RESULT_/gu) ?? []).length / 10);
+  expect(thirdRequest.length).toBeLessThan(secondRequest.length);
+  expect(thirdRequest).toContain("LATEST_RAW_RESULT");
+  expect(thirdRequest).toContain("butler_tool_result_observed_checkpoint");
+  expect(thirdRequest).toContain("evidence_ref");
+});
+
 test("registered Anthropic and Gemini models use provider-native API keys", async () => {
   registerHostedModelConfig({
     providerId: "anthropic",

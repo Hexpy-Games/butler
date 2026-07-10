@@ -35,6 +35,8 @@ const STARTUP_TOOL_NAMES = [
 
 const PROJECT_TOOL_NAMES = [
   "project_ledger_status",
+  "project_ledger_list",
+  "project_ledger_show",
   "project_ledger_check",
   "inspect_project_status",
   "query_project_work",
@@ -399,7 +401,20 @@ export function selectButlerToolsForTurn(input: {
     allowedNames.add(name);
   }
   if (fixedToolSurfaceEnabled(input)) {
+    const turnProfiles = requiredToolProfiles(input.turnMetadata);
+    const fixedProfiles = turnProfiles.length > 0
+      ? turnProfiles
+      : requiredToolProfiles(input.sessionMetadata);
     const fixedNames = new Set(requiredToolNamesForTurn(input));
+    for (const profile of fixedProfiles) {
+      for (const name of PROFILE_TOOL_NAMES[profile]) fixedNames.add(name);
+    }
+    if (!projectLedgerLifecycleAllowed(input)) {
+      for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) fixedNames.delete(name);
+    }
+    if (projectLedgerInspectionSuppressed(input)) {
+      for (const name of PROJECT_LEDGER_INSPECTION_TOOL_NAMES) fixedNames.delete(name);
+    }
     return tools.filter((tool) =>
       fixedNames.has(tool.name) &&
       !(input.role === "worker" && WORKER_FORBIDDEN_TOOL_NAMES.has(tool.name)),
@@ -419,7 +434,7 @@ export function selectButlerToolsForTurn(input: {
 }
 
 function fixedWorkspaceToolDefinition(tool: FunctionToolDefinition): FunctionToolDefinition {
-  if (tool.name !== "grep_files" && tool.name !== "read_file") return tool;
+  if (tool.name !== "grep_files" && tool.name !== "read_file" && tool.name !== "write_file") return tool;
   const parameters = recordValue(tool.parameters);
   const properties = recordValue(parameters.properties);
   if (!("workspace_root" in properties)) return tool;

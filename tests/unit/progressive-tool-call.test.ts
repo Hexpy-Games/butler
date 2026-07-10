@@ -357,6 +357,21 @@ test("tool_call schema validation rejects unknown properties when no properties 
   });
 });
 
+test("schema validation enforces const and conditional oneOf requirements", () => {
+  const schema = {
+    type: "object",
+    properties: { kind: { type: "string" }, work_id: { type: "string" } },
+    required: ["kind"],
+    oneOf: [
+      { properties: { kind: { const: "work" } } },
+      { properties: { kind: { const: "task" } }, required: ["work_id"] },
+    ],
+  };
+  expect(validateJsonObjectSchema({ kind: "task", work_id: "W-1" }, schema)).toEqual({ ok: true });
+  expect(validateJsonObjectSchema({ kind: "task" }, schema)).toMatchObject({ ok: false });
+  expect(validateJsonObjectSchema({ kind: "other" }, schema)).toMatchObject({ ok: false });
+});
+
 test("bridge audit metadata redacts raw tool_call arguments", () => {
   const event = bridgeToolAuditEvent(
     "tool_call",

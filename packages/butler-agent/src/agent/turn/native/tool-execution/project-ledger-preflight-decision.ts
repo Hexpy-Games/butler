@@ -17,6 +17,7 @@ export function allowsProjectLedgerPreflightDecision(input: {
 }): boolean {
   if (!LEDGER_PREFLIGHT_TOOL_NAMES.has(input.call.name)) return false;
   if (!ledgerTrackingMode(input.executorInput.turnInput.metadata)) return false;
+  if (input.executorInput.activeWorkStreamBinding?.()) return false;
   const currentToolNames = input.executorInput.toolSurfaceController?.currentToolNames() ?? [];
   return currentToolNames.includes(input.call.name) && currentToolNames.includes("project_ledger_status");
 }

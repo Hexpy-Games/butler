@@ -70,6 +70,8 @@ const projectLedgerToolNames: string[] = [
 ];
 const projectMetadataToolNames: string[] = [
   "project_ledger_status",
+  "project_ledger_list",
+  "project_ledger_show",
   "project_ledger_check",
   "inspect_project_status",
   "query_project_work",
@@ -82,6 +84,8 @@ const projectLifecycleWorkspaceToolNames: string[] = [
   "write_file",
   "grep_files",
   "project_ledger_status",
+  "project_ledger_list",
+  "project_ledger_show",
   "project_ledger_work_update",
   "project_ledger_work_complete",
   "project_ledger_task_update",
@@ -925,7 +929,7 @@ test("project sessions expose bounded project tools without workspace escalation
   expect(names).not.toContain("call_mcp_tool");
   expect(names).not.toContain("create_planned_task");
   expect(names).not.toContain("create_work_orchestration");
-  expect(toolContractJsonChars(tools)).toBeLessThan(11_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(12_000);
 });
 
 test("project sessions keep Project Ledger lifecycle tools hidden for status-only wording", () => {
@@ -1206,6 +1210,8 @@ test("Project Ledger runtime metadata exposes the bounded project profile withou
     turnMetadata: { runtimePolicy: { tracking_mode: "ledger" } },
   })).toEqual(["startup", "project"]);
   expect(names).toContain("project_ledger_status");
+  expect(names).toContain("project_ledger_list");
+  expect(names).toContain("project_ledger_show");
   expect(names).toContain("inspect_project_status");
   expect(names).toContain("query_project_work");
   expect(names).toContain("render_project_dashboard");
@@ -2908,7 +2914,23 @@ test("Project Ledger tool schemas expose bounded project management wrappers", (
   expect(Object.keys(nativeList?.parameters.properties ?? {})).toEqual(["project_ref", "kind", "status", "query", "limit"]);
   expect(nativeCreate?.parameters.required).toEqual(["kind", "id", "title"]);
   expect(Object.keys(nativeCreate?.parameters.properties ?? {})).toContain("body");
-  expect(nativeTaskComplete?.parameters.required).toEqual(["id"]);
+  const createVariants = (nativeCreate?.parameters as Record<string, unknown>)?.oneOf as Array<{
+    properties?: { kind?: { const?: string; enum?: string[] } };
+    required?: string[];
+  }>;
+  expect(createVariants.find((variant) => variant.properties?.kind?.const === "task")?.required)
+    .toEqual(["work_id", "acceptance"]);
+  expect(createVariants.find((variant) => variant.properties?.kind?.const === "attempt")?.required)
+    .toEqual(["task_id"]);
+  const workVariant = createVariants.find((variant) => variant.properties?.kind?.const === "work");
+  expect(workVariant).toBeDefined();
+  expect(workVariant?.required).toContain("acceptance");
+  expect((workVariant?.properties as any).status.enum).toContain("in_progress");
+  const taskVariant = createVariants.find((variant) => variant.properties?.kind?.const === "task");
+  expect(taskVariant?.required).toEqual(["work_id", "acceptance"]);
+  expect((taskVariant?.properties as any).status.enum).toContain("todo");
+  expect((taskVariant?.properties as any).status.enum).not.toContain("pending");
+  expect(nativeTaskComplete?.parameters.required).toEqual(["id", "validation", "review", "report"]);
   expect(Object.keys(nativeTaskComplete?.parameters.properties ?? {})).toContain("validation");
   expect(status?.parameters.required).toEqual([]);
   expect(Object.keys(status?.parameters.properties ?? {})).toEqual(["project_ref"]);
@@ -2924,6 +2946,16 @@ test("Project Ledger tool schemas expose bounded project management wrappers", (
     "review",
     "report",
   ]);
+});
+
+test("workspace file tool schemas keep the runtime-owned root out of model arguments", () => {
+  for (const name of ["grep_files", "read_file", "write_file"]) {
+    const tool = BUTLER_TOOLS.find((candidate) => candidate.name === name);
+    expect(tool).toBeDefined();
+    expect(tool?.parameters.properties).not.toHaveProperty("workspace_root");
+  }
+  expect((BUTLER_TOOLS.find((tool) => tool.name === "read_file")?.parameters.properties as any)
+    .path.description).toContain("relative to the active workspace root");
 });
 
 test("context monitor tool schema exposes safe session lookup", () => {
@@ -4375,6 +4407,11 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
   }) as Record<string, any>;
   expect(nativeCreatedTask.ok).toBe(true);
   expect(nativeCreatedTask.data.id).toBe("T-NATIVE-BODY");
+  expect(nativeCreatedTask.project_ledger_closeout).toEqual(expect.objectContaining({
+    ok: true,
+    check_ok: true,
+    issue_count: 0,
+  }));
 
   const nativeShownTask = await execute({
     name: "project_ledger_show",

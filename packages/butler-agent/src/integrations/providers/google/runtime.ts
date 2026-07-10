@@ -1,4 +1,4 @@
-import { createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, type ProviderUsageSample } from "../shared/runtime-support.ts";
+import { activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { geminiGenerateContentUrl, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
@@ -9,6 +9,7 @@ import {
   blockCapacityToolOutput,
   partitionSemanticToolBatch,
 } from "../../../agent/turn/tool-batch-capacity.ts";
+import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 
 
 export async function createGeminiContent(
@@ -123,7 +124,6 @@ export async function runGeminiFunctionToolPromptText(
   options: FunctionToolPromptOptions,
 ): Promise<string> {
   const log = options.log ?? (() => {});
-  const allowedNames = new Set(options.tools.map((tool) => tool.name));
   const maxRounds = modelIterationLimitWithinUsageBudget(
     options.maxToolRounds ?? 8,
     options.usageAttribution,
@@ -134,12 +134,14 @@ export async function runGeminiFunctionToolPromptText(
   const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   let toolBatchExecuted = false;
   for (let round = 0; round < maxRounds; round += 1) {
+    const activeTools = activeFunctionTools(options);
+    const allowedNames = new Set(activeTools.map((tool) => tool.name));
     const response = await requests.request({
       model: config.modelRef,
       run: async () => await createGeminiContent(config, {
         systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
         contents,
-        tools: geminiTools(options.tools),
+        tools: geminiTools(activeTools),
         ...(options.toolChoice === "required"
           ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
           : {}),
@@ -160,7 +162,13 @@ export async function runGeminiFunctionToolPromptText(
       return [{ id: `gemini_call_${round}_${name}`, name, args: args.parsed, raw: args.raw }];
     });
     if (calls.length === 0) {
-      if (text) return text;
+      if (text) {
+        const disposition = await reviewProviderFinalCandidate({ options, text, roundIndex: round });
+        if (disposition.kind === "final") return disposition.text;
+        contents.push({ role: "model", parts: responseParts });
+        contents.push({ role: "user", parts: [{ text: disposition.observation }] });
+        continue;
+      }
       throw providerEmptyResponseError({
         provider: "google",
         api: "generate_content",

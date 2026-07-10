@@ -230,6 +230,10 @@ export interface FunctionToolCall {
   arguments: string;
 }
 
+export type ProviderFinalCandidateReview =
+  | { status: "accepted"; text?: string }
+  | { status: "continue"; observation: string; requiredDeliverables?: string[] };
+
 
 export interface FunctionToolPromptOptions {
   prompt: string;
@@ -265,6 +269,10 @@ export interface FunctionToolPromptOptions {
     args: Record<string, unknown>;
     output: unknown;
   }) => Promise<string | null | undefined> | string | null | undefined;
+  reviewFinalCandidate?: (input: {
+    text: string;
+    roundIndex: number;
+  }) => Promise<ProviderFinalCandidateReview> | ProviderFinalCandidateReview;
 }
 
 

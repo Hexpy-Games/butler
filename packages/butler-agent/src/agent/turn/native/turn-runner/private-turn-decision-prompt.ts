@@ -25,6 +25,9 @@ export async function runPrivateTurnDecisionPrompt(input: {
   promptSections?: PromptUsageSectionAttribution[];
   responseFormat?: { schema: Record<string, unknown> };
   validateDecision?: (args: Record<string, unknown>) => PrivateTurnDecisionValidation;
+  toolName?: string;
+  toolDescription?: string;
+  submissionInstruction?: string;
   model: string;
   reasoningEffort?: ReasoningEffort;
   systemPrompt: string;
@@ -43,21 +46,22 @@ export async function runPrivateTurnDecisionPrompt(input: {
   throwIfRuntimeTurnAborted(input.signal);
   let submissionCount = 0;
   let latestValidation: PrivateTurnDecisionValidation | null = null;
+  const toolName = input.toolName ?? PRIVATE_TURN_DECISION_TOOL;
   const text = await input.toolPromptRunner({
     prompt: input.promptText,
     model: input.model,
     reasoningEffort: input.reasoningEffort,
     instructions: [
       input.systemPrompt,
-      `Submit exactly one typed turn decision through ${PRIVATE_TURN_DECISION_TOOL}.`,
+      input.submissionInstruction ?? `Submit exactly one typed turn decision through ${toolName}.`,
     ].join("\n\n"),
     cacheScope: "session-turn",
     signal: input.signal,
     attachments: input.attachments,
     tools: [{
       type: "function",
-      name: PRIVATE_TURN_DECISION_TOOL,
-      description: "Submit the typed decision that controls this Butler turn.",
+      name: toolName,
+      description: input.toolDescription ?? "Submit the typed decision that controls this Butler turn.",
       parameters: input.responseFormat.schema,
     }],
     maxToolRounds: 2,
@@ -65,7 +69,7 @@ export async function runPrivateTurnDecisionPrompt(input: {
     butlerData: input.butlerData,
     usageAttribution: input.usageAttribution(input.phase, 0, input.promptSections),
     executeTool: async (call) => {
-      if (call.name !== PRIVATE_TURN_DECISION_TOOL) {
+      if (call.name !== toolName) {
         throw new Error("turn_contract_decision_tool_mismatch");
       }
       submissionCount += 1;
@@ -82,7 +86,7 @@ export async function runPrivateTurnDecisionPrompt(input: {
         };
     },
     finalTextFromToolResult: ({ name, args }) => {
-      if (name !== PRIVATE_TURN_DECISION_TOOL) return null;
+      if (name !== toolName) return null;
       if (latestValidation?.ok || submissionCount >= 2) {
         return JSON.stringify(latestValidation?.canonicalArgs ?? args);
       }

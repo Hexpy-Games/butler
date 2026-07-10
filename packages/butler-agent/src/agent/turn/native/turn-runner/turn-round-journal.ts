@@ -5,6 +5,7 @@ import { structuredToolResultModelPreview } from "../../tool-result-model-previe
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
 import {
   recentTurnRoundJournal,
+  stableTurnMutationIdentities,
   type DurableTurnRoundJournalEntry,
 } from "../../turn-round-journal-contract.ts";
 
@@ -45,16 +46,43 @@ export function buildDurableTurnRoundJournal(input: {
       result_fingerprint: digest(stableJson(stableValue(resultPreview ?? entry.result ?? entry.error))),
       state_revision: stateRevision(entry, resultPreview),
       observed_delta: mutating ? "mutation" : evidence ? "evidence" : "none",
+      call_coordinates: stableCallCoordinates(entry.args),
       result_preview: resultPreview ?? undefined,
     }) as unknown as DurableTurnRoundJournalEntry;
   });
 }
 
+function stableCallCoordinates(
+  args: Record<string, unknown>,
+): Record<string, string | number | boolean> | undefined {
+  const coordinateKeys = [
+    "kind", "id", "work_id", "task_id", "list_id", "path", "validation_suite", "view", "status",
+  ] as const;
+  const coordinates: Record<string, string | number | boolean> = {};
+  for (const key of coordinateKeys) {
+    const value = args[key];
+    if (typeof value === "number" || typeof value === "boolean") {
+      coordinates[key] = value;
+      continue;
+    }
+    if (typeof value !== "string" || !value.trim()) continue;
+    const safe = key === "path"
+      ? safeRelativePath(value)
+      : safeOptionalPublicText(value)?.slice(0, 240);
+    if (safe) coordinates[key] = safe;
+  }
+  return Object.keys(coordinates).length > 0 ? coordinates : undefined;
+}
+
 export function renderTurnRoundJournal(entries: readonly DurableTurnRoundJournalEntry[]): string {
   if (entries.length === 0) return "";
+  const stableIdentities = stableTurnMutationIdentities(entries);
   return [
+    ...(stableIdentities.length > 0
+      ? ["Stable mutation identities:", JSON.stringify(stableIdentities, null, 2)]
+      : []),
     "Recent provider-neutral round journal:",
-    JSON.stringify(entries, null, 2),
+    JSON.stringify(recentTurnRoundJournal(entries), null, 2),
     "Use changed state revisions and unresolved obligations to choose the next action. Do not repeat a no-delta broad read unless a typed retry reason expects a concrete change.",
   ].join("\n");
 }

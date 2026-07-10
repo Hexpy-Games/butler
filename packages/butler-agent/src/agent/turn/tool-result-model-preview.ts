@@ -2,11 +2,16 @@ const MAX_CANDIDATE_PATHS = 24;
 const MAX_MATCH_PREVIEWS = 12;
 const MAX_MATCH_TEXT_CHARS = 240;
 const MAX_FILE_CONTENT_CHARS = 4_800;
+const WORK_BLOCK_TOOL_NAME = "run_work_block";
 
 export function structuredToolResultModelPreview(input: {
   toolName: string;
   output: unknown;
 }): Record<string, unknown> | null {
+  if (input.toolName === WORK_BLOCK_TOOL_NAME) {
+    const output = toolPayload(input.output, ["results"]);
+    return output ? workBlockPreview(output) : null;
+  }
   if (input.toolName === "grep_files") {
     const output = toolPayload(input.output, ["matches", "pattern"]);
     return output ? grepFilesPreview(output) : null;
@@ -15,7 +20,44 @@ export function structuredToolResultModelPreview(input: {
     const output = toolPayload(input.output, ["content", "path"]);
     return output ? readFilePreview(output) : null;
   }
+  if (input.toolName === "run_command") {
+    const output = toolPayload(input.output, ["model_visible_content", "exit_code"]);
+    return output ? runCommandPreview(output) : null;
+  }
   return genericToolPreview(input.toolName, input.output);
+}
+
+function runCommandPreview(output: Record<string, unknown>): Record<string, unknown> {
+  return compactUndefined({
+    tool_name: "run_command",
+    ok: typeof output.ok === "boolean" ? output.ok : undefined,
+    exit_code: finiteNumber(output.exit_code) ?? undefined,
+    observation_kind: text(output.observation_kind),
+    summary: boundedText(output.summary, 480),
+    model_visible_content: boundedHeadTailText(output.model_visible_content, 2_000),
+    stderr: boundedHeadTailText(output.stderr, 1_600),
+    stdout: boundedHeadTailText(output.stdout, 1_200),
+  });
+}
+
+function workBlockPreview(output: Record<string, unknown>): Record<string, unknown> {
+  const results = Array.isArray(output.results) ? output.results : [];
+  return {
+    tool_name: WORK_BLOCK_TOOL_NAME,
+    ...(record(output.frontier) ? { frontier: projectGenericRecord(record(output.frontier)!, 0) } : {}),
+    results: results.slice(0, 6).flatMap((value) => {
+      const result = record(value);
+      const name = text(result?.name);
+      if (!name) return [];
+      const nested = result?.result ?? result?.output;
+      return [{
+        name,
+        ok: result?.ok !== false,
+        preview: structuredToolResultModelPreview({ toolName: name, output: nested }),
+        ...(typeof result?.error === "string" ? { error: boundedText(result.error, 320) } : {}),
+      }];
+    }),
+  };
 }
 
 function genericToolPreview(toolName: string, value: unknown): Record<string, unknown> | null {
@@ -33,6 +75,7 @@ const GENERIC_SAFE_KEYS = new Set([
   "list_id", "todo_list_id", "workstream_id", "work_stream_id", "project_id", "record_generation",
   "generation", "count", "counts", "progress", "results", "records", "nextActions", "next_actions",
   "items", "issues", "work_stream", "work_streams", "data", "error", "code", "message",
+  "stage", "gated", "ledgerDiscoveryObserved", "ledgerDiscoveryCandidateCount", "requiredLedgerKinds", "observedLedgerKinds", "ledgerCheckPassed",
 ]);
 
 function projectGenericRecord(value: Record<string, unknown>, depth: number): Record<string, unknown> {
@@ -95,14 +138,60 @@ function grepFilesPreview(output: Record<string, unknown>): Record<string, unkno
 }
 
 function readFilePreview(output: Record<string, unknown>): Record<string, unknown> {
+  const content = readFileContentPreview(output);
   return compactUndefined({
     tool_name: "read_file",
     path: text(output.path),
     start_line: finiteNumber(output.start_line),
     end_line: finiteNumber(output.end_line),
     truncated: output.truncated === true,
-    content: boundedText(output.content, MAX_FILE_CONTENT_CHARS),
+    content: content.text,
+    preview_content_truncated: content.truncated,
+    preview_start_line: content.startLine,
+    preview_end_line: content.endLine,
+    next_start_line: content.nextStartLine,
+    omitted_through_line: content.truncated ? finiteNumber(output.end_line) ?? undefined : undefined,
   });
+}
+
+function readFileContentPreview(output: Record<string, unknown>): {
+  text?: string;
+  truncated: boolean;
+  startLine?: number;
+  endLine?: number;
+  nextStartLine?: number;
+} {
+  const content = text(output.content);
+  const startLine = finiteNumber(output.start_line) ?? undefined;
+  if (!content) return { truncated: false, startLine };
+  if (content.length <= MAX_FILE_CONTENT_CHARS) {
+    return {
+      text: content,
+      truncated: false,
+      startLine,
+      endLine: finiteNumber(output.end_line) ?? undefined,
+    };
+  }
+  const candidate = content.slice(0, MAX_FILE_CONTENT_CHARS);
+  const lineBoundary = candidate.lastIndexOf("\n");
+  if (lineBoundary < Math.floor(MAX_FILE_CONTENT_CHARS / 2) || startLine === undefined) {
+    return {
+      text: `${candidate}...`,
+      truncated: true,
+      startLine,
+    };
+  }
+  const visible = candidate.slice(0, lineBoundary);
+  const visibleLineCount = visible.split("\n").length;
+  const endLine = startLine + visibleLineCount - 1;
+  const nextStartLine = endLine + 1;
+  return {
+    text: `${visible}\n[preview cut; continue with read_file start_line=${nextStartLine}]`,
+    truncated: true,
+    startLine,
+    endLine,
+    nextStartLine,
+  };
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -139,6 +228,16 @@ function boundedText(value: unknown, maxChars: number): string | undefined {
   return valueText.length <= maxChars
     ? valueText
     : `${valueText.slice(0, maxChars)}...`;
+}
+
+function boundedHeadTailText(value: unknown, maxChars: number): string | undefined {
+  const valueText = text(value);
+  if (!valueText) return undefined;
+  if (valueText.length <= maxChars) return valueText;
+  const marker = "\n...[middle omitted]...\n";
+  const available = Math.max(0, maxChars - marker.length);
+  const headLength = Math.floor(available * 0.4);
+  return `${valueText.slice(0, headLength)}${marker}${valueText.slice(-(available - headLength))}`;
 }
 
 function finiteNumber(value: unknown): number | null {

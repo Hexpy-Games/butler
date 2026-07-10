@@ -67,7 +67,8 @@ export async function emitStartedProgress(input: {
   if (
     !input.semanticProgressEstablished &&
     !input.isWorkerStartTool &&
-    input.decision.source !== "runtime-derived"
+    input.decision.source !== "runtime-derived" &&
+    isFirstDecisionTool(input.decision)
   ) {
     await emitDecisionProgressBestEffort({
       turnInput: input.input.turnInput,

@@ -690,11 +690,12 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       } catch (error) {
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
+      const isSchedulerYield = isTurnSchedulerContinuationYieldError(error);
       const isContinuationFailure =
         safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
         isNonPublicContinuationDeliveryError(error) ||
         isPromptUsageModelCallBudgetError(error) ||
-        isTurnSchedulerContinuationYieldError(error);
+        isSchedulerYield;
       if (!isContinuationFailure) {
         this.finalizeConversationAdmissionFailure(conversationAdmission, timestamp, error);
       }
@@ -727,28 +728,37 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         sessionId: binding.sessionId,
         role: binding.role,
         state: failureState,
-        reason: failureState === "active"
+        reason: isSchedulerYield
+          ? "gateway-turn-continuing"
+          : failureState === "active"
           ? "gateway-turn-incomplete"
           : "gateway-runtime-error",
-        metadata: {
+        metadata: isSchedulerYield
+          ? {
+            contextAtomId: error.contextAtomId,
+            checkpointId: error.checkpointId,
+          }
+          : {
+            message: safeFailure.message,
+            code: safeFailure.code,
+            diagnostics: diagnosticDetails(error),
+          },
+        timestamp,
+      });
+      if (!isSchedulerYield) {
+        recordSystemEvent({
+          sessionId: binding.sessionId,
+          category: "runtime_error",
           message: safeFailure.message,
-          code: safeFailure.code,
-          diagnostics: diagnosticDetails(error),
-        },
-        timestamp,
-      });
-      recordSystemEvent({
-        sessionId: binding.sessionId,
-        category: "runtime_error",
-        message: safeFailure.message,
-        statusCode: safeFailure.statusCode,
-        details: diagnosticDetails(error),
-        metadata: {
-          source: "gateway-actor",
-          code: safeFailure.code,
-        },
-        timestamp,
-      });
+          statusCode: safeFailure.statusCode,
+          details: diagnosticDetails(error),
+          metadata: {
+            source: "gateway-actor",
+            code: safeFailure.code,
+          },
+          timestamp,
+        });
+      }
       throw err;
     }
   }

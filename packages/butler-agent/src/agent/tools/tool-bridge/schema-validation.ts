@@ -8,7 +8,7 @@ export function validateJsonObjectSchema(
 ): SchemaValidationResult {
   const record = objectRecord(schema);
   if (!record) return { ok: true };
-  return validateObject(value, record, "$");
+  return validateJsonValue(value, record, "$");
 }
 
 function validateObject(
@@ -48,8 +48,26 @@ function validateObject(
 function validateJsonValue(value: unknown, schema: unknown, path: string): SchemaValidationResult {
   const record = objectRecord(schema);
   if (!record) return { ok: true };
+  if ("const" in record && value !== record.const) {
+    return { ok: false, message: `Expected constant value at ${path}`, path };
+  }
   const enumValues = Array.isArray(record.enum) ? record.enum : null;
   if (enumValues && !enumValues.includes(value)) return { ok: false, message: `Invalid enum value at ${path}`, path };
+  const oneOf = Array.isArray(record.oneOf) ? record.oneOf : null;
+  if (oneOf) {
+    const results = oneOf.map((variant) => validateJsonValue(value, variant, path));
+    const matches = results.filter((result) => result.ok);
+    if (matches.length !== 1) {
+      const firstFailure = results.find((result) => !result.ok);
+      return {
+        ok: false,
+        message: matches.length === 0 && firstFailure && !firstFailure.ok
+          ? `No schema variant matched: ${firstFailure.message}`
+          : `Expected exactly one schema variant at ${path}`,
+        path: matches.length === 0 && firstFailure && !firstFailure.ok ? firstFailure.path : path,
+      };
+    }
+  }
   const types = schemaTypes(record.type);
   if (types.length > 0 && !types.some((type) => matchesType(value, type))) {
     return { ok: false, message: `Expected ${types.join(" or ")} at ${path}`, path };
