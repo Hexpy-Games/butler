@@ -3,30 +3,25 @@ import { safeOptionalPublicText, safeRelativePath } from "../../../output/eviden
 import { isStateMutatingToolCall } from "../../tool-loop-guards.ts";
 import { structuredToolResultModelPreview } from "../../tool-result-model-preview.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
+import {
+  recentTurnRoundJournal,
+  type DurableTurnRoundJournalEntry,
+} from "../../turn-round-journal-contract.ts";
 
-const ROUND_JOURNAL_LIMIT = 18;
-
-export interface DurableTurnRoundJournalEntry {
-  sequence: number;
-  decision_id?: string;
-  semantic_block_id?: string;
-  block_title?: string;
-  expected_effect?: string;
-  repeat_reason?: PublicWorkDecision["repeatReason"];
-  tool: string;
-  ok: boolean;
-  call_identity: string;
-  result_fingerprint: string;
-  state_revision: string;
-  observed_delta: "mutation" | "evidence" | "none";
-  result_preview?: Record<string, unknown>;
-}
+export type { DurableTurnRoundJournalEntry } from "../../turn-round-journal-contract.ts";
 
 export function buildTurnRoundJournal(input: {
   audit: readonly ToolAuditEntry[];
   publicDecisions: readonly PublicWorkDecision[];
 }): DurableTurnRoundJournalEntry[] {
-  return input.audit.slice(-ROUND_JOURNAL_LIMIT).map((entry, offset) => {
+  return recentTurnRoundJournal(buildDurableTurnRoundJournal(input));
+}
+
+export function buildDurableTurnRoundJournal(input: {
+  audit: readonly ToolAuditEntry[];
+  publicDecisions: readonly PublicWorkDecision[];
+}): DurableTurnRoundJournalEntry[] {
+  return input.audit.map((entry, offset) => {
     const decision = entry.publicDecision ?? decisionForAuditEntry(input.publicDecisions, entry);
     const resultPreview = structuredToolResultModelPreview({
       toolName: entry.name,
@@ -38,7 +33,7 @@ export function buildTurnRoundJournal(input: {
       (entry.evidenceCapabilityReceipts?.length ?? 0) > 0
     );
     return compactUndefined({
-      sequence: input.audit.length - Math.min(input.audit.length, ROUND_JOURNAL_LIMIT) + offset + 1,
+      sequence: offset + 1,
       decision_id: safeText(decision?.decisionId),
       semantic_block_id: safeText(decision?.semanticBlockId),
       block_title: safeOptionalPublicText(decision?.blockTitle),

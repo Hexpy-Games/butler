@@ -14,6 +14,7 @@ import {
   readTurnContextAtom,
   type TurnContextAtom,
 } from "../../turn-continuation-context.ts";
+import { recentTurnRoundJournal } from "../../turn-round-journal-contract.ts";
 
 export interface NormalizedTurnPrompt {
   prompt: string;
@@ -331,7 +332,7 @@ function renderTurnContextAtom(atom: TurnContextAtom, contextAtomId: string): st
   lines.push(renderAtomRefs("Current Turn Todos", atom.currentTurnTodos));
   if (atom.roundJournal?.length) {
     lines.push("Recent Round Journal:");
-    lines.push(JSON.stringify(atom.roundJournal, null, 2));
+    lines.push(JSON.stringify(recentTurnRoundJournal(atom.roundJournal), null, 2));
   }
   lines.push("Continuation Instruction: resume this same logical turn from the context atom facts before using active WorkStream/Todo fallback.");
   return lines.filter((line) => line.trim()).join("\n");

@@ -1,4 +1,4 @@
-import { finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, sanitizeResponseFinalAnswerText } from "../shared/runtime-support.ts";
+import { createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { geminiGenerateContentUrl, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
@@ -66,6 +66,18 @@ export function geminiText(response: Record<string, any>): string {
   );
 }
 
+export function geminiUsageSample(
+  response: Record<string, any>,
+): ProviderUsageSample | null {
+  const promptTokens = numberOrNull(response.usageMetadata?.promptTokenCount);
+  const outputTokens = numberOrNull(response.usageMetadata?.candidatesTokenCount) ?? 0;
+  const totalTokens = numberOrNull(response.usageMetadata?.totalTokenCount) ??
+    (promptTokens === null ? null : promptTokens + outputTokens);
+  const cachedTokens = numberOrNull(response.usageMetadata?.cachedContentTokenCount) ?? 0;
+  if (promptTokens === null && totalTokens === null) return null;
+  return { promptTokens, cachedTokens, outputTokens, totalTokens };
+}
+
 
 export function geminiTools(tools: FunctionToolDefinition[]): Array<Record<string, unknown>> {
   return [{
@@ -82,12 +94,17 @@ export async function runGeminiPromptText(
   config: HostedRuntimeConfig,
   options: PromptOptions,
 ): Promise<string> {
-  const response = await createGeminiContent(config, {
-    ...(options.instructions?.trim()
-      ? { systemInstruction: { parts: [{ text: options.instructions.trim() }] } }
-      : {}),
-    contents: [{ role: "user", parts: [{ text: promptTextForHosted(options) }] }],
-  }, options.signal);
+  const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
+  const response = await requests.request({
+    model: config.modelRef,
+    run: async () => await createGeminiContent(config, {
+      ...(options.instructions?.trim()
+        ? { systemInstruction: { parts: [{ text: options.instructions.trim() }] } }
+        : {}),
+      contents: [{ role: "user", parts: [{ text: promptTextForHosted(options) }] }],
+    }, options.signal),
+    usage: geminiUsageSample,
+  });
   const text = geminiText(response);
   if (!text) {
     throw providerEmptyResponseError({
@@ -114,16 +131,21 @@ export async function runGeminiFunctionToolPromptText(
   const contents: Array<Record<string, unknown>> = [
     { role: "user", parts: [{ text: promptTextForHosted(options) }] },
   ];
+  const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   let toolBatchExecuted = false;
   for (let round = 0; round < maxRounds; round += 1) {
-    const response = await createGeminiContent(config, {
-      systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
-      contents,
-      tools: geminiTools(options.tools),
-      ...(options.toolChoice === "required"
-        ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
-        : {}),
-    }, options.signal);
+    const response = await requests.request({
+      model: config.modelRef,
+      run: async () => await createGeminiContent(config, {
+        systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
+        contents,
+        tools: geminiTools(options.tools),
+        ...(options.toolChoice === "required"
+          ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
+          : {}),
+      }, options.signal),
+      usage: geminiUsageSample,
+    });
     const parts = response.candidates?.[0]?.content?.parts;
     const responseParts = Array.isArray(parts) ? parts : [];
     const text = geminiText(response);
@@ -208,10 +230,14 @@ export async function runGeminiFunctionToolPromptText(
     return toolBatchCompletedHandoffText();
   }
   contents.push({ role: "user", parts: [{ text: finalNoToolInstructions(options.instructions) }] });
-  const response = await createGeminiContent(config, {
-    systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
-    contents,
-  }, options.signal);
+  const response = await requests.request({
+    model: config.modelRef,
+    run: async () => await createGeminiContent(config, {
+      systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
+      contents,
+    }, options.signal),
+    usage: geminiUsageSample,
+  });
   const text = geminiText(response);
   if (!text) {
     throw providerEmptyResponseError({
