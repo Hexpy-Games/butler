@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  isStaticallyReadOnlyToolName,
   isStateMutatingToolCall,
   repeatedToolFamilyKey,
   ToolStagnationObserver,
@@ -76,6 +77,11 @@ test("tool stagnation history resets after a state mutation", () => {
 });
 
 test("repeated tool family helpers classify read-only and state-mutating calls", () => {
+  expect(repeatedToolFamilyKey("read_file", {
+    path: "packages/butler-agent/src/agent/turn/tool-loop-guards.ts",
+    start_line: 120,
+    limit_lines: 80,
+  })).toBe("workspace-read:packages/butler-agent/src/agent/turn/tool-loop-guards.ts:120:80");
   expect(repeatedToolFamilyKey("grep_files", {
     pattern: "promptCacheKey",
     include_globs: ["packages/**/*.ts"],
@@ -99,6 +105,12 @@ test("repeated tool family helpers classify read-only and state-mutating calls",
   expect(repeatedToolFamilyKey("tool_search", { provider: "native", category: "workspace", query: "run command" })).toBe("tool-search:native:workspace:any:run command");
   expect(repeatedToolFamilyKey("list_tool_capabilities", { category: "workspace" })).toBe("tool-capabilities:any:workspace:any:any");
   expect(repeatedToolFamilyKey("run_command", { command: "git diff -- packages/butler-agent" })).toBe("command:git-diff");
+  expect(isStaticallyReadOnlyToolName("read_file")).toBe(true);
+  expect(isStaticallyReadOnlyToolName("grep_files")).toBe(true);
+  expect(isStaticallyReadOnlyToolName("read_tool_evidence_artifact")).toBe(true);
+  expect(isStaticallyReadOnlyToolName("write_file")).toBe(false);
+  expect(isStateMutatingToolCall("read_file", { path: "src/a.ts" })).toBe(false);
+  expect(isStateMutatingToolCall("grep_files", { pattern: "TODO" })).toBe(false);
   expect(isStateMutatingToolCall("web_search", { query: "Butler" })).toBe(false);
   expect(isStateMutatingToolCall("project_ledger_check", {})).toBe(false);
   expect(isStateMutatingToolCall("project_ledger_render", { view: "dashboard" })).toBe(false);

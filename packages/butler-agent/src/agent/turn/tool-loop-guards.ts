@@ -12,6 +12,40 @@ interface ObservedToolState {
   count: number;
 }
 
+const STATICALLY_READ_ONLY_TOOL_NAMES = new Set([
+  "get_context_monitor",
+  "get_memory_health",
+  "get_task_result",
+  "get_usage_monitor",
+  "get_work_dashboard",
+  "grep_files",
+  "inspect_project_status",
+  "list_automations",
+  "list_mcp_capabilities",
+  "list_skills",
+  "list_tasks",
+  "list_todo_list",
+  "list_tool_capabilities",
+  "list_work_streams",
+  "project_ledger_check",
+  "project_ledger_list",
+  "project_ledger_show",
+  "project_ledger_status",
+  "project_memory_search",
+  "query_memory",
+  "query_project_work",
+  "read_conversation_context",
+  "read_file",
+  "read_mcp_resource",
+  "read_tool_evidence_artifact",
+  "read_tool_output_artifact",
+  "recall_memory",
+  "tool_describe",
+  "tool_search",
+  "web_read",
+  "web_search",
+]);
+
 export class ToolStagnationObserver {
   private readonly observed = new Map<string, ObservedToolState>();
 
@@ -53,6 +87,13 @@ export function directToolRoundLimit(requestedRounds: number): number {
 }
 
 export function repeatedToolFamilyKey(name: string, args: Record<string, unknown>): string | null {
+  if (name === "read_file") {
+    const path = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path) return null;
+    const startLine = positiveIntegerArg(args.start_line) ?? 1;
+    const limitLines = positiveIntegerArg(args.limit_lines) ?? "default";
+    return `workspace-read:${path}:${startLine}:${limitLines}`;
+  }
   if (name === "grep_files") {
     const pattern = typeof args.pattern === "string" ? args.pattern.trim() : "";
     return pattern ? `workspace-grep:${pattern}` : null;
@@ -88,6 +129,12 @@ export function repeatedToolFamilyKey(name: string, args: Record<string, unknown
   if (/^git\s+status\b/u.test(command)) return "command:git-status";
   if (/^git\s+diff\b/u.test(command)) return "command:git-diff";
   return null;
+}
+
+function positiveIntegerArg(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : null;
 }
 
 function discoveryToolFamilyKey(prefix: string, args: Record<string, unknown>): string {
@@ -128,19 +175,7 @@ export function isStateMutatingToolCall(name: string, args: Record<string, unkno
     if (name === "render_project_dashboard" || name === "project_ledger_render") {
       return args.write === true;
     }
-    return ![
-      "inspect_project_status",
-      "query_project_work",
-      "project_ledger_status",
-      "project_ledger_list",
-      "project_ledger_show",
-      "project_ledger_check",
-      "web_search",
-      "web_read",
-      "read_tool_evidence_artifact",
-      "read_tool_output_artifact",
-      "list_todo_list",
-    ].includes(name);
+    return !isStaticallyReadOnlyToolName(name);
   }
   const command = typeof args.command === "string" ? args.command.trim() : "";
   if (!command) return false;
@@ -153,4 +188,8 @@ export function isStateMutatingToolCall(name: string, args: Record<string, unkno
   if (/(?:^|[\s;&|])project-ledger\s+(?:work|task|attempt)\s+(?:create|update|complete|start|succeed|fail)\b/u.test(command)) return true;
   if (/(?:^|[\s;&|])project-ledger\s+render\b[\s\S]*\s--write\b/u.test(command)) return true;
   return false;
+}
+
+export function isStaticallyReadOnlyToolName(name: string): boolean {
+  return STATICALLY_READ_ONLY_TOOL_NAMES.has(name);
 }

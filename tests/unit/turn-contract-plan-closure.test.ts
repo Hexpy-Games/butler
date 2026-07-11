@@ -127,7 +127,7 @@ test("an explicit bound plan blocks evidence-only terminal delivery until retain
   }).contract.state).toBe("delivered");
 });
 
-test("the runtime opening placeholder does not over-gate a simple execution contract", () => {
+test("the runtime opening placeholder blocks every execution contract until an explicit plan exists", () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-plan-placeholder-"));
   tempDirs.push(butlerData);
   const decision = {
@@ -147,5 +147,8 @@ test("the runtime opening placeholder does not over-gate a simple execution cont
   });
 
   expect(evaluateTurnContractPlanClosure({ butlerData, contract: active.contract }))
-    .toEqual({ status: "not_required", open_items: [] });
+    .toEqual({
+      status: "incomplete",
+      open_items: [{ id: "opening", status: "in_progress", phase: "planning" }],
+    });
 });

@@ -1,8 +1,16 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { cancelPersistedRuntimeTurn } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation.ts";
+import {
+  principalTurnCancellationMarkerPath,
+  principalTurnCancellationRecorded,
+  recordPrincipalTurnCancellation,
+  refreshPrincipalTurnAbortSignal,
+  registerPrincipalTurnAbortController,
+} from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-registry.ts";
+import { throwIfRuntimeTurnAborted } from "../../packages/butler-agent/src/agent/turn/native/policy/turn-errors.ts";
 import {
   compileTurnContract,
   TURN_CONTRACT_DECISION_SCHEMA,
@@ -126,4 +134,106 @@ test("principal cancellation resolves an in-process contract through its WorkStr
   });
   expect(contracts.listNonTerminal().map((item) => item.contract_id))
     .not.toContain(contract.contract_id);
+});
+
+test("principal cancellation tombstone aborts active and restarted turn controllers", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-principal-cancel-"));
+  tempDirs.push(butlerData);
+  const turnId = "turn-controller-cancel";
+  const activeController = new AbortController();
+  const unregister = registerPrincipalTurnAbortController({
+    butlerData,
+    turnId,
+    controller: activeController,
+  });
+
+  recordPrincipalTurnCancellation({ butlerData, turnId });
+
+  expect(activeController.signal.aborted).toBe(true);
+  expect(principalTurnCancellationRecorded({ butlerData, turnId })).toBe(true);
+  const markerPath = principalTurnCancellationMarkerPath({ butlerData, turnId });
+  expect(markerPath).not.toContain(turnId);
+  expect(readFileSync(markerPath, "utf8")).not.toContain(turnId);
+  unregister();
+
+  const restartedController = new AbortController();
+  const unregisterRestarted = registerPrincipalTurnAbortController({
+    butlerData,
+    turnId,
+    controller: restartedController,
+  });
+  expect(restartedController.signal.aborted).toBe(true);
+  unregisterRestarted();
+});
+
+test("turn boundary refresh observes a cancellation written by another process", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-principal-cancel-"));
+  tempDirs.push(butlerData);
+  const turnId = "turn-external-controller-cancel";
+  const controller = new AbortController();
+  const unregister = registerPrincipalTurnAbortController({
+    butlerData,
+    turnId,
+    controller,
+  });
+  writeFileSync(
+    principalTurnCancellationMarkerPath({ butlerData, turnId }),
+    `${JSON.stringify({ schemaVersion: "butler.principal-turn-cancellation.v1" })}\n`,
+    "utf8",
+  );
+
+  expect(() => throwIfRuntimeTurnAborted(controller.signal)).toThrow("Runtime turn was cancelled");
+  expect(refreshPrincipalTurnAbortSignal(controller.signal)).toBe(true);
+  expect(controller.signal.aborted).toBe(true);
+  unregister();
+});
+
+test("turn controller file watcher observes cross-process cancellation while a call is in flight", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-principal-cancel-"));
+  tempDirs.push(butlerData);
+  const turnId = "turn-external-watcher-cancel";
+  const controller = new AbortController();
+  const unregister = registerPrincipalTurnAbortController({
+    butlerData,
+    turnId,
+    controller,
+  });
+  const aborted = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("principal cancellation watcher timed out")),
+      1_000,
+    );
+    controller.signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+  });
+
+  writeFileSync(
+    principalTurnCancellationMarkerPath({ butlerData, turnId }),
+    `${JSON.stringify({ schemaVersion: "butler.principal-turn-cancellation.v1" })}\n`,
+    "utf8",
+  );
+  await aborted;
+
+  expect(controller.signal.aborted).toBe(true);
+  unregister();
+});
+
+test("completed turn registration is removed before a later cancellation record", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-principal-cancel-"));
+  tempDirs.push(butlerData);
+  const turnId = "turn-completed-before-cancel";
+  const controller = new AbortController();
+  const unregister = registerPrincipalTurnAbortController({
+    butlerData,
+    turnId,
+    controller,
+  });
+
+  unregister();
+  unregister();
+  recordPrincipalTurnCancellation({ butlerData, turnId });
+
+  expect(controller.signal.aborted).toBe(false);
 });

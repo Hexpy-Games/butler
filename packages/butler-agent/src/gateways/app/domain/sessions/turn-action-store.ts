@@ -141,8 +141,11 @@ export class AppTurnActionStore {
         "Turn is not cancellable.",
       );
     }
-    this.input.cancelResponder(turnId);
-    this.input.cancelPersistedRuntimeTurn(turnId);
+    try {
+      this.input.cancelPersistedRuntimeTurn(turnId);
+    } finally {
+      this.input.cancelResponder(turnId);
+    }
     const cancelledTurn = this.input.finalizeCancelledTurn(row.chat_id, turnId);
     this.input.cleanupTurnEventSequences(row.chat_id, turnId);
     return {

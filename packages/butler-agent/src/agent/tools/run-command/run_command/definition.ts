@@ -35,6 +35,11 @@ export const runCommandToolDefinition = {
         type: "string",
         description: "Optional stable validation suite id for verification commands. When set, emits a structured validation receipt; failed receipts must be cleared by a later passing receipt for the same suite before completion.",
       },
+      state_effect: {
+        type: "string",
+        enum: ["read_only", "mutation", "validation"],
+        description: "Optional declaration of the command's intended state effect. When the runtime has focused a workspace action after excessive inspection, this must be 'mutation' and the command itself must match a verified mutation form.",
+      },
       output_mode: {
         type: "string",
         enum: [
