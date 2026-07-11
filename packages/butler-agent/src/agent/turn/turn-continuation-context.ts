@@ -16,6 +16,7 @@ export interface TurnContextObservationRef {
 }
 
 export interface TurnObligationFrontierCheckpoint {
+  planReady?: boolean;
   gated: boolean;
   ledgerDiscoveryObserved?: boolean;
   ledgerDiscoveryCandidateCount?: number;
@@ -28,7 +29,7 @@ export interface TurnObligationFrontierCheckpoint {
   validationFocused?: boolean;
   statusObserved?: boolean;
   statusFocused?: boolean;
-  stage: "open" | "ledger" | "workspace_execution" | "workspace_validation" | "workspace_repair" | "status_inspection" | "closeout";
+  stage: "open" | "work_planning" | "ledger" | "workspace_execution" | "workspace_validation" | "workspace_repair" | "status_inspection" | "closeout";
 }
 
 export interface TurnContextAtom {
@@ -308,13 +309,14 @@ function sanitizeObligationFrontier(
 ): TurnObligationFrontierCheckpoint {
   const ledgerKinds = new Set(["spec", "work", "task"] as const);
   const stages = new Set<TurnObligationFrontierCheckpoint["stage"]>([
-    "open", "ledger", "workspace_execution", "workspace_validation", "workspace_repair", "status_inspection", "closeout",
+    "open", "work_planning", "ledger", "workspace_execution", "workspace_validation", "workspace_repair", "status_inspection", "closeout",
   ]);
   const kinds = (values: readonly string[]) => [...new Set(values)]
     .filter((value): value is "spec" | "work" | "task" =>
       ledgerKinds.has(value as "spec" | "work" | "task"))
     .sort();
   return {
+    planReady: frontier.planReady === true,
     gated: frontier.gated === true,
     ledgerDiscoveryObserved: frontier.ledgerDiscoveryObserved === true,
     ledgerDiscoveryCandidateCount: finiteNonNegativeInteger(

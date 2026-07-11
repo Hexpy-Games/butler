@@ -28,7 +28,7 @@ const tools = [
 }));
 
 test("mixed ledger-first contracts expose the next obligation producer instead of workspace exploration", () => {
-  const controller = createObligationToolSurfaceController(contract());
+  const controller = createObligationToolSurfaceController(contract(), { planReady: true });
   expect(controller.project(tools).map((tool) => tool.name)).not.toContain("update_work_stream_state");
   expect(controller.project(tools).map((tool) => tool.name)).toEqual([
     "project_ledger_list",
@@ -100,7 +100,7 @@ test("mixed ledger-first contracts expose the next obligation producer instead o
 });
 
 test("a ledger check must follow the latest required mutation", () => {
-  const controller = createObligationToolSurfaceController(contract());
+  const controller = createObligationToolSurfaceController(contract(), { planReady: true });
   controller.observe({ name: "project_ledger_check", args: {}, result: { ok: true } });
   for (const kind of ["spec", "work", "task"] as const) {
     controller.observe({
@@ -121,7 +121,7 @@ test("Ledger show is exposed only when bounded discovery returned a candidate", 
     ...tools,
     { type: "function", name: "project_ledger_show", description: "show", parameters: { type: "object", properties: {} } },
   ] satisfies FunctionToolDefinition[];
-  const controller = createObligationToolSurfaceController(contract());
+  const controller = createObligationToolSurfaceController(contract(), { planReady: true });
   controller.observe({
     name: "project_ledger_list",
     args: { kind: "all" },
@@ -132,7 +132,7 @@ test("Ledger show is exposed only when bounded discovery returned a candidate", 
 });
 
 test("todo progress cannot satisfy workspace mutation and a completion gap focuses structured validation", () => {
-  const controller = createObligationToolSurfaceController(contract());
+  const controller = createObligationToolSurfaceController(contract(), { planReady: true });
   for (const kind of ["spec", "work", "task"] as const) {
     controller.observe({ name: "project_ledger_create", args: { kind }, result: { ok: true } });
   }
@@ -158,7 +158,7 @@ test("a missing status report exposes only status evidence producers", () => {
     ],
     tracking_mode: "local",
   });
-  const controller = createObligationToolSurfaceController(statusContract);
+  const controller = createObligationToolSurfaceController(statusContract, { planReady: true });
 
   controller.focusMissingDeliverables(["status_report"]);
 
@@ -188,6 +188,7 @@ test("a missing status report exposes only status evidence producers", () => {
 
 test("failed validation opens repair and a passing retry restores workspace execution", () => {
   const controller = createObligationToolSurfaceController(contract(), {
+    planReady: true,
     observedLedgerKinds: ["spec", "work", "task"],
     ledgerCheckPassed: true,
     workspaceMutationObserved: true,
@@ -218,7 +219,7 @@ test("failed validation opens repair and a passing retry restores workspace exec
 
 test("one surface session preserves the frontier across prompt phases for the same contract", () => {
   const session = createObligationToolSurfaceSession();
-  const first = session.controllerFor(contract());
+  const first = session.controllerFor(contract(), { planReady: true });
   first.observe({ name: "project_ledger_create", args: { kind: "spec" }, result: { ok: true } });
   const nextGeneration = { ...contract(), generation: 9 };
   const second = session.controllerFor(nextGeneration);
@@ -227,7 +228,7 @@ test("one surface session preserves the frontier across prompt phases for the sa
 });
 
 test("failed mutations and checks cannot promote the workspace surface", () => {
-  const controller = createObligationToolSurfaceController(contract());
+  const controller = createObligationToolSurfaceController(contract(), { planReady: true });
   controller.observe({
     name: "project_ledger_create",
     args: { kind: "spec" },
@@ -240,6 +241,43 @@ test("failed mutations and checks cannot promote the workspace surface", () => {
     ledgerDiscoveryObserved: false,
     observedLedgerKinds: [],
   });
+});
+
+test("execution contracts expose only a structured explicit-plan update before ordinary tools", () => {
+  const controller = createObligationToolSurfaceController(contract());
+
+  expect(controller.state()).toMatchObject({ stage: "work_planning", planReady: false });
+  const planningTools = controller.project(tools);
+  expect(planningTools.map((tool) => tool.name)).toEqual(["update_todo_list"]);
+  const todoTool = planningTools[0]!;
+  expect(todoTool.description).toContain("explicit bound plan");
+  const todos = (todoTool.parameters.properties as any).todos;
+  expect(todos.minItems).toBe(1);
+  expect(todos.items.required).toEqual(expect.arrayContaining(["id", "phase"]));
+
+  controller.observe({
+    name: "update_todo_list",
+    args: { todos: [] },
+    result: { ok: true },
+  });
+  expect(controller.state()).toMatchObject({ stage: "work_planning", planReady: false });
+
+  controller.observe({
+    name: "update_todo_list",
+    args: {
+      todos: [{
+        id: "implement",
+        content: "Implement the change",
+        active_form: "Implementing the change",
+        status: "in_progress",
+        phase: "execution",
+      }],
+    },
+    result: { ok: true },
+  });
+
+  expect(controller.state()).toMatchObject({ stage: "ledger", planReady: true });
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual(["project_ledger_list"]);
 });
 
 function contract(overrides: Partial<CompiledTurnContract> = {}): CompiledTurnContract {

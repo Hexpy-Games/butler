@@ -3,10 +3,15 @@ import type { CompiledTurnContract } from "../../turn-contract-types.ts";
 import { isStateMutatingToolCall } from "../../tool-loop-guards.ts";
 import { isInternalProgressTool } from "../progress/runtime-semantic-progress.ts";
 import { isStatusReportEvidenceTool } from "./turn-contract-status-evidence.ts";
+import {
+  explicitPlanArguments,
+  requireExplicitPlanUpdate,
+} from "./turn-contract-plan-admission.ts";
 
 type LedgerRecordKind = "spec" | "work" | "task";
 export type ObligationToolSurfaceStage =
   | "open"
+  | "work_planning"
   | "ledger"
   | "workspace_execution"
   | "workspace_validation"
@@ -50,6 +55,7 @@ const LEDGER_OBLIGATION_MUTATION_TOOLS = new Set([
 ]);
 
 export interface ObligationToolSurfaceState {
+  planReady: boolean;
   gated: boolean;
   ledgerDiscoveryObserved: boolean;
   ledgerDiscoveryCandidateCount: number;
@@ -66,6 +72,7 @@ export interface ObligationToolSurfaceState {
 }
 
 export interface ObligationToolSurfaceSeed {
+  planReady?: boolean;
   ledgerDiscoveryObserved?: boolean;
   ledgerDiscoveryCandidateCount?: number;
   observedLedgerKinds?: readonly LedgerRecordKind[];
@@ -98,7 +105,9 @@ export interface ObligationToolSurfaceSession {
   state(): ObligationToolSurfaceState;
 }
 
-export function createObligationToolSurfaceSession(): ObligationToolSurfaceSession {
+export function createObligationToolSurfaceSession(input: {
+  resolvePlanReady?: (contract: CompiledTurnContract) => boolean;
+} = {}): ObligationToolSurfaceSession {
   let contractId: string | null = null;
   let controller = createObligationToolSurfaceController(null);
   return {
@@ -106,7 +115,12 @@ export function createObligationToolSurfaceSession(): ObligationToolSurfaceSessi
       const nextContractId = contract?.contract_id ?? null;
       if (nextContractId !== contractId) {
         contractId = nextContractId;
-        controller = createObligationToolSurfaceController(contract, seed);
+        controller = createObligationToolSurfaceController(contract, {
+          ...seed,
+          planReady: seed?.planReady === true || Boolean(
+            contract && input.resolvePlanReady?.(contract),
+          ),
+        });
       }
       return controller;
     },
@@ -127,6 +141,8 @@ export function createObligationToolSurfaceController(
   const workAction = Boolean(
     contract && ["start_work", "resume_work", "modify_work"].includes(contract.action),
   );
+  const requiresExplicitPlan = workAction;
+  let planReady = !requiresExplicitPlan || seed.planReady === true;
   const requiresCodeChange = contract?.deliverables.includes("code_change") ?? false;
   const requiresValidation = contract?.deliverables.includes("validation") ?? false;
   const hasWorkspaceDeliverable = requiresCodeChange || requiresValidation;
@@ -158,6 +174,7 @@ export function createObligationToolSurfaceController(
     [...requiredLedgerKinds].every((kind) => observedLedgerKinds.has(kind))
   );
   const stage = (): ObligationToolSurfaceStage => {
+    if (requiresExplicitPlan && !planReady) return "work_planning";
     if (requiresStatusReport && statusFocused) return "status_inspection";
     if (!managed) return "open";
     if (gated()) return "ledger";
@@ -175,6 +192,10 @@ export function createObligationToolSurfaceController(
       switch (stage()) {
         case "open":
           return [...runtimeOwnedLifecycleFiltered];
+        case "work_planning":
+          return runtimeOwnedLifecycleFiltered
+            .filter((tool) => tool.name === "update_todo_list" || isInternalProgressTool(tool.name))
+            .map(requireExplicitPlanUpdate);
         case "ledger": {
           const remainingLedgerKinds = remainingRequiredLedgerKinds(
             requiredLedgerKinds,
@@ -222,6 +243,13 @@ export function createObligationToolSurfaceController(
       if (successful(input.result) && isStatusReportEvidenceTool(input.name)) {
         statusObserved = true;
       }
+      if (
+        successful(input.result) &&
+        input.name === "update_todo_list" &&
+        explicitPlanArguments(input.args)
+      ) {
+        planReady = true;
+      }
       if (!managed) return;
       if (!successful(input.result)) return;
       if (input.name === "project_ledger_list") {
@@ -251,6 +279,7 @@ export function createObligationToolSurfaceController(
       }
     },
     state: () => ({
+      planReady,
       gated: gated(),
       ledgerDiscoveryObserved,
       ledgerDiscoveryCandidateCount,

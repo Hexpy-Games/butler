@@ -68,6 +68,7 @@ import {
 } from "./obligation-tool-surface.ts";
 import { modelFacingToolOutput } from "./model-facing-tool-output.ts";
 import { bindRuntimeOwnedWorkspaceArguments } from "./model-facing-tool-arguments.ts";
+import { turnContractPlanIsExplicit } from "../../turn-contract-plan-closure.ts";
 
 const REASONING_EFFORT_VALUES = new Set<ReasoningEffort>([
   "none",
@@ -115,7 +116,12 @@ export function createNativeTurnPromptRunners(input: {
     0,
     Math.floor(input.initialSemanticBlockSequence ?? 0),
   );
-  const obligationToolSurfaceSession = createObligationToolSurfaceSession();
+  const obligationToolSurfaceSession = createObligationToolSurfaceSession({
+    resolvePlanReady: (contract) => turnContractPlanIsExplicit({
+      butlerData: input.deps.butlerData,
+      contract,
+    }),
+  });
   const reviewFinalCandidate = input.reviewFinalCandidate
     ? async (candidate: Parameters<NonNullable<FunctionToolPromptOptions["reviewFinalCandidate"]>>[0]) => {
       const review = await input.reviewFinalCandidate!(candidate);
