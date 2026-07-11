@@ -50,6 +50,7 @@ export function typedTurnDecisionInstructions(input: {
     "Reading, searching, or reviewing existing files without changing durable state is inspect with status_report, even when tools are required.",
     "The review deliverable is only for structured review evidence of changed, planned, or inherited work; it is not ordinary source inspection.",
     "Use start_work for new durable work. Use resume_work or modify_work only for a listed compatible WorkStream.",
+    "Every start_work, resume_work, or modify_work decision first creates or restores an explicit bound todo plan before ordinary tools run; the runtime opening placeholder is not that plan.",
     "Use cancel_work only for a listed WorkStream. Use supply_user_action only for its listed waiting-user blocker.",
     "For implementation or mutation include the actual durable deliverables, not status_report alone.",
     "status_report means an explicitly requested read-only status snapshot; do not add it merely because the turn will end with a report.",

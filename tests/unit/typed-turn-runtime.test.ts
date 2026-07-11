@@ -493,7 +493,10 @@ test("typed completion gaps stay in one provider invocation and preserve the obl
     }),
     runFunctionToolPromptText: async (input) => {
       toolPromptInvocations += 1;
-      expect(workBlockCatalogNames(input.dynamicTools?.() ?? input.tools)).toContain("write_file");
+      expect(workBlockCatalogNames(input.dynamicTools?.() ?? input.tools)).toEqual([
+        "update_todo_list",
+        "list_todo_list",
+      ]);
       await input.executeTool({
         name: "update_todo_list",
         args: {
@@ -521,6 +524,7 @@ test("typed completion gaps stay in one provider invocation and preserve the obl
         },
         rawArguments: JSON.stringify({ todos: [] }),
       });
+      expect(workBlockCatalogNames(input.dynamicTools?.() ?? input.tools)).toContain("write_file");
       const writeBlock = testWorkBlock("파일 변경", "write_file", {
         path: "same-provider.txt",
         content: "changed",
