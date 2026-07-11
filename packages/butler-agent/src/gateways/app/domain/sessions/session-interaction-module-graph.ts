@@ -44,6 +44,7 @@ export function createAppSessionInteractionModuleGraph(input: {
       host.generatedSessionTitleHandler(chatId, sourceText),
   });
   const systemResponderTurns = createSystemResponderTurns({
+    butlerData,
     messageFiles,
     host,
   });
@@ -141,10 +142,11 @@ export function createAppSessionInteractionModuleGraph(input: {
 }
 
 function createSystemResponderTurns(input: {
+  butlerData: string;
   messageFiles: AppMessageFileStore;
   host: any;
 }): AppSystemResponderTurnStore {
-  const { messageFiles, host } = input;
+  const { butlerData, messageFiles, host } = input;
   return new AppSystemResponderTurnStore({
     ensureChat: (chatId) => host.ensureChat(chatId),
     getSessionControls: (chatId) => host.getSessionControls(chatId),
@@ -190,8 +192,10 @@ function createSystemResponderTurns(input: {
       messageFiles.createResponderFiles(chatId, files ?? []),
     insertOrReplaceAssistantReplies: (chatId, turnId, texts, files) =>
       host.insertOrReplaceAssistantReplies(chatId, turnId, texts, files),
-    finalizeCancelledTurn: (chatId, turnId) =>
-      host.finalizeCancelledTurn(chatId, turnId),
+    finalizeCancelledTurn: (chatId, turnId) => {
+      cancelPersistedRuntimeTurn({ butlerData, turnId });
+      return host.finalizeCancelledTurn(chatId, turnId);
+    },
     getMessageRow: (messageId) => host.getMessageRow(messageId),
     refsForMessage: (messageId) => messageFiles.refsForMessage(messageId),
     markResponderNonPublicContinuation: (chatId, turnId) =>

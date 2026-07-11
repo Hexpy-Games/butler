@@ -17,6 +17,7 @@ import {
   TurnSchedulerContinuationYieldError,
 } from "../../turn-continuation-context.ts";
 import { snapshotDirectTurnBudget, type DirectTurnBudget } from "../../direct-turn-budget.ts";
+import { principalTurnCancellationRecorded } from "../../principal-turn-cancellation-registry.ts";
 import { safeRuntimeFailure } from "../../../../integrations/providers/provider-errors.ts";
 import {
   cancelActiveWorkStreamBestEffort,
@@ -478,11 +479,13 @@ export async function runNativeToolTurn({
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (toolLoopUsed) {
       if (input.signal?.aborted) {
-        cancelActiveWorkStreamBestEffort({
-          butlerData: deps.butlerData,
-          sessionId: input.handle.sessionId,
-          turnId,
-        });
+        if (!turnId || !principalTurnCancellationRecorded({ butlerData: deps.butlerData, turnId })) {
+          cancelActiveWorkStreamBestEffort({
+            butlerData: deps.butlerData,
+            sessionId: input.handle.sessionId,
+            turnId,
+          });
+        }
       } else if (!limitedDelivery && !isBudgetError && !isSchedulerYield && !isCompletionIncomplete) {
         markActiveWorkStreamRecoverableBestEffort({
           butlerData: deps.butlerData,
