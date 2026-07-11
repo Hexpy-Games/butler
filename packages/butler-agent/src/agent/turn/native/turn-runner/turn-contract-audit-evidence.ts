@@ -12,11 +12,7 @@ import {
 import type { EvidenceCapabilityReceipt } from "../../../output/evidence/types.ts";
 import type { ToolAuditEntry } from "../output/tool-types.ts";
 import { recordTurnContractMetric } from "./turn-contract-metrics.ts";
-
-const STATUS_TOOLS = new Set([
-  "project_ledger_status", "project_ledger_show", "inspect_project_status",
-  "query_project_work", "get_work_dashboard", "get_context_monitor", "list_work_streams",
-]);
+import { isStatusReportEvidenceTool } from "./turn-contract-status-evidence.ts";
 
 export function recordTurnContractAuditEvidence(input: {
   butlerData: string;
@@ -108,7 +104,7 @@ function auditMatchesObligation(entry: ToolAuditEntry, obligation: RequiredEvide
   const capabilities = entry.evidenceCapabilityReceipts ?? [];
   switch (obligation.deliverable) {
     case "status_report":
-      return STATUS_TOOLS.has(entry.name) || capabilities.some((receipt) =>
+      return isStatusReportEvidenceTool(entry.name) || capabilities.some((receipt) =>
         verifiedCapability(receipt, ["source_verified"], ["project_state", "workspace_inspection"]));
     case "ledger_spec":
       return ledgerMutationMatches(entry, "spec");

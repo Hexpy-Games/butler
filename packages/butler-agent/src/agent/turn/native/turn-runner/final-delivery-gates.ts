@@ -38,6 +38,7 @@ import {
   unsatisfiedTurnContractObligations,
 } from "./turn-contract-audit-evidence.ts";
 import { buildTurnContinuationEvidence } from "./turn-continuation-evidence.ts";
+import { statusReportEvidenceGuidance } from "./turn-contract-status-evidence.ts";
 
 export type FinalDeliveryOutcome =
   | { kind: "final"; text: string; evidenceRefs: string[] }
@@ -152,6 +153,9 @@ export async function reviewFinalCandidateForContinuation(
             "Continue the same logical turn. The typed turn contract is not complete.",
             "Satisfy these structured deliverables before final delivery:",
             ...missing.map((item) => `- ${item.deliverable}:${item.target_kind}:${item.target_id}`),
+            ...(missing.some((item) => item.deliverable === "status_report")
+              ? statusReportEvidenceGuidance()
+              : []),
             ...(unsatisfied.some((item) => item.deliverable === "final_report")
               ? ["The current final candidate already supplies final_report. Do not create a report record or file; submit a new final candidate after the listed non-report work is complete."]
               : []),
@@ -198,6 +202,9 @@ function planClosureGap(
           ? [
               "The following typed deliverables also still need evidence:",
               ...missingDeliverables.map((item) => `- ${item.deliverable}:${item.target_kind}:${item.target_id}`),
+              ...(missingDeliverables.some((item) => item.deliverable === "status_report")
+                ? statusReportEvidenceGuidance()
+                : []),
             ]
           : []),
         "Keep moving through those structured items in dependency order and submit a new final candidate after they are complete.",

@@ -220,6 +220,8 @@ export async function runNativeToolTurn({
           checkpoint.contextAtomId,
           checkpoint.checkpointId,
           checkpoint.generation,
+          checkpoint.sourceErrorCode,
+          checkpoint.retryableProviderFailureStreak,
         );
       }
     };
@@ -252,6 +254,8 @@ export async function runNativeToolTurn({
           checkpoint.contextAtomId,
           checkpoint.checkpointId,
           checkpoint.generation,
+          checkpoint.sourceErrorCode,
+          checkpoint.retryableProviderFailureStreak,
         );
       }
     };
@@ -531,7 +535,13 @@ async function persistSchedulerContinuation(input: {
   nextSemanticBlockSequenceFloor?: number;
   error: unknown;
   obligationFrontier: ObligationToolSurfaceState;
-}): Promise<{ contextAtomId: string; checkpointId: string; generation: number }> {
+}): Promise<{
+  contextAtomId: string;
+  checkpointId: string;
+  generation: number;
+  sourceErrorCode: string;
+  retryableProviderFailureStreak: number;
+}> {
   const safeFailure = isPromptUsageModelCallBudgetError(input.error)
     ? {
       code: "prompt_usage_model_call_budget_exhausted",
@@ -618,6 +628,8 @@ async function persistSchedulerContinuation(input: {
     contextAtomId,
     checkpointId: committed.checkpointId,
     generation: committed.generation,
+    sourceErrorCode: safeFailure.code,
+    retryableProviderFailureStreak: committed.retryableProviderFailureStreak ?? 0,
   };
 }
 

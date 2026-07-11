@@ -124,3 +124,35 @@ test("an open bound plan prevents the final candidate from fabricating final-rep
   expect(store.evidenceFor(recorded).map((receipt) => receipt.deliverable)).toEqual(["code_change"]);
   expect(recorded.state).not.toBe("satisfied");
 });
+
+test("Ledger integrity checks do not satisfy a project status snapshot", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-turn-audit-"));
+  tempDirs.push(butlerData);
+  const store = new TurnContractStore(butlerData);
+  const contract = store.create(compileTurnContract({
+    decision: {
+      schema_version: TURN_CONTRACT_DECISION_SCHEMA,
+      decision_id: "decision-status-evidence",
+      action: "inspect",
+      target_project_id: "project-a",
+      deliverables: ["status_report"],
+      public_summary: "Inspect the current project status.",
+    },
+  }));
+
+  const afterCheck = recordTurnContractAuditEvidence({
+    butlerData,
+    contract,
+    finalCandidate: "The Ledger is structurally valid.",
+    audit: [{ name: "project_ledger_check", args: {}, ok: true }],
+  });
+  expect(store.evidenceFor(afterCheck)).toEqual([]);
+
+  const afterStatus = recordTurnContractAuditEvidence({
+    butlerData,
+    contract: afterCheck,
+    finalCandidate: "The current project status is active.",
+    audit: [{ name: "project_ledger_status", args: {}, ok: true }],
+  });
+  expect(store.evidenceFor(afterStatus).map((receipt) => receipt.deliverable)).toEqual(["status_report"]);
+});

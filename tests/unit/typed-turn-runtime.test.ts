@@ -1230,6 +1230,10 @@ test("retryable provider failures checkpoint the active contract instead of fail
   }
 
   expect(isTurnSchedulerContinuationYieldError(yielded)).toBe(true);
+  expect(yielded).toMatchObject({
+    sourceErrorCode: "provider_network_error",
+    retryableProviderFailureStreak: 1,
+  });
   expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).toMatchObject({
     state: "continuing",
     contractId: expect.stringContaining("contract-"),

@@ -30,6 +30,7 @@ import { normalizeTurnPrompt } from "../../packages/butler-agent/src/agent/turn/
 import {
   createTurnContextAtomId,
   readTurnContextAtom,
+  TurnSchedulerContinuationYieldError,
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
@@ -1284,6 +1285,64 @@ test("queued inbound completion gap consumes same logical turn continuation with
     turnId: "turn-completion-gap-continuation",
   })).toBeNull();
   expect(JSON.stringify(app.sentActions)).not.toContain("not captured command evidence");
+  store.close();
+});
+
+test("queued rate-limit continuation is durably delayed before another provider attempt", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  const now = new Date("2026-07-11T00:00:00.000Z");
+  queue.enqueue({
+    eventId: "app:rate-limit-continuation",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-rate-limit-continuation",
+      text: "Continue the active work.",
+      timestamp: now.toISOString(),
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-rate-limit-continuation",
+    },
+  }, { source: "test" }, now);
+  const guard = new DeliveryGuard({ adapters: [new MockTransportAdapter({ id: "app" })] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        throw new TurnSchedulerContinuationYieldError(
+          "butler/app-general",
+          "turn-rate-limit-continuation",
+          "continuation.json",
+          "continuation.json:g3",
+          3,
+          "provider_rate_limited",
+          3,
+        );
+      },
+    },
+    store,
+    deliveryGuard: guard,
+    now: () => now,
+  });
+
+  expect(summary).toMatchObject({ claimed: 1, handled: 1, failed: 0 });
+  const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+  const pendingFiles = readdirSync(pendingDir);
+  expect(pendingFiles).toHaveLength(1);
+  const pending = JSON.parse(readFileSync(join(pendingDir, pendingFiles[0]!), "utf8"));
+  expect(pending.metadata).toMatchObject({
+    sameLogicalTurnContinuation: true,
+    continuationFailureCode: "provider_rate_limited",
+    continuationBackoffMs: 60_000,
+    notBefore: "2026-07-11T00:01:00.000Z",
+  });
+  expect(queue.claimEligible(1, () => true, new Date("2026-07-11T00:00:59.999Z"))).toEqual([]);
+  expect(queue.claimEligible(1, () => true, new Date("2026-07-11T00:01:00.000Z"))).toHaveLength(1);
   store.close();
 });
 

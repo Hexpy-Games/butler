@@ -67,6 +67,13 @@ function readJson<T>(path: string): T | null {
   }
 }
 
+function queueRecordAvailable(record: QueuedInboundEvent, now: Date): boolean {
+  const notBefore = typeof record.metadata.notBefore === "string"
+    ? Date.parse(record.metadata.notBefore)
+    : Number.NaN;
+  return !Number.isFinite(notBefore) || now.getTime() >= notBefore;
+}
+
 export class NativeInboundQueue {
   readonly rootDir: string;
   private readonly ownerId = processingOwnerId();
@@ -121,6 +128,7 @@ export class NativeInboundQueue {
       const to = join(this.dir("processing"), name);
       const record = this.readQueuedRecord(from);
       if (!record) continue;
+      if (!queueRecordAvailable(record, now)) continue;
       if (!isEligible(record)) continue;
       try {
         renameSync(from, to);

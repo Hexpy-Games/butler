@@ -15,6 +15,7 @@ import {
 } from "../../agent/turn/turn-continuation-context.ts";
 import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
 import type { DeliveryGuard } from "../transport/delivery-guard.ts";
+import { continuationBackoffForFailure } from "./continuation-backoff.ts";
 
 export interface QueuedInboundServer {
   handleInbound(envelope: InboundEnvelope): Promise<GatewayDispatchResult>;
@@ -473,6 +474,8 @@ async function processClaimedQueuedInboundItem(input: {
         turnId,
         contextAtomId: error.contextAtomId,
         checkpointId: error.checkpointId ?? error.contextAtomId,
+        sourceErrorCode: error.sourceErrorCode,
+        retryableProviderFailureStreak: error.retryableProviderFailureStreak,
         now: options.now?.(),
       });
       if (!scheduled) {
@@ -568,9 +571,17 @@ function scheduleSameLogicalTurnContinuation(input: {
   turnId: string;
   contextAtomId: string;
   checkpointId: string;
+  sourceErrorCode?: string;
+  retryableProviderFailureStreak?: number;
   now?: Date;
 }): QueuedInboundEvent | null {
   try {
+    const now = input.now ?? new Date();
+    const backoff = continuationBackoffForFailure({
+      sourceErrorCode: input.sourceErrorCode,
+      retryStreak: input.retryableProviderFailureStreak ?? 1,
+      now,
+    });
     return input.queue.enqueue({
       ...input.item.envelope,
       routingHints: {
@@ -584,7 +595,12 @@ function scheduleSameLogicalTurnContinuation(input: {
       contextAtomId: input.contextAtomId,
       checkpointId: input.checkpointId,
       sameLogicalTurnContinuation: true,
-    }, input.now);
+      ...(backoff ? {
+        notBefore: backoff.notBefore,
+        continuationBackoffMs: backoff.delayMs,
+        continuationFailureCode: input.sourceErrorCode,
+      } : {}),
+    }, now);
   } catch {
     return null;
   }

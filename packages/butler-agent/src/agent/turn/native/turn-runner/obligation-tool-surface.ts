@@ -2,6 +2,7 @@ import type { FunctionToolDefinition } from "../../../../integrations/providers/
 import type { CompiledTurnContract } from "../../turn-contract-types.ts";
 import { isStateMutatingToolCall } from "../../tool-loop-guards.ts";
 import { isInternalProgressTool } from "../progress/runtime-semantic-progress.ts";
+import { isStatusReportEvidenceTool } from "./turn-contract-status-evidence.ts";
 
 type LedgerRecordKind = "spec" | "work" | "task";
 export type ObligationToolSurfaceStage =
@@ -10,6 +11,7 @@ export type ObligationToolSurfaceStage =
   | "workspace_execution"
   | "workspace_validation"
   | "workspace_repair"
+  | "status_inspection"
   | "closeout";
 
 const LEDGER_DELIVERABLE_KINDS = new Map<string, LedgerRecordKind>([
@@ -58,6 +60,8 @@ export interface ObligationToolSurfaceState {
   validationObserved: boolean;
   validationFailed: boolean;
   validationFocused: boolean;
+  statusObserved: boolean;
+  statusFocused: boolean;
   stage: ObligationToolSurfaceStage;
 }
 
@@ -70,6 +74,8 @@ export interface ObligationToolSurfaceSeed {
   validationObserved?: boolean;
   validationFailed?: boolean;
   validationFocused?: boolean;
+  statusObserved?: boolean;
+  statusFocused?: boolean;
 }
 
 export interface ObligationToolSurfaceController {
@@ -143,12 +149,16 @@ export function createObligationToolSurfaceController(
   let validationObserved = seed.validationObserved === true;
   let validationFailed = seed.validationFailed === true && !validationObserved;
   let validationFocused = seed.validationFocused === true && !validationObserved;
+  const requiresStatusReport = contract?.deliverables.includes("status_report") ?? false;
+  let statusObserved = seed.statusObserved === true;
+  let statusFocused = seed.statusFocused === true;
 
   const gated = () => ledgerFirst && !(
     mutationSequence > 0 && checkedMutationSequence === mutationSequence &&
     [...requiredLedgerKinds].every((kind) => observedLedgerKinds.has(kind))
   );
   const stage = (): ObligationToolSurfaceStage => {
+    if (requiresStatusReport && statusFocused) return "status_inspection";
     if (!managed) return "open";
     if (gated()) return "ledger";
     if (requiresValidation && validationFocused && !validationObserved) {
@@ -191,13 +201,16 @@ export function createObligationToolSurfaceController(
           return runtimeOwnedLifecycleFiltered
             .filter((tool) => tool.name === "run_command")
             .map(requireStructuredValidation);
+        case "status_inspection":
+          return runtimeOwnedLifecycleFiltered.filter((tool) =>
+            isInternalProgressTool(tool.name) ||
+            (!statusObserved && isStatusReportEvidenceTool(tool.name)));
         case "closeout":
           return runtimeOwnedLifecycleFiltered.filter((tool) =>
             CLOSEOUT_TOOLS.has(tool.name) || isInternalProgressTool(tool.name));
       }
     },
     observe(input) {
-      if (!managed) return;
       const validation = validationReceiptState(input.result);
       if (validation === "passed") {
         validationObserved = true;
@@ -206,6 +219,10 @@ export function createObligationToolSurfaceController(
       } else if (validation === "failed") {
         validationFailed = true;
       }
+      if (successful(input.result) && isStatusReportEvidenceTool(input.name)) {
+        statusObserved = true;
+      }
+      if (!managed) return;
       if (!successful(input.result)) return;
       if (input.name === "project_ledger_list") {
         ledgerDiscoveryObserved = true;
@@ -226,6 +243,9 @@ export function createObligationToolSurfaceController(
       }
     },
     focusMissingDeliverables(deliverables) {
+      if (requiresStatusReport && deliverables.includes("status_report") && !statusObserved) {
+        statusFocused = true;
+      }
       if (requiresValidation && deliverables.includes("validation") && !validationObserved) {
         validationFocused = true;
       }
@@ -241,6 +261,8 @@ export function createObligationToolSurfaceController(
       validationObserved,
       validationFailed,
       validationFocused,
+      statusObserved,
+      statusFocused,
       stage: stage(),
     }),
   };

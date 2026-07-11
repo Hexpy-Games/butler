@@ -532,6 +532,14 @@ export class WorkStreamStore {
       .map(summary);
   }
 
+  recordsForTurn(turnId: string): WorkStreamRecord[] {
+    const normalizedTurnId = turnId.trim();
+    if (!normalizedTurnId) return [];
+    return this.records()
+      .filter((record) => record.last_user_turn_id === normalizedTurnId)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  }
+
   linkedTo(input: {
     plannedTaskIds?: string[];
     orchestrationIds?: string[];

@@ -287,6 +287,86 @@ export class WorkStreamClaimStore {
     });
   }
 
+  cancelByPrincipalTurn(input: {
+    workstreamId: string;
+    contractId: string;
+    turnId: string;
+    expectedGeneration: number;
+    now?: Date;
+  }): WorkStreamClaimResult {
+    return this.withLock(
+      input.workstreamId,
+      "contract_cancel",
+      input.turnId,
+      input.now,
+      { contractId: input.contractId },
+      (context) => {
+        const record = this.streams.read(input.workstreamId);
+        if (!record) return { ok: false, code: "workstream_not_found" };
+        if (record.last_user_turn_id !== input.turnId) {
+          return { ok: false, code: "workstream_principal_turn_mismatch" };
+        }
+        if (record.state === "cancelled" && record.active_claim_receipt_id) {
+          const prior = this.readReceipt(record.active_claim_receipt_id);
+          if (prior?.operation === "cancel" && prior.turn_id === input.turnId) {
+            return { ok: true, record, receipt: prior, replayed: true };
+          }
+        }
+        if (["complete", "failed", "cancelled"].includes(record.state)) {
+          return { ok: false, code: `workstream_terminal_${record.state}` };
+        }
+        if (record.active_contract_id !== input.contractId) {
+          return { ok: false, code: "workstream_claim_missing" };
+        }
+        if (record.record_generation !== input.expectedGeneration) {
+          return { ok: false, code: "workstream_claim_generation_conflict" };
+        }
+        const now = input.now ?? new Date();
+        const contractId = input.contractId;
+        const receiptId = workStreamClaimReceiptId("cancel", contractId, record.id, record.record_generation ?? 1);
+        const receipt = this.writeReceipt({
+          ...workStreamClaimReceipt({
+            operation: "cancel",
+            outcome: "cancelled",
+            before: record,
+            after: { ...record, record_generation: (record.record_generation ?? 1) + 1 },
+            contractId,
+            turnId: input.turnId,
+            now,
+          }),
+          receipt_id: receiptId,
+          lease_expires_at: null,
+          released_contract_id: contractId,
+          project_id: record.project_id ?? undefined,
+        });
+        const updated: WorkStreamRecord = {
+          ...record,
+          state: "cancelled",
+          current_phase: null,
+          active_step_id: null,
+          active_contract_id: null,
+          claim_lease_expires_at: null,
+          active_claim_receipt_id: receipt.receipt_id,
+          active_blocker_id: null,
+          active_blocker_evidence_id: null,
+          record_generation: receipt.after_generation,
+          updated_at: now.toISOString(),
+        };
+        const authorized = authorizeWorkStreamMutation(context, {
+          contractId,
+          releasedContractId: contractId,
+        });
+        commitWorkStreamMutation({
+          butlerData: this.butlerData,
+          context: authorized,
+          record: updated,
+          expectedGeneration: record.record_generation ?? 1,
+        });
+        return { ok: true, record: updated, receipt, replayed: false };
+      },
+    );
+  }
+
   waitForUser(input: {
     contract: CompiledTurnContract;
     workstreamId: string;
