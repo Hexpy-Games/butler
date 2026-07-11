@@ -16,6 +16,8 @@ import {
 import { promptUsageModelCallBudgetExhaustedError } from "../../packages/butler-agent/src/integrations/providers/shared/usage.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { TURN_FORWARD_PROGRESS_STALLED_CODE } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/obligation-tool-surface.ts";
+import { cancelPersistedRuntimeTurn } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation.ts";
+import { registerPrincipalTurnAbortController } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-registry.ts";
 
 let data = "";
 
@@ -788,6 +790,106 @@ test("typed execution stops a resumed evidence loop after one focused-action cor
     state: "recoverable",
   });
   expect(events.some((event) => event.kind === "turn.failed")).toBe(true);
+});
+
+test("principal cancellation blocks the next typed workspace tool and provider request", async () => {
+  const sessionId = "butler/typed-principal-cancel";
+  const turnId = "turn-typed-principal-cancel";
+  const controller = new AbortController();
+  const unregister = registerPrincipalTurnAbortController({
+    butlerData: data,
+    turnId,
+    controller,
+  });
+  let workspaceToolCalls = 0;
+  let providerRequestsAfterCancel = 0;
+  let toolFailure: unknown;
+  let providerFailure: unknown;
+  const runtime = new NativeToolLoopRuntime({
+    butlerData: data,
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => JSON.stringify({
+      schema_version: "butler.turn-contract-decision.v1",
+      decision_id: decisionIdFromFormat(input.responseFormat),
+      action: "start_work",
+      target_workstream_id: null,
+      target_project_id: "butler",
+      blocker_id: null,
+      deliverables: ["code_change", "final_report"],
+      answer_text: null,
+      public_title: "취소 경계 검증",
+      public_summary: "작업목록을 만든 뒤 대상 파일을 변경합니다.",
+      public_rationale: "취소 전후의 tool authority를 구분해야 합니다.",
+      immediate_next_step: "명시적 계획을 만든 뒤 파일을 변경합니다.",
+    }),
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          todos: [{
+            id: "implement",
+            content: "대상 파일을 변경합니다.",
+            active_form: "대상 파일을 변경하는 중입니다.",
+            status: "in_progress",
+            phase: "execution",
+          }],
+        },
+        rawArguments: "{}",
+      });
+      cancelPersistedRuntimeTurn({ butlerData: data, turnId });
+      try {
+        await input.executeTool({
+          name: "write_file",
+          args: { path: "must-not-run.txt", content: "cancelled" },
+          rawArguments: JSON.stringify({ path: "must-not-run.txt", content: "cancelled" }),
+        });
+      } catch (error) {
+        toolFailure = error;
+      }
+      try {
+        input.usageAttribution?.beforeModelRequest?.({ roundIndex: 1 });
+        providerRequestsAfterCancel += 1;
+      } catch (error) {
+        providerFailure = error;
+      }
+      throw providerFailure;
+    },
+    executeButlerTool: async (call) => {
+      if (call.name === "write_file") workspaceToolCalls += 1;
+      return { ok: true };
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: data,
+    systemPrompt: "You are Sandy.",
+    metadata: { projectId: "butler" },
+  });
+
+  let failure: unknown;
+  try {
+    await runtime.runTurn({
+      handle,
+      provider: typedProvider,
+      model: "openai/gpt-5.5",
+      input: { text: "파일을 변경해줘." },
+      signal: controller.signal,
+      metadata: { turnId, runtimePolicy: { completionReview: "disabled" } },
+    });
+  } catch (error) {
+    failure = error;
+  } finally {
+    unregister();
+  }
+
+  expect(controller.signal.aborted).toBe(true);
+  expect(toolFailure).toMatchObject({ name: "AbortError" });
+  expect(providerFailure).toMatchObject({ name: "AbortError" });
+  expect(failure).toBe(providerFailure);
+  expect(workspaceToolCalls).toBe(0);
+  expect(providerRequestsAfterCancel).toBe(0);
 });
 
 test("workspace inspect exposes direct read tools without mutation tools", async () => {

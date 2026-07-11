@@ -6,11 +6,13 @@ import {
 import { TurnContractStore } from "./turn-contract-store.ts";
 import { WorkStreamStore } from "../work/work-stream.ts";
 import { WorkStreamClaimStore } from "../work/work-stream-claim-store.ts";
+import { recordPrincipalTurnCancellation } from "./principal-turn-cancellation-registry.ts";
 
 export function cancelPersistedRuntimeTurn(input: {
   butlerData: string;
   turnId: string;
 }): void {
+  recordPrincipalTurnCancellation(input);
   const contracts = new TurnContractStore(input.butlerData);
   const atoms = turnContextAtomsForTurn(input);
   const streams = new WorkStreamStore(input.butlerData, { autoRecover: false })

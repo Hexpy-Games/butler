@@ -49,6 +49,7 @@ import type {
   NativeToolCall,
 } from "./audited-executor-types.ts";
 import { buildTurnRoundJournal } from "../turn-runner/turn-round-journal.ts";
+import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
 
 export function createAuditedButlerToolExecutor(
   input: NativeAuditedToolExecutorInput,
@@ -227,13 +228,6 @@ function appendPublicDecisionContinuationObservation(input: {
     },
   }));
   return toolObservationResult(observation);
-}
-
-function throwIfRuntimeTurnAborted(signal?: AbortSignal): void {
-  if (!signal?.aborted) return;
-  const error = new Error("Runtime turn was cancelled.");
-  error.name = "AbortError";
-  throw error;
 }
 
 function discardPendingPublicDecisionForTool(
