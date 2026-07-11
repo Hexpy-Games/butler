@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -112,6 +113,35 @@ describe("run_command evidence capability receipts", () => {
       verified: false,
       scope: { status: "timed_out", exit_code: null, timed_out: true },
     });
+  });
+
+  test("turn abort terminates the foreground command process tree before a delayed write", async () => {
+    const controller = new AbortController();
+    const startedPath = join(workspace, "command-started.txt");
+    const latePath = join(workspace, "command-late.txt");
+    const command = [
+      "printf 'started\\n' > command-started.txt",
+      "/bin/sh -c \"sleep 1; printf 'late\\n' > command-late.txt\"",
+    ].join("; ");
+    const running = runCommandTool({
+      butlerHome: workspace,
+      butlerData,
+      workspacePath: workspace,
+      args: { command, timeout_ms: 30_000 },
+      signal: controller.signal,
+    });
+
+    for (let attempt = 0; attempt < 200 && !existsSync(startedPath); attempt += 1) {
+      await Bun.sleep(10);
+    }
+    expect(existsSync(startedPath)).toBe(true);
+    const cancelledAt = Date.now();
+    controller.abort(new Error("turn_cancelled_test"));
+    await expect(running).rejects.toThrow("turn_cancelled_test");
+    expect(Date.now() - cancelledAt).toBeLessThan(2_000);
+
+    await Bun.sleep(1_200);
+    expect(existsSync(latePath)).toBe(false);
   });
 
   test("records structured validation evidence without command-name inference", async () => {

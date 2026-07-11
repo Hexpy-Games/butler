@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, readdirSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
@@ -890,6 +890,127 @@ test("principal cancellation blocks the next typed workspace tool and provider r
   expect(failure).toBe(providerFailure);
   expect(workspaceToolCalls).toBe(0);
   expect(providerRequestsAfterCancel).toBe(0);
+});
+
+test("principal cancellation aborts an active default run_command process tree", async () => {
+  const sessionId = "butler/typed-active-command-cancel";
+  const turnId = "turn-typed-active-command-cancel";
+  const controller = new AbortController();
+  const unregister = registerPrincipalTurnAbortController({
+    butlerData: data,
+    turnId,
+    controller,
+  });
+  const startedPath = join(data, "runtime-command-started.txt");
+  const latePath = join(data, "runtime-command-late.txt");
+  const events: RuntimeTurnEventInput[] = [];
+  let cancelledAt = 0;
+  let commandSettledAt = 0;
+  const command = [
+    "printf 'started\\n' > runtime-command-started.txt",
+    "/bin/sh -c \"sleep 1; printf 'late\\n' > runtime-command-late.txt\"",
+  ].join("; ");
+  const runtime = new NativeToolLoopRuntime({
+    butlerData: data,
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => JSON.stringify({
+      schema_version: "butler.turn-contract-decision.v1",
+      decision_id: decisionIdFromFormat(input.responseFormat),
+      action: "start_work",
+      target_workstream_id: null,
+      target_project_id: "butler",
+      blocker_id: null,
+      deliverables: ["validation"],
+      answer_text: null,
+      public_title: "활성 명령 취소 검증",
+      public_summary: "작업목록을 만든 뒤 장기 포그라운드 명령을 실행합니다.",
+      public_rationale: "취소 신호가 실제 명령 프로세스 트리까지 전파되어야 합니다.",
+      immediate_next_step: "명령 실행 중 취소하고 지연 쓰기가 없는지 확인합니다.",
+    }),
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          todos: [{
+            id: "run",
+            content: "장기 포그라운드 명령을 실행합니다.",
+            active_form: "장기 포그라운드 명령을 실행하는 중입니다.",
+            status: "in_progress",
+            phase: "execution",
+          }, {
+            id: "verify",
+            content: "취소 후 지연 쓰기가 없는지 검증합니다.",
+            active_form: "취소 후 지연 쓰기를 검증하는 중입니다.",
+            status: "pending",
+            phase: "review",
+            blocked_by: ["run"],
+          }],
+        },
+        rawArguments: "{}",
+      });
+      const block = testWorkBlock("장기 명령 실행", "run_command", {
+        command,
+        timeout_ms: 30_000,
+        validation_suite: "active-command-cancellation",
+      });
+      await input.onAssistantTextBeforeTools?.({ text: "", toolCalls: [block] });
+      const cancelWhenStarted = (async () => {
+        for (let attempt = 0; attempt < 200 && !existsSync(startedPath); attempt += 1) {
+          await Bun.sleep(10);
+        }
+        expect(existsSync(startedPath)).toBe(true);
+        cancelledAt = Date.now();
+        cancelPersistedRuntimeTurn({ butlerData: data, turnId });
+      })();
+      await input.executeTool({
+        ...block,
+        rawArguments: JSON.stringify(block.args),
+      });
+      commandSettledAt = Date.now();
+      await cancelWhenStarted;
+      return "취소 뒤에는 전달되면 안 됩니다.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: data,
+    systemPrompt: "You are Sandy.",
+    metadata: { projectId: "butler" },
+  });
+
+  let failure: unknown;
+  try {
+    await runtime.runTurn({
+      handle,
+      provider: typedProvider,
+      model: "openai/gpt-5.5",
+      input: { text: "장기 명령 취소를 검증해줘." },
+      signal: controller.signal,
+      metadata: { turnId, runtimePolicy: { completionReview: "disabled" } },
+      emitTurnEvent: (event) => {
+        events.push(event);
+      },
+    });
+  } catch (error) {
+    failure = error;
+  } finally {
+    unregister();
+  }
+
+  expect(controller.signal.aborted).toBe(true);
+  expect(failure).toMatchObject({ name: "AbortError" });
+  expect(cancelledAt).toBeGreaterThan(0);
+  expect(commandSettledAt).toBeGreaterThanOrEqual(cancelledAt);
+  expect(commandSettledAt - cancelledAt).toBeLessThan(2_000);
+  await Bun.sleep(1_200);
+  expect(existsSync(latePath)).toBe(false);
+  expect(events.some((event) =>
+    event.kind === "tool.started" &&
+    (event.payload as Record<string, unknown> | undefined)?.toolName === "Bash",
+  )).toBe(true);
+  expect(events.some((event) => event.kind === "tool.completed")).toBe(false);
 });
 
 test("workspace inspect exposes direct read tools without mutation tools", async () => {
