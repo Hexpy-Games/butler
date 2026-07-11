@@ -22,7 +22,10 @@ import {
   type TurnDeliverable,
   type TurnEvidenceReceipt,
 } from "../../packages/butler-agent/src/agent/turn/turn-contract.ts";
-import { typedTurnDecisionInstructions } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/typed-turn-decision.ts";
+import {
+  turnDecisionResponseFormat,
+  typedTurnDecisionInstructions,
+} from "../../packages/butler-agent/src/agent/turn/native/turn-runner/typed-turn-decision.ts";
 
 const tempDirs: string[] = [];
 afterEach(() => tempDirs.splice(0).forEach((path) => rmSync(path, { recursive: true, force: true })));
@@ -103,6 +106,40 @@ test("typed decisions distinguish status snapshots from work validation and fina
   expect(prompt).toContain("Post-change verification belongs to validation");
   expect(prompt).toContain("The ordinary user-facing completion answer is the final candidate");
   expect(prompt).not.toContain("For mixed status-and-work instructions include status_report");
+});
+
+test("typed decisions distinguish runtime todo plans from canonical Ledger tasks", () => {
+  const prompt = typedTurnDecisionInstructions({
+    decisionId: "decision-runtime-todo-semantics",
+    projectId: "project-a",
+    candidateIds: [],
+  });
+  const responseFormat = turnDecisionResponseFormat({
+    decisionId: "decision-runtime-todo-semantics",
+    projectId: "project-a",
+    candidateIds: [],
+    waitingBlockerIds: [],
+  });
+  const properties = responseFormat.schema.properties as Record<
+    string,
+    Record<string, unknown>
+  >;
+  const deliverables = properties.deliverables!;
+  const itemSchema = deliverables.items as Record<string, unknown>;
+
+  expect(prompt).toContain("The bound runtime todo plan is not a ledger_tasks deliverable");
+  expect(prompt).toContain("Never add ledger_tasks merely because the user asks for a task list");
+  expect(prompt).toContain("An active project id alone does not imply Ledger tracking");
+  expect(prompt).toContain("with no intended durable diff, select validation");
+  expect(String(deliverables.description)).toContain(
+    "ledger_tasks never means the bound runtime todo plan",
+  );
+  expect(String(itemSchema.description)).toContain(
+    "A request for a task list, todo list, work list, checklist",
+  );
+  expect(String(properties.target_project_id?.description)).toContain(
+    "does not imply canonical Project Ledger tracking",
+  );
 });
 
 test("complete action and deliverable matrix is deterministic", () => {
