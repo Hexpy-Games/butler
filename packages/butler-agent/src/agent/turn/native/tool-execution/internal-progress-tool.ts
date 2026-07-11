@@ -74,6 +74,7 @@ export function createInternalProgressToolRunner(input: {
         await emitTodoProgressBestEffort({
           turnInput: input.executorInput.turnInput,
           args: cleanArgs,
+          result,
         });
       }
       appendInternalProgressToolResult(input.executorInput, call.name, result, source);
@@ -120,7 +121,8 @@ export function createInternalProgressToolRunner(input: {
         rawArguments: JSON.stringify(args),
       }, "runtime");
     },
-    semanticProgressEstablished: () => semanticProgressEstablished,
+    semanticProgressEstablished: () =>
+      semanticProgressEstablished || Boolean(input.executorInput.activeWorkStreamBinding?.()),
     currentSemanticWorkBlock: () => currentSemanticWorkBlock,
   };
 }

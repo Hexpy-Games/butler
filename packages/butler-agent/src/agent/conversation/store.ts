@@ -121,6 +121,10 @@ export class AgentConversationStore {
     return turn;
   }
 
+  readTurn(turnId: string): ConversationTurn | null {
+    return this.internals.getTurn(turnId);
+  }
+
   writeSummary(input: ConversationSummaryInput): ConversationSummary {
     const now = input.now ?? isoNow();
     const summary: ConversationSummary = {

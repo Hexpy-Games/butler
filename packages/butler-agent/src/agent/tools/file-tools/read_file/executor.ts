@@ -33,6 +33,29 @@ export async function executeReadFileTool(call: { arguments?: unknown; input?: u
   const a = parsed.args;
   const workspaceRoot = getWorkspaceRoot(a, context.workspacePath);
   const path = String(a.path ?? "");
+  const suppliedWorkspaceRoot = typeof a.workspace_root === "string" ? a.workspace_root.trim() : "";
+  if (context.workspacePath && suppliedWorkspaceRoot) {
+    const suppliedGuard = await resolveWorkspacePathGuard({
+      workspaceRoot: suppliedWorkspaceRoot,
+      relativePath: path,
+      rejectProtectedProjectLedgerPaths: true,
+      protectedProjectLedgerRoots: context.protectedProjectLedgerRoots,
+    });
+    if (!suppliedGuard.ok && suppliedGuard.reason === "protected_path") {
+      return {
+        ok: false,
+        error: suppliedGuard.reason,
+        path,
+        guard: suppliedGuard,
+        evidence_capability_receipts: fileToolCapabilityReceipt({
+          toolName: "read_file",
+          ok: false,
+          path,
+          error: suppliedGuard.reason,
+        }),
+      };
+    }
+  }
   const maxBytes = Math.max(1, Math.min(Number(a.max_bytes ?? 65536), 1048576));
   const startLineRaw = a.start_line === undefined ? undefined : Math.max(1, Number(a.start_line));
   const limitLinesRaw = a.limit_lines === undefined ? undefined : Math.max(1, Math.min(Number(a.limit_lines), 10000));

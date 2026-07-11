@@ -34,36 +34,19 @@ export class ToolObservationError extends Error {
   }
 }
 
-export function publicDecisionRequiredObservation(input: {
+export function publicDecisionContinuationObservation(input: {
   turnId: string;
   call: NativeToolCall;
 }): TurnObservation {
   return createToolObservation({
     turnId: input.turnId,
-    kind: "public_decision_required",
-    summary: `A public decision is required before executing ${input.call.name}.`,
+    kind: "public_decision_continuation",
+    summary: `Continue with a fresh public decision before ${input.call.name}.`,
     modelVisibleContent: [
-      "Tool execution was paused before running the requested visible tool batch.",
-      `Tool: ${input.call.name}`,
-      "Reason: the same assistant response did not include a complete authored public decision for this tool call.",
-      "Continue by authoring summary, rationale, and next_step fields for the immediate tool action, then call the tool again.",
-    ].join("\n"),
-  });
-}
-
-export function repeatedToolFamilyObservation(input: {
-  turnId: string;
-  call: NativeToolCall;
-  family: string;
-}): TurnObservation {
-  return createToolObservation({
-    turnId: input.turnId,
-    kind: "validation_failed",
-    summary: `Repeated ${input.family} tool-family pressure was observed.`,
-    modelVisibleContent: [
-      `Tool-family pressure was observed before re-running ${input.call.name}.`,
-      `Family: ${input.family}`,
-      "Use the latest available evidence, choose a distinct verification path, or continue with a bounded limitation.",
+      "The current visible work step has reached its planned small-batch size.",
+      `Next requested tool: ${input.call.name}`,
+      "Continue naturally by authoring title, summary, rationale, and next_step for the next small objective, then request this tool again.",
+      "This is an internal turn-flow cue; keep working in the next assistant step.",
     ].join("\n"),
   });
 }
@@ -116,6 +99,16 @@ export function throwIfToolResultNeedsObservation(input: {
 }
 
 export function toolObservationResult(observation: TurnObservation): Record<string, unknown> {
+  if (observation.kind === "public_decision_continuation") {
+    return {
+      ok: true,
+      continuation_required: true,
+      observation,
+      observation_kind: observation.kind,
+      summary: observation.summary,
+      model_visible_content: observation.modelVisibleContent,
+    };
+  }
   return {
     ok: false,
     observation,
@@ -223,7 +216,8 @@ function observationKindAt(result: unknown): ObservationKind | null {
     kind === "test_failed" ||
     kind === "validation_failed" ||
     kind === "completion_gap" ||
-    kind === "public_decision_required"
+    kind === "public_decision_required" ||
+    kind === "public_decision_continuation"
   ) {
     return kind;
   }

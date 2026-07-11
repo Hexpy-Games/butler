@@ -1,7 +1,13 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import type { DirectTurnBudgetSnapshot } from "./direct-turn-budget.ts";
 import { isTerminalTurnState, type TurnState } from "./turn-kernel.ts";
+import {
+  withDurableFileLock,
+  writeJsonFileAtomic,
+} from "../persistence/atomic-json-store.ts";
+import type { DurableTurnRoundJournalEntry } from "./turn-round-journal-contract.ts";
+import type { TurnContractDecision } from "./turn-contract.ts";
 
 export interface TurnContextObservationRef {
   kind: string;
@@ -9,22 +15,53 @@ export interface TurnContextObservationRef {
   path?: string;
 }
 
+export interface TurnObligationFrontierCheckpoint {
+  gated: boolean;
+  ledgerDiscoveryObserved?: boolean;
+  ledgerDiscoveryCandidateCount?: number;
+  requiredLedgerKinds: Array<"spec" | "work" | "task">;
+  observedLedgerKinds: Array<"spec" | "work" | "task">;
+  ledgerCheckPassed: boolean;
+  workspaceMutationObserved: boolean;
+  validationObserved: boolean;
+  validationFailed: boolean;
+  validationFocused?: boolean;
+  statusObserved?: boolean;
+  statusFocused?: boolean;
+  stage: "open" | "ledger" | "workspace_execution" | "workspace_validation" | "workspace_repair" | "status_inspection" | "closeout";
+}
+
 export interface TurnContextAtom {
+  schemaVersion: "butler.turn-continuation.v2";
+  generation: number;
+  checkpointId: string;
   sessionId: string;
   turnId: string;
   state: TurnState;
   sourceErrorCode: string;
+  retryableProviderFailureStreak?: number;
   reason: string;
   userRequest: { id: string };
   latestAssistantDecision?: { id: string };
   unresolvedObservations: TurnContextObservationRef[];
   openToolPairs: TurnContextObservationRef[];
+  evidenceCandidates: TurnContextObservationRef[];
   latestCompletionReview?: { status: string; observationId?: string };
   currentTurnWork: TurnContextObservationRef[];
   currentTurnTodos: TurnContextObservationRef[];
+  roundJournal?: DurableTurnRoundJournalEntry[];
   budgetSnapshot?: DirectTurnBudgetSnapshot;
+  contractId?: string;
+  turnDecision?: TurnContractDecision;
+  workStreamId?: string;
+  todoListId?: string;
+  nextSemanticBlockSequence?: number;
+  providerAdapterId?: string;
+  effectiveModel?: string;
+  obligationFrontier?: TurnObligationFrontierCheckpoint;
   terminalOutcome?: { id: string; state: string };
   createdAt: string;
+  updatedAt: string;
 }
 
 export const TURN_SCHEDULER_CONTINUATION_YIELD_CODE = "turn_scheduler_continuation_yield";
@@ -36,6 +73,10 @@ export class TurnSchedulerContinuationYieldError extends Error {
     readonly sessionId: string,
     readonly turnId: string,
     readonly contextAtomId: string,
+    readonly checkpointId?: string,
+    readonly checkpointGeneration?: number,
+    readonly sourceErrorCode?: string,
+    readonly retryableProviderFailureStreak?: number,
   ) {
     super("Turn scheduler yielded after persisting a continuation context atom.");
     this.name = "TurnSchedulerContinuationYieldError";
@@ -74,33 +115,122 @@ export function persistTurnContextAtom(input: {
   latestAssistantDecision?: { id: string };
   unresolvedObservations?: TurnContextObservationRef[];
   openToolPairs?: TurnContextObservationRef[];
+  evidenceCandidates?: TurnContextObservationRef[];
   latestCompletionReview?: { status: string; observationId?: string };
   currentTurnWork?: TurnContextObservationRef[];
   currentTurnTodos?: TurnContextObservationRef[];
+  roundJournal?: DurableTurnRoundJournalEntry[];
   budgetSnapshot?: DirectTurnBudgetSnapshot;
   terminalOutcome?: { id: string; state: string };
-}): void {
-  if (isTerminalTurnState(input.state)) return;
-  const path = continuationPathFor(input.butlerData, createTurnContextAtomId(input.sessionId, input.turnId));
-  const value: TurnContextAtom = {
-    sessionId: input.sessionId,
-    turnId: input.turnId,
-    state: input.state,
-    sourceErrorCode: input.sourceErrorCode,
-    reason: input.reason,
-    userRequest: { id: safeRefId(input.userRequest?.id ?? `turn:${input.turnId}`) },
-    ...(input.latestAssistantDecision ? { latestAssistantDecision: input.latestAssistantDecision } : {}),
-    unresolvedObservations: input.unresolvedObservations ?? [],
-    openToolPairs: input.openToolPairs ?? [],
-    ...(input.latestCompletionReview ? { latestCompletionReview: input.latestCompletionReview } : {}),
-    currentTurnWork: input.currentTurnWork ?? [],
-    currentTurnTodos: input.currentTurnTodos ?? [],
-    ...(input.budgetSnapshot ? { budgetSnapshot: sanitizeBudgetSnapshot(input.budgetSnapshot) } : {}),
-    ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
-    createdAt: new Date().toISOString(),
-  };
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(value, null, 2), "utf8");
+  contractId?: string;
+  turnDecision?: TurnContractDecision;
+  workStreamId?: string;
+  todoListId?: string;
+  nextSemanticBlockSequence?: number;
+  providerAdapterId?: string;
+  effectiveModel?: string;
+  obligationFrontier?: TurnObligationFrontierCheckpoint;
+  expectedGeneration?: number;
+}): string | null {
+  if (isTerminalTurnState(input.state)) return null;
+  const contextAtomId = createTurnContextAtomId(input.sessionId, input.turnId);
+  const path = continuationPathFor(input.butlerData, contextAtomId);
+  const committed = withDurableFileLock({
+    lockPath: `${path}.lock`,
+    lockRoot: input.butlerData,
+    ownerId: `turn-continuation:${contextAtomId}`,
+    action: () => {
+      const existing = readTurnContextAtom({
+        butlerData: input.butlerData,
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+      });
+      if (existing && input.expectedGeneration !== existing.generation) {
+        throw new Error("turn_continuation_generation_conflict");
+      }
+      if (!existing && input.expectedGeneration !== undefined && input.expectedGeneration !== 0) {
+        throw new Error("turn_continuation_generation_conflict");
+      }
+      const generation = (existing?.generation ?? 0) + 1;
+      const now = new Date().toISOString();
+      const retryableProviderFailureStreak = providerFailureStreak({
+        existing,
+        sourceErrorCode: input.sourceErrorCode,
+        roundJournal: input.roundJournal,
+      });
+      const value: TurnContextAtom = {
+        schemaVersion: "butler.turn-continuation.v2",
+        generation,
+        checkpointId: `${contextAtomId}:g${generation}`,
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        state: input.state,
+        sourceErrorCode: input.sourceErrorCode,
+        ...(retryableProviderFailureStreak > 0 ? { retryableProviderFailureStreak } : {}),
+        reason: input.reason,
+        userRequest: { id: safeRefId(input.userRequest?.id ?? `turn:${input.turnId}`) },
+        ...(input.latestAssistantDecision ? { latestAssistantDecision: input.latestAssistantDecision } : {}),
+        unresolvedObservations: input.unresolvedObservations ?? [],
+        openToolPairs: input.openToolPairs ?? [],
+        evidenceCandidates: input.evidenceCandidates ?? [],
+        ...(input.latestCompletionReview ? { latestCompletionReview: input.latestCompletionReview } : {}),
+        currentTurnWork: input.currentTurnWork ?? [],
+        currentTurnTodos: input.currentTurnTodos ?? [],
+        ...(input.roundJournal || existing?.roundJournal
+          ? { roundJournal: mergeRoundJournal(existing?.roundJournal, input.roundJournal) }
+          : {}),
+        ...(input.budgetSnapshot ? { budgetSnapshot: sanitizeBudgetSnapshot(input.budgetSnapshot) } : {}),
+        ...(input.contractId ? { contractId: safeRefId(input.contractId) } : {}),
+        ...(input.turnDecision ? { turnDecision: sanitizeTurnDecision(input.turnDecision) } : {}),
+        ...(input.workStreamId ? { workStreamId: safeRefId(input.workStreamId) } : {}),
+        ...(input.todoListId ? { todoListId: safeRefId(input.todoListId) } : {}),
+        ...(input.nextSemanticBlockSequence !== undefined
+          ? { nextSemanticBlockSequence: finiteNonNegativeInteger(input.nextSemanticBlockSequence) }
+          : {}),
+        ...(input.providerAdapterId ? { providerAdapterId: safeRefId(input.providerAdapterId) } : {}),
+        ...(input.effectiveModel ? { effectiveModel: safeRefId(input.effectiveModel) } : {}),
+        ...(input.obligationFrontier
+          ? { obligationFrontier: sanitizeObligationFrontier(input.obligationFrontier) }
+          : {}),
+        ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      writeJsonFileAtomic(path, value);
+      return value;
+    },
+  });
+  if (!committed) throw new Error("turn_continuation_commit_conflict");
+  return contextAtomId;
+}
+
+function providerFailureStreak(input: {
+  existing: TurnContextAtom | null;
+  sourceErrorCode: string;
+  roundJournal?: DurableTurnRoundJournalEntry[];
+}): number {
+  if (!input.sourceErrorCode.startsWith("provider_")) return 0;
+  const existingJournalEntries = new Set(
+    (input.existing?.roundJournal ?? []).map(roundJournalEntryIdentity),
+  );
+  const newRoundObserved = (input.roundJournal ?? [])
+    .some((entry) => !existingJournalEntries.has(roundJournalEntryIdentity(entry)));
+  const sameFailureWithoutNewRound = input.existing?.sourceErrorCode === input.sourceErrorCode &&
+    !newRoundObserved;
+  return sameFailureWithoutNewRound
+    ? Math.max(1, input.existing?.retryableProviderFailureStreak ?? 1) + 1
+    : 1;
+}
+
+function roundJournalEntryIdentity(entry: DurableTurnRoundJournalEntry): string {
+  return [
+    entry.decision_id,
+    entry.semantic_block_id,
+    entry.tool,
+    entry.call_identity,
+    entry.result_fingerprint,
+    entry.state_revision,
+  ].join(":");
 }
 
 export function readTurnContextAtom(input: {
@@ -114,7 +244,20 @@ export function readTurnContextAtom(input: {
     const text = readFileSync(path, "utf8");
     const parsed = JSON.parse(text) as TurnContextAtom;
     if (!parsed || typeof parsed !== "object") return null;
-    return parsed;
+    return {
+      ...parsed,
+      schemaVersion: "butler.turn-continuation.v2",
+      generation: finitePositiveInteger(parsed.generation),
+      checkpointId: parsed.checkpointId || `${createTurnContextAtomId(input.sessionId, input.turnId)}:g1`,
+      retryableProviderFailureStreak: finiteNonNegativeInteger(
+        parsed.retryableProviderFailureStreak ?? 0,
+      ),
+      evidenceCandidates: Array.isArray(parsed.evidenceCandidates)
+        ? parsed.evidenceCandidates
+        : [],
+      roundJournal: Array.isArray(parsed.roundJournal) ? parsed.roundJournal : [],
+      updatedAt: parsed.updatedAt ?? parsed.createdAt,
+    };
   } catch {
     return null;
   }
@@ -130,6 +273,24 @@ export function clearTurnContextAtom(input: {
   rmSync(path, { force: true });
 }
 
+export function turnContextAtomsForTurn(input: {
+  butlerData: string;
+  turnId: string;
+}): TurnContextAtom[] {
+  const dir = join(input.butlerData, "state", TURN_KERNEL_CONTEXT_DIR_NAME);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(CONTINUATION_FILE_SUFFIX))
+    .flatMap((name) => {
+      try {
+        const parsed = JSON.parse(readFileSync(join(dir, name), "utf8")) as TurnContextAtom;
+        return parsed?.turnId === input.turnId ? [parsed] : [];
+      } catch {
+        return [];
+      }
+    });
+}
+
 function continuationPathFor(butlerData: string, fileName: string): string {
   return join(butlerData, "state", TURN_KERNEL_CONTEXT_DIR_NAME, fileName);
 }
@@ -140,6 +301,36 @@ function safeIdSegment(value: string): string {
 
 function safeRefId(value: string): string {
   return value.replace(/[^\S\n]+/gu, " ").replace(/[\r\n]+/gu, " ").trim().slice(0, 160) || "unknown";
+}
+
+function sanitizeObligationFrontier(
+  frontier: TurnObligationFrontierCheckpoint,
+): TurnObligationFrontierCheckpoint {
+  const ledgerKinds = new Set(["spec", "work", "task"] as const);
+  const stages = new Set<TurnObligationFrontierCheckpoint["stage"]>([
+    "open", "ledger", "workspace_execution", "workspace_validation", "workspace_repair", "status_inspection", "closeout",
+  ]);
+  const kinds = (values: readonly string[]) => [...new Set(values)]
+    .filter((value): value is "spec" | "work" | "task" =>
+      ledgerKinds.has(value as "spec" | "work" | "task"))
+    .sort();
+  return {
+    gated: frontier.gated === true,
+    ledgerDiscoveryObserved: frontier.ledgerDiscoveryObserved === true,
+    ledgerDiscoveryCandidateCount: finiteNonNegativeInteger(
+      frontier.ledgerDiscoveryCandidateCount ?? 0,
+    ),
+    requiredLedgerKinds: kinds(frontier.requiredLedgerKinds),
+    observedLedgerKinds: kinds(frontier.observedLedgerKinds),
+    ledgerCheckPassed: frontier.ledgerCheckPassed === true,
+    workspaceMutationObserved: frontier.workspaceMutationObserved === true,
+    validationObserved: frontier.validationObserved === true,
+    validationFailed: frontier.validationFailed === true,
+    validationFocused: frontier.validationFocused === true,
+    statusObserved: frontier.statusObserved === true,
+    statusFocused: frontier.statusFocused === true,
+    stage: stages.has(frontier.stage) ? frontier.stage : "open",
+  };
 }
 
 function sanitizeBudgetSnapshot(snapshot: DirectTurnBudgetSnapshot): DirectTurnBudgetSnapshot {
@@ -157,10 +348,50 @@ function sanitizeBudgetSnapshot(snapshot: DirectTurnBudgetSnapshot): DirectTurnB
   };
 }
 
+function sanitizeTurnDecision(decision: TurnContractDecision): TurnContractDecision {
+  return {
+    schema_version: decision.schema_version,
+    decision_id: safeRefId(decision.decision_id),
+    action: decision.action,
+    ...(decision.target_workstream_id
+      ? { target_workstream_id: safeRefId(decision.target_workstream_id) }
+      : {}),
+    ...(decision.target_project_id ? { target_project_id: safeRefId(decision.target_project_id) } : {}),
+    ...(decision.blocker_id ? { blocker_id: safeRefId(decision.blocker_id) } : {}),
+    deliverables: [...decision.deliverables],
+    ...(decision.answer_text ? { answer_text: safeDecisionText(decision.answer_text) } : {}),
+    ...(decision.public_title ? { public_title: safeDecisionText(decision.public_title) } : {}),
+    public_summary: safeDecisionText(decision.public_summary),
+    ...(decision.public_rationale
+      ? { public_rationale: safeDecisionText(decision.public_rationale) }
+      : {}),
+    ...(decision.immediate_next_step
+      ? { immediate_next_step: safeDecisionText(decision.immediate_next_step) }
+      : {}),
+  };
+}
+
+function mergeRoundJournal(
+  previous: DurableTurnRoundJournalEntry[] | undefined,
+  current: DurableTurnRoundJournalEntry[] | undefined,
+): DurableTurnRoundJournalEntry[] {
+  const entries = [...(previous ?? []), ...(current ?? [])];
+  return entries.map((entry, index) => ({
+    ...entry,
+    sequence: index + 1,
+  }));
+}
+
+function safeDecisionText(value: string): string {
+  return value.replace(/[\r\n]+/gu, " ").replace(/\s+/gu, " ").trim().slice(0, 420);
+}
+
 function finiteNonNegativeInteger(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
-function finitePositiveInteger(value: number): number {
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+function finitePositiveInteger(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 1;
 }

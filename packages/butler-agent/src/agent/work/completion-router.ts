@@ -22,6 +22,17 @@ export interface CompletionRouteResult {
   enqueued: number;
 }
 
+interface CompletionRouteInput {
+  butlerData: string;
+  consumer: CompletionConsumer;
+}
+
+interface CompletionTaskSnapshot {
+  byId: Map<string, TaskRecord>;
+  plannedReportReady: TaskRecord[];
+  reportable: TaskRecord[];
+}
+
 interface CompletionClaim {
   version: 1;
   kind: "planned-review";
@@ -47,13 +58,24 @@ export function completionOwnerForOrigin(origin: TaskOriginContext | null | unde
   return completionOwnerForSessionId(origin?.origin_session_id);
 }
 
-export function routeCompletionNotifications(input: {
-  butlerData: string;
-  consumer: CompletionConsumer;
-}): CompletionRouteResult {
-  const promotions = claimPlannedWorkerCompletions(input);
-  const enqueued = enqueueOwnedNotifications(input);
+export function routeCompletionNotifications(
+  input: CompletionRouteInput,
+): CompletionRouteResult {
+  const promotions = claimCompletionPromotions(input);
+  const enqueued = enqueueCompletionNotifications(input);
   return { promotions, enqueued };
+}
+
+export function claimCompletionPromotions(
+  input: CompletionRouteInput,
+): PlannedWorkerPromotion[] {
+  return claimPlannedWorkerCompletions(input);
+}
+
+export function enqueueCompletionNotifications(
+  input: CompletionRouteInput,
+): number {
+  return enqueueOwnedNotifications(input);
 }
 
 export function claimPlannedWorkerCompletions(input: {
@@ -62,11 +84,15 @@ export function claimPlannedWorkerCompletions(input: {
 }): PlannedWorkerPromotion[] {
   const taskStore = new TaskStore(input.butlerData);
   const plannedStore = new PlannedTaskStore(input.butlerData);
+  const tasks = readCompletionTaskSnapshot(taskStore);
+  const plannedLinks = plannedStore.findByWorkerTaskIds(
+    new Set(tasks.reportable.map((task) => task.taskId)),
+  );
   const promotions: PlannedWorkerPromotion[] = [];
   const seen = new Set<string>();
 
-  for (const task of taskStore.reportableTasks()) {
-    const plannedLink = plannedStore.findByWorkerTaskId(task.taskId);
+  for (const task of tasks.reportable) {
+    const plannedLink = plannedLinks.get(task.taskId);
     if (!plannedLink) continue;
     const key = `${plannedLink.record.taskId}:${plannedLink.attempt}`;
     seen.add(key);
@@ -139,7 +165,7 @@ export function claimPlannedWorkerCompletions(input: {
     if (!record || !latestAttempt || !workerTaskId || !Number.isFinite(attemptNumber)) continue;
     const key = `${record.taskId}:${attemptNumber}`;
     if (seen.has(key)) continue;
-    const task = taskStore.read(workerTaskId);
+    const task = tasks.byId.get(workerTaskId) ?? null;
     if (task?.notifiedAt) continue;
     if (completionOwnerForPlannedWorker(record, task, input.butlerData) !== input.consumer) continue;
     if (!claimPlannedReview({
@@ -171,9 +197,13 @@ function enqueueOwnedNotifications(input: {
   const taskStore = new TaskStore(input.butlerData);
   const plannedStore = new PlannedTaskStore(input.butlerData);
   const queue = new TaskNotificationQueue(input.butlerData);
+  const tasks = readCompletionTaskSnapshot(taskStore);
+  const plannedLinks = plannedStore.findByWorkerTaskIds(
+    new Set(tasks.reportable.map((task) => task.taskId)),
+  );
   let enqueued = 0;
 
-  for (const task of taskStore.plannedReportReadyTasks()) {
+  for (const task of tasks.plannedReportReady) {
     if (completionOwnerForTask(task, input.butlerData) !== input.consumer) continue;
     const notificationId = queue.plannedReportNotificationId(task.taskId);
     const existing = queue.read(notificationId);
@@ -191,9 +221,9 @@ function enqueueOwnedNotifications(input: {
     queue.enqueuePlannedReport(task);
   }
 
-  for (const task of taskStore.reportableTasks()) {
+  for (const task of tasks.reportable) {
     if (task.notifiedAt) continue;
-    if (plannedStore.findByWorkerTaskId(task.taskId)) continue;
+    if (plannedLinks.has(task.taskId)) continue;
     if (completionOwnerForTask(task, input.butlerData) !== input.consumer) continue;
     const notificationId = queue.taskNotificationId(task.taskId);
     const existing = queue.read(notificationId);
@@ -203,6 +233,24 @@ function enqueueOwnedNotifications(input: {
   }
 
   return enqueued;
+}
+
+function readCompletionTaskSnapshot(taskStore: TaskStore): CompletionTaskSnapshot {
+  const tasks = taskStore.taskIds()
+    .map((taskId) => taskStore.read(taskId))
+    .filter((task): task is TaskRecord => Boolean(task));
+  const reportableStatuses = new Set(["DONE", "FAILED", "REVIEWED"]);
+  return {
+    byId: new Map(tasks.map((task) => [task.taskId, task])),
+    plannedReportReady: tasks.filter((task) => Boolean(
+      task.planned?.publicReport &&
+      (task.planned.status === "PUBLIC_REPORT_READY" ||
+        task.planned.status === "FAILED_PUBLIC_REPORT_READY"),
+    )),
+    reportable: tasks.filter((task) =>
+      reportableStatuses.has(task.status) && workSafetyForTask(task).safe_to_report,
+    ),
+  };
 }
 
 function completionOwnerForTask(

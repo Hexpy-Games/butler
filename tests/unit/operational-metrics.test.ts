@@ -234,6 +234,7 @@ test("native runtime and tool execution emit operational metrics without tool pa
       runFunctionToolPromptText: async ({ executeTool, onAssistantTextBeforeTools }) => {
         await onAssistantTextBeforeTools?.({
           text: [
+            "title: Check usage monitor",
             "summary: Check the usage monitor status.",
             "rationale: The metrics test needs the selected tool to execute without storing payload text.",
             "next_step: Use the sanitized tool metric to finish the turn.",

@@ -763,6 +763,7 @@ export interface ProgressRow {
   kind?: string;
   state: string;
   safe_label: string;
+  turn_event_sequence?: number;
   safe_tool_name?: string;
   safe_input_label?: string;
   tool_call_id?: string;
@@ -776,8 +777,15 @@ export interface ProgressRow {
   public_decision_model_call_id?: string;
   public_decision_latency_ms?: number;
   public_decision_evidence_refs?: string[];
+  work_contract_id?: string;
+  work_stream_id?: string;
+  semantic_block_id?: string;
   work_block_id?: string;
   work_block_label?: string;
+  work_block_phase?: "started" | "updated" | "completed";
+  work_block_sequence?: number;
+  work_decision_id?: string;
+  work_decision_title?: string;
   work_decision_summary?: string;
   work_decision_rationale?: string;
   work_decision_next_step?: string;
@@ -878,6 +886,7 @@ export interface WorkBlockView {
   label: string;
   state: string;
   rows: ProgressRow[];
+  decision_title?: string;
   decision_summary?: string;
   decision_rationale?: string;
   decision_next_step?: string;
@@ -965,6 +974,12 @@ export interface UsageTokenBucketView {
   missingTotalTokenCount: number;
 }
 
+export interface UsageSectionBucketView {
+  requestCount: number;
+  chars: number;
+  estimatedTokens: number;
+}
+
 export interface UsageMonitorView {
   filters: {
     sessionId: string | null;
@@ -975,6 +990,7 @@ export interface UsageMonitorView {
     byScope: Record<string, number>;
     byScopeUsage: Record<string, UsageTokenBucketView>;
     byModel: Record<string, UsageTokenBucketView>;
+    bySection: Record<string, UsageSectionBucketView>;
   };
   webSearch: {
     requestCount: number;

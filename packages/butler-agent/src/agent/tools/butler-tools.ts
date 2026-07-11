@@ -45,10 +45,7 @@ import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
 import { createWorkerToolHandlers } from "./worker/index.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
 import type { ExternalToolCatalogInput } from "./progressive-catalog.ts";
-export {
-  BUTLER_TOOLS,
-  CORE_BUTLER_TOOLS,
-} from "./registry.ts";
+export { BUTLER_TOOLS, CORE_BUTLER_TOOLS } from "./registry.ts";
 export type {
   ButlerToolDefinition,
   ToolCapabilityCategory,
@@ -139,6 +136,7 @@ export function createButlerToolExecutor(input: {
   describedToolIds?: readonly string[] | (() => readonly string[]);
   pluginToolCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
   pluginToolDescriber?: (input: { id: string; namespace: string; name: string }) => Promise<ExternalToolCatalogInput | null | undefined>;
+  activeWorkStreamBinding?: () => { contractId: string; workStreamId: string } | null;
 }): ButlerToolExecutor {
   const taskStore = new TaskStore(input.butlerData);
   const plannedTaskStore = new PlannedTaskStore(input.butlerData);
@@ -189,6 +187,7 @@ export function createButlerToolExecutor(input: {
       turnId: input.turnId,
       todoListStore,
       workStreamStore,
+      activeWorkStreamBinding: input.activeWorkStreamBinding,
     }),
     ...createMemoryToolHandlers({
       butlerHome: input.butlerHome,

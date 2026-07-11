@@ -10,6 +10,7 @@ const TOOL_PROGRESS_DISPLAY_NAME_BY_TOOL_NAME: Record<string, string> = {
   get_memory_health: "Get Memory Health",
   get_usage_monitor: "Get Usage Monitor",
   list_tool_capabilities: "List Tool Capabilities",
+  read_tool_evidence_artifact: "Read Tool Evidence Artifact",
   read_tool_output_artifact: "Read Tool Output Artifact",
   tool_call: "Tool Call",
   tool_describe: "Tool Describe",

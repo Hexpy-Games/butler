@@ -132,7 +132,8 @@ export async function resolveToolCallTarget(
     };
   }
 
-  const validation = validateJsonObjectSchema(args, description.schema);
+  const normalizedArgs = normalizeBridgeArgumentsForTarget(id, args);
+  const validation = validateJsonObjectSchema(normalizedArgs, description.schema);
   if (!validation.ok) {
     return {
       ok: false,
@@ -140,7 +141,7 @@ export async function resolveToolCallTarget(
     };
   }
 
-  const targetCall = describedToolCall(description, args);
+  const targetCall = describedToolCall(description, normalizedArgs);
   if (!targetCall.ok) {
     return { ok: false, result: targetCall.result };
   }
@@ -149,6 +150,20 @@ export async function resolveToolCallTarget(
     targetCall: targetCall.call,
     bridgeInvocation: bridgeInvocationMetadata(description),
   };
+}
+
+function normalizeBridgeArgumentsForTarget(
+  id: string,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!id.startsWith("native:project_ledger_")) return args;
+  if (!("project_path" in args)) return args;
+  const normalized = { ...args };
+  if (!("project_ref" in normalized) && typeof normalized.project_path === "string") {
+    normalized.project_ref = normalized.project_path;
+  }
+  delete normalized.project_path;
+  return normalized;
 }
 
 function isToolCallAllowedByTurnDescription(

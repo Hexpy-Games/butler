@@ -2,7 +2,11 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { pollWorkerResultsOnce } from "../../packages/butler-agent/src/interfaces/gateway/worker-result-monitor.ts";
+import {
+  completionMonitorRevision,
+  pollWorkerResultsOnce,
+  WorkerResultMonitorGate,
+} from "../../packages/butler-agent/src/interfaces/gateway/worker-result-monitor.ts";
 import { buildTaskOriginContext } from "../../packages/butler-agent/src/agent/work/task-origin.ts";
 import { routeCompletionNotifications } from "../../packages/butler-agent/src/agent/work/completion-router.ts";
 import { TaskNotificationQueue } from "../../packages/butler-agent/src/agent/work/task-notifications.ts";
@@ -26,6 +30,67 @@ afterEach(() => {
   if (originalButlerData === undefined) delete process.env.BUTLER_DATA;
   else process.env.BUTLER_DATA = originalButlerData;
   rmSync(tempDir, { recursive: true, force: true });
+});
+
+test("worker result monitor gate wakes only for structured completion work", () => {
+  const gate = new WorkerResultMonitorGate(60_000);
+
+  expect(gate.nextAction({ revision: "task-1:RUNNING", pendingCount: 0, nowMs: 1_000 }))
+    .toBe("full_scan");
+  gate.recordFullScan({ revision: "task-1:RUNNING", nowMs: 1_000 });
+
+  expect(gate.nextAction({ revision: "task-1:RUNNING", pendingCount: 0, nowMs: 2_000 }))
+    .toBe("idle");
+  expect(gate.nextAction({ revision: "task-1:RUNNING", pendingCount: 1, nowMs: 2_000 }))
+    .toBe("delivery_only");
+  expect(gate.nextAction({ revision: "task-1:DONE", pendingCount: 0, nowMs: 2_000 }))
+    .toBe("full_scan");
+  expect(gate.nextAction({ revision: "task-1:RUNNING", pendingCount: 0, nowMs: 61_000 }))
+    .toBe("full_scan");
+});
+
+test("completion monitor revision ignores task logs and changes on canonical status", () => {
+  const taskDir = join(tempDir, "tasks", "task-revision");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "RUNNING\n", "utf8");
+  writeFileSync(join(taskDir, "log.txt"), "first log\n", "utf8");
+  const initial = completionMonitorRevision(tempDir);
+
+  writeFileSync(join(taskDir, "log.txt"), "large changing output\n".repeat(100), "utf8");
+  expect(completionMonitorRevision(tempDir)).toBe(initial);
+
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  expect(completionMonitorRevision(tempDir)).not.toBe(initial);
+});
+
+test("delivery-only worker poll retries queued output without scanning new completions", async () => {
+  const queuedTaskDir = join(tempDir, "tasks", "task-queued-delivery");
+  mkdirSync(queuedTaskDir, { recursive: true });
+  writeFileSync(join(queuedTaskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(queuedTaskDir, "result.md"), "already queued\n", "utf8");
+  const taskStore = new TaskStore(tempDir);
+  new TaskNotificationQueue(tempDir).enqueueTaskResult(
+    taskStore.read("task-queued-delivery")!,
+  );
+
+  const undiscoveredTaskDir = join(tempDir, "tasks", "task-undiscovered");
+  mkdirSync(undiscoveredTaskDir, { recursive: true });
+  writeFileSync(join(undiscoveredTaskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(undiscoveredTaskDir, "result.md"), "must await full scan\n", "utf8");
+
+  const delivered = await pollWorkerResultsOnce({
+    butlerHome: "fixtures/butler-project",
+    butlerData: tempDir,
+    sessionId: "butler/main",
+    chatId: "123",
+    scanCompletions: false,
+    sendTelegram: async () => ({ ok: true, transportMessageId: "retry" }),
+  });
+
+  const queue = new TaskNotificationQueue(tempDir);
+  expect(delivered).toBe(1);
+  expect(queue.read("worker-result-task-queued-delivery")?.status).toBe("delivered");
+  expect(queue.read("worker-result-task-undiscovered")).toBeNull();
 });
 
 test("worker result monitor delivers completed task results once", async () => {

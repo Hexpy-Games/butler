@@ -34,6 +34,7 @@ import {
   diagnosticDetails,
   safeRuntimeFailure,
 } from "../../integrations/providers/provider-errors.ts";
+import { bindProviderToModel } from "../../integrations/providers/registry.ts";
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../runtime/internal-recovery-failure.ts";
 import {
   isNonPublicContinuationDeliveryError,
@@ -41,9 +42,7 @@ import {
 } from "../../agent/turn/recoverable-delivery.ts";
 import {
   clearTurnContextAtom,
-  createTurnContextAtomId,
   isTurnSchedulerContinuationYieldError,
-  persistTurnContextAtom,
 } from "../../agent/turn/turn-continuation-context.ts";
 import type {
   GatewayActorTurnResult,
@@ -112,6 +111,7 @@ function defaultNow(): string {
 
 const DEFAULT_TYPING_INTERVAL_MS = 4_000;
 const EMPTY_FINAL_DURABLE_TEXT = "[turn completed without public final text]";
+const DEFAULT_OPENING_DECISION_TIMEOUT_MS = 0;
 
 type StewardActivityTimelineEvent = {
   schema: "butler.steward-activity-event.v1";
@@ -530,6 +530,9 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       );
       const activeBinding = this.requireBinding();
       developerLogBinding = activeBinding;
+      const generatedSessionTitlePromise = schedulerContinuation
+        ? Promise.resolve(null)
+        : this.generateSessionTitleBestEffort(activeBinding, envelope, route);
       const handle = await this.ensureRuntimeHandle(activeBinding, timestamp);
       const emitIntermediate = this.options.deliverIntermediate
         ? async (
@@ -562,11 +565,12 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         envelope,
         emitIntermediate,
       });
+      const turnProvider = bindProviderToModel(this.options.provider, binding.modelRef);
       let result;
       try {
         result = await this.options.runtime.runTurn({
           handle,
-          provider: this.options.provider,
+          provider: turnProvider,
           model: binding.modelRef,
           input: envelope,
           signal: envelope.signal,
@@ -584,6 +588,8 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
               ? {
                 contextAtomId: schedulerContinuation.contextAtomId,
                 continuationForQueueId: schedulerContinuation.continuationForQueueId,
+                checkpointId: schedulerContinuation.checkpointId,
+                schedulerItemId: schedulerContinuation.schedulerItemId,
               }
               : undefined,
             runtimePolicy: activeBinding.metadata?.runtimePolicy,
@@ -629,11 +635,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           turnId,
         });
       }
-      const generatedSessionTitle = await this.generateSessionTitleBestEffort(
-        activeBinding,
-        envelope,
-        route,
-      );
+      const generatedSessionTitle = await generatedSessionTitlePromise;
       const finalAction = finalResultAction({
         binding: activeBinding,
         envelope,
@@ -688,8 +690,15 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       } catch (error) {
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
-      const turnId = turnIdFromEnvelope(envelope);
-      this.finalizeConversationAdmissionFailure(conversationAdmission, timestamp, error);
+      const isSchedulerYield = isTurnSchedulerContinuationYieldError(error);
+      const isContinuationFailure =
+        safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
+        isNonPublicContinuationDeliveryError(error) ||
+        isPromptUsageModelCallBudgetError(error) ||
+        isSchedulerYield;
+      if (!isContinuationFailure) {
+        this.finalizeConversationAdmissionFailure(conversationAdmission, timestamp, error);
+      }
       this.captureDeveloperModelTurn({
         kind: "model_turn_error",
         binding: developerLogBinding,
@@ -711,26 +720,6 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             : undefined,
         },
       });
-      const isContinuationFailure =
-        safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
-        isNonPublicContinuationDeliveryError(error) ||
-        isPromptUsageModelCallBudgetError(error) ||
-        isTurnSchedulerContinuationYieldError(error);
-      if (isPromptUsageModelCallBudgetError(error) && turnId) {
-        const contextAtomId = createTurnContextAtomId(binding.sessionId, turnId);
-        persistTurnContextAtom({
-          butlerData: gatewayMetricsButlerData(),
-          sessionId: binding.sessionId,
-          turnId,
-          state: "continuing",
-          sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
-          reason: "Continuation checkpoint persisted before internal scheduler rollover.",
-          unresolvedObservations: [{
-            kind: "context_compacted",
-            id: contextAtomId,
-          }],
-        });
-      }
       const failureState = isContinuationFailure
         ? "active"
         : "crashed";
@@ -739,28 +728,37 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         sessionId: binding.sessionId,
         role: binding.role,
         state: failureState,
-        reason: failureState === "active"
+        reason: isSchedulerYield
+          ? "gateway-turn-continuing"
+          : failureState === "active"
           ? "gateway-turn-incomplete"
           : "gateway-runtime-error",
-        metadata: {
+        metadata: isSchedulerYield
+          ? {
+            contextAtomId: error.contextAtomId,
+            checkpointId: error.checkpointId,
+          }
+          : {
+            message: safeFailure.message,
+            code: safeFailure.code,
+            diagnostics: diagnosticDetails(error),
+          },
+        timestamp,
+      });
+      if (!isSchedulerYield) {
+        recordSystemEvent({
+          sessionId: binding.sessionId,
+          category: "runtime_error",
           message: safeFailure.message,
-          code: safeFailure.code,
-          diagnostics: diagnosticDetails(error),
-        },
-        timestamp,
-      });
-      recordSystemEvent({
-        sessionId: binding.sessionId,
-        category: "runtime_error",
-        message: safeFailure.message,
-        statusCode: safeFailure.statusCode,
-        details: diagnosticDetails(error),
-        metadata: {
-          source: "gateway-actor",
-          code: safeFailure.code,
-        },
-        timestamp,
-      });
+          statusCode: safeFailure.statusCode,
+          details: diagnosticDetails(error),
+          metadata: {
+            source: "gateway-actor",
+            code: safeFailure.code,
+          },
+          timestamp,
+        });
+      }
       throw err;
     }
   }
@@ -882,16 +880,25 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     timestamp: string;
   }): Promise<string | undefined> {
     if (input.envelope.transport !== APP_TRANSPORT) return undefined;
+    const turnProvider = bindProviderToModel(this.options.provider, input.binding.modelRef);
+    if (
+      this.role === "butler" &&
+      turnProvider.capabilities.supportsStructuredOutputs === true
+    ) return undefined;
+    const timeoutMs = this.options.openingDecisionTimeoutMs ?? DEFAULT_OPENING_DECISION_TIMEOUT_MS;
+    if (timeoutMs <= 0) {
+      return undefined;
+    }
     try {
       const openingDecision = await generateOpeningDecisionWithProvider(
-        this.options.provider,
+        turnProvider,
         {
           userMessage: input.envelope.message.text ?? "",
           model: input.binding.modelRef,
           sessionRole: input.binding.role,
           projectId: input.binding.projectId,
           signal: input.envelope.signal,
-          timeoutMs: this.options.openingDecisionTimeoutMs,
+          timeoutMs,
         },
       );
       if (!openingDecision) {
@@ -1228,6 +1235,8 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
 function schedulerContinuationMetadata(envelope: InboundEnvelope): {
   contextAtomId: string;
   continuationForQueueId?: string;
+  checkpointId?: string;
+  schedulerItemId?: string;
 } | null {
   const raw = envelope.raw && typeof envelope.raw === "object"
     ? envelope.raw as Record<string, unknown>
@@ -1238,7 +1247,9 @@ function schedulerContinuationMetadata(envelope: InboundEnvelope): {
   const continuationForQueueId = typeof raw.continuationForQueueId === "string"
     ? raw.continuationForQueueId
     : undefined;
-  return { contextAtomId, continuationForQueueId };
+  const checkpointId = typeof raw.checkpointId === "string" ? raw.checkpointId.trim() : undefined;
+  const schedulerItemId = typeof raw.schedulerItemId === "string" ? raw.schedulerItemId.trim() : undefined;
+  return { contextAtomId, continuationForQueueId, checkpointId, schedulerItemId };
 }
 
 function timestampAfter(timestamp: string, offsetMs: number): string {

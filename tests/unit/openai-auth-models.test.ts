@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -9,12 +9,12 @@ import {
   pkceChallenge,
   resolveOpenAIAuth,
   writeButlerOpenAIAuthProfile,
-} from "../../packages/butler-agent/src/integrations/providers/openai-auth.ts";
+} from "../../packages/butler-agent/src/integrations/providers/openai/auth.ts";
 import {
   AUTO_CODEX_LATEST,
   pickLatestCodexModel,
   resolveDynamicOpenAIModel,
-} from "../../packages/butler-agent/src/integrations/providers/openai-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/openai/models.ts";
 import {
   extractResponseText,
   isTransientModelApiError,
@@ -31,10 +31,10 @@ import {
 import {
   normalizeLocalServerUrl,
   safeLocalModelId,
-} from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 import {
   registerHostedModelConfig,
-} from "../../packages/butler-agent/src/integrations/providers/registered-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
 import {
   readPromptCacheMetrics,
 } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
@@ -42,6 +42,7 @@ import {
   resolveRuntimeMessageLanguage,
   runtimeMessages,
 } from "../../packages/butler-agent/src/agent/output/messages.ts";
+import { isToolBatchCompletedHandoffText } from "../../packages/butler-agent/src/agent/turn/tool-batch-handoff.ts";
 import {
   isContainerRuntime,
   resolveOAuthListenHost,
@@ -453,6 +454,8 @@ test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
   }, tempDir);
 
   const bodies: Record<string, any>[] = [];
+  const attributedRequests: number[] = [];
+  const attributedUsage: number[] = [];
   globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const body = JSON.parse(String(init?.body || "{}"));
     bodies.push(body);
@@ -472,10 +475,12 @@ test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
             }],
           },
         }],
+        usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
       }), { status: 200 });
     }
     return new Response(JSON.stringify({
       choices: [{ message: { role: "assistant", content: "tool result used" } }],
+      usage: { prompt_tokens: 140, completion_tokens: 10, total_tokens: 150 },
     }), { status: 200 });
   }) as unknown as typeof fetch;
 
@@ -483,6 +488,14 @@ test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
     model: "zai/glm-5.2",
     reasoningEffort: "low",
     prompt: "search",
+    butlerData: tempDir,
+    usageAttribution: {
+      turnId: "turn-zai-tools",
+      phase: "initial_tool_loop",
+      budgetState: { status: "ok", requestCount: 0, maxRequests: 8 },
+      beforeModelRequest: ({ roundIndex }) => attributedRequests.push(roundIndex),
+      afterModelResponseUsage: (usage) => attributedUsage.push(usage.promptTokens ?? 0),
+    },
     tools: [{
       type: "function",
       name: "lookup",
@@ -500,6 +513,311 @@ test("registered Z.AI hosted tool calls forward reasoning effort", async () => {
   expect(bodies).toHaveLength(2);
   expect(bodies[0]!.reasoning_effort).toBe("low");
   expect(bodies[1]!.reasoning_effort).toBe("low");
+  expect(attributedRequests).toEqual([0, 1]);
+  expect(attributedUsage).toEqual([100, 140]);
+});
+
+test("registered Z.AI adapter keeps consecutive decisions and tool results in one provider loop", async () => {
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  const bodies: Record<string, any>[] = [];
+  const decisions: string[] = [];
+  const executed: string[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    bodies.push(body);
+    if (bodies.length <= 2) {
+      const index = bodies.length;
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            role: "assistant",
+            content: index === 1
+              ? ""
+              : [
+                "title: 두 번째 상태 확인",
+                "summary: 첫 결과를 바탕으로 두 번째 상태를 확인합니다.",
+                "rationale: 두 상태를 함께 관찰해야 다음 행동을 정할 수 있습니다.",
+                "next_step: 두 결과를 비교해 결론을 작성합니다.",
+              ].join("\n"),
+            tool_calls: [{
+              id: `call_${index}`,
+              type: "function",
+              function: {
+                name: "lookup",
+                arguments: JSON.stringify({ query: `butler-${index}` }),
+              },
+            }],
+          },
+        }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "both results observed" } }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const text = await runFunctionToolPromptText({
+    model: "zai/glm-5.2",
+    prompt: "inspect two states",
+    maxToolRounds: 4,
+    handoffAfterToolBatch: false,
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "Look up a term.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    onAssistantTextBeforeTools: ({ text }) => {
+      decisions.push(text);
+    },
+    executeTool: async (call) => {
+      executed.push(String(call.args.query));
+      return { answer: call.args.query };
+    },
+  });
+
+  expect(text).toBe("both results observed");
+  expect(executed).toEqual(["butler-1", "butler-2"]);
+  expect(decisions).toHaveLength(2);
+  expect(bodies).toHaveLength(3);
+  expect(bodies[1]!.messages).toContainEqual(expect.objectContaining({
+    role: "tool",
+    tool_call_id: "call_1",
+  }));
+  expect(bodies[2]!.messages).toContainEqual(expect.objectContaining({
+    role: "tool",
+    tool_call_id: "call_2",
+  }));
+});
+
+test("registered Z.AI typed tool batches hand off before hidden final synthesis", async () => {
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  const bodies: Record<string, any>[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    bodies.push(JSON.parse(String(init?.body || "{}")));
+    if (bodies.length > 1) throw new Error("unexpected hidden synthesis request");
+    return new Response(JSON.stringify({
+      choices: [{
+        message: {
+          role: "assistant",
+          content: "summary: 후보를 검색합니다.",
+          tool_calls: [{
+            id: "call_1",
+            type: "function",
+            function: {
+              name: "lookup",
+              arguments: "{\"query\":\"butler\"}",
+            },
+          }],
+        },
+      }],
+      usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const text = await runFunctionToolPromptText({
+    model: "zai/glm-5.2",
+    prompt: "search",
+    maxToolRounds: 1,
+    handoffAfterToolBatch: true,
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "Look up a term.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    executeTool: async () => ({ answer: "found" }),
+  });
+
+  expect(isToolBatchCompletedHandoffText(text)).toBe(true);
+  expect(bodies).toHaveLength(1);
+});
+
+test("registered Z.AI hosted tool result compaction emits rehydratable evidence packet", async () => {
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  const bodies: Record<string, any>[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    bodies.push(body);
+    if (bodies.length === 1) {
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: "call_large",
+              type: "function",
+              function: {
+                name: "lookup",
+                arguments: "{\"query\":\"butler\"}",
+              },
+            }],
+          },
+        }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "tool result used" } }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runFunctionToolPromptText({
+    model: "zai/glm-5.2",
+    reasoningEffort: "low",
+    prompt: "search",
+    butlerData: tempDir,
+    usageAttribution: { turnId: "turn-hosted-evidence" },
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "Look up a term.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    executeTool: async () => ({
+      ok: true,
+      title: "Large hosted tool result",
+      stdout: [
+        "HEAD_START",
+        "A".repeat(16_000),
+        "RAW_MIDDLE_ONLY_IN_HOSTED_ARTIFACT",
+        "B".repeat(16_000),
+        "TAIL_END",
+      ].join("\n"),
+    }),
+  })).resolves.toBe("tool result used");
+
+  expect(bodies).toHaveLength(2);
+  const toolMessage = bodies[1]!.messages.find((message: Record<string, unknown>) => message.role === "tool");
+  const content = String(toolMessage.content);
+  expect(content).not.toContain("RAW_MIDDLE_ONLY_IN_HOSTED_ARTIFACT");
+  const parsed = JSON.parse(content) as Record<string, any>;
+  const packet = parsed.output.butler_evidence_packet;
+  expect(parsed.output.butler_tool_result_compacted).toBe(true);
+  expect(packet).toMatchObject({
+    schema: "butler.evidence-packet.v1",
+    tool_name: "lookup",
+    tool_call_id: "call_large",
+    turn_id: "turn-hosted-evidence",
+    rehydrate: {
+      kind: "tool_evidence_artifact",
+      tool: "read_tool_evidence_artifact",
+    },
+  });
+  expect(existsSync(packet.rehydrate.path)).toBe(true);
+  const artifact = JSON.parse(readFileSync(packet.rehydrate.path, "utf8")) as Record<string, any>;
+  expect(artifact.serialized_text).toContain("RAW_MIDDLE_ONLY_IN_HOSTED_ARTIFACT");
+  expect(artifact.digest).toBe(packet.digest);
+});
+
+test("registered Z.AI keeps the latest tool batch intact before compacting observed older rounds", async () => {
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  const bodies: Record<string, any>[] = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const body = JSON.parse(String(init?.body || "{}"));
+    bodies.push(body);
+    if (bodies.length === 1) {
+      return new Response(JSON.stringify({
+        choices: [{ message: {
+          role: "assistant",
+          content: "",
+          tool_calls: Array.from({ length: 5 }, (_, index) => ({
+            id: `call_old_${index}`,
+            type: "function",
+            function: { name: "lookup", arguments: JSON.stringify({ query: `old-${index}` }) },
+          })),
+        } }],
+      }), { status: 200 });
+    }
+    if (bodies.length === 2) {
+      return new Response(JSON.stringify({
+        choices: [{ message: {
+          role: "assistant",
+          content: "",
+          tool_calls: [{
+            id: "call_latest",
+            type: "function",
+            function: { name: "lookup", arguments: "{\"query\":\"latest\"}" },
+          }],
+        } }],
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "rolling context used" } }],
+    }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runFunctionToolPromptText({
+    model: "zai/glm-5.2",
+    prompt: "inspect several bounded results",
+    butlerData: tempDir,
+    maxToolRounds: 3,
+    usageAttribution: { turnId: "turn-hosted-rolling-context" },
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "Look up a term.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    executeTool: async (call) => call.args.query === "latest"
+      ? { ok: true, title: "Latest result", message: "LATEST_RAW_RESULT" }
+      : { ok: true, title: String(call.args.query), message: "OLD_RAW_RESULT_".repeat(300) },
+  })).resolves.toBe("rolling context used");
+
+  expect(bodies).toHaveLength(3);
+  const secondRequest = JSON.stringify(bodies[1]!.messages);
+  const thirdRequest = JSON.stringify(bodies[2]!.messages);
+  expect(secondRequest).toContain("OLD_RAW_RESULT_");
+  expect((thirdRequest.match(/OLD_RAW_RESULT_/gu) ?? []).length)
+    .toBeLessThan((secondRequest.match(/OLD_RAW_RESULT_/gu) ?? []).length / 10);
+  expect(thirdRequest.length).toBeLessThan(secondRequest.length);
+  expect(thirdRequest).toContain("LATEST_RAW_RESULT");
+  expect(thirdRequest).toContain("butler_tool_result_observed_checkpoint");
+  expect(thirdRequest).toContain("evidence_ref");
 });
 
 test("registered Anthropic and Gemini models use provider-native API keys", async () => {
@@ -570,6 +888,8 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
   }, tempDir);
 
   const calls: Array<{ url: string; authorization: string; body: Record<string, any> }> = [];
+  const attributedRequests: number[] = [];
+  const attributedUsage: unknown[] = [];
   globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     calls.push({
       url: String(input),
@@ -578,6 +898,12 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
     });
     return new Response(JSON.stringify({
       choices: [{ message: { role: "assistant", content: "ok" } }],
+      usage: {
+        prompt_tokens: 120,
+        completion_tokens: 30,
+        total_tokens: 150,
+        prompt_tokens_details: { cached_tokens: 80 },
+      },
     }), { status: 200 });
   }) as unknown as typeof fetch;
 
@@ -603,6 +929,15 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
         required: ["ok"],
         properties: { ok: { type: "string" } },
       },
+    },
+    butlerData: tempDir,
+    cacheScope: "hosted-zai-test",
+    usageAttribution: {
+      turnId: "turn-zai-usage",
+      phase: "typed_turn_decision",
+      budgetState: { status: "ok", requestCount: 0, maxRequests: 8 },
+      beforeModelRequest: ({ roundIndex }) => attributedRequests.push(roundIndex),
+      afterModelResponseUsage: (usage) => attributedUsage.push(usage),
     },
   })).resolves.toBe("ok");
 
@@ -635,6 +970,23 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
       },
     },
   });
+  expect(attributedRequests).toEqual([0]);
+  expect(attributedUsage).toEqual([expect.objectContaining({
+    model: "zai/glm-5.2",
+    promptTokens: 120,
+    cachedTokens: 80,
+    outputTokens: 30,
+    totalTokens: 150,
+    roundIndex: 0,
+  })]);
+  expect(readPromptCacheMetrics({ butlerData: tempDir })).toContainEqual(expect.objectContaining({
+    model: "zai/glm-5.2",
+    scope: "hosted-zai-test",
+    turnId: "turn-zai-usage",
+    phase: "typed_turn_decision",
+    promptTokens: 120,
+    cachedTokens: 80,
+  }));
 });
 
 test("registered OpenCode Go chat-completions models use the hosted OpenAI-compatible endpoint", async () => {
@@ -726,6 +1078,30 @@ test("model API calls retry transient backend failures without caller rework", a
   expect(attempts).toBe(3);
   expect(isTransientModelApiError(new Error("Codex backend error (503): upstream connect error"))).toBe(true);
   expect(isTransientModelApiError(new Error("OpenAI Responses API error (400): bad request"))).toBe(false);
+});
+
+test("hosted chat adapters use the same transient retry policy", async () => {
+  process.env.BUTLER_MODEL_API_RETRY_ATTEMPTS = "3";
+  process.env.BUTLER_MODEL_API_RETRY_DELAY_MS = "0";
+  registerHostedModelConfig({
+    providerId: "zai",
+    modelId: "glm-5.2",
+    authType: "api_key",
+    apiKey: "zai-secret-key",
+  }, tempDir);
+
+  let attempts = 0;
+  globalThis.fetch = (async () => {
+    attempts += 1;
+    if (attempts < 3) throw new TypeError("fetch failed: ETIMEDOUT");
+    return Response.json({
+      choices: [{ message: { role: "assistant", content: "hosted recovered" } }],
+    });
+  }) as unknown as typeof fetch;
+
+  await expect(runPromptText({ model: "zai/glm-5.2", prompt: "hi" }))
+    .resolves.toBe("hosted recovered");
+  expect(attempts).toBe(3);
 });
 
 test("provider HTTP failures preserve safe status diagnostics", async () => {
@@ -3072,6 +3448,58 @@ test("Codex subscription tool continuation is sent as stateless input without pr
   ]);
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("large-hidden-reasoning-state");
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("encrypted_content");
+});
+
+test("Codex typed tool batches hand off before a continuation response request", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+
+  const seenBodies: Array<Record<string, any>> = [];
+  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    seenBodies.push(JSON.parse(String(init?.body || "{}")));
+    if (seenBodies.length > 1) throw new Error("unexpected hidden continuation request");
+    return new Response([
+      'data: {"type":"response.output_item.done","item":{"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{\\"query\\":\\"status\\"}"}}',
+      "",
+      'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":1,"total_tokens":2}}}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n"), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const result = await runFunctionToolPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "check",
+    maxToolRounds: 1,
+    handoffAfterToolBatch: true,
+    tools: [{
+      type: "function",
+      name: "lookup",
+      description: "lookup status",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }],
+    executeTool: async () => ({ ok: true }),
+  });
+
+  expect(isToolBatchCompletedHandoffText(result)).toBe(true);
+  expect(seenBodies).toHaveLength(1);
 });
 
 test("OpenAI function tool prompt reserves budget for final synthesis instead of exceeding request budget", async () => {

@@ -204,22 +204,6 @@ export function createWorkStreamPhaseBudgetController(input: {
   return controller;
 }
 
-export function completionGapFingerprint(input: {
-  kind: string;
-  summary: string;
-  refs?: Array<{ kind: string; id: string }>;
-}): string {
-  const refs = (input.refs ?? [])
-    .map((ref) => `${ref.kind}:${ref.id}`)
-    .sort()
-    .join("|");
-  return stableHash([
-    input.kind.trim(),
-    input.summary.trim(),
-    refs,
-  ].join("\n"));
-}
-
 export function promptUsageModelCallBudgetExhaustedError(): Error & { code: string } {
   const error = Object.assign(
     new Error("Prompt usage model-call budget exhausted before provider request"),
@@ -257,12 +241,4 @@ function safeDimensionIdentifier(value: string | undefined): string | undefined 
     return undefined;
   }
   return /^[A-Za-z][A-Za-z0-9_.:-]*$/.test(trimmed) ? trimmed : undefined;
-}
-
-function stableHash(value: string): string {
-  let hash = 5381;
-  for (const char of value) {
-    hash = ((hash << 5) + hash + char.charCodeAt(0)) >>> 0;
-  }
-  return hash.toString(36);
 }

@@ -1,8 +1,8 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
@@ -13,16 +13,25 @@ import { toolContractJsonChars } from "../../packages/butler-agent/src/agent/too
 import { indexTranscriptLinesForQuery } from "../../packages/butler-agent/src/agent/cognition/memory/exact-query.ts";
 import { loadPrivateEnvIntoProcess } from "../../packages/butler-agent/src/interfaces/cli/private-env.ts";
 import { runFunctionToolPromptText, runPromptText } from "../../packages/butler-agent/src/integrations/providers/provider.ts";
+import { providerCapabilitiesForModel } from "../../packages/butler-agent/src/integrations/providers/registry.ts";
 import {
   readLocalModelConfigs,
   upsertLocalModelConfig,
-} from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 import {
   readRegisteredHostedModelConfigs,
   registerHostedModelConfig,
   resolveProviderCredentialSecret,
-} from "../../packages/butler-agent/src/integrations/providers/registered-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
+import { createProjectFolderSelectionToken } from "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
+import { PROJECT_LEDGER_MUTATION_TOOL_NAME_SET } from "../../packages/butler-agent/src/agent/tools/project-ledger/mutation-tools.ts";
+import {
+  collectElectronForwardProgressBenchmark,
+  snapshotLedgerRecords,
+  type ElectronForwardProgressBenchmark,
+  type LedgerRecordSnapshot,
+} from "../support/turn-forward-progress-electron-benchmark.ts";
 
 const root = process.cwd();
 const electronBin = resolve(
@@ -60,7 +69,8 @@ type E2eMode =
   | "live-llm-real-project-check"
   | "live-llm-workstream-natural-external"
   | "live-llm-artifact-report"
-  | "live-llm-watl-worker";
+  | "live-llm-watl-worker"
+  | "live-llm-turn-forward-progress";
 const requestedMode = process.env.BUTLER_APP_CLIENT_E2E_MODE;
 const e2eMode: E2eMode = requestedMode === "live-llm"
   ? "live-llm"
@@ -94,6 +104,8 @@ const e2eMode: E2eMode = requestedMode === "live-llm"
             ? "live-llm-artifact-report"
           : requestedMode === "live-llm-watl-worker"
             ? "live-llm-watl-worker"
+          : requestedMode === "live-llm-turn-forward-progress"
+            ? "live-llm-turn-forward-progress"
           : "deterministic";
 const usesLiveLlm = e2eMode === "live-llm" ||
   e2eMode === "live-llm-btcc-opening-decision" ||
@@ -106,19 +118,22 @@ const usesLiveLlm = e2eMode === "live-llm" ||
   e2eMode === "live-llm-real-project-check" ||
   e2eMode === "live-llm-workstream-natural-external" ||
   e2eMode === "live-llm-artifact-report" ||
-  e2eMode === "live-llm-watl-worker";
+  e2eMode === "live-llm-watl-worker" ||
+  e2eMode === "live-llm-turn-forward-progress";
 const usesBtccOpeningDecisionScenario = e2eMode === "btcc-opening-decision" ||
   e2eMode === "live-llm-btcc-opening-decision";
 const usesDeterministicBtccOpeningDecisionScenario = e2eMode === "btcc-opening-decision";
 const usesDecisionContextScenario = e2eMode === "decision-context" || e2eMode === "live-llm-decision-context";
 const usesDynamicDecisionContextScenario = e2eMode === "live-llm-decision-context";
-const usesExternalButlerService = e2eMode === "live-llm-workstream-natural-external";
+const usesForwardProgressScenario = e2eMode === "live-llm-turn-forward-progress";
+const usesExternalButlerService = e2eMode === "live-llm-workstream-natural-external" ||
+  usesForwardProgressScenario;
 const usesMemoryRecallScenario = e2eMode === "live-llm-memory-recall";
 const usesBeegAutonomousScenario = e2eMode === "live-llm-beeg-autonomous";
 const usesRealProjectCheckScenario = e2eMode === "live-llm-real-project-check";
 const usesNaturalWorkStreamScenario = e2eMode === "live-llm-workstream-natural" ||
   usesRealProjectCheckScenario ||
-  usesExternalButlerService;
+  e2eMode === "live-llm-workstream-natural-external";
 const usesWorkStreamScenario = e2eMode === "live-llm-workstream" || usesNaturalWorkStreamScenario;
 const usesArtifactReportScenario = e2eMode === "live-llm-artifact-report";
 const usesWatlWorkerScenario = e2eMode === "live-llm-watl-worker";
@@ -126,7 +141,8 @@ const usesDynamicWorkLabels = e2eMode === "live-llm-toolchain" ||
   usesDynamicDecisionContextScenario ||
   usesWorkStreamScenario ||
   usesArtifactReportScenario ||
-  usesWatlWorkerScenario;
+  usesWatlWorkerScenario ||
+  usesForwardProgressScenario;
 const usesToolchainScenario = e2eMode === "toolchain" ||
   usesDeterministicBtccOpeningDecisionScenario ||
   e2eMode === "tool-profile" ||
@@ -134,7 +150,8 @@ const usesToolchainScenario = e2eMode === "toolchain" ||
   usesDecisionContextScenario ||
   usesWorkStreamScenario ||
   usesArtifactReportScenario ||
-  usesWatlWorkerScenario;
+  usesWatlWorkerScenario ||
+  usesForwardProgressScenario;
 const composerSelector = "[data-test-class~=\"composer-card\"]";
 const composerTextareaSelector = `${composerSelector} textarea`;
 const composerSendButtonSelector = `${composerSelector} button[type="submit"]`;
@@ -201,6 +218,16 @@ const toolchainProjectId = "toolchain-project";
 const toolchainProjectDir = join(tempDir, toolchainProjectId);
 const appDbPath = join(tempDir, "app.sqlite");
 const toolchainDashboardPath = join(tempDir, "project-ledger", "projects", toolchainProjectId, "views", "dashboard.md");
+const forwardProgressLedgerRoot = join(tempDir, "project-ledger", "projects", "butler");
+const forwardProgressWorkspace = join(tempDir, "workspace", "butler");
+const forwardProgressSessionTitle = "Forward Progress Benchmark";
+const folderSelectionSecret = `e2e-folder-selection-${runId}`;
+let forwardProgressLedgerBefore: LedgerRecordSnapshot = {};
+let forwardProgressWorkspaceBefore: Record<string, string> = {};
+let forwardProgressBenchmark: ElectronForwardProgressBenchmark | undefined;
+let forwardProgressLiveBlocks = "";
+let forwardProgressFirstMeaningfulMs = 0;
+let forwardProgressTurnStartedAt = 0;
 const artifactReportRelativePath = join(".tmp", "app-client-multiturn-e2e", `artifact-report-${runId}`);
 const artifactReportDir = resolve(root, artifactReportRelativePath);
 const artifactReportCsvRelativePath = join(
@@ -220,7 +247,7 @@ const requiredDecisionContextCalls = [
   "transform_public_data_table",
 ];
 const expectedToolchainWorkBlockLabels = [
-  "Checking the Project Ledger status.",
+  "Project Ledger 상태 확인",
   "Reviewing the needed Project Ledger work context.",
   "Updating the Project Ledger dashboard.",
 ];
@@ -252,6 +279,8 @@ const activeProgressLabels = usesDecisionContextScenario
   : expectedToolchainProgressLabels;
 const activeRequiredToolCalls = usesArtifactReportScenario
   ? ["web_search", "run_command"]
+  : usesForwardProgressScenario
+    ? []
   : usesWorkStreamScenario
     ? ["update_todo_list", "run_command"]
   : usesDynamicDecisionContextScenario
@@ -265,6 +294,13 @@ const toolchainPrompt = usesRealProjectCheckScenario
     "현재 브랜치, 작업트리 상태, 최근 커밋 몇 개를 확인해서 내가 지금 조심해야 할 리스크가 있는지 알려줘.",
     "필요하면 로컬 명령으로 확인해도 돼.",
     "답변은 브랜치, 변경 요약, 리스크, 다음 행동 네 항목으로 짧게 정리해줘.",
+  ].join("\n")
+  : usesForwardProgressScenario
+  ? [
+    "샌디의 브라우저 작업에서 사용자가 원하는 본문 요소를 모델이 직접 선택하고 캡처하는 web.capture 기능을 준비해 주세요.",
+    "Project Ledger에 web.capture 관련 스펙, Work, 테스트 태스크 업데이트부터 해주세요. 기존 항목이 없으면 생성하고, 생성 또는 수정한 항목을 Ledger check로 검증하세요.",
+    "Ledger 업데이트만 보고 턴을 끝내지 말고, 확인된 계획을 바탕으로 이번 턴에서 바로 진행할 수 있는 다음 구현 단계까지 계속 진행하세요.",
+    "중간에 허락을 묻거나 도움을 요청하지 말고, 실제로 완료한 변경과 검증 결과를 마지막에 보고하세요.",
   ].join("\n")
   : usesNaturalWorkStreamScenario
   ? [
@@ -362,7 +398,11 @@ const beegAutonomousPrompt = [
   "그때 어떤 접근이 안전하다고 봤는지 확인된 범위에서 짧게 정리해줘.",
   "기억에서 확인되지 않은 내용은 단정하지 말아줘.",
 ].join("\n");
-const waitForFinalTimeoutMs = usesLiveLlm ? 300_000 : 20_000;
+const waitForFinalTimeoutMs = usesForwardProgressScenario
+  ? 900_000
+  : usesLiveLlm
+    ? 300_000
+    : 20_000;
 
 mkdirSync(screenshotDir, { recursive: true });
 if (usesLiveLlm) {
@@ -386,12 +426,31 @@ if (usesLiveLlm) {
 process.env.BUTLER_DATA = tempDir;
 if (usesMemoryRecallScenario) initializeMemoryRecallFixture();
 if (usesBeegAutonomousScenario || usesWatlWorkerScenario) initializeBeegRealDataSnapshot();
-if (usesToolchainScenario && !usesArtifactReportScenario) {
+if (usesForwardProgressScenario) {
+  initializeForwardProgressLedger();
+} else if (usesToolchainScenario && !usesArtifactReportScenario) {
   initializeToolchainProject();
 }
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+function decisionIdFromResponseFormat(responseFormat: unknown): string {
+  const schema = responseFormat && typeof responseFormat === "object"
+    ? (responseFormat as { schema?: unknown }).schema
+    : undefined;
+  const properties = schema && typeof schema === "object"
+    ? (schema as { properties?: unknown }).properties
+    : undefined;
+  const decision = properties && typeof properties === "object"
+    ? (properties as { decision_id?: unknown }).decision_id
+    : undefined;
+  const decisionId = decision && typeof decision === "object"
+    ? (decision as { const?: unknown }).const
+    : undefined;
+  assert(typeof decisionId === "string" && decisionId.length > 0, "typed decision id is missing from the response schema.");
+  return decisionId;
 }
 
 assert(existsSync(electronBin), "Electron binary is missing; run npm --prefix packages/butler-app/client/electron install first.");
@@ -411,6 +470,9 @@ const fakeProvider: ModelProviderAdapter = {
     supportsServerThreads: false,
     supportsReasoningConfig: true,
     supportsPromptCaching: true,
+  },
+  capabilitiesFor(model) {
+    return providerCapabilitiesForModel(model);
   },
   async invoke(input) {
     if (input.metadata?.purpose === "app_opening_decision") {
@@ -458,6 +520,39 @@ const runtime = new NativeToolLoopRuntime({
   butlerData: tempDir,
   appMessageDbPath: appDbPath,
   disableAutomaticRecall: true,
+  runPromptText: usesLiveLlm ? undefined : async (input) => {
+    const decisionId = decisionIdFromResponseFormat(input.responseFormat);
+    if (usesToolchainScenario) {
+      return JSON.stringify({
+        schema_version: "butler.turn-contract-decision.v1",
+        decision_id: decisionId,
+        action: "inspect",
+        target_workstream_id: null,
+        target_project_id: null,
+        blocker_id: null,
+        deliverables: ["status_report"],
+        answer_text: null,
+        public_title: "Project Ledger 상태 확인",
+        public_summary: "Project Ledger 상태와 다음 작업을 확인하고 대시보드를 갱신합니다.",
+        public_rationale: "요청한 세 작업을 순서대로 실행해야 각 결과를 검증할 수 있습니다.",
+        immediate_next_step: "먼저 현재 Project Ledger 상태를 조회합니다.",
+      });
+    }
+    return JSON.stringify({
+      schema_version: "butler.turn-contract-decision.v1",
+      decision_id: decisionId,
+      action: "answer",
+      target_workstream_id: null,
+      target_project_id: null,
+      blocker_id: null,
+      deliverables: [],
+      answer_text: prompts.length === 0 ? FIRST_FINAL : SECOND_FINAL,
+      public_title: "요청에 답변",
+      public_summary: "현재 대화 맥락으로 바로 답변합니다.",
+      public_rationale: "추가 도구나 사용자 확인이 필요하지 않습니다.",
+      immediate_next_step: null,
+    });
+  },
   executeButlerTool: usesLiveLlm ? undefined : async (call) => {
     if (e2eMode === "decision-context") {
       const deterministic = deterministicDecisionContextToolResult(call);
@@ -517,6 +612,7 @@ const bridge = usesExternalButlerService
       runtime,
       provider: fakeProvider,
       runtimePolicy: e2eRuntimePolicy(),
+      ...(usesLiveLlm ? {} : { sessionTitleGenerator: false }),
     });
 const server = createAppServer({
   dbPath: appDbPath,
@@ -528,7 +624,23 @@ const server = createAppServer({
   responderTimeoutMs: waitForFinalTimeoutMs + 30_000,
   automationSchedulerIntervalMs: false,
   responder: bridge?.responder,
+  folderSelectionSecret,
 });
+if (usesForwardProgressScenario) {
+  const project = server.store.createProject({
+    source: "existing_folder",
+    display_name: "Butler Forward Progress",
+    folder_selection_token: createProjectFolderSelectionToken(
+      forwardProgressWorkspace,
+      folderSelectionSecret,
+    ),
+  }).project;
+  server.store.createSession({
+    kind: "project",
+    project_id: project.id,
+    title: forwardProgressSessionTitle,
+  });
+}
 if (usesDeterministicBtccOpeningDecisionScenario) {
   server.store.updateSettings({
     model: "openai/gpt-5.5",
@@ -570,8 +682,12 @@ function e2eRuntimePolicy(): Record<string, unknown> | undefined {
   if (usesLiveLlm) return undefined;
   return {
     completionReview: "disabled",
-    ...(usesDeterministicBtccOpeningDecisionScenario
-      ? { requiredNativeToolProfiles: ["project"] }
+    ...(usesToolchainScenario
+      ? {
+        trackingMode: "ledger",
+        tracking_mode_source: "explicit",
+        requiredNativeToolProfiles: ["project"],
+      }
       : {}),
   };
 }
@@ -594,9 +710,10 @@ const output: string[] = [];
 
 try {
   const debugPort = await freePort();
+  const electronUserDataDir = join(tempDir, "electron-profile");
   electronProcess = spawn(electronBin, [
     `--remote-debugging-port=${debugPort}`,
-    `--user-data-dir=${join(tempDir, "electron-profile")}`,
+    `--user-data-dir=${electronUserDataDir}`,
     electronAppRoot,
   ], {
     cwd: root,
@@ -604,6 +721,7 @@ try {
       ...process.env,
       BUTLER_APP_SERVER_URL: server.url,
       BUTLER_APP_UI_URL: server.url,
+      BUTLER_APP_ELECTRON_USER_DATA_DIR: electronUserDataDir,
       BUTLER_DATA: tempDir,
       ELECTRON_ENABLE_LOGGING: "1",
     },
@@ -633,6 +751,20 @@ try {
   await assertCanonicalSessionSnapshot(cdp, "before-reload");
   await reloadElectronPageAndAssertStable(cdp);
   await assertCanonicalSessionSnapshot(cdp, "after-reload");
+  if (usesForwardProgressScenario) {
+    await expandCollapsedTurnActivity(cdp);
+    const replayBlocks = await visibleWorkBlockSnapshot(cdp);
+    assert(
+      replayBlocks === forwardProgressLiveBlocks,
+      `forward-progress live/replay work blocks differ: live=${forwardProgressLiveBlocks} replay=${replayBlocks}`,
+    );
+    forwardProgressBenchmark = await finalizeForwardProgressBenchmark(true);
+    assertForwardProgressLedgerShape(forwardProgressBenchmark.changedLedgerRecords);
+    assert(
+      forwardProgressBenchmark.gate.ok,
+      `forward-progress benchmark gates failed: ${forwardProgressBenchmark.gate.failures.join(", ")}; benchmark=${JSON.stringify(forwardProgressBenchmark)}`,
+    );
+  }
 
   const screenshotFile = `${e2eMode}-final.png`;
   const screenshotPath = join(screenshotDir, screenshotFile);
@@ -658,7 +790,17 @@ try {
         : usesMemoryRecallScenario || usesBeegAutonomousScenario
         ? ["memory-recall-final-visible"]
         : ["status-only-final-activity-hidden"]),
-      ...(usesToolchainScenario
+      ...(usesForwardProgressScenario
+        ? [
+          "real-llm-provider-called",
+          "isolated-canonical-ledger-mutated",
+          "spec-work-test-task-updated",
+          "single-opening-decision",
+          "linear-work-blocks",
+          "live-replay-work-block-parity",
+          "forward-progress-performance-gates",
+        ]
+        : usesToolchainScenario
         ? [
           ...(e2eMode === "tool-profile"
             ? ["provider-tool-surface-profiled", "weather-tools-excluded-from-provider-surface"]
@@ -724,6 +866,7 @@ try {
     memoryRecall: usesMemoryRecallScenario ? readMemoryRecallEvidence() : undefined,
     beegAutonomous: usesBeegAutonomousScenario ? readBeegAutonomousEvidence() : undefined,
     watlWorker: usesWatlWorkerScenario ? readWatlWorkerEvidence() : undefined,
+    forwardProgress: usesForwardProgressScenario ? forwardProgressBenchmark : undefined,
     btccOpeningDecision: usesBtccOpeningDecisionScenario ? btccOpeningDecisionGate : undefined,
     inboundQueue: usesExternalButlerService ? inboundQueueCounts() : undefined,
     decisionSourceCounts,
@@ -792,6 +935,38 @@ function initializeToolchainProject(): void {
   assert(
     result.status === 0,
     `failed to initialize isolated Project Ledger fixture: ${result.stderr || result.stdout}`,
+  );
+}
+
+function initializeForwardProgressLedger(): void {
+  const source = join(sourceButlerData, "project-ledger", "projects", "butler");
+  assert(existsSync(source), `source Butler Project Ledger does not exist: ${source}`);
+  rmSync(forwardProgressLedgerRoot, { recursive: true, force: true });
+  mkdirSync(join(tempDir, "project-ledger", "projects"), { recursive: true });
+  cpSync(source, forwardProgressLedgerRoot, { recursive: true, force: true });
+  mkdirSync(join(forwardProgressWorkspace, "src"), { recursive: true });
+  writeFileSync(join(forwardProgressWorkspace, "package.json"), `${JSON.stringify({
+    name: "butler-forward-progress-e2e",
+    private: true,
+    type: "module",
+    scripts: { test: "bun test" },
+  }, null, 2)}\n`, "utf8");
+  writeFileSync(join(forwardProgressWorkspace, "src", "browser-capture.ts"), [
+    "export interface BrowserCaptureRequest {",
+    "  url: string;",
+    "  selector?: string;",
+    "}",
+    "",
+    "export function planBrowserCapture(request: BrowserCaptureRequest): BrowserCaptureRequest {",
+    "  return request;",
+    "}",
+    "",
+  ].join("\n"), "utf8");
+  forwardProgressWorkspaceBefore = snapshotTextFiles(forwardProgressWorkspace);
+  forwardProgressLedgerBefore = snapshotLedgerRecords(forwardProgressLedgerRoot);
+  assert(
+    Object.keys(forwardProgressLedgerBefore).length > 0,
+    "isolated forward-progress Ledger snapshot is empty.",
   );
 }
 
@@ -1075,17 +1250,22 @@ function assertProfiledToolSurface(
 async function runDeterministicToolchain(
   input: Parameters<typeof runFunctionToolPromptText>[0],
 ): Promise<void> {
-  const toolNames = input.tools.map((tool) => tool.name);
+  const toolNames = workBlockCatalogNames(input.tools);
   for (const name of requiredToolchainCalls) {
-    assert(toolNames.includes(name), `deterministic toolchain provider surface did not include required tool: ${name}`);
+    assert(
+      toolNames.includes(name),
+      `deterministic toolchain provider surface did not include required tool: ${name}; available=${toolNames.join(",")}`,
+    );
   }
   for (const [index, name] of requiredToolchainCalls.entries()) {
     const args = deterministicToolchainArgs(name);
     await input.onAssistantTextBeforeTools?.({
       text: [
-        `summary: ${expectedToolchainWorkBlockLabels[index]}`,
+        `title: ${expectedToolchainWorkBlockLabels[index]}`,
+        `summary: ${expectedToolchainProgressLabels[index]} 작업을 수행합니다.`,
         "rationale: 요청한 Project Ledger 검증은 단계별 도구 결과를 관찰해야 안전하게 진행됩니다.",
         `next_step: ${expectedToolchainProgressLabels[index]}.`,
+        `expected_effect: ${expectedToolchainProgressLabels[index]} 결과가 다음 단계의 근거로 남습니다.`,
       ].join("\n"),
       toolCalls: [{ name, args }],
     });
@@ -1095,7 +1275,29 @@ async function runDeterministicToolchain(
       rawArguments: JSON.stringify(args),
     });
     observedToolCalls.push(name);
+    await delay(300);
   }
+}
+
+function workBlockCatalogNames(
+  tools: readonly { name: string; description?: string; parameters: Record<string, unknown> }[],
+): string[] {
+  const wrapper = tools.find((tool) => tool.name === "run_work_block");
+  if (!wrapper) return tools.map((tool) => tool.name);
+  const properties = wrapper.parameters.properties as Record<string, unknown> | undefined;
+  const calls = properties?.calls as { items?: unknown } | undefined;
+  const items = calls?.items as { oneOf?: unknown[] } | undefined;
+  const variants = Array.isArray(items?.oneOf) ? items.oneOf : items ? [items] : [];
+  const names = variants.flatMap((variant) => {
+    const name = (variant as { properties?: { name?: { const?: unknown } } })
+      .properties?.name?.const;
+    return typeof name === "string" ? [name] : [];
+  });
+  if (names.length > 0) return names;
+  const available = wrapper.description?.match(/Available calls: ([^.]+)\./u)?.[1];
+  return available
+    ? available.split(",").map((name) => name.trim()).filter(Boolean)
+    : [];
 }
 
 function deterministicToolchainArgs(name: string): Record<string, unknown> {
@@ -1455,6 +1657,10 @@ function readBeegAutonomousEvidence(): Record<string, unknown> {
 }
 
 async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
+  if (usesForwardProgressScenario) {
+    await runForwardProgressBrowserScenario(client);
+    return;
+  }
   await sendComposerTurn(client, toolchainPrompt);
   if (usesBtccOpeningDecisionScenario) {
     await waitForBtccOpeningDecisionVisible(client, BTCC_OPENING_DECISION_VISIBLE_THRESHOLD_MS);
@@ -1696,6 +1902,176 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
   if (usesBtccOpeningDecisionScenario) {
     await assertBtccOpeningDecisionTypedGate("final");
   }
+}
+
+async function runForwardProgressBrowserScenario(client: CdpClient): Promise<void> {
+  await selectForwardProgressSession(client);
+  forwardProgressTurnStartedAt = Date.now();
+  await sendComposerTurn(client, toolchainPrompt);
+  await waitForForwardProgressOpeningDecision();
+  forwardProgressFirstMeaningfulMs = Date.now() - forwardProgressTurnStartedAt;
+  await waitForAnyVisible(
+    client,
+    [turnWorkPanelSelector, turnWorkCollapsedSelector],
+    "forward-progress work surface",
+    waitForFinalTimeoutMs,
+  );
+  await waitForForwardProgressTerminal(client);
+  await waitForVisible(client, turnResultSectionSelector, "forward-progress final result");
+  await waitForVisible(client, turnWorkCollapsedSelector, "forward-progress collapsed work");
+  await expandCollapsedTurnActivity(client);
+  forwardProgressLiveBlocks = await visibleWorkBlockSnapshot(client);
+  assert(forwardProgressLiveBlocks !== "[]", "forward-progress turn rendered no work blocks.");
+  const finalText = await lastAssistantFinalText(client);
+  assert(
+    !/(?:turn_contract_decision_conflict|runtime finished without|fresh public work decision continuation needed)/iu.test(finalText),
+    `forward-progress final exposed an internal failure: ${finalText}`,
+  );
+}
+
+async function selectForwardProgressSession(client: CdpClient): Promise<void> {
+  await waitForExpression(
+    client,
+    `(() => {
+      const target = Array.from(document.querySelectorAll("button, a, [role='button']"))
+        .find((element) => (element.textContent ?? "").includes(${JSON.stringify(forwardProgressSessionTitle)}));
+      if (!(target instanceof HTMLElement)) return false;
+      target.click();
+      return true;
+    })()`,
+    "forward-progress project session",
+    30_000,
+  );
+  await waitForVisible(client, composerTextareaSelector, "forward-progress composer");
+}
+
+async function waitForForwardProgressOpeningDecision(): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < waitForFinalTimeoutMs) {
+    const projection = await readBtccTypedProjection();
+    if (projection.rows.some(isOpeningDecisionRow)) return;
+    const sessionId = latestE2eSessionId();
+    const response = await fetchJson(`${server.url}session-view?session_id=${encodeURIComponent(sessionId)}`);
+    const state = (response.data as { latest_turn?: { state?: string } | null }).latest_turn?.state;
+    if (state === "failed" || state === "cancelled") {
+      throw new Error(`Forward-progress turn ended in ${state} before its opening decision.`);
+    }
+    await delay(100);
+  }
+  throw new Error("Timed out waiting for the forward-progress opening decision.");
+}
+
+async function waitForForwardProgressTerminal(client: CdpClient): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < waitForFinalTimeoutMs) {
+    const sessionId = latestE2eSessionId();
+    const response = await fetchJson(`${server.url}session-view?session_id=${encodeURIComponent(sessionId)}`);
+    const data = response.data as {
+      latest_turn?: { state?: string } | null;
+    };
+    const state = data.latest_turn?.state;
+    if (state === "failed" || state === "cancelled") {
+      throw new Error(`Forward-progress turn ended in ${state}.`);
+    }
+    if (state === "delivered" && (await lastAssistantFinalText(client)).trim()) return;
+    await delay(250);
+  }
+  throw new Error("Timed out waiting for the forward-progress terminal result.");
+}
+
+async function visibleWorkBlockSnapshot(client: CdpClient): Promise<string> {
+  return await evaluateString(client, `JSON.stringify(
+    Array.from(document.querySelectorAll(${JSON.stringify(turnWorkCollapsedBlockSelector)})).map((block) => ({
+      title: (block.querySelector(${JSON.stringify(turnWorkBlockHeaderSelector)})?.textContent ?? "").replace(/\\s+/g, " ").trim(),
+      text: (block.textContent ?? "").replace(/\\s+/g, " ").trim(),
+      tools: Array.from(block.querySelectorAll(${JSON.stringify(turnWorkToolRowSelector)}))
+        .map((row) => (row.textContent ?? "").replace(/\\s+/g, " ").trim()),
+    }))
+  )`);
+}
+
+async function finalizeForwardProgressBenchmark(
+  liveReplayParity: boolean,
+): Promise<ElectronForwardProgressBenchmark> {
+  const sessionId = latestE2eSessionId();
+  const events = await replayAgentTurnEvents();
+  const toolCalls = durableTranscriptToolCalls(sessionId);
+  const benchmark = collectElectronForwardProgressBenchmark({
+    butlerData: tempDir,
+    sinceTs: forwardProgressTurnStartedAt,
+    completedAt: Date.now(),
+    firstMeaningfulMs: forwardProgressFirstMeaningfulMs,
+    toolCalls,
+    openingDecisions: events.filter((event) =>
+      event.kind === "assistant.decision" && event.payload?.role === "opening",
+    ).length,
+    noDeltaBroadReadRounds: noDeltaBroadReadRounds(sessionId),
+    contractConflicts: durableTranscriptContains("turn_contract_decision_conflict") ? 1 : 0,
+    genericInternalFailures: durableTranscriptContains("Runtime finished without a text result") ||
+      durableTranscriptContains("Fresh public work decision continuation needed")
+      ? 1
+      : 0,
+    liveReplayParity,
+    ledgerBefore: forwardProgressLedgerBefore,
+    ledgerRoot: forwardProgressLedgerRoot,
+    toolCompletedAt: events
+      .filter((event) => event.kind === "tool.completed")
+      .map((event) => Date.parse(event.createdAt ?? ""))
+      .filter(Number.isFinite),
+  });
+  assert(
+    toolCalls.some((name) => PROJECT_LEDGER_MUTATION_TOOL_NAME_SET.has(name)),
+    `forward-progress turn did not execute a Project Ledger mutation: ${toolCalls.join(" -> ")}`,
+  );
+  assert(
+    toolCalls.some((name) => name === "project_ledger_check" || name === "project_ledger_status"),
+    `forward-progress turn did not validate the isolated Ledger: ${toolCalls.join(" -> ")}`,
+  );
+  return benchmark;
+}
+
+function noDeltaBroadReadRounds(sessionId: string): number {
+  const lastMutationBySignature = new Map<string, number>();
+  let mutationRevision = 0;
+  let repeats = 0;
+  for (const call of durableTranscriptToolCallRecords(sessionId)) {
+    if (PROJECT_LEDGER_MUTATION_TOOL_NAME_SET.has(call.name)) {
+      mutationRevision += 1;
+      continue;
+    }
+    if (!isBroadLedgerReadTool(call.name)) continue;
+    const signature = `${call.name}:${JSON.stringify(call.args)}`;
+    if (lastMutationBySignature.get(signature) === mutationRevision) repeats += 1;
+    lastMutationBySignature.set(signature, mutationRevision);
+  }
+  return repeats;
+}
+
+function isBroadLedgerReadTool(name: string): boolean {
+  return name === "inspect_project_status" ||
+    name === "project_ledger_list" ||
+    name === "project_ledger_status" ||
+    name === "query_project_work";
+}
+
+function assertForwardProgressLedgerShape(changedRecords: string[]): void {
+  assert(
+    changedRecords.some((path) => path.startsWith("specs/")),
+    `forward-progress turn did not create or update a spec: ${changedRecords.join(", ")}`,
+  );
+  assert(
+    changedRecords.some((path) => /(^|\/)work\.md$/u.test(path)),
+    `forward-progress turn did not create or update Work: ${changedRecords.join(", ")}`,
+  );
+  assert(
+    changedRecords.some((path) => path.includes("/tasks/") && path.endsWith(".md")),
+    `forward-progress turn did not create or update test tasks: ${changedRecords.join(", ")}`,
+  );
+  assert(
+    JSON.stringify(snapshotTextFiles(forwardProgressWorkspace)) !==
+      JSON.stringify(forwardProgressWorkspaceBefore),
+    "forward-progress turn stopped after Ledger planning without continuing into the isolated workspace.",
+  );
 }
 
 interface BtccProgressRow {
@@ -2190,15 +2566,19 @@ async function assertCanonicalSessionSnapshotOnce(
     .reverse()
     .find((message) => message.role === "assistant");
   const latestAssistantText = normalizeMarkdownForRenderedText(latestAssistant?.text ?? "");
+  const latestAssistantComparable = comparableRenderedText(latestAssistantText);
+  const visibleFinalComparable = comparableRenderedText(visibleFinal);
   assert(
-    latestAssistantText &&
-      normalizeMarkdownForRenderedText(visibleFinal).includes(
-        latestAssistantText.slice(
+    latestAssistantComparable &&
+      visibleFinalComparable.includes(
+        latestAssistantComparable.slice(
           0,
-          Math.min(80, latestAssistantText.length),
+          Math.min(80, latestAssistantComparable.length),
         ),
       ),
-    `${phase}: visible final text is not backed by the canonical session view.`,
+    `${phase}: visible final text is not backed by the canonical session view. ` +
+      `canonical=${JSON.stringify(latestAssistantText.slice(0, 160))} ` +
+      `visible=${JSON.stringify(normalizeMarkdownForRenderedText(visibleFinal).slice(0, 160))}`,
   );
   if (usesToolchainScenario) {
     const hasDurableWork =
@@ -2212,14 +2592,28 @@ function normalizeMarkdownForRenderedText(value: string): string {
   return value
     .replace(/`([^`]+)`/gu, "$1")
     .replace(/\*\*([^*]+)\*\*/gu, "$1")
+    .replace(/^\s*```[^\n]*$/gmu, "")
+    .replace(/^\s{0,3}(?:[-*_]\s*){3,}$/gmu, "")
+    .replace(/^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*$/gmu, "")
+    .replace(/^\s{0,3}#{1,6}\s+/gmu, "")
     .replace(/^\s*[-*]\s+/gmu, "")
+    .replace(/\|/gu, " ")
     .replace(/\s+/gu, " ")
     .trim();
 }
 
+function comparableRenderedText(value: string): string {
+  return normalizeMarkdownForRenderedText(value).replace(/\s+/gu, "");
+}
+
 function latestE2eSessionId(): string {
-  const sessions = server.store.listSessions({ kind: "chat" }).sessions;
-  const candidate = sessions.find((session) => session.last_message_preview) ??
+  const sessions = server.store.listSessions({
+    kind: usesForwardProgressScenario ? "project" : "chat",
+  }).sessions;
+  const forwardProgressSession = usesForwardProgressScenario
+    ? sessions.find((session) => session.title === forwardProgressSessionTitle)
+    : undefined;
+  const candidate = forwardProgressSession ?? sessions.find((session) => session.last_message_preview) ??
     sessions[0];
   assert(candidate?.id, "could not find the active E2E chat session.");
   return candidate.id;
@@ -2256,6 +2650,8 @@ async function reloadElectronPageAndAssertStable(client: CdpClient): Promise<voi
         "지금 브랜치가 뭔지",
         "공개 웹에서 접근 가능한 자료",
         "메모리 엔진 도구 이름",
+        "web.capture",
+        "Forward Progress Benchmark",
       ];
       const candidates = Array.from(document.querySelectorAll("button, a, [role='button']"));
       const target = candidates.find((element) => {
@@ -2865,8 +3261,10 @@ async function connectToElectronPage(port: number, appUrl: string): Promise<CdpC
   const origin = new URL(appUrl).origin;
   const startedAt = Date.now();
   while (Date.now() - startedAt < 60_000) {
-    if (electronProcess?.exitCode !== null) {
-      throw new Error(`Electron exited before CDP target appeared: ${electronProcess?.exitCode}`);
+    if (electronProcess?.exitCode !== null || electronProcess?.signalCode !== null) {
+      throw new Error(
+        `Electron exited before CDP target appeared: code=${electronProcess?.exitCode ?? "none"} signal=${electronProcess?.signalCode ?? "none"}`,
+      );
     }
     try {
       const targets = await fetch(`http://127.0.0.1:${port}/json/list`)
@@ -2953,6 +3351,10 @@ async function connectCdp(url: string): Promise<CdpClient> {
     if (payload.error) entry.reject(new Error(payload.error.message ?? "CDP command failed."));
     else entry.resolve(payload.result);
   });
+  socket.addEventListener("close", () => {
+    for (const entry of pending.values()) entry.reject(new Error("CDP socket closed."));
+    pending.clear();
+  });
 
   return {
     send<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}): Promise<T> {
@@ -3026,6 +3428,42 @@ function durableTranscriptToolCalls(sessionId?: string): string[] {
     }
   }
   return names;
+}
+
+function durableTranscriptToolCallRecords(
+  sessionId?: string,
+): Array<{ name: string; args: Record<string, unknown> }> {
+  const dir = join(tempDir, "transcripts");
+  if (!existsSync(dir)) return [];
+  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".jsonl")) continue;
+    for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const event = JSON.parse(trimmed) as {
+          sessionId?: unknown;
+          kind?: string;
+          payload?: { name?: unknown; arguments?: unknown };
+        };
+        const name = typeof event.payload?.name === "string" ? event.payload.name : "";
+        if (
+          durableTranscriptEventMatchesSession(event, sessionId) &&
+          event.kind === "tool_call" &&
+          name
+        ) {
+          calls.push({
+            name,
+            args: projectedToolArguments(event.payload?.arguments) ?? {},
+          });
+        }
+      } catch {
+        // Ignore malformed transcript lines; valid events remain ordered.
+      }
+    }
+  }
+  return calls;
 }
 
 function durableTranscriptToolCallArguments(toolName: string, sessionId?: string): Array<Record<string, unknown>> {
@@ -3411,6 +3849,17 @@ function listFilesRecursive(dir: string): string[] {
   return files;
 }
 
+function snapshotTextFiles(rootPath: string): Record<string, string> {
+  return Object.fromEntries(
+    listFilesRecursive(rootPath)
+      .filter((path) => statSync(path).isFile())
+      .map((path) => [
+        relative(rootPath, path).replaceAll("\\", "/"),
+        readFileSync(path, "utf8"),
+      ]),
+  );
+}
+
 function promptInvocationPreview(): string {
   return prompts
     .map((prompt, index) => {
@@ -3443,12 +3892,18 @@ async function replayDecisionSourceCounts(): Promise<Record<string, number>> {
 async function replayAgentTurnEvents(): Promise<Array<{
   kind: string;
   visibility?: string;
+  createdAt?: string;
   payload?: Record<string, unknown>;
 }>> {
   return (await replayTimelineEvents())
     .filter((event) => event.type === "agent.turn_event")
     .map((event) => event.payload?.event)
-    .filter((event): event is { kind: string; visibility?: string } =>
+    .filter((event): event is {
+      kind: string;
+      visibility?: string;
+      createdAt?: string;
+      payload?: Record<string, unknown>;
+    } =>
       Boolean(event?.kind && event.visibility !== "internal"),
     );
 }
@@ -3461,6 +3916,7 @@ type ReplayTimelineEvent = {
     event?: {
       kind?: string;
       visibility?: string;
+      createdAt?: string;
       payload?: Record<string, unknown>;
     };
   };

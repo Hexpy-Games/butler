@@ -150,6 +150,7 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
   expect(manifest.requiredFiles).toContain("package.json");
   expect(manifest.requiredFiles).toContain("packages/butler-agent/scripts");
   expect(manifest.requiredFiles).toContain("packages/butler-agent/resources");
+  expect(manifest.requiredFiles).toContain("packages/butler-progress-projection");
   expect(manifest.requiredFiles).toContain("packages/project-ledger");
   expect(manifest.requiredFiles).toContain("deploy/agent/templates");
   expect(manifest.agentArtifactLayout).toMatchObject({

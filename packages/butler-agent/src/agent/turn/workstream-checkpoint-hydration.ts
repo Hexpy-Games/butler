@@ -77,7 +77,11 @@ export function checkpointForRecord(input: {
 }
 
 function trackingModeForRecord(record: WorkStreamRecord): RuntimeTrackingMode {
-  if (record.project_id && record.linked_planned_task_ids.length > 0) return "ledger";
+  // A project session (projectId present) defaults to the Project Ledger
+  // context. Previously this required linked_planned_task_ids as well, which
+  // downgraded ordinary project-session todo work to "local" and suppressed
+  // Project Ledger inspection tools even in project sessions.
+  if (record.project_id) return "ledger";
   if (record.todo_list_id) return "local";
   return "none";
 }
@@ -162,6 +166,7 @@ function evidenceRefsFor(
     ...record.linked_orchestration_ids.map((id) => ref("orchestration", id)),
     ...record.linked_worker_task_ids.map((id) => ref("worker_task", id)),
     ...(atom?.openToolPairs ?? []).map(refFromObservation),
+    ...(atom?.evidenceCandidates ?? []).map(refFromObservation),
     ...(atom?.currentTurnWork ?? []).map(refFromObservation),
     ...(atom?.currentTurnTodos ?? []).map(refFromObservation),
     atom?.latestAssistantDecision ? ref("assistant_decision", atom.latestAssistantDecision.id) : null,

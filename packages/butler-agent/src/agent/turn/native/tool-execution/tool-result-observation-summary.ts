@@ -11,56 +11,84 @@ const ERROR_DETAIL_FIELDS = ["code", "field", "message", "id", "kind", "status"]
 
 export function summarizedToolResultForObservation(result: unknown): string {
   if (!result || typeof result !== "object" || Array.isArray(result)) return "";
-  const record = result as Record<string, unknown>;
   const lines: string[] = [];
-  const exitCode = record.exit_code;
-  if (typeof exitCode === "number") lines.push(`exit_code: ${exitCode}`);
-  for (const field of STRING_RESULT_FIELDS) {
-    const value = record[field];
-    if (typeof value === "string") {
-      pushSafeLine(lines, field, value);
-    } else if (field === "error" && isPlainRecord(value)) {
-      appendStructuredError(lines, value);
-    }
-  }
+  appendResultRecord(lines, result as Record<string, unknown>, "", 0);
   return limitSummary(lines.join("\n"));
 }
 
-function appendStructuredError(lines: string[], error: Record<string, unknown>): void {
-  pushSafeLine(lines, "error.code", error.code);
-  pushSafeLine(lines, "error.message", error.message);
-  appendErrorDetails(lines, error.details);
-  appendCliNextHints(lines, error.next);
-  appendNativeNextHints(lines, error.native_next);
+function appendResultRecord(
+  lines: string[],
+  record: Record<string, unknown>,
+  prefix: string,
+  depth: number,
+): void {
+  const exitCode = record.exit_code;
+  if (typeof exitCode === "number") lines.push(`${prefix}exit_code: ${exitCode}`);
+  for (const field of STRING_RESULT_FIELDS) {
+    const value = record[field];
+    if (typeof value === "string") {
+      pushSafeLine(lines, `${prefix}${field}`, value);
+    } else if (field === "error" && isPlainRecord(value)) {
+      appendStructuredError(lines, value, prefix);
+    }
+  }
+  appendStructuredDataIssues(lines, record.data, prefix);
+  if (depth >= 2) return;
+  for (const key of ["output", "result"] as const) {
+    const nested = record[key];
+    if (isPlainRecord(nested)) appendResultRecord(lines, nested, `${prefix}${key}.`, depth + 1);
+  }
 }
 
-function appendErrorDetails(lines: string[], value: unknown): void {
+function appendStructuredDataIssues(lines: string[], value: unknown, prefix = ""): void {
+  if (!isPlainRecord(value)) return;
+  const issueCount = value.issueCount;
+  if (typeof issueCount === "number") lines.push(`${prefix}data.issueCount: ${issueCount}`);
+  if (!Array.isArray(value.issues)) return;
+  for (const issue of value.issues.slice(0, MAX_ERROR_DETAILS)) {
+    if (!isPlainRecord(issue)) continue;
+    const parts = ["code", "severity", "message", "path", "record"]
+      .map((field) => safeKeyValue(field, issue[field]))
+      .filter((part): part is string => Boolean(part));
+    if (parts.length > 0) lines.push(`${prefix}issue: ${parts.join(", ")}`);
+  }
+}
+
+function appendStructuredError(lines: string[], error: Record<string, unknown>, prefix = ""): void {
+  pushSafeLine(lines, `${prefix}error.code`, error.code);
+  pushSafeLine(lines, `${prefix}error.message`, error.message);
+  appendErrorDetails(lines, error.details, prefix);
+  appendCliNextHints(lines, error.next, prefix);
+  appendNativeNextHints(lines, error.native_next, prefix);
+}
+
+function appendErrorDetails(lines: string[], value: unknown, prefix = ""): void {
   if (!Array.isArray(value)) return;
   for (const detail of value.slice(0, MAX_ERROR_DETAILS)) {
     if (!isPlainRecord(detail)) continue;
     const parts = ERROR_DETAIL_FIELDS
       .map((field) => safeKeyValue(field, detail[field]))
       .filter((part): part is string => Boolean(part));
-    if (parts.length > 0) lines.push(`detail: ${parts.join(", ")}`);
+    if (parts.length > 0) lines.push(`${prefix}detail: ${parts.join(", ")}`);
   }
 }
 
-function appendCliNextHints(lines: string[], value: unknown): void {
+function appendCliNextHints(lines: string[], value: unknown, prefix = ""): void {
   if (!Array.isArray(value)) return;
   for (const item of value.slice(0, MAX_NEXT_HINTS)) {
     if (typeof item === "string") {
-      pushSafeLine(lines, "next", item);
+      pushSafeLine(lines, `${prefix}next`, item);
       continue;
     }
     if (!isPlainRecord(item)) continue;
     const command = safeText(item.command);
     const reason = safeText(item.reason);
     if (!command && !reason) continue;
-    lines.push(`next: ${[command, reason].filter(Boolean).join(" | ")}`);
+    lines.push(`${prefix}next: ${[command, reason].filter(Boolean).join(" | ")}`);
   }
 }
 
-function appendNativeNextHints(lines: string[], value: unknown): void {
+function appendNativeNextHints(lines: string[], value: unknown, prefix = ""): void {
   if (!Array.isArray(value)) return;
   for (const item of value.slice(0, MAX_NEXT_HINTS)) {
     if (!isPlainRecord(item)) continue;
@@ -69,7 +97,7 @@ function appendNativeNextHints(lines: string[], value: unknown): void {
     const reason = safeText(item.reason);
     if (!tool && !args && !reason) continue;
     const action = [tool, args].filter(Boolean).join(" ");
-    lines.push(`native_next: ${[action, reason].filter(Boolean).join(" | ")}`);
+    lines.push(`${prefix}native_next: ${[action, reason].filter(Boolean).join(" | ")}`);
   }
 }
 

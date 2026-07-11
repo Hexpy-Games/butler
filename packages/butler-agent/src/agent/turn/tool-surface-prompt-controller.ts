@@ -24,8 +24,15 @@ export class ToolSurfacePromptController {
   readonly promotedNativeToolNames = new Set<string>();
 
   private currentProviderTools: readonly FunctionToolDefinition[] = [];
+  private turnMetadata: Record<string, unknown> | undefined;
 
-  constructor(private readonly input: ToolSurfacePromptControllerInput) {}
+  constructor(private readonly input: ToolSurfacePromptControllerInput) {
+    this.turnMetadata = input.turnMetadata;
+  }
+
+  applyTurnMetadata(turnMetadata: Record<string, unknown> | undefined): void {
+    this.turnMetadata = turnMetadata;
+  }
 
   currentToolNames(): readonly string[] {
     return this.currentDynamicProviderTools().map((tool) => tool.name);
@@ -67,7 +74,7 @@ export class ToolSurfacePromptController {
       role: this.input.role,
       message: this.input.message,
       sessionMetadata: this.input.sessionMetadata,
-      turnMetadata: this.input.turnMetadata,
+      turnMetadata: this.turnMetadata,
       providerCapabilities: this.input.providerCapabilities,
       tools: this.input.tools,
     });

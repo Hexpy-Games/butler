@@ -28,7 +28,7 @@ export function finalResultContractRepairPrompt(input: {
     "## Final Result Contract Repair",
     "The previous final answer exposed public work decision fields as the result.",
     "Then rewrite the final answer as the user-facing outcome report only.",
-    "Do not include public work decision protocol keys (`summary:`, `rationale:`, `next_step:`), legacy `작업/이유/다음` or `Work/Why/Next`, raw tool ids, tool-call order, public_work_decision_context, or raw tool logs.",
+    "Do not include public work decision protocol keys (`title:`, `summary:`, `rationale:`, `next_step:`), legacy `작업/이유/다음` or `Work/Why/Next`, raw tool ids, tool-call order, public_work_decision_context, or raw tool logs.",
     "Preserve the active persona, user language, and any current-turn Active Persona Reminder while rewriting.",
     ...finalResultEvidenceRepairInstructions(),
     "",
@@ -102,11 +102,12 @@ export function goalCompletionIncompleteContinuationPrompt(input: {
 
 export function containsFinalPublicWorkDecisionLeak(value: string): boolean {
   const sample = value.trimStart().slice(0, FINAL_DECISION_LEAK_SAMPLE_CHARS);
+  const hasTitle = /(?:^|\n)\s*(?:[-*]|\d+[.)])?\s*(?:title|제목)\s*[:：-]\s*\S/iu.test(sample);
   const hasWork = /(?:^|\n)\s*(?:[-*]|\d+[.)])?\s*(?:작업|work|summary)\s*[:：-]\s*\S/iu.test(sample);
   const hasWhy = /(?:^|\n)\s*(?:[-*]|\d+[.)])?\s*(?:이유|근거|why|rationale)\s*[:：-]\s*\S/iu.test(sample);
   const hasNext = /(?:^|\n)\s*(?:[-*]|\d+[.)])?\s*(?:다음|다음 단계|next|next_step)\s*[:：-]\s*\S/iu.test(sample);
-  const startsWithWork = /^\s*(?:[-*]|\d+[.)])?\s*(?:작업|work|summary)\s*[:：-]\s*\S/iu.test(sample);
-  return hasWork && hasWhy && (hasNext || startsWithWork);
+  const startsWithDecision = /^\s*(?:[-*]|\d+[.)])?\s*(?:title|제목|작업|work|summary)\s*[:：-]\s*\S/iu.test(sample);
+  return hasWork && hasWhy && (hasNext || startsWithDecision || hasTitle);
 }
 
 export function containsFinalToolImplementationLeak(value: string, toolNames: string[]): boolean {
@@ -142,7 +143,7 @@ export function stripLeadingPublicWorkDecisionBlock(value: string): string {
       continue;
     }
     if (
-      /^(?:[-*]|\d+[.)])?\s*(?:작업|work|summary|이유|근거|why|rationale|다음|다음 단계|next|next_step)\s*[:：-]/iu
+      /^(?:[-*]|\d+[.)])?\s*(?:title|제목|작업|work|summary|이유|근거|why|rationale|다음|다음 단계|next|next_step|expected_effect|repeat_reason)\s*[:：-]/iu
         .test(line)
     ) {
       sawField = true;

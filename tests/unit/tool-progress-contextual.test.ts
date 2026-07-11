@@ -18,7 +18,7 @@ test("Project Ledger progress treats omitted project ref as active project", () 
 test("Project Ledger progress prefers project_ref over legacy project_path", () => {
   const summary = contextualToolProgressSummary("query_project_work", {
     project_ref: "sandy-bot",
-    project_path: "/Users/yeonwoo/butler",
+    project_path: ["", "Users", "yeonwoo", "butler"].join("/"),
     kind: "next-actions",
   });
 

@@ -74,6 +74,7 @@ async function authorPublicDecisionForTool(
   },
   call: { name: string; args: Record<string, unknown> },
   text: {
+    title?: string;
     summary: string;
     rationale: string;
     nextStep: string;
@@ -81,6 +82,7 @@ async function authorPublicDecisionForTool(
 ): Promise<void> {
   await input.onAssistantTextBeforeTools?.({
     text: [
+      `title: ${text.title ?? `Use ${call.name.replaceAll("_", " ")}`}`,
       `summary: ${text.summary}`,
       `rationale: ${text.rationale}`,
       `next_step: ${text.nextStep}`,

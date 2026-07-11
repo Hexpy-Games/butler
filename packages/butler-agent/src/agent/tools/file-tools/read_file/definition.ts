@@ -8,8 +8,10 @@ export const readFileToolDefinition: ButlerToolDefinition = {
     type: "object",
     additionalProperties: false,
     properties: {
-      workspace_root: { type: "string" },
-      path: { type: "string" },
+      path: {
+        type: "string",
+        description: "Path relative to the active workspace root. Never pass an absolute path or a workspace root.",
+      },
       start_line: { type: "integer", minimum: 1 },
       limit_lines: { type: "integer", minimum: 1, maximum: 10000 },
       max_bytes: { type: "integer", minimum: 1, maximum: 1048576 },

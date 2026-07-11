@@ -11,7 +11,7 @@ import {
   registeredHostedModelMetadata,
   upsertProviderApiKeyCredential,
   type HostedModelProviderId,
-} from "../../../../integrations/providers/registered-models.ts";
+} from "../../../../integrations/providers/shared/registered-models.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 import type {
   HostedModelDeletionResult,

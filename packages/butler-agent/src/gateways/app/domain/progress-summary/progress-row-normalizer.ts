@@ -50,10 +50,40 @@ function applyBasicProgressFields(
   if (bridgePhase) row.bridge_phase = bridgePhase;
   const receiptKind = safeOptionalShortToken(input.receipt_kind);
   if (receiptKind) row.receipt_kind = receiptKind;
+  const workContractId = safeOptionalShortToken(input.work_contract_id);
+  if (workContractId) row.work_contract_id = workContractId;
+  const workStreamId = safeOptionalShortToken(input.work_stream_id);
+  if (workStreamId) row.work_stream_id = workStreamId;
+  const semanticBlockId = safeOptionalShortToken(input.semantic_block_id);
+  if (semanticBlockId) row.semantic_block_id = semanticBlockId;
   const workBlockId = safeOptionalShortToken(input.work_block_id);
   if (workBlockId) row.work_block_id = workBlockId;
   const workBlockLabel = safeOptionalShortText(input.work_block_label);
   if (workBlockLabel) row.work_block_label = workBlockLabel;
+  const workBlockPhase = safeOptionalShortToken(input.work_block_phase);
+  if (
+    workBlockPhase === "started" ||
+    workBlockPhase === "updated" ||
+    workBlockPhase === "completed"
+  ) {
+    row.work_block_phase = workBlockPhase;
+  }
+  const turnEventSequence = safeOptionalNonNegativeInteger(
+    input.turn_event_sequence,
+  );
+  if (turnEventSequence !== undefined) {
+    row.turn_event_sequence = turnEventSequence;
+  }
+  const workBlockSequence = safeOptionalNonNegativeInteger(
+    input.work_block_sequence,
+  );
+  if (workBlockSequence !== undefined) {
+    row.work_block_sequence = workBlockSequence;
+  }
+  const workDecisionId = safeOptionalShortToken(input.work_decision_id);
+  if (workDecisionId) row.work_decision_id = workDecisionId;
+  const workDecisionTitle = safeOptionalShortText(input.work_decision_title);
+  if (workDecisionTitle) row.work_decision_title = workDecisionTitle;
 }
 
 function applyPublicDecisionFields(

@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
+import {
+  deferredTodoProjection,
+  hasDeferredTodoRecovery,
+  reconcilePendingWorkStreamTransactions,
+} from "./work-stream-transaction-recovery.ts";
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
 export type TodoPriority = "low" | "normal" | "high";
@@ -25,6 +30,7 @@ export interface TodoItemInput {
 
 export interface TodoItem {
   id: string;
+  ordinal: number;
   content: string;
   active_form: string;
   status: TodoStatus;
@@ -138,14 +144,24 @@ function normalizeItems(input: {
   if (input.items.length > MAX_TODO_ITEMS) {
     throw new Error(`todo list may contain at most ${MAX_TODO_ITEMS} items`);
   }
-  const priorById = new Map(input.prior?.items.map((item) => [item.id, item]) ?? []);
+  const priorItems = input.prior?.items ?? [];
+  const priorById = new Map(priorItems.map((item) => [item.id, item]));
+  const normalizedInputs = input.items.map((item, index) => ({
+    item,
+    id: item.id
+      ? safeTodoId(item.id)
+      : stableTodoId(item.content.trim(), index),
+  }));
+  const retainsPriorItem = normalizedInputs.some(({ id }) => priorById.has(id));
+  let nextOrdinal = retainsPriorItem
+    ? Math.max(0, ...priorItems.map((item) => item.ordinal)) + 1
+    : 1;
   const seen = new Set<string>();
-  const items = input.items.map((item, index) => {
+  const items = normalizedInputs.map(({ item, id }, index) => {
     const content = item.content.trim();
     const activeForm = item.active_form.trim();
     if (!content) throw new Error("todo content must be non-empty");
     if (!activeForm) throw new Error("todo active_form must be non-empty");
-    const id = item.id ? safeTodoId(item.id) : stableTodoId(content, index);
     if (seen.has(id)) throw new Error(`duplicate todo id at index ${index}: ${id}`);
     seen.add(id);
     const previous = priorById.get(id);
@@ -155,6 +171,7 @@ function normalizeItems(input: {
       : null;
     return {
       id,
+      ordinal: previous?.ordinal ?? nextOrdinal++,
       content,
       active_form: activeForm,
       status,
@@ -184,7 +201,36 @@ function normalizeItems(input: {
     }
   }
   assertAcyclicBlockedBy(items);
-  return items;
+  return items.sort((left, right) => left.ordinal - right.ordinal);
+}
+
+function withStableTodoOrdinals(record: TodoListRecord): TodoListRecord {
+  const seen = new Set<number>();
+  const hasValidOrdinals = record.items.every((item) => {
+    const ordinal = Number((item as TodoItem & { ordinal?: number }).ordinal);
+    if (!Number.isInteger(ordinal) || ordinal <= 0 || seen.has(ordinal)) {
+      return false;
+    }
+    seen.add(ordinal);
+    return true;
+  });
+  if (!hasValidOrdinals) {
+    return {
+      ...record,
+      items: record.items.map((item, index) => ({
+        ...item,
+        ordinal: index + 1,
+      })),
+    };
+  }
+  const sorted = record.items
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) =>
+      left.item.ordinal - right.item.ordinal || left.index - right.index)
+    .map(({ item }) => item);
+  return sorted.every((item, index) => item === record.items[index])
+    ? record
+    : { ...record, items: sorted };
 }
 
 function assertAcyclicBlockedBy(items: TodoItem[]): void {
@@ -231,9 +277,12 @@ export function summarizeTodoProgress(items: TodoItem[]): TodoProgressSummary {
 
 export class TodoListStore {
   readonly todosDir: string;
+  private readonly autoRecover: boolean;
 
-  constructor(readonly butlerData: string) {
+  constructor(readonly butlerData: string, options: { autoRecover?: boolean } = {}) {
     this.todosDir = join(butlerData, "todos");
+    this.autoRecover = options.autoRecover !== false;
+    if (this.autoRecover) reconcilePendingWorkStreamTransactions({ butlerData });
   }
 
   listPath(listId = "main"): string {
@@ -241,7 +290,13 @@ export class TodoListStore {
   }
 
   read(listId = "main"): TodoListRecord | null {
-    return readJson<TodoListRecord>(this.listPath(listId));
+    if (this.autoRecover) {
+      const recovery = reconcilePendingWorkStreamTransactions({ butlerData: this.butlerData, todoListId: listId });
+      const projection = deferredTodoProjection(recovery, listId);
+      if (projection) return withStableTodoOrdinals(projection);
+    }
+    const record = readJson<TodoListRecord>(this.listPath(listId));
+    return record ? withStableTodoOrdinals(record) : null;
   }
 
   update(input: {
@@ -250,6 +305,17 @@ export class TodoListStore {
     items: TodoItemInput[];
     now?: Date;
   }): TodoListView {
+    const record = this.prepareUpdate(input);
+    this.replacePrepared(record);
+    return this.view(record.list_id, { includeCompleted: true });
+  }
+
+  prepareUpdate(input: {
+    listId?: string;
+    title?: string | null;
+    items: TodoItemInput[];
+    now?: Date;
+  }): TodoListRecord {
     const listId = safeListId(input.listId ?? "main");
     const prior = this.read(listId);
     const now = (input.now ?? new Date()).toISOString();
@@ -258,7 +324,7 @@ export class TodoListStore {
       prior,
       items: input.items,
     });
-    const record: TodoListRecord = {
+    return {
       version: 1,
       list_id: listId,
       title: typeof input.title === "string" && input.title.trim()
@@ -268,8 +334,26 @@ export class TodoListStore {
       updated_at: now,
       items,
     };
-    writeJsonAtomic(this.listPath(listId), record);
-    return this.view(listId, { includeCompleted: true });
+  }
+
+  replacePrepared(record: TodoListRecord): void {
+    const stableRecord = withStableTodoOrdinals(record);
+    if (
+      stableRecord.version !== 1 ||
+      stableRecord.list_id !== safeListId(stableRecord.list_id)
+    ) {
+      throw new Error("invalid prepared todo list record");
+    }
+    if (this.autoRecover) {
+      const recovery = reconcilePendingWorkStreamTransactions({
+        butlerData: this.butlerData,
+        todoListId: record.list_id,
+      });
+      if (hasDeferredTodoRecovery(recovery, record.list_id)) {
+        throw new Error("workstream_recovery_deferred");
+      }
+    }
+    writeJsonAtomic(this.listPath(stableRecord.list_id), stableRecord);
   }
 
   view(

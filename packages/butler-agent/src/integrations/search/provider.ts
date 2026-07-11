@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { arch, platform, release } from "os";
 import { join } from "path";
 import { JSDOM } from "jsdom";
-import { accountIdFromAccessToken, resolveOpenAIAuth } from "../providers/openai-auth.ts";
+import { accountIdFromAccessToken, resolveOpenAIAuth } from "../providers/openai/auth.ts";
 
 export interface WebSearchInput {
   query: string;

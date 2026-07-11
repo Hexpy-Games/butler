@@ -67,6 +67,36 @@ describe("run_command evidence capability receipts", () => {
     });
   });
 
+  test("preserves an upstream pipeline failure when output is bounded", async () => {
+    const result = await runCommandTool({
+      butlerData,
+      workspacePath: workspace,
+      args: {
+        command: "printf 'type error\\n'; exit 9 | head -1",
+        validation_suite: "typecheck",
+      },
+    });
+    const receipts = result.evidence_capability_receipts as Array<Record<string, unknown>>;
+
+    expect(result).toMatchObject({ exit_code: 9, ok: false });
+    expect(receipts[0]).toMatchObject({
+      capability: "command_executed",
+      maturity: "rejected",
+      verified: false,
+      scope: { status: "failed", exit_code: 9 },
+    });
+  });
+
+  test("keeps ordinary shell pipeline semantics outside structured validation", async () => {
+    const result = await runCommandTool({
+      butlerData,
+      workspacePath: workspace,
+      args: { command: "exit 9 | head -1" },
+    });
+
+    expect(result).toMatchObject({ exit_code: 0, ok: true });
+  });
+
   test("records timed out command as partial execution evidence", async () => {
     const result = await runCommandTool({
       butlerData,
@@ -246,17 +276,19 @@ describe("file tool evidence capability receipts", () => {
     await writeFile(join(workspace, "src/a.txt"), "needle\nneedle\n");
     const result = await executeGrepFilesTool(call({
       workspace_root: workspace,
-      query: "needle",
+      pattern: "needle",
       max_matches: 1,
     }));
     const receipts = (result as Record<string, unknown>).evidence_capability_receipts as unknown[];
 
     expect(receipts[0]).toMatchObject({
-      capability: "source_verified",
-      evidence_kind: "workspace_inspection",
-      verified: true,
-      scope: { truncated: true, match_count: 1 },
-      limitations: ["Result was bounded and may be partial."],
+      capability: "source_candidate",
+      evidence_kind: "source_candidate",
+      maturity: "candidate",
+      verified: false,
+      scope: { truncated: true, match_count: 1, candidate_count: 1 },
+      references: [{ path: "src/a.txt", label: "line 1" }],
+      limitations: ["Search candidate discovery is not source verification."],
     });
     expect(JSON.stringify(receipts)).not.toContain("needle");
   });

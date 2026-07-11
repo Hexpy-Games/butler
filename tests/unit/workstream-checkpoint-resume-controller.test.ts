@@ -52,8 +52,8 @@ test("checkpoint resume presents ordinary user turns to the model without readin
     checkpoint: {
       workStreamId: stream.id,
       todoListId: "recoverable-main",
-      trackingMode: "local",
-      closeoutStrategy: "local_workstream",
+      trackingMode: "ledger",
+      closeoutStrategy: "ledger",
     },
   });
   expect(typoResume.candidates[0]!.checkpoint.activeItems).toEqual(expect.arrayContaining([

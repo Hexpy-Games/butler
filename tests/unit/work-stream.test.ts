@@ -10,6 +10,14 @@ import {
   WorkStreamStore,
 } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { TodoListStore, type TodoItem, type TodoItemInput } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
+import { WorkStreamClaimStore } from "../../packages/butler-agent/src/agent/work/work-stream-claim-store.ts";
+import { WorkStreamPlanStore } from "../../packages/butler-agent/src/agent/work/work-stream-plan-store.ts";
+import {
+  compileTurnContract,
+  TURN_CONTRACT_DECISION_SCHEMA,
+  type CompiledTurnContract,
+  type TurnContractAction,
+} from "../../packages/butler-agent/src/agent/turn/turn-contract.ts";
 
 let tempDir = "";
 
@@ -32,6 +40,7 @@ function todo(input: Partial<TodoItem> & Pick<TodoItem, "id" | "phase" | "status
     priority: "normal",
     blocked_by: [],
     note: null,
+    ordinal: input.ordinal ?? 1,
     created_at: "2026-05-15T00:00:00.000Z",
     updated_at: "2026-05-15T00:00:00.000Z",
     completed_at: input.status === "completed" ? "2026-05-15T00:00:00.000Z" : null,
@@ -55,6 +64,40 @@ function todoInput(
     blocked_by: [],
     note: input.note,
   };
+}
+
+function workContract(input: {
+  action?: TurnContractAction;
+  workstreamId: string;
+  blockerId?: string;
+  state?: string;
+}): CompiledTurnContract {
+  const action = input.action ?? "resume_work";
+  return compileTurnContract({
+    decision: {
+      schema_version: TURN_CONTRACT_DECISION_SCHEMA,
+      decision_id: `decision-${action}-${input.workstreamId}`,
+      action,
+      target_workstream_id: input.workstreamId,
+      target_project_id: "project-a",
+      ...(input.blockerId ? { blocker_id: input.blockerId } : {}),
+      deliverables: action === "supply_user_action" || action === "cancel_work" ? [] : ["code_change"],
+      public_summary: "Continue claimed work.",
+    },
+    candidates: {
+      workstreams: [{
+        workstream_id: input.workstreamId,
+        state: input.state ?? "recoverable",
+        waiting_user_blocker_id: input.blockerId,
+        unsatisfied_obligations: [{
+          deliverable: "code_change",
+          target_kind: "workspace",
+          target_id: "workspace-a",
+          generation: 1,
+        }],
+      }],
+    },
+  });
 }
 
 test("work stream transitions reject skipped review and completion claims", () => {
@@ -94,6 +137,70 @@ test("todo progress creates a durable session-scoped work stream", () => {
     active_step_id: "code",
   });
   expect(store.list({ sessionId: "butler/app-project-butler" }).map((item) => item.id)).toEqual([record.id]);
+});
+
+test("contract claim is scoped, idempotent, conflict-safe, and cancellation releases ownership", () => {
+  const store = new WorkStreamStore(tempDir);
+  const claims = new WorkStreamClaimStore(tempDir);
+  const record = store.updateFromTodoList({
+    ownerSessionId: "session-a",
+    originChatId: "chat-a",
+    projectId: "project-a",
+    listId: "claim",
+    items: [todo({ id: "code", phase: "execution", status: "in_progress" })],
+    now: new Date("2026-07-10T00:00:00.000Z"),
+  });
+  const recoverable = store.transition({ id: record.id, state: "recoverable", now: new Date("2026-07-10T00:01:00.000Z") });
+  const contract = workContract({ workstreamId: record.id });
+  const claimed = claims.claim({
+    contract, workstreamId: record.id, sessionId: "session-a", chatId: "chat-a", projectId: "project-a", turnId: "turn-a", expectedGeneration: recoverable.record_generation!, now: new Date("2026-07-10T00:02:00.000Z"),
+  });
+  expect(claimed).toMatchObject({ ok: true, record: { state: "executing", active_contract_id: contract.contract_id, last_user_turn_id: "turn-a" }, receipt: { operation: "claim" } });
+  const replay = claims.claim({ contract, workstreamId: record.id, sessionId: "session-a", chatId: "chat-a", projectId: "project-a", turnId: "turn-a", expectedGeneration: recoverable.record_generation! });
+  expect(replay).toMatchObject({ ok: true, replayed: true, receipt: { receipt_id: claimed.ok ? claimed.receipt.receipt_id : "" } });
+  expect(claims.claim({ contract: { ...contract, contract_id: "contract-b" }, workstreamId: record.id, sessionId: "session-a", chatId: "chat-a", projectId: "project-a", turnId: "turn-b", expectedGeneration: claimed.ok ? claimed.record.record_generation! : 0, now: new Date("2026-07-10T00:02:30.000Z") })).toEqual({ ok: false, code: "workstream_claim_conflict" });
+  expect(claims.claim({ contract, workstreamId: record.id, sessionId: "wrong", chatId: "chat-a", projectId: "project-a", turnId: "turn-a", expectedGeneration: claimed.ok ? claimed.record.record_generation! : 0 })).toEqual({ ok: false, code: "workstream_scope_mismatch" });
+  const cancellation = workContract({ action: "cancel_work", workstreamId: record.id });
+  const cancelled = claims.cancel({ contract: cancellation, workstreamId: record.id, expectedGeneration: claimed.ok ? claimed.record.record_generation! : 0, turnId: "turn-a" });
+  expect(cancelled).toMatchObject({ ok: true, record: { active_contract_id: null, state: "cancelled" }, receipt: { operation: "cancel" } });
+  expect(claims.cancel({ contract: cancellation, workstreamId: record.id, expectedGeneration: claimed.ok ? claimed.record.record_generation! : 0, turnId: "turn-a" }))
+    .toMatchObject({ ok: true, replayed: true, receipt: { receipt_id: cancelled.ok ? cancelled.receipt.receipt_id : "" } });
+  expect(store.read(record.id)?.state).toBe("cancelled");
+});
+
+test("plan amendment preserves completed evidence and claim ownership", () => {
+  const store = new WorkStreamStore(tempDir);
+  const claims = new WorkStreamClaimStore(tempDir);
+  const plans = new WorkStreamPlanStore(tempDir);
+  new TodoListStore(tempDir).update({
+    listId: "amend",
+    items: [todoInput({ id: "done", phase: "planning", status: "completed" }), todoInput({ id: "next", phase: "execution", status: "in_progress" })],
+  });
+  const record = store.updateFromTodoList({
+    ownerSessionId: "session-a", originChatId: "chat-a", projectId: "project-a", listId: "amend",
+    items: [todo({ id: "done", phase: "planning", status: "completed" }), todo({ id: "next", phase: "execution", status: "in_progress" })],
+  });
+  const contract = workContract({ workstreamId: record.id });
+  const claimed = claims.claim({ contract, workstreamId: record.id, sessionId: "session-a", chatId: "chat-a", projectId: "project-a", turnId: "turn-a", expectedGeneration: record.record_generation! });
+  expect(claimed.ok).toBe(true);
+  const claimedGeneration = claimed.ok ? claimed.record.record_generation! : 0;
+  expect(plans.amend({ workstreamId: record.id, contractId: contract.contract_id, expectedGeneration: claimedGeneration, items: [todoInput({ id: "next", phase: "execution", status: "in_progress" })] })).toEqual({ ok: false, code: "workstream_completed_item_changed" });
+  const completedBefore = new TodoListStore(tempDir).read("amend")!.items[0];
+  const amended = plans.amend({
+    workstreamId: record.id, contractId: contract.contract_id, expectedGeneration: claimedGeneration,
+    items: [todoInput({ id: "replacement", phase: "execution", status: "in_progress" }), todoInput({ id: "done", phase: "planning", status: "completed" })],
+  });
+  expect(amended).toMatchObject({ ok: true, record: { active_contract_id: contract.contract_id, plan_revision: 2, superseded_todo_ids: ["next"] }, receipt: { parent_revision: 1, revision: 2 } });
+  expect(plans.amend({
+    workstreamId: record.id, contractId: contract.contract_id, expectedGeneration: claimedGeneration,
+    items: [todoInput({ id: "replacement", phase: "execution", status: "in_progress" }), todoInput({ id: "done", phase: "planning", status: "completed" })],
+  })).toMatchObject({ ok: true, replayed: true, receipt: { receipt_id: amended.ok ? amended.receipt.receipt_id : "" } });
+  const amendedItems = new TodoListStore(tempDir).read("amend")!.items;
+  expect(amendedItems[0]).toEqual(completedBefore);
+  expect(amendedItems.map((item) => [item.id, item.ordinal])).toEqual([
+    ["done", 1],
+    ["replacement", 3],
+  ]);
 });
 
 test("todo-derived work streams accept sparse active phase snapshots", () => {

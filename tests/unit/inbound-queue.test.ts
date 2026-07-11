@@ -92,6 +92,23 @@ test("native inbound queue claims early without parsing the whole pending direct
   }
 });
 
+test("native inbound queue does not claim a continuation before its durable backoff expires", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    const queued = queue.enqueue(envelope("automation:backoff"), {
+      source: "scheduler-continuation",
+      notBefore: "2026-06-11T00:01:00.000Z",
+    }, new Date("2026-06-11T00:00:00.000Z"));
+
+    expect(queue.claimEligible(1, () => true, new Date("2026-06-11T00:00:59.999Z"))).toEqual([]);
+    const [claimed] = queue.claimEligible(1, () => true, new Date("2026-06-11T00:01:00.000Z"));
+    expect(claimed?.queueId).toBe(queued.queueId);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("native inbound queue recovers stale processing records back to pending", () => {
   const butlerData = tempRoot();
   try {

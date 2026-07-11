@@ -24,6 +24,7 @@ import {
 import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/src/agent/events/turn-events.ts";
 import { readFirstVisibleLatencySummary } from "../../packages/butler-agent/src/operations/metrics/first-visible-latency.ts";
 import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-store.ts";
+import { createNativeButlerDefaultProvider } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -636,7 +637,6 @@ test("app session actor emits deterministic acknowledgement before context prepa
   const order: string[] = [];
   const turnEvents: string[] = [];
   const acknowledgedPayloads: Array<Record<string, unknown> | undefined> = [];
-  const decisionPayloads: Array<Record<string, unknown> | undefined> = [];
   const openingProviderCalls: Array<{ model: string; text: string }> = [];
   store.upsert({
     sessionId: "butler/main",
@@ -670,9 +670,6 @@ test("app session actor emits deterministic acknowledgement before context prepa
       if (event.kind === TURN_ACKNOWLEDGED_EVENT_KIND) {
         acknowledgedPayloads.push(event.payload);
       }
-      if (event.kind === TURN_DECISION_EVENT_KIND) {
-        decisionPayloads.push(event.payload);
-      }
     },
   });
   const actor = await lifecycle.getOrCreate("butler/main", "butler");
@@ -682,30 +679,17 @@ test("app session actor emits deterministic acknowledgement before context prepa
   });
 
   expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
-  expect(turnEvents[1]).toBe(TURN_DECISION_EVENT_KIND);
-  expect(turnEvents).not.toContain(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  expect(turnEvents[1]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
+  expect(turnEvents).not.toContain(TURN_DECISION_EVENT_KIND);
   expect(acknowledgedPayloads[0]).toMatchObject({
     safeLabel: "Request received. Preparing the work.",
     transport: APP_TRANSPORT,
   });
-  expect(decisionPayloads[0]).toMatchObject({
-    role: "opening",
-    source: "model-authored",
-    firstVisible: true,
-    summary: "Start by orienting to the requested session actor change.",
-    rationale: "The user asked for app opening semantics before runtime work.",
-    nextStep: "Emit the opening decision and then run the turn.",
-  });
-  expect(String(decisionPayloads[0]?.decisionId)).toMatch(/^opening-[a-f0-9]{24}$/u);
-  expect(openingProviderCalls).toHaveLength(1);
-  expect(openingProviderCalls[0]).toMatchObject({
-    model: "openai/auto:codex-latest",
-  });
-  expect(openingProviderCalls[0]?.text).toContain("hello");
+  expect(openingProviderCalls).toHaveLength(0);
   expect(order.indexOf(`turnEvent:${TURN_ACKNOWLEDGED_EVENT_KIND}`)).toBeLessThan(
-    order.indexOf(`turnEvent:${TURN_DECISION_EVENT_KIND}`),
+    order.indexOf(`turnEvent:${FIRST_VISIBLE_PROGRESS_EVENT_KIND}`),
   );
-  expect(order.indexOf(`turnEvent:${TURN_DECISION_EVENT_KIND}`)).toBeLessThan(
+  expect(order.indexOf(`turnEvent:${FIRST_VISIBLE_PROGRESS_EVENT_KIND}`)).toBeLessThan(
     order.indexOf("buildTurnContext"),
   );
   const summary = readFirstVisibleLatencySummary({ butlerData: tempDir });
@@ -738,6 +722,7 @@ test("app session actor records opening decision id in runtime metadata", async 
     runtime,
     provider: providerReturningOpening(),
     systemPromptFactory: () => "You are Butler.",
+    openingDecisionTimeoutMs: 250,
     deliverTurnEvent: async ({ event }) => {
       if (event.kind === TURN_DECISION_EVENT_KIND) {
         decisionPayloads.push(event.payload);
@@ -754,6 +739,92 @@ test("app session actor records opening decision id in runtime metadata", async 
   expect(typeof decisionId).toBe("string");
   expect(runtime.turns[0]?.metadata).toMatchObject({
     openingDecisionId: decisionId,
+  });
+  store.close();
+});
+
+test("Butler structured provider skips the duplicate gateway opening model call", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime();
+  runtime.firstTurnRelease.resolve();
+  let providerCalls = 0;
+  const provider: ModelProviderAdapter = {
+    ...providerReturningOpening(),
+    capabilities: {
+      ...fakeProvider.capabilities,
+      supportsStructuredOutputs: true,
+    },
+    async invoke() {
+      providerCalls += 1;
+      return { text: openingDecisionText };
+    },
+  };
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: provider.id,
+    modelRef: "openai/gpt-5.5",
+    transportBindings: [{
+      transport: APP_TRANSPORT,
+      accountId: "local",
+      peerId: "butler/main",
+    }],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider,
+    systemPromptFactory: () => "You are Butler.",
+    openingDecisionTimeoutMs: 250,
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+  await actor.handleInbound(appInbound("typed-opening", "hello"));
+
+  expect(providerCalls).toBe(0);
+  expect(runtime.turns[0]?.metadata?.openingDecisionId).toBeUndefined();
+  store.close();
+});
+
+test("session actor binds provider capabilities to the effective session model", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime();
+  runtime.firstTurnRelease.resolve();
+  const provider = createNativeButlerDefaultProvider({
+    system: { defaultModel: "openai/gpt-5.5-codex" },
+  }, async () => openingDecisionText);
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "project-sandy-bot",
+    workspacePath: "fixtures/sandy-bot",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: provider.id,
+    modelRef: "zai/glm-5.2",
+    transportBindings: [{
+      transport: APP_TRANSPORT,
+      accountId: "local",
+      peerId: "butler/main",
+    }],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider,
+    systemPromptFactory: () => "You are Butler.",
+    openingDecisionTimeoutMs: 250,
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+  await actor.handleInbound(appInbound("model-override", "Update the Project Ledger first."));
+
+  expect(runtime.turns[0]?.provider.id).toBe("zai");
+  expect(runtime.turns[0]?.provider.capabilities).toMatchObject({
+    supportsStructuredOutputs: true,
+    structuredDecisionTransport: "function_tool",
   });
   store.close();
 });
@@ -783,6 +854,7 @@ test("app session actor omits opening decision metadata when decision delivery f
     runtime,
     provider: providerReturningOpening(),
     systemPromptFactory: () => "You are Butler.",
+    openingDecisionTimeoutMs: 250,
     deliverTurnEvent: async ({ event }) => {
       if (event.kind === TURN_DECISION_EVENT_KIND) {
         throw new Error("decision event store unavailable");
@@ -797,6 +869,7 @@ test("app session actor omits opening decision metadata when decision delivery f
   });
 
   expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
+  expect(turnEvents[1]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
   expect(turnEvents).not.toContain(TURN_DECISION_EVENT_KIND);
   expect(runtime.turns[0]?.metadata?.openingDecisionId).toBeUndefined();
   expect(readTranscript("butler/main")).toContainEqual(expect.objectContaining({
@@ -853,8 +926,8 @@ test("app session actor times out failed opening generation without public fallb
   await runtime.firstTurnStarted.promise;
 
   expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
+  expect(turnEvents[1]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
   expect(turnEvents).not.toContain(TURN_DECISION_EVENT_KIND);
-  expect(turnEvents).not.toContain(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
   expect(providerInvokeCount).toBe(1);
   expect(runtime.turns[0]?.metadata?.openingDecisionId).toBeUndefined();
   runtime.firstTurnRelease.resolve();

@@ -1,6 +1,6 @@
 {
   "name": "butler",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "type": "module",
   "private": true,
   "bin": {
@@ -9,6 +9,7 @@
   "workspaces": [
     "packages/butler-app/client/electron",
     "packages/butler-app/client/ui",
+    "packages/butler-progress-projection",
     "packages/project-ledger",
     "packages/butler-agent/src/interfaces/mcp-server",
     "packages/butler-agent/src/integrations/telegram"
@@ -51,6 +52,7 @@
     "app:client:btcc-opening-decision:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-btcc-opening-decision BUTLER_APP_CLIENT_E2E_MODEL=openai/gpt-5.5 BUTLER_APP_CLIENT_E2E_REASONING=medium ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:btcc-opening-decision:live-llm:glm-low:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-btcc-opening-decision BUTLER_APP_CLIENT_E2E_MODEL=zai/glm-5.2 BUTLER_APP_CLIENT_E2E_REASONING=low ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:multiturn:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
+    "app:client:turn-forward-progress:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-turn-forward-progress ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:toolchain:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=toolchain ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:tool-profile:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=tool-profile ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",
     "app:client:toolchain:live-llm:e2e": "npm --prefix packages/butler-app/client/ui run build && BUTLER_APP_CLIENT_E2E_MODE=live-llm-toolchain ${BUTLER_BUN:-bun} run tests/e2e/app-client-multiturn-e2e.ts",

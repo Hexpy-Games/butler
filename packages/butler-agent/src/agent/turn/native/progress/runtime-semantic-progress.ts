@@ -17,6 +17,14 @@ export const WORKER_ORCHESTRATION_START_TOOLS = [
 
 export const WORKER_ORCHESTRATION_START_TOOL_SET = new Set<string>(WORKER_ORCHESTRATION_START_TOOLS);
 
+export interface TodoProgressItem {
+  id: string;
+  label: string;
+  state: string;
+  phase: string | null;
+  order: number;
+}
+
 export function isInternalProgressTool(name: string): boolean {
   return INTERNAL_PROGRESS_TOOLS.has(name);
 }
@@ -33,14 +41,25 @@ export function activeTodoWorkBlockFromArgs(args: Record<string, unknown>): {
   };
 }
 
-export function todoProgressItemsFromArgs(args: Record<string, unknown>): Array<{
-  id: string;
-  label: string;
-  state: string;
-  phase: string | null;
-  order: number;
-}> {
+export function todoProgressItemsFromArgs(
+  args: Record<string, unknown>,
+): TodoProgressItem[] {
   const todos = Array.isArray(args.todos) ? args.todos : [];
+  return todoProgressItems(todos, false);
+}
+
+export function todoProgressItemsFromResult(
+  result: unknown,
+): TodoProgressItem[] | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+  const items = (result as Record<string, unknown>).items;
+  return Array.isArray(items) ? todoProgressItems(items, true) : null;
+}
+
+function todoProgressItems(
+  todos: unknown[],
+  useCanonicalOrdinal: boolean,
+): TodoProgressItem[] {
   return todos
     .filter((todo): todo is Record<string, unknown> =>
       Boolean(todo && typeof todo === "object" && !Array.isArray(todo)))
@@ -63,11 +82,18 @@ export function todoProgressItemsFromArgs(args: Record<string, unknown>): Array<
         label,
         state: todoProgressState(status),
         phase: todoProgressPhase(todo.phase),
-        order: index + 1,
+        order: useCanonicalOrdinal
+          ? canonicalTodoOrdinal(todo.ordinal, index)
+          : index + 1,
       };
     })
     .filter((item) => item.label)
     .slice(0, 8);
+}
+
+function canonicalTodoOrdinal(value: unknown, index: number): number {
+  const ordinal = Number(value);
+  return Number.isInteger(ordinal) && ordinal > 0 ? ordinal : index + 1;
 }
 
 export function runtimeSemanticTodoItems(input: {

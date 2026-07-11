@@ -49,6 +49,21 @@ describe("native file tools hardening", () => {
     expect(result.content.includes("�")).toBe(false);
   });
 
+  test("trusted session workspace overrides a model-supplied workspace root", async () => {
+    const workspace = await tmpWorkspace();
+    await writeFile(join(workspace, "owned.txt"), "runtime-owned workspace", "utf8");
+
+    const result = await executeReadFileTool({
+      arguments: {
+        workspace_root: "/",
+        path: "owned.txt",
+      },
+    }, { workspacePath: workspace }) as { ok: boolean; content?: string };
+
+    expect(result.ok).toBe(true);
+    expect(result.content).toContain("runtime-owned workspace");
+  });
+
   test("grep_files reports traversal caps as partial results", async () => {
     const workspace = await tmpWorkspace();
     await mkdir(join(workspace, "a", "b"), { recursive: true });
@@ -57,6 +72,30 @@ describe("native file tools hardening", () => {
     expect(result.ok).toBe(true);
     expect(result.truncated).toBe(true);
     expect(result.stopped_by).toBe("max_dirs");
+  });
+
+  test("grep_files excludes temporary roots and orders source before tests", async () => {
+    const workspace = await tmpWorkspace();
+    await mkdir(join(workspace, ".tmp", "generated"), { recursive: true });
+    await mkdir(join(workspace, "packages", "feature", "src"), { recursive: true });
+    await mkdir(join(workspace, "packages", "feature", "scripts", "benchmarks"), { recursive: true });
+    await mkdir(join(workspace, "tests"), { recursive: true });
+    await writeFile(join(workspace, ".tmp", "generated", "cache.ts"), "prompt_cache_key", "utf8");
+    await writeFile(join(workspace, "tests", "cache.test.ts"), "prompt_cache_key", "utf8");
+    await writeFile(join(workspace, "packages", "feature", "scripts", "benchmarks", "cache.ts"), "prompt_cache_key", "utf8");
+    await writeFile(join(workspace, "packages", "feature", "src", "cache.ts"), "prompt_cache_key", "utf8");
+
+    const result = await executeGrepFilesTool({
+      arguments: { pattern: "prompt_cache_key", max_matches: 1 },
+    }, { workspacePath: workspace }) as {
+      matches: Array<{ path: string }>;
+      files_considered: number;
+    };
+
+    expect(result.matches.map((match) => match.path)).toEqual([
+      "packages/feature/src/cache.ts",
+    ]);
+    expect(result.files_considered).toBe(3);
   });
 
   test("evidence receipts distinguish read, write, and search operations", async () => {
