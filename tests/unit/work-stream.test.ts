@@ -459,6 +459,23 @@ test("turn-local recoverable outcome keeps interrupted todos resumable without t
       expect.objectContaining({ id: "inspect", status: "pending" }),
       expect.objectContaining({ id: "report", status: "pending" }),
     ]));
+
+  const cancelledReplay = applyTurnLocalWorkOutcomeForSession({
+    butlerData: tempDir,
+    sessionId,
+    turnId: "turn-recoverable",
+    outcome: "cancelled",
+    statusNote: "Principal cancelled the recoverable turn.",
+  });
+  expect(cancelledReplay).toHaveLength(1);
+  expect(store.read(turnLocal.id)).toMatchObject({
+    state: "cancelled",
+    current_phase: null,
+    active_step_id: null,
+    status_note: "Principal cancelled the recoverable turn.",
+  });
+  expect(new TodoListStore(tempDir).view("turn-local-recoverable", { includeCompleted: true }).progress)
+    .toMatchObject({ active: 0, cancelled: 2 });
 });
 
 test("turn-local terminal outcomes clear active todos and active projection", () => {
