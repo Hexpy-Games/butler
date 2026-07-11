@@ -40,7 +40,7 @@ export class TurnForwardProgressStalledError extends Error {
   readonly code = TURN_FORWARD_PROGRESS_STALLED_CODE;
 
   constructor() {
-    super(`${TURN_FORWARD_PROGRESS_STALLED_CODE}: two consecutive calls violated the focused workspace-action frontier`);
+    super(`${TURN_FORWARD_PROGRESS_STALLED_CODE}: two provider-visible repair responses violated the focused workspace-action frontier`);
     this.name = "TurnForwardProgressStalledError";
   }
 }
@@ -128,7 +128,7 @@ export interface ObligationToolSurfaceController {
     name: string;
     args: Record<string, unknown>;
     result: unknown;
-  }): void;
+  }): ObligationToolAdmission | null;
   focusMissingDeliverables(deliverables: readonly string[]): void;
   state(): ObligationToolSurfaceState;
 }
@@ -326,12 +326,13 @@ export function createObligationToolSurfaceController(
       ) {
         resetWorkspaceInspection();
       }
-      if (!managed) return;
+      if (!managed) return null;
       if (!successful(input.result)) {
-        if (workspaceActionFocused && workspaceActionCallAllowed(input.name, input.args)) {
+        if (workspaceActionFocused && workspaceMutationAttempted(input.name, input.args)) {
           workspaceActionRejections += 1;
+          return workspaceActionRejection(workspaceActionRejections >= 2);
         }
-        return;
+        return null;
       }
       if (input.name === "project_ledger_list") {
         ledgerDiscoveryObserved = true;
@@ -350,17 +351,17 @@ export function createObligationToolSurfaceController(
         if (checkAdvanced) resetWorkspaceInspection();
       }
       if (
-        isWorkspaceMutation(input.name, input.args) &&
+        workspaceMutationAttempted(input.name, input.args) &&
         workspaceMutationVerified(input.name, input.result)
       ) {
         workspaceMutationObserved = true;
         if (validationFailed) validationFailed = false;
         resetWorkspaceInspection();
-        return;
+        return null;
       }
-      if (workspaceActionFocused && isWorkspaceMutation(input.name, input.args)) {
+      if (workspaceActionFocused && workspaceMutationAttempted(input.name, input.args)) {
         workspaceActionRejections += 1;
-        return;
+        return workspaceActionRejection(workspaceActionRejections >= 2);
       }
       if (
         planReady &&
@@ -376,6 +377,7 @@ export function createObligationToolSurfaceController(
           workspaceActionFocused = true;
         }
       }
+      return null;
     },
     focusMissingDeliverables(deliverables) {
       if (requiresStatusReport && deliverables.includes("status_report") && !statusObserved) {
@@ -460,7 +462,12 @@ function workspaceActionSurfaceAllows(name: string): boolean {
 
 function workspaceActionCallAllowed(name: string, args: Record<string, unknown>): boolean {
   if (name === "update_todo_list" || isInternalProgressTool(name)) return true;
-  if (name === "run_command" && args.state_effect !== "mutation") return false;
+  if (name === "run_command") return args.state_effect === "mutation";
+  return isWorkspaceMutation(name, args);
+}
+
+function workspaceMutationAttempted(name: string, args: Record<string, unknown>): boolean {
+  if (name === "run_command") return args.state_effect === "mutation";
   return isWorkspaceMutation(name, args);
 }
 
@@ -469,7 +476,7 @@ function workspaceActionRejection(terminal: boolean): ObligationToolAdmission {
     allowed: false,
     code: "workspace_action_required",
     message: terminal
-      ? "A second consecutive read-only or falsely declared action was rejected; this turn must recover from a forward-progress fault."
+      ? "A later provider response again failed to produce verified workspace mutation evidence; this turn must recover from a forward-progress fault."
       : "Workspace inspection is exhausted. Perform one verified mutation or an accepted structured plan update before reading more evidence.",
     terminal,
   };
