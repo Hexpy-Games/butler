@@ -136,6 +136,86 @@ test("bound WorkStream rejects todo and state mutations aimed at another stream"
     .toBe(active.contract.contract_id);
 });
 
+test("bound sparse closeout retains completed todo evidence and closes the open report item", async () => {
+  const decision = startDecision("decision-sparse-closeout");
+  const active = activateTurnContract({
+    butlerData: data,
+    contract: compileTurnContract({ decision }),
+    decision,
+    sessionId: "butler/sandy",
+    chatId: "chat-sandy",
+    projectId: "sandy-bot",
+    turnId: "turn-sparse-closeout",
+    toolSurfaceController: fakeToolSurfaceController(),
+  });
+  const workStreamId = active.contract.target_workstream_id!;
+  const todos = new TodoListStore(data);
+  const streams = new WorkStreamStore(data);
+  const handlers = createWorkTrackingToolHandlers({
+    butlerData: data,
+    sessionId: "butler/sandy",
+    originChatId: "chat-sandy",
+    projectId: "sandy-bot",
+    turnId: "turn-sparse-closeout",
+    todoListStore: todos,
+    workStreamStore: streams,
+    activeWorkStreamBinding: () => ({ contractId: active.contract.contract_id, workStreamId }),
+  });
+
+  await handlers.update_todo_list({ args: {
+    todos: [{
+      id: "1",
+      content: "검증",
+      active_form: "검증 완료",
+      status: "completed",
+      phase: "execution",
+      note: "quality checks passed",
+    }, {
+      id: "2",
+      content: "커밋과 push",
+      active_form: "커밋과 push 완료",
+      status: "completed",
+      phase: "execution",
+      note: "commit 24df031",
+    }, {
+      id: "3",
+      content: "배포",
+      active_form: "배포 완료",
+      status: "completed",
+      phase: "execution",
+      note: "service active",
+    }, {
+      id: "4",
+      content: "헬스체크와 최종 보고",
+      active_form: "최종 보고 중",
+      status: "in_progress",
+      phase: "review",
+      blocked_by: ["3"],
+    }],
+  } });
+  const completedBefore = todos.read(streams.read(workStreamId)!.todo_list_id!)!.items.slice(0, 3);
+
+  const closed = await handlers.update_todo_list({ args: {
+    todos: [{
+      id: "4",
+      content: "헬스체크와 최종 보고",
+      active_form: "최종 보고 완료",
+      status: "completed",
+      phase: "reporting",
+      blocked_by: ["3"],
+      note: "remote health verified",
+    }],
+  } });
+
+  expect(closed).toMatchObject({
+    ok: true,
+    progress: { total: 4, completed: 4, active: 0, progress_pct: 100 },
+    plan_amendment_receipt: { preserved_completed_item_ids: ["1", "2", "3"] },
+  });
+  expect(closed.items.slice(0, 3)).toEqual(completedBefore);
+  expect(closed.items[3]).toMatchObject({ id: "4", status: "completed", phase: "reporting" });
+});
+
 function startDecision(id = "decision-start-authority"): TurnContractDecision {
   return {
     schema_version: TURN_CONTRACT_DECISION_SCHEMA,
