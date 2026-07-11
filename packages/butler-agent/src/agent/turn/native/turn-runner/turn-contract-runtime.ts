@@ -10,6 +10,7 @@ import type { PublicWorkDecision } from "../output/tool-types.ts";
 import { turnMetadataForContract } from "./turn-contract-tool-policy.ts";
 import { recordTurnContractMetric } from "./turn-contract-metrics.ts";
 import { prepareStartWorkStreamBinding } from "./start-workstream-binding.ts";
+import { turnContractActionRequiresExplicitPlan } from "../../turn-contract-plan-closure.ts";
 
 export interface ActiveTurnContract {
   contract: CompiledTurnContract;
@@ -253,8 +254,7 @@ export function contractExecutionPrompt(input: {
   const activeTodoListId = contract.target_workstream_id
     ? new WorkStreamStore(input.butlerData).read(contract.target_workstream_id)?.todo_list_id
     : null;
-  const requiresExplicitPlan = ["start_work", "resume_work", "modify_work"]
-    .includes(contract.action);
+  const requiresExplicitPlan = turnContractActionRequiresExplicitPlan(contract.action);
   return [
     input.basePrompt,
     "## Active Typed Turn Contract",

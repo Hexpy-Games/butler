@@ -281,6 +281,20 @@ test("execution contracts expose only a structured explicit-plan update before o
   expect(controller.project(tools).map((tool) => tool.name)).toEqual(["project_ledger_list"]);
 });
 
+test("supplying a blocker action cannot bypass the explicit-plan frontier", () => {
+  const controller = createObligationToolSurfaceController(contract({
+    action: "supply_user_action",
+    blocker_id: "blocker-auth",
+    deliverables: [],
+    required_evidence: [],
+    tracking_mode: "none",
+    closeout_strategy: "noop",
+  }));
+
+  expect(controller.state()).toMatchObject({ stage: "work_planning", planReady: false });
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual(["update_todo_list"]);
+});
+
 test("twelve consecutive workspace reads focus a verified state-changing action", () => {
   const controller = createObligationToolSurfaceController(localCodeContract(), { planReady: true });
 
@@ -411,6 +425,62 @@ test("replayed plans and no-op Ledger checks cannot clear a focused workspace ac
     stage: "workspace_execution",
     workspaceInspectionCount: 0,
     workspaceActionFocused: false,
+  });
+});
+
+test("mutating-looking commands must return verified mutation evidence in the focused stage", () => {
+  const controller = createObligationToolSurfaceController(localCodeContract(), {
+    planReady: true,
+    workspaceInspectionCount: WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
+    workspaceActionFocused: true,
+  });
+  const command = {
+    name: "run_command",
+    args: { command: "apply_patch < change.patch", state_effect: "mutation" },
+  };
+
+  expect(controller.authorize(command)).toEqual({ allowed: true });
+  controller.observe({
+    ...command,
+    result: {
+      ok: true,
+      evidence_capability_receipts: [{
+        capability: "command_executed",
+        maturity: "verified",
+        verified: true,
+      }],
+    },
+  });
+  expect(controller.state()).toMatchObject({
+    stage: "workspace_action",
+    workspaceActionRejections: 1,
+  });
+
+  expect(controller.authorize(command)).toEqual({ allowed: true });
+  controller.observe({ ...command, result: { ok: false } });
+  expect(controller.state()).toMatchObject({ workspaceActionRejections: 2 });
+  expect(() => controller.assertCanContinue()).toThrow("turn_forward_progress_stalled");
+
+  const verified = createObligationToolSurfaceController(localCodeContract(), {
+    planReady: true,
+    workspaceInspectionCount: WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
+    workspaceActionFocused: true,
+  });
+  verified.observe({
+    ...command,
+    result: {
+      ok: true,
+      evidence_capability_receipts: [{
+        capability: "durable_artifact",
+        maturity: "verified",
+        verified: true,
+      }],
+    },
+  });
+  expect(verified.state()).toMatchObject({
+    stage: "workspace_execution",
+    workspaceActionFocused: false,
+    workspaceActionRejections: 0,
   });
 });
 
