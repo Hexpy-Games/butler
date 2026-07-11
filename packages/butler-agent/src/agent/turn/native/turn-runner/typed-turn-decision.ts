@@ -18,6 +18,16 @@ import { WorkStreamStore, type WorkStreamRecord } from "../../../work/work-strea
 
 export const TURN_DECISION_REPAIR_LIMIT = 1;
 
+const DELIVERABLE_DECISION_GUIDANCE = [
+  "Select only concrete output obligations required by the user's semantic objective.",
+  "ledger_spec, ledger_work, and ledger_tasks mean canonical Project Ledger records only.",
+  "ledger_tasks never means the bound runtime todo plan created with update_todo_list.",
+  "A request for a task list, todo list, work list, checklist, or explicit plan before execution does not by itself request ledger_tasks.",
+  "Every work action receives its bound runtime todo plan independently of deliverables and tracking mode.",
+  "The active project id alone does not imply Ledger tracking.",
+  "For local command, file, test, or operational verification with no intended durable diff, use validation; use code_change for an intended durable workspace mutation.",
+].join(" ");
+
 export interface StructuredDecisionPrompt {
   prompt: string;
   promptSections: PromptUsageSectionAttribution[];
@@ -51,6 +61,10 @@ export function typedTurnDecisionInstructions(input: {
     "The review deliverable is only for structured review evidence of changed, planned, or inherited work; it is not ordinary source inspection.",
     "Use start_work for new durable work. Use resume_work or modify_work only for a listed compatible WorkStream.",
     "Every start_work, resume_work, or modify_work decision first creates or restores an explicit bound todo plan before ordinary tools run; the runtime opening placeholder is not that plan.",
+    "The bound runtime todo plan is not a ledger_tasks deliverable. Never add ledger_tasks merely because the user asks for a task list, todo list, work list, checklist, or explicit plan before execution.",
+    "Use ledger_spec, ledger_work, or ledger_tasks only when the semantic objective requires canonical Project Ledger records or the selected compatible WorkStream already has unsatisfied Ledger obligations.",
+    "An active project id alone does not imply Ledger tracking. Ordinary local commands, files, tests, and operational checks remain local workspace work.",
+    "For local command, file, test, or operational verification with no intended durable diff, select validation; select code_change for an intended durable workspace mutation.",
     "Use cancel_work only for a listed WorkStream. Use supply_user_action only for its listed waiting-user blocker.",
     "For implementation or mutation include the actual durable deliverables, not status_report alone.",
     "status_report means an explicitly requested read-only status snapshot; do not add it merely because the turn will end with a report.",
@@ -86,11 +100,19 @@ export function turnDecisionResponseFormat(input: {
         decision_id: { type: "string", const: input.decisionId },
         action: { type: "string", enum: [...TURN_CONTRACT_ACTIONS] },
         target_workstream_id: { enum: [null, ...input.candidateIds] },
-        target_project_id: { enum: [null, ...(input.projectId?.trim() ? [input.projectId.trim()] : [])] },
+        target_project_id: {
+          description: "The active project target. Selecting it does not imply canonical Project Ledger tracking.",
+          enum: [null, ...(input.projectId?.trim() ? [input.projectId.trim()] : [])],
+        },
         blocker_id: { enum: [null, ...input.waitingBlockerIds] },
         deliverables: {
           type: "array",
-          items: { type: "string", enum: [...TURN_DELIVERABLES] },
+          description: DELIVERABLE_DECISION_GUIDANCE,
+          items: {
+            type: "string",
+            enum: [...TURN_DELIVERABLES],
+            description: DELIVERABLE_DECISION_GUIDANCE,
+          },
         },
         answer_text: { type: ["string", "null"] },
         public_title: { type: "string", minLength: 2, maxLength: 80 },
