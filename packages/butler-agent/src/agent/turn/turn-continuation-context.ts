@@ -1,4 +1,4 @@
-import { readFileSync, rmSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { DirectTurnBudgetSnapshot } from "./direct-turn-budget.ts";
 import { isTerminalTurnState, type TurnState } from "./turn-kernel.ts";
@@ -26,7 +26,9 @@ export interface TurnObligationFrontierCheckpoint {
   validationObserved: boolean;
   validationFailed: boolean;
   validationFocused?: boolean;
-  stage: "open" | "ledger" | "workspace_execution" | "workspace_validation" | "workspace_repair" | "closeout";
+  statusObserved?: boolean;
+  statusFocused?: boolean;
+  stage: "open" | "ledger" | "workspace_execution" | "workspace_validation" | "workspace_repair" | "status_inspection" | "closeout";
 }
 
 export interface TurnContextAtom {
@@ -37,6 +39,7 @@ export interface TurnContextAtom {
   turnId: string;
   state: TurnState;
   sourceErrorCode: string;
+  retryableProviderFailureStreak?: number;
   reason: string;
   userRequest: { id: string };
   latestAssistantDecision?: { id: string };
@@ -72,6 +75,8 @@ export class TurnSchedulerContinuationYieldError extends Error {
     readonly contextAtomId: string,
     readonly checkpointId?: string,
     readonly checkpointGeneration?: number,
+    readonly sourceErrorCode?: string,
+    readonly retryableProviderFailureStreak?: number,
   ) {
     super("Turn scheduler yielded after persisting a continuation context atom.");
     this.name = "TurnSchedulerContinuationYieldError";
@@ -148,6 +153,11 @@ export function persistTurnContextAtom(input: {
       }
       const generation = (existing?.generation ?? 0) + 1;
       const now = new Date().toISOString();
+      const retryableProviderFailureStreak = providerFailureStreak({
+        existing,
+        sourceErrorCode: input.sourceErrorCode,
+        roundJournal: input.roundJournal,
+      });
       const value: TurnContextAtom = {
         schemaVersion: "butler.turn-continuation.v2",
         generation,
@@ -156,6 +166,7 @@ export function persistTurnContextAtom(input: {
         turnId: input.turnId,
         state: input.state,
         sourceErrorCode: input.sourceErrorCode,
+        ...(retryableProviderFailureStreak > 0 ? { retryableProviderFailureStreak } : {}),
         reason: input.reason,
         userRequest: { id: safeRefId(input.userRequest?.id ?? `turn:${input.turnId}`) },
         ...(input.latestAssistantDecision ? { latestAssistantDecision: input.latestAssistantDecision } : {}),
@@ -193,6 +204,35 @@ export function persistTurnContextAtom(input: {
   return contextAtomId;
 }
 
+function providerFailureStreak(input: {
+  existing: TurnContextAtom | null;
+  sourceErrorCode: string;
+  roundJournal?: DurableTurnRoundJournalEntry[];
+}): number {
+  if (!input.sourceErrorCode.startsWith("provider_")) return 0;
+  const existingJournalEntries = new Set(
+    (input.existing?.roundJournal ?? []).map(roundJournalEntryIdentity),
+  );
+  const newRoundObserved = (input.roundJournal ?? [])
+    .some((entry) => !existingJournalEntries.has(roundJournalEntryIdentity(entry)));
+  const sameFailureWithoutNewRound = input.existing?.sourceErrorCode === input.sourceErrorCode &&
+    !newRoundObserved;
+  return sameFailureWithoutNewRound
+    ? Math.max(1, input.existing?.retryableProviderFailureStreak ?? 1) + 1
+    : 1;
+}
+
+function roundJournalEntryIdentity(entry: DurableTurnRoundJournalEntry): string {
+  return [
+    entry.decision_id,
+    entry.semantic_block_id,
+    entry.tool,
+    entry.call_identity,
+    entry.result_fingerprint,
+    entry.state_revision,
+  ].join(":");
+}
+
 export function readTurnContextAtom(input: {
   butlerData: string;
   sessionId: string;
@@ -209,6 +249,9 @@ export function readTurnContextAtom(input: {
       schemaVersion: "butler.turn-continuation.v2",
       generation: finitePositiveInteger(parsed.generation),
       checkpointId: parsed.checkpointId || `${createTurnContextAtomId(input.sessionId, input.turnId)}:g1`,
+      retryableProviderFailureStreak: finiteNonNegativeInteger(
+        parsed.retryableProviderFailureStreak ?? 0,
+      ),
       evidenceCandidates: Array.isArray(parsed.evidenceCandidates)
         ? parsed.evidenceCandidates
         : [],
@@ -230,6 +273,24 @@ export function clearTurnContextAtom(input: {
   rmSync(path, { force: true });
 }
 
+export function turnContextAtomsForTurn(input: {
+  butlerData: string;
+  turnId: string;
+}): TurnContextAtom[] {
+  const dir = join(input.butlerData, "state", TURN_KERNEL_CONTEXT_DIR_NAME);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(CONTINUATION_FILE_SUFFIX))
+    .flatMap((name) => {
+      try {
+        const parsed = JSON.parse(readFileSync(join(dir, name), "utf8")) as TurnContextAtom;
+        return parsed?.turnId === input.turnId ? [parsed] : [];
+      } catch {
+        return [];
+      }
+    });
+}
+
 function continuationPathFor(butlerData: string, fileName: string): string {
   return join(butlerData, "state", TURN_KERNEL_CONTEXT_DIR_NAME, fileName);
 }
@@ -247,7 +308,7 @@ function sanitizeObligationFrontier(
 ): TurnObligationFrontierCheckpoint {
   const ledgerKinds = new Set(["spec", "work", "task"] as const);
   const stages = new Set<TurnObligationFrontierCheckpoint["stage"]>([
-    "open", "ledger", "workspace_execution", "workspace_validation", "workspace_repair", "closeout",
+    "open", "ledger", "workspace_execution", "workspace_validation", "workspace_repair", "status_inspection", "closeout",
   ]);
   const kinds = (values: readonly string[]) => [...new Set(values)]
     .filter((value): value is "spec" | "work" | "task" =>
@@ -266,6 +327,8 @@ function sanitizeObligationFrontier(
     validationObserved: frontier.validationObserved === true,
     validationFailed: frontier.validationFailed === true,
     validationFocused: frontier.validationFocused === true,
+    statusObserved: frontier.statusObserved === true,
+    statusFocused: frontier.statusFocused === true,
     stage: stages.has(frontier.stage) ? frontier.stage : "open",
   };
 }

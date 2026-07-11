@@ -22,6 +22,7 @@ import {
   type TurnDeliverable,
   type TurnEvidenceReceipt,
 } from "../../packages/butler-agent/src/agent/turn/turn-contract.ts";
+import { typedTurnDecisionInstructions } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/typed-turn-decision.ts";
 
 const tempDirs: string[] = [];
 afterEach(() => tempDirs.splice(0).forEach((path) => rmSync(path, { recursive: true, force: true })));
@@ -89,6 +90,19 @@ test("action matrix rejects every status-only execution action", () => {
   }
   expect(() => compileTurnContract({ decision: decision({ action: "answer", deliverables: [], answer_text: "ok" }) })).not.toThrow();
   expect(() => compileTurnContract({ decision: decision({ action: "cancel_work", target_workstream_id: "ws-a", deliverables: [] }), candidates: candidate() })).not.toThrow();
+});
+
+test("typed decisions distinguish status snapshots from work validation and final prose", () => {
+  const prompt = typedTurnDecisionInstructions({
+    decisionId: "decision-status-semantics",
+    projectId: "project-a",
+    candidateIds: [],
+  });
+
+  expect(prompt).toContain("status_report means an explicitly requested read-only status snapshot");
+  expect(prompt).toContain("Post-change verification belongs to validation");
+  expect(prompt).toContain("The ordinary user-facing completion answer is the final candidate");
+  expect(prompt).not.toContain("For mixed status-and-work instructions include status_report");
 });
 
 test("complete action and deliverable matrix is deterministic", () => {

@@ -106,7 +106,7 @@ function contractProfiles(contract: CompiledTurnContract): ButlerToolProfile[] {
 
 function contractTools(contract: CompiledTurnContract): string[] {
   const tools = new Set<string>();
-  if (contract.action === "inspect" && contract.target_project_id) {
+  if (contract.target_project_id && contract.deliverables.includes("status_report")) {
     tools.add("project_ledger_status");
     tools.add("project_ledger_show");
   }

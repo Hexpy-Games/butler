@@ -69,3 +69,23 @@ test("fixed contract surfaces retain turn-scoped project profiles without full-a
   expect(tools).not.toContain("write_file");
   expect(tools).not.toContain("project_ledger_create");
 });
+
+test("mixed work contracts with a status obligation retain exact status producers", () => {
+  const contract = compileTurnContract({
+    decision: {
+      schema_version: "butler.turn-contract-decision.v1",
+      decision_id: "decision-mixed-status-work",
+      action: "start_work",
+      target_project_id: "project-a",
+      deliverables: ["status_report", "code_change"],
+      public_summary: "Inspect current state and apply the requested change.",
+    },
+  });
+
+  const metadata = turnMetadataForContract(contract, {});
+  expect(metadata.requiredNativeTools).toEqual([
+    "project_ledger_show",
+    "project_ledger_status",
+  ]);
+  expect(metadata.requiredNativeToolProfiles).toEqual(["workspace"]);
+});

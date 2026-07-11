@@ -121,7 +121,9 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
         validationObserved: false,
         validationFailed: false,
         validationFocused: true,
-        stage: "workspace_validation",
+        statusObserved: false,
+        statusFocused: true,
+        stage: "status_inspection",
       },
     });
     const persisted = readTurnContextAtom({ butlerData, sessionId, turnId });
@@ -163,7 +165,9 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
         workspaceMutationObserved: true,
         validationObserved: false,
         validationFocused: true,
-        stage: "workspace_validation",
+        statusObserved: false,
+        statusFocused: true,
+        stage: "status_inspection",
       },
     });
     expect(JSON.stringify(persisted)).not.toContain("private raw request");
@@ -198,6 +202,90 @@ test("turn context atom is not persisted for terminal states", () => {
     expect(isTerminalTurnState("waiting_user")).toBe(true);
     expect(isTerminalTurnState("failed")).toBe(true);
     expect(isTerminalTurnState("runtime_fault")).toBe(true);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("provider retry streak advances only while the durable round journal is unchanged", () => {
+  const butlerData = tempWorkspace();
+  try {
+    const sessionId = "butler/main/provider-backoff";
+    const turnId = "turn-provider-backoff";
+    persistTurnContextAtom({
+      butlerData,
+      sessionId,
+      turnId,
+      state: "continuing",
+      sourceErrorCode: "provider_rate_limited",
+      reason: "rate limited",
+      roundJournal: [],
+    });
+    expect(readTurnContextAtom({ butlerData, sessionId, turnId }))
+      .toMatchObject({ generation: 1, retryableProviderFailureStreak: 1 });
+
+    persistTurnContextAtom({
+      butlerData,
+      sessionId,
+      turnId,
+      state: "continuing",
+      sourceErrorCode: "provider_rate_limited",
+      reason: "rate limited",
+      roundJournal: [],
+      expectedGeneration: 1,
+    });
+    expect(readTurnContextAtom({ butlerData, sessionId, turnId }))
+      .toMatchObject({ generation: 2, retryableProviderFailureStreak: 2 });
+
+    persistTurnContextAtom({
+      butlerData,
+      sessionId,
+      turnId,
+      state: "continuing",
+      sourceErrorCode: "provider_rate_limited",
+      reason: "rate limited",
+      roundJournal: [{
+        sequence: 1,
+        decision_id: "decision-1",
+        semantic_block_id: "contract-1:block:1",
+        block_title: "새 상태 증거 확인",
+        tool: "project_ledger_status",
+        ok: true,
+        call_identity: "call-1",
+        result_fingerprint: "result-1",
+        state_revision: "revision-1",
+        observed_delta: "evidence",
+        result_preview: { ok: true },
+      }],
+      expectedGeneration: 2,
+    });
+    expect(readTurnContextAtom({ butlerData, sessionId, turnId }))
+      .toMatchObject({ generation: 3, retryableProviderFailureStreak: 1 });
+
+    persistTurnContextAtom({
+      butlerData,
+      sessionId,
+      turnId,
+      state: "continuing",
+      sourceErrorCode: "provider_rate_limited",
+      reason: "rate limited",
+      roundJournal: [{
+        sequence: 2,
+        decision_id: "decision-2",
+        semantic_block_id: "contract-1:block:2",
+        block_title: "동일 길이의 새 라운드",
+        tool: "project_ledger_status",
+        ok: true,
+        call_identity: "call-2",
+        result_fingerprint: "result-2",
+        state_revision: "revision-2",
+        observed_delta: "evidence",
+        result_preview: { ok: true },
+      }],
+      expectedGeneration: 3,
+    });
+    expect(readTurnContextAtom({ butlerData, sessionId, turnId }))
+      .toMatchObject({ generation: 4, retryableProviderFailureStreak: 1 });
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

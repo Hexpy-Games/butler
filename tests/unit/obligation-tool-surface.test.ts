@@ -7,6 +7,8 @@ import {
 } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/obligation-tool-surface.ts";
 
 const tools = [
+  "project_ledger_status",
+  "project_ledger_show",
   "project_ledger_list",
   "project_ledger_create",
   "project_ledger_check",
@@ -147,6 +149,43 @@ test("todo progress cannot satisfy workspace mutation and a completion gap focus
   expect(projected[0]?.parameters.required).toEqual(["validation_suite"]);
 });
 
+test("a missing status report exposes only status evidence producers", () => {
+  const statusContract = contract({
+    deliverables: ["status_report", "code_change"],
+    required_evidence: [
+      obligation("status_report", "project_ledger", "status_snapshot"),
+      obligation("code_change", "workspace", "durable_diff"),
+    ],
+    tracking_mode: "local",
+  });
+  const controller = createObligationToolSurfaceController(statusContract);
+
+  controller.focusMissingDeliverables(["status_report"]);
+
+  expect(controller.state()).toMatchObject({
+    stage: "status_inspection",
+    statusFocused: true,
+    statusObserved: false,
+  });
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual([
+    "project_ledger_status",
+    "project_ledger_show",
+    "update_todo_list",
+    "query_project_work",
+    "inspect_project_status",
+  ]);
+  expect(controller.project(tools).map((tool) => tool.name)).not.toContain("project_ledger_check");
+  expect(controller.project(tools).map((tool) => tool.name)).not.toContain("run_command");
+
+  controller.observe({ name: "project_ledger_status", args: {}, result: { ok: true } });
+  expect(controller.state()).toMatchObject({
+    stage: "status_inspection",
+    statusFocused: true,
+    statusObserved: true,
+  });
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual(["update_todo_list"]);
+});
+
 test("failed validation opens repair and a passing retry restores workspace execution", () => {
   const controller = createObligationToolSurfaceController(contract(), {
     observedLedgerKinds: ["spec", "work", "task"],
@@ -203,7 +242,7 @@ test("failed mutations and checks cannot promote the workspace surface", () => {
   });
 });
 
-function contract(): CompiledTurnContract {
+function contract(overrides: Partial<CompiledTurnContract> = {}): CompiledTurnContract {
   const obligations = [
     ["ledger_spec", "project_ledger"],
     ["ledger_work", "project_ledger"],
@@ -241,6 +280,25 @@ function contract(): CompiledTurnContract {
     terminal_delivery_keys: [],
     created_at: "2026-07-10T00:00:00.000Z",
     updated_at: "2026-07-10T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function obligation(
+  deliverable: string,
+  producer: "project_ledger" | "workspace",
+  evidenceClass: string,
+): CompiledTurnContract["required_evidence"][number] {
+  return {
+    deliverable: deliverable as CompiledTurnContract["deliverables"][number],
+    target_kind: producer === "project_ledger" ? "project" : "workspace",
+    target_id: "butler",
+    generation: 1,
+    cardinality: 1,
+    expected_item_ids: [],
+    evidence_class: evidenceClass as CompiledTurnContract["required_evidence"][number]["evidence_class"],
+    allowed_producers: [producer],
+    obligation_id: `obligation-${deliverable}`,
   };
 }
 

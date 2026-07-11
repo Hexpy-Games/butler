@@ -8,6 +8,7 @@ import { AppSessionQueueStore } from "./session-queue-store.ts";
 import { AppSessionViewStore } from "./session-view-store.ts";
 import { AppSystemResponderTurnStore } from "./system-responder-turn-store.ts";
 import { AppTurnActionStore } from "./turn-action-store.ts";
+import { cancelPersistedRuntimeTurn } from "../../../../agent/turn/principal-turn-cancellation.ts";
 
 export interface AppSessionInteractionModuleGraph {
   generatedSessionTitles: AppGeneratedSessionTitleStore;
@@ -67,6 +68,7 @@ export function createAppSessionInteractionModuleGraph(input: {
       host.dispatchDeferredResponderTurn(turnInput),
     completeResponderTurn: (turnInput) => host.completeResponderTurn(turnInput),
     cancelResponder: (turnId) => responderRuntime.cancel(turnId),
+    cancelPersistedRuntimeTurn: (turnId) => cancelPersistedRuntimeTurn({ butlerData, turnId }),
     finalizeCancelledTurn: (chatId, turnId) =>
       host.finalizeCancelledTurn(chatId, turnId),
     cleanupTurnEventSequences: (chatId, turnId) =>

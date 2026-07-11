@@ -51,6 +51,7 @@ interface TurnActionStoreInput {
     options: SendMessageOptions;
   }) => Promise<TurnActionResult>;
   cancelResponder: (turnId: string) => void;
+  cancelPersistedRuntimeTurn: (turnId: string) => void;
   finalizeCancelledTurn: (chatId: string, turnId: string) => TurnRecord;
   cleanupTurnEventSequences: (chatId: string, turnId: string) => void;
   ensureCancelledTurnActivityMessage: (
@@ -141,6 +142,7 @@ export class AppTurnActionStore {
       );
     }
     this.input.cancelResponder(turnId);
+    this.input.cancelPersistedRuntimeTurn(turnId);
     const cancelledTurn = this.input.finalizeCancelledTurn(row.chat_id, turnId);
     this.input.cleanupTurnEventSequences(row.chat_id, turnId);
     return {

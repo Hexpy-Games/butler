@@ -288,6 +288,40 @@ export class TurnContractStore {
     return result;
   }
 
+  recordPrincipalTurnCancellation(input: {
+    contractId: string;
+    turnId: string;
+    now?: Date;
+  }): CompiledTurnContract {
+    const now = input.now ?? new Date();
+    safeId(input.turnId);
+    const deliveryKey = terminalDeliveryKey(input.contractId, "cancelled");
+    const result = withDurableFileLock({
+      lockPath: `${this.contractPath(input.contractId)}.lock`,
+      lockRoot: this.butlerData,
+      ownerId: `principal-turn-cancel:${input.turnId}`,
+      now,
+      action: () => {
+        const contract = this.read(input.contractId);
+        if (!contract) throw new Error("turn_contract_not_found");
+        if (terminalContractState(contract.state)) return contract;
+        const updated: CompiledTurnContract = {
+          ...contract,
+          state: "cancelled",
+          generation: contract.generation + 1,
+          terminal_delivery_keys: contract.terminal_delivery_keys.includes(deliveryKey)
+            ? contract.terminal_delivery_keys
+            : [...contract.terminal_delivery_keys, deliveryKey],
+          updated_at: now.toISOString(),
+        };
+        writeJsonFileAtomic(this.contractPath(contract.contract_id), updated);
+        return updated;
+      },
+    });
+    if (!result) throw new Error("turn_contract_store_conflict");
+    return result;
+  }
+
   listNonTerminal(): CompiledTurnContract[] {
     if (!existsSync(this.contractsDir)) return [];
     return readdirSync(this.contractsDir)
