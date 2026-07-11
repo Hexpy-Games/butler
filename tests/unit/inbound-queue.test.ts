@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { FileQueueButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
@@ -134,6 +134,104 @@ test("native inbound queue recovers stale processing records back to pending", (
     expect(readFileSync(reclaimed!.path, "utf8")).toContain(
       "processing_lease_expired",
     );
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("native inbound queue recovers a definitely dead owner before lease expiry", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    const queued = queue.enqueue(envelope("automation:dead-owner"), {
+      sameLogicalTurnContinuation: true,
+    });
+    const [claimed] = queue.claimEligible(
+      1,
+      () => true,
+      new Date("2026-04-27T00:00:00.000Z"),
+      15 * 60_000,
+    );
+    expect(claimed?.queueId).toBe(queued.queueId);
+    const record = JSON.parse(readFileSync(claimed!.path, "utf8")) as QueuedInboundEvent;
+    record.processing = {
+      ...record.processing!,
+      ownerId: "999999:dead-owner",
+    };
+    writeFileSync(claimed!.path, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+
+    const recovered = queue.recoverStaleProcessing({
+      staleAfterMs: 15 * 60_000,
+      now: new Date("2026-04-27T00:01:00.000Z"),
+    });
+
+    expect(recovered).toEqual({ requeued: 1, skipped: 0 });
+    const [reclaimed] = queue.claim(1);
+    expect(reclaimed?.queueId).toBe(queued.queueId);
+    expect(reclaimed?.attempts).toBe(2);
+    expect(readFileSync(reclaimed!.path, "utf8")).toContain(
+      "processing_owner_dead",
+    );
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("native inbound queue keeps ordinary dead-owner claims behind the lease fence", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    queue.enqueue(envelope("automation:ordinary-dead-owner"));
+    const [claimed] = queue.claimEligible(
+      1,
+      () => true,
+      new Date("2026-04-27T00:00:00.000Z"),
+      15 * 60_000,
+    );
+    const record = JSON.parse(readFileSync(claimed!.path, "utf8")) as QueuedInboundEvent;
+    record.processing = {
+      ...record.processing!,
+      ownerId: "999999:dead-owner",
+    };
+    writeFileSync(claimed!.path, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+
+    expect(queue.recoverStaleProcessing({
+      staleAfterMs: 15 * 60_000,
+      now: new Date("2026-04-27T00:01:00.000Z"),
+    })).toEqual({ requeued: 0, skipped: 1 });
+    expect(existsSync(claimed!.path)).toBe(true);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("native inbound queue protects live and unknown owners before lease expiry", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    queue.enqueue(envelope("automation:protected-owner"));
+    const [claimed] = queue.claimEligible(
+      1,
+      () => true,
+      new Date("2026-04-27T00:00:00.000Z"),
+      15 * 60_000,
+    );
+    expect(queue.recoverStaleProcessing({
+      staleAfterMs: 15 * 60_000,
+      now: new Date("2026-04-27T00:01:00.000Z"),
+    })).toEqual({ requeued: 0, skipped: 1 });
+
+    const record = JSON.parse(readFileSync(claimed!.path, "utf8")) as QueuedInboundEvent;
+    record.processing = {
+      ...record.processing!,
+      ownerId: "unknown-owner",
+    };
+    writeFileSync(claimed!.path, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+    expect(queue.recoverStaleProcessing({
+      staleAfterMs: 15 * 60_000,
+      now: new Date("2026-04-27T00:02:00.000Z"),
+    })).toEqual({ requeued: 0, skipped: 1 });
+    expect(existsSync(claimed!.path)).toBe(true);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
