@@ -28,11 +28,11 @@ export const EMPTY_SETTINGS: SettingsView = {
   default_project_workspace_label: "butler-workspace",
   language: "en",
   timezone: "UTC",
-  model: "openai/gpt-5.5",
+  model: "openai/gpt-5.6-sol",
   reasoning_effort: "xhigh",
   consolidation_model: "default",
   consolidation_reasoning_effort: "xhigh",
-  effective_consolidation_model: "openai/gpt-5.5",
+  effective_consolidation_model: "openai/gpt-5.6-sol",
   consolidation_uses_butler_model: true,
   context_window_tokens: 258_000,
   worker_model_rules: [
@@ -41,7 +41,7 @@ export const EMPTY_SETTINGS: SettingsView = {
       label: "Deep work",
       condition:
         "Research, feature-level development, architecture, review, and analysis",
-      model: "openai/gpt-5.5",
+      model: "openai/gpt-5.6-sol",
       reasoning_effort: "high",
       enabled: true,
     },
@@ -50,7 +50,7 @@ export const EMPTY_SETTINGS: SettingsView = {
       label: "Routine work",
       condition:
         "Simple coding, search, local inspection, formatting, and tool calls",
-      model: "openai/gpt-5.4-mini",
+      model: "openai/gpt-5.6-terra",
       reasoning_effort: "medium",
       enabled: true,
     },
@@ -83,21 +83,21 @@ export const EMPTY_SETTINGS: SettingsView = {
 };
 
 export const EMPTY_MODEL_CATALOG: ModelCatalogView = {
-  default_model_ref: "openai/gpt-5.5",
+  default_model_ref: "openai/gpt-5.6-sol",
   default_reasoning_effort: "xhigh",
   providers: [],
   models: [
     {
       provider_id: "openai",
       provider_label: "OpenAI",
-      model_id: "gpt-5.5",
-      model_ref: "openai/gpt-5.5",
-      display_name: "GPT-5.5",
+      model_id: "gpt-5.6-sol",
+      model_ref: "openai/gpt-5.6-sol",
+      display_name: "GPT-5.6 Sol",
       status: "latest",
-      context_window_tokens: 258_000,
+      context_window_tokens: 1_050_000,
       max_output_tokens: 128_000,
       default_reasoning_effort: "xhigh",
-      reasoning_efforts: ["none", "low", "medium", "high", "xhigh"],
+      reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
       token_estimator: "openai_tiktoken_o200k",
       runtime_supported: true,
     },

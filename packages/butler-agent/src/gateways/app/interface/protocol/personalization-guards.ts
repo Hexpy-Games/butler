@@ -92,7 +92,7 @@ function isPersonalizationProfilingUpdate(
   }
   if (
     "extractor_reasoning_effort" in input &&
-    !["none", "low", "medium", "high", "xhigh"].includes(
+    !["none", "low", "medium", "high", "xhigh", "max"].includes(
       String(input.extractor_reasoning_effort),
     )
   ) {

@@ -749,7 +749,7 @@ test("interactive installer provider chooser can choose OpenAI API key", () => {
     CFG="$tmp/butler.config.json" CREDS="$tmp/auth/model-provider-credentials.json" "$BUTLER_BUN" -e "
       const cfg = JSON.parse(await Bun.file(process.env.CFG).text());
       const creds = JSON.parse(await Bun.file(process.env.CREDS).text());
-      if (cfg.system.defaultModel !== 'openai/gpt-5.5') throw new Error('OpenAI provider should use catalog default');
+      if (cfg.system.defaultModel !== 'openai/gpt-5.6-sol') throw new Error('OpenAI provider should use catalog default');
       const cred = creds.credentials?.find((item) => item.provider_id === 'openai');
       if (!cred || cred.secret !== 'sk-preview') throw new Error('OpenAI credential was not stored');
     "

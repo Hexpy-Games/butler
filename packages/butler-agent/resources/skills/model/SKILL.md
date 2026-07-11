@@ -13,7 +13,7 @@ reporting: Reply directly with the current or changed model settings.
 Call the `model_set` MCP tool based on user intent:
 - "butler-model" or "/butler-model" with no args → model_set() — query both butler and worker models
 - "butler-model worker openai/gpt-5-codex" → model_set(target="worker", model="openai/gpt-5-codex")
-- "butler-model butler openai/gpt-5.5" → model_set(target="butler", model="openai/gpt-5.5") — applies on next restart
+- "butler-model butler openai/gpt-5.6-sol" → model_set(target="butler", model="openai/gpt-5.6-sol") — applies on next restart
 - "butler-model list" → model_set(action="list") — show all available models
 
 Reply directly with the result. Do not dispatch a worker.

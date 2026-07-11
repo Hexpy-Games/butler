@@ -75,6 +75,7 @@ const REASONING_EFFORT_VALUES = new Set<ReasoningEffort>([
   "medium",
   "high",
   "xhigh",
+  "max",
 ]);
 function selectedReasoningEffort(turnInput: RuntimeTurnInput): ReasoningEffort | undefined {
   const snakeCase = metadataPolicyValue(turnInput.metadata, "reasoning_effort");

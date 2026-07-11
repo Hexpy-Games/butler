@@ -3,10 +3,13 @@ import { join } from "path";
 import { resolveOpenAIAuth } from "./auth.ts";
 
 export const AUTO_CODEX_LATEST = "auto:codex-latest";
-export const DEFAULT_CODEX_MODEL = "gpt-5.5-codex";
+export const DEFAULT_CODEX_MODEL = "gpt-5.6-sol";
 export const DEFAULT_CODEX_MODEL_REF = `openai/${DEFAULT_CODEX_MODEL}` as const;
 export const FALLBACK_OPENAI_MODELS = [
   DEFAULT_CODEX_MODEL,
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "gpt-5.5-codex",
   "gpt-5.5",
   "gpt-5.4",
   "gpt-5.4-mini",
@@ -28,19 +31,33 @@ function getModelsUrl(): string {
 function versionScore(model: string): number[] {
   const match = model.match(/gpt-(\d+(?:\.\d+)?)/i);
   const version = match ? Number(match[1]) : 0;
-  const codexBoost = /codex/i.test(model) ? 1_000 : 0;
+  const tierBoost = modelTierScore(model);
   const maxBoost = /max/i.test(model) ? 100 : 0;
   const miniPenalty = /mini|nano/i.test(model) ? -10 : 0;
-  return [version + codexBoost + maxBoost + miniPenalty, model.length];
+  return [version, tierBoost + maxBoost + miniPenalty, model.length];
+}
+
+function modelTierScore(model: string): number {
+  if (/-(?:sol)$/i.test(model) || /^gpt-\d+(?:\.\d+)?$/i.test(model)) return 90;
+  if (/-codex(?:$|-)/i.test(model)) return 80;
+  if (/-terra$/i.test(model)) return 60;
+  if (/-luna$/i.test(model)) return 30;
+  return 0;
+}
+
+function isAutoSelectableCodexModel(model: string): boolean {
+  if (/^gpt-\d+(?:\.\d+)?-codex(?:$|-)/i.test(model)) return true;
+  if (/^gpt-\d+(?:\.\d+)?-(?:sol|terra|luna)$/i.test(model)) return true;
+  return /^gpt-5\.6$/i.test(model);
 }
 
 export function pickLatestCodexModel(models: string[]): string {
   const codex = models
-    .filter((model) => /^gpt-\d+(?:\.\d+)?(?:[-.]codex|.*codex)/i.test(model))
+    .filter(isAutoSelectableCodexModel)
     .sort((a, b) => {
       const as = versionScore(a);
       const bs = versionScore(b);
-      return bs[0] - as[0] || bs[1] - as[1] || b.localeCompare(a);
+      return bs[0] - as[0] || bs[1] - as[1] || bs[2] - as[2] || b.localeCompare(a);
     });
   if (!codex[0]) {
     throw new Error("No Codex-capable OpenAI model was returned by the configured model list.");

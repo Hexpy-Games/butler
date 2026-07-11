@@ -24,7 +24,7 @@ const sourceButlerData = process.env.BUTLER_LIVE_SOURCE_BUTLER_DATA ||
   join(process.env.HOME ?? "", ".butler");
 const tempDir = mkdtempSync(join(tmpdir(), "butler-devlog-live-e2e-"));
 const model = normalizeE2eModel(
-  process.env.BUTLER_DEVLOG_E2E_MODEL || "openai/gpt-5.5",
+  process.env.BUTLER_DEVLOG_E2E_MODEL || "openai/gpt-5.6-sol",
 );
 const reasoningEffort = process.env.BUTLER_DEVLOG_E2E_REASONING || "low";
 const runId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -56,7 +56,7 @@ try {
   process.env.BUTLER_DATA = tempDir;
   process.env.BUTLER_RUNTIME ||= "codex-api";
 
-  assert(model === "openai/gpt-5.5", `Developer log live E2E must use GPT-5.5, got ${model}`);
+  assert(model === "openai/gpt-5.6-sol", `Developer log live E2E must use GPT-5.6 Sol, got ${model}`);
   assert(
     reasoningEffort === "low" || reasoningEffort === "medium",
     `Developer log live E2E reasoning must be low or medium, got ${reasoningEffort}`,
@@ -212,7 +212,7 @@ function assert(condition: unknown, message: string): asserts condition {
 
 function normalizeE2eModel(value: string): `${string}/${string}` {
   const trimmed = value.trim();
-  if (trimmed === "gpt-5.5") return "openai/gpt-5.5";
+  if (trimmed === "gpt-5.6-sol") return "openai/gpt-5.6-sol";
   if (trimmed.includes("/")) return trimmed as `${string}/${string}`;
   throw new Error(`Developer log live E2E model must be provider/model, got ${value}`);
 }

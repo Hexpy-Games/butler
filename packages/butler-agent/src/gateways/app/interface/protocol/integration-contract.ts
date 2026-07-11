@@ -128,10 +128,10 @@ export interface AppModelSummary {
   status: "latest" | "recommended" | "available" | "deprecated";
   context_window_tokens: number;
   max_output_tokens: number;
-  default_reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh";
-  reasoning_efforts: Array<"none" | "low" | "medium" | "high" | "xhigh">;
+  default_reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh" | "max";
+  reasoning_efforts: Array<"none" | "low" | "medium" | "high" | "xhigh" | "max">;
   reasoning_budget_tokens?: Partial<
-    Record<"none" | "low" | "medium" | "high" | "xhigh", number>
+    Record<"none" | "low" | "medium" | "high" | "xhigh" | "max", number>
   >;
   token_estimator: string;
   source_url: string;
@@ -163,7 +163,7 @@ export interface ProviderCredentialView {
 export interface ModelCatalogView {
   generated_at: string;
   default_model_ref: string;
-  default_reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh";
+  default_reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   providers: Array<{
     provider_id: string;
     provider_label: string;

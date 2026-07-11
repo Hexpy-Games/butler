@@ -2181,7 +2181,7 @@ test("app gateway bridge preserves selected reasoning effort through native runt
     await postJson(`${server.url}messages`, {
       chat_id: "general",
       text: "run with low reasoning",
-      model: "openai/gpt-5.5",
+      model: "openai/gpt-5.6-sol",
       reasoning_effort: "low",
     });
     await waitForAssistantMessageMatching(
@@ -2190,7 +2190,7 @@ test("app gateway bridge preserves selected reasoning effort through native runt
       (message) => message.text === "reasoning metadata reply",
     );
 
-    expect(runtime.turns.at(-1)?.model).toBe("openai/gpt-5.5");
+    expect(runtime.turns.at(-1)?.model).toBe("openai/gpt-5.6-sol");
     expect(runtime.turns.at(-1)?.metadata).toMatchObject({
       reasoning_effort: "low",
     });
@@ -3190,12 +3190,12 @@ test("settings, command palette, and project actions are route-backed and privac
     const settings = await getJson(`${server.url}settings`);
     expect(settings.data).toMatchObject({
       bridge_mode: "local",
-      model: "openai/gpt-5.5",
+      model: "openai/gpt-5.6-sol",
       reasoning_effort: "xhigh",
       timezone: expect.any(String),
       consolidation_model: "default",
       consolidation_reasoning_effort: "xhigh",
-      effective_consolidation_model: "openai/gpt-5.5",
+      effective_consolidation_model: "openai/gpt-5.6-sol",
       consolidation_uses_butler_model: true,
       context_window_tokens: 258_000,
       access_mode: "full_access",
@@ -3220,13 +3220,13 @@ test("settings, command palette, and project actions are route-backed and privac
     expect(settings.data.worker_model_rules).toEqual([
       expect.objectContaining({
         id: "deep_work",
-        model: "openai/gpt-5.5",
+        model: "openai/gpt-5.6-sol",
         reasoning_effort: "high",
         enabled: true,
       }),
       expect.objectContaining({
         id: "routine_work",
-        model: "openai/gpt-5.4-mini",
+        model: "openai/gpt-5.6-terra",
         reasoning_effort: "medium",
         enabled: true,
       }),
@@ -3259,7 +3259,7 @@ test("settings, command palette, and project actions are route-backed and privac
     });
 
     const catalog = await getJson(`${server.url}model-catalog`);
-    expect(catalog.data.default_model_ref).toBe("openai/gpt-5.5");
+    expect(catalog.data.default_model_ref).toBe("openai/gpt-5.6-sol");
     expect(catalog.data.default_reasoning_effort).toBe("xhigh");
     const providerIds = catalog.data.providers.map(
       (provider: { provider_id: string }) => provider.provider_id,
@@ -3295,6 +3295,9 @@ test("settings, command palette, and project actions are route-backed and privac
       (model: { model_ref: string }) => model.model_ref,
     );
     expect(modelRefs).toContain("xai/grok-4.3");
+    expect(modelRefs).toContain("openai/gpt-5.6-sol");
+    expect(modelRefs).toContain("openai/gpt-5.6-terra");
+    expect(modelRefs).toContain("openai/gpt-5.6-luna");
     expect(modelRefs).toContain("qwen/qwen3.7-max");
     expect(modelRefs).toContain("kimi/kimi-k2.6");
     expect(modelRefs).toContain("zai/glm-5.2");
@@ -3328,15 +3331,16 @@ test("settings, command palette, and project actions are route-backed and privac
     });
     expect(
       catalog.data.models.some(
-        (model: { model_ref: string }) => model.model_ref === "openai/gpt-5.5",
+        (model: { model_ref: string }) => model.model_ref === "openai/gpt-5.6-sol",
       ),
     ).toBe(true);
     expect(
       catalog.data.models.find(
-        (model: { model_ref: string }) => model.model_ref === "openai/gpt-5.5",
+        (model: { model_ref: string }) => model.model_ref === "openai/gpt-5.6-sol",
       ),
     ).toMatchObject({
       context_window_tokens: 1_050_000,
+      reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
       runtime_supported: true,
     });
     expect(
@@ -3354,11 +3358,11 @@ test("settings, command palette, and project actions are route-backed and privac
         provider_id: "openai",
         runtime_supported: true,
         deep_work: expect.objectContaining({
-          model: "openai/gpt-5.5",
+          model: "openai/gpt-5.6-sol",
           reasoning_effort: "high",
         }),
         routine_work: expect.objectContaining({
-          model: "openai/gpt-5.4-mini",
+          model: "openai/gpt-5.6-terra",
           reasoning_effort: "medium",
         }),
       }),
@@ -3623,6 +3627,25 @@ test("settings, command palette, and project actions are route-backed and privac
       {},
     );
     expect(archived.data.project.archived).toBe(true);
+  } finally {
+    server.stop();
+  }
+});
+
+test("settings accepts GPT-5.6 max reasoning effort", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+  });
+  try {
+    const maxReasoning = await patchJson(`${server.url}settings`, {
+      model: "openai/gpt-5.6-sol",
+      reasoning_effort: "max",
+      consolidation_reasoning_effort: "max",
+    });
+    expect(maxReasoning.data.model).toBe("openai/gpt-5.6-sol");
+    expect(maxReasoning.data.reasoning_effort).toBe("max");
+    expect(maxReasoning.data.consolidation_reasoning_effort).toBe("max");
   } finally {
     server.stop();
   }
@@ -4151,7 +4174,7 @@ test("registered local models can be edited and deleted without stale settings r
       ),
     ).not.toContain("local/gemma-after");
     const normalizedSettings = await getJson(`${server.url}settings`);
-    expect(normalizedSettings.data.model).toBe("openai/gpt-5.5");
+    expect(normalizedSettings.data.model).toBe("openai/gpt-5.6-sol");
     expect(
       JSON.stringify(normalizedSettings.data.worker_model_rules),
     ).not.toContain("local/gemma-after");
@@ -4233,7 +4256,7 @@ test("session controls and personalization are app-server backed and privacy saf
       `${server.url}sessions/general/controls`,
     );
     expect(initialControls.data.controls).toMatchObject({
-      model: "openai/gpt-5.5",
+      model: "openai/gpt-5.6-sol",
       reasoning_effort: "xhigh",
       access_mode: "full_access",
       plan_mode: false,

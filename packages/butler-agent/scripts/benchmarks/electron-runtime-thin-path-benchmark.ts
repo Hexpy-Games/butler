@@ -991,8 +991,8 @@ function positiveInteger(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function isReasoningEffort(value: string): value is "none" | "low" | "medium" | "high" | "xhigh" {
-  return value === "none" || value === "low" || value === "medium" || value === "high" || value === "xhigh";
+function isReasoningEffort(value: string): value is "none" | "low" | "medium" | "high" | "xhigh" | "max" {
+  return value === "none" || value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "max";
 }
 
 function assert(condition: unknown, message: string): asserts condition {

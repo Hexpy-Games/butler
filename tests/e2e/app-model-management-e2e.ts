@@ -16,7 +16,7 @@ const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 
 const hostedProviders = [
-  { label: "OpenAI", model: "GPT-5.5" },
+  { label: "OpenAI", model: "GPT-5.6 Sol" },
   { label: "Anthropic", model: "Claude Opus 4.7" },
   { label: "Google", model: "Gemini 3.1 Pro Preview" },
   { label: "xAI / Grok", model: "Grok 4.3" },

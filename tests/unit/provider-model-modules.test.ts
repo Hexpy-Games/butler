@@ -56,21 +56,21 @@ test("namespaced hosted model metadata resolves duplicate model ids by provider"
 });
 
 test("structured output capability follows the provider call shape", () => {
-  expect(modelSupportsJsonSchemaResponseFormat("openai/gpt-5.5")).toBe(true);
+  expect(modelSupportsJsonSchemaResponseFormat("openai/gpt-5.6-sol")).toBe(true);
   expect(modelSupportsJsonSchemaResponseFormat("zai/glm-5.2")).toBe(false);
   expect(modelSupportsJsonSchemaResponseFormat("anthropic/claude-opus-4-6")).toBe(false);
   expect(modelSupportsJsonSchemaResponseFormat("google/gemini-3.1-pro-preview")).toBe(false);
   expect(modelSupportsJsonSchemaResponseFormat("opencode-go/glm-5.2")).toBe(false);
-  expect(modelStructuredDecisionTransport("openai/gpt-5.5")).toBe("json_schema");
+  expect(modelStructuredDecisionTransport("openai/gpt-5.6-sol")).toBe("json_schema");
   expect(modelStructuredDecisionTransport("zai/glm-5.2")).toBe("function_tool");
   expect(modelStructuredDecisionTransport("anthropic/claude-opus-4-6")).toBe("function_tool");
   expect(modelStructuredDecisionTransport("google/gemini-3.1-pro-preview")).toBe("function_tool");
 });
 
 test("provider registry binds capabilities and catalogs to one concrete model provider", () => {
-  expect(resolveProviderAdapterDefinition("openai/gpt-5.5").catalog).toBe(OPENAI_MODELS);
+  expect(resolveProviderAdapterDefinition("openai/gpt-5.6-sol").catalog).toBe(OPENAI_MODELS);
   expect(resolveProviderAdapterDefinition("zai/glm-5.2").catalog).toBe(ZAI_MODELS);
-  expect(providerCapabilitiesForModel("openai/gpt-5.5")).toMatchObject({
+  expect(providerCapabilitiesForModel("openai/gpt-5.6-sol")).toMatchObject({
     supportsStructuredOutputs: true,
     structuredDecisionTransport: "json_schema",
   });
@@ -81,4 +81,21 @@ test("provider registry binds capabilities and catalogs to one concrete model pr
   expect(() => providerCapabilitiesForModel("unknown/example-model")).toThrow(
     "provider_adapter_not_registered:unknown",
   );
+});
+
+test("OpenAI catalog exposes GPT-5.6 family as the latest supported model set", () => {
+  const refs = OPENAI_MODELS.map((model) => model.model_ref);
+  expect(refs.slice(0, 3)).toEqual([
+    "openai/gpt-5.6-sol",
+    "openai/gpt-5.6-terra",
+    "openai/gpt-5.6-luna",
+  ]);
+  expect(OPENAI_MODELS[0]).toMatchObject({
+    model_ref: "openai/gpt-5.6-sol",
+    status: "latest",
+    context_window_tokens: 1_050_000,
+    max_output_tokens: 128_000,
+    default_reasoning_effort: "xhigh",
+    reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+  });
 });

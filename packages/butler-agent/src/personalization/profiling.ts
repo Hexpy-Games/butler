@@ -1861,7 +1861,8 @@ function normalizeProfilingExtractorReasoningEffort(
     value === "low" ||
     value === "medium" ||
     value === "high" ||
-    value === "xhigh"
+    value === "xhigh" ||
+    value === "max"
   ) {
     return value;
   }
