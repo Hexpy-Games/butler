@@ -106,11 +106,14 @@ export function progressRowFromSharedTurnEvent(
   }
   if (event.kind.startsWith("tool.")) {
     if (event.kind === "tool.progress" && payload.activityKind === "todo") {
+      const todoId = optionalText(payload.todoId ?? payload.inputLabel);
       return {
         ...base,
+        id: todoId ?? base.id,
         kind: "todo",
         safe_label: safeText(payload.safeLabel, "Working step"),
         state: optionalText(payload.state) ?? "running",
+        safe_input_label: todoId,
         safe_detail_rows: detailRows(payload.detailRows),
         safe_order: optionalNonNegativeInteger(payload.safeOrder),
       };

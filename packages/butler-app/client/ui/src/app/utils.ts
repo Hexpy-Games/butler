@@ -779,11 +779,13 @@ export function mergeTurnProgressFromSummary(
   const base = incomingStateWins
     ? { ...(resetForRetry ? {} : previous), ...latest }
     : { ...latest, ...(resetForRetry ? {} : previous) };
-  const mergedRows = mergeProgressRows(
-    resetForRetry ? [] : (previous?.safe_progress_rows ?? []),
-    rows,
-    { reviveForRetry },
-  );
+  const previousRows = resetForRetry
+    ? []
+    : previousRowsForAuthoritativeTodoSnapshot(
+        previous?.safe_progress_rows ?? [],
+        rows,
+      );
+  const mergedRows = mergeProgressRows(previousRows, rows, { reviveForRetry });
   const nextSnapshot = {
     ...base,
     turn_id: latest.turn_id,
@@ -797,6 +799,20 @@ export function mergeTurnProgressFromSummary(
     ...current,
     [latest.turn_id]: nextSnapshot,
   });
+}
+
+function previousRowsForAuthoritativeTodoSnapshot(
+  previous: ProgressRow[],
+  incoming: ProgressRow[],
+): ProgressRow[] {
+  const incomingTodos = incoming.filter((row) => row.kind === "todo");
+  if (
+    incomingTodos.length === 0 ||
+    incomingTodos.some((row) => !normalizeProgressPart(row.safe_input_label))
+  ) {
+    return previous;
+  }
+  return previous.filter((row) => row.kind !== "todo");
 }
 
 export function activeTurnProgressSnapshot(
@@ -1318,20 +1334,7 @@ function todoProgressRowsDisplayMatch(
   if (left.kind !== "todo" || right.kind !== "todo") return false;
   const leftKey = todoProgressMergeKey(left);
   const rightKey = todoProgressMergeKey(right);
-  if (leftKey && rightKey && leftKey === rightKey) return true;
-
-  const leftLabel = normalizeTodoProgressLabel(left.safe_label);
-  const rightLabel = normalizeTodoProgressLabel(right.safe_label);
-  if (!leftLabel || leftLabel !== rightLabel) return false;
-
-  const leftOrder = progressRowFiniteDisplayOrder(left);
-  const rightOrder = progressRowFiniteDisplayOrder(right);
-  if (leftOrder !== null && rightOrder !== null)
-    return leftOrder === rightOrder;
-
-  const leftStableId = normalizeProgressPart(left.safe_input_label);
-  const rightStableId = normalizeProgressPart(right.safe_input_label);
-  return !leftStableId || !rightStableId;
+  return Boolean(leftKey && rightKey && leftKey === rightKey);
 }
 
 function sortProgressRowsForDisplay(rows: ProgressRow[]): ProgressRow[] {
@@ -1576,17 +1579,8 @@ function progressRowSemanticMergeKey(row: ProgressRow): string | null {
 
 function todoProgressMergeKey(row: ProgressRow): string | null {
   if (row.kind !== "todo") return null;
-  const stableId = normalizeProgressPart(row.safe_input_label);
-  if (stableId) return `id:${stableId}`;
-  const label = normalizeTodoProgressLabel(row.safe_label);
-  return label ? `label:${label}` : null;
-}
-
-function normalizeTodoProgressLabel(value?: string): string {
-  return normalizeProgressPart(value)
-    .replace(/\s*(?:하는\s*)?중입니다$/u, "")
-    .replace(/\s*(?:하는\s*)?중$/u, "")
-    .trim();
+  const stableId = normalizeProgressPart(row.safe_input_label ?? row.id);
+  return stableId ? `id:${stableId}` : null;
 }
 
 function progressRowsSemanticallyMatch(

@@ -2235,6 +2235,209 @@ test("semantic progress rows merge running and delivered todo updates", () => {
   });
 });
 
+test("authoritative summary replaces legacy live todo rows without identity", () => {
+  const current = {
+    "turn-wcap": {
+      turn_id: "turn-wcap",
+      state: "thinking",
+      safe_progress_rows: [
+        {
+          id: "turn-event-old",
+          kind: "todo",
+          state: "running",
+          safe_label: "T-WCAP-01 타입 확장 검증 중",
+          safe_order: 1,
+        },
+      ],
+    },
+  };
+
+  const merged = mergeTurnProgressFromSummary(current, {
+    session_id: "sandy",
+    turn_state: "thinking",
+    latest_progress: {
+      turn_id: "turn-wcap",
+      state: "thinking",
+      safe_progress_rows: [
+        {
+          id: "wcap-1",
+          kind: "todo",
+          state: "delivered",
+          safe_label: "T-WCAP-01: ToolAttachment 타입 확장 검증",
+          safe_input_label: "wcap-1",
+          safe_order: 1,
+        },
+      ],
+    },
+  });
+
+  expect(merged["turn-wcap"]?.safe_progress_rows).toEqual([
+    {
+      id: "wcap-1",
+      kind: "todo",
+      state: "delivered",
+      safe_label: "T-WCAP-01: ToolAttachment 타입 확장 검증",
+      safe_input_label: "wcap-1",
+      safe_order: 1,
+    },
+  ]);
+});
+
+test("todo composer updates one captured Sandy row by stable identity", async () => {
+  const { todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  );
+  const liveRow = sharedProgressRowFromTurnEvent(
+    createAgentTurnEvent({
+      sessionId: "sandy",
+      turnId: "turn-wcap",
+      sessionSequence: 1,
+      turnSequence: 1,
+      kind: "tool.progress",
+      payload: {
+        activityKind: "todo",
+        inputLabel: "wcap-1",
+        safeLabel: "T-WCAP-01 타입 확장 검증 중",
+        state: "running",
+        safeOrder: 1,
+      },
+    }),
+  );
+
+  expect(liveRow).not.toBeNull();
+  const rows = todoRowsForDisplay([
+    liveRow!,
+    {
+      id: "wcap-1",
+      kind: "todo",
+      state: "delivered",
+      safe_label: "T-WCAP-01: ToolAttachment 타입 확장 검증",
+      safe_input_label: "wcap-1",
+      safe_order: 1,
+    },
+  ]);
+
+  expect(rows).toEqual([
+    {
+      id: "wcap-1",
+      label: "T-WCAP-01: ToolAttachment 타입 확장 검증",
+      state: "completed",
+    },
+  ]);
+});
+
+test("captured Sandy todo transitions keep six rows across live and replay", async () => {
+  const { todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  );
+  const initialLabels = [
+    "T-WCAP-01 타입 확장 검증 중",
+    "T-WCAP-02: web-capture.ts 캡처 엔진 typecheck 에러 수정",
+    "T-WCAP-03: 레지스트리 등록 + 로깅 이벤트 추가 + binding 연동",
+    "T-WCAP-04: Discord 첨부 전송 연동 + 통합 테스트 + lint + 커밋",
+    "전체 typecheck + lint + 테스트 통과 검증",
+    "최종 보고",
+  ];
+  const liveRows = initialLabels.map((safeLabel, index) =>
+    sharedProgressRowFromTurnEvent(
+      createAgentTurnEvent({
+        sessionId: "sandy",
+        turnId: "turn-wcap",
+        sessionSequence: index + 1,
+        turnSequence: index + 1,
+        kind: "tool.progress",
+        payload: {
+          activityKind: "todo",
+          inputLabel: `wcap-${index + 1}`,
+          safeLabel,
+          state: index === 0 ? "running" : "accepted",
+          safeOrder: index + 1,
+        },
+      }),
+    ),
+  );
+  expect(liveRows.every(Boolean)).toBe(true);
+
+  const replayRows = [
+    ["T-WCAP-01: ToolAttachment 타입 확장 검증", "delivered"],
+    ["T-WCAP-02: web-capture.ts 캡처 엔진 lint 에러 수정", "delivered"],
+    ["레지스트리 등록 + 로깅 + binding", "running"],
+    ["T-WCAP-04: Discord 첨부 전송 + 통합 테스트 + lint + 커밋", "accepted"],
+    ["전체 typecheck + lint + 테스트 통과 검증", "accepted"],
+    ["최종 보고", "accepted"],
+  ].map(([safeLabel, state], index) => ({
+    id: `wcap-${index + 1}`,
+    kind: "todo",
+    state,
+    safe_label: safeLabel!,
+    safe_input_label: `wcap-${index + 1}`,
+    safe_order: index + 1,
+  }));
+
+  const rows = todoRowsForDisplay([
+    ...(liveRows.filter(Boolean) as NonNullable<(typeof liveRows)[number]>[]),
+    ...replayRows,
+  ]);
+
+  expect(rows).toHaveLength(6);
+  expect(rows.map((row) => row.id)).toEqual([
+    "wcap-1",
+    "wcap-2",
+    "wcap-3",
+    "wcap-4",
+    "wcap-5",
+    "wcap-6",
+  ]);
+  expect(rows.slice(0, 4)).toEqual([
+    {
+      id: "wcap-1",
+      label: "T-WCAP-01: ToolAttachment 타입 확장 검증",
+      state: "completed",
+    },
+    {
+      id: "wcap-2",
+      label: "T-WCAP-02: web-capture.ts 캡처 엔진 lint 에러 수정",
+      state: "completed",
+    },
+    {
+      id: "wcap-3",
+      label: "레지스트리 등록 + 로깅 + binding",
+      state: "running",
+    },
+    {
+      id: "wcap-4",
+      label: "T-WCAP-04: Discord 첨부 전송 + 통합 테스트 + lint + 커밋",
+      state: "pending",
+    },
+  ]);
+});
+
+test("todo composer does not collapse different ids with the same label", async () => {
+  const { todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  );
+  const rows = todoRowsForDisplay([
+    {
+      id: "todo-a",
+      kind: "todo",
+      state: "accepted",
+      safe_label: "동일한 작업",
+      safe_input_label: "todo-a",
+      safe_order: 1,
+    },
+    {
+      id: "todo-b",
+      kind: "todo",
+      state: "accepted",
+      safe_label: "동일한 작업",
+      safe_input_label: "todo-b",
+      safe_order: 2,
+    },
+  ]);
+
+  expect(rows.map((row) => row.id)).toEqual(["todo-a", "todo-b"]);
+});
+
 test("semantic progress rows keep todo list order from safe order", () => {
   const rows = semanticProgressRows([
     {
@@ -2270,7 +2473,7 @@ test("semantic progress rows keep todo list order from safe order", () => {
   ]);
 });
 
-test("todo composer rows keep ordered steps when compatibility rows duplicate items", async () => {
+test("todo composer rows keep ordered steps across repeated stable projections", async () => {
   const { todoRowsForDisplay } = await import(
     "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
   );
@@ -2280,6 +2483,7 @@ test("todo composer rows keep ordered steps when compatibility rows duplicate it
       kind: "todo",
       state: "accepted",
       safe_label: "검토",
+      safe_input_label: "review",
       safe_order: 3,
     },
     {
@@ -2295,6 +2499,7 @@ test("todo composer rows keep ordered steps when compatibility rows duplicate it
       kind: "todo",
       state: "running",
       safe_label: "계획",
+      safe_input_label: "plan",
       safe_order: 1,
     },
     {
@@ -2310,6 +2515,7 @@ test("todo composer rows keep ordered steps when compatibility rows duplicate it
       kind: "todo",
       state: "pending",
       safe_label: "보고",
+      safe_input_label: "report",
       safe_order: 4,
     },
     {
@@ -2325,6 +2531,7 @@ test("todo composer rows keep ordered steps when compatibility rows duplicate it
       kind: "todo",
       state: "delivered",
       safe_label: "스펙",
+      safe_input_label: "spec",
       safe_order: 0,
     },
     {
@@ -2340,6 +2547,7 @@ test("todo composer rows keep ordered steps when compatibility rows duplicate it
       kind: "todo",
       state: "pending",
       safe_label: "구현",
+      safe_input_label: "code",
       safe_order: 2,
     },
     {
@@ -2361,7 +2569,7 @@ test("todo composer rows keep ordered steps when compatibility rows duplicate it
   ]);
 });
 
-test("todo composer rows collapse duplicate compatibility labels", async () => {
+test("todo composer rows do not infer identity from matching labels", async () => {
   const { todoRowsForDisplay } = await import(
     "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
   );
@@ -2382,6 +2590,11 @@ test("todo composer rows collapse duplicate compatibility labels", async () => {
   ]);
 
   expect(rows).toEqual([
+    {
+      id: "inspect",
+      label: "파일 구조 확인",
+      state: "running",
+    },
     {
       id: "inspect-compat",
       label: "파일 구조 확인",
