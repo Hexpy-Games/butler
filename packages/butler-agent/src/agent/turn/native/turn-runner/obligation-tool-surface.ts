@@ -1,6 +1,9 @@
 import type { FunctionToolDefinition } from "../../../../integrations/providers/provider.ts";
 import type { CompiledTurnContract } from "../../turn-contract-types.ts";
-import { isStateMutatingToolCall } from "../../tool-loop-guards.ts";
+import {
+  isStateMutatingToolCall,
+  isStaticallyReadOnlyToolName,
+} from "../../tool-loop-guards.ts";
 import { isInternalProgressTool } from "../progress/runtime-semantic-progress.ts";
 import { isStatusReportEvidenceTool } from "./turn-contract-status-evidence.ts";
 import {
@@ -14,10 +17,32 @@ export type ObligationToolSurfaceStage =
   | "work_planning"
   | "ledger"
   | "workspace_execution"
+  | "workspace_action"
   | "workspace_validation"
   | "workspace_repair"
   | "status_inspection"
   | "closeout";
+
+export const WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS = 12;
+export const TURN_FORWARD_PROGRESS_STALLED_CODE = "turn_forward_progress_stalled";
+
+export type ObligationToolAdmission =
+  | { allowed: true }
+  | {
+    allowed: false;
+    code: "workspace_action_required";
+    message: string;
+    terminal: boolean;
+  };
+
+export class TurnForwardProgressStalledError extends Error {
+  readonly code = TURN_FORWARD_PROGRESS_STALLED_CODE;
+
+  constructor() {
+    super(`${TURN_FORWARD_PROGRESS_STALLED_CODE}: two consecutive calls violated the focused workspace-action frontier`);
+    this.name = "TurnForwardProgressStalledError";
+  }
+}
 
 const LEDGER_DELIVERABLE_KINDS = new Map<string, LedgerRecordKind>([
   ["ledger_spec", "spec"],
@@ -63,6 +88,9 @@ export interface ObligationToolSurfaceState {
   observedLedgerKinds: LedgerRecordKind[];
   ledgerCheckPassed: boolean;
   workspaceMutationObserved: boolean;
+  workspaceInspectionCount: number;
+  workspaceActionFocused: boolean;
+  workspaceActionRejections: number;
   validationObserved: boolean;
   validationFailed: boolean;
   validationFocused: boolean;
@@ -78,6 +106,9 @@ export interface ObligationToolSurfaceSeed {
   observedLedgerKinds?: readonly LedgerRecordKind[];
   ledgerCheckPassed?: boolean;
   workspaceMutationObserved?: boolean;
+  workspaceInspectionCount?: number;
+  workspaceActionFocused?: boolean;
+  workspaceActionRejections?: number;
   validationObserved?: boolean;
   validationFailed?: boolean;
   validationFocused?: boolean;
@@ -87,6 +118,11 @@ export interface ObligationToolSurfaceSeed {
 
 export interface ObligationToolSurfaceController {
   project(tools: readonly FunctionToolDefinition[]): FunctionToolDefinition[];
+  authorize(input: {
+    name: string;
+    args: Record<string, unknown>;
+  }): ObligationToolAdmission;
+  assertCanContinue(): void;
   observe(input: {
     name: string;
     args: Record<string, unknown>;
@@ -102,6 +138,7 @@ export interface ObligationToolSurfaceSession {
     seed?: ObligationToolSurfaceSeed,
   ): ObligationToolSurfaceController;
   focusMissingDeliverables(deliverables: readonly string[]): void;
+  assertCanContinue(): void;
   state(): ObligationToolSurfaceState;
 }
 
@@ -125,6 +162,7 @@ export function createObligationToolSurfaceSession(input: {
       return controller;
     },
     focusMissingDeliverables: (deliverables) => controller.focusMissingDeliverables(deliverables),
+    assertCanContinue: () => controller.assertCanContinue(),
     state: () => controller.state(),
   };
 }
@@ -162,6 +200,15 @@ export function createObligationToolSurfaceController(
   );
   let checkedMutationSequence = seed.ledgerCheckPassed ? mutationSequence : -1;
   let workspaceMutationObserved = seed.workspaceMutationObserved === true;
+  let workspaceInspectionCount = Math.min(
+    WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
+    nonNegativeInteger(seed.workspaceInspectionCount),
+  );
+  let workspaceActionFocused = seed.workspaceActionFocused === true ||
+    workspaceInspectionCount >= WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS;
+  let workspaceActionRejections = workspaceActionFocused
+    ? nonNegativeInteger(seed.workspaceActionRejections)
+    : 0;
   let validationObserved = seed.validationObserved === true;
   let validationFailed = seed.validationFailed === true && !validationObserved;
   let validationFocused = seed.validationFocused === true && !validationObserved;
@@ -178,6 +225,7 @@ export function createObligationToolSurfaceController(
     if (requiresStatusReport && statusFocused) return "status_inspection";
     if (!managed) return "open";
     if (gated()) return "ledger";
+    if (workspaceActionFocused) return "workspace_action";
     if (requiresValidation && validationFocused && !validationObserved) {
       return validationFailed ? "workspace_repair" : "workspace_validation";
     }
@@ -218,6 +266,10 @@ export function createObligationToolSurfaceController(
         case "workspace_repair":
           return runtimeOwnedLifecycleFiltered.filter((tool) =>
             !isLedgerOnlyTool(tool.name) || CLOSEOUT_TOOLS.has(tool.name));
+        case "workspace_action":
+          return runtimeOwnedLifecycleFiltered
+            .filter((tool) => workspaceActionSurfaceAllows(tool.name))
+            .map(requireWorkspaceMutation);
         case "workspace_validation":
           return runtimeOwnedLifecycleFiltered
             .filter((tool) => tool.name === "run_command")
@@ -231,6 +283,20 @@ export function createObligationToolSurfaceController(
             CLOSEOUT_TOOLS.has(tool.name) || isInternalProgressTool(tool.name));
       }
     },
+    authorize(input) {
+      if (!workspaceActionFocused) return { allowed: true };
+      if (workspaceActionRejections >= 2) {
+        return workspaceActionRejection(true);
+      }
+      if (workspaceActionCallAllowed(input.name, input.args)) return { allowed: true };
+      workspaceActionRejections += 1;
+      return workspaceActionRejection(workspaceActionRejections >= 2);
+    },
+    assertCanContinue() {
+      if (workspaceActionFocused && workspaceActionRejections >= 2) {
+        throw new TurnForwardProgressStalledError();
+      }
+    },
     observe(input) {
       const validation = validationReceiptState(input.result);
       if (validation === "passed") {
@@ -240,8 +306,10 @@ export function createObligationToolSurfaceController(
       } else if (validation === "failed") {
         validationFailed = true;
       }
+      if (validation) resetWorkspaceInspection();
       if (successful(input.result) && isStatusReportEvidenceTool(input.name)) {
         statusObserved = true;
+        resetWorkspaceInspection();
       }
       if (
         successful(input.result) &&
@@ -249,6 +317,13 @@ export function createObligationToolSurfaceController(
         explicitPlanArguments(input.args)
       ) {
         planReady = true;
+      }
+      if (
+        successful(input.result) &&
+        input.name === "update_todo_list" &&
+        planUpdateChangedState(input.result)
+      ) {
+        resetWorkspaceInspection();
       }
       if (!managed) return;
       if (!successful(input.result)) return;
@@ -261,13 +336,32 @@ export function createObligationToolSurfaceController(
         ledgerDiscoveryObserved = true;
         observedLedgerKinds.add(kind);
         mutationSequence += 1;
+        resetWorkspaceInspection();
       }
       if (input.name === "project_ledger_check") {
+        const checkAdvanced = mutationSequence > 0 && checkedMutationSequence !== mutationSequence;
         checkedMutationSequence = mutationSequence;
+        if (checkAdvanced) resetWorkspaceInspection();
       }
       if (isWorkspaceMutation(input.name, input.args)) {
         workspaceMutationObserved = true;
         if (validationFailed) validationFailed = false;
+        resetWorkspaceInspection();
+        return;
+      }
+      if (
+        planReady &&
+        !gated() &&
+        !isInternalProgressTool(input.name) &&
+        !isStateMutatingToolCall(input.name, input.args)
+      ) {
+        workspaceInspectionCount = Math.min(
+          WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
+          workspaceInspectionCount + 1,
+        );
+        if (workspaceInspectionCount >= WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS) {
+          workspaceActionFocused = true;
+        }
       }
     },
     focusMissingDeliverables(deliverables) {
@@ -287,6 +381,9 @@ export function createObligationToolSurfaceController(
       observedLedgerKinds: [...observedLedgerKinds].sort(),
       ledgerCheckPassed: mutationSequence > 0 && checkedMutationSequence === mutationSequence,
       workspaceMutationObserved,
+      workspaceInspectionCount,
+      workspaceActionFocused,
+      workspaceActionRejections,
       validationObserved,
       validationFailed,
       validationFocused,
@@ -295,6 +392,12 @@ export function createObligationToolSurfaceController(
       stage: stage(),
     }),
   };
+
+  function resetWorkspaceInspection(): void {
+    workspaceInspectionCount = 0;
+    workspaceActionFocused = false;
+    workspaceActionRejections = 0;
+  }
 }
 
 function requireStructuredValidation(tool: FunctionToolDefinition): FunctionToolDefinition {
@@ -309,6 +412,53 @@ function requireStructuredValidation(tool: FunctionToolDefinition): FunctionTool
       ...tool.parameters,
       required: [...new Set([...required, "validation_suite"])],
     },
+  };
+}
+
+function requireWorkspaceMutation(tool: FunctionToolDefinition): FunctionToolDefinition {
+  if (tool.name !== "run_command") return tool;
+  const parameters = recordValue(tool.parameters);
+  const properties = recordValue(parameters.properties);
+  const required = Array.isArray(parameters.required)
+    ? parameters.required.filter((value): value is string => typeof value === "string")
+    : [];
+  return {
+    ...tool,
+    description: `${tool.description} Workspace inspection is exhausted. Declare state_effect='mutation'; the runtime also verifies that the command actually mutates state.`,
+    parameters: {
+      ...parameters,
+      properties: {
+        ...properties,
+        state_effect: {
+          type: "string",
+          const: "mutation",
+          description: "Required declaration for the focused state-changing workspace action.",
+        },
+      },
+      required: [...new Set([...required, "state_effect"])],
+    },
+  };
+}
+
+function workspaceActionSurfaceAllows(name: string): boolean {
+  if (name === "update_todo_list" || isInternalProgressTool(name)) return true;
+  return !isLedgerOnlyTool(name) && !isStaticallyReadOnlyToolName(name);
+}
+
+function workspaceActionCallAllowed(name: string, args: Record<string, unknown>): boolean {
+  if (name === "update_todo_list" || isInternalProgressTool(name)) return true;
+  if (name === "run_command" && args.state_effect !== "mutation") return false;
+  return isWorkspaceMutation(name, args);
+}
+
+function workspaceActionRejection(terminal: boolean): ObligationToolAdmission {
+  return {
+    allowed: false,
+    code: "workspace_action_required",
+    message: terminal
+      ? "A second consecutive read-only or falsely declared action was rejected; this turn must recover from a forward-progress fault."
+      : "Workspace inspection is exhausted. Perform one verified mutation or an accepted structured plan update before reading more evidence.",
+    terminal,
   };
 }
 
@@ -450,8 +600,19 @@ function projectLedgerListCandidateCount(value: unknown): number {
   return candidates.length;
 }
 
+function planUpdateChangedState(value: unknown): boolean {
+  const root = recordValue(value);
+  return root.replayed !== true && root.ignored !== true;
+}
+
 function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function nonNegativeInteger(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.floor(value))
+    : 0;
 }

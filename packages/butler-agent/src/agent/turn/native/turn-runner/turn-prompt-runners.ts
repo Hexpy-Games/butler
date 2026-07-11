@@ -64,6 +64,7 @@ import {
 } from "./work-block-tool.ts";
 import {
   createObligationToolSurfaceSession,
+  type ObligationToolAdmission,
   type ObligationToolSurfaceSeed,
 } from "./obligation-tool-surface.ts";
 import { modelFacingToolOutput } from "./model-facing-tool-output.ts";
@@ -142,6 +143,7 @@ export function createNativeTurnPromptRunners(input: {
     budgetState: directTurnBudgetState(input.turnBudget),
     getBudgetState: () => directTurnBudgetState(input.turnBudget),
     beforeModelRequest: (request) => {
+      obligationToolSurfaceSession.assertCanContinue();
       input.phaseBudgetController?.beforeModelRequest({
         phase,
         roundIndex: request.roundIndex,
@@ -262,6 +264,17 @@ export function createNativeTurnPromptRunners(input: {
                   });
                   continue;
                 }
+                const admission = obligationToolSurface.authorize(embedded);
+                if (!admission.allowed) {
+                  results.push({
+                    ...embedded,
+                    ok: false,
+                    error: `${admission.code}: ${admission.message}`,
+                    output: workspaceActionAdmissionResult(admission),
+                  });
+                  if (admission.terminal) break;
+                  continue;
+                }
                 input.phaseBudgetController?.recordToolCall({
                   phase,
                   toolName: embedded.name,
@@ -296,6 +309,11 @@ export function createNativeTurnPromptRunners(input: {
                 results,
               } satisfies WorkBlockToolExecutionResult;
             }
+            const admission = obligationToolSurface.authorize({
+              name: call.name,
+              args: call.args,
+            });
+            if (!admission.allowed) return workspaceActionAdmissionResult(admission);
             input.phaseBudgetController?.recordToolCall({
               phase,
               toolName: call.name,
@@ -572,6 +590,25 @@ export function createNativeTurnPromptRunners(input: {
         latencyTracker: input.latencyTracker,
         validateDecision,
       }),
+  };
+}
+
+function workspaceActionAdmissionResult(
+  admission: Exclude<ObligationToolAdmission, { allowed: true }>,
+): Record<string, unknown> {
+  return {
+    ok: false,
+    error: {
+      code: admission.code,
+      message: admission.message,
+      recoverable: true,
+      terminal: admission.terminal,
+    },
+    butler_forward_progress_observation: {
+      code: admission.code,
+      required_action: "verified_workspace_mutation_or_structured_plan_update",
+      terminal: admission.terminal,
+    },
   };
 }
 

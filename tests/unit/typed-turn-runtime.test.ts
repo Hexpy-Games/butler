@@ -15,6 +15,7 @@ import {
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { promptUsageModelCallBudgetExhaustedError } from "../../packages/butler-agent/src/integrations/providers/shared/usage.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { TURN_FORWARD_PROGRESS_STALLED_CODE } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/obligation-tool-surface.ts";
 
 let data = "";
 
@@ -630,6 +631,165 @@ test("typed completion gaps stay in one provider invocation and preserve the obl
     .toMatchObject({ state: "complete" });
 });
 
+test("typed execution stops a resumed evidence loop after one focused-action correction", async () => {
+  const sessionId = "butler/typed-workspace-action-frontier";
+  const turnId = "turn-typed-workspace-action-frontier";
+  const events: RuntimeTurnEventInput[] = [];
+  const executedReads: string[] = [];
+  let firstRejection: unknown;
+  let secondRejection: unknown;
+  const runtime = new NativeToolLoopRuntime({
+    butlerData: data,
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => JSON.stringify({
+      schema_version: "butler.turn-contract-decision.v1",
+      decision_id: decisionIdFromFormat(input.responseFormat),
+      action: "start_work",
+      target_workstream_id: null,
+      target_project_id: "butler",
+      blocker_id: null,
+      deliverables: ["code_change", "final_report"],
+      answer_text: null,
+      public_title: "탐색 루프 차단 검증",
+      public_summary: "필요한 소스를 확인한 뒤 실제 변경까지 끝냅니다.",
+      public_rationale: "읽기만 반복하지 않고 상태 변경으로 전진해야 합니다.",
+      immediate_next_step: "작업목록을 만든 뒤 필요한 파일만 확인합니다.",
+    }),
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          todos: [{
+            id: "inspect-and-change",
+            content: "필요한 소스를 확인하고 실제 변경을 적용합니다.",
+            active_form: "소스를 확인하고 변경을 적용하는 중입니다.",
+            status: "in_progress",
+            phase: "execution",
+          }],
+        },
+        rawArguments: "{}",
+      });
+
+      const readBlock = async (block: number, count: number, offset: number) => {
+        const call = {
+          name: "run_work_block",
+          args: {
+            decision: {
+              block_title: `근거 범위 ${block} 확인`,
+              objective: `변경 대상 근거 범위 ${block}의 실제 소스를 확인합니다.`,
+              rationale: "구현 대상을 좁히는 데 필요한 bounded source evidence입니다.",
+              next_step: "확인 결과를 바탕으로 실제 변경 단계로 이동합니다.",
+              expected_effect: "변경 대상 파일의 현재 내용이 확인됩니다.",
+              repeat_reason: null,
+              completion_obligations: [],
+            },
+            calls: Array.from({ length: count }, (_, index) => ({
+              name: "read_file",
+              args: { path: `src/evidence-${offset + index}.ts` },
+            })),
+          },
+        };
+        await input.onAssistantTextBeforeTools?.({ text: "", toolCalls: [call] });
+        return await input.executeTool({
+          ...call,
+          rawArguments: JSON.stringify(call.args),
+        });
+      };
+
+      await readBlock(1, 6, 0);
+      await readBlock(2, 5, 6);
+      firstRejection = await readBlock(3, 2, 11);
+
+      const focusedTools = input.dynamicTools?.() ?? input.tools;
+      expect(workBlockCatalogNames(focusedTools)).toEqual(expect.arrayContaining([
+        "update_todo_list",
+        "write_file",
+        "run_command",
+      ]));
+      expect(workBlockCatalogNames(focusedTools)).not.toContain("read_file");
+      expect(workBlockCatalogNames(focusedTools)).not.toContain("grep_files");
+
+      secondRejection = await input.executeTool({
+        name: "read_file",
+        args: { path: "src/stale-provider-call.ts" },
+        rawArguments: JSON.stringify({ path: "src/stale-provider-call.ts" }),
+      });
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 1 });
+      return "unreachable";
+    },
+    executeButlerTool: async (call) => {
+      if (call.name === "read_file") executedReads.push(String(call.args.path));
+      return {
+        ok: true,
+        evidence_capability_receipts: call.name === "read_file"
+          ? [createEvidenceCapabilityReceipt({
+            producer: { kind: "tool", name: "read_file" },
+            capability: "source_verified",
+            evidence_kind: "workspace_inspection",
+            summary: "A bounded source file was verified.",
+          })]
+          : [],
+      };
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: data,
+    systemPrompt: "You are Sandy.",
+    metadata: { projectId: "butler" },
+  });
+
+  let failure: unknown;
+  try {
+    await runtime.runTurn({
+      handle,
+      provider: typedProvider,
+      model: "openai/gpt-5.5",
+      input: { text: "조사만 반복하지 말고 변경과 보고까지 끝내줘." },
+      metadata: {
+        turnId,
+        runtimePolicy: { completionReview: "disabled" },
+      },
+      emitTurnEvent: (event) => {
+        events.push(event);
+      },
+    });
+  } catch (error) {
+    failure = error;
+  }
+
+  expect(failure).toMatchObject({ code: TURN_FORWARD_PROGRESS_STALLED_CODE });
+  expect(executedReads).toHaveLength(12);
+  expect(firstRejection).toMatchObject({
+    butler_work_block_result: true,
+    results: [
+      expect.objectContaining({ ok: true }),
+      expect.objectContaining({
+        ok: false,
+        output: expect.objectContaining({
+          butler_forward_progress_observation: expect.objectContaining({
+            code: "workspace_action_required",
+            terminal: false,
+          }),
+        }),
+      }),
+    ],
+  });
+  expect(secondRejection).toMatchObject({
+    ok: false,
+    error: expect.objectContaining({
+      code: "workspace_action_required",
+      terminal: true,
+    }),
+  });
+  expect(new WorkStreamStore(data).recordsForTurn(turnId)[0]).toMatchObject({
+    state: "recoverable",
+  });
+  expect(events.some((event) => event.kind === "turn.failed")).toBe(true);
+});
+
 test("workspace inspect exposes direct read tools without mutation tools", async () => {
   let selectedTools: string[] = [];
   let selectedMaxToolRounds: number | undefined;
@@ -1092,10 +1252,40 @@ test("one semantic decision block closes only after its final tool", async () =>
         expect(input.prompt).toContain("or omit list_id so the active contract binds it automatically");
         sawActiveTodoList = true;
       }
-      selectedTools = workBlockCatalogNames(input.tools);
+      expect(workBlockCatalogNames(input.dynamicTools?.() ?? input.tools)).toEqual([
+        "update_todo_list",
+        "list_todo_list",
+      ]);
+      const plan = [{
+        id: "implement",
+        content: "대상 파일을 수정합니다.",
+        active_form: "대상 파일을 수정하는 중입니다.",
+        status: "in_progress" as const,
+        phase: "execution" as const,
+      }, {
+        id: "validate",
+        content: "변경 결과를 검증합니다.",
+        active_form: "변경 결과를 검증하는 중입니다.",
+        status: "pending" as const,
+        phase: "review" as const,
+        blocked_by: ["implement"],
+      }, {
+        id: "report",
+        content: "완료 결과를 보고합니다.",
+        active_form: "완료 결과를 보고하는 중입니다.",
+        status: "pending" as const,
+        phase: "reporting" as const,
+        blocked_by: ["validate"],
+      }];
+      await input.executeTool({
+        name: "update_todo_list",
+        args: { todos: plan },
+        rawArguments: JSON.stringify({ todos: plan }),
+      });
+      selectedTools = workBlockCatalogNames(input.dynamicTools?.() ?? input.tools);
       const toolCalls = [
         { name: "write_file", args: { path: "fixture.txt", content: "done", overwrite: false } },
-        { name: "run_command", args: { command: "bun test fixture" } },
+        { name: "run_command", args: { command: "bun test fixture", validation_suite: "fixture" } },
       ];
       await input.onAssistantTextBeforeTools?.({
         text: [
@@ -1111,13 +1301,9 @@ test("one semantic decision block closes only after its final tool", async () =>
       await input.executeTool({
         name: "update_todo_list",
         args: {
-          todos: [{
-            id: "opening",
-            content: "요청한 코드 변경과 검증을 완료해야 합니다.",
-            active_form: "코드 변경과 검증을 완료했습니다.",
-            status: "completed",
-            phase: "reporting",
-          }],
+          todos: plan.map((todo) => todo.id === "report"
+            ? todo
+            : { ...todo, status: "completed" as const }),
         },
         rawArguments: JSON.stringify({ todos: [] }),
       });
@@ -1252,6 +1438,27 @@ test("scheduler resume restores one typed contract without another opening decis
   const budgetStates: Array<{ requestCount?: number; cumulativeRequestCount?: number }> = [];
   let typedDecisionCalls = 0;
   let toolPromptCalls = 0;
+  const checkpointPlan = [{
+    id: "implement",
+    content: "체크포인트 대상 파일을 변경합니다.",
+    active_form: "체크포인트 대상 파일을 변경하는 중입니다.",
+    status: "in_progress" as const,
+    phase: "execution" as const,
+  }, {
+    id: "validate",
+    content: "변경 결과를 검증합니다.",
+    active_form: "변경 결과를 검증하는 중입니다.",
+    status: "pending" as const,
+    phase: "review" as const,
+    blocked_by: ["implement"],
+  }, {
+    id: "report",
+    content: "완료 결과를 보고합니다.",
+    active_form: "완료 결과를 보고하는 중입니다.",
+    status: "pending" as const,
+    phase: "reporting" as const,
+    blocked_by: ["validate"],
+  }];
   const runtime = new NativeToolLoopRuntime({
     butlerData: data,
     butlerHome: process.cwd(),
@@ -1278,6 +1485,11 @@ test("scheduler resume restores one typed contract without another opening decis
       budgetStates.push(input.usageAttribution?.getBudgetState?.() ?? {});
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
       if (toolPromptCalls === 1) {
+        await input.executeTool({
+          name: "update_todo_list",
+          args: { todos: checkpointPlan },
+          rawArguments: JSON.stringify({ todos: checkpointPlan }),
+        });
         await input.executeTool({
           name: "write_file",
           args: { path: "checkpoint-proof.txt", content: "changed" },
@@ -1308,17 +1520,12 @@ test("scheduler resume restores one typed contract without another opening decis
       await input.executeTool({
         name: "update_todo_list",
         args: {
-          list_id: "main",
           title: "체크포인트 재개 검증",
-          todos: [{
-            id: "opening",
-            content: "파일 변경과 검증을 하나의 계약으로 완료합니다.",
-            active_form: "파일을 변경한 뒤 다음 블록에서 검증합니다.",
-            status: "completed",
-            phase: "planning",
-          }],
+          todos: checkpointPlan.map((todo) => todo.id === "report"
+            ? todo
+            : { ...todo, status: "completed" as const }),
         },
-        rawArguments: JSON.stringify({ list_id: "main" }),
+        rawArguments: JSON.stringify({ todos: checkpointPlan }),
       });
       return "같은 계약에서 파일 변경과 검증을 완료했습니다.";
     },
@@ -1372,7 +1579,9 @@ test("scheduler resume restores one typed contract without another opening decis
     workStreamId: expect.stringContaining("work-contract-"),
     nextSemanticBlockSequence: 1,
     budgetSnapshot: { modelRequestsUsed: 1 },
-    roundJournal: [expect.objectContaining({ tool: "write_file", observed_delta: "mutation" })],
+    roundJournal: expect.arrayContaining([
+      expect.objectContaining({ tool: "write_file", observed_delta: "mutation" }),
+    ]),
     obligationFrontier: expect.objectContaining({
       stage: "workspace_execution",
       workspaceMutationObserved: true,
