@@ -44,6 +44,7 @@ test("worker cancel closes linked work stream and sibling worker tasks", async (
     items: [
       {
         id: "execute",
+        ordinal: 1,
         content: "Execute linked workers",
         active_form: "Executing linked workers",
         status: "in_progress",

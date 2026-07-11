@@ -9251,7 +9251,15 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
   const progressActions: Array<Record<string, unknown>> = [];
   const runtime = new NativeToolLoopRuntime({
     messageLanguage: "ko",
-    executeButlerTool: async () => ({ ok: true, updated: true }),
+    executeButlerTool: async (call) => ({
+      ok: true,
+      updated: true,
+      items: call.name === "update_todo_list"
+        ? [...(call.args.todos as Array<Record<string, unknown>>)]
+            .sort((left) => left.id === "collect" ? -1 : 1)
+            .map((item, index) => ({ ...item, ordinal: index + 1 }))
+        : [],
+    }),
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: "title: 진행 단계 정리\nsummary: 진행 단계를 정리합니다.\nrationale: 중형 작업의 현재 단계를 추적해야 합니다.\nnext_step: 수집 단계로 넘어갑니다.",
@@ -9304,18 +9312,18 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
         args: {
           todos: [
             {
-              id: "collect",
-              content: "자료 수집하기",
-              active_form: "자료 수집하기",
-              status: "completed",
-              phase: "execution",
-            },
-            {
               id: "chart",
               content: "그래프 그리기",
               active_form: "그래프 그리기",
               status: "completed",
               phase: "reporting",
+            },
+            {
+              id: "collect",
+              content: "자료 수집하기",
+              active_form: "자료 수집하기",
+              status: "completed",
+              phase: "execution",
             },
           ],
         },
@@ -9375,6 +9383,12 @@ test("native runtime keeps internal todo tools out of public toolchain events", 
       phase: "reporting",
     }),
   ]));
+  expect(progressActions
+    .filter((action) => action.kind === "todo_progress" && action.state === "delivered")
+    .map((action) => [action.todoId, action.safeOrder])).toEqual([
+    ["collect", 1],
+    ["chart", 2],
+  ]);
   expect(readTranscript("butler/main/todo-progress")
     .filter((event) => event.kind === "tool_call")
     .map((event) => event.payload.name)).toEqual(["update_todo_list", "update_todo_list"]);

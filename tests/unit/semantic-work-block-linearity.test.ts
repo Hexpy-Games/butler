@@ -100,6 +100,35 @@ test("same-label todos with different stable ids remain distinct", () => {
   ]);
 });
 
+test("server todo projection preserves the established ordinal on completion", () => {
+  const rows = [
+    normalizeProgressSummaryRow({
+      id: "todo-running",
+      kind: "todo",
+      state: "running",
+      safe_label: "첫 단계 진행 중",
+      safe_input_label: "first",
+      safe_order: 1,
+    }),
+    normalizeProgressSummaryRow({
+      id: "todo-completed",
+      kind: "todo",
+      state: "delivered",
+      safe_label: "첫 단계",
+      safe_input_label: "first",
+      safe_order: 4,
+    }),
+  ];
+
+  expect(dedupeProgressRows(rows)).toEqual([
+    expect.objectContaining({
+      safe_input_label: "first",
+      safe_order: 1,
+      state: "delivered",
+    }),
+  ]);
+});
+
 test("block title and decision content survive as distinct replay fields", () => {
   const event = createAgentTurnEvent({
     sessionId: "butler/main",

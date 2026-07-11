@@ -3,7 +3,7 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const updateTodoListToolDefinition = {
   type: "function",
   name: "update_todo_list",
-  description: "Create or replace Butler's durable checklist for the current non-trivial multi-step work. Use proactively for complex work; keep at most one item in_progress.",
+  description: "Create or replace Butler's durable checklist for the current non-trivial multi-step work. Reuse stable ids across updates; Butler preserves retained order and appends new ids. Keep at most one item in_progress.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -18,14 +18,14 @@ export const updateTodoListToolDefinition = {
       },
       todos: {
         type: "array",
-        description: "Full current ordered todo list.",
+        description: "Full current todo list. The first accepted order is durable; later array reordering does not move retained ids, and new ids append.",
         items: {
           type: "object",
           additionalProperties: false,
           properties: {
             id: {
               type: "string",
-              description: "Optional stable safe id. Butler assigns one when omitted.",
+              description: "Stable safe id. Reuse the returned id on every later update; Butler assigns one when omitted initially.",
             },
             content: {
               type: "string",

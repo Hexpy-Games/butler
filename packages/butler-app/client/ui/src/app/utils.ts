@@ -1697,7 +1697,10 @@ function mergeProgressRow(
       base.safe_detail_rows ??
       current.safe_detail_rows ??
       incoming.safe_detail_rows,
-    safe_order: base.safe_order ?? current.safe_order ?? incoming.safe_order,
+    safe_order:
+      current.kind === "todo" && incoming.kind === "todo"
+        ? minimumOptionalNumber(current.safe_order, incoming.safe_order)
+        : base.safe_order ?? current.safe_order ?? incoming.safe_order,
     safe_path_labels:
       base.safe_path_labels ??
       current.safe_path_labels ??

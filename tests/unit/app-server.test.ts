@@ -4789,6 +4789,7 @@ test("session summary exposes active WorkStreams without raw work internals", as
     items: [
       {
         id: "intent",
+        ordinal: 1,
         content: "Frame intent",
         active_form: "Framing intent",
         status: "completed",
@@ -4802,6 +4803,7 @@ test("session summary exposes active WorkStreams without raw work internals", as
       },
       {
         id: "plan",
+        ordinal: 2,
         content: "Plan implementation",
         active_form: "Planning implementation",
         status: "in_progress",
@@ -4852,6 +4854,7 @@ test("session summary excludes recoverable WorkStreams from active projection", 
     items: [
       {
         id: "code",
+        ordinal: 1,
         content: "Implement recovery path",
         active_form: "Implementing recovery path",
         status: "in_progress",
@@ -5093,6 +5096,7 @@ test("session summary and view keep current-turn waiting WorkStreams active only
       items: [
         {
           id: "historical",
+          ordinal: 1,
           content: "Wait from an earlier turn",
           active_form: "Waiting from an earlier turn",
           status: "in_progress",
@@ -5116,6 +5120,7 @@ test("session summary and view keep current-turn waiting WorkStreams active only
       items: [
         {
           id: "current",
+          ordinal: 1,
           content: "Wait for current turn decision",
           active_form: "Waiting for current turn decision",
           status: "in_progress",
@@ -6591,6 +6596,7 @@ test("session view does not sync linked orchestration workers while reading", as
     title: "Build a small canvas game",
     items: [{
       id: "orchestrate",
+      ordinal: 1,
       content: "Run orchestration",
       active_form: "Running orchestration",
       status: "in_progress",

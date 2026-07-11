@@ -74,6 +74,7 @@ export function createInternalProgressToolRunner(input: {
         await emitTodoProgressBestEffort({
           turnInput: input.executorInput.turnInput,
           args: cleanArgs,
+          result,
         });
       }
       appendInternalProgressToolResult(input.executorInput, call.name, result, source);
