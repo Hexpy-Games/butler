@@ -10,6 +10,7 @@ import {
   explicitPlanArguments,
   requireExplicitPlanUpdate,
 } from "./turn-contract-plan-admission.ts";
+import { turnContractActionRequiresExplicitPlan } from "../../turn-contract-plan-closure.ts";
 
 type LedgerRecordKind = "spec" | "work" | "task";
 export type ObligationToolSurfaceStage =
@@ -177,7 +178,7 @@ export function createObligationToolSurfaceController(
     if (kind) requiredLedgerKinds.add(kind);
   }
   const workAction = Boolean(
-    contract && ["start_work", "resume_work", "modify_work"].includes(contract.action),
+    contract && turnContractActionRequiresExplicitPlan(contract.action),
   );
   const requiresExplicitPlan = workAction;
   let planReady = !requiresExplicitPlan || seed.planReady === true;
@@ -326,7 +327,12 @@ export function createObligationToolSurfaceController(
         resetWorkspaceInspection();
       }
       if (!managed) return;
-      if (!successful(input.result)) return;
+      if (!successful(input.result)) {
+        if (workspaceActionFocused && workspaceActionCallAllowed(input.name, input.args)) {
+          workspaceActionRejections += 1;
+        }
+        return;
+      }
       if (input.name === "project_ledger_list") {
         ledgerDiscoveryObserved = true;
         ledgerDiscoveryCandidateCount = projectLedgerListCandidateCount(input.result);
@@ -343,10 +349,17 @@ export function createObligationToolSurfaceController(
         checkedMutationSequence = mutationSequence;
         if (checkAdvanced) resetWorkspaceInspection();
       }
-      if (isWorkspaceMutation(input.name, input.args)) {
+      if (
+        isWorkspaceMutation(input.name, input.args) &&
+        workspaceMutationVerified(input.name, input.result)
+      ) {
         workspaceMutationObserved = true;
         if (validationFailed) validationFailed = false;
         resetWorkspaceInspection();
+        return;
+      }
+      if (workspaceActionFocused && isWorkspaceMutation(input.name, input.args)) {
+        workspaceActionRejections += 1;
         return;
       }
       if (
@@ -575,18 +588,28 @@ function successful(value: unknown): boolean {
 }
 
 function validationReceiptState(value: unknown): "passed" | "failed" | null {
-  const root = value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-  const receipts = [root.evidence_capability_receipts, root.evidenceCapabilityReceipts]
-    .flatMap((candidate) => Array.isArray(candidate) ? candidate : []);
-  for (const receipt of receipts) {
+  for (const receipt of evidenceCapabilityReceipts(value)) {
     if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) continue;
     const record = receipt as Record<string, unknown>;
     if (record.capability !== "validation_passed") continue;
     return record.verified === true && record.maturity === "verified" ? "passed" : "failed";
   }
   return null;
+}
+
+function workspaceMutationVerified(name: string, value: unknown): boolean {
+  if (name === "write_file") return true;
+  return evidenceCapabilityReceipts(value).some((receipt) => {
+    const record = recordValue(receipt);
+    return record.verified === true && record.maturity === "verified" &&
+      (record.capability === "workspace_mutated" || record.capability === "durable_artifact");
+  });
+}
+
+function evidenceCapabilityReceipts(value: unknown): unknown[] {
+  const root = recordValue(value);
+  return [root.evidence_capability_receipts, root.evidenceCapabilityReceipts]
+    .flatMap((candidate) => Array.isArray(candidate) ? candidate : []);
 }
 
 function projectLedgerListCandidateCount(value: unknown): number {

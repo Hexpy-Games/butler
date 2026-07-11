@@ -15,6 +15,12 @@ export interface OpenTurnContractPlanItem {
   phase: string | null;
 }
 
+export function turnContractActionRequiresExplicitPlan(
+  action: CompiledTurnContract["action"],
+): boolean {
+  return EXECUTION_ACTIONS.has(action);
+}
+
 export type TurnContractPlanClosure =
   | { status: "not_required" | "satisfied"; open_items: [] }
   | { status: "incomplete"; open_items: OpenTurnContractPlanItem[] }
@@ -24,7 +30,7 @@ export function evaluateTurnContractPlanClosure(input: {
   butlerData: string;
   contract: CompiledTurnContract;
 }): TurnContractPlanClosure {
-  if (!EXECUTION_ACTIONS.has(input.contract.action)) {
+  if (!turnContractActionRequiresExplicitPlan(input.contract.action)) {
     return { status: "not_required", open_items: [] };
   }
   const workstreamId = input.contract.target_workstream_id;
@@ -76,7 +82,7 @@ export function turnContractPlanIsExplicit(input: {
   butlerData: string;
   contract: CompiledTurnContract;
 }): boolean {
-  if (!EXECUTION_ACTIONS.has(input.contract.action)) return true;
+  if (!turnContractActionRequiresExplicitPlan(input.contract.action)) return true;
   const workstreamId = input.contract.target_workstream_id;
   if (!workstreamId) return false;
   const stream = new WorkStreamStore(input.butlerData, { autoRecover: false }).read(workstreamId);
