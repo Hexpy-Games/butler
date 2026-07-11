@@ -1,3 +1,5 @@
+import { refreshPrincipalTurnAbortSignal } from "../../principal-turn-cancellation-registry.ts";
+
 const DEFAULT_GOAL_COMPLETION_CONTINUATION_ATTEMPTS = 8;
 const DIRECT_WORK_FINALIZATION_REPAIR_ATTEMPTS = 1;
 
@@ -32,5 +34,6 @@ export function directWorkContinuationAttempts(): number {
 }
 
 export function throwIfRuntimeTurnAborted(signal?: AbortSignal): void {
+  if (signal) refreshPrincipalTurnAbortSignal(signal);
   if (signal?.aborted) throw runtimeTurnAbortError();
 }

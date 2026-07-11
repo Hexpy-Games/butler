@@ -16,6 +16,11 @@ import {
 import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
 import type { DeliveryGuard } from "../transport/delivery-guard.ts";
 import { continuationBackoffForFailure } from "./continuation-backoff.ts";
+import {
+  principalTurnCancellationRecorded,
+  registerPrincipalTurnAbortController,
+} from "../../agent/turn/principal-turn-cancellation-registry.ts";
+import { runtimeTurnAbortError } from "../../agent/turn/native/policy/turn-errors.ts";
 
 export interface QueuedInboundServer {
   handleInbound(envelope: InboundEnvelope): Promise<GatewayDispatchResult>;
@@ -375,6 +380,7 @@ async function processClaimedQueuedInboundItem(input: {
   const deliverAction = options.deliverAction ??
     ((sessionId: string, action: OutboundAction, metadata: Record<string, unknown>) =>
       options.deliveryGuard.deliver(sessionId, action, metadata));
+  let unregisterTurnController: (() => void) | undefined;
 
   try {
     if (options.shouldHandleItem && !options.shouldHandleItem(item)) {
@@ -384,12 +390,24 @@ async function processClaimedQueuedInboundItem(input: {
       });
       return summary;
     }
+    if (principalCancellationRecordedForItem(options, item)) {
+      completePrincipalCancelledQueueClaim(options, item);
+      return summary;
+    }
     reactivateHintedSessionForInbound({
       item,
       store: options.store,
       now: options.now,
     });
     const controller = new AbortController();
+    const turnId = item.envelope.routingHints?.turnId?.trim();
+    if (turnId) {
+      unregisterTurnController = registerPrincipalTurnAbortController({
+        butlerData: options.queue.butlerData,
+        turnId,
+        controller,
+      });
+    }
     const result = await withDispatchTimeout(
       {
         controller,
@@ -415,6 +433,10 @@ async function processClaimedQueuedInboundItem(input: {
       },
       dispatchTimeoutMsFor(options),
     );
+    if (principalCancellationRecordedForItem(options, item)) {
+      completePrincipalCancelledQueueClaim(options, item);
+      return summary;
+    }
     if (result.status !== "handled") {
       summary.failed += 1;
       const failure = failureForDispatchResult(result);
@@ -456,6 +478,7 @@ async function processClaimedQueuedInboundItem(input: {
       if (!terminalRecorded) return summary;
       summary.handled += 1;
       for (const action of actions) {
+        if (principalCancellationRecordedForItem(options, item)) break;
         const delivery = await deliverAction(result.route.sessionId, action, {
           source: "gateway/queued-inbound.ts",
           queueId: item.queueId,
@@ -467,6 +490,10 @@ async function processClaimedQueuedInboundItem(input: {
     summary.quiescence = dispatchQuiescenceForError(error);
     const sessionId = item.envelope.routingHints?.sessionId?.trim();
     const turnId = item.envelope.routingHints?.turnId?.trim();
+    if (principalCancellationRecordedForItem(options, item)) {
+      completePrincipalCancelledQueueClaim(options, item);
+      return summary;
+    }
     if (isTurnSchedulerContinuationYieldError(error) && sessionId && turnId) {
       const scheduled = scheduleSameLogicalTurnContinuation({
         queue: options.queue,
@@ -479,6 +506,10 @@ async function processClaimedQueuedInboundItem(input: {
         now: options.now?.(),
       });
       if (!scheduled) {
+        if (principalCancellationRecordedForItem(options, item)) {
+          completePrincipalCancelledQueueClaim(options, item);
+          return summary;
+        }
         summary.failed += 1;
         failQueueClaim(options, item, "Unable to schedule same-logical-turn continuation.", {
           source: "gateway/queued-inbound.ts#scheduler-continuation",
@@ -560,6 +591,8 @@ async function processClaimedQueuedInboundItem(input: {
       queueSource: "gateway/queued-inbound.ts#failure",
     });
     if (delivered) summary.delivered += 1;
+  } finally {
+    unregisterTurnController?.();
   }
 
   return summary;
@@ -576,6 +609,10 @@ function scheduleSameLogicalTurnContinuation(input: {
   now?: Date;
 }): QueuedInboundEvent | null {
   try {
+    if (principalTurnCancellationRecorded({
+      butlerData: input.queue.butlerData,
+      turnId: input.turnId,
+    })) return null;
     const now = input.now ?? new Date();
     const backoff = continuationBackoffForFailure({
       sourceErrorCode: input.sourceErrorCode,
@@ -604,6 +641,28 @@ function scheduleSameLogicalTurnContinuation(input: {
   } catch {
     return null;
   }
+}
+
+function principalCancellationRecordedForItem(
+  options: ProcessQueuedInboundOptions,
+  item: ClaimedInboundEvent,
+): boolean {
+  const turnId = item.envelope.routingHints?.turnId?.trim();
+  return Boolean(turnId && principalTurnCancellationRecorded({
+    butlerData: options.queue.butlerData,
+    turnId,
+  }));
+}
+
+function completePrincipalCancelledQueueClaim(
+  options: ProcessQueuedInboundOptions,
+  item: ClaimedInboundEvent,
+): boolean {
+  return completeQueueClaim(options, item, {
+    dispatchStatus: "cancelled-principal-turn",
+    handled: false,
+    cancelled: true,
+  });
 }
 
 function completeQueueClaim(
@@ -727,6 +786,7 @@ async function withDispatchTimeout<T>(
   },
   timeoutMs: number,
 ): Promise<T> {
+  throwIfDispatchAborted(input.controller.signal);
   if (timeoutMs <= 0) {
     return await input.run(input.controller.signal);
   }
@@ -758,6 +818,11 @@ async function withDispatchTimeout<T>(
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+function throwIfDispatchAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return;
+  throw signal.reason ?? runtimeTurnAbortError();
 }
 
 export class QueuedInboundDispatcher {
