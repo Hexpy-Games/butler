@@ -112,17 +112,8 @@ function progressRowSemanticMergeKey(row: ProgressSummaryRow): string | null {
 
 function todoProgressMergeKey(row: ProgressSummaryRow): string | null {
   if (row.kind !== "todo") return null;
-  const stableId = normalizeProgressPart(row.safe_input_label);
-  if (stableId) return `id:${stableId}`;
-  const label = normalizeTodoProgressLabel(row.safe_label);
-  return label ? `label:${label}` : null;
-}
-
-function normalizeTodoProgressLabel(value?: string): string {
-  return normalizeProgressPart(value)
-    .replace(/\s*(?:하는\s*)?중입니다$/u, "")
-    .replace(/\s*(?:하는\s*)?중$/u, "")
-    .trim();
+  const stableId = normalizeProgressPart(row.safe_input_label ?? row.id);
+  return stableId ? `id:${stableId}` : null;
 }
 
 function progressRowsSemanticallyMatch(

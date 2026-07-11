@@ -49,6 +49,57 @@ test("typed identifiers survive the public event and progress protocol projectio
   });
 });
 
+test("todo identity survives the shared live turn-event projection", () => {
+  const event = createAgentTurnEvent({
+    sessionId: "butler/main",
+    turnId: "turn-todo",
+    sessionSequence: 1,
+    turnSequence: 2,
+    kind: "tool.progress",
+    payload: {
+      activityKind: "todo",
+      inputLabel: "wcap-1",
+      safeLabel: "T-WCAP-01 타입 확장 검증 중",
+      state: "running",
+      safeOrder: 1,
+    },
+  });
+
+  expect(progressRowFromTurnEvent(event)).toMatchObject({
+    kind: "todo",
+    safe_input_label: "wcap-1",
+    safe_label: "T-WCAP-01 타입 확장 검증 중",
+    state: "running",
+    safe_order: 1,
+  });
+});
+
+test("same-label todos with different stable ids remain distinct", () => {
+  const rows = [
+    normalizeProgressSummaryRow({
+      id: "todo-a",
+      kind: "todo",
+      state: "accepted",
+      safe_label: "동일한 표시 이름",
+      safe_input_label: "todo-a",
+      safe_order: 1,
+    }),
+    normalizeProgressSummaryRow({
+      id: "todo-b",
+      kind: "todo",
+      state: "accepted",
+      safe_label: "동일한 표시 이름",
+      safe_input_label: "todo-b",
+      safe_order: 2,
+    }),
+  ];
+
+  expect(dedupeProgressRows(rows).map((row) => row.safe_input_label)).toEqual([
+    "todo-a",
+    "todo-b",
+  ]);
+});
+
 test("block title and decision content survive as distinct replay fields", () => {
   const event = createAgentTurnEvent({
     sessionId: "butler/main",

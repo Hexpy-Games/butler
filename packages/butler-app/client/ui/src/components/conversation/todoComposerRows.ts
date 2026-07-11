@@ -20,10 +20,12 @@ export function todoRowsForDisplay(rows: ProgressRow[]): TodoComposerItem[] {
     if (row.kind !== "todo") continue;
     const label = row.safe_label.trim();
     if (!label) continue;
-    const previous = byKey.get(label);
-    byKey.set(label, {
+    const todoId = row.safe_input_label?.trim() || row.id;
+    if (!todoId) continue;
+    const previous = byKey.get(todoId);
+    byKey.set(todoId, {
       item: {
-        id: row.id,
+        id: todoId,
         label,
         state: todoState(row.state),
       },
