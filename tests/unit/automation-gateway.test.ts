@@ -35,6 +35,7 @@ import {
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { readTranscript } from "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
+import { recordPrincipalTurnCancellation } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-registry.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -1343,6 +1344,135 @@ test("queued rate-limit continuation is durably delayed before another provider 
   });
   expect(queue.claimEligible(1, () => true, new Date("2026-07-11T00:00:59.999Z"))).toEqual([]);
   expect(queue.claimEligible(1, () => true, new Date("2026-07-11T00:01:00.000Z"))).toHaveLength(1);
+  store.close();
+});
+
+test("queued dispatcher never enters a turn that was durably cancelled before claim", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  const turnId = "turn-cancelled-before-claim";
+  queue.enqueue(appEnvelope({
+    eventId: "app:cancelled-before-claim",
+    messageId: "cancelled-before-claim",
+    sessionId: "butler/app-general",
+  }));
+  recordPrincipalTurnCancellation({ butlerData: tempDir, turnId });
+  let serverCalls = 0;
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        serverCalls += 1;
+        throw new Error("cancelled turn must not enter gateway dispatch");
+      },
+    },
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [new MockTransportAdapter({ id: "app" })] }),
+  });
+
+  expect(summary).toMatchObject({ claimed: 1, handled: 0, delivered: 0, failed: 0 });
+  expect(serverCalls).toBe(0);
+  const processedDir = join(tempDir, "runtime", "inbound-events", "processed");
+  const processed = JSON.parse(readFileSync(join(processedDir, readdirSync(processedDir)[0]!), "utf8"));
+  expect(processed.metadata).toMatchObject({
+    dispatchStatus: "cancelled-principal-turn",
+    handled: false,
+  });
+  store.close();
+});
+
+test("principal cancellation aborts an in-flight queued continuation without failure delivery", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  const messageId = "cancelled-in-flight";
+  const turnId = `turn-${messageId}`;
+  queue.enqueue(appEnvelope({
+    eventId: "app:cancelled-in-flight",
+    messageId,
+    sessionId: "butler/app-general",
+  }));
+  const started = deferred<AbortSignal>();
+  let providerRequestsAfterCancel = 0;
+  const app = new MockTransportAdapter({ id: "app" });
+  const processing = processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound(envelope) {
+        const signal = envelope.signal!;
+        started.resolve(signal);
+        await new Promise<void>((_resolve, reject) => {
+          if (signal.aborted) {
+            reject(signal.reason);
+            return;
+          }
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+        providerRequestsAfterCancel += 1;
+        throw new Error("unreachable provider request");
+      },
+    },
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [app] }),
+  });
+
+  const signal = await started.promise;
+  recordPrincipalTurnCancellation({ butlerData: tempDir, turnId });
+  const summary = await processing;
+
+  expect(signal.aborted).toBe(true);
+  expect(providerRequestsAfterCancel).toBe(0);
+  expect(summary).toMatchObject({ claimed: 1, handled: 0, delivered: 0, failed: 0 });
+  expect(app.sentActions).toHaveLength(0);
+  store.close();
+});
+
+test("cancelled queued turn discards a late successful dispatch result", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  const messageId = "cancelled-late-result";
+  const turnId = `turn-${messageId}`;
+  queue.enqueue(appEnvelope({
+    eventId: "app:cancelled-late-result",
+    messageId,
+    sessionId: "butler/app-general",
+  }));
+  const started = deferred();
+  const release = deferred();
+  const app = new MockTransportAdapter({ id: "app" });
+  const processing = processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        started.resolve();
+        await release.promise;
+        return {
+          status: "handled" as const,
+          route: {
+            sessionId: "butler/app-general",
+            role: "butler" as const,
+            reason: "session-hint",
+            workspacePath: tempDir,
+          },
+          handlerResult: {
+            ok: true,
+            handledBy: "late-test-result",
+            metadata: { text: "must not be delivered" },
+          },
+        };
+      },
+    },
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [app] }),
+  });
+
+  await started.promise;
+  recordPrincipalTurnCancellation({ butlerData: tempDir, turnId });
+  release.resolve();
+  const summary = await processing;
+
+  expect(summary).toMatchObject({ claimed: 1, handled: 0, delivered: 0, failed: 0 });
+  expect(app.sentActions).toHaveLength(0);
   store.close();
 });
 

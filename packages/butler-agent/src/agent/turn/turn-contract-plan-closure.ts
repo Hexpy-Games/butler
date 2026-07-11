@@ -15,6 +15,12 @@ export interface OpenTurnContractPlanItem {
   phase: string | null;
 }
 
+export function turnContractActionRequiresExplicitPlan(
+  action: CompiledTurnContract["action"],
+): boolean {
+  return EXECUTION_ACTIONS.has(action);
+}
+
 export type TurnContractPlanClosure =
   | { status: "not_required" | "satisfied"; open_items: [] }
   | { status: "incomplete"; open_items: OpenTurnContractPlanItem[] }
@@ -24,7 +30,7 @@ export function evaluateTurnContractPlanClosure(input: {
   butlerData: string;
   contract: CompiledTurnContract;
 }): TurnContractPlanClosure {
-  if (!EXECUTION_ACTIONS.has(input.contract.action)) {
+  if (!turnContractActionRequiresExplicitPlan(input.contract.action)) {
     return { status: "not_required", open_items: [] };
   }
   const workstreamId = input.contract.target_workstream_id;
@@ -45,20 +51,47 @@ export function evaluateTurnContractPlanClosure(input: {
   if (!plan) {
     return { status: "invalid", code: "turn_contract_plan_missing", open_items: [] };
   }
+  const explicitNonReportingItems = plan.items.filter((item) => item.phase !== "reporting");
   if (
-    input.contract.action === "start_work" &&
-    (stream.plan_revision ?? 1) <= 1 &&
-    plan.items.length === 1 &&
-    plan.items[0]?.id === "opening"
+    (stream.plan_revision ?? 1) <= 1 ||
+    (plan.items.length === 1 && plan.items[0]?.id === "opening") ||
+    explicitNonReportingItems.length === 0
   ) {
-    return { status: "not_required", open_items: [] };
+    return {
+      status: "incomplete",
+      open_items: (explicitNonReportingItems.length > 0 ? explicitNonReportingItems : [{
+        id: "opening",
+        status: "pending",
+        phase: "planning" as const,
+      }]).map((item) => ({
+        id: item.id,
+        status: item.status,
+        phase: item.phase ?? null,
+      })),
+    };
   }
-  const openItems = plan.items
+  const openItems = explicitNonReportingItems
     .filter((item) => item.phase !== "reporting" && item.status !== "completed")
     .map((item) => ({ id: item.id, status: item.status, phase: item.phase ?? null }));
   return openItems.length > 0
     ? { status: "incomplete", open_items: openItems }
     : { status: "satisfied", open_items: [] };
+}
+
+export function turnContractPlanIsExplicit(input: {
+  butlerData: string;
+  contract: CompiledTurnContract;
+}): boolean {
+  if (!turnContractActionRequiresExplicitPlan(input.contract.action)) return true;
+  const workstreamId = input.contract.target_workstream_id;
+  if (!workstreamId) return false;
+  const stream = new WorkStreamStore(input.butlerData, { autoRecover: false }).read(workstreamId);
+  if (!stream?.todo_list_id || stream.active_contract_id !== input.contract.contract_id) return false;
+  const plan = new TodoListStore(input.butlerData, { autoRecover: false }).read(stream.todo_list_id);
+  if (!plan) return false;
+  if ((stream.plan_revision ?? 1) <= 1) return false;
+  if (plan.items.length === 1 && plan.items[0]?.id === "opening") return false;
+  return plan.items.some((item) => item.phase !== "reporting");
 }
 
 export function turnContractPlanAllowsTerminal(closure: TurnContractPlanClosure): boolean {

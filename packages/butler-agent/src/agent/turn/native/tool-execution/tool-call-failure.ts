@@ -135,7 +135,7 @@ export async function handleAuditedToolFailure(input: {
       state: "failed",
     });
   }
-  if (!input.usesSemanticWorkBlock && isLastDecisionTool(input.decision)) {
+  if (isLastDecisionTool(input.decision)) {
     await emitTurnEventBestEffort(input.executorInput.turnInput, {
       kind: "work.block.completed",
       payload: {

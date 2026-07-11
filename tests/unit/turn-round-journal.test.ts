@@ -89,6 +89,28 @@ test("round journal fingerprints ignore volatile timestamps but distinguish muta
   expect(renderTurnRoundJournal([first, mutation])).toContain("no-delta broad read");
 });
 
+test("workspace reads and searches never journal a mutation delta", () => {
+  const entries = buildTurnRoundJournal({
+    audit: [{
+      name: "read_file",
+      args: { path: "src/a.ts", start_line: 1, limit_lines: 80 },
+      ok: true,
+      result: { ok: true, content: "export const value = 1;" },
+    }, {
+      name: "grep_files",
+      args: { pattern: "value", include_globs: ["src/**/*.ts"] },
+      ok: true,
+      result: { ok: true, matches: [{ path: "src/a.ts", line: 1 }] },
+    }],
+    publicDecisions: [],
+  });
+
+  expect(entries.map((entry) => ({ tool: entry.tool, delta: entry.observed_delta }))).toEqual([
+    { tool: "read_file", delta: "none" },
+    { tool: "grep_files", delta: "none" },
+  ]);
+});
+
 test("resume journal retains old mutation identities outside the recent round window", () => {
   const entries = Array.from({ length: 32 }, (_, index) => ({
     sequence: index + 1,
