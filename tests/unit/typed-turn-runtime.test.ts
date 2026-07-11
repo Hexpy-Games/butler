@@ -17,6 +17,7 @@ import { promptUsageModelCallBudgetExhaustedError } from "../../packages/butler-
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { cancelPersistedRuntimeTurn } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation.ts";
 import { registerPrincipalTurnAbortController } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-registry.ts";
+import { WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/obligation-tool-surface.ts";
 
 let data = "";
 
@@ -1726,7 +1727,7 @@ test("retryable provider failures checkpoint the active contract instead of fail
   });
 });
 
-test("scheduler resume restores one typed contract without another opening decision", async () => {
+test("scheduler resume restores one typed contract and retires its satisfied mutation frontier", async () => {
   const turnId = "turn-typed-checkpoint-resume";
   const sessionId = "butler/typed-checkpoint-resume";
   const events: RuntimeTurnEventInput[] = [];
@@ -1822,24 +1823,35 @@ test("scheduler resume restores one typed contract without another opening decis
         },
         rawArguments: JSON.stringify({ todos: checkpointPlan }),
       });
+      for (let index = 0; index <= WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS; index += 1) {
+        const read = {
+          name: "read_file",
+          args: { path: `closeout-evidence-${index}.txt` },
+        };
+        await input.executeTool({ ...read, rawArguments: JSON.stringify(read.args) });
+      }
+      expect(workBlockCatalogNames(input.dynamicTools?.() ?? input.tools)).toContain("read_file");
       return "같은 계약에서 파일 변경과 검증을 완료했습니다.";
     },
-    executeButlerTool: async (call) => ({
-      ok: true,
-      evidence_capability_receipts: [call.name === "write_file"
-        ? createEvidenceCapabilityReceipt({
-          producer: { kind: "tool", name: "write_file" },
-          capability: "workspace_mutated",
-          evidence_kind: "mutation_result",
-          summary: "Checkpoint fixture was written.",
-        })
-        : createEvidenceCapabilityReceipt({
-          producer: { kind: "tool", name: "run_command" },
-          capability: "validation_passed",
-          evidence_kind: "execution_result",
-          summary: "Checkpoint validation passed.",
-        })],
-    }),
+    executeButlerTool: async (call) => {
+      if (call.name === "read_file") return { ok: true, content: "closeout evidence" };
+      return {
+        ok: true,
+        evidence_capability_receipts: [call.name === "write_file"
+          ? createEvidenceCapabilityReceipt({
+            producer: { kind: "tool", name: "write_file" },
+            capability: "workspace_mutated",
+            evidence_kind: "mutation_result",
+            summary: "Checkpoint fixture was written.",
+          })
+          : createEvidenceCapabilityReceipt({
+            producer: { kind: "tool", name: "run_command" },
+            capability: "validation_passed",
+            evidence_kind: "execution_result",
+            summary: "Checkpoint validation passed.",
+          })],
+      };
+    },
   });
   const handle = await runtime.createSession({
     sessionId,
