@@ -762,7 +762,7 @@ try {
     assertForwardProgressLedgerShape(forwardProgressBenchmark.changedLedgerRecords);
     assert(
       forwardProgressBenchmark.gate.ok,
-      `forward-progress benchmark gates failed: ${forwardProgressBenchmark.gate.failures.join(", ")}`,
+      `forward-progress benchmark gates failed: ${forwardProgressBenchmark.gate.failures.join(", ")}; benchmark=${JSON.stringify(forwardProgressBenchmark)}`,
     );
   }
 

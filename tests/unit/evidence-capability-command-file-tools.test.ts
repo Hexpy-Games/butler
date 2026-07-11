@@ -67,6 +67,36 @@ describe("run_command evidence capability receipts", () => {
     });
   });
 
+  test("preserves an upstream pipeline failure when output is bounded", async () => {
+    const result = await runCommandTool({
+      butlerData,
+      workspacePath: workspace,
+      args: {
+        command: "printf 'type error\\n'; exit 9 | head -1",
+        validation_suite: "typecheck",
+      },
+    });
+    const receipts = result.evidence_capability_receipts as Array<Record<string, unknown>>;
+
+    expect(result).toMatchObject({ exit_code: 9, ok: false });
+    expect(receipts[0]).toMatchObject({
+      capability: "command_executed",
+      maturity: "rejected",
+      verified: false,
+      scope: { status: "failed", exit_code: 9 },
+    });
+  });
+
+  test("keeps ordinary shell pipeline semantics outside structured validation", async () => {
+    const result = await runCommandTool({
+      butlerData,
+      workspacePath: workspace,
+      args: { command: "exit 9 | head -1" },
+    });
+
+    expect(result).toMatchObject({ exit_code: 0, ok: true });
+  });
+
   test("records timed out command as partial execution evidence", async () => {
     const result = await runCommandTool({
       butlerData,
