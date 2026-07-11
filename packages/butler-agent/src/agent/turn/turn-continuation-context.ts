@@ -24,12 +24,15 @@ export interface TurnObligationFrontierCheckpoint {
   observedLedgerKinds: Array<"spec" | "work" | "task">;
   ledgerCheckPassed: boolean;
   workspaceMutationObserved: boolean;
+  workspaceInspectionCount?: number;
+  workspaceActionFocused?: boolean;
+  workspaceActionRejections?: number;
   validationObserved: boolean;
   validationFailed: boolean;
   validationFocused?: boolean;
   statusObserved?: boolean;
   statusFocused?: boolean;
-  stage: "open" | "work_planning" | "ledger" | "workspace_execution" | "workspace_validation" | "workspace_repair" | "status_inspection" | "closeout";
+  stage: "open" | "work_planning" | "ledger" | "workspace_execution" | "workspace_action" | "workspace_validation" | "workspace_repair" | "status_inspection" | "closeout";
 }
 
 export interface TurnContextAtom {
@@ -309,7 +312,7 @@ function sanitizeObligationFrontier(
 ): TurnObligationFrontierCheckpoint {
   const ledgerKinds = new Set(["spec", "work", "task"] as const);
   const stages = new Set<TurnObligationFrontierCheckpoint["stage"]>([
-    "open", "work_planning", "ledger", "workspace_execution", "workspace_validation", "workspace_repair", "status_inspection", "closeout",
+    "open", "work_planning", "ledger", "workspace_execution", "workspace_action", "workspace_validation", "workspace_repair", "status_inspection", "closeout",
   ]);
   const kinds = (values: readonly string[]) => [...new Set(values)]
     .filter((value): value is "spec" | "work" | "task" =>
@@ -326,6 +329,9 @@ function sanitizeObligationFrontier(
     observedLedgerKinds: kinds(frontier.observedLedgerKinds),
     ledgerCheckPassed: frontier.ledgerCheckPassed === true,
     workspaceMutationObserved: frontier.workspaceMutationObserved === true,
+    workspaceInspectionCount: finiteNonNegativeInteger(frontier.workspaceInspectionCount ?? 0),
+    workspaceActionFocused: frontier.workspaceActionFocused === true,
+    workspaceActionRejections: finiteNonNegativeInteger(frontier.workspaceActionRejections ?? 0),
     validationObserved: frontier.validationObserved === true,
     validationFailed: frontier.validationFailed === true,
     validationFocused: frontier.validationFocused === true,
