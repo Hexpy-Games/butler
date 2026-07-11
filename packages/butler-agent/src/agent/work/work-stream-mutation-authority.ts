@@ -79,7 +79,7 @@ export function commitWorkStreamMutation(input: {
   if (currentGeneration !== input.expectedGeneration) {
     throw new Error("workstream_mutation_generation_conflict");
   }
-  assertTerminalImmutable(current, input.record);
+  assertTerminalImmutable(current, input.record, input.context);
   assertClaimTupleMutation(current, input.record, input.context);
   if (
     input.record.state === "cancelled" &&
@@ -187,8 +187,17 @@ function claimTupleFingerprint(record: WorkStreamRecord): string {
   });
 }
 
-function assertTerminalImmutable(current: WorkStreamRecord | null, next: WorkStreamRecord): void {
+function assertTerminalImmutable(
+  current: WorkStreamRecord | null,
+  next: WorkStreamRecord,
+  context: WorkStreamMutationContext,
+): void {
   if (!current || !TERMINAL_STATES.has(current.state)) return;
+  if (
+    current.state === "failed" &&
+    next.state === "recoverable" &&
+    context.operation === "legacy_transition"
+  ) return;
   if (current.state !== next.state) throw new Error("workstream_terminal_state_immutable");
 }
 
