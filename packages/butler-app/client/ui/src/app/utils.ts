@@ -2249,6 +2249,7 @@ export function accessDescription(value: string): string {
 export function reasoningLabel(value: ReasoningEffort | string): string {
   if (value === "none") return "Instant";
   if (value === "xhigh") return "Extra High";
+  if (value === "max") return "Max";
   return value ? value[0].toUpperCase() + value.slice(1) : "Medium";
 }
 

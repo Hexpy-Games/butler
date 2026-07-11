@@ -75,7 +75,15 @@ function butlerConfigPath(): string {
   return join(butlerData(), "butler.config.json");
 }
 
-export const VALID_MODELS = ["openai/gpt-5.5-codex", "openai/gpt-5.5", "openai/gpt-5.4", "openai/auto:codex-latest"] as const;
+export const VALID_MODELS = [
+  "openai/gpt-5.6-sol",
+  "openai/gpt-5.6-terra",
+  "openai/gpt-5.6-luna",
+  "openai/gpt-5.5-codex",
+  "openai/gpt-5.5",
+  "openai/gpt-5.4",
+  "openai/auto:codex-latest",
+] as const;
 export type ModelAlias = (typeof VALID_MODELS)[number];
 
 // ── model ────────────────────────────────────────────────────────────────────
@@ -91,7 +99,7 @@ function readModelField(field: "butlerModel" | "workerModel"): string {
       return sys.defaultModel;
     }
   } catch {}
-  return "openai/gpt-5.5-codex";
+  return "openai/gpt-5.6-sol";
 }
 
 function writeModelField(field: "butlerModel" | "workerModel", model: string): void {

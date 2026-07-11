@@ -4,9 +4,18 @@ import { BUTLER_DIR } from "./constants.ts";
 import { parseModelRef } from "../../integrations/providers/model-ref.ts";
 
 export const BUTLER_CONFIG_PATH = join(BUTLER_DIR.DATA, "butler.config.json");
-export const DEFAULT_MODEL = "openai/gpt-5.5-codex";
+export const DEFAULT_MODEL = "openai/gpt-5.6-sol";
 
-export const VALID_MODELS = ["gpt-5.5-codex", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "auto:codex-latest"] as const;
+export const VALID_MODELS = [
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "gpt-5.5-codex",
+  "gpt-5.5",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "auto:codex-latest",
+] as const;
 export const ALL_MODELS = [...VALID_MODELS] as const;
 
 export type ModelAlias = (typeof ALL_MODELS)[number];

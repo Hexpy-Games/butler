@@ -9,14 +9,14 @@ import {
   type SpawnSyncLike,
 } from "../support/gncc-closeout-runner.ts";
 
-test("closeout config enforces GPT-5.5 with low or medium reasoning", () => {
-  expect(closeoutConfig({ model: "gpt-5.5", reasoningEffort: "medium" })).toEqual({
-    model: "openai/gpt-5.5",
+test("closeout config enforces GPT-5.6 Sol with low or medium reasoning", () => {
+  expect(closeoutConfig({ model: "gpt-5.6-sol", reasoningEffort: "medium" })).toEqual({
+    model: "openai/gpt-5.6-sol",
     reasoningEffort: "medium",
   });
   expect(() => closeoutConfig({ model: "openai/gpt-5.4", reasoningEffort: "low" }))
-    .toThrow(/must use GPT-5\.5/);
-  expect(() => closeoutConfig({ model: "openai/gpt-5.5", reasoningEffort: "high" }))
+    .toThrow(/must use GPT-5\.6 Sol/);
+  expect(() => closeoutConfig({ model: "openai/gpt-5.6-sol", reasoningEffort: "high" }))
     .toThrow(/reasoning must be low or medium/);
 });
 
@@ -99,13 +99,13 @@ test("live E2E validator checks service, model, reasoning, and call count", () =
   const valid = {
     ok: true,
     service: "live-service",
-    model: "openai/gpt-5.5",
+    model: "openai/gpt-5.6-sol",
     reasoningEffort: "low",
     liveModelCalls: 2,
   };
   validateCloseoutJson("live-e2e", valid, {
     service: "live-service",
-    model: "openai/gpt-5.5",
+    model: "openai/gpt-5.6-sol",
     reasoningEffort: "low",
     minLiveModelCalls: 2,
   });
@@ -115,7 +115,7 @@ test("live E2E validator checks service, model, reasoning, and call count", () =
       service: "wrong-service",
     }, {
       service: "live-service",
-      model: "openai/gpt-5.5",
+      model: "openai/gpt-5.6-sol",
       reasoningEffort: "low",
       minLiveModelCalls: 2,
     });
@@ -126,7 +126,7 @@ test("live E2E validator checks service, model, reasoning, and call count", () =
       model: "openai/gpt-5.4",
     }, {
       service: "live-service",
-      model: "openai/gpt-5.5",
+      model: "openai/gpt-5.6-sol",
       reasoningEffort: "low",
     });
   }).toThrow(/model mismatch/);
@@ -136,7 +136,7 @@ test("live E2E validator checks service, model, reasoning, and call count", () =
       reasoningEffort: "high",
     }, {
       service: "live-service",
-      model: "openai/gpt-5.5",
+      model: "openai/gpt-5.6-sol",
       reasoningEffort: "low",
     });
   }).toThrow(/reasoning mismatch/);
@@ -148,7 +148,7 @@ test("runCloseoutCheck reports live calls and passes timeout to subprocesses", (
     capturedTimeout = options.timeout;
     return {
       status: 0,
-      stdout: "setup log\n{\"ok\":true,\"service\":\"live-fixture\",\"model\":\"openai/gpt-5.5\",\"reasoningEffort\":\"low\",\"liveModelCalls\":3}",
+      stdout: "setup log\n{\"ok\":true,\"service\":\"live-fixture\",\"model\":\"openai/gpt-5.6-sol\",\"reasoningEffort\":\"low\",\"liveModelCalls\":3}",
       stderr: "",
     };
   };
@@ -159,7 +159,7 @@ test("runCloseoutCheck reports live calls and passes timeout to subprocesses", (
     parseJson: true,
     validateJson: "live-e2e",
     expectedService: "live-fixture",
-    expectedModel: "openai/gpt-5.5",
+    expectedModel: "openai/gpt-5.6-sol",
     expectedReasoningEffort: "low",
     timeoutMs: 1234,
   }, {
@@ -226,7 +226,7 @@ test("validator failures redact parsed JSON diagnostics", () => {
       path: `${homedir()}/private/path`,
     }, {
       service: "live-service",
-      model: "openai/gpt-5.5",
+      model: "openai/gpt-5.6-sol",
       reasoningEffort: "low",
     });
   } catch (error) {

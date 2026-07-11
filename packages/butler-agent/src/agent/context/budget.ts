@@ -98,7 +98,7 @@ function readConfig(): Record<string, any> {
 }
 
 function canonicalModelRef(modelRef: string | null | undefined): string {
-  const raw = modelRef?.trim() || "openai/gpt-5.5-codex";
+  const raw = modelRef?.trim() || "openai/gpt-5.6-sol";
   return parseModelRef(raw).canonicalRef;
 }
 

@@ -24,7 +24,7 @@ export interface ButlerConfig {
 
 const DEFAULTS: ButlerConfig = {
   user: { name: "User", timezone: "UTC", language: "en", techLanguage: "en" },
-  system: { butlerHome: process.env.BUTLER_HOME || process.cwd(), butlerData: process.env.BUTLER_DATA || join(homedir(), ".butler"), devRoot: "~/dev", mcpServerName: "butler-main", defaultModel: "openai/gpt-5.5-codex", runtime: "codex-api" },
+  system: { butlerHome: process.env.BUTLER_HOME || process.cwd(), butlerData: process.env.BUTLER_DATA || join(homedir(), ".butler"), devRoot: "~/dev", mcpServerName: "butler-main", defaultModel: "openai/gpt-5.6-sol", runtime: "codex-api" },
   webSearch: {
     provider: "duckduckgo-html",
     readerBackend: "lightweight",

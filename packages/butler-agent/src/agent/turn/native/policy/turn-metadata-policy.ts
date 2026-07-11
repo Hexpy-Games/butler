@@ -18,7 +18,7 @@ export function workerModelRulesFromMetadata(metadata: unknown): Array<{
   label?: string;
   condition?: string;
   model?: string;
-  reasoning_effort?: "none" | "low" | "medium" | "high" | "xhigh";
+  reasoning_effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   enabled?: boolean;
 }> {
   if (!Array.isArray(metadata)) return [];
@@ -28,12 +28,13 @@ export function workerModelRulesFromMetadata(metadata: unknown): Array<{
     const model = typeof rule.model === "string" ? rule.model.trim() : "";
     if (!model) return [];
     const reasoning = rule.reasoning_effort;
-    const reasoningEffort: "none" | "low" | "medium" | "high" | "xhigh" | undefined =
+    const reasoningEffort: "none" | "low" | "medium" | "high" | "xhigh" | "max" | undefined =
       reasoning === "none" ||
       reasoning === "low" ||
       reasoning === "medium" ||
       reasoning === "high" ||
-      reasoning === "xhigh"
+      reasoning === "xhigh" ||
+      reasoning === "max"
         ? reasoning
         : undefined;
     return [{

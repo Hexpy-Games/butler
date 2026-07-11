@@ -108,7 +108,7 @@ export function isUpdateSettingsRequest(
     return false;
   if (
     "consolidation_reasoning_effort" in input &&
-    !["none", "low", "medium", "high", "xhigh"].includes(
+    !["none", "low", "medium", "high", "xhigh", "max"].includes(
       String(input.consolidation_reasoning_effort),
     )
   )
@@ -238,7 +238,7 @@ function isWorkerModelRuleList(value: unknown): value is WorkerModelRule[] {
     if ("enabled" in input && typeof input.enabled !== "boolean") return false;
     if (
       "reasoning_effort" in input &&
-      !["none", "low", "medium", "high", "xhigh"].includes(
+      !["none", "low", "medium", "high", "xhigh", "max"].includes(
         String(input.reasoning_effort),
       )
     ) {

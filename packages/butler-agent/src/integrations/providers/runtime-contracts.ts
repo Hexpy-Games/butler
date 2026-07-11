@@ -5,7 +5,7 @@ import type { RuntimeMessageLanguage } from "../../agent/output/messages.ts";
 
 export type ButlerRuntime = "codex-api" | "local";
 
-export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
+export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export type PromptCacheRetention = "in_memory" | "24h";
 

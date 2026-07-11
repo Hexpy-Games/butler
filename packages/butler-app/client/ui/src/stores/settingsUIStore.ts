@@ -533,7 +533,8 @@ function profilingDraftFromPersonalization(
       extractorReasoningEffort === "low" ||
       extractorReasoningEffort === "medium" ||
       extractorReasoningEffort === "high" ||
-      extractorReasoningEffort === "xhigh"
+      extractorReasoningEffort === "xhigh" ||
+      extractorReasoningEffort === "max"
         ? extractorReasoningEffort
         : "medium",
     clearProfile: false,

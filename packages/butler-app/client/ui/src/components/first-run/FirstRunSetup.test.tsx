@@ -364,9 +364,9 @@ test("first-run model setup waits for a newly added model before completion", as
       patch,
       {
         language: "ko",
-        model: "openai/gpt-5.5",
+        model: "openai/gpt-5.6-sol",
         reasoning_effort: "xhigh",
-        context_window_tokens: 258000,
+        context_window_tokens: 1_050_000,
       },
     ),
   )).toBe(true);
@@ -386,7 +386,7 @@ test("first-run model setup recovers when default was saved before completion", 
     },
     {
       modelCatalog: firstRunRegisteredModelCatalog(),
-      settings: { ...EMPTY_SETTINGS, model: "openai/gpt-5.5" },
+      settings: { ...EMPTY_SETTINGS, model: "openai/gpt-5.6-sol" },
     },
   );
 
@@ -413,7 +413,7 @@ test("first-run model setup blocks completion when selected language cannot be s
     {
       failLanguageSaveOnce: true,
       modelCatalog: firstRunRegisteredModelCatalog(),
-      settings: { ...EMPTY_SETTINGS, model: "openai/gpt-5.5" },
+      settings: { ...EMPTY_SETTINGS, model: "openai/gpt-5.6-sol" },
     },
   );
 
@@ -679,7 +679,7 @@ async function renderFirstRun(
         if (
           languageSaveFailures > 0 &&
           hasSettingsPatchFields(patch, { language: "ko" }) &&
-          !hasSettingsPatchFields(patch, { model: "openai/gpt-5.5" })
+          !hasSettingsPatchFields(patch, { model: "openai/gpt-5.6-sol" })
         ) {
           languageSaveFailures -= 1;
           throw new Error("language save failed");
