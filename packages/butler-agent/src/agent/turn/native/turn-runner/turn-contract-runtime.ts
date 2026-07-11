@@ -1,4 +1,6 @@
 import type { ToolSurfacePromptController } from "../../tool-surface-prompt-controller.ts";
+import { cancelPersistedRuntimeTurn } from "../../principal-turn-cancellation.ts";
+import { principalTurnCancellationRecorded } from "../../principal-turn-cancellation-registry.ts";
 import {
   TurnContractStore,
   type CompiledTurnContract,
@@ -118,6 +120,7 @@ export function activateTurnContract(input: {
   turnMetadata?: Record<string, unknown>;
   toolSurfaceController: ToolSurfacePromptController;
 }): ActiveTurnContract {
+  abortCancelledActivation(input);
   const contracts = new TurnContractStore(input.butlerData);
   const existing = contracts.read(input.contract.contract_id);
   let contract = contracts.create(existing ?? prepareStartWorkStreamBinding({
@@ -129,6 +132,7 @@ export function activateTurnContract(input: {
     projectId: input.projectId,
     turnId: input.turnId,
   }));
+  abortCancelledActivation(input, contract.contract_id);
   recordTurnContractMetric({
     butlerData: input.butlerData,
     name: "compiled",
@@ -161,6 +165,7 @@ export function activateTurnContract(input: {
       });
       throw new Error(claim.code);
     }
+    abortCancelledActivation(input, contract.contract_id);
     recordTurnContractMetric({
       butlerData: input.butlerData,
       name: "claim",
@@ -173,6 +178,7 @@ export function activateTurnContract(input: {
       state: "claimed",
       expectedGeneration: contract.generation,
     });
+    abortCancelledActivation(input, contract.contract_id);
     contract = contracts.transitionState({
       contractId: contract.contract_id,
       state: "executing",
@@ -238,11 +244,32 @@ export function activateTurnContract(input: {
       expectedGeneration: contract.generation,
     });
   }
+  abortCancelledActivation(input, contract.contract_id);
   return {
     contract,
     decision: input.decision,
     publicDecision: publicDecisionForContract(contract, input.decision),
   };
+}
+
+function abortCancelledActivation(
+  input: Pick<Parameters<typeof activateTurnContract>[0], "butlerData" | "turnId">,
+  contractId?: string,
+): void {
+  if (!principalTurnCancellationRecorded(input)) return;
+  if (contractId) {
+    cancelPersistedRuntimeTurn({
+      butlerData: input.butlerData,
+      turnId: input.turnId,
+      contractIds: [contractId],
+    });
+  }
+  const error = Object.assign(
+    new Error("Runtime turn was cancelled before contract activation completed."),
+    { code: "turn_cancelled" },
+  );
+  error.name = "AbortError";
+  throw error;
 }
 
 export function contractExecutionPrompt(input: {
