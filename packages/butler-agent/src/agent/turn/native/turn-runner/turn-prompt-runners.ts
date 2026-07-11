@@ -273,8 +273,7 @@ export function createNativeTurnPromptRunners(input: {
                     error: `${admission.code}: ${admission.message}`,
                     output: workspaceActionAdmissionResult(admission),
                   });
-                  if (admission.terminal) break;
-                  continue;
+                  break;
                 }
                 input.phaseBudgetController?.recordToolCall({
                   phase,
@@ -286,17 +285,43 @@ export function createNativeTurnPromptRunners(input: {
                     args: embedded.args,
                     rawArguments: JSON.stringify(embedded.args),
                   });
-                  obligationToolSurface.observe({
+                  const verification = obligationToolSurface.observe({
                     name: embedded.name,
                     args: embedded.args,
                     result: output,
                   });
+                  if (verification && !verification.allowed) {
+                    results.push({
+                      ...embedded,
+                      ok: false,
+                      error: `${verification.code}: ${verification.message}`,
+                      output: workspaceActionAdmissionResult(verification),
+                    });
+                    break;
+                  }
                   results.push({
                     ...embedded,
                     ok: toolResultSucceeded(output),
                     output: modelFacingToolOutput(output, input.session.init.workspacePath),
                   });
                 } catch (error) {
+                  const verification = obligationToolSurface.observe({
+                    name: embedded.name,
+                    args: embedded.args,
+                    result: {
+                      ok: false,
+                      error: error instanceof Error ? error.message : String(error),
+                    },
+                  });
+                  if (verification && !verification.allowed) {
+                    results.push({
+                      ...embedded,
+                      ok: false,
+                      error: `${verification.code}: ${verification.message}`,
+                      output: workspaceActionAdmissionResult(verification),
+                    });
+                    break;
+                  }
                   results.push({
                     ...embedded,
                     ok: false,
@@ -320,11 +345,14 @@ export function createNativeTurnPromptRunners(input: {
               toolName: call.name,
             });
             const result = await input.executor(call);
-            obligationToolSurface.observe({
+            const verification = obligationToolSurface.observe({
               name: call.name,
               args: call.args,
               result,
             });
+            if (verification && !verification.allowed) {
+              return workspaceActionAdmissionResult(verification);
+            }
             return result;
           };
           const text = await input.deps.toolPromptRunner({

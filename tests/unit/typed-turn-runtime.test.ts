@@ -15,7 +15,6 @@ import {
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { promptUsageModelCallBudgetExhaustedError } from "../../packages/butler-agent/src/integrations/providers/shared/usage.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
-import { TURN_FORWARD_PROGRESS_STALLED_CODE } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/obligation-tool-surface.ts";
 import { cancelPersistedRuntimeTurn } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation.ts";
 import { registerPrincipalTurnAbortController } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-registry.ts";
 
@@ -633,13 +632,14 @@ test("typed completion gaps stay in one provider invocation and preserve the obl
     .toMatchObject({ state: "complete" });
 });
 
-test("typed execution stops a resumed evidence loop after one focused-action correction", async () => {
+test("typed execution repairs a focused-action rejection with a verified script mutation", async () => {
   const sessionId = "butler/typed-workspace-action-frontier";
   const turnId = "turn-typed-workspace-action-frontier";
   const events: RuntimeTurnEventInput[] = [];
   const executedReads: string[] = [];
-  let firstRejection: unknown;
-  let secondRejection: unknown;
+  const executedCommands: string[] = [];
+  let rejectedBatch: unknown;
+  let repairBatch: unknown;
   const runtime = new NativeToolLoopRuntime({
     butlerData: data,
     butlerHome: process.cwd(),
@@ -700,8 +700,7 @@ test("typed execution stops a resumed evidence loop after one focused-action cor
       };
 
       await readBlock(1, 6, 0);
-      await readBlock(2, 5, 6);
-      firstRejection = await readBlock(3, 2, 11);
+      await readBlock(2, 6, 6);
 
       const focusedTools = input.dynamicTools?.() ?? input.tools;
       expect(workBlockCatalogNames(focusedTools)).toEqual(expect.arrayContaining([
@@ -712,16 +711,85 @@ test("typed execution stops a resumed evidence loop after one focused-action cor
       expect(workBlockCatalogNames(focusedTools)).not.toContain("read_file");
       expect(workBlockCatalogNames(focusedTools)).not.toContain("grep_files");
 
-      secondRejection = await input.executeTool({
-        name: "read_file",
-        args: { path: "src/stale-provider-call.ts" },
-        rawArguments: JSON.stringify({ path: "src/stale-provider-call.ts" }),
+      const rejectedCall = {
+        name: "run_work_block",
+        args: {
+          decision: {
+            block_title: "집중 단계의 상태 확인 시도",
+            objective: "두 상태 확인 명령이 변경을 만들지 않는지 검증합니다.",
+            rationale: "provider가 한 응답에 잘못 묶은 호출은 한 번만 교정되어야 합니다.",
+            next_step: "교정 결과를 받은 뒤 실제 파일 변경을 수행합니다.",
+            expected_effect: "첫 호출만 실행되고 하나의 구조화 교정이 반환됩니다.",
+            repeat_reason: null,
+            completion_obligations: [],
+          },
+          calls: [
+            {
+              name: "run_command",
+              args: { command: "git status --short", state_effect: "mutation" },
+            },
+            {
+              name: "run_command",
+              args: { command: "git diff --stat", state_effect: "mutation" },
+            },
+          ],
+        },
+      };
+      await input.onAssistantTextBeforeTools?.({ text: "", toolCalls: [rejectedCall] });
+      rejectedBatch = await input.executeTool({
+        ...rejectedCall,
+        rawArguments: JSON.stringify(rejectedCall.args),
+      });
+
+      const repairCall = {
+        name: "run_work_block",
+        args: {
+          decision: {
+            block_title: "검증된 스크립트 파일 변경",
+            objective: "스크립트 기반 변경을 적용하고 durable mutation evidence를 남깁니다.",
+            rationale: "명령 텍스트 휴리스틱이 아니라 실행 후 증거로 변경을 판정해야 합니다.",
+            next_step: "변경 후 작업목록을 완료하고 최종 결과를 보고합니다.",
+            expected_effect: "workspace_action focus가 해제됩니다.",
+            repeat_reason: null,
+            completion_obligations: ["durable_artifact"],
+          },
+          calls: [{
+            name: "run_command",
+            args: {
+              command: "python3 -c 'from pathlib import Path; Path(\"src/fixed.ts\").write_text(\"fixed\")'",
+              state_effect: "mutation",
+            },
+          }],
+        },
+      };
+      await input.onAssistantTextBeforeTools?.({ text: "", toolCalls: [repairCall] });
+      repairBatch = await input.executeTool({
+        ...repairCall,
+        rawArguments: JSON.stringify(repairCall.args),
+      });
+      expect(repairBatch).toMatchObject({
+        butler_work_block_result: true,
+        results: [expect.objectContaining({ ok: true })],
+      });
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          todos: [{
+            id: "inspect-and-change",
+            content: "필요한 소스를 확인하고 실제 변경을 적용합니다.",
+            active_form: "소스를 확인하고 변경을 적용하는 중입니다.",
+            status: "completed",
+            phase: "execution",
+          }],
+        },
+        rawArguments: "{}",
       });
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 1 });
-      return "unreachable";
+      return "수정과 검증을 완료했습니다.";
     },
     executeButlerTool: async (call) => {
       if (call.name === "read_file") executedReads.push(String(call.args.path));
+      if (call.name === "run_command") executedCommands.push(String(call.args.command));
       return {
         ok: true,
         evidence_capability_receipts: call.name === "read_file"
@@ -730,6 +798,20 @@ test("typed execution stops a resumed evidence loop after one focused-action cor
             capability: "source_verified",
             evidence_kind: "workspace_inspection",
             summary: "A bounded source file was verified.",
+          })]
+          : call.name === "run_command" && String(call.args.command).startsWith("python3")
+          ? [createEvidenceCapabilityReceipt({
+            producer: { kind: "tool", name: "run_command" },
+            capability: "durable_artifact",
+            evidence_kind: "artifact",
+            summary: "A script command produced a verified workspace file mutation.",
+          })]
+          : call.name === "run_command"
+          ? [createEvidenceCapabilityReceipt({
+            producer: { kind: "tool", name: "run_command" },
+            capability: "command_executed",
+            evidence_kind: "execution_result",
+            summary: "A read-only command completed without mutation evidence.",
           })]
           : [],
       };
@@ -743,31 +825,28 @@ test("typed execution stops a resumed evidence loop after one focused-action cor
     metadata: { projectId: "butler" },
   });
 
-  let failure: unknown;
-  try {
-    await runtime.runTurn({
-      handle,
-      provider: typedProvider,
-      model: "openai/gpt-5.5",
-      input: { text: "조사만 반복하지 말고 변경과 보고까지 끝내줘." },
-      metadata: {
-        turnId,
-        runtimePolicy: { completionReview: "disabled" },
-      },
-      emitTurnEvent: (event) => {
-        events.push(event);
-      },
-    });
-  } catch (error) {
-    failure = error;
-  }
+  const result = await runtime.runTurn({
+    handle,
+    provider: typedProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "조사만 반복하지 말고 변경과 보고까지 끝내줘." },
+    metadata: {
+      turnId,
+      runtimePolicy: { completionReview: "disabled" },
+    },
+    emitTurnEvent: (event) => {
+      events.push(event);
+    },
+  });
 
-  expect(failure).toMatchObject({ code: TURN_FORWARD_PROGRESS_STALLED_CODE });
+  expect(result.text).toContain("완료");
   expect(executedReads).toHaveLength(12);
-  expect(firstRejection).toMatchObject({
+  expect(executedCommands).toHaveLength(2);
+  expect(executedCommands[0]).toBe("git status --short");
+  expect(executedCommands[1]).toContain("python3 -c");
+  expect(rejectedBatch).toMatchObject({
     butler_work_block_result: true,
     results: [
-      expect.objectContaining({ ok: true }),
       expect.objectContaining({
         ok: false,
         output: expect.objectContaining({
@@ -779,17 +858,10 @@ test("typed execution stops a resumed evidence loop after one focused-action cor
       }),
     ],
   });
-  expect(secondRejection).toMatchObject({
-    ok: false,
-    error: expect.objectContaining({
-      code: "workspace_action_required",
-      terminal: true,
-    }),
-  });
   expect(new WorkStreamStore(data).recordsForTurn(turnId)[0]).toMatchObject({
-    state: "recoverable",
+    state: "complete",
   });
-  expect(events.some((event) => event.kind === "turn.failed")).toBe(true);
+  expect(events.some((event) => event.kind === "turn.failed")).toBe(false);
 });
 
 test("principal cancellation blocks the next typed workspace tool and provider request", async () => {

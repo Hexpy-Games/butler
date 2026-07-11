@@ -2343,6 +2343,43 @@ test("run_command implicit artifact discovery does not auto-promote workspace fi
   expect(readFileSync(join(workspace, "reports", "population.csv"), "utf8")).toContain("Seoul,9300000");
 });
 
+test("run_command verifies a script-based Git workspace mutation without command-text allowlisting", async () => {
+  const workspace = join(tempDir, "workspace");
+  mkdirSync(workspace, { recursive: true });
+  expect(spawnSync("git", ["init", "-q", workspace]).status).toBe(0);
+  const executor = createButlerToolExecutor({
+    butlerHome: root,
+    butlerData: tempDir,
+    workspacePath: workspace,
+  });
+
+  const result = await executor({
+    name: "run_command",
+    args: {
+      command: "python3 -c 'from pathlib import Path; Path(\"fixed.ts\").write_text(\"fixed\")'",
+      state_effect: "mutation",
+    },
+    rawArguments: "{}",
+  }) as {
+    ok: boolean;
+    durable_artifact_created?: boolean;
+    written_files?: string[];
+    evidence_capability_receipts?: Array<Record<string, unknown>>;
+  };
+
+  expect(result.ok).toBe(true);
+  expect(result.durable_artifact_created).toBe(true);
+  expect(result.written_files).toContain("fixed.ts");
+  expect(result.evidence_capability_receipts).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      capability: "durable_artifact",
+      maturity: "verified",
+      verified: true,
+    }),
+  ]));
+  expect(readFileSync(join(workspace, "fixed.ts"), "utf8")).toBe("fixed");
+}, 15_000);
+
 test("run_command structured stdout does not auto-promote workspace-root generated artifacts", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });

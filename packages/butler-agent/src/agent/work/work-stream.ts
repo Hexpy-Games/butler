@@ -898,6 +898,7 @@ function turnLocalOutcomeCanApply(
   record: WorkStreamRecord,
   outcome: TurnLocalWorkOutcome,
 ): boolean {
+  if (outcome === "failed" && record.state === "recoverable") return false;
   if (outcome === "completed") {
     return record.state !== "recoverable" && record.state !== "paused";
   }
