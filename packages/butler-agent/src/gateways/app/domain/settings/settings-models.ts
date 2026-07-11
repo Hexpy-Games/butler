@@ -82,8 +82,9 @@ export function normalizeConsolidationModelRef(
 export function normalizeWorkerModelRules(
   input: unknown,
   extraModels: ProviderModelMetadata[] = [],
+  initialModelRef?: string,
 ): WorkerModelRule[] {
-  const fallbackRules = defaultWorkerModelRulesFor(extraModels);
+  const fallbackRules = defaultWorkerModelRulesFor(extraModels, initialModelRef);
   const rawRules = Array.isArray(input) ? input : fallbackRules;
   const normalized = rawRules.slice(0, 12).flatMap((rule, index) => {
     if (!rule || typeof rule !== "object") return [];
@@ -155,22 +156,32 @@ export function positiveTokenCount(input: unknown): number | undefined {
 
 function defaultWorkerModelRulesFor(
   extraModels: ProviderModelMetadata[] = [],
+  initialModelRef?: string,
 ): WorkerModelRule[] {
+  if (initialModelRef) {
+    const model = resolveRegisteredRuntimeModelMetadata(
+      initialModelRef,
+      extraModels,
+    );
+    return workerRulesForModel(model);
+  }
   if (extraModels.length === 0) return defaultWorkerModelRules();
   const selectable = extraModels.filter((model) => model.runtime_supported);
   if (selectable.length === 0) return [];
-  const deepModel = selectable[0]!;
-  const routineModel = selectable[1] ?? deepModel;
+  return workerRulesForModel(selectable[0]!);
+}
+
+function workerRulesForModel(model: ProviderModelMetadata): WorkerModelRule[] {
   return [
     {
       id: "deep_work",
       label: "Deep work",
       condition:
         "Research, feature-level development, architecture, review, and analysis",
-      model: deepModel.model_ref,
-      reasoning_effort: deepModel.reasoning_efforts.includes("high")
+      model: model.model_ref,
+      reasoning_effort: model.reasoning_efforts.includes("high")
         ? "high"
-        : deepModel.default_reasoning_effort,
+        : model.default_reasoning_effort,
       enabled: true,
     },
     {
@@ -178,10 +189,10 @@ function defaultWorkerModelRulesFor(
       label: "Routine work",
       condition:
         "Simple coding, search, local inspection, formatting, and tool calls",
-      model: routineModel.model_ref,
-      reasoning_effort: routineModel.reasoning_efforts.includes("medium")
+      model: model.model_ref,
+      reasoning_effort: model.reasoning_efforts.includes("medium")
         ? "medium"
-        : routineModel.default_reasoning_effort,
+        : model.default_reasoning_effort,
       enabled: true,
     },
   ];

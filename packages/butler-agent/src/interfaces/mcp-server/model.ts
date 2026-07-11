@@ -4,7 +4,7 @@ import { BUTLER_DIR } from "./constants.ts";
 import { parseModelRef } from "../../integrations/providers/model-ref.ts";
 
 export const BUTLER_CONFIG_PATH = join(BUTLER_DIR.DATA, "butler.config.json");
-export const DEFAULT_MODEL = "openai/gpt-5.6-sol";
+export const DEFAULT_MODEL = "openai/gpt-5.5-codex";
 
 export const VALID_MODELS = [
   "gpt-5.6-sol",

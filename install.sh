@@ -247,7 +247,7 @@ persona_locale_from_language() {
   esac
 }
 DEFAULT_NATIVE_RUNTIME="codex-api"
-DEFAULT_OPENAI_MODEL="gpt-5.6-sol"
+DEFAULT_OPENAI_MODEL="gpt-5.5-codex"
 BUTLER_RUNTIME_HELPER="$BUTLER_HOME/packages/butler-agent/scripts/lib/butler-runtime.sh"
 
 OS_SERVICE_REGISTRATION_RESULT="not-evaluated"
@@ -1559,6 +1559,7 @@ set_default_model_ref() {
     cfg.system.runtime = 'codex-api';
     cfg.system.defaultModel = modelRef;
     cfg.system.butlerModel = modelRef;
+    cfg.system.workerModel = modelRef;
     if (modelRef?.startsWith('openai/')) cfg.system.openaiModel = modelId;
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(cfg, null, 2) + '\\n');
@@ -1864,6 +1865,7 @@ configure_local_model() {
       cfg.system.runtime = 'codex-api';
       cfg.system.defaultModel = model.model_ref;
       cfg.system.butlerModel = model.model_ref;
+      cfg.system.workerModel = model.model_ref;
       cfg.system.openaiModel = cfg.system.openaiModel || process.env.DEFAULT_OPENAI_MODEL;
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, JSON.stringify(cfg, null, 2) + '\\n');

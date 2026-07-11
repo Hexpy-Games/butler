@@ -300,7 +300,7 @@ test("default OpenAI model is concrete and does not require model discovery", as
   }) as unknown as typeof fetch;
 
   await expect(runPromptText({ prompt: "hi" })).resolves.toBe("ok");
-  expect(seenBody.model).toBe("gpt-5.6-sol");
+  expect(seenBody.model).toBe("gpt-5.5-codex");
 });
 
 test("registered OpenAI hosted prompt forwards response format", async () => {

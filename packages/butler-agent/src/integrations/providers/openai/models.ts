@@ -3,13 +3,13 @@ import { join } from "path";
 import { resolveOpenAIAuth } from "./auth.ts";
 
 export const AUTO_CODEX_LATEST = "auto:codex-latest";
-export const DEFAULT_CODEX_MODEL = "gpt-5.6-sol";
+export const DEFAULT_CODEX_MODEL = "gpt-5.5-codex";
 export const DEFAULT_CODEX_MODEL_REF = `openai/${DEFAULT_CODEX_MODEL}` as const;
 export const FALLBACK_OPENAI_MODELS = [
   DEFAULT_CODEX_MODEL,
+  "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
-  "gpt-5.5-codex",
   "gpt-5.5",
   "gpt-5.4",
   "gpt-5.4-mini",

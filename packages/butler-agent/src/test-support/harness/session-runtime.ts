@@ -61,7 +61,7 @@ export interface ResolvedRuntimeBinding {
 }
 
 const DEFAULT_TELEGRAM_ACCOUNT_ID = "default";
-const DEFAULT_NATIVE_MODEL_REF = "openai/gpt-5.6-sol";
+const DEFAULT_NATIVE_MODEL_REF = "openai/gpt-5.5-codex";
 
 function getButlerHome(explicit?: string): string {
   return explicit || process.env.BUTLER_HOME || process.cwd();

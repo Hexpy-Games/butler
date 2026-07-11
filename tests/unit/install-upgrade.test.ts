@@ -50,8 +50,8 @@ test("config migration removes legacy runtime fields and preserves private confi
     },
     system: {
       runtime: "codex-api",
-      defaultModel: "openai/gpt-5.6-sol",
-      openaiModel: "gpt-5.6-sol",
+      defaultModel: "openai/gpt-5.5-codex",
+      openaiModel: "gpt-5.5-codex",
     },
   });
 });

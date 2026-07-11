@@ -750,6 +750,8 @@ test("interactive installer provider chooser can choose OpenAI API key", () => {
       const cfg = JSON.parse(await Bun.file(process.env.CFG).text());
       const creds = JSON.parse(await Bun.file(process.env.CREDS).text());
       if (cfg.system.defaultModel !== 'openai/gpt-5.6-sol') throw new Error('OpenAI provider should use catalog default');
+      if (cfg.system.butlerModel !== cfg.system.defaultModel) throw new Error('Butler model should inherit the install selection');
+      if (cfg.system.workerModel !== cfg.system.defaultModel) throw new Error('Worker model should inherit the install selection');
       const cred = creds.credentials?.find((item) => item.provider_id === 'openai');
       if (!cred || cred.secret !== 'sk-preview') throw new Error('OpenAI credential was not stored');
     "
@@ -891,6 +893,7 @@ test("installer can configure a local OpenAI-compatible model as the default", (
       if (model.context_window_tokens !== 32768) throw new Error('local context window mismatch');
       if (cfg.system.defaultModel !== 'local/gemma-test') throw new Error('default model should use the local ref');
       if (cfg.system.butlerModel !== 'local/gemma-test') throw new Error('butler model should use the local ref');
+      if (cfg.system.workerModel !== 'local/gemma-test') throw new Error('worker model should use the local ref');
     "
     test ! -s "$tmp/.env" || ! grep -q '^OPENAI_API_KEY=' "$tmp/.env"
     echo ok
