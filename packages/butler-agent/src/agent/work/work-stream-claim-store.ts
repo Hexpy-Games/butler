@@ -29,6 +29,7 @@ import {
   workStreamContractBindingError,
   workStreamProvenanceError,
 } from "./work-stream-claim-records.ts";
+import { TodoListStore } from "./todo-list.ts";
 
 export interface WorkStreamClaimReceipt {
   schema_version: "butler.workstream-claim-receipt.v1";
@@ -55,12 +56,14 @@ export class WorkStreamClaimStore {
   private readonly streams: WorkStreamStore;
   private readonly receiptsDir: string;
   private readonly blockers: WorkStreamBlockerStore;
+  private readonly todos: TodoListStore;
 
   constructor(readonly butlerData: string) {
     reconcilePendingWorkStreamTransactions({ butlerData });
     this.streams = new WorkStreamStore(butlerData, { autoRecover: false });
     this.receiptsDir = join(butlerData, "workstream-claim-receipts");
     this.blockers = new WorkStreamBlockerStore(butlerData);
+    this.todos = new TodoListStore(butlerData, { autoRecover: false });
   }
 
   claim(input: {
@@ -291,7 +294,7 @@ export class WorkStreamClaimStore {
     workstreamId: string;
     contractId: string;
     turnId: string;
-    expectedGeneration: number;
+    busyTimeoutMs?: number;
     now?: Date;
   }): WorkStreamClaimResult {
     return this.withLock(
@@ -308,7 +311,14 @@ export class WorkStreamClaimStore {
         }
         if (record.state === "cancelled" && record.active_claim_receipt_id) {
           const prior = this.readReceipt(record.active_claim_receipt_id);
-          if (prior?.operation === "cancel" && prior.turn_id === input.turnId) {
+          if (
+            prior?.operation === "cancel" &&
+            prior.turn_id === input.turnId &&
+            prior.contract_id === input.contractId &&
+            !record.active_contract_id &&
+            !record.claim_lease_expires_at
+          ) {
+            this.cancelTodoProjection(record, input.now ?? new Date());
             return { ok: true, record, receipt: prior, replayed: true };
           }
         }
@@ -317,9 +327,6 @@ export class WorkStreamClaimStore {
         }
         if (record.active_contract_id !== input.contractId) {
           return { ok: false, code: "workstream_claim_missing" };
-        }
-        if (record.record_generation !== input.expectedGeneration) {
-          return { ok: false, code: "workstream_claim_generation_conflict" };
         }
         const now = input.now ?? new Date();
         const contractId = input.contractId;
@@ -349,6 +356,7 @@ export class WorkStreamClaimStore {
           active_claim_receipt_id: receipt.receipt_id,
           active_blocker_id: null,
           active_blocker_evidence_id: null,
+          status_note: "Turn cancelled before final delivery.",
           record_generation: receipt.after_generation,
           updated_at: now.toISOString(),
         };
@@ -362,8 +370,10 @@ export class WorkStreamClaimStore {
           record: updated,
           expectedGeneration: record.record_generation ?? 1,
         });
+        this.cancelTodoProjection(updated, now);
         return { ok: true, record: updated, receipt, replayed: false };
       },
+      input.busyTimeoutMs,
     );
   }
 
@@ -450,6 +460,15 @@ export class WorkStreamClaimStore {
     return receipt;
   }
 
+  private cancelTodoProjection(record: WorkStreamRecord, now: Date): void {
+    if (!record.todo_list_id) return;
+    this.todos.cancelOpenItems({
+      listId: record.todo_list_id,
+      note: "Cancelled with the turn.",
+      now,
+    });
+  }
+
   private withLock<T extends WorkStreamClaimResult>(
     id: string,
     operation: WorkStreamMutationOperation,
@@ -457,6 +476,7 @@ export class WorkStreamClaimStore {
     now: Date | undefined,
     authorization: WorkStreamContractAuthorization,
     action: (context: WorkStreamMutationContext) => T,
+    busyTimeoutMs?: number,
   ): T {
     const result = withWorkStreamMutationAuthority({
       butlerData: this.butlerData,
@@ -465,6 +485,7 @@ export class WorkStreamClaimStore {
       ownerId,
       now,
       authorization,
+      busyTimeoutMs,
       action,
     });
     return result ?? { ok: false, code: "workstream_claim_conflict" } as T;

@@ -291,6 +291,7 @@ export class TurnContractStore {
   recordPrincipalTurnCancellation(input: {
     contractId: string;
     turnId: string;
+    busyTimeoutMs?: number;
     now?: Date;
   }): CompiledTurnContract {
     const now = input.now ?? new Date();
@@ -301,6 +302,7 @@ export class TurnContractStore {
       lockRoot: this.butlerData,
       ownerId: `principal-turn-cancel:${input.turnId}`,
       now,
+      busyTimeoutMs: input.busyTimeoutMs,
       action: () => {
         const contract = this.read(input.contractId);
         if (!contract) throw new Error("turn_contract_not_found");

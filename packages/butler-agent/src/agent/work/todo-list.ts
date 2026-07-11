@@ -310,6 +310,35 @@ export class TodoListStore {
     return this.view(record.list_id, { includeCompleted: true });
   }
 
+  cancelOpenItems(input: {
+    listId: string;
+    note?: string;
+    now?: Date;
+  }): TodoListRecord | null {
+    const current = this.read(input.listId);
+    if (!current) return null;
+    if (current.items.every((item) => item.status === "completed" || item.status === "cancelled")) {
+      return current;
+    }
+    return this.update({
+      listId: current.list_id,
+      title: current.title,
+      items: current.items.map((item) => ({
+        id: item.id,
+        content: item.content,
+        active_form: item.active_form,
+        status: item.status === "completed" || item.status === "cancelled"
+          ? item.status
+          : "cancelled",
+        phase: item.phase ?? undefined,
+        priority: item.priority,
+        blocked_by: item.blocked_by,
+        note: item.note ?? input.note ?? "Cancelled with the turn.",
+      })),
+      now: input.now,
+    }).list;
+  }
+
   prepareUpdate(input: {
     listId?: string;
     title?: string | null;
