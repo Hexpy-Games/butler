@@ -253,6 +253,8 @@ export function contractExecutionPrompt(input: {
   const activeTodoListId = contract.target_workstream_id
     ? new WorkStreamStore(input.butlerData).read(contract.target_workstream_id)?.todo_list_id
     : null;
+  const requiresExplicitPlan = ["start_work", "resume_work", "modify_work"]
+    .includes(contract.action);
   return [
     input.basePrompt,
     "## Active Typed Turn Contract",
@@ -266,7 +268,9 @@ export function contractExecutionPrompt(input: {
     `Opening Block Title: ${decision.public_title ?? "Current work"}`,
     `Opening Decision: ${decision.public_summary}`,
     `Immediate Next Step: ${decision.immediate_next_step ?? decision.public_summary}`,
-    "The typed opening decision admits the contract. Before ordinary tools, replace the runtime opening placeholder with an explicit bound todo plan using the focused plan surface.",
+    requiresExplicitPlan
+      ? "The typed opening decision admits the contract. Before ordinary tools, replace the runtime opening placeholder with an explicit bound todo plan using the focused plan surface."
+      : "The typed opening decision already authorizes the first tool batch. Execute only that immediate step without restating or paraphrasing the opening decision protocol.",
     activeTodoListId
       ? `When calling update_todo_list, use list_id ${activeTodoListId} or omit list_id so the active contract binds it automatically.`
       : "Do not invent a todo-list id.",
@@ -280,7 +284,9 @@ export function contractExecutionPrompt(input: {
     "The final_report deliverable is the user-facing final candidate unless the user explicitly requested a durable report artifact. Once execution and validation are complete, stop calling tools and emit that final candidate; do not invent a Ledger report record or report file.",
     "The active typed contract owns its WorkStream lifecycle. Do not call update_work_stream_state for this WorkStream; the runtime completes it after accepting the final candidate.",
     "After the requested workspace mutation and passing validation are observed, emit the final candidate unless a named contract deliverable remains unsatisfied. Reserve Project Ledger task or Work status transitions for an explicit requested or acceptance-bound lifecycle change.",
-    "Keep every retained non-reporting plan item current and mark it completed only after its work is actually done. Remove obsolete items only through an explicit plan amendment; a final candidate does not cancel open plan work.",
+    requiresExplicitPlan
+      ? "Keep every retained non-reporting plan item current and mark it completed only after its work is actually done. Remove obsolete items only through an explicit plan amendment; a final candidate does not cancel open plan work."
+      : "If an explicit todo plan exists, keep every retained non-reporting item current and complete only work that actually finished.",
     "Do not report completion until the runtime confirms every typed evidence obligation.",
   ].join("\n\n");
 }
