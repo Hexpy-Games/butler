@@ -405,6 +405,111 @@ test("workspace inspection frontier resumes from its durable checkpoint", () => 
   });
 });
 
+test("verified code mutation retires the workspace action lease during later reads", () => {
+  const controller = createObligationToolSurfaceController(localCodeContract(), {
+    planReady: true,
+  });
+
+  controller.observe({
+    name: "write_file",
+    args: { path: "src/fix.ts", content: "fixed" },
+    result: { ok: true },
+  });
+  for (let index = 0; index < WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS * 2; index += 1) {
+    controller.observe({
+      name: "read_file",
+      args: { path: `src/closeout-${index}.ts` },
+      result: { ok: true },
+    });
+  }
+
+  expect(controller.state()).toMatchObject({
+    stage: "workspace_execution",
+    workspaceMutationObserved: true,
+    workspaceInspectionCount: 0,
+    workspaceActionFocused: false,
+    workspaceActionRejections: 0,
+  });
+  expect(controller.project(tools).map((tool) => tool.name)).toContain("read_file");
+  expect(() => controller.assertCanContinue()).not.toThrow();
+});
+
+test("a satisfied mutation checkpoint discards stale workspace action counters", () => {
+  const controller = createObligationToolSurfaceController(localCodeContract(), {
+    planReady: true,
+    workspaceMutationObserved: true,
+    workspaceInspectionCount: WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
+    workspaceActionFocused: true,
+    workspaceActionRejections: 2,
+  });
+
+  expect(controller.state()).toMatchObject({
+    stage: "workspace_execution",
+    workspaceMutationObserved: true,
+    workspaceInspectionCount: 0,
+    workspaceActionFocused: false,
+    workspaceActionRejections: 0,
+  });
+  expect(controller.authorize({ name: "read_file", args: { path: "src/final.ts" } }))
+    .toEqual({ allowed: true });
+  expect(() => controller.assertCanContinue()).not.toThrow();
+});
+
+test("validation-only work never focuses mutation and an invalidated code change rearms cleanly", () => {
+  const validationOnly = createObligationToolSurfaceController(contract({
+    contract_id: "contract-validation-only",
+    deliverables: ["validation"],
+    required_evidence: [{
+      ...obligation("validation", "workspace", "passing_validation"),
+      allowed_producers: ["validation"],
+    }],
+    tracking_mode: "local",
+    closeout_strategy: "local_workstream",
+  }), { planReady: true });
+
+  for (let index = 0; index < WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS * 2; index += 1) {
+    validationOnly.observe({
+      name: "read_file",
+      args: { path: `src/validation-${index}.ts` },
+      result: { ok: true },
+    });
+  }
+  expect(validationOnly.state()).toMatchObject({
+    stage: "workspace_execution",
+    workspaceInspectionCount: 0,
+    workspaceActionFocused: false,
+  });
+  validationOnly.focusMissingDeliverables(["validation"]);
+  expect(validationOnly.state()).toMatchObject({
+    stage: "workspace_validation",
+    validationFocused: true,
+  });
+
+  const invalidated = createObligationToolSurfaceController(localCodeContract(), {
+    planReady: true,
+    workspaceMutationObserved: true,
+    workspaceInspectionCount: WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
+    workspaceActionFocused: true,
+    workspaceActionRejections: 1,
+  });
+  invalidated.focusMissingDeliverables(["code_change"]);
+  expect(invalidated.state()).toMatchObject({
+    stage: "workspace_execution",
+    workspaceMutationObserved: false,
+    workspaceInspectionCount: 0,
+    workspaceActionFocused: false,
+    workspaceActionRejections: 0,
+  });
+  for (let index = 0; index < WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS; index += 1) {
+    invalidated.observe({
+      name: "read_file",
+      args: { path: `src/recheck-${index}.ts` },
+      result: { ok: true },
+    });
+  }
+  expect(invalidated.state()).toMatchObject({ stage: "workspace_action" });
+});
+
 test("replayed plans and no-op Ledger checks cannot clear a focused workspace action", () => {
   const controller = createObligationToolSurfaceController(localCodeContract(), {
     planReady: true,

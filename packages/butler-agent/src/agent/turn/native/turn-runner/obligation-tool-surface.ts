@@ -201,12 +201,18 @@ export function createObligationToolSurfaceController(
   );
   let checkedMutationSequence = seed.ledgerCheckPassed ? mutationSequence : -1;
   let workspaceMutationObserved = seed.workspaceMutationObserved === true;
-  let workspaceInspectionCount = Math.min(
-    WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
-    nonNegativeInteger(seed.workspaceInspectionCount),
+  const workspaceMutationOutstanding = () =>
+    requiresCodeChange && !workspaceMutationObserved;
+  let workspaceInspectionCount = workspaceMutationOutstanding()
+    ? Math.min(
+      WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
+      nonNegativeInteger(seed.workspaceInspectionCount),
+    )
+    : 0;
+  let workspaceActionFocused = workspaceMutationOutstanding() && (
+    seed.workspaceActionFocused === true ||
+    workspaceInspectionCount >= WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS
   );
-  let workspaceActionFocused = seed.workspaceActionFocused === true ||
-    workspaceInspectionCount >= WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS;
   let workspaceActionRejections = workspaceActionFocused
     ? nonNegativeInteger(seed.workspaceActionRejections)
     : 0;
@@ -226,7 +232,9 @@ export function createObligationToolSurfaceController(
     if (requiresStatusReport && statusFocused) return "status_inspection";
     if (!managed) return "open";
     if (gated()) return "ledger";
-    if (workspaceActionFocused) return "workspace_action";
+    if (workspaceMutationOutstanding() && workspaceActionFocused) {
+      return "workspace_action";
+    }
     if (requiresValidation && validationFocused && !validationObserved) {
       return validationFailed ? "workspace_repair" : "workspace_validation";
     }
@@ -285,7 +293,9 @@ export function createObligationToolSurfaceController(
       }
     },
     authorize(input) {
-      if (!workspaceActionFocused) return { allowed: true };
+      if (!workspaceMutationOutstanding() || !workspaceActionFocused) {
+        return { allowed: true };
+      }
       if (workspaceActionRejections >= 2) {
         return workspaceActionRejection(true);
       }
@@ -294,7 +304,11 @@ export function createObligationToolSurfaceController(
       return workspaceActionRejection(workspaceActionRejections >= 2);
     },
     assertCanContinue() {
-      if (workspaceActionFocused && workspaceActionRejections >= 2) {
+      if (
+        workspaceMutationOutstanding() &&
+        workspaceActionFocused &&
+        workspaceActionRejections >= 2
+      ) {
         throw new TurnForwardProgressStalledError();
       }
     },
@@ -364,6 +378,7 @@ export function createObligationToolSurfaceController(
         return workspaceActionRejection(workspaceActionRejections >= 2);
       }
       if (
+        workspaceMutationOutstanding() &&
         planReady &&
         !gated() &&
         !isInternalProgressTool(input.name) &&
@@ -380,6 +395,14 @@ export function createObligationToolSurfaceController(
       return null;
     },
     focusMissingDeliverables(deliverables) {
+      if (
+        requiresCodeChange &&
+        deliverables.includes("code_change") &&
+        workspaceMutationObserved
+      ) {
+        workspaceMutationObserved = false;
+        resetWorkspaceInspection();
+      }
       if (requiresStatusReport && deliverables.includes("status_report") && !statusObserved) {
         statusFocused = true;
       }
