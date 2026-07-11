@@ -82,12 +82,12 @@ const SERVICE_DISPLAY_NAMES: Record<NativeServiceId, string> = {
 
 function readConfiguredButlerModel(butlerData: string): string {
   const configPath = join(butlerData, "butler.config.json");
-  if (!existsSync(configPath)) return "openai/gpt-5.6-sol";
+  if (!existsSync(configPath)) return "openai/gpt-5.5-codex";
   try {
     const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-    return cfg?.system?.butlerModel || cfg?.system?.defaultModel || "openai/gpt-5.6-sol";
+    return cfg?.system?.butlerModel || cfg?.system?.defaultModel || "openai/gpt-5.5-codex";
   } catch {
-    return "openai/gpt-5.6-sol";
+    return "openai/gpt-5.5-codex";
   }
 }
 

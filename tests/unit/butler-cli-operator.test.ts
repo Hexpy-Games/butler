@@ -539,7 +539,7 @@ test("operator model and auth commands use canonical refs and avoid secret leaka
     const list = runCli(["model", "list", "--json"], butlerData);
     expect(list.exitCode).toBe(0);
     let parsed = JSON.parse(stdoutText(list));
-    expect(parsed.data.models[0]).toBe("openai/gpt-5.6-sol");
+    expect(parsed.data.models[0]).toBe("openai/gpt-5.5-codex");
     expect(parsed.data.models).not.toContain("openai/auto:codex-latest");
 
     const set = runCli(["model", "set", "openai/gpt-5.6-sol", "--json"], butlerData);

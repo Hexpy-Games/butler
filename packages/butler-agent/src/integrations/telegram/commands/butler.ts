@@ -99,7 +99,7 @@ function readModelField(field: "butlerModel" | "workerModel"): string {
       return sys.defaultModel;
     }
   } catch {}
-  return "openai/gpt-5.6-sol";
+  return "openai/gpt-5.5-codex";
 }
 
 function writeModelField(field: "butlerModel" | "workerModel", model: string): void {

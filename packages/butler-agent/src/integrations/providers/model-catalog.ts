@@ -113,7 +113,7 @@ export interface WorkerModelPreset {
   routine_work: WorkerModelRule;
 }
 
-export const DEFAULT_MODEL_REF = "openai/gpt-5.6-sol" as const;
+export const DEFAULT_MODEL_REF = "openai/gpt-5.5" as const;
 export const DEFAULT_REASONING_EFFORT: ReasoningEffort = "xhigh";
 
 export { localModelConfigToMetadata } from "./local/catalog.ts";

@@ -638,6 +638,11 @@ test("fresh app settings honor an install-selected local model default", async (
     const settings = await getJson(`${server.url}settings`);
     expect(settings.data.model).toBe("local/gemma-install");
     expect(settings.data.context_window_tokens).toBe(32768);
+    expect(settings.data.effective_consolidation_model).toBe("local/gemma-install");
+    expect(settings.data.worker_model_rules).toEqual([
+      expect.objectContaining({ id: "deep_work", model: "local/gemma-install" }),
+      expect.objectContaining({ id: "routine_work", model: "local/gemma-install" }),
+    ]);
     const catalog = await getJson(`${server.url}model-catalog`);
     expect(catalog.data.default_model_ref).toBe("local/gemma-install");
     expect(catalog.data.default_reasoning_effort).toBe("none");
@@ -2181,7 +2186,7 @@ test("app gateway bridge preserves selected reasoning effort through native runt
     await postJson(`${server.url}messages`, {
       chat_id: "general",
       text: "run with low reasoning",
-      model: "openai/gpt-5.6-sol",
+      model: "openai/gpt-5.5",
       reasoning_effort: "low",
     });
     await waitForAssistantMessageMatching(
@@ -2190,7 +2195,7 @@ test("app gateway bridge preserves selected reasoning effort through native runt
       (message) => message.text === "reasoning metadata reply",
     );
 
-    expect(runtime.turns.at(-1)?.model).toBe("openai/gpt-5.6-sol");
+    expect(runtime.turns.at(-1)?.model).toBe("openai/gpt-5.5");
     expect(runtime.turns.at(-1)?.metadata).toMatchObject({
       reasoning_effort: "low",
     });
@@ -3190,12 +3195,12 @@ test("settings, command palette, and project actions are route-backed and privac
     const settings = await getJson(`${server.url}settings`);
     expect(settings.data).toMatchObject({
       bridge_mode: "local",
-      model: "openai/gpt-5.6-sol",
+      model: "openai/gpt-5.5",
       reasoning_effort: "xhigh",
       timezone: expect.any(String),
       consolidation_model: "default",
       consolidation_reasoning_effort: "xhigh",
-      effective_consolidation_model: "openai/gpt-5.6-sol",
+      effective_consolidation_model: "openai/gpt-5.5",
       consolidation_uses_butler_model: true,
       context_window_tokens: 258_000,
       access_mode: "full_access",
@@ -3220,13 +3225,13 @@ test("settings, command palette, and project actions are route-backed and privac
     expect(settings.data.worker_model_rules).toEqual([
       expect.objectContaining({
         id: "deep_work",
-        model: "openai/gpt-5.6-sol",
+        model: "openai/gpt-5.5",
         reasoning_effort: "high",
         enabled: true,
       }),
       expect.objectContaining({
         id: "routine_work",
-        model: "openai/gpt-5.6-terra",
+        model: "openai/gpt-5.5",
         reasoning_effort: "medium",
         enabled: true,
       }),
@@ -3259,7 +3264,7 @@ test("settings, command palette, and project actions are route-backed and privac
     });
 
     const catalog = await getJson(`${server.url}model-catalog`);
-    expect(catalog.data.default_model_ref).toBe("openai/gpt-5.6-sol");
+    expect(catalog.data.default_model_ref).toBe("openai/gpt-5.5");
     expect(catalog.data.default_reasoning_effort).toBe("xhigh");
     const providerIds = catalog.data.providers.map(
       (provider: { provider_id: string }) => provider.provider_id,
@@ -4174,7 +4179,7 @@ test("registered local models can be edited and deleted without stale settings r
       ),
     ).not.toContain("local/gemma-after");
     const normalizedSettings = await getJson(`${server.url}settings`);
-    expect(normalizedSettings.data.model).toBe("openai/gpt-5.6-sol");
+    expect(normalizedSettings.data.model).toBe("openai/gpt-5.5");
     expect(
       JSON.stringify(normalizedSettings.data.worker_model_rules),
     ).not.toContain("local/gemma-after");
@@ -4256,7 +4261,7 @@ test("session controls and personalization are app-server backed and privacy saf
       `${server.url}sessions/general/controls`,
     );
     expect(initialControls.data.controls).toMatchObject({
-      model: "openai/gpt-5.6-sol",
+      model: "openai/gpt-5.5",
       reasoning_effort: "xhigh",
       access_mode: "full_access",
       plan_mode: false,

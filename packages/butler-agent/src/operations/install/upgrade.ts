@@ -28,7 +28,7 @@ const LEGACY_SYSTEM_FIELDS = [
 ];
 const LEGACY_AUTO_CODEX_MODEL = "auto:codex-latest";
 const LEGACY_AUTO_CODEX_MODEL_REF = `openai/${LEGACY_AUTO_CODEX_MODEL}`;
-const DEFAULT_CODEX_MODEL = "gpt-5.6-sol";
+const DEFAULT_CODEX_MODEL = "gpt-5.5-codex";
 const DEFAULT_CODEX_MODEL_REF = `openai/${DEFAULT_CODEX_MODEL}`;
 
 function readJson(path: string): Record<string, unknown> {

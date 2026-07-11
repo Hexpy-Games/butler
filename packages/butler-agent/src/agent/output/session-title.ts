@@ -36,7 +36,7 @@ export function normalizeModelRef(value?: string): ModelRef {
   const trimmed = value?.trim();
   if (trimmed && trimmed.includes("/")) return trimmed as ModelRef;
   if (trimmed) return `openai/${trimmed}`;
-  return "openai/gpt-5.6-sol";
+  return "openai/gpt-5.5-codex";
 }
 
 export function safeGeneratedSessionTitle(value: unknown): string | null {
