@@ -82,6 +82,40 @@ test("Project Ledger lifecycle closeout stops before rendering generated views w
   });
 });
 
+test("Project Ledger lifecycle closeout reuses the mutation index refresh", () => {
+  const calls: string[] = [];
+  const closeout = runProjectLedgerLifecycleCloseout({
+    executor: { butlerHome: "/tmp/butler" },
+    projectPath: "/tmp/butler/project-ledger/projects/demo",
+    refreshedIndex: {
+      ok: true,
+      data: { index: { path: "project-ledger/projects/demo/index/project.json" } },
+    },
+    runTool: (_executor, args) => {
+      calls.push(args.join(" "));
+      if (args[0] === "render") {
+        return {
+          ok: true,
+          data: {
+            path: `project-ledger/projects/demo/views/${args[3]}.md`,
+            written: true,
+          },
+        };
+      }
+      return { ok: true, data: { ok: true, issueCount: 0, issues: [] } };
+    },
+  });
+
+  expect(calls.some((call) => call.startsWith("index "))).toBe(false);
+  expect(calls).toHaveLength(4);
+  expect(closeout).toMatchObject({
+    ok: true,
+    index_ok: true,
+    check_ok: true,
+    issue_count: 0,
+  });
+});
+
 test("Project Ledger lifecycle closeout fails when render reports success without writing views", () => {
   const closeout = runProjectLedgerLifecycleCloseout({
     executor: { butlerHome: "/tmp/butler" },

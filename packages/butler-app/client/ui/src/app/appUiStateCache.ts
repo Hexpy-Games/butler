@@ -14,6 +14,7 @@ const APP_UI_STATE_KEY = "butler:app-ui-state:v1";
 export interface AppUiStateSnapshot {
   schema: typeof APP_UI_STATE_SCHEMA;
   cached_at: string;
+  active_session_id: string;
   left_open: boolean;
   right_open: boolean;
   right_tab: string;
@@ -61,6 +62,7 @@ export function snapshotForAppUiState(
   return {
     schema: APP_UI_STATE_SCHEMA,
     cached_at: new Date().toISOString(),
+    active_session_id: normalizeString(input.active_session_id, "draft:chat"),
     left_open: input.left_open ?? false,
     right_open: input.right_open ?? true,
     right_tab: normalizeString(input.right_tab, "summary"),

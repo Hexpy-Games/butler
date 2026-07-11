@@ -9,6 +9,8 @@ export type PublicWorkObligationKind =
   | "data_table_created"
   | "chart_rendered";
 
+export type PublicWorkRepeatReason = "polling" | "transient_retry" | "race_confirmation";
+
 export type OutcomeRequirementKind =
   | "source_coverage"
   | "structured_comparison"
@@ -124,13 +126,25 @@ export interface EvidenceReceipt {
 export interface PublicWorkDecision {
   decisionId: string;
   workBlockId?: string;
+  contractId?: string;
+  workstreamId?: string;
+  semanticBlockId?: string;
+  blockTitle?: string;
   summary: string;
   rationale?: string;
   evidenceRefs: string[];
   nextStep?: string;
+  expectedEffect?: string;
+  repeatReason?: PublicWorkRepeatReason;
   completionObligations?: PublicWorkObligationKind[];
-  source: "assistant-authored" | "model-authored" | "principal-authored" | "runtime-derived" | "review-repaired";
+  source: "assistant-authored" | "contract-derived" | "model-authored" | "principal-authored" | "runtime-derived" | "review-repaired";
   toolName?: string;
+  toolCallIndex?: number;
+  toolBatchSize?: number;
+  claimed?: boolean;
+  usageCount?: number;
+  usageGroupId?: string;
+  providerRound?: number;
 }
 
 export interface ToolAuditEntry {

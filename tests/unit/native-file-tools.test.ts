@@ -7,7 +7,10 @@ import { projectLedgerProtectedPath } from "../../packages/butler-agent/src/agen
 import { resolveWorkspacePathGuard } from "../../packages/butler-agent/src/agent/tools/file-tools/shared/workspace-path-guard.ts";
 import { executeReadFileTool } from "../../packages/butler-agent/src/agent/tools/file-tools/read_file/index.ts";
 import { executeWriteFileTool } from "../../packages/butler-agent/src/agent/tools/file-tools/write_file/index.ts";
-import { executeGrepFilesTool } from "../../packages/butler-agent/src/agent/tools/file-tools/grep_files/index.ts";
+import {
+  executeGrepFilesTool,
+  grepFilesToolDefinition,
+} from "../../packages/butler-agent/src/agent/tools/file-tools/grep_files/index.ts";
 
 let root = "";
 beforeEach(async () => { root = await mkdtemp(join(tmpdir(), "butler-file-tools-")); });
@@ -192,9 +195,49 @@ describe("Project Ledger protected path roots", () => {
 });
 
 describe("grep_files", () => {
+  test("exposes pattern as the only required search text field", () => {
+    const parameters = grepFilesToolDefinition.parameters as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+    expect(parameters.required).toEqual(["pattern"]);
+    expect(parameters.properties).toHaveProperty("pattern");
+    expect(parameters.properties).not.toHaveProperty("query");
+  });
+
+  test("rejects query-only search arguments instead of repairing aliases", async () => {
+    const res = await executeGrepFilesTool(call({ workspace_root: root, query: "needle" })) as any;
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("missing_pattern");
+  });
+
   test("supports include, exclude, context, truncation, and receipts", async () => {
     await mkdir(join(root, "src")); await writeFile(join(root, "src/a.ts"), "before\nneedle\nafter\n"); await writeFile(join(root, "src/a.md"), "needle\n");
-    const res = await executeGrepFilesTool(call({ workspace_root: root, query: "NEEDLE", case_sensitive: false, include_globs:["src/*.ts"], exclude_globs:["**/*.md"], context_lines:1, max_matches:1 })) as any;
+    const res = await executeGrepFilesTool(call({ workspace_root: root, pattern: "NEEDLE", case_sensitive: false, include_globs:["src/*.ts"], exclude_globs:["**/*.md"], context_lines:1, max_matches:1 })) as any;
     expect(res.ok).toBe(true); expect(res.matches).toHaveLength(1); expect(res.matches[0].context).toHaveLength(3); expect(res.truncated).toBe(true); expect(res.evidence_receipts[0].producer.name).toBe("grep_files");
+    expect(res.evidence_receipts[0].satisfies).toEqual([]);
+    expect(res.evidence_capability_receipts[0]).toMatchObject({
+      capability: "source_candidate",
+      verified: false,
+    });
+    expect(res.evidence_capability_receipts[0].satisfies).toBeUndefined();
+  });
+
+  test("supports recursive slash-free globs and standard brace expansion", async () => {
+    await mkdir(join(root, "src", "nested"), { recursive: true });
+    await writeFile(join(root, "src", "a.ts"), "prompt_cache_key\n");
+    await writeFile(join(root, "src", "nested", "b.js"), "prompt_cache_key\n");
+    await writeFile(join(root, "src", "nested", "c.md"), "prompt_cache_key\n");
+
+    const res = await executeGrepFilesTool(call({
+      workspace_root: root,
+      pattern: "prompt_cache_key",
+      include_globs: ["*.{ts,js}"],
+    })) as any;
+
+    expect(res.matches.map((match: { path: string }) => match.path)).toEqual([
+      "src/a.ts",
+      "src/nested/b.js",
+    ]);
   });
 });

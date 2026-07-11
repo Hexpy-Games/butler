@@ -3,18 +3,16 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const readToolOutputArtifactToolDefinition = {
   type: "function",
   name: "read_tool_output_artifact",
-  description: "Read a bounded stdout/stderr slice from a Butler-owned tool-output artifact by artifact id or artifact path. Use this when a compact tool preview is insufficient.",
+  description: "Read a bounded stdout/stderr slice from a Butler tool-output artifact.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
       artifact_id: {
         type: "string",
-        description: "Artifact id from a compacted tool-output preview.",
       },
       path: {
         type: "string",
-        description: "Absolute artifact path under Butler's tool-output artifact root.",
       },
       stream: {
         type: "string",
@@ -23,19 +21,15 @@ export const readToolOutputArtifactToolDefinition = {
           "stderr",
           "both",
         ],
-        description: "Which stream to read. Defaults to both.",
       },
       offset_lines: {
         type: "integer",
-        description: "Zero-based starting line. Defaults to 0.",
       },
       limit_lines: {
         type: "integer",
-        description: "Maximum lines to return. Defaults to 80.",
       },
       max_tokens: {
         type: "integer",
-        description: "Maximum estimated tokens to return. Defaults to 1200.",
       },
     },
     required: [],
@@ -56,7 +50,7 @@ export const readToolOutputArtifactToolMetadata = {
     "debug",
   ],
   safetyNotes: [
-    "Reads only bounded slices of Butler-owned artifacts; avoid dumping full raw output.",
+    "Reads only bounded slices of Butler-owned tool output.",
   ],
   satisfiesCompletionObligations: [
     "source_verified",

@@ -9,6 +9,7 @@ import {
   readTurnContextAtom,
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { isTerminalTurnState } from "../../packages/butler-agent/src/agent/turn/turn-kernel.ts";
+import { TURN_CONTRACT_DECISION_SCHEMA } from "../../packages/butler-agent/src/agent/turn/turn-contract.ts";
 
 function tempWorkspace(): string {
   return mkdtempSync(join(tmpdir(), "butler-turn-kernel-context-"));
@@ -45,6 +46,7 @@ test("turn context atom persists, reads, and clears", () => {
       reason: "internal scheduler rollover",
       userRequest: { id: `turn:${turnId}` },
       unresolvedObservations: [{ kind: "tool_result", id: "obs-1" }],
+      evidenceCandidates: [],
       openToolPairs: [],
       currentTurnWork: [],
       currentTurnTodos: [],
@@ -75,9 +77,27 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
       latestAssistantDecision: { id: "decision-1" },
       unresolvedObservations: [{ kind: "completion_gap", id: "observation-1" }],
       openToolPairs: [{ kind: "tool_pair", id: "tool-1" }],
+      evidenceCandidates: [{
+        kind: "source_candidate",
+        id: "candidate-1:line-710",
+        path: "packages/butler-agent/src/integrations/providers/provider.ts",
+      }],
       latestCompletionReview: { status: "gap", observationId: "observation-1" },
       currentTurnWork: [{ kind: "work_stream", id: "work-1" }],
       currentTurnTodos: [{ kind: "todo", id: "todo-1" }],
+      roundJournal: [{
+        sequence: 1,
+        decision_id: "decision-1",
+        semantic_block_id: "contract-1:block:1",
+        block_title: "Ledger 기준점 확인",
+        tool: "project_ledger_status",
+        ok: true,
+        call_identity: "call-fingerprint",
+        result_fingerprint: "result-fingerprint",
+        state_revision: "state-revision",
+        observed_delta: "none",
+        result_preview: { ok: true, issueCount: 0 },
+      }],
       budgetSnapshot: {
         turnId,
         modelRequestsUsed: 7,
@@ -90,6 +110,21 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
         maxOutputTokens: 80000,
         maxTotalTokens: 300000,
       },
+      obligationFrontier: {
+        gated: false,
+        ledgerDiscoveryObserved: true,
+        ledgerDiscoveryCandidateCount: 2,
+        requiredLedgerKinds: ["task", "spec", "work"],
+        observedLedgerKinds: ["work", "spec", "task"],
+        ledgerCheckPassed: true,
+        workspaceMutationObserved: true,
+        validationObserved: false,
+        validationFailed: false,
+        validationFocused: true,
+        statusObserved: false,
+        statusFocused: true,
+        stage: "status_inspection",
+      },
     });
     const persisted = readTurnContextAtom({ butlerData, sessionId, turnId });
 
@@ -98,9 +133,21 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
       latestAssistantDecision: { id: "decision-1" },
       unresolvedObservations: [{ kind: "completion_gap", id: "observation-1" }],
       openToolPairs: [{ kind: "tool_pair", id: "tool-1" }],
+      evidenceCandidates: [{
+        kind: "source_candidate",
+        id: "candidate-1:line-710",
+        path: "packages/butler-agent/src/integrations/providers/provider.ts",
+      }],
       latestCompletionReview: { status: "gap", observationId: "observation-1" },
       currentTurnWork: [{ kind: "work_stream", id: "work-1" }],
       currentTurnTodos: [{ kind: "todo", id: "todo-1" }],
+      roundJournal: [{
+        sequence: 1,
+        decision_id: "decision-1",
+        block_title: "Ledger 기준점 확인",
+        tool: "project_ledger_status",
+        observed_delta: "none",
+      }],
       budgetSnapshot: {
         turnId,
         modelRequestsUsed: 7,
@@ -108,6 +155,19 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
         cachedTokens: 900,
         outputTokens: 80,
         totalTokens: 1280,
+      },
+      obligationFrontier: {
+        ledgerDiscoveryObserved: true,
+        ledgerDiscoveryCandidateCount: 2,
+        requiredLedgerKinds: ["spec", "task", "work"],
+        observedLedgerKinds: ["spec", "task", "work"],
+        ledgerCheckPassed: true,
+        workspaceMutationObserved: true,
+        validationObserved: false,
+        validationFocused: true,
+        statusObserved: false,
+        statusFocused: true,
+        stage: "status_inspection",
       },
     });
     expect(JSON.stringify(persisted)).not.toContain("private raw request");
@@ -146,3 +206,164 @@ test("turn context atom is not persisted for terminal states", () => {
     rmSync(butlerData, { recursive: true, force: true });
   }
 });
+
+test("provider retry streak advances only while the durable round journal is unchanged", () => {
+  const butlerData = tempWorkspace();
+  try {
+    const sessionId = "butler/main/provider-backoff";
+    const turnId = "turn-provider-backoff";
+    persistTurnContextAtom({
+      butlerData,
+      sessionId,
+      turnId,
+      state: "continuing",
+      sourceErrorCode: "provider_rate_limited",
+      reason: "rate limited",
+      roundJournal: [],
+    });
+    expect(readTurnContextAtom({ butlerData, sessionId, turnId }))
+      .toMatchObject({ generation: 1, retryableProviderFailureStreak: 1 });
+
+    persistTurnContextAtom({
+      butlerData,
+      sessionId,
+      turnId,
+      state: "continuing",
+      sourceErrorCode: "provider_rate_limited",
+      reason: "rate limited",
+      roundJournal: [],
+      expectedGeneration: 1,
+    });
+    expect(readTurnContextAtom({ butlerData, sessionId, turnId }))
+      .toMatchObject({ generation: 2, retryableProviderFailureStreak: 2 });
+
+    persistTurnContextAtom({
+      butlerData,
+      sessionId,
+      turnId,
+      state: "continuing",
+      sourceErrorCode: "provider_rate_limited",
+      reason: "rate limited",
+      roundJournal: [{
+        sequence: 1,
+        decision_id: "decision-1",
+        semantic_block_id: "contract-1:block:1",
+        block_title: "새 상태 증거 확인",
+        tool: "project_ledger_status",
+        ok: true,
+        call_identity: "call-1",
+        result_fingerprint: "result-1",
+        state_revision: "revision-1",
+        observed_delta: "evidence",
+        result_preview: { ok: true },
+      }],
+      expectedGeneration: 2,
+    });
+    expect(readTurnContextAtom({ butlerData, sessionId, turnId }))
+      .toMatchObject({ generation: 3, retryableProviderFailureStreak: 1 });
+
+    persistTurnContextAtom({
+      butlerData,
+      sessionId,
+      turnId,
+      state: "continuing",
+      sourceErrorCode: "provider_rate_limited",
+      reason: "rate limited",
+      roundJournal: [{
+        sequence: 2,
+        decision_id: "decision-2",
+        semantic_block_id: "contract-1:block:2",
+        block_title: "동일 길이의 새 라운드",
+        tool: "project_ledger_status",
+        ok: true,
+        call_identity: "call-2",
+        result_fingerprint: "result-2",
+        state_revision: "revision-2",
+        observed_delta: "evidence",
+        result_preview: { ok: true },
+      }],
+      expectedGeneration: 3,
+    });
+    expect(readTurnContextAtom({ butlerData, sessionId, turnId }))
+      .toMatchObject({ generation: 4, retryableProviderFailureStreak: 1 });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("turn context checkpoint uses generation CAS and preserves the round journal", () => {
+  const butlerData = tempWorkspace();
+  try {
+    const sessionId = "butler/main/context-cas";
+    const turnId = "turn-context-cas";
+    const base = {
+      butlerData,
+      sessionId,
+      turnId,
+      state: "continuing" as const,
+      sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+      reason: "safety window exhausted",
+      contractId: "contract-cas",
+      workStreamId: "work-cas",
+      todoListId: "todo-cas",
+      nextSemanticBlockSequence: 2,
+      turnDecision: {
+        schema_version: TURN_CONTRACT_DECISION_SCHEMA,
+        decision_id: "decision-cas",
+        action: "resume_work" as const,
+        target_workstream_id: "work-cas",
+        deliverables: ["code_change" as const],
+        public_summary: "기존 작업을 이어갑니다.",
+      },
+    };
+    persistTurnContextAtom({
+      ...base,
+      roundJournal: [journalEntry("call-1", "result-1")],
+    });
+    const first = readTurnContextAtom({ butlerData, sessionId, turnId });
+    expect(first).toMatchObject({
+      schemaVersion: "butler.turn-continuation.v2",
+      generation: 1,
+      checkpointId: expect.stringContaining(":g1"),
+      contractId: "contract-cas",
+      workStreamId: "work-cas",
+      todoListId: "todo-cas",
+      nextSemanticBlockSequence: 2,
+    });
+    expect(() => persistTurnContextAtom({
+      ...base,
+      roundJournal: [journalEntry("call-conflict", "result-conflict")],
+    })).toThrow("turn_continuation_generation_conflict");
+
+    persistTurnContextAtom({
+      ...base,
+      expectedGeneration: 1,
+      nextSemanticBlockSequence: 3,
+      roundJournal: [journalEntry("call-2", "result-2")],
+    });
+    const second = readTurnContextAtom({ butlerData, sessionId, turnId });
+    expect(second).toMatchObject({
+      generation: 2,
+      checkpointId: expect.stringContaining(":g2"),
+      nextSemanticBlockSequence: 3,
+      roundJournal: [
+        { sequence: 1, call_identity: "call-1" },
+        { sequence: 2, call_identity: "call-2" },
+      ],
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+function journalEntry(callIdentity: string, resultFingerprint: string) {
+  return {
+    sequence: 1,
+    tool: "read_file",
+    ok: true,
+    call_identity: callIdentity,
+    result_fingerprint: resultFingerprint,
+    state_revision: resultFingerprint,
+    observed_delta: "evidence" as const,
+  };
+}

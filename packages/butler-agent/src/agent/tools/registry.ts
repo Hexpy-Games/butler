@@ -11,6 +11,7 @@ import { renderProjectDashboardToolDefinition, renderProjectDashboardToolMetadat
 import { completeProjectWorkToolDefinition, completeProjectWorkToolMetadata } from "./project-ledger/complete_project_work/index.ts";
 import { projectLedgerNativeToolDefinitions, projectLedgerNativeToolMetadata } from "./project-ledger/native.ts";
 import { getContextMonitorToolDefinition, getContextMonitorToolMetadata } from "./monitoring/get_context_monitor/index.ts";
+import { readToolEvidenceArtifactToolDefinition, readToolEvidenceArtifactToolMetadata } from "./monitoring/read_tool_evidence_artifact/index.ts";
 import { readToolOutputArtifactToolDefinition, readToolOutputArtifactToolMetadata } from "./monitoring/read_tool_output_artifact/index.ts";
 import { getUsageMonitorToolDefinition, getUsageMonitorToolMetadata } from "./monitoring/get_usage_monitor/index.ts";
 import { listToolCapabilitiesToolDefinition, listToolCapabilitiesToolMetadata } from "./monitoring/list_tool_capabilities/index.ts";
@@ -68,6 +69,7 @@ export const CORE_BUTLER_TOOLS = [
   renderProjectDashboardToolDefinition,
   completeProjectWorkToolDefinition,
   getContextMonitorToolDefinition,
+  readToolEvidenceArtifactToolDefinition,
   readToolOutputArtifactToolDefinition,
   getUsageMonitorToolDefinition,
   listToolCapabilitiesToolDefinition,
@@ -128,6 +130,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [renderProjectDashboardToolDefinition.name]: renderProjectDashboardToolMetadata,
   [completeProjectWorkToolDefinition.name]: completeProjectWorkToolMetadata,
   [getContextMonitorToolDefinition.name]: getContextMonitorToolMetadata,
+  [readToolEvidenceArtifactToolDefinition.name]: readToolEvidenceArtifactToolMetadata,
   [readToolOutputArtifactToolDefinition.name]: readToolOutputArtifactToolMetadata,
   [getUsageMonitorToolDefinition.name]: getUsageMonitorToolMetadata,
   [listToolCapabilitiesToolDefinition.name]: listToolCapabilitiesToolMetadata,

@@ -1,6 +1,9 @@
 import { randomUUID } from "crypto";
 import { sanitizePublicText } from "../../events/turn-events.ts";
-import type { PublicWorkObligationKind } from "../../turn/native/output/tool-types.ts";
+import type {
+  PublicWorkObligationKind,
+  PublicWorkRepeatReason,
+} from "../../turn/native/output/tool-types.ts";
 
 const DECISION_ID_SUFFIX_LENGTH = 8;
 const PUBLIC_DECISION_TEXT_MAX_CHARS = 420;
@@ -12,9 +15,12 @@ const PUBLIC_WORK_DECISION_CONTEXT_REF_LIMIT = 3;
 const PUBLIC_WORK_OBLIGATION_LIMIT = 6;
 
 const PUBLIC_WORK_DECISION_PROTOCOL_FIELDS = {
+  title: "blockTitle",
   summary: "summary",
   rationale: "rationale",
   next_step: "nextStep",
+  expected_effect: "expectedEffect",
+  repeat_reason: "repeatReason",
   completion_obligations: "completionObligations",
 } as const;
 
@@ -25,11 +31,19 @@ const PUBLIC_WORK_OBLIGATION_KINDS = new Set<PublicWorkObligationKind>([
   "data_table_created",
   "chart_rendered",
 ]);
+const PUBLIC_WORK_REPEAT_REASONS = new Set<PublicWorkRepeatReason>([
+  "polling",
+  "transient_retry",
+  "race_confirmation",
+]);
 
 export interface PublicDecisionStructuredFields {
+  blockTitle?: string;
   summary?: string;
   rationale?: string;
   nextStep?: string;
+  expectedEffect?: string;
+  repeatReason?: PublicWorkRepeatReason;
   completionObligations?: PublicWorkObligationKind[];
   repaired?: boolean;
 }
@@ -61,8 +75,19 @@ export function publicDecisionStructuredFields(value: string): PublicDecisionStr
     if (!parsed) {
       continue;
     }
+    if (parsed.key === "blockTitle") {
+      if (
+        current.blockTitle || current.summary || current.rationale || current.nextStep ||
+        current.expectedEffect || current.repeatReason
+      ) {
+        decisions.push(current);
+        current = {};
+      }
+      current = assignProtocolText(current, "blockTitle", parsed.value);
+      continue;
+    }
     if (parsed.key === "summary") {
-      if (current.summary || current.rationale || current.nextStep) {
+      if (current.summary) {
         decisions.push(current);
         current = {};
       }
@@ -77,6 +102,17 @@ export function publicDecisionStructuredFields(value: string): PublicDecisionStr
       current = assignProtocolText(current, "nextStep", parsed.value);
       continue;
     }
+    if (parsed.key === "expectedEffect") {
+      current = assignProtocolText(current, "expectedEffect", parsed.value);
+      continue;
+    }
+    if (parsed.key === "repeatReason") {
+      const repeatReason = publicDecisionRepeatReason(parsed.value);
+      current = repeatReason
+        ? { ...current, repeatReason }
+        : { ...current, repaired: true };
+      continue;
+    }
     const obligations = publicDecisionCompletionObligations(parsed.value);
     if (obligations.length > 0) {
       current.completionObligations = obligations;
@@ -84,7 +120,10 @@ export function publicDecisionStructuredFields(value: string): PublicDecisionStr
       current.repaired = true;
     }
   }
-  if (current.summary || current.rationale || current.nextStep) {
+  if (
+    current.blockTitle || current.summary || current.rationale || current.nextStep ||
+    current.expectedEffect || current.repeatReason
+  ) {
     decisions.push(current);
   }
   return decisions.slice(0, PUBLIC_DECISION_RECORD_LIMIT);
@@ -107,9 +146,12 @@ export function isUsablePublicDecisionText(
 }
 
 export function renderPublicDecisionContext(input: Array<{
+  blockTitle?: string;
   summary: string;
   rationale?: string;
   nextStep?: string;
+  expectedEffect?: string;
+  repeatReason?: PublicWorkRepeatReason;
   completionObligations?: PublicWorkObligationKind[];
   evidenceRefs: string[];
 }>): string {
@@ -121,9 +163,11 @@ export function renderPublicDecisionContext(input: Array<{
     "## Public Work Decisions",
     ...recent.map((decision, index) => {
       const parts = [
-        `${index + 1}. ${decision.summary}`,
+        `${index + 1}. ${decision.blockTitle ? `[${decision.blockTitle}] ` : ""}${decision.summary}`,
         decision.rationale ? `rationale: ${decision.rationale}` : "",
         decision.nextStep ? `next_step: ${decision.nextStep}` : "",
+        decision.expectedEffect ? `expected_effect: ${decision.expectedEffect}` : "",
+        decision.repeatReason ? `repeat_reason: ${decision.repeatReason}` : "",
         decision.completionObligations && decision.completionObligations.length > 0
           ? `completion_obligations: ${decision.completionObligations.join(", ")}`
           : "",
@@ -138,7 +182,10 @@ export function renderPublicDecisionContext(input: Array<{
 
 function parseDecisionProtocolLine(
   line: string,
-): { key: "summary" | "rationale" | "nextStep" | "completionObligations"; value: string } | null {
+): {
+  key: "blockTitle" | "summary" | "rationale" | "nextStep" | "expectedEffect" | "repeatReason" | "completionObligations";
+  value: string;
+} | null {
   const separatorIndex = line.indexOf(":");
   if (separatorIndex < 0) {
     return null;
@@ -156,7 +203,7 @@ function parseDecisionProtocolLine(
   };
 }
 
-function assignProtocolText<T extends "summary" | "rationale" | "nextStep">(
+function assignProtocolText<T extends "blockTitle" | "summary" | "rationale" | "nextStep" | "expectedEffect">(
   current: PublicDecisionStructuredFields,
   key: T,
   value: string,
@@ -166,6 +213,13 @@ function assignProtocolText<T extends "summary" | "rationale" | "nextStep">(
     return { ...current, repaired: true };
   }
   return { ...current, [key]: text };
+}
+
+function publicDecisionRepeatReason(value: string): PublicWorkRepeatReason | null {
+  const normalized = value.trim().toLowerCase();
+  return PUBLIC_WORK_REPEAT_REASONS.has(normalized as PublicWorkRepeatReason)
+    ? normalized as PublicWorkRepeatReason
+    : null;
 }
 
 function publicDecisionCompletionObligations(value: string): PublicWorkObligationKind[] {

@@ -135,3 +135,53 @@ test("tool result observation summary exposes Project Ledger closeout failure re
   expect(summary).toContain("view: handoff");
   expect(summary).toContain("native_next: project_ledger_check");
 });
+
+test("tool result observation summary exposes Project Ledger check issues", () => {
+  const summary = summarizedToolResultForObservation({
+    ok: false,
+    data: {
+      issueCount: 2,
+      issues: [
+        {
+          code: "stale_view",
+          severity: "warning",
+          message: "Generated view is older than source records",
+          path: "/Users/sandy/.butler/project-ledger/projects/butler/views/dashboard.md",
+        },
+        {
+          code: "invalid_reference",
+          severity: "error",
+          message: "Task parent does not exist",
+          record: "T-WEB-CAPTURE",
+        },
+      ],
+    },
+    error: {
+      code: "project_ledger_check_failed",
+      message: "Project Ledger check failed with 2 issues",
+    },
+  });
+
+  expect(summary).toContain("data.issueCount: 2");
+  expect(summary).toContain("issue: code: stale_view, severity: warning");
+  expect(summary).toContain("path: [redacted-path]");
+  expect(summary).toContain("issue: code: invalid_reference, severity: error");
+  expect(summary).toContain("record: T-WEB-CAPTURE");
+  expect(summary).not.toContain("/Users/sandy");
+});
+
+test("tool result observation summary preserves nested command stderr for repair", () => {
+  const summary = summarizedToolResultForObservation({
+    ok: false,
+    output: {
+      ok: false,
+      exit_code: 1,
+      stdout: "1 test failed",
+      stderr: "ReferenceError: document is not defined",
+    },
+  });
+
+  expect(summary).toContain("output.exit_code: 1");
+  expect(summary).toContain("output.stdout: 1 test failed");
+  expect(summary).toContain("output.stderr: ReferenceError: document is not defined");
+});

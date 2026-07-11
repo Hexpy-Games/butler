@@ -152,31 +152,36 @@ test("focused resume envelope treats unlinked project WorkStreams as local track
     },
   }).toolNames;
 
-  expect(envelope?.checkpoint.trackingMode).toBe("local");
-  expect(envelope?.checkpoint.closeoutStrategy).toBe("local_workstream");
-  expect(envelope?.prompt).toContain("Tracking Mode: local");
-  expect(envelope?.prompt).toContain("Closeout Strategy: local_workstream");
-  expect(envelope?.prompt).not.toContain("Relevant Project Ledger Records:");
-  expect(envelope?.requiredNativeTools).not.toContain("project_ledger_status");
-  expect(envelope?.requiredNativeTools).not.toContain("project_ledger_show");
+  expect(envelope?.checkpoint.trackingMode).toBe("ledger");
+  expect(envelope?.checkpoint.closeoutStrategy).toBe("ledger");
+  expect(envelope?.prompt).toContain("Tracking Mode: ledger");
+  expect(envelope?.prompt).toContain("Closeout Strategy: ledger");
+  expect(envelope?.requiredNativeTools).toEqual(expect.arrayContaining([
+    "project_ledger_status",
+    "project_ledger_show",
+  ]));
   expect(turnMetadata).toMatchObject({
-    tracking_mode: "local",
-    closeout_strategy: "local_workstream",
+    tracking_mode: "ledger",
+    closeout_strategy: "ledger",
     runtimePolicy: {
-      tracking_mode: "local",
-      closeout_strategy: "local_workstream",
+      tracking_mode: "ledger",
+      closeout_strategy: "ledger",
     },
     focusedResume: {
-      trackingMode: "local",
-      closeoutStrategy: "local_workstream",
+      trackingMode: "ledger",
+      closeoutStrategy: "ledger",
     },
   });
-  expect(turnMetadata?.requiredNativeTools).not.toContain("project_ledger_task_complete");
-  expect(turnMetadata?.requiredNativeToolProfiles).not.toContain("project-lifecycle");
-  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
-  expect(toolNames).not.toContain("inspect_project_status");
-  expect(toolNames).not.toContain("query_project_work");
-  expect(toolNames).not.toContain("render_project_dashboard");
+  expect(turnMetadata?.requiredNativeTools).toEqual(expect.arrayContaining([
+    "project_ledger_task_complete",
+    "project_ledger_status",
+  ]));
+  expect(turnMetadata?.requiredNativeToolProfiles).toContain("project-lifecycle");
+  expect(toolNames).toEqual(expect.arrayContaining([
+    "project_ledger_status",
+    "inspect_project_status",
+    "query_project_work",
+  ]));
 });
 
 test("ordinary user turns get a model decision envelope instead of focused resume", () => {
@@ -216,12 +221,14 @@ test("ordinary user turns get a model decision envelope instead of focused resum
   expect(focused).toBeNull();
   expect(decision?.prompt).toContain("## WorkStream Continuation Decision Envelope");
   expect(decision?.prompt).toContain("Current User Instruction:\n완전히 다른 작업을 해줘");
-  expect(decision?.prompt).toContain("Tracking Mode: local");
+  expect(decision?.prompt).toContain("Tracking Mode: ledger");
   expect(decision?.prompt).toContain("If the current instruction asks for unrelated work");
   expect(decision?.prompt).not.toContain("Continue this selected WorkStream before broad validation");
-  expect(decision?.requiredNativeToolProfiles).not.toContain("project");
-  expect(decision?.requiredNativeTools).not.toContain("project_ledger_status");
-  expect(decision?.requiredNativeTools).not.toContain("project_ledger_show");
+  expect(decision?.requiredNativeToolProfiles).toContain("project");
+  expect(decision?.requiredNativeTools).toEqual(expect.arrayContaining([
+    "project_ledger_status",
+    "project_ledger_show",
+  ]));
   expect(toolNames).toEqual(expect.arrayContaining([
     "list_work_streams",
     "update_work_stream_state",
@@ -230,10 +237,11 @@ test("ordinary user turns get a model decision envelope instead of focused resum
     "read_file",
     "write_file",
   ]));
-  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
-  expect(toolNames).not.toContain("query_project_work");
-  expect(toolNames).not.toContain("inspect_project_status");
-  expect(toolNames).not.toContain("render_project_dashboard");
+  expect(toolNames).toEqual(expect.arrayContaining([
+    "query_project_work",
+    "inspect_project_status",
+    "project_ledger_status",
+  ]));
 });
 
 test("candidate decision envelope keeps workspace tools for planning-phase work with executable pending todos", () => {
@@ -274,16 +282,19 @@ test("candidate decision envelope keeps workspace tools for planning-phase work 
     })],
   });
   expect(decision?.requiredNativeToolProfiles).toEqual(expect.arrayContaining(["workspace"]));
-  expect(decision?.requiredNativeToolProfiles).not.toContain("project");
+  expect(decision?.requiredNativeToolProfiles).toContain("project");
   expect(toolNames).toEqual(expect.arrayContaining([
     "run_command",
     "read_file",
     "write_file",
     "grep_files",
+    "read_tool_evidence_artifact",
     "read_tool_output_artifact",
   ]));
-  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
-  expect(toolNames).not.toContain("query_project_work");
+  expect(toolNames).toEqual(expect.arrayContaining([
+    "project_ledger_status",
+    "query_project_work",
+  ]));
 });
 
 test("candidate decision envelope sees executable pending todos beyond active item preview", () => {
@@ -321,14 +332,14 @@ test("candidate decision envelope sees executable pending todos beyond active it
   expect(activeItems).toHaveLength(8);
   expect(activeItems.map((item) => item.id)).not.toContain("execute-after-preview");
   expect(decision?.requiredNativeToolProfiles).toEqual(expect.arrayContaining(["workspace"]));
-  expect(decision?.requiredNativeToolProfiles).not.toContain("project");
+  expect(decision?.requiredNativeToolProfiles).toContain("project");
   expect(toolNames).toEqual(expect.arrayContaining([
     "run_command",
     "read_file",
     "write_file",
     "grep_files",
   ]));
-  expect(toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
+  expect(toolNames).toContain("project_ledger_status");
 });
 
 test("focused resume prompt excludes broad recent conversation and prompt-context work sections", () => {

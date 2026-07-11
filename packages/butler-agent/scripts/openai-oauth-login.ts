@@ -10,7 +10,7 @@ import {
   getOpenAIOAuthClientId,
   pkceChallenge,
   writeButlerOpenAIAuthProfile,
-} from "../src/integrations/providers/openai-auth.ts";
+} from "../src/integrations/providers/openai/auth.ts";
 
 type EnvLike = Record<string, string | undefined>;
 

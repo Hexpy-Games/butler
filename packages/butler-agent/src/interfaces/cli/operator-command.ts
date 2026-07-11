@@ -50,7 +50,7 @@ import {
 } from "../../agent/cognition/box/store.ts";
 import { MockTransportAdapter } from "../transport/mock/adapter.ts";
 import { parseModelRef } from "../../integrations/providers/model-ref.ts";
-import { FALLBACK_OPENAI_MODELS } from "../../integrations/providers/openai-models.ts";
+import { FALLBACK_OPENAI_MODELS } from "../../integrations/providers/openai/models.ts";
 import { inspectProjectCapsule } from "../../agent/cognition/memory/project-memory.ts";
 import {
   checkMemoryMetadataIntegrity,

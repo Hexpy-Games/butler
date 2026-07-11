@@ -30,6 +30,7 @@ import { normalizeTurnPrompt } from "../../packages/butler-agent/src/agent/turn/
 import {
   createTurnContextAtomId,
   readTurnContextAtom,
+  TurnSchedulerContinuationYieldError,
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
@@ -1075,7 +1076,7 @@ test("queued inbound provider failure preserves safe API diagnostics for app pro
   expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
 });
 
-test("queued inbound schedules same-logical-turn continuation for raw model-call budget exhaustion", async () => {
+test("queued inbound never schedules raw budget exhaustion without an orchestrator checkpoint", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -1125,28 +1126,13 @@ test("queued inbound schedules same-logical-turn continuation for raw model-call
   const pendingRecords = readdirSync(join(tempDir, "runtime", "inbound-events", "pending"))
     .filter((name) => name.endsWith(".json"))
     .map((name) => JSON.parse(readFileSync(join(tempDir, "runtime", "inbound-events", "pending", name), "utf8")));
-  expect(pendingRecords).toHaveLength(1);
-  expect(pendingRecords[0].metadata).toMatchObject({
-    sameLogicalTurnContinuation: true,
-    continuationTurnId: "turn-budget-failure",
-    contextAtomId: createTurnContextAtomId("butler/app-general", "turn-budget-failure"),
-  });
+  expect(pendingRecords).toHaveLength(0);
   const persisted = readTurnContextAtom({
     butlerData: tempDir,
     sessionId: "butler/app-general",
     turnId: "turn-budget-failure",
   });
-  expect(persisted).toMatchObject({
-    sessionId: "butler/app-general",
-    turnId: "turn-budget-failure",
-    state: "continuing",
-    sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
-    reason: "Continuation checkpoint persisted before internal scheduler rollover.",
-    unresolvedObservations: [{
-      kind: "context_compacted",
-      id: createTurnContextAtomId("butler/app-general", "turn-budget-failure"),
-    }],
-  });
+  expect(persisted).toBeNull();
   store.close();
 });
 
@@ -1209,6 +1195,7 @@ test("queued inbound completion gap consumes same logical turn continuation with
       prompts.push(input.prompt);
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Run requested command",
           "summary: I am running the requested command.",
           "rationale: completion requires command evidence.",
           "next_step: summarize after evidence exists.",
@@ -1298,6 +1285,64 @@ test("queued inbound completion gap consumes same logical turn continuation with
     turnId: "turn-completion-gap-continuation",
   })).toBeNull();
   expect(JSON.stringify(app.sentActions)).not.toContain("not captured command evidence");
+  store.close();
+});
+
+test("queued rate-limit continuation is durably delayed before another provider attempt", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  const now = new Date("2026-07-11T00:00:00.000Z");
+  queue.enqueue({
+    eventId: "app:rate-limit-continuation",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-user", displayName: "Butler App" },
+    message: {
+      id: "message-rate-limit-continuation",
+      text: "Continue the active work.",
+      timestamp: now.toISOString(),
+    },
+    routingHints: {
+      sessionId: "butler/app-general",
+      turnId: "turn-rate-limit-continuation",
+    },
+  }, { source: "test" }, now);
+  const guard = new DeliveryGuard({ adapters: [new MockTransportAdapter({ id: "app" })] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        throw new TurnSchedulerContinuationYieldError(
+          "butler/app-general",
+          "turn-rate-limit-continuation",
+          "continuation.json",
+          "continuation.json:g3",
+          3,
+          "provider_rate_limited",
+          3,
+        );
+      },
+    },
+    store,
+    deliveryGuard: guard,
+    now: () => now,
+  });
+
+  expect(summary).toMatchObject({ claimed: 1, handled: 1, failed: 0 });
+  const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+  const pendingFiles = readdirSync(pendingDir);
+  expect(pendingFiles).toHaveLength(1);
+  const pending = JSON.parse(readFileSync(join(pendingDir, pendingFiles[0]!), "utf8"));
+  expect(pending.metadata).toMatchObject({
+    sameLogicalTurnContinuation: true,
+    continuationFailureCode: "provider_rate_limited",
+    continuationBackoffMs: 60_000,
+    notBefore: "2026-07-11T00:01:00.000Z",
+  });
+  expect(queue.claimEligible(1, () => true, new Date("2026-07-11T00:00:59.999Z"))).toEqual([]);
+  expect(queue.claimEligible(1, () => true, new Date("2026-07-11T00:01:00.000Z"))).toHaveLength(1);
   store.close();
 });
 
@@ -1399,6 +1444,7 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
         });
         await input.onAssistantTextBeforeTools?.({
           text: [
+            "title: Sandy 스타일 가드 증거 확인",
             "summary: Inspect Sandy style guard validation evidence.",
             "rationale: The user asked to continue from W3 with durable work state.",
             "next_step: Capture a small validation receipt before continuing.",
@@ -1566,7 +1612,16 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   ]));
 
   const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
-  expect(readdirSync(pendingDir).filter((name) => name.endsWith(".json"))).toHaveLength(1);
+  const pendingFiles = readdirSync(pendingDir).filter((name) => name.endsWith(".json"));
+  expect(pendingFiles).toHaveLength(1);
+  const scheduledQueueItem = JSON.parse(
+    readFileSync(join(pendingDir, pendingFiles[0]!), "utf8"),
+  ) as { queueId: string; metadata: Record<string, unknown> };
+  expect(scheduledQueueItem.metadata).toMatchObject({
+    sameLogicalTurnContinuation: true,
+    contextAtomId: createTurnContextAtomId(sessionId, "turn-client-w3-budget-first"),
+    checkpointId: persisted!.checkpointId,
+  });
 
   const second = await processQueuedInboundEvents({
     queue,
@@ -1583,6 +1638,12 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   });
   expect(promptCallCount).toBe(2);
   expect(turnEvents.filter((event) => event.kind === "turn.acknowledged")).toHaveLength(1);
+  expect(turnEvents.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(1);
+  expect(turnEvents.find((event) => event.kind === "turn.continuation_scheduled")?.payload)
+    .toMatchObject({
+      checkpointId: persisted!.checkpointId,
+      schedulerItemId: scheduledQueueItem.queueId,
+    });
   expect(readTranscript(sessionId).filter((event) => event.kind === "inbound")).toHaveLength(1);
   expect(resumePrompt).toContain("## Scheduler Continuation Context Atom");
   expect(resumePrompt).toContain("## Focused WorkStream Resume Envelope");

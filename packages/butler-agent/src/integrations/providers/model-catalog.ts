@@ -1,8 +1,8 @@
 import { getEncoding, type Tiktoken } from "js-tiktoken";
-import { HOSTED_PROVIDER_MODELS } from "./model-catalog/hosted-models.ts";
-import { localModelConfigToMetadata } from "./model-catalog/local-metadata.ts";
-import { workerModelPresets } from "./model-catalog/worker-presets.ts";
-import { readLocalModelConfigs, type LocalModelApiType, type LocalModelPlatform, type LocalModelSource } from "./local-models.ts";
+import { HOSTED_PROVIDER_MODELS } from "./shared/hosted-models.ts";
+import { localModelConfigToMetadata } from "./local/catalog.ts";
+import { workerModelPresets } from "./shared/worker-presets.ts";
+import { readLocalModelConfigs, type LocalModelApiType, type LocalModelPlatform, type LocalModelSource } from "./local/models.ts";
 import { parseModelRef, type ParsedModelRef } from "./model-ref.ts";
 
 export type ModelProviderId =
@@ -18,6 +18,16 @@ export type ModelProviderId =
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 export type ProviderAuthMethod = "api_key" | "codex_oauth";
 export type HostedProviderApiShape = "openai_chat_completions" | "anthropic_messages";
+export type StructuredDecisionTransport = "json_schema" | "function_tool";
+const FUNCTION_TOOL_DECISION_PROVIDERS = new Set<string>([
+  "anthropic",
+  "google",
+  "xai",
+  "qwen",
+  "kimi",
+  "zai",
+  "opencode-go",
+]);
 export type TokenEstimatorKind =
   | "provider_usage"
   | "openai_tiktoken_o200k"
@@ -106,8 +116,8 @@ export interface WorkerModelPreset {
 export const DEFAULT_MODEL_REF = "openai/gpt-5.5" as const;
 export const DEFAULT_REASONING_EFFORT: ReasoningEffort = "xhigh";
 
-export { localModelConfigToMetadata } from "./model-catalog/local-metadata.ts";
-export { defaultWorkerModelRules, workerModelPresets } from "./model-catalog/worker-presets.ts";
+export { localModelConfigToMetadata } from "./local/catalog.ts";
+export { defaultWorkerModelRules, workerModelPresets } from "./shared/worker-presets.ts";
 
 const MODELS: readonly ProviderModelMetadata[] = HOSTED_PROVIDER_MODELS;
 let openAIEncoding: Tiktoken | null = null;
@@ -236,6 +246,20 @@ export function resolveModelMetadata(
   const providerDefault = models.find((model) => model.provider_id === parsed.providerId && model.status === "latest");
   if (providerDefault) return { ...providerDefault, reasoning_efforts: [...providerDefault.reasoning_efforts] };
   return { ...MODELS[0]!, reasoning_efforts: [...MODELS[0]!.reasoning_efforts] };
+}
+
+export function modelSupportsJsonSchemaResponseFormat(modelRef?: string | null): boolean {
+  const parsed = parseModelRef(modelRef?.trim() || DEFAULT_MODEL_REF);
+  return parsed.providerId === "openai";
+}
+
+export function modelStructuredDecisionTransport(
+  modelRef?: string | null,
+): StructuredDecisionTransport | null {
+  const parsed = parseModelRef(modelRef?.trim() || DEFAULT_MODEL_REF);
+  if (modelSupportsJsonSchemaResponseFormat(modelRef)) return "json_schema";
+  if (FUNCTION_TOOL_DECISION_PROVIDERS.has(parsed.providerId)) return "function_tool";
+  return null;
 }
 
 export function resolveRuntimeModelMetadata(

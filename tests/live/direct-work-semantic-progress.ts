@@ -11,7 +11,7 @@ import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-l
 import {
   readLocalModelConfigs,
   upsertLocalModelConfig,
-} from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 const sourceButlerData = process.env.BUTLER_LIVE_SOURCE_BUTLER_DATA ||

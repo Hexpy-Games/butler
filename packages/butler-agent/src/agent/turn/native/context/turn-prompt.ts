@@ -14,10 +14,19 @@ import {
   readTurnContextAtom,
   type TurnContextAtom,
 } from "../../turn-continuation-context.ts";
+import {
+  recentTurnRoundJournal,
+  stableTurnMutationIdentities,
+} from "../../turn-round-journal-contract.ts";
 
 export interface NormalizedTurnPrompt {
   prompt: string;
   promptContextChars: number;
+  promptContextSections: Array<{
+    id: string;
+    title: string;
+    chars: number;
+  }>;
   compactionContextChars: number;
   feedbackBufferContextChars: number;
   workingMemoryContextChars: number;
@@ -104,6 +113,7 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
     promptContext,
     options.removePromptContextSections ?? [],
   );
+  const promptContextSections = promptContextUsageSections(filteredPromptContext);
   if (filteredPromptContext) parts.push(filteredPromptContext);
 
   const focusedResumeEnvelope = options.focusedResumeEnvelope?.trim() ?? "";
@@ -167,6 +177,7 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
   return {
     prompt,
     promptContextChars: filteredPromptContext.length,
+    promptContextSections,
     compactionContextChars: compactionContext.length,
     feedbackBufferContextChars: feedbackBufferContext.length,
     workingMemoryContextChars: workingMemoryContext.length,
@@ -176,6 +187,46 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
     focusedResumeEnvelopeChars: focusedResumeEnvelope.length,
     resumeDecisionEnvelopeChars: resumeDecisionEnvelope.length,
   };
+}
+
+function promptContextUsageSections(promptContext: string): NormalizedTurnPrompt["promptContextSections"] {
+  const trimmed = promptContext.trim();
+  if (!trimmed) return [];
+  return [...trimmed.matchAll(/(?:^|\n)(## ([^\n]+)\n[\s\S]*?)(?=\n## |\n---\n|$)/gu)]
+    .map((match) => {
+      const content = match[1]?.trim() ?? "";
+      const title = match[2]?.trim() ?? "Prompt Context";
+      return {
+        id: promptContextSectionUsageId(title),
+        title,
+        chars: content.length,
+      };
+    })
+    .filter((section) => section.chars > 0);
+}
+
+function promptContextSectionUsageId(title: string): string {
+  const normalized = title.trim().toLocaleLowerCase("en-US");
+  const known: Record<string, string> = {
+    "butler operating ethos / eol": "eol",
+    "active persona reminder": "active_persona_reminder",
+    "personalization profile": "personalization_profile",
+    "profile projection": "profile_projection",
+    "active rules": "active_rules",
+    "hot cache": "hot_cache",
+    "project memory": "project_memory",
+    "project hot cache": "project_hot_cache",
+    "runtime state": "runtime_state",
+    "active work state": "active_work_state",
+    "project ledger runtime context": "project_ledger_runtime_context",
+    "current user input": "current_user_input",
+    "current attachment references": "current_attachment_references",
+    "first-chat onboarding": "first_chat_onboarding",
+  };
+  return known[normalized] ?? (normalized
+    .replace(/[^a-z0-9]+/gu, "_")
+    .replace(/^_+|_+$/gu, "")
+    .slice(0, 80) || "prompt_context_section");
 }
 
 function renderSchedulerContinuationAtomContext(
@@ -223,6 +274,15 @@ function renderSchedulerContinuationAtomContext(
       "Scheduler continuation context atom could not be read.",
     );
   }
+  const checkpointId = typeof continuation?.checkpointId === "string"
+    ? continuation.checkpointId.trim()
+    : "";
+  if (checkpointId && checkpointId !== atom.checkpointId) {
+    throw schedulerContinuationInvariantFault(
+      "turn_scheduler_continuation_checkpoint_mismatch",
+      "Scheduler continuation metadata referenced a stale checkpoint generation.",
+    );
+  }
   return renderTurnContextAtom(atom, contextAtomId);
 }
 
@@ -244,12 +304,20 @@ function renderTurnContextAtom(atom: TurnContextAtom, contextAtomId: string): st
   const lines = [
     "## Scheduler Continuation Context Atom",
     `Context Atom ID: ${contextAtomId}`,
+    `Checkpoint ID: ${atom.checkpointId}`,
+    `Checkpoint Generation: ${atom.generation}`,
     `Turn ID: ${atom.turnId}`,
     `State: ${atom.state}`,
     `Source Error Code: ${atom.sourceErrorCode}`,
     `Reason: ${atom.reason}`,
     `User Request Ref: ${atom.userRequest.id}`,
   ];
+  if (atom.contractId) lines.push(`Active Contract ID: ${atom.contractId}`);
+  if (atom.workStreamId) lines.push(`Bound WorkStream ID: ${atom.workStreamId}`);
+  if (atom.todoListId) lines.push(`Bound Todo List ID: ${atom.todoListId}`);
+  if (atom.nextSemanticBlockSequence !== undefined) {
+    lines.push(`Next Semantic Block Sequence: ${atom.nextSemanticBlockSequence}`);
+  }
   if (atom.latestAssistantDecision) {
     lines.push(`Latest Assistant Decision Ref: ${atom.latestAssistantDecision.id}`);
   }
@@ -262,8 +330,18 @@ function renderTurnContextAtom(atom: TurnContextAtom, contextAtomId: string): st
   }
   lines.push(renderAtomRefs("Unresolved Observations", atom.unresolvedObservations));
   lines.push(renderAtomRefs("Open Tool Pairs", atom.openToolPairs));
+  lines.push(renderAtomRefs("Evidence Candidates", atom.evidenceCandidates));
   lines.push(renderAtomRefs("Current Turn Work", atom.currentTurnWork));
   lines.push(renderAtomRefs("Current Turn Todos", atom.currentTurnTodos));
+  if (atom.roundJournal?.length) {
+    const stableIdentities = stableTurnMutationIdentities(atom.roundJournal);
+    if (stableIdentities.length > 0) {
+      lines.push("Stable Mutation Identities:");
+      lines.push(JSON.stringify(stableIdentities, null, 2));
+    }
+    lines.push("Recent Round Journal:");
+    lines.push(JSON.stringify(recentTurnRoundJournal(atom.roundJournal), null, 2));
+  }
   lines.push("Continuation Instruction: resume this same logical turn from the context atom facts before using active WorkStream/Todo fallback.");
   return lines.filter((line) => line.trim()).join("\n");
 }

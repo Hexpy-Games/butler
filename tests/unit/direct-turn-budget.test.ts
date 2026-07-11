@@ -24,6 +24,11 @@ test("direct turn budget starts with the runtime request and token limits", () =
     maxPromptTokens: 220_000,
     maxOutputTokens: 80_000,
     maxTotalTokens: 300_000,
+    cumulativeRequestCount: 0,
+    cumulativePromptTokens: 0,
+    cumulativeCachedTokens: 0,
+    cumulativeOutputTokens: 0,
+    cumulativeTotalTokens: 0,
   });
 });
 
@@ -76,12 +81,39 @@ test("direct turn budget hydrates from a continuation snapshot", () => {
   );
 
   expect(directTurnBudgetState(hydrated)).toMatchObject({
-    requestCount: 3,
-    promptTokens: 1000,
-    cachedTokens: 800,
-    outputTokens: 120,
-    totalTokens: 1120,
+    requestCount: 0,
+    promptTokens: 0,
+    cachedTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
     maxRequests: 32,
+    cumulativeRequestCount: 3,
+    cumulativePromptTokens: 1000,
+    cumulativeCachedTokens: 800,
+    cumulativeOutputTokens: 120,
+    cumulativeTotalTokens: 1120,
+  });
+});
+
+test("continuation hydration preserves cumulative usage while opening a new safety window", () => {
+  const budget = createDirectTurnBudget("turn-budget-resume-window");
+  for (let index = 0; index < 32; index += 1) beforeDirectTurnModelRequest(budget);
+  expect(directTurnBudgetState(budget).status).toBe("exhausted");
+
+  const resumed = hydrateDirectTurnBudget(
+    "turn-budget-resume-window",
+    snapshotDirectTurnBudget(budget),
+  );
+  expect(directTurnBudgetState(resumed)).toMatchObject({
+    status: "ok",
+    requestCount: 0,
+    cumulativeRequestCount: 32,
+  });
+  beforeDirectTurnModelRequest(resumed);
+  expect(snapshotDirectTurnBudget(resumed).modelRequestsUsed).toBe(33);
+  expect(directTurnBudgetState(resumed)).toMatchObject({
+    requestCount: 1,
+    cumulativeRequestCount: 33,
   });
 });
 

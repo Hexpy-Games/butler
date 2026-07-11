@@ -32,6 +32,7 @@ export type TurnStateContractEventKind = typeof TURN_STATE_CONTRACT_EVENT_KINDS[
 
 export const AUTHORED_DECISION_SOURCES = [
   "assistant-authored",
+  "contract-derived",
   "model-authored",
   "principal-authored",
 ] as const;
@@ -108,6 +109,10 @@ export interface TurnAcknowledgedPayloadInput {
 
 export interface TurnDecisionPayloadInput {
   decisionId: unknown;
+  contractId?: unknown;
+  workstreamId?: unknown;
+  semanticBlockId?: unknown;
+  blockTitle?: unknown;
   role: unknown;
   summary: unknown;
   rationale?: unknown;
@@ -203,10 +208,18 @@ export function createTurnDecisionPayload(input: TurnDecisionPayloadInput): Reco
     }
   }
   const evidenceRefs = safeStringArray(input.evidenceRefs);
+  const contractId = optionalSafeText(input.contractId);
+  const workstreamId = optionalSafeText(input.workstreamId);
+  const semanticBlockId = optionalSafeText(input.semanticBlockId);
+  const blockTitle = optionalSafeText(input.blockTitle);
   const modelCallId = optionalSafeText(input.modelCallId);
   const latencyMs = optionalNonNegativeInteger(input.latencyMs);
   return {
     decisionId,
+    ...(contractId ? { contractId } : {}),
+    ...(workstreamId ? { workstreamId } : {}),
+    ...(semanticBlockId ? { semanticBlockId } : {}),
+    ...(blockTitle ? { blockTitle } : {}),
     role,
     summary,
     rationale,
@@ -333,6 +346,10 @@ export function normalizeTurnStateContractPayload(
   if (kind === TURN_DECISION_EVENT_KIND) {
     return createTurnDecisionPayload({
       decisionId: payload.decisionId,
+      contractId: payload.contractId,
+      workstreamId: payload.workstreamId,
+      semanticBlockId: payload.semanticBlockId,
+      blockTitle: payload.blockTitle ?? payload.decisionTitle,
       role: payload.role ?? payload.decisionRole,
       summary: payload.summary ?? payload.decisionSummary,
       rationale: payload.rationale ?? payload.decisionRationale,

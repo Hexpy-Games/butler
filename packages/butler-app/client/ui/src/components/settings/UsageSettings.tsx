@@ -7,6 +7,7 @@ import { SettingsSection } from "./SettingsSection";
 import { UsageBucketPanel } from "./UsageBucketPanel";
 import { UsageMonitorMetrics } from "./UsageMonitorMetrics";
 import { UsageProviderPanel } from "./UsageProviderPanel";
+import { UsageSectionPanel } from "./UsageSectionPanel";
 import { UsageToolPanel } from "./UsageToolPanel";
 import { formatTimestamp, usageRows } from "./usageSettingsFormat";
 
@@ -49,6 +50,17 @@ export function UsageSettings() {
     [view],
   );
   const modelRows = useMemo(() => usageRows(view?.model.byModel ?? {}), [view]);
+  const sectionRows = useMemo(
+    () =>
+      Object.entries(view?.model.bySection ?? {})
+        .sort((left, right) =>
+          right[1].estimatedTokens - left[1].estimatedTokens ||
+          right[1].chars - left[1].chars ||
+          left[0].localeCompare(right[0]),
+        )
+        .slice(0, 12),
+    [view],
+  );
   const toolRows = useMemo(
     () =>
       Object.entries(view?.tools.byTool ?? {})
@@ -105,6 +117,7 @@ export function UsageSettings() {
         />
         <UsageBucketPanel title="스코프별 토큰" rows={scopeRows} />
         <UsageBucketPanel title="모델별 토큰" rows={modelRows} />
+        <UsageSectionPanel rows={sectionRows} />
         <UsageToolPanel rows={toolRows} />
         <Typo.Caption>
           {view?.generated_at ? `${formatTimestamp(view.generated_at)} · ` : ""}

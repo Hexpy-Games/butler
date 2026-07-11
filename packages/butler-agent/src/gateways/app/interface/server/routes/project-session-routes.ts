@@ -19,7 +19,6 @@ import {
 } from "../../protocol/app-protocol.ts";
 import { paginationFromSearchParams } from "../route-params.ts";
 import { json, parseJson, RequestError } from "../responses.ts";
-import { createSessionInputWithGeneratedTitle } from "../session-title.ts";
 
 import type { AppRouteContext } from "../server-types.ts";
 
@@ -159,13 +158,8 @@ export async function handleProjectSessionRoutes(
         "invalid_request",
         "Session kind is required.",
       );
-    const createInput = await createSessionInputWithGeneratedTitle({
-      body,
-      requestSignal: input.request.signal,
-      store: input.store,
-    });
     return json(
-      apiEnvelope<CreateSessionResult>(input.store.createSession(createInput)),
+      apiEnvelope<CreateSessionResult>(input.store.createSession(body)),
       201,
     );
   }

@@ -125,11 +125,14 @@ test("initial surface selection uses structured controller state without prompt 
     "write_file",
     "grep_files",
     "project_ledger_status",
+    "project_ledger_list",
+    "project_ledger_show",
     "project_ledger_check",
     "inspect_project_status",
     "query_project_work",
     "render_project_dashboard",
     "get_context_monitor",
+    "read_tool_evidence_artifact",
     "read_tool_output_artifact",
     "list_tool_capabilities",
     "tool_search",
@@ -141,7 +144,7 @@ test("initial surface selection uses structured controller state without prompt 
   ]);
 });
 
-test("initial surface selection exposes Project Ledger tools when the turn asks for ledger work", () => {
+test("initial surface selection does not infer Project Ledger tools from message text", () => {
   const selection = selectInitialToolsFromSurfaceController({
     role: "butler",
     message: "Project Ledger 상태를 확인하고 dashboard를 렌더해줘.",
@@ -153,10 +156,10 @@ test("initial surface selection exposes Project Ledger tools when the turn asks 
   expect(selection.state.context.sessionMetadata).toBeUndefined();
   expect(selection.state.context.turnMetadata).toBeUndefined();
   expect(Object.keys(selection.state.context)).not.toContain("message");
-  expect(selection.toolNames).toContain("project_ledger_status");
-  expect(selection.toolNames).toContain("inspect_project_status");
-  expect(selection.toolNames).toContain("query_project_work");
-  expect(selection.toolNames).toContain("render_project_dashboard");
+  expect(selection.toolNames).not.toContain("project_ledger_status");
+  expect(selection.toolNames).not.toContain("inspect_project_status");
+  expect(selection.toolNames).not.toContain("query_project_work");
+  expect(selection.toolNames).not.toContain("render_project_dashboard");
 });
 
 test("initial surface selection preserves tracking closeout metadata for lifecycle tools", () => {

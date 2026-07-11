@@ -43,7 +43,7 @@ import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/di
 import {
   discoverLocalModels,
   upsertLocalModelConfig,
-} from "../../packages/butler-agent/src/integrations/providers/local-models.ts";
+} from "../../packages/butler-agent/src/integrations/providers/local/models.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
 import {
   TURN_DECISION_EVENT_KIND,
@@ -2556,7 +2556,7 @@ test("generated session titles do not overwrite manual titles", async () => {
   }
 });
 
-test("session creation generates a title from the initial message before returning", async () => {
+test("session creation does not block runtime admission on model title generation", async () => {
   process.env.OPENAI_API_KEY = "sk-create-title-test";
   writeFileSync(
     join(tempDir, "butler.config.json"),
@@ -2609,10 +2609,10 @@ test("session creation generates a title from the initial message before returni
       session_hint: "create-weather-title",
     });
 
-    expect(sawTitleRequest).toBe(true);
-    expect(session.data.session.title).toBe("오늘 날씨");
+    expect(sawTitleRequest).toBe(false);
+    expect(session.data.session.title).toBe(userText);
     expect(server.store.getSession(session.data.session.id).title).toBe(
-      "오늘 날씨",
+      userText,
     );
   } finally {
     server.stop();
@@ -4789,6 +4789,7 @@ test("session summary exposes active WorkStreams without raw work internals", as
     items: [
       {
         id: "intent",
+        ordinal: 1,
         content: "Frame intent",
         active_form: "Framing intent",
         status: "completed",
@@ -4802,6 +4803,7 @@ test("session summary exposes active WorkStreams without raw work internals", as
       },
       {
         id: "plan",
+        ordinal: 2,
         content: "Plan implementation",
         active_form: "Planning implementation",
         status: "in_progress",
@@ -4852,6 +4854,7 @@ test("session summary excludes recoverable WorkStreams from active projection", 
     items: [
       {
         id: "code",
+        ordinal: 1,
         content: "Implement recovery path",
         active_form: "Implementing recovery path",
         status: "in_progress",
@@ -5093,6 +5096,7 @@ test("session summary and view keep current-turn waiting WorkStreams active only
       items: [
         {
           id: "historical",
+          ordinal: 1,
           content: "Wait from an earlier turn",
           active_form: "Waiting from an earlier turn",
           status: "in_progress",
@@ -5116,6 +5120,7 @@ test("session summary and view keep current-turn waiting WorkStreams active only
       items: [
         {
           id: "current",
+          ordinal: 1,
           content: "Wait for current turn decision",
           active_form: "Waiting for current turn decision",
           status: "in_progress",
@@ -6591,6 +6596,7 @@ test("session view does not sync linked orchestration workers while reading", as
     title: "Build a small canvas game",
     items: [{
       id: "orchestrate",
+      ordinal: 1,
       content: "Run orchestration",
       active_form: "Running orchestration",
       status: "in_progress",
@@ -7974,7 +7980,7 @@ test("app transport no-visible limited final closes queued turns without assista
   }
 });
 
-test("session summary keeps first visible preparation work block from progress read model", async () => {
+test("session summary replaces first visible preparation with the first semantic work block", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   const server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
@@ -8043,14 +8049,13 @@ test("session summary keeps first visible preparation work block from progress r
       expect.objectContaining({
         kind: "work_block",
         state: "running",
-        safe_label: "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
-        work_block_id: "first-progress-note",
-        work_block_label:
-          "요청의 범위와 다음 작업 경로를 먼저 정리하겠습니다.",
+        safe_label: "Checking files",
+        work_block_id: "work-file-check",
+        work_block_label: "Checking files",
       }),
     );
     expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
-      "work-file-check",
+      "first-progress-note",
     );
 
     const sessionView = await getJson(
@@ -8059,7 +8064,7 @@ test("session summary keeps first visible preparation work block from progress r
     expect(sessionView.data.active_turn.progress.safe_progress_rows).toContainEqual(
       expect.objectContaining({
         kind: "work_block",
-        work_block_id: "first-progress-note",
+        work_block_id: "work-file-check",
       }),
     );
   } finally {

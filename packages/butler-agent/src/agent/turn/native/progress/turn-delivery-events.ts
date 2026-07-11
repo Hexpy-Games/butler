@@ -15,7 +15,10 @@ import {
 import { firstVisibleProgressPayload } from "../../../events/first-visible-progress.ts";
 import type { PublicWorkDecision } from "../output/tool-types.ts";
 import type { ToolProgressSummary } from "../output/tool-types.ts";
-import { todoProgressItemsFromArgs } from "./runtime-semantic-progress.ts";
+import {
+  todoProgressItemsFromArgs,
+  todoProgressItemsFromResult,
+} from "./runtime-semantic-progress.ts";
 
 export function buildIntermediateAction(input: {
   envelope: InboundEnvelope;
@@ -90,10 +93,12 @@ export async function emitTurnEventBestEffort(
 export async function emitTodoProgressBestEffort(input: {
   turnInput: RuntimeTurnInput;
   args: Record<string, unknown>;
+  result?: unknown;
 }): Promise<void> {
   const inboundEnvelope = "eventId" in input.turnInput.input ? input.turnInput.input : null;
   if (!inboundEnvelope || !input.turnInput.emitIntermediateDelivery) return;
-  const items = todoProgressItemsFromArgs(input.args);
+  const items = todoProgressItemsFromResult(input.result) ??
+    todoProgressItemsFromArgs(input.args);
   for (const item of items) {
     await emitIntermediateBestEffort(
       input.turnInput,

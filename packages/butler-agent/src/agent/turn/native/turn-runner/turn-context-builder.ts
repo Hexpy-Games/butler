@@ -88,12 +88,24 @@ export async function prepareNativeTurnContext(input: {
   publicDecisionContext: PublicWorkDecision[];
   pendingPublicDecisions: PublicWorkDecision[];
   assistantTextBeforeToolsSeen: () => boolean;
+  activeWorkStreamBinding: () => { contractId: string; workStreamId: string } | null;
   skipRuntimePreparationProgress?: boolean;
 }) {
   const userText = currentUserText(input.turnInput);
   const plannedReview = plannedReviewTurnContext(input.turnInput);
   await maybeCompact(input);
   const turnId = currentRuntimeTurnId(input.turnInput) ?? `turn-${randomUUID().slice(0, 12)}`;
+  const continuationAtom = hasSchedulerContinuationMetadata(
+    input.turnInput,
+    input.turnInput.handle.sessionId,
+    turnId,
+  )
+    ? readTurnContextAtom({
+      butlerData: input.deps.butlerData,
+      sessionId: input.turnInput.handle.sessionId,
+      turnId,
+    })
+    : null;
   const chatId = currentChatId(input.turnInput);
   const resumeSelection = selectWorkStreamCheckpointResume({
     butlerData: input.deps.butlerData,
@@ -171,6 +183,7 @@ export async function prepareNativeTurnContext(input: {
     turnId,
     turnInput: input.turnInput,
     resumeSelection,
+    continuationAtom,
   });
   const currentAttachmentContext = measureTurnPreparationStepSync(
     preparationMetricInput(input, "attachment_context"),
@@ -212,6 +225,7 @@ export async function prepareNativeTurnContext(input: {
     turnContext: [prompt, currentAttachmentContext].filter(Boolean).join("\n\n"),
     currentToolNames: () => toolSurfaceController.currentToolNames(),
     describedToolIds: () => toolSurfaceController.describedToolIdList(),
+    activeWorkStreamBinding: input.activeWorkStreamBinding,
   });
   const executor = createAuditedButlerToolExecutor({
     sessionId: input.turnInput.handle.sessionId,
@@ -230,6 +244,7 @@ export async function prepareNativeTurnContext(input: {
     plannedReview,
     semanticProgressSafetyNet,
     toolSurfaceController,
+    activeWorkStreamBinding: input.activeWorkStreamBinding,
     executor: turnScopedExecutor({
       defaultExecutor,
       injectedExecutor: input.deps.butlerToolExecutor,
@@ -263,6 +278,7 @@ export async function prepareNativeTurnContext(input: {
     resumeSelection,
     focusedResumeEnvelope,
     resumeDecisionEnvelope,
+    continuationAtom,
   };
 }
 
@@ -284,6 +300,7 @@ function budgetForTurn(input: {
   turnId: string;
   turnInput: RuntimeTurnInput;
   resumeSelection: ReturnType<typeof selectWorkStreamCheckpointResume>;
+  continuationAtom: ReturnType<typeof readTurnContextAtom>;
 }) {
   if (!hasSchedulerContinuationMetadata(input.turnInput, input.sessionId, input.turnId)) {
     return hydrateDirectTurnBudget(
@@ -291,12 +308,7 @@ function budgetForTurn(input: {
       input.resumeSelection.selected?.checkpoint.budgetSnapshot,
     );
   }
-  const atom = readTurnContextAtom({
-    butlerData: input.butlerData,
-    sessionId: input.sessionId,
-    turnId: input.turnId,
-  });
-  return hydrateDirectTurnBudget(input.turnId, atom?.budgetSnapshot);
+  return hydrateDirectTurnBudget(input.turnId, input.continuationAtom?.budgetSnapshot);
 }
 
 function currentChatId(input: RuntimeTurnInput): string | null {

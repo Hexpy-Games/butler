@@ -10,6 +10,8 @@ type ProjectLedgerToolRunner = typeof runProjectLedgerTool;
 type ProjectLedgerViewName = "dashboard" | "handoff" | "roadmap";
 
 const LIFECYCLE_CLOSEOUT_TOOLS = new Set([
+  "project_ledger_create",
+  "project_ledger_update",
   "project_ledger_work_update",
   "project_ledger_work_complete",
   "project_ledger_task_update",
@@ -33,10 +35,11 @@ export function runProjectLedgerLifecycleCloseout(input: {
   executor: ProjectLedgerCloseoutInput;
   projectPath: string;
   runTool?: ProjectLedgerToolRunner;
+  refreshedIndex?: Record<string, unknown> | null;
 }): Record<string, unknown> {
   const runTool = input.runTool ?? runProjectLedgerTool;
   const project = ["--project", input.projectPath];
-  const indexResult = runTool(input.executor, ["index", ...project]);
+  const indexResult = input.refreshedIndex ?? runTool(input.executor, ["index", ...project]);
   const indexOk = indexResult.ok === true;
   if (!indexOk) {
     return {

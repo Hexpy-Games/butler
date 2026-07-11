@@ -335,7 +335,7 @@ test("tool_call validates array item schemas before dispatch", async () => {
 
   const result = await execute({
     name: "tool_call",
-    args: { id: "native:grep_files", arguments: { include: [123] } },
+    args: { id: "native:grep_files", arguments: { pattern: "needle", include: [123] } },
     rawArguments: "{}",
   }) as { ok: boolean; error: { code: string; path: string } };
 
@@ -355,6 +355,21 @@ test("tool_call schema validation rejects unknown properties when no properties 
     message: "Unexpected argument: unexpected",
     path: "$.unexpected",
   });
+});
+
+test("schema validation enforces const and conditional oneOf requirements", () => {
+  const schema = {
+    type: "object",
+    properties: { kind: { type: "string" }, work_id: { type: "string" } },
+    required: ["kind"],
+    oneOf: [
+      { properties: { kind: { const: "work" } } },
+      { properties: { kind: { const: "task" } }, required: ["work_id"] },
+    ],
+  };
+  expect(validateJsonObjectSchema({ kind: "task", work_id: "W-1" }, schema)).toEqual({ ok: true });
+  expect(validateJsonObjectSchema({ kind: "task" }, schema)).toMatchObject({ ok: false });
+  expect(validateJsonObjectSchema({ kind: "other" }, schema)).toMatchObject({ ok: false });
 });
 
 test("bridge audit metadata redacts raw tool_call arguments", () => {

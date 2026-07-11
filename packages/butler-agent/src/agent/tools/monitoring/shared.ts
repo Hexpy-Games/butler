@@ -2,6 +2,7 @@ import type { WebSearchProvider } from "../../../integrations/search/provider.ts
 import { readContextMonitor } from "../../../operations/metrics/context-monitor.ts";
 import { readUsageMonitor } from "../../../operations/metrics/usage-monitor.ts";
 import { readMemoryHealth } from "../../cognition/memory/quality.ts";
+import { readToolEvidenceArtifactSlice } from "../../context/tool-evidence-retention.ts";
 import { readToolOutputArtifactSlice } from "../../context/tool-output-budgeter.ts";
 import { BUTLER_TOOLS, TOOL_CAPABILITY_METADATA } from "../registry.ts";
 import { nativeToolAvailability } from "../tool-availability.ts";
@@ -77,6 +78,18 @@ export function createMonitoringToolHandlers(input: {
         call.args.stream === "stdout" || call.args.stream === "stderr" || call.args.stream === "both"
           ? call.args.stream
           : undefined,
+      offsetLines: typeof call.args.offset_lines === "number" ? call.args.offset_lines : undefined,
+      limitLines: typeof call.args.limit_lines === "number" ? call.args.limit_lines : undefined,
+      maxTokens: typeof call.args.max_tokens === "number" ? call.args.max_tokens : undefined,
+    }),
+    "read_tool_evidence_artifact": async (call: ToolCall) => readToolEvidenceArtifactSlice({
+      butlerData: input.butlerData,
+      artifactId: typeof call.args.artifact_id === "string" && call.args.artifact_id.trim()
+        ? call.args.artifact_id.trim()
+        : undefined,
+      path: typeof call.args.path === "string" && call.args.path.trim()
+        ? call.args.path.trim()
+        : undefined,
       offsetLines: typeof call.args.offset_lines === "number" ? call.args.offset_lines : undefined,
       limitLines: typeof call.args.limit_lines === "number" ? call.args.limit_lines : undefined,
       maxTokens: typeof call.args.max_tokens === "number" ? call.args.max_tokens : undefined,

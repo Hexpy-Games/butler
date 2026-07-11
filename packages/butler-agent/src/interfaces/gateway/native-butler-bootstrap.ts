@@ -26,7 +26,11 @@ import { AgentConversationStore } from "../../agent/conversation/store.ts";
 import { createAgentTurnEvent } from "../../agent/events/turn-events.ts";
 import { createLifecycleGatewayHandlers, SessionLifecycleService } from "./session-lifecycle.ts";
 import { generateSessionTitleWithProvider } from "../../agent/output/session-title.ts";
-import { NativeToolLoopRuntime } from "../../agent/turn/native-tool-loop.ts";
+import {
+  BOOTSTRAP_RECOVERY_DEADLINE_MS,
+  reconcilePendingWorkStreamTransactions,
+} from "../../agent/work/work-stream-transaction-recovery.ts";
+import { NativeToolLoopRuntime, type NativeToolLoopRuntimeOptions } from "../../agent/turn/native-tool-loop.ts";
 import { DeveloperLogStore } from "../../operations/diagnostics/developer-log-store.ts";
 import { readDeveloperDiagnosticsEnabled } from "../../operations/diagnostics/developer-log-settings.ts";
 import { diagnosticDetails, safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
@@ -37,6 +41,10 @@ import { createTelegramLiveGateway } from "../transport/telegram/live-gateway.ts
 import { runTelegramPolling } from "../transport/telegram/polling-runner.ts";
 import { runWorkerResultMonitor } from "./worker-result-monitor.ts";
 import { runPromptText } from "../../integrations/providers/provider.ts";
+import {
+  providerCapabilitiesForModel,
+  resolveProviderAdapterDefinition,
+} from "../../integrations/providers/registry.ts";
 import { plannedInternalGoal, PlannedTaskStore } from "../../agent/work/planned-task.ts";
 import type { TaskRecord } from "../../agent/work/task-store.ts";
 import { WorkOrchestrationStore } from "../../agent/work/work-orchestration.ts";
@@ -46,6 +54,7 @@ import {
   resolveTelegramGatewayRuntimeConfig,
 } from "../../operations/gateway/registry.ts";
 import { QueuedInboundDispatcher } from "./queued-inbound.ts";
+import { reconcileNonTerminalTurnContracts } from "../../agent/turn/turn-contract.ts";
 
 interface ButlerConfig {
   system?: {
@@ -62,6 +71,7 @@ export interface NativeButlerMainOptions {
   butlerHome?: string;
   butlerData?: string;
   runtime?: AgentRuntimeAdapter;
+  runtimeFactory?: (options: NativeToolLoopRuntimeOptions) => AgentRuntimeAdapter;
   provider?: ModelProviderAdapter;
   sendTelegram?: (input: {
     chatId: string;
@@ -110,38 +120,29 @@ export function createNativeButlerDefaultProvider(
   promptRunner: PromptTextRunner = runPromptText,
 ): ModelProviderAdapter {
   const configuredModel = config.system?.butlerModel || config.system?.defaultModel || "";
-  const providerId = configuredModel.includes("/")
-    ? configuredModel.split("/", 1)[0] || "openai"
-    : "openai";
-  const supportsOpenAIFunctionTools = providerId === "openai";
-  return {
-    id: providerId,
-    capabilities: {
-      supportsStreaming: false,
-      supportsToolCalls: supportsOpenAIFunctionTools,
-      supportsImages: false,
-      supportsAudio: false,
-      supportsServerThreads: false,
-      supportsReasoningConfig: true,
-      supportsPromptCaching: true,
-      supportsSameTurnToolSchemaPromotion: supportsOpenAIFunctionTools,
-    },
-    async invoke(input) {
-      const prompt = input.messages
-        .map((message) => `${message.role}: ${message.content}`)
-        .join("\n\n");
-      const text = await promptRunner({
-        prompt,
-        model: input.model,
-        instructions: input.systemPrompt,
-        responseFormat: input.responseFormat,
-        reasoningEffort: input.reasoning?.effort,
-        signal: input.signal,
-        cacheScope: "native-butler-title-provider",
-      });
-      return { text };
-    },
+  const invoke: ModelProviderAdapter["invoke"] = async (input) => {
+    const prompt = input.messages
+      .map((message) => `${message.role}: ${message.content}`)
+      .join("\n\n");
+    const text = await promptRunner({
+      prompt,
+      model: input.model,
+      instructions: input.systemPrompt,
+      responseFormat: input.responseFormat,
+      reasoningEffort: input.reasoning?.effort,
+      signal: input.signal,
+      cacheScope: "native-butler-title-provider",
+    });
+    return { text };
   };
+  const forModel = (model: string): ModelProviderAdapter => ({
+    id: resolveProviderAdapterDefinition(model).providerId,
+    capabilities: providerCapabilitiesForModel(model),
+    capabilitiesFor: providerCapabilitiesForModel,
+    forModel,
+    invoke,
+  });
+  return forModel(configuredModel);
 }
 
 export function appTurnEventAction(input: {
@@ -574,7 +575,14 @@ export async function runNativeButlerMain(
     butlerData,
     compatibilityConfig: config as Record<string, any>,
   });
-  const runtime = input.runtime ?? new NativeToolLoopRuntime({ butlerHome, butlerData });
+  const runtimeOptions: NativeToolLoopRuntimeOptions = {
+    butlerHome,
+    butlerData,
+    appMessageDbPath: join(butlerData, "app-server", "butler-client.sqlite"),
+  };
+  reconcilePendingWorkStreamTransactions({ butlerData, maxDurationMs: BOOTSTRAP_RECOVERY_DEADLINE_MS });
+  reconcileNonTerminalTurnContracts({ butlerData });
+  const runtime = input.runtime ?? input.runtimeFactory?.(runtimeOptions) ?? new NativeToolLoopRuntime(runtimeOptions);
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
   const developerLogStore = new DeveloperLogStore({ butlerData });
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));

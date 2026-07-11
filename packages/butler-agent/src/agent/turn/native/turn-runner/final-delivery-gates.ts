@@ -1,4 +1,6 @@
 import type { RuntimeTurnInput } from "../../../../test-support/harness/contracts.ts";
+import { join } from "path";
+import { readJsonFile } from "../../../persistence/atomic-json-store.ts";
 import {
   enforceGroundedActionClaims,
   hasSuccessfulTool,
@@ -19,13 +21,24 @@ import {
   repairFinalContract,
 } from "./public-output-gates.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
-import { persistTurnContextAtom } from "../../turn-continuation-context.ts";
 import type { createDirectTurnBudget } from "../../direct-turn-budget.ts";
 import { WorkStreamStore } from "../../../work/work-stream.ts";
 import { TodoListStore } from "../../../work/todo-list.ts";
 import { safePublicText } from "../../../output/evidence/transcript-sanitizers.ts";
-
-export const KERNEL_COMPLETION_GAP_CONTINUATION_CODE = "completion_gap_continuation";
+import {
+  canDeliverTurnContract,
+  evaluateTurnContractPlanClosure,
+  turnContractPlanAllowsTerminal,
+  TurnContractStore,
+  type CompiledTurnContract,
+  type TurnCancellationReceipt,
+} from "../../turn-contract.ts";
+import {
+  recordTurnContractAuditEvidence,
+  unsatisfiedTurnContractObligations,
+} from "./turn-contract-audit-evidence.ts";
+import { buildTurnContinuationEvidence } from "./turn-continuation-evidence.ts";
+import { statusReportEvidenceGuidance } from "./turn-contract-status-evidence.ts";
 
 export type FinalDeliveryOutcome =
   | { kind: "final"; text: string; evidenceRefs: string[] }
@@ -35,12 +48,14 @@ export type FinalDeliveryOutcome =
         kind: string;
         summary: string;
         modelVisibleContent: string;
+        nextMode?: "tool_decision" | "final_synthesis";
         refs?: Array<{ kind: string; id: string; path?: string }>;
+        requiredDeliverables?: string[];
       };
       evidenceRefs: string[];
     };
 
-export async function produceFinalDeliveryOutcome(input: {
+type FinalDeliveryReviewInput = {
   turnInput: RuntimeTurnInput;
   session: NativeStoredSessionConfig;
   deps: NativeTurnRunnerDeps;
@@ -53,7 +68,34 @@ export async function produceFinalDeliveryOutcome(input: {
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
   toolSurfaceController: ToolSurfacePromptController;
-}): Promise<FinalDeliveryOutcome> {
+  turnContract?: CompiledTurnContract;
+};
+
+export type FinalCandidateContinuationReviewOutcome =
+  | { kind: "accepted"; text: string; evidenceRefs: string[] }
+  | Extract<FinalDeliveryOutcome, { kind: "completion_gap" }>;
+
+export async function produceFinalDeliveryOutcome(
+  input: FinalDeliveryReviewInput,
+): Promise<FinalDeliveryOutcome> {
+  const review = await reviewFinalCandidateForContinuation(input);
+  if (review.kind === "completion_gap") return review;
+  const contractRepairedText = repairFinalContract({ ...input, finalText: review.text });
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: "guard.started",
+    payload: { guard: "public_output" },
+  });
+  const checkedText = applyPublicOutputGuards({ ...input, finalText: contractRepairedText });
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: "guard.completed",
+    payload: { guard: "public_output", status: "approved" },
+  });
+  return { kind: "final", text: checkedText, evidenceRefs: review.evidenceRefs };
+}
+
+export async function reviewFinalCandidateForContinuation(
+  input: FinalDeliveryReviewInput,
+): Promise<FinalCandidateContinuationReviewOutcome> {
   const explicitToolGap = explicitToolRequirementGap(input);
   if (explicitToolGap) return explicitToolGap;
   const groundedText = applyGroundingIfNeeded(input, input.initialText);
@@ -65,17 +107,133 @@ export async function produceFinalDeliveryOutcome(input: {
       evidenceRefs: reviewResult.outcome.evidenceRefs,
     };
   }
-  const contractRepairedText = repairFinalContract({ ...input, finalText: reviewResult.reviewedText });
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: "guard.started",
-    payload: { guard: "public_output" },
-  });
-  const checkedText = applyPublicOutputGuards({ ...input, finalText: contractRepairedText });
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: "guard.completed",
-    payload: { guard: "public_output", status: "approved" },
-  });
-  return { kind: "final", text: checkedText, evidenceRefs: reviewResult.outcome.evidenceRefs };
+  if (input.turnContract) {
+    const planClosure = evaluateTurnContractPlanClosure({
+      butlerData: input.deps.butlerData,
+      contract: input.turnContract,
+    });
+    const contract = recordTurnContractAuditEvidence({
+      butlerData: input.deps.butlerData,
+      contract: input.turnContract,
+      audit: input.audit,
+      finalCandidate: reviewResult.reviewedText,
+      runtimeReviewCompleted: reviewResult.performed,
+      planClosureSatisfied: turnContractPlanAllowsTerminal(planClosure),
+    });
+    if (planClosure.status === "invalid") {
+      throw new Error(planClosure.code);
+    }
+    const store = new TurnContractStore(input.deps.butlerData);
+    if (planClosure.status === "incomplete") {
+      const missing = unsatisfiedTurnContractObligations({
+        butlerData: input.deps.butlerData,
+        contract,
+      }).filter((item) => item.deliverable !== "final_report");
+      return planClosureGap(planClosure, contract.evidence_receipt_ids, missing);
+    }
+    const gate = canDeliverTurnContract({
+      contract,
+      evidenceReceipts: store.evidenceFor(contract),
+      cancellationReceipt: contract.cancellation_receipt_id
+        ? cancellationReceipt(input.deps.butlerData, contract.cancellation_receipt_id)
+        : null,
+    });
+    if (gate !== "deliver") {
+      const unsatisfied = unsatisfiedTurnContractObligations({
+        butlerData: input.deps.butlerData,
+        contract,
+      });
+      const missing = actionableContractObligations(unsatisfied);
+      return {
+        kind: "completion_gap",
+        observation: {
+          kind: "turn_contract_incomplete",
+          summary: `Typed turn contract still has ${missing.length} unsatisfied obligation(s).`,
+          modelVisibleContent: [
+            "Continue the same logical turn. The typed turn contract is not complete.",
+            "Satisfy these structured deliverables before final delivery:",
+            ...missing.map((item) => `- ${item.deliverable}:${item.target_kind}:${item.target_id}`),
+            ...(missing.some((item) => item.deliverable === "status_report")
+              ? statusReportEvidenceGuidance()
+              : []),
+            ...(unsatisfied.some((item) => item.deliverable === "final_report")
+              ? ["The current final candidate already supplies final_report. Do not create a report record or file; submit a new final candidate after the listed non-report work is complete."]
+              : []),
+            "Do not ask the user unless a verified user-owned blocker receipt exists.",
+          ].join("\n"),
+          refs: missing.map((item) => ({ kind: "turn_contract_obligation", id: item.obligation_id })),
+          requiredDeliverables: [...new Set(missing.map((item) => item.deliverable))],
+        },
+        evidenceRefs: contract.evidence_receipt_ids,
+      };
+    }
+  }
+  return {
+    kind: "accepted",
+    text: reviewResult.reviewedText,
+    evidenceRefs: reviewResult.outcome.evidenceRefs,
+  };
+}
+
+function planClosureGap(
+  closure: ReturnType<typeof evaluateTurnContractPlanClosure>,
+  evidenceRefs: string[],
+  missingDeliverables: Array<{
+    deliverable: string;
+    target_kind: string;
+    target_id: string;
+    obligation_id: string;
+  }>,
+): Extract<FinalDeliveryOutcome, { kind: "completion_gap" }> {
+  const openItems = closure.status === "incomplete" ? closure.open_items.slice(0, 12) : [];
+  const totalOpenItems = closure.status === "incomplete" ? closure.open_items.length : 0;
+  return {
+    kind: "completion_gap",
+    observation: {
+      kind: "turn_contract_plan_incomplete",
+      summary: totalOpenItems > 0
+        ? `The bound work plan still has ${totalOpenItems} open non-reporting item(s).`
+        : "The bound work plan is not currently resolvable for terminal delivery.",
+      modelVisibleContent: [
+        "Continue the same logical turn. The contract-bound work plan is not complete yet.",
+        "Finish the retained items below, then update the bound todo list with their structured statuses.",
+        ...openItems.map((item) => `- ${item.id}: status=${item.status}; phase=${item.phase ?? "none"}`),
+        ...(missingDeliverables.length > 0
+          ? [
+              "The following typed deliverables also still need evidence:",
+              ...missingDeliverables.map((item) => `- ${item.deliverable}:${item.target_kind}:${item.target_id}`),
+              ...(missingDeliverables.some((item) => item.deliverable === "status_report")
+                ? statusReportEvidenceGuidance()
+                : []),
+            ]
+          : []),
+        "Keep moving through those structured items in dependency order and submit a new final candidate after they are complete.",
+        "A verified user-owned blocker may change the state to waiting_user; otherwise continue autonomously.",
+      ].join("\n"),
+      refs: [
+        ...openItems.map((item) => ({ kind: "workstream_todo", id: item.id })),
+        ...missingDeliverables.map((item) => ({ kind: "turn_contract_obligation", id: item.obligation_id })),
+      ],
+      requiredDeliverables: [...new Set(missingDeliverables.map((item) => item.deliverable))],
+    },
+    evidenceRefs,
+  };
+}
+
+function actionableContractObligations<T extends { deliverable: string }>(obligations: T[]): T[] {
+  const withoutFinalReport = obligations.filter((item) => item.deliverable !== "final_report");
+  return withoutFinalReport.length > 0 ? withoutFinalReport : obligations;
+}
+
+function cancellationReceipt(butlerData: string, receiptId: string) {
+  return readJsonFile<TurnCancellationReceipt>(
+    join(butlerData, "workstream-claim-receipts", `${safeContractId(receiptId)}.json`),
+  );
+}
+
+function safeContractId(value: string): string {
+  if (!/^[A-Za-z0-9._:-]{1,160}$/.test(value)) throw new Error("turn_contract_unsafe_receipt_id");
+  return value;
 }
 
 function applyGroundingIfNeeded(
@@ -106,7 +264,7 @@ function explicitToolRequirementGap(input: {
   useTools: boolean;
   audit: ToolAuditEntry[];
   toolSurfaceController: ToolSurfacePromptController;
-}): FinalDeliveryOutcome | null {
+}): Extract<FinalDeliveryOutcome, { kind: "completion_gap" }> | null {
   if (!input.useTools) {
     return null;
   }
@@ -147,7 +305,11 @@ async function runGoalCompletionReviews(input: {
   initialText: string;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
-}): Promise<{ outcome: ReturnType<typeof evaluateCompletionReviewOutcome>; reviewedText: string }> {
+}): Promise<{
+  outcome: ReturnType<typeof evaluateCompletionReviewOutcome>;
+  reviewedText: string;
+  performed: boolean;
+}> {
   const shouldReview = shouldRunCompletionReview(input);
   if (!shouldReview) {
     return {
@@ -156,6 +318,7 @@ async function runGoalCompletionReviews(input: {
         evidenceRefs: [],
       },
       reviewedText: input.initialText,
+      performed: false,
     };
   }
   const requiredObligations = requiredCompletionObligations(input.publicDecisionContext);
@@ -182,6 +345,7 @@ async function runGoalCompletionReviews(input: {
       })
       : outcome,
     reviewedText: input.initialText,
+    performed: true,
   };
 }
 
@@ -263,6 +427,7 @@ function withCompletionGapEvidenceBundle(input: {
     ...completionGapStagnationAdvisory(input.audit),
     "",
     "review-guidance:",
+    "- A butler_evidence_packet is a pointer to omitted raw evidence, not itself a final source. If a claim depends on omitted packet evidence, call read_tool_evidence_artifact for an exact bounded slice before finalizing.",
     "- source_verified is a semantic obligation. If the bounded evidence above contains the source facts needed for the answer, use it and finalize the turn.",
     "- If the evidence is insufficient, choose a tool or artifact path that can add different evidence. Repeating the same call is useful only when the underlying state is expected to change.",
     "- If no available tool can advance the missing evidence, answer with INCOMPLETE and a concise limitation.",
@@ -498,66 +663,6 @@ function observationsFromAudit(audit: ToolAuditEntry[]) {
     });
 }
 
-export async function persistCompletionGapContinuation(input: {
-  turnInput: RuntimeTurnInput;
-  deps: NativeTurnRunnerDeps;
-  turnId?: string | null;
-  audit: ToolAuditEntry[];
-  publicDecisionContext: PublicWorkDecision[];
-  observation: {
-    kind: string;
-    summary: string;
-    modelVisibleContent: string;
-    refs?: Array<{ kind: string; id: string; path?: string }>;
-  };
-}): Promise<void> {
-  const turnId = input.turnId;
-  if (!turnId) return;
-  const refs = collectTurnContinuationRefs({
-    butlerData: input.deps.butlerData,
-    sessionId: input.turnInput.handle.sessionId,
-    turnId,
-    audit: input.audit,
-    publicDecisionContext: input.publicDecisionContext,
-  });
-  persistTurnContextAtom({
-    butlerData: input.deps.butlerData,
-    sessionId: input.turnInput.handle.sessionId,
-    turnId,
-    state: "continuing",
-    sourceErrorCode: KERNEL_COMPLETION_GAP_CONTINUATION_CODE,
-    reason: input.observation.summary,
-    userRequest: {
-      id: currentUserMessageRef(input.turnInput),
-    },
-    ...refs,
-    unresolvedObservations: [{
-      kind: input.observation.kind,
-      id: `completion-gap:${turnId}`,
-    }, ...(input.observation.refs ?? [])],
-    latestCompletionReview: {
-      status: "gap",
-      observationId: `completion-gap:${turnId}`,
-    },
-  });
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: "turn.observation",
-    visibility: "internal",
-    payload: {
-      kind: input.observation.kind,
-      safeLabel: input.observation.summary,
-      modelVisibleContentChars: input.observation.modelVisibleContent.length,
-    },
-  });
-  await emitTurnEventBestEffort(input.turnInput, {
-    kind: "turn.continuation_scheduled",
-    payload: {
-      reason: KERNEL_COMPLETION_GAP_CONTINUATION_CODE,
-      safeLabel: "Continuing from completion gap",
-    },
-  });
-}
-
 export function collectTurnContinuationRefs(input: {
   butlerData: string;
   sessionId: string;
@@ -567,6 +672,7 @@ export function collectTurnContinuationRefs(input: {
 }): {
   latestAssistantDecision?: { id: string };
   openToolPairs: Array<{ kind: string; id: string; path?: string }>;
+  evidenceCandidates: Array<{ kind: string; id: string; path?: string }>;
   currentTurnWork: Array<{ kind: string; id: string; path?: string }>;
   currentTurnTodos: Array<{ kind: string; id: string; path?: string }>;
 } {
@@ -593,17 +699,15 @@ export function collectTurnContinuationRefs(input: {
     .filter((entry) => !entry.ok)
     .map((entry, index) => ({ kind: "tool_pair", id: `audit:${index}:${entry.name}` }));
   const latestAssistantDecision = input.publicDecisionContext.at(-1)?.decisionId;
+  const evidenceCandidates = buildTurnContinuationEvidence({
+    audit: input.audit,
+    publicDecisions: input.publicDecisionContext,
+  }).refs;
   return {
     ...(latestAssistantDecision ? { latestAssistantDecision: { id: latestAssistantDecision } } : {}),
     openToolPairs,
+    evidenceCandidates,
     currentTurnWork,
     currentTurnTodos,
   };
-}
-
-function currentUserMessageRef(input: RuntimeTurnInput): string {
-  if ("message" in input.input && typeof input.input.message?.id === "string") {
-    return input.input.message.id;
-  }
-  return `turn:${input.handle.sessionId}`;
 }

@@ -1,18 +1,24 @@
 import { test, expect } from "bun:test";
 import {
   listModelMetadata,
+  modelSupportsJsonSchemaResponseFormat,
+  modelStructuredDecisionTransport,
   resolveModelMetadata,
   type ModelProviderId,
   type ProviderModelMetadata,
 } from "../../packages/butler-agent/src/integrations/providers/model-catalog.ts";
-import { ANTHROPIC_MODELS } from "../../packages/butler-agent/src/integrations/providers/model-catalog/anthropic.ts";
-import { GOOGLE_MODELS } from "../../packages/butler-agent/src/integrations/providers/model-catalog/google.ts";
-import { KIMI_MODELS } from "../../packages/butler-agent/src/integrations/providers/model-catalog/kimi.ts";
-import { OPENCODE_GO_MODELS } from "../../packages/butler-agent/src/integrations/providers/model-catalog/opencode-go.ts";
-import { OPENAI_MODELS } from "../../packages/butler-agent/src/integrations/providers/model-catalog/openai.ts";
-import { QWEN_MODELS } from "../../packages/butler-agent/src/integrations/providers/model-catalog/qwen.ts";
-import { XAI_MODELS } from "../../packages/butler-agent/src/integrations/providers/model-catalog/xai.ts";
-import { ZAI_MODELS } from "../../packages/butler-agent/src/integrations/providers/model-catalog/zai.ts";
+import { ANTHROPIC_MODELS } from "../../packages/butler-agent/src/integrations/providers/anthropic/catalog.ts";
+import { GOOGLE_MODELS } from "../../packages/butler-agent/src/integrations/providers/google/catalog.ts";
+import { KIMI_MODELS } from "../../packages/butler-agent/src/integrations/providers/kimi/catalog.ts";
+import { OPENCODE_GO_MODELS } from "../../packages/butler-agent/src/integrations/providers/opencode-go/catalog.ts";
+import { OPENAI_MODELS } from "../../packages/butler-agent/src/integrations/providers/openai/catalog.ts";
+import { QWEN_MODELS } from "../../packages/butler-agent/src/integrations/providers/qwen/catalog.ts";
+import { XAI_MODELS } from "../../packages/butler-agent/src/integrations/providers/xai/catalog.ts";
+import { ZAI_MODELS } from "../../packages/butler-agent/src/integrations/providers/zai/catalog.ts";
+import {
+  providerCapabilitiesForModel,
+  resolveProviderAdapterDefinition,
+} from "../../packages/butler-agent/src/integrations/providers/registry.ts";
 
 const providerModules: Array<{
   providerId: Exclude<ModelProviderId, "local">;
@@ -47,4 +53,32 @@ test("namespaced hosted model metadata resolves duplicate model ids by provider"
   expect(zaiGlm.hosted_api_shape).toBeUndefined();
   expect(openCodeGoGlm.provider_id).toBe("opencode-go");
   expect(openCodeGoGlm.hosted_api_shape).toBe("openai_chat_completions");
+});
+
+test("structured output capability follows the provider call shape", () => {
+  expect(modelSupportsJsonSchemaResponseFormat("openai/gpt-5.5")).toBe(true);
+  expect(modelSupportsJsonSchemaResponseFormat("zai/glm-5.2")).toBe(false);
+  expect(modelSupportsJsonSchemaResponseFormat("anthropic/claude-opus-4-6")).toBe(false);
+  expect(modelSupportsJsonSchemaResponseFormat("google/gemini-3.1-pro-preview")).toBe(false);
+  expect(modelSupportsJsonSchemaResponseFormat("opencode-go/glm-5.2")).toBe(false);
+  expect(modelStructuredDecisionTransport("openai/gpt-5.5")).toBe("json_schema");
+  expect(modelStructuredDecisionTransport("zai/glm-5.2")).toBe("function_tool");
+  expect(modelStructuredDecisionTransport("anthropic/claude-opus-4-6")).toBe("function_tool");
+  expect(modelStructuredDecisionTransport("google/gemini-3.1-pro-preview")).toBe("function_tool");
+});
+
+test("provider registry binds capabilities and catalogs to one concrete model provider", () => {
+  expect(resolveProviderAdapterDefinition("openai/gpt-5.5").catalog).toBe(OPENAI_MODELS);
+  expect(resolveProviderAdapterDefinition("zai/glm-5.2").catalog).toBe(ZAI_MODELS);
+  expect(providerCapabilitiesForModel("openai/gpt-5.5")).toMatchObject({
+    supportsStructuredOutputs: true,
+    structuredDecisionTransport: "json_schema",
+  });
+  expect(providerCapabilitiesForModel("zai/glm-5.2")).toMatchObject({
+    supportsStructuredOutputs: true,
+    structuredDecisionTransport: "function_tool",
+  });
+  expect(() => providerCapabilitiesForModel("unknown/example-model")).toThrow(
+    "provider_adapter_not_registered:unknown",
+  );
 });

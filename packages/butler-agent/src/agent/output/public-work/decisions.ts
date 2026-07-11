@@ -13,13 +13,43 @@ import {
 
 const PUBLIC_DECISION_EVIDENCE_REF_LIMIT = 2;
 const PUBLIC_DECISION_FALLBACK_MIN_CHARS = 8;
+export const PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT = 6;
+
+export interface PublicWorkDecisionEnvelope {
+  blockTitle: string;
+  summary: string;
+  rationale: string;
+  nextStep: string;
+  expectedEffect?: string;
+  repeatReason?: PublicWorkDecision["repeatReason"];
+  completionObligations?: PublicWorkDecision["completionObligations"];
+  repaired?: boolean;
+}
+
+interface PublicWorkDecisionBatchInput {
+  envelope: PublicWorkDecisionEnvelope;
+  toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
+  existingDecisions: PublicWorkDecision[];
+  contractContext?: {
+    contractId: string;
+    workstreamId?: string;
+    semanticBlockId: string;
+    usageGroupId: string;
+  };
+}
 
 export function publicWorkDecisionPayload(decision: PublicWorkDecision): Record<string, unknown> {
   return {
     decisionId: decision.decisionId,
+    contractId: decision.contractId,
+    workstreamId: decision.workstreamId,
+    semanticBlockId: decision.semanticBlockId,
+    decisionTitle: decision.blockTitle,
     decisionSummary: decision.summary,
     decisionRationale: decision.rationale,
     decisionNextStep: decision.nextStep,
+    decisionExpectedEffect: decision.expectedEffect,
+    decisionRepeatReason: decision.repeatReason,
     decisionSource: decision.source,
     decisionEvidenceRefs: decision.evidenceRefs,
     decisionCompletionObligations: decision.completionObligations ?? [],
@@ -31,42 +61,86 @@ export function publicWorkDecisionsFromAssistantText(input: {
   toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
   language: RuntimeMessageLanguage;
   existingDecisions: PublicWorkDecision[];
+  contractContext?: {
+    contractId: string;
+    workstreamId?: string;
+    semanticBlockId: string;
+    usageGroupId: string;
+  };
 }): PublicWorkDecision[] {
   const structured = publicDecisionStructuredFields(input.text);
   if (structured.length === 0) {
     return [];
   }
+  const parsed = structured[0]!;
+  return publicWorkDecisionsFromEnvelope({
+    envelope: {
+      blockTitle: parsed.blockTitle ?? "",
+      summary: parsed.summary ?? "",
+      rationale: parsed.rationale ?? "",
+      nextStep: parsed.nextStep ?? "",
+      ...(parsed.expectedEffect ? { expectedEffect: parsed.expectedEffect } : {}),
+      ...(parsed.repeatReason ? { repeatReason: parsed.repeatReason } : {}),
+      completionObligations: parsed.completionObligations ?? [],
+      ...(parsed.repaired === true ? { repaired: true } : {}),
+    },
+    toolCalls: input.toolCalls,
+    existingDecisions: input.existingDecisions,
+    contractContext: input.contractContext,
+  });
+}
+
+export function publicWorkDecisionsFromEnvelope(
+  input: PublicWorkDecisionBatchInput,
+): PublicWorkDecision[] {
+  const envelope = input.envelope;
+  const decisionId = publicDecisionId();
+  const usageGroupId = input.contractContext?.usageGroupId ?? decisionId;
   return input.toolCalls.flatMap((call, index) => {
-    const indexedDecision = structured[index];
-    const sharedDecision = structured[0];
-    const decisionWasRepaired = indexedDecision?.repaired === true || sharedDecision?.repaired === true;
-    const summary = indexedDecision?.summary ?? sharedDecision?.summary;
-    const rationale = indexedDecision?.rationale ?? sharedDecision?.rationale;
-    const nextStep = indexedDecision?.nextStep ?? sharedDecision?.nextStep;
+    const decisionWasRepaired = envelope.repaired === true;
+    const blockTitle = envelope.blockTitle;
+    const summary = envelope.summary;
+    const rationale = envelope.rationale;
+    const nextStep = envelope.nextStep;
+    const expectedEffect = envelope.expectedEffect;
+    const repeatReason = envelope.repeatReason;
     if (
       decisionWasRepaired ||
+      typeof blockTitle !== "string" ||
       typeof summary !== "string" ||
       typeof rationale !== "string" ||
       typeof nextStep !== "string" ||
       !isUsablePublicDecisionText(summary ?? "") ||
+      !isUsablePublicDecisionText(blockTitle ?? "", { minChars: 2 }) ||
       !isUsablePublicDecisionText(rationale ?? "", { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS }) ||
       !isUsablePublicDecisionText(nextStep ?? "", { minChars: PUBLIC_DECISION_FALLBACK_MIN_CHARS })
     ) {
       return [];
     }
     return {
-      decisionId: publicDecisionId(),
+      decisionId,
+      usageGroupId,
+      ...(input.contractContext
+        ? {
+          contractId: input.contractContext.contractId,
+          ...(input.contractContext.workstreamId ? { workstreamId: input.contractContext.workstreamId } : {}),
+          semanticBlockId: input.contractContext.semanticBlockId,
+        }
+        : {}),
+      blockTitle,
       summary,
       rationale,
       evidenceRefs: input.existingDecisions
         .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
         .map((decision) => decision.summary),
       nextStep,
-      completionObligations: indexedDecision?.completionObligations ??
-        sharedDecision?.completionObligations ??
-        [],
+      ...(expectedEffect ? { expectedEffect } : {}),
+      ...(repeatReason ? { repeatReason } : {}),
+      completionObligations: envelope.completionObligations ?? [],
       source: "assistant-authored",
       toolName: call.name,
+      toolCallIndex: index,
+      toolBatchSize: Math.min(input.toolCalls.length, PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT),
     };
   });
 }
@@ -80,16 +154,21 @@ export function takePublicWorkDecisionForTool(input: {
   allowRuntimeDerived?: boolean;
 }): PublicWorkDecision {
   const pending = takePendingDecision(input.pending, input.toolName);
-  if (!pending || !isCompleteVisibleDecision(pending, input.allowRuntimeDerived === true)) {
-    throw new Error("Public work decision required before visible tool execution.");
+  const decision = pending && isCompleteVisibleDecision(pending, input.allowRuntimeDerived === true)
+    ? pending
+    : undefined;
+  if (!decision || !isCompleteVisibleDecision(decision, input.allowRuntimeDerived === true)) {
+    throw new Error("Fresh public work decision continuation needed before visible tool execution.");
   }
-  const evidenceRefs = pending.evidenceRefs.length > 0
-    ? pending.evidenceRefs
+  const evidenceRefs = decision.evidenceRefs.length > 0
+    ? decision.evidenceRefs
     : input.previousDecisions
       .slice(-PUBLIC_DECISION_EVIDENCE_REF_LIMIT)
       .map((decision) => decision.summary);
+  const publicDecision = { ...decision };
+  delete publicDecision.claimed;
   return {
-    ...pending,
+    ...publicDecision,
     evidenceRefs,
   };
 }
@@ -99,21 +178,122 @@ export function hasCompleteAuthoredPublicDecisionForTool(input: {
   toolName: string;
   allowRuntimeDerived?: boolean;
 }): boolean {
-  const decision = input.pending.find((candidate) => candidate.toolName === input.toolName) ??
+  const decision = input.pending.find((candidate) => candidate.toolName === input.toolName && candidate.claimed !== true) ??
+    input.pending.find((candidate) => candidate.toolName === input.toolName) ??
+    input.pending.find((candidate) => candidate.claimed !== true) ??
     input.pending[0];
-  return Boolean(decision && isCompleteVisibleDecision(decision, input.allowRuntimeDerived === true));
+
+  if (!decision) {
+    return false;
+  }
+  if (!decisionGroupHasRemainingUse(input.pending, decision)) {
+    return false;
+  }
+
+  return isCompleteVisibleDecision(decision, input.allowRuntimeDerived === true);
 }
 
 function takePendingDecision(
   pending: PublicWorkDecision[],
   toolName: string,
 ): PublicWorkDecision | undefined {
-  const matchingIndex = pending.findIndex((decision) => decision.toolName === toolName);
-  const hasMatchingDecision = matchingIndex >= 0;
-  if (hasMatchingDecision) {
-    return pending.splice(matchingIndex, 1)[0];
+  const matchingOrderedDecision = pending.find((decision) =>
+    decision.toolName === toolName && decision.claimed !== true,
+  );
+  if (matchingOrderedDecision && claimDecisionGroupUse(pending, matchingOrderedDecision)) {
+    matchingOrderedDecision.claimed = true;
+    return decisionWithClaimedIndex(pending, matchingOrderedDecision);
   }
-  return pending.shift();
+
+  const reusableMatchingDecision = pending.find((decision) => decision.toolName === toolName);
+  if (reusableMatchingDecision && claimDecisionGroupUse(pending, reusableMatchingDecision)) {
+    return decisionWithClaimedIndex(pending, reusableMatchingDecision);
+  }
+
+  const sharedOrderedDecision = pending.find((decision) => decision.claimed !== true);
+  if (sharedOrderedDecision && claimDecisionGroupUse(pending, sharedOrderedDecision)) {
+    sharedOrderedDecision.claimed = true;
+    return decisionWithClaimedIndex(pending, sharedOrderedDecision);
+  }
+
+  const sharedDecision = pending[0];
+  if (sharedDecision && claimDecisionGroupUse(pending, sharedDecision)) {
+    return decisionWithClaimedIndex(pending, sharedDecision);
+  }
+
+  return;
+}
+
+function decisionWithClaimedIndex(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+): PublicWorkDecision {
+  const claimedIndex = Math.max(0, decisionGroupUsageCount(pending, decision) - 1);
+  return {
+    ...decision,
+    toolCallIndex: decision.toolCallIndex ?? claimedIndex,
+  };
+}
+
+function decisionUsageGroupKey(decision: PublicWorkDecision): string {
+  return decision.usageGroupId ?? decision.decisionId;
+}
+
+function decisionGroupHasRemainingUse(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+): boolean {
+  return decisionGroupUsageCount(pending, decision) < decisionGroupUsageLimit(pending, decision);
+}
+
+function claimDecisionGroupUse(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+): boolean {
+  const usageCount = decisionGroupUsageCount(pending, decision);
+  if (usageCount >= decisionGroupUsageLimit(pending, decision)) return false;
+  setDecisionGroupUsageCount(pending, decision, usageCount + 1);
+  return true;
+}
+
+function decisionGroupUsageLimit(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+): number {
+  const key = decisionUsageGroupKey(decision);
+  const declaredBatchSize = pending
+    .filter((candidate) => decisionUsageGroupKey(candidate) === key)
+    .reduce((max, candidate) => Math.max(max, candidate.toolBatchSize ?? 0), 0);
+  return Math.max(
+    1,
+    Math.min(
+      declaredBatchSize || PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT,
+      PUBLIC_WORK_DECISION_TOOL_USAGE_LIMIT,
+    ),
+  );
+}
+
+function decisionGroupUsageCount(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+): number {
+  const key = decisionUsageGroupKey(decision);
+  return pending
+    .filter((candidate) => decisionUsageGroupKey(candidate) === key)
+    .reduce((max, candidate) => Math.max(max, candidate.usageCount ?? 0), 0);
+}
+
+function setDecisionGroupUsageCount(
+  pending: PublicWorkDecision[],
+  decision: PublicWorkDecision,
+  usageCount: number,
+): void {
+  const key = decisionUsageGroupKey(decision);
+  for (const candidate of pending) {
+    if (decisionUsageGroupKey(candidate) === key) {
+      candidate.usageCount = usageCount;
+    }
+  }
 }
 
 export function annotateToolResultWithDecisionContext(input: {

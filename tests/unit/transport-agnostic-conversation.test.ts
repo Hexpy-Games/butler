@@ -310,6 +310,7 @@ test("mock transport can deliver a source-backed web search answer without Teleg
     runFunctionToolPromptText: async (input) => {
       await input.onAssistantTextBeforeTools?.({
         text: [
+          "title: Butler 공개 문서 검색",
           "summary: Search public web sources for Butler documentation.",
           "rationale: The transport answer needs a current source-backed reference.",
           "next_step: Use the source URL from search evidence in the final reply.",

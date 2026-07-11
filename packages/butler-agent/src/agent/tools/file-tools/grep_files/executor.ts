@@ -1,22 +1,25 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { resolveWorkspacePathGuard, looksSensitiveWorkspacePath } from "../shared/workspace-path-guard.ts";
 import { fileToolCapabilityReceipt, fileToolEvidenceReceipt } from "../shared/evidence.ts";
 import { getWorkspaceRoot, stringArray, tryParseToolArgs } from "../shared/args.ts";
 import type { FileToolExecutionContext } from "../read_file/executor.ts";
 
-const DEFAULT_EXCLUDED_DIRS = new Set([".git", ".project-ledger", "project-ledger", "node_modules", "dist", "build", ".next", "coverage", ".turbo", "vendor"]);
+const DEFAULT_EXCLUDED_DIRS = new Set([
+  ".cache",
+  ".git",
+  ".next",
+  ".project-ledger",
+  ".tmp",
+  ".turbo",
+  "build",
+  "coverage",
+  "dist",
+  "node_modules",
+  "project-ledger",
+  "vendor",
+]);
 
-function globToRe(glob: string) {
-  let out = "";
-  for (let i = 0; i < glob.length; i += 1) {
-    const ch = glob[i];
-    if (ch === "*" && glob[i + 1] === "*") { out += ".*"; i += 1; continue; }
-    if (ch === "*") { out += "[^/]*"; continue; }
-    out += ch.replace(/[\\^$+?.()|{}[\]]/g, "\\$&");
-  }
-  return new RegExp(`^${out}$`);
-}
 function escapeRegExp(value: string): string { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function isBinary(b: Buffer) { const n = Math.min(b.length, 2048); for (let i = 0; i < n; i += 1) if (b[i] === 0) return true; return false; }
 
@@ -29,7 +32,8 @@ async function walk(root: string, dir: string, depth: number, out: WalkState, li
   if (depth > limits.maxDepth) { out.truncated = true; out.stoppedBy = "max_depth"; return; }
   out.dirsVisited += 1;
   if (out.dirsVisited > limits.maxDirs) { out.truncated = true; out.stoppedBy = "max_dirs"; return; }
-  const entries = await readdir(dir, { withFileTypes: true });
+  const entries = (await readdir(dir, { withFileTypes: true }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   for (const ent of entries) {
     if (out.truncated) return;
     const abs = join(dir, ent.name);
@@ -50,7 +54,7 @@ export async function executeGrepFilesTool(call: { arguments?: unknown; input?: 
   if (!parsed.ok) return { ok: false, error: parsed.error, detail: parsed.detail, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: parsed.error }) };
   const a = parsed.args;
   const workspaceRoot = getWorkspaceRoot(a, context.workspacePath);
-  const pattern = String(a.pattern ?? a.query ?? "");
+  const pattern = String(a.pattern ?? "").trim();
   const regex = Boolean(a.regex ?? false);
   const caseSensitive = Boolean(a.case_sensitive ?? true);
   const include = stringArray(a.include ?? a.include_globs);
@@ -75,14 +79,17 @@ export async function executeGrepFilesTool(call: { arguments?: unknown; input?: 
   if (!guard.ok) return { ok: false, error: guard.reason, guard, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: guard.reason }) };
   let matcher: RegExp;
   try { matcher = new RegExp(regex ? pattern : escapeRegExp(pattern), caseSensitive ? "" : "i"); } catch (error) { return { ok: false, error: "invalid_pattern", detail: error instanceof Error ? error.message : String(error), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: false, error: "invalid_pattern" }) }; }
-  const inc = include.length ? include.map(globToRe) : [/.*/];
-  const exc = exclude.map(globToRe);
+  const inc = include.length ? include.map(workspaceGlobMatcher) : [() => true];
+  const exc = exclude.map(workspaceGlobMatcher);
   const walkState: WalkState = { files: [], dirsVisited: 0, truncated: false, startedAt: Date.now() };
   await walk(guard.realPath!, guard.realPath!, 0, walkState, limits);
+  walkState.files.sort((a, b) =>
+    workspaceCandidatePriority(a) - workspaceCandidatePriority(b) || a.localeCompare(b),
+  );
   const matches: Array<{ path: string; line: number; text: string; context: Array<{ line: number; text: string }> }> = [];
   let filesSearched = 0; let filesSkipped = 0; let truncated = walkState.truncated; let stoppedBy = walkState.stoppedBy;
   for (const f of walkState.files) {
-    if (!inc.some((r) => r.test(f)) || exc.some((r) => r.test(f))) continue;
+    if (!inc.some((matches) => matches(f)) || exc.some((matches) => matches(f))) continue;
     const abs = join(guard.realPath!, f);
     const st = await stat(abs);
     if (st.size > maxBytes) { filesSkipped += 1; truncated = true; stoppedBy = stoppedBy ?? "max_bytes_per_file"; continue; }
@@ -95,9 +102,28 @@ export async function executeGrepFilesTool(call: { arguments?: unknown; input?: 
       if (matcher.test(lines[i])) {
         const start = Math.max(0, i - contextLines); const end = Math.min(lines.length - 1, i + contextLines);
         matches.push({ path: f, line: i + 1, text: lines[i], context: lines.slice(start, end + 1).map((text, idx) => ({ line: start + idx + 1, text })) });
-        if (matches.length >= maxMatches) { truncated = true; stoppedBy = stoppedBy ?? "max_matches"; return { ok: true, pattern, regex, case_sensitive: caseSensitive, files_searched: filesSearched, files_skipped: filesSkipped, dirs_visited: walkState.dirsVisited, files_considered: walkState.files.length, matches, truncated, stopped_by: stoppedBy, evidence_receipts: fileToolEvidenceReceipt({ toolName: "grep_files", summary: `Found ${matches.length} matches for ${pattern}`, references: { pattern, regex, case_sensitive: caseSensitive, files_searched: filesSearched, files_skipped: filesSkipped, dirs_visited: walkState.dirsVisited, files_considered: walkState.files.length, truncated, stopped_by: stoppedBy }, satisfies: ["source_verified"] }), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: true, truncated, filesSearched, filesSkipped, matches }) }; }
+        if (matches.length >= maxMatches) { truncated = true; stoppedBy = stoppedBy ?? "max_matches"; return { ok: true, pattern, regex, case_sensitive: caseSensitive, files_searched: filesSearched, files_skipped: filesSkipped, dirs_visited: walkState.dirsVisited, files_considered: walkState.files.length, matches, truncated, stopped_by: stoppedBy, evidence_receipts: fileToolEvidenceReceipt({ toolName: "grep_files", summary: `Found ${matches.length} matches for ${pattern}`, references: { pattern, regex, case_sensitive: caseSensitive, files_searched: filesSearched, files_skipped: filesSkipped, dirs_visited: walkState.dirsVisited, files_considered: walkState.files.length, truncated, stopped_by: stoppedBy }, satisfies: [] }), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: true, truncated, filesSearched, filesSkipped, matches }) }; }
       }
     }
   }
-  return { ok: true, pattern, regex, case_sensitive: caseSensitive, files_searched: filesSearched, files_skipped: filesSkipped, dirs_visited: walkState.dirsVisited, files_considered: walkState.files.length, matches, truncated, stopped_by: stoppedBy, evidence_receipts: fileToolEvidenceReceipt({ toolName: "grep_files", summary: `Found ${matches.length} matches for ${pattern}`, references: { pattern, regex, case_sensitive: caseSensitive, files_searched: filesSearched, files_skipped: filesSkipped, dirs_visited: walkState.dirsVisited, files_considered: walkState.files.length, truncated, stopped_by: stoppedBy }, satisfies: ["source_verified"] }), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: true, truncated, filesSearched, filesSkipped, matches }) };
+  return { ok: true, pattern, regex, case_sensitive: caseSensitive, files_searched: filesSearched, files_skipped: filesSkipped, dirs_visited: walkState.dirsVisited, files_considered: walkState.files.length, matches, truncated, stopped_by: stoppedBy, evidence_receipts: fileToolEvidenceReceipt({ toolName: "grep_files", summary: `Found ${matches.length} matches for ${pattern}`, references: { pattern, regex, case_sensitive: caseSensitive, files_searched: filesSearched, files_skipped: filesSkipped, dirs_visited: walkState.dirsVisited, files_considered: walkState.files.length, truncated, stopped_by: stoppedBy }, satisfies: [] }), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "grep_files", ok: true, truncated, filesSearched, filesSkipped, matches }) };
+}
+
+function workspaceGlobMatcher(glob: string): (path: string) => boolean {
+  const matcher = new Bun.Glob(glob);
+  const matchesBasename = !glob.includes("/");
+  return (path) => matcher.match(path) || (matchesBasename && matcher.match(basename(path)));
+}
+
+function workspaceCandidatePriority(path: string): number {
+  const segments = path.split("/");
+  if (segments.includes("src")) return 0;
+  if (
+    segments.some((segment) => ["test", "tests", "fixture", "fixtures"].includes(segment)) ||
+    /\.(?:spec|test)\.[^/]+$/u.test(path)
+  ) return 3;
+  if (segments.some((segment) => ["benchmark", "benchmarks", "example", "examples", "scripts"].includes(segment))) {
+    return 2;
+  }
+  return 1;
 }

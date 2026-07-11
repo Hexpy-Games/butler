@@ -1,0 +1,66 @@
+export const SHARED_WORK_BLOCK_MARKER_KIND = "work_block" as const;
+
+export type SharedWorkBlockPhase = "started" | "updated" | "completed";
+
+export interface SharedTurnEvent {
+  id: string;
+  turnSequence: number;
+  createdAt?: string;
+  kind: string;
+  visibility?: "public" | "internal";
+  payload?: Record<string, unknown>;
+}
+
+export interface SharedProgressDetailRow {
+  id: string;
+  kind?: string;
+  safe_label: string;
+  safe_value?: string;
+  state?: string;
+}
+
+export interface SharedProgressRow {
+  id: string;
+  kind?: string;
+  safe_label: string;
+  state: string;
+  created_at?: string;
+  turn_event_sequence?: number;
+  safe_tool_name?: string;
+  safe_input_label?: string;
+  safe_count?: number;
+  safe_order?: number;
+  safe_path_labels?: string[];
+  tool_call_id?: string;
+  bridge_phase?: string;
+  receipt_kind?: string;
+  public_decision_role?: string;
+  public_decision_summary?: string;
+  public_decision_rationale?: string;
+  public_decision_next_step?: string;
+  public_decision_source?: string;
+  public_decision_model_call_id?: string;
+  public_decision_latency_ms?: number;
+  public_decision_evidence_refs?: string[];
+  work_contract_id?: string;
+  work_stream_id?: string;
+  semantic_block_id?: string;
+  work_block_id?: string;
+  work_block_label?: string;
+  work_block_phase?: SharedWorkBlockPhase;
+  work_block_sequence?: number;
+  work_decision_id?: string;
+  work_decision_title?: string;
+  work_decision_summary?: string;
+  work_decision_rationale?: string;
+  work_decision_next_step?: string;
+  work_decision_source?: string;
+  work_decision_evidence_refs?: string[];
+  runtime_fault_id?: string;
+  runtime_fault_kind?: string;
+  runtime_fault_retryable?: boolean;
+  runtime_fault_public_summary?: string;
+  runtime_fault_safe_error_code?: string;
+  runtime_fault_safe_cause?: string;
+  safe_detail_rows?: SharedProgressDetailRow[];
+}

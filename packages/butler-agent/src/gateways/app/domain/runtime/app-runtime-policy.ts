@@ -32,6 +32,8 @@ export function appRuntimePolicy(input: {
   return {
     ...existing,
     accessMode: input.accessMode,
+    thinFirstResponse: thinFirstResponsePolicy(existing),
+    thin_first_response: thinFirstResponsePolicy(existing),
     trackingMode,
     tracking_mode: trackingMode,
     trackingModeSource: tracking.source,
@@ -48,6 +50,12 @@ export function appRuntimePolicy(input: {
     ),
     requiredNativeToolProfiles: [...new Set(requestedProfiles)],
   };
+}
+
+function thinFirstResponsePolicy(existing: Record<string, unknown>): boolean | "disabled" {
+  const value = existing.thin_first_response ?? existing.thinFirstResponse;
+  if (value === false || value === "disabled") return "disabled";
+  return true;
 }
 
 export function stringArray(value: unknown): string[] {
