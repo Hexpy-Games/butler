@@ -248,6 +248,7 @@ export async function prepareNativeTurnContext(input: {
     executor: turnScopedExecutor({
       defaultExecutor,
       injectedExecutor: input.deps.butlerToolExecutor,
+      signal: input.turnInput.signal,
     }),
   });
   await emitStartedAndPreparation({
@@ -505,12 +506,15 @@ function preparationMetricInput(
 function turnScopedExecutor(input: {
   defaultExecutor: FunctionToolPromptOptions["executeTool"];
   injectedExecutor?: FunctionToolPromptOptions["executeTool"];
+  signal?: AbortSignal;
 }): FunctionToolPromptOptions["executeTool"] {
-  if (!input.injectedExecutor) return input.defaultExecutor;
+  const defaultExecutor = input.defaultExecutor;
   const injectedExecutor = input.injectedExecutor;
   return async (call) => {
+    const scopedCall = input.signal ? { ...call, signal: input.signal } : call;
+    if (!injectedExecutor) return await defaultExecutor(scopedCall);
     if (TURN_SCOPED_WORK_TRACKING_TOOLS.has(call.name)) {
-      return await input.defaultExecutor(call);
+      return await defaultExecutor(scopedCall);
     }
     return await injectedExecutor(call);
   };

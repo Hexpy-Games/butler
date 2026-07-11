@@ -1,4 +1,8 @@
-import { spawn, spawnSync } from "child_process";
+import {
+  spawn,
+  spawnSync,
+  type ChildProcessWithoutNullStreams,
+} from "child_process";
 import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from "fs";
 import { extname, isAbsolute, join, relative, resolve } from "path";
 import { budgetToolOutput, type ShellCommandResult } from "../../../context/tool-output-budgeter.ts";
@@ -16,7 +20,7 @@ import {
   restoreProjectLedgerMutationIfChanged,
 } from "./project-ledger-mutation-snapshot.ts";
 
-type ToolCall = { args: Record<string, unknown> };
+type ToolCall = { args: Record<string, unknown>; signal?: AbortSignal };
 
 export function createRunCommandToolHandlers(input: {
   butlerHome: string;
@@ -29,6 +33,7 @@ export function createRunCommandToolHandlers(input: {
       butlerData: input.butlerData,
       workspacePath: input.workspacePath,
       args: call.args,
+      signal: call.signal,
     }),
   };
 }
@@ -540,6 +545,7 @@ async function executeBashCommand(input: {
   timeoutMs: number;
   butlerData: string;
   pipefail: boolean;
+  signal?: AbortSignal;
 }): Promise<ShellCommandResult> {
   return await new Promise((resolveCommand, reject) => {
     const child = spawn(
@@ -548,6 +554,7 @@ async function executeBashCommand(input: {
       {
         cwd: input.cwd,
         env: butlerToolProcessEnvironment({ butlerData: input.butlerData }),
+        detached: process.platform !== "win32",
         windowsHide: true,
       },
     );
@@ -556,14 +563,33 @@ async function executeBashCommand(input: {
     let stdoutTruncated = false;
     let stderrTruncated = false;
     let timedOut = false;
+    let escalationTimer: ReturnType<typeof setTimeout> | undefined;
+    let terminationStarted = false;
 
-    const timer = setTimeout(() => {
+    const terminateProcessTree = () => {
+      if (terminationStarted) return;
+      terminationStarted = true;
+      signalCommandProcessTree(child, "SIGTERM");
+      escalationTimer = setTimeout(() => {
+        signalCommandProcessTree(child, "SIGKILL");
+      }, 500);
+      escalationTimer.unref?.();
+    };
+    const timeoutTimer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-      setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-      }, 500).unref?.();
+      terminateProcessTree();
     }, input.timeoutMs);
+    const onAbort = () => {
+      clearTimeout(timeoutTimer);
+      terminateProcessTree();
+    };
+    const cleanup = (includeEscalation: boolean) => {
+      clearTimeout(timeoutTimer);
+      if (includeEscalation && escalationTimer) clearTimeout(escalationTimer);
+      input.signal?.removeEventListener("abort", onAbort);
+    };
+    if (input.signal?.aborted) onAbort();
+    else input.signal?.addEventListener("abort", onAbort, { once: true });
 
     child.stdout.on("data", (chunk) => {
       const next = appendCapturedText(stdout, chunk);
@@ -576,23 +602,90 @@ async function executeBashCommand(input: {
       stderrTruncated ||= next.truncated;
     });
     child.on("error", (error) => {
-      clearTimeout(timer);
+      cleanup(true);
       reject(error);
     });
     child.on("close", (code) => {
-      clearTimeout(timer);
-      const truncationNotes = [
-        stdoutTruncated ? `[stdout truncated after ${MAX_COMMAND_CAPTURE_CHARS} chars]` : "",
-        stderrTruncated ? `[stderr truncated after ${MAX_COMMAND_CAPTURE_CHARS} chars]` : "",
-      ].filter(Boolean);
-      resolveCommand({
-        stdout: stdoutTruncated ? `${stdout}\n${truncationNotes[0] ?? ""}` : stdout,
-        stderr: stderrTruncated ? `${stderr}\n${truncationNotes.at(-1) ?? ""}` : stderr,
-        exit_code: timedOut ? null : code,
-        timed_out: timedOut,
-      });
+      cleanup(false);
+      void (async () => {
+        if (terminationStarted) {
+          let stopped = await waitForCommandProcessTreeExit(child, 500);
+          if (!stopped) {
+            signalCommandProcessTree(child, "SIGKILL");
+            stopped = await waitForCommandProcessTreeExit(child, 500);
+          }
+          if (!stopped) {
+            cleanup(true);
+            reject(new Error("run_command_process_tree_termination_failed"));
+            return;
+          }
+        }
+        cleanup(true);
+        const truncationNotes = [
+          stdoutTruncated ? `[stdout truncated after ${MAX_COMMAND_CAPTURE_CHARS} chars]` : "",
+          stderrTruncated ? `[stderr truncated after ${MAX_COMMAND_CAPTURE_CHARS} chars]` : "",
+        ].filter(Boolean);
+        resolveCommand({
+          stdout: stdoutTruncated ? `${stdout}\n${truncationNotes[0] ?? ""}` : stdout,
+          stderr: stderrTruncated ? `${stderr}\n${truncationNotes.at(-1) ?? ""}` : stderr,
+          exit_code: timedOut ? null : code,
+          timed_out: timedOut,
+        });
+      })();
     });
   });
+}
+
+function signalCommandProcessTree(
+  child: ChildProcessWithoutNullStreams,
+  signal: NodeJS.Signals,
+): void {
+  if (!child.pid) return;
+  if (process.platform === "win32") {
+    const result = spawnSync(
+      "taskkill",
+      ["/pid", String(child.pid), "/t", "/f"],
+      { stdio: "ignore", windowsHide: true },
+    );
+    if (result.status === 0) return;
+    child.kill(signal);
+    return;
+  }
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    child.kill(signal);
+  }
+}
+
+async function waitForCommandProcessTreeExit(
+  child: ChildProcessWithoutNullStreams,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (commandProcessTreeRunning(child) && Date.now() < deadline) {
+    await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+  }
+  return !commandProcessTreeRunning(child);
+}
+
+function commandProcessTreeRunning(child: ChildProcessWithoutNullStreams): boolean {
+  if (!child.pid) return false;
+  if (process.platform === "win32") {
+    return child.exitCode === null && child.signalCode === null;
+  }
+  try {
+    process.kill(-child.pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function throwIfCommandAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new Error("Runtime turn was cancelled.");
 }
 
 function sliceLastCharacters(value: string, maxChars: number): string {
@@ -625,7 +718,9 @@ export async function runCommandTool(input: {
   butlerData: string;
   workspacePath: string;
   args: Record<string, unknown>;
+  signal?: AbortSignal;
 }): Promise<Record<string, unknown>> {
+  throwIfCommandAborted(input.signal);
   const command = typeof input.args.command === "string" ? input.args.command.trim() : "";
   if (!command) throw new Error("run_command requires command");
   const cwd = commandWorkingDirectory({
@@ -686,15 +781,26 @@ export async function runCommandTool(input: {
     butlerData: input.butlerData,
     butlerHome: input.butlerHome,
   });
-  const raw = await executeBashCommand({
-    command,
-    cwd,
-    timeoutMs,
-    butlerData: input.butlerData,
-    pipefail: Boolean(validationSuiteFromArgs(input.args)),
-  });
-  const projectLedgerMutation = restoreProjectLedgerMutationIfChanged(projectLedgerSnapshot);
-  cleanupProjectLedgerMutationSnapshot(projectLedgerSnapshot);
+  let raw: ShellCommandResult;
+  let projectLedgerMutation: ReturnType<
+    typeof restoreProjectLedgerMutationIfChanged
+  >;
+  try {
+    raw = await executeBashCommand({
+      command,
+      cwd,
+      timeoutMs,
+      butlerData: input.butlerData,
+      pipefail: Boolean(validationSuiteFromArgs(input.args)),
+      signal: input.signal,
+    });
+    projectLedgerMutation = restoreProjectLedgerMutationIfChanged(
+      projectLedgerSnapshot,
+    );
+  } finally {
+    cleanupProjectLedgerMutationSnapshot(projectLedgerSnapshot);
+  }
+  throwIfCommandAborted(input.signal);
   if (projectLedgerMutation) {
     return {
       ok: false,
@@ -779,6 +885,7 @@ export async function runCommandTool(input: {
     ...discoveredWorkspaceArtifacts,
   ]);
   const artifactEvidence = commandArtifactEvidenceFields(artifacts);
+  throwIfCommandAborted(input.signal);
   return {
     ok: budgeted.exit_code === 0 && budgeted.timed_out === false,
     command,
