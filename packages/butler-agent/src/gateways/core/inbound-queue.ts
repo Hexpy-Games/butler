@@ -181,7 +181,9 @@ export class NativeInboundQueue {
       const leaseExpiresAtMs = Date.parse(record.processing?.leaseExpiresAt ?? "");
       const leaseExpired =
         Number.isFinite(leaseExpiresAtMs) && nowMs >= leaseExpiresAtMs;
-      if (!leaseExpired) {
+      const ownerDead = record.metadata.sameLogicalTurnContinuation === true &&
+        processingOwnerLiveness(record.processing?.ownerId) === "dead";
+      if (!leaseExpired && !ownerDead) {
         summary.skipped += 1;
         continue;
       }
@@ -210,7 +212,9 @@ export class NativeInboundQueue {
         metadata: {
           ...record.metadata,
           recoveredFromProcessing: true,
-          recoveryReason: "processing_lease_expired",
+          recoveryReason: ownerDead
+            ? "processing_owner_dead"
+            : "processing_lease_expired",
           recoveredAt: now.toISOString(),
           recoveredBy: options.ownerId ?? this.ownerId,
           previousProcessing: record.processing,
@@ -271,5 +275,18 @@ export class NativeInboundQueue {
     if (!existsSync(item.path)) return false;
     const current = this.readQueuedRecord(item.path);
     return current?.processing?.claimId === item.processing.claimId;
+  }
+}
+
+function processingOwnerLiveness(ownerId: string | undefined): "alive" | "dead" | "unknown" {
+  const match = /^(\d+):/u.exec(ownerId ?? "");
+  if (!match) return "unknown";
+  const pid = Number(match[1]);
+  if (!Number.isSafeInteger(pid) || pid <= 0) return "unknown";
+  try {
+    process.kill(pid, 0);
+    return "alive";
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ESRCH" ? "dead" : "alive";
   }
 }
