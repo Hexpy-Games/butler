@@ -40,6 +40,7 @@ function todo(input: Partial<TodoItem> & Pick<TodoItem, "id" | "phase" | "status
     priority: "normal",
     blocked_by: [],
     note: null,
+    ordinal: input.ordinal ?? 1,
     created_at: "2026-05-15T00:00:00.000Z",
     updated_at: "2026-05-15T00:00:00.000Z",
     completed_at: input.status === "completed" ? "2026-05-15T00:00:00.000Z" : null,
@@ -187,14 +188,19 @@ test("plan amendment preserves completed evidence and claim ownership", () => {
   const completedBefore = new TodoListStore(tempDir).read("amend")!.items[0];
   const amended = plans.amend({
     workstreamId: record.id, contractId: contract.contract_id, expectedGeneration: claimedGeneration,
-    items: [todoInput({ id: "done", phase: "planning", status: "completed" }), todoInput({ id: "replacement", phase: "execution", status: "in_progress" })],
+    items: [todoInput({ id: "replacement", phase: "execution", status: "in_progress" }), todoInput({ id: "done", phase: "planning", status: "completed" })],
   });
   expect(amended).toMatchObject({ ok: true, record: { active_contract_id: contract.contract_id, plan_revision: 2, superseded_todo_ids: ["next"] }, receipt: { parent_revision: 1, revision: 2 } });
   expect(plans.amend({
     workstreamId: record.id, contractId: contract.contract_id, expectedGeneration: claimedGeneration,
-    items: [todoInput({ id: "done", phase: "planning", status: "completed" }), todoInput({ id: "replacement", phase: "execution", status: "in_progress" })],
+    items: [todoInput({ id: "replacement", phase: "execution", status: "in_progress" }), todoInput({ id: "done", phase: "planning", status: "completed" })],
   })).toMatchObject({ ok: true, replayed: true, receipt: { receipt_id: amended.ok ? amended.receipt.receipt_id : "" } });
-  expect(new TodoListStore(tempDir).read("amend")!.items[0]).toEqual(completedBefore);
+  const amendedItems = new TodoListStore(tempDir).read("amend")!.items;
+  expect(amendedItems[0]).toEqual(completedBefore);
+  expect(amendedItems.map((item) => [item.id, item.ordinal])).toEqual([
+    ["done", 1],
+    ["replacement", 3],
+  ]);
 });
 
 test("todo-derived work streams accept sparse active phase snapshots", () => {

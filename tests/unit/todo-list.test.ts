@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync } from "fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -257,3 +257,104 @@ test("todo completion timestamps reflect completion transitions", () => {
   expect(store.view("main", { includeCompleted: true }).list.items[0]?.completed_at)
     .toBe("2026-04-27T00:20:00.000Z");
 });
+
+test("todo updates preserve retained ordinals and append new ids", () => {
+  const store = new TodoListStore(tempDir);
+  store.update({
+    listId: "stable-order",
+    items: [
+      { id: "a", content: "A", active_form: "Doing A", status: "completed" },
+      { id: "b", content: "B", active_form: "Doing B", status: "in_progress" },
+      { id: "c", content: "C", active_form: "Doing C", status: "pending" },
+    ],
+  });
+
+  const updated = store.update({
+    listId: "stable-order",
+    items: [
+      { id: "new", content: "New", active_form: "Doing new", status: "pending" },
+      { id: "c", content: "C", active_form: "Doing C", status: "in_progress" },
+      { id: "b", content: "B", active_form: "Doing B", status: "completed" },
+      { id: "a", content: "A", active_form: "Doing A", status: "completed" },
+    ],
+  });
+
+  expect(updated.list.items.map((item) => [item.id, item.ordinal])).toEqual([
+    ["a", 1],
+    ["b", 2],
+    ["c", 3],
+    ["new", 4],
+  ]);
+});
+
+test("todo replacement without retained ids establishes a fresh order", () => {
+  const store = new TodoListStore(tempDir);
+  store.update({
+    listId: "replace-order",
+    items: [
+      { id: "old-a", content: "Old A", active_form: "Doing old A", status: "completed" },
+      { id: "old-b", content: "Old B", active_form: "Doing old B", status: "pending" },
+    ],
+  });
+
+  const replaced = store.update({
+    listId: "replace-order",
+    items: [
+      { id: "new-b", content: "New B", active_form: "Doing new B", status: "pending" },
+      { id: "new-a", content: "New A", active_form: "Doing new A", status: "in_progress" },
+    ],
+  });
+
+  expect(replaced.list.items.map((item) => [item.id, item.ordinal])).toEqual([
+    ["new-b", 1],
+    ["new-a", 2],
+  ]);
+});
+
+test("legacy todo records derive ordinals from persisted order", () => {
+  const store = new TodoListStore(tempDir);
+  mkdirSync(store.todosDir, { recursive: true });
+  writeFileSync(store.listPath("legacy-order"), `${JSON.stringify({
+    version: 1,
+    list_id: "legacy-order",
+    title: null,
+    created_at: "2026-07-01T00:00:00.000Z",
+    updated_at: "2026-07-01T00:00:00.000Z",
+    items: [
+      legacyTodo("done", "completed"),
+      legacyTodo("next", "pending"),
+    ],
+  })}\n`, "utf8");
+
+  expect(store.read("legacy-order")?.items.map((item) => [item.id, item.ordinal])).toEqual([
+    ["done", 1],
+    ["next", 2],
+  ]);
+  const updated = store.update({
+    listId: "legacy-order",
+    items: [
+      { id: "next", content: "next", active_form: "Doing next", status: "in_progress" },
+      { id: "done", content: "done", active_form: "Doing done", status: "completed" },
+    ],
+  });
+  expect(updated.list.items.map((item) => [item.id, item.ordinal])).toEqual([
+    ["done", 1],
+    ["next", 2],
+  ]);
+});
+
+function legacyTodo(id: string, status: "pending" | "completed") {
+  return {
+    id,
+    content: id,
+    active_form: `Doing ${id}`,
+    status,
+    phase: null,
+    priority: "normal",
+    blocked_by: [],
+    note: null,
+    created_at: "2026-07-01T00:00:00.000Z",
+    updated_at: "2026-07-01T00:00:00.000Z",
+    completed_at: status === "completed" ? "2026-07-01T00:00:00.000Z" : null,
+  };
+}

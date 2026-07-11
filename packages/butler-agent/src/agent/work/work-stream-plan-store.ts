@@ -194,6 +194,7 @@ export class WorkStreamPlanStore {
 function semanticTodoFingerprint(item: TodoItem): string {
   return JSON.stringify({
     id: item.id,
+    ordinal: item.ordinal,
     content: item.content,
     active_form: item.active_form,
     status: item.status,

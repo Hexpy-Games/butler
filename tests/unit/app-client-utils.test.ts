@@ -2473,6 +2473,40 @@ test("semantic progress rows keep todo list order from safe order", () => {
   ]);
 });
 
+test("completed todo updates cannot move an established display ordinal", () => {
+  const rows = semanticProgressRows([
+    {
+      id: "todo-a-running",
+      kind: "todo",
+      state: "running",
+      safe_label: "A 진행 중",
+      safe_input_label: "todo-a",
+      safe_order: 1,
+    },
+    {
+      id: "todo-b",
+      kind: "todo",
+      state: "accepted",
+      safe_label: "B",
+      safe_input_label: "todo-b",
+      safe_order: 2,
+    },
+    {
+      id: "todo-a-completed",
+      kind: "todo",
+      state: "delivered",
+      safe_label: "A",
+      safe_input_label: "todo-a",
+      safe_order: 3,
+    },
+  ]);
+
+  expect(rows.map((row) => [row.safe_input_label, row.safe_order, row.state])).toEqual([
+    ["todo-a", 1, "delivered"],
+    ["todo-b", 2, "accepted"],
+  ]);
+});
+
 test("todo composer rows keep ordered steps across repeated stable projections", async () => {
   const { todoRowsForDisplay } = await import(
     "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
