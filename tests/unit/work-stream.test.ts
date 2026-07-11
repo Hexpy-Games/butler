@@ -272,16 +272,33 @@ test("plan amendment preserves completed evidence and claim ownership", () => {
   const claimed = claims.claim({ contract, workstreamId: record.id, sessionId: "session-a", chatId: "chat-a", projectId: "project-a", turnId: "turn-a", expectedGeneration: record.record_generation! });
   expect(claimed.ok).toBe(true);
   const claimedGeneration = claimed.ok ? claimed.record.record_generation! : 0;
-  expect(plans.amend({ workstreamId: record.id, contractId: contract.contract_id, expectedGeneration: claimedGeneration, items: [todoInput({ id: "next", phase: "execution", status: "in_progress" })] })).toEqual({ ok: false, code: "workstream_completed_item_changed" });
   const completedBefore = new TodoListStore(tempDir).read("amend")!.items[0];
-  const amended = plans.amend({
+  const sparse = plans.amend({
     workstreamId: record.id, contractId: contract.contract_id, expectedGeneration: claimedGeneration,
-    items: [todoInput({ id: "replacement", phase: "execution", status: "in_progress" }), todoInput({ id: "done", phase: "planning", status: "completed" })],
+    items: [todoInput({ id: "next", phase: "execution", status: "in_progress" })],
   });
-  expect(amended).toMatchObject({ ok: true, record: { active_contract_id: contract.contract_id, plan_revision: 2, superseded_todo_ids: ["next"] }, receipt: { parent_revision: 1, revision: 2 } });
+  expect(sparse).toMatchObject({
+    ok: true,
+    record: { active_contract_id: contract.contract_id, plan_revision: 2 },
+    receipt: { parent_revision: 1, revision: 2, preserved_completed_item_ids: ["done"] },
+  });
+  expect(new TodoListStore(tempDir).read("amend")!.items[0]).toEqual(completedBefore);
+  const staleCompleted = todoInput({
+    id: "done",
+    content: "attempted rewrite",
+    active_form: "attempted reopen",
+    phase: "reporting",
+    status: "pending",
+    note: "attempted evidence replacement",
+  });
+  const amended = plans.amend({
+    workstreamId: record.id, contractId: contract.contract_id, expectedGeneration: sparse.ok ? sparse.record.record_generation! : 0,
+    items: [todoInput({ id: "replacement", phase: "execution", status: "in_progress" }), staleCompleted],
+  });
+  expect(amended).toMatchObject({ ok: true, record: { active_contract_id: contract.contract_id, plan_revision: 3, superseded_todo_ids: ["next"] }, receipt: { parent_revision: 2, revision: 3 } });
   expect(plans.amend({
-    workstreamId: record.id, contractId: contract.contract_id, expectedGeneration: claimedGeneration,
-    items: [todoInput({ id: "replacement", phase: "execution", status: "in_progress" }), todoInput({ id: "done", phase: "planning", status: "completed" })],
+    workstreamId: record.id, contractId: contract.contract_id, expectedGeneration: sparse.ok ? sparse.record.record_generation! : 0,
+    items: [todoInput({ id: "replacement", phase: "execution", status: "in_progress" }), staleCompleted],
   })).toMatchObject({ ok: true, replayed: true, receipt: { receipt_id: amended.ok ? amended.receipt.receipt_id : "" } });
   const amendedItems = new TodoListStore(tempDir).read("amend")!.items;
   expect(amendedItems[0]).toEqual(completedBefore);

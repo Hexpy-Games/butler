@@ -109,7 +109,7 @@ export class WorkStreamPlanStore {
       nextTodo = this.completedItemsPreserved(priorTodo, this.todos.prepareUpdate({
         listId: priorTodo.list_id,
         title: input.title ?? priorTodo.title,
-        items: input.items,
+        items: effectiveAmendmentItems(priorTodo, input.items),
         now,
       }));
     } catch (error) {
@@ -162,14 +162,7 @@ export class WorkStreamPlanStore {
   }
 
   private completedItemsPreserved(prior: TodoListRecord, next: TodoListRecord): TodoListRecord {
-    const proposedById = new Map(next.items.map((item) => [item.id, item]));
     const completedById = new Map(prior.items.filter((item) => item.status === "completed").map((item) => [item.id, item]));
-    for (const [id, completed] of completedById) {
-      const proposed = proposedById.get(id);
-      if (!proposed || semanticTodoFingerprint(proposed) !== semanticTodoFingerprint(completed)) {
-        throw new Error("workstream_completed_item_changed");
-      }
-    }
     return {
       ...next,
       items: next.items.map((item) => completedById.get(item.id) ?? item),
@@ -191,18 +184,26 @@ export class WorkStreamPlanStore {
 
 }
 
-function semanticTodoFingerprint(item: TodoItem): string {
-  return JSON.stringify({
+function effectiveAmendmentItems(prior: TodoListRecord, proposed: TodoItemInput[]): TodoItemInput[] {
+  const completed = prior.items.filter((item) => item.status === "completed");
+  const completedIds = new Set(completed.map((item) => item.id));
+  return [
+    ...completed.map(todoItemInput),
+    ...proposed.filter((item) => !item.id || !completedIds.has(item.id.trim())),
+  ];
+}
+
+function todoItemInput(item: TodoItem): TodoItemInput {
+  return {
     id: item.id,
-    ordinal: item.ordinal,
     content: item.content,
     active_form: item.active_form,
     status: item.status,
-    phase: item.phase,
+    phase: item.phase ?? undefined,
     priority: item.priority,
     blocked_by: item.blocked_by,
-    note: item.note,
-  });
+    note: item.note ?? undefined,
+  };
 }
 
 function amendmentTransactionId(
