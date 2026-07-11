@@ -4,6 +4,10 @@ import { join } from "path";
 import { readJsonFile, withDurableFileLock, writeJsonFileAtomic } from "../persistence/atomic-json-store.ts";
 import { allEvidenceObligationsSatisfied, assertEvidenceReceiptForContract } from "./turn-contract-evidence.ts";
 import {
+  evaluateTurnContractPlanClosure,
+  turnContractPlanAllowsTerminal,
+} from "./turn-contract-plan-closure.ts";
+import {
   COMPILED_TURN_CONTRACT_SCHEMA,
   type CompiledTurnContract,
   type TurnCancellationReceipt,
@@ -81,10 +85,13 @@ export class TurnContractStore {
           generation: contract.generation + 1,
           updated_at: now.toISOString(),
         };
-        const updated: CompiledTurnContract = allEvidenceObligationsSatisfied({
+        const evidenceSatisfied = allEvidenceObligationsSatisfied({
           contract: candidate,
           receipts: this.evidenceFor(candidate),
-        })
+        });
+        const updated: CompiledTurnContract = evidenceSatisfied && turnContractPlanAllowsTerminal(
+          evaluateTurnContractPlanClosure({ butlerData: this.butlerData, contract: candidate }),
+        )
           ? { ...candidate, state: "satisfied" }
           : candidate;
         writeJsonFileAtomic(this.contractPath(contract.contract_id), updated);
@@ -257,6 +264,14 @@ export class TurnContractStore {
           !allEvidenceObligationsSatisfied({ contract, receipts: this.evidenceFor(contract) })
         ) {
           throw new Error("turn_contract_delivery_evidence_incomplete");
+        }
+        if (
+          input.terminalState === "delivered" &&
+          !turnContractPlanAllowsTerminal(
+            evaluateTurnContractPlanClosure({ butlerData: this.butlerData, contract }),
+          )
+        ) {
+          throw new Error("turn_contract_plan_incomplete");
         }
         const updated: CompiledTurnContract = {
           ...contract,

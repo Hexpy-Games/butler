@@ -27,6 +27,8 @@ import { TodoListStore } from "../../../work/todo-list.ts";
 import { safePublicText } from "../../../output/evidence/transcript-sanitizers.ts";
 import {
   canDeliverTurnContract,
+  evaluateTurnContractPlanClosure,
+  turnContractPlanAllowsTerminal,
   TurnContractStore,
   type CompiledTurnContract,
   type TurnCancellationReceipt,
@@ -105,14 +107,29 @@ export async function reviewFinalCandidateForContinuation(
     };
   }
   if (input.turnContract) {
+    const planClosure = evaluateTurnContractPlanClosure({
+      butlerData: input.deps.butlerData,
+      contract: input.turnContract,
+    });
     const contract = recordTurnContractAuditEvidence({
       butlerData: input.deps.butlerData,
       contract: input.turnContract,
       audit: input.audit,
       finalCandidate: reviewResult.reviewedText,
       runtimeReviewCompleted: reviewResult.performed,
+      planClosureSatisfied: turnContractPlanAllowsTerminal(planClosure),
     });
+    if (planClosure.status === "invalid") {
+      throw new Error(planClosure.code);
+    }
     const store = new TurnContractStore(input.deps.butlerData);
+    if (planClosure.status === "incomplete") {
+      const missing = unsatisfiedTurnContractObligations({
+        butlerData: input.deps.butlerData,
+        contract,
+      }).filter((item) => item.deliverable !== "final_report");
+      return planClosureGap(planClosure, contract.evidence_receipt_ids, missing);
+    }
     const gate = canDeliverTurnContract({
       contract,
       evidenceReceipts: store.evidenceFor(contract),
@@ -151,6 +168,48 @@ export async function reviewFinalCandidateForContinuation(
     kind: "accepted",
     text: reviewResult.reviewedText,
     evidenceRefs: reviewResult.outcome.evidenceRefs,
+  };
+}
+
+function planClosureGap(
+  closure: ReturnType<typeof evaluateTurnContractPlanClosure>,
+  evidenceRefs: string[],
+  missingDeliverables: Array<{
+    deliverable: string;
+    target_kind: string;
+    target_id: string;
+    obligation_id: string;
+  }>,
+): Extract<FinalDeliveryOutcome, { kind: "completion_gap" }> {
+  const openItems = closure.status === "incomplete" ? closure.open_items.slice(0, 12) : [];
+  const totalOpenItems = closure.status === "incomplete" ? closure.open_items.length : 0;
+  return {
+    kind: "completion_gap",
+    observation: {
+      kind: "turn_contract_plan_incomplete",
+      summary: totalOpenItems > 0
+        ? `The bound work plan still has ${totalOpenItems} open non-reporting item(s).`
+        : "The bound work plan is not currently resolvable for terminal delivery.",
+      modelVisibleContent: [
+        "Continue the same logical turn. The contract-bound work plan is not complete yet.",
+        "Finish the retained items below, then update the bound todo list with their structured statuses.",
+        ...openItems.map((item) => `- ${item.id}: status=${item.status}; phase=${item.phase ?? "none"}`),
+        ...(missingDeliverables.length > 0
+          ? [
+              "The following typed deliverables also still need evidence:",
+              ...missingDeliverables.map((item) => `- ${item.deliverable}:${item.target_kind}:${item.target_id}`),
+            ]
+          : []),
+        "Keep moving through those structured items in dependency order and submit a new final candidate after they are complete.",
+        "A verified user-owned blocker may change the state to waiting_user; otherwise continue autonomously.",
+      ].join("\n"),
+      refs: [
+        ...openItems.map((item) => ({ kind: "workstream_todo", id: item.id })),
+        ...missingDeliverables.map((item) => ({ kind: "turn_contract_obligation", id: item.obligation_id })),
+      ],
+      requiredDeliverables: [...new Set(missingDeliverables.map((item) => item.deliverable))],
+    },
+    evidenceRefs,
   };
 }
 

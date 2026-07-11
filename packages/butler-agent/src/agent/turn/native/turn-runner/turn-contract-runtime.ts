@@ -280,6 +280,7 @@ export function contractExecutionPrompt(input: {
     "The final_report deliverable is the user-facing final candidate unless the user explicitly requested a durable report artifact. Once execution and validation are complete, stop calling tools and emit that final candidate; do not invent a Ledger report record or report file.",
     "The active typed contract owns its WorkStream lifecycle. Do not call update_work_stream_state for this WorkStream; the runtime completes it after accepting the final candidate.",
     "After the requested workspace mutation and passing validation are observed, emit the final candidate unless a named contract deliverable remains unsatisfied. Reserve Project Ledger task or Work status transitions for an explicit requested or acceptance-bound lifecycle change.",
+    "If you replaced the opening placeholder with an explicit todo plan, keep every retained non-reporting item current and mark it completed only after its work is actually done. Remove obsolete items only through an explicit plan amendment; a final candidate does not cancel open plan work.",
     "Do not report completion until the runtime confirms every typed evidence obligation.",
   ].join("\n\n");
 }

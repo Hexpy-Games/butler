@@ -88,3 +88,39 @@ test("a skipped runtime completion review does not fabricate review evidence", (
 
   expect(store.evidenceFor(recorded).some((receipt) => receipt.deliverable === "review")).toBe(false);
 });
+
+test("an open bound plan prevents the final candidate from fabricating final-report evidence", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-turn-audit-"));
+  tempDirs.push(butlerData);
+  const store = new TurnContractStore(butlerData);
+  const contract = store.create(compileTurnContract({
+    decision: {
+      schema_version: TURN_CONTRACT_DECISION_SCHEMA,
+      decision_id: "decision-open-plan-report",
+      action: "start_work",
+      target_project_id: "project-a",
+      deliverables: ["code_change", "final_report"],
+      public_summary: "Implement every planned item and report.",
+    },
+  }));
+  const recorded = recordTurnContractAuditEvidence({
+    butlerData,
+    contract,
+    finalCandidate: "Only the first implementation item is complete.",
+    planClosureSatisfied: false,
+    audit: [{
+      name: "write_file",
+      args: { path: "src/partial.ts" },
+      ok: true,
+      evidenceCapabilityReceipts: [createEvidenceCapabilityReceipt({
+        producer: { kind: "tool", name: "write_file" },
+        capability: "workspace_mutated",
+        evidence_kind: "mutation_result",
+        summary: "Partial workspace change.",
+      })],
+    }],
+  });
+
+  expect(store.evidenceFor(recorded).map((receipt) => receipt.deliverable)).toEqual(["code_change"]);
+  expect(recorded.state).not.toBe("satisfied");
+});

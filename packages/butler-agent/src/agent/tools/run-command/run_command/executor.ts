@@ -539,13 +539,18 @@ async function executeBashCommand(input: {
   cwd: string;
   timeoutMs: number;
   butlerData: string;
+  pipefail: boolean;
 }): Promise<ShellCommandResult> {
   return await new Promise((resolveCommand, reject) => {
-    const child = spawn("/bin/bash", ["-lc", input.command], {
-      cwd: input.cwd,
-      env: butlerToolProcessEnvironment({ butlerData: input.butlerData }),
-      windowsHide: true,
-    });
+    const child = spawn(
+      "/bin/bash",
+      input.pipefail ? ["-o", "pipefail", "-lc", input.command] : ["-lc", input.command],
+      {
+        cwd: input.cwd,
+        env: butlerToolProcessEnvironment({ butlerData: input.butlerData }),
+        windowsHide: true,
+      },
+    );
     let stdout = "";
     let stderr = "";
     let stdoutTruncated = false;
@@ -686,6 +691,7 @@ export async function runCommandTool(input: {
     cwd,
     timeoutMs,
     butlerData: input.butlerData,
+    pipefail: Boolean(validationSuiteFromArgs(input.args)),
   });
   const projectLedgerMutation = restoreProjectLedgerMutationIfChanged(projectLedgerSnapshot);
   cleanupProjectLedgerMutationSnapshot(projectLedgerSnapshot);

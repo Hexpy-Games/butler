@@ -494,6 +494,33 @@ test("typed completion gaps stay in one provider invocation and preserve the obl
     runFunctionToolPromptText: async (input) => {
       toolPromptInvocations += 1;
       expect(workBlockCatalogNames(input.dynamicTools?.() ?? input.tools)).toContain("write_file");
+      await input.executeTool({
+        name: "update_todo_list",
+        args: {
+          todos: [{
+            id: "implement",
+            content: "대상 파일을 변경합니다.",
+            active_form: "대상 파일을 변경하는 중입니다.",
+            status: "in_progress",
+            phase: "execution",
+          }, {
+            id: "validate",
+            content: "변경 결과를 검증합니다.",
+            active_form: "변경 결과를 검증하는 중입니다.",
+            status: "pending",
+            phase: "review",
+            blocked_by: ["implement"],
+          }, {
+            id: "report",
+            content: "완료 결과를 보고합니다.",
+            active_form: "완료 결과를 보고하는 중입니다.",
+            status: "pending",
+            phase: "reporting",
+            blocked_by: ["validate"],
+          }],
+        },
+        rawArguments: JSON.stringify({ todos: [] }),
+      });
       const writeBlock = testWorkBlock("파일 변경", "write_file", {
         path: "same-provider.txt",
         content: "changed",
@@ -505,9 +532,9 @@ test("typed completion gaps stay in one provider invocation and preserve the obl
       const premature = await input.reviewFinalCandidate?.({ text: "변경을 완료했습니다.", roundIndex: 1 });
       expect(premature).toMatchObject({ status: "continue" });
       const prematureObservation = premature?.status === "continue" ? premature.observation : "";
+      expect(prematureObservation).toContain("contract-bound work plan is not complete");
       expect(prematureObservation).toContain("validation");
       expect(prematureObservation).not.toContain("- final_report:");
-      expect(prematureObservation).toContain("current final candidate already supplies final_report");
       expect(workBlockCatalogNames(input.dynamicTools?.() ?? input.tools)).toEqual(["run_command"]);
 
       const validationBlock = testWorkBlock("구조화 검증", "run_command", {
@@ -517,13 +544,34 @@ test("typed completion gaps stay in one provider invocation and preserve the obl
       await input.onAssistantTextBeforeTools?.({ text: "", toolCalls: [validationBlock] });
       await input.executeTool({ ...validationBlock, rawArguments: JSON.stringify(validationBlock.args) });
 
+      const planGap = await input.reviewFinalCandidate?.({ text: "변경과 검증을 완료했습니다.", roundIndex: 2 });
+      expect(planGap).toMatchObject({ status: "continue" });
+      const planObservation = planGap?.status === "continue" ? planGap.observation : "";
+      expect(planObservation).toContain("implement: status=in_progress; phase=execution");
+      expect(planObservation).toContain("validate: status=pending; phase=review");
+      expect(planObservation).not.toContain("typed deliverables also still need evidence");
+
       const closeoutBlock = testWorkBlock("진행 상태 마감", "update_todo_list", {
         todos: [{
-          id: "opening",
-          content: "파일 변경과 구조화 검증을 같은 provider 대화에서 완료합니다.",
-          active_form: "파일 변경과 구조화 검증을 완료했습니다.",
+          id: "implement",
+          content: "대상 파일을 변경합니다.",
+          active_form: "대상 파일을 변경하는 중입니다.",
           status: "completed",
+          phase: "execution",
+        }, {
+          id: "validate",
+          content: "변경 결과를 검증합니다.",
+          active_form: "변경 결과를 검증하는 중입니다.",
+          status: "completed",
+          phase: "review",
+          blocked_by: ["implement"],
+        }, {
+          id: "report",
+          content: "완료 결과를 보고합니다.",
+          active_form: "완료 결과를 보고하는 중입니다.",
+          status: "pending",
           phase: "reporting",
+          blocked_by: ["validate"],
         }],
       });
       await input.onAssistantTextBeforeTools?.({ text: "", toolCalls: [closeoutBlock] });

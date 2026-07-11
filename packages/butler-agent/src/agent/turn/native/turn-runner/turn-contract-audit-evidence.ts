@@ -24,6 +24,7 @@ export function recordTurnContractAuditEvidence(input: {
   audit: readonly ToolAuditEntry[];
   finalCandidate: string;
   runtimeReviewCompleted?: boolean;
+  planClosureSatisfied?: boolean;
 }): CompiledTurnContract {
   const store = new TurnContractStore(input.butlerData);
   let contract = store.read(input.contract.contract_id) ?? input.contract;
@@ -51,6 +52,7 @@ export function recordTurnContractAuditEvidence(input: {
   const finalReport = contract.required_evidence.find((item) => item.deliverable === "final_report");
   if (
     finalReport && input.finalCandidate.trim() &&
+    input.planClosureSatisfied !== false &&
     !evidenceObligationSatisfied({ contract, obligation: finalReport, receipts: store.evidenceFor(contract) }) &&
     nonReportObligationsSatisfied(contract, store.evidenceFor(contract))
   ) {
