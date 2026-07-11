@@ -9502,7 +9502,13 @@ test("native runtime emits linear work blocks under the active semantic todo", a
   ]);
   const workBlockStarts = turnEvents.filter((event) => event.kind === "work.block.started");
   expect(workBlockStarts.map((event) => event.payload.workBlockId)).toEqual(workBlockIds);
-  expect(turnEvents.filter((event) => event.kind === "work.block.completed")).toHaveLength(0);
+  const workBlockCompletions = turnEvents.filter((event) => event.kind === "work.block.completed");
+  expect(workBlockCompletions.map((event) => event.payload.workBlockId)).toEqual(workBlockIds);
+  expect(workBlockCompletions.map((event) => event.payload.status)).toEqual([
+    "completed",
+    "completed",
+    "completed",
+  ]);
 });
 
 test("native runtime completes reporting WorkStream when final answer is delivered", async () => {

@@ -1550,6 +1550,7 @@ test("run_command schema exposes bounded non-interactive bash execution", () => 
     "max_output_tokens",
     "output_paths",
     "validation_suite",
+    "state_effect",
     "output_mode",
   ]);
   expect(tool?.description).toContain("non-interactive bash command");
@@ -1563,6 +1564,10 @@ test("run_command schema exposes bounded non-interactive bash execution", () => 
   });
   expect(properties?.validation_suite).toMatchObject({
     type: "string",
+  });
+  expect(properties?.state_effect).toMatchObject({
+    type: "string",
+    enum: ["read_only", "mutation", "validation"],
   });
 });
 
