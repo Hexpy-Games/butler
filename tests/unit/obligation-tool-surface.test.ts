@@ -328,16 +328,28 @@ test("twelve consecutive workspace reads focus a verified state-changing action"
   });
 });
 
-test("workspace action admission rejects disguised reads and escalates the second violation", () => {
+test("workspace action verifies declared commands after execution and escalates a later violation", () => {
   const controller = createObligationToolSurfaceController(localCodeContract(), {
     planReady: true,
     workspaceInspectionCount: WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
     workspaceActionFocused: true,
   });
 
-  expect(controller.authorize({
+  const disguisedRead = {
     name: "run_command",
     args: { command: "git status --short", state_effect: "mutation" },
+  };
+  expect(controller.authorize(disguisedRead)).toEqual({ allowed: true });
+  expect(controller.observe({
+    ...disguisedRead,
+    result: {
+      ok: true,
+      evidence_capability_receipts: [{
+        capability: "command_executed",
+        maturity: "verified",
+        verified: true,
+      }],
+    },
   })).toMatchObject({
     allowed: false,
     code: "workspace_action_required",
@@ -436,11 +448,14 @@ test("mutating-looking commands must return verified mutation evidence in the fo
   });
   const command = {
     name: "run_command",
-    args: { command: "apply_patch < change.patch", state_effect: "mutation" },
+    args: {
+      command: "python3 -c 'from pathlib import Path; Path(\"src/a.ts\").write_text(\"changed\")'",
+      state_effect: "mutation",
+    },
   };
 
   expect(controller.authorize(command)).toEqual({ allowed: true });
-  controller.observe({
+  expect(controller.observe({
     ...command,
     result: {
       ok: true,
@@ -450,6 +465,10 @@ test("mutating-looking commands must return verified mutation evidence in the fo
         verified: true,
       }],
     },
+  })).toMatchObject({
+    allowed: false,
+    code: "workspace_action_required",
+    terminal: false,
   });
   expect(controller.state()).toMatchObject({
     stage: "workspace_action",
@@ -457,7 +476,11 @@ test("mutating-looking commands must return verified mutation evidence in the fo
   });
 
   expect(controller.authorize(command)).toEqual({ allowed: true });
-  controller.observe({ ...command, result: { ok: false } });
+  expect(controller.observe({ ...command, result: { ok: false } })).toMatchObject({
+    allowed: false,
+    code: "workspace_action_required",
+    terminal: true,
+  });
   expect(controller.state()).toMatchObject({ workspaceActionRejections: 2 });
   expect(() => controller.assertCanContinue()).toThrow("turn_forward_progress_stalled");
 
@@ -466,7 +489,8 @@ test("mutating-looking commands must return verified mutation evidence in the fo
     workspaceInspectionCount: WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
     workspaceActionFocused: true,
   });
-  verified.observe({
+  expect(verified.authorize(command)).toEqual({ allowed: true });
+  expect(verified.observe({
     ...command,
     result: {
       ok: true,
@@ -476,7 +500,7 @@ test("mutating-looking commands must return verified mutation evidence in the fo
         verified: true,
       }],
     },
-  });
+  })).toBeNull();
   expect(verified.state()).toMatchObject({
     stage: "workspace_execution",
     workspaceActionFocused: false,
