@@ -110,6 +110,94 @@ test("work stream transitions reject skipped review and completion claims", () =
   expect(() => assertWorkStreamTransition("reviewing", "executing")).not.toThrow();
 });
 
+test("failed work streams reopen only through the explicit recoverable transition", () => {
+  const store = new WorkStreamStore(tempDir);
+  const initial = store.updateFromTodoList({
+    ownerSessionId: "butler/app-project-sandy",
+    originChatId: "project-sandy",
+    projectId: "sandy-bot",
+    listId: "sandy-recovery-plan",
+    title: "Finish Sandy deployment",
+    intentSummary: "Validate, commit, deploy, and report.",
+    lastUserTurnId: "turn-sandy-failed",
+    items: [todo({ id: "validate", phase: "execution", status: "in_progress" })],
+  });
+  const failed = store.transition({
+    id: initial.id,
+    state: "failed",
+    activeStepId: null,
+    statusNote: "The turn failed after a recoverable runtime fault.",
+  });
+  const restoredItems = [todo({ id: "validate", phase: "execution", status: "in_progress" })];
+
+  expect(() => store.updateFromTodoList({
+    id: failed.id,
+    ownerSessionId: failed.owner_session_id,
+    originChatId: failed.origin_chat_id,
+    projectId: failed.project_id,
+    listId: failed.todo_list_id,
+    title: failed.title,
+    intentSummary: failed.intent_summary,
+    lastUserTurnId: failed.last_user_turn_id,
+    items: restoredItems,
+  })).toThrow("workstream_terminal_state_immutable");
+
+  const recoverable = store.transition({
+    id: failed.id,
+    state: "recoverable",
+    statusNote: "Explicitly recovered after the runtime fault was repaired.",
+  });
+  expect(recoverable).toMatchObject({
+    id: initial.id,
+    state: "recoverable",
+    owner_session_id: "butler/app-project-sandy",
+    origin_chat_id: "project-sandy",
+    project_id: "sandy-bot",
+    todo_list_id: "sandy-recovery-plan",
+    active_contract_id: initial.active_contract_id,
+    original_claim_receipt_id: initial.original_claim_receipt_id,
+  });
+
+  const resumed = store.updateFromTodoList({
+    id: recoverable.id,
+    ownerSessionId: recoverable.owner_session_id,
+    originChatId: recoverable.origin_chat_id,
+    projectId: recoverable.project_id,
+    listId: recoverable.todo_list_id,
+    title: recoverable.title,
+    intentSummary: recoverable.intent_summary,
+    lastUserTurnId: recoverable.last_user_turn_id,
+    items: restoredItems,
+  });
+  expect(resumed).toMatchObject({
+    id: initial.id,
+    state: "executing",
+    current_phase: "execution",
+    active_step_id: "validate",
+    todo_list_id: "sandy-recovery-plan",
+  });
+
+  const completed = store.transition({ id: resumed.id, state: "reviewing" });
+  const consolidating = store.transition({ id: completed.id, state: "consolidating" });
+  const reporting = store.transition({ id: consolidating.id, state: "reporting" });
+  store.transition({ id: reporting.id, state: "complete", activeStepId: null });
+  expect(() => store.transition({ id: reporting.id, state: "recoverable" })).toThrow(
+    "invalid work stream transition complete -> recoverable",
+  );
+
+  const cancellable = store.updateFromTodoList({
+    ownerSessionId: "butler/app-project-sandy-cancelled",
+    originChatId: "project-sandy-cancelled",
+    projectId: "sandy-bot",
+    listId: "sandy-cancelled-plan",
+    items: [todo({ id: "stop", phase: "execution", status: "in_progress" })],
+  });
+  store.transition({ id: cancellable.id, state: "cancelled", activeStepId: null });
+  expect(() => store.transition({ id: cancellable.id, state: "recoverable" })).toThrow(
+    "invalid work stream transition cancelled -> recoverable",
+  );
+});
+
 test("todo progress creates a durable session-scoped work stream", () => {
   const store = new WorkStreamStore(tempDir);
   const record = store.updateFromTodoList({
