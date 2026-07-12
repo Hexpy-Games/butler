@@ -5,17 +5,18 @@ export const TYPED_BLOCKER_SCHEMA = "butler.typed-blocker.v1" as const;
 export const BLOCKER_EVIDENCE_RECEIPT_SCHEMA = "butler.blocker-evidence-receipt.v1" as const;
 
 export const TURN_CONTRACT_ACTIONS = [
-  "answer", "inspect", "start_work", "resume_work", "modify_work", "cancel_work", "supply_user_action",
+  "answer", "tool_answer", "inspect", "start_work", "resume_work", "modify_work", "cancel_work", "supply_user_action",
 ] as const;
 export type TurnContractAction = typeof TURN_CONTRACT_ACTIONS[number];
 
 export const TURN_DELIVERABLES = [
-  "status_report", "ledger_spec", "ledger_work", "ledger_tasks", "code_change", "validation", "review", "final_report",
+  "grounded_answer", "status_report", "ledger_spec", "ledger_work", "ledger_tasks", "code_change", "validation", "review", "final_report",
 ] as const;
 export type TurnDeliverable = typeof TURN_DELIVERABLES[number];
 
-export type TurnEvidenceProducer = "runtime" | "project_ledger" | "workspace" | "validation" | "review";
+export type TurnEvidenceProducer = "runtime" | "public_web" | "project_ledger" | "workspace" | "validation" | "review";
 export type TurnEvidenceClass =
+  | "grounded_answer"
   | "status_snapshot"
   | "canonical_record"
   | "canonical_task_set"
@@ -40,6 +41,8 @@ export interface TurnContractDecision {
   target_workstream_id?: string;
   target_project_id?: string;
   blocker_id?: string;
+  evidence_domain?: "public_web";
+  inspection_scope?: "project" | "workspace";
   deliverables: TurnDeliverable[];
   answer_text?: string;
   public_title?: string;
@@ -50,7 +53,7 @@ export interface TurnContractDecision {
 
 export interface EvidenceObligationSeed {
   deliverable: TurnDeliverable;
-  target_kind: "project" | "workstream" | "workspace" | "report";
+  target_kind: "public" | "project" | "workstream" | "workspace" | "report";
   target_id: string;
   generation: number;
   cardinality?: number;
@@ -88,11 +91,13 @@ export interface CompiledTurnContract {
   target_workstream_id?: string;
   target_project_id?: string;
   blocker_id?: string;
+  evidence_domain?: "public_web";
+  inspection_scope?: "project" | "workspace";
   deliverables: TurnDeliverable[];
   required_evidence: RequiredEvidenceObligation[];
   tracking_mode: "ledger" | "local" | "none";
   closeout_strategy: "ledger" | "local_workstream" | "noop";
-  terminal_rule: "answer" | "verified_report" | "deliverables_satisfied";
+  terminal_rule: "answer" | "grounded_answer" | "verified_report" | "deliverables_satisfied";
   state: "validated" | "claimed" | "executing" | "reviewing" | "waiting_user" | "continuing" | "satisfied" | "delivered" | "cancelled" | "failed_system";
   generation: number;
   evidence_receipt_ids: string[];

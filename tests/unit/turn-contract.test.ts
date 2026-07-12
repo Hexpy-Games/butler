@@ -37,16 +37,71 @@ function tempData(): string {
 }
 
 function decision(overrides: Partial<TurnContractDecision> = {}): TurnContractDecision {
+  const action = overrides.action ?? "inspect";
   return {
     schema_version: TURN_CONTRACT_DECISION_SCHEMA,
     decision_id: "decision-1",
-    action: "inspect",
-    target_project_id: "project-a",
-    deliverables: ["status_report"],
+    action,
+    ...(action === "inspect" ? {
+      target_project_id: "project-a",
+      inspection_scope: "project" as const,
+      deliverables: ["status_report" as const],
+    } : { deliverables: [] }),
     public_summary: "Inspect canonical status.",
     ...overrides,
   };
 }
+
+test("tool-assisted public answers are distinct from direct answers and inspection", () => {
+  const contract = compileTurnContract({
+    decision: decision({
+      action: "tool_answer",
+      target_project_id: undefined,
+      inspection_scope: undefined,
+      evidence_domain: "public_web",
+      deliverables: ["grounded_answer"],
+    }),
+    obligationRequirements: {
+      grounded_answer: {
+        deliverable: "grounded_answer",
+        target_kind: "public",
+        target_id: "public-web",
+        generation: 1,
+      },
+    },
+  });
+
+  expect(contract).toMatchObject({
+    action: "tool_answer",
+    evidence_domain: "public_web",
+    tracking_mode: "none",
+    closeout_strategy: "noop",
+    terminal_rule: "grounded_answer",
+    deliverables: ["grounded_answer"],
+  });
+  expect(contract.required_evidence[0]).toMatchObject({
+    target_kind: "public",
+    target_id: "public-web",
+    evidence_class: "grounded_answer",
+    allowed_producers: ["public_web"],
+  });
+  expect(() => compileTurnContract({
+    decision: decision({
+      action: "tool_answer",
+      target_project_id: undefined,
+      inspection_scope: undefined,
+      deliverables: ["grounded_answer"],
+    }),
+  })).toThrow("turn_contract_tool_answer_domain_invalid");
+  expect(() => compileTurnContract({
+    decision: decision({
+      action: "inspect",
+      target_project_id: undefined,
+      inspection_scope: undefined,
+      deliverables: ["status_report"],
+    }),
+  })).toThrow("turn_contract_inspection_scope_missing");
+});
 
 function candidate(overrides: Partial<TurnContractWorkstreamCandidate> = {}): TurnContractCandidates {
   return {
@@ -103,6 +158,8 @@ test("typed decisions distinguish status snapshots from work validation and fina
   });
 
   expect(prompt).toContain("status_report means an explicitly requested read-only status snapshot");
+  expect(prompt).toContain("Use tool_answer for a general answer that requires public web evidence");
+  expect(prompt).toContain("Do not force a search-then-read sequence");
   expect(prompt).toContain("Post-change verification belongs to validation");
   expect(prompt).toContain("The ordinary user-facing completion answer is the final candidate");
   expect(prompt).not.toContain("For mixed status-and-work instructions include status_report");
@@ -557,7 +614,7 @@ test("shared delivery gate requires a matching cancellation receipt", () => {
       operation: "cancel",
       outcome: "cancelled",
       workstream_id: "ws-a",
-      project_id: "project-a",
+      project_id: contract.target_project_id,
       contract_id: contract.contract_id,
       released_contract_id: "prior-contract",
       before_generation: 4,

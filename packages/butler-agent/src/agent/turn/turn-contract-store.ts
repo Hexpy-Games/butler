@@ -396,7 +396,9 @@ function normalizeObligations(contract: CompiledTurnContract): CompiledTurnContr
       };
     }
     const deliverable = obligation.deliverable;
-    const targetKind = deliverable === "status_report" || deliverable.startsWith("ledger_")
+    const targetKind = deliverable === "grounded_answer"
+      ? "public" as const
+      : deliverable === "status_report" || deliverable.startsWith("ledger_")
       ? "project" as const
       : deliverable === "final_report" ? "report" as const : "workspace" as const;
     return {
@@ -417,6 +419,7 @@ function defaultEvidencePolicy(deliverable: CompiledTurnContract["deliverables"]
   allowed_producers: CompiledTurnContract["required_evidence"][number]["allowed_producers"];
 } {
   switch (deliverable) {
+    case "grounded_answer": return { evidence_class: "grounded_answer", allowed_producers: ["public_web"] };
     case "status_report": return { evidence_class: "status_snapshot", allowed_producers: ["runtime", "project_ledger"] };
     case "ledger_spec":
     case "ledger_work": return { evidence_class: "canonical_record", allowed_producers: ["project_ledger"] };
