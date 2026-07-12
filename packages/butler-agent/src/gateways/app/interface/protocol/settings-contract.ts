@@ -41,9 +41,9 @@ export interface SettingsView {
   language: "en" | "ko";
   timezone: string;
   model: string;
-  reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh";
+  reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   consolidation_model: string;
-  consolidation_reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh";
+  consolidation_reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   effective_consolidation_model: string;
   consolidation_uses_butler_model: boolean;
   context_window_tokens: number;
@@ -90,7 +90,7 @@ export interface WorkerModelRule {
   label: string;
   condition: string;
   model: string;
-  reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh";
+  reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   enabled: boolean;
 }
 

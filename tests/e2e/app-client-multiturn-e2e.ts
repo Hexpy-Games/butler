@@ -407,12 +407,12 @@ const waitForFinalTimeoutMs = usesForwardProgressScenario
 mkdirSync(screenshotDir, { recursive: true });
 if (usesLiveLlm) {
   loadPrivateEnvIntoProcess(sourceButlerData);
-  liveClientModel ||= process.env.BUTLER_APP_CLIENT_E2E_MODEL?.trim() || "openai/gpt-5.5";
+  liveClientModel ||= process.env.BUTLER_APP_CLIENT_E2E_MODEL?.trim() || "openai/gpt-5.6-sol";
   liveClientReasoning ||= process.env.BUTLER_APP_CLIENT_E2E_REASONING?.trim() || "medium";
   if (isGptHostedE2eModel(liveClientModel)) {
     assert(
-      liveClientModel === "openai/gpt-5.5" || liveClientModel === "gpt-5.5",
-      `live GPT E2E must use gpt-5.5, got ${liveClientModel}.`,
+      liveClientModel === "openai/gpt-5.6-sol" || liveClientModel === "gpt-5.6-sol",
+      `live GPT E2E must use gpt-5.6-sol, got ${liveClientModel}.`,
     );
     assert(
       liveClientReasoning === "low" || liveClientReasoning === "medium",
@@ -643,7 +643,7 @@ if (usesForwardProgressScenario) {
 }
 if (usesDeterministicBtccOpeningDecisionScenario) {
   server.store.updateSettings({
-    model: "openai/gpt-5.5",
+    model: "openai/gpt-5.6-sol",
     reasoning_effort: "medium",
   });
 }
@@ -1216,13 +1216,13 @@ function runtimeBindingModels(): Array<{ sessionId: string; modelRef: string; pr
   }
 }
 
-function isReasoningEffort(value: string | undefined): value is "none" | "low" | "medium" | "high" | "xhigh" {
-  return value === "none" || value === "low" || value === "medium" || value === "high" || value === "xhigh";
+function isReasoningEffort(value: string | undefined): value is "none" | "low" | "medium" | "high" | "xhigh" | "max" {
+  return value === "none" || value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "max";
 }
 
 function isGptHostedE2eModel(value: string | undefined): boolean {
   if (!value) return false;
-  return value === "gpt-5.5" || value.startsWith("openai/gpt-");
+  return value === "gpt-5.6-sol" || value.startsWith("openai/gpt-");
 }
 
 function assertProfiledToolSurface(

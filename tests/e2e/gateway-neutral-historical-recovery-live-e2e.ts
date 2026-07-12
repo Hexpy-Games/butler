@@ -17,7 +17,7 @@ const sourceButlerData = process.env.BUTLER_LIVE_SOURCE_BUTLER_DATA ||
   join(process.env.HOME ?? "", ".butler");
 const tempDir = mkdtempSync(join(tmpdir(), "butler-gncc-recovery-live-e2e-"));
 const runId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-const model = normalizeE2eModel(process.env.BUTLER_GNCC_RECOVERY_E2E_MODEL || "openai/gpt-5.5");
+const model = normalizeE2eModel(process.env.BUTLER_GNCC_RECOVERY_E2E_MODEL || "openai/gpt-5.6-sol");
 const reasoningEffort = process.env.BUTLER_GNCC_RECOVERY_E2E_REASONING || "low";
 const secretTranscriptText = `LIVE_GNCC_RECOVERY_SECRET_${runId}`;
 
@@ -26,7 +26,7 @@ try {
   process.env.BUTLER_DATA = tempDir;
   process.env.BUTLER_RUNTIME ||= "codex-api";
 
-  assert(model === "openai/gpt-5.5", `GNCC recovery live E2E must use GPT-5.5, got ${model}`);
+  assert(model === "openai/gpt-5.6-sol", `GNCC recovery live E2E must use GPT-5.6 Sol, got ${model}`);
   assert(reasoningEffort === "low" || reasoningEffort === "medium", `GNCC recovery live E2E reasoning must be low or medium, got ${reasoningEffort}`);
 
   writeFileSync(join(tempDir, "butler.config.json"), JSON.stringify({
@@ -132,7 +132,7 @@ function assert(condition: unknown, message: string): asserts condition {
 
 function normalizeE2eModel(value: string): `${string}/${string}` {
   const trimmed = value.trim();
-  if (trimmed === "gpt-5.5") return "openai/gpt-5.5";
+  if (trimmed === "gpt-5.6-sol") return "openai/gpt-5.6-sol";
   if (trimmed.includes("/")) return trimmed as `${string}/${string}`;
   throw new Error(`GNCC recovery live E2E model must be provider/model, got ${value}`);
 }

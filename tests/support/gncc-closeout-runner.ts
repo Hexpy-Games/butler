@@ -60,7 +60,7 @@ const SECRET_VALUE_RE = /\b(?:sk|pat|ghp|gho|ghu|ghs|github_pat)_[A-Za-z0-9_]{8,
 
 export function normalizeCloseoutModel(value: string): `${string}/${string}` {
   const trimmed = value.trim();
-  if (trimmed === "gpt-5.5") return "openai/gpt-5.5";
+  if (trimmed === "gpt-5.6-sol") return "openai/gpt-5.6-sol";
   if (trimmed.includes("/")) return trimmed as `${string}/${string}`;
   throw new Error(`GNCC closeout live E2E model must be provider/model, got ${value}`);
 }
@@ -69,9 +69,9 @@ export function closeoutConfig(input: {
   model?: string;
   reasoningEffort?: string;
 }): CloseoutConfig {
-  const model = normalizeCloseoutModel(input.model || "openai/gpt-5.5");
+  const model = normalizeCloseoutModel(input.model || "openai/gpt-5.6-sol");
   const reasoningEffort = input.reasoningEffort || "low";
-  assert(model === "openai/gpt-5.5", `GNCC closeout live E2E must use GPT-5.5, got ${model}`);
+  assert(model === "openai/gpt-5.6-sol", `GNCC closeout live E2E must use GPT-5.6 Sol, got ${model}`);
   assert(
     reasoningEffort === "low" || reasoningEffort === "medium",
     `GNCC closeout reasoning must be low or medium, got ${reasoningEffort}`,

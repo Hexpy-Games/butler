@@ -15,7 +15,7 @@ export type ModelProviderId =
   | "zai"
   | "opencode-go"
   | "local";
-export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
+export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 export type ProviderAuthMethod = "api_key" | "codex_oauth";
 export type HostedProviderApiShape = "openai_chat_completions" | "anthropic_messages";
 export type StructuredDecisionTransport = "json_schema" | "function_tool";

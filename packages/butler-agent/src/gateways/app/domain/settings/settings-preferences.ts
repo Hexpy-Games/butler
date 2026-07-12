@@ -31,7 +31,7 @@ export function sanitizeSettingsUpdate(
     if (model) output.model = model;
   }
   if (
-    ["none", "low", "medium", "high", "xhigh"].includes(
+    ["none", "low", "medium", "high", "xhigh", "max"].includes(
       String(input.reasoning_effort),
     )
   ) {
@@ -45,7 +45,7 @@ export function sanitizeSettingsUpdate(
     if (model) output.consolidation_model = model;
   }
   if (
-    ["none", "low", "medium", "high", "xhigh"].includes(
+    ["none", "low", "medium", "high", "xhigh", "max"].includes(
       String(input.consolidation_reasoning_effort),
     )
   ) {
