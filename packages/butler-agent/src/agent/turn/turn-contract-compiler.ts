@@ -30,6 +30,7 @@ export const TURN_ACTION_DELIVERABLE_MATRIX: Record<TurnContractAction, {
   requiresDurableExecution: boolean;
 }> = {
   answer: { allowed: [], required: [], requiresDurableExecution: false },
+  tool_answer: { allowed: ["grounded_answer"], required: ["grounded_answer"], requiresDurableExecution: false },
   inspect: { allowed: ["status_report"], required: ["status_report"], requiresDurableExecution: false },
   start_work: { allowed: TURN_DELIVERABLES, required: [], requiresDurableExecution: true },
   resume_work: { allowed: TURN_DELIVERABLES, required: [], requiresDurableExecution: true },
@@ -70,13 +71,19 @@ export function compileTurnContract(input: {
     ...(input.decision.target_workstream_id ? { target_workstream_id: input.decision.target_workstream_id } : {}),
     ...(input.decision.target_project_id ? { target_project_id: input.decision.target_project_id } : {}),
     ...(input.decision.blocker_id ? { blocker_id: input.decision.blocker_id } : {}),
+    ...(input.decision.evidence_domain ? { evidence_domain: input.decision.evidence_domain } : {}),
+    ...(input.decision.inspection_scope ? { inspection_scope: input.decision.inspection_scope } : {}),
     deliverables,
     required_evidence: requiredEvidence,
     tracking_mode: trackingMode,
-    closeout_strategy: input.decision.action === "inspect"
+    closeout_strategy: input.decision.action === "inspect" || input.decision.action === "tool_answer"
       ? "noop"
       : trackingMode === "ledger" ? "ledger" : trackingMode === "local" ? "local_workstream" : "noop",
-    terminal_rule: input.decision.action === "answer" ? "answer" : input.decision.action === "inspect" ? "verified_report" : "deliverables_satisfied",
+    terminal_rule: input.decision.action === "answer"
+      ? "answer"
+      : input.decision.action === "tool_answer"
+        ? "grounded_answer"
+        : input.decision.action === "inspect" ? "verified_report" : "deliverables_satisfied",
     state: input.decision.action === "answer" ? "satisfied" : "validated",
     generation: 1,
     evidence_receipt_ids: [],
@@ -117,6 +124,7 @@ export function validateTurnContractDecision(
   } else if (decision.answer_text !== undefined) {
     throw new Error("turn_contract_non_answer_has_answer_text");
   }
+  validateReadOnlyAnswerFields(decision);
   if (decision.action === "supply_user_action") {
     if (selected?.state !== "waiting_user") throw new Error("turn_contract_supply_target_not_waiting");
     if (!safeText(decision.blocker_id) || decision.blocker_id !== selected.waiting_user_blocker_id) {
@@ -136,6 +144,29 @@ export function validateTurnContractDecision(
     }
   }
   return selected;
+}
+
+function validateReadOnlyAnswerFields(decision: TurnContractDecision): void {
+  if (decision.action === "tool_answer") {
+    if (decision.evidence_domain !== "public_web") throw new Error("turn_contract_tool_answer_domain_invalid");
+    if (decision.inspection_scope !== undefined) throw new Error("turn_contract_tool_answer_inspection_scope_invalid");
+    if (decision.target_project_id !== undefined || decision.target_workstream_id !== undefined) {
+      throw new Error("turn_contract_tool_answer_target_invalid");
+    }
+    return;
+  }
+  if (decision.evidence_domain !== undefined) throw new Error("turn_contract_unexpected_evidence_domain");
+  if (decision.action === "inspect") {
+    if (!decision.inspection_scope) throw new Error("turn_contract_inspection_scope_missing");
+    if (decision.inspection_scope === "project" && !safeText(decision.target_project_id)) {
+      throw new Error("turn_contract_inspection_project_target_missing");
+    }
+    if (decision.inspection_scope === "workspace" && decision.target_project_id !== undefined) {
+      throw new Error("turn_contract_inspection_workspace_target_invalid");
+    }
+    return;
+  }
+  if (decision.inspection_scope !== undefined) throw new Error("turn_contract_unexpected_inspection_scope");
 }
 
 function validateActionMatrix(decision: TurnContractDecision): void {
@@ -186,13 +217,19 @@ function effectiveObligationSeeds(
 }
 
 function defaultSeed(decision: TurnContractDecision, deliverable: TurnDeliverable): EvidenceObligationSeed {
-  const targetKind = deliverable === "status_report" || deliverable.startsWith("ledger_")
+  const targetKind = deliverable === "grounded_answer"
+    ? "public"
+    : deliverable === "status_report" && decision.inspection_scope === "workspace"
+      ? "workspace"
+      : deliverable === "status_report" || deliverable.startsWith("ledger_")
     ? "project"
     : deliverable === "final_report" ? "report" : "workspace";
   return {
     deliverable,
     target_kind: targetKind,
-    target_id: decision.target_project_id ?? decision.target_workstream_id ?? "active",
+    target_id: deliverable === "grounded_answer"
+      ? "public-web"
+      : decision.target_project_id ?? decision.target_workstream_id ?? "active",
     generation: 1,
     cardinality: 1,
     expected_item_ids: [],
@@ -230,6 +267,8 @@ function semanticDecisionFingerprint(
     target_workstream_id: decision.target_workstream_id,
     target_project_id: decision.target_project_id,
     blocker_id: decision.blocker_id,
+    evidence_domain: decision.evidence_domain,
+    inspection_scope: decision.inspection_scope,
     deliverables: decision.deliverables,
     answer_text: decision.answer_text,
     tracking_mode: trackingMode,
@@ -262,6 +301,7 @@ function defaultEvidencePolicy(deliverable: TurnDeliverable): {
   allowed_producers: TurnEvidenceProducer[];
 } {
   switch (deliverable) {
+    case "grounded_answer": return { evidence_class: "grounded_answer", allowed_producers: ["public_web"] };
     case "status_report": return { evidence_class: "status_snapshot", allowed_producers: ["runtime", "project_ledger"] };
     case "ledger_spec":
     case "ledger_work": return { evidence_class: "canonical_record", allowed_producers: ["project_ledger"] };

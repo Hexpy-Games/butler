@@ -56,8 +56,10 @@ export function typedTurnDecisionInstructions(input: {
     `decision_id must be ${input.decisionId}.`,
     "This is the first productive pass, not a separate natural-language classifier.",
     "Use answer only when the response can be delivered now without tools or durable work; include the complete answer_text.",
+    "Use tool_answer for a general answer that requires public web evidence; include grounded_answer, set evidence_domain to public_web, and do not select project or WorkStream targets.",
+    "Search and page-read outputs are evidence material. Do not force a search-then-read sequence: search material may support a claim, and a successful page read may still be insufficient.",
     "Set answer_text to null for every action except answer. For answer, set it to the complete response.",
-    "Use inspect only for a status/report request that does not ask to change or continue work; include status_report only.",
+    "Use inspect only for a project or workspace status/report request that does not ask to change or continue work; include status_report and select the exact inspection_scope.",
     "Reading, searching, or reviewing existing files without changing durable state is inspect with status_report, even when tools are required.",
     "The review deliverable is only for structured review evidence of changed, planned, or inherited work; it is not ordinary source inspection.",
     "Use start_work for new durable work. Use resume_work or modify_work only for a listed compatible WorkStream.",
@@ -95,7 +97,7 @@ export function turnDecisionResponseFormat(input: {
       additionalProperties: false,
       required: [
         "schema_version", "decision_id", "action", "target_workstream_id", "target_project_id",
-        "blocker_id", "deliverables", "answer_text", "public_title", "public_summary", "public_rationale", "immediate_next_step",
+        "blocker_id", "evidence_domain", "inspection_scope", "deliverables", "answer_text", "public_title", "public_summary", "public_rationale", "immediate_next_step",
       ],
       properties: {
         schema_version: { type: "string", const: TURN_CONTRACT_DECISION_SCHEMA },
@@ -107,6 +109,8 @@ export function turnDecisionResponseFormat(input: {
           enum: [null, ...(input.projectId?.trim() ? [input.projectId.trim()] : [])],
         },
         blocker_id: { enum: [null, ...input.waitingBlockerIds] },
+        evidence_domain: { enum: [null, "public_web"] },
+        inspection_scope: { enum: [null, "project", "workspace"] },
         deliverables: {
           type: "array",
           description: DELIVERABLE_DECISION_GUIDANCE,
@@ -145,6 +149,8 @@ export function parseStructuredTurnDecision(text: string, expectedDecisionId: st
     target_workstream_id: nullableString(record.target_workstream_id),
     target_project_id: nullableString(record.target_project_id),
     blocker_id: nullableString(record.blocker_id),
+    evidence_domain: nullableString(record.evidence_domain) as TurnContractDecision["evidence_domain"],
+    inspection_scope: nullableString(record.inspection_scope) as TurnContractDecision["inspection_scope"],
     deliverables: Array.isArray(record.deliverables) ? record.deliverables as TurnDeliverable[] : [],
     answer_text: nullableString(record.answer_text),
     public_title: nullableString(record.public_title) ?? legacyDecisionTitle(record),
@@ -162,6 +168,8 @@ export function canonicalFunctionDecisionArgs(
     ...args,
     ...(action && action !== "answer" ? { answer_text: null } : {}),
     ...(action && action !== "supply_user_action" ? { blocker_id: null } : {}),
+    ...(action && action !== "tool_answer" ? { evidence_domain: null } : {}),
+    ...(action && action !== "inspect" ? { inspection_scope: null } : {}),
   };
 }
 
