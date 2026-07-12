@@ -4,6 +4,7 @@ import {
   createEvidenceCapabilityReceipt,
 } from "../../../output/evidence/ledger.ts";
 import { evidenceReceipt, urlReferences } from "../../../tool-support/executor-support.ts";
+import { publicWebReadEvidenceItems } from "../../../output/evidence/public-web-evidence.ts";
 
 type WebReadToolCall = { args: Record<string, unknown> };
 
@@ -59,6 +60,29 @@ export function createWebReadHandler(input: {
       hasPageEvidence;
     return {
       ...bounded,
+      public_web_evidence_items: publicWebReadEvidenceItems({
+        sourceUrl: capabilitySourceUrl,
+        markdown: typeof bounded.markdown === "string" ? bounded.markdown : undefined,
+        chunks: Array.isArray(bounded.chunks)
+          ? bounded.chunks.flatMap((chunk) => {
+            const record = chunk && typeof chunk === "object" && !Array.isArray(chunk)
+              ? chunk as Record<string, unknown>
+              : null;
+            if (!record) return [];
+            return [{
+              id: typeof record.id === "string" ? record.id : undefined,
+              title: typeof record.title === "string" ? record.title : undefined,
+              url: typeof record.url === "string" ? record.url : undefined,
+              text: typeof record.text === "string" ? record.text : undefined,
+            }];
+          })
+          : [],
+        truncated: bounded.truncated === true,
+        evidenceQuality: typeof bounded.evidence_quality === "string" ? bounded.evidence_quality : undefined,
+        warnings: Array.isArray(bounded.warnings)
+          ? bounded.warnings.filter((item): item is string => typeof item === "string")
+          : [],
+      }),
       evidence_capability_receipts: webReadEvidenceCapabilityReceipts({
         ok: sourceVerified,
         sourceUrl: capabilitySourceUrl,

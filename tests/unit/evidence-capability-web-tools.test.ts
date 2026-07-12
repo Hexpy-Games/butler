@@ -52,6 +52,16 @@ test("web_search emits candidate discovery capability receipts only", async () =
   });
   expect(ledger.satisfied).toEqual([]);
   expect(ledger.missing).toEqual(["source_verified"]);
+  expect(result.public_web_evidence_items).toEqual([
+    expect.objectContaining({
+      schema_version: "butler.public-web-evidence-item.v1",
+      producer: "web_search",
+      source_url: "https://example.com/source",
+      source_identity: "example.com",
+      content_kind: "search_snippet",
+      published_at: null,
+    }),
+  ]);
 });
 
 test("web_search drops unsafe candidate URLs from capability references", async () => {
@@ -120,6 +130,15 @@ test("web_read emits verified source capability receipts for successful reads", 
   expect(ledger.rejectedReceipts).toEqual([]);
   expect(ledger.satisfied).toEqual(["source_verified"]);
   expect(ledger.missing).toEqual([]);
+  expect(result.public_web_evidence_items).toEqual([
+    expect.objectContaining({
+      schema_version: "butler.public-web-evidence-item.v1",
+      producer: "web_read",
+      source_url: "https://example.com/source",
+      source_identity: "example.com",
+      content_kind: "page_chunk",
+    }),
+  ]);
 });
 
 test("web_read emits limitation receipts for failed reads", async () => {

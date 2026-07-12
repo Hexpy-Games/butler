@@ -17,6 +17,7 @@ import {
   readRequirementForSearchOutput,
   webSearchEvidenceCapabilityReceipts,
 } from "./evidence.ts";
+import { publicWebSearchEvidenceItems } from "../../../output/evidence/public-web-evidence.ts";
 type WebSearchToolCall = { args: Record<string, unknown> };
 
 export function createWebSearchHandler(input: {
@@ -87,6 +88,7 @@ export function createWebSearchHandler(input: {
       return {
         ok: true,
         ...output,
+        public_web_evidence_items: publicWebSearchEvidenceItems({ results: output.results }),
         evidence_capability_receipts: webSearchEvidenceCapabilityReceipts(output),
         evidence_receipts: [
           evidenceReceipt({
