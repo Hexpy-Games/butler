@@ -61,6 +61,7 @@ import {
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { appRuntimePolicy } from "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
+import { publicWebSearchEvidenceItems } from "../../packages/butler-agent/src/agent/output/evidence/public-web-evidence.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -379,6 +380,8 @@ test("native runtime compiles typed inspection intent into a normal tool prompt"
       target_workstream_id: null,
       target_project_id: null,
       blocker_id: null,
+      evidence_domain: null,
+      inspection_scope: "workspace",
       deliverables: ["status_report"],
       answer_text: null,
       public_summary: "실제 저장소 상태를 읽어 함수명을 확인해야 합니다.",
@@ -436,6 +439,119 @@ test("native runtime compiles typed inspection intent into a normal tool prompt"
   expect(toolPrompts[0]).toContain("## Active Typed Turn Contract");
   expect(toolPrompts[0]).toContain("Action: inspect");
   expect(toolPrompts[0]).toContain("Execute only that immediate step");
+});
+
+test("general chat tool_answer uses public evidence and a separate grounding review", async () => {
+  const textPhases: string[] = [];
+  const executedTools: string[] = [];
+  const items = publicWebSearchEvidenceItems({
+    observedAt: new Date("2026-07-13T00:00:00.000Z"),
+    results: [{
+      title: "Fixture announcement",
+      url: "https://news.example/announcement",
+      snippet: "The announcement was published on July 12.",
+      source: "Example News",
+      published_at: "2026-07-12",
+    }],
+  });
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => {
+      textPhases.push(input.responseFormat?.name ?? "none");
+      if (input.responseFormat?.name === "grounded_answer_review") {
+        return JSON.stringify({
+          schema_version: "butler.grounded-answer-review.v1",
+          outcome: "supported",
+          candidate_safe_to_deliver: true,
+          next_action: "accept",
+          summary: "The publication date is directly supported.",
+          claims: [{
+            claim_id: "claim-date",
+            claim_text: "The announcement was published on July 12.",
+            support: "direct",
+            evidence_item_ids: [items[0]!.evidence_item_id],
+            limitations: ["Only the publication date was checked."],
+          }],
+          citation_item_ids: [items[0]!.evidence_item_id],
+          limitations: [],
+        });
+      }
+      return JSON.stringify({
+        schema_version: "butler.turn-contract-decision.v1",
+        decision_id: typedDecisionId(input.responseFormat),
+        action: "tool_answer",
+        target_workstream_id: null,
+        target_project_id: null,
+        blocker_id: null,
+        evidence_domain: "public_web",
+        inspection_scope: null,
+        deliverables: ["grounded_answer"],
+        answer_text: null,
+        public_title: "Check the announcement date",
+        public_summary: "공개 웹 근거로 공지 날짜를 확인합니다.",
+        public_rationale: "최신 공개 근거가 필요한 질의입니다.",
+        immediate_next_step: "공개 검색 결과를 확인합니다.",
+      });
+    },
+    runFunctionToolPromptText: async (input) => {
+      const call = { name: "web_search", args: { query: "fixture announcement date" } };
+      await authorPublicDecisionForTool(input, call, {
+        summary: "공지 날짜의 공개 근거를 검색합니다.",
+        rationale: "일반 채팅 질의의 최신 사실을 확인해야 합니다.",
+        nextStep: "확인된 검색 근거로 답합니다.",
+      });
+      await input.executeTool({ ...call, rawArguments: JSON.stringify(call.args) });
+      return "공지는 7월 12일에 게시됐습니다 ([Example News](https://news.example/announcement)).";
+    },
+    executeButlerTool: async (call) => {
+      executedTools.push(call.name);
+      return {
+        ok: true,
+        query: call.args.query,
+        results: [{ url: "https://news.example/announcement" }],
+        public_web_evidence_items: items,
+      };
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/general-chat-tool-answer",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  const result = await runtime.runTurn({
+    handle,
+    provider: structuredFakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "공지 날짜를 검색해서 알려줘." },
+    metadata: { runtimePolicy: { completionReview: "disabled", thinFirstResponse: true } },
+  });
+
+  expect(result.text).toContain("https://news.example/announcement");
+  expect(executedTools).toEqual(["web_search"]);
+  expect(textPhases).toEqual(["butler_turn_contract_decision", "grounded_answer_review"]);
+  const contracts = readdirSync(join(tempDir, "turn-contracts"))
+    .filter((name) => name.endsWith(".json"));
+  expect(contracts).toHaveLength(1);
+  const storedContract = JSON.parse(readFileSync(join(tempDir, "turn-contracts", contracts[0]!), "utf8"));
+  expect(storedContract).toMatchObject({
+    action: "tool_answer",
+    evidence_domain: "public_web",
+    state: "delivered",
+  });
+  expect(storedContract).not.toHaveProperty("target_project_id");
+  const evidenceBundle = JSON.parse(readFileSync(
+    join(tempDir, "public-web-evidence", "contracts", `${storedContract.contract_id}.json`),
+    "utf8",
+  ));
+  expect(evidenceBundle).toMatchObject({
+    contract_id: storedContract.contract_id,
+    items: [expect.objectContaining({ evidence_item_id: items[0]!.evidence_item_id })],
+    attempts: [expect.objectContaining({ producer: "web_search", outcome: "evidence" })],
+  });
 });
 
 test("native runtime gives worker sessions the execution tool loop and role-limited tool profile", async () => {
@@ -6063,7 +6179,7 @@ test("native runtime skips completion review when evidence receipts satisfy the 
   expect(result.text).toContain("https://example.test/population");
 });
 
-test("native runtime accepts model-reviewed run_command output for assistant-authored source verification", async () => {
+test("native runtime does not synthesize source verification from unreviewed command output", async () => {
   const attempts: string[] = [];
   const executedTools: string[] = [];
   const runtime = new NativeToolLoopRuntime({
@@ -6071,6 +6187,20 @@ test("native runtime accepts model-reviewed run_command output for assistant-aut
     messageLanguage: "ko",
     executeButlerTool: async (call) => {
       executedTools.push(call.name);
+      if (call.name === "web_read") {
+        return {
+          ok: true,
+          source_url: "https://example.test/issues",
+          evidence_capability_receipts: [capabilityReceipt({
+            id: "ecr-issues-source",
+            producerName: "web_read",
+            capability: "source_verified",
+            evidenceKind: "source_page",
+            satisfies: ["source_verified"],
+            reference: { url: "https://example.test/issues" },
+          })],
+        };
+      }
       return {
         ok: true,
         command: call.args.command,
@@ -6101,9 +6231,26 @@ test("native runtime accepts model-reviewed run_command output for assistant-aut
     },
     runFunctionToolPromptText: async (input) => {
       attempts.push(input.prompt);
-      if (attempts.length > 1) {
-        throw new Error("completion review should not loop after model-reviewed command output");
+      if (attempts.length === 2) {
+        expect(input.prompt).toContain("source_verified");
+        await input.onAssistantTextBeforeTools?.({
+          text: [
+            "title: Verify the public issue source",
+            "summary: 명시적 공개 출처를 확인합니다.",
+            "rationale: 명령 출력만으로 source_verified를 합성하지 않습니다.",
+            "next_step: 원문 확인 뒤 답합니다.",
+            "completion_obligations: source_verified",
+          ].join("\n"),
+          toolCalls: [{ name: "web_read", args: { url: "https://example.test/issues" } }],
+        });
+        await input.executeTool({
+          name: "web_read",
+          args: { url: "https://example.test/issues" },
+          rawArguments: JSON.stringify({ url: "https://example.test/issues" }),
+        });
+        return "공개 이슈 원문을 확인했습니다. 열린 이슈에는 #52와 #28이 포함됩니다.";
       }
+      if (attempts.length > 2) throw new Error("source verification should finish after web_read");
       await input.onAssistantTextBeforeTools?.({
         text: [
           "title: Test decision step",
@@ -6136,8 +6283,8 @@ test("native runtime accepts model-reviewed run_command output for assistant-aut
     input: { text: "gh issue list --state open 결과를 확인해서 열린 이슈를 알려줘." },
   });
 
-  expect(executedTools).toEqual(["run_command"]);
-  expect(attempts).toHaveLength(1);
+  expect(executedTools).toEqual(["run_command", "web_read"]);
+  expect(attempts).toHaveLength(2);
   expect(result.text).toContain("#52");
 });
 

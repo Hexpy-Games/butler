@@ -140,6 +140,25 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
   if (error instanceof ModelProviderRequestError) return error.diagnostic();
   const message = errorMessage(error);
   const code = errorCode(error);
+  if (code === "turn_contract_surface_inconsistent") {
+    return {
+      code,
+      message: "Butler could not create a valid tool path for this request. Retry the turn.",
+      retryable: true,
+      cause: safeErrorText(message),
+    };
+  }
+  if (
+    code === "grounding_review_structured_output_invalid" ||
+    code === "grounding_review_structured_transport_missing"
+  ) {
+    return {
+      code,
+      message: "Butler could not verify the public evidence binding. Retry the turn or switch models.",
+      retryable: true,
+      cause: safeErrorText(message),
+    };
+  }
   if (isToolCallRepairFailure(error)) {
     return {
       code: code ?? "tool_call_repair",

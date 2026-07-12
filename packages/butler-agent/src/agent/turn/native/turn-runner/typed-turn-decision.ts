@@ -56,8 +56,10 @@ export function typedTurnDecisionInstructions(input: {
     `decision_id must be ${input.decisionId}.`,
     "This is the first productive pass, not a separate natural-language classifier.",
     "Use answer only when the response can be delivered now without tools or durable work; include the complete answer_text.",
+    "Use tool_answer for a general answer that requires public web evidence; include grounded_answer, set evidence_domain to public_web, and do not select project or WorkStream targets.",
+    "Search and page-read outputs are evidence material. Do not force a search-then-read sequence: search material may support a claim, and a successful page read may still be insufficient.",
     "Set answer_text to null for every action except answer. For answer, set it to the complete response.",
-    "Use inspect only for a status/report request that does not ask to change or continue work; include status_report only.",
+    "Use inspect only for a project or workspace status/report request that does not ask to change or continue work; include status_report and select the exact inspection_scope.",
     "Reading, searching, or reviewing existing files without changing durable state is inspect with status_report, even when tools are required.",
     "The review deliverable is only for structured review evidence of changed, planned, or inherited work; it is not ordinary source inspection.",
     "Use start_work for new durable work. Use resume_work or modify_work only for a listed compatible WorkStream.",
@@ -95,7 +97,7 @@ export function turnDecisionResponseFormat(input: {
       additionalProperties: false,
       required: [
         "schema_version", "decision_id", "action", "target_workstream_id", "target_project_id",
-        "blocker_id", "deliverables", "answer_text", "public_title", "public_summary", "public_rationale", "immediate_next_step",
+        "blocker_id", "evidence_domain", "inspection_scope", "deliverables", "answer_text", "public_title", "public_summary", "public_rationale", "immediate_next_step",
       ],
       properties: {
         schema_version: { type: "string", const: TURN_CONTRACT_DECISION_SCHEMA },
@@ -107,6 +109,8 @@ export function turnDecisionResponseFormat(input: {
           enum: [null, ...(input.projectId?.trim() ? [input.projectId.trim()] : [])],
         },
         blocker_id: { enum: [null, ...input.waitingBlockerIds] },
+        evidence_domain: { enum: [null, "public_web"] },
+        inspection_scope: { enum: [null, "project", "workspace"] },
         deliverables: {
           type: "array",
           description: DELIVERABLE_DECISION_GUIDANCE,
@@ -145,6 +149,8 @@ export function parseStructuredTurnDecision(text: string, expectedDecisionId: st
     target_workstream_id: nullableString(record.target_workstream_id),
     target_project_id: nullableString(record.target_project_id),
     blocker_id: nullableString(record.blocker_id),
+    evidence_domain: nullableString(record.evidence_domain) as TurnContractDecision["evidence_domain"],
+    inspection_scope: nullableString(record.inspection_scope) as TurnContractDecision["inspection_scope"],
     deliverables: Array.isArray(record.deliverables) ? record.deliverables as TurnDeliverable[] : [],
     answer_text: nullableString(record.answer_text),
     public_title: nullableString(record.public_title) ?? legacyDecisionTitle(record),
@@ -162,6 +168,8 @@ export function canonicalFunctionDecisionArgs(
     ...args,
     ...(action && action !== "answer" ? { answer_text: null } : {}),
     ...(action && action !== "supply_user_action" ? { blocker_id: null } : {}),
+    ...(action && action !== "tool_answer" ? { evidence_domain: null } : {}),
+    ...(action && action !== "inspect" ? { inspection_scope: null } : {}),
   };
 }
 
@@ -209,7 +217,8 @@ export function compileStructuredTurnDecision(input: {
   ) {
     throw new Error("turn_contract_project_target_mismatch");
   }
-  const decision = input.projectId?.trim() && !input.decision.target_project_id && input.decision.action !== "answer"
+  const attachesProjectTarget = !["answer", "tool_answer", "inspect"].includes(input.decision.action);
+  const decision = input.projectId?.trim() && !input.decision.target_project_id && attachesProjectTarget
     ? { ...input.decision, target_project_id: input.projectId.trim() }
     : input.decision;
   return compileTurnContract({
@@ -272,23 +281,37 @@ function obligationRequirements(input: {
   workspaceId: string;
   projectId?: string | null;
 }): Partial<Record<TurnDeliverable, EvidenceObligationSeed>> {
-  const projectId = input.decision.target_project_id ?? input.projectId ?? "active-project";
+  const projectId = input.decision.target_project_id ?? input.projectId;
   const workstreamId = input.decision.target_workstream_id ?? input.workspaceId;
   const requirements: Partial<Record<TurnDeliverable, EvidenceObligationSeed>> = {};
   for (const deliverable of input.decision.deliverables) {
-    const targetKind = deliverable === "status_report" || deliverable.startsWith("ledger_")
-      ? "project"
+    const targetKind = deliverable === "grounded_answer"
+      ? "public"
+      : deliverable === "status_report" && input.decision.inspection_scope === "workspace"
+        ? "workspace"
+        : deliverable === "status_report" || deliverable.startsWith("ledger_")
+          ? "project"
       : deliverable === "final_report" ? "report" : "workspace";
+    const targetId = targetKind === "public"
+      ? "public-web"
+      : targetKind === "project"
+        ? requiredProjectTarget(projectId)
+        : targetKind === "report" ? workstreamId : input.workspaceId;
     requirements[deliverable] = {
       deliverable,
       target_kind: targetKind,
-      target_id: targetKind === "project" ? projectId : targetKind === "report" ? workstreamId : input.workspaceId,
+      target_id: targetId,
       generation: 1,
       cardinality: 1,
       expected_item_ids: [],
     };
   }
   return requirements;
+}
+
+function requiredProjectTarget(value: string | null | undefined): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error("turn_contract_project_evidence_target_missing");
+  return value.trim();
 }
 
 function legacyObligations(record: WorkStreamRecord): EvidenceObligationSeed[] {

@@ -173,3 +173,36 @@ test("tool evidence artifact previews preserve the requested bounded text slice"
     },
   });
 });
+
+test("public web previews retain bounded evidence IDs and source content for restart", () => {
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_search",
+    output: {
+      ok: true,
+      public_web_evidence_items: [{
+        evidence_item_id: "public-web-evidence-1",
+        source_url: "https://news.example/event",
+        source_identity: "news.example",
+        published_at: "2026-07-12",
+        content_kind: "search_snippet",
+        bounded_content: "The event happened on July 12.",
+        limitations: ["Search excerpt."],
+      }],
+    },
+  });
+
+  expect(preview).toEqual({
+    tool_name: "web_search",
+    ok: true,
+    evidence_item_count: 1,
+    evidence_items: [{
+      evidence_item_id: "public-web-evidence-1",
+      source_url: "https://news.example/event",
+      source_identity: "news.example",
+      published_at: "2026-07-12",
+      content_kind: "search_snippet",
+      bounded_content: "The event happened on July 12.",
+      limitations: ["Search excerpt."],
+    }],
+  });
+});
