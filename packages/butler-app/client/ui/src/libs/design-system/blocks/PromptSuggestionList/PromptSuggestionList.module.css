@@ -371,7 +371,7 @@
 @media (width <= 560px) {
   .root {
     gap: var(--space-lg);
-    padding-block-start: var(--titlebar-safe-area-top);
+    padding-block-start: var(--space-md);
   }
 
   .title {

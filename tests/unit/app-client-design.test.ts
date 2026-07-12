@@ -2672,6 +2672,11 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(smoke).toContain("narrow-right-panel-visible");
   expect(smoke).toContain("narrow-right-panel-titlebar-draggable");
   expect(smoke).toContain("narrow-scrim-compositor-stable");
+  expect(smoke).toContain("narrow-sidebar-pushes-workspace");
+  expect(smoke).toContain("narrow-sidebar-comfortable-density");
+  expect(smoke).toContain("narrow-composer-idle-one-line");
+  expect(smoke).toContain("narrow-composer-focus-expands");
+  expect(smoke).toContain("narrow-composer-draft-ellipsis");
   expect(smoke).toContain("narrow-scrim-interrupted-reversal");
   expect(smoke).toContain("narrow-scrim-repeat-monotonic");
   expect(smoke).toContain("sidebar should collapse to 0px");
@@ -2942,6 +2947,9 @@ test("composer controls use a store boundary instead of toolbar props drilling",
   const toolbar = read(
     "packages/butler-app/client/ui/src/components/conversation/ComposerToolbar.tsx",
   );
+  const inputSurface = read(
+    "packages/butler-app/client/ui/src/components/conversation/ComposerInputSurface.tsx",
+  );
   const store = read(
     "packages/butler-app/client/ui/src/components/conversation/composerStore.ts",
   );
@@ -2957,7 +2965,8 @@ test("composer controls use a store boundary instead of toolbar props drilling",
   expect(toolbar).not.toContain("planMode");
   expect(toolbar).not.toContain("handlePlanModeChange");
   expect(toolbar).not.toContain("appCopy.composer.plan");
-  expect(composer).toContain("<ComposerToolbar />");
+  expect(composer).toContain("<ComposerInputSurface");
+  expect(inputSurface).toContain("<ComposerToolbar />");
   expect(composer).not.toContain("accessMode={");
   expect(composer).not.toContain("setAccessMenuOpen={");
   expect(composer).not.toContain("onModelChoice={");

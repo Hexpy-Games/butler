@@ -1,6 +1,7 @@
 import {
   ComposerCardToolbar,
   ComposerCardToolbarSpacer,
+  ComposerCardExpandedControls,
   ComposerSendButton,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
@@ -9,6 +10,7 @@ import { AccessModeMenu } from "./AccessModeMenu";
 import { ComposerAttachmentMenu } from "./ComposerAttachmentMenu";
 import { ComposerContextControl } from "./ComposerContextControl";
 import { ModelMenu } from "./ModelMenu";
+import { ComposerCompactPreview } from "./ComposerCompactPreview";
 
 export function ComposerToolbar() {
   const isSending = useComposerStore((store) => store.isSending);
@@ -19,10 +21,13 @@ export function ComposerToolbar() {
   return (
     <ComposerCardToolbar>
       <ComposerAttachmentMenu />
-      <AccessModeMenu />
-      <ComposerCardToolbarSpacer />
-      <ComposerContextControl />
-      <ModelMenu />
+      <ComposerCompactPreview />
+      <ComposerCardExpandedControls>
+        <AccessModeMenu />
+        <ComposerCardToolbarSpacer />
+        <ComposerContextControl />
+        <ModelMenu />
+      </ComposerCardExpandedControls>
       {(isSending || activeTurn) && !canSend ? (
         <ComposerSendButton
           mode="stop"

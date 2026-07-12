@@ -52,11 +52,11 @@ export function NavRow({
     <>
       <span className={styles.labelRegion}>
         {icon && (
-          <span className={styles.icon} aria-hidden="true">
+          <span className={styles.icon} aria-hidden="true" data-slot="nav-row-icon">
             {icon}
           </span>
         )}
-        <span className={styles.label}>{label}</span>
+        <span className={styles.label} data-slot="nav-row-label">{label}</span>
       </span>
       {(badge || actions) && (
         <span

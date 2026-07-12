@@ -81,7 +81,9 @@
   border-radius: var(--app-window-radius, 18px) 0 0
     var(--app-window-radius, 18px);
   background: var(--workspace-bg);
-  transition: background 180ms ease;
+  transition:
+    background 180ms ease,
+    transform var(--adaptive-panel-duration) var(--adaptive-panel-easing);
 }
 
 .workspace > :not([data-test-class~="custom-titlebar"]) {
@@ -250,6 +252,32 @@
 }
 
 @media (width <= 640px) {
+  .root {
+    --app-window-radius: 0px;
+
+    border-radius: 0;
+  }
+
+  .workspace {
+    border: 0;
+    border-radius: 0;
+  }
+
+  .chrome {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: block;
+    pointer-events: none;
+    transition: transform var(--adaptive-panel-duration)
+      var(--adaptive-panel-easing);
+  }
+
+  .root[data-left-open="true"] .workspace,
+  .root[data-left-open="true"] .chrome {
+    transform: translateX(var(--adaptive-drawer-width));
+  }
+
   .sidebar {
     width: var(--adaptive-drawer-width);
     padding-top: var(--safe-area-top);
@@ -295,7 +323,9 @@
   .root,
   .sidebar,
   .inspector,
-  .scrim {
+  .scrim,
+  .workspace,
+  .chrome {
     transition: none;
   }
 }

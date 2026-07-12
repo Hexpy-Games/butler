@@ -38,6 +38,30 @@
   display: grid;
   width: 100%;
   pointer-events: auto;
+  transition:
+    border-radius var(--adaptive-panel-duration) var(--adaptive-panel-easing),
+    min-height var(--adaptive-panel-duration) var(--adaptive-panel-easing);
+}
+
+.expandedBody {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    grid-template-rows var(--adaptive-panel-duration)
+      var(--adaptive-panel-easing),
+    opacity 160ms ease,
+    transform var(--adaptive-panel-duration) var(--adaptive-panel-easing);
+}
+
+.expandedBodyInner {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .adjunct {
@@ -77,6 +101,29 @@
   min-width: 0;
   border-top: 1px solid var(--composer-glass-divider);
   padding: var(--space-2);
+}
+
+.compactPreview {
+  display: none;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 0 var(--space-sm);
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compactPreview[data-empty="true"] {
+  color: var(--placeholder);
+}
+
+.expandedControls {
+  display: contents;
 }
 
 .spacer {
@@ -165,6 +212,41 @@
 }
 
 @media (width <= 640px) {
+  .textarea {
+    min-height: calc(
+      1.5em + var(--composer-inner-padding-block) +
+        var(--composer-inner-padding-block)
+    );
+  }
+
+  .card[data-expanded="false"] {
+    border-radius: var(--radius-pill);
+  }
+
+  .card[data-expanded="false"] .expandedBody {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(var(--space-xs));
+  }
+
+  .card[data-expanded="false"] .adjunct {
+    display: none;
+  }
+
+  .card[data-expanded="false"] .toolbar {
+    min-height: calc(var(--control-hit-target) + var(--space-sm));
+    border-top-color: transparent;
+  }
+
+  .card[data-expanded="false"] .compactPreview {
+    display: block;
+  }
+
+  .card[data-expanded="false"] .expandedControls {
+    display: none;
+  }
+
   .floating.large {
     bottom: calc(18px + var(--safe-area-bottom) + var(--keyboard-inset-bottom));
   }
@@ -172,6 +254,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .wrap,
+  .card,
+  .expandedBody,
   .sendButton {
     transition: none;
   }
