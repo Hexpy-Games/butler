@@ -6,12 +6,14 @@ interface ComposerControlButtonProps
   children: ReactNode;
   icon?: ReactNode;
   detail?: ReactNode;
+  compact?: "label" | "icon";
 }
 
 export function ComposerControlButton({
   children,
   detail,
   icon,
+  compact = "label",
   type = "button",
   ...props
 }: ComposerControlButtonProps) {
@@ -20,6 +22,7 @@ export function ComposerControlButton({
       label={children}
       detail={detail}
       icon={icon}
+      compact={compact}
       type={type}
       {...props}
     />

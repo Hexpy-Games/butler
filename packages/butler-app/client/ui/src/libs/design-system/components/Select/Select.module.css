@@ -144,3 +144,14 @@
     transform: translateY(0) scale(1);
   }
 }
+
+@media (width <= 640px), (pointer: coarse) {
+  .trigger,
+  .trigger[data-size="sm"] {
+    min-height: var(--control-hit-target);
+  }
+
+  .item {
+    min-height: var(--control-hit-target);
+  }
+}

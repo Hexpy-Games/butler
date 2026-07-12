@@ -8,7 +8,7 @@
   gap: var(--space-md);
   align-items: center;
   justify-content: space-between;
-  min-height: var(--titlebar-height, 48px);
+  min-height: var(--titlebar-safe-area-top);
   padding: 0 18px;
   padding-right: calc(18px + var(--window-controls-width, 0px));
   color: var(--text-primary);
@@ -87,6 +87,15 @@
   -webkit-app-region: no-drag;
 }
 
+.trailing button {
+  --icon-button-size: var(--titlebar-action-size, 30px);
+}
+
+.trailing button svg {
+  width: var(--titlebar-action-icon-size, 17px);
+  height: var(--titlebar-action-icon-size, 17px);
+}
+
 .windowControls {
   position: absolute;
   top: 50%;
@@ -124,7 +133,30 @@
 }
 
 @media (width <=640px) {
+  .titlebar {
+    min-height: var(--titlebar-safe-area-top);
+    gap: var(--space-xs);
+    padding-top: var(--safe-area-top);
+    padding-right: max(var(--space-md), var(--safe-area-right));
+    padding-left: calc(
+      max(var(--space-md), var(--safe-area-left)) +
+        var(--chrome-floating-toggle-size, var(--control-hit-target))
+    );
+  }
+
   .leading[data-visibility="narrow"] {
     display: inline-grid;
+  }
+
+  .subtitle {
+    display: none;
+  }
+
+  .trailing {
+    min-width: 0;
+  }
+
+  .windowControls {
+    display: none;
   }
 }

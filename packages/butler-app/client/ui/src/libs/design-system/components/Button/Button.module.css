@@ -135,6 +135,21 @@
   min-height: 34px;
 }
 
+@media (width <= 640px), (pointer: coarse) {
+  .button:not(.variantLink) {
+    min-height: var(--control-hit-target);
+  }
+
+  .sizeIcon,
+  .sizeIconXs,
+  .sizeIconSm,
+  .sizeIconLg {
+    width: var(--control-hit-target);
+    height: var(--control-hit-target);
+    min-height: var(--control-hit-target);
+  }
+}
+
 .shapePill {
   overflow: hidden;
   border-radius: var(--radius-pill);

@@ -1,7 +1,26 @@
 :root {
   color-scheme: light;
+  --adaptive-viewport-block-size: 100vh;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --keyboard-inset-bottom: 0px;
   --titlebar-height: 48px;
-  --titlebar-safe-area-top: calc(var(--titlebar-height) + var(--space-sm));
+  --titlebar-safe-area-top: calc(var(--titlebar-height) + var(--safe-area-top));
+  --control-hit-target: 30px;
+  --control-height-xs: 24px;
+  --control-height-sm: 28px;
+  --control-height-md: 30px;
+  --control-height-lg: 34px;
+  --adaptive-page-gutter: var(--space-xl);
+  --adaptive-composer-inset: 44px;
+  --adaptive-panel-duration: 220ms;
+  --adaptive-panel-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --adaptive-drawer-width: min(88vw, 320px);
+  --adaptive-inspector-width: min(100vw, 430px);
+  --adaptive-panel-bg: var(--neutral-white);
+  --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
   --chrome-floating-toggle-top: 10px;
   --chrome-floating-toggle-left: calc(
     var(--traffic-controls-width) + var(--space-2)
@@ -357,6 +376,65 @@
   --radius: var(--radius-control);
 }
 
+@supports (height: 100dvh) {
+  :root {
+    --adaptive-viewport-block-size: 100dvh;
+  }
+}
+
+@media (width <= 640px), (pointer: coarse) {
+  :root {
+    --control-hit-target: 44px;
+  }
+}
+
+@media (width <= 640px) {
+  :root {
+    --titlebar-height: 56px;
+    --chrome-floating-toggle-top: calc(
+      var(--safe-area-top) +
+        ((var(--titlebar-height) - var(--chrome-floating-toggle-size)) / 2)
+    );
+    --chrome-floating-toggle-size: 52px;
+    --chrome-floating-toggle-icon-size: 22px;
+    --titlebar-action-size: 52px;
+    --titlebar-action-icon-size: 22px;
+    --adaptive-page-gutter: var(--space-lg);
+    --adaptive-composer-inset: var(--space-md);
+    --adaptive-composer-radius: calc(
+      (var(--control-hit-target) + var(--space-md)) / 2
+    );
+    --adaptive-drawer-width: min(78vw, 336px);
+    --sidebar-row-height: 48px;
+    --sidebar-action-size: 44px;
+    --sidebar-icon-size: 22px;
+    --sidebar-row-gap: var(--space-md);
+    --typo-h1-size: 34px;
+    --typo-h2-size: 26px;
+    --typo-h3-size: 22px;
+    --typo-h4-size: 20px;
+    --typo-h5-size: 18px;
+    --typo-h6-size: 16px;
+    --typo-body-size: 16px;
+    --typo-caption-size: 14px;
+    --typo-label-size: 15px;
+    --typo-code-size: 15px;
+    --typo-app-title-size: 17px;
+    --typo-panel-title-size: 17px;
+    --typo-dashboard-title-size: 26px;
+    --typo-new-chat-title-size-sm: 36px;
+    --typo-section-title-size: 15px;
+    --typo-panel-section-title-size: 17px;
+    --typo-metric-value-size: 20px;
+    --font-size-1: 14px;
+    --font-size-2: 15px;
+    --font-size-3: 16px;
+    --font-size-4: 17px;
+    --font-size-5: 20px;
+    --font-size-6: 26px;
+  }
+}
+
 .theme-dark {
   color-scheme: dark;
   /* Override semantic tokens for dark theme */
@@ -391,6 +469,8 @@
 
   --color-focus-ring: rgba(0, 122, 255, 0.34);
   --surface: rgba(30, 31, 34, 0.9);
+  --adaptive-panel-bg: var(--grayscale-11);
+  --adaptive-scrim-bg: rgba(0, 0, 0, 0.34);
   --surface-raised: rgba(35, 36, 39, 0.96);
   --workspace-bg: rgba(26, 27, 30, 0.94);
   --titlebar-bg: rgba(26, 27, 30, 0.76);
@@ -482,6 +562,8 @@
   --color-text-inverse: var(--neutral-white);
 
   --surface: rgba(255, 255, 255, 0.9);
+  --adaptive-panel-bg: var(--neutral-white);
+  --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
   --surface-raised: rgba(255, 255, 255, 0.96);
   --workspace-bg: rgba(255, 255, 255, 0.94);
   --titlebar-bg: rgba(255, 255, 255, 0.72);

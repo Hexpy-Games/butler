@@ -74,8 +74,15 @@ function nativeBridge(): NativeShellBridge | null {
 }
 
 export function platformClassName(): string {
-  const platform = nativeBridge()?.platform || "browser";
+  const platform = nativePlatform();
   return `platform-${platform.replace(/[^a-z0-9_-]/giu, "-").toLocaleLowerCase("en-US")}`;
+}
+
+export function nativePlatform(): "browser" | "darwin" | "linux" | "win32" {
+  const platform = nativeBridge()?.platform;
+  return platform === "darwin" || platform === "linux" || platform === "win32"
+    ? platform
+    : "browser";
 }
 
 export async function setNativeShellPreferences(

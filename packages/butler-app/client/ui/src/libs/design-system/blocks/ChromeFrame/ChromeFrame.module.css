@@ -67,6 +67,15 @@
   -webkit-app-region: no-drag;
 }
 
+.floatingToggle > button {
+  --icon-button-size: var(--chrome-floating-toggle-size, 30px);
+}
+
+.floatingToggle > button svg {
+  width: var(--chrome-floating-toggle-icon-size, 16px);
+  height: var(--chrome-floating-toggle-icon-size, 16px);
+}
+
 @media (width <=720px) {
   .frame,
   .rightOpen {

@@ -131,3 +131,9 @@
     transition: none;
   }
 }
+
+@media (width <= 640px), (pointer: coarse) {
+  .trigger {
+    min-height: var(--control-hit-target);
+  }
+}

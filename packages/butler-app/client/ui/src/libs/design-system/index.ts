@@ -1,5 +1,6 @@
 // Primitives
 export * from "./lib/floatingConstraints";
+export * from "./responsive";
 export * from "./components/Breadcrumb";
 export * from "./components/Button";
 export * from "./components/ButtonContainer";
@@ -36,6 +37,7 @@ export * from "./components/Icons";
 export * from "./components/IconButton";
 
 // Blocks
+export * from "./blocks/AdaptiveShell";
 export * from "./blocks/NavRow";
 export * from "./blocks/NavSection";
 export * from "./blocks/CollapsibleNavGroup";

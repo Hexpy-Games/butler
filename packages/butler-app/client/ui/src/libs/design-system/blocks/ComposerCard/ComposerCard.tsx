@@ -18,6 +18,7 @@ export interface ComposerCardProps extends FormHTMLAttributes<HTMLFormElement> {
   adjunct?: ReactNode;
   children: ReactNode;
   containerRef?: Ref<HTMLDivElement>;
+  expanded?: boolean;
 }
 
 export function ComposerCard({
@@ -27,6 +28,7 @@ export function ComposerCard({
   children,
   className,
   containerRef,
+  expanded = true,
   ...props
 }: ComposerCardProps) {
   return (
@@ -38,6 +40,7 @@ export function ComposerCard({
       <form
         className={cn(tintedGlassSurfaceClassName, styles.card, className)}
         data-radius="composer"
+        data-expanded={expanded}
         data-test-class="composer-card"
         {...props}
       >
@@ -70,6 +73,35 @@ export function ComposerCardToolbar({ children }: { children: ReactNode }) {
     <div className={styles.toolbar} data-test-class="composer-toolbar">
       {children}
     </div>
+  );
+}
+
+export function ComposerCardExpandedBody({ children }: { children: ReactNode }) {
+  return (
+    <div className={styles.expandedBody} data-slot="composer-expanded-body">
+      <div className={styles.expandedBodyInner}>{children}</div>
+    </div>
+  );
+}
+
+export function ComposerCardExpandedControls({ children }: { children: ReactNode }) {
+  return <span className={styles.expandedControls}>{children}</span>;
+}
+
+export function ComposerCardCompactPreview({
+  children,
+  className,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      className={cn(styles.compactPreview, className)}
+      data-slot="composer-compact-preview"
+      type="button"
+      {...props}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -108,6 +140,7 @@ export function ComposerSendButton({
   return (
     <button
       className={cn(styles.sendButton, mode === "stop" && styles.stop, className)}
+      data-test-class="composer-send-button"
       type={mode === "send" ? "submit" : "button"}
       {...props}
     >

@@ -1,7 +1,7 @@
 .screen {
   position: relative;
   display: grid;
-  min-height: 100vh;
+  min-height: var(--adaptive-viewport-block-size);
   place-items: center;
   overflow: hidden;
   padding: var(--space-2xl);
@@ -14,7 +14,7 @@
   position: relative;
   z-index: 1;
   width: min(880px, 100%);
-  max-height: calc(100vh - var(--space-2xl) * 2);
+  max-height: calc(var(--adaptive-viewport-block-size) - var(--space-2xl) * 2);
 }
 
 .dragLane {
@@ -49,7 +49,9 @@
 
   display: grid;
   height: clamp(360px, 54vh, 560px);
-  max-height: calc(100vh - var(--space-2xl) * 2 - 104px);
+  max-height: calc(
+    var(--adaptive-viewport-block-size) - var(--space-2xl) * 2 - 104px
+  );
   align-content: start;
   overflow: hidden;
 }
@@ -85,7 +87,7 @@
   }
 
   .shell {
-    max-height: calc(100vh - var(--space-lg) * 2);
+    max-height: calc(var(--adaptive-viewport-block-size) - var(--space-lg) * 2);
   }
 
   .productTitle {
@@ -93,8 +95,13 @@
   }
 
   .body {
-    height: min(520px, calc(100vh - var(--space-lg) * 2 - 96px));
-    max-height: calc(100vh - var(--space-lg) * 2 - 96px);
+    height: min(
+      520px,
+      calc(var(--adaptive-viewport-block-size) - var(--space-lg) * 2 - 96px)
+    );
+    max-height: calc(
+      var(--adaptive-viewport-block-size) - var(--space-lg) * 2 - 96px
+    );
   }
 }
 

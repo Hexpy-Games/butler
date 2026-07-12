@@ -1,7 +1,9 @@
 .viewer {
   min-height: 280px;
   min-width: 0;
-  max-height: calc(100vh - var(--titlebar-height) - 210px);
+  max-height: calc(
+    var(--adaptive-viewport-block-size) - var(--titlebar-safe-area-top) - 210px
+  );
   overflow: auto;
   padding: var(--space-md);
   border: 1px solid var(--line);

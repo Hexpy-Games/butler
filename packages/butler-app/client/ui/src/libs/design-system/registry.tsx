@@ -53,6 +53,7 @@ import {
 } from "./index";
 
 // Import block fixtures
+import { AdaptiveShellFixture } from "./blocks/AdaptiveShell/AdaptiveShell.fixtures";
 import { NavRowFixture } from "./blocks/NavRow/NavRow.fixtures";
 import { ButtonContainerFixture } from "./components/ButtonContainer/ButtonContainer.fixtures";
 import { NavSectionFixture } from "./blocks/NavSection/NavSection.fixtures";
@@ -883,6 +884,12 @@ export const designSystemComponents: DesignSystemComponentMeta[] = [
 ];
 
 export const designSystemBlocks: DesignSystemBlockMeta[] = [
+  {
+    name: "AdaptiveShell",
+    path: "blocks/AdaptiveShell",
+    tags: ["shell", "drawer", "responsive", "adaptive"],
+    fixture: AdaptiveShellFixture,
+  },
   {
     name: "NavRow",
     path: "blocks/NavRow",
