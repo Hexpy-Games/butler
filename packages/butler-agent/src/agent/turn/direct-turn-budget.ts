@@ -208,7 +208,7 @@ export function promptUsageSectionsFromPrompt(
     .map(([id, chars]) => ({
       id,
       chars,
-      estimatedTokens: estimateContextTokens("x".repeat(Math.min(chars, 200_000))),
+      estimatedTokens: estimateContextTokens(chars),
     }));
 }
 

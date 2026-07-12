@@ -71,6 +71,7 @@ export interface TurnContractWorkstreamCandidate {
   workstream_id: string;
   state: string;
   unsatisfied_obligations: EvidenceObligationSeed[];
+  tracking_mode?: CompiledTurnContract["tracking_mode"];
   waiting_user_blocker_id?: string;
 }
 

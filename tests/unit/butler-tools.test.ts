@@ -541,6 +541,8 @@ test("Project Ledger native tools route task completion through task handlers", 
   }) as { ok: boolean; data?: { id?: string; status?: string } };
   expect(unchangedCommitEvidenceWork.ok).toBe(true);
   expect(unchangedCommitEvidenceWork.data).toMatchObject({ id: "W-COMMIT-EVIDENCE", status: "specified" });
+  expect((unchangedCommitEvidenceWork as Record<string, any>).evidence_capability_receipts)
+    .toEqual([expect.objectContaining({ capability: "source_verified", evidence_kind: "project_state" })]);
 
   const codeCommits = JSON.stringify([{ repo: "butler", hash: "abc123", message: "Task commit" }]);
   const completedCommitEvidenceWork = await executor({
@@ -4478,6 +4480,55 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
     rawArguments: "{}",
   }) as Record<string, any>;
   expect(nativeUpdatedWork.ok).toBe(true);
+  const canonicalImplementation = "Implemented the scoped wrapper change.";
+  const canonicalValidation = "Focused and full validation passed.";
+  const canonicalReview = "Hostile review found no remaining blockers.";
+  const canonicalCommit = JSON.stringify([{
+    repo: "ledger-demo",
+    hash: "abc123def456",
+    message: "Implement wrapper change",
+  }]);
+  const evidencedWork = await execute({
+    name: "project_ledger_update",
+    args: {
+      project_path: projectPath,
+      kind: "work",
+      id: "W-TOOL",
+      implementation: canonicalImplementation,
+      validation: canonicalValidation,
+      review: canonicalReview,
+      code_commits: canonicalCommit,
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(evidencedWork.ok).toBe(true);
+  const pendingShownWork = await execute({
+    name: "project_ledger_show",
+    args: {
+      project_path: projectPath,
+      kind: "work",
+      id: "W-TOOL",
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(pendingShownWork.data.status).not.toBe("done");
+  expect(pendingShownWork.evidence_capability_receipts).toEqual([
+    expect.objectContaining({ capability: "source_verified", evidence_kind: "project_state" }),
+  ]);
+  const completedWork = await execute({
+    name: "project_ledger_work_complete",
+    args: {
+      project_path: projectPath,
+      id: "W-TOOL",
+      validation: canonicalValidation,
+      review: canonicalReview,
+      report: "Canonical closeout report.",
+      code_commits: canonicalCommit,
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(completedWork.ok).toBe(true);
+  expect(completedWork.data.status).toBe("done");
   const nativeShownWork = await execute({
     name: "project_ledger_show",
     args: {
@@ -4489,6 +4540,17 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
     rawArguments: "{}",
   }) as Record<string, any>;
   expect(nativeShownWork.data.body).toContain("Updated through project_ledger_work_update.");
+  expect(nativeShownWork.evidence_capability_receipts).toEqual(expect.arrayContaining([
+    expect.objectContaining({ capability: "source_verified", evidence_kind: "project_state" }),
+    expect.objectContaining({ capability: "workspace_mutated", evidence_kind: "mutation_result" }),
+    expect.objectContaining({ capability: "validation_passed", evidence_kind: "execution_result" }),
+    expect.objectContaining({ capability: "review_completed", evidence_kind: "review_result" }),
+  ]));
+  const receiptText = JSON.stringify(nativeShownWork.evidence_capability_receipts);
+  expect(receiptText).not.toContain(canonicalImplementation);
+  expect(receiptText).not.toContain(canonicalValidation);
+  expect(receiptText).not.toContain(canonicalReview);
+  expect(receiptText).not.toContain("abc123def456");
 
   const nativeUpdatedTask = await execute({
     name: "project_ledger_task_update",

@@ -26,6 +26,7 @@ const DELIVERABLE_DECISION_GUIDANCE = [
   "Every work action receives its bound runtime todo plan independently of deliverables and tracking mode.",
   "The active project id alone does not imply Ledger tracking.",
   "For local command, file, test, or operational verification with no intended durable diff, use validation; use code_change for an intended durable workspace mutation.",
+  "resume_work may declare only execution deliverables already listed as unsatisfied for the selected WorkStream; use modify_work when the current request adds execution scope.",
 ].join(" ");
 
 export interface StructuredDecisionPrompt {
@@ -60,6 +61,7 @@ export function typedTurnDecisionInstructions(input: {
     "Reading, searching, or reviewing existing files without changing durable state is inspect with status_report, even when tools are required.",
     "The review deliverable is only for structured review evidence of changed, planned, or inherited work; it is not ordinary source inspection.",
     "Use start_work for new durable work. Use resume_work or modify_work only for a listed compatible WorkStream.",
+    "For resume_work, keep execution deliverables within the selected WorkStream's inherited unsatisfied frontier. Use modify_work when the request adds a new execution deliverable.",
     "Every start_work, resume_work, or modify_work decision first creates or restores an explicit bound todo plan before ordinary tools run; the runtime opening placeholder is not that plan.",
     "The bound runtime todo plan is not a ledger_tasks deliverable. Never add ledger_tasks merely because the user asks for a task list, todo list, work list, checklist, or explicit plan before execution.",
     "Use ledger_spec, ledger_work, or ledger_tasks only when the semantic objective requires canonical Project Ledger records or the selected compatible WorkStream already has unsatisfied Ledger obligations.",
@@ -187,6 +189,7 @@ export function turnContractCandidates(input: {
         workstream_id: record.id,
         state: record.state,
         unsatisfied_obligations: unsatisfied,
+        tracking_mode: candidate.checkpoint.trackingMode,
         ...(record.active_blocker_id ? { waiting_user_blocker_id: record.active_blocker_id } : {}),
       }];
     }),
@@ -252,6 +255,8 @@ export function structuredDecisionRepairGuidance(code: string): string {
     case "turn_contract_missing_workstream_target":
     case "turn_contract_incompatible_workstream_target":
       return "Select one target_workstream_id from the supplied compatible candidates.";
+    case "turn_contract_resume_deliverable_not_inherited":
+      return "Keep resume_work and remove newly added execution deliverables, or use modify_work only when the current user request truly adds execution scope.";
     case "turn_contract_unexpected_blocker_id":
       return "Set blocker_id to null unless the action is supply_user_action.";
     case "turn_contract_supply_blocker_mismatch":

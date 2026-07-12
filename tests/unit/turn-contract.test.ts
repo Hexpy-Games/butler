@@ -131,6 +131,7 @@ test("typed decisions distinguish runtime todo plans from canonical Ledger tasks
   expect(prompt).toContain("Never add ledger_tasks merely because the user asks for a task list");
   expect(prompt).toContain("An active project id alone does not imply Ledger tracking");
   expect(prompt).toContain("with no intended durable diff, select validation");
+  expect(prompt).toContain("resume_work, keep execution deliverables within");
   expect(String(deliverables.description)).toContain(
     "ledger_tasks never means the bound runtime todo plan",
   );
@@ -165,6 +166,8 @@ test("complete action and deliverable matrix is deterministic", () => {
       });
       if (action === "start_work" && deliverable === "review") {
         expect(invoke).toThrow("turn_contract_execution_requires_durable_deliverable");
+      } else if (action === "resume_work" && deliverable !== "code_change") {
+        expect(invoke).toThrow("turn_contract_resume_deliverable_not_inherited");
       } else {
         expect(invoke).not.toThrow();
       }
@@ -201,6 +204,81 @@ test("resume and modify inherit exact unsatisfied WorkStream obligations", () =>
     decision({ action: "resume_work", target_workstream_id: "ws-a", deliverables: ["code_change"] }),
     candidate({ unsatisfied_obligations: [] }),
   )).toThrow("no_unsatisfied");
+});
+
+test("resume cannot add new execution deliverables outside the inherited frontier", () => {
+  expect(() => compileTurnContract({
+    decision: decision({
+      action: "resume_work",
+      target_workstream_id: "ws-a",
+      deliverables: ["ledger_work"],
+    }),
+    candidates: candidate(),
+  })).toThrow("turn_contract_resume_deliverable_not_inherited");
+
+  expect(() => compileTurnContract({
+    decision: decision({
+      action: "modify_work",
+      target_workstream_id: "ws-a",
+      deliverables: ["ledger_work"],
+    }),
+    candidates: candidate(),
+  })).not.toThrow();
+});
+
+test("resume preserves the selected WorkStream tracking mode", () => {
+  const contract = compileTurnContract({
+    decision: decision({
+      action: "resume_work",
+      target_workstream_id: "ws-a",
+      deliverables: ["code_change"],
+    }),
+    candidates: candidate({ tracking_mode: "ledger" }),
+  });
+
+  expect(contract.tracking_mode).toBe("ledger");
+  expect(contract.closeout_strategy).toBe("ledger");
+});
+
+test("resume redeclaration keeps the exact inherited obligation generation", () => {
+  const contract = compileTurnContract({
+    decision: decision({
+      action: "resume_work",
+      target_workstream_id: "ws-a",
+      deliverables: ["code_change", "final_report"],
+    }),
+    candidates: candidate({
+      unsatisfied_obligations: [{
+        deliverable: "code_change",
+        target_kind: "workspace",
+        target_id: "workspace-a",
+        generation: 4,
+      }, {
+        deliverable: "final_report",
+        target_kind: "report",
+        target_id: "ws-a",
+        generation: 4,
+      }],
+    }),
+  });
+
+  expect(contract.required_evidence.filter((item) => item.deliverable === "code_change"))
+    .toHaveLength(1);
+  expect(contract.required_evidence.filter((item) => item.deliverable === "final_report"))
+    .toHaveLength(1);
+  expect(contract.required_evidence.every((item) => item.generation === 4)).toBe(true);
+});
+
+test("contract semantics include the inherited tracking mode", () => {
+  const input = decision({
+    action: "resume_work",
+    target_workstream_id: "ws-a",
+    deliverables: ["code_change"],
+  });
+  const local = compileTurnContract({ decision: input, candidates: candidate({ tracking_mode: "local" }) });
+  const ledger = compileTurnContract({ decision: input, candidates: candidate({ tracking_mode: "ledger" }) });
+
+  expect(ledger.decision_semantic_fingerprint).not.toBe(local.decision_semantic_fingerprint);
 });
 
 test("inherited and declared obligations normalize before dedupe and identity", () => {
