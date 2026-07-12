@@ -178,6 +178,8 @@ describe("responsive adaptive design contracts", () => {
     );
     expect(presentation).toContain("internalPointerActive.current = true");
     expect(presentation).toContain("!internalPointerActive.current");
+    expect(presentation).toContain("window.requestAnimationFrame");
+    expect(presentation).toContain('"pointercancel", cancelInternalPointer');
     expect(composer).toContain("onFocusCapture");
     expect(composer).toContain("onBlurCapture");
     expect(textArea).toContain("const minRows = 1");
