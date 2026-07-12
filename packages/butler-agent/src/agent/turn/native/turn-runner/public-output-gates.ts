@@ -15,6 +15,7 @@ import { finalContractFallbackText } from "../policy/turn-evidence-gates.ts";
 import { recordIntentGuardMetric } from "./intent-guard-metrics.ts";
 import type { NativeStoredSessionConfig, NativeTurnRunnerDeps } from "./turn-runner-types.ts";
 import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
+import type { CompiledTurnContract } from "../../turn-contract.ts";
 
 export function repairFinalContract(input: {
   turnInput: RuntimeTurnInput;
@@ -60,6 +61,7 @@ export function applyPublicOutputGuards(input: {
   userText: string;
   finalText: string;
   audit: ToolAuditEntry[];
+  turnContract?: CompiledTurnContract;
 }): string {
   const intentGuardDecision = getIntentGuardDecision(input);
   if (intentGuardDecision.guard !== "none") {
@@ -89,7 +91,11 @@ function getIntentGuardDecision(input: {
   userText: string;
   finalText: string;
   audit: ToolAuditEntry[];
+  turnContract?: CompiledTurnContract;
 }): ReturnType<typeof applyRuntimeIntentGuardsWithDecision> | { text: string; guard: "none" } {
+  if (input.turnContract?.action === "tool_answer") {
+    return { text: input.finalText, guard: "none" };
+  }
   const shouldApplyIntentGuard = input.useTools && shouldEnforceGrounding(input.turnInput);
   if (!shouldApplyIntentGuard) {
     return { text: input.finalText, guard: "none" };
