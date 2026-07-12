@@ -21,15 +21,20 @@ export function useComposerPresentation({
   useEffect(() => setEngaged(false), [activeChatId, setEngaged]);
   useEffect(() => {
     const releaseInternalPointer = () => {
-      window.setTimeout(() => {
-        internalPointerActive.current = false;
-      }, 0);
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          internalPointerActive.current = false;
+        });
+      });
+    };
+    const cancelInternalPointer = () => {
+      internalPointerActive.current = false;
     };
     document.addEventListener("pointerup", releaseInternalPointer);
-    document.addEventListener("pointercancel", releaseInternalPointer);
+    document.addEventListener("pointercancel", cancelInternalPointer);
     return () => {
       document.removeEventListener("pointerup", releaseInternalPointer);
-      document.removeEventListener("pointercancel", releaseInternalPointer);
+      document.removeEventListener("pointercancel", cancelInternalPointer);
     };
   }, []);
   useEffect(() => {
