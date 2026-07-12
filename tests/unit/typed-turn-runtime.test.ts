@@ -47,7 +47,11 @@ const typedProvider: ModelProviderAdapter = {
 };
 
 test("typed first productive pass returns a direct answer without entering the tool loop", async () => {
-  const calls: Array<{ prompt: string; responseFormat?: unknown }> = [];
+  const calls: Array<{
+    prompt: string;
+    responseFormat?: unknown;
+    promptSections?: Array<{ id: string; chars: number }>;
+  }> = [];
   const events: RuntimeTurnEventInput[] = [];
   let toolLoopCalls = 0;
   const runtime = new NativeToolLoopRuntime({
@@ -55,7 +59,11 @@ test("typed first productive pass returns a direct answer without entering the t
     butlerHome: process.cwd(),
     disableAutomaticRecall: true,
     runPromptText: async (input) => {
-      calls.push({ prompt: input.prompt, responseFormat: input.responseFormat });
+      calls.push({
+        prompt: input.prompt,
+        responseFormat: input.responseFormat,
+        promptSections: input.usageAttribution?.promptSections,
+      });
       return JSON.stringify({
         schema_version: "butler.turn-contract-decision.v1",
         decision_id: decisionIdFromFormat(input.responseFormat),
@@ -85,7 +93,36 @@ test("typed first productive pass returns a direct answer without entering the t
     provider: typedProvider,
     model: "openai/gpt-5.5" as const,
     input: { text: "방금 말한 설계가 어떤 의미야?" },
-    metadata: { thinFirstResponse: "app_default", runtimePolicy: { completionReview: "disabled" } },
+    metadata: {
+      thinFirstResponse: "app_default",
+      runtimePolicy: { completionReview: "disabled" },
+      promptContext: [
+        "Live Configuration Hash: test",
+        "",
+        "---",
+        "",
+        "## Active Persona Reminder",
+        "Use this current persona for every user-facing answer in this turn.",
+        "# Neko Servant",
+        "## Voice",
+        "THIN_PERSONA_VOICE_SENTINEL: End answers with 다냐.",
+        "## Boundaries",
+        "Keep the character during serious answers.",
+        "",
+        "---",
+        "",
+        "## Personalization Profile",
+        "# Personalization Profile",
+        "- Butler nickname: Alfred",
+        "- Principal name: Bruce Wayne",
+        "- Address the principal as: Master Wayne",
+        "",
+        "---",
+        "",
+        "## Runtime State",
+        "Response Language: ko",
+      ].join("\n"),
+    },
     emitTurnEvent: (event) => {
       events.push(event);
     },
@@ -95,6 +132,11 @@ test("typed first productive pass returns a direct answer without entering the t
   expect(calls).toHaveLength(1);
   expect(calls[0]?.responseFormat).toMatchObject({ type: "json_schema", strict: true });
   expect(calls[0]?.prompt).toContain("Active Persona Reminder");
+  expect(calls[0]?.prompt).toContain("THIN_PERSONA_VOICE_SENTINEL");
+  expect(calls[0]?.prompt).toContain("Address the principal as: Master Wayne");
+  expect(calls[0]?.promptSections?.map((section) => section.id)).toEqual(
+    expect.arrayContaining(["active_persona_reminder", "personalization_profile"]),
+  );
   expect(events.some((event) => event.kind === "assistant.decision")).toBe(false);
   expect(readOnlyContract()).toMatchObject({ action: "answer", state: "delivered" });
   const processMetrics = readFileSync(operationalMetricsPath(data), "utf8")
