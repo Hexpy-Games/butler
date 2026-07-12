@@ -328,7 +328,7 @@ test("twelve consecutive workspace reads focus a verified state-changing action"
   });
 });
 
-test("workspace action verifies declared commands after execution and escalates a later violation", () => {
+test("workspace action narrows to direct file mutation after an unverified command", () => {
   const controller = createObligationToolSurfaceController(localCodeContract(), {
     planReady: true,
     workspaceInspectionCount: WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
@@ -355,16 +355,23 @@ test("workspace action verifies declared commands after execution and escalates 
     code: "workspace_action_required",
     terminal: false,
   });
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual([
+    "update_todo_list",
+    "write_file",
+  ]);
   expect(controller.authorize({
     name: "read_file",
     args: { path: "src/a.ts" },
   })).toMatchObject({
     allowed: false,
     code: "workspace_action_required",
-    terminal: true,
+    terminal: false,
   });
   expect(controller.state()).toMatchObject({ workspaceActionRejections: 2 });
-  expect(() => controller.assertCanContinue()).toThrow("turn_forward_progress_stalled");
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual([
+    "update_todo_list",
+    "write_file",
+  ]);
 
   const recoverableController = createObligationToolSurfaceController(localCodeContract(), {
     planReady: true,
@@ -387,7 +394,6 @@ test("workspace action verifies declared commands after execution and escalates 
     workspaceActionFocused: false,
     workspaceActionRejections: 0,
   });
-  expect(() => recoverableController.assertCanContinue()).not.toThrow();
 });
 
 test("workspace inspection frontier resumes from its durable checkpoint", () => {
@@ -402,6 +408,49 @@ test("workspace inspection frontier resumes from its durable checkpoint", () => 
     stage: "workspace_action",
     workspaceInspectionCount: WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
     workspaceActionFocused: true,
+  });
+});
+
+test("a resumed repeated-repair frontier stays strict and non-terminal", () => {
+  const controller = createObligationToolSurfaceController(localCodeContract(), {
+    planReady: true,
+    workspaceInspectionCount: WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
+    workspaceActionFocused: true,
+    workspaceActionRejections: 2,
+  });
+
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual([
+    "update_todo_list",
+    "write_file",
+  ]);
+  for (let index = 0; index < 3; index += 1) {
+    expect(controller.authorize({
+      name: "run_command",
+      args: { command: "git status --short", state_effect: "mutation" },
+    })).toMatchObject({
+      allowed: false,
+      code: "workspace_action_required",
+      terminal: false,
+    });
+  }
+  expect(controller.state()).toMatchObject({
+    stage: "workspace_action",
+    workspaceActionRejections: 2,
+  });
+
+  expect(controller.authorize({
+    name: "write_file",
+    args: { path: "src/fixed.ts", content: "fixed", overwrite: false },
+  })).toEqual({ allowed: true });
+  controller.observe({
+    name: "write_file",
+    args: { path: "src/fixed.ts", content: "fixed", overwrite: false },
+    result: { ok: true },
+  });
+  expect(controller.state()).toMatchObject({
+    stage: "workspace_execution",
+    workspaceActionFocused: false,
+    workspaceActionRejections: 0,
   });
 });
 
@@ -431,7 +480,6 @@ test("verified code mutation retires the workspace action lease during later rea
     workspaceActionRejections: 0,
   });
   expect(controller.project(tools).map((tool) => tool.name)).toContain("read_file");
-  expect(() => controller.assertCanContinue()).not.toThrow();
 });
 
 test("a satisfied mutation checkpoint discards stale workspace action counters", () => {
@@ -452,7 +500,6 @@ test("a satisfied mutation checkpoint discards stale workspace action counters",
   });
   expect(controller.authorize({ name: "read_file", args: { path: "src/final.ts" } }))
     .toEqual({ allowed: true });
-  expect(() => controller.assertCanContinue()).not.toThrow();
 });
 
 test("validation-only work never focuses mutation and an invalidated code change rearms cleanly", () => {
@@ -545,7 +592,7 @@ test("replayed plans and no-op Ledger checks cannot clear a focused workspace ac
   });
 });
 
-test("mutating-looking commands must return verified mutation evidence in the focused stage", () => {
+test("unverified focused commands stay recoverable and cannot bypass direct repair", () => {
   const controller = createObligationToolSurfaceController(localCodeContract(), {
     planReady: true,
     workspaceInspectionCount: WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
@@ -580,14 +627,16 @@ test("mutating-looking commands must return verified mutation evidence in the fo
     workspaceActionRejections: 1,
   });
 
-  expect(controller.authorize(command)).toEqual({ allowed: true });
-  expect(controller.observe({ ...command, result: { ok: false } })).toMatchObject({
+  expect(controller.authorize(command)).toMatchObject({
     allowed: false,
     code: "workspace_action_required",
-    terminal: true,
+    terminal: false,
   });
   expect(controller.state()).toMatchObject({ workspaceActionRejections: 2 });
-  expect(() => controller.assertCanContinue()).toThrow("turn_forward_progress_stalled");
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual([
+    "update_todo_list",
+    "write_file",
+  ]);
 
   const verified = createObligationToolSurfaceController(localCodeContract(), {
     planReady: true,

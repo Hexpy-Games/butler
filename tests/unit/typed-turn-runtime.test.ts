@@ -633,13 +633,15 @@ test("typed completion gaps stay in one provider invocation and preserve the obl
     .toMatchObject({ state: "complete" });
 });
 
-test("typed execution repairs a focused-action rejection with a verified script mutation", async () => {
+test("typed execution survives repeated focused-action repair and completes with a direct write", async () => {
   const sessionId = "butler/typed-workspace-action-frontier";
   const turnId = "turn-typed-workspace-action-frontier";
   const events: RuntimeTurnEventInput[] = [];
   const executedReads: string[] = [];
   const executedCommands: string[] = [];
+  const executedWrites: string[] = [];
   let rejectedBatch: unknown;
+  let failedRepairBatch: unknown;
   let repairBatch: unknown;
   const runtime = new NativeToolLoopRuntime({
     butlerData: data,
@@ -742,24 +744,54 @@ test("typed execution repairs a focused-action rejection with a verified script 
         rawArguments: JSON.stringify(rejectedCall.args),
       });
 
+      const strictTools = input.dynamicTools?.() ?? input.tools;
+      expect(workBlockCatalogNames(strictTools)).toEqual(expect.arrayContaining([
+        "update_todo_list",
+        "write_file",
+      ]));
+      expect(workBlockCatalogNames(strictTools)).not.toContain("run_command");
+      expect(workBlockCatalogNames(strictTools)).not.toContain("read_file");
+
+      const failedRepairCall = {
+        name: "run_work_block",
+        args: {
+          decision: {
+            block_title: "첫 직접 변경 실패",
+            objective: "직접 파일 변경 실패를 구조화 관찰로 돌려받습니다.",
+            rationale: "두 번째 교정도 사용자 턴을 실패시키지 않아야 합니다.",
+            next_step: "실패 원인을 반영해 같은 직접 변경을 다시 시도합니다.",
+            expected_effect: "직접 변경 전용 surface가 유지됩니다.",
+            repeat_reason: null,
+            completion_obligations: [],
+          },
+          calls: [{
+            name: "write_file",
+            args: { path: "src/failed.ts", content: "not persisted", overwrite: false },
+          }],
+        },
+      };
+      await input.onAssistantTextBeforeTools?.({ text: "", toolCalls: [failedRepairCall] });
+      failedRepairBatch = await input.executeTool({
+        ...failedRepairCall,
+        rawArguments: JSON.stringify(failedRepairCall.args),
+      });
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 1 });
+
       const repairCall = {
         name: "run_work_block",
         args: {
           decision: {
-            block_title: "검증된 스크립트 파일 변경",
-            objective: "스크립트 기반 변경을 적용하고 durable mutation evidence를 남깁니다.",
-            rationale: "명령 텍스트 휴리스틱이 아니라 실행 후 증거로 변경을 판정해야 합니다.",
+            block_title: "검증된 직접 파일 변경",
+            objective: "직접 파일 변경을 적용하고 durable mutation evidence를 남깁니다.",
+            rationale: "간접 셸 명령 없이 구조화된 쓰기 도구로 변경을 완료해야 합니다.",
             next_step: "변경 후 작업목록을 완료하고 최종 결과를 보고합니다.",
             expected_effect: "workspace_action focus가 해제됩니다.",
             repeat_reason: null,
             completion_obligations: ["durable_artifact"],
           },
           calls: [{
-            name: "run_command",
-            args: {
-              command: "python3 -c 'from pathlib import Path; Path(\"src/fixed.ts\").write_text(\"fixed\")'",
-              state_effect: "mutation",
-            },
+            name: "write_file",
+            args: { path: "src/fixed.ts", content: "fixed", overwrite: false },
           }],
         },
       };
@@ -785,12 +817,16 @@ test("typed execution repairs a focused-action rejection with a verified script 
         },
         rawArguments: "{}",
       });
-      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 1 });
+      input.usageAttribution?.beforeModelRequest?.({ roundIndex: 2 });
       return "수정과 검증을 완료했습니다.";
     },
     executeButlerTool: async (call) => {
       if (call.name === "read_file") executedReads.push(String(call.args.path));
       if (call.name === "run_command") executedCommands.push(String(call.args.command));
+      if (call.name === "write_file") executedWrites.push(String(call.args.path));
+      if (call.name === "write_file" && call.args.path === "src/failed.ts") {
+        return { ok: false, error: "simulated_write_conflict" };
+      }
       return {
         ok: true,
         evidence_capability_receipts: call.name === "read_file"
@@ -842,10 +878,24 @@ test("typed execution repairs a focused-action rejection with a verified script 
 
   expect(result.text).toContain("완료");
   expect(executedReads).toHaveLength(12);
-  expect(executedCommands).toHaveLength(2);
+  expect(executedCommands).toHaveLength(1);
   expect(executedCommands[0]).toBe("git status --short");
-  expect(executedCommands[1]).toContain("python3 -c");
+  expect(executedWrites).toEqual(["src/failed.ts", "src/fixed.ts"]);
   expect(rejectedBatch).toMatchObject({
+    butler_work_block_result: true,
+    results: [
+      expect.objectContaining({
+        ok: false,
+        output: expect.objectContaining({
+          butler_forward_progress_observation: expect.objectContaining({
+            code: "workspace_action_required",
+            terminal: false,
+          }),
+        }),
+      }),
+    ],
+  });
+  expect(failedRepairBatch).toMatchObject({
     butler_work_block_result: true,
     results: [
       expect.objectContaining({
