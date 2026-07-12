@@ -1,6 +1,24 @@
 export const BOTTOM_LOCK_THRESHOLD = 120;
 export const DEFAULT_SCROLL_BEHAVIOR: ScrollBehavior = "auto";
 
+interface ConversationBottomLockInput {
+  wasPinned: boolean;
+  distanceFromBottom: number;
+  userScrollIntent: boolean;
+  threshold?: number;
+}
+
+export function conversationBottomLockAfterScroll({
+  wasPinned,
+  distanceFromBottom,
+  userScrollIntent,
+  threshold = BOTTOM_LOCK_THRESHOLD,
+}: ConversationBottomLockInput): boolean {
+  if (distanceFromBottom < threshold) return true;
+  if (!wasPinned) return false;
+  return !userScrollIntent;
+}
+
 export interface ScrollToBottomOptions {
   behavior?: ScrollBehavior;
 }
