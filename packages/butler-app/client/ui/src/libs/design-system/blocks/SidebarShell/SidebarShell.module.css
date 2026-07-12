@@ -17,18 +17,9 @@
 @media (width <= 640px) {
   .shell {
     width: 100%;
-    padding-right: max(14px, var(--safe-area-right));
-    padding-bottom: max(16px, var(--safe-area-bottom));
-    padding-left: max(14px, var(--safe-area-left));
-  }
-
-  .titlebar {
-    height: var(--titlebar-safe-area-top);
-    padding-top: var(--safe-area-top);
-  }
-
-  .trafficSpace {
-    width: 0;
+    padding: max(var(--safe-area-top), var(--space-sm))
+      max(14px, var(--safe-area-right)) max(16px, var(--safe-area-bottom))
+      max(14px, var(--safe-area-left));
   }
 }
 
@@ -181,6 +172,16 @@
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
   gap: 2px;
+}
+
+@media (width <= 640px) {
+  .titlebar {
+    display: none;
+  }
+
+  .trafficSpace {
+    width: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

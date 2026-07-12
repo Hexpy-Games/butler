@@ -280,7 +280,6 @@
 
   .sidebar {
     width: var(--adaptive-drawer-width);
-    padding-top: var(--safe-area-top);
   }
 
   .inspector {

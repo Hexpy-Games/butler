@@ -134,7 +134,8 @@
 
   .collapsed {
     padding-left: calc(
-      max(var(--space-md), var(--safe-area-left)) + var(--control-hit-target)
+      max(var(--space-md), var(--safe-area-left)) +
+        var(--chrome-floating-toggle-size, var(--control-hit-target))
     );
   }
 

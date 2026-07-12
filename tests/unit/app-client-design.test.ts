@@ -845,9 +845,9 @@ test("UI polish contracts keep titlebar, context legend, and project collapse be
 
   expect(titlebar).not.toContain("setCommandOpen");
   expect(titlebar).not.toContain("appCopy.titlebar.commandPalette");
-  expect(titlebar).toContain("MessageSquarePlus");
-  expect(titlebar).toContain('data-test-class="titlebar-new-chat-button"');
-  expect(titlebar).toContain('leadingVisibility="narrow"');
+  expect(titlebar).not.toContain("MessageSquarePlus");
+  expect(titlebar).not.toContain('data-test-class="titlebar-new-chat-button"');
+  expect(titlebar).not.toContain('leadingVisibility="narrow"');
   expect(sidebarDirectItem).toContain("setCommandOpen(true)");
   expect(keyValueRowStyles).toMatch(/\.row\s*\{[\s\S]*align-items:\s*start;/);
   expect(keyValueRowStyles).toContain(".labelGroup");

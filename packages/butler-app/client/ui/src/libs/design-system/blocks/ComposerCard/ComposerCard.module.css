@@ -38,9 +38,8 @@
   display: grid;
   width: 100%;
   pointer-events: auto;
-  transition:
-    border-radius var(--adaptive-panel-duration) var(--adaptive-panel-easing),
-    min-height var(--adaptive-panel-duration) var(--adaptive-panel-easing);
+  transition: min-height var(--adaptive-panel-duration)
+    var(--adaptive-panel-easing);
 }
 
 .expandedBody {
@@ -212,15 +211,15 @@
 }
 
 @media (width <= 640px) {
+  .card {
+    border-radius: var(--adaptive-composer-radius);
+  }
+
   .textarea {
     min-height: calc(
       1.5em + var(--composer-inner-padding-block) +
         var(--composer-inner-padding-block)
     );
-  }
-
-  .card[data-expanded="false"] {
-    border-radius: var(--radius-pill);
   }
 
   .card[data-expanded="false"] .expandedBody {

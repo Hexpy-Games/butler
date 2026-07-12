@@ -35,10 +35,12 @@ export function ComposerToolbar() {
           onClick={onStop}
         />
       ) : (
-        <ComposerSendButton
-          aria-label={appCopy.composer.send}
-          disabled={!canSend}
-        />
+        <ComposerCardExpandedControls>
+          <ComposerSendButton
+            aria-label={appCopy.composer.send}
+            disabled={!canSend}
+          />
+        </ComposerCardExpandedControls>
       )}
     </ComposerCardToolbar>
   );
