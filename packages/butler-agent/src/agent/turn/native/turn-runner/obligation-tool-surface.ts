@@ -25,7 +25,6 @@ export type ObligationToolSurfaceStage =
   | "closeout";
 
 export const WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS = 12;
-export const TURN_FORWARD_PROGRESS_STALLED_CODE = "turn_forward_progress_stalled";
 
 export type ObligationToolAdmission =
   | { allowed: true }
@@ -35,15 +34,6 @@ export type ObligationToolAdmission =
     message: string;
     terminal: boolean;
   };
-
-export class TurnForwardProgressStalledError extends Error {
-  readonly code = TURN_FORWARD_PROGRESS_STALLED_CODE;
-
-  constructor() {
-    super(`${TURN_FORWARD_PROGRESS_STALLED_CODE}: two provider-visible repair responses violated the focused workspace-action frontier`);
-    this.name = "TurnForwardProgressStalledError";
-  }
-}
 
 const LEDGER_DELIVERABLE_KINDS = new Map<string, LedgerRecordKind>([
   ["ledger_spec", "spec"],
@@ -123,7 +113,6 @@ export interface ObligationToolSurfaceController {
     name: string;
     args: Record<string, unknown>;
   }): ObligationToolAdmission;
-  assertCanContinue(): void;
   observe(input: {
     name: string;
     args: Record<string, unknown>;
@@ -139,7 +128,6 @@ export interface ObligationToolSurfaceSession {
     seed?: ObligationToolSurfaceSeed,
   ): ObligationToolSurfaceController;
   focusMissingDeliverables(deliverables: readonly string[]): void;
-  assertCanContinue(): void;
   state(): ObligationToolSurfaceState;
 }
 
@@ -163,7 +151,6 @@ export function createObligationToolSurfaceSession(input: {
       return controller;
     },
     focusMissingDeliverables: (deliverables) => controller.focusMissingDeliverables(deliverables),
-    assertCanContinue: () => controller.assertCanContinue(),
     state: () => controller.state(),
   };
 }
@@ -214,7 +201,7 @@ export function createObligationToolSurfaceController(
     workspaceInspectionCount >= WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS
   );
   let workspaceActionRejections = workspaceActionFocused
-    ? nonNegativeInteger(seed.workspaceActionRejections)
+    ? Math.min(2, nonNegativeInteger(seed.workspaceActionRejections))
     : 0;
   let validationObserved = seed.validationObserved === true;
   let validationFailed = seed.validationFailed === true && !validationObserved;
@@ -277,7 +264,7 @@ export function createObligationToolSurfaceController(
             !isLedgerOnlyTool(tool.name) || CLOSEOUT_TOOLS.has(tool.name));
         case "workspace_action":
           return runtimeOwnedLifecycleFiltered
-            .filter((tool) => workspaceActionSurfaceAllows(tool.name))
+            .filter((tool) => workspaceActionSurfaceAllows(tool.name, workspaceActionRejections))
             .map(requireWorkspaceMutation);
         case "workspace_validation":
           return runtimeOwnedLifecycleFiltered
@@ -296,21 +283,10 @@ export function createObligationToolSurfaceController(
       if (!workspaceMutationOutstanding() || !workspaceActionFocused) {
         return { allowed: true };
       }
-      if (workspaceActionRejections >= 2) {
-        return workspaceActionRejection(true);
+      if (workspaceActionCallAllowed(input.name, input.args, workspaceActionRejections)) {
+        return { allowed: true };
       }
-      if (workspaceActionCallAllowed(input.name, input.args)) return { allowed: true };
-      workspaceActionRejections += 1;
-      return workspaceActionRejection(workspaceActionRejections >= 2);
-    },
-    assertCanContinue() {
-      if (
-        workspaceMutationOutstanding() &&
-        workspaceActionFocused &&
-        workspaceActionRejections >= 2
-      ) {
-        throw new TurnForwardProgressStalledError();
-      }
+      return recordWorkspaceActionRejection();
     },
     observe(input) {
       const validation = validationReceiptState(input.result);
@@ -343,8 +319,7 @@ export function createObligationToolSurfaceController(
       if (!managed) return null;
       if (!successful(input.result)) {
         if (workspaceActionFocused && workspaceMutationAttempted(input.name, input.args)) {
-          workspaceActionRejections += 1;
-          return workspaceActionRejection(workspaceActionRejections >= 2);
+          return recordWorkspaceActionRejection();
         }
         return null;
       }
@@ -374,8 +349,7 @@ export function createObligationToolSurfaceController(
         return null;
       }
       if (workspaceActionFocused && workspaceMutationAttempted(input.name, input.args)) {
-        workspaceActionRejections += 1;
-        return workspaceActionRejection(workspaceActionRejections >= 2);
+        return recordWorkspaceActionRejection();
       }
       if (
         workspaceMutationOutstanding() &&
@@ -436,6 +410,11 @@ export function createObligationToolSurfaceController(
     workspaceActionFocused = false;
     workspaceActionRejections = 0;
   }
+
+  function recordWorkspaceActionRejection(): ObligationToolAdmission {
+    workspaceActionRejections = Math.min(2, workspaceActionRejections + 1);
+    return workspaceActionRejection(workspaceActionRejections);
+  }
 }
 
 function requireStructuredValidation(tool: FunctionToolDefinition): FunctionToolDefinition {
@@ -478,13 +457,19 @@ function requireWorkspaceMutation(tool: FunctionToolDefinition): FunctionToolDef
   };
 }
 
-function workspaceActionSurfaceAllows(name: string): boolean {
+function workspaceActionSurfaceAllows(name: string, rejectionCount: number): boolean {
   if (name === "update_todo_list" || isInternalProgressTool(name)) return true;
+  if (rejectionCount > 0) return name === "write_file";
   return !isLedgerOnlyTool(name) && !isStaticallyReadOnlyToolName(name);
 }
 
-function workspaceActionCallAllowed(name: string, args: Record<string, unknown>): boolean {
+function workspaceActionCallAllowed(
+  name: string,
+  args: Record<string, unknown>,
+  rejectionCount: number,
+): boolean {
   if (name === "update_todo_list" || isInternalProgressTool(name)) return true;
+  if (rejectionCount > 0) return name === "write_file";
   if (name === "run_command") return args.state_effect === "mutation";
   return isWorkspaceMutation(name, args);
 }
@@ -494,14 +479,14 @@ function workspaceMutationAttempted(name: string, args: Record<string, unknown>)
   return isWorkspaceMutation(name, args);
 }
 
-function workspaceActionRejection(terminal: boolean): ObligationToolAdmission {
+function workspaceActionRejection(rejectionCount: number): ObligationToolAdmission {
   return {
     allowed: false,
     code: "workspace_action_required",
-    message: terminal
-      ? "A later provider response again failed to produce verified workspace mutation evidence; this turn must recover from a forward-progress fault."
-      : "Workspace inspection is exhausted. Perform one verified mutation or an accepted structured plan update before reading more evidence.",
-    terminal,
+    message: rejectionCount >= 2
+      ? "A later repair still lacked verified workspace mutation evidence. Keep using the direct write_file tool or make an accepted structured plan update; the turn remains active and evidence reads and shell mutation stay unavailable."
+      : "Workspace inspection is exhausted and an indirect mutation lacked verified evidence. Use the direct write_file tool or an accepted structured plan update; evidence reads and shell mutation are unavailable until progress is verified.",
+    terminal: false,
   };
 }
 

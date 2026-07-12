@@ -144,7 +144,6 @@ export function createNativeTurnPromptRunners(input: {
     getBudgetState: () => directTurnBudgetState(input.turnBudget),
     beforeModelRequest: (request) => {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
-      obligationToolSurfaceSession.assertCanContinue();
       input.phaseBudgetController?.beforeModelRequest({
         phase,
         roundIndex: request.roundIndex,
