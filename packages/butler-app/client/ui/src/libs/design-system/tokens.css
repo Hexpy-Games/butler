@@ -1,7 +1,25 @@
 :root {
   color-scheme: light;
+  --adaptive-viewport-block-size: 100vh;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --keyboard-inset-bottom: 0px;
   --titlebar-height: 48px;
-  --titlebar-safe-area-top: calc(var(--titlebar-height) + var(--space-sm));
+  --titlebar-safe-area-top: calc(var(--titlebar-height) + var(--safe-area-top));
+  --control-hit-target: 30px;
+  --control-height-xs: 24px;
+  --control-height-sm: 28px;
+  --control-height-md: 30px;
+  --control-height-lg: 34px;
+  --adaptive-page-gutter: var(--space-xl);
+  --adaptive-composer-inset: 44px;
+  --adaptive-panel-duration: 220ms;
+  --adaptive-panel-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --adaptive-drawer-width: min(88vw, 320px);
+  --adaptive-inspector-width: min(100vw, 430px);
+  --adaptive-panel-bg: var(--neutral-white);
   --chrome-floating-toggle-top: 10px;
   --chrome-floating-toggle-left: calc(
     var(--traffic-controls-width) + var(--space-2)
@@ -357,6 +375,26 @@
   --radius: var(--radius-control);
 }
 
+@supports (height: 100dvh) {
+  :root {
+    --adaptive-viewport-block-size: 100dvh;
+  }
+}
+
+@media (width <= 640px), (pointer: coarse) {
+  :root {
+    --control-hit-target: 44px;
+  }
+}
+
+@media (width <= 640px) {
+  :root {
+    --titlebar-height: 56px;
+    --adaptive-page-gutter: var(--space-lg);
+    --adaptive-composer-inset: var(--space-md);
+  }
+}
+
 .theme-dark {
   color-scheme: dark;
   /* Override semantic tokens for dark theme */
@@ -391,6 +429,7 @@
 
   --color-focus-ring: rgba(0, 122, 255, 0.34);
   --surface: rgba(30, 31, 34, 0.9);
+  --adaptive-panel-bg: var(--grayscale-11);
   --surface-raised: rgba(35, 36, 39, 0.96);
   --workspace-bg: rgba(26, 27, 30, 0.94);
   --titlebar-bg: rgba(26, 27, 30, 0.76);
@@ -482,6 +521,7 @@
   --color-text-inverse: var(--neutral-white);
 
   --surface: rgba(255, 255, 255, 0.9);
+  --adaptive-panel-bg: var(--neutral-white);
   --surface-raised: rgba(255, 255, 255, 0.96);
   --workspace-bg: rgba(255, 255, 255, 0.94);
   --titlebar-bg: rgba(255, 255, 255, 0.72);

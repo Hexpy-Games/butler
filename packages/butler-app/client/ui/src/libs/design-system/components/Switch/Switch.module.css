@@ -55,3 +55,15 @@
 .switch[data-size="sm"][data-state="checked"] .thumb {
   transform: translateX(10px);
 }
+
+@media (width <= 640px), (pointer: coarse) {
+  .switch {
+    position: relative;
+  }
+
+  .switch::after {
+    position: absolute;
+    inset: calc((var(--control-hit-target) - 100%) / -2);
+    content: "";
+  }
+}

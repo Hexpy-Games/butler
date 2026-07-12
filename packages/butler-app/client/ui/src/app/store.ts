@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import {
+  currentAdaptiveMode,
+  normalizeAdaptivePanelState,
+  restoreAdaptivePanelState,
+} from "../libs/design-system/responsive.ts";
+import {
   api,
   canSelectProjectFolder,
   isProjectFolderPickerUnavailable,
@@ -626,19 +631,44 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   renameSession: null,
 
   setLeftOpen: (value) =>
-    set((state) => ({ leftOpen: resolveUpdate(value, state.leftOpen) })),
+    set((state) => {
+      const leftOpen = resolveUpdate(value, state.leftOpen);
+      return leftOpen
+        ? normalizeAdaptivePanelState({
+            mode: currentAdaptiveMode(),
+            requested: "left",
+            leftOpen,
+            rightOpen: state.rightOpen,
+          })
+        : { leftOpen: false };
+    }),
   setRightOpen: (value) =>
-    set((state) => ({ rightOpen: resolveUpdate(value, state.rightOpen) })),
+    set((state) => {
+      const rightOpen = resolveUpdate(value, state.rightOpen);
+      return rightOpen
+        ? normalizeAdaptivePanelState({
+            mode: currentAdaptiveMode(),
+            requested: "right",
+            leftOpen: state.leftOpen,
+            rightOpen,
+          })
+        : { rightOpen: false };
+    }),
   setRightTab: (rightTab) => set({ rightTab }),
   setSelectedArtifactId: (artifactId) =>
     set({ selectedArtifactId: artifactId, selectedArtifact: null }),
   openArtifact: (artifactId, artifact) =>
-    set({
-      rightOpen: true,
+    set((state) => ({
+      ...normalizeAdaptivePanelState({
+        mode: currentAdaptiveMode(),
+        requested: "right",
+        leftOpen: state.leftOpen,
+        rightOpen: true,
+      }),
       rightTab: "artifacts",
       selectedArtifactId: artifactId,
       selectedArtifact: artifact ?? null,
-    }),
+    })),
   setLeftPanelWidth: (leftPanelWidth) => set({ leftPanelWidth }),
   setRightPanelWidth: (rightPanelWidth) => set({ rightPanelWidth }),
   setSidebarChatsCollapsed: (value) =>
@@ -659,19 +689,24 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         state.sidebarCollapsedProjectIds,
       ),
     })),
-  hydrateUiState: (uiState) =>
+  hydrateUiState: (uiState) => {
+    const panels = restoreAdaptivePanelState({
+      mode: currentAdaptiveMode(),
+      leftOpen: uiState.left_open,
+      rightOpen: uiState.right_open,
+    });
     set({
       activeChatId: uiState.active_session_id,
       view: { kind: "session" },
-      leftOpen: uiState.left_open,
-      rightOpen: uiState.right_open,
+      ...panels,
       rightTab: uiState.right_tab,
       leftPanelWidth: uiState.left_panel_width,
       rightPanelWidth: uiState.right_panel_width,
       sidebarChatsCollapsed: uiState.sidebar_chats_collapsed,
       sidebarProjectsCollapsed: uiState.sidebar_projects_collapsed,
       sidebarCollapsedProjectIds: uiState.sidebar_collapsed_project_ids,
-    }),
+    });
+  },
   setView: (view) => set({ view }),
   openSettings: (section = "general") =>
     set((state) => ({

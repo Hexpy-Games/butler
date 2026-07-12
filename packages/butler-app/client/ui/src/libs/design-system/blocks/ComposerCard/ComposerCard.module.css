@@ -1,5 +1,7 @@
 .wrap {
   position: relative;
+  container-name: composer;
+  container-type: inline-size;
   width: min(100%, var(--conversation-content-width, 760px));
   max-width: 920px;
   margin: 0 auto;
@@ -11,14 +13,18 @@
 .floating {
   position: absolute;
   z-index: 12;
-  right: 44px;
-  bottom: 22px;
-  left: 44px;
+  right: auto;
+  bottom: calc(22px + var(--safe-area-bottom) + var(--keyboard-inset-bottom));
+  left: 50%;
+  width: calc(100% - var(--adaptive-composer-inset) * 2);
+  max-width: var(--conversation-content-width, 760px);
+  margin-inline: 0;
   pointer-events: none;
+  transform: translateX(-50%);
 }
 
 .large {
-  max-width: 960px;
+  max-width: var(--conversation-content-width, 760px);
 }
 
 .floating.large {
@@ -42,6 +48,7 @@
 
 .textarea {
   width: 100%;
+  min-width: 0;
   min-height: 72px;
   max-height: calc(
     8lh + var(--composer-inner-padding-block) +
@@ -67,6 +74,7 @@
   min-height: 42px;
   align-items: center;
   gap: var(--space-1);
+  min-width: 0;
   border-top: 1px solid var(--composer-glass-divider);
   padding: var(--space-2);
 }
@@ -127,10 +135,38 @@
   background: var(--send-stop-bg);
 }
 
-@media (width <=720px) {
-  .wrap {
-    right: var(--space-3);
-    left: var(--space-3);
+@container composer (width <= 520px) {
+  .toolbar {
+    min-height: var(--control-hit-target);
+    gap: 2px;
+    padding: var(--space-xs);
+  }
+
+  .planToggle {
+    min-width: var(--control-hit-target);
+    min-height: var(--control-hit-target);
+    justify-content: center;
+    padding: 0 var(--space-xs);
+  }
+
+  .planToggle > span:last-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .sendButton {
+    width: var(--control-hit-target);
+    height: var(--control-hit-target);
+  }
+}
+
+@media (width <= 640px) {
+  .floating.large {
+    bottom: calc(18px + var(--safe-area-bottom) + var(--keyboard-inset-bottom));
   }
 }
 

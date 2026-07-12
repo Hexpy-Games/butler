@@ -69,3 +69,10 @@
   border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
+
+@media (width <= 640px), (pointer: coarse) {
+  .trigger,
+  .trigger[data-size="sm"] {
+    min-height: var(--control-hit-target);
+  }
+}

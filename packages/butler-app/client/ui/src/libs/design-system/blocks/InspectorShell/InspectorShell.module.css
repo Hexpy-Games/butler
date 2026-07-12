@@ -10,7 +10,7 @@
   max-width: 100%;
   flex-direction: column;
   min-width: 0;
-  height: 100vh;
+  height: var(--adaptive-viewport-block-size);
   overflow: hidden;
   padding: 0;
   border-left: 1px solid var(--line);
@@ -52,7 +52,7 @@
   flex: 0 0 auto;
   align-items: center;
   gap: var(--space-2);
-  min-height: 30px;
+  min-height: var(--control-height-md);
   padding: 0 var(--space-3);
   border: 0;
   border-radius: var(--radius-control);
@@ -64,6 +64,23 @@
   transition:
     background-color 120ms ease,
     color 120ms ease;
+}
+
+@media (width <= 640px), (pointer: coarse) {
+  .tabs {
+    min-height: var(--control-hit-target);
+  }
+
+  .tabs button {
+    min-height: var(--control-hit-target);
+  }
+
+  .content {
+    padding-bottom: max(
+      var(--inspector-bottom-padding),
+      var(--safe-area-bottom)
+    );
+  }
 }
 
 .tabs button:hover {
