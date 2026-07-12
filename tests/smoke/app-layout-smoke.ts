@@ -1545,6 +1545,87 @@ try {
   screenshots.push(await screenshot(page, "narrow-sidebar.png"));
   await page.mouse.click(385, 420);
   await page.waitForTimeout(240);
+  const narrowScrim = page.locator('[data-slot="adaptive-shell-scrim"]');
+  await narrowScrim.evaluate((element) => {
+    element.setAttribute("data-smoke-identity", "stable");
+  });
+  const scrimCycles: Array<{ close: number[]; open: number[] }> = [];
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    await page.getByRole("button", { name: "Show sidebar" }).click();
+    const open: number[] = [];
+    for (const wait of [32, 64, 144]) {
+      await page.waitForTimeout(wait);
+      open.push(
+        await narrowScrim.evaluate((element) =>
+          Number(getComputedStyle(element).opacity),
+        ),
+      );
+    }
+    await page.mouse.click(385, 420);
+    const close: number[] = [];
+    for (const wait of [32, 64, 144]) {
+      await page.waitForTimeout(wait);
+      close.push(
+        await narrowScrim.evaluate((element) =>
+          Number(getComputedStyle(element).opacity),
+        ),
+      );
+    }
+    scrimCycles.push({ close, open });
+  }
+  const scrimLayerState = await narrowScrim.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      backfaceVisibility: style.backfaceVisibility,
+      contain: style.contain,
+      identity: element.getAttribute("data-smoke-identity"),
+      transform: style.transform,
+      willChange: style.willChange,
+    };
+  });
+  const monotonic = (values: number[], direction: "down" | "up") =>
+    values.every((value, index) =>
+      index === 0
+        ? true
+        : direction === "up"
+          ? value >= (values[index - 1] ?? value)
+          : value <= (values[index - 1] ?? value),
+    );
+  assert(
+    scrimCycles.every(
+      (cycle) =>
+        monotonic(cycle.open, "up") && monotonic(cycle.close, "down"),
+    ) &&
+      scrimLayerState.identity === "stable" &&
+      scrimLayerState.backfaceVisibility === "hidden" &&
+      (scrimLayerState.contain === "content" ||
+        scrimLayerState.contain.includes("paint")) &&
+      scrimLayerState.transform !== "none" &&
+      scrimLayerState.willChange.includes("opacity"),
+    `narrow scrim should remain compositor-stable across repeated fades: ${JSON.stringify({ scrimCycles, scrimLayerState })}`,
+  );
+  await page.getByRole("button", { name: "Show sidebar" }).click();
+  await page.waitForTimeout(80);
+  const interruptedOpenOpacity = await narrowScrim.evaluate((element) =>
+    Number(getComputedStyle(element).opacity),
+  );
+  await page.mouse.click(385, 420);
+  await page.waitForTimeout(40);
+  const interruptedCloseOpacity = await narrowScrim.evaluate((element) =>
+    Number(getComputedStyle(element).opacity),
+  );
+  await page.getByRole("button", { name: "Show sidebar" }).click();
+  await page.waitForTimeout(40);
+  const interruptedReopenOpacity = await narrowScrim.evaluate((element) =>
+    Number(getComputedStyle(element).opacity),
+  );
+  assert(
+    interruptedCloseOpacity < interruptedOpenOpacity &&
+      interruptedReopenOpacity > interruptedCloseOpacity,
+    `interrupted scrim transition should reverse from its computed opacity: ${JSON.stringify({ interruptedCloseOpacity, interruptedOpenOpacity, interruptedReopenOpacity })}`,
+  );
+  await page.mouse.click(385, 420);
+  await page.waitForTimeout(240);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(320);
   const showSidebarAfterNarrow = page.getByRole("button", {
@@ -3804,6 +3885,9 @@ try {
         "narrow-right-panel-left-toggle-hidden",
         "narrow-right-panel-auto-collapses-left-state",
         "narrow-titlebar-new-chat-visible",
+        "narrow-scrim-compositor-stable",
+        "narrow-scrim-interrupted-reversal",
+        "narrow-scrim-repeat-monotonic",
         "left-resize-below-min-collapses",
         "sidebar-collapses-to-zero",
         "left-sidebar-column-animates-on-close",

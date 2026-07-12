@@ -19,6 +19,8 @@ exclusive open-panel state.
 - Medium layouts use bounded overlay panels.
 - Compact layouts use an 88vw left drawer and full-cover right sheet.
 - Panels animate with transform and honor reduced motion.
+- The always-mounted scrim keeps a promoted compositor layer and animates only
+  opacity, preventing repeated mobile panel toggles from flashing.
 - The workspace remains full width in compact and medium modes.
 
 ## Wrong use cases

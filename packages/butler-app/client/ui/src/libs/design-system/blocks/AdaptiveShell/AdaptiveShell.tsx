@@ -87,7 +87,6 @@ export function AdaptiveShellInspector({
 export function AdaptiveShellChrome({ children }: { children: ReactNode }) {
   return <div className={styles.chrome}>{children}</div>;
 }
-
 export function AdaptivePanelResizeHandle({
   side,
   ...props
@@ -122,6 +121,7 @@ export function AdaptiveShellScrim({
       aria-label={label}
       className={styles.scrim}
       data-open={open}
+      data-slot="adaptive-shell-scrim"
       onClick={onDismiss}
       tabIndex={open ? 0 : -1}
       type="button"
