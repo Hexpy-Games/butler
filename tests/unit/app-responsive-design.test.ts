@@ -161,6 +161,9 @@ describe("responsive adaptive design contracts", () => {
     const toolbar = read(
       "packages/butler-app/client/ui/src/components/conversation/ComposerToolbar.tsx",
     );
+    const tokens = read(
+      "packages/butler-app/client/ui/src/libs/design-system/tokens.css",
+    );
 
     expect(composer).toContain("useComposerPresentation");
     expect(composer).toContain("onFocusCapture");
@@ -178,6 +181,10 @@ describe("responsive adaptive design contracts", () => {
     );
     expect(styles).not.toContain(
       "border-radius var(--adaptive-panel-duration)",
+    );
+    expect(tokens).toContain("--adaptive-composer-radius: calc(");
+    expect(tokens).toContain(
+      "(var(--control-hit-target) + var(--space-md)) / 2",
     );
     expect(toolbar).toContain("<ComposerCardExpandedControls>");
     expect(toolbar).toContain("<ComposerSendButton");

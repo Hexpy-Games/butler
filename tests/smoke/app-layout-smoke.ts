@@ -3238,6 +3238,7 @@ try {
       collapsedDraftState.textOverflow === "ellipsis" &&
       collapsedDraftState.whiteSpace === "nowrap" &&
       collapsedDraftState.sendWidth === 0 &&
+      idleComposerRadius * 2 >= idleComposerBox.height - 0.1 &&
       Math.abs(idleComposerRadius - engagedComposerRadius) <= 0.1 &&
       Math.abs(collapsedDraftRadius - engagedComposerRadius) <= 0.1,
     `compact composer should morph between idle and engaged states while preserving draft: ${JSON.stringify({ collapsedDraftBox, collapsedDraftRadius, collapsedDraftState, engagedComposerBox, engagedComposerRadius, engagedTextareaBox, idleComposerBox, idleComposerRadius })}`,
