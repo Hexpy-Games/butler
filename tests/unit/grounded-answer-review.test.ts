@@ -2,7 +2,10 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { publicWebSearchEvidenceItems } from "../../packages/butler-agent/src/agent/output/evidence/public-web-evidence.ts";
+import {
+  publicWebReadEvidenceItems,
+  publicWebSearchEvidenceItems,
+} from "../../packages/butler-agent/src/agent/output/evidence/public-web-evidence.ts";
 import { createDirectTurnBudget } from "../../packages/butler-agent/src/agent/turn/direct-turn-budget.ts";
 import {
   compileTurnContract,
@@ -45,7 +48,7 @@ function contract(butlerData: string) {
   return value;
 }
 
-function turnInput(): RuntimeTurnInput {
+function turnInput(transport: "json_schema" | "function_tool" = "json_schema"): RuntimeTurnInput {
   return {
     handle: { sessionId: "general-chat", role: "butler", runtimeAdapterId: "native" },
     provider: {
@@ -59,7 +62,7 @@ function turnInput(): RuntimeTurnInput {
         supportsReasoningConfig: true,
         supportsPromptCaching: false,
         supportsStructuredOutputs: true,
-        structuredDecisionTransport: "json_schema",
+        structuredDecisionTransport: transport,
       },
       invoke: async () => ({ text: "" }),
     },
@@ -254,4 +257,114 @@ test("unsafe semantic review returns a continuation gap instead of a verified re
 
   expect(outcome).toMatchObject({ kind: "gap", nextMode: "final_synthesis" });
   expect(new TurnContractStore(butlerData).read(activeContract.contract_id)!.evidence_receipt_ids).toEqual([]);
+});
+
+test("a successful web_read remains insufficient when its content does not support the claim", async () => {
+  const butlerData = tempData();
+  const activeContract = contract(butlerData);
+  const items = publicWebReadEvidenceItems({
+    sourceUrl: "https://news.example/unrelated",
+    markdown: "This page discusses ticket sales but does not name the winner.",
+  });
+  const review = {
+    schema_version: "butler.grounded-answer-review.v1",
+    outcome: "insufficient",
+    candidate_safe_to_deliver: false,
+    next_action: "gather_more_evidence",
+    summary: "The read page does not support the claimed winner.",
+    claims: [{
+      claim_id: "claim-winner",
+      claim_text: "Team A won the final.",
+      support: "unsupported",
+      evidence_item_ids: [],
+      limitations: ["The page does not identify a winner."],
+    }],
+    citation_item_ids: [],
+    limitations: ["A different source is needed."],
+  };
+  const outcome = await reviewGroundedAnswerCandidate({
+    turnInput: turnInput(),
+    deps: deps(butlerData, review),
+    turnId: "turn-read-insufficient",
+    turnBudget: createDirectTurnBudget("turn-read-insufficient"),
+    prompt: "Who won?",
+    candidateText: "Team A won the final.",
+    audit: [{ name: "web_read", args: { url: "https://news.example/unrelated" }, ok: true, result: {
+      ok: true,
+      public_web_evidence_items: items,
+    } }],
+    contract: activeContract,
+  });
+
+  expect(outcome).toMatchObject({ kind: "gap", nextMode: "tool_decision" });
+});
+
+test("failed retrieval cannot be reclassified as a no-result answer", async () => {
+  const butlerData = tempData();
+  const activeContract = contract(butlerData);
+  const review = {
+    schema_version: "butler.grounded-answer-review.v1",
+    outcome: "no_result",
+    candidate_safe_to_deliver: true,
+    next_action: "accept",
+    summary: "No result was found.",
+    claims: [],
+    citation_item_ids: [],
+    limitations: ["No result."],
+  };
+  await expect(reviewGroundedAnswerCandidate({
+    turnInput: turnInput(),
+    deps: deps(butlerData, review),
+    turnId: "turn-provider-failed",
+    turnBudget: createDirectTurnBudget("turn-provider-failed"),
+    prompt: "Find the result.",
+    candidateText: "결과를 찾지 못했습니다.",
+    audit: [{ name: "web_search", args: { query: "result" }, ok: false, error: "provider unavailable" }],
+    contract: activeContract,
+  })).rejects.toThrow("grounding_review_no_result_unobserved");
+});
+
+test("function-tool structured providers run the same mandatory grounding review", async () => {
+  const butlerData = tempData();
+  const activeContract = contract(butlerData);
+  const items = publicWebSearchEvidenceItems({
+    results: [{
+      title: "Event report",
+      url: "https://news.example/event",
+      snippet: "The event happened on July 12.",
+      source: "Example News",
+    }],
+  });
+  const review = supportedReview([items[0]!.evidence_item_id]);
+  const functionDeps = deps(butlerData, review);
+  functionDeps.toolPromptRunner = async (input) => {
+    expect(input.toolChoice).toBe("required");
+    expect(input.tools.map((tool) => tool.name)).toEqual(["submit_grounding_review"]);
+    const output = await input.executeTool({
+      name: "submit_grounding_review",
+      args: review,
+      rawArguments: JSON.stringify(review),
+    });
+    return await input.finalTextFromToolResult!({
+      name: "submit_grounding_review",
+      args: review,
+      output,
+    }) ?? "";
+  };
+  const outcome = await reviewGroundedAnswerCandidate({
+    turnInput: turnInput("function_tool"),
+    deps: functionDeps,
+    turnId: "turn-function-review",
+    turnBudget: createDirectTurnBudget("turn-function-review"),
+    prompt: "When did it happen?",
+    candidateText: "July 12 ([Example News](https://news.example/event)).",
+    audit: [{ name: "web_search", args: { query: "event" }, ok: true, result: {
+      ok: true,
+      results: [{ url: "https://news.example/event" }],
+      public_web_evidence_items: items,
+    } }],
+    contract: activeContract,
+  });
+
+  expect(outcome.kind).toBe("accepted");
 });
