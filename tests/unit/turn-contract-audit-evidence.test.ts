@@ -182,6 +182,7 @@ test("Ledger integrity checks do not satisfy a project status snapshot", () => {
       decision_id: "decision-status-evidence",
       action: "inspect",
       target_project_id: "project-a",
+      inspection_scope: "project",
       deliverables: ["status_report"],
       public_summary: "Inspect the current project status.",
     },

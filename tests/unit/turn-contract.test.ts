@@ -23,6 +23,7 @@ import {
   type TurnEvidenceReceipt,
 } from "../../packages/butler-agent/src/agent/turn/turn-contract.ts";
 import {
+  compileStructuredTurnDecision,
   turnDecisionResponseFormat,
   typedTurnDecisionInstructions,
 } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/typed-turn-decision.ts";
@@ -46,7 +47,9 @@ function decision(overrides: Partial<TurnContractDecision> = {}): TurnContractDe
       target_project_id: "project-a",
       inspection_scope: "project" as const,
       deliverables: ["status_report" as const],
-    } : { deliverables: [] }),
+    } : action === "tool_answer" || action === "answer" || action === "cancel_work"
+      ? { deliverables: [] }
+      : { target_project_id: "workspace-a", deliverables: [] }),
     public_summary: "Inspect canonical status.",
     ...overrides,
   };
@@ -101,6 +104,44 @@ test("tool-assisted public answers are distinct from direct answers and inspecti
       deliverables: ["status_report"],
     }),
   })).toThrow("turn_contract_inspection_scope_missing");
+});
+
+test("structured compilation binds public, project, and workspace targets without sentinels", () => {
+  const publicAnswer = compileStructuredTurnDecision({
+    decision: decision({
+      action: "tool_answer",
+      target_project_id: undefined,
+      inspection_scope: undefined,
+      evidence_domain: "public_web",
+      deliverables: ["grounded_answer"],
+    }),
+    candidates: {},
+    workspaceId: "workspace-chat",
+    projectId: "butler",
+  });
+  expect(publicAnswer.target_project_id).toBeUndefined();
+  expect(publicAnswer.required_evidence[0]).toMatchObject({
+    target_kind: "public",
+    target_id: "public-web",
+  });
+
+  const workspaceInspect = compileStructuredTurnDecision({
+    decision: decision({
+      target_project_id: undefined,
+      inspection_scope: "workspace",
+    }),
+    candidates: {},
+    workspaceId: "workspace-chat",
+    projectId: undefined,
+  });
+  expect(workspaceInspect.required_evidence[0]).toMatchObject({
+    target_kind: "workspace",
+    target_id: "workspace-chat",
+  });
+
+  const serialized = JSON.stringify([publicAnswer, workspaceInspect]);
+  expect(serialized).not.toContain("active-project");
+  expect(serialized).not.toContain('"target_id":"active"');
 });
 
 function candidate(overrides: Partial<TurnContractWorkstreamCandidate> = {}): TurnContractCandidates {
