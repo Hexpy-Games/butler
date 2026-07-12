@@ -34,6 +34,8 @@ export function AccessModeMenu() {
     <Popover open={accessMenuOpen} onOpenChange={setAccessMenuOpen}>
       <PopoverTrigger asChild>
         <ComposerControlButton
+          aria-label={`${appCopy.composer.permission}: ${accessLabel(accessMode)}`}
+          compact="icon"
           data-test-class="access-button"
           icon={accessModeIcon(accessMode, 16)}
           style={accessModeStyle(accessMode)}

@@ -215,12 +215,9 @@ test("dedicated client design tokens cover flat sidebar and custom titlebar prim
   expect(css).toContain("--chrome-floating-toggle-top: 10px");
   expect(css).toContain("--chrome-floating-toggle-left: calc(");
   expect(css).toContain("-webkit-app-region: drag");
-  expect(componentCss).toContain(":global(.mac-window)");
+  expect(componentCss).toContain(".root[data-transparent-workspace=\"true\"]");
   expect(componentCss).toMatch(
-    /:global\(\.mac-window\)\s*\{[\s\S]*background:\s*transparent;/,
-  );
-  expect(componentCss).toMatch(
-    /:global\(\.mac-window\)\s*\{[\s\S]*color:\s*var\(--text-primary\);/,
+    /\.root\s*\{[\s\S]*color:\s*var\(--text-primary\);/,
   );
   expect(componentCss).toContain(".shell");
   expect(componentCss).toContain(".content");
@@ -236,9 +233,9 @@ test("dedicated client design tokens cover flat sidebar and custom titlebar prim
   expect(componentCss).toContain(".floatingToggle");
   expect(componentCss).toContain("top: var(--chrome-floating-toggle-top)");
   expect(componentCss).toContain("left: var(--chrome-floating-toggle-left)");
-  expect(componentCss).toContain(":global(.panel-resize-handle)");
-  expect(componentCss).toContain(":global(.left-panel-resize-handle)");
-  expect(componentCss).toContain(":global(.right-panel-resize-handle)");
+  expect(componentCss).toContain(".resizeHandle");
+  expect(componentCss).toContain('.resizeHandle[data-side="left"]');
+  expect(componentCss).toContain('.resizeHandle[data-side="right"]');
   expect(componentCss).toContain(".titlebar");
   expect(componentCss).toContain(".tabs");
   expect(componentCss).toContain(".button");
@@ -270,6 +267,9 @@ test("dedicated client sidebar collapse keeps a normal clickable titlebar toggle
   const visualHarness = read(
     "packages/butler-app/client/ui/src/pages/VisualHarness.tsx",
   );
+  const adaptiveShellStyles = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",
+  );
 
   expect(main).not.toContain("function ChromeControls");
   expect(main).not.toContain('className="chrome-controls"');
@@ -290,29 +290,27 @@ test("dedicated client sidebar collapse keeps a normal clickable titlebar toggle
   expect(chromeEnvironment).toContain('return window.butlerApp ? "electron"');
   expect(chromeEnvironment).toContain('"electron-chrome"');
   expect(chromeEnvironment).toContain('"browser-chrome"');
-  expect(appShell).toContain("chromeEnvironmentClassName()");
-  expect(visualHarness).toContain("chromeEnvironmentClassName()");
+  expect(appShell).toContain("chromeEnvironment={chromeEnvironment()}");
+  expect(visualHarness).toContain("chromeEnvironment={chromeEnvironment()}");
   expect(tokens).toContain("--titlebar-height: 48px");
   expect(tokens).toContain("--chrome-floating-toggle-top: 10px");
   expect(tokens).toContain("--sidebar-width");
-  expect(css).toContain(":global(.mac-window.left-collapsed)");
-  expect(css).toContain(":global(.mac-window.panel-resizing)");
-  expect(css).toContain(":global(.mac-window.browser-chrome)");
-  expect(css).toContain("--traffic-controls-width: 0px");
-  expect(css).toContain("--chrome-floating-toggle-left: 0px");
-  expect(css).toContain(":global(.electron-chrome.platform-linux)");
-  expect(collapseWhitespace(css)).toContain(
+  expect(adaptiveShellStyles).toContain('[data-left-open="false"]');
+  expect(adaptiveShellStyles).toContain('[data-resizing="true"]');
+  expect(adaptiveShellStyles).toContain('[data-chrome-environment="browser"]');
+  expect(adaptiveShellStyles).toContain("--traffic-controls-width: 0px");
+  expect(adaptiveShellStyles).toContain("--chrome-floating-toggle-left: 0px");
+  expect(adaptiveShellStyles).toContain('[data-platform="linux"]');
+  expect(collapseWhitespace(adaptiveShellStyles)).toContain(
     "--titlebar-collapsed-left-padding: calc( var(--chrome-floating-toggle-left) + 44px )",
   );
-  expect(css).toContain("--chrome-floating-toggle-left: 10px");
-  expect(css).toMatch(
-    /grid-template-columns:\s*minmax\(\s*0,\s*var\(--shell-left-column-target-width\)\s*\)\s*minmax\(\s*0,\s*1fr\s*\)\s*minmax\(\s*0,\s*var\(--shell-right-column-target-width\)\s*\);/,
+  expect(adaptiveShellStyles).toContain("--chrome-floating-toggle-left: 10px");
+  expect(adaptiveShellStyles).toMatch(
+    /grid-template-columns:\s*minmax\(\s*0,\s*var\(--adaptive-left-track\)\s*\)\s*minmax\(\s*0,\s*1fr\s*\)\s*minmax\(\s*0,\s*var\(--adaptive-right-track\)\s*\);/,
   );
-  expect(css).toContain("--shell-left-column-target-width: 0px");
-  expect(css).toContain(
-    "--shell-right-column-target-width: var(--shell-right-column-width)",
-  );
-  expect(css).toContain(":global(.left-collapsed .sidebar-slot)");
+  expect(css).toContain("--adaptive-left-track: 0px");
+  expect(css).toContain("--adaptive-right-track: var(--right-panel-width)");
+  expect(css).toContain('[data-left-open="false"]');
   expect(css).toContain(".contentCollapsed");
   expect(css).toContain("visibility: hidden");
   expect(main).toContain("Resize left sidebar");
@@ -330,12 +328,10 @@ test("dedicated client sidebar collapse keeps a normal clickable titlebar toggle
   expect(main).toContain("tabIndex={0}");
   expect(main).toContain("setLeftOpen(false)");
   expect(main).toContain("--right-panel-width");
-  expect(css).toContain(":global(.panel-resize-handle:focus-visible)");
-  expect(css).toContain(":global(.right-panel-slot)");
-  expect(css).toContain(
-    'right-panel-slot [data-test-class~="right-inspector"]',
-  );
-  expect(css).toContain("width: var(--shell-right-column-width)");
+  expect(css).toContain(".resizeHandle:focus-visible");
+  expect(css).toContain(".inspector");
+  expect(css).toContain(".root .inspector > *");
+  expect(css).toContain("width: var(--right-panel-width)");
   expect(css).toContain("contain: layout paint style");
   expect(css).toContain(".open");
   expect(css).toContain(".item");
@@ -501,7 +497,9 @@ test("dedicated client keeps complete work history and session management contro
   expect(sidebarChatItem).toContain("runSessionAction");
   expect(sidebarProjectSessionItem).toContain("runSessionAction");
   expect(sidebarChatItem).toContain('rightVisibility="hover"');
-  expect(sidebarProjectSessionItem).toContain('rightVisibility="hover"');
+  expect(sidebarProjectSessionItem).toContain(
+    'rightVisibility="hover-compact-hidden"',
+  );
   expect(sidebarChatItem).toContain("onContextMenu");
   expect(sidebarProjectSessionItem).toContain("onContextMenu");
   expect(sidebarChatItem).toContain("event.preventDefault()");
@@ -519,20 +517,20 @@ test("theme and settings routes cover the full app surface", () => {
   const css = readUiStyleSources();
 
   expect(main).toContain("selectIsSettingsView");
-  expect(main).toContain("settings-active");
-  expect(main).toContain("!isSettingsView && <WindowChromeLayer");
+  expect(main).toContain("settingsActive={isSettingsView}");
+  expect(main).toContain("<AdaptiveShellChrome>");
   expect(main).toContain("isSettingsView ? (");
-  expect(css).toContain(":global(.mac-window.settings-active)");
+  expect(css).toContain('[data-settings-active="true"]');
   expect(css).toContain(".active");
   expect(css).toContain(".sidebarActive");
   expect(css).toMatch(
-    /:global\(\.workspace\)\s*\{[\s\S]*background:\s*var\(--workspace-bg\);/,
+    /\.workspace\s*\{[\s\S]*background:\s*var\(--workspace-bg\);/,
   );
   expect(css).toMatch(
     /\.shell\s*\{[\s\S]*background:\s*var\(--conversation-bg\);/,
   );
-  expect(css).toContain(".main-screen-theme-bloom");
-  expect(css).toContain(".main-screen-theme-silk");
+  expect(main).toContain("main-screen-theme-bloom");
+  expect(main).toContain("main-screen-theme-silk");
   expect(css).toMatch(
     /\.user \.body\s*\{[\s\S]*background:\s*var\(--user-message-bg\);/,
   );
@@ -839,8 +837,8 @@ test("UI polish contracts keep titlebar, context legend, and project collapse be
   const section = read(
     "packages/butler-app/client/ui/src/libs/design-system/components/Section/Section.tsx",
   );
-  const shellStyles = read(
-    "packages/butler-app/client/ui/src/pages/Shell.module.css",
+  const adaptiveShellStyles = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",
   );
   const electronMain = read("packages/butler-app/client/electron/main.mjs");
   const projectCollapseHook = read(
@@ -849,9 +847,9 @@ test("UI polish contracts keep titlebar, context legend, and project collapse be
 
   expect(titlebar).not.toContain("setCommandOpen");
   expect(titlebar).not.toContain("appCopy.titlebar.commandPalette");
-  expect(titlebar).toContain("MessageSquarePlus");
-  expect(titlebar).toContain('data-test-class="titlebar-new-chat-button"');
-  expect(titlebar).toContain('leadingVisibility="narrow"');
+  expect(titlebar).not.toContain("MessageSquarePlus");
+  expect(titlebar).not.toContain('data-test-class="titlebar-new-chat-button"');
+  expect(titlebar).not.toContain('leadingVisibility="narrow"');
   expect(sidebarDirectItem).toContain("setCommandOpen(true)");
   expect(keyValueRowStyles).toMatch(/\.row\s*\{[\s\S]*align-items:\s*start;/);
   expect(keyValueRowStyles).toContain(".labelGroup");
@@ -902,26 +900,24 @@ test("UI polish contracts keep titlebar, context legend, and project collapse be
   expect(inspectorShellStyles).toContain("padding: 0");
   expect(inspectorShellStyles).toContain("width: 100%");
   expect(inspectorShellStyles).not.toContain("padding: 0 18px 22px");
-  expect(shellStyles).toContain("--shell-right-column-width");
-  expect(shellStyles).toContain("--shell-left-column-target-width");
-  expect(shellStyles).toContain("--shell-right-column-target-width");
-  expect(shellStyles).toContain(":global(.right-panel-slot)");
-  expect(shellStyles).toContain(
-    'right-panel-slot [data-test-class~="right-inspector"]',
+  expect(adaptiveShellStyles).toContain("--adaptive-right-track");
+  expect(adaptiveShellStyles).toContain("--adaptive-left-track");
+  expect(adaptiveShellStyles).toContain(".inspector");
+  expect(adaptiveShellStyles).toContain("contain: layout paint style");
+  expect(adaptiveShellStyles).toContain("@media (width <= 640px)");
+  expect(adaptiveShellStyles).toContain('[data-right-open="true"]');
+  expect(adaptiveShellStyles).toContain(".panelTitlebar");
+  expect(adaptiveShellStyles).toContain(
+    "inset: var(--titlebar-safe-area-top) 0 0 auto",
   );
-  expect(shellStyles).toContain("contain: layout paint style");
-  expect(shellStyles).toContain("@media (width<=640px)");
-  expect(shellStyles).toContain(":global(.mac-window.right-open)");
-  expect(shellStyles).toContain("right-panel-overlay-titlebar");
-  expect(shellStyles).toContain("padding-top: var(--titlebar-height)");
-  expect(shellStyles).toContain("chrome-floating-toggle-layer");
+  expect(adaptiveShellStyles).toContain(".chrome");
   const leftCollapsedBlock =
-    shellStyles.match(
-      /:global\(\.mac-window\.left-collapsed\)\s*\{[^}]*\}/u,
+    adaptiveShellStyles.match(
+      /\.root\[data-left-open="false"\]\s*\{[^}]*\}/u,
     )?.[0] ?? "";
   expect(leftCollapsedBlock).not.toContain("grid-template-columns");
-  expect(shellStyles).not.toMatch(
-    /:global\(\.right-inspector\)\s*\{[^}]*display:\s*none/u,
+  expect(adaptiveShellStyles).not.toMatch(
+    /\.inspector\s*\{[^}]*display:\s*none/u,
   );
   expect(appShell).toContain("useNarrowRightPanelAutoCollapse");
   expect(narrowRightPanelHook).toContain('"(max-width: 640px)"');
@@ -938,7 +934,7 @@ test("UI polish contracts keep titlebar, context legend, and project collapse be
     'className="right-panel-overlay-titlebar drag-region"',
   );
   expect(rightPanelOverlayTitlebar).not.toContain("no-drag");
-  expect(shellStyles).toContain("-webkit-app-region: drag");
+  expect(rightPanelOverlayTitlebar).toContain("AdaptivePanelTitlebar");
   expect(chromeFrame).toContain(
     'data-test-class="chrome-floating-toggle-layer"',
   );
@@ -973,8 +969,8 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   const nativeNotificationStatusPanel = read(
     "packages/butler-app/client/ui/src/components/settings/NativeNotificationStatusPanel.tsx",
   );
-  const shellStyles = read(
-    "packages/butler-app/client/ui/src/pages/Shell.module.css",
+  const adaptiveShellStyles = read(
+    "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",
   );
   const titlebarShellStyles = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/TitlebarShell/TitlebarShell.module.css",
@@ -1116,7 +1112,7 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(windowControls).toContain("minimizeNativeWindow");
   expect(windowControls).toContain("toggleNativeWindowMaximize");
   expect(windowControls).toContain("closeNativeWindow");
-  expect(appShell).toContain("platformClassName()");
+  expect(appShell).toContain("platform={nativePlatform()}");
   expect(appShell).toContain("useNativeShellPreferences");
   expect(generalSettings).toContain("DesktopShellSettings");
   expect(desktopShellSettings).toContain("settingsSections.notifications");
@@ -1128,12 +1124,12 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(nativeNotificationStatusPanel).toContain("getNativeNotificationStatus");
   expect(nativeNotificationStatusPanel).toContain("testDesktopNotification");
   expect(nativeNotificationStatusPanel).toContain("openNativeNotificationSettings");
-  expect(shellStyles).toContain(":global(.electron-chrome.platform-win32)");
-  expect(shellStyles).toContain("--window-controls-width");
-  expect(shellStyles).toContain("--traffic-controls-width: 0px");
-  expect(shellStyles).toContain("--chrome-floating-toggle-left: 10px");
-  expect(shellStyles).toContain("border-radius: var(--app-window-radius)");
-  expect(shellStyles).toContain("padding: var(--app-window-frame-inset)");
+  expect(adaptiveShellStyles).toContain('[data-platform="win32"]');
+  expect(adaptiveShellStyles).toContain("--window-controls-width");
+  expect(adaptiveShellStyles).toContain("--traffic-controls-width: 0px");
+  expect(adaptiveShellStyles).toContain("--chrome-floating-toggle-left: 10px");
+  expect(adaptiveShellStyles).toContain("border-radius: var(--app-window-radius");
+  expect(adaptiveShellStyles).toContain("padding: var(--app-window-frame-inset");
   expect(titlebarShellStyles).toContain(
     "padding-right: calc(18px + var(--window-controls-width, 0px))",
   );
@@ -1388,7 +1384,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
     "8lh + var(--composer-inner-padding-block) + var(--composer-inner-padding-block)",
   );
   expect(normalizedComposerCardStyles).toContain(
-    ".toolbar { display: flex; min-height: 42px; align-items: center; gap: var(--space-1); border-top: 1px solid var(--composer-glass-divider); padding: var(--space-2);",
+    ".toolbar { display: flex; min-height: 42px; align-items: center; gap: var(--space-1); min-width: 0; border-top: 1px solid var(--composer-glass-divider); padding: var(--space-2);",
   );
   expect(composerKeyboard).toContain("shouldSubmitComposerEnter");
   expect(composerKeyboard).toContain("modifier_enter_send_enter_newline");
@@ -1458,13 +1454,13 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(promptSuggestionListStyles).toContain("grid-auto-flow: column");
   expect(promptSuggestionListStyles).toContain("overflow: auto hidden");
   expect(promptSuggestionListStyles).toContain(
-    "height: calc(100vh - var(--composer-reserve))",
+    "height: calc(var(--adaptive-viewport-block-size) - var(--composer-reserve))",
   );
   expect(promptSuggestionListStyles).toContain(
-    "padding: var(--titlebar-height) 0 0",
+    "padding: var(--titlebar-safe-area-top) 0 0",
   );
   expect(promptSuggestionListStyles).toContain(
-    "inset: 0 0 0 var(--shell-left-column-target-width, 0)",
+    "inset: 0",
   );
   expect(promptSuggestionListStyles).toContain(
     "grid-auto-columns: minmax(198px, 224px)",
@@ -1589,7 +1585,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("appCopy.composer.attachFile");
   expect(renderer).toContain("uploadMessageFile");
   expect(renderer).toContain("uploadEpochRef");
-  expect(css).toContain(".mac-window.right-open .workspace");
+  expect(css).toContain('.root[data-right-open="true"] .workspace');
   expect(css).toContain("border-right-width: 0");
   expect(renderer).toContain("MESSAGE_FILE_URL_PATTERN");
   expect(renderer).toContain("function MessageAttachments");
@@ -1666,7 +1662,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(css).toContain("white-space: nowrap");
   expect(css).toContain("flex: 0 0 auto");
   expect(css).toContain(
-    "max-height: calc(100vh - var(--titlebar-height) - 210px)",
+    "var(--adaptive-viewport-block-size) - var(--titlebar-safe-area-top) - 210px",
   );
   expect(css).toContain("overflow: hidden");
   expect(css).not.toContain(".command-sheet");
@@ -2669,11 +2665,22 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(smoke).toContain("new-chat-start-position-high");
   expect(smoke).toContain("new-chat-moment-time-visible");
   expect(smoke).toContain("new-chat-extra-icon-gutter");
+  expect(smoke).toContain("narrow-new-chat-meta-row");
+  expect(smoke).toContain("narrow-new-chat-full-width-copy");
+  expect(smoke).toContain("narrow-readable-type-scale");
   expect(smoke).toContain("new-chat-left-radius-preserved");
   expect(smoke).toContain("browser-chrome-traffic-reserve-zero");
   expect(smoke).toContain("browser-sidebar-toggle-flush-left");
   expect(smoke).toContain("narrow-right-panel-visible");
   expect(smoke).toContain("narrow-right-panel-titlebar-draggable");
+  expect(smoke).toContain("narrow-scrim-compositor-stable");
+  expect(smoke).toContain("narrow-sidebar-pushes-workspace");
+  expect(smoke).toContain("narrow-sidebar-comfortable-density");
+  expect(smoke).toContain("narrow-composer-idle-one-line");
+  expect(smoke).toContain("narrow-composer-focus-expands");
+  expect(smoke).toContain("narrow-composer-draft-ellipsis");
+  expect(smoke).toContain("narrow-scrim-interrupted-reversal");
+  expect(smoke).toContain("narrow-scrim-repeat-monotonic");
   expect(smoke).toContain("sidebar should collapse to 0px");
   expect(smoke).toContain("sidebar-hover-highlight");
   expect(smoke).toContain("light-theme-sidebar-tokenized");
@@ -2942,6 +2949,9 @@ test("composer controls use a store boundary instead of toolbar props drilling",
   const toolbar = read(
     "packages/butler-app/client/ui/src/components/conversation/ComposerToolbar.tsx",
   );
+  const inputSurface = read(
+    "packages/butler-app/client/ui/src/components/conversation/ComposerInputSurface.tsx",
+  );
   const store = read(
     "packages/butler-app/client/ui/src/components/conversation/composerStore.ts",
   );
@@ -2957,7 +2967,8 @@ test("composer controls use a store boundary instead of toolbar props drilling",
   expect(toolbar).not.toContain("planMode");
   expect(toolbar).not.toContain("handlePlanModeChange");
   expect(toolbar).not.toContain("appCopy.composer.plan");
-  expect(composer).toContain("<ComposerToolbar />");
+  expect(composer).toContain("<ComposerInputSurface");
+  expect(inputSurface).toContain("<ComposerToolbar />");
   expect(composer).not.toContain("accessMode={");
   expect(composer).not.toContain("setAccessMenuOpen={");
   expect(composer).not.toContain("onModelChoice={");
@@ -3031,7 +3042,7 @@ test("composer adjunct panels use design-system blocks inside the composer card"
     )?.length,
   ).toBe(1);
   expect(normalizedComposerCardStyles).toContain(
-    ".toolbar { display: flex; min-height: 42px; align-items: center; gap: var(--space-1); border-top: 1px solid var(--composer-glass-divider); padding: var(--space-2);",
+    ".toolbar { display: flex; min-height: 42px; align-items: center; gap: var(--space-1); min-width: 0; border-top: 1px solid var(--composer-glass-divider); padding: var(--space-2);",
   );
   expect(workerPanel).toContain("WorkerActivityPanel");
   expect(workerPanel).not.toContain("ActivityFeed");

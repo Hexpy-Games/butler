@@ -55,3 +55,21 @@
 .detail {
   color: var(--text-tertiary);
 }
+
+@container composer (width <= 520px) {
+  .control {
+    min-width: var(--control-hit-target);
+    min-height: var(--control-hit-target);
+    padding-inline: var(--space-sm);
+  }
+
+  .control[data-compact="icon"] .content,
+  .detail {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

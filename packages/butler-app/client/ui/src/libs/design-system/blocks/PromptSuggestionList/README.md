@@ -16,6 +16,8 @@ Use it in conversation empty states and prompt-first surfaces. Keep domain copy,
 
 It keeps empty prompt screens visually coherent: moment rhythm, title/icon alignment, card proportions, glass treatment, ordinal markers, hover motion, and horizontal rail behavior stay consistent without one-off product CSS.
 
+At compact widths, the title icon moves into the moment row beside the three-dot marker and time. The title, description, and suggestion rail then use the full content width inside the adaptive page gutter. Expanded layouts keep the icon beside the title.
+
 ## How to use this component
 
 Pass a `title`, optional `moment`, optional `titleIcon`, optional `description`, optional `fluidBackground`, optional `fluidPalette`, optional `fluidPaletteOptions`, optional `fluidTone`, optional `fluidVariant`, and `suggestions` with stable ids, `title`, `description`, prompt `text`, optional `meta`, and select handlers. The start surface intentionally uses ordinals instead of item icons or abstract card graphics.
@@ -32,6 +34,7 @@ Butler client containers and design-system fixtures can use this block. The bloc
 - Let the rail scroll horizontally at the viewport edge instead of clipping it inside an invisible max-width container.
 - Keep the rail free of edge shadows; cards carry the only tinted glass treatment.
 - Keep all domain behavior in the container.
+- Let the block own compact icon placement; do not reserve a product-level icon gutter.
 
 ## Wrong use cases
 

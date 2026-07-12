@@ -21,6 +21,8 @@ import type { ComposerAttachment } from "./hooks/useFileAttachments";
 type AttachmentSetter = Dispatch<SetStateAction<ComposerAttachment[]>>;
 
 interface ComposerStore {
+  engaged: boolean;
+  setEngaged: (engaged: boolean) => void;
   text: string;
   setText: (text: string) => void;
   setIsComposing: (value: boolean) => void;
@@ -75,6 +77,8 @@ const noopSubmit = (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => {
 const noopKeyDown = (_event: ReactKeyboardEvent<HTMLTextAreaElement>) => {};
 
 export const useComposerStore = create<ComposerStore>((set, get) => ({
+  engaged: false,
+  setEngaged: (engaged) => set({ engaged }),
   text: "",
   setText: (text) => set({ text }),
   setIsComposing: noop,

@@ -1,4 +1,5 @@
 import { PromptSuggestionList } from "./PromptSuggestionList";
+import { Sparkles } from "../../components/Icons";
 import type { FluidPalette, FluidRgb } from "./promptFluid";
 
 function silkPalette(color: FluidRgb): FluidPalette {
@@ -30,6 +31,7 @@ export function PromptSuggestionListFixture() {
       fluidPaletteOptions={fluidPaletteOptions}
       fluidVariant="silk"
       moment="오후 2:10"
+      titleIcon={<Sparkles />}
       suggestions={[
         {
           id: "review",

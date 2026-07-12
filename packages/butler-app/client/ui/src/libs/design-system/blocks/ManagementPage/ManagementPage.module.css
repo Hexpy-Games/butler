@@ -23,6 +23,8 @@
 
 @media (width <= 700px) {
   .content {
-    padding: var(--space-lg) var(--space-lg) 48px;
+    gap: var(--space-lg);
+    padding: var(--space-lg) var(--adaptive-page-gutter)
+      max(48px, calc(var(--safe-area-bottom) + var(--space-2xl)));
   }
 }

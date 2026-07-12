@@ -1,4 +1,14 @@
 import { useState } from "react";
+import { appCopy } from "@/app/copy.ts";
+import {
+  AdaptivePanelResizeHandle,
+  AdaptiveShell,
+  AdaptiveShellChrome,
+  AdaptiveShellInspector,
+  AdaptiveShellScrim,
+  AdaptiveShellSidebar,
+  AdaptiveShellWorkspace,
+} from "@/butler-ds";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
 import { Sidebar } from "@/components/layout/Sidebar.tsx";
@@ -12,8 +22,8 @@ import { CommandPalette } from "@/components/command/CommandPalette.tsx";
 import { ProjectRenameDialog } from "@/components/layout/ProjectRenameDialog.tsx";
 import { SessionRenameDialog } from "@/components/layout/SessionRenameDialog.tsx";
 import { AppToaster } from "@/components/common/AppToaster.tsx";
-import { chromeEnvironmentClassName } from "@/app/chromeEnvironment.ts";
-import { platformClassName } from "@/app/nativeNotifications.ts";
+import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
+import { nativePlatform } from "@/app/nativeNotifications.ts";
 import { appThemeClasses, isDraftChatId } from "@/app/utils.ts";
 import {
   selectEffectiveRightOpen,
@@ -34,11 +44,9 @@ import {
   usePanelResize,
 } from "@/hooks/usePanelResize.ts";
 import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
+import { useBrowserChromeThemeColor } from "@/hooks/useBrowserChromeThemeColor.ts";
 import { FirstRunSetup } from "@/components/first-run/FirstRunSetup.tsx";
 import { readFirstRunState } from "@/app/firstRunSetup.ts";
-import shellStyles from "./Shell.module.css";
-
-void shellStyles;
 
 export function AppShell() {
   const [firstRunState, setFirstRunState] = useState(() =>
@@ -72,6 +80,8 @@ function AppWorkspaceShell() {
   const view = useButlerStore((state) => state.view);
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const settings = useButlerStore((state) => state.settings);
+  const rightOpen = useButlerStore((state) => state.rightOpen);
+  const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const systemPrefersDark = useSystemThemePreference();
   useNativeAppearanceTheme(settings.appearance_theme);
   useNativeShellPreferences(settings);
@@ -84,6 +94,14 @@ function AppWorkspaceShell() {
   const isSettingsView = useButlerStore(selectIsSettingsView);
   const newChatActive =
     view.kind === "session" && isDraftChatId(activeChatId);
+  const browserChromeDark =
+    settings.appearance_theme === "dark" ||
+    (settings.appearance_theme === "system" && systemPrefersDark);
+  useBrowserChromeThemeColor({
+    active: newChatActive,
+    dark: browserChromeDark,
+    enabled: chromeEnvironment() === "browser",
+  });
   const {
     beginPanelResize,
     handlePanelResizeKeyDown,
@@ -95,28 +113,46 @@ function AppWorkspaceShell() {
     setLeftOpen: (value) => setLeftOpen(value),
   });
   useNarrowRightPanelAutoCollapse({
-    rightOpen: effectiveRightOpen,
+    effectiveRightOpen,
+    leftOpen,
+    rightOpen,
     setLeftOpen,
+    setRightOpen,
   });
 
   return (
-    <div
-      className={`${shellStyles.moduleScope} mac-window ${chromeEnvironmentClassName()} ${platformClassName()} ${appThemeClasses(settings, systemPrefersDark)} ${leftOpen ? "" : "left-collapsed"} ${effectiveRightOpen ? "right-open" : ""} ${isSettingsView ? "settings-active" : ""} ${newChatActive ? "new-chat-active" : ""} ${resizingPanel ? "panel-resizing" : ""}`}
+    <AdaptiveShell
+      className={`mac-window ${appThemeClasses(settings, systemPrefersDark)}`}
+      chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window"
+      leftOpen={leftOpen}
+      platform={nativePlatform()}
+      resizing={Boolean(resizingPanel)}
+      rightOpen={effectiveRightOpen}
+      settingsActive={isSettingsView}
       style={panelStyle}
+      transparentWorkspace={
+        newChatActive &&
+        (settings.main_screen_theme === "bloom" ||
+          settings.main_screen_theme === "silk")
+      }
     >
       {isSettingsView ? (
         <SettingsView isActive={isSettingsView} />
       ) : (
         <>
-          <div
+          <AdaptiveShellSidebar
             className="sidebar-slot"
             data-test-class="sidebar-slot"
             id="butler-left-sidebar"
+            open={leftOpen}
           >
             <Sidebar />
-          </div>
-          <main className="workspace" data-test-class="workspace">
+          </AdaptiveShellSidebar>
+          <AdaptiveShellWorkspace
+            className="workspace"
+            data-test-class="workspace"
+          >
             <Titlebar />
             {view.kind === "automations" ||
             view.kind === "automation-detail" ? (
@@ -126,52 +162,67 @@ function AppWorkspaceShell() {
             ) : (
               <Conversation />
             )}
-          </main>
+          </AdaptiveShellWorkspace>
         </>
       )}
       {!isSettingsView && leftOpen && (
-        <div
+        <AdaptivePanelResizeHandle
           aria-label="Resize left sidebar"
           aria-orientation="vertical"
           aria-controls="butler-left-sidebar"
           aria-valuemax={LEFT_PANEL_MAX_WIDTH}
           aria-valuemin={LEFT_PANEL_MIN_WIDTH}
           aria-valuenow={leftPanelWidth}
-          className="panel-resize-handle left-panel-resize-handle no-drag"
           data-test-class="panel-resize-handle left-panel-resize-handle"
-          role="separator"
-          tabIndex={0}
+          side="left"
           onKeyDown={(event) => handlePanelResizeKeyDown("left", event)}
           onPointerDown={(event) => beginPanelResize("left", event)}
         />
       )}
       {!isSettingsView && rightAvailable && (
-        <div className="right-panel-slot" data-test-class="right-panel-slot">
+        <AdaptiveShellInspector
+          className="right-panel-slot"
+          data-test-class="right-panel-slot"
+          open={effectiveRightOpen}
+        >
           <Inspector id="butler-right-inspector" />
-        </div>
+        </AdaptiveShellInspector>
       )}
       {!isSettingsView && effectiveRightOpen && (
-        <div
+        <AdaptivePanelResizeHandle
           aria-label="Resize right panel"
           aria-orientation="vertical"
           aria-controls="butler-right-inspector"
           aria-valuemax={RIGHT_PANEL_MAX_WIDTH}
           aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
           aria-valuenow={rightPanelWidth}
-          className="panel-resize-handle right-panel-resize-handle no-drag"
           data-test-class="panel-resize-handle right-panel-resize-handle"
-          role="separator"
-          tabIndex={0}
+          side="right"
           onKeyDown={(event) => handlePanelResizeKeyDown("right", event)}
           onPointerDown={(event) => beginPanelResize("right", event)}
         />
       )}
-      {!isSettingsView && <WindowChromeLayer />}
+      {!isSettingsView && (
+        <AdaptiveShellScrim
+          label={
+            effectiveRightOpen ? appCopy.titlebar.hideRightPanel : "Hide sidebar"
+          }
+          open={leftOpen || effectiveRightOpen}
+          onDismiss={() =>
+            effectiveRightOpen ? setRightOpen(false) : setLeftOpen(false)
+          }
+        />
+      )}
+      {!isSettingsView && (
+        <AdaptiveShellChrome>
+          <WindowChromeLayer />
+        </AdaptiveShellChrome>
+      )}
       {!isSettingsView && effectiveRightOpen && <RightPanelOverlayTitlebar />}
       {commandOpen && <CommandPalette />}
       {renameProject && <ProjectRenameDialog />}
       {renameSession && <SessionRenameDialog />}
       <AppToaster />
-    </div>
+    </AdaptiveShell>
   );
 }

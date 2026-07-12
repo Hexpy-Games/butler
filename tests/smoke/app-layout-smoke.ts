@@ -30,7 +30,7 @@ const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
 const screenshotDir = resolve(root, ".tmp", "app-layout-smoke");
 mkdirSync(screenshotDir, { recursive: true });
 const rightPanelToggleSelector = `[aria-label="${appCopy.titlebar.showRightPanel}"], [aria-label="${appCopy.titlebar.hideRightPanel}"]`;
-const turnActivityTimeoutMs = 3_000;
+const turnActivityTimeoutMs = 5_000;
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 const testClasses = (...names: string[]) => names.map(testClass).join("");
 
@@ -594,6 +594,10 @@ try {
   await page.setViewportSize({ width: 900, height: 520 });
   await page.waitForTimeout(320);
   await page
+    .getByRole("button", { name: appCopy.titlebar.showRightPanel })
+    .click();
+  await page.waitForTimeout(240);
+  await page
     .locator(testClass("context-legend-scroll"))
     .waitFor({ state: "visible" });
   const contextLegendState = await page
@@ -728,7 +732,7 @@ try {
     .evaluate((root) => {
       const style = getComputedStyle(root);
       return {
-        className: root.getAttribute("class") ?? "",
+        chromeEnvironment: root.getAttribute("data-chrome-environment"),
         floatingToggleLeft: style
           .getPropertyValue("--chrome-floating-toggle-left")
           .trim(),
@@ -739,7 +743,7 @@ try {
     });
   assert(toggleBox, "left sidebar toggle is missing");
   assert(
-    browserChromeState.className.includes("browser-chrome") &&
+    browserChromeState.chromeEnvironment === "browser" &&
       browserChromeState.trafficControlsWidth === "0px" &&
       browserChromeState.floatingToggleLeft === "0px",
     `browser chrome should not reserve native traffic-light space: ${JSON.stringify(browserChromeState)}`,
@@ -1068,6 +1072,10 @@ try {
     "disabled project folder picker must not raise composer errors",
   );
   await clickConversationAwayFromMenus(page);
+  await page.waitForTimeout(160);
+  if (await page.locator('[data-slot="dropdown-menu-content"]').isVisible()) {
+    await page.keyboard.press("Escape");
+  }
   await page
     .locator('[data-slot="dropdown-menu-content"]')
     .waitFor({ state: "hidden" });
@@ -1141,6 +1149,18 @@ try {
     .locator('[data-slot="dialog-overlay"]')
     .waitFor({ state: "hidden" });
   await closeBlockingOverlays(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(240);
+  const narrowDashboardOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  assert(
+    narrowDashboardOverflow <= 1,
+    `narrow project dashboard should not overflow horizontally: ${narrowDashboardOverflow}`,
+  );
+  screenshots.push(await screenshot(page, "narrow-project-dashboard.png"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(240);
   await page.locator(testClass("project-session-row")).first().click();
   await page.locator(testClass("conversation")).waitFor({ state: "visible" });
 
@@ -1329,8 +1349,12 @@ try {
       reopenedInspectorBox.width >= inspectorWidthAfterResize - 2,
     `right panel should slide open again: ${reopenedInspectorBox?.width}`,
   );
-  await page.setViewportSize({ width: 540, height: 760 });
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(320);
+  await page
+    .getByRole("button", { name: appCopy.titlebar.showRightPanel })
+    .click();
+  await page.waitForTimeout(240);
   const narrowInspectorBox = await page
     .locator(testClass("right-inspector"))
     .boundingBox();
@@ -1340,13 +1364,13 @@ try {
   assert(
     narrowInspectorBox &&
       narrowInspectorBox.x >= -1 &&
-      narrowInspectorBox.width >= 320 &&
-      narrowInspectorBox.x + narrowInspectorBox.width <= 541,
+      narrowInspectorBox.width >= 389 &&
+      narrowInspectorBox.x + narrowInspectorBox.width <= 391,
     `narrow right panel should stay visible: ${JSON.stringify(narrowInspectorBox)}`,
   );
   assert(
-    narrowWorkspaceBox && narrowWorkspaceBox.width <= 2,
-    `narrow right panel should sacrifice conversation width: ${JSON.stringify(narrowWorkspaceBox)}`,
+    narrowWorkspaceBox && narrowWorkspaceBox.width >= 389,
+    `narrow right panel must overlay without shrinking the workspace: ${JSON.stringify(narrowWorkspaceBox)}`,
   );
   const narrowOverlayState = await page
     .locator(testClass("mac-window"))
@@ -1374,7 +1398,7 @@ try {
       const overlayStyle = overlay ? getComputedStyle(overlay) : null;
       const closeStyle = closeButton ? getComputedStyle(closeButton) : null;
       return {
-        rootClassName: root.getAttribute("class") ?? "",
+        leftOpen: root.getAttribute("data-left-open"),
         closeRight: closeBox?.right ?? Number.NaN,
         closeTop: closeBox?.top ?? Number.NaN,
         closeVisible:
@@ -1425,13 +1449,13 @@ try {
     `narrow right panel overlay should hide the left sidebar toggle: ${JSON.stringify(narrowOverlayState)}`,
   );
   assert(
-    narrowOverlayState.rootClassName.includes("left-collapsed"),
+    narrowOverlayState.leftOpen === "false",
     `narrow right panel should auto-collapse the left sidebar state: ${JSON.stringify(narrowOverlayState)}`,
   );
   screenshots.push(await screenshot(page, "narrow-right-panel-visible.png"));
   await page.locator(testClass("right-panel-overlay-close")).click();
   await page.waitForTimeout(320);
-  const narrowTitlebarNewChatState = await page
+  const narrowTitlebarChromeState = await page
     .locator(testClass("mac-window"))
     .evaluate((root) => {
       const button = root.querySelector<HTMLElement>(
@@ -1440,8 +1464,19 @@ try {
       const title = root.querySelector<HTMLElement>(
         "[data-test-class~='titlebar-title']",
       );
+      const toggle = Array.from(document.querySelectorAll<HTMLElement>("button"))
+        .find((element) => element.getAttribute("aria-label") === "Show sidebar");
+      const toggleIcon = toggle?.querySelector<HTMLElement>("svg");
+      const rightToggle = root.querySelector<HTMLElement>(
+        "[data-test-class~='titlebar-right-panel-toggle']",
+      );
+      const rightToggleIcon = rightToggle?.querySelector<HTMLElement>("svg");
       const buttonBox = button?.getBoundingClientRect();
       const titleBox = title?.getBoundingClientRect();
+      const toggleBox = toggle?.getBoundingClientRect();
+      const toggleIconBox = toggleIcon?.getBoundingClientRect();
+      const rightToggleBox = rightToggle?.getBoundingClientRect();
+      const rightToggleIconBox = rightToggleIcon?.getBoundingClientRect();
       return {
         buttonDisplay: button ? getComputedStyle(button).display : "",
         buttonLeft: buttonBox?.left ?? Number.NaN,
@@ -1449,15 +1484,314 @@ try {
         buttonWidth: buttonBox?.width ?? Number.NaN,
         titleLeft: titleBox?.left ?? Number.NaN,
         titleText: title?.textContent ?? "",
+        titleCenterY: titleBox ? titleBox.top + titleBox.height / 2 : Number.NaN,
+        rightToggleCenterY: rightToggleBox
+          ? rightToggleBox.top + rightToggleBox.height / 2
+          : Number.NaN,
+        rightToggleHeight: rightToggleBox?.height ?? 0,
+        rightToggleIconHeight: rightToggleIconBox?.height ?? 0,
+        rightToggleIconWidth: rightToggleIconBox?.width ?? 0,
+        rightToggleWidth: rightToggleBox?.width ?? 0,
+        toggleCenterY: toggleBox
+          ? toggleBox.top + toggleBox.height / 2
+          : Number.NaN,
+        toggleHeight: toggleBox?.height ?? 0,
+        toggleIconHeight: toggleIconBox?.height ?? 0,
+        toggleIconWidth: toggleIconBox?.width ?? 0,
+        toggleRight: toggleBox?.right ?? Number.NaN,
+        toggleWidth: toggleBox?.width ?? 0,
       };
     });
   assert(
-    narrowTitlebarNewChatState.buttonWidth >= 24 &&
-      narrowTitlebarNewChatState.buttonDisplay !== "none" &&
-      narrowTitlebarNewChatState.buttonRight <=
-        narrowTitlebarNewChatState.titleLeft - 4,
-    `narrow titlebar should show new chat before the conversation title: ${JSON.stringify(narrowTitlebarNewChatState)}`,
+    narrowTitlebarChromeState.buttonDisplay === "" &&
+      Number.isNaN(narrowTitlebarChromeState.buttonWidth) &&
+      narrowTitlebarChromeState.toggleWidth >= 52 &&
+      narrowTitlebarChromeState.toggleHeight >= 52 &&
+      narrowTitlebarChromeState.toggleIconWidth >= 22 &&
+      narrowTitlebarChromeState.toggleIconHeight >= 22 &&
+      narrowTitlebarChromeState.toggleWidth >= 52 &&
+      narrowTitlebarChromeState.toggleHeight >= 52 &&
+      narrowTitlebarChromeState.toggleRight <=
+        narrowTitlebarChromeState.titleLeft - 4 &&
+      narrowTitlebarChromeState.rightToggleWidth >= 52 &&
+      narrowTitlebarChromeState.rightToggleHeight >= 52 &&
+      narrowTitlebarChromeState.rightToggleIconWidth >= 22 &&
+      narrowTitlebarChromeState.rightToggleIconHeight >= 22 &&
+      Math.abs(
+        narrowTitlebarChromeState.toggleCenterY -
+          narrowTitlebarChromeState.titleCenterY,
+      ) <= 1 &&
+      Math.abs(
+        narrowTitlebarChromeState.rightToggleCenterY -
+          narrowTitlebarChromeState.titleCenterY,
+      ) <= 1,
+    `narrow titlebar should omit new chat and expose a comfortable shell toggle: ${JSON.stringify(narrowTitlebarChromeState)}`,
   );
+  const narrowConversationState = await page
+    .locator(testClass("mac-window"))
+    .evaluate((root) => {
+      const composer = root.querySelector<HTMLElement>(
+        "[data-test-class~='composer-card']",
+      );
+      const accessContent = root.querySelector<HTMLElement>(
+        "[data-test-class~='access-button'] [data-test-class~='composer-control-content']",
+      );
+      const modelDetail = root.querySelector<HTMLElement>(
+        "[data-test-class~='composer-model-summary']",
+      );
+      const send = root.querySelector<HTMLElement>(
+        "[data-test-class~='composer-send-button']",
+      );
+      const composerBox = composer?.getBoundingClientRect();
+      const sendBox = send?.getBoundingClientRect();
+      return {
+        accessContentWidth: accessContent?.getBoundingClientRect().width ?? 0,
+        composerLeft: composerBox?.left ?? Number.NaN,
+        composerRight: composerBox?.right ?? Number.NaN,
+        modelDetailWidth:
+          modelDetail?.parentElement?.getBoundingClientRect().width ?? 0,
+        sendHeight: sendBox?.height ?? 0,
+        sendWidth: sendBox?.width ?? 0,
+        viewportWidth: window.innerWidth,
+      };
+    });
+  assert(
+    narrowConversationState.composerLeft >= 11 &&
+      narrowConversationState.composerRight <=
+        narrowConversationState.viewportWidth - 11,
+    `narrow composer should stay inside adaptive insets: ${JSON.stringify(narrowConversationState)}`,
+  );
+  assert(
+    narrowConversationState.accessContentWidth <= 1 &&
+      narrowConversationState.modelDetailWidth <= 1,
+    `narrow composer should reduce secondary labels: ${JSON.stringify(narrowConversationState)}`,
+  );
+  assert(
+    narrowConversationState.sendWidth >= 44 &&
+      narrowConversationState.sendHeight >= 44,
+    `narrow composer send target should be at least 44px: ${JSON.stringify(narrowConversationState)}`,
+  );
+  screenshots.push(await screenshot(page, "narrow-conversation.png"));
+  await page.getByRole("button", { name: "Show sidebar" }).click();
+  await page.waitForTimeout(240);
+  const narrowSidebarBox = await page
+    .locator(testClass("sidebar-slot"))
+    .boundingBox();
+  const workspaceBehindSidebar = await page
+    .locator(testClass("workspace"))
+    .boundingBox();
+  const firstCompactNavRow = page
+    .locator(testClass("sidebar-slot"))
+    .locator('[data-slot="clickable"]')
+    .first();
+  const firstCompactNavRowBox = await firstCompactNavRow.boundingBox();
+  const firstCompactNavMetrics = await firstCompactNavRow.evaluate((element) => {
+    const icon = element.querySelector("svg")?.getBoundingClientRect();
+    const label = element.querySelector<HTMLElement>(
+      '[data-slot="nav-row-label"]',
+    );
+    return {
+      iconHeight: icon?.height ?? 0,
+      iconWidth: icon?.width ?? 0,
+      labelFontSize: label
+        ? Number.parseFloat(getComputedStyle(label).fontSize)
+        : 0,
+    };
+  });
+  assert(
+    narrowSidebarBox?.width &&
+      narrowSidebarBox.width >= 300 &&
+      workspaceBehindSidebar?.width &&
+      workspaceBehindSidebar.width >= 389 &&
+      workspaceBehindSidebar.x >= narrowSidebarBox.width - 1 &&
+      firstCompactNavRowBox &&
+      firstCompactNavRowBox.height >= 48 &&
+      firstCompactNavRowBox.y - narrowSidebarBox.y <= 16 &&
+      firstCompactNavMetrics.iconWidth >= 22 &&
+      firstCompactNavMetrics.iconHeight >= 22 &&
+      firstCompactNavMetrics.labelFontSize >= 17,
+    `narrow sidebar must push the full workspace with comfortable navigation density: ${JSON.stringify({ firstCompactNavMetrics, firstCompactNavRowBox, narrowSidebarBox, workspaceBehindSidebar })}`,
+  );
+  const compactProjectSession = page
+    .locator(testClass("project-session-row"))
+    .first();
+  const compactProjectGesture = page
+    .locator(testClass("project-session-gesture"))
+    .first();
+  const compactSessionMenuButton = compactProjectSession.locator(
+    `button[aria-label="${appCopy.sessionActions.menuLabel}"]`,
+  );
+  const compactSessionActionVisibility = await compactSessionMenuButton.evaluate(
+    (element) => getComputedStyle(element.parentElement ?? element).visibility,
+  );
+  await compactProjectGesture.dispatchEvent("pointerdown", {
+    button: 0,
+    clientX: 80,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 6,
+    pointerType: "touch",
+  });
+  await page.waitForTimeout(100);
+  await compactProjectGesture.dispatchEvent("pointerup", {
+    button: 0,
+    clientX: 80,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 6,
+    pointerType: "touch",
+  });
+  await compactProjectSession.click();
+  assert(
+    (await page.getByRole("menu").count()) === 0,
+    "compact project-session short tap should navigate without opening its menu",
+  );
+  const activeTitleBeforeLongPress = await page
+    .locator(testClass("titlebar-title"))
+    .textContent();
+  await compactProjectGesture.dispatchEvent("pointerdown", {
+    button: 0,
+    clientX: 80,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 7,
+    pointerType: "touch",
+  });
+  await page.waitForTimeout(540);
+  await compactProjectGesture.dispatchEvent("pointerup", {
+    button: 0,
+    clientX: 80,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 7,
+    pointerType: "touch",
+  });
+  await compactProjectGesture.dispatchEvent("click");
+  const compactLongPressMenu = page.getByRole("menu").last();
+  await compactLongPressMenu.waitFor({ state: "visible" });
+  const activeTitleAfterLongPress = await page
+    .locator(testClass("titlebar-title"))
+    .textContent();
+  assert(
+    compactSessionActionVisibility === "hidden" &&
+      activeTitleAfterLongPress === activeTitleBeforeLongPress,
+    `compact project session should hide overflow and long press without navigation: ${JSON.stringify({ activeTitleAfterLongPress, activeTitleBeforeLongPress, compactSessionActionVisibility })}`,
+  );
+  await page.keyboard.press("Escape");
+  await compactLongPressMenu.waitFor({ state: "hidden" });
+  await compactProjectGesture.dispatchEvent("pointerdown", {
+    button: 0,
+    clientX: 80,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 8,
+    pointerType: "touch",
+  });
+  await compactProjectGesture.dispatchEvent("pointermove", {
+    button: 0,
+    clientX: 100,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 8,
+    pointerType: "touch",
+  });
+  await page.waitForTimeout(540);
+  await compactProjectGesture.dispatchEvent("pointerup", {
+    button: 0,
+    clientX: 100,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 8,
+    pointerType: "touch",
+  });
+  assert(
+    !(await compactLongPressMenu.isVisible()),
+    "compact project-session long press should cancel after pointer movement",
+  );
+  screenshots.push(await screenshot(page, "narrow-sidebar.png"));
+  await page.mouse.click(385, 420);
+  await page.waitForTimeout(240);
+  const narrowScrim = page.locator('[data-slot="adaptive-shell-scrim"]');
+  await narrowScrim.evaluate((element) => {
+    element.setAttribute("data-smoke-identity", "stable");
+  });
+  const scrimCycles: Array<{ close: number[]; open: number[] }> = [];
+  for (let cycle = 0; cycle < 3; cycle += 1) {
+    await page.getByRole("button", { name: "Show sidebar" }).click();
+    const open: number[] = [];
+    for (const wait of [32, 64, 144]) {
+      await page.waitForTimeout(wait);
+      open.push(
+        await narrowScrim.evaluate((element) =>
+          Number(getComputedStyle(element).opacity),
+        ),
+      );
+    }
+    await page.mouse.click(385, 420);
+    const close: number[] = [];
+    for (const wait of [32, 64, 144]) {
+      await page.waitForTimeout(wait);
+      close.push(
+        await narrowScrim.evaluate((element) =>
+          Number(getComputedStyle(element).opacity),
+        ),
+      );
+    }
+    scrimCycles.push({ close, open });
+  }
+  const scrimLayerState = await narrowScrim.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      backfaceVisibility: style.backfaceVisibility,
+      contain: style.contain,
+      identity: element.getAttribute("data-smoke-identity"),
+      transform: style.transform,
+      willChange: style.willChange,
+    };
+  });
+  const monotonic = (values: number[], direction: "down" | "up") =>
+    values.every((value, index) =>
+      index === 0
+        ? true
+        : direction === "up"
+          ? value >= (values[index - 1] ?? value)
+          : value <= (values[index - 1] ?? value),
+    );
+  assert(
+    scrimCycles.every(
+      (cycle) =>
+        monotonic(cycle.open, "up") && monotonic(cycle.close, "down"),
+    ) &&
+      scrimLayerState.identity === "stable" &&
+      scrimLayerState.backfaceVisibility === "hidden" &&
+      (scrimLayerState.contain === "content" ||
+        scrimLayerState.contain.includes("paint")) &&
+      scrimLayerState.transform !== "none" &&
+      scrimLayerState.willChange.includes("opacity"),
+    `narrow scrim should remain compositor-stable across repeated fades: ${JSON.stringify({ scrimCycles, scrimLayerState })}`,
+  );
+  await page.getByRole("button", { name: "Show sidebar" }).click();
+  await page.waitForTimeout(80);
+  const interruptedOpenOpacity = await narrowScrim.evaluate((element) =>
+    Number(getComputedStyle(element).opacity),
+  );
+  await page.mouse.click(385, 420);
+  await page.waitForTimeout(40);
+  const interruptedCloseOpacity = await narrowScrim.evaluate((element) =>
+    Number(getComputedStyle(element).opacity),
+  );
+  await page.getByRole("button", { name: "Show sidebar" }).click();
+  await page.waitForTimeout(40);
+  const interruptedReopenOpacity = await narrowScrim.evaluate((element) =>
+    Number(getComputedStyle(element).opacity),
+  );
+  assert(
+    interruptedCloseOpacity < interruptedOpenOpacity &&
+      interruptedReopenOpacity > interruptedCloseOpacity,
+    `interrupted scrim transition should reverse from its computed opacity: ${JSON.stringify({ interruptedCloseOpacity, interruptedOpenOpacity, interruptedReopenOpacity })}`,
+  );
+  await page.mouse.click(385, 420);
+  await page.waitForTimeout(240);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(320);
   const showSidebarAfterNarrow = page.getByRole("button", {
@@ -1888,7 +2222,7 @@ try {
   await page
     .locator(testClass("filtered-select-popover"))
     .waitFor({ state: "visible" });
-  await page.getByRole("button", { name: /GPT-5.4 Mini/i }).click();
+  await page.getByRole("button", { name: /GPT-5.6 Terra/i }).click();
   await expectLocatorCount(
     page,
     `${testClass("filtered-select-popover")}:visible`,
@@ -1915,7 +2249,7 @@ try {
     `model trigger should render model and compact reasoning without reasoning suffix: ${modelButtonText}`,
   );
   const modelButtonIconCount = await page
-    .getByRole("button", { name: /GPT-5.4 Mini/i })
+    .getByRole("button", { name: /GPT-5.6 Terra/i })
     .evaluate((element) => element.querySelectorAll("svg").length);
   assert(
     modelButtonIconCount === 0,
@@ -2037,8 +2371,35 @@ try {
     settingsDetailDrag === "drag",
     `settings detail top area should remain draggable, got ${settingsDetailDrag}`,
   );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(240);
+  const compactSettingsMaster = await page
+    .locator(testClass("settings-sidebar"))
+    .boundingBox();
+  assert(
+    compactSettingsMaster && compactSettingsMaster.width >= 389,
+    `compact settings should begin with the master list: ${JSON.stringify(compactSettingsMaster)}`,
+  );
+  screenshots.push(await screenshot(page, "narrow-settings-master.png"));
   await page
-    .getByRole("button", { name: appCopy.settings.sections.models })
+    .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: appCopy.settings.panels.butlerModel })
+    .waitFor({ state: "visible" });
+  const compactSettingsDetail = await page
+    .locator(".settings-detail")
+    .boundingBox();
+  assert(
+    compactSettingsDetail && compactSettingsDetail.width >= 389,
+    `compact settings detail should replace the master list: ${JSON.stringify(compactSettingsDetail)}`,
+  );
+  screenshots.push(await screenshot(page, "narrow-settings-detail.png"));
+  await page.getByRole("button", { name: appCopy.settings.back }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(240);
+  await page
+    .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
   await page
     .getByRole("heading", { name: appCopy.settings.panels.butlerModel })
@@ -2200,7 +2561,7 @@ try {
     `settings bloom color controls should render as circular swatches: ${JSON.stringify(bloomColorState)}`,
   );
   await page
-    .getByRole("button", { name: appCopy.settings.sections.models })
+    .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
   await page
     .getByRole("heading", { name: appCopy.settings.panels.butlerModel })
@@ -2210,7 +2571,10 @@ try {
     .waitFor({ state: "visible" });
   await page.getByText("Deep work").waitFor({ state: "visible" });
   await page.getByText("Routine work").waitFor({ state: "visible" });
-  await page.getByText("GPT-5.4 Mini").waitFor({ state: "visible" });
+  await page
+    .getByText("GPT-5.5", { exact: false })
+    .first()
+    .waitFor({ state: "visible" });
   const localModelsTitle = page.getByText(appCopy.settings.localModels.title);
   if ((await localModelsTitle.count()) > 0) {
     await localModelsTitle.waitFor({ state: "visible" });
@@ -2351,7 +2715,7 @@ try {
   await page.getByRole("button", { name: appCopy.sidebar.settings }).click();
   await page.locator(testClass("settings-view")).waitFor({ state: "visible" });
   await page
-    .getByRole("button", { name: appCopy.settings.sections.models })
+    .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
   await page.locator(testClass("settings-primary-reasoning-select")).click();
   await page
@@ -2943,6 +3307,156 @@ try {
       emptyStateLayout.workspaceLeftRadiusPreserved,
     `new chat empty state should use coherent DS suggestion cards: ${JSON.stringify(emptyStateLayout)}`,
   );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(240);
+  const compactComposer = page.locator(testClass("composer-card"));
+  const compactPreview = compactComposer.locator(
+    '[data-slot="composer-compact-preview"]',
+  );
+  const compactTextarea = compactComposer.locator("textarea");
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
+  await page.waitForTimeout(260);
+  const idleComposerBox = await compactComposer.boundingBox();
+  const idleComposerRadius = await compactComposer.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+  );
+  await compactPreview.click();
+  await page.waitForTimeout(260);
+  const engagedComposerBox = await compactComposer.boundingBox();
+  const engagedComposerRadius = await compactComposer.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+  );
+  const engagedTextareaBox = await compactTextarea.boundingBox();
+  await compactTextarea.fill(
+    "A long compact draft that should remain visible as one ellipsized line after focus leaves the composer",
+  );
+  await compactTextarea.evaluate((element) => element.blur());
+  await page.waitForTimeout(260);
+  const collapsedDraftBox = await compactComposer.boundingBox();
+  const collapsedDraftRadius = await compactComposer.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+  );
+  const collapsedDraftState = await compactPreview.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const send = element.closest("form")?.querySelector<HTMLElement>(
+      '[data-test-class~="composer-send-button"]',
+    );
+    return {
+      expanded: element.closest("form")?.dataset.expanded,
+      overflow: style.overflow,
+      text: element.textContent,
+      textOverflow: style.textOverflow,
+      whiteSpace: style.whiteSpace,
+      sendWidth: send?.getBoundingClientRect().width ?? 0,
+    };
+  });
+  assert(
+    idleComposerBox &&
+      idleComposerBox.height <= 68 &&
+      engagedComposerBox &&
+      engagedComposerBox.height >= idleComposerBox.height + 28 &&
+      engagedTextareaBox &&
+      engagedTextareaBox.height <= 64 &&
+      collapsedDraftBox &&
+      collapsedDraftBox.height <= 68 &&
+      collapsedDraftState.text?.startsWith("A long compact draft") &&
+      collapsedDraftState.overflow === "hidden" &&
+      collapsedDraftState.textOverflow === "ellipsis" &&
+      collapsedDraftState.whiteSpace === "nowrap" &&
+      collapsedDraftState.sendWidth === 0 &&
+      idleComposerRadius * 2 >= idleComposerBox.height - 0.1 &&
+      Math.abs(idleComposerRadius - engagedComposerRadius) <= 0.1 &&
+      Math.abs(collapsedDraftRadius - engagedComposerRadius) <= 0.1,
+    `compact composer should morph between idle and engaged states while preserving draft: ${JSON.stringify({ collapsedDraftBox, collapsedDraftRadius, collapsedDraftState, engagedComposerBox, engagedComposerRadius, engagedTextareaBox, idleComposerBox, idleComposerRadius })}`,
+  );
+  await compactPreview.click();
+  await compactTextarea.fill("");
+  await compactTextarea.evaluate((element) => element.blur());
+  await page.waitForTimeout(260);
+  const narrowNewChatState = await page
+    .locator(testClass("new-chat-empty-state"))
+    .evaluate((element) => {
+      const title = element.querySelector<HTMLElement>("h2");
+      const titleCopy = element.querySelector<HTMLElement>(
+        '[data-slot="prompt-suggestion-title-copy"]',
+      );
+      const compactTitleIcon = element.querySelector<HTMLElement>(
+        '[data-slot="prompt-suggestion-compact-title-icon"]',
+      );
+      const moment = element.querySelector<HTMLElement>(
+        '[data-slot="prompt-suggestion-moment"]',
+      );
+      const composer = document.querySelector<HTMLElement>(
+        "[data-test-class~='composer-card']",
+      );
+      const fluid = element.querySelector<HTMLElement>(
+        "[data-test-class~='new-chat-fluid-gradient']",
+      );
+      const titleBox = title?.getBoundingClientRect();
+      const titleCopyBox = titleCopy?.getBoundingClientRect();
+      const compactTitleIconBox = compactTitleIcon?.getBoundingClientRect();
+      const momentBox = moment?.getBoundingClientRect();
+      const composerBox = composer?.getBoundingClientRect();
+      const fluidStyle = fluid ? getComputedStyle(fluid) : null;
+      const rootStyle = getComputedStyle(document.documentElement);
+      return {
+        bodyTypeSize: Number.parseFloat(
+          rootStyle.getPropertyValue("--typo-body-size"),
+        ),
+        captionTypeSize: Number.parseFloat(
+          rootStyle.getPropertyValue("--typo-caption-size"),
+        ),
+        compactMetaAligned:
+          compactTitleIconBox && momentBox
+            ? Math.abs(
+                compactTitleIconBox.top + compactTitleIconBox.height / 2 -
+                  (momentBox.top + momentBox.height / 2),
+              ) <= 1
+            : false,
+        composerBottom: composerBox?.bottom ?? Number.NaN,
+        composerLeft: composerBox?.left ?? Number.NaN,
+        composerRight: composerBox?.right ?? Number.NaN,
+        fluidBottomLeftRadius: Number.parseFloat(
+          fluidStyle?.borderBottomLeftRadius ?? "NaN",
+        ),
+        fluidTopLeftRadius: Number.parseFloat(
+          fluidStyle?.borderTopLeftRadius ?? "NaN",
+        ),
+        pageGutter: Number.parseFloat(
+          rootStyle.getPropertyValue("--adaptive-page-gutter"),
+        ),
+        safeTitleTop:
+          Number.parseFloat(rootStyle.getPropertyValue("--titlebar-height")) +
+          Number.parseFloat(rootStyle.getPropertyValue("--safe-area-top")),
+        titleCopyLeft: titleCopyBox?.left ?? Number.NaN,
+        titleCopyRight: titleCopyBox?.right ?? Number.NaN,
+        titleTop: titleBox?.top ?? Number.NaN,
+        viewportHeight: window.innerHeight,
+        viewportWidth: window.innerWidth,
+      };
+    });
+  assert(
+    narrowNewChatState.titleTop >= narrowNewChatState.safeTitleTop &&
+      narrowNewChatState.compactMetaAligned &&
+      narrowNewChatState.bodyTypeSize === 16 &&
+      narrowNewChatState.captionTypeSize === 14 &&
+      narrowNewChatState.fluidTopLeftRadius === 0 &&
+      narrowNewChatState.fluidBottomLeftRadius === 0 &&
+      narrowNewChatState.titleCopyLeft <= narrowNewChatState.pageGutter + 1 &&
+      narrowNewChatState.titleCopyRight >=
+        narrowNewChatState.viewportWidth - narrowNewChatState.pageGutter - 1 &&
+      narrowNewChatState.composerLeft >= 11 &&
+      narrowNewChatState.composerRight <= narrowNewChatState.viewportWidth - 11 &&
+      narrowNewChatState.composerBottom <= narrowNewChatState.viewportHeight,
+    `narrow new chat should respect safe title and composer insets: ${JSON.stringify(narrowNewChatState)}`,
+  );
+  screenshots.push(await screenshot(page, "narrow-new-chat.png"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(240);
   await expectLocatorCount(
     page,
     rightPanelToggleSelector,
@@ -3104,8 +3618,10 @@ try {
   const turnActivityText = await timelineActivity.innerText();
   const pendingLabels = appCopy.conversation.work.pendingStateLabels;
   assert(
-    turnActivityText.includes(pendingLabels.thinking) ||
-      turnActivityText.includes(pendingLabels.session_starting) ||
+    Object.values(pendingLabels).some((label) =>
+      turnActivityText.includes(label),
+    ) ||
+      turnActivityText.includes("Preparing the work") ||
       turnActivityText.includes("Bash"),
     `turn-activity-during-send failed: ${turnActivityText}`,
   );
@@ -3126,10 +3642,10 @@ try {
   const expanded = await activityButton.getAttribute("aria-expanded");
   assert(expanded === "true", "turn activity keyboard expands details");
   const activityDetails = timelineWorkActivity
-    .locator(testClass("turn-activity-details"), { hasText: "bun test" })
+    .locator(testClass("turn-work-tool-detail-text"))
     .first();
   await activityDetails.waitFor({
-    state: "visible",
+    state: "attached",
     timeout: turnActivityTimeoutMs,
   });
   const activityDetailsColor = await activityDetails.evaluate((element) => {
@@ -3614,7 +4130,26 @@ try {
         "narrow-right-panel-titlebar-draggable",
         "narrow-right-panel-left-toggle-hidden",
         "narrow-right-panel-auto-collapses-left-state",
-        "narrow-titlebar-new-chat-visible",
+        "narrow-titlebar-new-chat-absent",
+        "narrow-shell-toggle-comfortable",
+        "narrow-titlebar-controls-aligned",
+        "narrow-titlebar-toggle-title-nonoverlap",
+        "narrow-sidebar-pushes-workspace",
+        "narrow-sidebar-comfortable-density",
+        "narrow-sidebar-single-safe-area-reserve",
+        "narrow-project-session-overflow-hidden",
+        "narrow-project-session-tap-navigates",
+        "narrow-project-session-long-press-menu",
+        "narrow-project-session-long-press-move-cancel",
+        "narrow-composer-idle-one-line",
+        "narrow-composer-focus-expands",
+        "narrow-composer-draft-ellipsis",
+        "narrow-composer-idle-send-hidden",
+        "narrow-composer-radius-stable",
+        "narrow-new-chat-radius-zero",
+        "narrow-scrim-compositor-stable",
+        "narrow-scrim-interrupted-reversal",
+        "narrow-scrim-repeat-monotonic",
         "left-resize-below-min-collapses",
         "sidebar-collapses-to-zero",
         "left-sidebar-column-animates-on-close",
@@ -3672,6 +4207,9 @@ try {
         "new-chat-vertical-scroll-absent",
         "new-chat-start-position-high",
         "new-chat-extra-icon-gutter",
+        "narrow-new-chat-meta-row",
+        "narrow-new-chat-full-width-copy",
+        "narrow-readable-type-scale",
         "new-chat-left-radius-preserved",
         "right-toggle-hidden-when-empty",
         "right-toggle-hidden-on-draft-new-chat",

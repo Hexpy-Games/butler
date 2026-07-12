@@ -7,6 +7,8 @@ export interface SettingsShellProps {
   detailHeader?: ReactNode;
   detail: ReactNode;
   active?: boolean;
+  compactPane?: "master" | "detail";
+  detailNavigation?: ReactNode;
 }
 
 export function SettingsShell({
@@ -14,6 +16,8 @@ export function SettingsShell({
   detailHeader,
   detail,
   active = false,
+  compactPane = "master",
+  detailNavigation,
 }: SettingsShellProps) {
   return (
     <section
@@ -21,6 +25,7 @@ export function SettingsShell({
         .filter(Boolean)
         .join(" ")}
       data-test-class={`settings-view${active ? " settings-view-active" : ""}`}
+      data-compact-pane={compactPane}
     >
       <aside
         className={[styles.sidebar, active && styles.sidebarActive]
@@ -40,7 +45,12 @@ export function SettingsShell({
           .join(" ")}
       >
         {detailHeader ? (
-          <div className={styles.detailHeader}>{detailHeader}</div>
+          <div className={styles.detailHeader}>
+            {detailNavigation ? (
+              <div className={styles.detailNavigation}>{detailNavigation}</div>
+            ) : null}
+            {detailHeader}
+          </div>
         ) : null}
         <ScrollArea
           className={styles.detailScroll}

@@ -8,10 +8,19 @@
   width: var(--sidebar-width);
   max-width: 100%;
   min-width: 0;
-  height: 100vh;
+  height: var(--adaptive-viewport-block-size);
   flex-direction: column;
   padding: 0 14px 16px;
   overflow: hidden;
+}
+
+@media (width <= 640px) {
+  .shell {
+    width: 100%;
+    padding: max(var(--safe-area-top), var(--space-sm))
+      max(14px, var(--safe-area-right)) max(16px, var(--safe-area-bottom))
+      max(14px, var(--safe-area-left));
+  }
 }
 
 .titlebar {
@@ -163,6 +172,16 @@
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
   gap: 2px;
+}
+
+@media (width <= 640px) {
+  .titlebar {
+    display: none;
+  }
+
+  .trafficSpace {
+    width: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

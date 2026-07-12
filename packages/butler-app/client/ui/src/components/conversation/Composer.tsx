@@ -1,8 +1,6 @@
 import { useRef, useState } from "react";
 import { ComposerAdjunctPanels } from "./ComposerAdjunctPanels";
-import { ComposerAttachments } from "./ComposerAttachments";
-import { ComposerTextArea } from "./ComposerTextArea";
-import { ComposerToolbar } from "./ComposerToolbar";
+import { ComposerInputSurface } from "./ComposerInputSurface";
 import { useComposerStore } from "./composerStore";
 import { useComposerControls } from "./hooks/useComposerControls";
 import { useFileAttachments } from "./hooks/useFileAttachments";
@@ -12,6 +10,7 @@ import { useComposerSession } from "./hooks/useComposerSession";
 import { useComposerState } from "./hooks/useComposerState";
 import { useComposerStoreBridge } from "./hooks/useComposerStoreBridge";
 import { usePendingProjectDocumentAttachment } from "./hooks/usePendingProjectDocumentAttachment";
+import { useComposerPresentation } from "./hooks/useComposerPresentation";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
 
@@ -120,37 +119,38 @@ export function Composer(props: ComposerProps) {
     queue.sessionQueue.length > 0 ||
     state.todoRows.length > 0 ||
     state.workers.length > 0;
+  const presentation = useComposerPresentation({
+    activeChatId: session.activeChatId,
+    containerRef: wrapRef,
+    protectedExpanded: modelMenuOpen || accessMenuOpen || contextPopoverOpen,
+  });
 
   return (
     <ComposerCard
       large={large}
+      expanded={presentation.expanded}
       floating
-      adjunct={showAdjunct ? (
-        <ComposerAdjunctPanels
-          queuedMessages={queue.sessionQueue}
-          onEditQueued={queue.handleEditQueued}
-          onDeleteQueued={queue.handleDeleteQueued}
-          todoRows={state.todoRows}
-          showWorkers={state.workers.length > 0}
-        />
-      ) : null}
+      adjunct={
+        showAdjunct ? (
+          <ComposerAdjunctPanels
+            queuedMessages={queue.sessionQueue}
+            onEditQueued={queue.handleEditQueued}
+            onDeleteQueued={queue.handleDeleteQueued}
+            todoRows={state.todoRows}
+            showWorkers={state.workers.length > 0}
+          />
+        ) : null
+      }
       containerRef={wrapRef}
       onPointerDown={focusDraftFromComposerChrome}
+      onPointerDownCapture={presentation.onPointerDownCapture}
+      onFocusCapture={presentation.onFocusCapture}
+      onBlurCapture={presentation.onBlurCapture}
       onSubmit={submit}
     >
-      <ComposerTextArea />
-      <ComposerAttachments />
-      <ComposerToolbar />
-      <input
-        ref={fileInputRef}
-        data-picker-filter="all-files"
-        hidden
-        multiple
-        type="file"
-        onChange={(event) => {
-          void files.addFiles(event.currentTarget.files);
-          event.currentTarget.value = "";
-        }}
+      <ComposerInputSurface
+        fileInputRef={fileInputRef}
+        onFiles={(nextFiles) => void files.addFiles(nextFiles)}
       />
     </ComposerCard>
   );

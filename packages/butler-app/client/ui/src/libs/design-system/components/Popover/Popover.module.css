@@ -68,6 +68,30 @@
   color: var(--text-secondary);
 }
 
+@media (width <= 640px) {
+  .content,
+  .content[data-menu-size],
+  .content[data-menu-size="compact"],
+  .content[data-menu-size="content"],
+  .content[data-menu-size="wide"],
+  .content[data-menu-size="fit"] {
+    width: min(100%, calc(100vw - var(--space-2xl)));
+    min-width: 0;
+    max-width: calc(100vw - var(--space-2xl));
+    max-height: calc(
+      var(--adaptive-viewport-block-size) - var(--titlebar-safe-area-top) -
+        var(--safe-area-bottom) - var(--space-2xl)
+    );
+    overflow: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content[data-state="open"] {
+    animation: none;
+  }
+}
+
 @keyframes popover-open {
   from {
     opacity: 0;
