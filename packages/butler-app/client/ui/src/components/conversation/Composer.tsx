@@ -122,10 +122,7 @@ export function Composer(props: ComposerProps) {
   const presentation = useComposerPresentation({
     activeChatId: session.activeChatId,
     containerRef: wrapRef,
-    protectedExpanded:
-      modelMenuOpen ||
-      accessMenuOpen ||
-      contextPopoverOpen,
+    protectedExpanded: modelMenuOpen || accessMenuOpen || contextPopoverOpen,
   });
 
   return (
@@ -133,17 +130,20 @@ export function Composer(props: ComposerProps) {
       large={large}
       expanded={presentation.expanded}
       floating
-      adjunct={showAdjunct ? (
-        <ComposerAdjunctPanels
-          queuedMessages={queue.sessionQueue}
-          onEditQueued={queue.handleEditQueued}
-          onDeleteQueued={queue.handleDeleteQueued}
-          todoRows={state.todoRows}
-          showWorkers={state.workers.length > 0}
-        />
-      ) : null}
+      adjunct={
+        showAdjunct ? (
+          <ComposerAdjunctPanels
+            queuedMessages={queue.sessionQueue}
+            onEditQueued={queue.handleEditQueued}
+            onDeleteQueued={queue.handleDeleteQueued}
+            todoRows={state.todoRows}
+            showWorkers={state.workers.length > 0}
+          />
+        ) : null
+      }
       containerRef={wrapRef}
       onPointerDown={focusDraftFromComposerChrome}
+      onPointerDownCapture={presentation.onPointerDownCapture}
       onFocusCapture={presentation.onFocusCapture}
       onBlurCapture={presentation.onBlurCapture}
       onSubmit={submit}
