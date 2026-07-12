@@ -71,9 +71,13 @@ describe("responsive adaptive design contracts", () => {
       "packages/butler-app/client/ui/src/libs/design-system/blocks/PromptSuggestionList/PromptSuggestionList.module.css",
     );
 
-    expect(component).toContain('data-slot="prompt-suggestion-compact-title-icon"');
+    expect(component).toContain(
+      'data-slot="prompt-suggestion-compact-title-icon"',
+    );
     expect(component).toContain("styles.metaRow");
-    expect(styles).toContain("--prompt-edge-gutter: var(--adaptive-page-gutter)");
+    expect(styles).toContain(
+      "--prompt-edge-gutter: var(--adaptive-page-gutter)",
+    );
     expect(styles).toContain(".compactTitleIcon");
     expect(styles).toContain(".titleIcon");
   });
@@ -138,7 +142,7 @@ describe("responsive adaptive design contracts", () => {
     expect(shell).toContain(
       "transform: translateX(var(--adaptive-drawer-width))",
     );
-    expect(shell).toContain(".root[data-left-open=\"true\"] .workspace");
+    expect(shell).toContain('.root[data-left-open="true"] .workspace');
     expect(tokens).toContain("--sidebar-row-height: 48px");
     expect(tokens).toContain("--sidebar-icon-size: 22px");
     expect(navRow).toContain("var(--sidebar-icon-size, 17px)");
@@ -166,6 +170,14 @@ describe("responsive adaptive design contracts", () => {
     );
 
     expect(composer).toContain("useComposerPresentation");
+    expect(composer).toContain(
+      "onPointerDownCapture={presentation.onPointerDownCapture}",
+    );
+    const presentation = read(
+      "packages/butler-app/client/ui/src/components/conversation/hooks/useComposerPresentation.ts",
+    );
+    expect(presentation).toContain("internalPointerActive.current = true");
+    expect(presentation).toContain("!internalPointerActive.current");
     expect(composer).toContain("onFocusCapture");
     expect(composer).toContain("onBlurCapture");
     expect(textArea).toContain("const minRows = 1");
@@ -198,7 +210,9 @@ describe("responsive adaptive design contracts", () => {
       "packages/butler-app/client/ui/src/libs/design-system/blocks/SidebarShell/SidebarShell.module.css",
     );
     expect(prompt).toContain(".fluidBackground {\n    border-radius: 0;");
-    expect(sidebar).toContain("padding: max(var(--safe-area-top), var(--space-sm))");
+    expect(sidebar).toContain(
+      "padding: max(var(--safe-area-top), var(--space-sm))",
+    );
     expect(sidebar).toContain(".titlebar {\n    display: none;");
   });
 
@@ -221,7 +235,9 @@ describe("responsive adaptive design contracts", () => {
     expect(tokens).toContain("--chrome-floating-toggle-icon-size: 22px");
     expect(tokens).toContain("--titlebar-action-size: 52px");
     expect(tokens).toContain("--titlebar-action-icon-size: 22px");
-    expect(tokens).toContain("(var(--titlebar-height) - var(--chrome-floating-toggle-size)) / 2");
+    expect(tokens).toContain(
+      "(var(--titlebar-height) - var(--chrome-floating-toggle-size)) / 2",
+    );
     expect(chrome).toContain("var(--chrome-floating-toggle-size, 30px)");
     expect(titlebarShell).toContain(
       "var(--chrome-floating-toggle-size, var(--control-hit-target))",
