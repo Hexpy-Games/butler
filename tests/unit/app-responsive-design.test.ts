@@ -158,6 +158,9 @@ describe("responsive adaptive design contracts", () => {
     const styles = read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/ComposerCard/ComposerCard.module.css",
     );
+    const toolbar = read(
+      "packages/butler-app/client/ui/src/components/conversation/ComposerToolbar.tsx",
+    );
 
     expect(composer).toContain("useComposerPresentation");
     expect(composer).toContain("onFocusCapture");
@@ -169,5 +172,43 @@ describe("responsive adaptive design contracts", () => {
     expect(styles).toContain('.card[data-expanded="false"]');
     expect(styles).toContain("text-overflow: ellipsis");
     expect(styles).toContain("grid-template-rows: 0fr");
+    expect(styles).toContain("border-radius: var(--adaptive-composer-radius)");
+    expect(styles).not.toContain(
+      '.card[data-expanded="false"] {\n    border-radius: var(--radius-pill)',
+    );
+    expect(styles).not.toContain(
+      "border-radius var(--adaptive-panel-duration)",
+    );
+    expect(toolbar).toContain("<ComposerCardExpandedControls>");
+    expect(toolbar).toContain("<ComposerSendButton");
+  });
+
+  test("removes compact fluid radius and duplicate sidebar reserve", () => {
+    const prompt = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/PromptSuggestionList/PromptSuggestionList.module.css",
+    );
+    const sidebar = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/SidebarShell/SidebarShell.module.css",
+    );
+    expect(prompt).toContain(".fluidBackground {\n    border-radius: 0;");
+    expect(sidebar).toContain("padding: max(var(--safe-area-top), var(--space-sm))");
+    expect(sidebar).toContain(".titlebar {\n    display: none;");
+  });
+
+  test("enlarges the compact shell toggle and omits titlebar new chat", () => {
+    const titlebar = read(
+      "packages/butler-app/client/ui/src/components/layout/Titlebar.tsx",
+    );
+    const chrome = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/ChromeFrame/ChromeFrame.module.css",
+    );
+    const tokens = read(
+      "packages/butler-app/client/ui/src/libs/design-system/tokens.css",
+    );
+
+    expect(titlebar).not.toContain("titlebar-new-chat-button");
+    expect(tokens).toContain("--chrome-floating-toggle-size: 52px");
+    expect(tokens).toContain("--chrome-floating-toggle-icon-size: 22px");
+    expect(chrome).toContain("var(--chrome-floating-toggle-size, 30px)");
   });
 });

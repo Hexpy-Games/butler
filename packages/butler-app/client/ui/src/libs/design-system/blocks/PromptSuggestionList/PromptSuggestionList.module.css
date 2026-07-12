@@ -369,6 +369,10 @@
 }
 
 @media (width <= 560px) {
+  .fluidBackground {
+    border-radius: 0;
+  }
+
   .root {
     gap: var(--space-lg);
     padding-block-start: var(--space-md);

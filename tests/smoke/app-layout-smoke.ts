@@ -1455,7 +1455,7 @@ try {
   screenshots.push(await screenshot(page, "narrow-right-panel-visible.png"));
   await page.locator(testClass("right-panel-overlay-close")).click();
   await page.waitForTimeout(320);
-  const narrowTitlebarNewChatState = await page
+  const narrowTitlebarChromeState = await page
     .locator(testClass("mac-window"))
     .evaluate((root) => {
       const button = root.querySelector<HTMLElement>(
@@ -1464,8 +1464,13 @@ try {
       const title = root.querySelector<HTMLElement>(
         "[data-test-class~='titlebar-title']",
       );
+      const toggle = Array.from(document.querySelectorAll<HTMLElement>("button"))
+        .find((element) => element.getAttribute("aria-label") === "Show sidebar");
+      const toggleIcon = toggle?.querySelector<HTMLElement>("svg");
       const buttonBox = button?.getBoundingClientRect();
       const titleBox = title?.getBoundingClientRect();
+      const toggleBox = toggle?.getBoundingClientRect();
+      const toggleIconBox = toggleIcon?.getBoundingClientRect();
       return {
         buttonDisplay: button ? getComputedStyle(button).display : "",
         buttonLeft: buttonBox?.left ?? Number.NaN,
@@ -1473,14 +1478,20 @@ try {
         buttonWidth: buttonBox?.width ?? Number.NaN,
         titleLeft: titleBox?.left ?? Number.NaN,
         titleText: title?.textContent ?? "",
+        toggleHeight: toggleBox?.height ?? 0,
+        toggleIconHeight: toggleIconBox?.height ?? 0,
+        toggleIconWidth: toggleIconBox?.width ?? 0,
+        toggleWidth: toggleBox?.width ?? 0,
       };
     });
   assert(
-    narrowTitlebarNewChatState.buttonWidth >= 44 &&
-      narrowTitlebarNewChatState.buttonDisplay !== "none" &&
-      narrowTitlebarNewChatState.buttonRight <=
-        narrowTitlebarNewChatState.titleLeft - 4,
-    `narrow titlebar should show new chat before the conversation title: ${JSON.stringify(narrowTitlebarNewChatState)}`,
+    narrowTitlebarChromeState.buttonDisplay === "" &&
+      Number.isNaN(narrowTitlebarChromeState.buttonWidth) &&
+      narrowTitlebarChromeState.toggleWidth >= 52 &&
+      narrowTitlebarChromeState.toggleHeight >= 52 &&
+      narrowTitlebarChromeState.toggleIconWidth >= 22 &&
+      narrowTitlebarChromeState.toggleIconHeight >= 22,
+    `narrow titlebar should omit new chat and expose a comfortable shell toggle: ${JSON.stringify(narrowTitlebarChromeState)}`,
   );
   const narrowConversationState = await page
     .locator(testClass("mac-window"))
@@ -1561,6 +1572,7 @@ try {
       workspaceBehindSidebar.x >= narrowSidebarBox.width - 1 &&
       firstCompactNavRowBox &&
       firstCompactNavRowBox.height >= 48 &&
+      firstCompactNavRowBox.y - narrowSidebarBox.y <= 16 &&
       firstCompactNavMetrics.iconWidth >= 22 &&
       firstCompactNavMetrics.iconHeight >= 22 &&
       firstCompactNavMetrics.labelFontSize >= 17,
@@ -3179,9 +3191,15 @@ try {
   });
   await page.waitForTimeout(260);
   const idleComposerBox = await compactComposer.boundingBox();
+  const idleComposerRadius = await compactComposer.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+  );
   await compactPreview.click();
   await page.waitForTimeout(260);
   const engagedComposerBox = await compactComposer.boundingBox();
+  const engagedComposerRadius = await compactComposer.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+  );
   const engagedTextareaBox = await compactTextarea.boundingBox();
   await compactTextarea.fill(
     "A long compact draft that should remain visible as one ellipsized line after focus leaves the composer",
@@ -3189,14 +3207,21 @@ try {
   await compactTextarea.evaluate((element) => element.blur());
   await page.waitForTimeout(260);
   const collapsedDraftBox = await compactComposer.boundingBox();
+  const collapsedDraftRadius = await compactComposer.evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+  );
   const collapsedDraftState = await compactPreview.evaluate((element) => {
     const style = getComputedStyle(element);
+    const send = element.closest("form")?.querySelector<HTMLElement>(
+      '[data-test-class~="composer-send-button"]',
+    );
     return {
       expanded: element.closest("form")?.dataset.expanded,
       overflow: style.overflow,
       text: element.textContent,
       textOverflow: style.textOverflow,
       whiteSpace: style.whiteSpace,
+      sendWidth: send?.getBoundingClientRect().width ?? 0,
     };
   });
   assert(
@@ -3211,8 +3236,11 @@ try {
       collapsedDraftState.text?.startsWith("A long compact draft") &&
       collapsedDraftState.overflow === "hidden" &&
       collapsedDraftState.textOverflow === "ellipsis" &&
-      collapsedDraftState.whiteSpace === "nowrap",
-    `compact composer should morph between idle and engaged states while preserving draft: ${JSON.stringify({ collapsedDraftBox, collapsedDraftState, engagedComposerBox, engagedTextareaBox, idleComposerBox })}`,
+      collapsedDraftState.whiteSpace === "nowrap" &&
+      collapsedDraftState.sendWidth === 0 &&
+      Math.abs(idleComposerRadius - engagedComposerRadius) <= 0.1 &&
+      Math.abs(collapsedDraftRadius - engagedComposerRadius) <= 0.1,
+    `compact composer should morph between idle and engaged states while preserving draft: ${JSON.stringify({ collapsedDraftBox, collapsedDraftRadius, collapsedDraftState, engagedComposerBox, engagedComposerRadius, engagedTextareaBox, idleComposerBox, idleComposerRadius })}`,
   );
   await compactPreview.click();
   await compactTextarea.fill("");
@@ -3234,11 +3262,15 @@ try {
       const composer = document.querySelector<HTMLElement>(
         "[data-test-class~='composer-card']",
       );
+      const fluid = element.querySelector<HTMLElement>(
+        "[data-test-class~='new-chat-fluid-gradient']",
+      );
       const titleBox = title?.getBoundingClientRect();
       const titleCopyBox = titleCopy?.getBoundingClientRect();
       const compactTitleIconBox = compactTitleIcon?.getBoundingClientRect();
       const momentBox = moment?.getBoundingClientRect();
       const composerBox = composer?.getBoundingClientRect();
+      const fluidStyle = fluid ? getComputedStyle(fluid) : null;
       const rootStyle = getComputedStyle(document.documentElement);
       return {
         bodyTypeSize: Number.parseFloat(
@@ -3257,6 +3289,12 @@ try {
         composerBottom: composerBox?.bottom ?? Number.NaN,
         composerLeft: composerBox?.left ?? Number.NaN,
         composerRight: composerBox?.right ?? Number.NaN,
+        fluidBottomLeftRadius: Number.parseFloat(
+          fluidStyle?.borderBottomLeftRadius ?? "NaN",
+        ),
+        fluidTopLeftRadius: Number.parseFloat(
+          fluidStyle?.borderTopLeftRadius ?? "NaN",
+        ),
         pageGutter: Number.parseFloat(
           rootStyle.getPropertyValue("--adaptive-page-gutter"),
         ),
@@ -3275,6 +3313,8 @@ try {
       narrowNewChatState.compactMetaAligned &&
       narrowNewChatState.bodyTypeSize === 16 &&
       narrowNewChatState.captionTypeSize === 14 &&
+      narrowNewChatState.fluidTopLeftRadius === 0 &&
+      narrowNewChatState.fluidBottomLeftRadius === 0 &&
       narrowNewChatState.titleCopyLeft <= narrowNewChatState.pageGutter + 1 &&
       narrowNewChatState.titleCopyRight >=
         narrowNewChatState.viewportWidth - narrowNewChatState.pageGutter - 1 &&
@@ -3959,12 +3999,17 @@ try {
         "narrow-right-panel-titlebar-draggable",
         "narrow-right-panel-left-toggle-hidden",
         "narrow-right-panel-auto-collapses-left-state",
-        "narrow-titlebar-new-chat-visible",
+        "narrow-titlebar-new-chat-absent",
+        "narrow-shell-toggle-comfortable",
         "narrow-sidebar-pushes-workspace",
         "narrow-sidebar-comfortable-density",
+        "narrow-sidebar-single-safe-area-reserve",
         "narrow-composer-idle-one-line",
         "narrow-composer-focus-expands",
         "narrow-composer-draft-ellipsis",
+        "narrow-composer-idle-send-hidden",
+        "narrow-composer-radius-stable",
+        "narrow-new-chat-radius-zero",
         "narrow-scrim-compositor-stable",
         "narrow-scrim-interrupted-reversal",
         "narrow-scrim-repeat-monotonic",

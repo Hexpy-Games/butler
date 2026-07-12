@@ -391,8 +391,12 @@
 @media (width <= 640px) {
   :root {
     --titlebar-height: 56px;
+    --chrome-floating-toggle-top: var(--safe-area-top);
+    --chrome-floating-toggle-size: 52px;
+    --chrome-floating-toggle-icon-size: 22px;
     --adaptive-page-gutter: var(--space-lg);
     --adaptive-composer-inset: var(--space-md);
+    --adaptive-composer-radius: var(--radius-composer);
     --adaptive-drawer-width: min(78vw, 336px);
     --sidebar-row-height: 48px;
     --sidebar-action-size: 44px;

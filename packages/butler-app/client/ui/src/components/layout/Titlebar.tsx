@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import {
   Archive,
   ButtonContainer,
-  MessageSquarePlus,
   MoreHorizontal,
   PanelRight,
   PanelRightClose,
@@ -41,7 +40,6 @@ export function Titlebar() {
   const settings = useButlerStore((state) => state.settings);
   const runSessionAction = useButlerStore((state) => state.runSessionAction);
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
-  const openNewChat = useButlerStore((state) => state.openNewChat);
   const { title, subtitle } = useMemo(
     () =>
       activeTitleForView(
@@ -66,19 +64,6 @@ export function Titlebar() {
           <span data-test-class="titlebar-subtitle">{subtitle}</span>
         ) : undefined
       }
-      leading={
-        storeView.kind === "session" ? (
-          <IconButton
-            className="titlebar-new-chat-button"
-            data-test-class="titlebar-new-chat-button"
-            label={appCopy.sidebar.newChat}
-            onClick={openNewChat}
-          >
-            <MessageSquarePlus size={15} />
-          </IconButton>
-        ) : undefined
-      }
-      leadingVisibility="narrow"
       collapsed={!leftOpen}
       className="drag-region"
       dataTestClass="custom-titlebar"
