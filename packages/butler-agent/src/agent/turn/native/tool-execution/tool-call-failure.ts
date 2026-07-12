@@ -30,6 +30,10 @@ import type {
   NativeToolCall,
 } from "./audited-executor-types.ts";
 import type { PublicWorkDecision, ToolProgressSummary } from "../output/tool-types.ts";
+import {
+  markWorkBlockFailure,
+  markWorkBlockTerminal,
+} from "../progress/work-block-lifecycle.ts";
 
 export async function handleAuditedToolFailure(input: {
   executorInput: NativeAuditedToolExecutorInput;
@@ -123,6 +127,10 @@ export async function handleAuditedToolFailure(input: {
       safeObservation: observation,
     },
   });
+  markWorkBlockFailure({
+    decisions: input.executorInput.publicDecisionContext,
+    workBlockId: input.workBlockId,
+  });
   if (
     !input.semanticProgressEstablished &&
     !input.isWorkerStartTool &&
@@ -145,6 +153,11 @@ export async function handleAuditedToolFailure(input: {
         ...publicWorkDecisionPayload(input.decision),
         durationMs: Date.now() - input.startedAt,
       },
+    });
+    markWorkBlockTerminal({
+      decisions: input.executorInput.publicDecisionContext,
+      workBlockId: input.workBlockId,
+      status: "failed",
     });
   }
   appendTranscriptEvent(createTranscriptEvent({

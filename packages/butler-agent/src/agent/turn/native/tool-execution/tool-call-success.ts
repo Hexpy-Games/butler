@@ -38,6 +38,7 @@ import {
 import type { InboundEnvelope } from "../../../../gateways/core/contracts.ts";
 import type { NativeAuditedToolExecutorInput, NativeToolCall } from "./audited-executor-types.ts";
 import type { PublicWorkDecision, ToolProgressSummary } from "../output/tool-types.ts";
+import { markWorkBlockTerminal } from "../progress/work-block-lifecycle.ts";
 
 export async function handleAuditedToolSuccess(input: {
   executorInput: NativeAuditedToolExecutorInput;
@@ -112,6 +113,11 @@ export async function handleAuditedToolSuccess(input: {
         ...publicWorkDecisionPayload(input.decision),
         durationMs: Date.now() - input.startedAt,
       },
+    });
+    markWorkBlockTerminal({
+      decisions: input.executorInput.publicDecisionContext,
+      workBlockId: input.workBlockId,
+      status: "completed",
     });
   }
   appendSuccessTranscript(input, bridgeAudit);

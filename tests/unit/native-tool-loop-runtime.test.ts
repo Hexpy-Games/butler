@@ -912,6 +912,218 @@ test("native runtime counts mixed-tool batches against one authored decision gro
   expect(transcriptDecisions).toHaveLength(1);
 });
 
+test("native runtime terminalizes a short-executed authored tool batch before the next provider round", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async () => ({ ok: true }),
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "title: Inspect declared files",
+          "summary: Read the declared files as one bounded batch.",
+          "rationale: The files describe the runtime boundary that the next provider round will modify.",
+          "next_step: Read the available files, then continue with the implementation round.",
+        ].join("\n"),
+        toolCalls: [
+          { name: "read_file", args: { path: "a.ts" } },
+          { name: "read_file", args: { path: "b.ts" } },
+          { name: "read_file", args: { path: "c.ts" } },
+        ],
+      });
+      for (const path of ["a.ts", "b.ts"]) {
+        await input.executeTool({
+          name: "read_file",
+          args: { path },
+          rawArguments: JSON.stringify({ path }),
+        });
+      }
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "title: Apply the inspected change",
+          "summary: Apply the change after the inspection round.",
+          "rationale: The available file evidence is sufficient to proceed without the third declared read.",
+          "next_step: Run the implementation command and then synthesize the result.",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "true" } }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "true" },
+        rawArguments: JSON.stringify({ command: "true" }),
+      });
+      return "Completed the inspected change.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/short-executed-authored-batch",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Inspect then apply the change." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload });
+    },
+  });
+
+  const starts = events.filter((event) => event.kind === "work.block.started");
+  const completions = events.filter((event) => event.kind === "work.block.completed");
+  expect(starts).toHaveLength(2);
+  expect(completions).toHaveLength(2);
+  expect(completions.map((event) => event.payload?.workBlockId)).toEqual(
+    starts.map((event) => event.payload?.workBlockId),
+  );
+  expect(events.findIndex((event) =>
+    event.kind === "work.block.completed" &&
+    event.payload?.workBlockId === starts[0]?.payload?.workBlockId,
+  )).toBeLessThan(events.findIndex((event) =>
+    event.kind === "work.block.started" &&
+    event.payload?.workBlockId === starts[1]?.payload?.workBlockId,
+  ));
+});
+
+test("native runtime terminalizes a short-executed authored tool batch before final synthesis", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async () => ({ ok: true }),
+    runFunctionToolPromptText: async (input) => {
+      const toolCalls = ["a.ts", "b.ts", "c.ts"].map((path) => ({
+        name: "read_file",
+        args: { path },
+      }));
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "title: Inspect final evidence",
+          "summary: Read the declared evidence files before final synthesis.",
+          "rationale: The available files provide enough evidence even if one declared read is skipped.",
+          "next_step: Read the available files and synthesize the final response.",
+        ].join("\n"),
+        toolCalls,
+      });
+      for (const call of toolCalls.slice(0, 2)) {
+        await input.executeTool({
+          ...call,
+          rawArguments: JSON.stringify(call.args),
+        });
+      }
+      return "Synthesized the final response.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/short-executed-final-batch",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Inspect before the final response." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload });
+    },
+  });
+
+  const starts = events.filter((event) => event.kind === "work.block.started");
+  const completions = events.filter((event) => event.kind === "work.block.completed");
+  expect(starts).toHaveLength(1);
+  expect(completions).toHaveLength(1);
+  expect(completions[0]?.payload?.workBlockId).toBe(starts[0]?.payload?.workBlockId);
+  expect(events.findIndex((event) => event.kind === "work.block.completed"))
+    .toBeLessThan(events.findIndex((event) => event.kind === "message.final.started"));
+});
+
+test("native runtime preserves failure when reconciling a short-executed authored tool batch", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async (call) => {
+      if (call.args.path === "b.ts") throw new Error("read failed");
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "title: Inspect fallible files",
+          "summary: Read the fallible files as one bounded batch.",
+          "rationale: The next provider round needs the available file evidence and the failure outcome.",
+          "next_step: Read the available files, preserve any failure, and continue to the next round.",
+        ].join("\n"),
+        toolCalls: [
+          { name: "read_file", args: { path: "a.ts" } },
+          { name: "read_file", args: { path: "b.ts" } },
+          { name: "read_file", args: { path: "c.ts" } },
+        ],
+      });
+      for (const path of ["a.ts", "b.ts"]) {
+        await input.executeTool({
+          name: "read_file",
+          args: { path },
+          rawArguments: JSON.stringify({ path }),
+        });
+      }
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "title: Continue after failed inspection",
+          "summary: Continue after recording the failed inspection batch.",
+          "rationale: The runtime must close the earlier block without losing its failed outcome.",
+          "next_step: Run the continuation command and synthesize the result.",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "true" } }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "true" },
+        rawArguments: JSON.stringify({ command: "true" }),
+      });
+      return "Continued after the failed inspection.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/short-executed-failed-batch",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Inspect fallible files and continue." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload });
+    },
+  });
+
+  const starts = events.filter((event) => event.kind === "work.block.started");
+  const completions = events.filter((event) => event.kind === "work.block.completed");
+  expect(starts).toHaveLength(2);
+  expect(completions).toHaveLength(2);
+  expect(completions[0]?.payload).toMatchObject({
+    workBlockId: starts[0]?.payload?.workBlockId,
+    status: "failed",
+  });
+});
+
 test("native runtime permits Ledger preflight inspection tools in ledger-tracked project turns", async () => {
   let executed = 0;
   let returnedToolResult: unknown;
