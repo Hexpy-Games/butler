@@ -171,6 +171,8 @@ export function createObligationToolSurfaceController(
   let planReady = !requiresExplicitPlan || seed.planReady === true;
   const requiresCodeChange = contract?.deliverables.includes("code_change") ?? false;
   const requiresValidation = contract?.deliverables.includes("validation") ?? false;
+  const canonicalResumeEvidence = contract?.action === "resume_work" &&
+    contract.tracking_mode === "ledger";
   const hasWorkspaceDeliverable = requiresCodeChange || requiresValidation;
   const ledgerFirst = Boolean(
     workAction && contract?.tracking_mode === "ledger" &&
@@ -211,7 +213,9 @@ export function createObligationToolSurfaceController(
   let statusFocused = seed.statusFocused === true;
 
   const gated = () => ledgerFirst && !(
-    mutationSequence > 0 && checkedMutationSequence === mutationSequence &&
+    (mutationSequence > 0
+      ? checkedMutationSequence === mutationSequence
+      : canonicalResumeEvidence) &&
     [...requiredLedgerKinds].every((kind) => observedLedgerKinds.has(kind))
   );
   const stage = (): ObligationToolSurfaceStage => {
@@ -252,6 +256,7 @@ export function createObligationToolSurfaceController(
             allRequiredKindsObserved: [...requiredLedgerKinds]
               .every((kind) => observedLedgerKinds.has(kind)),
             checkPending: checkedMutationSequence !== mutationSequence,
+            canonicalResumeEvidence,
             }))
             .filter((tool) =>
               tool.name !== "project_ledger_create" || remainingLedgerKinds.length > 0)
@@ -261,14 +266,19 @@ export function createObligationToolSurfaceController(
         case "workspace_execution":
         case "workspace_repair":
           return runtimeOwnedLifecycleFiltered.filter((tool) =>
-            !isLedgerOnlyTool(tool.name) || CLOSEOUT_TOOLS.has(tool.name));
+            !isLedgerOnlyTool(tool.name) || CLOSEOUT_TOOLS.has(tool.name) ||
+            canonicalResumeEvidenceTool(tool.name));
         case "workspace_action":
           return runtimeOwnedLifecycleFiltered
-            .filter((tool) => workspaceActionSurfaceAllows(tool.name, workspaceActionRejections))
+            .filter((tool) => workspaceActionSurfaceAllows(
+              tool.name,
+              workspaceActionRejections,
+              canonicalResumeEvidence,
+            ))
             .map(requireWorkspaceMutation);
         case "workspace_validation":
           return runtimeOwnedLifecycleFiltered
-            .filter((tool) => tool.name === "run_command")
+            .filter((tool) => tool.name === "run_command" || canonicalResumeEvidenceTool(tool.name))
             .map(requireStructuredValidation);
         case "status_inspection":
           return runtimeOwnedLifecycleFiltered.filter((tool) =>
@@ -280,6 +290,9 @@ export function createObligationToolSurfaceController(
       }
     },
     authorize(input) {
+      if (canonicalResumeEvidenceTool(input.name)) {
+        return { allowed: true };
+      }
       if (!workspaceMutationOutstanding() || !workspaceActionFocused) {
         return { allowed: true };
       }
@@ -289,7 +302,7 @@ export function createObligationToolSurfaceController(
       return recordWorkspaceActionRejection();
     },
     observe(input) {
-      const validation = validationReceiptState(input.result);
+      const validation = validationReceiptState(input.result, canonicalResumeEvidence);
       if (validation === "passed") {
         validationObserved = true;
         validationFailed = false;
@@ -327,6 +340,14 @@ export function createObligationToolSurfaceController(
         ledgerDiscoveryObserved = true;
         ledgerDiscoveryCandidateCount = projectLedgerListCandidateCount(input.result);
       }
+      const canonicalKind = canonicalResumeEvidence
+        ? canonicalResumeLedgerRecordKind(input.name, input.result)
+        : null;
+      if (canonicalKind) {
+        ledgerDiscoveryObserved = true;
+        ledgerDiscoveryCandidateCount = Math.max(1, ledgerDiscoveryCandidateCount);
+        if (requiredLedgerKinds.has(canonicalKind)) observedLedgerKinds.add(canonicalKind);
+      }
       const kind = ledgerRecordKindForMutation(input.name, input.args);
       if (kind) {
         ledgerDiscoveryObserved = true;
@@ -340,7 +361,7 @@ export function createObligationToolSurfaceController(
         if (checkAdvanced) resetWorkspaceInspection();
       }
       if (
-        workspaceMutationAttempted(input.name, input.args) &&
+        (workspaceMutationAttempted(input.name, input.args) || canonicalResumeEvidenceTool(input.name)) &&
         workspaceMutationVerified(input.name, input.result)
       ) {
         workspaceMutationObserved = true;
@@ -415,6 +436,10 @@ export function createObligationToolSurfaceController(
     workspaceActionRejections = Math.min(2, workspaceActionRejections + 1);
     return workspaceActionRejection(workspaceActionRejections);
   }
+
+  function canonicalResumeEvidenceTool(name: string): boolean {
+    return canonicalResumeEvidence && name === "project_ledger_show";
+  }
 }
 
 function requireStructuredValidation(tool: FunctionToolDefinition): FunctionToolDefinition {
@@ -457,8 +482,13 @@ function requireWorkspaceMutation(tool: FunctionToolDefinition): FunctionToolDef
   };
 }
 
-function workspaceActionSurfaceAllows(name: string, rejectionCount: number): boolean {
+function workspaceActionSurfaceAllows(
+  name: string,
+  rejectionCount: number,
+  canonicalResumeEvidence: boolean,
+): boolean {
   if (name === "update_todo_list" || isInternalProgressTool(name)) return true;
+  if (canonicalResumeEvidence && name === "project_ledger_show") return true;
   if (rejectionCount > 0) return name === "write_file";
   return !isLedgerOnlyTool(name) && !isStaticallyReadOnlyToolName(name);
 }
@@ -495,8 +525,12 @@ function ledgerPhaseAllows(name: string, state: {
   discoveryCandidateCount: number;
   allRequiredKindsObserved: boolean;
   checkPending: boolean;
+  canonicalResumeEvidence: boolean;
 }): boolean {
-  if (!state.discoveryObserved) return name === "project_ledger_list";
+  if (!state.discoveryObserved) {
+    return name === "project_ledger_list" ||
+      (state.canonicalResumeEvidence && name === "project_ledger_show");
+  }
   if (isInternalProgressTool(name)) return true;
   if (state.allRequiredKindsObserved) {
     return name === "project_ledger_check" && state.checkPending;
@@ -602,14 +636,40 @@ function successful(value: unknown): boolean {
   return (value as Record<string, unknown>).ok !== false;
 }
 
-function validationReceiptState(value: unknown): "passed" | "failed" | null {
+function validationReceiptState(
+  value: unknown,
+  canonicalResumeEvidence: boolean,
+): "passed" | "failed" | null {
   for (const receipt of evidenceCapabilityReceipts(value)) {
     if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) continue;
     const record = receipt as Record<string, unknown>;
     if (record.capability !== "validation_passed") continue;
+    const producer = recordValue(record.producer);
+    if (producer.kind === "project_ledger" && !canonicalResumeEvidence) continue;
     return record.verified === true && record.maturity === "verified" ? "passed" : "failed";
   }
   return null;
+}
+
+function canonicalResumeLedgerRecordKind(
+  name: string,
+  value: unknown,
+): LedgerRecordKind | null {
+  if (name !== "project_ledger_show") return null;
+  const receipt = evidenceCapabilityReceipts(value).find((candidate) => {
+    const record = recordValue(candidate);
+    const producer = recordValue(record.producer);
+    return producer.kind === "project_ledger" &&
+      record.capability === "source_verified" &&
+      record.evidence_kind === "project_state" &&
+      record.verified === true &&
+      record.maturity === "verified";
+  });
+  if (!receipt) return null;
+  const scopeKind = recordValue(recordValue(receipt).scope).record_kind;
+  return scopeKind === "spec" || scopeKind === "work" || scopeKind === "task"
+    ? scopeKind
+    : null;
 }
 
 function workspaceMutationVerified(name: string, value: unknown): boolean {

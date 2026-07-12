@@ -137,6 +137,55 @@ test("prompt usage attribution keeps only populated prompt sections", () => {
   expect(sections.every((section) => section.estimatedTokens > 0)).toBe(true);
 });
 
+test("prompt usage attribution estimates known character counts without synthetic tokenization", () => {
+  const sections = promptUsageSectionsFromPrompt({
+    promptContextChars: 0,
+    compactionContextChars: 380,
+    feedbackBufferContextChars: 0,
+    workingMemoryContextChars: 0,
+    recentConversationChars: 0,
+    recallContextChars: 0,
+    inboundMessageChars: 0,
+  });
+
+  expect(sections).toEqual([{
+    id: "compaction_context",
+    chars: 380,
+    estimatedTokens: 95,
+  }]);
+});
+
+test("prompt usage attribution stays bounded for large granular character counts", () => {
+  const startedAt = performance.now();
+  const sections = promptUsageSectionsFromPrompt({
+    promptContextChars: 1_000_000,
+    promptContextSections: [
+      { id: "active_persona_reminder", chars: 200_000 },
+      { id: "project_memory", chars: 200_000 },
+      { id: "runtime_state", chars: 200_000 },
+    ],
+    compactionContextChars: 200_000,
+    feedbackBufferContextChars: 0,
+    workingMemoryContextChars: 200_000,
+    recentConversationChars: 200_000,
+    recallContextChars: 0,
+    inboundMessageChars: 380,
+  });
+  const elapsedMs = performance.now() - startedAt;
+
+  expect(sections).toEqual([
+    { id: "active_persona_reminder", chars: 200_000, estimatedTokens: 50_000 },
+    { id: "project_memory", chars: 200_000, estimatedTokens: 50_000 },
+    { id: "runtime_state", chars: 200_000, estimatedTokens: 50_000 },
+    { id: "prompt_context_other", chars: 400_000, estimatedTokens: 100_000 },
+    { id: "compaction_context", chars: 200_000, estimatedTokens: 50_000 },
+    { id: "working_memory", chars: 200_000, estimatedTokens: 50_000 },
+    { id: "recent_conversation", chars: 200_000, estimatedTokens: 50_000 },
+    { id: "inbound_message", chars: 380, estimatedTokens: 95 },
+  ]);
+  expect(elapsedMs).toBeLessThan(100);
+});
+
 test("direct turns compact recent conversation budget only when compaction exists", () => {
   expect(recentConversationBudgetForTurn({
     configuredBudget: 8_000,

@@ -48,14 +48,19 @@ export function compileTurnContract(input: {
   const seeds = effectiveObligationSeeds(input.decision, selected, input.obligationRequirements);
   assertExecutionObligations(input.decision.action, seeds);
   const contractId = deterministicContractId(input.decision.decision_id);
-  const decisionSemanticFingerprint = semanticDecisionFingerprint(input.decision, seeds);
   const requiredEvidence = seeds.map((seed, index) => obligation(contractId, seed, index));
   const deliverables = uniqueDeliverables(requiredEvidence.map((item) => item.deliverable));
   const now = (input.now ?? new Date()).toISOString();
-  const trackingMode = deliverables.some((value) => value.startsWith("ledger_")) ||
+  const derivedTrackingMode = deliverables.some((value) => value.startsWith("ledger_")) ||
       (input.decision.action === "inspect" && Boolean(input.decision.target_project_id))
     ? "ledger"
     : deliverables.some((value) => EXECUTION_DELIVERABLES.has(value)) ? "local" : "none";
+  const trackingMode = inheritedTrackingMode(input.decision.action, selected, derivedTrackingMode);
+  const decisionSemanticFingerprint = semanticDecisionFingerprint(
+    input.decision,
+    seeds,
+    trackingMode,
+  );
   return {
     schema_version: COMPILED_TURN_CONTRACT_SCHEMA,
     contract_id: contractId,
@@ -80,6 +85,18 @@ export function compileTurnContract(input: {
     created_at: now,
     updated_at: now,
   };
+}
+
+function inheritedTrackingMode(
+  action: TurnContractAction,
+  selected: TurnContractWorkstreamCandidate | null,
+  derived: CompiledTurnContract["tracking_mode"],
+): CompiledTurnContract["tracking_mode"] {
+  if (action !== "resume_work" && action !== "modify_work") return derived;
+  const inherited = selected?.tracking_mode;
+  if (!inherited) return derived;
+  const rank = { none: 0, local: 1, ledger: 2 } as const;
+  return rank[inherited] > rank[derived] ? inherited : derived;
 }
 
 export function validateTurnContractDecision(
@@ -110,6 +127,13 @@ export function validateTurnContractDecision(
   }
   if ((decision.action === "resume_work" || decision.action === "modify_work") && selected?.unsatisfied_obligations.length === 0) {
     throw new Error("turn_contract_target_has_no_unsatisfied_obligations");
+  }
+  if (decision.action === "resume_work" && selected) {
+    const inherited = new Set(selected.unsatisfied_obligations.map((item) => item.deliverable));
+    if (decision.deliverables.some((deliverable) =>
+      EXECUTION_DELIVERABLES.has(deliverable) && !inherited.has(deliverable))) {
+      throw new Error("turn_contract_resume_deliverable_not_inherited");
+    }
   }
   return selected;
 }
@@ -153,7 +177,11 @@ function effectiveObligationSeeds(
 ): EvidenceObligationSeed[] {
   if (decision.action === "answer" || decision.action === "cancel_work") return [];
   const inherited = selected?.unsatisfied_obligations ?? [];
-  const declared = decision.deliverables.map((deliverable) => requirements[deliverable] ?? defaultSeed(decision, deliverable));
+  const inheritedDeliverables = new Set(inherited.map((seed) => seed.deliverable));
+  const declared = decision.deliverables
+    .filter((deliverable) =>
+      decision.action !== "resume_work" || !inheritedDeliverables.has(deliverable))
+    .map((deliverable) => requirements[deliverable] ?? defaultSeed(decision, deliverable));
   return dedupeSeeds([...inherited, ...declared]);
 }
 
@@ -191,7 +219,11 @@ function deterministicContractId(decisionId: string): string {
   return `contract-${hash(decisionId).slice(0, 24)}`;
 }
 
-function semanticDecisionFingerprint(decision: TurnContractDecision, seeds: EvidenceObligationSeed[]): string {
+function semanticDecisionFingerprint(
+  decision: TurnContractDecision,
+  seeds: EvidenceObligationSeed[],
+  trackingMode: CompiledTurnContract["tracking_mode"],
+): string {
   return hash(canonicalJson({
     decision_id: decision.decision_id,
     action: decision.action,
@@ -200,6 +232,7 @@ function semanticDecisionFingerprint(decision: TurnContractDecision, seeds: Evid
     blocker_id: decision.blocker_id,
     deliverables: decision.deliverables,
     answer_text: decision.answer_text,
+    tracking_mode: trackingMode,
     obligations: dedupeSeeds(seeds),
   }));
 }
