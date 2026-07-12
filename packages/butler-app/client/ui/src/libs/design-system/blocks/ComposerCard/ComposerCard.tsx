@@ -108,6 +108,7 @@ export function ComposerSendButton({
   return (
     <button
       className={cn(styles.sendButton, mode === "stop" && styles.stop, className)}
+      data-test-class="composer-send-button"
       type={mode === "send" ? "submit" : "button"}
       {...props}
     >

@@ -8,10 +8,28 @@
   width: var(--sidebar-width);
   max-width: 100%;
   min-width: 0;
-  height: 100vh;
+  height: var(--adaptive-viewport-block-size);
   flex-direction: column;
   padding: 0 14px 16px;
   overflow: hidden;
+}
+
+@media (width <= 640px) {
+  .shell {
+    width: 100%;
+    padding-right: max(14px, var(--safe-area-right));
+    padding-bottom: max(16px, var(--safe-area-bottom));
+    padding-left: max(14px, var(--safe-area-left));
+  }
+
+  .titlebar {
+    height: var(--titlebar-safe-area-top);
+    padding-top: var(--safe-area-top);
+  }
+
+  .trafficSpace {
+    width: 0;
+  }
 }
 
 .titlebar {

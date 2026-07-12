@@ -1,5 +1,12 @@
 .shell {
-  --conversation-content-width: min(760px, 86%);
+  --conversation-shell-content-gutter: 7%;
+  --conversation-content-width: min(
+    760px,
+    calc(
+      100% - var(--conversation-shell-content-gutter) -
+        var(--conversation-shell-content-gutter)
+    )
+  );
 
   position: relative;
   display: block;
@@ -96,7 +103,15 @@
   align-content: end;
   gap: 22px;
   margin: 0 auto;
-  padding: var(--titlebar-height) 0 0;
+  padding: var(--titlebar-safe-area-top) 0 0;
+}
+
+@media (width <= 560px) {
+  .shell {
+    --conversation-content-width: calc(
+      100% - var(--adaptive-composer-inset) - var(--adaptive-composer-inset)
+    );
+  }
 }
 
 .virtualizedMessageList {

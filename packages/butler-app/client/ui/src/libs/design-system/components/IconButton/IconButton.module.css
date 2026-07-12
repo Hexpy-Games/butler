@@ -28,3 +28,11 @@
   color: var(--text-secondary);
   background: transparent;
 }
+
+@media (width <= 640px), (pointer: coarse) {
+  .moduleScope {
+    width: max(var(--icon-button-size, 30px), var(--control-hit-target));
+    height: max(var(--icon-button-size, 30px), var(--control-hit-target));
+    min-height: var(--control-hit-target);
+  }
+}

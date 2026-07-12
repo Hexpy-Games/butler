@@ -1,4 +1,14 @@
 import { useEffect, useMemo } from "react";
+import { appCopy } from "@/app/copy.ts";
+import {
+  AdaptivePanelResizeHandle,
+  AdaptiveShell,
+  AdaptiveShellChrome,
+  AdaptiveShellInspector,
+  AdaptiveShellScrim,
+  AdaptiveShellSidebar,
+  AdaptiveShellWorkspace,
+} from "@/butler-ds";
 import { WindowChromeLayer } from "@/components/layout/Chrome.tsx";
 import { RightPanelOverlayTitlebar } from "@/components/layout/RightPanelOverlayTitlebar.tsx";
 import { Sidebar } from "@/components/layout/Sidebar.tsx";
@@ -7,9 +17,9 @@ import { Conversation } from "@/components/conversation/Conversation.tsx";
 import { Inspector } from "@/components/inspector/Inspector.tsx";
 import { ProjectDashboardView } from "@/components/management/ProjectDashboardView.tsx";
 import { SettingsView } from "@/components/settings/SettingsView.tsx";
-import { chromeEnvironmentClassName } from "@/app/chromeEnvironment.ts";
+import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
 import { EMPTY_SETTINGS } from "@/app/constants.ts";
-import { platformClassName } from "@/app/nativeNotifications.ts";
+import { nativePlatform } from "@/app/nativeNotifications.ts";
 import {
   HARNESS_MODEL_CATALOG,
   HARNESS_MESSAGES,
@@ -29,9 +39,6 @@ import {
 import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
 import { usePortalThemeClasses } from "@/hooks/usePortalThemeClasses.ts";
 import { useSystemThemePreference } from "@/hooks/useSystemThemePreference.ts";
-import shellStyles from "./Shell.module.css";
-
-void shellStyles;
 
 export function VisualHarness() {
   const leftOpen = useButlerStore((state) => state.leftOpen);
@@ -79,8 +86,11 @@ export function VisualHarness() {
     setLeftOpen,
   });
   useNarrowRightPanelAutoCollapse({
-    rightOpen: effectiveRightOpen,
+    effectiveRightOpen,
+    leftOpen,
+    rightOpen,
     setLeftOpen,
+    setRightOpen,
   });
   useEffect(() => {
     setLeftOpen(false);
@@ -109,16 +119,25 @@ export function VisualHarness() {
     setSummary,
   ]);
   return (
-    <div
-      className={`${shellStyles.moduleScope} mac-window visual-harness ${chromeEnvironmentClassName()} ${platformClassName()} ${appThemeClasses(harnessSettings, systemPrefersDark)} ${leftOpen ? "" : "left-collapsed"} ${effectiveRightOpen ? "right-open" : ""} ${isSettingsView ? "settings-active" : ""} ${newChatActive ? "new-chat-active" : ""} ${resizingPanel ? "panel-resizing" : ""}`}
+    <AdaptiveShell
+      className={`mac-window visual-harness ${appThemeClasses(harnessSettings, systemPrefersDark)}`}
+      chromeEnvironment={chromeEnvironment()}
       data-test-class="mac-window visual-harness"
+      leftOpen={leftOpen}
+      platform={nativePlatform()}
+      resizing={Boolean(resizingPanel)}
+      rightOpen={effectiveRightOpen}
+      settingsActive={isSettingsView}
       style={panelStyle}
+      transparentWorkspace={newChatActive}
     >
       {!isSettingsView && (
-        <WindowChromeLayer
-          leftOpen={leftOpen}
-          onToggle={() => setLeftOpen((value) => !value)}
-        />
+        <AdaptiveShellChrome>
+          <WindowChromeLayer
+            leftOpen={leftOpen}
+            onToggle={() => setLeftOpen((value) => !value)}
+          />
+        </AdaptiveShellChrome>
       )}
       {!isSettingsView && effectiveRightOpen && <RightPanelOverlayTitlebar />}
       {isSettingsView ? (
@@ -129,14 +148,18 @@ export function VisualHarness() {
         />
       ) : (
         <>
-          <div
+          <AdaptiveShellSidebar
             className="sidebar-slot"
             data-test-class="sidebar-slot"
             id="butler-left-sidebar"
+            open={leftOpen}
           >
             <Sidebar />
-          </div>
-          <main className="workspace" data-test-class="workspace">
+          </AdaptiveShellSidebar>
+          <AdaptiveShellWorkspace
+            className="workspace"
+            data-test-class="workspace"
+          >
             <Titlebar />
             {view.kind === "project-dashboard" ? (
               <ProjectDashboardView
@@ -156,46 +179,57 @@ export function VisualHarness() {
             ) : (
               <Conversation />
             )}
-          </main>
+          </AdaptiveShellWorkspace>
         </>
       )}
       {!isSettingsView && leftOpen && (
-        <div
+        <AdaptivePanelResizeHandle
           aria-label="Resize left sidebar"
           aria-orientation="vertical"
           aria-controls="butler-left-sidebar"
           aria-valuemax={LEFT_PANEL_MAX_WIDTH}
           aria-valuemin={LEFT_PANEL_MIN_WIDTH}
           aria-valuenow={leftPanelWidth}
-          className="panel-resize-handle left-panel-resize-handle no-drag"
           data-test-class="panel-resize-handle left-panel-resize-handle"
-          role="separator"
-          tabIndex={0}
+          side="left"
           onKeyDown={(event) => handlePanelResizeKeyDown("left", event)}
           onPointerDown={(event) => beginPanelResize("left", event)}
         />
       )}
       {!isSettingsView && rightAvailable && (
-        <div className="right-panel-slot" data-test-class="right-panel-slot">
+        <AdaptiveShellInspector
+          className="right-panel-slot"
+          data-test-class="right-panel-slot"
+          open={effectiveRightOpen}
+        >
           <Inspector id="butler-right-inspector" />
-        </div>
+        </AdaptiveShellInspector>
       )}
       {!isSettingsView && effectiveRightOpen && (
-        <div
+        <AdaptivePanelResizeHandle
           aria-label="Resize right panel"
           aria-orientation="vertical"
           aria-controls="butler-right-inspector"
           aria-valuemax={RIGHT_PANEL_MAX_WIDTH}
           aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
           aria-valuenow={rightPanelWidth}
-          className="panel-resize-handle right-panel-resize-handle no-drag"
           data-test-class="panel-resize-handle right-panel-resize-handle"
-          role="separator"
-          tabIndex={0}
+          side="right"
           onKeyDown={(event) => handlePanelResizeKeyDown("right", event)}
           onPointerDown={(event) => beginPanelResize("right", event)}
         />
       )}
-    </div>
+      {!isSettingsView && (
+        <AdaptiveShellScrim
+          label={
+            effectiveRightOpen ? appCopy.titlebar.hideRightPanel : "Hide sidebar"
+          }
+          open={leftOpen || effectiveRightOpen}
+          onDismiss={() =>
+            effectiveRightOpen ? setRightOpen(false) : setLeftOpen(false)
+          }
+        />
+      )}
+    </AdaptiveShell>
   );
 }

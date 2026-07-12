@@ -11,6 +11,7 @@ export interface ComposerControlProps
   label: ReactNode;
   detail?: ReactNode;
   active?: boolean;
+  compact?: "label" | "icon";
   className?: string;
 }
 
@@ -19,6 +20,7 @@ export function ComposerControl({
   label,
   detail,
   active = false,
+  compact = "label",
   disabled = false,
   onClick,
   className,
@@ -28,6 +30,7 @@ export function ComposerControl({
   return (
     <PillButton
       className={cn(styles.control, active && styles.active, className)}
+      data-compact={compact}
       icon={icon ? <span data-test-class="composer-control-icon">{icon}</span> : undefined}
       disabled={disabled}
       onClick={onClick}

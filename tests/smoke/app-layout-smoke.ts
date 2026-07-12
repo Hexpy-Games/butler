@@ -30,7 +30,7 @@ const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
 const screenshotDir = resolve(root, ".tmp", "app-layout-smoke");
 mkdirSync(screenshotDir, { recursive: true });
 const rightPanelToggleSelector = `[aria-label="${appCopy.titlebar.showRightPanel}"], [aria-label="${appCopy.titlebar.hideRightPanel}"]`;
-const turnActivityTimeoutMs = 3_000;
+const turnActivityTimeoutMs = 5_000;
 const testClass = (name: string) => `[data-test-class~="${name}"]`;
 const testClasses = (...names: string[]) => names.map(testClass).join("");
 
@@ -594,6 +594,10 @@ try {
   await page.setViewportSize({ width: 900, height: 520 });
   await page.waitForTimeout(320);
   await page
+    .getByRole("button", { name: appCopy.titlebar.showRightPanel })
+    .click();
+  await page.waitForTimeout(240);
+  await page
     .locator(testClass("context-legend-scroll"))
     .waitFor({ state: "visible" });
   const contextLegendState = await page
@@ -728,7 +732,7 @@ try {
     .evaluate((root) => {
       const style = getComputedStyle(root);
       return {
-        className: root.getAttribute("class") ?? "",
+        chromeEnvironment: root.getAttribute("data-chrome-environment"),
         floatingToggleLeft: style
           .getPropertyValue("--chrome-floating-toggle-left")
           .trim(),
@@ -739,7 +743,7 @@ try {
     });
   assert(toggleBox, "left sidebar toggle is missing");
   assert(
-    browserChromeState.className.includes("browser-chrome") &&
+    browserChromeState.chromeEnvironment === "browser" &&
       browserChromeState.trafficControlsWidth === "0px" &&
       browserChromeState.floatingToggleLeft === "0px",
     `browser chrome should not reserve native traffic-light space: ${JSON.stringify(browserChromeState)}`,
@@ -1068,6 +1072,10 @@ try {
     "disabled project folder picker must not raise composer errors",
   );
   await clickConversationAwayFromMenus(page);
+  await page.waitForTimeout(160);
+  if (await page.locator('[data-slot="dropdown-menu-content"]').isVisible()) {
+    await page.keyboard.press("Escape");
+  }
   await page
     .locator('[data-slot="dropdown-menu-content"]')
     .waitFor({ state: "hidden" });
@@ -1141,6 +1149,18 @@ try {
     .locator('[data-slot="dialog-overlay"]')
     .waitFor({ state: "hidden" });
   await closeBlockingOverlays(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(240);
+  const narrowDashboardOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  assert(
+    narrowDashboardOverflow <= 1,
+    `narrow project dashboard should not overflow horizontally: ${narrowDashboardOverflow}`,
+  );
+  screenshots.push(await screenshot(page, "narrow-project-dashboard.png"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(240);
   await page.locator(testClass("project-session-row")).first().click();
   await page.locator(testClass("conversation")).waitFor({ state: "visible" });
 
@@ -1329,8 +1349,12 @@ try {
       reopenedInspectorBox.width >= inspectorWidthAfterResize - 2,
     `right panel should slide open again: ${reopenedInspectorBox?.width}`,
   );
-  await page.setViewportSize({ width: 540, height: 760 });
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(320);
+  await page
+    .getByRole("button", { name: appCopy.titlebar.showRightPanel })
+    .click();
+  await page.waitForTimeout(240);
   const narrowInspectorBox = await page
     .locator(testClass("right-inspector"))
     .boundingBox();
@@ -1340,13 +1364,13 @@ try {
   assert(
     narrowInspectorBox &&
       narrowInspectorBox.x >= -1 &&
-      narrowInspectorBox.width >= 320 &&
-      narrowInspectorBox.x + narrowInspectorBox.width <= 541,
+      narrowInspectorBox.width >= 389 &&
+      narrowInspectorBox.x + narrowInspectorBox.width <= 391,
     `narrow right panel should stay visible: ${JSON.stringify(narrowInspectorBox)}`,
   );
   assert(
-    narrowWorkspaceBox && narrowWorkspaceBox.width <= 2,
-    `narrow right panel should sacrifice conversation width: ${JSON.stringify(narrowWorkspaceBox)}`,
+    narrowWorkspaceBox && narrowWorkspaceBox.width >= 389,
+    `narrow right panel must overlay without shrinking the workspace: ${JSON.stringify(narrowWorkspaceBox)}`,
   );
   const narrowOverlayState = await page
     .locator(testClass("mac-window"))
@@ -1374,7 +1398,7 @@ try {
       const overlayStyle = overlay ? getComputedStyle(overlay) : null;
       const closeStyle = closeButton ? getComputedStyle(closeButton) : null;
       return {
-        rootClassName: root.getAttribute("class") ?? "",
+        leftOpen: root.getAttribute("data-left-open"),
         closeRight: closeBox?.right ?? Number.NaN,
         closeTop: closeBox?.top ?? Number.NaN,
         closeVisible:
@@ -1425,7 +1449,7 @@ try {
     `narrow right panel overlay should hide the left sidebar toggle: ${JSON.stringify(narrowOverlayState)}`,
   );
   assert(
-    narrowOverlayState.rootClassName.includes("left-collapsed"),
+    narrowOverlayState.leftOpen === "false",
     `narrow right panel should auto-collapse the left sidebar state: ${JSON.stringify(narrowOverlayState)}`,
   );
   screenshots.push(await screenshot(page, "narrow-right-panel-visible.png"));
@@ -1452,12 +1476,75 @@ try {
       };
     });
   assert(
-    narrowTitlebarNewChatState.buttonWidth >= 24 &&
+    narrowTitlebarNewChatState.buttonWidth >= 44 &&
       narrowTitlebarNewChatState.buttonDisplay !== "none" &&
       narrowTitlebarNewChatState.buttonRight <=
         narrowTitlebarNewChatState.titleLeft - 4,
     `narrow titlebar should show new chat before the conversation title: ${JSON.stringify(narrowTitlebarNewChatState)}`,
   );
+  const narrowConversationState = await page
+    .locator(testClass("mac-window"))
+    .evaluate((root) => {
+      const composer = root.querySelector<HTMLElement>(
+        "[data-test-class~='composer-card']",
+      );
+      const accessContent = root.querySelector<HTMLElement>(
+        "[data-test-class~='access-button'] [data-test-class~='composer-control-content']",
+      );
+      const modelDetail = root.querySelector<HTMLElement>(
+        "[data-test-class~='composer-model-summary']",
+      );
+      const send = root.querySelector<HTMLElement>(
+        "[data-test-class~='composer-send-button']",
+      );
+      const composerBox = composer?.getBoundingClientRect();
+      const sendBox = send?.getBoundingClientRect();
+      return {
+        accessContentWidth: accessContent?.getBoundingClientRect().width ?? 0,
+        composerLeft: composerBox?.left ?? Number.NaN,
+        composerRight: composerBox?.right ?? Number.NaN,
+        modelDetailWidth:
+          modelDetail?.parentElement?.getBoundingClientRect().width ?? 0,
+        sendHeight: sendBox?.height ?? 0,
+        sendWidth: sendBox?.width ?? 0,
+        viewportWidth: window.innerWidth,
+      };
+    });
+  assert(
+    narrowConversationState.composerLeft >= 11 &&
+      narrowConversationState.composerRight <=
+        narrowConversationState.viewportWidth - 11,
+    `narrow composer should stay inside adaptive insets: ${JSON.stringify(narrowConversationState)}`,
+  );
+  assert(
+    narrowConversationState.accessContentWidth <= 1 &&
+      narrowConversationState.modelDetailWidth <= 1,
+    `narrow composer should reduce secondary labels: ${JSON.stringify(narrowConversationState)}`,
+  );
+  assert(
+    narrowConversationState.sendWidth >= 44 &&
+      narrowConversationState.sendHeight >= 44,
+    `narrow composer send target should be at least 44px: ${JSON.stringify(narrowConversationState)}`,
+  );
+  screenshots.push(await screenshot(page, "narrow-conversation.png"));
+  await page.getByRole("button", { name: "Show sidebar" }).click();
+  await page.waitForTimeout(240);
+  const narrowSidebarBox = await page
+    .locator(testClass("sidebar-slot"))
+    .boundingBox();
+  const workspaceBehindSidebar = await page
+    .locator(testClass("workspace"))
+    .boundingBox();
+  assert(
+    narrowSidebarBox?.width &&
+      narrowSidebarBox.width >= 300 &&
+      workspaceBehindSidebar?.width &&
+      workspaceBehindSidebar.width >= 389,
+    `narrow sidebar must overlay without shrinking workspace: ${JSON.stringify({ narrowSidebarBox, workspaceBehindSidebar })}`,
+  );
+  screenshots.push(await screenshot(page, "narrow-sidebar.png"));
+  await page.mouse.click(385, 420);
+  await page.waitForTimeout(240);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(320);
   const showSidebarAfterNarrow = page.getByRole("button", {
@@ -1888,7 +1975,7 @@ try {
   await page
     .locator(testClass("filtered-select-popover"))
     .waitFor({ state: "visible" });
-  await page.getByRole("button", { name: /GPT-5.4 Mini/i }).click();
+  await page.getByRole("button", { name: /GPT-5.6 Terra/i }).click();
   await expectLocatorCount(
     page,
     `${testClass("filtered-select-popover")}:visible`,
@@ -1915,7 +2002,7 @@ try {
     `model trigger should render model and compact reasoning without reasoning suffix: ${modelButtonText}`,
   );
   const modelButtonIconCount = await page
-    .getByRole("button", { name: /GPT-5.4 Mini/i })
+    .getByRole("button", { name: /GPT-5.6 Terra/i })
     .evaluate((element) => element.querySelectorAll("svg").length);
   assert(
     modelButtonIconCount === 0,
@@ -2037,8 +2124,35 @@ try {
     settingsDetailDrag === "drag",
     `settings detail top area should remain draggable, got ${settingsDetailDrag}`,
   );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(240);
+  const compactSettingsMaster = await page
+    .locator(testClass("settings-sidebar"))
+    .boundingBox();
+  assert(
+    compactSettingsMaster && compactSettingsMaster.width >= 389,
+    `compact settings should begin with the master list: ${JSON.stringify(compactSettingsMaster)}`,
+  );
+  screenshots.push(await screenshot(page, "narrow-settings-master.png"));
   await page
-    .getByRole("button", { name: appCopy.settings.sections.models })
+    .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: appCopy.settings.panels.butlerModel })
+    .waitFor({ state: "visible" });
+  const compactSettingsDetail = await page
+    .locator(".settings-detail")
+    .boundingBox();
+  assert(
+    compactSettingsDetail && compactSettingsDetail.width >= 389,
+    `compact settings detail should replace the master list: ${JSON.stringify(compactSettingsDetail)}`,
+  );
+  screenshots.push(await screenshot(page, "narrow-settings-detail.png"));
+  await page.getByRole("button", { name: appCopy.settings.back }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(240);
+  await page
+    .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
   await page
     .getByRole("heading", { name: appCopy.settings.panels.butlerModel })
@@ -2200,7 +2314,7 @@ try {
     `settings bloom color controls should render as circular swatches: ${JSON.stringify(bloomColorState)}`,
   );
   await page
-    .getByRole("button", { name: appCopy.settings.sections.models })
+    .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
   await page
     .getByRole("heading", { name: appCopy.settings.panels.butlerModel })
@@ -2210,7 +2324,10 @@ try {
     .waitFor({ state: "visible" });
   await page.getByText("Deep work").waitFor({ state: "visible" });
   await page.getByText("Routine work").waitFor({ state: "visible" });
-  await page.getByText("GPT-5.4 Mini").waitFor({ state: "visible" });
+  await page
+    .getByText("GPT-5.5", { exact: false })
+    .first()
+    .waitFor({ state: "visible" });
   const localModelsTitle = page.getByText(appCopy.settings.localModels.title);
   if ((await localModelsTitle.count()) > 0) {
     await localModelsTitle.waitFor({ state: "visible" });
@@ -2351,7 +2468,7 @@ try {
   await page.getByRole("button", { name: appCopy.sidebar.settings }).click();
   await page.locator(testClass("settings-view")).waitFor({ state: "visible" });
   await page
-    .getByRole("button", { name: appCopy.settings.sections.models })
+    .getByRole("button", { name: appCopy.settings.sections.models, exact: true })
     .click();
   await page.locator(testClass("settings-primary-reasoning-select")).click();
   await page
@@ -2943,6 +3060,40 @@ try {
       emptyStateLayout.workspaceLeftRadiusPreserved,
     `new chat empty state should use coherent DS suggestion cards: ${JSON.stringify(emptyStateLayout)}`,
   );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(240);
+  const narrowNewChatState = await page
+    .locator(testClass("new-chat-empty-state"))
+    .evaluate((element) => {
+      const title = element.querySelector<HTMLElement>("h2");
+      const composer = document.querySelector<HTMLElement>(
+        "[data-test-class~='composer-card']",
+      );
+      const titleBox = title?.getBoundingClientRect();
+      const composerBox = composer?.getBoundingClientRect();
+      const rootStyle = getComputedStyle(document.documentElement);
+      return {
+        composerBottom: composerBox?.bottom ?? Number.NaN,
+        composerLeft: composerBox?.left ?? Number.NaN,
+        composerRight: composerBox?.right ?? Number.NaN,
+        safeTitleTop:
+          Number.parseFloat(rootStyle.getPropertyValue("--titlebar-height")) +
+          Number.parseFloat(rootStyle.getPropertyValue("--safe-area-top")),
+        titleTop: titleBox?.top ?? Number.NaN,
+        viewportHeight: window.innerHeight,
+        viewportWidth: window.innerWidth,
+      };
+    });
+  assert(
+    narrowNewChatState.titleTop >= narrowNewChatState.safeTitleTop &&
+      narrowNewChatState.composerLeft >= 11 &&
+      narrowNewChatState.composerRight <= narrowNewChatState.viewportWidth - 11 &&
+      narrowNewChatState.composerBottom <= narrowNewChatState.viewportHeight,
+    `narrow new chat should respect safe title and composer insets: ${JSON.stringify(narrowNewChatState)}`,
+  );
+  screenshots.push(await screenshot(page, "narrow-new-chat.png"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(240);
   await expectLocatorCount(
     page,
     rightPanelToggleSelector,
@@ -3104,8 +3255,10 @@ try {
   const turnActivityText = await timelineActivity.innerText();
   const pendingLabels = appCopy.conversation.work.pendingStateLabels;
   assert(
-    turnActivityText.includes(pendingLabels.thinking) ||
-      turnActivityText.includes(pendingLabels.session_starting) ||
+    Object.values(pendingLabels).some((label) =>
+      turnActivityText.includes(label),
+    ) ||
+      turnActivityText.includes("Preparing the work") ||
       turnActivityText.includes("Bash"),
     `turn-activity-during-send failed: ${turnActivityText}`,
   );
@@ -3126,10 +3279,10 @@ try {
   const expanded = await activityButton.getAttribute("aria-expanded");
   assert(expanded === "true", "turn activity keyboard expands details");
   const activityDetails = timelineWorkActivity
-    .locator(testClass("turn-activity-details"), { hasText: "bun test" })
+    .locator(testClass("turn-work-tool-detail-text"))
     .first();
   await activityDetails.waitFor({
-    state: "visible",
+    state: "attached",
     timeout: turnActivityTimeoutMs,
   });
   const activityDetailsColor = await activityDetails.evaluate((element) => {

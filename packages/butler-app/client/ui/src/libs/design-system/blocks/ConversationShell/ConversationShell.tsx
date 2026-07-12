@@ -26,7 +26,7 @@ export function ConversationShell({
     ...(contentGutter
       ? {
           "--new-chat-title-edge-gutter": contentGutter,
-          "--conversation-content-width": `min(760px, calc(100% - ${contentGutter} - ${contentGutter}))`,
+          "--conversation-shell-content-gutter": contentGutter,
         }
       : {}),
   } as CSSProperties;

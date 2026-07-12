@@ -16,22 +16,22 @@
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  height: calc(100vh - var(--composer-reserve));
+  height: calc(var(--adaptive-viewport-block-size) - var(--composer-reserve));
   min-height: 0;
   align-content: start;
   gap: var(--space-lg);
   isolation: isolate;
   margin: 0;
   overflow: visible;
-  padding: var(--titlebar-height) 0 0;
+  padding: var(--titlebar-safe-area-top) 0 0;
 }
 
 .fluidBackground {
   position: fixed;
-  inset: 0 0 0 var(--shell-left-column-target-width, 0);
+  inset: 0;
   z-index: 0;
-  width: calc(100vw - var(--shell-left-column-target-width, 0));
-  height: 100vh;
+  width: 100%;
+  height: var(--adaptive-viewport-block-size);
   border-radius: var(--workspace-left-radius, 18px) 0 0
     var(--workspace-left-radius, 18px);
   pointer-events: none;
@@ -331,7 +331,7 @@
 @media (width <= 560px) {
   .root {
     gap: var(--space-lg);
-    padding-block-start: var(--titlebar-height);
+    padding-block-start: var(--titlebar-safe-area-top);
   }
 
   .title {
