@@ -1467,10 +1467,16 @@ try {
       const toggle = Array.from(document.querySelectorAll<HTMLElement>("button"))
         .find((element) => element.getAttribute("aria-label") === "Show sidebar");
       const toggleIcon = toggle?.querySelector<HTMLElement>("svg");
+      const rightToggle = root.querySelector<HTMLElement>(
+        "[data-test-class~='titlebar-right-panel-toggle']",
+      );
+      const rightToggleIcon = rightToggle?.querySelector<HTMLElement>("svg");
       const buttonBox = button?.getBoundingClientRect();
       const titleBox = title?.getBoundingClientRect();
       const toggleBox = toggle?.getBoundingClientRect();
       const toggleIconBox = toggleIcon?.getBoundingClientRect();
+      const rightToggleBox = rightToggle?.getBoundingClientRect();
+      const rightToggleIconBox = rightToggleIcon?.getBoundingClientRect();
       return {
         buttonDisplay: button ? getComputedStyle(button).display : "",
         buttonLeft: buttonBox?.left ?? Number.NaN,
@@ -1478,9 +1484,21 @@ try {
         buttonWidth: buttonBox?.width ?? Number.NaN,
         titleLeft: titleBox?.left ?? Number.NaN,
         titleText: title?.textContent ?? "",
+        titleCenterY: titleBox ? titleBox.top + titleBox.height / 2 : Number.NaN,
+        rightToggleCenterY: rightToggleBox
+          ? rightToggleBox.top + rightToggleBox.height / 2
+          : Number.NaN,
+        rightToggleHeight: rightToggleBox?.height ?? 0,
+        rightToggleIconHeight: rightToggleIconBox?.height ?? 0,
+        rightToggleIconWidth: rightToggleIconBox?.width ?? 0,
+        rightToggleWidth: rightToggleBox?.width ?? 0,
+        toggleCenterY: toggleBox
+          ? toggleBox.top + toggleBox.height / 2
+          : Number.NaN,
         toggleHeight: toggleBox?.height ?? 0,
         toggleIconHeight: toggleIconBox?.height ?? 0,
         toggleIconWidth: toggleIconBox?.width ?? 0,
+        toggleRight: toggleBox?.right ?? Number.NaN,
         toggleWidth: toggleBox?.width ?? 0,
       };
     });
@@ -1490,7 +1508,23 @@ try {
       narrowTitlebarChromeState.toggleWidth >= 52 &&
       narrowTitlebarChromeState.toggleHeight >= 52 &&
       narrowTitlebarChromeState.toggleIconWidth >= 22 &&
-      narrowTitlebarChromeState.toggleIconHeight >= 22,
+      narrowTitlebarChromeState.toggleIconHeight >= 22 &&
+      narrowTitlebarChromeState.toggleWidth >= 52 &&
+      narrowTitlebarChromeState.toggleHeight >= 52 &&
+      narrowTitlebarChromeState.toggleRight <=
+        narrowTitlebarChromeState.titleLeft - 4 &&
+      narrowTitlebarChromeState.rightToggleWidth >= 52 &&
+      narrowTitlebarChromeState.rightToggleHeight >= 52 &&
+      narrowTitlebarChromeState.rightToggleIconWidth >= 22 &&
+      narrowTitlebarChromeState.rightToggleIconHeight >= 22 &&
+      Math.abs(
+        narrowTitlebarChromeState.toggleCenterY -
+          narrowTitlebarChromeState.titleCenterY,
+      ) <= 1 &&
+      Math.abs(
+        narrowTitlebarChromeState.rightToggleCenterY -
+          narrowTitlebarChromeState.titleCenterY,
+      ) <= 1,
     `narrow titlebar should omit new chat and expose a comfortable shell toggle: ${JSON.stringify(narrowTitlebarChromeState)}`,
   );
   const narrowConversationState = await page
@@ -1577,6 +1611,102 @@ try {
       firstCompactNavMetrics.iconHeight >= 22 &&
       firstCompactNavMetrics.labelFontSize >= 17,
     `narrow sidebar must push the full workspace with comfortable navigation density: ${JSON.stringify({ firstCompactNavMetrics, firstCompactNavRowBox, narrowSidebarBox, workspaceBehindSidebar })}`,
+  );
+  const compactProjectSession = page
+    .locator(testClass("project-session-row"))
+    .first();
+  const compactProjectGesture = page
+    .locator(testClass("project-session-gesture"))
+    .first();
+  const compactSessionMenuButton = compactProjectSession.locator(
+    `button[aria-label="${appCopy.sessionActions.menuLabel}"]`,
+  );
+  const compactSessionActionVisibility = await compactSessionMenuButton.evaluate(
+    (element) => getComputedStyle(element.parentElement ?? element).visibility,
+  );
+  await compactProjectGesture.dispatchEvent("pointerdown", {
+    button: 0,
+    clientX: 80,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 6,
+    pointerType: "touch",
+  });
+  await page.waitForTimeout(100);
+  await compactProjectGesture.dispatchEvent("pointerup", {
+    button: 0,
+    clientX: 80,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 6,
+    pointerType: "touch",
+  });
+  await compactProjectSession.click();
+  assert(
+    (await page.getByRole("menu").count()) === 0,
+    "compact project-session short tap should navigate without opening its menu",
+  );
+  const activeTitleBeforeLongPress = await page
+    .locator(testClass("titlebar-title"))
+    .textContent();
+  await compactProjectGesture.dispatchEvent("pointerdown", {
+    button: 0,
+    clientX: 80,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 7,
+    pointerType: "touch",
+  });
+  await page.waitForTimeout(540);
+  await compactProjectGesture.dispatchEvent("pointerup", {
+    button: 0,
+    clientX: 80,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 7,
+    pointerType: "touch",
+  });
+  await compactProjectGesture.dispatchEvent("click");
+  const compactLongPressMenu = page.getByRole("menu").last();
+  await compactLongPressMenu.waitFor({ state: "visible" });
+  const activeTitleAfterLongPress = await page
+    .locator(testClass("titlebar-title"))
+    .textContent();
+  assert(
+    compactSessionActionVisibility === "hidden" &&
+      activeTitleAfterLongPress === activeTitleBeforeLongPress,
+    `compact project session should hide overflow and long press without navigation: ${JSON.stringify({ activeTitleAfterLongPress, activeTitleBeforeLongPress, compactSessionActionVisibility })}`,
+  );
+  await page.keyboard.press("Escape");
+  await compactLongPressMenu.waitFor({ state: "hidden" });
+  await compactProjectGesture.dispatchEvent("pointerdown", {
+    button: 0,
+    clientX: 80,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 8,
+    pointerType: "touch",
+  });
+  await compactProjectGesture.dispatchEvent("pointermove", {
+    button: 0,
+    clientX: 100,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 8,
+    pointerType: "touch",
+  });
+  await page.waitForTimeout(540);
+  await compactProjectGesture.dispatchEvent("pointerup", {
+    button: 0,
+    clientX: 100,
+    clientY: 150,
+    isPrimary: true,
+    pointerId: 8,
+    pointerType: "touch",
+  });
+  assert(
+    !(await compactLongPressMenu.isVisible()),
+    "compact project-session long press should cancel after pointer movement",
   );
   screenshots.push(await screenshot(page, "narrow-sidebar.png"));
   await page.mouse.click(385, 420);
@@ -4002,9 +4132,15 @@ try {
         "narrow-right-panel-auto-collapses-left-state",
         "narrow-titlebar-new-chat-absent",
         "narrow-shell-toggle-comfortable",
+        "narrow-titlebar-controls-aligned",
+        "narrow-titlebar-toggle-title-nonoverlap",
         "narrow-sidebar-pushes-workspace",
         "narrow-sidebar-comfortable-density",
         "narrow-sidebar-single-safe-area-reserve",
+        "narrow-project-session-overflow-hidden",
+        "narrow-project-session-tap-navigates",
+        "narrow-project-session-long-press-menu",
+        "narrow-project-session-long-press-move-cancel",
         "narrow-composer-idle-one-line",
         "narrow-composer-focus-expands",
         "narrow-composer-draft-ellipsis",

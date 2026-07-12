@@ -7,7 +7,7 @@ interface SidebarItemProps {
   badge?: ReactNode;
   right?: ReactNode;
   active?: boolean;
-  rightVisibility?: "visible" | "hover";
+  rightVisibility?: "visible" | "hover" | "hover-compact-hidden";
   className?: string;
   dataTestClass?: string;
   onClick?: HTMLAttributes<HTMLDivElement>["onClick"];

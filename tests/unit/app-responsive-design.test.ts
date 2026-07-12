@@ -212,10 +212,42 @@ describe("responsive adaptive design contracts", () => {
     const tokens = read(
       "packages/butler-app/client/ui/src/libs/design-system/tokens.css",
     );
+    const titlebarShell = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/TitlebarShell/TitlebarShell.module.css",
+    );
 
     expect(titlebar).not.toContain("titlebar-new-chat-button");
     expect(tokens).toContain("--chrome-floating-toggle-size: 52px");
     expect(tokens).toContain("--chrome-floating-toggle-icon-size: 22px");
+    expect(tokens).toContain("--titlebar-action-size: 52px");
+    expect(tokens).toContain("--titlebar-action-icon-size: 22px");
+    expect(tokens).toContain("(var(--titlebar-height) - var(--chrome-floating-toggle-size)) / 2");
     expect(chrome).toContain("var(--chrome-floating-toggle-size, 30px)");
+    expect(titlebarShell).toContain(
+      "var(--chrome-floating-toggle-size, var(--control-hit-target))",
+    );
+    expect(titlebarShell).toContain("var(--titlebar-action-size, 30px)");
+  });
+
+  test("uses compact project-session tap and cancellable long press", () => {
+    const item = read(
+      "packages/butler-app/client/ui/src/components/layout/SidebarProjectSessionItem.tsx",
+    );
+    const gesture = read(
+      "packages/butler-app/client/ui/src/components/layout/useLongPressAction.ts",
+    );
+    const navStyles = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/NavRow/NavRow.module.css",
+    );
+
+    expect(item).toContain("onClick={() => openSession(session.id)}");
+    expect(item).toContain('rightVisibility="hover-compact-hidden"');
+    expect(item).toContain("useLongPressAction(() => setMenuOpen(true))");
+    expect(gesture).toContain("LONG_PRESS_DURATION_MS = 500");
+    expect(gesture).toContain("LONG_PRESS_MOVE_TOLERANCE_PX = 10");
+    expect(gesture).toContain("completedRef.current = true");
+    expect(gesture).toContain("event.stopPropagation()");
+    expect(navStyles).toContain(".compactHiddenActions");
+    expect(navStyles).toContain("visibility: hidden");
   });
 });

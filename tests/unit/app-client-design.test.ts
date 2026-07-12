@@ -497,7 +497,9 @@ test("dedicated client keeps complete work history and session management contro
   expect(sidebarChatItem).toContain("runSessionAction");
   expect(sidebarProjectSessionItem).toContain("runSessionAction");
   expect(sidebarChatItem).toContain('rightVisibility="hover"');
-  expect(sidebarProjectSessionItem).toContain('rightVisibility="hover"');
+  expect(sidebarProjectSessionItem).toContain(
+    'rightVisibility="hover-compact-hidden"',
+  );
   expect(sidebarChatItem).toContain("onContextMenu");
   expect(sidebarProjectSessionItem).toContain("onContextMenu");
   expect(sidebarChatItem).toContain("event.preventDefault()");
